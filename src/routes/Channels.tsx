@@ -99,7 +99,7 @@ export const ChannelsUpdater = (({children}: PropsWithChildren) => {
   )
 })
 
-export const ChannelTest = (({id}: {id: number}) => {
+export const ChannelSlider = (({id}: {id: number}) => {
   const [value, setValue] = useRecoilState(channelState(id))
 
   return (
@@ -120,96 +120,29 @@ export default function Channels() {
   )
 }
 
-function ChannelsB() {
-  return (
-      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-        <Grid container spacing={3}>
-          {/* Chart */}
-          <Grid item xs={12} md={8} lg={9}>
-            <Paper
-                sx={{
-                  p: 2,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  height: 240,
-                }}
-            >
-              {/*<Chart />*/}
-            </Paper>
-          </Grid>
-          {/* Recent Deposits */}
-          <Grid item xs={12} md={4} lg={3}>
-            <Paper
-                sx={{
-                  p: 2,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  height: 240,
-                }}
-            >
-              {/*<Deposits />*/}
-            </Paper>
-          </Grid>
-          {/* Recent Orders */}
-          <Grid item xs={12}>
-            <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column' }}>
-              {/*<Orders />*/}
-            </Paper>
-          </Grid>
-        </Grid>
-      </Container>
-  )
-}
-
-function ChannelsA() {
-  return (
-      <Grid container spacing={2} columns={16}>
-        <Grid xs={4}>
-          <ChannelTest id={1} />
-          <ChannelTest id={2} />
-          <ChannelTest id={3} />
-          <ChannelTest id={4} />
-        </Grid>
-        <Grid xs={4}>
-          <ChannelTest id={5} />
-          <ChannelTest id={6} />
-          <ChannelTest id={7} />
-          <ChannelTest id={8} />
-        </Grid>
-        <Grid xs={4}>
-          <ChannelTest id={1} />
-          <ChannelTest id={2} />
-          <ChannelTest id={3} />
-          <ChannelTest id={4} />
-        </Grid>
-        <Grid xs={4}>
-          <ChannelTest id={5} />
-          <ChannelTest id={6} />
-          <ChannelTest id={7} />
-          <ChannelTest id={8} />
-        </Grid>
-      </Grid>
-  )
-}
-
 const ChannelGroups = (() => {
-  new Array(64).fill(1,0, 64).map((_, k) => {
+    const channelCount = 512;
+    const groupSize = 8;
 
-  })
-
-  return (
-      <>
-        <Grid item xs={12} md={4} lg={3}>
-          <Paper
-              sx={{
-                p: 2,
-                display: 'flex',
-                flexDirection: 'column',
-                height: 240,
-              }}
-          >
-          </Paper>
-        </Grid>
-      </>
-  )
+    return (
+        <>
+            {Array.from(Array(channelCount/groupSize)).map((g, groupNo) => (
+                <Grid item xs={12} md={4} lg={3} key={groupNo}>
+                    <Paper
+                        sx={{
+                            p: 2,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            height: 240,
+                    }}>
+                        {Array.from(Array(groupSize)).map((s, itemNo) => {
+                            const channelNo = groupNo*groupSize + itemNo + 1
+                            return <ChannelSlider key={itemNo} id={channelNo} />
+                        })
+                        }
+                    </Paper>
+                </Grid>
+            ))}
+        </>
+    )
 })
