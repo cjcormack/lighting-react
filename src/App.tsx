@@ -1,25 +1,43 @@
-import React from 'react';
-import logo from './logo.svg';
+import React, {PropsWithChildren, Suspense} from 'react';
 import './App.css';
+import {atom, atomFamily, RecoilRoot, selector, selectorFamily, useRecoilState, useRecoilValue} from "recoil";
+
+import '@fontsource/roboto/300.css';
+import '@fontsource/roboto/400.css';
+import '@fontsource/roboto/500.css';
+import '@fontsource/roboto/700.css';
+import Layout from "./Layout";
+import {createBrowserRouter, RouterProvider} from "react-router-dom";
+import Channels, {ChannelsUpdater} from "./routes/Channels";
+import Scripts from "./routes/Scripts";
+import {Connection} from "./connection";
 
 function App() {
+  const router = createBrowserRouter([
+    {
+      path: "/",
+      element: <Layout />,
+      children: [
+        {
+          path: "channels",
+          element: <Channels />,
+        },
+        {
+          path: "scripts",
+          element: <Scripts />,
+        },
+      ],
+    },
+  ]);
+
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.tsx</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+      <React.StrictMode>
+        <RecoilRoot>
+          <Connection>
+            <RouterProvider router={router}/>
+          </Connection>
+        </RecoilRoot>
+      </React.StrictMode>
   );
 }
 
