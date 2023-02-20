@@ -1,4 +1,4 @@
-import React, {PropsWithChildren, Suspense} from 'react';
+import React from 'react';
 
 import '@fontsource/roboto/300.css';
 import '@fontsource/roboto/400.css';
@@ -6,7 +6,6 @@ import '@fontsource/roboto/500.css';
 import '@fontsource/roboto/700.css';
 import {
   Box,
-  Button,
   Toolbar,
   styled,
   createTheme,
@@ -14,31 +13,20 @@ import {
   ThemeProvider,
   IconButton,
   Typography,
-  Badge,
   Divider,
   List,
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  Container,
-  Grid,
-  Paper,
-  CardContent,
-  CardActions, Card, ListItemAvatar, ListItem, Avatar
 } from "@mui/material";
 import MuiAppBar, { AppBarProps as MuiAppBarProps } from '@mui/material/AppBar';
 import MuiDrawer from '@mui/material/Drawer';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import MenuIcon from '@mui/icons-material/Menu';
-import NotificationsIcon from '@mui/icons-material/Notifications';
 import DataObjectIcon from '@mui/icons-material/DataObject';
 import TuneIcon from '@mui/icons-material/Tune';
-import ImageIcon from '@mui/icons-material/Image';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import TrackStatus from './TrackStatus';
-import {Link, Outlet, redirect, useLinkClickHandler, useNavigate} from 'react-router-dom';
-import { Alert } from '@mui/material';
-import RefreshIcon from '@mui/icons-material/Refresh';
+import {Outlet, useLocation, useNavigate} from 'react-router-dom';
 import {ConnectionStatus} from "./connection";
 
 const drawerWidth: number = 240;
@@ -94,12 +82,13 @@ const Drawer = styled(MuiDrawer, { shouldForwardProp: (prop) => prop !== 'open' 
 const mdTheme = createTheme();
 
 export default function Layout() {
-  const [open, setOpen] = React.useState(true);
+  const [open, setOpen] = React.useState(true)
   const toggleDrawer = () => {
-    setOpen(!open);
+    setOpen(!open)
   };
 
-  const navigate = useNavigate();
+  const navigate = useNavigate()
+  const location = useLocation()
 
   return (
       <ThemeProvider theme={mdTheme}>
@@ -152,13 +141,13 @@ export default function Layout() {
             <List component="nav">
               <TrackStatus/>
               <Divider sx={{ my: 1 }} />
-              <ListItemButton onClick={() => navigate('/scripts')}>
+              <ListItemButton onClick={() => navigate('/scripts')} selected={location.pathname === '/scripts'}>
                 <ListItemIcon>
                   <DataObjectIcon />
                 </ListItemIcon>
                 <ListItemText primary="Scripts" />
               </ListItemButton>
-              <ListItemButton onClick={() => navigate('/channels')}>
+              <ListItemButton onClick={() => navigate('/channels')} selected={location.pathname === '/channels'}>
                 <ListItemIcon>
                   <TuneIcon />
                 </ListItemIcon>

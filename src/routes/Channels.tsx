@@ -1,7 +1,7 @@
 import {atom, DefaultValue, selectorFamily, useRecoilState, useRecoilValue} from "recoil";
 import React, {PropsWithChildren, useEffect} from "react";
 import {WsChannelUpdate, WsChannelUpdates, WsMessage, wsState} from "../connection";
-import {Box, Container, Grid, Paper, Slider} from "@mui/material";
+import {Container, Grid, Paper, Slider, Typography} from "@mui/material";
 import {ReadyState} from "react-use-websocket";
 
 const channelsState = atom<Map<number, number>>({
@@ -103,11 +103,16 @@ export const ChannelSlider = (({id}: {id: number}) => {
   const [value, setValue] = useRecoilState(channelState(id))
 
   return (
-      <Slider defaultValue={0} max={255} value={value} aria-label="Default" valueLabelDisplay="auto" onChange={(e, v) => {
-        if (typeof v === 'number') {
-          setValue(v)
-        }
-      }} />
+      <>
+        <Typography id="input-slider" gutterBottom>
+          Channel {id}
+        </Typography>
+        <Slider defaultValue={0} max={255} value={value} aria-label="Default" valueLabelDisplay="auto" onChange={(e, v) => {
+          if (typeof v === 'number') {
+            setValue(v)
+          }
+        }} />
+      </>
   )
 })
 export default function Channels() {
@@ -133,7 +138,6 @@ const ChannelGroups = (() => {
                             p: 2,
                             display: 'flex',
                             flexDirection: 'column',
-                            height: 240,
                     }}>
                         {Array.from(Array(groupSize)).map((s, itemNo) => {
                             const channelNo = groupNo*groupSize + itemNo + 1

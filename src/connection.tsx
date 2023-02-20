@@ -1,4 +1,4 @@
-import {Alert, Button} from "@mui/material";
+import {Alert} from "@mui/material";
 import React, {PropsWithChildren, useEffect} from "react";
 import {atom, selector, useRecoilValue, useSetRecoilState} from "recoil";
 import useWebSocket, {ReadyState} from "react-use-websocket";

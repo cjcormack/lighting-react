@@ -1,6 +1,6 @@
-import React, {PropsWithChildren, Suspense} from 'react';
+import React from 'react';
 import './App.css';
-import {atom, atomFamily, RecoilRoot, selector, selectorFamily, useRecoilState, useRecoilValue} from "recoil";
+import {RecoilRoot} from "recoil";
 
 import '@fontsource/roboto/300.css';
 import '@fontsource/roboto/400.css';
@@ -8,7 +8,7 @@ import '@fontsource/roboto/500.css';
 import '@fontsource/roboto/700.css';
 import Layout from "./Layout";
 import {createBrowserRouter, RouterProvider} from "react-router-dom";
-import Channels, {ChannelsUpdater} from "./routes/Channels";
+import Channels from "./routes/Channels";
 import Scripts from "./routes/Scripts";
 import {Connection} from "./connection";
 
