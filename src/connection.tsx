@@ -38,29 +38,6 @@ const wsReadyStateState = selector<ReadyState | undefined>({
   }
 })
 
-// const connectionState = selector<Connection>({
-//   key: 'connection',
-//   get: () => {
-//     return connection
-//   },
-//   set: () => {
-//
-//   }
-// })
-
-// const ws = new WebSocket(wsAddress)
-//
-// ws.onopen = () => {
-//   console.log("Connected!")
-// }
-
-// const connectionStatusState = selector({
-//   key: 'connectionStatus',
-//   get: ({get}) => {
-//     return get(connectionState).status
-//   },
-// })
-
 export const ConnectionStatus = (() => {
   const readyState = useRecoilValue(wsReadyStateState)
   if (readyState === undefined) {
