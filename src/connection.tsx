@@ -1,44 +1,51 @@
-import {Alert} from "@mui/material";
-import React, {PropsWithChildren, useEffect} from "react";
-import {atom, selector, useRecoilValue, useSetRecoilState} from "recoil";
-import useWebSocket, {ReadyState} from "react-use-websocket";
-import {WebSocketHook} from "react-use-websocket/src/lib/types";
-import {JsonValue} from "react-use-websocket/dist/lib/types";
-import {ChannelsUpdater} from "./routes/Channels";
+import React, {PropsWithChildren} from "react";
+import {DefaultValue} from "recoil";
+import {ItemKey, RecoilSync, UpdateItems} from "recoil-sync";
+import {createLightingApi} from "./lightingApi";
+import {Simulate} from "react-dom/test-utils";
+import change = Simulate.change;
 
-export type WsChannelUpdate = {c: {i: number, l: number}}
-export type WsChannelUpdates = {channels: {id: number, currentLevel: number}[]}
-type WsChannelUpdateOut = {
-  channel: {
-    id: number,
-    level: number,
-    fadeTime: number
-  }
+export const LightingApiStoreKey: string = "lighting-channels"
+
+export const LightingApiConnection: React.FC<PropsWithChildren> = ({children}) => {
+  const lightingApi = createLightingApi()
+
+  return (
+      <RecoilSync
+          storeKey={LightingApiStoreKey}
+          read={(itemKey) => {
+            const value = lightingApi.channels.currentValues().get(Number(itemKey))
+
+            if (value === undefined) {
+              return 0
+            }
+
+            return value
+          }}
+          write={({diff}) => {
+            diff.forEach((value, channelNo) => {
+              lightingApi.channels.updateValue(Number(channelNo), Number(value))
+            })
+          }}
+          listen={({updateItems}) => {
+            const subscription = lightingApi.channels.subscribe((updates) => {
+              const items = new Map<ItemKey, DefaultValue | unknown>()
+
+              updates.forEach((value, channelNo) => {
+                items.set(channelNo.toString(), value)
+              })
+
+              updateItems(items)
+            })
+            return subscription.unsubscribe
+          }}
+      >
+        {children}
+      </RecoilSync>
+  )
 }
 
-type WsData = WsChannelUpdate | WsChannelUpdates | WsChannelUpdateOut
-
-export type WsMessage = {
-  type: "uC" | "uT" | "channelState" | "updateChannel",
-  data: WsData,
-} & JsonValue
-
-const wsAddress = "ws://" + window.location.href.split("/")[2] + "/lighting/"
-
-export const wsState = atom<WebSocketHook<WsMessage> | undefined>({
-  key: 'ws',
-  default: undefined,
-})
-
-const wsReadyStateState = selector<ReadyState | undefined>({
-  key: 'wsReadyState',
-  get: ({get}) => {
-    const ws = get(wsState)
-    return ws?.readyState
-  }
-})
-
-export const ConnectionStatus = (() => {
+/*export const ConnectionStatus = (() => {
   const readyState = useRecoilValue(wsReadyStateState)
   if (readyState === undefined) {
     return null
@@ -63,25 +70,4 @@ export const ConnectionStatus = (() => {
     default:
       throw new Error('Unknown ReadyState')
   }
-})
-
-export const Connection = (({children}: PropsWithChildren) => {
-  const ws = useWebSocket<WsMessage>(wsAddress, {
-    share: true,
-    shouldReconnect: () => true,
-    reconnectInterval: 5000,
-  })
-
-  const setConnection = useSetRecoilState(wsState)
-
-  useEffect(() => {
-    setConnection(ws)
-  })
-
-  return (
-      <>
-        <ChannelsUpdater/>
-        {children}
-      </>
-  )
-})
+})*/

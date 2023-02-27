@@ -10,7 +10,7 @@ import Layout from "./Layout";
 import {createBrowserRouter, RouterProvider} from "react-router-dom";
 import Channels from "./routes/Channels";
 import Scripts from "./routes/Scripts";
-import {Connection} from "./connection";
+import {LightingApiConnection} from "./connection";
 
 function App() {
   const router = createBrowserRouter([
@@ -33,9 +33,9 @@ function App() {
   return (
       <React.StrictMode>
         <RecoilRoot>
-          <Connection>
+          <LightingApiConnection>
             <RouterProvider router={router}/>
-          </Connection>
+          </LightingApiConnection>
         </RecoilRoot>
       </React.StrictMode>
   );

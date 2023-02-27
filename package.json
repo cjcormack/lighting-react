@@ -9,6 +9,7 @@
     "@fontsource/roboto": "^4.5.8",
     "@mui/icons-material": "^5.11.9",
     "@mui/material": "^5.11.9",
+    "@recoiljs/refine": "^0.1.1",
     "@testing-library/jest-dom": "^5.16.5",
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
@@ -20,8 +21,8 @@
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.8.1",
     "react-scripts": "5.0.1",
-    "react-use-websocket": "^4.3.1",
     "recoil": "^0.7.6",
+    "recoil-sync": "^0.2.0",
     "typescript": "^4.9.5",
     "web-vitals": "^2.1.4"
   },
