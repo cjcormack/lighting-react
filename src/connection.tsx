@@ -1,14 +1,14 @@
 import React, {PropsWithChildren} from "react";
 import {DefaultValue} from "recoil";
 import {ItemKey, RecoilSync, UpdateItems} from "recoil-sync";
-import {createLightingApi} from "./lightingApi";
+import {useLightingApi} from "./lightingApi";
 import {Simulate} from "react-dom/test-utils";
 import change = Simulate.change;
 
 export const LightingApiStoreKey: string = "lighting-channels"
 
 export const LightingApiConnection: React.FC<PropsWithChildren> = ({children}) => {
-  const lightingApi = createLightingApi()
+  const lightingApi = useLightingApi()
 
   return (
       <RecoilSync

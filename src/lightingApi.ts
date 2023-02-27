@@ -1,14 +1,29 @@
-type ChannelUpdateInMessage = {
-  type: "uC",
-  data: {
-    c: {
-      i: number,
-      l: number,
-    }
-  }
+const enum ChannelTypes {
+  'uC' = 'uC',
+  'channelState' = 'channelState',
 }
 
-type InMessage = ChannelUpdateInMessage
+interface ChannelUpdateInMessage {
+  type: ChannelTypes.uC;
+  data: {
+    c: {
+      i: number;
+      l: number;
+    };
+  };
+}
+
+interface ChannelStateInMessage {
+  type: ChannelTypes.channelState;
+  data: {
+    channels: {
+      id: number;
+      currentLevel: number;
+    }[];
+  };
+}
+
+type InMessage = ChannelUpdateInMessage | ChannelStateInMessage;
 
 function aggregateAndDebounce<A, B>(
     // Take some val and the current aggregated vals in and return next aggregated vals
@@ -87,7 +102,13 @@ type LightingApi = {
   }
 }
 
-export function createLightingApi(): LightingApi {
+const lightingApi = createLightingApi()
+
+export function useLightingApi(): LightingApi {
+  return lightingApi
+}
+
+function createLightingApi(): LightingApi {
   const currentValues = new Map<number, number>()
 
   let nextId = 1
@@ -102,18 +123,33 @@ export function createLightingApi(): LightingApi {
     })
   }, 100)
 
-  const wsAddress = "ws://" + window.location.href.split("/")[2] + "/lighting/"
+  const wsAddress = 'ws://' + window.location.href.split('/')[2] + '/lighting/'
   const ws = new WebSocket(wsAddress)
 
-  ws.onopen = () => {}
+  window.setInterval(() => {
+    if (ws.readyState == WebSocket.OPEN) {
+      ws.send(JSON.stringify({type: "ping"}))
+    }
+  }, 10_000)
+
+  ws.onopen = () => {
+    const payload = {
+      type: 'channelState',
+    }
+    ws.send(JSON.stringify(payload))
+  }
   ws.onerror = () => {}
   ws.onclose = () => {}
 
   ws.onmessage = (ev: MessageEvent) => {
     const message: InMessage = JSON.parse(ev.data)
 
-    if (message as ChannelUpdateInMessage) {
+    if (message.type === ChannelTypes.uC) {
       updateItem(message.data.c.i, message.data.c.l)
+    } else if (message.type === ChannelTypes.channelState) {
+      message.data.channels.forEach((update) => {
+        updateItem(update.id, update.currentLevel)
+      })
     }
   }
 
@@ -137,7 +173,7 @@ export function createLightingApi(): LightingApi {
       },
       updateValue: (channelNo: number, value: number) => {
         const payload = {
-          type: "updateChannel",
+          type: 'updateChannel',
           data: {channel: {id: channelNo, level: value, fadeTime: 0}}
         }
         ws.send(JSON.stringify(payload))
@@ -145,15 +181,3 @@ export function createLightingApi(): LightingApi {
     }
   }
 }
-
-
-// newValues.forEach((newValue, id) => {
-//   const oldValue = oldValues.get(id)
-//   if (oldValue !== newValue) {
-//     const payload: WsMessage = {
-//       type: "updateChannel",
-//       data: {channel: {id: id, level: newValue, fadeTime: 0}}
-//     }
-//     ws.sendJsonMessage(payload)
-//   }
-// })

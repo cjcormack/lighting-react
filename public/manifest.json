@@ -1,6 +1,6 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "lighting-react",
+  "name": "Chris' DMX Controller v7",
   "icons": [
     {
       "src": "favicon.ico",
