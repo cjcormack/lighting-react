@@ -2,7 +2,7 @@ import {atomFamily, useRecoilState} from "recoil";
 import React from "react";
 import {Container, Grid, Paper, Slider, Typography} from "@mui/material";
 import {syncEffect} from "recoil-sync";
-import {LightingApiStoreKey} from "../connection";
+import {LightingChannelsStoreKey} from "../connection";
 import {number} from "@recoiljs/refine";
 
 const channelState = atomFamily<number, number>({
@@ -11,7 +11,7 @@ const channelState = atomFamily<number, number>({
   effects: param => [
     syncEffect({
       itemKey: param.toString(),
-      storeKey: LightingApiStoreKey,
+      storeKey: LightingChannelsStoreKey,
       refine: number(),
     }),
   ],

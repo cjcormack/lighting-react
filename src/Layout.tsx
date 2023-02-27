@@ -27,6 +27,7 @@ import DataObjectIcon from '@mui/icons-material/DataObject';
 import TuneIcon from '@mui/icons-material/Tune';
 import TrackStatus from './TrackStatus';
 import {Outlet, useLocation, useNavigate} from 'react-router-dom';
+import {ConnectionStatus} from "./connection";
 
 const drawerWidth: number = 240;
 
@@ -120,7 +121,7 @@ export default function Layout() {
               >
                 Chris' DMX Controller v7
               </Typography>
-              {/*<ConnectionStatus/>*/}
+              <ConnectionStatus/>
             </Toolbar>
           </AppBar>
           <Drawer variant="permanent" open={open}>
