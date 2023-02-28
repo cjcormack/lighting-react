@@ -1,0 +1,57 @@
+import {Subscription} from "./subscription";
+import {InternalApiConnection, InternalEventType} from "./lightingApi";
+
+export enum Status {
+    CONNECTING,
+    OPEN,
+    CLOSING,
+    CLOSED,
+}
+
+export interface StatusApi {
+    get(): Status
+    reconnect(): void
+    subscribe(fn: ((status: Status) => void)): Subscription
+}
+
+export function createStatusApi(conn: InternalApiConnection): StatusApi {
+    let nextStatusSubscriptionId = 1
+    const statusUpdatesSubscriptions = new Map<number, (status: Status) => void>()
+
+    const notifyStatusChange = (readyState: Status) => {
+        statusUpdatesSubscriptions.forEach((fn) => {
+            fn(readyState)
+        })
+    }
+
+    conn.subscribe((evType, ev) => {
+        if (evType === InternalEventType.message) {
+            return
+        }
+        notifyStatusChange(conn.readyState())
+    })
+
+    return {
+        get: (): Status => {
+            return conn.readyState()
+        },
+        reconnect: () => {
+            conn.reconnect()
+            notifyStatusChange(conn.readyState())
+        },
+        subscribe: (fn: (status: Status) => void): Subscription => {
+            const thisId = nextStatusSubscriptionId
+            nextStatusSubscriptionId++
+
+            fn(conn.readyState())
+
+            statusUpdatesSubscriptions.set(thisId, fn)
+
+            return {
+                unsubscribe: () => {
+                    statusUpdatesSubscriptions.delete(thisId)
+                },
+            }
+        },
+    }
+}

@@ -15,7 +15,7 @@ import {LightingApiConnection} from "./connection";
 function App() {
   const router = createBrowserRouter([
     {
-      path: "/",
+      path: "/lighting/",
       element: <Layout />,
       children: [
         {

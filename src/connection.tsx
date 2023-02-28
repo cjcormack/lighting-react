@@ -1,12 +1,14 @@
 import React, {PropsWithChildren} from "react";
 import {atom, DefaultValue, useRecoilValue} from "recoil";
 import {ItemKey, RecoilSync, syncEffect} from "recoil-sync";
-import {Status, useLightingApi} from "./api/lightingApi";
+import {useLightingApi} from "./api/lightingApi";
 import {Alert, Button} from "@mui/material";
 import {number} from "@recoiljs/refine";
+import {Status} from "./api/statusApi";
 
 export const LightingChannelsStoreKey: string = 'lighting-channels'
 export const LightingStatusStoreKey: string = 'lighting-status'
+export const LightingTrackStoreKey: string = 'lighting-track'
 
 export const LightingApiConnection: React.FC<PropsWithChildren> = ({children}) => {
   const lightingApi = useLightingApi()
@@ -15,7 +17,7 @@ export const LightingApiConnection: React.FC<PropsWithChildren> = ({children}) =
       <RecoilSync
           storeKey={LightingStatusStoreKey}
           read={() => {
-            return lightingApi.status.currentStatus()
+            return lightingApi.status.get()
           }}
           listen={({updateAllKnownItems}) => {
             const subscription = lightingApi.status.subscribe((status) => {
@@ -27,7 +29,7 @@ export const LightingApiConnection: React.FC<PropsWithChildren> = ({children}) =
         <RecoilSync
             storeKey={LightingChannelsStoreKey}
             read={(itemKey) => {
-              const value = lightingApi.channels.currentValues().get(Number(itemKey))
+              const value = lightingApi.channels.getAll().get(Number(itemKey))
 
               if (value === undefined) {
                 return 0
@@ -37,7 +39,7 @@ export const LightingApiConnection: React.FC<PropsWithChildren> = ({children}) =
             }}
             write={({diff}) => {
               diff.forEach((value, channelNo) => {
-                lightingApi.channels.updateValue(Number(channelNo), Number(value))
+                lightingApi.channels.update(Number(channelNo), Number(value))
               })
             }}
             listen={({updateItems}) => {
@@ -53,7 +55,20 @@ export const LightingApiConnection: React.FC<PropsWithChildren> = ({children}) =
               return subscription.unsubscribe
             }}
         >
-          {children}
+          <RecoilSync
+              storeKey={LightingTrackStoreKey}
+              read={() => {
+                return lightingApi.track.get()
+              }}
+              listen={({updateAllKnownItems}) => {
+                const subscription = lightingApi.track.subscribe((currentTrack) => {
+                  updateAllKnownItems(new Map<ItemKey, DefaultValue | unknown>([['currentTrack', currentTrack]]))
+                })
+                return subscription.unsubscribe
+              }}
+          >
+            {children}
+          </RecoilSync>
         </RecoilSync>
       </RecoilSync>
   )
