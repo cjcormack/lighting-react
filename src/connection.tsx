@@ -1,18 +1,16 @@
 import React, {PropsWithChildren} from "react";
 import {atom, DefaultValue, useRecoilValue} from "recoil";
 import {ItemKey, RecoilSync, syncEffect} from "recoil-sync";
-import {useLightingApi} from "./api/lightingApi";
 import {Alert, Button} from "@mui/material";
 import {number} from "@recoiljs/refine";
 import {Status} from "./api/statusApi";
+import {lightingApi} from "./api/lightingApi";
 
 export const LightingChannelsStoreKey: string = 'lighting-channels'
 export const LightingStatusStoreKey: string = 'lighting-status'
 export const LightingTrackStoreKey: string = 'lighting-track'
 
 export const LightingApiConnection: React.FC<PropsWithChildren> = ({children}) => {
-  const lightingApi = useLightingApi()
-
   return (
       <RecoilSync
           storeKey={LightingStatusStoreKey}
@@ -87,7 +85,6 @@ const statusState = atom<Status>({
 
 export const ConnectionStatus = (() => {
   const readyState = useRecoilValue(statusState)
-  const lightingApi = useLightingApi()
 
   if (readyState === undefined) {
     return null

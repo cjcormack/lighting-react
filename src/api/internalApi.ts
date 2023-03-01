@@ -9,6 +9,7 @@ export function InMessageChecker<A, B>(typeChecker: Checker<A>, dataChecker: Che
 }
 
 export interface InternalApiConnection {
+  baseUrl: string
   readyState(): number;
   send(data: string | ArrayBufferLike | Blob | ArrayBufferView): void,
   subscribe(fn: ((evType: InternalEventType, ev: Event) => void)): Subscription
@@ -22,7 +23,7 @@ export enum InternalEventType {
   'open' = 'open',
 }
 
-export function createInternalApiConnection(wsAddress: string): InternalApiConnection {
+export function createInternalApiConnection(baseUrl: string, wsUrl: string): InternalApiConnection {
   let nextEventSubscriptionId = 1
   const eventSubscriptions = new Map<number, (evType: InternalEventType, ev: Event) => void>()
 
@@ -36,7 +37,7 @@ export function createInternalApiConnection(wsAddress: string): InternalApiConne
   }
 
   function connect(): WebSocket {
-    const ws = new WebSocket(wsAddress)
+    const ws = new WebSocket(wsUrl)
 
     ws.onopen = (ev) => {
       notifyEvent(ev)
@@ -64,6 +65,7 @@ export function createInternalApiConnection(wsAddress: string): InternalApiConne
   }, 10_000)
 
   return {
+    baseUrl: baseUrl,
     readyState(): number {
       return ws.readyState
     },

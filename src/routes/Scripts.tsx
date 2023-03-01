@@ -1,34 +1,13 @@
 import {Container} from "@mui/material";
 import React, {Suspense} from "react";
 import {selector, selectorFamily, useRecoilValue} from "recoil";
+import {lightingApi} from "../api/lightingApi";
+import {Script} from "../api/scriptsApi";
 
-export default function Scripts() {
-  return (
-      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-        <Suspense fallback={'Loading...'}>
-          <ScriptList/>
-        </Suspense>
-        <Suspense fallback={'Loading...'}>
-          <ScriptDisplay id={28}/>
-        </Suspense>
-      </Container>
-  )
-}
-
-type Scripts = {
-  scripts: Array<Script>,
-}
-
-type Script = {
-  id: number
-  name: string,
-  script: string,
-}
-
-const scriptListState = selector<Scripts>({
+const scriptListState = selector<readonly Script[]>({
   key: 'scriptList',
-  get: async () => {
-    return await fetch('/lighting/rest/script/list').then((res) => res.json())
+  get: () => {
+    return lightingApi.scripts.getAll()
   },
 })
 
@@ -36,14 +15,14 @@ const scriptIdsState = selector<Array<number>>({
   key: 'scriptIds',
   get: ({get}) => {
     const scripts = get(scriptListState)
-    return scripts.scripts.map((it) => it.id)
+    return scripts.map((it) => it.id)
   },
 })
 
 const scriptsMappedByIdState = selector<Map<number, Script>>({
   key: 'scriptsMappedById',
   get: ({get}) => {
-    const scriptList = get(scriptListState).scripts
+    const scriptList = get(scriptListState)
     return new Map(scriptList.map((script => [script.id, script])))
   }
 })
@@ -59,6 +38,19 @@ const scriptState = selectorFamily<Script, number>({
     return script
   },
 })
+
+export default function Scripts() {
+  return (
+      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+        <Suspense fallback={'Loading...'}>
+          <ScriptList/>
+        </Suspense>
+        <Suspense fallback={'Loading...'}>
+          <ScriptDisplay id={28}/>
+        </Suspense>
+      </Container>
+  )
+}
 
 const ScriptList = () => {
   const scriptIds = useRecoilValue(scriptIdsState)
@@ -86,7 +78,6 @@ const ScriptListEntry = ({id}: {id: number}) => {
 
 const ScriptDisplay = ({id}: {id: number}) => {
   const script = useRecoilValue(scriptState(id))
-  console.log(script)
 
   if (script === undefined) {
     return null
