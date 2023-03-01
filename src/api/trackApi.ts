@@ -1,27 +1,26 @@
 import {Subscription} from "./subscription";
-import {InternalApiConnection} from "./lightingApi";
-
-export interface TrackDetails {
-    isPlaying: boolean,
-    artist: string,
-    name: string,
-}
+import {bool, CheckerReturnType, jsonParser, literal, object, string, union} from "@recoiljs/refine";
+import {InMessageChecker, InternalApiConnection} from "./internalApi";
 
 export interface TrackApi {
     get(): TrackDetails
     subscribe(fn: (currentTrack: TrackDetails) => void): Subscription
 }
 
-const enum TrackTypes {
-    'uT' = 'uT',
-    'trackDetails' = 'trackDetails',
-}
+export const TrackDetailsChecker = object({
+    isPlaying: bool(),
+    artist: string(),
+    name: string(),
+})
 
-interface TrackUpdateInMessage {
-    type: TrackTypes.uT | TrackTypes.trackDetails
-    data: TrackDetails
-}
+export type TrackDetails = CheckerReturnType<typeof TrackDetailsChecker>
 
+const TrackUpdateInMessageChecker = InMessageChecker(
+    union(literal('uT'), literal('trackDetails')),
+    TrackDetailsChecker
+)
+
+const trackUpdateParser = jsonParser(TrackUpdateInMessageChecker)
 
 export function createTrackApi(conn: InternalApiConnection): TrackApi {
     let currentTrack: TrackDetails = {
@@ -47,10 +46,11 @@ export function createTrackApi(conn: InternalApiConnection): TrackApi {
     }
 
     const handleOnMessage = (ev: MessageEvent) => {
-        const message: TrackUpdateInMessage = JSON.parse(ev.data)
-
-        currentTrack = message.data
-        notifyTrackChange(currentTrack)
+        const message = trackUpdateParser(ev.data)
+        if (message != null) {
+            currentTrack = message.data
+            notifyTrackChange(currentTrack)
+        }
     }
 
     conn.subscribe((evType, ev) => {

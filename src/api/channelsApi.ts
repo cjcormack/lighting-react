@@ -1,6 +1,7 @@
 import {Subscription} from "./subscription";
 import {aggregateAndDebounce} from "./aggregateAndDebounce";
-import {InternalApiConnection} from "./lightingApi";
+import {InMessageChecker, InternalApiConnection} from "./internalApi";
+import {array, jsonParser, literal, number, object, union} from "@recoiljs/refine";
 
 export interface ChannelsApi {
     getAll(): Map<number, number>
@@ -8,32 +9,26 @@ export interface ChannelsApi {
     subscribe(fn: (updates: Map<number, number>) => void): Subscription
 }
 
-const enum ChannelTypes {
-    'uC' = 'uC',
-    'channelState' = 'channelState',
-}
+const ChannelUpdateInMessageChecker = InMessageChecker(
+    literal('uC'),
+    object({
+        c: object({
+            i: number(),
+            l: number()
+        })
+    })
+)
+const ChannelStateInMessageChecker = InMessageChecker(
+    literal('channelState'),
+    object({
+        channels: array(object({
+            id: number(),
+            currentLevel: number()
+        }))
+    })
+)
 
-interface ChannelUpdateInMessage {
-    type: ChannelTypes.uC
-    data: {
-        c: {
-            i: number
-            l: number
-        };
-    };
-}
-
-interface ChannelStateInMessage {
-    type: ChannelTypes.channelState
-    data: {
-        channels: {
-            id: number
-            currentLevel: number
-        }[];
-    };
-}
-
-type InMessage = ChannelUpdateInMessage | ChannelStateInMessage
+const channelUpdateParser = jsonParser(union(ChannelUpdateInMessageChecker, ChannelStateInMessageChecker))
 
 function debounceChannelUpdates(
     func: (updates: Map<number, number>) => void,
@@ -71,7 +66,7 @@ export function createChannelsApi(conn: InternalApiConnection): ChannelsApi {
         notifyChannelsChange(updates)
     }, 100)
 
-    const handleOnOpen = (ev: Event) => {
+    const handleOnOpen = () => {
         const payload = {
             type: 'channelState',
         }
@@ -79,12 +74,16 @@ export function createChannelsApi(conn: InternalApiConnection): ChannelsApi {
     }
 
     const handleOnMessage = (ev: MessageEvent) => {
-        const message: InMessage = JSON.parse(ev.data)
+        const message = channelUpdateParser(ev.data)
 
-        if (message.type === ChannelTypes.uC) {
+        if (message == null) {
+            return
+        }
+
+        if (message.type === 'uC') {
             currentValues.set(message.data.c.i, message.data.c.l)
             updateItem(message.data.c.i, message.data.c.l)
-        } else if (message.type === ChannelTypes.channelState) {
+        } else if (message.type === 'channelState') {
             message.data.channels.forEach((update) => {
                 currentValues.set(update.id, update.currentLevel)
                 updateItem(update.id, update.currentLevel)
@@ -94,7 +93,7 @@ export function createChannelsApi(conn: InternalApiConnection): ChannelsApi {
 
     conn.subscribe((evType, ev) => {
         if (evType === 'open') {
-            handleOnOpen(ev)
+            handleOnOpen()
         } else if (evType === 'message' && ev instanceof MessageEvent) {
             handleOnMessage(ev)
         }

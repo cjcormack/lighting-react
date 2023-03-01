@@ -1,5 +1,5 @@
 import {Subscription} from "./subscription";
-import {InternalApiConnection, InternalEventType} from "./lightingApi";
+import {InternalApiConnection, InternalEventType} from "./internalApi";
 
 export enum Status {
     CONNECTING,

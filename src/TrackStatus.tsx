@@ -2,17 +2,10 @@ import {Avatar, ListItem, ListItemAvatar, ListItemText} from "@mui/material";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import PauseIcon from "@mui/icons-material/Pause";
 import React from "react";
-import {atom, atomFamily, useRecoilValue} from "recoil";
-import {bool, Checker, number, object, string} from "@recoiljs/refine";
+import {atom, useRecoilValue} from "recoil";
 import {syncEffect} from "recoil-sync";
 import {LightingTrackStoreKey} from "./connection";
-import {TrackDetails} from "./api/trackApi";
-
-const trackChecker = object({
-  isPlaying: bool(),
-  artist: string(),
-  name: string(),
-});
+import {TrackDetails, TrackDetailsChecker} from "./api/trackApi";
 
 const trackState = atom<TrackDetails>({
   key: 'channels',
@@ -25,7 +18,7 @@ const trackState = atom<TrackDetails>({
     syncEffect({
       itemKey: 'currentTrack',
       storeKey: LightingTrackStoreKey,
-      refine: trackChecker,
+      refine: TrackDetailsChecker,
     }),
   ],
 })
