@@ -1,8 +1,9 @@
-import {Container} from "@mui/material";
+import {Box, Container, Divider, Grid, List, ListItem, ListItemButton, ListItemIcon, ListItemText} from "@mui/material";
 import React, {Suspense} from "react";
 import {selector, selectorFamily, useRecoilValue} from "recoil";
 import {lightingApi} from "../api/lightingApi";
 import {Script} from "../api/scriptsApi";
+import {Drafts, Inbox} from "@mui/icons-material";
 
 const scriptListState = selector<readonly Script[]>({
   key: 'scriptList',
@@ -41,14 +42,58 @@ const scriptState = selectorFamily<Script, number>({
 
 export default function Scripts() {
   return (
-      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-        <Suspense fallback={'Loading...'}>
+      <>
+        <Grid container spacing={0}>
+          <Grid item xs="auto">
+            <Box sx={{ width: 200, bgcolor: 'background.paper' }}>
+              <nav aria-label="main mailbox folders">
+                <List>
+                  <ListItem disablePadding>
+                    <ListItemButton>
+                      <ListItemIcon>
+                        <Inbox />
+                      </ListItemIcon>
+                      <ListItemText primary="Inbox" />
+                    </ListItemButton>
+                  </ListItem>
+                  <ListItem disablePadding>
+                    <ListItemButton>
+                      <ListItemIcon>
+                        <Drafts />
+                      </ListItemIcon>
+                      <ListItemText primary="Drafts" />
+                    </ListItemButton>
+                  </ListItem>
+                </List>
+              </nav>
+              <Divider />
+              <nav aria-label="secondary mailbox folders">
+                <List>
+                  <ListItem disablePadding>
+                    <ListItemButton>
+                      <ListItemText primary="Trash" />
+                    </ListItemButton>
+                  </ListItem>
+                  <ListItem disablePadding>
+                    <ListItemButton component="a" href="#simple-list">
+                      <ListItemText primary="Spam" />
+                    </ListItemButton>
+                  </ListItem>
+                </List>
+              </nav>
+            </Box>
+          </Grid>
+          <Grid item xs>
+            b
+          </Grid>
+        </Grid>
+        {/*<Suspense fallback={'Loading...'}>
           <ScriptList/>
         </Suspense>
         <Suspense fallback={'Loading...'}>
           <ScriptDisplay id={28}/>
-        </Suspense>
-      </Container>
+        </Suspense>*/}
+      </>
   )
 }
 
