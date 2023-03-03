@@ -23,7 +23,7 @@ function App() {
           element: <Channels />,
         },
         {
-          path: "scripts",
+          path: "scripts/:scriptId?",
           element: <Scripts />,
         },
       ],

@@ -141,13 +141,17 @@ export default function Layout() {
             <List component="nav">
               <TrackStatus/>
               <Divider sx={{ my: 1 }} />
-              <ListItemButton onClick={() => navigate('/lighting/scripts')} selected={location.pathname === '/lighting/scripts'}>
+              <ListItemButton
+                  onClick={() => navigate('/lighting/scripts')}
+                  selected={location.pathname.startsWith('/lighting/scripts')}>
                 <ListItemIcon>
                   <DataObjectIcon />
                 </ListItemIcon>
                 <ListItemText primary="Scripts" />
               </ListItemButton>
-              <ListItemButton onClick={() => navigate('/lighting/channels')} selected={location.pathname === '/lighting/channels'}>
+              <ListItemButton
+                  onClick={() => navigate('/lighting/channels')}
+                  selected={location.pathname === '/lighting/channels'}>
                 <ListItemIcon>
                   <TuneIcon />
                 </ListItemIcon>
