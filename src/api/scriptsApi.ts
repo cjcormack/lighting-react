@@ -68,6 +68,10 @@ const RunResultParser = jsonParserEnforced(object({
 }))
 
 export type Script = CheckerReturnType<typeof ScriptChecker>
+export type ScriptDetails = {
+  name: string,
+  script: string,
+}
 
 export type CompileResult = CheckerReturnType<typeof CompileResultChecker>
 
@@ -78,8 +82,9 @@ export interface ScriptsApi {
   get(id: number): Promise<Script | undefined>,
   compile(script: string): Promise<CompileResult>,
   run(script: string): Promise<RunResult>,
-  save(id: number, script: {name: string, script: string}): Promise<Script>,
+  save(id: number, script: ScriptDetails): Promise<Script>,
   delete(id: number): Promise<void>,
+  create(script: ScriptDetails): Promise<Script>,
 }
 
 export function createScriptApi(conn: InternalApiConnection): ScriptsApi {
@@ -122,6 +127,14 @@ export function createScriptApi(conn: InternalApiConnection): ScriptsApi {
       return fetch(`${conn.baseUrl}rest/script/${id}`, {
         method: "DELETE",
       }).then(() => {})
+    },
+    create(script: ScriptDetails): Promise<Script> {
+      return fetch(`${conn.baseUrl}rest/script`, {
+        method: "POST",
+        body: JSON.stringify({script: script}),
+      }).then((res) => {
+        return res.text().then((text) => ScriptParser(text).script)
+      })
     },
   }
 }

@@ -28,7 +28,7 @@ function App() {
         },
       ],
     },
-  ]);
+  ])
 
   return (
       <React.StrictMode>
@@ -38,7 +38,7 @@ function App() {
           </LightingApiConnection>
         </RecoilRoot>
       </React.StrictMode>
-  );
+  )
 }
 
-export default App;
+export default App

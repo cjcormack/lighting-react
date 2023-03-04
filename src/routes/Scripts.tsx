@@ -7,19 +7,20 @@ import {
 import React, {Dispatch, SetStateAction, Suspense, useEffect, useState} from "react";
 import {atom, selector, selectorFamily, useRecoilRefresher_UNSTABLE, useRecoilState, useRecoilValue} from "recoil";
 import {lightingApi} from "../api/lightingApi";
-import {CompileResult, RunResult, Script} from "../api/scriptsApi";
+import {CompileResult, RunResult, Script, ScriptDetails} from "../api/scriptsApi";
 import {
+  unstable_useBlocker,
   unstable_usePrompt,
   useLocation,
   useNavigate,
   useParams
 } from "react-router-dom";
+import {Add as AddIcon, Build as BuildIcon, PlayArrow as PlayArrowIcon, Warning as WarningIcon, Error as ErrorIcon, Info as InfoIcon} from "@mui/icons-material";
 import AceEditor from "react-ace";
 
 import "ace-builds/src-noconflict/mode-kotlin"
 import "ace-builds/src-noconflict/theme-github";
 import "ace-builds/src-noconflict/ext-language_tools";
-import {Build as BuildIcon, PlayArrow as PlayArrowIcon, Warning as WarningIcon, Error as ErrorIcon, Info as InfoIcon} from "@mui/icons-material";
 
 const scriptListState = selector<readonly Script[]>({
   key: 'scriptList',
@@ -44,7 +45,7 @@ const scriptsMappedByIdState = selector<Map<number, Script>>({
   }
 })
 
-const scriptState = selectorFamily<Script, number>({
+const scriptState = selectorFamily<ScriptDetails, number>({
   key: 'script',
   get: (scriptId: number) => ({get}) => {
     const scriptsMappedById = get(scriptsMappedByIdState)
@@ -66,30 +67,17 @@ export default function Scripts() {
               <Suspense fallback={'Loading...'}>
                 <ScriptList/>
               </Suspense>
-              <ListItemButton>
-                <ListItemText
-                    primary="Single-line item"
-                />
-              </ListItemButton>
-              <ListItemButton>
-                <ListItemText
-                    primary="Single-line item"
-                />
-              </ListItemButton>
-              <ListItemButton>
-                <ListItemText
-                    primary="Single-line item"
-                />
-              </ListItemButton>
             </List>
           </Box>
         </Grid>
         <Grid item xs>
           {scriptId === undefined ? (
               <></>
+          ) : scriptId === 'new' ?(
+              <NewScript/>
           ) : (
               <Suspense fallback={'Loading...'}>
-                <ScriptDisplay id={Number(scriptId)}/>
+                <EditScript id={Number(scriptId)}/>
               </Suspense>
           )
           }
@@ -101,6 +89,12 @@ export default function Scripts() {
 const ScriptList = () => {
   const scriptIds = useRecoilValue(scriptIdsState)
 
+  const navigate = useNavigate()
+
+  const doNew = () => {
+    navigate('/lighting/scripts/new')
+  }
+
   return (
       <>
         {scriptIds.map((scriptId) => {
@@ -110,6 +104,13 @@ const ScriptList = () => {
               </Suspense>
           )
         })}
+        <Box sx={{m: 1}}>
+          <Button startIcon={<AddIcon/>}
+                  size="small"
+                  variant="outlined"
+                  fullWidth
+                  onClick={doNew}>New Script</Button>
+        </Box>
       </>
   )
 }
@@ -142,22 +143,45 @@ interface ScriptEdits {
   script?: string,
 }
 
-const ScriptDisplay = ({id}: { id: number }) => {
+const NewScript = () => {
+  const script: ScriptDetails = {
+    name: '',
+    script: '',
+  }
+  return (
+      <ScriptDisplay script={script}/>
+  )
+}
+
+const EditScript = ({id}: { id: number }) => {
   const script = useRecoilValue(scriptState(id))
 
+  return (
+      <ScriptDisplay script={script} id={id}/>
+  )
+}
+
+const ScriptDisplay = ({script, id}: { script: ScriptDetails, id?: number }) => {
   const [compileResult, setCompileResult] = useState<Promise<CompileResult> | undefined>()
   const [runResult, setRunResult] = useState<Promise<RunResult> | undefined>()
 
   const [edits, setEdits] = useRecoilState(scriptEditsState)
   const [deleteAlertOpen, setDeleteAlertOpen] = useState<boolean>(false)
 
+  const [newId, setNewId] = useState<number | undefined>()
+
   const scriptListRefresher = useRecoilRefresher_UNSTABLE(scriptListState)
+
+  const navigate = useNavigate()
 
   const hasChanged = edits.name !== undefined || edits.script !== undefined
 
-  unstable_usePrompt({when: hasChanged, message: "Unsaved changes"})
+  unstable_usePrompt({when: hasChanged && newId === undefined, message: "Unsaved changes"})
 
   useEffect(() => {
+    if (newId !== undefined) {
+      navigate(`/lighting/scripts/${newId}`)
+    }
     if (edits.id !== id) {
       setEdits({
         id: id,
@@ -172,9 +196,11 @@ const ScriptDisplay = ({id}: { id: number }) => {
   const scriptName = edits.name !== undefined ? edits.name : script.name
   const scriptScript = edits.script !== undefined ? edits.script : script.script
 
-  const canReset = hasChanged
-  const canSave = hasChanged
-  const canDelete = true
+  const isNew = id === undefined
+
+  const canReset = hasChanged && !isNew
+  const canSave = hasChanged && scriptName !== '' && scriptScript !== ''
+  const canDelete = !isNew
   const canCompile = scriptScript !== ''
   const canRun = scriptScript !== ''
 
@@ -185,28 +211,46 @@ const ScriptDisplay = ({id}: { id: number }) => {
     setRunResult(lightingApi.scripts.run(scriptScript))
   }
   const doDelete = () => {
-    setDeleteAlertOpen(true)
+    if (!isNew) {
+      setDeleteAlertOpen(true)
+    }
   }
   const doReset = () => {
-    setEdits({
-      id: script.id,
-    })
+    if (!isNew) {
+      setEdits({
+        id: id,
+      })
+    }
   }
   const doSave = () => {
-    lightingApi.scripts.save(id, {
-      name: scriptName,
-      script: scriptScript,
-    }).then(() => {
-      scriptListRefresher()
-      setEdits({
-        id: script.id,
+    if (isNew) {
+      lightingApi.scripts.create({
+        name: scriptName,
+        script: scriptScript,
+      }).then((newScript) => {
+        scriptListRefresher()
+        setEdits({
+          id: newScript.id,
+        })
+        setNewId(newScript.id)
+
       })
-    })
+    } else {
+      lightingApi.scripts.save(id, {
+        name: scriptName,
+        script: scriptScript,
+      }).then(() => {
+        scriptListRefresher()
+        setEdits({
+          id: id,
+        })
+      })
+    }
   }
 
   const onNameChange = (ev: React.ChangeEvent<HTMLTextAreaElement | HTMLInputElement>) => {
     const updatedEdits: ScriptEdits = {
-      id: script.id,
+      id: id,
       script: edits.script,
     }
 
@@ -217,7 +261,7 @@ const ScriptDisplay = ({id}: { id: number }) => {
   }
   const onScriptChange = (value: string) => {
     const updatedEdits: ScriptEdits = {
-      id: script.id,
+      id: id,
       name: edits.name,
     }
 
@@ -231,7 +275,9 @@ const ScriptDisplay = ({id}: { id: number }) => {
       <>
         <ScriptCompileDialog compileResult={compileResult} setCompileResult={setCompileResult}/>
         <ScriptRunDialog runResult={runResult} setRunResult={setRunResult}/>
-        <DeleteConfirmAlert id={id} open={deleteAlertOpen} setOpen={setDeleteAlertOpen} />
+        {
+          isNew ? null : <DeleteConfirmAlert id={id} open={deleteAlertOpen} setOpen={setDeleteAlertOpen} />
+        }
         <Paper
             sx={{
               p: 2,
@@ -289,7 +335,9 @@ const ScriptDisplay = ({id}: { id: number }) => {
             <ButtonGroup variant="contained" aria-label="text button group">
               <Button color="error" disabled={!canDelete} onClick={doDelete}>Delete</Button>
               <Button disabled={!canReset} onClick={doReset}>Reset</Button>
-              <Button disabled={!canSave} onClick={doSave}>Save</Button>
+              <Button disabled={!canSave} onClick={doSave}>
+                { isNew ? 'Create' : 'Save' }
+              </Button>
             </ButtonGroup>
           </Box>
         </Paper>
