@@ -15,14 +15,14 @@ export const lightingApi = createLightingApi()
 
 function getWebSocketUrl() {
   if (process.env.NODE_ENV && process.env.NODE_ENV === 'development') {
-    return 'ws://127.0.0.1:8080/lighting/'
+    return 'ws://127.0.0.1:8080/api'
   } else {
-    return 'ws://' + window.location.href.split('/')[2] + '/lighting/'
+    return 'ws://' + window.location.href.split('/')[2] + '/api'
   }
 }
 
 function createLightingApi(): LightingApi {
-  const baseUrl = '/lighting/'
+  const baseUrl = '/api/'
   const wsUrl = getWebSocketUrl()
 
   const connection = createInternalApiConnection(baseUrl, wsUrl)

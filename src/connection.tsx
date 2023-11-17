@@ -27,7 +27,7 @@ export const LightingApiConnection: React.FC<PropsWithChildren> = ({children}) =
         <RecoilSync
             storeKey={LightingChannelsStoreKey}
             read={(itemKey) => {
-              const value = lightingApi.channels.getAll().get(Number(itemKey))
+              const value = lightingApi.channels.getAll().get(itemKey)
 
               if (value === undefined) {
                 return 0
@@ -36,8 +36,10 @@ export const LightingApiConnection: React.FC<PropsWithChildren> = ({children}) =
               return value
             }}
             write={({diff}) => {
-              diff.forEach((value, channelNo) => {
-                lightingApi.channels.update(Number(channelNo), Number(value))
+              diff.forEach((value, key) => {
+                const splitKey = key.split(":")
+
+                lightingApi.channels.update(Number(splitKey[0]), Number(splitKey[1]), Number(value))
               })
             }}
             listen={({updateItems}) => {

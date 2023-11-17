@@ -15,11 +15,11 @@ import {LightingApiConnection} from "./connection";
 function App() {
   const router = createBrowserRouter([
     {
-      path: "/lighting/",
+      path: "/",
       element: <Layout />,
       children: [
         {
-          path: "channels",
+          path: "channels/:universe",
           element: <Channels />,
         },
         {

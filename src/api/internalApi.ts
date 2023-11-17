@@ -1,13 +1,6 @@
 import {Checker, object} from "@recoiljs/refine";
 import {Subscription} from "./subscription";
 
-export function InMessageChecker<A, B>(typeChecker: Checker<A>, dataChecker: Checker<B>) {
-  return object({
-    type: typeChecker,
-    data: dataChecker,
-  })
-}
-
 export interface InternalApiConnection {
   baseUrl: string
   readyState(): number;

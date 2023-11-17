@@ -142,20 +142,36 @@ export default function Layout() {
               <TrackStatus/>
               <Divider sx={{ my: 1 }} />
               <ListItemButton
-                  onClick={() => navigate('/lighting/scripts')}
-                  selected={location.pathname.startsWith('/lighting/scripts')}>
+                  onClick={() => navigate('/scripts')}
+                  selected={location.pathname.startsWith('/scripts')}>
                 <ListItemIcon>
                   <DataObjectIcon />
                 </ListItemIcon>
                 <ListItemText primary="Scripts" />
               </ListItemButton>
               <ListItemButton
-                  onClick={() => navigate('/lighting/channels')}
-                  selected={location.pathname === '/lighting/channels'}>
+                  onClick={() => navigate('/channels/0')}
+                  selected={location.pathname === '/channels/0'}>
                 <ListItemIcon>
                   <TuneIcon />
                 </ListItemIcon>
-                <ListItemText primary="Channels" />
+                <ListItemText primary="Universe 0" />
+              </ListItemButton>
+              <ListItemButton
+                  onClick={() => navigate('/channels/1')}
+                  selected={location.pathname === '/channels/1'}>
+                <ListItemIcon>
+                  <TuneIcon />
+                </ListItemIcon>
+                <ListItemText primary="Universe 1" />
+              </ListItemButton>
+              <ListItemButton
+                  onClick={() => navigate('/channels/2')}
+                  selected={location.pathname === '/channels/2'}>
+                <ListItemIcon>
+                  <TuneIcon />
+                </ListItemIcon>
+                <ListItemText primary="Universe 2" />
               </ListItemButton>
             </List>
           </Drawer>

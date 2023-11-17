@@ -9,7 +9,6 @@ import {atom, selector, selectorFamily, useRecoilRefresher_UNSTABLE, useRecoilSt
 import {lightingApi} from "../api/lightingApi";
 import {CompileResult, RunResult, Script, ScriptDetails} from "../api/scriptsApi";
 import {
-  unstable_useBlocker,
   unstable_usePrompt,
   useLocation,
   useNavigate,
@@ -92,7 +91,7 @@ const ScriptList = () => {
   const navigate = useNavigate()
 
   const doNew = () => {
-    navigate('/lighting/scripts/new')
+    navigate('/scripts/new')
   }
 
   return (
@@ -128,8 +127,8 @@ const ScriptListEntry = ({id}: { id: number }) => {
 
   return (
       <ListItemButton
-          onClick={() => navigate(`/lighting/scripts/${id}`)}
-          selected={location.pathname === `/lighting/scripts/${id}`}>
+          onClick={() => navigate(`/scripts/${id}`)}
+          selected={location.pathname === `/scripts/${id}`}>
         <ListItemText
             primary={script.name}
         />
@@ -180,7 +179,7 @@ const ScriptDisplay = ({script, id}: { script: ScriptDetails, id?: number }) => 
 
   useEffect(() => {
     if (newId !== undefined) {
-      navigate(`/lighting/scripts/${newId}`)
+      navigate(`/scripts/${newId}`)
     }
     if (edits.id !== id) {
       setEdits({
@@ -307,7 +306,6 @@ const ScriptDisplay = ({script, id}: { script: ScriptDetails, id?: number }) => 
             }}>
           <AceEditor
               mode="kotlin"
-              theme="github"
               editorProps={{$blockScrolling: true}}
               value={scriptScript}
               onChange={onScriptChange}
@@ -393,14 +391,14 @@ const ScriptCompileDialog = ({compileResult, setCompileResult}: {compileResult: 
           >
             <List>
               {
-                resolvedCompileResult?.report.messages.map((message, index) => {
+                resolvedCompileResult?.messages.map((message, index) => {
                   return (
                       <ListItem key={index}>
                         <ListItemIcon>
                           {
-                            message.severity.name === 'ERROR'
+                            message.severity === 'ERROR'
                               ? <ErrorIcon color="error" fontSize="large" />
-                              : message.severity.name === 'WARNING'
+                              : message.severity === 'WARNING'
                               ? <WarningIcon color="warning" fontSize="large" />
                               : <InfoIcon fontSize="large" />
                           }
@@ -472,15 +470,17 @@ const ScriptRunDialog = ({runResult, setRunResult}: {runResult: Promise<RunResul
           >
             <List>
               {
-                resolvedRunResult?.error != null ?
-                    resolvedRunResult?.error.messages.map((message, index) => {
+                resolvedRunResult?.result != null ?
+                    JSON.stringify(resolvedRunResult.result)
+                : resolvedRunResult?.messages != null ?
+                    resolvedRunResult.messages.map((message, index) => {
                       return (
                           <ListItem key={index}>
                             <ListItemIcon>
                               {
-                                message.severity.name === 'ERROR'
+                                message.severity === 'ERROR'
                                   ? <ErrorIcon color="error" fontSize="large" />
-                                  : message.severity.name === 'WARNING'
+                                  : message.severity === 'WARNING'
                                   ? <WarningIcon color="warning" fontSize="large" />
                                   : <InfoIcon fontSize="large" />
                               }
@@ -489,9 +489,7 @@ const ScriptRunDialog = ({runResult, setRunResult}: {runResult: Promise<RunResul
                           </ListItem>
                       )
                     })
-                : resolvedRunResult?.result != null ?
-                    JSON.stringify(resolvedRunResult.result)
-                : null
+                :  null
               }
 
             </List>
@@ -514,7 +512,7 @@ const DeleteConfirmAlert = ({id, open, setOpen}: {id: number, open: (boolean), s
   const handleDelete = () => {
     lightingApi.scripts.delete(id).then(() => {
       scriptListRefresher()
-      navigate('/lighting/scripts')
+      navigate('/scripts')
       setOpen(false)
     })
   }

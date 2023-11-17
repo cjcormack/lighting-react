@@ -1,42 +1,32 @@
 import {Subscription} from "./subscription";
 import {aggregateAndDebounce} from "./aggregateAndDebounce";
-import {InMessageChecker, InternalApiConnection} from "./internalApi";
 import {array, jsonParser, literal, number, object, union} from "@recoiljs/refine";
+import {InternalApiConnection} from "./internalApi";
 
 export interface ChannelsApi {
-    getAll(): Map<number, number>
-    update(channelNo: number, value: number): void
-    subscribe(fn: (updates: Map<number, number>) => void): Subscription
+    getAll(): Map<string, number>
+    update(universe: number, channelNo: number, value: number): void
+    subscribe(fn: (updates: Map<string, number>) => void): Subscription
 }
 
-const ChannelUpdateInMessageChecker = InMessageChecker(
-    literal('uC'),
-    object({
-        c: object({
-            i: number(),
-            l: number()
-        })
-    })
-)
-const ChannelStateInMessageChecker = InMessageChecker(
-    literal('channelState'),
-    object({
-        channels: array(object({
-            id: number(),
-            currentLevel: number()
-        }))
-    })
-)
+const ChannelStateInMessageChecker = object({
+    type: literal('channelState'),
+    channels: array(object({
+        universe: number(),
+        id: number(),
+        currentLevel: number()
+    })),
+})
 
-const channelUpdateParser = jsonParser(union(ChannelUpdateInMessageChecker, ChannelStateInMessageChecker))
+const channelUpdateParser = jsonParser(ChannelStateInMessageChecker)
 
 function debounceChannelUpdates(
-    func: (updates: Map<number, number>) => void,
+    func: (updates: Map<string, number>) => void,
     waitMs: number
-): (i: number, l: number) => void {
+): (i: string, l: number) => void {
 
     let fn = aggregateAndDebounce(
-        ([a, b]: [number,number], map: Map<number, number>) => {
+        ([a, b]: [string,number], map: Map<string, number>) => {
             map.set(a, b);
             return map;
         },
@@ -45,24 +35,24 @@ function debounceChannelUpdates(
         waitMs
     );
 
-    return (a: number, b: number) => {
+    return (a: string, b: number) => {
         fn([a, b])
     }
 }
 
 export function createChannelsApi(conn: InternalApiConnection): ChannelsApi {
-    const currentValues = new Map<number, number>()
+    const currentValues = new Map<string, number>()
 
     let nextChannelSubscriptionId = 1
-    const channelUpdatesSubscriptions = new Map<number, (updates: Map<number, number>) => void>()
+    const channelUpdatesSubscriptions = new Map<number, (updates: Map<string, number>) => void>()
 
-    const notifyChannelsChange = (updates: Map<number, number>) => {
+    const notifyChannelsChange = (updates: Map<string, number>) => {
         channelUpdatesSubscriptions.forEach((fn) => {
             fn(updates)
         })
     }
 
-    const updateItem = debounceChannelUpdates((updates: Map<number, number>) => {
+    const updateItem = debounceChannelUpdates((updates: Map<string, number>) => {
         notifyChannelsChange(updates)
     }, 100)
 
@@ -80,15 +70,11 @@ export function createChannelsApi(conn: InternalApiConnection): ChannelsApi {
             return
         }
 
-        if (message.type === 'uC') {
-            currentValues.set(message.data.c.i, message.data.c.l)
-            updateItem(message.data.c.i, message.data.c.l)
-        } else if (message.type === 'channelState') {
-            message.data.channels.forEach((update) => {
-                currentValues.set(update.id, update.currentLevel)
-                updateItem(update.id, update.currentLevel)
-            })
-        }
+        message.channels.forEach((update) => {
+            const key = `${update.universe}:${update.id}`
+            currentValues.set(key, update.currentLevel)
+            updateItem(key, update.currentLevel)
+        })
     }
 
     conn.subscribe((evType, ev) => {
@@ -103,7 +89,7 @@ export function createChannelsApi(conn: InternalApiConnection): ChannelsApi {
         getAll() {
             return currentValues
         },
-        subscribe(fn: (updates: Map<number, number>) => void): Subscription {
+        subscribe(fn: (updates: Map<string, number>) => void): Subscription {
             const thisId = nextChannelSubscriptionId
             nextChannelSubscriptionId++
 
@@ -117,10 +103,13 @@ export function createChannelsApi(conn: InternalApiConnection): ChannelsApi {
                 },
             }
         },
-        update(channelNo: number, value: number) {
+        update(universe: number, channelNo: number, value: number) {
             const payload = {
                 type: 'updateChannel',
-                data: {channel: {id: channelNo, level: value, fadeTime: 0}}
+                universe: universe,
+                id: channelNo,
+                level: value,
+                fadeTime: 0
             }
             conn.send(JSON.stringify(payload))
         }

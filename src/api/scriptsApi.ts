@@ -17,25 +17,16 @@ export const ScriptChecker = object({
   script: string(),
 })
 
-const ScriptParser = jsonParserEnforced(object({
-  script: ScriptChecker,
-}))
+const ScriptParser = jsonParserEnforced(ScriptChecker)
 
-const ScriptListParser = jsonParserEnforced(object({
-  scripts: array(ScriptChecker),
-}))
+const ScriptListParser = jsonParserEnforced(array(ScriptChecker))
 
-const CompileResultSeverityChecker = object({
-  name: union(
+const CompileResultMessageChecker = object({
+  severity: union(
       literal('INFO'),
       literal('WARNING'),
       literal('ERROR'),
   ),
-  ordinal: number(),
-})
-
-const CompileResultMessageChecker = object({
-  severity: CompileResultSeverityChecker,
   message: string(),
   sourcePath: nullable(string()),
   location: nullable(string()),
@@ -43,29 +34,22 @@ const CompileResultMessageChecker = object({
 
 const CompileResultChecker = object({
   success: bool(),
-  report: object({
-    messages: array(CompileResultMessageChecker)
-  })
+  messages: array(CompileResultMessageChecker)
 })
 
-const CompileResultParser = jsonParserEnforced(object({
-  compileResult: CompileResultChecker,
-}))
+const CompileResultParser = jsonParserEnforced(CompileResultChecker)
 
 const RunResultChecker = object({
   status: union(
       literal('success'),
       literal('compileError'),
+      literal('exception'),
   ),
-  error: nullable(object({
-    messages: array(CompileResultMessageChecker)
-  })),
+  messages: array(CompileResultMessageChecker),
   result: nullable(mixed()),
 })
 
-const RunResultParser = jsonParserEnforced(object({
-  runResult: RunResultChecker,
-}))
+const RunResultParser = jsonParserEnforced(RunResultChecker)
 
 export type Script = CheckerReturnType<typeof ScriptChecker>
 export type ScriptDetails = {
@@ -91,7 +75,7 @@ export function createScriptApi(conn: InternalApiConnection): ScriptsApi {
   return {
     getAll(): Promise<readonly Script[]> {
       return fetch(conn.baseUrl+"rest/script/list").then((res) => {
-          return res.text().then((text) => ScriptListParser(text).scripts)
+          return res.text().then((text) => ScriptListParser(text))
       })
     },
     get(id: number): Promise<Script | undefined> {
@@ -104,7 +88,7 @@ export function createScriptApi(conn: InternalApiConnection): ScriptsApi {
         method: "POST",
         body: script,
       }).then((res) => {
-        return res.text().then((text) => CompileResultParser(text).compileResult)
+        return res.text().then((text) => CompileResultParser(text))
       })
     },
     run(script: string): Promise<RunResult> {
@@ -112,15 +96,16 @@ export function createScriptApi(conn: InternalApiConnection): ScriptsApi {
         method: "POST",
         body: script,
       }).then((res) => {
-        return res.text().then((text) => RunResultParser(text).runResult)
+        return res.text().then((text) => RunResultParser(text))
       })
     },
-    save(id: number, script: {name: string, script: string}) {
+    save(id: number, script: ScriptDetails) {
       return fetch(`${conn.baseUrl}rest/script/${id}`, {
         method: "PUT",
-        body: JSON.stringify({script: script}),
+        headers:{'content-type': 'application/json'},
+        body: JSON.stringify(script),
       }).then((res) => {
-        return res.text().then((text) => ScriptParser(text).script)
+        return res.text().then((text) => ScriptParser(text))
       })
     },
     delete(id: number) {
@@ -131,9 +116,10 @@ export function createScriptApi(conn: InternalApiConnection): ScriptsApi {
     create(script: ScriptDetails): Promise<Script> {
       return fetch(`${conn.baseUrl}rest/script`, {
         method: "POST",
-        body: JSON.stringify({script: script}),
+        headers:{'content-type': 'application/json'},
+        body: JSON.stringify(script),
       }).then((res) => {
-        return res.text().then((text) => ScriptParser(text).script)
+        return res.text().then((text) => ScriptParser(text))
       })
     },
   }

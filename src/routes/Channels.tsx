@@ -4,21 +4,22 @@ import {Container, Grid, Paper, Slider, Typography} from "@mui/material";
 import {syncEffect} from "recoil-sync";
 import {LightingChannelsStoreKey} from "../connection";
 import {number} from "@recoiljs/refine";
+import {useParams} from "react-router-dom";
 
-const channelState = atomFamily<number, number>({
+const channelState = atomFamily<number, string>({
   key: 'channels',
   default: 0,
   effects: param => [
     syncEffect({
-      itemKey: param.toString(),
+      itemKey: param,
       storeKey: LightingChannelsStoreKey,
       refine: number(),
     }),
   ],
 })
 
-export const ChannelSlider = (({id}: {id: number}) => {
-  const [value, setValue] = useRecoilState(channelState(id))
+export const ChannelSlider = (({universe, id}: {universe: number, id: number}) => {
+  const [value, setValue] = useRecoilState(channelState(`${universe}:${id}`))
 
   return (
       <>
@@ -34,16 +35,17 @@ export const ChannelSlider = (({id}: {id: number}) => {
   )
 })
 export default function Channels() {
+  const {universe} = useParams()
   return (
       <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
         <Grid container spacing={3}>
-          <ChannelGroups/>
+          <ChannelGroups universe={Number(universe)}/>
         </Grid>
       </Container>
   )
 }
 
-const ChannelGroups = (() => {
+const ChannelGroups = (({universe}: { universe: number }) => {
     const channelCount = 512
     const groupSize = 8
 
@@ -59,7 +61,7 @@ const ChannelGroups = (() => {
                     }}>
                         {Array.from(Array(groupSize)).map((s, itemNo) => {
                             const channelNo = groupNo*groupSize + itemNo + 1
-                            return <ChannelSlider key={itemNo} id={channelNo} />
+                            return <ChannelSlider key={itemNo} universe={universe} id={channelNo} />
                         })
                         }
                     </Paper>

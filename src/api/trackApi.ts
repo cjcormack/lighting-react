@@ -1,6 +1,6 @@
 import {Subscription} from "./subscription";
 import {bool, CheckerReturnType, jsonParser, literal, object, string, union} from "@recoiljs/refine";
-import {InMessageChecker, InternalApiConnection} from "./internalApi";
+import {InternalApiConnection} from "./internalApi";
 
 export interface TrackApi {
     get(): TrackDetails
@@ -15,12 +15,7 @@ export const TrackDetailsChecker = object({
 
 export type TrackDetails = CheckerReturnType<typeof TrackDetailsChecker>
 
-const TrackUpdateInMessageChecker = InMessageChecker(
-    union(literal('uT'), literal('trackDetails')),
-    TrackDetailsChecker
-)
-
-const trackUpdateParser = jsonParser(TrackUpdateInMessageChecker)
+const trackUpdateParser = jsonParser(TrackDetailsChecker)
 
 export function createTrackApi(conn: InternalApiConnection): TrackApi {
     let currentTrack: TrackDetails = {
@@ -48,7 +43,7 @@ export function createTrackApi(conn: InternalApiConnection): TrackApi {
     const handleOnMessage = (ev: MessageEvent) => {
         const message = trackUpdateParser(ev.data)
         if (message != null) {
-            currentTrack = message.data
+            currentTrack = message
             notifyTrackChange(currentTrack)
         }
     }
