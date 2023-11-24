@@ -27,7 +27,10 @@ import DataObjectIcon from '@mui/icons-material/DataObject';
 import TuneIcon from '@mui/icons-material/Tune';
 import TrackStatus from './TrackStatus';
 import {Outlet, useLocation, useNavigate} from 'react-router-dom';
-import {ConnectionStatus} from "./connection";
+import {ConnectionStatus, LightingUniversesStoreKey} from "./connection";
+import {atom, useRecoilValue} from "recoil";
+import {array, number} from "@recoiljs/refine";
+import {syncEffect} from "recoil-sync";
 
 const drawerWidth: number = 240;
 
@@ -81,6 +84,15 @@ const Drawer = styled(MuiDrawer, { shouldForwardProp: (prop) => prop !== 'open' 
 
 const mdTheme = createTheme();
 
+const universesState = atom<readonly number[]>({
+  key: 'universes',
+  effects: [syncEffect({
+      itemKey: "universes",
+      storeKey: LightingUniversesStoreKey,
+      refine: array(number()),
+    })]
+})
+
 export default function Layout() {
   const [open, setOpen] = React.useState(true)
   const toggleDrawer = () => {
@@ -89,6 +101,8 @@ export default function Layout() {
 
   const navigate = useNavigate()
   const location = useLocation()
+
+  const universes = useRecoilValue(universesState)
 
   return (
       <ThemeProvider theme={mdTheme}>
@@ -149,30 +163,19 @@ export default function Layout() {
                 </ListItemIcon>
                 <ListItemText primary="Scripts" />
               </ListItemButton>
-              <ListItemButton
-                  onClick={() => navigate('/channels/0')}
-                  selected={location.pathname === '/channels/0'}>
-                <ListItemIcon>
-                  <TuneIcon />
-                </ListItemIcon>
-                <ListItemText primary="Universe 0" />
-              </ListItemButton>
-              <ListItemButton
-                  onClick={() => navigate('/channels/1')}
-                  selected={location.pathname === '/channels/1'}>
-                <ListItemIcon>
-                  <TuneIcon />
-                </ListItemIcon>
-                <ListItemText primary="Universe 1" />
-              </ListItemButton>
-              <ListItemButton
-                  onClick={() => navigate('/channels/2')}
-                  selected={location.pathname === '/channels/2'}>
-                <ListItemIcon>
-                  <TuneIcon />
-                </ListItemIcon>
-                <ListItemText primary="Universe 2" />
-              </ListItemButton>
+              {
+                  universes.map((universe) => (
+                    <ListItemButton
+                        key={universe}
+                        onClick={() => navigate(`/channels/${universe}`)}
+                        selected={location.pathname === `/channels/${universe}`}>
+                      <ListItemIcon>
+                        <TuneIcon />
+                      </ListItemIcon>
+                      <ListItemText primary={`Universe ${universe}`} />
+                    </ListItemButton>
+                  ))
+              }
             </List>
           </Drawer>
           <Box

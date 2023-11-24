@@ -1,4 +1,3 @@
-import {Checker, object} from "@recoiljs/refine";
 import {Subscription} from "./subscription";
 
 export interface InternalApiConnection {

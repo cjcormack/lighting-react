@@ -1,6 +1,6 @@
 import {Subscription} from "./subscription";
 import {aggregateAndDebounce} from "./aggregateAndDebounce";
-import {array, jsonParser, literal, number, object, union} from "@recoiljs/refine";
+import {array, jsonParser, literal, number, object} from "@recoiljs/refine";
 import {InternalApiConnection} from "./internalApi";
 
 export interface ChannelsApi {

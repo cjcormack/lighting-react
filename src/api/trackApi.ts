@@ -1,5 +1,5 @@
 import {Subscription} from "./subscription";
-import {bool, CheckerReturnType, jsonParser, literal, object, string, union} from "@recoiljs/refine";
+import {bool, CheckerReturnType, jsonParser, object, string} from "@recoiljs/refine";
 import {InternalApiConnection} from "./internalApi";
 
 export interface TrackApi {
