@@ -9,8 +9,9 @@ import '@fontsource/roboto/700.css';
 import Layout from "./Layout";
 import {createBrowserRouter, RouterProvider} from "react-router-dom";
 import Channels from "./routes/Channels";
-import Scripts from "./routes/Scripts";
 import {LightingApiConnection} from "./connection";
+import Scripts from "./routes/Scripts";
+import {Scenes} from "./routes/Scenes";
 
 function App() {
   const router = createBrowserRouter([
@@ -25,6 +26,10 @@ function App() {
         {
           path: "scripts/:scriptId?",
           element: <Scripts />,
+        },
+        {
+          path: "scenes",
+          element: <Scenes />,
         },
       ],
     },

@@ -49,7 +49,7 @@ const RunResultChecker = object({
   result: nullable(mixed()),
 })
 
-const RunResultParser = jsonParserEnforced(RunResultChecker)
+export const RunResultParser = jsonParserEnforced(RunResultChecker)
 
 export type Script = CheckerReturnType<typeof ScriptChecker>
 export type ScriptDetails = {

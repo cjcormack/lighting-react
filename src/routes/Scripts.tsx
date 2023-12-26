@@ -21,7 +21,7 @@ import "ace-builds/src-noconflict/mode-kotlin"
 import "ace-builds/src-noconflict/theme-github";
 import "ace-builds/src-noconflict/ext-language_tools";
 
-const scriptListState = selector<readonly Script[]>({
+export const scriptListState = selector<readonly Script[]>({
   key: 'scriptList',
   get: () => {
     return lightingApi.scripts.getAll()
@@ -44,7 +44,7 @@ const scriptsMappedByIdState = selector<Map<number, Script>>({
   }
 })
 
-const scriptState = selectorFamily<ScriptDetails, number>({
+export const scriptState = selectorFamily<ScriptDetails, number>({
   key: 'script',
   get: (scriptId: number) => ({get}) => {
     const scriptsMappedById = get(scriptsMappedByIdState)

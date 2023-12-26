@@ -25,6 +25,7 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import MenuIcon from '@mui/icons-material/Menu';
 import DataObjectIcon from '@mui/icons-material/DataObject';
 import TuneIcon from '@mui/icons-material/Tune';
+import WbIridescentIcon from '@mui/icons-material/WbIridescent';
 import TrackStatus from './TrackStatus';
 import {Outlet, useLocation, useNavigate} from 'react-router-dom';
 import {ConnectionStatus, LightingUniversesStoreKey} from "./connection";
@@ -162,6 +163,14 @@ export default function Layout() {
                   <DataObjectIcon />
                 </ListItemIcon>
                 <ListItemText primary="Scripts" />
+              </ListItemButton>
+              <ListItemButton
+                  onClick={() => navigate('/scenes')}
+                  selected={location.pathname.startsWith('/scenes')}>
+                <ListItemIcon>
+                  <WbIridescentIcon />
+                </ListItemIcon>
+                <ListItemText primary="Scenes" />
               </ListItemButton>
               {
                   universes.map((universe) => (
