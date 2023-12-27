@@ -20,6 +20,7 @@ import {OverridableStringUnion} from "@mui/types";
 import {ChipPropsColorOverrides} from "@mui/material/Chip/Chip";
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import AddSceneDialog from "../AddSceneDialog";
+import {useNavigate} from "react-router-dom";
 
 export const sceneListState = selector<readonly Scene[]>({
   key: 'sceneList',
@@ -129,6 +130,8 @@ const SceneCard = ({id}: {id: number}) => {
 
   const sceneListRefresher = useRecoilRefresher_UNSTABLE(sceneListState)
 
+  const navigate = useNavigate()
+
   const doRun = () => {
     setStatus({
       text: "running...",
@@ -155,6 +158,10 @@ const SceneCard = ({id}: {id: number}) => {
     })
   }
 
+  const handleViewScript = () => {
+    navigate(`/scripts/${scene.scriptId}`)
+  }
+
   return (
       <Grid item xs={12} md={4} lg={3}>
         <Card sx={{ maxWidth: 345 }}>
@@ -170,6 +177,9 @@ const SceneCard = ({id}: {id: number}) => {
             </CardContent>
           </CardActionArea>
           <CardActions>
+            <Button size="small" color="primary" onClick={handleViewScript}>
+              View Script
+            </Button>
             <Button size="small" color="error" onClick={handleSceneDelete}>
               Delete
             </Button>
