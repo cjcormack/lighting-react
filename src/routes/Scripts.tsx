@@ -2,7 +2,7 @@ import {
   Box, Button, ButtonGroup, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle,
   Grid,
   List, ListItem, ListItemButton, ListItemIcon,
-  ListItemText, Paper, TextField
+  ListItemText, Paper, TextField, Typography
 } from "@mui/material";
 import React, {Dispatch, SetStateAction, Suspense, useEffect, useState} from "react";
 import {atom, selector, selectorFamily, useRecoilRefresher_UNSTABLE, useRecoilState, useRecoilValue} from "recoil";
@@ -59,29 +59,42 @@ export const scriptState = selectorFamily<ScriptDetails, number>({
 export default function Scripts() {
   const {scriptId} = useParams()
   return (
-      <Grid container spacing={0}>
-        <Grid item xs="auto">
-          <Box sx={{width: 200, bgcolor: 'background.paper'}}>
-            <List dense={true}>
-              <Suspense fallback={'Loading...'}>
-                <ScriptList/>
-              </Suspense>
-            </List>
-          </Box>
-        </Grid>
-        <Grid item xs>
-          {scriptId === undefined ? (
-              <></>
-          ) : scriptId === 'new' ?(
-              <NewScript/>
-          ) : (
-              <Suspense fallback={'Loading...'}>
-                <EditScript id={Number(scriptId)}/>
-              </Suspense>
-          )
-          }
-        </Grid>
-      </Grid>
+      <Paper
+          sx={{
+            p: 2,
+            m: 2,
+            display: 'flex',
+            flexDirection: 'column',
+          }}>
+        <Box>
+          <Typography variant="h2">
+            Scripts
+          </Typography>
+          <Grid container spacing={0}>
+            <Grid item xs="auto">
+              <Box sx={{width: 200, bgcolor: 'background.paper'}}>
+                <List dense={true}>
+                  <Suspense fallback={'Loading...'}>
+                    <ScriptList/>
+                  </Suspense>
+                </List>
+              </Box>
+            </Grid>
+            <Grid item xs>
+              {scriptId === undefined ? (
+                  <></>
+                ) : scriptId === 'new' ?(
+                    <NewScript/>
+                ) : (
+                    <Suspense fallback={'Loading...'}>
+                      <EditScript id={Number(scriptId)}/>
+                    </Suspense>
+                )
+              }
+            </Grid>
+          </Grid>
+        </Box>
+      </Paper>
   )
 }
 
@@ -471,7 +484,9 @@ const ScriptRunDialog = ({runResult, setRunResult}: {runResult: Promise<RunResul
             <List>
               {
                 resolvedRunResult?.result != null ?
-                    JSON.stringify(resolvedRunResult.result)
+                    <ListItem style={{whiteSpace: "pre-wrap"}}>
+                      {resolvedRunResult.result}
+                    </ListItem>
                 : resolvedRunResult?.messages != null ?
                     resolvedRunResult.messages.map((message, index) => {
                       return (

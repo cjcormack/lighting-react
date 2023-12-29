@@ -89,6 +89,16 @@ export function createChannelsApi(conn: InternalApiConnection): ChannelsApi {
         getAll() {
             return currentValues
         },
+        update(universe: number, channelNo: number, value: number) {
+            const payload = {
+                type: 'updateChannel',
+                universe: universe,
+                id: channelNo,
+                level: value,
+                fadeTime: 0
+            }
+            conn.send(JSON.stringify(payload))
+        },
         subscribe(fn: (updates: Map<string, number>) => void): Subscription {
             const thisId = nextChannelSubscriptionId
             nextChannelSubscriptionId++
@@ -103,15 +113,5 @@ export function createChannelsApi(conn: InternalApiConnection): ChannelsApi {
                 },
             }
         },
-        update(universe: number, channelNo: number, value: number) {
-            const payload = {
-                type: 'updateChannel',
-                universe: universe,
-                id: channelNo,
-                level: value,
-                fadeTime: 0
-            }
-            conn.send(JSON.stringify(payload))
-        }
     }
 }

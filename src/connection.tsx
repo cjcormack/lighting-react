@@ -8,6 +8,7 @@ import {lightingApi} from "./api/lightingApi";
 
 export const LightingUniversesStoreKey: string = 'lighting-universes'
 export const LightingChannelsStoreKey: string = 'lighting-channels'
+export const LightingFixturesStoreKey: string = 'lighting-fixtures'
 export const LightingStatusStoreKey: string = 'lighting-status'
 export const LightingTrackStoreKey: string = 'lighting-track'
 

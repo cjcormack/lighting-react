@@ -12,6 +12,7 @@ import Channels from "./routes/Channels";
 import {LightingApiConnection} from "./connection";
 import Scripts from "./routes/Scripts";
 import {Scenes} from "./routes/Scenes";
+import {Fixtures} from "./routes/Fixtures";
 
 function App() {
   const router = createBrowserRouter([
@@ -30,6 +31,10 @@ function App() {
         {
           path: "scenes",
           element: <Scenes />,
+        },
+        {
+          path: "fixtures",
+          element: <Fixtures />,
         },
       ],
     },

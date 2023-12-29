@@ -26,6 +26,7 @@ import MenuIcon from '@mui/icons-material/Menu';
 import DataObjectIcon from '@mui/icons-material/DataObject';
 import TuneIcon from '@mui/icons-material/Tune';
 import WbIridescentIcon from '@mui/icons-material/WbIridescent';
+import BatchPredictionIcon from '@mui/icons-material/BatchPrediction';
 import TrackStatus from './TrackStatus';
 import {Outlet, useLocation, useNavigate} from 'react-router-dom';
 import {ConnectionStatus, LightingUniversesStoreKey} from "./connection";
@@ -171,6 +172,14 @@ export default function Layout() {
                   <WbIridescentIcon />
                 </ListItemIcon>
                 <ListItemText primary="Scenes" />
+              </ListItemButton>
+              <ListItemButton
+                  onClick={() => navigate('/fixtures')}
+                  selected={location.pathname.startsWith('/fixtures')}>
+                <ListItemIcon>
+                  <BatchPredictionIcon />
+                </ListItemIcon>
+                <ListItemText primary="Fixtures" />
               </ListItemButton>
               {
                   universes.map((universe) => (

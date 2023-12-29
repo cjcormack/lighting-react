@@ -5,6 +5,7 @@ import {createInternalApiConnection} from "./internalApi";
 import {createScriptApi, ScriptsApi} from "./scriptsApi";
 import {createUniversesApi, UniversesApi} from "./universesApi";
 import {createSceneApi, ScenesApi} from "./scenesApi";
+import {createFixtureApi, FixturesApi} from "./fixturesApi";
 
 interface LightingApi {
   universes: UniversesApi
@@ -13,6 +14,7 @@ interface LightingApi {
   track: TrackApi
   scripts: ScriptsApi
   scenes: ScenesApi
+  fixtures: FixturesApi
 }
 
 export const lightingApi = createLightingApi()
@@ -37,6 +39,7 @@ function createLightingApi(): LightingApi {
   const trackApi = createTrackApi(connection)
   const scriptApi = createScriptApi(connection)
   const sceneApi = createSceneApi(connection)
+  const fixtureApi = createFixtureApi(connection)
 
   return {
     universes: universesApi,
@@ -45,5 +48,6 @@ function createLightingApi(): LightingApi {
     track: trackApi,
     scripts: scriptApi,
     scenes: sceneApi,
+    fixtures: fixtureApi,
   }
 }

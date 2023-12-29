@@ -1,6 +1,6 @@
 import {atomFamily, useRecoilState} from "recoil";
-import React from "react";
-import {Container, Grid, Paper, Slider, Typography} from "@mui/material";
+import React, {Suspense} from "react";
+import {Box, Container, Grid, Input, Paper, Slider, TextField, Typography} from "@mui/material";
 import {syncEffect} from "recoil-sync";
 import {LightingChannelsStoreKey} from "../connection";
 import {number} from "@recoiljs/refine";
@@ -18,30 +18,97 @@ const channelState = atomFamily<number, string>({
   ],
 })
 
-export const ChannelSlider = (({universe, id}: {universe: number, id: number}) => {
+export const ChannelSlider = (({universe, id, description}: {universe: number, id: number, description?: string}) => {
   const [value, setValue] = useRecoilState(channelState(`${universe}:${id}`))
+
+  const handleSliderChange = (e: Event, v: number | number[]) => {
+    if (typeof v === 'number') {
+      setValue(v)
+    }
+  }
+
+  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.value === '') {
+      setValue(0)
+    }
+
+    const valueNumber = Number(event.target.value)
+    if (isNaN(valueNumber)) {
+
+    } else if (valueNumber < 0) {
+      setValue(0)
+    } else if (valueNumber > 255) {
+      setValue(255)
+    } else {
+      setValue(valueNumber)
+    }
+  }
+
+  const handleInputBlur = () => {
+    if (value < 0) {
+      setValue(0)
+    } else if (value > 255) {
+      setValue(255)
+    }
+  }
 
   return (
       <>
         <Typography id="input-slider" gutterBottom>
-          Channel {id}
-        </Typography>
-        <Slider defaultValue={0} max={255} value={value} aria-label="Default" valueLabelDisplay="auto" onChange={(e, v) => {
-          if (typeof v === 'number') {
-            setValue(v)
+          {
+            description ?
+              `${id}: ${description}`
+            :
+              `Channel ${id}`
           }
-        }} />
+        </Typography>
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs>
+            <Slider defaultValue={0} max={255} value={value} aria-label="Default" valueLabelDisplay="auto" onChange={handleSliderChange} />
+          </Grid>
+          <Grid item xs="auto">
+            <TextField
+                value={value}
+                size="small"
+                variant="outlined"
+                onChange={handleInputChange}
+                onBlur={handleInputBlur}
+                inputProps={{
+                  min: 0,
+                  max: 255,
+                  'aria-labelledby': 'input-slider',
+                }}
+                sx={{
+                  width: 62,
+                }}
+            />
+          </Grid>
+        </Grid>
+
       </>
   )
 })
 export default function Channels() {
   const {universe} = useParams()
   return (
-      <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-        <Grid container spacing={3}>
-          <ChannelGroups universe={Number(universe)}/>
-        </Grid>
-      </Container>
+      <Paper
+          sx={{
+            p: 2,
+            m: 2,
+            display: 'flex',
+            flexDirection: 'column',
+          }}>
+        <Box>
+          <Typography variant="h2">
+            Universe {universe}
+          </Typography>
+          <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+            <Grid container spacing={3}>
+              <ChannelGroups universe={Number(universe)}/>
+            </Grid>
+          </Container>
+        </Box>
+      </Paper>
   )
 }
 
@@ -52,7 +119,7 @@ const ChannelGroups = (({universe}: { universe: number }) => {
     return (
         <>
             {Array.from(Array(channelCount/groupSize)).map((g, groupNo) => (
-                <Grid item xs={12} md={4} lg={3} key={groupNo}>
+                <Grid item xs={12} md={6} lg={4} xl={3} key={groupNo}>
                     <Paper
                         sx={{
                             p: 2,
@@ -62,7 +129,7 @@ const ChannelGroups = (({universe}: { universe: number }) => {
                         {Array.from(Array(groupSize)).map((s, itemNo) => {
                             const channelNo = groupNo*groupSize + itemNo + 1
                             return <ChannelSlider key={itemNo} universe={universe} id={channelNo} />
-                        })
+                          })
                         }
                     </Paper>
                 </Grid>

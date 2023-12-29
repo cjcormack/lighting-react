@@ -46,7 +46,7 @@ const RunResultChecker = object({
       literal('exception'),
   ),
   messages: array(CompileResultMessageChecker),
-  result: nullable(mixed()),
+  result: nullable(string()),
 })
 
 export const RunResultParser = jsonParserEnforced(RunResultChecker)

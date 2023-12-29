@@ -96,10 +96,6 @@ export function Scenes() {
 function ScenesContainer() {
   const sceneIds = useRecoilValue(sceneIdsState)
 
-  const doRun = () => {
-    console.log('test')
-  }
-
   return (
       <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
         <Grid container spacing={3}>
