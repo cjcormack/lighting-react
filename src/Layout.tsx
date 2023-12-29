@@ -17,7 +17,7 @@ import {
   List,
   ListItemButton,
   ListItemIcon,
-  ListItemText,
+  ListItemText, ListSubheader,
 } from "@mui/material";
 import MuiAppBar, { AppBarProps as MuiAppBarProps } from '@mui/material/AppBar';
 import MuiDrawer from '@mui/material/Drawer';
@@ -157,43 +157,45 @@ export default function Layout() {
             <List component="nav">
               <TrackStatus/>
               <Divider sx={{ my: 1 }} />
-              <ListItemButton
-                  onClick={() => navigate('/scripts')}
-                  selected={location.pathname.startsWith('/scripts')}>
-                <ListItemIcon>
-                  <DataObjectIcon />
-                </ListItemIcon>
-                <ListItemText primary="Scripts" />
-              </ListItemButton>
-              <ListItemButton
-                  onClick={() => navigate('/scenes')}
-                  selected={location.pathname.startsWith('/scenes')}>
-                <ListItemIcon>
-                  <WbIridescentIcon />
-                </ListItemIcon>
-                <ListItemText primary="Scenes" />
-              </ListItemButton>
-              <ListItemButton
-                  onClick={() => navigate('/fixtures')}
-                  selected={location.pathname.startsWith('/fixtures')}>
-                <ListItemIcon>
-                  <BatchPredictionIcon />
-                </ListItemIcon>
-                <ListItemText primary="Fixtures" />
-              </ListItemButton>
-              {
-                  universes.map((universe) => (
-                    <ListItemButton
-                        key={universe}
-                        onClick={() => navigate(`/channels/${universe}`)}
-                        selected={location.pathname === `/channels/${universe}`}>
-                      <ListItemIcon>
-                        <TuneIcon />
-                      </ListItemIcon>
-                      <ListItemText primary={`Universe ${universe}`} />
-                    </ListItemButton>
-                  ))
-              }
+              <List component="div" disablePadding subheader={<ListSubheader component="div">Lights</ListSubheader>}>
+                <ListItemButton
+                    onClick={() => navigate('/scripts')}
+                    selected={location.pathname.startsWith('/scripts')}>
+                  <ListItemIcon>
+                    <DataObjectIcon />
+                  </ListItemIcon>
+                  <ListItemText primary="Scripts" />
+                </ListItemButton>
+                <ListItemButton
+                    onClick={() => navigate('/scenes')}
+                    selected={location.pathname.startsWith('/scenes')}>
+                  <ListItemIcon>
+                    <WbIridescentIcon />
+                  </ListItemIcon>
+                  <ListItemText primary="Scenes" />
+                </ListItemButton>
+                <ListItemButton
+                    onClick={() => navigate('/fixtures')}
+                    selected={location.pathname.startsWith('/fixtures')}>
+                  <ListItemIcon>
+                    <BatchPredictionIcon />
+                  </ListItemIcon>
+                  <ListItemText primary="Fixtures" />
+                </ListItemButton>
+                {
+                    universes.map((universe) => (
+                      <ListItemButton
+                          key={universe}
+                          onClick={() => navigate(`/channels/${universe}`)}
+                          selected={location.pathname === `/channels/${universe}`}>
+                        <ListItemIcon>
+                          <TuneIcon />
+                        </ListItemIcon>
+                        <ListItemText primary={`Universe ${universe}`} />
+                      </ListItemButton>
+                    ))
+                }
+              </List>
             </List>
           </Drawer>
           <Box
