@@ -15,11 +15,8 @@ import {
   useParams
 } from "react-router-dom";
 import {Add as AddIcon, Build as BuildIcon, PlayArrow as PlayArrowIcon, Warning as WarningIcon, Error as ErrorIcon, Info as InfoIcon} from "@mui/icons-material";
-import AceEditor from "react-ace";
 
-import "ace-builds/src-noconflict/mode-kotlin"
-import "ace-builds/src-noconflict/theme-github";
-import "ace-builds/src-noconflict/ext-language_tools";
+import ReactKotlinPlayground from "../kotlinScript/index.mjs";
 
 export const scriptListState = selector<readonly Script[]>({
   key: 'scriptList',
@@ -58,6 +55,7 @@ export const scriptState = selectorFamily<ScriptDetails, number>({
 
 export default function Scripts() {
   const {scriptId} = useParams()
+
   return (
       <Paper
           sx={{
@@ -206,6 +204,26 @@ const ScriptDisplay = ({script, id}: { script: ScriptDetails, id?: number }) => 
   }
 
   const scriptName = edits.name !== undefined ? edits.name : script.name
+
+  const scriptPrefix = `import uk.me.cormack.lighting7.fixture.*
+import uk.me.cormack.lighting7.fixture.dmx.*
+import uk.me.cormack.lighting7.fixture.hue.*
+import java.awt.Color
+import uk.me.cormack.lighting7.dmx.DmxController
+import uk.me.cormack.lighting7.dmx.ArtNetController
+import uk.me.cormack.lighting7.show.*
+import uk.me.cormack.lighting7.scripts.*
+
+class TestScript(fixtures: Fixtures, scriptName: String, step: Int): LightingScript(fixtures, scriptName, step) {}
+
+fun TestScript.test() {
+//sampleStart
+`
+  const scriptSuffix = `
+//sampleEnd
+}
+`
+
   const scriptScript = edits.script !== undefined ? edits.script : script.script
 
   const isNew = id === undefined
@@ -317,13 +335,15 @@ const ScriptDisplay = ({script, id}: { script: ScriptDetails, id?: number }) => 
               display: 'flex',
               flexDirection: 'column',
             }}>
-          <AceEditor
+          <ReactKotlinPlayground
               mode="kotlin"
-              editorProps={{$blockScrolling: true}}
-              value={scriptScript}
+              lines="true"
               onChange={onScriptChange}
-              width="100%"
-              height="400px"
+              value={scriptPrefix + scriptScript + scriptSuffix}
+              highlightOnFly="true"
+              autocomplete="true"
+              matchBrackets="true"
+              key={id ? `${id}` : "new"}
           />
         </Paper>
         <Paper
