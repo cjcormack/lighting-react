@@ -1,18 +1,20 @@
 import {
-  array,
-  CheckerReturnType,
-  jsonParserEnforced,
+  array, bool,
+  CheckerReturnType, jsonParser,
+  jsonParserEnforced, literal,
   number,
   object,
   string,
 } from "@recoiljs/refine";
 import {InternalApiConnection} from "./internalApi";
 import {RunResult, RunResultParser} from "./scriptsApi";
+import {Subscription} from "./subscription";
 
 export const SceneChecker = object({
   id: number(),
   name: string(),
   scriptId: number(),
+  isActive: bool(),
 })
 
 const SceneParser = jsonParserEnforced(SceneChecker)
@@ -32,9 +34,47 @@ export interface ScenesApi {
   save(id: number, scene: SceneDetails): Promise<Scene>,
   delete(id: number): Promise<void>,
   create(scene: SceneDetails): Promise<Scene>,
+  subscribe(fn: () => void): Subscription,
 }
 
+const ScenesChangedInMessageChecker = object({
+  type: literal('scenesChanged'),
+})
+
+const scenesChangedParser = jsonParser(ScenesChangedInMessageChecker)
+
 export function createSceneApi(conn: InternalApiConnection): ScenesApi {
+  let nextSubscriptionId = 1
+  const subscriptions = new Map<number, () => void>()
+
+  const notifyChange = () => {
+    subscriptions.forEach((fn) => {
+      fn()
+    })
+  }
+
+  const handleOnOpen = () => {
+    notifyChange()
+  }
+
+  const handleOnMessage = (ev: MessageEvent) => {
+    const message = scenesChangedParser(ev.data)
+
+    if (message == null) {
+      return
+    }
+
+    notifyChange()
+  }
+
+  conn.subscribe((evType, ev) => {
+    if (evType === 'open') {
+      handleOnOpen()
+    } else if (evType === 'message' && ev instanceof MessageEvent) {
+      handleOnMessage(ev)
+    }
+  })
+
   return {
     getAll(): Promise<readonly Scene[]> {
       return fetch(conn.baseUrl+"rest/scene/list").then((res) => {
@@ -75,6 +115,20 @@ export function createSceneApi(conn: InternalApiConnection): ScenesApi {
       }).then((res) => {
         return res.text().then((text) => SceneParser(text))
       })
+    },
+    subscribe(fn: () => void): Subscription {
+      const thisId = nextSubscriptionId
+      nextSubscriptionId++
+
+      subscriptions.set(thisId, fn)
+
+      fn()
+
+      return {
+        unsubscribe: () => {
+          subscriptions.delete(thisId)
+        },
+      }
     },
   }
 }

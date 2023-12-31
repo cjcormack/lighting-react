@@ -209,12 +209,18 @@ const ScriptDisplay = ({script, id}: { script: ScriptDetails, id?: number }) => 
 import uk.me.cormack.lighting7.fixture.dmx.*
 import uk.me.cormack.lighting7.fixture.hue.*
 import java.awt.Color
-import uk.me.cormack.lighting7.dmx.DmxController
-import uk.me.cormack.lighting7.dmx.ArtNetController
+import uk.me.cormack.lighting7.dmx.*
 import uk.me.cormack.lighting7.show.*
 import uk.me.cormack.lighting7.scripts.*
 
-class TestScript(fixtures: Fixtures, scriptName: String, step: Int): LightingScript(fixtures, scriptName, step) {}
+class TestScript(
+    fixtures: Fixtures.FixturesWithTransaction, 
+    scriptName: 
+    String, 
+    step: Int, 
+    sceneName: String, 
+    sceneIsActive: Boolean
+): LightingScript(fixtures, scriptName, step, sceneName, sceneIsActive) {}
 
 fun TestScript.test() {
 //sampleStart

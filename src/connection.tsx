@@ -8,7 +8,8 @@ import {lightingApi} from "./api/lightingApi";
 
 export const LightingUniversesStoreKey: string = 'lighting-universes'
 export const LightingChannelsStoreKey: string = 'lighting-channels'
-export const LightingFixturesStoreKey: string = 'lighting-fixtures'
+export const LightingApiStoreKey: string = 'lighting-api'
+export const LightingApiScenesListItemKey: string = 'scene-list'
 export const LightingStatusStoreKey: string = 'lighting-status'
 export const LightingTrackStoreKey: string = 'lighting-track'
 
@@ -70,19 +71,38 @@ export const LightingApiConnection: React.FC<PropsWithChildren> = ({children}) =
               }}
           >
             <RecoilSync
-                storeKey={LightingTrackStoreKey}
-                read={() => {
-                  return lightingApi.track.get()
+                storeKey={LightingApiStoreKey}
+                read={(itemKey) => {
+                  if (itemKey === LightingApiScenesListItemKey) {
+                    return lightingApi.scenes.getAll()
+                  } else {
+                    throw Error(`Unknown item key '${itemKey}'`)
+                  }
                 }}
-                listen={({updateAllKnownItems}) => {
-                  const subscription = lightingApi.track.subscribe((currentTrack) => {
-                    updateAllKnownItems(new Map<ItemKey, DefaultValue | unknown>([['currentTrack', currentTrack]]))
+                listen={({updateItem}) => {
+                  const subscription = lightingApi.scenes.subscribe(() => {
+                    lightingApi.scenes.getAll().then((scenes) => {
+                      updateItem(LightingApiScenesListItemKey, scenes)
+                    })
                   })
                   return subscription.unsubscribe
                 }}
             >
-              {children}
+              <RecoilSync
+                  storeKey={LightingTrackStoreKey}
+                  read={() => {
+                    return lightingApi.track.get()
+                  }}
+                  listen={({updateAllKnownItems}) => {
+                    const subscription = lightingApi.track.subscribe((currentTrack) => {
+                      updateAllKnownItems(new Map<ItemKey, DefaultValue | unknown>([['currentTrack', currentTrack]]))
+                    })
+                    return subscription.unsubscribe
+                  }}
+              >
+                {children}
 
+              </RecoilSync>
             </RecoilSync>
           </RecoilSync>
         </RecoilSync>

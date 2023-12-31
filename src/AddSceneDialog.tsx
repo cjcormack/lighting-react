@@ -17,8 +17,6 @@ export default function AddSceneDialog({open, setOpen, setSceneSaving}: {
 }) {
   const scriptList = useRecoilValue(scriptListState)
 
-  const sceneListRefresher = useRecoilRefresher_UNSTABLE(sceneListState)
-
   const [value, setValue] = useState<AddSceneDetails>({
     name: "",
     script_id: "",
@@ -43,7 +41,6 @@ export default function AddSceneDialog({open, setOpen, setSceneSaving}: {
       name: value.name,
       scriptId: Number(value.script_id),
     }).then(() => {
-      sceneListRefresher()
       setSceneSaving(false)
     })
 

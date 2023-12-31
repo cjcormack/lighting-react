@@ -1,6 +1,6 @@
-import {selector, selectorFamily, useRecoilRefresher_UNSTABLE, useRecoilValue} from "recoil";
+import {atom, selector, selectorFamily, useRecoilRefresher_UNSTABLE, useRecoilValue} from "recoil";
 import {lightingApi} from "../api/lightingApi";
-import {Scene, SceneDetails} from "../api/scenesApi";
+import {Scene, SceneChecker} from "../api/scenesApi";
 import {
   Box,
   Button,
@@ -11,7 +11,7 @@ import {
   Chip,
   Container,
   Grid,
-  Paper, Stack,
+  Paper, Stack, Theme,
   Typography
 } from "@mui/material";
 import React, {Suspense, useState} from "react";
@@ -21,12 +21,21 @@ import {ChipPropsColorOverrides} from "@mui/material/Chip/Chip";
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import AddSceneDialog from "../AddSceneDialog";
 import {useNavigate} from "react-router-dom";
+import {syncEffect} from "recoil-sync";
+import {LightingApiScenesListItemKey, LightingApiStoreKey} from "../connection";
+import {array} from "@recoiljs/refine";
+import {SxProps} from "@mui/system";
 
-export const sceneListState = selector<readonly Scene[]>({
+export const sceneListState = atom<readonly Scene[]>({
   key: 'sceneList',
-  get: () => {
-    return lightingApi.scenes.getAll()
-  },
+  default: [],
+  effects: [
+    syncEffect({
+      itemKey: LightingApiScenesListItemKey,
+      storeKey: LightingApiStoreKey,
+      refine: array(SceneChecker),
+    }),
+  ],
 })
 
 const sceneIdsState = selector<Array<number>>({
@@ -45,7 +54,7 @@ const scenesMappedByIdState = selector<Map<number, Scene>>({
   }
 })
 
-const sceneState = selectorFamily<SceneDetails, number>({
+const sceneState = selectorFamily<Scene, number>({
   key: 'scene',
   get: (sceneId: number) => ({get}) => {
     const scenesMappedById = get(scenesMappedByIdState)
@@ -111,7 +120,7 @@ function ScenesContainer() {
 
 const SceneCard = ({id}: {id: number}) => {
   interface StatusDetails {
-    text: string,
+    text: "ready" | "running..." | "active" | "failed",
     color: OverridableStringUnion<
         'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning',
         ChipPropsColorOverrides
@@ -124,8 +133,6 @@ const SceneCard = ({id}: {id: number}) => {
     color: "default",
   })
 
-  const sceneListRefresher = useRecoilRefresher_UNSTABLE(sceneListState)
-
   const navigate = useNavigate()
 
   const doRun = () => {
@@ -136,7 +143,7 @@ const SceneCard = ({id}: {id: number}) => {
 
     lightingApi.scenes.run(id).then((runResult) => {
       setStatus({
-        text: "completed",
+        text: "active",
         color: "success",
       })
     }).catch((error) => {
@@ -148,19 +155,36 @@ const SceneCard = ({id}: {id: number}) => {
     })
   }
 
+  if (status.text === "active") {
+    if (!scene.isActive) {
+      status.text = "ready"
+      status.color = "default"
+    }
+  } else if (status.text === "ready") {
+    if (scene.isActive) {
+      status.text = "active"
+      status.color = "success"
+    }
+  }
+
   const handleSceneDelete = () => {
-    lightingApi.scenes.delete(id).then(() => {
-      sceneListRefresher()
-    })
+    lightingApi.scenes.delete(id)
   }
 
   const handleViewScript = () => {
     navigate(`/scripts/${scene.scriptId}`)
   }
 
+  const sx: SxProps<Theme> = {
+    maxWidth: 345
+  }
+  if (scene.isActive) {
+    sx.bgcolor = '#84bef5'
+  }
+
   return (
       <Grid item xs={12} md={4} lg={3}>
-        <Card sx={{ maxWidth: 345 }}>
+        <Card sx={sx}>
           <CardActionArea onClick={doRun}>
             <CardContent>
               <Typography gutterBottom variant="h5" component="div">
