@@ -1,8 +1,16 @@
 import React, {ChangeEvent, Dispatch, SetStateAction, useState} from "react";
-import {useRecoilRefresher_UNSTABLE, useRecoilValue, useSetRecoilState} from "recoil";
+import {useRecoilValue} from "recoil";
 import {scriptListState} from "./routes/Scripts";
-import {Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, TextField} from "@mui/material";
-import { sceneListState } from "./routes/Scenes";
+import {
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  MenuItem,
+  Stack,
+  TextField,
+} from "@mui/material";
 import {lightingApi} from "./api/lightingApi";
 
 interface AddSceneDetails {
@@ -11,7 +19,7 @@ interface AddSceneDetails {
 }
 
 export default function AddSceneDialog({open, setOpen, setSceneSaving}: {
-  open: (boolean),
+  open: boolean,
   setOpen: Dispatch<SetStateAction<boolean>>,
   setSceneSaving: Dispatch<SetStateAction<boolean>>,
 }) {
@@ -40,6 +48,7 @@ export default function AddSceneDialog({open, setOpen, setSceneSaving}: {
     lightingApi.scenes.create({
       name: value.name,
       scriptId: Number(value.script_id),
+      settingsValues: new Map(),
     }).then(() => {
       setSceneSaving(false)
     })

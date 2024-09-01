@@ -1,6 +1,6 @@
 import {atomFamily, useRecoilState} from "recoil";
-import React, {Suspense} from "react";
-import {Box, Container, Grid, Input, Paper, Slider, TextField, Typography} from "@mui/material";
+import React from "react";
+import {Box, Container, Grid, Paper, Slider, TextField, Typography} from "@mui/material";
 import {syncEffect} from "recoil-sync";
 import {LightingChannelsStoreKey} from "../connection";
 import {number} from "@recoiljs/refine";

@@ -1,22 +1,42 @@
 import {
-  Box, Button, ButtonGroup, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle,
-  Grid,
-  List, ListItem, ListItemButton, ListItemIcon,
-  ListItemText, Paper, TextField, Typography
+  Box,
+  Button,
+  ButtonGroup,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
+  Grid, IconButton,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography
 } from "@mui/material";
 import React, {Dispatch, SetStateAction, Suspense, useEffect, useState} from "react";
 import {atom, selector, selectorFamily, useRecoilRefresher_UNSTABLE, useRecoilState, useRecoilValue} from "recoil";
 import {lightingApi} from "../api/lightingApi";
-import {CompileResult, RunResult, Script, ScriptDetails} from "../api/scriptsApi";
+import {CompileResult, RunResult, Script, ScriptDetails, ScriptSetting} from "../api/scriptsApi";
 import {
   unstable_usePrompt,
   useLocation,
   useNavigate,
   useParams
 } from "react-router-dom";
-import {Add as AddIcon, Build as BuildIcon, PlayArrow as PlayArrowIcon, Warning as WarningIcon, Error as ErrorIcon, Info as InfoIcon} from "@mui/icons-material";
+import {Add as AddIcon, Build as BuildIcon, PlayArrow as PlayArrowIcon, RemoveCircle as RemoveCircleIcon, Warning as WarningIcon, Error as ErrorIcon, Info as InfoIcon} from "@mui/icons-material";
 
 import ReactKotlinPlayground from "../kotlinScript/index.mjs";
+import AddScriptDialog from "../AddScriptDialog";
 
 export const scriptListState = selector<readonly Script[]>({
   key: 'scriptList',
@@ -151,12 +171,14 @@ interface ScriptEdits {
   id?: number,
   name?: string,
   script?: string,
+  settings?: ScriptSetting[],
 }
 
 const NewScript = () => {
   const script: ScriptDetails = {
     name: '',
     script: '',
+    settings: [],
   }
   return (
       <ScriptDisplay script={script}/>
@@ -184,7 +206,7 @@ const ScriptDisplay = ({script, id}: { script: ScriptDetails, id?: number }) => 
 
   const navigate = useNavigate()
 
-  const hasChanged = edits.name !== undefined || edits.script !== undefined
+  const hasChanged = edits.name !== undefined || edits.script !== undefined || edits.settings !== undefined
 
   unstable_usePrompt({when: hasChanged && newId === undefined, message: "Unsaved changes"})
 
@@ -205,6 +227,8 @@ const ScriptDisplay = ({script, id}: { script: ScriptDetails, id?: number }) => 
 
   const scriptName = edits.name !== undefined ? edits.name : script.name
 
+  const settings = edits.settings !== undefined ? edits.settings : script.settings
+
   const scriptPrefix = `import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.dmx.*
 import uk.me.cormack.lighting7.fixture.hue.*
@@ -212,6 +236,7 @@ import java.awt.Color
 import uk.me.cormack.lighting7.dmx.*
 import uk.me.cormack.lighting7.show.*
 import uk.me.cormack.lighting7.scripts.*
+import uk.me.cormack.lighting7.scriptSettings.*
 
 class TestScript(
     fixtures: Fixtures.FixturesWithTransaction, 
@@ -219,8 +244,9 @@ class TestScript(
     String, 
     step: Int, 
     sceneName: String, 
-    sceneIsActive: Boolean
-): LightingScript(fixtures, scriptName, step, sceneName, sceneIsActive) {}
+    sceneIsActive: Boolean,
+    settings: Map<String, String>
+): LightingScript(fixtures, scriptName, step, sceneName, sceneIsActive, settings) {}
 
 fun TestScript.test() {
 //sampleStart
@@ -241,10 +267,10 @@ fun TestScript.test() {
   const canRun = scriptScript !== ''
 
   const doCompile = () => {
-    setCompileResult(lightingApi.scripts.compile(scriptScript))
+    setCompileResult(lightingApi.scripts.compile(scriptScript, settings))
   }
   const doRun = () => {
-    setRunResult(lightingApi.scripts.run(scriptScript))
+    setRunResult(lightingApi.scripts.run(scriptScript, settings))
   }
   const doDelete = () => {
     if (!isNew) {
@@ -263,6 +289,7 @@ fun TestScript.test() {
       lightingApi.scripts.create({
         name: scriptName,
         script: scriptScript,
+        settings: settings,
       }).then((newScript) => {
         scriptListRefresher()
         setEdits({
@@ -275,6 +302,7 @@ fun TestScript.test() {
       lightingApi.scripts.save(id, {
         name: scriptName,
         script: scriptScript,
+        settings: settings,
       }).then(() => {
         scriptListRefresher()
         setEdits({
@@ -288,6 +316,7 @@ fun TestScript.test() {
     const updatedEdits: ScriptEdits = {
       id: id,
       script: edits.script,
+      settings: edits.settings,
     }
 
     if (ev.target.value !== script.name) {
@@ -299,11 +328,49 @@ fun TestScript.test() {
     const updatedEdits: ScriptEdits = {
       id: id,
       name: edits.name,
+      settings: edits.settings,
     }
 
     if (value !== script.script) {
       updatedEdits.script = value
     }
+    setEdits(updatedEdits)
+  }
+
+  const addSetting = (setting: ScriptSetting) => {
+    const updatedEdits: ScriptEdits = {
+      id: id,
+      name: edits.name,
+      script: edits.script,
+    }
+
+    const updatedSettings: ScriptSetting[] = settings.filter((existingSetting) => {
+      return existingSetting.name !== setting.name
+    })
+    updatedSettings.push(setting)
+
+    if (updatedEdits.settings !== updatedSettings) {
+      updatedEdits.settings = updatedSettings
+    }
+
+    setEdits(updatedEdits)
+  }
+
+  const removeSetting = (setting: ScriptSetting) => {
+    const updatedEdits: ScriptEdits = {
+      id: id,
+      name: edits.name,
+      script: edits.script,
+    }
+
+    const updatedSettings: ScriptSetting[] = settings.filter((existingSetting) => {
+      return existingSetting.name !== setting.name
+    })
+
+    if (updatedEdits.settings !== updatedSettings) {
+      updatedEdits.settings = updatedSettings
+    }
+
     setEdits(updatedEdits)
   }
 
@@ -322,18 +389,17 @@ fun TestScript.test() {
               flexDirection: 'column',
             }}>
           <Box>
-            <div>
-              <TextField
-                  required
-                  id="outlined-required"
-                  label="Name"
-                  fullWidth={true}
-                  value={scriptName}
-                  onChange={onNameChange}
-              />
-            </div>
+            <TextField
+                required
+                id="outlined-required"
+                label="Name"
+                fullWidth={true}
+                value={scriptName}
+                onChange={onNameChange}
+            />
           </Box>
         </Paper>
+        <ScriptSettings settings={settings} addSetting={addSetting} removeSetting={removeSetting}/>
         <Paper
             sx={{
               p: 2,
@@ -582,5 +648,94 @@ const DeleteConfirmAlert = ({id, open, setOpen}: {id: number, open: (boolean), s
           <Button onClick={handleDelete}>Delete</Button>
         </DialogActions>
       </Dialog>
+  )
+}
+
+function ScriptSettings({settings, addSetting, removeSetting}: {
+  settings: readonly ScriptSetting[],
+  addSetting: (setting: ScriptSetting) => void,
+  removeSetting: (setting: ScriptSetting) => void,
+}) {
+  const [addScriptDialogOpen, setAddScriptDialogOpen] = useState<boolean>(false)
+
+  return (
+      <>
+        <Suspense fallback={'Loading...'}>
+          <AddScriptDialog open={addScriptDialogOpen} setOpen={setAddScriptDialogOpen} addSetting={addSetting}/>
+        </Suspense>
+        <Paper
+            sx={{
+              p: 2,
+              m: 2,
+              display: 'flex',
+              flexDirection: 'column',
+            }}>
+          <Box>
+            <Typography variant="h5">
+              Settings
+            </Typography>
+            <TableContainer component={Paper}>
+              <Table aria-label="simple table">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Type</TableCell>
+                    <TableCell>Name</TableCell>
+                    <TableCell colSpan={2}>Details</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {
+                    settings.length ?
+                        (
+                            settings.map((setting) => (
+                                <TableRow
+                                    key={setting.name}
+                                    sx={{'&:last-child td, &:last-child th': {border: 0}}}
+                                >
+                                  <TableCell component="th" scope="row">
+                                    {setting.type}
+                                  </TableCell>
+                                  <TableCell>{setting.name}</TableCell>
+                                  <TableCell>min: {setting.minValue};
+                                    max: {setting.maxValue};
+                                    default: {setting.defaultValue}</TableCell>
+                                  <TableCell align="right">
+                                    <IconButton aria-label="delete" size="medium" onClick={() => removeSetting(setting)}>
+                                      <RemoveCircleIcon />
+                                    </IconButton>
+                                  </TableCell>
+                                </TableRow>
+                            ))
+                        )
+                        :
+                        <TableRow>
+                          <TableCell colSpan={4}>
+                            No settings
+                          </TableCell>
+                        </TableRow>
+                  }
+
+                </TableBody>
+              </Table>
+            </TableContainer>
+            <Box
+              display="flex"
+              sx={{
+                justifyContent: "space-between",
+              }}
+            >
+              <Box sx={{
+                paddingTop: "10px",
+                marginLeft: "auto",
+              }}>
+                <Button variant="outlined" startIcon={<AddIcon />} size="small" onClick={() => setAddScriptDialogOpen(true)}>
+                  Add Setting
+                </Button>
+              </Box>
+            </Box>
+
+          </Box>
+        </Paper>
+      </>
   )
 }

@@ -1,8 +1,7 @@
 import {
   array, bool,
   CheckerReturnType, jsonParser,
-  jsonParserEnforced, literal,
-  number,
+  jsonParserEnforced, literal, mixed, number,
   object,
   string,
 } from "@recoiljs/refine";
@@ -15,6 +14,7 @@ export const SceneChecker = object({
   name: string(),
   scriptId: number(),
   isActive: bool(),
+  settingsValues: mixed(),
 })
 
 const SceneParser = jsonParserEnforced(SceneChecker)
@@ -24,12 +24,14 @@ const SceneListParser = jsonParserEnforced(array(SceneChecker))
 export type Scene = CheckerReturnType<typeof SceneChecker>
 export type SceneDetails = {
   name: string,
-  scriptId: number
+  scriptId: number,
+  settingsValues: any,
 }
 
 export interface ScenesApi {
   getAll(): Promise<readonly Scene[]>,
   get(id: number): Promise<Scene | undefined>,
+
   run(id: number): Promise<RunResult>,
   save(id: number, scene: SceneDetails): Promise<Scene>,
   delete(id: number): Promise<void>,
@@ -89,6 +91,8 @@ export function createSceneApi(conn: InternalApiConnection): ScenesApi {
     run(id: number): Promise<RunResult> {
       return fetch(`${conn.baseUrl}rest/scene/${id}/run`, {
         method: "POST",
+        headers:{'content-type': 'application/json'},
+        body: JSON.stringify({})
       }).then((res) => {
         return res.text().then((text) => RunResultParser(text))
       })

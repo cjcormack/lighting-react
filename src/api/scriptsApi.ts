@@ -3,18 +3,32 @@ import {
   bool,
   CheckerReturnType,
   jsonParserEnforced,
-  literal, mixed, nullable,
+  literal, nullable,
   number,
   object,
   string,
-  union
+  union, writableArray
 } from "@recoiljs/refine";
 import {InternalApiConnection} from "./internalApi";
+
+const ScriptSettingIntChecker = object({
+  type: literal('scriptSettingInt'),
+  name: string(),
+  minValue: nullable(number()),
+  maxValue: nullable(number()),
+  defaultValue: nullable(number()),
+})
+
+const ScriptSettingChecker = union(
+    ScriptSettingIntChecker,
+)
+export type ScriptSetting = CheckerReturnType<typeof ScriptSettingChecker>
 
 export const ScriptChecker = object({
   id: number(),
   name: string(),
   script: string(),
+  settings: writableArray(ScriptSettingChecker),
 })
 
 const ScriptParser = jsonParserEnforced(ScriptChecker)
@@ -55,6 +69,7 @@ export type Script = CheckerReturnType<typeof ScriptChecker>
 export type ScriptDetails = {
   name: string,
   script: string,
+  settings: Array<ScriptSetting>,
 }
 
 export type CompileResult = CheckerReturnType<typeof CompileResultChecker>
@@ -64,8 +79,8 @@ export type RunResult = CheckerReturnType<typeof RunResultChecker>
 export interface ScriptsApi {
   getAll(): Promise<readonly Script[]>,
   get(id: number): Promise<Script | undefined>,
-  compile(script: string): Promise<CompileResult>,
-  run(script: string): Promise<RunResult>,
+  compile(script: string, settings: Array<ScriptSetting>): Promise<CompileResult>,
+  run(script: string, settings: Array<ScriptSetting>): Promise<RunResult>,
   save(id: number, script: ScriptDetails): Promise<Script>,
   delete(id: number): Promise<void>,
   create(script: ScriptDetails): Promise<Script>,
@@ -83,18 +98,26 @@ export function createScriptApi(conn: InternalApiConnection): ScriptsApi {
         return allScripts.filter((script) => script.id === id).pop()
       })
     },
-    compile(script: string): Promise<CompileResult> {
+    compile(script: string, settings: Array<ScriptSetting>): Promise<CompileResult> {
       return fetch(conn.baseUrl+"rest/script/compile", {
         method: "POST",
-        body: script,
+        headers:{'content-type': 'application/json'},
+        body: JSON.stringify({
+          script: script,
+          settings: settings,
+        }),
       }).then((res) => {
         return res.text().then((text) => CompileResultParser(text))
       })
     },
-    run(script: string): Promise<RunResult> {
+    run(script: string, settings: Array<ScriptSetting>): Promise<RunResult> {
       return fetch(conn.baseUrl+"rest/script/run", {
         method: "POST",
-        body: script,
+        headers:{'content-type': 'application/json'},
+        body: JSON.stringify({
+          script: script,
+          settings: settings,
+        }),
       }).then((res) => {
         return res.text().then((text) => RunResultParser(text))
       })

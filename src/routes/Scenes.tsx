@@ -1,4 +1,4 @@
-import {atom, selector, selectorFamily, useRecoilRefresher_UNSTABLE, useRecoilValue} from "recoil";
+import {atom, selector, selectorFamily, useRecoilValue} from "recoil";
 import {lightingApi} from "../api/lightingApi";
 import {Scene, SceneChecker} from "../api/scenesApi";
 import {
@@ -25,6 +25,7 @@ import {syncEffect} from "recoil-sync";
 import {LightingApiScenesListItemKey, LightingApiStoreKey} from "../connection";
 import {array} from "@recoiljs/refine";
 import {SxProps} from "@mui/system";
+import SetSceneSettings from "../SetSceneSettings";
 
 export const sceneListState = atom<readonly Scene[]>({
   key: 'sceneList',
@@ -128,12 +129,20 @@ const SceneCard = ({id}: {id: number}) => {
   }
 
   const scene = useRecoilValue(sceneState(id))
+  const script = useRecoilValue(scriptState(scene.scriptId))
+
+  const [showSettings, setShowSettings] = useState<boolean>(false)
+
   const [status, setStatus] = useState<StatusDetails>({
     text: "ready",
     color: "default",
   })
 
   const navigate = useNavigate()
+
+  const settingsValuesObject = scene.settingsValues as object
+
+  const settingsValuesMap: Map<string, any> = new Map(Object.entries(settingsValuesObject))
 
   const doRun = () => {
     setStatus({
@@ -182,39 +191,62 @@ const SceneCard = ({id}: {id: number}) => {
     sx.bgcolor = '#84bef5'
   }
 
-  return (
-      <Grid item xs={12} md={4} lg={3}>
-        <Card sx={sx}>
-          <CardActionArea onClick={doRun}>
-            <CardContent>
-              <Typography gutterBottom variant="h5" component="div">
-                {scene.name}
-              </Typography>
-              <Suspense fallback={'Loading...'}>
-                <SceneScriptDetails id={scene.scriptId}/>
-              </Suspense>
-              <Chip label={status.text} color={status.color} size="small" variant="outlined"  />
-            </CardContent>
-          </CardActionArea>
-          <CardActions>
-            <Button size="small" color="primary" onClick={handleViewScript}>
-              View Script
-            </Button>
-            <Button size="small" color="error" onClick={handleSceneDelete}>
-              Delete
-            </Button>
-          </CardActions>
-        </Card>
-      </Grid>
-  )
-}
-
-const SceneScriptDetails = ({id}: {id: number}) => {
-  const script = useRecoilValue(scriptState(id))
+  const saveSettingValues = (settingsValues: Map<string, any>) => {
+    let newScene = {
+      name: scene.name,
+      scriptId: scene.scriptId,
+      settingsValues: Object.fromEntries(settingsValues.entries()),
+    }
+    lightingApi.scenes.save(id, newScene)
+  }
 
   return (
-      <Typography sx={{ mb: 1.5 }} color="text.secondary">
-        Run script '{script.name}'
-      </Typography>
+      <>
+        <SetSceneSettings open={showSettings} setOpen={setShowSettings} settings={script.settings} originalSettingsValues={settingsValuesMap}
+                          saveSettingValues={saveSettingValues} />
+        <Grid item xs={12} md={4} lg={3}>
+          <Card sx={sx}>
+            <CardActionArea onClick={doRun}>
+              <CardContent>
+                <Typography gutterBottom variant="h5" component="div">
+                  {scene.name}
+                </Typography>
+                <Typography sx={{ mb: 1.5 }} color="text.secondary">
+                  Run script '{script.name}'
+                </Typography>
+                <Stack direction="row" spacing={1}>
+                  <Chip label={status.text} color={status.color} size="small" variant="outlined"  />
+                  {
+                    script.settings.map((setting) => {
+                      const settingValue = settingsValuesMap.get(setting.name) ?? setting.defaultValue
+
+                      return (
+                        <Chip key={setting.name} label={`${setting.name}: ${settingValue}`} size="small" variant="outlined" />
+                      )
+                    })
+                  }
+                </Stack>
+              </CardContent>
+            </CardActionArea>
+            <CardActions>
+              {
+                script.settings.length ? (
+                  <Button size="small" color="primary" onClick={() => setShowSettings(true)}>
+                    Settings
+                  </Button>
+                ) : (
+                  <></>
+                )
+              }
+              <Button size="small" color="primary" onClick={handleViewScript}>
+                Script
+              </Button>
+              <Button size="small" color="error" onClick={handleSceneDelete}>
+                Delete
+              </Button>
+            </CardActions>
+          </Card>
+        </Grid>
+      </>
   )
 }
