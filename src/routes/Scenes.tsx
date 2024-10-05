@@ -69,7 +69,7 @@ const sceneState = selectorFamily<Scene, number>({
 
 export function Scenes() {
   const [addSceneDialogOpen, setAddSceneDialogOpen] = useState<boolean>(false)
-  const [sceneSaving, setSceneSaving] = useState<boolean>(false)
+  const [, setSceneSaving] = useState<boolean>(false)
 
   return (
       <>
@@ -142,7 +142,7 @@ const SceneCard = ({id}: {id: number}) => {
 
   const settingsValuesObject = scene.settingsValues as object
 
-  const settingsValuesMap: Map<string, any> = new Map(Object.entries(settingsValuesObject))
+  const settingsValuesMap: Map<string, unknown> = new Map(Object.entries(settingsValuesObject))
 
   const doRun = () => {
     setStatus({
@@ -150,7 +150,7 @@ const SceneCard = ({id}: {id: number}) => {
       color: "info",
     })
 
-    lightingApi.scenes.run(id).then((runResult) => {
+    lightingApi.scenes.run(id).then(() => {
       setStatus({
         text: "active",
         color: "success",
@@ -191,8 +191,8 @@ const SceneCard = ({id}: {id: number}) => {
     sx.bgcolor = '#84bef5'
   }
 
-  const saveSettingValues = (settingsValues: Map<string, any>) => {
-    let newScene = {
+  const saveSettingValues = (settingsValues: Map<string, unknown>) => {
+    const newScene = {
       name: scene.name,
       scriptId: scene.scriptId,
       settingsValues: Object.fromEntries(settingsValues.entries()),
@@ -212,7 +212,7 @@ const SceneCard = ({id}: {id: number}) => {
                   {scene.name}
                 </Typography>
                 <Typography sx={{ mb: 1.5 }} color="text.secondary">
-                  Run script '{script.name}'
+                  Run script &apos;{script.name}&apos;
                 </Typography>
                 <Stack direction="row" spacing={1}>
                   <Chip label={status.text} color={status.color} size="small" variant="outlined"  />

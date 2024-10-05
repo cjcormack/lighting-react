@@ -25,7 +25,7 @@ export type Scene = CheckerReturnType<typeof SceneChecker>
 export type SceneDetails = {
   name: string,
   scriptId: number,
-  settingsValues: any,
+  settingsValues: unknown,
 }
 
 export interface ScenesApi {

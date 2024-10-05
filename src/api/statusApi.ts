@@ -24,7 +24,7 @@ export function createStatusApi(conn: InternalApiConnection): StatusApi {
         })
     }
 
-    conn.subscribe((evType, ev) => {
+    conn.subscribe((evType) => {
         if (evType === InternalEventType.message) {
             return
         }

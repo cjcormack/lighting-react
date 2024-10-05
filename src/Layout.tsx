@@ -135,7 +135,7 @@ export default function Layout() {
                   noWrap
                   sx={{ flexGrow: 1 }}
               >
-                Chris' DMX Controller v7
+                Chris&apos; DMX Controller v7
               </Typography>
               <ConnectionStatus/>
             </Toolbar>

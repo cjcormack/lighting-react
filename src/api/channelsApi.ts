@@ -25,7 +25,7 @@ function debounceChannelUpdates(
     waitMs: number
 ): (i: string, l: number) => void {
 
-    let fn = aggregateAndDebounce(
+    const fn = aggregateAndDebounce(
         ([a, b]: [string,number], map: Map<string, number>) => {
             map.set(a, b);
             return map;

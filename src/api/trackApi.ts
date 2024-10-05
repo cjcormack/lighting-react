@@ -33,7 +33,7 @@ export function createTrackApi(conn: InternalApiConnection): TrackApi {
         })
     }
 
-    const handleOnOpen = (ev: Event) => {
+    const handleOnOpen = () => {
         const payload = {
             type: 'trackDetails',
         }
@@ -50,7 +50,7 @@ export function createTrackApi(conn: InternalApiConnection): TrackApi {
 
     conn.subscribe((evType, ev) => {
         if (evType === 'open') {
-            handleOnOpen(ev)
+            handleOnOpen()
         } else if (evType === 'message' && ev instanceof MessageEvent) {
             handleOnMessage(ev)
         }

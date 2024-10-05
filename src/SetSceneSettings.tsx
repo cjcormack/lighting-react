@@ -6,10 +6,10 @@ export default function SetSceneSettings({open, setOpen, settings, originalSetti
   open: boolean,
   setOpen: Dispatch<SetStateAction<boolean>>,
   settings: ScriptSetting[],
-  originalSettingsValues: ReadonlyMap<string, any>,
-  saveSettingValues: (settingsValues: Map<string, any>) => void,
+  originalSettingsValues: ReadonlyMap<string, unknown>,
+  saveSettingValues: (settingsValues: Map<string, unknown>) => void,
 }) {
-  const [updatedSettingsValues, setUpdatedSettingsValues] = useState<Map<string, any>>(new Map())
+  const [updatedSettingsValues, setUpdatedSettingsValues] = useState<Map<string, unknown>>(new Map())
 
   const clearValue = () => {
     setUpdatedSettingsValues(new Map(originalSettingsValues))

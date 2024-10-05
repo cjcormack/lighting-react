@@ -33,9 +33,7 @@ export const ChannelSlider = (({universe, id, description}: {universe: number, i
     }
 
     const valueNumber = Number(event.target.value)
-    if (isNaN(valueNumber)) {
-
-    } else if (valueNumber < 0) {
+    if (isNaN(valueNumber)) { /* empty */ } else if (valueNumber < 0) {
       setValue(0)
     } else if (valueNumber > 255) {
       setValue(255)

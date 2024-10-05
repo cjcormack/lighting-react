@@ -18,8 +18,6 @@ export const FixtureChecker = object({
   })),
 })
 
-const FixtureParser = jsonParserEnforced(FixtureChecker)
-
 const FixtureListParser = jsonParserEnforced(array(FixtureChecker))
 
 export type Fixture = CheckerReturnType<typeof FixtureChecker>

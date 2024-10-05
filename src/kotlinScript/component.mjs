@@ -84,9 +84,9 @@ class ReactKotlinPlayground extends Component {
         this.initPlayground();
     }
 
-    componentDidUpdate(prevProps) {
-        const oldProps = prevProps;
-        const nextProps = this.props;
+    componentDidUpdate(/*prevProps*/) {
+        // const oldProps = prevProps;
+        // const nextProps = this.props;
 
         this.initPlayground();
 
@@ -98,7 +98,7 @@ class ReactKotlinPlayground extends Component {
     render() {
         const {
             className,
-            //eslint-disable-next-line no-unused-vars
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
             playground: _playground,
             ...props
         } = this.props;
