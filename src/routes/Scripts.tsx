@@ -22,148 +22,148 @@ import {
   TableRow,
   TextField,
   Typography
-} from "@mui/material";
-import React, {Dispatch, SetStateAction, Suspense, useEffect, useState} from "react";
-import {atom, selector, selectorFamily, useRecoilRefresher_UNSTABLE, useRecoilState, useRecoilValue} from "recoil";
-import {lightingApi} from "../api/lightingApi";
-import {CompileResult, RunResult, Script, ScriptDetails, ScriptSetting} from "../api/scriptsApi";
+} from "@mui/material"
+import React, { Dispatch, SetStateAction, Suspense, useEffect, useState } from "react"
 import {
   unstable_usePrompt,
   useLocation,
   useNavigate,
   useParams
-} from "react-router-dom";
-import {Add as AddIcon, Build as BuildIcon, PlayArrow as PlayArrowIcon, RemoveCircle as RemoveCircleIcon, Warning as WarningIcon, Error as ErrorIcon, Info as InfoIcon} from "@mui/icons-material";
+} from "react-router-dom"
+import {
+  Add as AddIcon,
+  Build as BuildIcon,
+  PlayArrow as PlayArrowIcon,
+  RemoveCircle as RemoveCircleIcon,
+  Warning as WarningIcon,
+  Error as ErrorIcon,
+  Info as InfoIcon
+} from "@mui/icons-material"
 
-import ReactKotlinPlayground from "../kotlinScript/index.mjs";
-import AddScriptDialog from "../AddScriptDialog";
-
-export const scriptListState = selector<readonly Script[]>({
-  key: 'scriptList',
-  get: () => {
-    return lightingApi.scripts.getAll()
-  },
-})
-
-const scriptIdsState = selector<Array<number>>({
-  key: 'scriptIds',
-  get: ({get}) => {
-    const scripts = get(scriptListState)
-    return scripts.map((it) => it.id)
-  },
-})
-
-const scriptsMappedByIdState = selector<Map<number, Script>>({
-  key: 'scriptsMappedById',
-  get: ({get}) => {
-    const scriptList = get(scriptListState)
-    return new Map(scriptList.map((script => [script.id, script])))
-  }
-})
-
-export const scriptState = selectorFamily<ScriptDetails, number>({
-  key: 'script',
-  get: (scriptId: number) => ({get}) => {
-    const scriptsMappedById = get(scriptsMappedByIdState)
-    const script = scriptsMappedById.get(scriptId)
-    if (script === undefined) {
-      throw new Error("Script not found")
-    }
-    return script
-  },
-})
+import AddScriptDialog from "../AddScriptDialog"
+import {
+  CompileResult, RunResult,
+  ScriptDetails,
+  ScriptSetting,
+  useCompileMutation, useCreateMutation, useDeleteMutation, useRunMutation, useSaveMutation,
+  useScriptListQuery,
+  useScriptQuery
+} from "../store/scripts"
+// @ts-ignore
+import ReactKotlinPlayground from "../kotlinScript/index.mjs"
 
 export default function Scripts() {
-  const {scriptId} = useParams()
+  const { scriptId } = useParams()
 
   return (
-      <Paper
-          sx={{
-            p: 2,
-            m: 2,
-            display: 'flex',
-            flexDirection: 'column',
-          }}>
-        <Box>
-          <Typography variant="h2">
-            Scripts
-          </Typography>
-          <Grid container spacing={0}>
-            <Grid item xs="auto">
-              <Box sx={{width: 200, bgcolor: 'background.paper'}}>
-                <List dense={true}>
-                  <Suspense fallback={'Loading...'}>
-                    <ScriptList/>
-                  </Suspense>
-                </List>
-              </Box>
-            </Grid>
-            <Grid item xs>
-              {scriptId === undefined ? (
-                  <></>
-                ) : scriptId === 'new' ?(
-                    <NewScript/>
-                ) : (
-                    <Suspense fallback={'Loading...'}>
-                      <EditScript id={Number(scriptId)}/>
-                    </Suspense>
-                )
-              }
-            </Grid>
+    <Paper
+      sx={{
+        p: 2,
+        m: 2,
+        display: "flex",
+        flexDirection: "column"
+      }}>
+      <Box>
+        <Typography variant="h2">
+          Scripts
+        </Typography>
+        <Grid container spacing={0}>
+          <Grid item xs="auto">
+            <Box sx={{ width: 200, bgcolor: "background.paper" }}>
+              <List dense={true}>
+                <Suspense fallback={"Loading..."}>
+                  <ScriptList />
+                </Suspense>
+              </List>
+            </Box>
           </Grid>
-        </Box>
-      </Paper>
+          <Grid item xs>
+            {scriptId === undefined ? (
+              <></>
+            ) : scriptId === "new" ? (
+              <NewScript />
+            ) : (
+              <Suspense fallback={"Loading..."}>
+                <EditScript id={Number(scriptId)} />
+              </Suspense>
+            )
+            }
+          </Grid>
+        </Grid>
+      </Box>
+    </Paper>
   )
 }
 
 const ScriptList = () => {
-  const scriptIds = useRecoilValue(scriptIdsState)
+  const {
+    data: scriptList,
+    isLoading,
+    isFetching
+  } = useScriptListQuery()
 
   const navigate = useNavigate()
 
   const doNew = () => {
-    navigate('/scripts/new')
+    navigate("/scripts/new")
   }
 
+  if (isLoading || isFetching) {
+    return (
+      <>Loading...</>
+    )
+  }
+
+  const scriptIds = (scriptList ?? []).map((it) => it.id)
+
   return (
-      <>
-        {scriptIds.map((scriptId) => {
-          return (
-              <Suspense key={scriptId} fallback={'Loading...'}>
-                <ScriptListEntry id={scriptId}/>
-              </Suspense>
-          )
-        })}
-        <Box sx={{m: 1}}>
-          <Button startIcon={<AddIcon/>}
-                  size="small"
-                  variant="outlined"
-                  fullWidth
-                  onClick={doNew}>New Script</Button>
-        </Box>
-      </>
+    <>
+      {scriptIds.map((scriptId) => {
+        return (
+          <ScriptListEntry id={scriptId} />
+        )
+      })}
+      <Box sx={{ m: 1 }}>
+        <Button startIcon={<AddIcon />}
+                size="small"
+                variant="outlined"
+                fullWidth
+                onClick={doNew}>New Script</Button>
+      </Box>
+    </>
   )
 }
 
-const scriptEditsState = atom<ScriptEdits>({
-  key: 'script-edits',
-  default: {},
-})
-
-const ScriptListEntry = ({id}: { id: number }) => {
-  const script = useRecoilValue(scriptState(id))
+const ScriptListEntry = ({ id }: { id: number }) => {
+  const {
+    data: script,
+    isLoading,
+    isFetching
+  } = useScriptQuery(id)
 
   const navigate = useNavigate()
   const location = useLocation()
 
+  if (isLoading || isFetching) {
+    return (
+      <>Loading...</>
+    )
+  }
+
+  if (!script) {
+    return (
+      <>Not found</>
+    )
+  }
+
   return (
-      <ListItemButton
-          onClick={() => navigate(`/scripts/${id}`)}
-          selected={location.pathname === `/scripts/${id}`}>
-        <ListItemText
-            primary={script.name}
-        />
-      </ListItemButton>
+    <ListItemButton
+      onClick={() => navigate(`/scripts/${id}`)}
+      selected={location.pathname === `/scripts/${id}`}>
+      <ListItemText
+        primary={script.name}
+      />
+    </ListItemButton>
   )
 }
 
@@ -176,39 +176,72 @@ interface ScriptEdits {
 
 const NewScript = () => {
   const script: ScriptDetails = {
-    name: '',
-    script: '',
-    settings: [],
+    name: "",
+    script: "",
+    settings: []
   }
   return (
-      <ScriptDisplay script={script}/>
+    <ScriptDisplay script={script} />
   )
 }
 
-const EditScript = ({id}: { id: number }) => {
-  const script = useRecoilValue(scriptState(id))
+const EditScript = ({ id }: { id: number }) => {
+  const {
+    data: script,
+    isLoading,
+    isFetching
+  } = useScriptQuery(id)
+
+  if (isLoading || isFetching) {
+    return (
+      <>Loading...</>
+    )
+  }
+
+  if (!script) {
+    return (
+      <>Not found</>
+    )
+  }
 
   return (
-      <ScriptDisplay script={script} id={id}/>
+    <ScriptDisplay script={script} id={id} />
   )
 }
 
-const ScriptDisplay = ({script, id}: { script: ScriptDetails, id?: number }) => {
-  const [compileResult, setCompileResult] = useState<Promise<CompileResult> | undefined>()
-  const [runResult, setRunResult] = useState<Promise<RunResult> | undefined>()
+const ScriptDisplay = ({ script, id }: { script: ScriptDetails, id?: number }) => {
+  const [
+    runCompileMutation,
+    {
+      data: compileResult,
+      isUninitialized: hasNotCompiled,
+      isLoading: isCompiling,
+      reset: resetCompile,
+    }
+  ] = useCompileMutation()
+  const [
+    runRunMutation,
+    {
+      data: runResult,
+      isUninitialized: hasNotRun,
+      isLoading: isRunning,
+      reset: resetRun,
+    }
+  ] = useRunMutation()
 
-  const [edits, setEdits] = useRecoilState(scriptEditsState)
+  const [runSaveMutation] = useSaveMutation()
+  const [runCreateMutation] = useCreateMutation()
+
   const [deleteAlertOpen, setDeleteAlertOpen] = useState<boolean>(false)
 
   const [newId, setNewId] = useState<number | undefined>()
-
-  const scriptListRefresher = useRecoilRefresher_UNSTABLE(scriptListState)
+  const [edits, setEdits] = useState<ScriptEdits>({})
 
   const navigate = useNavigate()
 
   const hasChanged = edits.name !== undefined || edits.script !== undefined || edits.settings !== undefined
 
-  unstable_usePrompt({when: hasChanged && newId === undefined, message: "Unsaved changes"})
+  unstable_usePrompt({ when: hasChanged && newId === undefined, message: "Unsaved changes" })
 
   useEffect(() => {
     if (newId !== undefined) {
@@ -216,7 +249,7 @@ const ScriptDisplay = ({script, id}: { script: ScriptDetails, id?: number }) => 
     }
     if (edits.id !== id) {
       setEdits({
-        id: id,
+        id: id
       })
     }
   })
@@ -261,16 +294,22 @@ fun TestScript.test() {
   const isNew = id === undefined
 
   const canReset = hasChanged && !isNew
-  const canSave = hasChanged && scriptName !== '' && scriptScript !== ''
+  const canSave = hasChanged && scriptName !== "" && scriptScript !== ""
   const canDelete = !isNew
-  const canCompile = scriptScript !== ''
-  const canRun = scriptScript !== ''
+  const canCompile = scriptScript !== ""
+  const canRun = scriptScript !== ""
 
   const doCompile = () => {
-    setCompileResult(lightingApi.scripts.compile(scriptScript, settings))
+    runCompileMutation({
+      script: scriptScript,
+      settings: settings
+    })
   }
   const doRun = () => {
-    setRunResult(lightingApi.scripts.run(scriptScript, settings))
+    runRunMutation({
+      script: scriptScript,
+      settings: settings
+    })
   }
   const doDelete = () => {
     if (!isNew) {
@@ -280,33 +319,37 @@ fun TestScript.test() {
   const doReset = () => {
     if (!isNew) {
       setEdits({
-        id: id,
+        id: id
       })
     }
   }
   const doSave = () => {
     if (isNew) {
-      lightingApi.scripts.create({
+      runCreateMutation({
         name: scriptName,
         script: scriptScript,
-        settings: settings,
+        settings: settings
       }).then((newScript) => {
-        scriptListRefresher()
-        setEdits({
-          id: newScript.id,
-        })
-        setNewId(newScript.id)
+        console.log(newScript.data)
 
+        if (!newScript.data) {
+          throw new Error('data unexpectedly empty')
+        }
+
+        setEdits({
+          id: newScript.data.id
+        })
+        setNewId(newScript.data.id)
       })
     } else {
-      lightingApi.scripts.save(id, {
+      runSaveMutation({
+        id: id,
         name: scriptName,
         script: scriptScript,
-        settings: settings,
+        settings: settings
       }).then(() => {
-        scriptListRefresher()
         setEdits({
-          id: id,
+          id: id
         })
       })
     }
@@ -316,7 +359,7 @@ fun TestScript.test() {
     const updatedEdits: ScriptEdits = {
       id: id,
       script: edits.script,
-      settings: edits.settings,
+      settings: edits.settings
     }
 
     if (ev.target.value !== script.name) {
@@ -328,7 +371,7 @@ fun TestScript.test() {
     const updatedEdits: ScriptEdits = {
       id: id,
       name: edits.name,
-      settings: edits.settings,
+      settings: edits.settings
     }
 
     if (value !== script.script) {
@@ -341,7 +384,7 @@ fun TestScript.test() {
     const updatedEdits: ScriptEdits = {
       id: id,
       name: edits.name,
-      script: edits.script,
+      script: edits.script
     }
 
     const updatedSettings: ScriptSetting[] = settings.filter((existingSetting) => {
@@ -360,7 +403,7 @@ fun TestScript.test() {
     const updatedEdits: ScriptEdits = {
       id: id,
       name: edits.name,
-      script: edits.script,
+      script: edits.script
     }
 
     const updatedSettings: ScriptSetting[] = settings.filter((existingSetting) => {
@@ -375,251 +418,247 @@ fun TestScript.test() {
   }
 
   return (
-      <>
-        <ScriptCompileDialog compileResult={compileResult} setCompileResult={setCompileResult}/>
-        <ScriptRunDialog runResult={runResult} setRunResult={setRunResult}/>
-        {
-          isNew ? null : <DeleteConfirmAlert id={id} open={deleteAlertOpen} setOpen={setDeleteAlertOpen} />
-        }
-        <Paper
-            sx={{
-              p: 2,
-              m: 2,
-              display: 'flex',
-              flexDirection: 'column',
-            }}>
-          <Box>
-            <TextField
-                required
-                id="outlined-required"
-                label="Name"
-                fullWidth={true}
-                value={scriptName}
-                onChange={onNameChange}
-            />
-          </Box>
-        </Paper>
-        <ScriptSettings settings={settings} addSetting={addSetting} removeSetting={removeSetting}/>
-        <Paper
-            sx={{
-              p: 2,
-              m: 2,
-              display: 'flex',
-              flexDirection: 'column',
-            }}>
-          <ReactKotlinPlayground
-              mode="kotlin"
-              lines="true"
-              onChange={onScriptChange}
-              value={scriptPrefix + scriptScript + scriptSuffix}
-              highlightOnFly="true"
-              autocomplete="true"
-              matchBrackets="true"
-              key={id ? `${id}` : "new"}
+    <>
+      <ScriptCompileDialog
+        compileResult={compileResult}
+        hasNotCompiled={hasNotCompiled}
+        isCompiling={isCompiling}
+        resetCompile={resetCompile}
+      />
+      <ScriptRunDialog
+        runResult={runResult}
+        hasNotRun={hasNotRun}
+        isRunning={isRunning}
+        resetRun={resetRun}
+      />
+      {
+        isNew ? null : <DeleteConfirmAlert id={id} open={deleteAlertOpen} setOpen={setDeleteAlertOpen} />
+      }
+      <Paper
+        sx={{
+          p: 2,
+          m: 2,
+          display: "flex",
+          flexDirection: "column"
+        }}>
+        <Box>
+          <TextField
+            required
+            id="outlined-required"
+            label="Name"
+            fullWidth={true}
+            value={scriptName}
+            onChange={onNameChange}
           />
-        </Paper>
-        <Paper
-            sx={{
-              p: 2,
-              m: 2,
-              display: 'flex',
-              flexDirection: 'column',
-            }}>
-          <Box
-              sx={{
-                display: 'flex',
-                justifyContent: 'space-between',
-              }}
-          >
-            <ButtonGroup aria-label="outlined button group">
-              <Button startIcon={<BuildIcon />} disabled={!canCompile} onClick={doCompile}>Compile</Button>
-              <Button startIcon={<PlayArrowIcon />} disabled={!canRun} onClick={doRun}>Run</Button>
-            </ButtonGroup>
-            <ButtonGroup variant="contained" aria-label="text button group">
-              <Button color="error" disabled={!canDelete} onClick={doDelete}>Delete</Button>
-              <Button disabled={!canReset} onClick={doReset}>Reset</Button>
-              <Button disabled={!canSave} onClick={doSave}>
-                { isNew ? 'Create' : 'Save' }
-              </Button>
-            </ButtonGroup>
-          </Box>
-        </Paper>
-      </>
+        </Box>
+      </Paper>
+      <ScriptSettings settings={settings} addSetting={addSetting} removeSetting={removeSetting} />
+      <Paper
+        sx={{
+          p: 2,
+          m: 2,
+          display: "flex",
+          flexDirection: "column"
+        }}>
+        <ReactKotlinPlayground
+          mode="kotlin"
+          lines="true"
+          onChange={onScriptChange}
+          value={scriptPrefix + scriptScript + scriptSuffix}
+          highlightOnFly="true"
+          autocomplete="true"
+          matchBrackets="true"
+          key={id ? `${id}` : "new"}
+        />
+      </Paper>
+      <Paper
+        sx={{
+          p: 2,
+          m: 2,
+          display: "flex",
+          flexDirection: "column"
+        }}>
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "space-between"
+          }}
+        >
+          <ButtonGroup aria-label="outlined button group">
+            <Button startIcon={<BuildIcon />} disabled={!canCompile} onClick={doCompile}>Compile</Button>
+            <Button startIcon={<PlayArrowIcon />} disabled={!canRun} onClick={doRun}>Run</Button>
+          </ButtonGroup>
+          <ButtonGroup variant="contained" aria-label="text button group">
+            <Button color="error" disabled={!canDelete} onClick={doDelete}>Delete</Button>
+            <Button disabled={!canReset} onClick={doReset}>Reset</Button>
+            <Button disabled={!canSave} onClick={doSave}>
+              {isNew ? "Create" : "Save"}
+            </Button>
+          </ButtonGroup>
+        </Box>
+      </Paper>
+    </>
   )
 }
 
-const ScriptCompileDialog = ({compileResult, setCompileResult}: {compileResult: Promise<CompileResult> | undefined, setCompileResult: Dispatch<SetStateAction<Promise<CompileResult> | undefined>>}) => {
-  const open = compileResult !== undefined
-
-  const [resolvedCompileResult, setResolvedCompileResult] = useState<CompileResult | undefined>()
-
-  useEffect(() => {
-    if (compileResult !== undefined) {
-      compileResult.then((res) => {
-        setResolvedCompileResult((res))
-      })
-    }
-  }, [compileResult])
-
-  if (compileResult === undefined) {
-    return null
-  }
+const ScriptCompileDialog = ({ compileResult, hasNotCompiled, isCompiling, resetCompile }: {
+  compileResult?: CompileResult,
+  hasNotCompiled: boolean,
+  isCompiling: boolean,
+  resetCompile: () => void,
+}) => {
+  const open = !hasNotCompiled
 
   let title: string
   let color: string
-  if (resolvedCompileResult === undefined) {
-    title ='Compiling...'
+  if (isCompiling) {
+    title = "Compiling..."
     color = ""
-  } else if (resolvedCompileResult.success) {
-    title='Compilation Successful'
+  } else if (compileResult?.success) {
+    title = "Compilation Successful"
     color = "green"
   } else {
-    title='Compilation Failed'
+    title = "Compilation Failed"
     color = "error"
   }
 
   return (
-      <Dialog
-          open={open}
-          aria-labelledby="compile-result-dialog-title"
-          aria-describedby="compile-result-dialog-description"
-      >
-        <DialogTitle
-            id="compile-result-dialog-title"
-            color={color}>
-          {title}
-        </DialogTitle>
-        <DialogContent dividers={true}>
-          <DialogContent
-              id="compile-result-dialog-description"
-              tabIndex={-1}
-          >
-            <List>
-              {
-                resolvedCompileResult?.messages.map((message, index) => {
-                  return (
+    <Dialog
+      open={open}
+      aria-labelledby="compile-result-dialog-title"
+      aria-describedby="compile-result-dialog-description"
+    >
+      <DialogTitle
+        id="compile-result-dialog-title"
+        color={color}>
+        {title}
+      </DialogTitle>
+      <DialogContent dividers={true}>
+        <DialogContent
+          id="compile-result-dialog-description"
+          tabIndex={-1}
+        >
+          <List>
+            {
+              compileResult?.messages.map((message, index) => {
+                return (
+                  <ListItem key={index}>
+                    <ListItemIcon>
+                      {
+                        message.severity === "ERROR"
+                          ? <ErrorIcon color="error" fontSize="large" />
+                          : message.severity === "WARNING"
+                            ? <WarningIcon color="warning" fontSize="large" />
+                            : <InfoIcon fontSize="large" />
+                      }
+                    </ListItemIcon>
+                    <ListItemText primary={message.message}
+                                  secondary={message.sourcePath ? `${message.sourcePath} ${message.location}` : ""} />
+                  </ListItem>
+                )
+              })
+            }
+
+          </List>
+        </DialogContent>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={() => {
+          resetCompile()
+        }}>Close</Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
+const ScriptRunDialog = ({ runResult, hasNotRun, isRunning, resetRun }: {
+  runResult?: RunResult,
+  hasNotRun: boolean,
+  isRunning: boolean,
+  resetRun: () => void,
+}) => {
+  const open = !hasNotRun
+
+  let title: string
+  let color: string
+  if (isRunning) {
+    title = "Running..."
+    color = ""
+  } else if (runResult?.status === "success") {
+    title = "Run Successful"
+    color = "green"
+  } else {
+    title = "Run Failed"
+    color = "error"
+  }
+
+  return (
+    <Dialog
+      open={open}
+      aria-labelledby="run-result-dialog-title"
+      aria-describedby="run-result-dialog-description"
+    >
+      <DialogTitle
+        id="run-result-dialog-title"
+        color={color}>
+        {title}
+      </DialogTitle>
+      <DialogContent dividers={true}>
+        <DialogContent
+          id="run-result-dialog-description"
+          tabIndex={-1}
+        >
+          <List>
+            {
+              runResult?.result != null ?
+                <ListItem style={{ whiteSpace: "pre-wrap" }}>
+                  {runResult.result}
+                </ListItem>
+                : runResult?.messages != null ?
+                  runResult.messages.map((message, index) => {
+                    return (
                       <ListItem key={index}>
                         <ListItemIcon>
                           {
-                            message.severity === 'ERROR'
+                            message.severity === "ERROR"
                               ? <ErrorIcon color="error" fontSize="large" />
-                              : message.severity === 'WARNING'
-                              ? <WarningIcon color="warning" fontSize="large" />
-                              : <InfoIcon fontSize="large" />
+                              : message.severity === "WARNING"
+                                ? <WarningIcon color="warning" fontSize="large" />
+                                : <InfoIcon fontSize="large" />
                           }
                         </ListItemIcon>
-                        <ListItemText primary={message.message} secondary={message.sourcePath ?`${message.sourcePath} ${message.location}` : '' } />
+                        <ListItemText primary={message.message}
+                                      secondary={message.sourcePath ? `${message.sourcePath} ${message.location}` : ""} />
                       </ListItem>
-                  )
-                })
-              }
+                    )
+                  })
+                  : null
+            }
 
-            </List>
-          </DialogContent>
+          </List>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => {
-            setCompileResult(undefined)
-            setResolvedCompileResult(undefined)
-          }}>Close</Button>
-        </DialogActions>
-      </Dialog>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={() => {
+          resetRun()
+        }}>Close</Button>
+      </DialogActions>
+    </Dialog>
   )
 }
 
-const ScriptRunDialog = ({runResult, setRunResult}: {runResult: Promise<RunResult> | undefined, setRunResult: Dispatch<SetStateAction<Promise<RunResult> | undefined>>}) => {
-  const open = runResult !== undefined
-
-  const [resolvedRunResult, setResolvedRunResult] = useState<RunResult | undefined>()
-
-  useEffect(() => {
-    if (runResult !== undefined) {
-      runResult.then((res) => {
-        setResolvedRunResult((res))
-      })
-    }
-  }, [runResult])
-
-  if (runResult === undefined) {
-    return null
-  }
-
-  let title: string
-  let color: string
-  if (resolvedRunResult === undefined) {
-    title ='Running...'
-    color = ""
-  } else if (resolvedRunResult.status === 'success') {
-    title='Run Successful'
-    color = "green"
-  } else {
-    title='Run Failed'
-    color = "error"
-  }
-
-  return (
-      <Dialog
-          open={open}
-          aria-labelledby="run-result-dialog-title"
-          aria-describedby="run-result-dialog-description"
-      >
-        <DialogTitle
-            id="run-result-dialog-title"
-            color={color}>
-          {title}
-        </DialogTitle>
-        <DialogContent dividers={true}>
-          <DialogContent
-              id="run-result-dialog-description"
-              tabIndex={-1}
-          >
-            <List>
-              {
-                resolvedRunResult?.result != null ?
-                    <ListItem style={{whiteSpace: "pre-wrap"}}>
-                      {resolvedRunResult.result}
-                    </ListItem>
-                : resolvedRunResult?.messages != null ?
-                    resolvedRunResult.messages.map((message, index) => {
-                      return (
-                          <ListItem key={index}>
-                            <ListItemIcon>
-                              {
-                                message.severity === 'ERROR'
-                                  ? <ErrorIcon color="error" fontSize="large" />
-                                  : message.severity === 'WARNING'
-                                  ? <WarningIcon color="warning" fontSize="large" />
-                                  : <InfoIcon fontSize="large" />
-                              }
-                            </ListItemIcon>
-                            <ListItemText primary={message.message} secondary={message.sourcePath ?`${message.sourcePath} ${message.location}` : '' } />
-                          </ListItem>
-                      )
-                    })
-                :  null
-              }
-
-            </List>
-          </DialogContent>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => {
-            setRunResult(undefined)
-            setResolvedRunResult(undefined)
-          }}>Close</Button>
-        </DialogActions>
-      </Dialog>
-  )
-}
-
-const DeleteConfirmAlert = ({id, open, setOpen}: {id: number, open: (boolean), setOpen: Dispatch<SetStateAction<boolean>>}) => {
-  const scriptListRefresher = useRecoilRefresher_UNSTABLE(scriptListState)
+const DeleteConfirmAlert = ({ id, open, setOpen }: {
+  id: number,
+  open: (boolean),
+  setOpen: Dispatch<SetStateAction<boolean>>
+}) => {
   const navigate = useNavigate()
 
+  const [runDeleteMigration] = useDeleteMutation()
+
   const handleDelete = () => {
-    lightingApi.scripts.delete(id).then(() => {
-      scriptListRefresher()
-      navigate('/scripts')
+    runDeleteMigration(id).then(() => {
+      navigate("/scripts")
       setOpen(false)
     })
   }
@@ -629,29 +668,29 @@ const DeleteConfirmAlert = ({id, open, setOpen}: {id: number, open: (boolean), s
   }
 
   return (
-      <Dialog
-          open={open}
-          onClose={handleClose}
-          aria-labelledby="delete-alert-dialog-title"
-          aria-describedby="delete-alert-dialog-description"
-      >
-        <DialogTitle id="delete-alert-dialog-title">
-          {"Really delete this script?"}
-        </DialogTitle>
-        <DialogContent>
-          <DialogContentText id="delete-alert-dialog-description">
-            Are you sure you want to delete this script?
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleClose} autoFocus>Cancel</Button>
-          <Button onClick={handleDelete}>Delete</Button>
-        </DialogActions>
-      </Dialog>
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      aria-labelledby="delete-alert-dialog-title"
+      aria-describedby="delete-alert-dialog-description"
+    >
+      <DialogTitle id="delete-alert-dialog-title">
+        {"Really delete this script?"}
+      </DialogTitle>
+      <DialogContent>
+        <DialogContentText id="delete-alert-dialog-description">
+          Are you sure you want to delete this script?
+        </DialogContentText>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={handleClose} autoFocus>Cancel</Button>
+        <Button onClick={handleDelete}>Delete</Button>
+      </DialogActions>
+    </Dialog>
   )
 }
 
-function ScriptSettings({settings, addSetting, removeSetting}: {
+function ScriptSettings({ settings, addSetting, removeSetting }: {
   settings: readonly ScriptSetting[],
   addSetting: (setting: ScriptSetting) => void,
   removeSetting: (setting: ScriptSetting) => void,
@@ -659,83 +698,84 @@ function ScriptSettings({settings, addSetting, removeSetting}: {
   const [addScriptDialogOpen, setAddScriptDialogOpen] = useState<boolean>(false)
 
   return (
-      <>
-        <Suspense fallback={'Loading...'}>
-          <AddScriptDialog open={addScriptDialogOpen} setOpen={setAddScriptDialogOpen} addSetting={addSetting}/>
-        </Suspense>
-        <Paper
-            sx={{
-              p: 2,
-              m: 2,
-              display: 'flex',
-              flexDirection: 'column',
-            }}>
-          <Box>
-            <Typography variant="h5">
-              Settings
-            </Typography>
-            <TableContainer component={Paper}>
-              <Table aria-label="simple table">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Type</TableCell>
-                    <TableCell>Name</TableCell>
-                    <TableCell colSpan={2}>Details</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {
-                    settings.length ?
-                        (
-                            settings.map((setting) => (
-                                <TableRow
-                                    key={setting.name}
-                                    sx={{'&:last-child td, &:last-child th': {border: 0}}}
-                                >
-                                  <TableCell component="th" scope="row">
-                                    {setting.type}
-                                  </TableCell>
-                                  <TableCell>{setting.name}</TableCell>
-                                  <TableCell>min: {setting.minValue};
-                                    max: {setting.maxValue};
-                                    default: {setting.defaultValue}</TableCell>
-                                  <TableCell align="right">
-                                    <IconButton aria-label="delete" size="medium" onClick={() => removeSetting(setting)}>
-                                      <RemoveCircleIcon />
-                                    </IconButton>
-                                  </TableCell>
-                                </TableRow>
-                            ))
-                        )
-                        :
-                        <TableRow>
-                          <TableCell colSpan={4}>
-                            No settings
+    <>
+      <Suspense fallback={"Loading..."}>
+        <AddScriptDialog open={addScriptDialogOpen} setOpen={setAddScriptDialogOpen} addSetting={addSetting} />
+      </Suspense>
+      <Paper
+        sx={{
+          p: 2,
+          m: 2,
+          display: "flex",
+          flexDirection: "column"
+        }}>
+        <Box>
+          <Typography variant="h5">
+            Settings
+          </Typography>
+          <TableContainer component={Paper}>
+            <Table aria-label="simple table">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Type</TableCell>
+                  <TableCell>Name</TableCell>
+                  <TableCell colSpan={2}>Details</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {
+                  settings.length ?
+                    (
+                      settings.map((setting) => (
+                        <TableRow
+                          key={setting.name}
+                          sx={{ "&:last-child td, &:last-child th": { border: 0 } }}
+                        >
+                          <TableCell component="th" scope="row">
+                            {setting.type}
+                          </TableCell>
+                          <TableCell>{setting.name}</TableCell>
+                          <TableCell>min: {setting.minValue};
+                            max: {setting.maxValue};
+                            default: {setting.defaultValue}</TableCell>
+                          <TableCell align="right">
+                            <IconButton aria-label="delete" size="medium" onClick={() => removeSetting(setting)}>
+                              <RemoveCircleIcon />
+                            </IconButton>
                           </TableCell>
                         </TableRow>
-                  }
+                      ))
+                    )
+                    :
+                    <TableRow>
+                      <TableCell colSpan={4}>
+                        No settings
+                      </TableCell>
+                    </TableRow>
+                }
 
-                </TableBody>
-              </Table>
-            </TableContainer>
-            <Box
-              display="flex"
-              sx={{
-                justifyContent: "space-between",
-              }}
-            >
-              <Box sx={{
-                paddingTop: "10px",
-                marginLeft: "auto",
-              }}>
-                <Button variant="outlined" startIcon={<AddIcon />} size="small" onClick={() => setAddScriptDialogOpen(true)}>
-                  Add Setting
-                </Button>
-              </Box>
+              </TableBody>
+            </Table>
+          </TableContainer>
+          <Box
+            display="flex"
+            sx={{
+              justifyContent: "space-between"
+            }}
+          >
+            <Box sx={{
+              paddingTop: "10px",
+              marginLeft: "auto"
+            }}>
+              <Button variant="outlined" startIcon={<AddIcon />} size="small"
+                      onClick={() => setAddScriptDialogOpen(true)}>
+                Add Setting
+              </Button>
             </Box>
-
           </Box>
-        </Paper>
-      </>
+
+        </Box>
+      </Paper>
+    </>
   )
 }

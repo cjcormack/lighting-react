@@ -6,7 +6,8 @@ export default {
   server: {
     open: true,
     proxy: {
-      '/api': 'http://localhost:8413/'
-    }
+      '/api': 'http://localhost:8413/',
+      '/kotlin-compiler-server': 'http://localhost:8413/',
+    },
   },
 }

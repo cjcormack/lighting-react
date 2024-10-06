@@ -1,6 +1,6 @@
 import React, {ChangeEvent, Dispatch, SetStateAction, useState} from "react";
 import {Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField} from "@mui/material";
-import {ScriptSetting} from "./api/scriptsApi";
+import { ScriptSetting } from "./store/scripts"
 
 export default function SetSceneSettings({open, setOpen, settings, originalSettingsValues, saveSettingValues}: {
   open: boolean,

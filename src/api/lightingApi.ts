@@ -2,7 +2,6 @@ import {ChannelsApi, createChannelsApi} from "./channelsApi";
 import {createStatusApi, StatusApi} from "./statusApi";
 import {createTrackApi, TrackApi} from "./trackApi";
 import {createInternalApiConnection} from "./internalApi";
-import {createScriptApi, ScriptsApi} from "./scriptsApi";
 import {createUniversesApi, UniversesApi} from "./universesApi";
 import {createSceneApi, ScenesApi} from "./scenesApi";
 import {createFixtureApi, FixturesApi} from "./fixturesApi";
@@ -12,7 +11,6 @@ interface LightingApi {
   channels: ChannelsApi
   status: StatusApi
   track: TrackApi
-  scripts: ScriptsApi
   scenes: ScenesApi
   fixtures: FixturesApi
 }
@@ -20,8 +18,8 @@ interface LightingApi {
 export const lightingApi = createLightingApi()
 
 function getWebSocketUrl() {
-  if (process.env.NODE_ENV && process.env.NODE_ENV === 'development') {
-    return 'ws://127.0.0.1:8413/api'
+  if (import.meta.env.VITE_SOCKET_URL) {
+    return import.meta.env.VITE_SOCKET_URL
   } else {
     return 'ws://' + window.location.href.split('/')[2] + '/api'
   }
@@ -37,7 +35,6 @@ function createLightingApi(): LightingApi {
   const channelsApi = createChannelsApi(connection)
   const statusApi = createStatusApi(connection)
   const trackApi = createTrackApi(connection)
-  const scriptApi = createScriptApi(connection)
   const sceneApi = createSceneApi(connection)
   const fixtureApi = createFixtureApi(connection)
 
@@ -46,7 +43,6 @@ function createLightingApi(): LightingApi {
     channels: channelsApi,
     status: statusApi,
     track: trackApi,
-    scripts: scriptApi,
     scenes: sceneApi,
     fixtures: fixtureApi,
   }

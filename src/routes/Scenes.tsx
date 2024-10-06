@@ -15,7 +15,6 @@ import {
   Typography
 } from "@mui/material";
 import React, {Suspense, useState} from "react";
-import {scriptState} from "./Scripts";
 import {OverridableStringUnion} from "@mui/types";
 import {ChipPropsColorOverrides} from "@mui/material/Chip/Chip";
 import AddCircleIcon from '@mui/icons-material/AddCircle';
@@ -26,6 +25,7 @@ import {LightingApiScenesListItemKey, LightingApiStoreKey} from "../connection";
 import {array} from "@recoiljs/refine";
 import {SxProps} from "@mui/system";
 import SetSceneSettings from "../SetSceneSettings";
+import { useScriptQuery } from "../store/scripts"
 
 export const sceneListState = atom<readonly Scene[]>({
   key: 'sceneList',
@@ -129,7 +129,12 @@ const SceneCard = ({id}: {id: number}) => {
   }
 
   const scene = useRecoilValue(sceneState(id))
-  const script = useRecoilValue(scriptState(scene.scriptId))
+
+  const {
+    data: script,
+    isLoading,
+    isFetching,
+  } = useScriptQuery(scene.scriptId)
 
   const [showSettings, setShowSettings] = useState<boolean>(false)
 
@@ -198,6 +203,17 @@ const SceneCard = ({id}: {id: number}) => {
       settingsValues: Object.fromEntries(settingsValues.entries()),
     }
     lightingApi.scenes.save(id, newScene)
+  }
+
+  if (isLoading || isFetching) {
+    return (
+      <>Loading...</>
+    )
+  }
+  if (!script) {
+    return (
+      <>Script not found</>
+    )
   }
 
   return (

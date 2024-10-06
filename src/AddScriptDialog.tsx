@@ -1,6 +1,6 @@
 import React, {ChangeEvent, Dispatch, SetStateAction, useState} from "react";
 import {Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, TextField} from "@mui/material";
-import {ScriptSetting} from "./api/scriptsApi";
+import { ScriptSetting } from "./store/scripts"
 
 export default function AddScriptDialog({open, setOpen, addSetting}: {
   open: boolean,
@@ -10,9 +10,9 @@ export default function AddScriptDialog({open, setOpen, addSetting}: {
   const [value, setValue] = useState<ScriptSetting>({
     name: '',
     type: 'scriptSettingInt',
-    minValue: null,
-    maxValue: null,
-    defaultValue: null,
+    minValue: undefined,
+    maxValue: undefined,
+    defaultValue: undefined,
   })
 
   const isValid = value.name
@@ -21,9 +21,9 @@ export default function AddScriptDialog({open, setOpen, addSetting}: {
     setValue({
       name: '',
       type: 'scriptSettingInt',
-      minValue: null,
-      maxValue: null,
-      defaultValue: null,
+      minValue: undefined,
+      maxValue: undefined,
+      defaultValue: undefined,
     })
   }
 
@@ -34,7 +34,6 @@ export default function AddScriptDialog({open, setOpen, addSetting}: {
 
   const handleAdd = () => {
     addSetting(value)
-    console.log('Add', value)
     clearValue()
     setOpen(false)
   }
@@ -55,7 +54,7 @@ export default function AddScriptDialog({open, setOpen, addSetting}: {
       const newValue = {
         name: value.name,
         type: value.type,
-        minValue: null,
+        minValue: undefined,
         maxValue: value.maxValue,
         defaultValue: value.defaultValue,
       }
@@ -82,7 +81,7 @@ export default function AddScriptDialog({open, setOpen, addSetting}: {
         name: value.name,
         type: value.type,
         minValue: value.minValue,
-        maxValue: null,
+        maxValue: undefined,
         defaultValue: value.defaultValue,
       }
 
@@ -109,7 +108,7 @@ export default function AddScriptDialog({open, setOpen, addSetting}: {
         type: value.type,
         minValue: value.minValue,
         maxValue: value.maxValue,
-        defaultValue: null,
+        defaultValue: undefined,
       }
 
       setValue(newValue)

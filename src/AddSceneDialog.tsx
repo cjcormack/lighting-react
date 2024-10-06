@@ -1,6 +1,5 @@
 import React, {ChangeEvent, Dispatch, SetStateAction, useState} from "react";
 import {useRecoilValue} from "recoil";
-import {scriptListState} from "./routes/Scripts";
 import {
   Button,
   Dialog,
@@ -12,6 +11,7 @@ import {
   TextField,
 } from "@mui/material";
 import {lightingApi} from "./api/lightingApi";
+import { useScriptListQuery } from "./store/scripts"
 
 interface AddSceneDetails {
   name: string,
@@ -23,7 +23,11 @@ export default function AddSceneDialog({open, setOpen, setSceneSaving}: {
   setOpen: Dispatch<SetStateAction<boolean>>,
   setSceneSaving: Dispatch<SetStateAction<boolean>>,
 }) {
-  const scriptList = useRecoilValue(scriptListState)
+  const {
+    data: scriptList,
+    isLoading,
+    isFetching,
+  } = useScriptListQuery()
 
   const [value, setValue] = useState<AddSceneDetails>({
     name: "",
@@ -74,6 +78,12 @@ export default function AddSceneDialog({open, setOpen, setSceneSaving}: {
     setValue(newValue)
   }
 
+  if (isLoading || isFetching) {
+    return (
+      <>Loading...</>
+    )
+  }
+
   return (
       <Dialog
           open={open}
@@ -106,7 +116,7 @@ export default function AddSceneDialog({open, setOpen, setSceneSaving}: {
                 value={value.script_id}
                 onChange={handleScriptChange}
             >
-              {scriptList.map((script) => (
+              {(scriptList ?? []).map((script) => (
                   <MenuItem key={script.id} value={script.id}>
                     {script.name}
                   </MenuItem>
