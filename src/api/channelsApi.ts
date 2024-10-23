@@ -1,6 +1,5 @@
 import {Subscription} from "./subscription";
 import {aggregateAndDebounce} from "./aggregateAndDebounce";
-import {array, jsonParser, literal, number, object} from "@recoiljs/refine";
 import {InternalApiConnection} from "./internalApi";
 
 export interface ChannelsApi {
@@ -11,16 +10,14 @@ export interface ChannelsApi {
     subscribeToChannel(key: string, fn: (value: number) => void): Subscription
 }
 
-const ChannelStateInMessageChecker = object({
-    type: literal('channelState'),
-    channels: array(object({
-        universe: number(),
-        id: number(),
-        currentLevel: number()
-    })),
-})
-
-const channelUpdateParser = jsonParser(ChannelStateInMessageChecker)
+type ChannelStateInMessage = {
+    type: 'channelState',
+    channels: {
+        universe: number,
+        id: number,
+        currentLevel: number,
+    }[],
+}
 
 function debounceChannelUpdates(
     func: (updates: Map<string, number>) => void,
@@ -77,7 +74,7 @@ export function createChannelsApi(conn: InternalApiConnection): ChannelsApi {
     }
 
     const handleOnMessage = (ev: MessageEvent) => {
-        const message = channelUpdateParser(ev.data)
+        const message: ChannelStateInMessage = JSON.parse(ev.data)
 
         if (message == null) {
             return

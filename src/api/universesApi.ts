@@ -1,5 +1,4 @@
 import {Subscription} from "./subscription";
-import {array, jsonParser, literal, number, object} from "@recoiljs/refine";
 import {InternalApiConnection} from "./internalApi";
 
 export interface UniversesApi {
@@ -7,12 +6,10 @@ export interface UniversesApi {
     subscribe(fn: (universes: readonly number[]) => void): Subscription
 }
 
-const UniversesInMessageChecker = object({
-    type: literal('universesState'),
-    universes: array(number()),
-})
-
-const universesUpdateParser = jsonParser(UniversesInMessageChecker)
+type UniversesInMessage = {
+    type: 'universesState',
+    universes: number[],
+}
 
 export function createUniversesApi(conn: InternalApiConnection): UniversesApi {
     let currentValues: readonly number[] = []
@@ -34,7 +31,7 @@ export function createUniversesApi(conn: InternalApiConnection): UniversesApi {
     }
 
     const handleOnMessage = (ev: MessageEvent) => {
-        const message = universesUpdateParser(ev.data)
+        const message: UniversesInMessage = JSON.parse(ev.data)
 
         if (message == null) {
             return

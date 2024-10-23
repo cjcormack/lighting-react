@@ -1,6 +1,3 @@
-import {
-  jsonParser, literal, object,
-} from "@recoiljs/refine";
 import {InternalApiConnection} from "./internalApi";
 import {Subscription} from "./subscription";
 
@@ -8,11 +5,9 @@ export interface ScenesApi {
   subscribe(fn: () => void): Subscription,
 }
 
-const ScenesChangedInMessageChecker = object({
-  type: literal('scenesChanged'),
-})
-
-const scenesChangedParser = jsonParser(ScenesChangedInMessageChecker)
+type ScenesChangedInMessage = {
+  type: 'scenesChanged',
+}
 
 export function createSceneApi(conn: InternalApiConnection): ScenesApi {
   let nextSubscriptionId = 1
@@ -29,7 +24,7 @@ export function createSceneApi(conn: InternalApiConnection): ScenesApi {
   }
 
   const handleOnMessage = (ev: MessageEvent) => {
-    const message = scenesChangedParser(ev.data)
+    const message: ScenesChangedInMessage = JSON.parse(ev.data)
 
     if (message == null) {
       return
