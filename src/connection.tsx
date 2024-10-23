@@ -1,105 +1,56 @@
-import React, {PropsWithChildren} from "react";
-import {atom, DefaultValue, useRecoilValue} from "recoil";
-import {ItemKey, RecoilSync, syncEffect} from "recoil-sync";
-import {Alert, Button} from "@mui/material";
-import {number} from "@recoiljs/refine";
-import {Status} from "./api/statusApi";
-import {lightingApi} from "./api/lightingApi";
+import React, { PropsWithChildren } from "react"
+import { atom, DefaultValue, useRecoilValue } from "recoil"
+import { ItemKey, RecoilSync, syncEffect } from "recoil-sync"
+import { Alert, Button } from "@mui/material"
+import { number } from "@recoiljs/refine"
+import { Status } from "./api/statusApi"
+import { lightingApi } from "./api/lightingApi"
 
-export const LightingUniversesStoreKey: string = 'lighting-universes'
-export const LightingChannelsStoreKey: string = 'lighting-channels'
-export const LightingApiStoreKey: string = 'lighting-api'
-export const LightingApiScenesListItemKey: string = 'scene-list'
-export const LightingStatusStoreKey: string = 'lighting-status'
-export const LightingTrackStoreKey: string = 'lighting-track'
+export const LightingStatusStoreKey: string = "lighting-status"
+export const LightingTrackStoreKey: string = "lighting-track"
 
-export const LightingApiConnection: React.FC<PropsWithChildren> = ({children}) => {
+export const LightingApiConnection: React.FC<PropsWithChildren> = ({ children }) => {
   return (
+    <RecoilSync
+      storeKey={LightingStatusStoreKey}
+      read={() => {
+        return lightingApi.status.get()
+      }}
+      listen={({ updateAllKnownItems }) => {
+        const subscription = lightingApi.status.subscribe((status) => {
+          updateAllKnownItems(new Map<ItemKey, DefaultValue | unknown>([["status", status]]))
+        })
+        return subscription.unsubscribe
+      }}
+    >
       <RecoilSync
-          storeKey={LightingStatusStoreKey}
-          read={() => {
-            return lightingApi.status.get()
-          }}
-          listen={({updateAllKnownItems}) => {
-            const subscription = lightingApi.status.subscribe((status) => {
-              updateAllKnownItems(new Map<ItemKey, DefaultValue | unknown>([['status', status]]))
-            })
-            return subscription.unsubscribe
-          }}
+        storeKey={LightingTrackStoreKey}
+        read={() => {
+          return lightingApi.track.get()
+        }}
+        listen={({ updateAllKnownItems }) => {
+          const subscription = lightingApi.track.subscribe((currentTrack) => {
+            updateAllKnownItems(new Map<ItemKey, DefaultValue | unknown>([["currentTrack", currentTrack]]))
+          })
+          return subscription.unsubscribe
+        }}
       >
-        <RecoilSync
-            storeKey={LightingUniversesStoreKey}
-            read={() => {
-              return lightingApi.universes.get()
-            }}
-            listen={({updateAllKnownItems}) => {
-              const subscription = lightingApi.universes.subscribe((universes) => {
-                updateAllKnownItems(new Map<ItemKey, DefaultValue | unknown>([['universes', universes]]))
-              })
-              return subscription.unsubscribe
-            }}
-        >
-          <RecoilSync
-              storeKey={LightingChannelsStoreKey}
-              read={(itemKey) => {
-                const value = lightingApi.channels.getAll().get(itemKey)
+        {children}
 
-                if (value === undefined) {
-                  return 0
-                }
-
-                return value
-              }}
-              write={({diff}) => {
-                diff.forEach((value, key) => {
-                  const splitKey = key.split(":")
-
-                  lightingApi.channels.update(Number(splitKey[0]), Number(splitKey[1]), Number(value))
-                })
-              }}
-              listen={({updateItems}) => {
-                const subscription = lightingApi.channels.subscribe((updates) => {
-                  const items = new Map<ItemKey, DefaultValue | unknown>()
-
-                  updates.forEach((value, channelNo) => {
-                    items.set(channelNo.toString(), value)
-                  })
-
-                  updateItems(items)
-                })
-                return subscription.unsubscribe
-              }}
-          >
-            <RecoilSync
-                storeKey={LightingTrackStoreKey}
-                read={() => {
-                  return lightingApi.track.get()
-                }}
-                listen={({updateAllKnownItems}) => {
-                  const subscription = lightingApi.track.subscribe((currentTrack) => {
-                    updateAllKnownItems(new Map<ItemKey, DefaultValue | unknown>([['currentTrack', currentTrack]]))
-                  })
-                  return subscription.unsubscribe
-                }}
-            >
-              {children}
-
-            </RecoilSync>
-          </RecoilSync>
-        </RecoilSync>
       </RecoilSync>
+    </RecoilSync>
   )
 }
 
 const statusState = atom<Status>({
-  key: 'lightingApiStatus',
+  key: "lightingApiStatus",
   effects: [
     syncEffect({
-      itemKey: 'status',
+      itemKey: "status",
       storeKey: LightingStatusStoreKey,
-      refine: number(),
-    }),
-  ],
+      refine: number()
+    })
+  ]
 })
 
 export const ConnectionStatus = (() => {
@@ -126,6 +77,6 @@ export const ConnectionStatus = (() => {
       </>
 
     default:
-      throw new Error('Unknown ReadyState')
+      throw new Error("Unknown ReadyState")
   }
 })

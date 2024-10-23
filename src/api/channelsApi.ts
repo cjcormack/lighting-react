@@ -5,8 +5,10 @@ import {InternalApiConnection} from "./internalApi";
 
 export interface ChannelsApi {
     getAll(): Map<string, number>
+    get(universe: number, channelNo: number): number
     update(universe: number, channelNo: number, value: number): void
     subscribe(fn: (updates: Map<string, number>) => void): Subscription
+    subscribeToChannel(key: string, fn: (value: number) => void): Subscription
 }
 
 const ChannelStateInMessageChecker = object({
@@ -46,9 +48,20 @@ export function createChannelsApi(conn: InternalApiConnection): ChannelsApi {
     let nextChannelSubscriptionId = 1
     const channelUpdatesSubscriptions = new Map<number, (updates: Map<string, number>) => void>()
 
+    const perChannelUpdatesSubscriptions = new Map<string, Map<number, (value: number) => void>>
+
     const notifyChannelsChange = (updates: Map<string, number>) => {
         channelUpdatesSubscriptions.forEach((fn) => {
             fn(updates)
+        })
+
+        updates.forEach((value, key) => {
+            const subscriptions = perChannelUpdatesSubscriptions.get(key)
+            if (subscriptions) {
+                subscriptions.forEach((fn) => {
+                    fn(value)
+                })
+            }
         })
     }
 
@@ -89,6 +102,9 @@ export function createChannelsApi(conn: InternalApiConnection): ChannelsApi {
         getAll() {
             return currentValues
         },
+        get(universe: number, channelNo: number): number {
+            return currentValues.get(`${universe}:${channelNo}`) || 0
+        },
         update(universe: number, channelNo: number, value: number) {
             const payload = {
                 type: 'updateChannel',
@@ -110,6 +126,26 @@ export function createChannelsApi(conn: InternalApiConnection): ChannelsApi {
             return {
                 unsubscribe: () => {
                     channelUpdatesSubscriptions.delete(thisId)
+                },
+            }
+        },
+        subscribeToChannel(key: string, fn: (value: number) => void): Subscription {
+            const thisId = nextChannelSubscriptionId
+            nextChannelSubscriptionId++
+
+            let channelMap = perChannelUpdatesSubscriptions.get(key)
+            if (!channelMap) {
+                channelMap = new Map<number, (value: number) => void>()
+                perChannelUpdatesSubscriptions.set(key, channelMap)
+            }
+
+            channelMap.set(thisId, fn)
+
+            fn(currentValues.get(key) || 0)
+
+            return {
+                unsubscribe: () => {
+                    channelMap.delete(thisId)
                 },
             }
         },

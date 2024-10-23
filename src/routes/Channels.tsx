@@ -1,25 +1,26 @@
-import {atomFamily, useRecoilState} from "recoil";
 import React from "react";
 import {Box, Container, Grid, Paper, Slider, TextField, Typography} from "@mui/material";
-import {syncEffect} from "recoil-sync";
-import {LightingChannelsStoreKey} from "../connection";
-import {number} from "@recoiljs/refine";
 import {useParams} from "react-router-dom";
-
-const channelState = atomFamily<number, string>({
-  key: 'channels',
-  default: 0,
-  effects: param => [
-    syncEffect({
-      itemKey: param,
-      storeKey: LightingChannelsStoreKey,
-      refine: number(),
-    }),
-  ],
-})
+import { useGetChannelQuery, useUpdateChannelMutation } from "../store/channels"
 
 export const ChannelSlider = (({universe, id, description}: {universe: number, id: number, description?: string}) => {
-  const [value, setValue] = useRecoilState(channelState(`${universe}:${id}`))
+  const {
+    data: maybeValue
+  } = useGetChannelQuery({ universe: universe, channelNo: id });
+
+  const value = maybeValue || 0
+
+  const [
+    runUpdateChannelMutation,
+  ] = useUpdateChannelMutation()
+
+  const setValue = (value: number) => {
+    runUpdateChannelMutation({
+      universe: universe,
+      channelNo: id,
+      value: value,
+    })
+  }
 
   const handleSliderChange = (e: Event, v: number | number[]) => {
     if (typeof v === 'number') {

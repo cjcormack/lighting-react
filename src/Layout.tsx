@@ -29,10 +29,8 @@ import WbIridescentIcon from '@mui/icons-material/WbIridescent';
 import BatchPredictionIcon from '@mui/icons-material/BatchPrediction';
 import TrackStatus from './TrackStatus';
 import {Outlet, useLocation, useNavigate} from 'react-router-dom';
-import {ConnectionStatus, LightingUniversesStoreKey} from "./connection";
-import {atom, useRecoilValue} from "recoil";
-import {array, number} from "@recoiljs/refine";
-import {syncEffect} from "recoil-sync";
+import {ConnectionStatus} from "./connection";
+import { useGetUniverseQuery } from "./store/universes"
 
 const drawerWidth: number = 240;
 
@@ -86,15 +84,6 @@ const Drawer = styled(MuiDrawer, { shouldForwardProp: (prop) => prop !== 'open' 
 
 const mdTheme = createTheme();
 
-const universesState = atom<readonly number[]>({
-  key: 'universes',
-  effects: [syncEffect({
-      itemKey: "universes",
-      storeKey: LightingUniversesStoreKey,
-      refine: array(number()),
-    })]
-})
-
 export default function Layout() {
   const [open, setOpen] = React.useState(true)
   const toggleDrawer = () => {
@@ -104,7 +93,9 @@ export default function Layout() {
   const navigate = useNavigate()
   const location = useLocation()
 
-  const universes = useRecoilValue(universesState)
+  const {
+    data: universes,
+  } = useGetUniverseQuery()
 
   return (
       <ThemeProvider theme={mdTheme}>
@@ -183,7 +174,7 @@ export default function Layout() {
                   <ListItemText primary="Fixtures" />
                 </ListItemButton>
                 {
-                    universes.map((universe) => (
+                    (universes || []).map((universe) => (
                       <ListItemButton
                           key={universe}
                           onClick={() => navigate(`/channels/${universe}`)}
