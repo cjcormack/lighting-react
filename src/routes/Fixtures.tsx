@@ -1,5 +1,3 @@
-import {selector, selectorFamily, useRecoilValue} from "recoil";
-import {lightingApi} from "../api/lightingApi";
 import {
   Box,
   Container,
@@ -8,43 +6,8 @@ import {
   Typography
 } from "@mui/material";
 import React, {Suspense} from "react";
-import {Fixture} from "../api/fixturesApi";
 import {ChannelSlider} from "./Channels";
-
-export const fixtureListState = selector<readonly Fixture[]>({
-  key: 'fixtureList',
-  get: () => {
-    return lightingApi.fixtures.getAll()
-  },
-})
-
-const fixtureKeysState = selector<Array<string>>({
-  key: 'fixtureKeys',
-  get: ({get}) => {
-    const fixtures = get(fixtureListState)
-    return fixtures.map((it) => it.key)
-  },
-})
-
-const fixturesMappedByKeyState = selector<Map<string, Fixture>>({
-  key: 'fixturesMappedByKey',
-  get: ({get}) => {
-    const fixtureList = get(fixtureListState)
-    return new Map(fixtureList.map((fixture => [fixture.key, fixture])))
-  }
-})
-
-const fixtureState = selectorFamily<Fixture, string>({
-  key: 'fixture',
-  get: (fixtureKey: string) => ({get}) => {
-    const fixturesMappedByKey = get(fixturesMappedByKeyState)
-    const fixture = fixturesMappedByKey.get(fixtureKey)
-    if (fixture === undefined) {
-      throw new Error(`Fixture '${fixtureKey}' not found`)
-    }
-    return fixture
-  },
-})
+import { Fixture, useFixtureListQuery } from "../store/fixtures"
 
 export function Fixtures() {
   return (
@@ -68,24 +31,32 @@ export function Fixtures() {
 }
 
 function FixturesContainer() {
-  const fixtureKeys = useRecoilValue(fixtureKeysState)
+  const {
+    data: maybeFixtureList,
+    isLoading,
+    isFetching
+  } = useFixtureListQuery()
+
+  const fixtureList = maybeFixtureList || []
+
+  if (isLoading || isFetching) {
+    return (
+      <>Loading...</>
+    )
+  }
 
   return (
       <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
         <Grid container spacing={3}>
-          {fixtureKeys.map((fixtureKey) => (
-            <Suspense fallback={'Loading...'} key={fixtureKey}>
-              <FixtureCard fixtureKey={fixtureKey}/>
-            </Suspense>
+          {fixtureList.map((fixture) => (
+            <FixtureCard fixture={fixture} key={fixture.key}/>
           ))}
         </Grid>
       </Container>
   )
 }
 
-const FixtureCard = ({fixtureKey}: {fixtureKey: string}) => {
-  const fixture = useRecoilValue(fixtureState(fixtureKey))
-
+const FixtureCard = ({fixture}: {fixture: Fixture}) => {
   const [value, setValue] = React.useState(0)
 
   const handleChange = (event: React.SyntheticEvent, newValue: number) => {

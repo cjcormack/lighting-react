@@ -33,7 +33,7 @@ export function createUniversesApi(conn: InternalApiConnection): UniversesApi {
     const handleOnMessage = (ev: MessageEvent) => {
         const message: UniversesInMessage = JSON.parse(ev.data)
 
-        if (message == null) {
+        if (message == null || message.type != 'universesState') {
             return
         }
 

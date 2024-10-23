@@ -26,7 +26,7 @@ export function createSceneApi(conn: InternalApiConnection): ScenesApi {
   const handleOnMessage = (ev: MessageEvent) => {
     const message: ScenesChangedInMessage = JSON.parse(ev.data)
 
-    if (message == null) {
+    if (message == null || message.type != 'scenesChanged') {
       return
     }
 

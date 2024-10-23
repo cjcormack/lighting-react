@@ -76,7 +76,7 @@ export function createChannelsApi(conn: InternalApiConnection): ChannelsApi {
     const handleOnMessage = (ev: MessageEvent) => {
         const message: ChannelStateInMessage = JSON.parse(ev.data)
 
-        if (message == null) {
+        if (message == null || message.type != 'channelState') {
             return
         }
 

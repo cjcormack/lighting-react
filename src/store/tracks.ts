@@ -1,18 +1,19 @@
 import { restApi } from "./restApi"
 import { lightingApi } from "../api/lightingApi"
+import { TrackDetails } from "../api/trackApi"
 
-export const universesApi = restApi.injectEndpoints({
+export const tracksApi = restApi.injectEndpoints({
   endpoints: (build) => {
     return {
-      getUniverse: build.query<readonly number[], void>({
+      currentTrack: build.query<TrackDetails, void>({
         queryFn: () => {
-          const value = lightingApi.universes.get()
+          const value = lightingApi.track.get()
           return { data: value }
         },
         async onCacheEntryAdded(_, { updateCachedData, cacheEntryRemoved }) {
-          const subscription = lightingApi.universes.subscribe((universes) => {
+          const subscription = lightingApi.track.subscribe((value) => {
             updateCachedData(() => {
-              return universes
+              return value
             })
           })
           await cacheEntryRemoved
@@ -24,4 +25,4 @@ export const universesApi = restApi.injectEndpoints({
   overrideExisting: false,
 })
 
-export const { useGetUniverseQuery } = universesApi
+export const { useCurrentTrackQuery } = tracksApi

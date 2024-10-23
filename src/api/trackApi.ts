@@ -1,5 +1,4 @@
 import {Subscription} from "./subscription";
-import {bool, CheckerReturnType, jsonParser, object, string} from "@recoiljs/refine";
 import {InternalApiConnection} from "./internalApi";
 
 export interface TrackApi {
@@ -7,15 +6,16 @@ export interface TrackApi {
     subscribe(fn: (currentTrack: TrackDetails) => void): Subscription
 }
 
-export const TrackDetailsChecker = object({
-    isPlaying: bool(),
-    artist: string(),
-    name: string(),
-})
+export type TrackDetails = {
+    isPlaying: boolean
+    artist: string
+    name: string
+}
 
-export type TrackDetails = CheckerReturnType<typeof TrackDetailsChecker>
-
-const trackUpdateParser = jsonParser(TrackDetailsChecker)
+type TrackDetailsOutMessage = {
+    type: 'trackChanged'
+    data: TrackDetails
+}
 
 export function createTrackApi(conn: InternalApiConnection): TrackApi {
     let currentTrack: TrackDetails = {
@@ -41,11 +41,12 @@ export function createTrackApi(conn: InternalApiConnection): TrackApi {
     }
 
     const handleOnMessage = (ev: MessageEvent) => {
-        const message = trackUpdateParser(ev.data)
-        if (message != null) {
-            currentTrack = message
-            notifyTrackChange(currentTrack)
+        const message: TrackDetailsOutMessage = JSON.parse(ev.data)
+        if (message == null || message.type != 'trackChanged') {
+            return
         }
+        currentTrack = message.data
+        notifyTrackChange(currentTrack)
     }
 
     conn.subscribe((evType, ev) => {

@@ -1,43 +1,60 @@
-import {
-  array,
-  CheckerReturnType,
-  jsonParserEnforced,
-  number, object,
-  string
-} from "@recoiljs/refine";
 import {InternalApiConnection} from "./internalApi";
-
-export const FixtureChecker = object({
-  key: string(),
-  name: string(),
-  typeKey: string(),
-  universe: number(),
-  channels: array(object({
-    channelNo: number(),
-    description: string(),
-  })),
-})
-
-const FixtureListParser = jsonParserEnforced(array(FixtureChecker))
-
-export type Fixture = CheckerReturnType<typeof FixtureChecker>
+import {Subscription} from "./subscription";
 
 export interface FixturesApi {
-  getAll(): Promise<readonly Fixture[]>
-  get(key: string): Promise<Fixture | undefined>
+  subscribe(fn: () => void): Subscription,
+}
+
+type FixturesChangedInMessage = {
+  type: 'fixturesChanged',
 }
 
 export function createFixtureApi(conn: InternalApiConnection): FixturesApi {
+  let nextSubscriptionId = 1
+  const subscriptions = new Map<number, () => void>()
+
+  const notifyChange = () => {
+    subscriptions.forEach((fn) => {
+      fn()
+    })
+  }
+
+  const handleOnOpen = () => {
+    notifyChange()
+  }
+
+  const handleOnMessage = (ev: MessageEvent) => {
+    const message: FixturesChangedInMessage = JSON.parse(ev.data)
+
+    if (message == null || message.type != 'fixturesChanged') {
+      return
+    }
+
+    notifyChange()
+  }
+
+  conn.subscribe((evType, ev) => {
+    if (evType === 'open') {
+      handleOnOpen()
+    } else if (evType === 'message' && ev instanceof MessageEvent) {
+      handleOnMessage(ev)
+    }
+  })
+
   return {
-    getAll(): Promise<readonly Fixture[]> {
-      return fetch(conn.baseUrl+"rest/fixture/list").then((res) => {
-          return res.text().then((text) => FixtureListParser(text))
-      })
-    },
-    get(key: string): Promise<Fixture | undefined> {
-      return this.getAll().then((allFixtures) => {
-        return allFixtures.filter((fixture) => fixture.key === key).pop()
-      })
+    subscribe(fn: () => void): Subscription {
+      const thisId = nextSubscriptionId
+      nextSubscriptionId++
+
+      subscriptions.set(thisId, fn)
+
+      fn()
+
+      return {
+        unsubscribe: () => {
+          subscriptions.delete(thisId)
+        },
+      }
     },
   }
 }

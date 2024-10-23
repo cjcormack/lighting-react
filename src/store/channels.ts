@@ -29,6 +29,7 @@ export const channelsApi = restApi.injectEndpoints({
       }),
     }
   },
+  overrideExisting: false,
 })
 
 export const { useGetChannelQuery, useUpdateChannelMutation } = channelsApi

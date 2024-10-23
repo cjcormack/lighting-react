@@ -1,60 +1,16 @@
-import React, { PropsWithChildren } from "react"
-import { atom, DefaultValue, useRecoilValue } from "recoil"
-import { ItemKey, RecoilSync, syncEffect } from "recoil-sync"
+import React from "react"
 import { Alert, Button } from "@mui/material"
-import { number } from "@recoiljs/refine"
 import { Status } from "./api/statusApi"
-import { lightingApi } from "./api/lightingApi"
-
-export const LightingStatusStoreKey: string = "lighting-status"
-export const LightingTrackStoreKey: string = "lighting-track"
-
-export const LightingApiConnection: React.FC<PropsWithChildren> = ({ children }) => {
-  return (
-    <RecoilSync
-      storeKey={LightingStatusStoreKey}
-      read={() => {
-        return lightingApi.status.get()
-      }}
-      listen={({ updateAllKnownItems }) => {
-        const subscription = lightingApi.status.subscribe((status) => {
-          updateAllKnownItems(new Map<ItemKey, DefaultValue | unknown>([["status", status]]))
-        })
-        return subscription.unsubscribe
-      }}
-    >
-      <RecoilSync
-        storeKey={LightingTrackStoreKey}
-        read={() => {
-          return lightingApi.track.get()
-        }}
-        listen={({ updateAllKnownItems }) => {
-          const subscription = lightingApi.track.subscribe((currentTrack) => {
-            updateAllKnownItems(new Map<ItemKey, DefaultValue | unknown>([["currentTrack", currentTrack]]))
-          })
-          return subscription.unsubscribe
-        }}
-      >
-        {children}
-
-      </RecoilSync>
-    </RecoilSync>
-  )
-}
-
-const statusState = atom<Status>({
-  key: "lightingApiStatus",
-  effects: [
-    syncEffect({
-      itemKey: "status",
-      storeKey: LightingStatusStoreKey,
-      refine: number()
-    })
-  ]
-})
+import { useReconnectMutation, useStatusQuery } from "./store/status"
 
 export const ConnectionStatus = (() => {
-  const readyState = useRecoilValue(statusState)
+  const {
+    data: readyState,
+  } = useStatusQuery()
+
+  const [
+    runReconnectMutation,
+  ] = useReconnectMutation()
 
   if (readyState === undefined) {
     return null
@@ -73,7 +29,7 @@ export const ConnectionStatus = (() => {
     case Status.CLOSED:
       return <>
         <Alert severity="error">Disconnected</Alert>
-        <Button variant="contained" color="error" onClick={() => lightingApi.status.reconnect()}>Reconnect...</Button>
+        <Button variant="contained" color="error" onClick={() => runReconnectMutation()}>Reconnect...</Button>
       </>
 
     default:

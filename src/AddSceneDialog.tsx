@@ -1,5 +1,4 @@
 import React, {ChangeEvent, Dispatch, SetStateAction, useState} from "react";
-import {useRecoilValue} from "recoil";
 import {
   Button,
   Dialog,
@@ -10,7 +9,6 @@ import {
   Stack,
   TextField,
 } from "@mui/material";
-import {lightingApi} from "./api/lightingApi";
 import { useScriptListQuery } from "./store/scripts"
 import { useCreateSceneMutation } from "./store/scenes"
 
