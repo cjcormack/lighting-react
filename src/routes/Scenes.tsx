@@ -1,6 +1,3 @@
-import {atom, selector, selectorFamily, useRecoilValue} from "recoil";
-import {lightingApi} from "../api/lightingApi";
-import {Scene, SceneChecker} from "../api/scenesApi";
 import {
   Box,
   Button,
@@ -11,70 +8,33 @@ import {
   Chip,
   Container,
   Grid,
-  Paper, Stack, Theme,
+  Paper, Stack, SxProps, Theme,
   Typography
-} from "@mui/material";
+} from "@mui/material"
 import React, {Suspense, useState} from "react";
 import {OverridableStringUnion} from "@mui/types";
 import {ChipPropsColorOverrides} from "@mui/material/Chip/Chip";
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import AddSceneDialog from "../AddSceneDialog";
 import {useNavigate} from "react-router-dom";
-import {syncEffect} from "recoil-sync";
-import {LightingApiScenesListItemKey, LightingApiStoreKey} from "../connection";
-import {array} from "@recoiljs/refine";
-import {SxProps} from "@mui/system";
 import SetSceneSettings from "../SetSceneSettings";
-import { useScriptQuery } from "../store/scripts"
-
-export const sceneListState = atom<readonly Scene[]>({
-  key: 'sceneList',
-  default: [],
-  effects: [
-    syncEffect({
-      itemKey: LightingApiScenesListItemKey,
-      storeKey: LightingApiStoreKey,
-      refine: array(SceneChecker),
-    }),
-  ],
-})
-
-const sceneIdsState = selector<Array<number>>({
-  key: 'sceneIds',
-  get: ({get}) => {
-    const scenes = get(sceneListState)
-    return scenes.map((it) => it.id)
-  },
-})
-
-const scenesMappedByIdState = selector<Map<number, Scene>>({
-  key: 'scenesMappedById',
-  get: ({get}) => {
-    const sceneList = get(sceneListState)
-    return new Map(sceneList.map((scene => [scene.id, scene])))
-  }
-})
-
-const sceneState = selectorFamily<Scene, number>({
-  key: 'scene',
-  get: (sceneId: number) => ({get}) => {
-    const scenesMappedById = get(scenesMappedByIdState)
-    const scene = scenesMappedById.get(sceneId)
-    if (scene === undefined) {
-      throw new Error("Scene not found")
-    }
-    return scene
-  },
-})
+import {
+  useScriptQuery
+} from "../store/scripts"
+import {
+  Scene, useDeleteSceneMutation,
+  useRunSceneMutation,
+  useSaveSceneMutation,
+  useSceneListQuery
+} from "../store/scenes"
 
 export function Scenes() {
   const [addSceneDialogOpen, setAddSceneDialogOpen] = useState<boolean>(false)
-  const [, setSceneSaving] = useState<boolean>(false)
 
   return (
       <>
         <Suspense fallback={'Loading...'}>
-          <AddSceneDialog open={addSceneDialogOpen} setOpen={setAddSceneDialogOpen} setSceneSaving={setSceneSaving}/>
+          <AddSceneDialog open={addSceneDialogOpen} setOpen={setAddSceneDialogOpen}/>
         </Suspense>
         <Paper
             sx={{
@@ -104,22 +64,30 @@ export function Scenes() {
 }
 
 function ScenesContainer() {
-  const sceneIds = useRecoilValue(sceneIdsState)
+  const {
+    data: sceneList,
+    isLoading,
+    isFetching
+  } = useSceneListQuery()
+
+  if (isLoading || isFetching) {
+    return (
+      <>Loading...</>
+    )
+  }
 
   return (
       <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
         <Grid container spacing={3}>
-          {sceneIds.map((sceneId) => (
-            <Suspense fallback={'Loading...'} key={sceneId}>
-              <SceneCard id={sceneId}/>
-            </Suspense>
+          {sceneList?.map((scene) => (
+            <SceneCard key={scene.id} scene={scene}/>
           ))}
         </Grid>
       </Container>
   )
 }
 
-const SceneCard = ({id}: {id: number}) => {
+const SceneCard = ({scene}: {scene: Scene}) => {
   interface StatusDetails {
     text: "ready" | "running..." | "active" | "failed",
     color: OverridableStringUnion<
@@ -128,20 +96,42 @@ const SceneCard = ({id}: {id: number}) => {
     >,
   }
 
-  const scene = useRecoilValue(sceneState(id))
-
   const {
     data: script,
-    isLoading,
-    isFetching,
+    isLoading: isScriptLoading,
+    isFetching: isScriptFetching,
   } = useScriptQuery(scene.scriptId)
+
+  const [
+    runRunMutation,
+    {
+      isLoading: isRunning,
+      isSuccess: isSuccess,
+      isError: isError,
+    }
+  ] = useRunSceneMutation()
+
+  const [runSaveMutation] = useSaveSceneMutation()
+
+  const [runDeleteMigration] = useDeleteSceneMutation()
 
   const [showSettings, setShowSettings] = useState<boolean>(false)
 
-  const [status, setStatus] = useState<StatusDetails>({
+  const status: StatusDetails  = {
     text: "ready",
     color: "default",
-  })
+  }
+
+  if (isRunning) {
+    status.text = "running..."
+    status.color = "info"
+  } else if (isSuccess) {
+    status.text = "active"
+    status.color = "success"
+  } else if (isError) {
+    status.text = "failed"
+    status.color = "error"
+  }
 
   const navigate = useNavigate()
 
@@ -150,23 +140,7 @@ const SceneCard = ({id}: {id: number}) => {
   const settingsValuesMap: Map<string, unknown> = new Map(Object.entries(settingsValuesObject))
 
   const doRun = () => {
-    setStatus({
-      text: "running...",
-      color: "info",
-    })
-
-    lightingApi.scenes.run(id).then(() => {
-      setStatus({
-        text: "active",
-        color: "success",
-      })
-    }).catch((error) => {
-      console.log(error)
-      setStatus({
-        text: "failed",
-        color: "error",
-      })
-    })
+    runRunMutation(scene.id)
   }
 
   if (status.text === "active") {
@@ -182,7 +156,7 @@ const SceneCard = ({id}: {id: number}) => {
   }
 
   const handleSceneDelete = () => {
-    lightingApi.scenes.delete(id)
+    runDeleteMigration(scene.id)
   }
 
   const handleViewScript = () => {
@@ -198,14 +172,15 @@ const SceneCard = ({id}: {id: number}) => {
 
   const saveSettingValues = (settingsValues: Map<string, unknown>) => {
     const newScene = {
+      id: scene.id,
       name: scene.name,
       scriptId: scene.scriptId,
       settingsValues: Object.fromEntries(settingsValues.entries()),
     }
-    lightingApi.scenes.save(id, newScene)
+    runSaveMutation(newScene)
   }
 
-  if (isLoading || isFetching) {
+  if (isScriptLoading || isScriptFetching) {
     return (
       <>Loading...</>
     )

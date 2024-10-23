@@ -12,22 +12,24 @@ import {
 } from "@mui/material";
 import {lightingApi} from "./api/lightingApi";
 import { useScriptListQuery } from "./store/scripts"
+import { useCreateSceneMutation } from "./store/scenes"
 
 interface AddSceneDetails {
   name: string,
   script_id: string,
 }
 
-export default function AddSceneDialog({open, setOpen, setSceneSaving}: {
+export default function AddSceneDialog({open, setOpen}: {
   open: boolean,
   setOpen: Dispatch<SetStateAction<boolean>>,
-  setSceneSaving: Dispatch<SetStateAction<boolean>>,
 }) {
   const {
     data: scriptList,
     isLoading,
     isFetching,
   } = useScriptListQuery()
+
+  const [runCreateMutation] = useCreateSceneMutation()
 
   const [value, setValue] = useState<AddSceneDetails>({
     name: "",
@@ -49,17 +51,11 @@ export default function AddSceneDialog({open, setOpen, setSceneSaving}: {
   }
 
   const handleAdd = () => {
-    lightingApi.scenes.create({
+    runCreateMutation({
       name: value.name,
       scriptId: Number(value.script_id),
       settingsValues: new Map(),
-    }).then(() => {
-      setSceneSaving(false)
     })
-
-    setSceneSaving(true)
-    clearValue()
-    setOpen(false)
   }
 
   const handleNameChange = (e: ChangeEvent<HTMLInputElement>) => {

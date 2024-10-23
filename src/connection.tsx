@@ -71,38 +71,19 @@ export const LightingApiConnection: React.FC<PropsWithChildren> = ({children}) =
               }}
           >
             <RecoilSync
-                storeKey={LightingApiStoreKey}
-                read={(itemKey) => {
-                  if (itemKey === LightingApiScenesListItemKey) {
-                    return lightingApi.scenes.getAll()
-                  } else {
-                    throw Error(`Unknown item key '${itemKey}'`)
-                  }
+                storeKey={LightingTrackStoreKey}
+                read={() => {
+                  return lightingApi.track.get()
                 }}
-                listen={({updateItem}) => {
-                  const subscription = lightingApi.scenes.subscribe(() => {
-                    lightingApi.scenes.getAll().then((scenes) => {
-                      updateItem(LightingApiScenesListItemKey, scenes)
-                    })
+                listen={({updateAllKnownItems}) => {
+                  const subscription = lightingApi.track.subscribe((currentTrack) => {
+                    updateAllKnownItems(new Map<ItemKey, DefaultValue | unknown>([['currentTrack', currentTrack]]))
                   })
                   return subscription.unsubscribe
                 }}
             >
-              <RecoilSync
-                  storeKey={LightingTrackStoreKey}
-                  read={() => {
-                    return lightingApi.track.get()
-                  }}
-                  listen={({updateAllKnownItems}) => {
-                    const subscription = lightingApi.track.subscribe((currentTrack) => {
-                      updateAllKnownItems(new Map<ItemKey, DefaultValue | unknown>([['currentTrack', currentTrack]]))
-                    })
-                    return subscription.unsubscribe
-                  }}
-              >
-                {children}
+              {children}
 
-              </RecoilSync>
             </RecoilSync>
           </RecoilSync>
         </RecoilSync>

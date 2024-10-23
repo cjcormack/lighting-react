@@ -15,21 +15,21 @@ export const scriptsApi = restApi.injectEndpoints({
         },
         providesTags: ['Script'],
       }),
-      compile: build.mutation<CompileResult, CompileRequest>({
+      compileScript: build.mutation<CompileResult, CompileRequest>({
         query: (request) => ({
           url: 'script/compile',
           method: 'POST',
           body: request,
         }),
       }),
-      run: build.mutation<RunResult, RunRequest>({
+      runScript: build.mutation<RunResult, RunRequest>({
         query: (request) => ({
           url: 'script/run',
           method: 'POST',
           body: request,
         }),
       }),
-      save: build.mutation<Script, Partial<Script> & Pick<Script, 'id'>>({
+      saveScript: build.mutation<Script, Partial<Script> & Pick<Script, 'id'>>({
         query: ({ id, ...request }) => ({
           url: `script/${id}`,
           method: 'PUT',
@@ -37,14 +37,14 @@ export const scriptsApi = restApi.injectEndpoints({
         }),
         invalidatesTags: ['Script'],
       }),
-      delete: build.mutation<void, number>({
+      deleteScript: build.mutation<void, number>({
         query: (id) => ({
           url: `script/${id}`,
           method: 'DELETE',
         }),
         invalidatesTags: ['Script'],
       }),
-      create: build.mutation<Script, ScriptDetails>({
+      createScript: build.mutation<Script, ScriptDetails>({
         query: (script) => ({
           url: `script`,
           method: 'POST',
@@ -58,8 +58,8 @@ export const scriptsApi = restApi.injectEndpoints({
 })
 
 export const {
-  useScriptListQuery, useScriptQuery, useRunMutation, useCompileMutation,
-  useSaveMutation, useDeleteMutation, useCreateMutation
+  useScriptListQuery, useScriptQuery, useRunScriptMutation, useCompileScriptMutation,
+  useSaveScriptMutation, useDeleteScriptMutation, useCreateScriptMutation
 } = scriptsApi
 
 export type Script = ScriptDetails & {

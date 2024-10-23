@@ -45,7 +45,7 @@ import {
   CompileResult, RunResult,
   ScriptDetails,
   ScriptSetting,
-  useCompileMutation, useCreateMutation, useDeleteMutation, useRunMutation, useSaveMutation,
+  useCompileScriptMutation, useCreateScriptMutation, useDeleteScriptMutation, useRunScriptMutation, useSaveScriptMutation,
   useScriptListQuery,
   useScriptQuery
 } from "../store/scripts"
@@ -120,7 +120,7 @@ const ScriptList = () => {
     <>
       {scriptIds.map((scriptId) => {
         return (
-          <ScriptListEntry id={scriptId} />
+          <ScriptListEntry key={scriptId} id={scriptId} />
         )
       })}
       <Box sx={{ m: 1 }}>
@@ -218,7 +218,7 @@ const ScriptDisplay = ({ script, id }: { script: ScriptDetails, id?: number }) =
       isLoading: isCompiling,
       reset: resetCompile,
     }
-  ] = useCompileMutation()
+  ] = useCompileScriptMutation()
   const [
     runRunMutation,
     {
@@ -227,10 +227,10 @@ const ScriptDisplay = ({ script, id }: { script: ScriptDetails, id?: number }) =
       isLoading: isRunning,
       reset: resetRun,
     }
-  ] = useRunMutation()
+  ] = useRunScriptMutation()
 
-  const [runSaveMutation] = useSaveMutation()
-  const [runCreateMutation] = useCreateMutation()
+  const [runSaveMutation] = useSaveScriptMutation()
+  const [runCreateMutation] = useCreateScriptMutation()
 
   const [deleteAlertOpen, setDeleteAlertOpen] = useState<boolean>(false)
 
@@ -654,7 +654,7 @@ const DeleteConfirmAlert = ({ id, open, setOpen }: {
 }) => {
   const navigate = useNavigate()
 
-  const [runDeleteMigration] = useDeleteMutation()
+  const [runDeleteMigration] = useDeleteScriptMutation()
 
   const handleDelete = () => {
     runDeleteMigration(id).then(() => {
