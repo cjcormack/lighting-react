@@ -14,8 +14,7 @@ export type TrackDetails = {
 
 type TrackDetailsOutMessage = {
     type: 'trackChanged'
-    data: TrackDetails
-}
+} & TrackDetails
 
 export function createTrackApi(conn: InternalApiConnection): TrackApi {
     let currentTrack: TrackDetails = {
@@ -45,7 +44,7 @@ export function createTrackApi(conn: InternalApiConnection): TrackApi {
         if (message == null || message.type != 'trackChanged') {
             return
         }
-        currentTrack = message.data
+        currentTrack = message
         notifyTrackChange(currentTrack)
     }
 

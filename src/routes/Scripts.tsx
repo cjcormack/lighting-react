@@ -99,7 +99,6 @@ const ScriptList = () => {
   const {
     data: scriptList,
     isLoading,
-    isFetching
   } = useScriptListQuery()
 
   const navigate = useNavigate()
@@ -108,7 +107,7 @@ const ScriptList = () => {
     navigate("/scripts/new")
   }
 
-  if (isLoading || isFetching) {
+  if (isLoading) {
     return (
       <>Loading...</>
     )
@@ -138,13 +137,12 @@ const ScriptListEntry = ({ id }: { id: number }) => {
   const {
     data: script,
     isLoading,
-    isFetching
   } = useScriptQuery(id)
 
   const navigate = useNavigate()
   const location = useLocation()
 
-  if (isLoading || isFetching) {
+  if (isLoading) {
     return (
       <>Loading...</>
     )
@@ -189,7 +187,7 @@ const EditScript = ({ id }: { id: number }) => {
   const {
     data: script,
     isLoading,
-    isFetching
+    isFetching,
   } = useScriptQuery(id)
 
   if (isLoading || isFetching) {

@@ -24,7 +24,6 @@ export default function AddSceneDialog({open, setOpen}: {
   const {
     data: scriptList,
     isLoading,
-    isFetching,
   } = useScriptListQuery()
 
   const [runCreateMutation] = useCreateSceneMutation()
@@ -72,7 +71,7 @@ export default function AddSceneDialog({open, setOpen}: {
     setValue(newValue)
   }
 
-  if (isLoading || isFetching) {
+  if (isLoading) {
     return (
       <>Loading...</>
     )

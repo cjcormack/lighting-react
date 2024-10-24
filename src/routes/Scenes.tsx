@@ -67,10 +67,9 @@ function ScenesContainer() {
   const {
     data: sceneList,
     isLoading,
-    isFetching
   } = useSceneListQuery()
 
-  if (isLoading || isFetching) {
+  if (isLoading) {
     return (
       <>Loading...</>
     )

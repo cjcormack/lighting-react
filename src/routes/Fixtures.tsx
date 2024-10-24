@@ -34,12 +34,11 @@ function FixturesContainer() {
   const {
     data: maybeFixtureList,
     isLoading,
-    isFetching
   } = useFixtureListQuery()
 
   const fixtureList = maybeFixtureList || []
 
-  if (isLoading || isFetching) {
+  if (isLoading) {
     return (
       <>Loading...</>
     )
