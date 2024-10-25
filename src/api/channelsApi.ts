@@ -118,8 +118,6 @@ export function createChannelsApi(conn: InternalApiConnection): ChannelsApi {
 
             channelUpdatesSubscriptions.set(thisId, fn)
 
-            fn(currentValues)
-
             return {
                 unsubscribe: () => {
                     channelUpdatesSubscriptions.delete(thisId)
@@ -137,8 +135,6 @@ export function createChannelsApi(conn: InternalApiConnection): ChannelsApi {
             }
 
             channelMap.set(thisId, fn)
-
-            fn(currentValues.get(key) || 0)
 
             return {
                 unsubscribe: () => {

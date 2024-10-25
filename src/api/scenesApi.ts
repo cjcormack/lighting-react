@@ -2,35 +2,65 @@ import {InternalApiConnection} from "./internalApi";
 import {Subscription} from "./subscription";
 
 export interface ScenesApi {
-  subscribe(fn: () => void): Subscription,
+  subscribe(fn: () => void): Subscription
+  subscribeToScene(id: number, fn: (data: Scene) => void): Subscription
 }
 
-type ScenesChangedInMessage = {
-  type: 'scenesChanged',
+export type SceneMode = 'SCENE' | 'CHASE'
+
+export type Scene = SceneDetails & {
+  id: number
+  isActive: boolean
+}
+
+export type SceneDetails = {
+  mode: SceneMode
+  name: string
+  scriptId: number
+  settingsValues: unknown
+}
+
+type sceneInMessage = {
+  type: 'sceneListChanged' | 'sceneChanged'
+}
+
+type SceneChangedInMessage = {
+  type: 'sceneChanged'
+  data: Scene
 }
 
 export function createSceneApi(conn: InternalApiConnection): ScenesApi {
   let nextSubscriptionId = 1
-  const subscriptions = new Map<number, () => void>()
+  const listSubscriptions = new Map<number, () => void>()
+  const itemSubscriptions = new Map<number, Map<number, (data: Scene) => void>>()
 
-  const notifyChange = () => {
-    subscriptions.forEach((fn) => {
+  const notifyListChange = () => {
+    listSubscriptions.forEach((fn) => {
       fn()
+    })
+  }
+  const notifyChange = (data: Scene) => {
+    itemSubscriptions.get(data.id)?.forEach((fn) => {
+      fn(data)
     })
   }
 
   const handleOnOpen = () => {
-    notifyChange()
+    notifyListChange()
   }
 
   const handleOnMessage = (ev: MessageEvent) => {
-    const message: ScenesChangedInMessage = JSON.parse(ev.data)
+    const message: sceneInMessage = JSON.parse(ev.data)
 
-    if (message == null || message.type != 'scenesChanged') {
+    if (message == null) {
       return
     }
 
-    notifyChange()
+    if (message.type == 'sceneChanged') {
+      notifyChange((message as SceneChangedInMessage).data)
+    } else if (message.type == 'sceneListChanged') {
+      notifyListChange()
+    }
   }
 
   conn.subscribe((evType, ev) => {
@@ -46,13 +76,30 @@ export function createSceneApi(conn: InternalApiConnection): ScenesApi {
       const thisId = nextSubscriptionId
       nextSubscriptionId++
 
-      subscriptions.set(thisId, fn)
-
-      fn()
+      listSubscriptions.set(thisId, fn)
 
       return {
         unsubscribe: () => {
-          subscriptions.delete(thisId)
+          listSubscriptions.delete(thisId)
+        },
+      }
+    },
+
+    subscribeToScene(id: number, fn: (data: Scene) => void): Subscription {
+      const thisId = nextSubscriptionId
+      nextSubscriptionId++
+
+      let scenesMap = itemSubscriptions.get(id)
+      if (!scenesMap) {
+        scenesMap = new Map<number, (data: Scene) => void>()
+        itemSubscriptions.set(id, scenesMap)
+      }
+
+      scenesMap.set(thisId, fn)
+
+      return {
+        unsubscribe: () => {
+          scenesMap.delete(thisId)
         },
       }
     },

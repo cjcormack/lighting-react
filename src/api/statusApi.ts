@@ -43,8 +43,6 @@ export function createStatusApi(conn: InternalApiConnection): StatusApi {
             const thisId = nextStatusSubscriptionId
             nextStatusSubscriptionId++
 
-            fn(conn.readyState())
-
             statusUpdatesSubscriptions.set(thisId, fn)
 
             return {

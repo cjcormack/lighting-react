@@ -48,8 +48,6 @@ export function createFixtureApi(conn: InternalApiConnection): FixturesApi {
 
       subscriptions.set(thisId, fn)
 
-      fn()
-
       return {
         unsubscribe: () => {
           subscriptions.delete(thisId)

@@ -11,13 +11,15 @@ import {
 } from "@mui/material";
 import { useScriptListQuery } from "./store/scripts"
 import { useCreateSceneMutation } from "./store/scenes"
+import { SceneMode } from "./api/scenesApi"
 
 interface AddSceneDetails {
   name: string,
   script_id: string,
 }
 
-export default function AddSceneDialog({open, setOpen}: {
+export default function AddSceneDialog({mode, open, setOpen}: {
+  mode: SceneMode,
   open: boolean,
   setOpen: Dispatch<SetStateAction<boolean>>,
 }) {
@@ -49,9 +51,12 @@ export default function AddSceneDialog({open, setOpen}: {
 
   const handleAdd = () => {
     runCreateMutation({
+      mode: mode,
       name: value.name,
       scriptId: Number(value.script_id),
       settingsValues: new Map(),
+    }).then(() => {
+      setOpen(false)
     })
   }
 
@@ -85,7 +90,7 @@ export default function AddSceneDialog({open, setOpen}: {
           fullWidth
       >
         <DialogTitle>
-          Create Scene
+          Create { mode == 'SCENE' ? ('Scene') : ('Chase') }
         </DialogTitle>
         <DialogContent>
           <Stack>

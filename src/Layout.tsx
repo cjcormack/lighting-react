@@ -27,6 +27,7 @@ import DataObjectIcon from '@mui/icons-material/DataObject';
 import TuneIcon from '@mui/icons-material/Tune';
 import WbIridescentIcon from '@mui/icons-material/WbIridescent';
 import BatchPredictionIcon from '@mui/icons-material/BatchPrediction';
+import AnimationIcon from '@mui/icons-material/Animation';
 import TrackStatus from './TrackStatus';
 import {Outlet, useLocation, useNavigate} from 'react-router-dom';
 import {ConnectionStatus} from "./connection";
@@ -164,6 +165,14 @@ export default function Layout() {
                     <WbIridescentIcon />
                   </ListItemIcon>
                   <ListItemText primary="Scenes" />
+                </ListItemButton>
+                <ListItemButton
+                    onClick={() => navigate('/chases')}
+                    selected={location.pathname.startsWith('/chases')}>
+                  <ListItemIcon>
+                    <AnimationIcon />
+                  </ListItemIcon>
+                  <ListItemText primary="Chases" />
                 </ListItemButton>
                 <ListItemButton
                     onClick={() => navigate('/fixtures')}

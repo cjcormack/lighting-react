@@ -59,8 +59,6 @@ export function createUniversesApi(conn: InternalApiConnection): UniversesApi {
 
             universesUpdatesSubscriptions.set(thisId, fn)
 
-            fn(currentValues)
-
             return {
                 unsubscribe: () => {
                     universesUpdatesSubscriptions.delete(thisId)

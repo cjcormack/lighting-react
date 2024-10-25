@@ -66,8 +66,6 @@ export function createTrackApi(conn: InternalApiConnection): TrackApi {
 
             trackUpdatesSubscriptions.set(thisId, fn)
 
-            fn(currentTrack)
-
             return {
                 unsubscribe: () => {
                     trackUpdatesSubscriptions.delete(thisId)

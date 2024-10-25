@@ -28,7 +28,11 @@ function App() {
         },
         {
           path: "scenes",
-          element: <Scenes />,
+          element: <Scenes mode={'SCENE'} />,
+        },
+        {
+          path: "chases",
+          element: <Scenes mode={'CHASE'} />,
         },
         {
           path: "fixtures",

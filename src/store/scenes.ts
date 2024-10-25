@@ -2,25 +2,39 @@ import { restApi } from "./restApi"
 import { RunResult } from "./scripts"
 import { lightingApi } from "../api/lightingApi"
 import { store } from "./index"
+import { Scene, SceneDetails, SceneMode } from "../api/scenesApi"
 
 lightingApi.scenes.subscribe(function() {
-  store.dispatch(restApi.util.invalidateTags(['Scene']))
+  store.dispatch(restApi.util.invalidateTags(['SceneList']))
 })
 
 export const scenesApi = restApi.injectEndpoints({
   endpoints: (build) => {
     return {
-      sceneList: build.query<Array<Scene>, void>({
-        query: () => {
-          return 'scene/list'
+      sceneList: build.query<Array<number>, SceneMode>({
+        query: (mode: SceneMode) => {
+          return {
+            url: "scene/list",
+            params: {
+              'mode': mode,
+            },
+          }
         },
-        providesTags: ['Scene'],
+        providesTags: ['SceneList'],
       }),
       scene: build.query<Scene, number>({
         query: (id) => {
           return `scene/${id}`
         },
-        providesTags: ['Scene'],
+        async onCacheEntryAdded(id, { updateCachedData, cacheEntryRemoved }) {
+          const subscription = lightingApi.scenes.subscribeToScene(id, (value) => {
+            updateCachedData(() => {
+              return value
+            })
+          })
+          await cacheEntryRemoved
+          subscription.unsubscribe()
+        },
       }),
       runScene: build.mutation<RunResult, number>({
         query: (id) => ({
@@ -35,14 +49,14 @@ export const scenesApi = restApi.injectEndpoints({
           method: 'PUT',
           body: request,
         }),
-        invalidatesTags: ['Scene'],
+        invalidatesTags: ['SceneList'],
       }),
       deleteScene: build.mutation<void, number>({
         query: (id) => ({
           url: `scene/${id}`,
           method: 'DELETE',
         }),
-        invalidatesTags: ['Scene'],
+        invalidatesTags: ['SceneList'],
       }),
       createScene: build.mutation<Scene, SceneDetails>({
         query: (scene) => ({
@@ -50,7 +64,7 @@ export const scenesApi = restApi.injectEndpoints({
           method: 'POST',
           body: scene,
         }),
-        invalidatesTags: ['Scene'],
+        invalidatesTags: ['SceneList'],
       }),
     }
   },
@@ -61,14 +75,3 @@ export const {
   useSceneListQuery, useSceneQuery, useRunSceneMutation,
   useSaveSceneMutation, useDeleteSceneMutation, useCreateSceneMutation
 } = scenesApi
-
-export type Scene = SceneDetails & {
-  id: number
-  isActive: boolean
-}
-
-export type SceneDetails = {
-  name: string
-  scriptId: number
-  settingsValues: unknown
-}

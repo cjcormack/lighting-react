@@ -11,7 +11,7 @@ import {
   Paper, Stack, SxProps, Theme,
   Typography
 } from "@mui/material"
-import React, {Suspense, useState} from "react";
+import React, { Dispatch, SetStateAction, useState } from "react"
 import {OverridableStringUnion} from "@mui/types";
 import {ChipPropsColorOverrides} from "@mui/material/Chip/Chip";
 import AddCircleIcon from '@mui/icons-material/AddCircle';
@@ -22,20 +22,22 @@ import {
   useScriptQuery
 } from "../store/scripts"
 import {
-  Scene, useDeleteSceneMutation,
+  useDeleteSceneMutation,
   useRunSceneMutation,
   useSaveSceneMutation,
-  useSceneListQuery
+  useSceneListQuery, useSceneQuery
 } from "../store/scenes"
+import { skipToken } from "@reduxjs/toolkit/query"
+import { SceneMode } from "../api/scenesApi"
 
-export function Scenes() {
+export function Scenes({mode}: {
+  mode: SceneMode,
+}) {
   const [addSceneDialogOpen, setAddSceneDialogOpen] = useState<boolean>(false)
 
   return (
       <>
-        <Suspense fallback={'Loading...'}>
-          <AddSceneDialog open={addSceneDialogOpen} setOpen={setAddSceneDialogOpen}/>
-        </Suspense>
+        <AddSceneDialog mode={mode} open={addSceneDialogOpen} setOpen={setAddSceneDialogOpen}/>
         <Paper
             sx={{
               p: 2,
@@ -49,25 +51,25 @@ export function Scenes() {
                   variant="contained"
                   startIcon={<AddCircleIcon/>}
                   onClick={() => setAddSceneDialogOpen(true)}
-              >Add Scene</Button>
+              >Add { mode == 'SCENE' ? ('Scene') : ('Chase') }</Button>
             </Stack>
             <Typography variant="h2">
-              Scenes
+              { mode == 'SCENE' ? ('Scenes') : ('Chases') }
             </Typography>
-            <Suspense fallback={'Loading...'}>
-              <ScenesContainer/>
-            </Suspense>
+            <ScenesContainer mode={mode}/>
           </Box>
         </Paper>
       </>
   )
 }
 
-function ScenesContainer() {
+function ScenesContainer({mode}: {
+  mode: SceneMode,
+}) {
   const {
-    data: sceneList,
+    data: sceneIds,
     isLoading,
-  } = useSceneListQuery()
+  } = useSceneListQuery(mode)
 
   if (isLoading) {
     return (
@@ -78,15 +80,15 @@ function ScenesContainer() {
   return (
       <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
         <Grid container spacing={3}>
-          {sceneList?.map((scene) => (
-            <SceneCard key={scene.id} scene={scene}/>
+          {sceneIds?.map((sceneId) => (
+            <SceneCard key={sceneId} sceneId={sceneId}/>
           ))}
         </Grid>
       </Container>
   )
 }
 
-const SceneCard = ({scene}: {scene: Scene}) => {
+const SceneCard = ({sceneId}: {sceneId: number}) => {
   interface StatusDetails {
     text: "ready" | "running..." | "active" | "failed",
     color: OverridableStringUnion<
@@ -96,10 +98,16 @@ const SceneCard = ({scene}: {scene: Scene}) => {
   }
 
   const {
+    data: scene,
+    isLoading: isSceneLoading,
+    isFetching: isSceneFetching,
+  } = useSceneQuery(sceneId)
+
+  const {
     data: script,
     isLoading: isScriptLoading,
     isFetching: isScriptFetching,
-  } = useScriptQuery(scene.scriptId)
+  } = useScriptQuery(scene?.scriptId ?? skipToken)
 
   const [
     runRunMutation,
@@ -116,6 +124,24 @@ const SceneCard = ({scene}: {scene: Scene}) => {
 
   const [showSettings, setShowSettings] = useState<boolean>(false)
 
+  const navigate = useNavigate()
+
+  if (isSceneLoading || isSceneFetching || isScriptLoading || isScriptFetching) {
+    return (
+      <>Loading...</>
+    )
+  }
+  if (!scene) {
+    return (
+      <>Scene not found</>
+    )
+  }
+  if (!script) {
+    return (
+      <>Script not found</>
+    )
+  }
+
   const status: StatusDetails  = {
     text: "ready",
     color: "default",
@@ -131,8 +157,6 @@ const SceneCard = ({scene}: {scene: Scene}) => {
     status.text = "failed"
     status.color = "error"
   }
-
-  const navigate = useNavigate()
 
   const settingsValuesObject = scene.settingsValues as object
 
@@ -177,17 +201,6 @@ const SceneCard = ({scene}: {scene: Scene}) => {
       settingsValues: Object.fromEntries(settingsValues.entries()),
     }
     runSaveMutation(newScene)
-  }
-
-  if (isScriptLoading || isScriptFetching) {
-    return (
-      <>Loading...</>
-    )
-  }
-  if (!script) {
-    return (
-      <>Script not found</>
-    )
   }
 
   return (
