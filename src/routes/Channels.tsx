@@ -62,10 +62,10 @@ export const ChannelSlider = (({universe, id, description}: {universe: number, i
           }
         </Typography>
         <Grid container spacing={2} alignItems="center">
-          <Grid item xs>
+          <Grid size="grow">
             <Slider defaultValue={0} max={255} value={value} aria-label="Default" valueLabelDisplay="auto" onChange={handleSliderChange} />
           </Grid>
-          <Grid item xs="auto">
+          <Grid size="auto">
             <TextField
                 value={value}
                 size="small"
@@ -118,7 +118,7 @@ const ChannelGroups = (({universe}: { universe: number }) => {
     return (
         <>
             {Array.from(Array(channelCount/groupSize)).map((g, groupNo) => (
-                <Grid item xs={12} md={6} lg={4} xl={3} key={groupNo}>
+                <Grid size={{ xs: 12, md: 6, lg: 4, xl: 3 }} key={groupNo}>
                     <Paper
                         sx={{
                             p: 2,

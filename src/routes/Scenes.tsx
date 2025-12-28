@@ -11,9 +11,9 @@ import {
   Paper, Stack, SxProps, Theme,
   Typography
 } from "@mui/material"
-import React, { Dispatch, SetStateAction, useState } from "react"
+import React, { useState } from "react"
 import {OverridableStringUnion} from "@mui/types";
-import {ChipPropsColorOverrides} from "@mui/material/Chip/Chip";
+import type {ChipPropsColorOverrides} from "@mui/material/Chip";
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import AddSceneDialog from "../AddSceneDialog";
 import {useNavigate} from "react-router-dom";
@@ -208,7 +208,7 @@ const SceneCard = ({sceneId}: {sceneId: number}) => {
       <>
         <SetSceneSettings open={showSettings} setOpen={setShowSettings} settings={script.settings} originalSettingsValues={settingsValuesMap}
                           saveSettingValues={saveSettingValues} />
-        <Grid item xs={12} md={4} lg={3}>
+        <Grid size={{ xs: 12, md: 4, lg: 3 }}>
           <Card sx={sx}>
             <CardActionArea onClick={doRun}>
               <CardContent>

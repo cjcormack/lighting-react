@@ -49,7 +49,7 @@ import {
   useScriptListQuery,
   useScriptQuery
 } from "../store/scripts"
-// @ts-ignore
+// @ts-expect-error - no type declarations for kotlinScript
 import ReactKotlinPlayground from "../kotlinScript/index.mjs"
 
 export default function Scripts() {
@@ -68,7 +68,7 @@ export default function Scripts() {
           Scripts
         </Typography>
         <Grid container spacing={0}>
-          <Grid item xs="auto">
+          <Grid size="auto">
             <Box sx={{ width: 200, bgcolor: "background.paper" }}>
               <List dense={true}>
                 <Suspense fallback={"Loading..."}>
@@ -77,7 +77,7 @@ export default function Scripts() {
               </List>
             </Box>
           </Grid>
-          <Grid item xs>
+          <Grid size="grow">
             {scriptId === undefined ? (
               <></>
             ) : scriptId === "new" ? (
