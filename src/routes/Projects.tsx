@@ -26,6 +26,7 @@ import EditProjectDialog from "../EditProjectDialog";
 import DeleteProjectConfirmDialog from "../DeleteProjectConfirmDialog";
 import ProjectSwitchConfirmDialog from "../ProjectSwitchConfirmDialog";
 import ViewProjectScriptsDialog from "../ViewProjectScriptsDialog";
+import CloneProjectDialog from "../CloneProjectDialog";
 
 export default function Projects() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -86,6 +87,7 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [switchOpen, setSwitchOpen] = useState(false);
   const [scriptsOpen, setScriptsOpen] = useState(false);
+  const [cloneOpen, setCloneOpen] = useState(false);
 
   const { data: currentProject } = useCurrentProjectQuery();
 
@@ -147,6 +149,12 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
         projectId={project.id}
         projectName={project.name}
       />
+      <CloneProjectDialog
+        open={cloneOpen}
+        setOpen={setCloneOpen}
+        sourceProjectId={project.id}
+        sourceProjectName={project.name}
+      />
       <Grid size={{ xs: 12, md: 6, lg: 4 }}>
         <Card
           sx={{
@@ -179,6 +187,9 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
             </Button>
             <Button size="small" onClick={() => setEditOpen(true)}>
               Configure
+            </Button>
+            <Button size="small" onClick={() => setCloneOpen(true)}>
+              Clone
             </Button>
             <Button
               size="small"

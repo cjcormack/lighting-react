@@ -11,6 +11,10 @@ import {
   ProjectScriptDetail,
   CreateInitialSceneResponse,
   CreateScriptResponse,
+  CloneProjectRequest,
+  CloneProjectResponse,
+  CopyScriptRequest,
+  CopyScriptResponse,
 } from "../api/projectApi"
 
 // Subscribe to WebSocket project changes - invalidate all caches on project switch
@@ -129,6 +133,29 @@ export const projectsApi = restApi.injectEndpoints({
         }),
         invalidatesTags: ['Project', 'Script'],
       }),
+
+      // Clone a project
+      cloneProject: build.mutation<CloneProjectResponse, { id: number } & CloneProjectRequest>({
+        query: ({ id, ...body }) => ({
+          url: `project/${id}/clone`,
+          method: 'POST',
+          body,
+        }),
+        invalidatesTags: ['ProjectList'],
+      }),
+
+      // Copy a script to another project
+      copyScript: build.mutation<CopyScriptResponse, { projectId: number; scriptId: number } & CopyScriptRequest>({
+        query: ({ projectId, scriptId, ...body }) => ({
+          url: `project/${projectId}/scripts/${scriptId}/copy`,
+          method: 'POST',
+          body,
+        }),
+        // Invalidate the target project's data since it now has a new script
+        invalidatesTags: (_result, _error, { targetProjectId }) => [
+          { type: 'Project', id: targetProjectId },
+        ],
+      }),
     }
   },
   overrideExisting: false,
@@ -148,4 +175,6 @@ export const {
   useCreateInitialSceneMutation,
   useCreateTrackChangedScriptMutation,
   useCreateRunLoopScriptMutation,
+  useCloneProjectMutation,
+  useCopyScriptMutation,
 } = projectsApi

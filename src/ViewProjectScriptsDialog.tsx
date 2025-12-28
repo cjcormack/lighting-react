@@ -23,6 +23,7 @@ import {
 } from "./store/projects";
 // @ts-expect-error - no type declarations for kotlinScript
 import ReactKotlinPlayground from "./kotlinScript/index.mjs";
+import CopyScriptDialog from "./CopyScriptDialog";
 
 interface ViewProjectScriptsDialogProps {
   open: boolean;
@@ -133,6 +134,7 @@ function ScriptViewer({
   projectId: number;
   scriptId: number;
 }) {
+  const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   const { data: script, isLoading } = useProjectScriptQuery({
     projectId,
     scriptId,
@@ -183,9 +185,25 @@ fun TestScript.test() {
 
   return (
     <Box>
-      <Typography variant="h6" gutterBottom>
-        {script.name}
-      </Typography>
+      <CopyScriptDialog
+        open={copyDialogOpen}
+        setOpen={setCopyDialogOpen}
+        sourceProjectId={projectId}
+        scriptId={scriptId}
+        scriptName={script.name}
+      />
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+        <Typography variant="h6">
+          {script.name}
+        </Typography>
+        <Button
+          variant="outlined"
+          size="small"
+          onClick={() => setCopyDialogOpen(true)}
+        >
+          Copy to Project
+        </Button>
+      </Stack>
       {script.settings.length > 0 && (
         <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
           <Typography variant="subtitle2" gutterBottom>

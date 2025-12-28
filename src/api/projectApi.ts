@@ -90,6 +90,35 @@ export interface CreateScriptResponse {
   message: string;
 }
 
+// Request for cloning a project
+export interface CloneProjectRequest {
+  name: string;
+  description?: string;
+}
+
+// Response from clone project endpoint
+export interface CloneProjectResponse {
+  project: ProjectDetail;
+  scriptsCloned: number;
+  scenesCloned: number;
+  message: string;
+}
+
+// Request for copying a script to another project
+export interface CopyScriptRequest {
+  targetProjectId: number;
+  newName?: string;
+}
+
+// Response from copy script endpoint
+export interface CopyScriptResponse {
+  scriptId: number;
+  scriptName: string;
+  targetProjectId: number;
+  targetProjectName: string;
+  message: string;
+}
+
 // WebSocket message types
 type ProjectStateMessage = {
   type: 'projectState';
