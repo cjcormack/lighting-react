@@ -197,6 +197,7 @@ const SceneCard = ({sceneId}: {sceneId: number}) => {
     const newScene = {
       id: scene.id,
       name: scene.name,
+      mode: scene.mode,
       scriptId: scene.scriptId,
       settingsValues: Object.fromEntries(settingsValues.entries()),
     }

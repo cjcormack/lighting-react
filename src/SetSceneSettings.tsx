@@ -9,7 +9,7 @@ export default function SetSceneSettings({open, setOpen, settings, originalSetti
   originalSettingsValues: ReadonlyMap<string, unknown>,
   saveSettingValues: (settingsValues: Map<string, unknown>) => void,
 }) {
-  const [updatedSettingsValues, setUpdatedSettingsValues] = useState<Map<string, unknown>>(new Map())
+  const [updatedSettingsValues, setUpdatedSettingsValues] = useState<Map<string, unknown>>(new Map(originalSettingsValues))
 
   const clearValue = () => {
     setUpdatedSettingsValues(new Map(originalSettingsValues))
