@@ -1,46 +1,75 @@
-# Getting Started with Create React App
+# Lighting Controller Frontend
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+React frontend for Chris' DMX Controller v7 - a web-based interface for controlling DMX lighting fixtures.
+
+## Features
+
+- **Script Editor**: Write and test Kotlin lighting scripts with syntax highlighting and in-browser compilation
+- **Scenes & Chases**: Configure and trigger lighting scenes with customizable settings
+- **Fixture Management**: Define and manage DMX fixtures
+- **Channel Control**: Direct control of individual DMX channels per universe
+- **Real-time Updates**: WebSocket-based live status and channel value updates
+
+## Requirements
+
+- Node.js 18+
+- [lighting7 backend](../lighting7) running on port 8413
+
+## Getting Started
+
+```bash
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+```
+
+The app opens at http://localhost:5173 and proxies API requests to the backend at http://localhost:8413.
 
 ## Available Scripts
 
-In the project directory, you can run:
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start development server with hot reload |
+| `npm run build` | Build for production |
+| `npm run preview` | Preview production build |
+| `npm run lint` | Run ESLint |
+| `npm run lint:fix` | Fix ESLint issues |
+| `npm run format` | Format code with Prettier |
+| `npm run type-check` | TypeScript type checking |
 
-### `npm start`
+## Tech Stack
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+- React 18 + TypeScript
+- Vite
+- Material-UI v6
+- Redux Toolkit + RTK Query
+- React Router v6
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+## Project Structure
 
-### `npm test`
+```
+src/
+├── api/           # WebSocket and REST API layer
+├── store/         # Redux store and RTK Query slices
+├── routes/        # Page components
+├── App.tsx        # Router setup
+├── Layout.tsx     # Main layout with navigation
+└── main.tsx       # Entry point
+```
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## Environment Variables
 
-### `npm run build`
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VITE_SOCKET_URL` | WebSocket URL override | Auto-detected from host |
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## Backend
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+This frontend requires the [lighting7](../lighting7) Kotlin backend to be running. The backend handles:
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
-
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
-
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
+- DMX output to physical lighting hardware
+- Kotlin script compilation and execution
+- Fixture, scene, and script persistence
+- WebSocket message routing
