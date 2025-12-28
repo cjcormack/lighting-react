@@ -31,7 +31,8 @@ import AnimationIcon from '@mui/icons-material/Animation';
 import TrackStatus from './TrackStatus';
 import {Outlet, useLocation, useNavigate} from 'react-router-dom';
 import {ConnectionStatus} from "./connection";
-import { useGetUniverseQuery } from "./store/universes"
+import { useGetUniverseQuery } from "./store/universes";
+import ProjectSelector from "./ProjectSelector";
 
 const drawerWidth: number = 240;
 
@@ -148,6 +149,8 @@ export default function Layout() {
             <Divider />
             <List component="nav">
               <TrackStatus/>
+              <Divider sx={{ my: 1 }} />
+              <ProjectSelector collapsed={!open} />
               <Divider sx={{ my: 1 }} />
               <List component="div" disablePadding subheader={<ListSubheader component="div">Lights</ListSubheader>}>
                 <ListItemButton

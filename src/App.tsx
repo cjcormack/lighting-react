@@ -11,6 +11,7 @@ import Channels from "./routes/Channels";
 import Scripts from "./routes/Scripts";
 import {Scenes} from "./routes/Scenes";
 import {Fixtures} from "./routes/Fixtures";
+import Projects from "./routes/Projects";
 
 function App() {
   const router = createBrowserRouter([
@@ -37,6 +38,10 @@ function App() {
         {
           path: "fixtures",
           element: <Fixtures />,
+        },
+        {
+          path: "projects",
+          element: <Projects />,
         },
       ],
     },
