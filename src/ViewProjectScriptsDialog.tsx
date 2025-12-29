@@ -14,6 +14,7 @@ import {
   useProjectScriptsQuery,
   useProjectScriptQuery,
 } from "./store/projects"
+import { useIsDarkMode } from "@/hooks/useIsDarkMode"
 // @ts-expect-error - no type declarations for kotlinScript
 import ReactKotlinPlayground from "./kotlinScript/index.mjs"
 import CopyScriptDialog from "./CopyScriptDialog"
@@ -127,6 +128,7 @@ function ScriptViewer({
   projectId: number
   scriptId: number
 }) {
+  const isDarkMode = useIsDarkMode()
   const [copyDialogOpen, setCopyDialogOpen] = useState(false)
   const { data: script, isLoading } = useProjectScriptQuery({
     projectId,
@@ -210,7 +212,8 @@ fun TestScript.test() {
           value={scriptPrefix + script.script + scriptSuffix}
           highlightOnFly="true"
           readOnly="true"
-          key={`${projectId}-${scriptId}`}
+          theme={isDarkMode ? "darcula" : "idea"}
+          key={`${projectId}-${scriptId}-${isDarkMode ? "dark" : "light"}`}
         />
       </Card>
     </div>

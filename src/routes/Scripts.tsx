@@ -28,6 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
+import { useIsDarkMode } from "@/hooks/useIsDarkMode"
 
 import AddScriptDialog from "../AddScriptDialog"
 import {
@@ -180,6 +181,8 @@ const EditScript = ({ id }: { id: number }) => {
 }
 
 const ScriptDisplay = ({ script, id }: { script: ScriptDetails, id?: number }) => {
+  const isDarkMode = useIsDarkMode()
+
   const [
     runCompileMutation,
     {
@@ -425,7 +428,8 @@ fun TestScript.test() {
           highlightOnFly="true"
           autocomplete="true"
           matchBrackets="true"
-          key={id ? `${id}` : "new"}
+          theme={isDarkMode ? "darcula" : "idea"}
+          key={`${id ?? "new"}-${isDarkMode ? "dark" : "light"}`}
         />
       </Card>
       <Card className="p-4 m-2 flex flex-col">
