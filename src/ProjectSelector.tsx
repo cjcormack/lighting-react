@@ -1,12 +1,12 @@
 import React, { useState } from "react";
 import {
   Box,
-  Typography,
   IconButton,
   Tooltip,
   CircularProgress,
   Link,
   Stack,
+  ListSubheader,
 } from "@mui/material";
 import SettingsIcon from "@mui/icons-material/Settings";
 import ListIcon from "@mui/icons-material/List";
@@ -67,13 +67,11 @@ export default function ProjectSelector({ collapsed }: ProjectSelectorProps) {
           projectId={currentProject.id}
         />
       )}
-      <Box sx={{ px: 2, py: 1 }}>
-        <Box sx={{ display: "flex", alignItems: "center", mb: 0.5 }}>
-          <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
-            Project
-          </Typography>
-        </Box>
-        <Stack direction="row" alignItems="center" spacing={1}>
+      <Box sx={{ py: 1 }}>
+        <ListSubheader component="div" sx={{ lineHeight: 'inherit', pb: 0.5 }}>
+          Project
+        </ListSubheader>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 2 }}>
           <Tooltip title="Configure current project">
             <Link
               component="button"
