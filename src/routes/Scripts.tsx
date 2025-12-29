@@ -1,11 +1,10 @@
 import React, { Dispatch, SetStateAction, Suspense, useEffect, useState } from "react"
 import {
-  unstable_usePrompt,
   useLocation,
   useNavigate,
   useParams
 } from "react-router-dom"
-import { Plus, Wrench, Play, MinusCircle, AlertTriangle, XCircle, Info } from "lucide-react"
+import { Plus, Wrench, Play, AlertTriangle, XCircle, Info, Menu } from "lucide-react"
 
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -19,18 +18,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { cn } from "@/lib/utils"
+import { cn, arraysEqual } from "@/lib/utils"
 import { useIsDarkMode } from "@/hooks/useIsDarkMode"
-
-import AddScriptDialog from "../AddScriptDialog"
+import { useMediaQuery } from "@/hooks/useMediaQuery"
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges"
+import { UnsavedChangesDialog } from "../UnsavedChangesDialog"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import { ScriptSettingsTable } from "@/components/scripts/ScriptSettingsTable"
 import {
   CompileResult, RunResult,
   ScriptDetails,
@@ -44,17 +43,45 @@ import ReactKotlinPlayground from "../kotlinScript/index.mjs"
 
 export default function Scripts() {
   const { scriptId } = useParams()
+  const isMobile = useMediaQuery("(max-width: 767px)")
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   return (
-    <Card className="m-4 p-4 flex flex-col">
-      <h1 className="text-3xl font-bold mb-4">Scripts</h1>
-      <div className="flex gap-0">
-        <div className="w-52">
-          <Suspense fallback={<div>Loading...</div>}>
-            <ScriptList />
-          </Suspense>
-        </div>
-        <div className="flex-1">
+    <Card className="m-4 p-4 flex flex-col min-w-0">
+      <div className="flex items-center gap-2 mb-4">
+        {isMobile && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setDrawerOpen(true)}
+          >
+            <Menu className="size-5" />
+          </Button>
+        )}
+        <h1 className="text-3xl font-bold">Scripts</h1>
+      </div>
+      <div className="flex gap-0 min-w-0">
+        {isMobile ? (
+          <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
+            <SheetContent side="left" className="w-64 p-0">
+              <SheetHeader className="p-4 border-b">
+                <SheetTitle>Scripts</SheetTitle>
+              </SheetHeader>
+              <div className="overflow-y-auto flex-1">
+                <Suspense fallback={<div className="p-4">Loading...</div>}>
+                  <ScriptList onSelect={() => setDrawerOpen(false)} />
+                </Suspense>
+              </div>
+            </SheetContent>
+          </Sheet>
+        ) : (
+          <div className="w-52">
+            <Suspense fallback={<div>Loading...</div>}>
+              <ScriptList />
+            </Suspense>
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
           {scriptId === undefined ? (
             <></>
           ) : scriptId === "new" ? (
@@ -70,7 +97,11 @@ export default function Scripts() {
   )
 }
 
-const ScriptList = () => {
+interface ScriptListProps {
+  onSelect?: () => void
+}
+
+const ScriptList = ({ onSelect }: ScriptListProps) => {
   const {
     data: scriptList,
     isLoading,
@@ -80,6 +111,7 @@ const ScriptList = () => {
 
   const doNew = () => {
     navigate("/scripts/new")
+    onSelect?.()
   }
 
   if (isLoading) {
@@ -92,7 +124,7 @@ const ScriptList = () => {
     <div className="flex flex-col">
       {scriptIds.map((scriptId) => {
         return (
-          <ScriptListEntry key={scriptId} id={scriptId} />
+          <ScriptListEntry key={scriptId} id={scriptId} onSelect={onSelect} />
         )
       })}
       <div className="m-2">
@@ -110,7 +142,7 @@ const ScriptList = () => {
   )
 }
 
-const ScriptListEntry = ({ id }: { id: number }) => {
+const ScriptListEntry = ({ id, onSelect }: { id: number; onSelect?: () => void }) => {
   const {
     data: script,
     isLoading,
@@ -129,13 +161,18 @@ const ScriptListEntry = ({ id }: { id: number }) => {
 
   const isSelected = location.pathname === `/scripts/${id}`
 
+  const handleClick = () => {
+    navigate(`/scripts/${id}`)
+    onSelect?.()
+  }
+
   return (
     <button
       className={cn(
         "w-full text-left px-4 py-2 text-sm hover:bg-accent transition-colors",
         isSelected && "bg-accent"
       )}
-      onClick={() => navigate(`/scripts/${id}`)}
+      onClick={handleClick}
     >
       {script.name}
     </button>
@@ -209,23 +246,27 @@ const ScriptDisplay = ({ script, id }: { script: ScriptDetails, id?: number }) =
 
   const [newId, setNewId] = useState<number | undefined>()
   const [edits, setEdits] = useState<ScriptEdits>({})
+  const [playgroundKey, setPlaygroundKey] = useState(0)
 
   const navigate = useNavigate()
 
   const hasChanged = edits.name !== undefined || edits.script !== undefined || edits.settings !== undefined
 
-  unstable_usePrompt({ when: hasChanged && newId === undefined, message: "Unsaved changes" })
+  const { showConfirmDialog, confirmLeave, cancelLeave } = useUnsavedChanges(
+    hasChanged,
+    newId !== undefined
+  )
 
   useEffect(() => {
     if (newId !== undefined) {
       navigate(`/scripts/${newId}`)
     }
-    if (edits.id !== id) {
-      setEdits({
-        id: id
-      })
-    }
-  })
+  }, [newId, navigate])
+
+  useEffect(() => {
+    setEdits({ id })
+    setPlaygroundKey(k => k + 1)
+  }, [id])
 
   if (script === undefined) {
     return null
@@ -294,6 +335,7 @@ fun TestScript.test() {
       setEdits({
         id: id
       })
+      setPlaygroundKey(k => k + 1)
     }
   }
   const doSave = () => {
@@ -347,7 +389,11 @@ fun TestScript.test() {
       settings: edits.settings
     }
 
-    if (value !== script.script) {
+    // Normalize both values to handle whitespace differences from the playground
+    const normalizedValue = value.trim()
+    const normalizedOriginal = script.script.trim()
+
+    if (normalizedValue !== normalizedOriginal) {
       updatedEdits.script = value
     }
     setEdits(updatedEdits)
@@ -365,7 +411,7 @@ fun TestScript.test() {
     })
     updatedSettings.push(setting)
 
-    if (updatedEdits.settings !== updatedSettings) {
+    if (!arraysEqual(updatedSettings, script.settings)) {
       updatedEdits.settings = updatedSettings
     }
 
@@ -383,7 +429,7 @@ fun TestScript.test() {
       return existingSetting.name !== setting.name
     })
 
-    if (updatedEdits.settings !== updatedSettings) {
+    if (!arraysEqual(updatedSettings, script.settings)) {
       updatedEdits.settings = updatedSettings
     }
 
@@ -392,6 +438,11 @@ fun TestScript.test() {
 
   return (
     <>
+      <UnsavedChangesDialog
+        open={showConfirmDialog}
+        onConfirm={confirmLeave}
+        onCancel={cancelLeave}
+      />
       <ScriptCompileDialog
         compileResult={compileResult}
         hasNotCompiled={hasNotCompiled}
@@ -418,19 +469,21 @@ fun TestScript.test() {
           />
         </div>
       </Card>
-      <ScriptSettings settings={settings} addSetting={addSetting} removeSetting={removeSetting} />
-      <Card className="p-4 m-2 flex flex-col">
-        <ReactKotlinPlayground
-          mode="kotlin"
-          lines="true"
-          onChange={onScriptChange}
-          value={scriptPrefix + scriptScript + scriptSuffix}
-          highlightOnFly="true"
-          autocomplete="true"
-          matchBrackets="true"
-          theme={isDarkMode ? "darcula" : "idea"}
-          key={`${id ?? "new"}-${isDarkMode ? "dark" : "light"}`}
-        />
+      <ScriptSettingsTable settings={settings} onAddSetting={addSetting} onRemoveSetting={removeSetting} />
+      <Card className="p-4 m-2 flex flex-col overflow-hidden min-w-0">
+        <div className="overflow-x-auto min-w-0">
+          <ReactKotlinPlayground
+            mode="kotlin"
+            lines="true"
+            onChange={onScriptChange}
+            value={scriptPrefix + scriptScript + scriptSuffix}
+            highlightOnFly="true"
+            autocomplete="true"
+            matchBrackets="true"
+            theme={isDarkMode ? "darcula" : "idea"}
+            key={`${id ?? "new"}-${playgroundKey}-${isDarkMode ? "dark" : "light"}`}
+          />
+        </div>
       </Card>
       <Card className="p-4 m-2 flex flex-col">
         <div className="flex justify-between">
@@ -619,70 +672,3 @@ const DeleteConfirmAlert = ({ id, open, setOpen }: {
   )
 }
 
-function ScriptSettings({ settings, addSetting, removeSetting }: {
-  settings: readonly ScriptSetting[],
-  addSetting: (setting: ScriptSetting) => void,
-  removeSetting: (setting: ScriptSetting) => void,
-}) {
-  const [addScriptDialogOpen, setAddScriptDialogOpen] = useState<boolean>(false)
-
-  return (
-    <>
-      <Suspense fallback={<div>Loading...</div>}>
-        <AddScriptDialog open={addScriptDialogOpen} setOpen={setAddScriptDialogOpen} addSetting={addSetting} />
-      </Suspense>
-      <Card className="p-4 m-2 flex flex-col">
-        <h2 className="text-xl font-semibold mb-4">Settings</h2>
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Type</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead colSpan={2}>Details</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {settings.length ? (
-                settings.map((setting) => (
-                  <TableRow key={setting.name}>
-                    <TableCell className="font-medium">{setting.type}</TableCell>
-                    <TableCell>{setting.name}</TableCell>
-                    <TableCell>
-                      min: {setting.minValue}; max: {setting.maxValue}; default: {setting.defaultValue}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeSetting(setting)}
-                      >
-                        <MinusCircle className="size-5" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-muted-foreground">
-                    No settings
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-        <div className="flex justify-end pt-3">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setAddScriptDialogOpen(true)}
-          >
-            <Plus className="size-4" />
-            Add Setting
-          </Button>
-        </div>
-      </Card>
-    </>
-  )
-}

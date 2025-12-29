@@ -8,15 +8,12 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Card } from "@/components/ui/card"
 import { ArrowLeft, Loader2 } from "lucide-react"
 import {
   useProjectScriptsQuery,
   useProjectScriptQuery,
 } from "./store/projects"
-import { useIsDarkMode } from "@/hooks/useIsDarkMode"
-// @ts-expect-error - no type declarations for kotlinScript
-import ReactKotlinPlayground from "./kotlinScript/index.mjs"
+import { ScriptEditor } from "@/components/scripts/ScriptEditor"
 import CopyScriptDialog from "./CopyScriptDialog"
 
 interface ViewProjectScriptsDialogProps {
@@ -45,7 +42,7 @@ export default function ViewProjectScriptsDialog({
 
   return (
     <Dialog open={open} onOpenChange={open => !open && handleClose()}>
-      <DialogContent className="max-w-4xl">
+      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-2">
             {selectedScriptId !== null && (
@@ -57,7 +54,7 @@ export default function ViewProjectScriptsDialog({
             <Badge variant="outline">Read-only</Badge>
           </div>
         </DialogHeader>
-        <div className="min-h-[400px] border-t pt-4">
+        <div className="min-h-[300px] border-t pt-4 min-w-0 overflow-x-auto">
           {selectedScriptId === null ? (
             <ScriptsList
               projectId={projectId}
@@ -128,7 +125,6 @@ function ScriptViewer({
   projectId: number
   scriptId: number
 }) {
-  const isDarkMode = useIsDarkMode()
   const [copyDialogOpen, setCopyDialogOpen] = useState(false)
   const { data: script, isLoading } = useProjectScriptQuery({
     projectId,
@@ -147,35 +143,8 @@ function ScriptViewer({
     return <p className="p-4 text-destructive">Script not found.</p>
   }
 
-  const scriptPrefix = `import uk.me.cormack.lighting7.fixture.*
-import uk.me.cormack.lighting7.fixture.dmx.*
-import uk.me.cormack.lighting7.fixture.hue.*
-import java.awt.Color
-import uk.me.cormack.lighting7.dmx.*
-import uk.me.cormack.lighting7.show.*
-import uk.me.cormack.lighting7.scripts.*
-import uk.me.cormack.lighting7.scriptSettings.*
-
-class TestScript(
-    fixtures: Fixtures.FixturesWithTransaction,
-    scriptName:
-    String,
-    step: Int,
-    sceneName: String,
-    sceneIsActive: Boolean,
-    settings: Map<String, String>
-): LightingScript(fixtures, scriptName, step, sceneName, sceneIsActive, settings) {}
-
-fun TestScript.test() {
-//sampleStart
-`
-  const scriptSuffix = `
-//sampleEnd
-}
-`
-
   return (
-    <div className="space-y-4">
+    <div className="-m-2 min-w-0">
       <CopyScriptDialog
         open={copyDialogOpen}
         setOpen={setCopyDialogOpen}
@@ -183,39 +152,20 @@ fun TestScript.test() {
         scriptId={scriptId}
         scriptName={script.name}
       />
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold">{script.name}</h3>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setCopyDialogOpen(true)}
-        >
-          Copy to Project
-        </Button>
-      </div>
-      {script.settings.length > 0 && (
-        <Card className="p-4">
-          <h4 className="text-sm font-medium mb-2">Settings</h4>
-          <div className="flex flex-wrap gap-2">
-            {script.settings.map(setting => (
-              <Badge key={setting.name} variant="outline">
-                {setting.name}: {setting.defaultValue ?? "—"}
-              </Badge>
-            ))}
-          </div>
-        </Card>
-      )}
-      <Card className="overflow-hidden">
-        <ReactKotlinPlayground
-          mode="kotlin"
-          lines="true"
-          value={scriptPrefix + script.script + scriptSuffix}
-          highlightOnFly="true"
-          readOnly="true"
-          theme={isDarkMode ? "darcula" : "idea"}
-          key={`${projectId}-${scriptId}-${isDarkMode ? "dark" : "light"}`}
-        />
-      </Card>
+      <ScriptEditor
+        script={script}
+        id={`${projectId}-${scriptId}`}
+        readOnly
+        headerActions={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCopyDialogOpen(true)}
+          >
+            Copy to Project
+          </Button>
+        }
+      />
     </div>
   )
 }

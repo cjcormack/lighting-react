@@ -171,7 +171,7 @@ export default function Layout() {
 
         {/* Main Content Area */}
         <div
-          className="flex flex-1 flex-col transition-all duration-200"
+          className="flex flex-1 flex-col transition-all duration-200 min-w-0"
           style={{ marginLeft: sidebarWidth }}
         >
           {/* Header */}
@@ -184,7 +184,7 @@ export default function Layout() {
           </header>
 
           {/* Page Content */}
-          <main className="flex-1 overflow-auto bg-muted/40">
+          <main className="flex-1 overflow-auto bg-muted/40 min-w-0">
             <Outlet />
           </main>
         </div>
