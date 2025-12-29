@@ -43,8 +43,18 @@ import ReactKotlinPlayground from "../kotlinScript/index.mjs"
 
 export default function Scripts() {
   const { scriptId } = useParams()
+  const navigate = useNavigate()
   const isMobile = useMediaQuery("(max-width: 767px)")
   const [drawerOpen, setDrawerOpen] = useState(false)
+
+  const { data: scriptList } = useScriptListQuery()
+
+  // Auto-select first script if none selected
+  useEffect(() => {
+    if (scriptId === undefined && scriptList && scriptList.length > 0) {
+      navigate(`/scripts/${scriptList[0].id}`, { replace: true })
+    }
+  }, [scriptId, scriptList, navigate])
 
   return (
     <Card className="m-4 p-4 flex flex-col min-w-0">
