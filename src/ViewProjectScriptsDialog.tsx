@@ -1,35 +1,28 @@
-import React, { Dispatch, SetStateAction, useState } from "react";
+import { Dispatch, SetStateAction, useState } from "react"
 import {
-  Box,
-  Button,
   Dialog,
-  DialogActions,
   DialogContent,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  List,
-  ListItemButton,
-  ListItemText,
-  Paper,
-  Typography,
-  CircularProgress,
-  Chip,
-  Stack,
-  IconButton,
-} from "@mui/material";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+} from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Card } from "@/components/ui/card"
+import { ArrowLeft, Loader2 } from "lucide-react"
 import {
   useProjectScriptsQuery,
   useProjectScriptQuery,
-} from "./store/projects";
+} from "./store/projects"
 // @ts-expect-error - no type declarations for kotlinScript
-import ReactKotlinPlayground from "./kotlinScript/index.mjs";
-import CopyScriptDialog from "./CopyScriptDialog";
+import ReactKotlinPlayground from "./kotlinScript/index.mjs"
+import CopyScriptDialog from "./CopyScriptDialog"
 
 interface ViewProjectScriptsDialogProps {
-  open: boolean;
-  setOpen: Dispatch<SetStateAction<boolean>>;
-  projectId: number;
-  projectName: string;
+  open: boolean
+  setOpen: Dispatch<SetStateAction<boolean>>
+  projectId: number
+  projectName: string
 }
 
 export default function ViewProjectScriptsDialog({
@@ -38,122 +31,118 @@ export default function ViewProjectScriptsDialog({
   projectId,
   projectName,
 }: ViewProjectScriptsDialogProps) {
-  const [selectedScriptId, setSelectedScriptId] = useState<number | null>(null);
+  const [selectedScriptId, setSelectedScriptId] = useState<number | null>(null)
 
   const handleClose = () => {
-    setSelectedScriptId(null);
-    setOpen(false);
-  };
+    setSelectedScriptId(null)
+    setOpen(false)
+  }
 
   const handleBack = () => {
-    setSelectedScriptId(null);
-  };
+    setSelectedScriptId(null)
+  }
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="lg" fullWidth>
-      <DialogTitle>
-        <Stack direction="row" alignItems="center" spacing={1}>
-          {selectedScriptId !== null && (
-            <IconButton onClick={handleBack} size="small">
-              <ArrowBackIcon />
-            </IconButton>
+    <Dialog open={open} onOpenChange={open => !open && handleClose()}>
+      <DialogContent className="max-w-4xl">
+        <DialogHeader>
+          <div className="flex items-center gap-2">
+            {selectedScriptId !== null && (
+              <Button variant="ghost" size="icon-sm" onClick={handleBack}>
+                <ArrowLeft className="size-4" />
+              </Button>
+            )}
+            <DialogTitle>Scripts from &quot;{projectName}&quot;</DialogTitle>
+            <Badge variant="outline">Read-only</Badge>
+          </div>
+        </DialogHeader>
+        <div className="min-h-[400px] border-t pt-4">
+          {selectedScriptId === null ? (
+            <ScriptsList
+              projectId={projectId}
+              onSelectScript={setSelectedScriptId}
+            />
+          ) : (
+            <ScriptViewer projectId={projectId} scriptId={selectedScriptId} />
           )}
-          <Typography variant="h6" component="span">
-            Scripts from &quot;{projectName}&quot;
-          </Typography>
-          <Chip label="Read-only" size="small" variant="outlined" />
-        </Stack>
-      </DialogTitle>
-      <DialogContent dividers sx={{ minHeight: 400 }}>
-        {selectedScriptId === null ? (
-          <ScriptsList
-            projectId={projectId}
-            onSelectScript={setSelectedScriptId}
-          />
-        ) : (
-          <ScriptViewer projectId={projectId} scriptId={selectedScriptId} />
-        )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose}>
+            Close
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={handleClose}>Close</Button>
-      </DialogActions>
     </Dialog>
-  );
+  )
 }
 
 function ScriptsList({
   projectId,
   onSelectScript,
 }: {
-  projectId: number;
-  onSelectScript: (scriptId: number) => void;
+  projectId: number
+  onSelectScript: (scriptId: number) => void
 }) {
-  const { data: scripts, isLoading } = useProjectScriptsQuery(projectId);
+  const { data: scripts, isLoading } = useProjectScriptsQuery(projectId)
 
   if (isLoading) {
     return (
-      <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
-        <CircularProgress />
-      </Box>
-    );
+      <div className="flex justify-center p-8">
+        <Loader2 className="size-6 animate-spin" />
+      </div>
+    )
   }
 
   if (!scripts || scripts.length === 0) {
     return (
-      <Typography color="text.secondary" sx={{ p: 2 }}>
-        No scripts in this project.
-      </Typography>
-    );
+      <p className="p-4 text-muted-foreground">No scripts in this project.</p>
+    )
   }
 
   return (
-    <List>
-      {scripts.map((script) => (
-        <ListItemButton
-          key={script.id}
-          onClick={() => onSelectScript(script.id)}
-        >
-          <ListItemText
-            primary={script.name}
-            secondary={
-              script.settingsCount > 0
+    <ul className="divide-y">
+      {scripts.map(script => (
+        <li key={script.id}>
+          <button
+            className="w-full px-4 py-3 text-left hover:bg-accent transition-colors"
+            onClick={() => onSelectScript(script.id)}
+          >
+            <div className="font-medium">{script.name}</div>
+            <div className="text-sm text-muted-foreground">
+              {script.settingsCount > 0
                 ? `${script.settingsCount} setting${script.settingsCount > 1 ? "s" : ""}`
-                : "No settings"
-            }
-          />
-        </ListItemButton>
+                : "No settings"}
+            </div>
+          </button>
+        </li>
       ))}
-    </List>
-  );
+    </ul>
+  )
 }
 
 function ScriptViewer({
   projectId,
   scriptId,
 }: {
-  projectId: number;
-  scriptId: number;
+  projectId: number
+  scriptId: number
 }) {
-  const [copyDialogOpen, setCopyDialogOpen] = useState(false);
+  const [copyDialogOpen, setCopyDialogOpen] = useState(false)
   const { data: script, isLoading } = useProjectScriptQuery({
     projectId,
     scriptId,
-  });
+  })
 
   if (isLoading) {
     return (
-      <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
-        <CircularProgress />
-      </Box>
-    );
+      <div className="flex justify-center p-8">
+        <Loader2 className="size-6 animate-spin" />
+      </div>
+    )
   }
 
   if (!script) {
-    return (
-      <Typography color="error" sx={{ p: 2 }}>
-        Script not found.
-      </Typography>
-    );
+    return <p className="p-4 text-destructive">Script not found.</p>
   }
 
   const scriptPrefix = `import uk.me.cormack.lighting7.fixture.*
@@ -177,14 +166,14 @@ class TestScript(
 
 fun TestScript.test() {
 //sampleStart
-`;
+`
   const scriptSuffix = `
 //sampleEnd
 }
-`;
+`
 
   return (
-    <Box>
+    <div className="space-y-4">
       <CopyScriptDialog
         open={copyDialogOpen}
         setOpen={setCopyDialogOpen}
@@ -192,36 +181,29 @@ fun TestScript.test() {
         scriptId={scriptId}
         scriptName={script.name}
       />
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-        <Typography variant="h6">
-          {script.name}
-        </Typography>
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold">{script.name}</h3>
         <Button
-          variant="outlined"
-          size="small"
+          variant="outline"
+          size="sm"
           onClick={() => setCopyDialogOpen(true)}
         >
           Copy to Project
         </Button>
-      </Stack>
+      </div>
       {script.settings.length > 0 && (
-        <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
-          <Typography variant="subtitle2" gutterBottom>
-            Settings
-          </Typography>
-          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-            {script.settings.map((setting) => (
-              <Chip
-                key={setting.name}
-                label={`${setting.name}: ${setting.defaultValue ?? "—"}`}
-                size="small"
-                variant="outlined"
-              />
+        <Card className="p-4">
+          <h4 className="text-sm font-medium mb-2">Settings</h4>
+          <div className="flex flex-wrap gap-2">
+            {script.settings.map(setting => (
+              <Badge key={setting.name} variant="outline">
+                {setting.name}: {setting.defaultValue ?? "—"}
+              </Badge>
             ))}
-          </Stack>
-        </Paper>
+          </div>
+        </Card>
       )}
-      <Paper variant="outlined">
+      <Card className="overflow-hidden">
         <ReactKotlinPlayground
           mode="kotlin"
           lines="true"
@@ -230,7 +212,7 @@ fun TestScript.test() {
           readOnly="true"
           key={`${projectId}-${scriptId}`}
         />
-      </Paper>
-    </Box>
-  );
+      </Card>
+    </div>
+  )
 }

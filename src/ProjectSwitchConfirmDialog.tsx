@@ -1,21 +1,21 @@
-import React from "react";
 import {
-  Button,
   Dialog,
-  DialogActions,
   DialogContent,
-  DialogContentText,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  CircularProgress,
-} from "@mui/material";
+} from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Loader2 } from "lucide-react"
 
 interface ProjectSwitchConfirmDialogProps {
-  open: boolean;
-  currentProjectName: string;
-  newProjectName: string;
-  isSwitching: boolean;
-  onConfirm: () => void;
-  onCancel: () => void;
+  open: boolean
+  currentProjectName: string
+  newProjectName: string
+  isSwitching: boolean
+  onConfirm: () => void
+  onCancel: () => void
 }
 
 export default function ProjectSwitchConfirmDialog({
@@ -27,30 +27,37 @@ export default function ProjectSwitchConfirmDialog({
   onCancel,
 }: ProjectSwitchConfirmDialogProps) {
   return (
-    <Dialog open={open} onClose={onCancel}>
-      <DialogTitle>Switch Project?</DialogTitle>
+    <Dialog open={open} onOpenChange={open => !open && onCancel()}>
       <DialogContent>
-        <DialogContentText>
-          Are you sure you want to switch from &quot;{currentProjectName}&quot; to &quot;{newProjectName}&quot;?
-        </DialogContentText>
-        <DialogContentText sx={{ mt: 2, color: "warning.main" }}>
-          This will stop all running scenes, clear effects, and black out DMX output.
-          Any unsaved changes will be lost.
-        </DialogContentText>
+        <DialogHeader>
+          <DialogTitle>Switch Project?</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <DialogDescription>
+            Are you sure you want to switch from &quot;{currentProjectName}
+            &quot; to &quot;{newProjectName}&quot;?
+          </DialogDescription>
+          <p className="text-sm text-amber-600 dark:text-amber-500">
+            This will stop all running scenes, clear effects, and black out DMX
+            output. Any unsaved changes will be lost.
+          </p>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel} disabled={isSwitching}>
+            Cancel
+          </Button>
+          <Button onClick={onConfirm} disabled={isSwitching}>
+            {isSwitching ? (
+              <>
+                <Loader2 className="animate-spin" />
+                Switching...
+              </>
+            ) : (
+              "Switch Project"
+            )}
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onCancel} disabled={isSwitching}>
-          Cancel
-        </Button>
-        <Button
-          onClick={onConfirm}
-          variant="contained"
-          disabled={isSwitching}
-          startIcon={isSwitching ? <CircularProgress size={16} /> : null}
-        >
-          {isSwitching ? "Switching..." : "Switch Project"}
-        </Button>
-      </DialogActions>
     </Dialog>
-  );
+  )
 }

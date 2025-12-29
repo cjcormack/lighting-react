@@ -1,123 +1,108 @@
-import {
-  Box,
-  Button,
-  Card,
-  CardActions,
-  CardContent,
-  Chip,
-  Container,
-  Grid,
-  Paper,
-  Stack,
-  Typography,
-  Alert,
-} from "@mui/material";
-import React, { useState } from "react";
-import AddCircleIcon from "@mui/icons-material/AddCircle";
+import { useState } from "react"
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { PlusCircle, XCircle } from "lucide-react"
+import { cn } from "@/lib/utils"
 import {
   useProjectListQuery,
   useCurrentProjectQuery,
   useDeleteProjectMutation,
   useSetCurrentProjectMutation,
-} from "../store/projects";
-import { ProjectSummary } from "../api/projectApi";
-import CreateProjectDialog from "../CreateProjectDialog";
-import EditProjectDialog from "../EditProjectDialog";
-import DeleteProjectConfirmDialog from "../DeleteProjectConfirmDialog";
-import ProjectSwitchConfirmDialog from "../ProjectSwitchConfirmDialog";
-import ViewProjectScriptsDialog from "../ViewProjectScriptsDialog";
-import CloneProjectDialog from "../CloneProjectDialog";
+} from "../store/projects"
+import { ProjectSummary } from "../api/projectApi"
+import CreateProjectDialog from "../CreateProjectDialog"
+import EditProjectDialog from "../EditProjectDialog"
+import DeleteProjectConfirmDialog from "../DeleteProjectConfirmDialog"
+import ProjectSwitchConfirmDialog from "../ProjectSwitchConfirmDialog"
+import ViewProjectScriptsDialog from "../ViewProjectScriptsDialog"
+import CloneProjectDialog from "../CloneProjectDialog"
 
 export default function Projects() {
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
 
   return (
     <>
-      <CreateProjectDialog open={createDialogOpen} setOpen={setCreateDialogOpen} />
-      <Paper
-        sx={{
-          p: 2,
-          m: 2,
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        <Box>
-          <Stack spacing={2} direction="row" sx={{ float: "right" }}>
-            <Button
-              variant="contained"
-              startIcon={<AddCircleIcon />}
-              onClick={() => setCreateDialogOpen(true)}
-            >
-              Create Project
-            </Button>
-          </Stack>
-          <Typography variant="h2">Projects</Typography>
-          <ProjectsContainer />
-        </Box>
-      </Paper>
+      <CreateProjectDialog
+        open={createDialogOpen}
+        setOpen={setCreateDialogOpen}
+      />
+      <Card className="m-4 p-4">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-3xl font-bold">Projects</h1>
+          <Button onClick={() => setCreateDialogOpen(true)}>
+            <PlusCircle className="size-4" />
+            Create Project
+          </Button>
+        </div>
+        <ProjectsContainer />
+      </Card>
     </>
-  );
+  )
 }
 
 function ProjectsContainer() {
-  const { data: projects, isLoading, error } = useProjectListQuery();
+  const { data: projects, isLoading, error } = useProjectListQuery()
 
   if (isLoading) {
-    return <>Loading...</>;
+    return <div>Loading...</div>
   }
 
   if (error) {
-    return <Alert severity="error">Failed to load projects</Alert>;
+    return (
+      <Alert variant="destructive">
+        <XCircle className="size-4" />
+        <AlertDescription>Failed to load projects</AlertDescription>
+      </Alert>
+    )
   }
 
   return (
-    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-      <Grid container spacing={3}>
-        {projects?.map((project) => (
-          <ProjectCard key={project.id} project={project} />
-        ))}
-      </Grid>
-    </Container>
-  );
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {projects?.map(project => (
+        <ProjectCard key={project.id} project={project} />
+      ))}
+    </div>
+  )
 }
 
 function ProjectCard({ project }: { project: ProjectSummary }) {
-  const [editOpen, setEditOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [switchOpen, setSwitchOpen] = useState(false);
-  const [scriptsOpen, setScriptsOpen] = useState(false);
-  const [cloneOpen, setCloneOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [switchOpen, setSwitchOpen] = useState(false)
+  const [scriptsOpen, setScriptsOpen] = useState(false)
+  const [cloneOpen, setCloneOpen] = useState(false)
 
-  const { data: currentProject } = useCurrentProjectQuery();
+  const { data: currentProject } = useCurrentProjectQuery()
 
   const [deleteProject, { isLoading: isDeleting, error: deleteError }] =
-    useDeleteProjectMutation();
+    useDeleteProjectMutation()
   const [setCurrentProject, { isLoading: isSwitching }] =
-    useSetCurrentProjectMutation();
+    useSetCurrentProjectMutation()
 
   const handleActivate = () => {
     if (!project.isCurrent) {
-      setSwitchOpen(true);
+      setSwitchOpen(true)
     }
-  };
+  }
 
   const handleConfirmSwitch = async () => {
-    await setCurrentProject(project.id);
-    setSwitchOpen(false);
-  };
+    await setCurrentProject(project.id)
+    setSwitchOpen(false)
+  }
 
   const handleDelete = async () => {
     try {
-      await deleteProject(project.id).unwrap();
-      setDeleteOpen(false);
+      await deleteProject(project.id).unwrap()
+      setDeleteOpen(false)
     } catch {
       // Error handled by dialog
     }
-  };
+  }
 
   const is409Error =
-    deleteError && "status" in deleteError && deleteError.status === 409;
+    deleteError && "status" in deleteError && deleteError.status === 409
 
   return (
     <>
@@ -131,7 +116,9 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
         projectName={project.name}
         isCurrent={project.isCurrent}
         isDeleting={isDeleting}
-        error={is409Error ? "Cannot delete the currently active project" : undefined}
+        error={
+          is409Error ? "Cannot delete the currently active project" : undefined
+        }
         onConfirm={handleDelete}
         onCancel={() => setDeleteOpen(false)}
       />
@@ -155,53 +142,50 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
         sourceProjectId={project.id}
         sourceProjectName={project.name}
       />
-      <Grid size={{ xs: 12, md: 6, lg: 4 }}>
-        <Card
-          sx={{
-            bgcolor: project.isCurrent ? "#e3f2fd" : undefined,
-          }}
-        >
-          <CardContent>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <Typography variant="h5" component="div">
-                {project.name}
-              </Typography>
-              {project.isCurrent && (
-                <Chip label="Active" color="primary" size="small" />
-              )}
-            </Stack>
-            {project.description && (
-              <Typography color="text.secondary" sx={{ mt: 1 }}>
-                {project.description}
-              </Typography>
-            )}
-          </CardContent>
-          <CardActions>
-            {!project.isCurrent && (
-              <Button size="small" color="primary" onClick={handleActivate}>
-                Activate
-              </Button>
-            )}
-            <Button size="small" onClick={() => setScriptsOpen(true)}>
-              Scripts
+      <Card className={cn(project.isCurrent && "bg-blue-50 dark:bg-blue-950")}>
+        <CardHeader className="pb-2">
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-lg">{project.name}</CardTitle>
+            {project.isCurrent && <Badge>Active</Badge>}
+          </div>
+        </CardHeader>
+        <CardContent className="pb-2">
+          {project.description && (
+            <p className="text-sm text-muted-foreground">
+              {project.description}
+            </p>
+          )}
+        </CardContent>
+        <CardFooter className="flex flex-wrap gap-2">
+          {!project.isCurrent && (
+            <Button variant="outline" size="sm" onClick={handleActivate}>
+              Activate
             </Button>
-            <Button size="small" onClick={() => setEditOpen(true)}>
-              Configure
-            </Button>
-            <Button size="small" onClick={() => setCloneOpen(true)}>
-              Clone
-            </Button>
-            <Button
-              size="small"
-              color="error"
-              onClick={() => setDeleteOpen(true)}
-              disabled={project.isCurrent}
-            >
-              Delete
-            </Button>
-          </CardActions>
-        </Card>
-      </Grid>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setScriptsOpen(true)}
+          >
+            Scripts
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setEditOpen(true)}>
+            Configure
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setCloneOpen(true)}>
+            Clone
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:text-destructive"
+            onClick={() => setDeleteOpen(true)}
+            disabled={project.isCurrent}
+          >
+            Delete
+          </Button>
+        </CardFooter>
+      </Card>
     </>
-  );
+  )
 }

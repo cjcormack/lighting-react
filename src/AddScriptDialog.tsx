@@ -1,15 +1,35 @@
-import React, {ChangeEvent, Dispatch, SetStateAction, useState} from "react";
-import {Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, TextField} from "@mui/material";
+import { ChangeEvent, Dispatch, SetStateAction, useState } from "react"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { ScriptSetting } from "./store/scripts"
 
-export default function AddScriptDialog({open, setOpen, addSetting}: {
-  open: boolean,
-  setOpen: Dispatch<SetStateAction<boolean>>,
-  addSetting: (setting: ScriptSetting) => void,
+export default function AddScriptDialog({
+  open,
+  setOpen,
+  addSetting,
+}: {
+  open: boolean
+  setOpen: Dispatch<SetStateAction<boolean>>
+  addSetting: (setting: ScriptSetting) => void
 }) {
   const [value, setValue] = useState<ScriptSetting>({
-    name: '',
-    type: 'scriptSettingInt',
+    name: "",
+    type: "scriptSettingInt",
     minValue: undefined,
     maxValue: undefined,
     defaultValue: undefined,
@@ -19,8 +39,8 @@ export default function AddScriptDialog({open, setOpen, addSetting}: {
 
   const clearValue = () => {
     setValue({
-      name: '',
-      type: 'scriptSettingInt',
+      name: "",
+      type: "scriptSettingInt",
       minValue: undefined,
       maxValue: undefined,
       defaultValue: undefined,
@@ -40,160 +60,102 @@ export default function AddScriptDialog({open, setOpen, addSetting}: {
 
   const handleNameChange = (e: ChangeEvent<HTMLInputElement>) => {
     setValue({
+      ...value,
       name: e.target.value,
-      type: value.type,
-      minValue: value.minValue,
-      maxValue: value.maxValue,
-      defaultValue: value.defaultValue,
     })
   }
 
   const handleMinValueChange = (e: ChangeEvent<HTMLInputElement>) => {
     const valueNumber = Number(e.target.value)
-    if (isNaN(valueNumber) || e.target.value === '') {
-      const newValue = {
-        name: value.name,
-        type: value.type,
-        minValue: undefined,
-        maxValue: value.maxValue,
-        defaultValue: value.defaultValue,
-      }
-
-      setValue(newValue)
+    if (isNaN(valueNumber) || e.target.value === "") {
+      setValue({ ...value, minValue: undefined })
       return
     }
-
-    const newValue = {
-      name: value.name,
-      type: value.type,
-      minValue: valueNumber,
-      maxValue: value.maxValue,
-      defaultValue: value.defaultValue,
-    }
-
-    setValue(newValue)
+    setValue({ ...value, minValue: valueNumber })
   }
 
   const handleMaxValueChange = (e: ChangeEvent<HTMLInputElement>) => {
     const valueNumber = Number(e.target.value)
-    if (isNaN(valueNumber) || e.target.value === '') {
-      const newValue = {
-        name: value.name,
-        type: value.type,
-        minValue: value.minValue,
-        maxValue: undefined,
-        defaultValue: value.defaultValue,
-      }
-
-      setValue(newValue)
+    if (isNaN(valueNumber) || e.target.value === "") {
+      setValue({ ...value, maxValue: undefined })
       return
     }
-
-    const newValue = {
-      name: value.name,
-      type: value.type,
-      minValue: value.minValue,
-      maxValue: valueNumber,
-      defaultValue: value.defaultValue,
-    }
-
-    setValue(newValue)
+    setValue({ ...value, maxValue: valueNumber })
   }
 
   const handleDefaultValueChange = (e: ChangeEvent<HTMLInputElement>) => {
     const valueNumber = Number(e.target.value)
-    if (isNaN(valueNumber) || e.target.value === '') {
-      const newValue = {
-        name: value.name,
-        type: value.type,
-        minValue: value.minValue,
-        maxValue: value.maxValue,
-        defaultValue: undefined,
-      }
-
-      setValue(newValue)
+    if (isNaN(valueNumber) || e.target.value === "") {
+      setValue({ ...value, defaultValue: undefined })
       return
     }
-
-    const newValue = {
-      name: value.name,
-      type: value.type,
-      minValue: value.minValue,
-      maxValue: value.maxValue,
-      defaultValue: valueNumber,
-    }
-
-    setValue(newValue)
+    setValue({ ...value, defaultValue: valueNumber })
   }
 
   return (
-      <Dialog
-          open={open}
-          onClose={handleClose}
-          maxWidth="sm"
-          fullWidth
-      >
-        <DialogTitle>
-          Add Setting
-        </DialogTitle>
-        <DialogContent>
-          <Stack>
-            <TextField
-                id="name"
-                label="Name"
-                autoFocus
-                fullWidth
-                required
-                variant="standard"
-                value={value.name}
-                onChange={handleNameChange}
+    <Dialog open={open} onOpenChange={open => !open && handleClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add Setting</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="setting-name">Name *</Label>
+            <Input
+              id="setting-name"
+              value={value.name}
+              onChange={handleNameChange}
+              autoFocus
             />
-            <TextField
-                id="type"
-                select
-                label="Type"
-                fullWidth
-                required
-                variant="standard"
-                value="scriptSettingInt"
-            >
-              <MenuItem value="scriptSettingInt">
-                Int
-              </MenuItem>
-            </TextField>
-            <TextField
-                id="minValue"
-                label="Min Value"
-                fullWidth
-                variant="standard"
-                value={value.minValue ?? ""}
-                onChange={handleMinValueChange}
-                placeholder="not set"
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="setting-type">Type *</Label>
+            <Select value="scriptSettingInt" disabled>
+              <SelectTrigger id="setting-type" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="scriptSettingInt">Int</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="setting-min">Min Value</Label>
+            <Input
+              id="setting-min"
+              value={value.minValue ?? ""}
+              onChange={handleMinValueChange}
+              placeholder="not set"
             />
-            <TextField
-                id="maxValue"
-                label="Max Value"
-                fullWidth
-                variant="standard"
-                value={value.maxValue ?? ""}
-                onChange={handleMaxValueChange}
-                placeholder="not set"
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="setting-max">Max Value</Label>
+            <Input
+              id="setting-max"
+              value={value.maxValue ?? ""}
+              onChange={handleMaxValueChange}
+              placeholder="not set"
             />
-            <TextField
-                id="defaultValue"
-                label="Default Value"
-                fullWidth
-                variant="standard"
-                value={value.defaultValue ?? ""}
-                onChange={handleDefaultValueChange}
-                placeholder="not set"
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="setting-default">Default Value</Label>
+            <Input
+              id="setting-default"
+              value={value.defaultValue ?? ""}
+              onChange={handleDefaultValueChange}
+              placeholder="not set"
             />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleClose} autoFocus>Cancel</Button>
-          <Button onClick={handleAdd} disabled={!isValid}>Add</Button>
-        </DialogActions>
-      </Dialog>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose}>
+            Cancel
+          </Button>
+          <Button onClick={handleAdd} disabled={!isValid}>
+            Add
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

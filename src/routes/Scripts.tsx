@@ -1,28 +1,3 @@
-import {
-  Box,
-  Button,
-  ButtonGroup,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  Grid, IconButton,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TextField,
-  Typography
-} from "@mui/material"
 import React, { Dispatch, SetStateAction, Suspense, useEffect, useState } from "react"
 import {
   unstable_usePrompt,
@@ -30,15 +5,29 @@ import {
   useNavigate,
   useParams
 } from "react-router-dom"
+import { Plus, Wrench, Play, MinusCircle, AlertTriangle, XCircle, Info } from "lucide-react"
+
+import { Card } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
-  Add as AddIcon,
-  Build as BuildIcon,
-  PlayArrow as PlayArrowIcon,
-  RemoveCircle as RemoveCircleIcon,
-  Warning as WarningIcon,
-  Error as ErrorIcon,
-  Info as InfoIcon
-} from "@mui/icons-material"
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { cn } from "@/lib/utils"
 
 import AddScriptDialog from "../AddScriptDialog"
 import {
@@ -56,42 +45,27 @@ export default function Scripts() {
   const { scriptId } = useParams()
 
   return (
-    <Paper
-      sx={{
-        p: 2,
-        m: 2,
-        display: "flex",
-        flexDirection: "column"
-      }}>
-      <Box>
-        <Typography variant="h2">
-          Scripts
-        </Typography>
-        <Grid container spacing={0}>
-          <Grid size="auto">
-            <Box sx={{ width: 200, bgcolor: "background.paper" }}>
-              <List dense={true}>
-                <Suspense fallback={"Loading..."}>
-                  <ScriptList />
-                </Suspense>
-              </List>
-            </Box>
-          </Grid>
-          <Grid size="grow">
-            {scriptId === undefined ? (
-              <></>
-            ) : scriptId === "new" ? (
-              <NewScript />
-            ) : (
-              <Suspense fallback={"Loading..."}>
-                <EditScript id={Number(scriptId)} />
-              </Suspense>
-            )
-            }
-          </Grid>
-        </Grid>
-      </Box>
-    </Paper>
+    <Card className="m-4 p-4 flex flex-col">
+      <h1 className="text-3xl font-bold mb-4">Scripts</h1>
+      <div className="flex gap-0">
+        <div className="w-52">
+          <Suspense fallback={<div>Loading...</div>}>
+            <ScriptList />
+          </Suspense>
+        </div>
+        <div className="flex-1">
+          {scriptId === undefined ? (
+            <></>
+          ) : scriptId === "new" ? (
+            <NewScript />
+          ) : (
+            <Suspense fallback={<div>Loading...</div>}>
+              <EditScript id={Number(scriptId)} />
+            </Suspense>
+          )}
+        </div>
+      </div>
+    </Card>
   )
 }
 
@@ -108,28 +82,30 @@ const ScriptList = () => {
   }
 
   if (isLoading) {
-    return (
-      <>Loading...</>
-    )
+    return <div>Loading...</div>
   }
 
   const scriptIds = (scriptList ?? []).map((it) => it.id)
 
   return (
-    <>
+    <div className="flex flex-col">
       {scriptIds.map((scriptId) => {
         return (
           <ScriptListEntry key={scriptId} id={scriptId} />
         )
       })}
-      <Box sx={{ m: 1 }}>
-        <Button startIcon={<AddIcon />}
-                size="small"
-                variant="outlined"
-                fullWidth
-                onClick={doNew}>New Script</Button>
-      </Box>
-    </>
+      <div className="m-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full"
+          onClick={doNew}
+        >
+          <Plus className="size-4" />
+          New Script
+        </Button>
+      </div>
+    </div>
   )
 }
 
@@ -143,25 +119,25 @@ const ScriptListEntry = ({ id }: { id: number }) => {
   const location = useLocation()
 
   if (isLoading) {
-    return (
-      <>Loading...</>
-    )
+    return <div>Loading...</div>
   }
 
   if (!script) {
-    return (
-      <>Not found</>
-    )
+    return <div>Not found</div>
   }
 
+  const isSelected = location.pathname === `/scripts/${id}`
+
   return (
-    <ListItemButton
+    <button
+      className={cn(
+        "w-full text-left px-4 py-2 text-sm hover:bg-accent transition-colors",
+        isSelected && "bg-accent"
+      )}
       onClick={() => navigate(`/scripts/${id}`)}
-      selected={location.pathname === `/scripts/${id}`}>
-      <ListItemText
-        primary={script.name}
-      />
-    </ListItemButton>
+    >
+      {script.name}
+    </button>
   )
 }
 
@@ -191,15 +167,11 @@ const EditScript = ({ id }: { id: number }) => {
   } = useScriptQuery(id)
 
   if (isLoading || isFetching) {
-    return (
-      <>Loading...</>
-    )
+    return <div>Loading...</div>
   }
 
   if (!script) {
-    return (
-      <>Not found</>
-    )
+    return <div>Not found</div>
   }
 
   return (
@@ -270,11 +242,11 @@ import uk.me.cormack.lighting7.scripts.*
 import uk.me.cormack.lighting7.scriptSettings.*
 
 class TestScript(
-    fixtures: Fixtures.FixturesWithTransaction, 
-    scriptName: 
-    String, 
-    step: Int, 
-    sceneName: String, 
+    fixtures: Fixtures.FixturesWithTransaction,
+    scriptName:
+    String,
+    step: Int,
+    sceneName: String,
     sceneIsActive: Boolean,
     settings: Map<String, String>
 ): LightingScript(fixtures, scriptName, step, sceneName, sceneIsActive, settings) {}
@@ -353,7 +325,7 @@ fun TestScript.test() {
     }
   }
 
-  const onNameChange = (ev: React.ChangeEvent<HTMLTextAreaElement | HTMLInputElement>) => {
+  const onNameChange = (ev: React.ChangeEvent<HTMLInputElement>) => {
     const updatedEdits: ScriptEdits = {
       id: id,
       script: edits.script,
@@ -432,32 +404,19 @@ fun TestScript.test() {
       {
         isNew ? null : <DeleteConfirmAlert id={id} open={deleteAlertOpen} setOpen={setDeleteAlertOpen} />
       }
-      <Paper
-        sx={{
-          p: 2,
-          m: 2,
-          display: "flex",
-          flexDirection: "column"
-        }}>
-        <Box>
-          <TextField
+      <Card className="p-4 m-2 flex flex-col">
+        <div className="space-y-2">
+          <Label htmlFor="script-name">Name</Label>
+          <Input
+            id="script-name"
             required
-            id="outlined-required"
-            label="Name"
-            fullWidth={true}
             value={scriptName}
             onChange={onNameChange}
           />
-        </Box>
-      </Paper>
+        </div>
+      </Card>
       <ScriptSettings settings={settings} addSetting={addSetting} removeSetting={removeSetting} />
-      <Paper
-        sx={{
-          p: 2,
-          m: 2,
-          display: "flex",
-          flexDirection: "column"
-        }}>
+      <Card className="p-4 m-2 flex flex-col">
         <ReactKotlinPlayground
           mode="kotlin"
           lines="true"
@@ -468,33 +427,32 @@ fun TestScript.test() {
           matchBrackets="true"
           key={id ? `${id}` : "new"}
         />
-      </Paper>
-      <Paper
-        sx={{
-          p: 2,
-          m: 2,
-          display: "flex",
-          flexDirection: "column"
-        }}>
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "space-between"
-          }}
-        >
-          <ButtonGroup aria-label="outlined button group">
-            <Button startIcon={<BuildIcon />} disabled={!canCompile} onClick={doCompile}>Compile</Button>
-            <Button startIcon={<PlayArrowIcon />} disabled={!canRun} onClick={doRun}>Run</Button>
-          </ButtonGroup>
-          <ButtonGroup variant="contained" aria-label="text button group">
-            <Button color="error" disabled={!canDelete} onClick={doDelete}>Delete</Button>
-            <Button disabled={!canReset} onClick={doReset}>Reset</Button>
+      </Card>
+      <Card className="p-4 m-2 flex flex-col">
+        <div className="flex justify-between">
+          <div className="flex gap-1">
+            <Button variant="outline" disabled={!canCompile} onClick={doCompile}>
+              <Wrench className="size-4" />
+              Compile
+            </Button>
+            <Button variant="outline" disabled={!canRun} onClick={doRun}>
+              <Play className="size-4" />
+              Run
+            </Button>
+          </div>
+          <div className="flex gap-1">
+            <Button variant="destructive" disabled={!canDelete} onClick={doDelete}>
+              Delete
+            </Button>
+            <Button variant="secondary" disabled={!canReset} onClick={doReset}>
+              Reset
+            </Button>
             <Button disabled={!canSave} onClick={doSave}>
               {isNew ? "Create" : "Save"}
             </Button>
-          </ButtonGroup>
-        </Box>
-      </Paper>
+          </div>
+        </div>
+      </Card>
     </>
   )
 }
@@ -508,63 +466,49 @@ const ScriptCompileDialog = ({ compileResult, hasNotCompiled, isCompiling, reset
   const open = !hasNotCompiled
 
   let title: string
-  let color: string
+  let titleClass: string
   if (isCompiling) {
     title = "Compiling..."
-    color = ""
+    titleClass = ""
   } else if (compileResult?.success) {
     title = "Compilation Successful"
-    color = "green"
+    titleClass = "text-green-600"
   } else {
     title = "Compilation Failed"
-    color = "error"
+    titleClass = "text-destructive"
   }
 
   return (
-    <Dialog
-      open={open}
-      aria-labelledby="compile-result-dialog-title"
-      aria-describedby="compile-result-dialog-description"
-    >
-      <DialogTitle
-        id="compile-result-dialog-title"
-        color={color}>
-        {title}
-      </DialogTitle>
-      <DialogContent dividers={true}>
-        <DialogContent
-          id="compile-result-dialog-description"
-          tabIndex={-1}
-        >
-          <List>
-            {
-              compileResult?.messages.map((message, index) => {
-                return (
-                  <ListItem key={index}>
-                    <ListItemIcon>
-                      {
-                        message.severity === "ERROR"
-                          ? <ErrorIcon color="error" fontSize="large" />
-                          : message.severity === "WARNING"
-                            ? <WarningIcon color="warning" fontSize="large" />
-                            : <InfoIcon fontSize="large" />
-                      }
-                    </ListItemIcon>
-                    <ListItemText primary={message.message}
-                                  secondary={message.sourcePath ? `${message.sourcePath} ${message.location}` : ""} />
-                  </ListItem>
-                )
-              })
-            }
-
-          </List>
-        </DialogContent>
+    <Dialog open={open} onOpenChange={(open) => !open && resetCompile()}>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className={titleClass}>{title}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-2">
+          {compileResult?.messages.map((message, index) => (
+            <div key={index} className="flex items-start gap-3 p-2">
+              {message.severity === "ERROR" ? (
+                <XCircle className="size-6 text-destructive flex-shrink-0" />
+              ) : message.severity === "WARNING" ? (
+                <AlertTriangle className="size-6 text-yellow-500 flex-shrink-0" />
+              ) : (
+                <Info className="size-6 flex-shrink-0" />
+              )}
+              <div>
+                <p className="font-medium">{message.message}</p>
+                {message.sourcePath && (
+                  <p className="text-sm text-muted-foreground">
+                    {message.sourcePath} {message.location}
+                  </p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        <DialogFooter>
+          <Button onClick={resetCompile}>Close</Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={() => {
-          resetCompile()
-        }}>Close</Button>
-      </DialogActions>
     </Dialog>
   )
 }
@@ -578,69 +522,53 @@ const ScriptRunDialog = ({ runResult, hasNotRun, isRunning, resetRun }: {
   const open = !hasNotRun
 
   let title: string
-  let color: string
+  let titleClass: string
   if (isRunning) {
     title = "Running..."
-    color = ""
+    titleClass = ""
   } else if (runResult?.status === "success") {
     title = "Run Successful"
-    color = "green"
+    titleClass = "text-green-600"
   } else {
     title = "Run Failed"
-    color = "error"
+    titleClass = "text-destructive"
   }
 
   return (
-    <Dialog
-      open={open}
-      aria-labelledby="run-result-dialog-title"
-      aria-describedby="run-result-dialog-description"
-    >
-      <DialogTitle
-        id="run-result-dialog-title"
-        color={color}>
-        {title}
-      </DialogTitle>
-      <DialogContent dividers={true}>
-        <DialogContent
-          id="run-result-dialog-description"
-          tabIndex={-1}
-        >
-          <List>
-            {
-              runResult?.result != null ?
-                <ListItem style={{ whiteSpace: "pre-wrap" }}>
-                  {runResult.result}
-                </ListItem>
-                : runResult?.messages != null ?
-                  runResult.messages.map((message, index) => {
-                    return (
-                      <ListItem key={index}>
-                        <ListItemIcon>
-                          {
-                            message.severity === "ERROR"
-                              ? <ErrorIcon color="error" fontSize="large" />
-                              : message.severity === "WARNING"
-                                ? <WarningIcon color="warning" fontSize="large" />
-                                : <InfoIcon fontSize="large" />
-                          }
-                        </ListItemIcon>
-                        <ListItemText primary={message.message}
-                                      secondary={message.sourcePath ? `${message.sourcePath} ${message.location}` : ""} />
-                      </ListItem>
-                    )
-                  })
-                  : null
-            }
-
-          </List>
-        </DialogContent>
+    <Dialog open={open} onOpenChange={(open) => !open && resetRun()}>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className={titleClass}>{title}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-2">
+          {runResult?.result != null ? (
+            <pre className="whitespace-pre-wrap p-2">{runResult.result}</pre>
+          ) : runResult?.messages != null ? (
+            runResult.messages.map((message, index) => (
+              <div key={index} className="flex items-start gap-3 p-2">
+                {message.severity === "ERROR" ? (
+                  <XCircle className="size-6 text-destructive flex-shrink-0" />
+                ) : message.severity === "WARNING" ? (
+                  <AlertTriangle className="size-6 text-yellow-500 flex-shrink-0" />
+                ) : (
+                  <Info className="size-6 flex-shrink-0" />
+                )}
+                <div>
+                  <p className="font-medium">{message.message}</p>
+                  {message.sourcePath && (
+                    <p className="text-sm text-muted-foreground">
+                      {message.sourcePath} {message.location}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))
+          ) : null}
+        </div>
+        <DialogFooter>
+          <Button onClick={resetRun}>Close</Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={() => {
-          resetRun()
-        }}>Close</Button>
-      </DialogActions>
     </Dialog>
   )
 }
@@ -666,24 +594,23 @@ const DeleteConfirmAlert = ({ id, open, setOpen }: {
   }
 
   return (
-    <Dialog
-      open={open}
-      onClose={handleClose}
-      aria-labelledby="delete-alert-dialog-title"
-      aria-describedby="delete-alert-dialog-description"
-    >
-      <DialogTitle id="delete-alert-dialog-title">
-        {"Really delete this script?"}
-      </DialogTitle>
+    <Dialog open={open} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent>
-        <DialogContentText id="delete-alert-dialog-description">
-          Are you sure you want to delete this script?
-        </DialogContentText>
+        <DialogHeader>
+          <DialogTitle>Really delete this script?</DialogTitle>
+          <DialogDescription>
+            Are you sure you want to delete this script?
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose}>
+            Cancel
+          </Button>
+          <Button variant="destructive" onClick={handleDelete}>
+            Delete
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={handleClose} autoFocus>Cancel</Button>
-        <Button onClick={handleDelete}>Delete</Button>
-      </DialogActions>
     </Dialog>
   )
 }
@@ -697,83 +624,61 @@ function ScriptSettings({ settings, addSetting, removeSetting }: {
 
   return (
     <>
-      <Suspense fallback={"Loading..."}>
+      <Suspense fallback={<div>Loading...</div>}>
         <AddScriptDialog open={addScriptDialogOpen} setOpen={setAddScriptDialogOpen} addSetting={addSetting} />
       </Suspense>
-      <Paper
-        sx={{
-          p: 2,
-          m: 2,
-          display: "flex",
-          flexDirection: "column"
-        }}>
-        <Box>
-          <Typography variant="h5">
-            Settings
-          </Typography>
-          <TableContainer component={Paper}>
-            <Table aria-label="simple table">
-              <TableHead>
+      <Card className="p-4 m-2 flex flex-col">
+        <h2 className="text-xl font-semibold mb-4">Settings</h2>
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Type</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead colSpan={2}>Details</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {settings.length ? (
+                settings.map((setting) => (
+                  <TableRow key={setting.name}>
+                    <TableCell className="font-medium">{setting.type}</TableCell>
+                    <TableCell>{setting.name}</TableCell>
+                    <TableCell>
+                      min: {setting.minValue}; max: {setting.maxValue}; default: {setting.defaultValue}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeSetting(setting)}
+                      >
+                        <MinusCircle className="size-5" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
                 <TableRow>
-                  <TableCell>Type</TableCell>
-                  <TableCell>Name</TableCell>
-                  <TableCell colSpan={2}>Details</TableCell>
+                  <TableCell colSpan={4} className="text-muted-foreground">
+                    No settings
+                  </TableCell>
                 </TableRow>
-              </TableHead>
-              <TableBody>
-                {
-                  settings.length ?
-                    (
-                      settings.map((setting) => (
-                        <TableRow
-                          key={setting.name}
-                          sx={{ "&:last-child td, &:last-child th": { border: 0 } }}
-                        >
-                          <TableCell component="th" scope="row">
-                            {setting.type}
-                          </TableCell>
-                          <TableCell>{setting.name}</TableCell>
-                          <TableCell>min: {setting.minValue};
-                            max: {setting.maxValue};
-                            default: {setting.defaultValue}</TableCell>
-                          <TableCell align="right">
-                            <IconButton aria-label="delete" size="medium" onClick={() => removeSetting(setting)}>
-                              <RemoveCircleIcon />
-                            </IconButton>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )
-                    :
-                    <TableRow>
-                      <TableCell colSpan={4}>
-                        No settings
-                      </TableCell>
-                    </TableRow>
-                }
-
-              </TableBody>
-            </Table>
-          </TableContainer>
-          <Box
-            display="flex"
-            sx={{
-              justifyContent: "space-between"
-            }}
+              )}
+            </TableBody>
+          </Table>
+        </div>
+        <div className="flex justify-end pt-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAddScriptDialogOpen(true)}
           >
-            <Box sx={{
-              paddingTop: "10px",
-              marginLeft: "auto"
-            }}>
-              <Button variant="outlined" startIcon={<AddIcon />} size="small"
-                      onClick={() => setAddScriptDialogOpen(true)}>
-                Add Setting
-              </Button>
-            </Box>
-          </Box>
-
-        </Box>
-      </Paper>
+            <Plus className="size-4" />
+            Add Setting
+          </Button>
+        </div>
+      </Card>
     </>
   )
 }

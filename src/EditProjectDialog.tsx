@@ -1,19 +1,24 @@
-import React, { useState, useEffect, Dispatch, SetStateAction } from "react";
+import { useState, useEffect, Dispatch, SetStateAction } from "react"
 import {
-  Button,
   Dialog,
-  DialogActions,
   DialogContent,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  TextField,
-  Stack,
-  MenuItem,
-  Typography,
-  Divider,
-  CircularProgress,
-  Box,
-} from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
+} from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Separator } from "@/components/ui/separator"
+import { Loader2, Plus } from "lucide-react"
 import {
   useProjectQuery,
   useUpdateProjectMutation,
@@ -23,12 +28,12 @@ import {
   useCreateInitialSceneMutation,
   useCreateTrackChangedScriptMutation,
   useCreateRunLoopScriptMutation,
-} from "./store/projects";
+} from "./store/projects"
 
 interface EditProjectDialogProps {
-  open: boolean;
-  setOpen: Dispatch<SetStateAction<boolean>>;
-  projectId: number;
+  open: boolean
+  setOpen: Dispatch<SetStateAction<boolean>>
+  projectId: number
 }
 
 export default function EditProjectDialog({
@@ -36,283 +41,324 @@ export default function EditProjectDialog({
   setOpen,
   projectId,
 }: EditProjectDialogProps) {
-  const { data: project, isLoading: isProjectLoading } = useProjectQuery(projectId, {
-    skip: !open,
-  });
-  const { data: currentProject } = useCurrentProjectQuery();
-  const { data: scripts, refetch: refetchScripts } = useProjectScriptsQuery(projectId, {
-    skip: !open,
-  });
-  const { data: scenes, refetch: refetchScenes } = useProjectScenesQuery(projectId, {
-    skip: !open,
-  });
-  const [updateProject, { isLoading: isUpdating }] = useUpdateProjectMutation();
+  const { data: project, isLoading: isProjectLoading } = useProjectQuery(
+    projectId,
+    {
+      skip: !open,
+    }
+  )
+  const { data: currentProject } = useCurrentProjectQuery()
+  const { data: scripts, refetch: refetchScripts } = useProjectScriptsQuery(
+    projectId,
+    {
+      skip: !open,
+    }
+  )
+  const { data: scenes, refetch: refetchScenes } = useProjectScenesQuery(
+    projectId,
+    {
+      skip: !open,
+    }
+  )
+  const [updateProject, { isLoading: isUpdating }] = useUpdateProjectMutation()
 
   // Create mutations (only available for current project)
-  const [createInitialScene, { isLoading: isCreatingInitialScene }] = useCreateInitialSceneMutation();
-  const [createTrackChangedScript, { isLoading: isCreatingTrackChanged }] = useCreateTrackChangedScriptMutation();
-  const [createRunLoopScript, { isLoading: isCreatingRunLoop }] = useCreateRunLoopScriptMutation();
+  const [createInitialScene, { isLoading: isCreatingInitialScene }] =
+    useCreateInitialSceneMutation()
+  const [createTrackChangedScript, { isLoading: isCreatingTrackChanged }] =
+    useCreateTrackChangedScriptMutation()
+  const [createRunLoopScript, { isLoading: isCreatingRunLoop }] =
+    useCreateRunLoopScriptMutation()
 
   // Check if this is the current project
-  const isCurrentProject = currentProject?.id === projectId;
+  const isCurrentProject = currentProject?.id === projectId
 
   // Form state
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [loadFixturesScriptId, setLoadFixturesScriptId] = useState<number | "">("");
-  const [initialSceneId, setInitialSceneId] = useState<number | "">("");
-  const [trackChangedScriptId, setTrackChangedScriptId] = useState<number | "">("");
-  const [runLoopScriptId, setRunLoopScriptId] = useState<number | "">("");
-  const [runLoopDelayMs, setRunLoopDelayMs] = useState<string>("");
+  const [name, setName] = useState("")
+  const [description, setDescription] = useState("")
+  const [loadFixturesScriptId, setLoadFixturesScriptId] = useState<string>("")
+  const [initialSceneId, setInitialSceneId] = useState<string>("none")
+  const [trackChangedScriptId, setTrackChangedScriptId] = useState<string>("none")
+  const [runLoopScriptId, setRunLoopScriptId] = useState<string>("none")
+  const [runLoopDelayMs, setRunLoopDelayMs] = useState<string>("")
 
   // Populate form when project loads
   useEffect(() => {
     if (project) {
-      setName(project.name);
-      setDescription(project.description || "");
-      setLoadFixturesScriptId(project.loadFixturesScriptId || "");
-      setInitialSceneId(project.initialSceneId || "");
-      setTrackChangedScriptId(project.trackChangedScriptId || "");
-      setRunLoopScriptId(project.runLoopScriptId || "");
-      setRunLoopDelayMs(project.runLoopDelayMs?.toString() || "");
+      setName(project.name)
+      setDescription(project.description || "")
+      setLoadFixturesScriptId(project.loadFixturesScriptId?.toString() || "")
+      setInitialSceneId(project.initialSceneId?.toString() || "none")
+      setTrackChangedScriptId(project.trackChangedScriptId?.toString() || "none")
+      setRunLoopScriptId(project.runLoopScriptId?.toString() || "none")
+      setRunLoopDelayMs(project.runLoopDelayMs?.toString() || "")
     }
-  }, [project]);
+  }, [project])
 
   const handleClose = () => {
-    setOpen(false);
-  };
+    setOpen(false)
+  }
 
   const handleSave = async () => {
-    if (loadFixturesScriptId === "") return; // Required field
+    if (loadFixturesScriptId === "") return // Required field
     await updateProject({
       id: projectId,
       name,
       description: description || null,
-      loadFixturesScriptId: loadFixturesScriptId,
-      initialSceneId: initialSceneId === "" ? null : initialSceneId,
-      trackChangedScriptId: trackChangedScriptId === "" ? null : trackChangedScriptId,
-      runLoopScriptId: runLoopScriptId === "" ? null : runLoopScriptId,
+      loadFixturesScriptId: Number(loadFixturesScriptId),
+      initialSceneId:
+        initialSceneId === "none" ? null : Number(initialSceneId),
+      trackChangedScriptId:
+        trackChangedScriptId === "none" ? null : Number(trackChangedScriptId),
+      runLoopScriptId:
+        runLoopScriptId === "none" ? null : Number(runLoopScriptId),
       runLoopDelayMs: runLoopDelayMs ? parseInt(runLoopDelayMs, 10) : null,
-    }).unwrap();
-    handleClose();
-  };
+    }).unwrap()
+    handleClose()
+  }
 
   const handleCreateInitialScene = async () => {
-    const result = await createInitialScene().unwrap();
-    setInitialSceneId(result.sceneId);
-    refetchScripts();
-    refetchScenes();
-  };
+    const result = await createInitialScene().unwrap()
+    setInitialSceneId(result.sceneId.toString())
+    refetchScripts()
+    refetchScenes()
+  }
 
   const handleCreateTrackChangedScript = async () => {
-    const result = await createTrackChangedScript().unwrap();
-    setTrackChangedScriptId(result.scriptId);
-    refetchScripts();
-  };
+    const result = await createTrackChangedScript().unwrap()
+    setTrackChangedScriptId(result.scriptId.toString())
+    refetchScripts()
+  }
 
   const handleCreateRunLoopScript = async () => {
-    const result = await createRunLoopScript().unwrap();
-    setRunLoopScriptId(result.scriptId);
-    refetchScripts();
-  };
+    const result = await createRunLoopScript().unwrap()
+    setRunLoopScriptId(result.scriptId.toString())
+    refetchScripts()
+  }
 
-  const isValid = name.trim().length > 0 && loadFixturesScriptId !== "";
-  const isCreating = isCreatingInitialScene || isCreatingTrackChanged || isCreatingRunLoop;
+  const isValid = name.trim().length > 0 && loadFixturesScriptId !== ""
+  const isCreating =
+    isCreatingInitialScene || isCreatingTrackChanged || isCreatingRunLoop
 
   if (isProjectLoading) {
     return (
-      <Dialog open={open} onClose={handleClose}>
+      <Dialog open={open} onOpenChange={open => !open && handleClose()}>
         <DialogContent>
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-            <CircularProgress />
-          </Box>
+          <div className="flex justify-center p-8">
+            <Loader2 className="size-6 animate-spin" />
+          </div>
         </DialogContent>
       </Dialog>
-    );
+    )
   }
 
   // Filter scenes to only show SCENE mode (not CHASE) for initial scene
-  const sceneOnlyScenes = scenes?.filter(s => s.mode === 'SCENE') || [];
+  const sceneOnlyScenes = scenes?.filter(s => s.mode === "SCENE") || []
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
-      <DialogTitle>Configure Project: {project?.name}</DialogTitle>
-      <DialogContent>
-        <Stack spacing={3} sx={{ mt: 1 }}>
-          <Typography variant="subtitle1" fontWeight="bold">
-            Basic Information
-          </Typography>
-          <TextField
-            label="Project Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            fullWidth
-            required
-            variant="standard"
-          />
-          <TextField
-            label="Description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            fullWidth
-            multiline
-            rows={2}
-            variant="standard"
-          />
+    <Dialog open={open} onOpenChange={open => !open && handleClose()}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Configure Project: {project?.name}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-6">
+          <div className="space-y-4">
+            <h3 className="font-semibold">Basic Information</h3>
+            <div className="space-y-2">
+              <Label htmlFor="project-name">Project Name *</Label>
+              <Input
+                id="project-name"
+                value={name}
+                onChange={e => setName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="project-desc">Description</Label>
+              <Textarea
+                id="project-desc"
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                rows={2}
+              />
+            </div>
+          </div>
 
-          <Divider />
+          <Separator />
 
-          <Typography variant="subtitle1" fontWeight="bold">
-            Startup Configuration
-          </Typography>
-          <TextField
-            select
-            label="Load Fixtures Script"
-            value={loadFixturesScriptId}
-            onChange={(e) => setLoadFixturesScriptId(e.target.value as number | "")}
-            fullWidth
-            required
-            variant="standard"
-            helperText="Script to run when project loads to configure fixtures (required)"
-          >
-            {scripts?.map((script) => (
-              <MenuItem key={script.id} value={script.id}>
-                {script.name}
-              </MenuItem>
-            ))}
-          </TextField>
-          <Box>
-            <Stack direction="row" spacing={1} alignItems="baseline">
-              <TextField
-                select
-                label="Initial Scene"
-                value={initialSceneId}
-                onChange={(e) => setInitialSceneId(e.target.value as number | "")}
-                fullWidth
-                variant="standard"
+          <div className="space-y-4">
+            <h3 className="font-semibold">Startup Configuration</h3>
+            <div className="space-y-2">
+              <Label htmlFor="load-fixtures">Load Fixtures Script *</Label>
+              <Select
+                value={loadFixturesScriptId}
+                onValueChange={setLoadFixturesScriptId}
               >
-                <MenuItem value="">None</MenuItem>
-                {sceneOnlyScenes.map((scene) => (
-                  <MenuItem key={scene.id} value={scene.id}>
-                    {scene.name}
-                  </MenuItem>
-                ))}
-              </TextField>
-              {isCurrentProject && initialSceneId === "" && (
-                <Button
-                  variant="outlined"
-                  size="small"
-                  startIcon={isCreatingInitialScene ? <CircularProgress size={16} /> : <AddIcon />}
-                  onClick={handleCreateInitialScene}
-                  disabled={isCreating}
-                  sx={{ whiteSpace: "nowrap" }}
+                <SelectTrigger id="load-fixtures" className="w-full">
+                  <SelectValue placeholder="Select a script" />
+                </SelectTrigger>
+                <SelectContent>
+                  {scripts?.map(script => (
+                    <SelectItem key={script.id} value={String(script.id)}>
+                      {script.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Script to run when project loads to configure fixtures
+                (required)
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="initial-scene">Initial Scene</Label>
+              <div className="flex gap-2">
+                <Select
+                  value={initialSceneId}
+                  onValueChange={setInitialSceneId}
                 >
-                  Create
-                </Button>
-              )}
-            </Stack>
-            <Typography variant="caption" color="text.secondary">
-              Scene to activate when project loads
-            </Typography>
-          </Box>
+                  <SelectTrigger id="initial-scene" className="w-full">
+                    <SelectValue placeholder="None" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {sceneOnlyScenes.map(scene => (
+                      <SelectItem key={scene.id} value={String(scene.id)}>
+                        {scene.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {isCurrentProject && initialSceneId === "none" && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCreateInitialScene}
+                    disabled={isCreating}
+                    className="shrink-0"
+                  >
+                    {isCreatingInitialScene ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Plus className="size-4" />
+                    )}
+                    Create
+                  </Button>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Scene to activate when project loads
+              </p>
+            </div>
+          </div>
 
-          <Divider />
+          <Separator />
 
-          <Typography variant="subtitle1" fontWeight="bold">
-            Runtime Configuration
-          </Typography>
-          <Box>
-            <Stack direction="row" spacing={1} alignItems="baseline">
-              <TextField
-                select
-                label="Track Changed Script"
-                value={trackChangedScriptId}
-                onChange={(e) => setTrackChangedScriptId(e.target.value as number | "")}
-                fullWidth
-                variant="standard"
-              >
-                <MenuItem value="">None</MenuItem>
-                {scripts?.map((script) => (
-                  <MenuItem key={script.id} value={script.id}>
-                    {script.name}
-                  </MenuItem>
-                ))}
-              </TextField>
-              {isCurrentProject && trackChangedScriptId === "" && (
-                <Button
-                  variant="outlined"
-                  size="small"
-                  startIcon={isCreatingTrackChanged ? <CircularProgress size={16} /> : <AddIcon />}
-                  onClick={handleCreateTrackChangedScript}
-                  disabled={isCreating}
-                  sx={{ whiteSpace: "nowrap" }}
+          <div className="space-y-4">
+            <h3 className="font-semibold">Runtime Configuration</h3>
+            <div className="space-y-2">
+              <Label htmlFor="track-changed">Track Changed Script</Label>
+              <div className="flex gap-2">
+                <Select
+                  value={trackChangedScriptId}
+                  onValueChange={setTrackChangedScriptId}
                 >
-                  Create
-                </Button>
-              )}
-            </Stack>
-            <Typography variant="caption" color="text.secondary">
-              Script to run when music track changes
-            </Typography>
-          </Box>
-          <Box>
-            <Stack direction="row" spacing={1} alignItems="baseline">
-              <TextField
-                select
-                label="Run Loop Script"
-                value={runLoopScriptId}
-                onChange={(e) => setRunLoopScriptId(e.target.value as number | "")}
-                fullWidth
-                variant="standard"
-              >
-                <MenuItem value="">None</MenuItem>
-                {scripts?.map((script) => (
-                  <MenuItem key={script.id} value={script.id}>
-                    {script.name}
-                  </MenuItem>
-                ))}
-              </TextField>
-              {isCurrentProject && runLoopScriptId === "" && (
-                <Button
-                  variant="outlined"
-                  size="small"
-                  startIcon={isCreatingRunLoop ? <CircularProgress size={16} /> : <AddIcon />}
-                  onClick={handleCreateRunLoopScript}
-                  disabled={isCreating}
-                  sx={{ whiteSpace: "nowrap" }}
+                  <SelectTrigger id="track-changed" className="w-full">
+                    <SelectValue placeholder="None" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {scripts?.map(script => (
+                      <SelectItem key={script.id} value={String(script.id)}>
+                        {script.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {isCurrentProject && trackChangedScriptId === "none" && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCreateTrackChangedScript}
+                    disabled={isCreating}
+                    className="shrink-0"
+                  >
+                    {isCreatingTrackChanged ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Plus className="size-4" />
+                    )}
+                    Create
+                  </Button>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Script to run when music track changes
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="run-loop">Run Loop Script</Label>
+              <div className="flex gap-2">
+                <Select
+                  value={runLoopScriptId}
+                  onValueChange={setRunLoopScriptId}
                 >
-                  Create
-                </Button>
-              )}
-            </Stack>
-            <Typography variant="caption" color="text.secondary">
-              Script to run continuously in a loop
-            </Typography>
-          </Box>
-          <TextField
-            label="Run Loop Delay (ms)"
-            type="number"
-            value={runLoopDelayMs}
-            onChange={(e) => setRunLoopDelayMs(e.target.value)}
-            fullWidth
-            variant="standard"
-            helperText="Delay between run loop iterations"
-            disabled={!runLoopScriptId}
-          />
-        </Stack>
+                  <SelectTrigger id="run-loop" className="w-full">
+                    <SelectValue placeholder="None" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {scripts?.map(script => (
+                      <SelectItem key={script.id} value={String(script.id)}>
+                        {script.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {isCurrentProject && runLoopScriptId === "none" && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCreateRunLoopScript}
+                    disabled={isCreating}
+                    className="shrink-0"
+                  >
+                    {isCreatingRunLoop ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Plus className="size-4" />
+                    )}
+                    Create
+                  </Button>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Script to run continuously in a loop
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="run-loop-delay">Run Loop Delay (ms)</Label>
+              <Input
+                id="run-loop-delay"
+                type="number"
+                value={runLoopDelayMs}
+                onChange={e => setRunLoopDelayMs(e.target.value)}
+                disabled={runLoopScriptId === "none"}
+              />
+              <p className="text-xs text-muted-foreground">
+                Delay between run loop iterations
+              </p>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose} disabled={isUpdating}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={!isValid || isUpdating}>
+            {isUpdating ? "Saving..." : "Save"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={handleClose} disabled={isUpdating}>
-          Cancel
-        </Button>
-        <Button
-          onClick={handleSave}
-          variant="contained"
-          disabled={!isValid || isUpdating}
-        >
-          {isUpdating ? "Saving..." : "Save"}
-        </Button>
-      </DialogActions>
     </Dialog>
-  );
+  )
 }

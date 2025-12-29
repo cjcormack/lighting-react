@@ -1,22 +1,25 @@
-import React, { Dispatch, SetStateAction, useState, useEffect } from "react";
+import { Dispatch, SetStateAction, useState, useEffect } from "react"
 import {
-  Alert,
-  Button,
   Dialog,
-  DialogActions,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  Stack,
-  TextField,
-  Typography,
-} from "@mui/material";
-import { useCloneProjectMutation } from "./store/projects";
+} from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { XCircle } from "lucide-react"
+import { useCloneProjectMutation } from "./store/projects"
 
 interface CloneProjectDialogProps {
-  open: boolean;
-  setOpen: Dispatch<SetStateAction<boolean>>;
-  sourceProjectId: number;
-  sourceProjectName: string;
+  open: boolean
+  setOpen: Dispatch<SetStateAction<boolean>>
+  sourceProjectId: number
+  sourceProjectName: string
 }
 
 export default function CloneProjectDialog({
@@ -25,23 +28,23 @@ export default function CloneProjectDialog({
   sourceProjectId,
   sourceProjectName,
 }: CloneProjectDialogProps) {
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [cloneProject, { isLoading, error, reset }] = useCloneProjectMutation();
+  const [name, setName] = useState("")
+  const [description, setDescription] = useState("")
+  const [cloneProject, { isLoading, error, reset }] = useCloneProjectMutation()
 
   useEffect(() => {
     if (open) {
-      setName(`Copy of ${sourceProjectName}`);
-      setDescription("");
-      reset();
+      setName(`Copy of ${sourceProjectName}`)
+      setDescription("")
+      reset()
     }
-  }, [open, sourceProjectName, reset]);
+  }, [open, sourceProjectName, reset])
 
   const handleClose = () => {
-    setName("");
-    setDescription("");
-    setOpen(false);
-  };
+    setName("")
+    setDescription("")
+    setOpen(false)
+  }
 
   const handleClone = async () => {
     try {
@@ -49,64 +52,68 @@ export default function CloneProjectDialog({
         id: sourceProjectId,
         name,
         description: description || undefined,
-      }).unwrap();
-      handleClose();
+      }).unwrap()
+      handleClose()
     } catch {
       // Error handled by mutation state
     }
-  };
+  }
 
-  const isValid = name.trim().length > 0;
+  const isValid = name.trim().length > 0
 
   const errorMessage =
     error && "status" in error && error.status === 409
       ? "A project with this name already exists"
       : error
         ? "Failed to clone project"
-        : undefined;
+        : undefined
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Clone Project</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ mt: 1 }}>
-          <Typography variant="body2" color="text.secondary">
-            Clone &quot;{sourceProjectName}&quot; with all its scripts, scenes, and settings.
-          </Typography>
-          {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
-          <TextField
-            label="New Project Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            fullWidth
-            required
-            autoFocus
-            variant="standard"
-          />
-          <TextField
-            label="Description (optional)"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            fullWidth
-            multiline
-            rows={2}
-            variant="standard"
-            placeholder="Leave empty to use the original project's description"
-          />
-        </Stack>
+    <Dialog open={open} onOpenChange={open => !open && handleClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Clone Project</DialogTitle>
+          <DialogDescription>
+            Clone &quot;{sourceProjectName}&quot; with all its scripts, scenes,
+            and settings.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          {errorMessage && (
+            <Alert variant="destructive">
+              <XCircle className="size-4" />
+              <AlertDescription>{errorMessage}</AlertDescription>
+            </Alert>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="clone-name">New Project Name *</Label>
+            <Input
+              id="clone-name"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              autoFocus
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="clone-description">Description (optional)</Label>
+            <Textarea
+              id="clone-description"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              rows={2}
+              placeholder="Leave empty to use the original project's description"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose} disabled={isLoading}>
+            Cancel
+          </Button>
+          <Button onClick={handleClone} disabled={!isValid || isLoading}>
+            {isLoading ? "Cloning..." : "Clone"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={handleClose} disabled={isLoading}>
-          Cancel
-        </Button>
-        <Button
-          onClick={handleClone}
-          variant="contained"
-          disabled={!isValid || isLoading}
-        >
-          {isLoading ? "Cloning..." : "Clone"}
-        </Button>
-      </DialogActions>
     </Dialog>
-  );
+  )
 }

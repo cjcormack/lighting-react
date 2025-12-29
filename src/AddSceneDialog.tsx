@@ -1,32 +1,40 @@
-import React, {ChangeEvent, Dispatch, SetStateAction, useState} from "react";
+import { Dispatch, SetStateAction, useState } from "react"
 import {
-  Button,
   Dialog,
-  DialogActions,
   DialogContent,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  MenuItem,
-  Stack,
-  TextField,
-} from "@mui/material";
+} from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { useScriptListQuery } from "./store/scripts"
 import { useCreateSceneMutation } from "./store/scenes"
 import { SceneMode } from "./api/scenesApi"
 
 interface AddSceneDetails {
-  name: string,
-  script_id: string,
+  name: string
+  script_id: string
 }
 
-export default function AddSceneDialog({mode, open, setOpen}: {
-  mode: SceneMode,
-  open: boolean,
-  setOpen: Dispatch<SetStateAction<boolean>>,
+export default function AddSceneDialog({
+  mode,
+  open,
+  setOpen,
+}: {
+  mode: SceneMode
+  open: boolean
+  setOpen: Dispatch<SetStateAction<boolean>>
 }) {
-  const {
-    data: scriptList,
-    isLoading,
-  } = useScriptListQuery()
+  const { data: scriptList, isLoading } = useScriptListQuery()
 
   const [runCreateMutation] = useCreateSceneMutation()
 
@@ -60,72 +68,59 @@ export default function AddSceneDialog({mode, open, setOpen}: {
     })
   }
 
-  const handleNameChange = (e: ChangeEvent<HTMLInputElement>) => {
-    setValue({
-      name: e.target.value,
-      script_id: value.script_id,
-    })
-  }
-
-  const handleScriptChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const newValue = {
-      name: value.name,
-      script_id: e.target.value,
-    }
-
-    setValue(newValue)
-  }
-
   if (isLoading) {
-    return (
-      <>Loading...</>
-    )
+    return <>Loading...</>
   }
 
   return (
-      <Dialog
-          open={open}
-          onClose={handleClose}
-          maxWidth="sm"
-          fullWidth
-      >
-        <DialogTitle>
-          Create { mode == 'SCENE' ? ('Scene') : ('Chase') }
-        </DialogTitle>
-        <DialogContent>
-          <Stack>
-            <TextField
-                id="name"
-                label="Name"
-                fullWidth
-                required
-                variant="standard"
-                value={value.name}
-                onChange={handleNameChange}
+    <Dialog open={open} onOpenChange={open => !open && handleClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>
+            Create {mode === "SCENE" ? "Scene" : "Chase"}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="scene-name">Name *</Label>
+            <Input
+              id="scene-name"
+              value={value.name}
+              onChange={e =>
+                setValue({ name: e.target.value, script_id: value.script_id })
+              }
             />
-            <TextField
-                id="script"
-                select
-                autoFocus
-                label="Script"
-                fullWidth
-                required
-                variant="standard"
-                value={value.script_id}
-                onChange={handleScriptChange}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="scene-script">Script *</Label>
+            <Select
+              value={value.script_id}
+              onValueChange={script_id =>
+                setValue({ name: value.name, script_id })
+              }
             >
-              {(scriptList ?? []).map((script) => (
-                  <MenuItem key={script.id} value={script.id}>
+              <SelectTrigger id="scene-script" className="w-full">
+                <SelectValue placeholder="Select a script" />
+              </SelectTrigger>
+              <SelectContent>
+                {(scriptList ?? []).map(script => (
+                  <SelectItem key={script.id} value={String(script.id)}>
                     {script.name}
-                  </MenuItem>
-              ))}
-            </TextField>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleClose} autoFocus>Cancel</Button>
-          <Button onClick={handleAdd} disabled={!isValid}>Init</Button>
-        </DialogActions>
-      </Dialog>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose}>
+            Cancel
+          </Button>
+          <Button onClick={handleAdd} disabled={!isValid}>
+            Init
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

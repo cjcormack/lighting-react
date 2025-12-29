@@ -1,65 +1,77 @@
-import React, { useState } from "react";
+import { useState } from "react"
+import { Button } from "@/components/ui/button"
 import {
-  Box,
-  IconButton,
   Tooltip,
-  CircularProgress,
-  Link,
-  Stack,
-  ListSubheader,
-} from "@mui/material";
-import SettingsIcon from "@mui/icons-material/Settings";
-import ListIcon from "@mui/icons-material/List";
-import { useNavigate } from "react-router-dom";
-import { useCurrentProjectQuery } from "./store/projects";
-import EditProjectDialog from "./EditProjectDialog";
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { Settings, List, Loader2 } from "lucide-react"
+import { useNavigate } from "react-router-dom"
+import { useCurrentProjectQuery } from "./store/projects"
+import EditProjectDialog from "./EditProjectDialog"
 
 interface ProjectSelectorProps {
-  collapsed?: boolean;
+  collapsed?: boolean
 }
 
 export default function ProjectSelector({ collapsed }: ProjectSelectorProps) {
-  const navigate = useNavigate();
-  const { data: currentProject, isLoading } = useCurrentProjectQuery();
-  const [editOpen, setEditOpen] = useState(false);
+  const navigate = useNavigate()
+  const { data: currentProject, isLoading } = useCurrentProjectQuery()
+  const [editOpen, setEditOpen] = useState(false)
 
   const handleManageProjects = () => {
-    navigate("/projects");
-  };
+    navigate("/projects")
+  }
 
   const handleConfigureProject = () => {
     if (currentProject) {
-      setEditOpen(true);
+      setEditOpen(true)
     }
-  };
+  }
 
   if (isLoading) {
     return (
-      <Box sx={{ p: 2, display: "flex", justifyContent: "center" }}>
-        <CircularProgress size={24} />
-      </Box>
-    );
+      <div className="flex justify-center p-4">
+        <Loader2 className="size-5 animate-spin" />
+      </div>
+    )
   }
 
   if (collapsed) {
     return (
-      <Box sx={{ p: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 0.5 }}>
-        <Tooltip title={`Configure: ${currentProject?.name || "Project"}`} placement="right">
-          <IconButton onClick={handleConfigureProject} disabled={!currentProject}>
-            <SettingsIcon />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title="All Projects" placement="right">
-          <IconButton onClick={handleManageProjects}>
-            <ListIcon />
-          </IconButton>
-        </Tooltip>
-      </Box>
-    );
+      <TooltipProvider>
+        <div className="flex flex-col items-center gap-1 p-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleConfigureProject}
+                disabled={!currentProject}
+              >
+                <Settings className="size-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              Configure: {currentProject?.name || "Project"}
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={handleManageProjects}>
+                <List className="size-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">All Projects</TooltipContent>
+          </Tooltip>
+        </div>
+      </TooltipProvider>
+    )
   }
 
   return (
-    <>
+    <TooltipProvider>
       {currentProject && (
         <EditProjectDialog
           open={editOpen}
@@ -67,40 +79,49 @@ export default function ProjectSelector({ collapsed }: ProjectSelectorProps) {
           projectId={currentProject.id}
         />
       )}
-      <Box sx={{ py: 1 }}>
-        <ListSubheader component="div" sx={{ lineHeight: 'inherit', pb: 0.5 }}>
+      <div className="py-2">
+        <div className="px-4 pb-1 text-xs font-medium text-muted-foreground">
           Project
-        </ListSubheader>
-        <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 2 }}>
-          <Tooltip title="Configure current project">
-            <Link
-              component="button"
-              variant="body2"
-              onClick={handleConfigureProject}
-              sx={{
-                textAlign: "left",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                flexGrow: 1,
-                minWidth: 0,
-              }}
-            >
-              {currentProject?.name || "No project"}
-            </Link>
+        </div>
+        <div className="flex items-center gap-1 px-4">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                className="flex-1 min-w-0 truncate text-left text-sm hover:underline"
+                onClick={handleConfigureProject}
+              >
+                {currentProject?.name || "No project"}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Configure current project</TooltipContent>
           </Tooltip>
-          <Tooltip title="Configure current project">
-            <IconButton size="small" onClick={handleConfigureProject} disabled={!currentProject}>
-              <SettingsIcon fontSize="small" />
-            </IconButton>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={handleConfigureProject}
+                disabled={!currentProject}
+              >
+                <Settings className="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Configure current project</TooltipContent>
           </Tooltip>
-          <Tooltip title="All projects">
-            <IconButton size="small" onClick={handleManageProjects}>
-              <ListIcon fontSize="small" />
-            </IconButton>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={handleManageProjects}
+              >
+                <List className="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>All projects</TooltipContent>
           </Tooltip>
-        </Stack>
-      </Box>
-    </>
-  );
+        </div>
+      </div>
+    </TooltipProvider>
+  )
 }

@@ -1,27 +1,32 @@
-import React, { Dispatch, SetStateAction, useState, useEffect } from "react";
+import { Dispatch, SetStateAction, useState, useEffect } from "react"
 import {
-  Alert,
-  Button,
   Dialog,
-  DialogActions,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  FormControl,
-  InputLabel,
-  MenuItem,
+} from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
   Select,
-  Stack,
-  TextField,
-  Typography,
-} from "@mui/material";
-import { useProjectListQuery, useCopyScriptMutation } from "./store/projects";
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { XCircle } from "lucide-react"
+import { useProjectListQuery, useCopyScriptMutation } from "./store/projects"
 
 interface CopyScriptDialogProps {
-  open: boolean;
-  setOpen: Dispatch<SetStateAction<boolean>>;
-  sourceProjectId: number;
-  scriptId: number;
-  scriptName: string;
+  open: boolean
+  setOpen: Dispatch<SetStateAction<boolean>>
+  sourceProjectId: number
+  scriptId: number
+  scriptName: string
 }
 
 export default function CopyScriptDialog({
@@ -31,101 +36,108 @@ export default function CopyScriptDialog({
   scriptId,
   scriptName,
 }: CopyScriptDialogProps) {
-  const [targetProjectId, setTargetProjectId] = useState<number | "">("");
-  const [newName, setNewName] = useState("");
-  const { data: projects } = useProjectListQuery();
-  const [copyScript, { isLoading, error, reset }] = useCopyScriptMutation();
+  const [targetProjectId, setTargetProjectId] = useState<string>("")
+  const [newName, setNewName] = useState("")
+  const { data: projects } = useProjectListQuery()
+  const [copyScript, { isLoading, error, reset }] = useCopyScriptMutation()
 
   // Filter out the source project from targets
-  const targetProjects = projects?.filter((p) => p.id !== sourceProjectId) ?? [];
+  const targetProjects =
+    projects?.filter(p => p.id !== sourceProjectId) ?? []
 
   useEffect(() => {
     if (open) {
-      setTargetProjectId("");
-      setNewName("");
-      reset();
+      setTargetProjectId("")
+      setNewName("")
+      reset()
     }
-  }, [open, reset]);
+  }, [open, reset])
 
   const handleClose = () => {
-    setTargetProjectId("");
-    setNewName("");
-    setOpen(false);
-  };
+    setTargetProjectId("")
+    setNewName("")
+    setOpen(false)
+  }
 
   const handleCopy = async () => {
-    if (targetProjectId === "") return;
+    if (targetProjectId === "") return
 
     try {
       await copyScript({
         projectId: sourceProjectId,
         scriptId,
-        targetProjectId,
+        targetProjectId: Number(targetProjectId),
         newName: newName.trim() || undefined,
-      }).unwrap();
-      handleClose();
+      }).unwrap()
+      handleClose()
     } catch {
       // Error handled by mutation state
     }
-  };
+  }
 
-  const isValid = targetProjectId !== "";
+  const isValid = targetProjectId !== ""
 
   const errorMessage =
     error && "status" in error && error.status === 409
       ? "A script with this name already exists in the target project"
       : error
         ? "Failed to copy script"
-        : undefined;
+        : undefined
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Copy Script to Project</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ mt: 1 }}>
-          <Typography variant="body2" color="text.secondary">
+    <Dialog open={open} onOpenChange={open => !open && handleClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Copy Script to Project</DialogTitle>
+          <DialogDescription>
             Copy &quot;{scriptName}&quot; to another project.
-          </Typography>
-          {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
-          <FormControl fullWidth required variant="standard">
-            <InputLabel id="target-project-label">Target Project</InputLabel>
-            <Select
-              labelId="target-project-label"
-              value={targetProjectId}
-              onChange={(e) => setTargetProjectId(e.target.value as number)}
-              label="Target Project"
-            >
-              {targetProjects.map((project) => (
-                <MenuItem key={project.id} value={project.id}>
-                  {project.name}
-                  {project.isCurrent && " (Active)"}
-                </MenuItem>
-              ))}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          {errorMessage && (
+            <Alert variant="destructive">
+              <XCircle className="size-4" />
+              <AlertDescription>{errorMessage}</AlertDescription>
+            </Alert>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="target-project">Target Project *</Label>
+            <Select value={targetProjectId} onValueChange={setTargetProjectId}>
+              <SelectTrigger id="target-project" className="w-full">
+                <SelectValue placeholder="Select a project" />
+              </SelectTrigger>
+              <SelectContent>
+                {targetProjects.map(project => (
+                  <SelectItem key={project.id} value={String(project.id)}>
+                    {project.name}
+                    {project.isCurrent && " (Active)"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
-          </FormControl>
-          <TextField
-            label="New Name (optional)"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            fullWidth
-            variant="standard"
-            placeholder={scriptName}
-            helperText="Leave empty to keep the original name"
-          />
-        </Stack>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="new-name">New Name (optional)</Label>
+            <Input
+              id="new-name"
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              placeholder={scriptName}
+            />
+            <p className="text-xs text-muted-foreground">
+              Leave empty to keep the original name
+            </p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose} disabled={isLoading}>
+            Cancel
+          </Button>
+          <Button onClick={handleCopy} disabled={!isValid || isLoading}>
+            {isLoading ? "Copying..." : "Copy"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={handleClose} disabled={isLoading}>
-          Cancel
-        </Button>
-        <Button
-          onClick={handleCopy}
-          variant="contained"
-          disabled={!isValid || isLoading}
-        >
-          {isLoading ? "Copying..." : "Copy"}
-        </Button>
-      </DialogActions>
     </Dialog>
-  );
+  )
 }

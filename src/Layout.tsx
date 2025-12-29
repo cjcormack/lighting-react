@@ -1,222 +1,194 @@
-import React from 'react';
-
-import '@fontsource/roboto/300.css';
-import '@fontsource/roboto/400.css';
-import '@fontsource/roboto/500.css';
-import '@fontsource/roboto/700.css';
+import React from "react"
+import { Outlet, useLocation, useNavigate } from "react-router-dom"
 import {
-  Box,
-  Toolbar,
-  styled,
-  createTheme,
-  CssBaseline,
-  ThemeProvider,
-  IconButton,
-  Typography,
-  Divider,
-  List,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText, ListSubheader,
-} from "@mui/material";
-import MuiAppBar, { AppBarProps as MuiAppBarProps } from '@mui/material/AppBar';
-import MuiDrawer from '@mui/material/Drawer';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
-import MenuIcon from '@mui/icons-material/Menu';
-import DataObjectIcon from '@mui/icons-material/DataObject';
-import TuneIcon from '@mui/icons-material/Tune';
-import WbIridescentIcon from '@mui/icons-material/WbIridescent';
-import BatchPredictionIcon from '@mui/icons-material/BatchPrediction';
-import AnimationIcon from '@mui/icons-material/Animation';
-import TrackStatus from './TrackStatus';
-import {Outlet, useLocation, useNavigate} from 'react-router-dom';
-import {ConnectionStatus} from "./connection";
-import { useGetUniverseQuery } from "./store/universes";
-import ProjectSelector from "./ProjectSelector";
+  ChevronLeft,
+  Menu,
+  Braces,
+  SlidersHorizontal,
+  Lightbulb,
+  LayoutGrid,
+  Clapperboard,
+} from "lucide-react"
 
-const drawerWidth: number = 240;
+import { Button } from "@/components/ui/button"
+import { Separator } from "@/components/ui/separator"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { cn } from "@/lib/utils"
 
-interface AppBarProps extends MuiAppBarProps {
-  open?: boolean;
+import TrackStatus from "./TrackStatus"
+import { ConnectionStatus } from "./connection"
+import { useGetUniverseQuery } from "./store/universes"
+import ProjectSelector from "./ProjectSelector"
+import ThemeToggle from "./ThemeToggle"
+
+const DRAWER_WIDTH = 240
+const DRAWER_COLLAPSED_WIDTH = 64
+
+interface NavItemProps {
+  icon: React.ReactNode
+  label: string
+  href: string
+  isActive: boolean
+  collapsed: boolean
+  onClick: () => void
 }
 
-const AppBar = styled(MuiAppBar, {
-  shouldForwardProp: (prop) => prop !== 'open',
-})<AppBarProps>(({ theme, open }) => ({
-  zIndex: theme.zIndex.drawer + 1,
-  transition: theme.transitions.create(['width', 'margin'], {
-    easing: theme.transitions.easing.sharp,
-    duration: theme.transitions.duration.leavingScreen,
-  }),
-  ...(open && {
-    marginLeft: drawerWidth,
-    width: `calc(100% - ${drawerWidth}px)`,
-    transition: theme.transitions.create(['width', 'margin'], {
-      easing: theme.transitions.easing.sharp,
-      duration: theme.transitions.duration.enteringScreen,
-    }),
-  }),
-}));
+function NavItem({ icon, label, isActive, collapsed, onClick }: NavItemProps) {
+  const button = (
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+        "hover:bg-accent hover:text-accent-foreground",
+        isActive && "bg-accent text-accent-foreground",
+        collapsed && "justify-center px-2"
+      )}
+    >
+      <span className="flex-shrink-0">{icon}</span>
+      {!collapsed && <span className="truncate">{label}</span>}
+    </button>
+  )
 
-const Drawer = styled(MuiDrawer, { shouldForwardProp: (prop) => prop !== 'open' })(
-    ({ theme, open }) => ({
-      '& .MuiDrawer-paper': {
-        position: 'relative',
-        whiteSpace: 'nowrap',
-        width: drawerWidth,
-        transition: theme.transitions.create('width', {
-          easing: theme.transitions.easing.sharp,
-          duration: theme.transitions.duration.enteringScreen,
-        }),
-        boxSizing: 'border-box',
-        ...(!open && {
-          overflowX: 'hidden',
-          transition: theme.transitions.create('width', {
-            easing: theme.transitions.easing.sharp,
-            duration: theme.transitions.duration.leavingScreen,
-          }),
-          width: theme.spacing(7),
-          [theme.breakpoints.up('sm')]: {
-            width: theme.spacing(9),
-          },
-        }),
-      },
-    }),
-);
+  if (collapsed) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{button}</TooltipTrigger>
+        <TooltipContent side="right">{label}</TooltipContent>
+      </Tooltip>
+    )
+  }
 
-const mdTheme = createTheme();
+  return button
+}
 
 export default function Layout() {
   const [open, setOpen] = React.useState(true)
   const toggleDrawer = () => {
     setOpen(!open)
-  };
+  }
 
   const navigate = useNavigate()
   const location = useLocation()
 
-  const {
-    data: universes,
-  } = useGetUniverseQuery()
+  const { data: universes } = useGetUniverseQuery()
+
+  const sidebarWidth = open ? DRAWER_WIDTH : DRAWER_COLLAPSED_WIDTH
 
   return (
-      <ThemeProvider theme={mdTheme}>
-        <Box sx={{ display: 'flex' }}>
-          <CssBaseline />
-          <AppBar position="absolute" open={open}>
-            <Toolbar
-                sx={{
-                  pr: '24px', // keep right padding when drawer closed
-                }}
-            >
-              <IconButton
-                  edge="start"
-                  color="inherit"
-                  aria-label="open drawer"
-                  onClick={toggleDrawer}
-                  sx={{
-                    marginRight: '36px',
-                    ...(open && { display: 'none' }),
-                  }}
-              >
-                <MenuIcon />
-              </IconButton>
-              <Typography
-                  component="h1"
-                  variant="h6"
-                  color="inherit"
-                  noWrap
-                  sx={{ flexGrow: 1 }}
-              >
-                Chris&apos; DMX Controller v7
-              </Typography>
-              <ConnectionStatus/>
-            </Toolbar>
-          </AppBar>
-          <Drawer variant="permanent" open={open}>
-            <Toolbar
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'flex-end',
-                  px: [1],
-                }}
-            >
-              <IconButton onClick={toggleDrawer}>
-                <ChevronLeftIcon />
-              </IconButton>
-            </Toolbar>
-            <Divider />
-            <List component="nav">
-              <TrackStatus/>
-              <Divider sx={{ my: 1 }} />
-              <ProjectSelector collapsed={!open} />
-              <Divider sx={{ my: 1 }} />
-              <List component="div" disablePadding subheader={<ListSubheader component="div">Lights</ListSubheader>}>
-                <ListItemButton
-                    onClick={() => navigate('/scripts')}
-                    selected={location.pathname.startsWith('/scripts')}>
-                  <ListItemIcon>
-                    <DataObjectIcon />
-                  </ListItemIcon>
-                  <ListItemText primary="Scripts" />
-                </ListItemButton>
-                <ListItemButton
-                    onClick={() => navigate('/scenes')}
-                    selected={location.pathname.startsWith('/scenes')}>
-                  <ListItemIcon>
-                    <WbIridescentIcon />
-                  </ListItemIcon>
-                  <ListItemText primary="Scenes" />
-                </ListItemButton>
-                <ListItemButton
-                    onClick={() => navigate('/chases')}
-                    selected={location.pathname.startsWith('/chases')}>
-                  <ListItemIcon>
-                    <AnimationIcon />
-                  </ListItemIcon>
-                  <ListItemText primary="Chases" />
-                </ListItemButton>
-                <ListItemButton
-                    onClick={() => navigate('/fixtures')}
-                    selected={location.pathname.startsWith('/fixtures')}>
-                  <ListItemIcon>
-                    <BatchPredictionIcon />
-                  </ListItemIcon>
-                  <ListItemText primary="Fixtures" />
-                </ListItemButton>
-                {
-                    (universes || []).map((universe) => (
-                      <ListItemButton
-                          key={universe}
-                          onClick={() => navigate(`/channels/${universe}`)}
-                          selected={location.pathname === `/channels/${universe}`}>
-                        <ListItemIcon>
-                          <TuneIcon />
-                        </ListItemIcon>
-                        <ListItemText primary={`Universe ${universe}`} />
-                      </ListItemButton>
-                    ))
-                }
-              </List>
-            </List>
-          </Drawer>
-          <Box
-              component="main"
-              sx={{
-                backgroundColor: (theme) =>
-                    theme.palette.mode === 'light'
-                        ? theme.palette.grey[100]
-                        : theme.palette.grey[900],
-                flexGrow: 1,
-                height: '100vh',
-                overflow: 'auto',
-              }}
-          >
-            <Toolbar />
-           <Outlet/>
-          </Box>
-        </Box>
-      </ThemeProvider>
+    <TooltipProvider delayDuration={0}>
+      <div className="flex h-screen">
+        {/* Sidebar */}
+        <aside
+          className={cn(
+            "flex flex-col border-r bg-background transition-all duration-200",
+            "fixed inset-y-0 left-0 z-50"
+          )}
+          style={{ width: sidebarWidth }}
+        >
+          {/* Sidebar Header */}
+          <div className="flex h-14 items-center justify-end border-b px-2">
+            <Button variant="ghost" size="icon" onClick={toggleDrawer}>
+              {open ? (
+                <ChevronLeft className="size-5" />
+              ) : (
+                <Menu className="size-5" />
+              )}
+            </Button>
+          </div>
+
+          {/* Sidebar Content */}
+          <div className="flex-1 overflow-y-auto py-2">
+            <div className="px-2">
+              <TrackStatus collapsed={!open} />
+            </div>
+
+            <Separator className="my-2" />
+
+            <ProjectSelector collapsed={!open} />
+
+            <Separator className="my-2" />
+
+            {/* Navigation Section */}
+            <div className="px-2">
+              {!open ? null : (
+                <div className="px-3 py-2 text-xs font-medium text-muted-foreground">
+                  Lights
+                </div>
+              )}
+              <nav className="space-y-1">
+                <NavItem
+                  icon={<Braces className="size-5" />}
+                  label="Scripts"
+                  href="/scripts"
+                  isActive={location.pathname.startsWith("/scripts")}
+                  collapsed={!open}
+                  onClick={() => navigate("/scripts")}
+                />
+                <NavItem
+                  icon={<Lightbulb className="size-5" />}
+                  label="Scenes"
+                  href="/scenes"
+                  isActive={location.pathname.startsWith("/scenes")}
+                  collapsed={!open}
+                  onClick={() => navigate("/scenes")}
+                />
+                <NavItem
+                  icon={<Clapperboard className="size-5" />}
+                  label="Chases"
+                  href="/chases"
+                  isActive={location.pathname.startsWith("/chases")}
+                  collapsed={!open}
+                  onClick={() => navigate("/chases")}
+                />
+                <NavItem
+                  icon={<LayoutGrid className="size-5" />}
+                  label="Fixtures"
+                  href="/fixtures"
+                  isActive={location.pathname.startsWith("/fixtures")}
+                  collapsed={!open}
+                  onClick={() => navigate("/fixtures")}
+                />
+                {(universes || []).map((universe) => (
+                  <NavItem
+                    key={universe}
+                    icon={<SlidersHorizontal className="size-5" />}
+                    label={`Universe ${universe}`}
+                    href={`/channels/${universe}`}
+                    isActive={location.pathname === `/channels/${universe}`}
+                    collapsed={!open}
+                    onClick={() => navigate(`/channels/${universe}`)}
+                  />
+                ))}
+              </nav>
+            </div>
+          </div>
+        </aside>
+
+        {/* Main Content Area */}
+        <div
+          className="flex flex-1 flex-col transition-all duration-200"
+          style={{ marginLeft: sidebarWidth }}
+        >
+          {/* Header */}
+          <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b bg-primary px-4 text-primary-foreground">
+            <h1 className="flex-1 text-lg font-semibold">
+              Chris&apos; DMX Controller v7
+            </h1>
+            <ConnectionStatus />
+            <ThemeToggle />
+          </header>
+
+          {/* Page Content */}
+          <main className="flex-1 overflow-auto bg-muted/40">
+            <Outlet />
+          </main>
+        </div>
+      </div>
+    </TooltipProvider>
   )
 }
