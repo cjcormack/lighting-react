@@ -125,7 +125,7 @@ export default function Layout() {
                   icon={<Braces className="size-5" />}
                   label="Scripts"
                   href="/scripts"
-                  isActive={location.pathname.startsWith("/scripts")}
+                  isActive={location.pathname.startsWith("/scripts") || location.pathname.includes("/scripts")}
                   collapsed={!open}
                   onClick={() => navigate("/scripts")}
                 />

@@ -2,10 +2,10 @@ import React from "react"
 import Layout from "./Layout"
 import {createBrowserRouter, RouterProvider} from "react-router-dom";
 import Channels from "./routes/Channels";
-import Scripts from "./routes/Scripts";
 import {Scenes} from "./routes/Scenes";
 import {Fixtures} from "./routes/Fixtures";
 import Projects from "./routes/Projects";
+import ProjectScripts, { ScriptsRedirect } from "./routes/ProjectScripts";
 
 function App() {
   const router = createBrowserRouter([
@@ -19,7 +19,11 @@ function App() {
         },
         {
           path: "scripts/:scriptId?",
-          element: <Scripts />,
+          element: <ScriptsRedirect />,
+        },
+        {
+          path: "projects/:projectId/scripts/:scriptId?",
+          element: <ProjectScripts />,
         },
         {
           path: "scenes",

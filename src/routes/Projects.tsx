@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { Card, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -23,7 +24,6 @@ import CreateProjectDialog from "../CreateProjectDialog"
 import EditProjectDialog from "../EditProjectDialog"
 import DeleteProjectConfirmDialog from "../DeleteProjectConfirmDialog"
 import ProjectSwitchConfirmDialog from "../ProjectSwitchConfirmDialog"
-import ViewProjectScriptsDialog from "../ViewProjectScriptsDialog"
 import CloneProjectDialog from "../CloneProjectDialog"
 
 export default function Projects() {
@@ -78,8 +78,8 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [switchOpen, setSwitchOpen] = useState(false)
-  const [scriptsOpen, setScriptsOpen] = useState(false)
   const [cloneOpen, setCloneOpen] = useState(false)
+  const navigate = useNavigate()
 
   const { data: currentProject } = useCurrentProjectQuery()
 
@@ -137,12 +137,6 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
         onConfirm={handleConfirmSwitch}
         onCancel={() => setSwitchOpen(false)}
       />
-      <ViewProjectScriptsDialog
-        open={scriptsOpen}
-        setOpen={setScriptsOpen}
-        projectId={project.id}
-        projectName={project.name}
-      />
       <CloneProjectDialog
         open={cloneOpen}
         setOpen={setCloneOpen}
@@ -175,7 +169,7 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
                     Activate
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem onClick={() => setScriptsOpen(true)}>
+                <DropdownMenuItem onClick={() => navigate(`/projects/${project.id}/scripts`)}>
                   Scripts
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setEditOpen(true)}>
