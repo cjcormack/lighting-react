@@ -6,7 +6,6 @@ import {
   ProjectDetail,
   CreateProjectRequest,
   UpdateProjectRequest,
-  ProjectScript,
   ProjectScene,
   ProjectScriptDetail,
   CreateInitialSceneResponse,
@@ -16,6 +15,14 @@ import {
   CopyScriptRequest,
   CopyScriptResponse,
 } from "../api/projectApi"
+import {
+  Script,
+  ScriptInput,
+  CompileRequest,
+  CompileResult,
+  RunRequest,
+  RunResult,
+} from "./scripts"
 
 // Subscribe to WebSocket project changes - invalidate all caches on project switch
 lightingApi.projects.subscribeToSwitch(function() {
@@ -92,9 +99,27 @@ export const projectsApi = restApi.injectEndpoints({
         // Cache invalidation handled by WebSocket subscription above
       }),
 
-      // Get scripts for any project (for config dropdowns)
-      projectScripts: build.query<ProjectScript[], number>({
+      // Get scripts for any project
+      projectScripts: build.query<ProjectScriptDetail[], number>({
         query: (projectId) => `project/${projectId}/scripts`,
+        providesTags: ['Script'],
+        async onQueryStarted(projectId, { dispatch, queryFulfilled }) {
+          try {
+            const { data } = await queryFulfilled
+            // Warm the individual script cache with data from the list
+            data.forEach(script => {
+              dispatch(
+                projectsApi.util.upsertQueryData(
+                  'projectScript',
+                  { projectId, scriptId: script.id },
+                  script
+                )
+              )
+            })
+          } catch {
+            // Query failed, nothing to cache
+          }
+        },
       }),
 
       // Get scenes for any project (for config dropdowns)
@@ -102,9 +127,10 @@ export const projectsApi = restApi.injectEndpoints({
         query: (projectId) => `project/${projectId}/scenes`,
       }),
 
-      // Get full script from any project (read-only cross-project viewing)
+      // Get full script from any project
       projectScript: build.query<ProjectScriptDetail, { projectId: number; scriptId: number }>({
         query: ({ projectId, scriptId }) => `project/${projectId}/scripts/${scriptId}`,
+        providesTags: ['Script'],
       }),
 
       // Create initial scene for current project
@@ -156,6 +182,53 @@ export const projectsApi = restApi.injectEndpoints({
           { type: 'Project', id: targetProjectId },
         ],
       }),
+
+      // Compile script
+      compileProjectScript: build.mutation<CompileResult, { projectId: number } & CompileRequest>({
+        query: ({ projectId, ...request }) => ({
+          url: `project/${projectId}/scripts/compile`,
+          method: 'POST',
+          body: request,
+        }),
+      }),
+
+      // Run script
+      runProjectScript: build.mutation<RunResult, { projectId: number } & RunRequest>({
+        query: ({ projectId, ...request }) => ({
+          url: `project/${projectId}/scripts/run`,
+          method: 'POST',
+          body: request,
+        }),
+      }),
+
+      // Save script
+      saveProjectScript: build.mutation<Script, { projectId: number; scriptId: number } & Partial<ScriptInput>>({
+        query: ({ projectId, scriptId, ...request }) => ({
+          url: `project/${projectId}/scripts/${scriptId}`,
+          method: 'PUT',
+          body: request,
+        }),
+        invalidatesTags: ['Script'],
+      }),
+
+      // Delete script
+      deleteProjectScript: build.mutation<void, { projectId: number; scriptId: number }>({
+        query: ({ projectId, scriptId }) => ({
+          url: `project/${projectId}/scripts/${scriptId}`,
+          method: 'DELETE',
+        }),
+        invalidatesTags: ['Script'],
+      }),
+
+      // Create script
+      createProjectScript: build.mutation<Script, { projectId: number } & ScriptInput>({
+        query: ({ projectId, ...script }) => ({
+          url: `project/${projectId}/scripts`,
+          method: 'POST',
+          body: script,
+        }),
+        invalidatesTags: ['Script'],
+      }),
     }
   },
   overrideExisting: false,
@@ -177,4 +250,9 @@ export const {
   useCreateRunLoopScriptMutation,
   useCloneProjectMutation,
   useCopyScriptMutation,
+  useCompileProjectScriptMutation,
+  useRunProjectScriptMutation,
+  useSaveProjectScriptMutation,
+  useDeleteProjectScriptMutation,
+  useCreateProjectScriptMutation,
 } = projectsApi

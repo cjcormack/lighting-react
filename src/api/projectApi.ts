@@ -1,5 +1,6 @@
 import { InternalApiConnection } from "./internalApi";
 import { Subscription } from "./subscription";
+import { ScriptSetting } from "../store/scripts";
 
 // Project summary for list views
 export interface ProjectSummary {
@@ -60,18 +61,18 @@ export interface ProjectScene {
   scriptName: string;
 }
 
-// Full script details from another project (read-only)
+// Full script details from any project
 export interface ProjectScriptDetail {
   id: number;
   name: string;
   script: string;
-  settings: Array<{
-    type: string;
-    name: string;
-    minValue?: number;
-    maxValue?: number;
-    defaultValue?: number;
-  }>;
+  settings: ScriptSetting[];
+  // Usage tracking fields (only present for current project)
+  sceneNames?: string[];
+  chaseNames?: string[];
+  usedByProperties?: string[];
+  canDelete?: boolean;
+  cannotDeleteReason?: string | null;
 }
 
 // Response from create initial scene endpoint

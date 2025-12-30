@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils"
 import AddSceneDialog from "../AddSceneDialog"
 import { useNavigate } from "react-router-dom"
 import SetSceneSettings from "../SetSceneSettings"
-import { useScriptQuery } from "../store/scripts"
+import { useCurrentProjectQuery, useProjectScriptQuery } from "../store/projects"
 import {
   useDeleteSceneMutation,
   useRunSceneMutation,
@@ -23,7 +23,7 @@ import {
   useSceneQuery,
 } from "../store/scenes"
 import { skipToken } from "@reduxjs/toolkit/query"
-import { SceneMode } from "../api/scenesApi"
+import { Scene, SceneMode } from "../api/scenesApi"
 
 export function Scenes({ mode }: { mode: SceneMode }) {
   const [addSceneDialogOpen, setAddSceneDialogOpen] = useState<boolean>(false)
@@ -52,7 +52,7 @@ export function Scenes({ mode }: { mode: SceneMode }) {
 }
 
 function ScenesContainer({ mode }: { mode: SceneMode }) {
-  const { data: sceneIds, isLoading } = useSceneListQuery(mode)
+  const { data: scenes, isLoading } = useSceneListQuery(mode)
 
   if (isLoading) {
     return <div>Loading...</div>
@@ -60,14 +60,14 @@ function ScenesContainer({ mode }: { mode: SceneMode }) {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-      {sceneIds?.map(sceneId => (
-        <SceneCard key={sceneId} sceneId={sceneId} />
+      {scenes?.map(scene => (
+        <SceneCard key={scene.id} scene={scene} />
       ))}
     </div>
   )
 }
 
-const SceneCard = ({ sceneId }: { sceneId: number }) => {
+const SceneCard = ({ scene: initialScene }: { scene: Scene }) => {
   type StatusVariant = "default" | "secondary" | "destructive" | "outline"
 
   interface StatusDetails {
@@ -75,10 +75,14 @@ const SceneCard = ({ sceneId }: { sceneId: number }) => {
     variant: StatusVariant
   }
 
-  const { data: scene, isLoading: isSceneLoading } = useSceneQuery(sceneId)
+  // Still subscribe for real-time isActive updates
+  const { data: subscribedScene } = useSceneQuery(initialScene.id)
+  const scene = subscribedScene ?? initialScene
 
-  const { data: script, isLoading: isScriptLoading } = useScriptQuery(
-    scene?.scriptId ?? skipToken
+  // Get current project ID for script query
+  const { data: currentProject } = useCurrentProjectQuery()
+  const { data: script, isLoading: isScriptLoading } = useProjectScriptQuery(
+    currentProject ? { projectId: currentProject.id, scriptId: scene.scriptId } : skipToken
   )
 
   const [
@@ -94,11 +98,8 @@ const SceneCard = ({ sceneId }: { sceneId: number }) => {
 
   const navigate = useNavigate()
 
-  if (isSceneLoading || isScriptLoading) {
+  if (isScriptLoading) {
     return <div>Loading...</div>
-  }
-  if (!scene) {
-    return <div>Scene not found</div>
   }
   if (!script) {
     return <div>Script not found</div>

@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useScriptListQuery } from "./store/scripts"
+import { useCurrentProjectQuery, useProjectScriptsQuery } from "./store/projects"
 import { useCreateSceneMutation } from "./store/scenes"
 import { SceneMode } from "./api/scenesApi"
 
@@ -34,7 +34,12 @@ export default function AddSceneDialog({
   open: boolean
   setOpen: Dispatch<SetStateAction<boolean>>
 }) {
-  const { data: scriptList, isLoading } = useScriptListQuery()
+  const { data: currentProject, isLoading: projectLoading } = useCurrentProjectQuery()
+  const { data: scriptList, isLoading: scriptsLoading } = useProjectScriptsQuery(
+    currentProject?.id ?? 0,
+    { skip: !currentProject }
+  )
+  const isLoading = projectLoading || scriptsLoading
 
   const [runCreateMutation] = useCreateSceneMutation()
 

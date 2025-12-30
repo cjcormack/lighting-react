@@ -35,18 +35,14 @@ import {
   useProjectScriptsQuery,
   useProjectScriptQuery,
   useCurrentProjectQuery,
+  useCreateProjectScriptMutation,
+  useCompileProjectScriptMutation,
+  useRunProjectScriptMutation,
+  useSaveProjectScriptMutation,
+  useDeleteProjectScriptMutation,
 } from "../store/projects"
-import {
-  Script,
-  ScriptSetting,
-  useScriptListQuery,
-  useScriptQuery,
-  useCreateScriptMutation,
-  useCompileScriptMutation,
-  useRunScriptMutation,
-  useSaveScriptMutation,
-  useDeleteScriptMutation,
-} from "../store/scripts"
+import { ProjectScriptDetail } from "../api/projectApi"
+import { Script, ScriptSetting } from "../store/scripts"
 import CopyScriptDialog from "../CopyScriptDialog"
 
 // Redirect component for /scripts route
@@ -84,26 +80,17 @@ export default function ProjectScripts() {
 
   const projectIdNum = Number(projectId)
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
+  const { data: scriptList, isLoading: scriptsLoading, isFetching: scriptsFetching } = useProjectScriptsQuery(projectIdNum)
 
-  // For current project, use the main script list; for others, use project-specific
   const isCurrentProject = project?.isCurrent === true
 
-  // Use appropriate script list based on whether this is the current project
-  const { data: currentProjectScripts } = useScriptListQuery(undefined, {
-    skip: !isCurrentProject,
-  })
-  const { data: otherProjectScripts } = useProjectScriptsQuery(projectIdNum, {
-    skip: isCurrentProject,
-  })
-
-  const scriptList = isCurrentProject ? currentProjectScripts : otherProjectScripts
-
   // Auto-select first script if none selected
+  // Wait until scripts are loaded and not fetching to avoid stale data from previous project
   useEffect(() => {
-    if (scriptId === undefined && scriptList && scriptList.length > 0) {
+    if (scriptId === undefined && scriptList && scriptList.length > 0 && !scriptsLoading && !scriptsFetching) {
       navigate(`/projects/${projectId}/scripts/${scriptList[0].id}`, { replace: true })
     }
-  }, [scriptId, scriptList, projectId, navigate])
+  }, [scriptId, scriptList, projectId, navigate, scriptsLoading, scriptsFetching])
 
   if (projectLoading) {
     return (
@@ -243,25 +230,15 @@ interface ScriptListProps {
 function ScriptList({ projectId, isCurrentProject, onSelect }: ScriptListProps) {
   const navigate = useNavigate()
 
-  // Use appropriate query based on project ownership
-  const { data: currentScripts, isLoading: currentLoading } = useScriptListQuery(
-    undefined,
-    { skip: !isCurrentProject }
-  )
-  const { data: otherScripts, isLoading: otherLoading } = useProjectScriptsQuery(
-    projectId,
-    { skip: isCurrentProject }
-  )
-
-  const isLoading = isCurrentProject ? currentLoading : otherLoading
-  const scriptList = isCurrentProject ? currentScripts : otherScripts
+  const { data: scriptList, isLoading, isFetching } = useProjectScriptsQuery(projectId)
 
   const doNew = () => {
     navigate(`/projects/${projectId}/scripts/new`)
     onSelect?.()
   }
 
-  if (isLoading) {
+  // Show loading when initially loading OR when refetching (e.g., switching projects)
+  if (isLoading || isFetching) {
     return (
       <div className="flex justify-center p-4">
         <Loader2 className="size-6 animate-spin" />
@@ -369,18 +346,7 @@ function ScriptListEntry({
   const navigate = useNavigate()
   const location = useLocation()
 
-  // Use appropriate query based on project ownership
-  const { data: currentScript, isLoading: currentLoading } = useScriptQuery(
-    scriptId,
-    { skip: !isCurrentProject }
-  )
-  const { data: otherScript, isLoading: otherLoading } = useProjectScriptQuery(
-    { projectId, scriptId },
-    { skip: isCurrentProject }
-  )
-
-  const isLoading = isCurrentProject ? currentLoading : otherLoading
-  const script = isCurrentProject ? currentScript : otherScript
+  const { data: script, isLoading } = useProjectScriptQuery({ projectId, scriptId })
 
   if (isLoading) {
     return <div className="px-4 py-2 text-sm text-muted-foreground">Loading...</div>
@@ -424,7 +390,7 @@ function ScriptListEntry({
 // New script component (for current project only)
 function NewProjectScript({ projectId }: { projectId: number }) {
   const navigate = useNavigate()
-  const [runCreateMutation, { isLoading: isCreating }] = useCreateScriptMutation()
+  const [runCreateMutation, { isLoading: isCreating }] = useCreateProjectScriptMutation()
 
   const [name, setName] = useState("")
   const [scriptCode, setScriptCode] = useState("")
@@ -433,6 +399,7 @@ function NewProjectScript({ projectId }: { projectId: number }) {
   const handleCreate = async () => {
     try {
       const result = await runCreateMutation({
+        projectId,
         name,
         script: scriptCode,
         settings,
@@ -472,7 +439,7 @@ function EditProjectScript({
   scriptId: number
 }) {
   const navigate = useNavigate()
-  const { data: script, isLoading, isFetching } = useScriptQuery(scriptId)
+  const { data: script, isLoading, isFetching } = useProjectScriptQuery({ projectId, scriptId })
 
   if (isLoading || isFetching) {
     return (
@@ -501,14 +468,14 @@ function EditableScriptEditor({
   projectId,
   onNavigate,
 }: {
-  script: Script
+  script: ProjectScriptDetail
   projectId: number
   onNavigate: (path: string) => void
 }) {
-  const [runCompileMutation, { isLoading: isCompiling }] = useCompileScriptMutation()
-  const [runRunMutation, { isLoading: isRunning }] = useRunScriptMutation()
-  const [runSaveMutation, { isLoading: isSaving }] = useSaveScriptMutation()
-  const [runDeleteMutation] = useDeleteScriptMutation()
+  const [runCompileMutation, { isLoading: isCompiling }] = useCompileProjectScriptMutation()
+  const [runRunMutation, { isLoading: isRunning }] = useRunProjectScriptMutation()
+  const [runSaveMutation, { isLoading: isSaving }] = useSaveProjectScriptMutation()
+  const [runDeleteMutation] = useDeleteProjectScriptMutation()
 
   const [edits, setEdits] = useState<{
     name?: string
@@ -536,16 +503,17 @@ function EditableScriptEditor({
   const canRun = currentScript !== ""
 
   const handleCompile = () => {
-    runCompileMutation({ script: currentScript, settings: currentSettings })
+    runCompileMutation({ projectId, script: currentScript, settings: currentSettings })
   }
 
   const handleRun = () => {
-    runRunMutation({ script: currentScript, settings: currentSettings })
+    runRunMutation({ projectId, script: currentScript, settings: currentSettings })
   }
 
   const handleSave = async () => {
     await runSaveMutation({
-      id: script.id,
+      projectId,
+      scriptId: script.id,
       name: currentName,
       script: currentScript,
       settings: currentSettings,
@@ -559,7 +527,7 @@ function EditableScriptEditor({
 
   const handleDelete = async () => {
     if (confirm(`Delete "${script.name}"?`)) {
-      await runDeleteMutation(script.id)
+      await runDeleteMutation({ projectId, scriptId: script.id })
       onNavigate(`/projects/${projectId}/scripts`)
     }
   }
@@ -596,7 +564,7 @@ function EditableScriptEditor({
         <>
           <Button
             variant="destructive"
-            disabled={!script.canDelete}
+            disabled={script.canDelete === false}
             onClick={handleDelete}
           >
             Delete
