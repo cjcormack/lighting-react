@@ -31,6 +31,10 @@ import {
 } from "@/components/ui/sheet"
 import { ScriptEditor } from "@/components/scripts/ScriptEditor"
 import {
+  ScriptCompileDialog,
+  ScriptRunDialog,
+} from "@/components/scripts/ScriptResultDialogs"
+import {
   useProjectQuery,
   useProjectScriptsQuery,
   useProjectScriptQuery,
@@ -559,8 +563,24 @@ function EditableScriptEditor({
   projectId: number
   onNavigate: (path: string) => void
 }) {
-  const [runCompileMutation, { isLoading: isCompiling }] = useCompileProjectScriptMutation()
-  const [runRunMutation, { isLoading: isRunning }] = useRunProjectScriptMutation()
+  const [
+    runCompileMutation,
+    {
+      data: compileResult,
+      isUninitialized: hasNotCompiled,
+      isLoading: isCompiling,
+      reset: resetCompile,
+    },
+  ] = useCompileProjectScriptMutation()
+  const [
+    runRunMutation,
+    {
+      data: runResult,
+      isUninitialized: hasNotRun,
+      isLoading: isRunning,
+      reset: resetRun,
+    },
+  ] = useRunProjectScriptMutation()
   const [runSaveMutation, { isLoading: isSaving }] = useSaveProjectScriptMutation()
   const [runDeleteMutation] = useDeleteProjectScriptMutation()
 
@@ -626,45 +646,59 @@ function EditableScriptEditor({
   }
 
   return (
-    <ScriptEditor
-      script={editableScript}
-      id={script.id}
-      onNameChange={(name) => setEdits({ ...edits, name: name !== script.name ? name : undefined })}
-      onScriptChange={(code) => {
-        const normalized = code.trim()
-        const original = script.script.trim()
-        setEdits({ ...edits, script: normalized !== original ? code : undefined })
-      }}
-      onAddSetting={(setting) => {
-        const newSettings = [...currentSettings.filter(s => s.name !== setting.name), setting]
-        setEdits({ ...edits, settings: newSettings })
-      }}
-      onRemoveSetting={(setting) => {
-        const newSettings = currentSettings.filter(s => s.name !== setting.name)
-        setEdits({ ...edits, settings: newSettings })
-      }}
-      onCompile={handleCompile}
-      onRun={handleRun}
-      isCompiling={isCompiling}
-      isRunning={isRunning}
-      footerActions={
-        <>
-          <Button
-            variant="destructive"
-            disabled={script.canDelete === false}
-            onClick={handleDelete}
-          >
-            Delete
-          </Button>
-          <Button variant="secondary" disabled={!canReset} onClick={handleReset}>
-            Reset
-          </Button>
-          <Button disabled={!canSave || isSaving} onClick={handleSave}>
-            {isSaving ? "Saving..." : "Save"}
-          </Button>
-        </>
-      }
-    />
+    <>
+      <ScriptCompileDialog
+        compileResult={compileResult}
+        hasNotCompiled={hasNotCompiled}
+        isCompiling={isCompiling}
+        resetCompile={resetCompile}
+      />
+      <ScriptRunDialog
+        runResult={runResult}
+        hasNotRun={hasNotRun}
+        isRunning={isRunning}
+        resetRun={resetRun}
+      />
+      <ScriptEditor
+        script={editableScript}
+        id={script.id}
+        onNameChange={(name) => setEdits({ ...edits, name: name !== script.name ? name : undefined })}
+        onScriptChange={(code) => {
+          const normalized = code.trim()
+          const original = script.script.trim()
+          setEdits({ ...edits, script: normalized !== original ? code : undefined })
+        }}
+        onAddSetting={(setting) => {
+          const newSettings = [...currentSettings.filter(s => s.name !== setting.name), setting]
+          setEdits({ ...edits, settings: newSettings })
+        }}
+        onRemoveSetting={(setting) => {
+          const newSettings = currentSettings.filter(s => s.name !== setting.name)
+          setEdits({ ...edits, settings: newSettings })
+        }}
+        onCompile={handleCompile}
+        onRun={handleRun}
+        isCompiling={isCompiling}
+        isRunning={isRunning}
+        footerActions={
+          <>
+            <Button
+              variant="destructive"
+              disabled={script.canDelete === false}
+              onClick={handleDelete}
+            >
+              Delete
+            </Button>
+            <Button variant="secondary" disabled={!canReset} onClick={handleReset}>
+              Reset
+            </Button>
+            <Button disabled={!canSave || isSaving} onClick={handleSave}>
+              {isSaving ? "Saving..." : "Save"}
+            </Button>
+          </>
+        }
+      />
+    </>
   )
 }
 
