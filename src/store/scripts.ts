@@ -44,7 +44,7 @@ export const scriptsApi = restApi.injectEndpoints({
         }),
         invalidatesTags: ['Script'],
       }),
-      createScript: build.mutation<Script, ScriptDetails>({
+      createScript: build.mutation<Script, ScriptInput>({
         query: (script) => ({
           url: `script`,
           method: 'POST',
@@ -66,10 +66,21 @@ export type Script = ScriptDetails & {
   id: number
 }
 
-export type ScriptDetails = {
+// Base script fields (used for create/update requests)
+export type ScriptInput = {
   name: string
   script: string
   settings: ScriptSetting[]
+}
+
+// Full script details including server-computed fields
+export type ScriptDetails = ScriptInput & {
+  // Usage tracking fields (server-provided)
+  sceneNames: string[]
+  chaseNames: string[]
+  usedByProperties: string[]
+  canDelete: boolean
+  cannotDeleteReason: string | null
 }
 
 export type ScriptSetting = {

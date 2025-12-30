@@ -5,9 +5,9 @@ import {
   Menu,
   Braces,
   SlidersHorizontal,
-  Lightbulb,
+  Spotlight,
   LayoutGrid,
-  Clapperboard,
+  IterationCw,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -130,7 +130,7 @@ export default function Layout() {
                   onClick={() => navigate("/scripts")}
                 />
                 <NavItem
-                  icon={<Lightbulb className="size-5" />}
+                  icon={<Spotlight className="size-5" />}
                   label="Scenes"
                   href="/scenes"
                   isActive={location.pathname.startsWith("/scenes")}
@@ -138,7 +138,7 @@ export default function Layout() {
                   onClick={() => navigate("/scenes")}
                 />
                 <NavItem
-                  icon={<Clapperboard className="size-5" />}
+                  icon={<IterationCw className="size-5" />}
                   label="Chases"
                   href="/chases"
                   isActive={location.pathname.startsWith("/chases")}

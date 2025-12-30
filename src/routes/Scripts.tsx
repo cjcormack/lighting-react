@@ -4,7 +4,7 @@ import {
   useNavigate,
   useParams
 } from "react-router-dom"
-import { Plus, Wrench, Play, AlertTriangle, XCircle, Info, Menu } from "lucide-react"
+import { Plus, Wrench, Play, AlertTriangle, XCircle, Info, Menu, IterationCw, Braces, LayoutGrid, Repeat, Spotlight } from "lucide-react"
 
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -19,6 +19,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { cn, arraysEqual } from "@/lib/utils"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useIsDarkMode } from "@/hooks/useIsDarkMode"
 import { useMediaQuery } from "@/hooks/useMediaQuery"
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges"
@@ -32,7 +38,9 @@ import {
 import { ScriptSettingsTable } from "@/components/scripts/ScriptSettingsTable"
 import {
   CompileResult, RunResult,
+  Script,
   ScriptDetails,
+  ScriptInput,
   ScriptSetting,
   useCompileScriptMutation, useCreateScriptMutation, useDeleteScriptMutation, useRunScriptMutation, useSaveScriptMutation,
   useScriptListQuery,
@@ -152,6 +160,46 @@ const ScriptList = ({ onSelect }: ScriptListProps) => {
   )
 }
 
+// Determine the most prominent usage of a script for display
+type ScriptUsage = {
+  icon: React.ReactNode
+  tooltip: string
+}
+
+const getScriptUsage = (script: Script): ScriptUsage => {
+  // Priority: Project properties > Scenes > Chases > Unmapped
+  if (script.usedByProperties.length > 0) {
+    // Show the most important property with its specific icon
+    if (script.usedByProperties.includes('loadFixturesScript')) {
+      return { icon: <LayoutGrid className="size-4" />, tooltip: 'Load Fixtures Script' }
+    }
+    if (script.usedByProperties.includes('trackChangedScript')) {
+      return { icon: <Play className="size-4" />, tooltip: 'Track Changed Script' }
+    }
+    if (script.usedByProperties.includes('runLoopScript')) {
+      return { icon: <Repeat className="size-4" />, tooltip: 'Run Loop Script' }
+    }
+  }
+
+  if (script.sceneNames.length > 0) {
+    const count = script.sceneNames.length
+    return {
+      icon: <Spotlight className="size-4" />,
+      tooltip: count === 1 ? `Used by scene: ${script.sceneNames[0]}` : `Used by ${count} scenes`
+    }
+  }
+
+  if (script.chaseNames.length > 0) {
+    const count = script.chaseNames.length
+    return {
+      icon: <IterationCw className="size-4" />,
+      tooltip: count === 1 ? `Used by chase: ${script.chaseNames[0]}` : `Used by ${count} chases`
+    }
+  }
+
+  return { icon: <Braces className="size-4" />, tooltip: 'Not used' }
+}
+
 const ScriptListEntry = ({ id, onSelect }: { id: number; onSelect?: () => void }) => {
   const {
     data: script,
@@ -170,6 +218,7 @@ const ScriptListEntry = ({ id, onSelect }: { id: number; onSelect?: () => void }
   }
 
   const isSelected = location.pathname === `/scripts/${id}`
+  const usage = getScriptUsage(script)
 
   const handleClick = () => {
     navigate(`/scripts/${id}`)
@@ -177,15 +226,23 @@ const ScriptListEntry = ({ id, onSelect }: { id: number; onSelect?: () => void }
   }
 
   return (
-    <button
-      className={cn(
-        "w-full text-left px-4 py-2 text-sm hover:bg-accent transition-colors",
-        isSelected && "bg-accent"
-      )}
-      onClick={handleClick}
-    >
-      {script.name}
-    </button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          className={cn(
+            "w-full text-left px-4 py-2 text-sm hover:bg-accent transition-colors flex items-center gap-2",
+            isSelected && "bg-accent"
+          )}
+          onClick={handleClick}
+        >
+          <span className="text-muted-foreground flex-shrink-0">{usage.icon}</span>
+          <span className="truncate">{script.name}</span>
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="right">
+        {usage.tooltip}
+      </TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -197,7 +254,7 @@ interface ScriptEdits {
 }
 
 const NewScript = () => {
-  const script: ScriptDetails = {
+  const script: ScriptInput = {
     name: "",
     script: "",
     settings: []
@@ -227,7 +284,7 @@ const EditScript = ({ id }: { id: number }) => {
   )
 }
 
-const ScriptDisplay = ({ script, id }: { script: ScriptDetails, id?: number }) => {
+const ScriptDisplay = ({ script, id }: { script: ScriptInput | ScriptDetails, id?: number }) => {
   const isDarkMode = useIsDarkMode()
 
   const [
@@ -317,9 +374,13 @@ fun TestScript.test() {
 
   const isNew = id === undefined
 
+  // Type guard for full script details (existing scripts have these properties)
+  const hasUsageInfo = 'canDelete' in script
+
   const canReset = hasChanged && !isNew
   const canSave = hasChanged && scriptName !== "" && scriptScript !== ""
-  const canDelete = !isNew
+  const canDelete = !isNew && (hasUsageInfo ? script.canDelete : true)
+  const cannotDeleteReason = hasUsageInfo ? script.cannotDeleteReason : null
   const canCompile = scriptScript !== ""
   const canRun = scriptScript !== ""
 
@@ -466,7 +527,7 @@ fun TestScript.test() {
         resetRun={resetRun}
       />
       {
-        isNew ? null : <DeleteConfirmAlert id={id} open={deleteAlertOpen} setOpen={setDeleteAlertOpen} />
+        !isNew && id !== undefined && <DeleteConfirmAlert script={script as Script} open={deleteAlertOpen} setOpen={setDeleteAlertOpen} />
       }
       <Card className="p-4 m-2 flex flex-col">
         <div className="space-y-2">
@@ -508,9 +569,24 @@ fun TestScript.test() {
             </Button>
           </div>
           <div className="flex gap-1">
-            <Button variant="destructive" disabled={!canDelete} onClick={doDelete}>
-              Delete
-            </Button>
+            {cannotDeleteReason && !isNew ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button variant="destructive" disabled>
+                      Delete
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {cannotDeleteReason}
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <Button variant="destructive" disabled={!canDelete} onClick={doDelete}>
+                Delete
+              </Button>
+            )}
             <Button variant="secondary" disabled={!canReset} onClick={doReset}>
               Reset
             </Button>
@@ -640,41 +716,164 @@ const ScriptRunDialog = ({ runResult, hasNotRun, isRunning, resetRun }: {
   )
 }
 
-const DeleteConfirmAlert = ({ id, open, setOpen }: {
-  id: number,
-  open: (boolean),
+// Property display name mapping
+const propertyDisplayNames: Record<string, string> = {
+  loadFixturesScript: "Load Fixtures Script",
+  trackChangedScript: "Track Changed Script",
+  runLoopScript: "Run Loop Script",
+}
+
+// Helper to format a list of names with "and N more" truncation
+const formatNameList = (names: string[], maxVisible: number = 3): { visible: string[], remaining: number } => {
+  if (names.length <= maxVisible) {
+    return { visible: names, remaining: 0 }
+  }
+  return { visible: names.slice(0, maxVisible), remaining: names.length - maxVisible }
+}
+
+const DeleteConfirmAlert = ({ script, open, setOpen }: {
+  script: Script,
+  open: boolean,
   setOpen: Dispatch<SetStateAction<boolean>>
 }) => {
   const navigate = useNavigate()
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const [runDeleteMigration] = useDeleteScriptMutation()
+  const [runDeleteMutation] = useDeleteScriptMutation()
 
-  const handleDelete = () => {
-    runDeleteMigration(id).then(() => {
+  const hasScenes = script.sceneNames.length > 0
+  const hasChases = script.chaseNames.length > 0
+
+  // Check for optional properties that will be cleared
+  const clearableProperties = script.usedByProperties
+    .filter(prop => prop === 'trackChangedScript' || prop === 'runLoopScript')
+    .map(prop => propertyDisplayNames[prop] || prop)
+
+  const hasWarnings = hasScenes || hasChases || clearableProperties.length > 0
+
+  const sceneList = formatNameList(script.sceneNames)
+  const chaseList = formatNameList(script.chaseNames)
+
+  const handleDelete = async () => {
+    setIsDeleting(true)
+    setError(null)
+
+    try {
+      await runDeleteMutation(script.id).unwrap()
       navigate("/scripts")
       setOpen(false)
-    })
+    } catch (err) {
+      // Handle 409 Conflict or other errors
+      const errorMessage = (err as { data?: { error?: string } })?.data?.error
+        || 'Failed to delete script'
+      setError(errorMessage)
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   const handleClose = () => {
     setOpen(false)
+    setError(null)
   }
 
   return (
     <Dialog open={open} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Really delete this script?</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to delete this script?
-          </DialogDescription>
+          <DialogTitle>Delete Script?</DialogTitle>
         </DialogHeader>
+        <div className="space-y-4">
+          {error && (
+            <Alert variant="destructive">
+              <AlertTriangle className="size-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          <DialogDescription>
+            Are you sure you want to delete &quot;{script.name}&quot;?
+          </DialogDescription>
+          {hasWarnings && (
+            <Alert>
+              <AlertTriangle className="size-4" />
+              <AlertDescription>
+                <div className="space-y-3">
+                  {hasScenes && (
+                    <div>
+                      <div className="font-medium mb-1">
+                        This will delete {script.sceneNames.length} scene{script.sceneNames.length === 1 ? '' : 's'}:
+                      </div>
+                      <ul className="space-y-1 ml-1">
+                        {sceneList.visible.map((name, index) => (
+                          <li key={index} className="flex items-center gap-2">
+                            <Spotlight className="size-4 text-muted-foreground flex-shrink-0" />
+                            <span>{name}</span>
+                          </li>
+                        ))}
+                        {sceneList.remaining > 0 && (
+                          <li className="text-muted-foreground text-sm ml-6">
+                            and {sceneList.remaining} more...
+                          </li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
+                  {hasChases && (
+                    <div>
+                      <div className="font-medium mb-1">
+                        This will delete {script.chaseNames.length} chase{script.chaseNames.length === 1 ? '' : 's'}:
+                      </div>
+                      <ul className="space-y-1 ml-1">
+                        {chaseList.visible.map((name, index) => (
+                          <li key={index} className="flex items-center gap-2">
+                            <IterationCw className="size-4 text-muted-foreground shrink-0" />
+                            <span>{name}</span>
+                          </li>
+                        ))}
+                        {chaseList.remaining > 0 && (
+                          <li className="text-muted-foreground text-sm ml-6">
+                            and {chaseList.remaining} more...
+                          </li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
+                  {clearableProperties.length > 0 && (
+                    <div>
+                      <div className="font-medium mb-1">
+                        This will clear project settings:
+                      </div>
+                      <ul className="space-y-1 ml-1">
+                        {script.usedByProperties
+                          .filter(prop => prop === 'trackChangedScript' || prop === 'runLoopScript')
+                          .map((prop, index) => (
+                          <li key={index} className="flex items-center gap-2">
+                            {prop === 'trackChangedScript' ? (
+                              <Play className="size-4 text-muted-foreground shrink-0" />
+                            ) : (
+                              <Repeat className="size-4 text-muted-foreground flex-shrink-0" />
+                            )}
+                            <span>{propertyDisplayNames[prop] || prop}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+          <p className="text-sm text-destructive">
+            This action cannot be undone.
+          </p>
+        </div>
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose}>
+          <Button variant="outline" onClick={handleClose} disabled={isDeleting}>
             Cancel
           </Button>
-          <Button variant="destructive" onClick={handleDelete}>
-            Delete
+          <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+            {isDeleting ? "Deleting..." : "Delete"}
           </Button>
         </DialogFooter>
       </DialogContent>
