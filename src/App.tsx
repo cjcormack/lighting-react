@@ -6,6 +6,7 @@ import {Fixtures} from "./routes/Fixtures";
 import Projects from "./routes/Projects";
 import ProjectScripts, { ScriptsRedirect } from "./routes/ProjectScripts";
 import { ProjectScenes, ScenesRedirect, ChasesRedirect } from "./routes/ProjectScenes";
+import ProjectOverview, { ProjectOverviewRedirect } from "./routes/ProjectOverview";
 
 function App() {
   const router = createBrowserRouter([
@@ -13,6 +14,14 @@ function App() {
       path: "/",
       element: <Layout />,
       children: [
+        {
+          index: true,
+          element: <ProjectOverviewRedirect />,
+        },
+        {
+          path: "projects/:projectId",
+          element: <ProjectOverview />,
+        },
         {
           path: "channels/:universe",
           element: <Channels />,

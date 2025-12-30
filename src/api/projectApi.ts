@@ -27,6 +27,7 @@ export interface ProjectDetail {
   runLoopDelayMs: number | null;
   scriptCount: number;
   sceneCount: number;
+  chaseCount: number;
 }
 
 // For creating a new project

@@ -16,6 +16,7 @@ import {
   SlidersHorizontal,
   ChevronRight,
   Circle,
+  Home,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useProjectListQuery, useCurrentProjectQuery } from "./store/projects"
@@ -68,6 +69,13 @@ export default function ProjectSelector({ collapsed }: ProjectSelectorProps) {
       <div className="flex flex-col gap-1 px-2">
         {activeProject && (
           <>
+            <NavItem
+              icon={<Home className="size-5" />}
+              label={activeProject.name}
+              isActive={location.pathname === `/projects/${activeProject.id}`}
+              collapsed
+              onClick={() => navigate(`/projects/${activeProject.id}`)}
+            />
             <NavItem
               icon={<Braces className="size-5" />}
               label="Scripts"
@@ -201,13 +209,21 @@ function ActiveProjectSection({
   navigate: ReturnType<typeof useNavigate>
   onConfigure: () => void
 }) {
+  const isOnOverview = location.pathname === `/projects/${project.id}`
+
   return (
     <div className="mb-2">
-      {/* Project header */}
-      <div className="flex items-center gap-2 px-4 py-1">
+      {/* Project header - clickable to go to overview */}
+      <button
+        onClick={() => navigate(`/projects/${project.id}`)}
+        className={cn(
+          "flex items-center gap-2 px-4 py-1 w-full hover:bg-accent rounded-md transition-colors",
+          isOnOverview && "bg-accent"
+        )}
+      >
         <Circle className="size-2 fill-primary text-primary" />
         <span className="text-sm font-medium truncate">{project.name}</span>
-      </div>
+      </button>
 
       {/* Nav items */}
       <div className="pl-4 pr-2 space-y-0.5">
@@ -283,28 +299,39 @@ function OtherProjectSection({
   navigate: ReturnType<typeof useNavigate>
   onConfigure: () => void
 }) {
+  const isOnOverview = location.pathname === `/projects/${project.id}`
   const isViewingThisProject = location.pathname.includes(`/projects/${project.id}`)
 
   return (
     <div>
       {/* Project header */}
-      <button
-        onClick={onToggle}
-        className="flex items-center gap-2 px-4 py-1 w-full hover:bg-accent rounded-md transition-colors"
-      >
-        <ChevronRight
+      <div className="flex items-center px-4 py-1 w-full hover:bg-accent rounded-md transition-colors">
+        <button
+          onClick={onToggle}
+          className="flex-shrink-0"
+        >
+          <ChevronRight
+            className={cn(
+              "size-4 text-muted-foreground transition-transform",
+              isExpanded && "rotate-90"
+            )}
+          />
+        </button>
+        <button
+          onClick={() => navigate(`/projects/${project.id}`)}
           className={cn(
-            "size-4 text-muted-foreground transition-transform",
-            isExpanded && "rotate-90"
+            "flex-1 text-left ml-2 rounded px-1 -mx-1",
+            isOnOverview && "bg-accent"
           )}
-        />
-        <span className={cn(
-          "text-sm truncate",
-          isViewingThisProject && "font-medium"
-        )}>
-          {project.name}
-        </span>
-      </button>
+        >
+          <span className={cn(
+            "text-sm truncate",
+            isViewingThisProject && "font-medium"
+          )}>
+            {project.name}
+          </span>
+        </button>
+      </div>
 
       {/* Nav items */}
       {isExpanded && (
