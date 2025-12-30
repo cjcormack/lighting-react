@@ -16,7 +16,7 @@ export const ConnectionStatus = () => {
   switch (readyState) {
     case Status.CONNECTING:
       return (
-        <Alert className="w-fit py-1 px-3 flex-row items-center">
+        <Alert className="w-fit py-1 px-3 gap-x-2!">
           <Loader2 className="size-4 animate-spin" />
           <AlertDescription>Connecting...</AlertDescription>
         </Alert>
@@ -24,7 +24,7 @@ export const ConnectionStatus = () => {
 
     case Status.OPEN:
       return (
-        <Alert className="w-fit py-1 px-3 flex-row items-center border-green-500/50 text-green-600 dark:text-green-400 [&>svg]:text-green-600 dark:[&>svg]:text-green-400">
+        <Alert className="w-fit py-1 px-3 gap-x-2! border-green-500/50 text-green-600 dark:text-green-400 [&>svg]:text-green-600 dark:[&>svg]:text-green-400">
           <CheckCircle className="size-4" />
           <AlertDescription>Connected</AlertDescription>
         </Alert>
@@ -32,7 +32,7 @@ export const ConnectionStatus = () => {
 
     case Status.CLOSING:
       return (
-        <Alert variant="destructive" className="w-fit py-1 px-3 flex-row items-center">
+        <Alert variant="destructive" className="w-fit py-1 px-3 gap-x-2!">
           <AlertTriangle className="size-4" />
           <AlertDescription>Disconnecting...</AlertDescription>
         </Alert>
@@ -41,7 +41,7 @@ export const ConnectionStatus = () => {
     case Status.CLOSED:
       return (
         <div className="flex items-center gap-2">
-          <Alert variant="destructive" className="w-fit py-1 px-3 flex-row items-center">
+          <Alert variant="destructive" className="w-fit py-1 px-3 gap-x-2!">
             <XCircle className="size-4" />
             <AlertDescription>Disconnected</AlertDescription>
           </Alert>
