@@ -1,9 +1,16 @@
 import { useState } from "react"
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { PlusCircle, XCircle } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { MoreVertical, PlusCircle, XCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   useProjectListQuery,
@@ -142,48 +149,57 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
         sourceProjectId={project.id}
         sourceProjectName={project.name}
       />
-      <Card className={cn(project.isCurrent && "bg-blue-50 dark:bg-blue-950")}>
-        <CardHeader className="pb-2">
-          <div className="flex items-center gap-2">
-            <CardTitle className="text-lg">{project.name}</CardTitle>
-            {project.isCurrent && <Badge>Active</Badge>}
+      <Card
+        className={cn(
+          "flex flex-col gap-0 py-3",
+          project.isCurrent && "bg-blue-100 dark:bg-blue-900"
+        )}
+      >
+        <CardHeader className="p-0 px-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <CardTitle className="text-lg">{project.name}</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                {project.description || "\u00A0"}
+              </p>
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
+                <Button variant="ghost" size="icon" className="-mr-2 -mt-1">
+                  <MoreVertical className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" onClick={e => e.stopPropagation()}>
+                {!project.isCurrent && (
+                  <DropdownMenuItem onClick={handleActivate}>
+                    Activate
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onClick={() => setScriptsOpen(true)}>
+                  Scripts
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setEditOpen(true)}>
+                  Configure
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setCloneOpen(true)}>
+                  Clone
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={() => setDeleteOpen(true)}
+                  disabled={project.isCurrent}
+                >
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </CardHeader>
-        <CardContent className="pb-2">
-          {project.description && (
-            <p className="text-sm text-muted-foreground">
-              {project.description}
-            </p>
-          )}
-        </CardContent>
-        <CardFooter className="flex flex-wrap gap-2">
-          {!project.isCurrent && (
-            <Button variant="outline" size="sm" onClick={handleActivate}>
-              Activate
-            </Button>
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setScriptsOpen(true)}
-          >
-            Scripts
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => setEditOpen(true)}>
-            Configure
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => setCloneOpen(true)}>
-            Clone
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-destructive hover:text-destructive"
-            onClick={() => setDeleteOpen(true)}
-            disabled={project.isCurrent}
-          >
-            Delete
-          </Button>
+        <CardFooter className="p-0 px-3 mt-auto">
+          <Badge variant={project.isCurrent ? "default" : "outline"}>
+            {project.isCurrent ? "active" : "inactive"}
+          </Badge>
         </CardFooter>
       </Card>
     </>

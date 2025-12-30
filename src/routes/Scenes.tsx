@@ -1,8 +1,15 @@
 import { useState } from "react"
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { PlusCircle } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { MoreVertical, PlusCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import AddSceneDialog from "../AddSceneDialog"
 import { useNavigate } from "react-router-dom"
@@ -153,6 +160,8 @@ const SceneCard = ({ sceneId }: { sceneId: number }) => {
     runSaveMutation(newScene)
   }
 
+  const settingsCount = script.settings.length
+
   return (
     <>
       <SetSceneSettings
@@ -164,55 +173,52 @@ const SceneCard = ({ sceneId }: { sceneId: number }) => {
       />
       <Card
         className={cn(
-          "cursor-pointer transition-colors hover:bg-accent/50",
+          "flex flex-col gap-0 py-3 cursor-pointer transition-colors hover:bg-accent/50",
           scene.isActive && "bg-blue-100 dark:bg-blue-900"
         )}
         onClick={doRun}
       >
-        <CardHeader className="pb-2">
-          <CardTitle className="text-lg">{scene.name}</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Run script &apos;{script.name}&apos;
-          </p>
-        </CardHeader>
-        <CardContent className="pb-2">
-          <div className="flex flex-wrap gap-1">
-            <Badge variant={status.variant}>{status.text}</Badge>
-            {script.settings.map(setting => {
-              const settingValue =
-                settingsValuesMap.get(setting.name) ?? setting.defaultValue
-              return (
-                <Badge key={setting.name} variant="outline">
-                  {setting.name}: {String(settingValue)}
-                </Badge>
-              )
-            })}
+        <CardHeader className="p-0 px-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <CardTitle className="text-lg">{scene.name}</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Run script &apos;{script.name}&apos;
+              </p>
+              <p className="text-xs text-muted-foreground/70 mt-1">
+                {settingsCount > 0
+                  ? `${settingsCount} ${settingsCount === 1 ? "setting" : "settings"}`
+                  : "\u00A0"}
+              </p>
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
+                <Button variant="ghost" size="icon" className="-mr-2 -mt-1">
+                  <MoreVertical className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" onClick={e => e.stopPropagation()}>
+                {settingsCount > 0 && (
+                  <DropdownMenuItem onClick={() => setShowSettings(true)}>
+                    Settings
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onClick={handleViewScript}>
+                  View Script
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={handleSceneDelete}
+                >
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
-        </CardContent>
-        <CardFooter
-          className="flex gap-2"
-          onClick={e => e.stopPropagation()}
-        >
-          {script.settings.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowSettings(true)}
-            >
-              Settings
-            </Button>
-          )}
-          <Button variant="ghost" size="sm" onClick={handleViewScript}>
-            Script
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-destructive hover:text-destructive"
-            onClick={handleSceneDelete}
-          >
-            Delete
-          </Button>
+        </CardHeader>
+        <CardFooter className="p-0 px-3 mt-auto">
+          <Badge variant={status.variant}>{status.text}</Badge>
         </CardFooter>
       </Card>
     </>
