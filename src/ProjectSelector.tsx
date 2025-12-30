@@ -73,21 +73,21 @@ export default function ProjectSelector({ collapsed }: ProjectSelectorProps) {
               label="Scripts"
               isActive={location.pathname.startsWith("/scripts") || location.pathname.includes("/scripts")}
               collapsed
-              onClick={() => navigate("/scripts")}
+              onClick={() => navigate(`/projects/${activeProject.id}/scripts`)}
             />
             <NavItem
               icon={<Spotlight className="size-5" />}
               label="Scenes"
-              isActive={location.pathname.startsWith("/scenes")}
+              isActive={location.pathname.startsWith("/scenes") || location.pathname.includes("/scenes")}
               collapsed
-              onClick={() => navigate("/scenes")}
+              onClick={() => navigate(`/projects/${activeProject.id}/scenes`)}
             />
             <NavItem
               icon={<IterationCw className="size-5" />}
               label="Chases"
-              isActive={location.pathname.startsWith("/chases")}
+              isActive={location.pathname.startsWith("/chases") || location.pathname.includes("/chases")}
               collapsed
-              onClick={() => navigate("/chases")}
+              onClick={() => navigate(`/projects/${activeProject.id}/chases`)}
             />
             <NavItem
               icon={<LayoutGrid className="size-5" />}
@@ -216,23 +216,23 @@ function ActiveProjectSection({
           label="Scripts"
           isActive={location.pathname.startsWith("/scripts") || (location.pathname.includes("/scripts") && location.pathname.includes(`/projects/${project.id}`))}
           collapsed={false}
-          onClick={() => navigate("/scripts")}
+          onClick={() => navigate(`/projects/${project.id}/scripts`)}
           indent
         />
         <NavItem
           icon={<Spotlight className="size-4" />}
           label="Scenes"
-          isActive={location.pathname.startsWith("/scenes")}
+          isActive={location.pathname.startsWith("/scenes") || (location.pathname.includes("/scenes") && location.pathname.includes(`/projects/${project.id}`))}
           collapsed={false}
-          onClick={() => navigate("/scenes")}
+          onClick={() => navigate(`/projects/${project.id}/scenes`)}
           indent
         />
         <NavItem
           icon={<IterationCw className="size-4" />}
           label="Chases"
-          isActive={location.pathname.startsWith("/chases")}
+          isActive={location.pathname.startsWith("/chases") || (location.pathname.includes("/chases") && location.pathname.includes(`/projects/${project.id}`))}
           collapsed={false}
-          onClick={() => navigate("/chases")}
+          onClick={() => navigate(`/projects/${project.id}/chases`)}
           indent
         />
         <NavItem
@@ -315,6 +315,22 @@ function OtherProjectSection({
             isActive={location.pathname === `/projects/${project.id}/scripts` || location.pathname.startsWith(`/projects/${project.id}/scripts/`)}
             collapsed={false}
             onClick={() => navigate(`/projects/${project.id}/scripts`)}
+            indent
+          />
+          <NavItem
+            icon={<Spotlight className="size-4" />}
+            label="Scenes"
+            isActive={location.pathname === `/projects/${project.id}/scenes`}
+            collapsed={false}
+            onClick={() => navigate(`/projects/${project.id}/scenes`)}
+            indent
+          />
+          <NavItem
+            icon={<IterationCw className="size-4" />}
+            label="Chases"
+            isActive={location.pathname === `/projects/${project.id}/chases`}
+            collapsed={false}
+            onClick={() => navigate(`/projects/${project.id}/chases`)}
             indent
           />
           <NavItem

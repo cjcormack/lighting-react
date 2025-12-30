@@ -11,6 +11,10 @@ export type SceneMode = 'SCENE' | 'CHASE'
 export type Scene = SceneDetails & {
   id: number
   isActive: boolean
+  canEdit: boolean
+  cannotEditReason: string | null
+  canDelete: boolean
+  cannotDeleteReason: string | null
 }
 
 export type SceneDetails = {

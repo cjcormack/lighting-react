@@ -160,17 +160,11 @@ export default function ProjectScripts() {
             <NewProjectScript projectId={projectIdNum} />
           ) : (
             <Suspense fallback={<div>Loading...</div>}>
-              {isCurrentProject ? (
-                <EditProjectScript
-                  projectId={projectIdNum}
-                  scriptId={Number(scriptId)}
-                />
-              ) : (
-                <ViewProjectScript
-                  projectId={projectIdNum}
-                  scriptId={Number(scriptId)}
-                />
-              )}
+              <ScriptDetailView
+                projectId={projectIdNum}
+                scriptId={Number(scriptId)}
+                isCurrentProject={isCurrentProject}
+              />
             </Suspense>
           )}
         </div>
@@ -183,11 +177,16 @@ export default function ProjectScripts() {
 function Breadcrumbs({
   projectName,
   isCurrent,
+  isReadOnly,
 }: {
   projectName: string
   isCurrent: boolean
+  isReadOnly?: boolean
 }) {
   const navigate = useNavigate()
+
+  // Show read-only badge if explicitly set, or if viewing non-current project
+  const showReadOnlyBadge = isReadOnly ?? !isCurrent
 
   return (
     <nav className="flex items-center gap-1 text-sm flex-wrap">
@@ -210,7 +209,7 @@ function Breadcrumbs({
       <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" />
       <span className="font-medium flex items-center gap-2">
         Scripts
-        {!isCurrent && (
+        {showReadOnlyBadge && (
           <Badge variant="secondary" className="text-xs">
             Read-only
           </Badge>
@@ -337,6 +336,27 @@ const getScriptUsage = (script: Script): ScriptUsage => {
   return { icon: <Braces className="size-4" />, tooltip: "Not used" }
 }
 
+// Helper for scripts that only have scene/chase names (from other projects)
+const getScriptUsageFromNames = (sceneNames: string[], chaseNames: string[]): ScriptUsage => {
+  if (sceneNames.length > 0) {
+    const count = sceneNames.length
+    return {
+      icon: <Spotlight className="size-4" />,
+      tooltip: count === 1 ? `Used by scene: ${sceneNames[0]}` : `Used by ${count} scenes`,
+    }
+  }
+
+  if (chaseNames.length > 0) {
+    const count = chaseNames.length
+    return {
+      icon: <IterationCw className="size-4" />,
+      tooltip: count === 1 ? `Used by chase: ${chaseNames[0]}` : `Used by ${count} chases`,
+    }
+  }
+
+  return { icon: <Braces className="size-4" />, tooltip: "Not used" }
+}
+
 function ScriptListEntry({
   scriptId,
   projectId,
@@ -358,10 +378,14 @@ function ScriptListEntry({
 
   const isSelected = location.pathname === `/projects/${projectId}/scripts/${scriptId}`
 
-  // Get usage info (only available for current project scripts)
-  const usage = isCurrentProject && "usedByProperties" in script
+  // Get usage info (now available for all projects)
+  const usage = "usedByProperties" in script && script.usedByProperties
     ? getScriptUsage(script as Script)
-    : { icon: <Braces className="size-4" />, tooltip: "Script" }
+    : "sceneNames" in script && (script.sceneNames?.length ?? 0) > 0
+      ? getScriptUsageFromNames(script.sceneNames!, script.chaseNames ?? [])
+      : "chaseNames" in script && (script.chaseNames?.length ?? 0) > 0
+        ? getScriptUsageFromNames([], script.chaseNames!)
+        : { icon: <Braces className="size-4" />, tooltip: "Not used" }
 
   const handleClick = () => {
     navigate(`/projects/${projectId}/scripts/${scriptId}`)
@@ -430,7 +454,70 @@ function NewProjectScript({ projectId }: { projectId: number }) {
   )
 }
 
-// Edit script component (for current project)
+// Script detail view - decides between editable and read-only based on canEdit
+function ScriptDetailView({
+  projectId,
+  scriptId,
+  isCurrentProject,
+}: {
+  projectId: number
+  scriptId: number
+  isCurrentProject: boolean
+}) {
+  const navigate = useNavigate()
+  const { data: script, isLoading, isFetching } = useProjectScriptQuery({ projectId, scriptId })
+
+  if (isLoading || isFetching) {
+    return (
+      <div className="flex justify-center p-8">
+        <Loader2 className="size-6 animate-spin" />
+      </div>
+    )
+  }
+
+  if (!script) {
+    return <p className="p-4 text-destructive">Script not found.</p>
+  }
+
+  // Use canEdit from backend, default to isCurrentProject for backwards compatibility
+  const canEdit = script.canEdit ?? isCurrentProject
+
+  if (!isCurrentProject) {
+    // Non-current project: always show view mode with Copy button
+    return <ViewProjectScript projectId={projectId} scriptId={scriptId} />
+  }
+
+  if (!canEdit) {
+    // Current project but canEdit is false: show read-only without Copy button
+    return <ReadOnlyScriptView script={script} />
+  }
+
+  // Current project with canEdit true: show editable
+  return (
+    <EditableScriptEditor
+      script={script}
+      projectId={projectId}
+      onNavigate={(path) => navigate(path)}
+    />
+  )
+}
+
+// Read-only script view for current project when canEdit is false
+function ReadOnlyScriptView({
+  script,
+}: {
+  script: ProjectScriptDetail
+}) {
+  return (
+    <ScriptEditor
+      script={script}
+      id={script.id}
+      readOnly
+    />
+  )
+}
+
+// Edit script component (for current project) - kept for backwards compatibility
 function EditProjectScript({
   projectId,
   scriptId,

@@ -67,12 +67,14 @@ export interface ProjectScriptDetail {
   name: string;
   script: string;
   settings: ScriptSetting[];
-  // Usage tracking fields (only present for current project)
+  // Usage tracking fields
   sceneNames?: string[];
   chaseNames?: string[];
   usedByProperties?: string[];
   canDelete?: boolean;
   cannotDeleteReason?: string | null;
+  canEdit?: boolean;
+  cannotEditReason?: string | null;
 }
 
 // Response from create initial scene endpoint

@@ -4,7 +4,6 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
 import { useIsDarkMode } from "@/hooks/useIsDarkMode"
 import { ScriptSettingsTable, SettingDisplay } from "./ScriptSettingsTable"
 import { ScriptSetting } from "@/store/scripts"
@@ -134,26 +133,12 @@ export function ScriptEditor({
       </Card>
 
       {/* Settings section */}
-      {readOnly ? (
-        script.settings.length > 0 && (
-          <Card className="p-4 m-2">
-            <h4 className="text-sm font-medium mb-2">Settings</h4>
-            <div className="flex flex-wrap gap-2">
-              {script.settings.map(setting => (
-                <Badge key={setting.name} variant="outline">
-                  {setting.name}: {setting.defaultValue ?? "—"}
-                </Badge>
-              ))}
-            </div>
-          </Card>
-        )
-      ) : (
-        <ScriptSettingsTable<SettingDisplay>
-          settings={script.settings}
-          onAddSetting={onAddSetting}
-          onRemoveSetting={onRemoveSetting as ((setting: SettingDisplay) => void) | undefined}
-        />
-      )}
+      <ScriptSettingsTable<SettingDisplay>
+        settings={script.settings}
+        onAddSetting={readOnly ? undefined : onAddSetting}
+        onRemoveSetting={readOnly ? undefined : (onRemoveSetting as ((setting: SettingDisplay) => void) | undefined)}
+        readOnly={readOnly}
+      />
 
       {/* Kotlin playground */}
       <Card className="p-4 m-2 flex flex-col overflow-hidden min-w-0">

@@ -49,6 +49,17 @@ export const projectsApi = restApi.injectEndpoints({
       currentProject: build.query<ProjectDetail, void>({
         query: () => 'project/current',
         providesTags: ['Project'],
+        async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+          try {
+            const { data } = await queryFulfilled
+            // Also cache under the project ID for consistency
+            dispatch(
+              projectsApi.util.upsertQueryData('project', data.id, data)
+            )
+          } catch {
+            // Query failed, nothing to cache
+          }
+        },
       }),
 
       // Get specific project details

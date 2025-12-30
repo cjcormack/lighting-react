@@ -2,10 +2,10 @@ import React from "react"
 import Layout from "./Layout"
 import {createBrowserRouter, RouterProvider} from "react-router-dom";
 import Channels from "./routes/Channels";
-import {Scenes} from "./routes/Scenes";
 import {Fixtures} from "./routes/Fixtures";
 import Projects from "./routes/Projects";
 import ProjectScripts, { ScriptsRedirect } from "./routes/ProjectScripts";
+import { ProjectScenes, ScenesRedirect, ChasesRedirect } from "./routes/ProjectScenes";
 
 function App() {
   const router = createBrowserRouter([
@@ -27,11 +27,19 @@ function App() {
         },
         {
           path: "scenes",
-          element: <Scenes mode={'SCENE'} />,
+          element: <ScenesRedirect />,
         },
         {
           path: "chases",
-          element: <Scenes mode={'CHASE'} />,
+          element: <ChasesRedirect />,
+        },
+        {
+          path: "projects/:projectId/scenes",
+          element: <ProjectScenes mode={'SCENE'} />,
+        },
+        {
+          path: "projects/:projectId/chases",
+          element: <ProjectScenes mode={'CHASE'} />,
         },
         {
           path: "fixtures",
