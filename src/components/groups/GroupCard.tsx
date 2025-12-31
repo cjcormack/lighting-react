@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -58,6 +58,9 @@ function GroupCardHeader({
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <CardTitle className="text-lg truncate">{group.name}</CardTitle>
+          <p className="text-xs text-muted-foreground truncate">
+            {group.memberCount} fixture{group.memberCount !== 1 ? 's' : ''}
+          </p>
         </div>
         <Button
           variant={isEditing ? 'default' : 'outline'}
@@ -68,21 +71,20 @@ function GroupCardHeader({
           {isEditing ? 'Done' : 'Edit'}
         </Button>
       </div>
-      <div className="flex flex-wrap gap-1 mt-1">
-        <Badge variant="secondary" className="text-xs">
-          {group.memberCount} fixture{group.memberCount !== 1 ? 's' : ''}
-        </Badge>
-        {group.capabilities.map((cap) => (
-          <Badge key={cap} variant="outline" className="text-xs capitalize">
-            {cap}
-          </Badge>
-        ))}
-      </div>
+      {group.capabilities.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1">
+          {group.capabilities.map((cap) => (
+            <Badge key={cap} variant="outline" className="text-xs capitalize">
+              {cap}
+            </Badge>
+          ))}
+        </div>
+      )}
     </CardHeader>
   )
 }
 
-function GroupPropertiesSection({
+export function GroupPropertiesSection({
   properties,
   isLoading,
   isEditing,

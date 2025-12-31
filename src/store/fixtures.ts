@@ -136,4 +136,5 @@ export type Fixture = {
   elements?: ElementDescriptor[]
   mode?: ModeInfo
   capabilities: string[]
+  groups: string[]
 }
