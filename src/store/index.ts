@@ -8,7 +8,16 @@ export const store = configureStore({
   },
 
   middleware: (getDefaultMiddleware) => {
-    return getDefaultMiddleware().concat(restApi.middleware)
+    return getDefaultMiddleware({
+      serializableCheck: {
+        // Ignore RTK Query internal paths - contains subscription functions
+        ignoredPaths: ['restApi.queries', 'restApi.mutations', 'restApi.subscriptions'],
+      },
+      immutableCheck: {
+        // Ignore RTK Query internal paths - large state with many cache entries
+        ignoredPaths: ['restApi.queries', 'restApi.mutations', 'restApi.subscriptions'],
+      },
+    }).concat(restApi.middleware)
   }
 })
 

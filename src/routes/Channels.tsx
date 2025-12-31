@@ -3,19 +3,21 @@ import { Card } from "@/components/ui/card"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { useParams, useNavigate, Navigate } from "react-router-dom"
 import { ChevronRight, Loader2 } from "lucide-react"
 import { useGetChannelQuery, useUpdateChannelMutation } from "../store/channels"
 import { useCurrentProjectQuery, useProjectQuery } from "../store/projects"
+import { EditModeProvider, useEditMode } from "@/components/fixtures/EditModeContext"
 
 export const ChannelSlider = ({
   universe,
   id,
-  description,
+  isEditing,
 }: {
   universe: number
   id: number
-  description?: string
+  isEditing: boolean
 }) => {
   const { data: maybeValue } = useGetChannelQuery({
     universe: universe,
@@ -23,6 +25,7 @@ export const ChannelSlider = ({
   })
 
   const value = maybeValue || 0
+  const percentage = Math.round((value / 255) * 100)
 
   const [runUpdateChannelMutation] = useUpdateChannelMutation()
 
@@ -58,36 +61,43 @@ export const ChannelSlider = ({
     }
   }
 
-  const handleInputBlur = () => {
-    if (value < 0) {
-      setValue(0)
-    } else if (value > 255) {
-      setValue(255)
-    }
-  }
-
   return (
-    <div className="space-y-2 py-2">
-      <label className="text-sm font-medium">
-        {description ? `${id}: ${description}` : `Channel ${id}`}
-      </label>
-      <div className="flex items-center gap-4">
-        <Slider
-          className="flex-1"
-          value={[value]}
-          max={255}
-          step={1}
-          onValueChange={handleSliderChange}
-        />
-        <Input
-          type="number"
-          value={value}
-          onChange={handleInputChange}
-          onBlur={handleInputBlur}
-          min={0}
-          max={255}
-          className="w-16"
-        />
+    <div className="py-1.5">
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-medium w-12 shrink-0 text-muted-foreground">
+          Ch {id}
+        </span>
+        {isEditing ? (
+          <>
+            <Slider
+              className="flex-1 min-w-12 shrink-0"
+              value={[value]}
+              max={255}
+              step={1}
+              onValueChange={handleSliderChange}
+            />
+            <Input
+              type="number"
+              value={value}
+              onChange={handleInputChange}
+              min={0}
+              max={255}
+              className="w-12 sm:w-14 h-7 text-xs px-1 shrink-0"
+            />
+          </>
+        ) : (
+          <>
+            <div className="flex-1 min-w-12 shrink-0 h-2 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all"
+                style={{ width: `${percentage}%` }}
+              />
+            </div>
+            <span className="w-8 sm:w-10 text-xs text-right text-muted-foreground shrink-0">
+              {value}
+            </span>
+          </>
+        )}
       </div>
     </div>
   )
@@ -151,12 +161,30 @@ export function ProjectChannels() {
   }
 
   return (
+    <EditModeProvider>
+      <ProjectChannelsContent projectName={project.name} universe={universeNum} />
+    </EditModeProvider>
+  )
+}
+
+function ProjectChannelsContent({ projectName, universe }: { projectName: string; universe: number }) {
+  const { isEditing, toggleEditing } = useEditMode()
+
+  return (
     <Card className="m-4 p-4">
       <div className="flex items-start justify-between mb-4">
-        <Breadcrumbs projectName={project.name} universe={universeNum} />
+        <Breadcrumbs projectName={projectName} universe={universe} />
+        <Button
+          variant={isEditing ? "default" : "outline"}
+          size="sm"
+          onClick={toggleEditing}
+          className="shrink-0"
+        >
+          {isEditing ? "Done" : "Edit"}
+        </Button>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        <ChannelGroups universe={universeNum} />
+        <ChannelGroups universe={universe} isEditing={isEditing} />
       </div>
     </Card>
   )
@@ -190,7 +218,7 @@ function Breadcrumbs({ projectName, universe }: { projectName: string; universe:
   )
 }
 
-const ChannelGroups = ({ universe }: { universe: number }) => {
+const ChannelGroups = ({ universe, isEditing }: { universe: number; isEditing: boolean }) => {
   const channelCount = 512
   const groupSize = 8
 
@@ -201,7 +229,7 @@ const ChannelGroups = ({ universe }: { universe: number }) => {
           {Array.from(Array(groupSize)).map((_, itemNo) => {
             const channelNo = groupNo * groupSize + itemNo + 1
             return (
-              <ChannelSlider key={itemNo} universe={universe} id={channelNo} />
+              <ChannelSlider key={itemNo} universe={universe} id={channelNo} isEditing={isEditing} />
             )
           })}
         </Card>
