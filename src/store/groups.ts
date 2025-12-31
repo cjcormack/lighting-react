@@ -8,6 +8,7 @@ import {
   ApplyFxResponse,
   ClearFxResponse,
   DistributionStrategy,
+  GroupActiveEffect,
 } from "../api/groupsApi"
 
 // WebSocket subscription for auto-invalidation
@@ -41,6 +42,14 @@ export const groupsApi = restApi.injectEndpoints({
       query: () => 'groups/distribution-strategies',
     }),
 
+    // Get active effects for a group
+    groupActiveEffects: build.query<GroupActiveEffect[], string>({
+      query: (groupName) => `groups/${encodeURIComponent(groupName)}/fx/active`,
+      providesTags: (_result, _error, groupName) => [
+        { type: 'GroupActiveEffects', id: groupName },
+      ],
+    }),
+
     // Apply effect to group
     applyGroupFx: build.mutation<ApplyFxResponse, { groupName: string } & ApplyFxRequest>({
       query: ({ groupName, ...request }) => ({
@@ -50,6 +59,7 @@ export const groupsApi = restApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { groupName }) => [
         { type: 'GroupList', id: groupName },
+        { type: 'GroupActiveEffects', id: groupName },
         'GroupList',
       ],
     }),
@@ -62,6 +72,7 @@ export const groupsApi = restApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, groupName) => [
         { type: 'GroupList', id: groupName },
+        { type: 'GroupActiveEffects', id: groupName },
         'GroupList',
       ],
     }),
@@ -73,6 +84,7 @@ export const {
   useGroupListQuery,
   useGroupQuery,
   useDistributionStrategiesQuery,
+  useGroupActiveEffectsQuery,
   useApplyGroupFxMutation,
   useClearGroupFxMutation,
 } = groupsApi

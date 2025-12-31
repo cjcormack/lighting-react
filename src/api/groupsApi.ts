@@ -78,7 +78,17 @@ export interface ApplyFxRequest {
 }
 
 export interface ApplyFxResponse {
-  effectIds: number[]
+  effectId: number
+}
+
+export interface GroupActiveEffect {
+  id: number
+  effectType: string
+  propertyName: string
+  beatDivision: number
+  blendMode: BlendMode
+  distribution: DistributionStrategy
+  isRunning: boolean
 }
 
 export interface ClearFxResponse {
@@ -89,7 +99,7 @@ export interface ClearFxResponse {
 
 type GroupsInMessage =
   | { type: 'groupsState'; groups: GroupSummary[] }
-  | { type: 'groupFxAdded'; groupName: string; effectIds: number[] }
+  | { type: 'groupFxAdded'; groupName: string; effectId: number }
   | { type: 'groupFxCleared'; groupName: string; removedCount: number }
 
 // === API Interface ===

@@ -1,7 +1,8 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Plus, Trash2 } from "lucide-react"
-import { useClearGroupFxMutation } from "../../store/groups"
+import { Badge } from "@/components/ui/badge"
+import { Plus, Trash2, Activity } from "lucide-react"
+import { useClearGroupFxMutation, useGroupActiveEffectsQuery } from "../../store/groups"
 import { AddFxDialog } from "./AddFxDialog"
 
 interface GroupFxModeProps {
@@ -12,6 +13,7 @@ interface GroupFxModeProps {
 export function GroupFxMode({ groupName, capabilities }: GroupFxModeProps) {
   const [addFxOpen, setAddFxOpen] = useState(false)
   const [clearGroupFx, { isLoading: isClearing }] = useClearGroupFxMutation()
+  const { data: activeEffects = [], isLoading: isLoadingEffects } = useGroupActiveEffectsQuery(groupName)
 
   const handleClearAll = async () => {
     try {
@@ -42,12 +44,37 @@ export function GroupFxMode({ groupName, capabilities }: GroupFxModeProps) {
           variant="destructive"
           size="sm"
           onClick={handleClearAll}
-          disabled={isClearing}
+          disabled={isClearing || activeEffects.length === 0}
         >
           <Trash2 className="size-4 mr-1" />
           Clear All
         </Button>
       </div>
+
+      {/* Active Effects List */}
+      {isLoadingEffects ? (
+        <div className="text-sm text-muted-foreground">Loading effects...</div>
+      ) : activeEffects.length > 0 ? (
+        <div className="space-y-2">
+          <div className="text-sm font-medium">Active Effects</div>
+          <div className="space-y-2">
+            {activeEffects.map((effect) => (
+              <div
+                key={effect.id}
+                className="flex flex-wrap items-center gap-2 p-2 rounded-md bg-muted/50"
+              >
+                <Activity className={`size-4 ${effect.isRunning ? 'text-green-500' : 'text-muted-foreground'}`} />
+                <span className="font-medium capitalize">{effect.effectType}</span>
+                <Badge variant="secondary">{effect.propertyName}</Badge>
+                <Badge variant="outline">{effect.beatDivision}x</Badge>
+                <Badge variant="outline" className="text-xs">{effect.distribution}</Badge>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="text-sm text-muted-foreground italic">No active effects</div>
+      )}
 
       <AddFxDialog
         open={addFxOpen}
