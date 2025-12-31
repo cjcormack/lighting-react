@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils"
 
 import TrackStatus from "./TrackStatus"
 import { ConnectionStatus } from "./connection"
-import ProjectSelector from "./ProjectSelector"
+import ProjectSwitcher from "./ProjectSwitcher"
 import ThemeToggle from "./ThemeToggle"
 
 const DRAWER_WIDTH = 240
@@ -53,7 +53,7 @@ export default function Layout() {
 
             <Separator className="my-2" />
 
-            <ProjectSelector collapsed={!open} />
+            <ProjectSwitcher collapsed={!open} />
           </div>
         </aside>
 
