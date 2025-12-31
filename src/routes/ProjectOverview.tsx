@@ -14,8 +14,13 @@ import {
   Play,
   RotateCcw,
   Layers,
+  LayoutGrid,
+  SlidersHorizontal,
 } from "lucide-react"
 import { useProjectQuery, useCurrentProjectQuery } from "../store/projects"
+import { useFixtureListQuery } from "../store/fixtures"
+import { useGroupListQuery } from "../store/groups"
+import { useGetUniverseQuery } from "../store/universes"
 import { useState } from "react"
 import { cn } from "@/lib/utils"
 import EditProjectDialog from "../EditProjectDialog"
@@ -27,6 +32,17 @@ export default function ProjectOverview() {
 
   const { data: project, isLoading, error } = useProjectQuery(Number(projectId), {
     skip: !projectId,
+  })
+
+  // Fetch fixtures, groups, and universes only for the current project (they're global to active project)
+  const { data: fixtures } = useFixtureListQuery(undefined, {
+    skip: !project?.isCurrent,
+  })
+  const { data: groups } = useGroupListQuery(undefined, {
+    skip: !project?.isCurrent,
+  })
+  const { data: universes } = useGetUniverseQuery(undefined, {
+    skip: !project?.isCurrent,
   })
 
   if (!projectId) {
@@ -102,6 +118,33 @@ export default function ProjectOverview() {
             description="Animated lighting sequences"
             onClick={() => navigate(`/projects/${project.id}/chases`)}
           />
+          {project.isCurrent && (
+            <>
+              <QuickNavCard
+                title="Fixtures"
+                count={fixtures?.length}
+                icon={<LayoutGrid className="size-5" />}
+                description="DMX fixture definitions"
+                onClick={() => navigate(`/projects/${project.id}/fixtures`)}
+              />
+              <QuickNavCard
+                title="Groups"
+                count={groups?.length}
+                icon={<Layers className="size-5" />}
+                description="Fixture groups for control"
+                onClick={() => navigate(`/projects/${project.id}/groups`)}
+              />
+              {universes && universes.length >= 1 && (
+                <QuickNavCard
+                  title="Universes"
+                  count={universes.length}
+                  icon={<SlidersHorizontal className="size-5" />}
+                  description="DMX channel control"
+                  onClick={() => navigate(`/projects/${project.id}/channels/${universes[0]}`)}
+                />
+              )}
+            </>
+          )}
         </div>
 
         {/* Project Configuration */}
