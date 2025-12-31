@@ -3,7 +3,6 @@ import Layout from "./Layout"
 import {createBrowserRouter, RouterProvider} from "react-router-dom";
 import Channels from "./routes/Channels";
 import {Fixtures} from "./routes/Fixtures";
-import {Groups} from "./routes/Groups";
 import Projects from "./routes/Projects";
 import ProjectScripts, { ScriptsRedirect } from "./routes/ProjectScripts";
 import { ProjectScenes, ScenesRedirect, ChasesRedirect } from "./routes/ProjectScenes";
@@ -54,10 +53,6 @@ function App() {
         {
           path: "fixtures",
           element: <Fixtures />,
-        },
-        {
-          path: "groups",
-          element: <Groups />,
         },
         {
           path: "projects",
