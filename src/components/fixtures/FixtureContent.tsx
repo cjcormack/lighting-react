@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Slider } from '@/components/ui/slider'
 import { Input } from '@/components/ui/input'
 import { ChevronDown, ChevronRight } from 'lucide-react'
@@ -10,6 +9,8 @@ import { PropertyVisualizer } from './PropertyVisualizers'
 import { GroupMembershipSection } from './GroupMembershipSection'
 import { cn } from '@/lib/utils'
 
+export type FixtureViewMode = 'properties' | 'channels'
+
 interface FixtureContentProps {
   fixture: Fixture
   isEditing: boolean
@@ -18,6 +19,8 @@ interface FixtureContentProps {
   cardSpan?: number
   /** Display variant - 'card' for grid layout, 'modal' for expandable accordion */
   variant?: 'card' | 'modal'
+  /** Which view to display - controlled externally */
+  viewMode: FixtureViewMode
 }
 
 export function FixtureContent({
@@ -26,31 +29,22 @@ export function FixtureContent({
   onGroupClick,
   cardSpan = 1,
   variant = 'card',
+  viewMode,
 }: FixtureContentProps) {
-  const [tab, setTab] = useState('properties')
   const hasElements = (fixture.elements?.length ?? 0) > 0
 
+  if (viewMode === 'channels') {
+    return <ChannelsView fixture={fixture} span={cardSpan} isEditing={isEditing} />
+  }
+
   return (
-    <Tabs value={tab} onValueChange={setTab}>
-      <TabsList>
-        <TabsTrigger value="properties">Properties</TabsTrigger>
-        <TabsTrigger value="channels">Channels</TabsTrigger>
-      </TabsList>
-
-      <TabsContent value="properties" className="pt-2">
-        <PropertiesView
-          fixture={fixture}
-          hasElements={hasElements}
-          isEditing={isEditing}
-          onGroupClick={onGroupClick}
-          variant={variant}
-        />
-      </TabsContent>
-
-      <TabsContent value="channels" className="pt-2">
-        <ChannelsView fixture={fixture} span={cardSpan} isEditing={isEditing} />
-      </TabsContent>
-    </Tabs>
+    <PropertiesView
+      fixture={fixture}
+      hasElements={hasElements}
+      isEditing={isEditing}
+      onGroupClick={onGroupClick}
+      variant={variant}
+    />
   )
 }
 

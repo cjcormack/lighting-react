@@ -1,16 +1,21 @@
-import { Suspense, useState, useMemo, useEffect } from "react"
+import { Suspense, useState, useMemo, useEffect, createContext, useContext } from "react"
 import { useParams, useNavigate, Navigate } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Search, ChevronRight, Loader2 } from "lucide-react"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { Search, ChevronRight, Loader2, Settings2, SlidersHorizontal } from "lucide-react"
 import { Fixture, useFixtureListQuery } from "../store/fixtures"
 import { EditModeProvider, useEditMode } from "../components/fixtures/EditModeContext"
-import { FixtureContent } from "../components/fixtures/FixtureContent"
+import { FixtureContent, FixtureViewMode } from "../components/fixtures/FixtureContent"
 import { GroupDetailModal } from "../components/fixtures/GroupDetailModal"
 import { useCurrentProjectQuery, useProjectQuery } from "../store/projects"
 import { cn } from "@/lib/utils"
+
+// Context for global view mode
+const ViewModeContext = createContext<FixtureViewMode>('properties')
+const useViewMode = () => useContext(ViewModeContext)
 
 // Redirect component for /fixtures route
 export function FixturesRedirect() {
@@ -105,6 +110,7 @@ function Breadcrumbs({ projectName }: { projectName: string }) {
 function FixturesContainer() {
   const { data: maybeFixtureList, isLoading } = useFixtureListQuery()
   const [filter, setFilter] = useState("")
+  const [viewMode, setViewMode] = useState<FixtureViewMode>('properties')
 
   const fixtureList = maybeFixtureList || []
 
@@ -132,16 +138,31 @@ function FixturesContainer() {
   }
 
   return (
-    <>
-      {/* Search input */}
-      <div className="relative mb-4">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Filter fixtures by name, manufacturer, or type..."
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          className="pl-9"
-        />
+    <ViewModeContext.Provider value={viewMode}>
+      {/* Search and view toggle */}
+      <div className="flex gap-2 mb-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Filter fixtures by name, manufacturer, or type..."
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <ToggleGroup
+          type="single"
+          value={viewMode}
+          onValueChange={(value) => value && setViewMode(value as FixtureViewMode)}
+          className="shrink-0"
+        >
+          <ToggleGroupItem value="properties" aria-label="Show properties" title="Properties">
+            <Settings2 className="h-4 w-4" />
+          </ToggleGroupItem>
+          <ToggleGroupItem value="channels" aria-label="Show channels" title="Channels">
+            <SlidersHorizontal className="h-4 w-4" />
+          </ToggleGroupItem>
+        </ToggleGroup>
       </div>
 
       <AllFixturesView
@@ -149,7 +170,7 @@ function FixturesContainer() {
         filteredFixtures={filteredFixtures}
         filter={filter}
       />
-    </>
+    </ViewModeContext.Provider>
   )
 }
 
@@ -232,6 +253,7 @@ function FixtureCardContent({
   onGroupClick: (groupName: string) => void
 }) {
   const { isEditing } = useEditMode()
+  const viewMode = useViewMode()
 
   return (
     <FixtureContent
@@ -239,6 +261,7 @@ function FixtureCardContent({
       isEditing={isEditing}
       onGroupClick={onGroupClick}
       cardSpan={span}
+      viewMode={viewMode}
     />
   )
 }

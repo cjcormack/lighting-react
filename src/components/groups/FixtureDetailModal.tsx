@@ -7,8 +7,10 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { Settings2, SlidersHorizontal } from 'lucide-react'
 import { useFixtureListQuery } from '../../store/fixtures'
-import { FixtureContent } from '../fixtures/FixtureContent'
+import { FixtureContent, FixtureViewMode } from '../fixtures/FixtureContent'
 
 interface FixtureDetailModalProps {
   fixtureKey: string | null
@@ -19,10 +21,12 @@ export function FixtureDetailModal({ fixtureKey, onClose }: FixtureDetailModalPr
   const { data: fixtureList } = useFixtureListQuery()
   const fixture = fixtureKey ? fixtureList?.find((f) => f.key === fixtureKey) : null
   const [isEditing, setIsEditing] = useState(false)
+  const [viewMode, setViewMode] = useState<FixtureViewMode>('properties')
 
-  // Reset edit mode when modal closes or fixture changes
+  // Reset edit mode and view mode when modal closes or fixture changes
   useEffect(() => {
     setIsEditing(false)
+    setViewMode('properties')
   }, [fixtureKey])
 
   const hasElements = (fixture?.elements?.length ?? 0) > 0
@@ -40,13 +44,28 @@ export function FixtureDetailModal({ fixtureKey, onClose }: FixtureDetailModalPr
                 </p>
               )}
             </div>
-            <Button
-              variant={isEditing ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setIsEditing(!isEditing)}
-            >
-              {isEditing ? 'Done' : 'Edit'}
-            </Button>
+            <div className="flex items-center gap-2">
+              <ToggleGroup
+                type="single"
+                value={viewMode}
+                onValueChange={(value) => value && setViewMode(value as FixtureViewMode)}
+                size="sm"
+              >
+                <ToggleGroupItem value="properties" aria-label="Show properties" title="Properties">
+                  <Settings2 className="h-4 w-4" />
+                </ToggleGroupItem>
+                <ToggleGroupItem value="channels" aria-label="Show channels" title="Channels">
+                  <SlidersHorizontal className="h-4 w-4" />
+                </ToggleGroupItem>
+              </ToggleGroup>
+              <Button
+                variant={isEditing ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setIsEditing(!isEditing)}
+              >
+                {isEditing ? 'Done' : 'Edit'}
+              </Button>
+            </div>
           </div>
 
           {/* Capability badges */}
@@ -73,6 +92,7 @@ export function FixtureDetailModal({ fixtureKey, onClose }: FixtureDetailModalPr
             isEditing={isEditing}
             cardSpan={2}
             variant="modal"
+            viewMode={viewMode}
           />
         )}
       </DialogContent>
