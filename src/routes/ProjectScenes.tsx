@@ -115,19 +115,14 @@ export function ProjectScenes({ mode }: { mode: SceneMode }) {
         />
       )}
       <Card className="m-4 p-4">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
           <Breadcrumbs
             projectName={project.name}
             isCurrent={isCurrentProject}
             resourceType={mode === "SCENE" ? "Scenes" : "Chases"}
           />
-        </div>
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-bold">
-            {mode === "SCENE" ? "Scenes" : "Chases"}
-          </h1>
           {isCurrentProject && (
-            <Button onClick={() => setAddSceneDialogOpen(true)}>
+            <Button onClick={() => setAddSceneDialogOpen(true)} className="self-start sm:self-auto">
               <PlusCircle className="size-4" />
               Add {mode === "SCENE" ? "Scene" : "Chase"}
             </Button>

@@ -1,36 +1,51 @@
-import { Suspense, useState, useMemo } from "react"
-import { useSearchParams } from "react-router-dom"
+import { Suspense, useState, useMemo, useEffect } from "react"
+import { useSearchParams, useParams, useNavigate, Navigate } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Slider } from "@/components/ui/slider"
-import { Search, ChevronDown, ChevronRight } from "lucide-react"
+import { Search, ChevronDown, ChevronRight, Loader2 } from "lucide-react"
 import { Fixture, ElementDescriptor, useFixtureListQuery } from "../store/fixtures"
 import { PropertyVisualizer } from "../components/fixtures/PropertyVisualizers"
 import { EditModeProvider, useEditMode } from "../components/fixtures/EditModeContext"
 import { useGetChannelQuery, useUpdateChannelMutation } from "../store/channels"
 import { useGroupListQuery, useGroupQuery } from "../store/groups"
 import { GroupSummary } from "../api/groupsApi"
+import { useCurrentProjectQuery, useProjectQuery } from "../store/projects"
 import { cn } from "@/lib/utils"
 
-export function Fixtures() {
-  return (
-    <Card className="m-4 p-4">
-      <h1 className="text-3xl font-bold mb-6">Fixtures</h1>
-      <Suspense fallback={<div>Loading...</div>}>
-        <FixturesContainer />
-      </Suspense>
-    </Card>
-  )
+// Redirect component for /fixtures route
+export function FixturesRedirect() {
+  const { data: currentProject, isLoading } = useCurrentProjectQuery()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (!isLoading && currentProject) {
+      navigate(`/projects/${currentProject.id}/fixtures`, { replace: true })
+    }
+  }, [currentProject, isLoading, navigate])
+
+  if (isLoading) {
+    return (
+      <Card className="m-4 p-4 flex items-center justify-center">
+        <Loader2 className="size-6 animate-spin" />
+      </Card>
+    )
+  }
+
+  return null
 }
 
 type ViewMode = "all" | "byGroup"
 
-function FixturesContainer() {
-  const { data: maybeFixtureList, isLoading } = useFixtureListQuery()
-  const [filter, setFilter] = useState("")
+// Main ProjectFixtures route component
+export function ProjectFixtures() {
+  const { projectId } = useParams()
+  const projectIdNum = Number(projectId)
+  const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
+  const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
   const [searchParams, setSearchParams] = useSearchParams()
 
   const viewMode: ViewMode = searchParams.get("view") === "byGroup" ? "byGroup" : "all"
@@ -44,6 +59,77 @@ function FixturesContainer() {
     }
     setSearchParams(newParams)
   }
+
+  // If viewing a non-current project, redirect to the current project
+  if (!currentLoading && currentProject && projectIdNum !== currentProject.id) {
+    return <Navigate to={`/projects/${currentProject.id}/fixtures`} replace />
+  }
+
+  if (projectLoading || currentLoading) {
+    return (
+      <Card className="m-4 p-4 flex items-center justify-center">
+        <Loader2 className="size-6 animate-spin" />
+      </Card>
+    )
+  }
+
+  if (!project) {
+    return (
+      <Card className="m-4 p-4">
+        <p className="text-destructive">Project not found</p>
+      </Card>
+    )
+  }
+
+  return (
+    <Card className="m-4 p-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+        <Breadcrumbs projectName={project.name} />
+        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)} className="self-start sm:self-auto">
+          <TabsList>
+            <TabsTrigger value="all">All Fixtures</TabsTrigger>
+            <TabsTrigger value="byGroup">By Group</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+      <Suspense fallback={<div>Loading...</div>}>
+        <FixturesContainer viewMode={viewMode} />
+      </Suspense>
+    </Card>
+  )
+}
+
+// Breadcrumbs component
+function Breadcrumbs({ projectName }: { projectName: string }) {
+  const navigate = useNavigate()
+
+  return (
+    <nav className="flex items-center gap-1 text-sm flex-wrap">
+      <button
+        onClick={() => navigate("/projects")}
+        className="text-muted-foreground hover:text-foreground transition-colors"
+      >
+        Projects
+      </button>
+      <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" />
+      <button
+        onClick={() => navigate("/projects")}
+        className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
+      >
+        {projectName}
+        <Badge variant="default" className="text-xs">
+          active
+        </Badge>
+      </button>
+      <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" />
+      <span className="font-medium">Fixtures</span>
+    </nav>
+  )
+}
+
+function FixturesContainer({ viewMode }: { viewMode: ViewMode }) {
+  const { data: maybeFixtureList, isLoading } = useFixtureListQuery()
+  const [filter, setFilter] = useState("")
 
   const fixtureList = maybeFixtureList || []
 
@@ -72,16 +158,6 @@ function FixturesContainer() {
 
   return (
     <>
-      {/* View mode toggle */}
-      <div className="flex items-center gap-4 mb-4">
-        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
-          <TabsList>
-            <TabsTrigger value="all">All Fixtures</TabsTrigger>
-            <TabsTrigger value="byGroup">By Group</TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
-
       {/* Search input */}
       <div className="relative mb-4">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

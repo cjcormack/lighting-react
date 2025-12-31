@@ -1,8 +1,8 @@
 import React from "react"
 import Layout from "./Layout"
 import {createBrowserRouter, RouterProvider} from "react-router-dom";
-import Channels from "./routes/Channels";
-import {Fixtures} from "./routes/Fixtures";
+import { ChannelsRedirect, ChannelsBaseRedirect, ProjectChannels } from "./routes/Channels";
+import { FixturesRedirect, ProjectFixtures } from "./routes/Fixtures";
 import Projects from "./routes/Projects";
 import ProjectScripts, { ScriptsRedirect } from "./routes/ProjectScripts";
 import { ProjectScenes, ScenesRedirect, ChasesRedirect } from "./routes/ProjectScenes";
@@ -23,8 +23,20 @@ function App() {
           element: <ProjectOverview />,
         },
         {
+          path: "projects/:projectId/fixtures",
+          element: <ProjectFixtures />,
+        },
+        {
+          path: "projects/:projectId/channels/:universe",
+          element: <ProjectChannels />,
+        },
+        {
+          path: "channels",
+          element: <ChannelsBaseRedirect />,
+        },
+        {
           path: "channels/:universe",
-          element: <Channels />,
+          element: <ChannelsRedirect />,
         },
         {
           path: "scripts/:scriptId?",
@@ -52,7 +64,7 @@ function App() {
         },
         {
           path: "fixtures",
-          element: <Fixtures />,
+          element: <FixturesRedirect />,
         },
         {
           path: "projects",
