@@ -3,6 +3,7 @@ import Layout from "./Layout"
 import {createBrowserRouter, RouterProvider} from "react-router-dom";
 import { ChannelsRedirect, ChannelsBaseRedirect, ProjectChannels } from "./routes/Channels";
 import { FixturesRedirect, ProjectFixtures } from "./routes/Fixtures";
+import { GroupsRedirect, ProjectGroups } from "./routes/Groups";
 import Projects from "./routes/Projects";
 import ProjectScripts, { ScriptsRedirect } from "./routes/ProjectScripts";
 import { ProjectScenes, ScenesRedirect, ChasesRedirect } from "./routes/ProjectScenes";
@@ -25,6 +26,14 @@ function App() {
         {
           path: "projects/:projectId/fixtures",
           element: <ProjectFixtures />,
+        },
+        {
+          path: "projects/:projectId/groups",
+          element: <ProjectGroups />,
+        },
+        {
+          path: "groups",
+          element: <GroupsRedirect />,
         },
         {
           path: "projects/:projectId/channels/:universe",

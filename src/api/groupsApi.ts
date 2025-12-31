@@ -1,5 +1,6 @@
 import { InternalApiConnection } from "./internalApi"
 import { Subscription } from "./subscription"
+import type { ChannelRef } from '../store/fixtures'
 
 // === Types ===
 
@@ -93,6 +94,81 @@ export interface GroupActiveEffect {
 
 export interface ClearFxResponse {
   removedCount: number
+}
+
+// === Group Property Types ===
+
+export type GroupPropertyDescriptor =
+  | GroupSliderPropertyDescriptor
+  | GroupColourPropertyDescriptor
+  | GroupPositionPropertyDescriptor
+  | GroupSettingPropertyDescriptor
+
+export interface GroupSliderPropertyDescriptor {
+  type: 'slider'
+  name: string
+  displayName: string
+  category: string
+  min: number
+  max: number
+  memberChannels: ChannelRef[]
+}
+
+export interface MemberColourChannels {
+  fixtureKey: string
+  redChannel: ChannelRef
+  greenChannel: ChannelRef
+  blueChannel: ChannelRef
+  whiteChannel?: ChannelRef
+  amberChannel?: ChannelRef
+  uvChannel?: ChannelRef
+}
+
+export interface GroupColourPropertyDescriptor {
+  type: 'colour'
+  name: string
+  displayName: string
+  category: 'colour'
+  memberColourChannels: MemberColourChannels[]
+}
+
+export interface MemberPositionChannels {
+  fixtureKey: string
+  panChannel: ChannelRef
+  tiltChannel: ChannelRef
+  panMin: number
+  panMax: number
+  tiltMin: number
+  tiltMax: number
+}
+
+export interface GroupPositionPropertyDescriptor {
+  type: 'position'
+  name: string
+  displayName: string
+  category: 'position'
+  memberPositionChannels: MemberPositionChannels[]
+}
+
+export interface MemberSettingChannel {
+  fixtureKey: string
+  channel: ChannelRef
+}
+
+export interface SettingOption {
+  name: string
+  level: number
+  displayName: string
+  colourPreview?: string
+}
+
+export interface GroupSettingPropertyDescriptor {
+  type: 'setting'
+  name: string
+  displayName: string
+  category: string
+  options: SettingOption[]
+  memberChannels: MemberSettingChannel[]
 }
 
 // === WebSocket Message Types ===

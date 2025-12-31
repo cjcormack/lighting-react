@@ -1,18 +1,16 @@
 import { Suspense, useState, useMemo, useEffect } from "react"
-import { useSearchParams, useParams, useNavigate, Navigate } from "react-router-dom"
+import { useParams, useNavigate, Navigate } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Slider } from "@/components/ui/slider"
-import { Search, ChevronDown, ChevronRight, Loader2 } from "lucide-react"
+import { Search, ChevronRight, Loader2 } from "lucide-react"
 import { Fixture, ElementDescriptor, useFixtureListQuery } from "../store/fixtures"
 import { PropertyVisualizer } from "../components/fixtures/PropertyVisualizers"
 import { EditModeProvider, useEditMode } from "../components/fixtures/EditModeContext"
 import { useGetChannelQuery, useUpdateChannelMutation } from "../store/channels"
-import { useGroupListQuery, useGroupQuery } from "../store/groups"
-import { GroupSummary } from "../api/groupsApi"
 import { useCurrentProjectQuery, useProjectQuery } from "../store/projects"
 import { cn } from "@/lib/utils"
 
@@ -38,27 +36,12 @@ export function FixturesRedirect() {
   return null
 }
 
-type ViewMode = "all" | "byGroup"
-
 // Main ProjectFixtures route component
 export function ProjectFixtures() {
   const { projectId } = useParams()
   const projectIdNum = Number(projectId)
   const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
-  const [searchParams, setSearchParams] = useSearchParams()
-
-  const viewMode: ViewMode = searchParams.get("view") === "byGroup" ? "byGroup" : "all"
-
-  const setViewMode = (mode: ViewMode) => {
-    const newParams = new URLSearchParams(searchParams)
-    if (mode === "all") {
-      newParams.delete("view")
-    } else {
-      newParams.set("view", mode)
-    }
-    setSearchParams(newParams)
-  }
 
   // If viewing a non-current project, redirect to the current project
   if (!currentLoading && currentProject && projectIdNum !== currentProject.id) {
@@ -83,17 +66,11 @@ export function ProjectFixtures() {
 
   return (
     <Card className="m-4 p-4">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+      <div className="mb-4">
         <Breadcrumbs projectName={project.name} />
-        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)} className="self-start sm:self-auto">
-          <TabsList>
-            <TabsTrigger value="all">All Fixtures</TabsTrigger>
-            <TabsTrigger value="byGroup">By Group</TabsTrigger>
-          </TabsList>
-        </Tabs>
       </div>
       <Suspense fallback={<div>Loading...</div>}>
-        <FixturesContainer viewMode={viewMode} />
+        <FixturesContainer />
       </Suspense>
     </Card>
   )
@@ -127,7 +104,7 @@ function Breadcrumbs({ projectName }: { projectName: string }) {
   )
 }
 
-function FixturesContainer({ viewMode }: { viewMode: ViewMode }) {
+function FixturesContainer() {
   const { data: maybeFixtureList, isLoading } = useFixtureListQuery()
   const [filter, setFilter] = useState("")
 
@@ -169,16 +146,11 @@ function FixturesContainer({ viewMode }: { viewMode: ViewMode }) {
         />
       </div>
 
-      {/* Content based on view mode */}
-      {viewMode === "all" ? (
-        <AllFixturesView
-          fixtureList={fixtureList}
-          filteredFixtures={filteredFixtures}
-          filter={filter}
-        />
-      ) : (
-        <ByGroupView fixtureList={fixtureList} filter={filter} />
-      )}
+      <AllFixturesView
+        fixtureList={fixtureList}
+        filteredFixtures={filteredFixtures}
+        filter={filter}
+      />
     </>
   )
 }
@@ -208,233 +180,6 @@ function AllFixturesView({
         <FixtureCard fixture={fixture} key={fixture.key} />
       ))}
     </div>
-  )
-}
-
-function ByGroupView({
-  fixtureList,
-  filter,
-}: {
-  fixtureList: Fixture[]
-  filter: string
-}) {
-  const { data: groups, isLoading: groupsLoading } = useGroupListQuery()
-
-  // Create fixture map for quick lookup
-  const fixtureMap = useMemo(() => {
-    const map = new Map<string, Fixture>()
-    fixtureList.forEach((f) => map.set(f.key, f))
-    return map
-  }, [fixtureList])
-
-  if (groupsLoading) {
-    return <div>Loading groups...</div>
-  }
-
-  if (!groups || groups.length === 0) {
-    return (
-      <div className="text-muted-foreground text-center py-8">
-        No groups configured. Switch to "All Fixtures" view to see fixtures.
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-4">
-      {groups.map((group) => (
-        <GroupSection
-          key={group.name}
-          groupSummary={group}
-          filter={filter}
-          fixtureMap={fixtureMap}
-        />
-      ))}
-      <UngroupedSection
-        fixtureList={fixtureList}
-        groups={groups}
-        filter={filter}
-        fixtureMap={fixtureMap}
-      />
-    </div>
-  )
-}
-
-function GroupSection({
-  groupSummary,
-  filter,
-  fixtureMap,
-}: {
-  groupSummary: GroupSummary
-  filter: string
-  fixtureMap: Map<string, Fixture>
-}) {
-  const [expanded, setExpanded] = useState(true)
-  const { data: groupDetail, isLoading } = useGroupQuery(groupSummary.name)
-
-  // Filter fixtures in this group based on search
-  const filteredMembers = useMemo(() => {
-    if (!groupDetail) return []
-    if (!filter.trim()) return groupDetail.members
-
-    const searchTerms = filter.toLowerCase().split(/\s+/)
-    return groupDetail.members.filter((member) => {
-      const fixture = fixtureMap.get(member.fixtureKey)
-      if (!fixture) return false
-
-      const searchableText = [
-        fixture.name,
-        fixture.manufacturer,
-        fixture.model,
-        fixture.typeKey,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-
-      return searchTerms.every((term) => searchableText.includes(term))
-    })
-  }, [groupDetail, filter, fixtureMap])
-
-  // Hide section if no fixtures match filter
-  if (filter && filteredMembers.length === 0) {
-    return null
-  }
-
-  return (
-    <Card>
-      <CardHeader
-        className="cursor-pointer pb-2"
-        onClick={() => setExpanded(!expanded)}
-      >
-        <div className="flex items-center gap-2">
-          {expanded ? (
-            <ChevronDown className="size-4 shrink-0" />
-          ) : (
-            <ChevronRight className="size-4 shrink-0" />
-          )}
-          <CardTitle className="text-lg">{groupSummary.name}</CardTitle>
-          <Badge variant="secondary" className="text-xs">
-            {filteredMembers.length} fixture
-            {filteredMembers.length !== 1 ? "s" : ""}
-            {filter &&
-              groupDetail &&
-              filteredMembers.length !== groupDetail.members.length &&
-              ` of ${groupDetail.members.length}`}
-          </Badge>
-          <div className="flex flex-wrap gap-1 ml-auto">
-            {groupSummary.capabilities.map((cap) => (
-              <Badge key={cap} variant="outline" className="text-xs capitalize">
-                {cap}
-              </Badge>
-            ))}
-          </div>
-        </div>
-      </CardHeader>
-      {expanded && (
-        <CardContent>
-          {isLoading ? (
-            <div>Loading fixtures...</div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filteredMembers.map((member) => {
-                const fixture = fixtureMap.get(member.fixtureKey)
-                if (!fixture) return null
-                return <FixtureCard fixture={fixture} key={fixture.key} />
-              })}
-            </div>
-          )}
-        </CardContent>
-      )}
-    </Card>
-  )
-}
-
-function UngroupedSection({
-  fixtureList,
-  groups,
-  filter,
-  fixtureMap,
-}: {
-  fixtureList: Fixture[]
-  groups: GroupSummary[]
-  filter: string
-  fixtureMap: Map<string, Fixture>
-}) {
-  const [expanded, setExpanded] = useState(true)
-
-  // Fetch all group details to find grouped fixture keys
-  // We need to collect all grouped fixture keys from all groups
-  const groupQueries = groups.map((g) => {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    return useGroupQuery(g.name)
-  })
-
-  const allLoading = groupQueries.some((q) => q.isLoading)
-
-  const groupedFixtureKeys = useMemo(() => {
-    const keys = new Set<string>()
-    groupQueries.forEach((q) => {
-      q.data?.members.forEach((m) => keys.add(m.fixtureKey))
-    })
-    return keys
-  }, [groupQueries])
-
-  const ungroupedFixtures = useMemo(() => {
-    let fixtures = fixtureList.filter((f) => !groupedFixtureKeys.has(f.key))
-
-    if (filter.trim()) {
-      const searchTerms = filter.toLowerCase().split(/\s+/)
-      fixtures = fixtures.filter((fixture) => {
-        const searchableText = [
-          fixture.name,
-          fixture.manufacturer,
-          fixture.model,
-          fixture.typeKey,
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase()
-        return searchTerms.every((term) => searchableText.includes(term))
-      })
-    }
-
-    return fixtures
-  }, [fixtureList, groupedFixtureKeys, filter])
-
-  if (allLoading) return null
-  if (ungroupedFixtures.length === 0) return null
-
-  return (
-    <Card>
-      <CardHeader
-        className="cursor-pointer pb-2"
-        onClick={() => setExpanded(!expanded)}
-      >
-        <div className="flex items-center gap-2">
-          {expanded ? (
-            <ChevronDown className="size-4 shrink-0" />
-          ) : (
-            <ChevronRight className="size-4 shrink-0" />
-          )}
-          <CardTitle className="text-lg text-muted-foreground">
-            Ungrouped
-          </CardTitle>
-          <Badge variant="outline" className="text-xs">
-            {ungroupedFixtures.length} fixture
-            {ungroupedFixtures.length !== 1 ? "s" : ""}
-          </Badge>
-        </div>
-      </CardHeader>
-      {expanded && (
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {ungroupedFixtures.map((fixture) => (
-              <FixtureCard fixture={fixture} key={fixture.key} />
-            ))}
-          </div>
-        </CardContent>
-      )}
-    </Card>
   )
 }
 

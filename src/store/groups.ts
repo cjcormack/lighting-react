@@ -9,6 +9,7 @@ import {
   ClearFxResponse,
   DistributionStrategy,
   GroupActiveEffect,
+  GroupPropertyDescriptor,
 } from "../api/groupsApi"
 
 // WebSocket subscription for auto-invalidation
@@ -35,6 +36,12 @@ export const groupsApi = restApi.injectEndpoints({
         await cacheEntryRemoved
         subscription.unsubscribe()
       },
+    }),
+
+    // Get group properties (aggregated property descriptors for all members)
+    groupProperties: build.query<GroupPropertyDescriptor[], string>({
+      query: (name) => `groups/${encodeURIComponent(name)}/properties`,
+      providesTags: (_result, _error, name) => [{ type: 'GroupList', id: name }],
     }),
 
     // Get distribution strategies
@@ -83,6 +90,7 @@ export const groupsApi = restApi.injectEndpoints({
 export const {
   useGroupListQuery,
   useGroupQuery,
+  useGroupPropertiesQuery,
   useDistributionStrategiesQuery,
   useGroupActiveEffectsQuery,
   useApplyGroupFxMutation,

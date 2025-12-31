@@ -13,6 +13,7 @@ import {
   Spotlight,
   IterationCw,
   LayoutGrid,
+  Layers,
   SlidersHorizontal,
   ChevronRight,
   Circle,
@@ -100,9 +101,16 @@ export default function ProjectSelector({ collapsed }: ProjectSelectorProps) {
             <NavItem
               icon={<LayoutGrid className="size-5" />}
               label="Fixtures"
-              isActive={location.pathname.startsWith("/fixtures")}
+              isActive={location.pathname.startsWith("/fixtures") || location.pathname.includes("/fixtures")}
               collapsed
               onClick={() => navigate("/fixtures")}
+            />
+            <NavItem
+              icon={<Layers className="size-5" />}
+              label="Groups"
+              isActive={location.pathname.startsWith("/groups") || location.pathname.includes("/groups")}
+              collapsed
+              onClick={() => navigate("/groups")}
             />
             {(universes ?? []).map(universe => (
               <NavItem
@@ -254,9 +262,17 @@ function ActiveProjectSection({
         <NavItem
           icon={<LayoutGrid className="size-4" />}
           label="Fixtures"
-          isActive={location.pathname.startsWith("/fixtures")}
+          isActive={location.pathname.startsWith("/fixtures") || location.pathname.includes("/fixtures")}
           collapsed={false}
           onClick={() => navigate("/fixtures")}
+          indent
+        />
+        <NavItem
+          icon={<Layers className="size-4" />}
+          label="Groups"
+          isActive={location.pathname.startsWith("/groups") || location.pathname.includes("/groups")}
+          collapsed={false}
+          onClick={() => navigate("/groups")}
           indent
         />
         {universes.map(universe => (
