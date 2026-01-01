@@ -90,8 +90,6 @@ export function FixtureDetailModal({ fixtureKey, onClose }: FixtureDetailModalPr
           <FixtureContent
             fixture={fixture}
             isEditing={isEditing}
-            cardSpan={2}
-            variant="modal"
             viewMode={viewMode}
           />
         )}

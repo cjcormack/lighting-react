@@ -17,8 +17,6 @@ interface FixtureContentProps {
   onGroupClick?: (groupName: string) => void
   /** Number of grid columns the card spans (affects channel layout) */
   cardSpan?: number
-  /** Display variant - 'card' for grid layout, 'modal' for expandable accordion */
-  variant?: 'card' | 'modal'
   /** Which view to display - controlled externally */
   viewMode: FixtureViewMode
 }
@@ -28,7 +26,6 @@ export function FixtureContent({
   isEditing,
   onGroupClick,
   cardSpan = 1,
-  variant = 'card',
   viewMode,
 }: FixtureContentProps) {
   const hasElements = (fixture.elements?.length ?? 0) > 0
@@ -43,7 +40,6 @@ export function FixtureContent({
       hasElements={hasElements}
       isEditing={isEditing}
       onGroupClick={onGroupClick}
-      variant={variant}
     />
   )
 }
@@ -53,13 +49,11 @@ function PropertiesView({
   hasElements,
   isEditing,
   onGroupClick,
-  variant,
 }: {
   fixture: Fixture
   hasElements: boolean
   isEditing: boolean
   onGroupClick?: (groupName: string) => void
-  variant: 'card' | 'modal'
 }) {
   // Group properties by category for better organization
   const colourProps =
@@ -150,11 +144,7 @@ function PropertiesView({
               </h4>
             </div>
           )}
-          {variant === 'modal' ? (
-            <ModalElementsView elements={fixture.elements} isEditing={isEditing} />
-          ) : (
-            <CardElementsView elements={fixture.elements} isEditing={isEditing} />
-          )}
+          <ElementsView elements={fixture.elements} isEditing={isEditing} />
         </>
       )}
 
@@ -165,45 +155,8 @@ function PropertiesView({
   )
 }
 
-/** Grid-based elements view for cards */
-function CardElementsView({
-  elements,
-  isEditing,
-}: {
-  elements: ElementDescriptor[]
-  isEditing: boolean
-}) {
-  return (
-    <div
-      className={cn(
-        'grid gap-4',
-        // Responsive grid: single column on mobile, then expand based on head count
-        'grid-cols-1',
-        elements.length >= 2 && 'sm:grid-cols-2',
-        elements.length >= 3 && 'lg:grid-cols-3',
-        elements.length >= 4 && 'xl:grid-cols-4'
-      )}
-    >
-      {elements.map((element) => (
-        <div key={element.key} className="border rounded p-3 min-w-0">
-          <h4 className="font-medium text-sm mb-2">{element.displayName}</h4>
-          <div className="space-y-1">
-            {element.properties.map((prop) => (
-              <PropertyVisualizer
-                key={prop.name}
-                property={prop}
-                isEditing={isEditing}
-              />
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-/** Expandable accordion-style elements view for modals */
-function ModalElementsView({
+/** Expandable accordion-style elements view */
+function ElementsView({
   elements,
   isEditing,
 }: {

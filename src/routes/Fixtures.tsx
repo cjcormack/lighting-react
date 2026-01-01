@@ -11,7 +11,6 @@ import { EditModeProvider, useEditMode } from "../components/fixtures/EditModeCo
 import { FixtureContent, FixtureViewMode } from "../components/fixtures/FixtureContent"
 import { GroupDetailModal } from "../components/fixtures/GroupDetailModal"
 import { useCurrentProjectQuery, useProjectQuery } from "../store/projects"
-import { cn } from "@/lib/utils"
 
 // Context for global view mode
 const ViewModeContext = createContext<FixtureViewMode>('properties')
@@ -202,37 +201,15 @@ function AllFixturesView({
   )
 }
 
-/**
- * Determine card span based on element count
- * Only multi-head fixtures get wider cards
- */
-function getCardSpan(fixture: Fixture): number {
-  const elementCount = fixture.elements?.length ?? 0
-
-  // Only multi-element fixtures get wider cards
-  if (elementCount >= 4) return 4
-  if (elementCount >= 3) return 3
-  if (elementCount >= 2) return 2
-
-  return 1
-}
-
 const FixtureCard = ({ fixture }: { fixture: Fixture }) => {
-  const span = getCardSpan(fixture)
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
 
   return (
     <EditModeProvider>
-      <Card
-        className={cn(
-          span === 2 && "md:col-span-2",
-          span === 3 && "md:col-span-2 lg:col-span-3",
-          span === 4 && "md:col-span-2 lg:col-span-3 xl:col-span-4"
-        )}
-      >
+      <Card>
         <FixtureCardHeader fixture={fixture} />
         <CardContent>
-          <FixtureCardContent fixture={fixture} span={span} onGroupClick={setSelectedGroup} />
+          <FixtureCardContent fixture={fixture} onGroupClick={setSelectedGroup} />
         </CardContent>
       </Card>
       <GroupDetailModal
@@ -245,11 +222,9 @@ const FixtureCard = ({ fixture }: { fixture: Fixture }) => {
 
 function FixtureCardContent({
   fixture,
-  span,
   onGroupClick,
 }: {
   fixture: Fixture
-  span: number
   onGroupClick: (groupName: string) => void
 }) {
   const { isEditing } = useEditMode()
@@ -260,7 +235,6 @@ function FixtureCardContent({
       fixture={fixture}
       isEditing={isEditing}
       onGroupClick={onGroupClick}
-      cardSpan={span}
       viewMode={viewMode}
     />
   )
