@@ -1,7 +1,24 @@
-import { memo } from 'react'
-import { Badge } from '@/components/ui/badge'
-import { useFixtureListQuery, findColourSource, type Fixture, type ColourPropertyDescriptor, type SliderPropertyDescriptor, type SettingPropertyDescriptor } from '../../store/fixtures'
-import { useColourValue, useSliderValue, useSettingColourPreview } from '../../hooks/usePropertyValues'
+import { memo, useMemo } from 'react'
+import {
+  useFixtureListQuery,
+  findColourSource,
+  type Fixture,
+  type ColourPropertyDescriptor,
+  type SliderPropertyDescriptor,
+  type SettingPropertyDescriptor,
+  type ElementDescriptor,
+} from '../../store/fixtures'
+import {
+  useColourValue,
+  useSliderValue,
+  useSettingColourPreview,
+} from '../../hooks/usePropertyValues'
+import { cn } from '@/lib/utils'
+
+// Fixed height for colour row to ensure consistent card heights
+const COLOUR_ROW_HEIGHT = 'h-6'
+// Fixed height for dimmer bar row
+const DIMMER_ROW_HEIGHT = 'h-[22px]'
 
 interface CompactFixtureCardProps {
   fixtureKey: string
@@ -10,133 +27,278 @@ interface CompactFixtureCardProps {
   onClick: () => void
 }
 
+/**
+ * Get the dimmer property from a fixture or element
+ */
+function findDimmerProperty(
+  properties: Fixture['properties'] | ElementDescriptor['properties']
+): SliderPropertyDescriptor | undefined {
+  return properties?.find(
+    (p) => p.type === 'slider' && p.category === 'dimmer'
+  ) as SliderPropertyDescriptor | undefined
+}
+
+/**
+ * Check if a fixture or its elements have any colour source
+ */
+function hasAnyColourSource(fixture: Fixture): boolean {
+  // Check fixture-level properties
+  if (fixture.properties && findColourSource(fixture.properties)) {
+    return true
+  }
+  // Check element-level properties
+  if (fixture.elements) {
+    return fixture.elements.some((el) => findColourSource(el.properties))
+  }
+  return false
+}
+
 export const CompactFixtureCard = memo(function CompactFixtureCard({
   fixtureKey,
   fixtureName,
-  tags,
   onClick,
 }: CompactFixtureCardProps) {
   const { data: fixtureList } = useFixtureListQuery()
   const fixture = fixtureList?.find((f) => f.key === fixtureKey)
 
-  const isElement = tags.includes('element')
-
   if (!fixture) {
     return (
       <div
-        className="p-2 border rounded cursor-pointer hover:bg-accent/50 transition-colors"
+        className="p-2 border rounded cursor-pointer hover:bg-accent/50 transition-colors min-w-[100px] flex-1 max-w-[300px]"
         onClick={onClick}
       >
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded bg-muted shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{fixtureName}</p>
-            {isElement && (
-              <Badge variant="outline" className="text-xs">
-                Element
-              </Badge>
-            )}
-          </div>
-        </div>
+        <p className="text-sm font-medium truncate">{fixtureName}</p>
+        {/* Placeholder for colour row */}
+        <div className={cn('mt-1.5', COLOUR_ROW_HEIGHT)} />
+        {/* Placeholder for dimmer row */}
+        <div className={cn('mt-1.5', DIMMER_ROW_HEIGHT)} />
       </div>
     )
   }
 
+  const dimmerProp = findDimmerProperty(fixture.properties)
+  const hasElements = fixture.elements && fixture.elements.length > 0
+  const hasColour = hasAnyColourSource(fixture)
+
   return (
     <div
-      className="p-2 border rounded cursor-pointer hover:bg-accent/50 transition-colors"
+      className="p-2 border rounded cursor-pointer hover:bg-accent/50 transition-colors min-w-[100px] flex-1 max-w-[300px]"
       onClick={onClick}
     >
-      <div className="flex items-center gap-2">
-        <FixtureColourIndicator fixture={fixture} />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate">{fixture.name}</p>
-          {isElement && (
-            <Badge variant="outline" className="text-xs">
-              Element
-            </Badge>
-          )}
-        </div>
-        <DimmerBadge fixture={fixture} />
+      {/* Name first */}
+      <p className="text-sm font-medium truncate">{fixture.name}</p>
+
+      {/* Colour indicator(s) - or invisible placeholder */}
+      <div className={cn('mt-1.5', COLOUR_ROW_HEIGHT)}>
+        {hasColour && (
+          hasElements ? (
+            <MultiHeadIndicator elements={fixture.elements!} fixtureDimmer={dimmerProp} />
+          ) : (
+            <SingleHeadIndicator fixture={fixture} />
+          )
+        )}
+      </div>
+
+      {/* Dimmer bar - or invisible placeholder */}
+      <div className={cn('mt-1.5', DIMMER_ROW_HEIGHT)}>
+        {dimmerProp && <DimmerBar dimmerProp={dimmerProp} />}
       </div>
     </div>
   )
 })
 
 /**
- * Shows colour swatch or dimmer bar indicator
+ * Single fixture colour indicator with dimmer brightness - full width
  */
-function FixtureColourIndicator({ fixture }: { fixture: Fixture }) {
+function SingleHeadIndicator({ fixture }: { fixture: Fixture }) {
   const colourSource = fixture.properties ? findColourSource(fixture.properties) : undefined
+  const dimmerProp = findDimmerProperty(fixture.properties)
 
   if (colourSource?.type === 'colour') {
-    return <ColourSwatchIndicator colourProp={colourSource.property} />
+    return <ColourSquare colourProp={colourSource.property} dimmerProp={dimmerProp} fullWidth />
   }
 
   if (colourSource?.type === 'setting') {
-    return <SettingColourIndicator settingProp={colourSource.property} />
+    return <SettingColourSquare settingProp={colourSource.property} dimmerProp={dimmerProp} fullWidth />
   }
 
-  // Fallback: show dimmer bar
-  const dimmerProp = fixture.properties?.find(
-    (p) => p.type === 'slider' && p.category === 'dimmer'
-  ) as SliderPropertyDescriptor | undefined
-
-  if (dimmerProp) {
-    return <DimmerBarIndicator dimmerProp={dimmerProp} />
-  }
-
-  return <div className="w-6 h-6 rounded bg-muted shrink-0" />
+  return null
 }
 
-function ColourSwatchIndicator({ colourProp }: { colourProp: ColourPropertyDescriptor }) {
-  const colour = useColourValue(colourProp)
+/**
+ * Multi-head indicator showing all heads in a row - heads grow to fill space
+ */
+function MultiHeadIndicator({
+  elements,
+  fixtureDimmer,
+}: {
+  elements: ElementDescriptor[]
+  fixtureDimmer?: SliderPropertyDescriptor
+}) {
   return (
-    <div
-      className="w-6 h-6 rounded border shrink-0"
-      style={{ backgroundColor: colour.combinedCss }}
-    />
-  )
-}
-
-function SettingColourIndicator({ settingProp }: { settingProp: SettingPropertyDescriptor }) {
-  const colourPreview = useSettingColourPreview(settingProp)
-  return (
-    <div
-      className="w-6 h-6 rounded border shrink-0"
-      style={{ backgroundColor: colourPreview ?? 'transparent' }}
-    />
-  )
-}
-
-function DimmerBarIndicator({ dimmerProp }: { dimmerProp: SliderPropertyDescriptor }) {
-  const value = useSliderValue(dimmerProp)
-  const pct = Math.round((value / 255) * 100)
-  return (
-    <div className="w-6 h-6 flex items-end shrink-0 border rounded overflow-hidden bg-muted">
-      <div className="w-full bg-primary" style={{ height: `${pct}%` }} />
+    <div className="flex gap-1 h-full">
+      {elements.map((element) => (
+        <HeadSquare
+          key={element.key}
+          element={element}
+          fixtureDimmer={fixtureDimmer}
+        />
+      ))}
     </div>
   )
 }
 
-function DimmerBadge({ fixture }: { fixture: Fixture }) {
-  const dimmerProp = fixture.properties?.find(
-    (p) => p.type === 'slider' && p.category === 'dimmer'
-  ) as SliderPropertyDescriptor | undefined
+/**
+ * Individual head square with colour and dimmer brightness - grows to fill space
+ */
+function HeadSquare({
+  element,
+  fixtureDimmer,
+}: {
+  element: ElementDescriptor
+  fixtureDimmer?: SliderPropertyDescriptor
+}) {
+  const colourSource = findColourSource(element.properties)
+  // Use element's own dimmer if it has one, otherwise use fixture dimmer
+  const elementDimmer = findDimmerProperty(element.properties)
+  const dimmerProp = elementDimmer ?? fixtureDimmer
 
-  if (!dimmerProp) return null
+  if (!colourSource) {
+    // No colour source - render empty placeholder to maintain spacing
+    return <div className="min-w-3 h-full flex-1 rounded-sm bg-muted border border-border" />
+  }
 
-  return <DimmerValue dimmerProp={dimmerProp} />
+  if (colourSource.type === 'colour') {
+    return <ColourSquare colourProp={colourSource.property} dimmerProp={dimmerProp} grow />
+  }
+
+  return <SettingColourSquare settingProp={colourSource.property} dimmerProp={dimmerProp} grow />
 }
 
-function DimmerValue({ dimmerProp }: { dimmerProp: SliderPropertyDescriptor }) {
+/**
+ * Colour square with brightness based on dimmer
+ * Uses a wrapper div for the border so it's not affected by brightness filter
+ */
+function ColourSquare({
+  colourProp,
+  dimmerProp,
+  fullWidth,
+  grow,
+}: {
+  colourProp: ColourPropertyDescriptor
+  dimmerProp?: SliderPropertyDescriptor
+  fullWidth?: boolean
+  grow?: boolean
+}) {
+  const colour = useColourValue(colourProp)
+  const dimmerValue = useDimmerBrightness(dimmerProp)
+
+  return (
+    <div
+      className={cn(
+        'h-full rounded-sm border border-border overflow-hidden',
+        fullWidth ? 'w-full' : grow ? 'min-w-3 flex-1' : 'w-6'
+      )}
+    >
+      <div
+        className="w-full h-full"
+        style={{
+          backgroundColor: colour.combinedCss,
+          filter: `brightness(${dimmerValue})`,
+        }}
+      />
+    </div>
+  )
+}
+
+/**
+ * Setting-based colour square with brightness
+ * Uses a wrapper div for the border so it's not affected by brightness filter
+ */
+function SettingColourSquare({
+  settingProp,
+  dimmerProp,
+  fullWidth,
+  grow,
+}: {
+  settingProp: SettingPropertyDescriptor
+  dimmerProp?: SliderPropertyDescriptor
+  fullWidth?: boolean
+  grow?: boolean
+}) {
+  const colourPreview = useSettingColourPreview(settingProp)
+  const dimmerValue = useDimmerBrightness(dimmerProp)
+
+  return (
+    <div
+      className={cn(
+        'h-full rounded-sm border border-border overflow-hidden',
+        fullWidth ? 'w-full' : grow ? 'min-w-3 flex-1' : 'w-6'
+      )}
+    >
+      <div
+        className="w-full h-full"
+        style={{
+          backgroundColor: colourPreview ?? '#888',
+          filter: `brightness(${dimmerValue})`,
+        }}
+      />
+    </div>
+  )
+}
+
+/**
+ * Hook to get dimmer brightness value (0.15 to 1.0)
+ * Returns 1.0 if no dimmer prop
+ */
+function useDimmerBrightness(dimmerProp?: SliderPropertyDescriptor): number {
+  // Always call the hook, but with a dummy value if no prop
+  const value = useSliderValue(
+    dimmerProp ?? { type: 'slider', name: 'dummy', displayName: '', category: 'dimmer', channel: { universe: 0, channelNo: 0 }, min: 0, max: 255 }
+  )
+
+  if (!dimmerProp) return 1.0
+
+  // Map 0-255 to 0.15-1.0 (keep some visibility even at 0)
+  const normalized = value / 255
+  return 0.15 + normalized * 0.85
+}
+
+/**
+ * Visual dimmer bar indicator
+ */
+function DimmerBar({ dimmerProp }: { dimmerProp: SliderPropertyDescriptor }) {
   const value = useSliderValue(dimmerProp)
   const pct = Math.round((value / 255) * 100)
+
   return (
-    <span className="text-xs text-muted-foreground tabular-nums w-8 text-right shrink-0">
-      {pct}%
-    </span>
+    <div className="flex items-center gap-1.5 h-full">
+      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden min-w-[40px]">
+        <div
+          className={cn(
+            'h-full rounded-full transition-all',
+            pct > 0 ? 'bg-primary' : 'bg-muted-foreground/30'
+          )}
+          style={{ width: `${Math.max(pct, 2)}%` }}
+        />
+      </div>
+      <span className="text-xs text-muted-foreground tabular-nums w-7 text-right">
+        {pct}%
+      </span>
+    </div>
   )
+}
+
+/**
+ * Calculate min width for a card based on head count
+ * Uses modest minimums that scale with heads but won't cause overflow
+ */
+function getMinWidthForHeadCount(headCount: number): string {
+  // Each head is min 24px (w-6) + 4px gap
+  // Keep minimums modest to avoid scrollbars on narrow screens
+  if (headCount >= 8) return 'min-w-[220px]'
+  if (headCount >= 5) return 'min-w-[160px]'
+  return 'min-w-[100px]'
 }
 
 /**
@@ -156,91 +318,60 @@ export const MultiElementCompactCard = memo(function MultiElementCompactCard({
   const { data: fixtureList } = useFixtureListQuery()
   const fixture = fixtureList?.find((f) => f.key === parentKey)
 
+  // Check if any elements have colour
+  const hasColour = useMemo(() => {
+    if (!fixture?.elements) return false
+    return fixture.elements.some((el) => findColourSource(el.properties))
+  }, [fixture?.elements])
+
+  const actualHeadCount = fixture?.elements?.length ?? elementCount
+  const minWidthClass = getMinWidthForHeadCount(actualHeadCount)
+
   if (!fixture) {
     return (
       <div
-        className="p-2 border rounded cursor-pointer hover:bg-accent/50 transition-colors"
+        className={cn(
+          'p-2 border rounded cursor-pointer hover:bg-accent/50 transition-colors flex-1 max-w-[400px]',
+          minWidthClass
+        )}
         onClick={onClick}
       >
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded bg-muted shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{parentKey}</p>
-            <Badge variant="secondary" className="text-xs">
-              {elementCount} heads
-            </Badge>
-          </div>
-        </div>
+        <p className="text-sm font-medium truncate">{parentKey}</p>
+        {/* Placeholder for colour row */}
+        <div className={cn('mt-1.5', COLOUR_ROW_HEIGHT)} />
+        {/* Placeholder for dimmer row */}
+        <div className={cn('mt-1.5', DIMMER_ROW_HEIGHT)} />
       </div>
     )
   }
 
+  const dimmerProp = findDimmerProperty(fixture.properties)
+
   return (
     <div
-      className="p-2 border rounded cursor-pointer hover:bg-accent/50 transition-colors"
+      className={cn(
+        'p-2 border rounded cursor-pointer hover:bg-accent/50 transition-colors flex-1 max-w-[400px]',
+        minWidthClass
+      )}
       onClick={onClick}
     >
-      <div className="flex items-center gap-2">
-        <MultiHeadColourIndicator fixture={fixture} />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate">{fixture.name}</p>
-          <Badge variant="secondary" className="text-xs">
-            {elementCount} heads
-          </Badge>
-        </div>
-        <DimmerBadge fixture={fixture} />
+      {/* Name first */}
+      <p className="text-sm font-medium truncate">{fixture.name}</p>
+
+      {/* Head squares - or invisible placeholder */}
+      <div className={cn('mt-1.5', COLOUR_ROW_HEIGHT)}>
+        {hasColour && (
+          <MultiHeadIndicator
+            elements={fixture.elements ?? []}
+            fixtureDimmer={dimmerProp}
+          />
+        )}
+      </div>
+
+      {/* Dimmer bar - or invisible placeholder */}
+      <div className={cn('mt-1.5', DIMMER_ROW_HEIGHT)}>
+        {dimmerProp && <DimmerBar dimmerProp={dimmerProp} />}
       </div>
     </div>
   )
 })
-
-/**
- * Shows mini colour dots for each head
- */
-function MultiHeadColourIndicator({ fixture }: { fixture: Fixture }) {
-  if (!fixture.elements || fixture.elements.length === 0) {
-    return <FixtureColourIndicator fixture={fixture} />
-  }
-
-  const maxDots = 4
-  const showElements = fixture.elements.slice(0, maxDots)
-  const extraCount = fixture.elements.length - maxDots
-
-  return (
-    <div className="flex gap-0.5 shrink-0 items-center">
-      {showElements.map((element) => {
-        const colourSource = findColourSource(element.properties)
-        if (!colourSource) {
-          return <div key={element.key} className="w-3 h-3 rounded-full bg-muted" />
-        }
-        if (colourSource.type === 'colour') {
-          return <ElementColourDot key={element.key} colourProp={colourSource.property} />
-        }
-        return <ElementSettingColourDot key={element.key} settingProp={colourSource.property} />
-      })}
-      {extraCount > 0 && (
-        <span className="text-xs text-muted-foreground ml-0.5">+{extraCount}</span>
-      )}
-    </div>
-  )
-}
-
-function ElementColourDot({ colourProp }: { colourProp: ColourPropertyDescriptor }) {
-  const colour = useColourValue(colourProp)
-  return (
-    <div
-      className="w-3 h-3 rounded-full border"
-      style={{ backgroundColor: colour.combinedCss }}
-    />
-  )
-}
-
-function ElementSettingColourDot({ settingProp }: { settingProp: SettingPropertyDescriptor }) {
-  const colourPreview = useSettingColourPreview(settingProp)
-  return (
-    <div
-      className="w-3 h-3 rounded-full border"
-      style={{ backgroundColor: colourPreview ?? 'transparent' }}
-    />
-  )
-}

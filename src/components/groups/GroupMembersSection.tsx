@@ -66,7 +66,7 @@ export function GroupMembersSection({
   return (
     <div className="pt-3 border-t">
       <h4 className="text-sm font-medium text-muted-foreground mb-2">Members</h4>
-      <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
+      <div className="flex flex-wrap gap-2">
         {/* Regular fixtures */}
         {regularFixtures.map((member) => (
           <CompactFixtureCard

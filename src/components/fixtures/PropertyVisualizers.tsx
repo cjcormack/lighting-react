@@ -316,7 +316,7 @@ export const SliderProperty = memo(function SliderProperty({
               onValueChange={([v]) => updateChannel(property.channel, v)}
               className="flex-1"
             />
-            <span className="w-12 text-xs text-right text-muted-foreground">
+            <span className="w-[4.5rem] text-xs text-right text-muted-foreground whitespace-nowrap">
               {value} ({percentage}%)
             </span>
           </>
@@ -328,7 +328,7 @@ export const SliderProperty = memo(function SliderProperty({
                 style={{ width: `${percentage}%` }}
               />
             </div>
-            <span className="w-12 text-xs text-right text-muted-foreground">
+            <span className="w-[4.5rem] text-xs text-right text-muted-foreground whitespace-nowrap">
               {value} ({percentage}%)
             </span>
           </>

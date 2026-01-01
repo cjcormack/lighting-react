@@ -1,4 +1,4 @@
-import React from "react"
+import React, { useState } from "react"
 import { Outlet } from "react-router-dom"
 import { ChevronLeft, Menu } from "lucide-react"
 
@@ -11,12 +11,19 @@ import TrackStatus from "./TrackStatus"
 import { ConnectionStatus } from "./connection"
 import ProjectSwitcher from "./ProjectSwitcher"
 import ThemeToggle from "./ThemeToggle"
+import { FixtureOverviewToggle } from "./components/FixtureOverviewToggle"
+import { FixtureOverviewPanel } from "./components/FixtureOverviewPanel"
+import { FixtureDetailModal } from "./components/groups/FixtureDetailModal"
+import { useFixtureOverview } from "./hooks/useFixtureOverview"
 
 const DRAWER_WIDTH = 240
 const DRAWER_COLLAPSED_WIDTH = 64
 
 export default function Layout() {
   const [open, setOpen] = React.useState(true)
+  const [selectedFixture, setSelectedFixture] = useState<string | null>(null)
+  const { isVisible: isOverviewVisible, toggle: toggleOverview } = useFixtureOverview()
+
   const toggleDrawer = () => {
     setOpen(!open)
   }
@@ -63,18 +70,37 @@ export default function Layout() {
           style={{ marginLeft: sidebarWidth }}
         >
           {/* Header */}
-          <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b bg-primary px-4 text-primary-foreground">
-            <h1 className="flex-1 text-lg font-semibold">
-              Chris&apos; DMX Controller v7
-            </h1>
-            <ConnectionStatus />
-            <ThemeToggle />
+          <header className="sticky top-0 z-40 border-b bg-primary px-4 py-2 text-primary-foreground">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <h1 className="text-lg font-semibold whitespace-nowrap">
+                Chris&apos; DMX Controller v7
+              </h1>
+              <div className="flex-1" />
+              <div className="flex flex-wrap items-center gap-2">
+                <ConnectionStatus />
+                <FixtureOverviewToggle isVisible={isOverviewVisible} onToggle={toggleOverview} />
+                <ThemeToggle />
+              </div>
+            </div>
           </header>
+
+          {/* Fixture Overview Panel - always rendered for animation */}
+          <FixtureOverviewPanel
+            onFixtureClick={setSelectedFixture}
+            isVisible={isOverviewVisible}
+          />
 
           {/* Page Content */}
           <main className="flex-1 overflow-auto bg-muted/40 min-w-0">
             <Outlet />
           </main>
+
+          {/* Fixture Detail Modal - opens in edit mode from overview */}
+          <FixtureDetailModal
+            fixtureKey={selectedFixture}
+            onClose={() => setSelectedFixture(null)}
+            isEditing
+          />
         </div>
       </div>
     </TooltipProvider>
