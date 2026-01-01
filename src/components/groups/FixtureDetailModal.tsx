@@ -15,17 +15,23 @@ import { FixtureContent, FixtureViewMode } from '../fixtures/FixtureContent'
 interface FixtureDetailModalProps {
   fixtureKey: string | null
   onClose: () => void
+  /** When provided, uses this edit state and hides the Edit button */
+  isEditing?: boolean
 }
 
-export function FixtureDetailModal({ fixtureKey, onClose }: FixtureDetailModalProps) {
+export function FixtureDetailModal({ fixtureKey, onClose, isEditing: externalIsEditing }: FixtureDetailModalProps) {
   const { data: fixtureList } = useFixtureListQuery()
   const fixture = fixtureKey ? fixtureList?.find((f) => f.key === fixtureKey) : null
-  const [isEditing, setIsEditing] = useState(false)
+  const [internalIsEditing, setInternalIsEditing] = useState(false)
   const [viewMode, setViewMode] = useState<FixtureViewMode>('properties')
+
+  // Use external edit state if provided, otherwise use internal state
+  const isEditing = externalIsEditing ?? internalIsEditing
+  const showEditButton = externalIsEditing === undefined
 
   // Reset edit mode and view mode when modal closes or fixture changes
   useEffect(() => {
-    setIsEditing(false)
+    setInternalIsEditing(false)
     setViewMode('properties')
   }, [fixtureKey])
 
@@ -58,13 +64,15 @@ export function FixtureDetailModal({ fixtureKey, onClose }: FixtureDetailModalPr
                   <SlidersHorizontal className="h-4 w-4" />
                 </ToggleGroupItem>
               </ToggleGroup>
-              <Button
-                variant={isEditing ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setIsEditing(!isEditing)}
-              >
-                {isEditing ? 'Done' : 'Edit'}
-              </Button>
+              {showEditButton && (
+                <Button
+                  variant={isEditing ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setInternalIsEditing(!internalIsEditing)}
+                >
+                  {isEditing ? 'Done' : 'Edit'}
+                </Button>
+              )}
             </div>
           </div>
 

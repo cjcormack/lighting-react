@@ -1,4 +1,4 @@
-import React, { useEffect } from "react"
+import React, { useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
@@ -7,19 +7,28 @@ import { Button } from "@/components/ui/button"
 import { useParams, useNavigate, Navigate } from "react-router-dom"
 import { ChevronRight, Loader2 } from "lucide-react"
 import { useGetChannelQuery, useUpdateChannelMutation } from "../store/channels"
+import { useGetChannelMappingQuery } from "../store/channelMapping"
 import { useCurrentProjectQuery, useProjectQuery } from "../store/projects"
 import { EditModeProvider, useEditMode } from "@/components/fixtures/EditModeContext"
+import { FixtureDetailModal } from "@/components/groups/FixtureDetailModal"
 
 export const ChannelSlider = ({
   universe,
   id,
   isEditing,
+  onFixtureClick,
 }: {
   universe: number
   id: number
   isEditing: boolean
+  onFixtureClick?: (fixtureKey: string) => void
 }) => {
   const { data: maybeValue } = useGetChannelQuery({
+    universe: universe,
+    channelNo: id,
+  })
+
+  const { data: mapping } = useGetChannelMappingQuery({
     universe: universe,
     channelNo: id,
   })
@@ -62,10 +71,10 @@ export const ChannelSlider = ({
   }
 
   return (
-    <div className="py-1.5">
+    <div>
       <div className="flex items-center gap-2">
-        <span className="text-xs font-medium w-12 shrink-0 text-muted-foreground">
-          Ch {id}
+        <span className="text-xs font-medium w-8 shrink-0 text-muted-foreground">
+          {id}
         </span>
         {isEditing ? (
           <>
@@ -97,6 +106,27 @@ export const ChannelSlider = ({
               {value}
             </span>
           </>
+        )}
+      </div>
+      <div className="flex items-center gap-1 ml-8 text-[10px] truncate">
+        {mapping ? (
+          <>
+            <button
+              className="text-muted-foreground hover:text-foreground hover:underline shrink-0"
+              title={`${mapping.fixtureName}: ${mapping.description}`}
+              onClick={() => onFixtureClick?.(mapping.fixtureKey)}
+            >
+              {mapping.fixtureName}
+            </button>
+            {mapping.description && (
+              <>
+                <span className="text-muted-foreground/50">·</span>
+                <span className="text-muted-foreground/50 truncate">{mapping.description}</span>
+              </>
+            )}
+          </>
+        ) : (
+          <span className="text-muted-foreground/30">Unmapped</span>
         )}
       </div>
     </div>
@@ -169,24 +199,36 @@ export function ProjectChannels() {
 
 function ProjectChannelsContent({ projectName, universe }: { projectName: string; universe: number }) {
   const { isEditing, toggleEditing } = useEditMode()
+  const [selectedFixtureKey, setSelectedFixtureKey] = useState<string | null>(null)
 
   return (
-    <Card className="m-4 p-4">
-      <div className="flex items-start justify-between mb-4">
-        <Breadcrumbs projectName={projectName} universe={universe} />
-        <Button
-          variant={isEditing ? "default" : "outline"}
-          size="sm"
-          onClick={toggleEditing}
-          className="shrink-0"
-        >
-          {isEditing ? "Done" : "Edit"}
-        </Button>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        <ChannelGroups universe={universe} isEditing={isEditing} />
-      </div>
-    </Card>
+    <>
+      <Card className="m-4 p-4">
+        <div className="flex items-start justify-between mb-4">
+          <Breadcrumbs projectName={projectName} universe={universe} />
+          <Button
+            variant={isEditing ? "default" : "outline"}
+            size="sm"
+            onClick={toggleEditing}
+            className="shrink-0"
+          >
+            {isEditing ? "Done" : "Edit"}
+          </Button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <ChannelGroups
+            universe={universe}
+            isEditing={isEditing}
+            onFixtureClick={setSelectedFixtureKey}
+          />
+        </div>
+      </Card>
+      <FixtureDetailModal
+        fixtureKey={selectedFixtureKey}
+        onClose={() => setSelectedFixtureKey(null)}
+        isEditing={isEditing}
+      />
+    </>
   )
 }
 
@@ -218,7 +260,15 @@ function Breadcrumbs({ projectName, universe }: { projectName: string; universe:
   )
 }
 
-const ChannelGroups = ({ universe, isEditing }: { universe: number; isEditing: boolean }) => {
+const ChannelGroups = ({
+  universe,
+  isEditing,
+  onFixtureClick,
+}: {
+  universe: number
+  isEditing: boolean
+  onFixtureClick?: (fixtureKey: string) => void
+}) => {
   const channelCount = 512
   const groupSize = 8
 
@@ -229,7 +279,13 @@ const ChannelGroups = ({ universe, isEditing }: { universe: number; isEditing: b
           {Array.from(Array(groupSize)).map((_, itemNo) => {
             const channelNo = groupNo * groupSize + itemNo + 1
             return (
-              <ChannelSlider key={itemNo} universe={universe} id={channelNo} isEditing={isEditing} />
+              <ChannelSlider
+                key={itemNo}
+                universe={universe}
+                id={channelNo}
+                isEditing={isEditing}
+                onFixtureClick={onFixtureClick}
+              />
             )
           })}
         </Card>

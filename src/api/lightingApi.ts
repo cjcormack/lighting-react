@@ -1,4 +1,5 @@
 import {ChannelsApi, createChannelsApi} from "./channelsApi";
+import {ChannelMappingApi, createChannelMappingApi} from "./channelMappingApi";
 import {createStatusApi, StatusApi} from "./statusApi";
 import {createTrackApi, TrackApi} from "./trackApi";
 import {createInternalApiConnection} from "./internalApi";
@@ -11,6 +12,7 @@ import {createGroupsApi, GroupsApi} from "./groupsApi";
 interface LightingApi {
   universes: UniversesApi
   channels: ChannelsApi
+  channelMapping: ChannelMappingApi
   status: StatusApi
   track: TrackApi
   scenes: ScenesApi
@@ -37,6 +39,7 @@ function createLightingApi(): LightingApi {
 
   const universesApi = createUniversesApi(connection)
   const channelsApi = createChannelsApi(connection)
+  const channelMappingApi = createChannelMappingApi(connection)
   const statusApi = createStatusApi(connection)
   const trackApi = createTrackApi(connection)
   const sceneApi = createSceneApi(connection)
@@ -47,6 +50,7 @@ function createLightingApi(): LightingApi {
   return {
     universes: universesApi,
     channels: channelsApi,
+    channelMapping: channelMappingApi,
     status: statusApi,
     track: trackApi,
     scenes: sceneApi,
