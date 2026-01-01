@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useCallback } from 'react'
 import { Slider } from '@/components/ui/slider'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -23,6 +23,7 @@ import {
   useUpdateChannel,
 } from '../../hooks/usePropertyValues'
 import { cn } from '@/lib/utils'
+import { ColourPickerPopover } from './ColourPickerPopover'
 
 interface PropertyVisualizerProps {
   property: PropertyDescriptor
@@ -46,19 +47,57 @@ export const ColourSwatch = memo(function ColourSwatch({
 
   const hasActiveUv = colour.uv !== undefined && colour.uv > 0
 
+  const handleColourChange = useCallback(
+    (r: number, g: number, b: number, w?: number, a?: number, uv?: number) => {
+      updateChannel(property.redChannel, r)
+      updateChannel(property.greenChannel, g)
+      updateChannel(property.blueChannel, b)
+      if (property.whiteChannel && w !== undefined) {
+        updateChannel(property.whiteChannel, w)
+      }
+      if (property.amberChannel && a !== undefined) {
+        updateChannel(property.amberChannel, a)
+      }
+      if (property.uvChannel && uv !== undefined) {
+        updateChannel(property.uvChannel, uv)
+      }
+    },
+    [updateChannel, property]
+  )
+
+  const swatchElement = (
+    <div
+      className={cn(
+        'w-10 h-10 rounded border border-border shadow-inner',
+        hasActiveUv && 'ring-2 ring-purple-500/50',
+        isEditing && 'cursor-pointer hover:ring-2 hover:ring-primary/50 transition-shadow'
+      )}
+      style={{ backgroundColor: colour.combinedCss }}
+      title={isEditing ? 'Click to pick colour' : colour.combinedCss}
+    />
+  )
+
   return (
     <div className="py-2">
       <div className="flex items-center gap-3">
         <span className="text-sm font-medium w-20 shrink-0">{property.displayName}</span>
         <div className="relative shrink-0">
-          <div
-            className={cn(
-              'w-10 h-10 rounded border border-border shadow-inner',
-              hasActiveUv && 'ring-2 ring-purple-500/50'
-            )}
-            style={{ backgroundColor: colour.combinedCss }}
-            title={colour.combinedCss}
-          />
+          {isEditing ? (
+            <ColourPickerPopover
+              r={colour.r}
+              g={colour.g}
+              b={colour.b}
+              combinedCss={colour.combinedCss}
+              hasWhiteChannel={!!property.whiteChannel}
+              hasAmberChannel={!!property.amberChannel}
+              hasUvChannel={!!property.uvChannel}
+              onColourChange={handleColourChange}
+            >
+              {swatchElement}
+            </ColourPickerPopover>
+          ) : (
+            swatchElement
+          )}
           {hasActiveUv && (
             <div
               className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-purple-500 border border-background"

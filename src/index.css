@@ -123,3 +123,26 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* react-colorful colour picker styles */
+.react-colorful {
+  width: 200px !important;
+  height: 200px !important;
+}
+
+.react-colorful__saturation {
+  border-radius: var(--radius-sm);
+}
+
+.react-colorful__hue {
+  height: 12px !important;
+  border-radius: var(--radius-sm);
+  margin-top: 12px;
+}
+
+.react-colorful__pointer {
+  width: 20px;
+  height: 20px;
+  border: 2px solid white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}

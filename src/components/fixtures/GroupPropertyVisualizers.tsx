@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useCallback } from 'react'
 import { Slider } from '@/components/ui/slider'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -26,6 +26,7 @@ import {
   useUpdateGroupSetting,
 } from '../../hooks/useGroupPropertyValues'
 import { cn } from '@/lib/utils'
+import { ColourPickerPopover } from './ColourPickerPopover'
 
 interface GroupPropertyVisualizerProps {
   property: GroupPropertyDescriptor
@@ -111,20 +112,47 @@ export const GroupColourSwatch = memo(function GroupColourSwatch({
   const hasUv = property.memberColourChannels.some((m) => m.uvChannel)
   const hasExtendedChannels = hasWhite || hasAmber || hasUv
 
+  const handleColourChange = useCallback(
+    (r: number, g: number, b: number, w?: number, a?: number, uv?: number) => {
+      updateAll(r, g, b, w, a, uv)
+    },
+    [updateAll]
+  )
+
+  const swatchElement = (
+    <div
+      className={cn(
+        'w-10 h-10 rounded border border-border shadow-inner',
+        !isUniform && 'ring-2 ring-yellow-500/50',
+        avgUv !== undefined && avgUv > 0 && 'ring-2 ring-purple-500/50',
+        isEditing && 'cursor-pointer hover:ring-2 hover:ring-primary/50 transition-shadow'
+      )}
+      style={{ backgroundColor: combinedCss }}
+      title={isEditing ? 'Click to pick colour' : isUniform ? combinedCss : 'Mixed colours'}
+    />
+  )
+
   return (
     <div className="py-2">
       <div className="flex items-center gap-3">
         <span className="text-sm font-medium w-20 shrink-0">{property.displayName}</span>
         <div className="relative shrink-0">
-          <div
-            className={cn(
-              'w-10 h-10 rounded border border-border shadow-inner',
-              !isUniform && 'ring-2 ring-yellow-500/50',
-              avgUv !== undefined && avgUv > 0 && 'ring-2 ring-purple-500/50'
-            )}
-            style={{ backgroundColor: combinedCss }}
-            title={isUniform ? combinedCss : 'Mixed colours'}
-          />
+          {isEditing ? (
+            <ColourPickerPopover
+              r={avgR}
+              g={avgG}
+              b={avgB}
+              combinedCss={combinedCss}
+              hasWhiteChannel={hasWhite}
+              hasAmberChannel={hasAmber}
+              hasUvChannel={hasUv}
+              onColourChange={handleColourChange}
+            >
+              {swatchElement}
+            </ColourPickerPopover>
+          ) : (
+            swatchElement
+          )}
           {!isUniform && (
             <div
               className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-yellow-500 border border-background"
