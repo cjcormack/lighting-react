@@ -261,3 +261,11 @@ export function useUpdateChannel() {
     lightingApi.channels.update(channel.universe, channel.channelNo, value)
   }, [])
 }
+
+/**
+ * Hook to get the colourPreview from a setting's current option (if it has one)
+ */
+export function useSettingColourPreview(property: SettingPropertyDescriptor): string | undefined {
+  const { option } = useSettingValue(property)
+  return option?.colourPreview
+}

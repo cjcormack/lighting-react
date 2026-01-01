@@ -1,7 +1,7 @@
 import { memo } from 'react'
 import { Badge } from '@/components/ui/badge'
-import { useFixtureListQuery, type Fixture, type ColourPropertyDescriptor, type SliderPropertyDescriptor } from '../../store/fixtures'
-import { useColourValue, useSliderValue } from '../../hooks/usePropertyValues'
+import { useFixtureListQuery, findColourSource, type Fixture, type ColourPropertyDescriptor, type SliderPropertyDescriptor, type SettingPropertyDescriptor } from '../../store/fixtures'
+import { useColourValue, useSliderValue, useSettingColourPreview } from '../../hooks/usePropertyValues'
 
 interface CompactFixtureCardProps {
   fixtureKey: string
@@ -67,12 +67,14 @@ export const CompactFixtureCard = memo(function CompactFixtureCard({
  * Shows colour swatch or dimmer bar indicator
  */
 function FixtureColourIndicator({ fixture }: { fixture: Fixture }) {
-  const colourProp = fixture.properties?.find((p) => p.type === 'colour') as
-    | ColourPropertyDescriptor
-    | undefined
+  const colourSource = fixture.properties ? findColourSource(fixture.properties) : undefined
 
-  if (colourProp) {
-    return <ColourSwatchIndicator colourProp={colourProp} />
+  if (colourSource?.type === 'colour') {
+    return <ColourSwatchIndicator colourProp={colourSource.property} />
+  }
+
+  if (colourSource?.type === 'setting') {
+    return <SettingColourIndicator settingProp={colourSource.property} />
   }
 
   // Fallback: show dimmer bar
@@ -93,6 +95,16 @@ function ColourSwatchIndicator({ colourProp }: { colourProp: ColourPropertyDescr
     <div
       className="w-6 h-6 rounded border shrink-0"
       style={{ backgroundColor: colour.combinedCss }}
+    />
+  )
+}
+
+function SettingColourIndicator({ settingProp }: { settingProp: SettingPropertyDescriptor }) {
+  const colourPreview = useSettingColourPreview(settingProp)
+  return (
+    <div
+      className="w-6 h-6 rounded border shrink-0"
+      style={{ backgroundColor: colourPreview ?? 'transparent' }}
     />
   )
 }
@@ -197,13 +209,14 @@ function MultiHeadColourIndicator({ fixture }: { fixture: Fixture }) {
   return (
     <div className="flex gap-0.5 shrink-0 items-center">
       {showElements.map((element) => {
-        const colourProp = element.properties.find((p) => p.type === 'colour') as
-          | ColourPropertyDescriptor
-          | undefined
-        if (!colourProp) {
+        const colourSource = findColourSource(element.properties)
+        if (!colourSource) {
           return <div key={element.key} className="w-3 h-3 rounded-full bg-muted" />
         }
-        return <ElementColourDot key={element.key} colourProp={colourProp} />
+        if (colourSource.type === 'colour') {
+          return <ElementColourDot key={element.key} colourProp={colourSource.property} />
+        }
+        return <ElementSettingColourDot key={element.key} settingProp={colourSource.property} />
       })}
       {extraCount > 0 && (
         <span className="text-xs text-muted-foreground ml-0.5">+{extraCount}</span>
@@ -218,6 +231,16 @@ function ElementColourDot({ colourProp }: { colourProp: ColourPropertyDescriptor
     <div
       className="w-3 h-3 rounded-full border"
       style={{ backgroundColor: colour.combinedCss }}
+    />
+  )
+}
+
+function ElementSettingColourDot({ settingProp }: { settingProp: SettingPropertyDescriptor }) {
+  const colourPreview = useSettingColourPreview(settingProp)
+  return (
+    <div
+      className="w-3 h-3 rounded-full border"
+      style={{ backgroundColor: colourPreview ?? 'transparent' }}
     />
   )
 }

@@ -138,3 +138,34 @@ export type Fixture = {
   capabilities: string[]
   groups: string[]
 }
+
+/**
+ * Result of finding a colour source from properties.
+ * Either a direct colour property (type: 'colour') or a setting with category 'colour'.
+ */
+export type ColourSource =
+  | { type: 'colour'; property: ColourPropertyDescriptor }
+  | { type: 'setting'; property: SettingPropertyDescriptor }
+
+/**
+ * Find the colour source from an array of properties.
+ * Prioritizes colour properties over colour settings.
+ * If multiple colour settings exist, returns the first one.
+ */
+export function findColourSource(properties: PropertyDescriptor[]): ColourSource | undefined {
+  // First, look for a direct colour property
+  const colourProp = properties.find((p) => p.type === 'colour')
+  if (colourProp) {
+    return { type: 'colour', property: colourProp as ColourPropertyDescriptor }
+  }
+
+  // Fall back to the first setting with category 'colour'
+  const colourSetting = properties.find(
+    (p) => p.type === 'setting' && p.category === 'colour'
+  )
+  if (colourSetting) {
+    return { type: 'setting', property: colourSetting as SettingPropertyDescriptor }
+  }
+
+  return undefined
+}

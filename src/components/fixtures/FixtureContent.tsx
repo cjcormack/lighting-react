@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { Slider } from '@/components/ui/slider'
 import { Input } from '@/components/ui/input'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { Fixture, ElementDescriptor, ColourPropertyDescriptor } from '../../store/fixtures'
+import { Fixture, ElementDescriptor, ColourPropertyDescriptor, SettingPropertyDescriptor, findColourSource } from '../../store/fixtures'
 import { useGetChannelQuery, useUpdateChannelMutation } from '../../store/channels'
-import { useColourValue } from '../../hooks/usePropertyValues'
+import { useColourValue, useSettingColourPreview } from '../../hooks/usePropertyValues'
 import { PropertyVisualizer } from './PropertyVisualizers'
 import { GroupMembershipSection } from './GroupMembershipSection'
 import { cn } from '@/lib/utils'
@@ -220,11 +220,9 @@ function HeadColourPreview({
   element: ElementDescriptor
   size?: 'sm' | 'md'
 }) {
-  const colourProp = element.properties.find((p) => p.type === 'colour') as
-    | ColourPropertyDescriptor
-    | undefined
+  const colourSource = findColourSource(element.properties)
 
-  if (!colourProp) {
+  if (!colourSource) {
     return (
       <div
         className={cn(
@@ -236,7 +234,11 @@ function HeadColourPreview({
     )
   }
 
-  return <HeadColourDot colourProp={colourProp} title={element.displayName} size={size} />
+  if (colourSource.type === 'colour') {
+    return <HeadColourDot colourProp={colourSource.property} title={element.displayName} size={size} />
+  }
+
+  return <HeadSettingColourDot settingProp={colourSource.property} title={element.displayName} size={size} />
 }
 
 function HeadColourDot({
@@ -256,6 +258,28 @@ function HeadColourDot({
         size === 'sm' ? 'w-6 h-6' : 'w-8 h-8'
       )}
       style={{ backgroundColor: colour.combinedCss }}
+      title={title}
+    />
+  )
+}
+
+function HeadSettingColourDot({
+  settingProp,
+  title,
+  size,
+}: {
+  settingProp: SettingPropertyDescriptor
+  title: string
+  size: 'sm' | 'md'
+}) {
+  const colourPreview = useSettingColourPreview(settingProp)
+  return (
+    <div
+      className={cn(
+        'rounded border',
+        size === 'sm' ? 'w-6 h-6' : 'w-8 h-8'
+      )}
+      style={{ backgroundColor: colourPreview ?? 'transparent' }}
       title={title}
     />
   )
