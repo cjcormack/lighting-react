@@ -1,5 +1,4 @@
 import {Subscription} from "./subscription";
-import {aggregateAndDebounce} from "./aggregateAndDebounce";
 import {InternalApiConnection} from "./internalApi";
 
 export interface ChannelsApi {
@@ -19,23 +18,40 @@ type ChannelStateInMessage = {
     }[],
 }
 
-function debounceChannelUpdates(
+/**
+ * Debounces map updates, merging incoming maps with pending updates.
+ * All entries from a single call are guaranteed to fire together,
+ * either immediately (if no interval running) or on the next tick.
+ */
+function debounceMapUpdates(
     func: (updates: Map<string, number>) => void,
     waitMs: number
-): (i: string, l: number) => void {
+): (updates: Map<string, number>) => void {
+    let intervalId: number | undefined = undefined
+    let pending = new Map<string, number>()
+    let newValsSeen = false
 
-    const fn = aggregateAndDebounce(
-        ([a, b]: [string,number], map: Map<string, number>) => {
-            map.set(a, b);
-            return map;
-        },
-        func,
-        () => new Map(),
-        waitMs
-    );
+    function flush() {
+        if (newValsSeen) {
+            func(pending)
+            pending = new Map()
+            newValsSeen = false
+        } else {
+            clearInterval(intervalId)
+            intervalId = undefined
+        }
+    }
 
-    return (a: string, b: number) => {
-        fn([a, b])
+    return (updates: Map<string, number>) => {
+        updates.forEach((value, key) => {
+            pending.set(key, value)
+        })
+        newValsSeen = true
+
+        if (!intervalId) {
+            flush()
+            intervalId = window.setInterval(flush, waitMs)
+        }
     }
 }
 
@@ -62,9 +78,9 @@ export function createChannelsApi(conn: InternalApiConnection): ChannelsApi {
         })
     }
 
-    const updateItem = debounceChannelUpdates((updates: Map<string, number>) => {
+    const updateBatch = debounceMapUpdates((updates: Map<string, number>) => {
         notifyChannelsChange(updates)
-    }, 100)
+    }, 33)
 
     const handleOnOpen = () => {
         const payload = {
@@ -80,11 +96,14 @@ export function createChannelsApi(conn: InternalApiConnection): ChannelsApi {
             return
         }
 
+        // Batch all channels from this message together
+        const updates = new Map<string, number>()
         message.channels.forEach((update) => {
             const key = `${update.universe}:${update.id}`
             currentValues.set(key, update.currentLevel)
-            updateItem(key, update.currentLevel)
+            updates.set(key, update.currentLevel)
         })
+        updateBatch(updates)
     }
 
     conn.subscribe((evType, ev) => {
