@@ -58,21 +58,29 @@ export interface ScriptEditorProps {
 const scriptPrefix = `import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.dmx.*
 import uk.me.cormack.lighting7.fixture.hue.*
-import java.awt.Color
+import uk.me.cormack.lighting7.fixture.group.*
 import uk.me.cormack.lighting7.dmx.*
 import uk.me.cormack.lighting7.show.*
 import uk.me.cormack.lighting7.scripts.*
 import uk.me.cormack.lighting7.scriptSettings.*
+import uk.me.cormack.lighting7.fx.*
+import uk.me.cormack.lighting7.fx.effects.*
+import uk.me.cormack.lighting7.grpc.TrackDetails
+import java.awt.Color
+import kotlinx.coroutines.*
 
 class TestScript(
+    show: Show,
     fixtures: Fixtures.FixturesWithTransaction,
-    scriptName:
-    String,
+    fxEngine: FxEngine,
+    scriptName: String,
     step: Int,
     sceneName: String,
     sceneIsActive: Boolean,
-    settings: Map<String, String>
-): LightingScript(fixtures, scriptName, step, sceneName, sceneIsActive, settings) {}
+    settings: Map<String, String>,
+    coroutineScope: CoroutineScope,
+    currentTrack: TrackDetails?
+): LightingScript(show, fixtures, fxEngine, scriptName, step, sceneName, sceneIsActive, settings, coroutineScope, currentTrack) {}
 
 fun TestScript.test() {
 //sampleStart
@@ -151,7 +159,7 @@ export function ScriptEditor({
             highlightOnFly="true"
             autocomplete={readOnly ? undefined : "true"}
             matchBrackets={readOnly ? undefined : "true"}
-            readOnly={readOnly ? "true" : undefined}
+            highlightOnly={readOnly ? "true" : undefined}
             theme={isDarkMode ? "darcula" : "idea"}
             key={`${id ?? "new"}-${isDarkMode ? "dark" : "light"}`}
           />
