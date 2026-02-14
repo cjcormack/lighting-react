@@ -13,8 +13,11 @@ import ProjectSwitcher from "./ProjectSwitcher"
 import ThemeToggle from "./ThemeToggle"
 import { FixtureOverviewToggle } from "./components/FixtureOverviewToggle"
 import { FixtureOverviewPanel } from "./components/FixtureOverviewPanel"
+import { EffectsOverviewToggle } from "./components/EffectsOverviewToggle"
+import { EffectsOverviewPanel } from "./components/EffectsOverviewPanel"
 import { FixtureDetailModal } from "./components/groups/FixtureDetailModal"
 import { useFixtureOverview } from "./hooks/useFixtureOverview"
+import { useEffectsOverview } from "./hooks/useEffectsOverview"
 
 const DRAWER_WIDTH = 240
 const DRAWER_COLLAPSED_WIDTH = 64
@@ -23,6 +26,7 @@ export default function Layout() {
   const [open, setOpen] = React.useState(true)
   const [selectedFixture, setSelectedFixture] = useState<string | null>(null)
   const { isVisible: isOverviewVisible, toggle: toggleOverview } = useFixtureOverview()
+  const { isVisible: isEffectsVisible, toggle: toggleEffects } = useEffectsOverview()
 
   const toggleDrawer = () => {
     setOpen(!open)
@@ -79,6 +83,7 @@ export default function Layout() {
               <div className="flex flex-wrap items-center gap-2">
                 <ConnectionStatus />
                 <FixtureOverviewToggle isVisible={isOverviewVisible} onToggle={toggleOverview} />
+                <EffectsOverviewToggle isVisible={isEffectsVisible} onToggle={toggleEffects} />
                 <ThemeToggle />
               </div>
             </div>
@@ -89,6 +94,9 @@ export default function Layout() {
             onFixtureClick={setSelectedFixture}
             isVisible={isOverviewVisible}
           />
+
+          {/* Effects Overview Panel - always rendered for animation */}
+          <EffectsOverviewPanel isVisible={isEffectsVisible} />
 
           {/* Page Content */}
           <main className="flex-1 overflow-auto bg-muted/40 min-w-0">
