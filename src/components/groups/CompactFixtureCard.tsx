@@ -20,6 +20,22 @@ const COLOUR_ROW_HEIGHT = 'h-6'
 // Fixed height for dimmer bar row
 const DIMMER_ROW_HEIGHT = 'h-[22px]'
 
+/** Desired pixel width per head square (including gap) */
+const PX_PER_HEAD = 28
+/** Card horizontal padding (p-2 = 8px each side) + border */
+const CARD_PADDING = 18
+
+/**
+ * Compute a flex-basis (in px) that gives each head square enough room.
+ * Used with flex-wrap to push multi-head cards onto their own row in
+ * narrow containers while still allowing them to shrink responsively.
+ * Returns undefined for non-multi-element fixtures.
+ */
+function basisForHeads(headCount: number): number | undefined {
+  if (headCount <= 1) return undefined
+  return headCount * PX_PER_HEAD + CARD_PADDING
+}
+
 interface CompactFixtureCardProps {
   fixtureKey: string
   fixtureName: string
@@ -79,10 +95,15 @@ export const CompactFixtureCard = memo(function CompactFixtureCard({
   const dimmerProp = findDimmerProperty(fixture.properties)
   const hasElements = fixture.elements && fixture.elements.length > 0
   const hasColour = hasAnyColourSource(fixture)
+  const headBasis = hasElements ? basisForHeads(fixture.elements!.length) : undefined
 
   return (
     <div
-      className="p-2 border rounded cursor-pointer hover:bg-accent/50 transition-colors min-w-[100px] flex-1 max-w-[300px]"
+      className={cn(
+        'p-2 border rounded cursor-pointer hover:bg-accent/50 transition-colors min-w-[100px] flex-1',
+        !headBasis && 'max-w-[300px]'
+      )}
+      style={headBasis ? { flexBasis: headBasis } : undefined}
       onClick={onClick}
     >
       {/* Name first */}
@@ -290,19 +311,9 @@ function DimmerBar({ dimmerProp }: { dimmerProp: SliderPropertyDescriptor }) {
 }
 
 /**
- * Calculate min width for a card based on head count
- * Uses modest minimums that scale with heads but won't cause overflow
- */
-function getMinWidthForHeadCount(headCount: number): string {
-  // Each head is min 24px (w-6) + 4px gap
-  // Keep minimums modest to avoid scrollbars on narrow screens
-  if (headCount >= 8) return 'min-w-[220px]'
-  if (headCount >= 5) return 'min-w-[160px]'
-  return 'min-w-[100px]'
-}
-
-/**
- * Compact card for multi-element fixtures showing aggregate view
+ * Compact card for multi-element fixtures showing aggregate view.
+ * Uses a computed min-width based on head count so it naturally
+ * wraps to its own row in narrow containers.
  */
 interface MultiElementCompactCardProps {
   parentKey: string
@@ -325,15 +336,13 @@ export const MultiElementCompactCard = memo(function MultiElementCompactCard({
   }, [fixture?.elements])
 
   const actualHeadCount = fixture?.elements?.length ?? elementCount
-  const minWidthClass = getMinWidthForHeadCount(actualHeadCount)
+  const headBasis = basisForHeads(actualHeadCount)
 
   if (!fixture) {
     return (
       <div
-        className={cn(
-          'p-2 border rounded cursor-pointer hover:bg-accent/50 transition-colors flex-1 max-w-[400px]',
-          minWidthClass
-        )}
+        className="p-2 border rounded cursor-pointer hover:bg-accent/50 transition-colors min-w-[100px] flex-1"
+        style={headBasis ? { flexBasis: headBasis } : undefined}
         onClick={onClick}
       >
         <p className="text-sm font-medium truncate">{parentKey}</p>
@@ -349,10 +358,8 @@ export const MultiElementCompactCard = memo(function MultiElementCompactCard({
 
   return (
     <div
-      className={cn(
-        'p-2 border rounded cursor-pointer hover:bg-accent/50 transition-colors flex-1 max-w-[400px]',
-        minWidthClass
-      )}
+      className="p-2 border rounded cursor-pointer hover:bg-accent/50 transition-colors min-w-[100px] flex-1"
+      style={headBasis ? { flexBasis: headBasis } : undefined}
       onClick={onClick}
     >
       {/* Name first */}
