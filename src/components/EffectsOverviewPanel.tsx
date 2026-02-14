@@ -11,10 +11,18 @@ interface EffectsOverviewPanelProps {
 function BeatIndicator() {
   const { data: fxState } = useFxStateQuery()
   const [beat, setBeat] = useState(false)
+  const [synced, setSynced] = useState(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastFlashTimeRef = useRef(0)
   const bpmRef = useRef(fxState?.bpm ?? 120)
+
+  const stopInterval = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
+  }, [])
 
   const flash = useCallback(() => {
     if (flashTimeoutRef.current) {
@@ -26,45 +34,70 @@ function BeatIndicator() {
   }, [])
 
   const startInterval = useCallback((bpm: number) => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current)
-    }
+    stopInterval()
     intervalRef.current = setInterval(flash, 60000 / bpm)
-  }, [flash])
+  }, [flash, stopInterval])
 
-  // Start the local beat interval on mount
+  // When we lose sync, stop flashing
   useEffect(() => {
-    startInterval(bpmRef.current)
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
+    if (!synced) {
+      stopInterval()
+    }
+  }, [synced, stopInterval])
+
+  // Detect tab visibility changes — mark as unsynced when returning
+  // from a hidden state, since the local interval drifts while
+  // backgrounded.
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        setSynced(false)
       }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [])
+
+  // Every beatSync (every 16 beats): sync to the server's beat boundary.
+  useEffect(() => {
+    const subscription = subscribeToBeat((beatSync) => {
+      bpmRef.current = beatSync.bpm
+
+      const wasSynced = synced
+      if (!synced) {
+        setSynced(true)
+      }
+
+      // Flash unless the local timer just flashed for this beat
+      const minGap = (60000 / beatSync.bpm) / 2
+      if (!wasSynced || Date.now() - lastFlashTimeRef.current > minGap) {
+        flash()
+      }
+
+      startInterval(beatSync.bpm)
+    })
+    return () => subscription.unsubscribe()
+  }, [flash, startInterval, synced])
+
+  // Cleanup
+  useEffect(() => {
+    return () => {
+      stopInterval()
       if (flashTimeoutRef.current) {
         clearTimeout(flashTimeoutRef.current)
       }
     }
-  }, [startInterval])
-
-  // Every beatSync (every 16 beats): re-phase the local interval to the
-  // server's beat boundary and update BPM. Flash unless the local timer
-  // just flashed for this same beat (within half a beat interval).
-  useEffect(() => {
-    const subscription = subscribeToBeat((beatSync) => {
-      bpmRef.current = beatSync.bpm
-      const minGap = (60000 / beatSync.bpm) / 2
-      if (Date.now() - lastFlashTimeRef.current > minGap) {
-        flash()
-      }
-      startInterval(beatSync.bpm)
-    })
-    return () => subscription.unsubscribe()
-  }, [flash, startInterval])
+  }, [stopInterval])
 
   return (
     <div
       className={cn(
-        'size-3 rounded-full transition-colors duration-75',
-        beat ? 'bg-primary' : 'bg-muted-foreground/25'
+        'size-3 rounded-full',
+        synced
+          ? cn('transition-colors duration-75', beat ? 'bg-primary' : 'bg-muted-foreground/25')
+          : 'border border-muted-foreground/40'
       )}
     />
   )
