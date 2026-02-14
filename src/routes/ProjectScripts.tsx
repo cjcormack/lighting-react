@@ -419,6 +419,24 @@ function ScriptListEntry({
 function NewProjectScript({ projectId }: { projectId: number }) {
   const navigate = useNavigate()
   const [runCreateMutation, { isLoading: isCreating }] = useCreateProjectScriptMutation()
+  const [
+    runCompileMutation,
+    {
+      data: compileResult,
+      isUninitialized: hasNotCompiled,
+      isLoading: isCompiling,
+      reset: resetCompile,
+    },
+  ] = useCompileProjectScriptMutation()
+  const [
+    runRunMutation,
+    {
+      data: runResult,
+      isUninitialized: hasNotRun,
+      isLoading: isRunning,
+      reset: resetRun,
+    },
+  ] = useRunProjectScriptMutation()
 
   const [name, setName] = useState("")
   const [scriptCode, setScriptCode] = useState("")
@@ -438,23 +456,49 @@ function NewProjectScript({ projectId }: { projectId: number }) {
     }
   }
 
+  const handleCompile = () => {
+    runCompileMutation({ projectId, script: scriptCode, settings })
+  }
+
+  const handleRun = () => {
+    runRunMutation({ projectId, script: scriptCode, settings })
+  }
+
   const script = { name, script: scriptCode, settings }
   const canCreate = name !== "" && scriptCode !== ""
 
   return (
-    <ScriptEditor
-      script={script}
-      id="new"
-      onNameChange={setName}
-      onScriptChange={setScriptCode}
-      onAddSetting={(setting) => setSettings([...settings.filter(s => s.name !== setting.name), setting])}
-      onRemoveSetting={(setting) => setSettings(settings.filter(s => s.name !== setting.name))}
-      footerActions={
-        <Button disabled={!canCreate || isCreating} onClick={handleCreate}>
-          {isCreating ? "Creating..." : "Create"}
-        </Button>
-      }
-    />
+    <>
+      <ScriptCompileDialog
+        compileResult={compileResult}
+        hasNotCompiled={hasNotCompiled}
+        isCompiling={isCompiling}
+        resetCompile={resetCompile}
+      />
+      <ScriptRunDialog
+        runResult={runResult}
+        hasNotRun={hasNotRun}
+        isRunning={isRunning}
+        resetRun={resetRun}
+      />
+      <ScriptEditor
+        script={script}
+        id="new"
+        onNameChange={setName}
+        onScriptChange={setScriptCode}
+        onAddSetting={(setting) => setSettings([...settings.filter(s => s.name !== setting.name), setting])}
+        onRemoveSetting={(setting) => setSettings(settings.filter(s => s.name !== setting.name))}
+        onCompile={handleCompile}
+        onRun={handleRun}
+        isCompiling={isCompiling}
+        isRunning={isRunning}
+        footerActions={
+          <Button disabled={!canCreate || isCreating} onClick={handleCreate}>
+            {isCreating ? "Creating..." : "Create"}
+          </Button>
+        }
+      />
+    </>
   )
 }
 
@@ -606,8 +650,6 @@ function EditableScriptEditor({
 
   const canSave = hasChanged && currentName !== "" && currentScript !== ""
   const canReset = hasChanged
-  const canCompile = currentScript !== ""
-  const canRun = currentScript !== ""
 
   const handleCompile = () => {
     runCompileMutation({ projectId, script: currentScript, settings: currentSettings })
