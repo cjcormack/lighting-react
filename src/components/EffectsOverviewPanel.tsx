@@ -13,12 +13,14 @@ function BeatIndicator() {
   const [beat, setBeat] = useState(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastFlashTimeRef = useRef(0)
   const bpmRef = useRef(fxState?.bpm ?? 120)
 
   const flash = useCallback(() => {
     if (flashTimeoutRef.current) {
       clearTimeout(flashTimeoutRef.current)
     }
+    lastFlashTimeRef.current = Date.now()
     setBeat(true)
     flashTimeoutRef.current = setTimeout(() => setBeat(false), 80)
   }, [])
@@ -43,16 +45,20 @@ function BeatIndicator() {
     }
   }, [startInterval])
 
-  // Use beatSync only to correct BPM drift — do not flash directly
+  // Every beatSync (every 16 beats): re-phase the local interval to the
+  // server's beat boundary and update BPM. Flash unless the local timer
+  // just flashed for this same beat (within half a beat interval).
   useEffect(() => {
     const subscription = subscribeToBeat((beatSync) => {
-      if (beatSync.bpm !== bpmRef.current) {
-        bpmRef.current = beatSync.bpm
-        startInterval(beatSync.bpm)
+      bpmRef.current = beatSync.bpm
+      const minGap = (60000 / beatSync.bpm) / 2
+      if (Date.now() - lastFlashTimeRef.current > minGap) {
+        flash()
       }
+      startInterval(beatSync.bpm)
     })
     return () => subscription.unsubscribe()
-  }, [startInterval])
+  }, [flash, startInterval])
 
   return (
     <div
