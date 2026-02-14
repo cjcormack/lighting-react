@@ -2,7 +2,10 @@ import { memo, useMemo } from 'react'
 import {
   useFixtureListQuery,
   findColourSource,
+  findCompactPrimary,
+  findCompactSecondary,
   type Fixture,
+  type PropertyDescriptor,
   type ColourPropertyDescriptor,
   type SliderPropertyDescriptor,
   type SettingPropertyDescriptor,
@@ -12,6 +15,7 @@ import type { GroupSliderPropertyDescriptor, GroupColourPropertyDescriptor } fro
 import {
   useColourValue,
   useSliderValue,
+  useSettingValue,
   useSettingColourPreview,
 } from '../../hooks/usePropertyValues'
 import { useGroupSliderValues } from '../../hooks/useGroupPropertyValues'
@@ -138,6 +142,12 @@ export const CompactFixtureCard = memo(function CompactFixtureCard({
   const virtualDimmerGroupColourProp = !hasRealDimmer && !virtualDimmerColourProp
     ? findGroupColourProperty(fixture) : undefined
 
+  const hasDimmerRow = !!dimmerProp || !!groupDimmerProp || !!virtualDimmerColourProp || !!virtualDimmerGroupColourProp
+
+  // Compact display fallbacks for fixtures without colour/dimmer
+  const compactPrimary = !hasColour ? findCompactPrimary(fixture.properties) : undefined
+  const compactSecondary = !hasDimmerRow ? findCompactSecondary(fixture.properties) : undefined
+
   return (
     <div
       className={cn(
@@ -150,18 +160,20 @@ export const CompactFixtureCard = memo(function CompactFixtureCard({
       {/* Name first */}
       <p className="text-sm font-medium truncate">{fixture.name}</p>
 
-      {/* Colour indicator(s) - or invisible placeholder */}
+      {/* Colour indicator(s) - or compact primary fallback - or invisible placeholder */}
       <div className={cn('mt-1.5', COLOUR_ROW_HEIGHT)}>
-        {hasColour && (
+        {hasColour ? (
           hasElements ? (
             <MultiHeadIndicator elements={fixture.elements!} fixtureDimmer={dimmerProp} />
           ) : (
             <SingleHeadIndicator fixture={fixture} />
           )
-        )}
+        ) : compactPrimary ? (
+          <CompactPropertyDisplay property={compactPrimary} />
+        ) : null}
       </div>
 
-      {/* Dimmer bar - or invisible placeholder */}
+      {/* Dimmer bar - or compact secondary fallback - or invisible placeholder */}
       <div className={cn('mt-1.5', DIMMER_ROW_HEIGHT)}>
         {dimmerProp ? (
           <DimmerBar dimmerProp={dimmerProp} />
@@ -171,6 +183,8 @@ export const CompactFixtureCard = memo(function CompactFixtureCard({
           <VirtualDimmerBar colourProp={virtualDimmerColourProp} />
         ) : virtualDimmerGroupColourProp ? (
           <GroupVirtualDimmerBar colourProp={virtualDimmerGroupColourProp} />
+        ) : compactSecondary ? (
+          <CompactPropertyDisplay property={compactSecondary} />
         ) : null}
       </div>
     </div>
@@ -332,6 +346,62 @@ function useDimmerBrightness(dimmerProp?: SliderPropertyDescriptor): number {
   // Map 0-255 to 0.15-1.0 (keep some visibility even at 0)
   const normalized = value / 255
   return 0.15 + normalized * 0.85
+}
+
+/**
+ * Renders a promoted property on the compact card.
+ * Dispatches to the appropriate display based on property type.
+ */
+function CompactPropertyDisplay({ property }: { property: PropertyDescriptor }) {
+  switch (property.type) {
+    case 'setting':
+      return <CompactSettingLabel settingProp={property} />
+    case 'slider':
+      return <CompactSliderBar sliderProp={property} />
+    default:
+      return null
+  }
+}
+
+/**
+ * Compact display for a setting property — shows the current mode name as a label
+ */
+function CompactSettingLabel({ settingProp }: { settingProp: SettingPropertyDescriptor }) {
+  const { option } = useSettingValue(settingProp)
+
+  return (
+    <div className="flex items-center h-full">
+      <span className="text-xs text-muted-foreground truncate">
+        {option?.displayName ?? '—'}
+      </span>
+    </div>
+  )
+}
+
+/**
+ * Compact display for a slider property — shows a bar with the property's display name
+ */
+function CompactSliderBar({ sliderProp }: { sliderProp: SliderPropertyDescriptor }) {
+  const value = useSliderValue(sliderProp)
+  const range = sliderProp.max - sliderProp.min
+  const pct = range > 0 ? Math.round(((value - sliderProp.min) / range) * 100) : 0
+
+  return (
+    <div className="flex items-center gap-1.5 h-full">
+      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden min-w-[40px]">
+        <div
+          className={cn(
+            'h-full rounded-full transition-all',
+            pct > 0 ? 'bg-primary' : 'bg-muted-foreground/30'
+          )}
+          style={{ width: `${Math.max(pct, 2)}%` }}
+        />
+      </div>
+      <span className="text-xs text-muted-foreground tabular-nums w-7 text-right">
+        {pct}%
+      </span>
+    </div>
+  )
 }
 
 /**

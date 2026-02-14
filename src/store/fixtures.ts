@@ -56,6 +56,8 @@ export type PropertyCategory =
   | 'speed'
   | 'other'
 
+export type CompactDisplayRole = 'primary' | 'secondary'
+
 export type SliderPropertyDescriptor = {
   type: 'slider'
   name: string
@@ -64,6 +66,7 @@ export type SliderPropertyDescriptor = {
   channel: ChannelRef
   min: number
   max: number
+  compactDisplay?: CompactDisplayRole
 }
 
 export type ColourPropertyDescriptor = {
@@ -77,6 +80,7 @@ export type ColourPropertyDescriptor = {
   whiteChannel?: ChannelRef
   amberChannel?: ChannelRef
   uvChannel?: ChannelRef
+  compactDisplay?: CompactDisplayRole
 }
 
 export type PositionPropertyDescriptor = {
@@ -90,6 +94,7 @@ export type PositionPropertyDescriptor = {
   panMax: number
   tiltMin: number
   tiltMax: number
+  compactDisplay?: CompactDisplayRole
 }
 
 export type SettingOption = {
@@ -106,6 +111,7 @@ export type SettingPropertyDescriptor = {
   category: PropertyCategory
   channel: ChannelRef
   options: SettingOption[]
+  compactDisplay?: CompactDisplayRole
 }
 
 export type ElementDescriptor = {
@@ -139,6 +145,20 @@ export type Fixture = {
   mode?: ModeInfo
   capabilities: string[]
   groups: string[]
+}
+
+/**
+ * Find the property promoted to the compact card primary slot (top row).
+ */
+export function findCompactPrimary(properties: PropertyDescriptor[]): PropertyDescriptor | undefined {
+  return properties.find((p) => p.compactDisplay === 'primary')
+}
+
+/**
+ * Find the property promoted to the compact card secondary slot (bottom row).
+ */
+export function findCompactSecondary(properties: PropertyDescriptor[]): PropertyDescriptor | undefined {
+  return properties.find((p) => p.compactDisplay === 'secondary')
 }
 
 /**
