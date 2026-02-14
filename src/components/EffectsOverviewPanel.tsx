@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { useFxStateQuery, tapTempo, subscribeToBeat } from '../store/fx'
+import { useFxStateQuery, tapTempo, subscribeToBeat, requestBeatSync } from '../store/fx'
 
 interface EffectsOverviewPanelProps {
   isVisible: boolean
@@ -45,13 +45,19 @@ function BeatIndicator() {
     }
   }, [synced, stopInterval])
 
+  // Request a beat sync on mount so we don't wait up to 16 beats
+  useEffect(() => {
+    requestBeatSync()
+  }, [])
+
   // Detect tab visibility changes — mark as unsynced when returning
   // from a hidden state, since the local interval drifts while
-  // backgrounded.
+  // backgrounded. Request an immediate beat sync from the server.
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         setSynced(false)
+        requestBeatSync()
       }
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)

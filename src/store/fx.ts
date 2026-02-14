@@ -35,3 +35,7 @@ export function tapTempo() {
 export function subscribeToBeat(fn: (beat: import('../api/fxApi').BeatSync) => void) {
   return lightingApi.fx.subscribeToBeat(fn)
 }
+
+export function requestBeatSync() {
+  lightingApi.fx.requestBeatSync()
+}

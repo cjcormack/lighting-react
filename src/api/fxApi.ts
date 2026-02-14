@@ -35,6 +35,7 @@ export interface FxApi {
   get(): FxState
   subscribe(fn: (state: FxState) => void): Subscription
   subscribeToBeat(fn: (beat: BeatSync) => void): Subscription
+  requestBeatSync(): void
   setBpm(bpm: number): void
   tap(): void
 }
@@ -86,8 +87,9 @@ export function createFxApi(conn: InternalApiConnection): FxApi {
         conn.send(JSON.stringify({ type: 'fxState' }))
       }
     } else if (evType === 'open') {
-      // Request initial FX state on connection
+      // Request initial FX state and beat sync on connection
       conn.send(JSON.stringify({ type: 'fxState' }))
+      conn.send(JSON.stringify({ type: 'requestBeatSync' }))
     }
   })
 
@@ -114,6 +116,10 @@ export function createFxApi(conn: InternalApiConnection): FxApi {
           beatSubscriptions.delete(thisId)
         },
       }
+    },
+
+    requestBeatSync(): void {
+      conn.send(JSON.stringify({ type: 'requestBeatSync' }))
     },
 
     setBpm(bpm: number): void {
