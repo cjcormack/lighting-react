@@ -1,6 +1,7 @@
 import { restApi } from "./restApi"
 import { lightingApi } from "../api/lightingApi"
 import { store } from "./index"
+import type { GroupPropertyDescriptor } from "../api/groupsApi"
 
 lightingApi.fixtures.subscribe(function() {
   store.dispatch(restApi.util.invalidateTags(['Fixture']))
@@ -134,6 +135,7 @@ export type Fixture = {
   }[]
   properties: PropertyDescriptor[]
   elements?: ElementDescriptor[]
+  elementGroupProperties?: GroupPropertyDescriptor[]
   mode?: ModeInfo
   capabilities: string[]
   groups: string[]

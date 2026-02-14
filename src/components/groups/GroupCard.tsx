@@ -4,9 +4,9 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Loader2 } from 'lucide-react'
 import { useGroupQuery, useGroupPropertiesQuery } from '../../store/groups'
-import { GroupPropertyVisualizer } from '../fixtures/GroupPropertyVisualizers'
+import { GroupPropertyVisualizer, GroupVirtualDimmerSlider } from '../fixtures/GroupPropertyVisualizers'
 import { GroupMembersSection } from './GroupMembersSection'
-import type { GroupSummary, GroupPropertyDescriptor } from '../../api/groupsApi'
+import type { GroupSummary, GroupPropertyDescriptor, GroupColourPropertyDescriptor } from '../../api/groupsApi'
 
 interface GroupCardProps {
   group: GroupSummary
@@ -107,6 +107,21 @@ export function GroupPropertiesSection({
 
   const grouped = groupPropertiesByCategory(properties)
 
+  // Virtual dimmer: group has colour but no dimmer
+  const hasRealDimmer = grouped.dimmer.length > 0
+  const virtualDimmerColourProp = !hasRealDimmer
+    ? grouped.colour.find((p) => p.type === 'colour') as GroupColourPropertyDescriptor | undefined
+    : undefined
+
+  const virtualBadge = virtualDimmerColourProp ? (
+    <Badge
+      variant="outline"
+      className="ml-1 text-[10px] leading-tight px-1 py-0 text-muted-foreground align-middle"
+    >
+      Virtual
+    </Badge>
+  ) : null
+
   return (
     <div className="space-y-1">
       {/* Colour properties first (most visually prominent) */}
@@ -123,6 +138,15 @@ export function GroupPropertiesSection({
       {grouped.dimmer.map((prop) => (
         <GroupPropertyVisualizer key={prop.name} property={prop} isEditing={isEditing} />
       ))}
+
+      {/* Virtual dimmer (colour but no real dimmer) */}
+      {virtualDimmerColourProp && (
+        <GroupVirtualDimmerSlider
+          colourProp={virtualDimmerColourProp}
+          isEditing={isEditing}
+          nameExtra={virtualBadge}
+        />
+      )}
 
       {/* Other slider properties */}
       {grouped.slider.map((prop) => (

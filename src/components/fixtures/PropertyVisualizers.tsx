@@ -22,6 +22,7 @@ import {
   useSettingValue,
   useUpdateChannel,
 } from '../../hooks/usePropertyValues'
+import { useVirtualDimmer } from '../../hooks/useVirtualDimmer'
 import { cn } from '@/lib/utils'
 import { ColourPickerPopover } from './ColourPickerPopover'
 
@@ -416,3 +417,54 @@ export function PropertyVisualizer({ property, isEditing = false }: PropertyVisu
       return <SettingProperty property={property} isEditing={isEditing} />
   }
 }
+
+/**
+ * Virtual dimmer slider for fixtures with colour but no dedicated dimmer.
+ * Derives brightness from max(R,G,B) and scales RGB proportionally.
+ */
+export const VirtualDimmerSlider = memo(function VirtualDimmerSlider({
+  colourProp,
+  isEditing = false,
+  nameExtra,
+}: {
+  colourProp: ColourPropertyDescriptor
+  isEditing?: boolean
+  nameExtra?: React.ReactNode
+}) {
+  const { value, percentage, setValue } = useVirtualDimmer(colourProp)
+
+  return (
+    <div className="py-2">
+      <div className="flex items-center gap-3">
+        <span className="text-sm font-medium w-20 shrink-0">Dimmer{nameExtra}</span>
+        {isEditing ? (
+          <>
+            <Slider
+              value={[value]}
+              min={0}
+              max={255}
+              step={1}
+              onValueChange={([v]) => setValue(v)}
+              className="flex-1"
+            />
+            <span className="w-[4.5rem] text-xs text-right text-muted-foreground whitespace-nowrap">
+              {value} ({percentage}%)
+            </span>
+          </>
+        ) : (
+          <>
+            <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all"
+                style={{ width: `${percentage}%` }}
+              />
+            </div>
+            <span className="w-[4.5rem] text-xs text-right text-muted-foreground whitespace-nowrap">
+              {value} ({percentage}%)
+            </span>
+          </>
+        )}
+      </div>
+    </div>
+  )
+})

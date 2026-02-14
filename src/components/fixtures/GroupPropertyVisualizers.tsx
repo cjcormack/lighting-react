@@ -25,12 +25,15 @@ import {
   useGroupSettingValues,
   useUpdateGroupSetting,
 } from '../../hooks/useGroupPropertyValues'
+import { useGroupVirtualDimmer } from '../../hooks/useVirtualDimmer'
 import { cn } from '@/lib/utils'
 import { ColourPickerPopover } from './ColourPickerPopover'
 
 interface GroupPropertyVisualizerProps {
   property: GroupPropertyDescriptor
   isEditing?: boolean
+  /** Extra content rendered after the property name (e.g. a badge) */
+  nameExtra?: React.ReactNode
 }
 
 /**
@@ -39,9 +42,11 @@ interface GroupPropertyVisualizerProps {
 export const GroupSliderProperty = memo(function GroupSliderProperty({
   property,
   isEditing = false,
+  nameExtra,
 }: {
   property: GroupSliderPropertyDescriptor
   isEditing?: boolean
+  nameExtra?: React.ReactNode
 }) {
   const { min, max, isUniform, displayText } = useGroupSliderValues(property)
   const updateAll = useUpdateGroupSlider(property)
@@ -52,7 +57,7 @@ export const GroupSliderProperty = memo(function GroupSliderProperty({
   return (
     <div className="py-2">
       <div className="flex items-center gap-3">
-        <span className="text-sm font-medium w-20 shrink-0">{property.displayName}</span>
+        <span className="text-sm font-medium w-20 shrink-0">{property.displayName}{nameExtra}</span>
         {isEditing ? (
           <>
             <Slider
@@ -98,9 +103,11 @@ export const GroupSliderProperty = memo(function GroupSliderProperty({
 export const GroupColourSwatch = memo(function GroupColourSwatch({
   property,
   isEditing = false,
+  nameExtra,
 }: {
   property: GroupColourPropertyDescriptor
   isEditing?: boolean
+  nameExtra?: React.ReactNode
 }) {
   const { isUniform, avgR, avgG, avgB, avgW, avgA, avgUv, combinedCss, displayText } =
     useGroupColourValues(property)
@@ -135,7 +142,7 @@ export const GroupColourSwatch = memo(function GroupColourSwatch({
   return (
     <div className="py-2">
       <div className="flex items-center gap-3">
-        <span className="text-sm font-medium w-20 shrink-0">{property.displayName}</span>
+        <span className="text-sm font-medium w-20 shrink-0">{property.displayName}{nameExtra}</span>
         <div className="relative shrink-0">
           {isEditing ? (
             <ColourPickerPopover
@@ -266,9 +273,11 @@ function ColourChannelSlider({
 export const GroupPositionIndicator = memo(function GroupPositionIndicator({
   property,
   isEditing = false,
+  nameExtra,
 }: {
   property: GroupPositionPropertyDescriptor
   isEditing?: boolean
+  nameExtra?: React.ReactNode
 }) {
   const { isUniform, avgPan, avgTilt, avgPanNormalized, avgTiltNormalized, displayText } =
     useGroupPositionValues(property)
@@ -292,7 +301,7 @@ export const GroupPositionIndicator = memo(function GroupPositionIndicator({
   return (
     <div className="py-2">
       <div className="flex items-start gap-3">
-        <span className="text-sm font-medium w-20 shrink-0">{property.displayName}</span>
+        <span className="text-sm font-medium w-20 shrink-0">{property.displayName}{nameExtra}</span>
         <div className="flex flex-col gap-2">
           <div
             className={cn(
@@ -371,9 +380,11 @@ export const GroupPositionIndicator = memo(function GroupPositionIndicator({
 export const GroupSettingProperty = memo(function GroupSettingProperty({
   property,
   isEditing = false,
+  nameExtra,
 }: {
   property: GroupSettingPropertyDescriptor
   isEditing?: boolean
+  nameExtra?: React.ReactNode
 }) {
   const { isUniform, displayText, currentOption } = useGroupSettingValues(property)
   const updateAll = useUpdateGroupSetting(property)
@@ -388,7 +399,7 @@ export const GroupSettingProperty = memo(function GroupSettingProperty({
   return (
     <div className="py-2">
       <div className="flex items-center gap-3">
-        <span className="text-sm font-medium w-20 shrink-0">{property.displayName}</span>
+        <span className="text-sm font-medium w-20 shrink-0">{property.displayName}{nameExtra}</span>
         {isEditing ? (
           <Select value={currentOption?.name} onValueChange={handleChange}>
             <SelectTrigger className="flex-1 h-8">
@@ -437,15 +448,77 @@ export const GroupSettingProperty = memo(function GroupSettingProperty({
 export function GroupPropertyVisualizer({
   property,
   isEditing = false,
+  nameExtra,
 }: GroupPropertyVisualizerProps) {
   switch (property.type) {
     case 'slider':
-      return <GroupSliderProperty property={property} isEditing={isEditing} />
+      return <GroupSliderProperty property={property} isEditing={isEditing} nameExtra={nameExtra} />
     case 'colour':
-      return <GroupColourSwatch property={property} isEditing={isEditing} />
+      return <GroupColourSwatch property={property} isEditing={isEditing} nameExtra={nameExtra} />
     case 'position':
-      return <GroupPositionIndicator property={property} isEditing={isEditing} />
+      return <GroupPositionIndicator property={property} isEditing={isEditing} nameExtra={nameExtra} />
     case 'setting':
-      return <GroupSettingProperty property={property} isEditing={isEditing} />
+      return <GroupSettingProperty property={property} isEditing={isEditing} nameExtra={nameExtra} />
   }
 }
+
+/**
+ * Virtual dimmer slider for a group colour property — aggregates max(R,G,B) per member.
+ * Shows range bar for mixed values, uniform slider for uniform values.
+ */
+export const GroupVirtualDimmerSlider = memo(function GroupVirtualDimmerSlider({
+  colourProp,
+  isEditing = false,
+  nameExtra,
+}: {
+  colourProp: GroupColourPropertyDescriptor
+  isEditing?: boolean
+  nameExtra?: React.ReactNode
+}) {
+  const { min, max, isUniform, displayText, setValue } = useGroupVirtualDimmer(colourProp)
+
+  const minPct = Math.round((min / 255) * 100)
+  const maxPct = Math.round((max / 255) * 100)
+
+  return (
+    <div className="py-2">
+      <div className="flex items-center gap-3">
+        <span className="text-sm font-medium w-20 shrink-0">Dimmer{nameExtra}</span>
+        {isEditing ? (
+          <>
+            <Slider
+              value={[max]}
+              min={0}
+              max={255}
+              step={1}
+              onValueChange={([v]) => setValue(v)}
+              className="flex-1"
+            />
+            <span className="w-16 text-xs text-right text-muted-foreground">
+              {displayText}
+            </span>
+          </>
+        ) : (
+          <>
+            <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden relative">
+              {isUniform ? (
+                <div
+                  className="h-full bg-primary transition-all"
+                  style={{ width: `${minPct}%` }}
+                />
+              ) : (
+                <div
+                  className="absolute h-full bg-primary/60 transition-all"
+                  style={{ left: `${minPct}%`, width: `${maxPct - minPct}%` }}
+                />
+              )}
+            </div>
+            <span className="w-16 text-xs text-right text-muted-foreground">
+              {displayText}
+            </span>
+          </>
+        )}
+      </div>
+    </div>
+  )
+})

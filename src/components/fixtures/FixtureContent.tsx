@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import { Slider } from '@/components/ui/slider'
 import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Fixture, ElementDescriptor, ColourPropertyDescriptor, SettingPropertyDescriptor, findColourSource } from '../../store/fixtures'
+import type { GroupPropertyDescriptor, GroupColourPropertyDescriptor } from '../../api/groupsApi'
 import { useGetChannelQuery, useUpdateChannelMutation } from '../../store/channels'
 import { useColourValue, useSettingColourPreview } from '../../hooks/usePropertyValues'
-import { PropertyVisualizer } from './PropertyVisualizers'
+import { PropertyVisualizer, VirtualDimmerSlider } from './PropertyVisualizers'
+import { GroupPropertyVisualizer, GroupVirtualDimmerSlider } from './GroupPropertyVisualizers'
 import { GroupMembershipSection } from './GroupMembershipSection'
 import { cn } from '@/lib/utils'
 
@@ -44,6 +47,38 @@ export function FixtureContent({
   )
 }
 
+/** Categorize element group properties by the same categories as fixture properties */
+function categorizeGroupProperties(properties: GroupPropertyDescriptor[]) {
+  const result = {
+    colour: [] as GroupPropertyDescriptor[],
+    position: [] as GroupPropertyDescriptor[],
+    dimmer: [] as GroupPropertyDescriptor[],
+    slider: [] as GroupPropertyDescriptor[],
+    setting: [] as GroupPropertyDescriptor[],
+  }
+  for (const prop of properties) {
+    switch (prop.type) {
+      case 'colour':
+        result.colour.push(prop)
+        break
+      case 'position':
+        result.position.push(prop)
+        break
+      case 'slider':
+        if (prop.category === 'dimmer') {
+          result.dimmer.push(prop)
+        } else {
+          result.slider.push(prop)
+        }
+        break
+      case 'setting':
+        result.setting.push(prop)
+        break
+    }
+  }
+  return result
+}
+
 function PropertiesView({
   fixture,
   hasElements,
@@ -55,7 +90,7 @@ function PropertiesView({
   isEditing: boolean
   onGroupClick?: (groupName: string) => void
 }) {
-  // Group properties by category for better organization
+  // Group fixture-level properties by category
   const colourProps =
     fixture.properties?.filter((p) => p.type === 'colour') ?? []
   const positionProps =
@@ -71,13 +106,30 @@ function PropertiesView({
   const settingProps =
     fixture.properties?.filter((p) => p.type === 'setting') ?? []
 
+  // Categorize element group properties (all-heads virtual properties)
+  const egp = fixture.elementGroupProperties
+    ? categorizeGroupProperties(fixture.elementGroupProperties)
+    : null
+
   const hasFixtureProperties =
     fixture.properties && fixture.properties.length > 0
+  const hasElementGroupProperties =
+    fixture.elementGroupProperties && fixture.elementGroupProperties.length > 0
+  const hasAnyProperties = hasFixtureProperties || hasElementGroupProperties
+
+  // Detect virtual dimmer need: has colour but no real dimmer at any level
+  const hasRealDimmer = dimmerProps.length > 0 || (egp?.dimmer.length ?? 0) > 0
+  const fixtureColourProp = colourProps.find((p) => p.type === 'colour') as ColourPropertyDescriptor | undefined
+  const egpColourProp = egp?.colour.find((p) => p.type === 'colour') as GroupColourPropertyDescriptor | undefined
+  // Show virtual dimmer for fixture-level colour, or element-group colour if no fixture-level colour
+  const virtualDimmerColourProp = !hasRealDimmer ? fixtureColourProp : undefined
+  const virtualDimmerGroupColourProp = !hasRealDimmer && !fixtureColourProp ? egpColourProp : undefined
+  const hasVirtualDimmer = !!virtualDimmerColourProp || !!virtualDimmerGroupColourProp
 
   return (
     <div className="space-y-4">
-      {/* Fixture-level properties - constrained width for multi-head fixtures */}
-      {hasFixtureProperties && (
+      {/* Properties - fixture-level and element-group interleaved by category */}
+      {(hasAnyProperties || hasVirtualDimmer) && (
         <div className={cn('space-y-1', hasElements && 'max-w-sm')}>
           {/* Colour properties first (most visually prominent) */}
           {colourProps.map((prop) => (
@@ -86,6 +138,9 @@ function PropertiesView({
               property={prop}
               isEditing={isEditing}
             />
+          ))}
+          {egp?.colour.map((prop) => (
+            <AllHeadsProperty key={`egp-${prop.name}`} property={prop} isEditing={isEditing} />
           ))}
 
           {/* Position properties */}
@@ -96,6 +151,9 @@ function PropertiesView({
               isEditing={isEditing}
             />
           ))}
+          {egp?.position.map((prop) => (
+            <AllHeadsProperty key={`egp-${prop.name}`} property={prop} isEditing={isEditing} />
+          ))}
 
           {/* Dimmer properties */}
           {dimmerProps.map((prop) => (
@@ -105,6 +163,25 @@ function PropertiesView({
               isEditing={isEditing}
             />
           ))}
+          {egp?.dimmer.map((prop) => (
+            <AllHeadsProperty key={`egp-${prop.name}`} property={prop} isEditing={isEditing} />
+          ))}
+
+          {/* Virtual dimmer (colour but no real dimmer) */}
+          {virtualDimmerColourProp && (
+            <VirtualDimmerSlider
+              colourProp={virtualDimmerColourProp}
+              isEditing={isEditing}
+              nameExtra={virtualBadge}
+            />
+          )}
+          {virtualDimmerGroupColourProp && (
+            <GroupVirtualDimmerSlider
+              colourProp={virtualDimmerGroupColourProp}
+              isEditing={isEditing}
+              nameExtra={virtualBadge}
+            />
+          )}
 
           {/* Other slider properties */}
           {otherSliders.map((prop) => (
@@ -114,6 +191,9 @@ function PropertiesView({
               isEditing={isEditing}
             />
           ))}
+          {egp?.slider.map((prop) => (
+            <AllHeadsProperty key={`egp-${prop.name}`} property={prop} isEditing={isEditing} />
+          ))}
 
           {/* Setting properties */}
           {settingProps.map((prop) => (
@@ -122,6 +202,9 @@ function PropertiesView({
               property={prop}
               isEditing={isEditing}
             />
+          ))}
+          {egp?.setting.map((prop) => (
+            <AllHeadsProperty key={`egp-${prop.name}`} property={prop} isEditing={isEditing} />
           ))}
         </div>
       )}
@@ -137,7 +220,7 @@ function PropertiesView({
       {/* Per-head properties */}
       {hasElements && fixture.elements && (
         <>
-          {(hasFixtureProperties || (fixture.groups && fixture.groups.length > 0)) && (
+          {(hasAnyProperties || (fixture.groups && fixture.groups.length > 0)) && (
             <div className="border-t pt-3">
               <h4 className="text-sm font-medium text-muted-foreground mb-2">
                 Heads ({fixture.elements.length})
@@ -148,10 +231,32 @@ function PropertiesView({
         </>
       )}
 
-      {!hasFixtureProperties && !hasElements && (
+      {!hasAnyProperties && !hasElements && (
         <p className="text-sm text-muted-foreground">No properties available</p>
       )}
     </div>
+  )
+}
+
+const virtualBadge = (
+  <Badge
+    variant="outline"
+    className="ml-1 text-[10px] leading-tight px-1 py-0 text-muted-foreground align-middle"
+  >
+    Virtual
+  </Badge>
+)
+
+/** Wrapper that renders a group property with a "Virtual" badge next to the name */
+function AllHeadsProperty({
+  property,
+  isEditing,
+}: {
+  property: GroupPropertyDescriptor
+  isEditing: boolean
+}) {
+  return (
+    <GroupPropertyVisualizer property={property} isEditing={isEditing} nameExtra={virtualBadge} />
   )
 }
 
@@ -310,6 +415,11 @@ function PropertiesList({
   )
   const settingProps = properties.filter((p) => p.type === 'setting')
 
+  // Virtual dimmer for elements with colour but no dimmer
+  const elementColourProp = dimmerProps.length === 0
+    ? colourProps.find((p) => p.type === 'colour') as ColourPropertyDescriptor | undefined
+    : undefined
+
   return (
     <div className="space-y-1">
       {colourProps.map((prop) => (
@@ -321,6 +431,13 @@ function PropertiesList({
       {dimmerProps.map((prop) => (
         <PropertyVisualizer key={prop.name} property={prop} isEditing={isEditing} />
       ))}
+      {elementColourProp && (
+        <VirtualDimmerSlider
+          colourProp={elementColourProp}
+          isEditing={isEditing}
+          nameExtra={virtualBadge}
+        />
+      )}
       {otherSliders.map((prop) => (
         <PropertyVisualizer key={prop.name} property={prop} isEditing={isEditing} />
       ))}

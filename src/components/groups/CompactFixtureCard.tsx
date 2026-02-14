@@ -8,11 +8,14 @@ import {
   type SettingPropertyDescriptor,
   type ElementDescriptor,
 } from '../../store/fixtures'
+import type { GroupSliderPropertyDescriptor, GroupColourPropertyDescriptor } from '../../api/groupsApi'
 import {
   useColourValue,
   useSliderValue,
   useSettingColourPreview,
 } from '../../hooks/usePropertyValues'
+import { useGroupSliderValues } from '../../hooks/useGroupPropertyValues'
+import { useVirtualDimmer, useGroupVirtualDimmer } from '../../hooks/useVirtualDimmer'
 import { cn } from '@/lib/utils'
 
 // Fixed height for colour row to ensure consistent card heights
@@ -55,6 +58,37 @@ function findDimmerProperty(
 }
 
 /**
+ * Get the aggregated dimmer property from element group properties
+ */
+function findGroupDimmerProperty(
+  fixture: Fixture
+): GroupSliderPropertyDescriptor | undefined {
+  return fixture.elementGroupProperties?.find(
+    (p) => p.type === 'slider' && p.category === 'dimmer'
+  ) as GroupSliderPropertyDescriptor | undefined
+}
+
+/**
+ * Get the fixture-level colour property (for virtual dimmer)
+ */
+function findColourProperty(
+  properties: Fixture['properties']
+): ColourPropertyDescriptor | undefined {
+  return properties?.find((p) => p.type === 'colour') as ColourPropertyDescriptor | undefined
+}
+
+/**
+ * Get the element-group colour property (for virtual dimmer)
+ */
+function findGroupColourProperty(
+  fixture: Fixture
+): GroupColourPropertyDescriptor | undefined {
+  return fixture.elementGroupProperties?.find(
+    (p) => p.type === 'colour'
+  ) as GroupColourPropertyDescriptor | undefined
+}
+
+/**
  * Check if a fixture or its elements have any colour source
  */
 function hasAnyColourSource(fixture: Fixture): boolean {
@@ -93,9 +127,16 @@ export const CompactFixtureCard = memo(function CompactFixtureCard({
   }
 
   const dimmerProp = findDimmerProperty(fixture.properties)
+  const groupDimmerProp = !dimmerProp ? findGroupDimmerProperty(fixture) : undefined
+  const hasRealDimmer = !!dimmerProp || !!groupDimmerProp
   const hasElements = fixture.elements && fixture.elements.length > 0
   const hasColour = hasAnyColourSource(fixture)
   const headBasis = hasElements ? basisForHeads(fixture.elements!.length) : undefined
+
+  // Virtual dimmer: colour but no real dimmer
+  const virtualDimmerColourProp = !hasRealDimmer ? findColourProperty(fixture.properties) : undefined
+  const virtualDimmerGroupColourProp = !hasRealDimmer && !virtualDimmerColourProp
+    ? findGroupColourProperty(fixture) : undefined
 
   return (
     <div
@@ -122,7 +163,15 @@ export const CompactFixtureCard = memo(function CompactFixtureCard({
 
       {/* Dimmer bar - or invisible placeholder */}
       <div className={cn('mt-1.5', DIMMER_ROW_HEIGHT)}>
-        {dimmerProp && <DimmerBar dimmerProp={dimmerProp} />}
+        {dimmerProp ? (
+          <DimmerBar dimmerProp={dimmerProp} />
+        ) : groupDimmerProp ? (
+          <GroupDimmerBar property={groupDimmerProp} />
+        ) : virtualDimmerColourProp ? (
+          <VirtualDimmerBar colourProp={virtualDimmerColourProp} />
+        ) : virtualDimmerGroupColourProp ? (
+          <GroupVirtualDimmerBar colourProp={virtualDimmerGroupColourProp} />
+        ) : null}
       </div>
     </div>
   )
@@ -311,6 +360,96 @@ function DimmerBar({ dimmerProp }: { dimmerProp: SliderPropertyDescriptor }) {
 }
 
 /**
+ * Visual dimmer bar for aggregated element group dimmer (shows range for mixed values)
+ */
+function GroupDimmerBar({ property }: { property: GroupSliderPropertyDescriptor }) {
+  const { min, max, isUniform, displayText } = useGroupSliderValues(property)
+  const minPct = Math.round((min / 255) * 100)
+  const maxPct = Math.round((max / 255) * 100)
+
+  return (
+    <div className="flex items-center gap-1.5 h-full">
+      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden min-w-[40px] relative">
+        {isUniform ? (
+          <div
+            className={cn(
+              'h-full rounded-full transition-all',
+              minPct > 0 ? 'bg-primary' : 'bg-muted-foreground/30'
+            )}
+            style={{ width: `${Math.max(minPct, 2)}%` }}
+          />
+        ) : (
+          <div
+            className="absolute h-full bg-primary/60 rounded-full transition-all"
+            style={{ left: `${minPct}%`, width: `${Math.max(maxPct - minPct, 2)}%` }}
+          />
+        )}
+      </div>
+      <span className="text-xs text-muted-foreground tabular-nums w-7 text-right">
+        {displayText}
+      </span>
+    </div>
+  )
+}
+
+/**
+ * Virtual dimmer bar for a single colour property — derives brightness from max(R,G,B)
+ */
+function VirtualDimmerBar({ colourProp }: { colourProp: ColourPropertyDescriptor }) {
+  const { percentage } = useVirtualDimmer(colourProp)
+
+  return (
+    <div className="flex items-center gap-1.5 h-full">
+      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden min-w-[40px]">
+        <div
+          className={cn(
+            'h-full rounded-full transition-all',
+            percentage > 0 ? 'bg-primary' : 'bg-muted-foreground/30'
+          )}
+          style={{ width: `${Math.max(percentage, 2)}%` }}
+        />
+      </div>
+      <span className="text-xs text-muted-foreground tabular-nums w-7 text-right">
+        {percentage}%
+      </span>
+    </div>
+  )
+}
+
+/**
+ * Virtual dimmer bar for a group colour property — aggregates max(R,G,B) per member
+ */
+function GroupVirtualDimmerBar({ colourProp }: { colourProp: GroupColourPropertyDescriptor }) {
+  const { min, max, isUniform, displayText } = useGroupVirtualDimmer(colourProp)
+  const minPct = Math.round((min / 255) * 100)
+  const maxPct = Math.round((max / 255) * 100)
+
+  return (
+    <div className="flex items-center gap-1.5 h-full">
+      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden min-w-[40px] relative">
+        {isUniform ? (
+          <div
+            className={cn(
+              'h-full rounded-full transition-all',
+              minPct > 0 ? 'bg-primary' : 'bg-muted-foreground/30'
+            )}
+            style={{ width: `${Math.max(minPct, 2)}%` }}
+          />
+        ) : (
+          <div
+            className="absolute h-full bg-primary/60 rounded-full transition-all"
+            style={{ left: `${minPct}%`, width: `${Math.max(maxPct - minPct, 2)}%` }}
+          />
+        )}
+      </div>
+      <span className="text-xs text-muted-foreground tabular-nums w-7 text-right">
+        {displayText}
+      </span>
+    </div>
+  )
+}
+
+/**
  * Compact card for multi-element fixtures showing aggregate view.
  * Uses a computed min-width based on head count so it naturally
  * wraps to its own row in narrow containers.
@@ -355,6 +494,12 @@ export const MultiElementCompactCard = memo(function MultiElementCompactCard({
   }
 
   const dimmerProp = findDimmerProperty(fixture.properties)
+  const groupDimmerProp = !dimmerProp ? findGroupDimmerProperty(fixture) : undefined
+  const hasRealDimmer = !!dimmerProp || !!groupDimmerProp
+
+  // Virtual dimmer: colour but no real dimmer
+  const virtualDimmerGroupColourProp = !hasRealDimmer
+    ? findGroupColourProperty(fixture) : undefined
 
   return (
     <div
@@ -377,7 +522,13 @@ export const MultiElementCompactCard = memo(function MultiElementCompactCard({
 
       {/* Dimmer bar - or invisible placeholder */}
       <div className={cn('mt-1.5', DIMMER_ROW_HEIGHT)}>
-        {dimmerProp && <DimmerBar dimmerProp={dimmerProp} />}
+        {dimmerProp ? (
+          <DimmerBar dimmerProp={dimmerProp} />
+        ) : groupDimmerProp ? (
+          <GroupDimmerBar property={groupDimmerProp} />
+        ) : virtualDimmerGroupColourProp ? (
+          <GroupVirtualDimmerBar colourProp={virtualDimmerGroupColourProp} />
+        ) : null}
       </div>
     </div>
   )

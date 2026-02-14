@@ -8,8 +8,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useGroupPropertiesQuery } from '../../store/groups'
-import { GroupPropertyVisualizer } from './GroupPropertyVisualizers'
-import type { GroupPropertyDescriptor } from '../../api/groupsApi'
+import { GroupPropertyVisualizer, GroupVirtualDimmerSlider } from './GroupPropertyVisualizers'
+import type { GroupPropertyDescriptor, GroupColourPropertyDescriptor } from '../../api/groupsApi'
 
 interface GroupPropertiesDialogProps {
   groupName: string
@@ -87,6 +87,27 @@ export function GroupPropertiesDialog({
             {groupedProperties.dimmer.length > 0 && (
               <PropertySection title="Dimmer" properties={groupedProperties.dimmer} isEditing={isEditing} />
             )}
+
+            {/* Virtual dimmer (colour but no real dimmer) */}
+            {groupedProperties.dimmer.length === 0 && groupedProperties.colour.length > 0 && (() => {
+              const colourProp = groupedProperties.colour.find(
+                (p) => p.type === 'colour'
+              ) as GroupColourPropertyDescriptor | undefined
+              if (!colourProp) return null
+              return (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="outline" className="text-xs font-medium">
+                      Dimmer
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                      Virtual
+                    </Badge>
+                  </div>
+                  <GroupVirtualDimmerSlider colourProp={colourProp} isEditing={isEditing} />
+                </div>
+              )
+            })()}
 
             {/* Other sliders */}
             {groupedProperties.slider.length > 0 && (
