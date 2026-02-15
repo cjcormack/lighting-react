@@ -12,6 +12,8 @@ import {
   type ElementDescriptor,
 } from '../../store/fixtures'
 import type { GroupSliderPropertyDescriptor, GroupColourPropertyDescriptor } from '../../api/groupsApi'
+import { useFixtureEffectsQuery } from '@/store/fixtureFx'
+import { AudioWaveform } from 'lucide-react'
 import {
   useColourValue,
   useSliderValue,
@@ -114,6 +116,10 @@ export const CompactFixtureCard = memo(function CompactFixtureCard({
 }: CompactFixtureCardProps) {
   const { data: fixtureList } = useFixtureListQuery()
   const fixture = fixtureList?.find((f) => f.key === fixtureKey)
+  const { data: effects } = useFixtureEffectsQuery(fixtureKey)
+  const allEffects = [...(effects?.direct ?? []), ...(effects?.indirect ?? [])]
+  const hasActiveFx = allEffects.length > 0
+  const anyRunning = allEffects.some((e) => e.isRunning)
 
   if (!fixture) {
     return (
@@ -157,8 +163,13 @@ export const CompactFixtureCard = memo(function CompactFixtureCard({
       style={headBasis ? { flexBasis: headBasis } : undefined}
       onClick={onClick}
     >
-      {/* Name first */}
-      <p className="text-sm font-medium truncate">{fixture.name}</p>
+      {/* Name + FX indicator */}
+      <div className="flex items-center gap-1">
+        <p className="text-sm font-medium truncate">{fixture.name}</p>
+        {hasActiveFx && (
+          <AudioWaveform className={cn('size-3 shrink-0', anyRunning ? 'text-primary' : 'text-muted-foreground/50')} />
+        )}
+      </div>
 
       {/* Colour indicator(s) - or compact primary fallback - or invisible placeholder */}
       <div className={cn('mt-1.5', COLOUR_ROW_HEIGHT)}>
@@ -537,6 +548,10 @@ export const MultiElementCompactCard = memo(function MultiElementCompactCard({
 }: MultiElementCompactCardProps) {
   const { data: fixtureList } = useFixtureListQuery()
   const fixture = fixtureList?.find((f) => f.key === parentKey)
+  const { data: effects } = useFixtureEffectsQuery(parentKey)
+  const allEffects = [...(effects?.direct ?? []), ...(effects?.indirect ?? [])]
+  const hasActiveFx = allEffects.length > 0
+  const anyRunning = allEffects.some((e) => e.isRunning)
 
   // Check if any elements have colour
   const hasColour = useMemo(() => {
@@ -577,8 +592,13 @@ export const MultiElementCompactCard = memo(function MultiElementCompactCard({
       style={headBasis ? { flexBasis: headBasis } : undefined}
       onClick={onClick}
     >
-      {/* Name first */}
-      <p className="text-sm font-medium truncate">{fixture.name}</p>
+      {/* Name + FX indicator */}
+      <div className="flex items-center gap-1">
+        <p className="text-sm font-medium truncate">{fixture.name}</p>
+        {hasActiveFx && (
+          <AudioWaveform className={cn('size-3 shrink-0', anyRunning ? 'text-primary' : 'text-muted-foreground/50')} />
+        )}
+      </div>
 
       {/* Head squares - or invisible placeholder */}
       <div className={cn('mt-1.5', COLOUR_ROW_HEIGHT)}>

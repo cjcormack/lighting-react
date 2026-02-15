@@ -9,13 +9,15 @@ interface FixtureFxBadgeProps {
 export function FixtureFxBadge({ fixtureKey }: FixtureFxBadgeProps) {
   const { data: effects } = useFixtureEffectsQuery(fixtureKey)
 
-  const totalCount = (effects?.direct.length ?? 0) + (effects?.indirect.length ?? 0)
-  if (totalCount === 0) return null
+  const allEffects = [...(effects?.direct ?? []), ...(effects?.indirect ?? [])]
+  if (allEffects.length === 0) return null
+
+  const anyRunning = allEffects.some((e) => e.isRunning)
 
   return (
-    <Badge variant="default" className="text-xs gap-1">
+    <Badge variant={anyRunning ? 'default' : 'secondary'} className="text-xs gap-1">
       <AudioWaveform className="size-3" />
-      {totalCount} FX
+      {allEffects.length} FX
     </Badge>
   )
 }
