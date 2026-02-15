@@ -10,6 +10,7 @@ import { useColourValue, useSettingColourPreview } from '../../hooks/useProperty
 import { PropertyVisualizer, VirtualDimmerSlider } from './PropertyVisualizers'
 import { GroupPropertyVisualizer, GroupVirtualDimmerSlider } from './GroupPropertyVisualizers'
 import { GroupMembershipSection } from './GroupMembershipSection'
+import { FixtureFxSection } from './fx/FixtureFxSection'
 import { cn } from '@/lib/utils'
 
 export type FixtureViewMode = 'properties' | 'channels'
@@ -216,6 +217,9 @@ function PropertiesView({
           onGroupClick={onGroupClick}
         />
       )}
+
+      {/* Effects section */}
+      <FixtureFxSection fixture={fixture} />
 
       {/* Per-head properties */}
       {hasElements && fixture.elements && (

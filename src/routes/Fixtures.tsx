@@ -8,6 +8,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Search, ChevronRight, Loader2, Settings2, SlidersHorizontal } from "lucide-react"
 import { Fixture, useFixtureListQuery } from "../store/fixtures"
 import { EditModeProvider, useEditMode } from "../components/fixtures/EditModeContext"
+import { FixtureFxBadge } from "../components/fixtures/fx/FixtureFxBadge"
 import { FixtureContent, FixtureViewMode } from "../components/fixtures/FixtureContent"
 import { GroupDetailModal } from "../components/fixtures/GroupDetailModal"
 import { useCurrentProjectQuery, useProjectQuery } from "../store/projects"
@@ -280,6 +281,7 @@ function FixtureCardHeader({ fixture }: { fixture: Fixture }) {
             {cap}
           </Badge>
         ))}
+        <FixtureFxBadge fixtureKey={fixture.key} />
       </div>
     </CardHeader>
   )
