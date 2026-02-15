@@ -33,6 +33,7 @@ lightingApi.projects.subscribeToSwitch(function() {
     'SceneList',
     'Script',
     'Fixture',
+    'FxPreset',
   ]))
 })
 

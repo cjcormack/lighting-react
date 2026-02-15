@@ -4,6 +4,7 @@ import { useApplyGroupFxMutation, useRemoveGroupFxMutation } from '@/store/group
 import { useFixtureListQuery } from '@/store/fixtures'
 import type { EffectLibraryEntry, FixtureDirectEffect } from '@/store/fixtureFx'
 import type { GroupActiveEffect, BlendMode, DistributionStrategy, EffectType } from '@/api/groupsApi'
+import type { FxPreset } from '@/api/fxPresetsApi'
 import {
   type BuskingTarget,
   type EffectPresence,
@@ -233,6 +234,60 @@ export function useBuskingState() {
     [defaultBeatDivision, resolveProperty, addFixtureFx, removeFx, applyGroupFx, removeGroupFx],
   )
 
+  const applyPreset = useCallback(
+    async (preset: FxPreset, targetEffectsData: TargetEffectsData[]) => {
+      const additions: Promise<unknown>[] = []
+
+      for (const presetEffect of preset.effects) {
+        // Find the library entry for this effect to resolve properties
+        const normalized = presetEffect.effectType.toLowerCase().replace(/[\s_]/g, '')
+        const libraryEntry = library?.find(
+          (e) => e.name.toLowerCase().replace(/[\s_]/g, '') === normalized,
+        )
+
+        for (const data of targetEffectsData) {
+          // Resolve which property to target
+          let propertyName = presetEffect.propertyName
+          if (!propertyName && libraryEntry) {
+            propertyName = resolveProperty(data.target, libraryEntry)
+          }
+          if (!propertyName) continue
+
+          if (data.target.type === 'group') {
+            additions.push(
+              applyGroupFx({
+                groupName: data.target.name,
+                effectType: presetEffect.effectType as EffectType,
+                propertyName,
+                beatDivision: presetEffect.beatDivision,
+                blendMode: (presetEffect.blendMode || 'OVERRIDE') as BlendMode,
+                distribution: (presetEffect.distribution || 'LINEAR') as DistributionStrategy,
+                phaseOffset: presetEffect.phaseOffset,
+                parameters: { ...presetEffect.parameters },
+              }).unwrap(),
+            )
+          } else {
+            additions.push(
+              addFixtureFx({
+                effectType: presetEffect.effectType,
+                fixtureKey: data.target.key,
+                propertyName,
+                beatDivision: presetEffect.beatDivision,
+                blendMode: (presetEffect.blendMode || 'OVERRIDE') as BlendMode,
+                startOnBeat: true,
+                phaseOffset: presetEffect.phaseOffset,
+                parameters: { ...presetEffect.parameters },
+              }).unwrap(),
+            )
+          }
+        }
+      }
+
+      await Promise.all(additions)
+    },
+    [library, resolveProperty, applyGroupFx, addFixtureFx],
+  )
+
   return {
     // Selection
     selectedTargets,
@@ -253,6 +308,9 @@ export function useBuskingState() {
     computePresence,
     toggleEffect,
     resolveProperty,
+
+    // Presets
+    applyPreset,
 
     // Bottom sheet
     editingEffect,

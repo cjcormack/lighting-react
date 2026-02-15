@@ -8,6 +8,7 @@ import Projects from "./routes/Projects";
 import ProjectScripts, { ScriptsRedirect } from "./routes/ProjectScripts";
 import { ProjectScenes, ScenesRedirect, ChasesRedirect } from "./routes/ProjectScenes";
 import { FxRedirect, ProjectFxBusking } from "./routes/FxBusking";
+import { PresetsRedirect, ProjectFxPresets } from "./routes/FxPresets";
 import ProjectOverview, { ProjectOverviewRedirect } from "./routes/ProjectOverview";
 
 function App() {
@@ -43,6 +44,14 @@ function App() {
         {
           path: "fx",
           element: <FxRedirect />,
+        },
+        {
+          path: "projects/:projectId/presets",
+          element: <ProjectFxPresets />,
+        },
+        {
+          path: "presets",
+          element: <PresetsRedirect />,
         },
         {
           path: "projects/:projectId/channels/:universe",

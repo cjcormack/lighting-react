@@ -3,6 +3,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useGroupActiveEffectsQuery } from '@/store/groups'
 import { useFixtureEffectsQuery } from '@/store/fixtureFx'
+import { useCurrentProjectQuery } from '@/store/projects'
+import { useProjectPresetListQuery } from '@/store/fxPresets'
 import { BuskingTopBar } from './BuskingTopBar'
 import { TargetList } from './TargetList'
 import { EffectPad } from './EffectPad'
@@ -16,6 +18,7 @@ import {
   normalizeEffectName,
 } from './buskingTypes'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
+import type { FxPreset } from '@/api/fxPresetsApi'
 
 export function BuskingView() {
   const isDesktop = useMediaQuery('(min-width: 768px)')
@@ -32,9 +35,16 @@ export function BuskingView() {
     effectsByCategory,
     computePresence,
     toggleEffect,
+    applyPreset,
     editingEffect,
     setEditingEffect,
   } = useBuskingState()
+
+  // Fetch presets for the current project
+  const { data: currentProject } = useCurrentProjectQuery()
+  const { data: presets } = useProjectPresetListQuery(currentProject?.id ?? 0, {
+    skip: !currentProject,
+  })
 
   // On mobile, switch to effects tab when a target is selected
   const handleSelectTarget = useCallback(
@@ -51,6 +61,14 @@ export function BuskingView() {
   const selectedArray = useMemo(
     () => Array.from(selectedTargets.values()),
     [selectedTargets],
+  )
+
+  // Fetch effects data for selected targets
+  const targetEffectsData = useSelectedTargetEffects(selectedArray)
+
+  const handleApplyPreset = useCallback(
+    (preset: FxPreset) => applyPreset(preset, targetEffectsData),
+    [applyPreset, targetEffectsData],
   )
 
   return (
@@ -72,12 +90,16 @@ export function BuskingView() {
           <div className="flex-1 min-w-0 overflow-hidden">
             <EffectPadWrapper
               selectedTargets={selectedArray}
+              targetEffectsData={targetEffectsData}
               effectsByCategory={effectsByCategory}
               activeCategory={activeCategory}
               onCategoryChange={setActiveCategory}
               computePresence={computePresence}
               toggleEffect={toggleEffect}
               setEditingEffect={setEditingEffect}
+              presets={presets ?? []}
+              onApplyPreset={handleApplyPreset}
+              currentProjectId={currentProject?.id}
             />
           </div>
         </div>
@@ -108,12 +130,16 @@ export function BuskingView() {
           <TabsContent value="effects" className="flex-1 overflow-hidden mt-0">
             <EffectPadWrapper
               selectedTargets={selectedArray}
+              targetEffectsData={targetEffectsData}
               effectsByCategory={effectsByCategory}
               activeCategory={activeCategory}
               onCategoryChange={setActiveCategory}
               computePresence={computePresence}
               toggleEffect={toggleEffect}
               setEditingEffect={setEditingEffect}
+              presets={presets ?? []}
+              onApplyPreset={handleApplyPreset}
+              currentProjectId={currentProject?.id}
             />
           </TabsContent>
         </Tabs>
@@ -125,29 +151,33 @@ export function BuskingView() {
 }
 
 /**
- * Wrapper that fetches effects data for each selected target and provides
- * presence computation + toggle handlers to the EffectPad.
+ * Wrapper that provides presence computation + toggle handlers to the EffectPad.
  */
 function EffectPadWrapper({
   selectedTargets,
+  targetEffectsData,
   effectsByCategory,
   activeCategory,
   onCategoryChange,
   computePresence,
   toggleEffect,
   setEditingEffect,
+  presets,
+  onApplyPreset,
+  currentProjectId,
 }: {
   selectedTargets: BuskingTarget[]
+  targetEffectsData: TargetEffectsData[]
   effectsByCategory: Record<string, EffectLibraryEntry[]>
   activeCategory: string
   onCategoryChange: (cat: string) => void
   computePresence: (effectName: string, data: TargetEffectsData[]) => EffectPresence
   toggleEffect: (effect: EffectLibraryEntry, presence: EffectPresence, data: TargetEffectsData[]) => Promise<void>
   setEditingEffect: (ctx: ActiveEffectContext | null) => void
+  presets: FxPreset[]
+  onApplyPreset: (preset: FxPreset) => Promise<void>
+  currentProjectId: number | undefined
 }) {
-  // Fetch effects for each selected target
-  const targetEffectsData = useSelectedTargetEffects(selectedTargets)
-
   const getPresence = useCallback(
     (effectName: string): EffectPresence => {
       return computePresence(effectName, targetEffectsData)
@@ -199,6 +229,9 @@ function EffectPadWrapper({
       onToggle={handleToggle}
       onLongPress={handleLongPress}
       hasSelection={selectedTargets.length > 0}
+      presets={presets}
+      onApplyPreset={onApplyPreset}
+      currentProjectId={currentProjectId}
     />
   )
 }

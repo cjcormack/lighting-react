@@ -27,6 +27,7 @@ import {
   ChevronDown,
   FolderOpen,
   AudioWaveform,
+  Bookmark,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useProjectListQuery } from "./store/projects"
@@ -120,6 +121,13 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
               isActive={location.pathname.includes("/chases")}
               collapsed
               onClick={() => navigate(`/projects/${viewedProject.id}/chases`)}
+            />
+            <NavItem
+              icon={<Bookmark className="size-5" />}
+              label="Presets"
+              isActive={location.pathname.includes("/presets")}
+              collapsed
+              onClick={() => navigate(`/projects/${viewedProject.id}/presets`)}
             />
 
             {/* Hardware items - only for active project */}
@@ -229,6 +237,13 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
               isActive={location.pathname.includes("/chases")}
               collapsed={false}
               onClick={() => navigate(`/projects/${viewedProject.id}/chases`)}
+            />
+            <NavItem
+              icon={<Bookmark className="size-4" />}
+              label="Presets"
+              isActive={location.pathname.includes("/presets")}
+              collapsed={false}
+              onClick={() => navigate(`/projects/${viewedProject.id}/presets`)}
             />
 
             {/* Hardware items - only for active project */}

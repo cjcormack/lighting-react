@@ -9,6 +9,7 @@ import {createFixtureApi, FixturesApi} from "./fixturesApi";
 import {createProjectApi, ProjectApi} from "./projectApi";
 import {createGroupsApi, GroupsApi} from "./groupsApi";
 import {createFxApi, FxApi} from "./fxApi";
+import {createFxPresetsWsApi, FxPresetsWsApi} from "./fxPresetsWsApi";
 
 interface LightingApi {
   universes: UniversesApi
@@ -21,6 +22,7 @@ interface LightingApi {
   projects: ProjectApi
   groups: GroupsApi
   fx: FxApi
+  fxPresets: FxPresetsWsApi
 }
 
 export const lightingApi = createLightingApi()
@@ -49,6 +51,7 @@ function createLightingApi(): LightingApi {
   const projectApi = createProjectApi(connection)
   const groupsApi = createGroupsApi(connection)
   const fxApi = createFxApi(connection)
+  const fxPresetsWsApi = createFxPresetsWsApi(connection)
 
   return {
     universes: universesApi,
@@ -61,5 +64,6 @@ function createLightingApi(): LightingApi {
     projects: projectApi,
     groups: groupsApi,
     fx: fxApi,
+    fxPresets: fxPresetsWsApi,
   }
 }
