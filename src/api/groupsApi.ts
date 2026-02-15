@@ -29,6 +29,8 @@ export interface GroupDetail extends GroupSummary {
 
 export type BlendMode = 'OVERRIDE' | 'ADDITIVE' | 'MULTIPLY' | 'MAX' | 'MIN'
 
+export type ElementMode = 'PER_FIXTURE' | 'FLAT'
+
 export type DistributionStrategy =
   | 'LINEAR'
   | 'UNIFIED'
@@ -76,6 +78,7 @@ export interface ApplyFxRequest {
   distribution: DistributionStrategy
   phaseOffset: number
   parameters: Record<string, string>
+  elementMode?: ElementMode
 }
 
 export interface ApplyFxResponse {
@@ -90,6 +93,10 @@ export interface GroupActiveEffect {
   blendMode: BlendMode
   distribution: DistributionStrategy
   isRunning: boolean
+  phaseOffset: number
+  currentPhase: number
+  parameters: Record<string, string>
+  elementMode: ElementMode | null
 }
 
 export interface ClearFxResponse {

@@ -13,7 +13,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { ChevronLeft, ChevronDown, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
-import { BEAT_DIVISION_OPTIONS, BLEND_MODE_OPTIONS, DISTRIBUTION_STRATEGY_OPTIONS, getEffectDescription } from './fxConstants'
+import { BEAT_DIVISION_OPTIONS, BLEND_MODE_OPTIONS, DISTRIBUTION_STRATEGY_OPTIONS, ELEMENT_MODE_OPTIONS, getEffectDescription } from './fxConstants'
 import type { EffectLibraryEntry, EffectParameterDef } from '@/store/fixtureFx'
 
 interface EffectParameterFormProps {
@@ -34,6 +34,10 @@ interface EffectParameterFormProps {
   distributionStrategy?: string
   onDistributionStrategyChange?: (v: string) => void
   showDistribution?: boolean
+  showStartOnBeat?: boolean
+  elementMode?: string
+  onElementModeChange?: (v: string) => void
+  showElementMode?: boolean
 }
 
 export function EffectParameterForm({
@@ -54,6 +58,10 @@ export function EffectParameterForm({
   distributionStrategy,
   onDistributionStrategyChange,
   showDistribution,
+  showStartOnBeat = true,
+  elementMode,
+  onElementModeChange,
+  showElementMode,
 }: EffectParameterFormProps) {
   const [showAdvanced, setShowAdvanced] = useState(false)
 
@@ -130,6 +138,26 @@ export function EffectParameterForm({
         </div>
       )}
 
+      {/* Element mode (groups with multi-element fixtures only) */}
+      {showElementMode && elementMode && onElementModeChange && (
+        <div>
+          <Label className="text-xs text-muted-foreground mb-1.5 block">Element Mode</Label>
+          <Select value={elementMode} onValueChange={onElementModeChange}>
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ELEMENT_MODE_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value} className="text-xs">
+                  <span>{option.label}</span>
+                  <span className="text-muted-foreground ml-2">{option.description}</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {/* Effect-specific parameters */}
       {effect.parameters.length > 0 && (
         <div className="space-y-3">
@@ -192,8 +220,8 @@ export function EffectParameterForm({
             />
           </div>
 
-          {/* Start on beat (add mode only) */}
-          {!isEdit && (
+          {/* Start on beat (add mode only, hidden for groups) */}
+          {!isEdit && showStartOnBeat && (
             <label className="flex items-center gap-2 text-xs cursor-pointer">
               <input
                 type="checkbox"

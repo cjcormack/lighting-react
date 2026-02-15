@@ -6,6 +6,8 @@ import { Loader2 } from 'lucide-react'
 import { useGroupQuery, useGroupPropertiesQuery } from '../../store/groups'
 import { GroupPropertyVisualizer, GroupVirtualDimmerSlider } from '../fixtures/GroupPropertyVisualizers'
 import { GroupMembersSection } from './GroupMembersSection'
+import { GroupFxBadge } from './fx/GroupFxBadge'
+import { GroupFxSection } from './fx/GroupFxSection'
 import type { GroupSummary, GroupPropertyDescriptor, GroupColourPropertyDescriptor } from '../../api/groupsApi'
 
 interface GroupCardProps {
@@ -32,6 +34,9 @@ export function GroupCard({ group, onFixtureClick }: GroupCardProps) {
           isLoading={propertiesLoading}
           isEditing={isEditing}
         />
+
+        {/* Effects section */}
+        <GroupFxSection group={group} />
 
         {/* Compact fixture member grid */}
         <GroupMembersSection
@@ -71,15 +76,14 @@ function GroupCardHeader({
           {isEditing ? 'Done' : 'Edit'}
         </Button>
       </div>
-      {group.capabilities.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-1">
-          {group.capabilities.map((cap) => (
-            <Badge key={cap} variant="outline" className="text-xs capitalize">
-              {cap}
-            </Badge>
-          ))}
-        </div>
-      )}
+      <div className="flex flex-wrap gap-1 mt-1">
+        {group.capabilities.map((cap) => (
+          <Badge key={cap} variant="outline" className="text-xs capitalize">
+            {cap}
+          </Badge>
+        ))}
+        <GroupFxBadge groupName={group.name} />
+      </div>
     </CardHeader>
   )
 }

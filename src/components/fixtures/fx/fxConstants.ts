@@ -39,6 +39,16 @@ export const DISTRIBUTION_STRATEGY_OPTIONS = [
   { value: 'POSITIONAL', label: 'Positional', description: 'Based on fixture position' },
 ] as const
 
+export const ELEMENT_MODE_OPTIONS = [
+  { value: 'PER_FIXTURE', label: 'Per Fixture', description: 'Effect runs independently on each fixture' },
+  { value: 'FLAT', label: 'Flat', description: 'All heads treated as one continuous strip' },
+] as const
+
+export function getElementModeLabel(mode: string): string {
+  const option = ELEMENT_MODE_OPTIONS.find((o) => o.value === mode)
+  return option?.label ?? mode.toLowerCase()
+}
+
 /** Fallback descriptions if the library API doesn't provide them */
 export const EFFECT_DESCRIPTIONS: Record<string, string> = {
   sinewave: 'Smooth wave oscillation',

@@ -10,12 +10,30 @@ import {
   DistributionStrategy,
   GroupActiveEffect,
   GroupPropertyDescriptor,
+  type ElementMode,
 } from "../api/groupsApi"
 
 // WebSocket subscription for auto-invalidation
 lightingApi.groups.subscribe(function () {
   store.dispatch(restApi.util.invalidateTags(['GroupList']))
 })
+
+// Also invalidate GroupActiveEffects when any FX changes (shared /fx/{id} endpoints)
+lightingApi.fx.subscribe(() => {
+  store.dispatch(restApi.util.invalidateTags(['GroupActiveEffects']))
+})
+
+// === Types ===
+
+export interface UpdateGroupFxRequest {
+  effectType?: string
+  parameters?: Record<string, string>
+  beatDivision?: number
+  blendMode?: string
+  phaseOffset?: number
+  distributionStrategy?: string
+  elementMode?: ElementMode
+}
 
 export const groupsApi = restApi.injectEndpoints({
   endpoints: (build) => ({
@@ -83,6 +101,57 @@ export const groupsApi = restApi.injectEndpoints({
         'GroupList',
       ],
     }),
+
+    // Pause a single group effect (shared /fx/{id} endpoint)
+    pauseGroupFx: build.mutation<void, { id: number; groupName: string }>({
+      query: ({ id }) => ({
+        url: `fx/${id}/pause`,
+        method: 'POST',
+      }),
+      invalidatesTags: (_result, _error, { groupName }) => [
+        { type: 'GroupActiveEffects', id: groupName },
+        'FixtureEffects',
+      ],
+    }),
+
+    // Resume a single group effect
+    resumeGroupFx: build.mutation<void, { id: number; groupName: string }>({
+      query: ({ id }) => ({
+        url: `fx/${id}/resume`,
+        method: 'POST',
+      }),
+      invalidatesTags: (_result, _error, { groupName }) => [
+        { type: 'GroupActiveEffects', id: groupName },
+        'FixtureEffects',
+      ],
+    }),
+
+    // Remove a single group effect
+    removeGroupFx: build.mutation<void, { id: number; groupName: string }>({
+      query: ({ id }) => ({
+        url: `fx/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: (_result, _error, { groupName }) => [
+        { type: 'GroupActiveEffects', id: groupName },
+        { type: 'GroupList', id: groupName },
+        'GroupList',
+        'FixtureEffects',
+      ],
+    }),
+
+    // Update a single group effect
+    updateGroupFx: build.mutation<void, { id: number; groupName: string; body: UpdateGroupFxRequest }>({
+      query: ({ id, body }) => ({
+        url: `fx/${id}`,
+        method: 'PUT',
+        body,
+      }),
+      invalidatesTags: (_result, _error, { groupName }) => [
+        { type: 'GroupActiveEffects', id: groupName },
+        'FixtureEffects',
+      ],
+    }),
   }),
   overrideExisting: false,
 })
@@ -95,4 +164,8 @@ export const {
   useGroupActiveEffectsQuery,
   useApplyGroupFxMutation,
   useClearGroupFxMutation,
+  usePauseGroupFxMutation,
+  useResumeGroupFxMutation,
+  useRemoveGroupFxMutation,
+  useUpdateGroupFxMutation,
 } = groupsApi
