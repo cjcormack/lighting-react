@@ -26,6 +26,7 @@ import {
   SlidersHorizontal,
   ChevronDown,
   FolderOpen,
+  AudioWaveform,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useProjectListQuery } from "./store/projects"
@@ -138,6 +139,13 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
                   collapsed
                   onClick={() => navigate(`/projects/${viewedProject.id}/groups`)}
                 />
+                <NavItem
+                  icon={<AudioWaveform className="size-5" />}
+                  label="FX"
+                  isActive={location.pathname.includes("/fx")}
+                  collapsed
+                  onClick={() => navigate(`/projects/${viewedProject.id}/fx`)}
+                />
                 {(universes ?? []).map((universe) => (
                   <NavItem
                     key={universe}
@@ -239,6 +247,13 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
                   isActive={location.pathname.includes("/groups")}
                   collapsed={false}
                   onClick={() => navigate(`/projects/${viewedProject.id}/groups`)}
+                />
+                <NavItem
+                  icon={<AudioWaveform className="size-4" />}
+                  label="FX"
+                  isActive={location.pathname.includes("/fx")}
+                  collapsed={false}
+                  onClick={() => navigate(`/projects/${viewedProject.id}/fx`)}
                 />
                 {(universes ?? []).map((universe) => (
                   <NavItem

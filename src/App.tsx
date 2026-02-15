@@ -7,6 +7,7 @@ import { GroupsRedirect, ProjectGroups } from "./routes/Groups";
 import Projects from "./routes/Projects";
 import ProjectScripts, { ScriptsRedirect } from "./routes/ProjectScripts";
 import { ProjectScenes, ScenesRedirect, ChasesRedirect } from "./routes/ProjectScenes";
+import { FxRedirect, ProjectFxBusking } from "./routes/FxBusking";
 import ProjectOverview, { ProjectOverviewRedirect } from "./routes/ProjectOverview";
 
 function App() {
@@ -34,6 +35,14 @@ function App() {
         {
           path: "groups",
           element: <GroupsRedirect />,
+        },
+        {
+          path: "projects/:projectId/fx",
+          element: <ProjectFxBusking />,
+        },
+        {
+          path: "fx",
+          element: <FxRedirect />,
         },
         {
           path: "projects/:projectId/channels/:universe",
