@@ -95,7 +95,7 @@ export function EffectPad({
 
         {CATEGORY_ORDER.map((cat) => (
           <TabsContent key={cat} value={cat} className="flex-1 overflow-y-auto px-2 pb-2 mt-0">
-            <div className="grid grid-cols-2 @[28rem]:grid-cols-3 @[48rem]:grid-cols-4 gap-2 pt-2">
+            <div className="grid grid-cols-1 @[20rem]:grid-cols-2 @[28rem]:grid-cols-3 @[48rem]:grid-cols-4 gap-2 pt-2">
               {(effectsByCategory[cat] ?? []).map((effect) => (
                 <EffectPadButton
                   key={effect.name}
@@ -116,7 +116,7 @@ export function EffectPad({
 
         <TabsContent value="controls" className="flex-1 overflow-y-auto px-2 pb-2 mt-0">
           {propertyButtons.length > 0 ? (
-            <div className="grid grid-cols-2 @[28rem]:grid-cols-3 @[48rem]:grid-cols-4 gap-2 pt-2">
+            <div className="grid grid-cols-1 @[20rem]:grid-cols-2 @[28rem]:grid-cols-3 @[48rem]:grid-cols-4 gap-2 pt-2">
               {propertyButtons.map((btn) => (
                 <PropertyPadButton
                   key={`${btn.kind}:${btn.propertyName}`}
@@ -191,7 +191,7 @@ function PresetGrid({
 
   return (
     <div className="space-y-2 pt-2">
-      <div className="grid grid-cols-2 @[28rem]:grid-cols-3 @[48rem]:grid-cols-4 gap-2">
+      <div className="grid grid-cols-1 @[20rem]:grid-cols-2 @[28rem]:grid-cols-3 @[48rem]:grid-cols-4 gap-2">
         {presets.map((preset) => (
           <button
             key={preset.id}
