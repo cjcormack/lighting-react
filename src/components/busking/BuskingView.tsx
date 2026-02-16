@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useGroupActiveEffectsQuery } from '@/store/groups'
 import { useFixtureEffectsQuery } from '@/store/fixtureFx'
+import { useFixtureListQuery } from '@/store/fixtures'
 import { useCurrentProjectQuery } from '@/store/projects'
 import { useProjectPresetListQuery } from '@/store/fxPresets'
 import { BuskingTopBar } from './BuskingTopBar'
@@ -18,6 +19,7 @@ import {
   targetKey,
   normalizeEffectName,
 } from './buskingTypes'
+import { inferPresetCapabilities } from '@/api/fxPresetsApi'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
 import type { FxPreset } from '@/api/fxPresetsApi'
 
@@ -50,6 +52,7 @@ export function BuskingView() {
   const { data: presets } = useProjectPresetListQuery(currentProject?.id ?? 0, {
     skip: !currentProject,
   })
+  const { data: fixtureList } = useFixtureListQuery()
 
   // On mobile, switch to effects tab when a target is selected
   const handleSelectTarget = useCallback(
@@ -70,6 +73,36 @@ export function BuskingView() {
 
   // Fetch effects data for selected targets
   const targetEffectsData = useSelectedTargetEffects(selectedArray)
+
+  // Filter presets to those compatible with selected targets
+  const filteredPresets = useMemo(() => {
+    if (!presets || selectedArray.length === 0) return presets ?? []
+    // Collect capabilities and fixture type keys from selected targets
+    const targetCaps = new Set<string>()
+    const targetTypeKeys = new Set<string>()
+    for (const target of selectedArray) {
+      if (target.type === 'group') {
+        target.group.capabilities.forEach((c) => targetCaps.add(c))
+        // Collect typeKeys of member fixtures
+        if (fixtureList) {
+          fixtureList
+            .filter((f) => f.groups.includes(target.name))
+            .forEach((f) => targetTypeKeys.add(f.typeKey))
+        }
+      } else {
+        target.fixture.capabilities.forEach((c) => targetCaps.add(c))
+        targetTypeKeys.add(target.fixture.typeKey)
+      }
+    }
+    return presets.filter((preset) => {
+      // Check capability compatibility
+      const requiredCaps = inferPresetCapabilities(preset.effects)
+      if (!requiredCaps.every((cap) => targetCaps.has(cap))) return false
+      // Check fixture type if set on preset
+      if (preset.fixtureType && !targetTypeKeys.has(preset.fixtureType)) return false
+      return true
+    })
+  }, [presets, selectedArray, fixtureList])
 
   const handleApplyPreset = useCallback(
     (preset: FxPreset) => applyPreset(preset, targetEffectsData),
@@ -106,7 +139,7 @@ export function BuskingView() {
               togglePropertyEffect={togglePropertyEffect}
               getActivePropertyValue={getActivePropertyValue}
               setEditingEffect={setEditingEffect}
-              presets={presets ?? []}
+              presets={filteredPresets}
               onApplyPreset={handleApplyPreset}
               currentProjectId={currentProject?.id}
             />
@@ -150,7 +183,7 @@ export function BuskingView() {
               togglePropertyEffect={togglePropertyEffect}
               getActivePropertyValue={getActivePropertyValue}
               setEditingEffect={setEditingEffect}
-              presets={presets ?? []}
+              presets={filteredPresets}
               onApplyPreset={handleApplyPreset}
               currentProjectId={currentProject?.id}
             />

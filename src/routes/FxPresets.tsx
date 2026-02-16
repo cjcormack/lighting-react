@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -10,7 +10,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Loader2, Plus, Bookmark } from 'lucide-react'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { Loader2, Plus, Bookmark, Sun, Palette, Move, ChevronDown, ChevronRight } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import {
   useProjectPresetListQuery,
@@ -18,10 +20,22 @@ import {
   useSaveProjectPresetMutation,
   useDeleteProjectPresetMutation,
 } from '../store/fxPresets'
-import { PresetCard } from '../components/presets/PresetCard'
+import { useFixtureListQuery } from '../store/fixtures'
+import { PresetListRow } from '../components/presets/PresetListRow'
 import { PresetForm } from '../components/presets/PresetForm'
 import { CopyPresetDialog } from '../components/presets/CopyPresetDialog'
-import type { FxPreset, FxPresetInput } from '../api/fxPresetsApi'
+import {
+  inferPresetCapabilities,
+  buildFixtureTypeHierarchy,
+  resolveFixtureTypeLabel,
+} from '../api/fxPresetsApi'
+import type { FxPreset, FxPresetInput, FixtureTypeHierarchy } from '../api/fxPresetsApi'
+
+const CAPABILITY_CHIPS = [
+  { value: 'dimmer', label: 'Dimmer', icon: Sun },
+  { value: 'colour', label: 'Colour', icon: Palette },
+  { value: 'position', label: 'Position', icon: Move },
+] as const
 
 // Redirect /presets → /projects/:projectId/presets
 export function PresetsRedirect() {
@@ -45,6 +59,12 @@ export function PresetsRedirect() {
   return null
 }
 
+interface PresetGroup {
+  key: string // fixtureType typeKey, or '' for untyped
+  label: string
+  presets: FxPreset[]
+}
+
 // Main presets management route
 export function ProjectFxPresets() {
   const { projectId } = useParams()
@@ -52,6 +72,7 @@ export function ProjectFxPresets() {
   const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
   const { data: presets, isLoading: presetsLoading } = useProjectPresetListQuery(projectIdNum)
+  const { data: fixtureList } = useFixtureListQuery()
 
   const [createPreset, { isLoading: isCreating }] = useCreateProjectPresetMutation()
   const [savePreset, { isLoading: isSaving }] = useSaveProjectPresetMutation()
@@ -62,7 +83,74 @@ export function ProjectFxPresets() {
   const [deletingPreset, setDeletingPreset] = useState<FxPreset | null>(null)
   const [copyingPreset, setCopyingPreset] = useState<FxPreset | null>(null)
 
+  // Filter state
+  const [capabilityFilter, setCapabilityFilter] = useState<string[]>([])
+  // Track collapsed groups (by group key)
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+
   const isCurrentProject = currentProject?.id === projectIdNum
+
+  // Build hierarchy for label resolution
+  const hierarchy = useMemo<FixtureTypeHierarchy | null>(() => {
+    if (!fixtureList) return null
+    return buildFixtureTypeHierarchy(fixtureList)
+  }, [fixtureList])
+
+  // Filtered presets (capability filter only — grouping replaces fixture type filter)
+  const filteredPresets = useMemo(() => {
+    if (!presets) return []
+    if (capabilityFilter.length === 0) return presets
+    return presets.filter((preset) => {
+      const presetCaps = inferPresetCapabilities(preset.effects)
+      return capabilityFilter.every((cap) => presetCaps.includes(cap))
+    })
+  }, [presets, capabilityFilter])
+
+  // Group presets by fixture type
+  const groups = useMemo<PresetGroup[]>(() => {
+    const byType = new Map<string, FxPreset[]>()
+    for (const preset of filteredPresets) {
+      const key = preset.fixtureType ?? ''
+      let list = byType.get(key)
+      if (!list) {
+        list = []
+        byType.set(key, list)
+      }
+      list.push(preset)
+    }
+
+    const result: PresetGroup[] = []
+
+    // "All Fixtures" group first
+    const untyped = byType.get('')
+    if (untyped) {
+      result.push({ key: '', label: 'All Fixtures', presets: untyped })
+      byType.delete('')
+    }
+
+    // Remaining groups sorted by label
+    const typed = [...byType.entries()].map(([key, list]) => ({
+      key,
+      label: hierarchy ? resolveFixtureTypeLabel(key, hierarchy) : key,
+      presets: list,
+    }))
+    typed.sort((a, b) => a.label.localeCompare(b.label))
+    result.push(...typed)
+
+    return result
+  }, [filteredPresets, hierarchy])
+
+  const toggleGroup = (key: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+      }
+      return next
+    })
+  }
 
   const handleCreate = () => {
     setEditingPreset(null)
@@ -112,6 +200,9 @@ export function ProjectFxPresets() {
     )
   }
 
+  const totalFiltered = filteredPresets.length
+  const totalAll = presets?.length ?? 0
+
   return (
     <div className="p-4 space-y-4">
       {/* Header */}
@@ -132,8 +223,25 @@ export function ProjectFxPresets() {
         )}
       </div>
 
-      {/* Preset grid */}
-      {(presets?.length ?? 0) === 0 ? (
+      {/* Capability filter chips */}
+      {totalAll > 0 && (
+        <ToggleGroup
+          type="multiple"
+          size="sm"
+          value={capabilityFilter}
+          onValueChange={setCapabilityFilter}
+        >
+          {CAPABILITY_CHIPS.map(({ value, label, icon: Icon }) => (
+            <ToggleGroupItem key={value} value={value} className="gap-1 text-xs">
+              <Icon className="size-3.5" />
+              {label}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      )}
+
+      {/* Preset list grouped by fixture type */}
+      {totalAll === 0 ? (
         <Card className="p-8 text-center">
           <Bookmark className="size-10 mx-auto text-muted-foreground/30 mb-3" />
           <p className="text-sm text-muted-foreground">
@@ -148,20 +256,64 @@ export function ProjectFxPresets() {
             </Button>
           )}
         </Card>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {presets?.map((preset) => (
-            <PresetCard
-              key={preset.id}
-              preset={preset}
-              onEdit={isCurrentProject && preset.canEdit ? () => handleEdit(preset) : undefined}
-              onDelete={
-                isCurrentProject && preset.canDelete ? () => setDeletingPreset(preset) : undefined
-              }
-              onCopy={!isCurrentProject ? () => setCopyingPreset(preset) : undefined}
-            />
-          ))}
+      ) : totalFiltered === 0 ? (
+        <div className="py-8 text-center text-sm text-muted-foreground">
+          No presets match the current filters.
         </div>
+      ) : (
+        <div className="space-y-3">
+          {groups.map((group) => {
+            const isCollapsed = collapsedGroups.has(group.key)
+            return (
+              <div key={group.key} className="rounded-lg border">
+                {/* Group header — only show if there are multiple groups */}
+                {groups.length > 1 && (
+                  <button
+                    onClick={() => toggleGroup(group.key)}
+                    className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-accent/50 transition-colors rounded-t-lg"
+                  >
+                    {isCollapsed ? (
+                      <ChevronRight className="size-4 text-muted-foreground shrink-0" />
+                    ) : (
+                      <ChevronDown className="size-4 text-muted-foreground shrink-0" />
+                    )}
+                    <span className="text-sm font-medium">{group.label}</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      ({group.presets.length})
+                    </span>
+                  </button>
+                )}
+                {!isCollapsed && (
+                  <div
+                    className={cn(
+                      'flex flex-col divide-y',
+                      groups.length > 1 && 'border-t',
+                    )}
+                  >
+                    {group.presets.map((preset) => (
+                      <PresetListRow
+                        key={preset.id}
+                        preset={preset}
+                        onEdit={isCurrentProject && preset.canEdit ? () => handleEdit(preset) : undefined}
+                        onDelete={
+                          isCurrentProject && preset.canDelete ? () => setDeletingPreset(preset) : undefined
+                        }
+                        onCopy={!isCurrentProject ? () => setCopyingPreset(preset) : undefined}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Result count */}
+      {totalAll > 0 && capabilityFilter.length > 0 && (
+        <p className="text-xs text-muted-foreground text-center">
+          Showing {totalFiltered} of {totalAll} presets
+        </p>
       )}
 
       {/* Create/Edit form */}

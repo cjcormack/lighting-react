@@ -176,13 +176,13 @@ function PresetGrid({
     return (
       <div className="py-8 text-center space-y-2">
         <Bookmark className="size-10 mx-auto text-muted-foreground/30" />
-        <p className="text-sm text-muted-foreground">No presets yet.</p>
+        <p className="text-sm text-muted-foreground">No compatible presets for selected targets.</p>
         {currentProjectId && (
           <button
             className="text-xs text-primary hover:underline"
             onClick={() => navigate(`/projects/${currentProjectId}/presets`)}
           >
-            Create presets →
+            Manage presets →
           </button>
         )}
       </div>

@@ -22,14 +22,32 @@ export const fixturesApi = restApi.injectEndpoints({
         },
         providesTags: ['Fixture'],
       }),
+      fixtureTypeList: build.query<Array<FixtureTypeInfo>, void>({
+        query: () => {
+          return 'fixture/types'
+        },
+        providesTags: ['Fixture'],
+      }),
     }
   },
   overrideExisting: false,
 })
 
 export const {
-  useFixtureListQuery, useFixtureQuery
+  useFixtureListQuery, useFixtureQuery, useFixtureTypeListQuery,
 } = fixturesApi
+
+export type FixtureTypeInfo = {
+  typeKey: string
+  manufacturer: string | null
+  model: string | null
+  modeName: string | null
+  channelCount: number | null
+  isRegistered: boolean
+  capabilities: string[]
+  properties: PropertyDescriptor[]
+  elementGroupProperties: GroupPropertyDescriptor[] | null
+}
 
 // Channel reference for property descriptors
 export type ChannelRef = {
