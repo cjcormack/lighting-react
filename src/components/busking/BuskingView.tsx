@@ -12,6 +12,7 @@ import { ActiveEffectSheet } from './ActiveEffectSheet'
 import { useBuskingState, type TargetEffectsData } from './useBuskingState'
 import {
   type BuskingTarget,
+  type PropertyButton,
   type ActiveEffectContext,
   type EffectPresence,
   targetKey,
@@ -35,6 +36,10 @@ export function BuskingView() {
     effectsByCategory,
     computePresence,
     toggleEffect,
+    propertyButtons,
+    computePropertyPresence,
+    togglePropertyEffect,
+    getActivePropertyValue,
     applyPreset,
     editingEffect,
     setEditingEffect,
@@ -96,6 +101,10 @@ export function BuskingView() {
               onCategoryChange={setActiveCategory}
               computePresence={computePresence}
               toggleEffect={toggleEffect}
+              propertyButtons={propertyButtons}
+              computePropertyPresence={computePropertyPresence}
+              togglePropertyEffect={togglePropertyEffect}
+              getActivePropertyValue={getActivePropertyValue}
               setEditingEffect={setEditingEffect}
               presets={presets ?? []}
               onApplyPreset={handleApplyPreset}
@@ -136,6 +145,10 @@ export function BuskingView() {
               onCategoryChange={setActiveCategory}
               computePresence={computePresence}
               toggleEffect={toggleEffect}
+              propertyButtons={propertyButtons}
+              computePropertyPresence={computePropertyPresence}
+              togglePropertyEffect={togglePropertyEffect}
+              getActivePropertyValue={getActivePropertyValue}
               setEditingEffect={setEditingEffect}
               presets={presets ?? []}
               onApplyPreset={handleApplyPreset}
@@ -161,6 +174,10 @@ function EffectPadWrapper({
   onCategoryChange,
   computePresence,
   toggleEffect,
+  propertyButtons,
+  computePropertyPresence,
+  togglePropertyEffect,
+  getActivePropertyValue,
   setEditingEffect,
   presets,
   onApplyPreset,
@@ -173,6 +190,10 @@ function EffectPadWrapper({
   onCategoryChange: (cat: string) => void
   computePresence: (effectName: string, data: TargetEffectsData[]) => EffectPresence
   toggleEffect: (effect: EffectLibraryEntry, presence: EffectPresence, data: TargetEffectsData[]) => Promise<void>
+  propertyButtons: PropertyButton[]
+  computePropertyPresence: (button: PropertyButton, data: TargetEffectsData[]) => EffectPresence
+  togglePropertyEffect: (button: PropertyButton, presence: EffectPresence, data: TargetEffectsData[], settingLevel?: number) => Promise<void>
+  getActivePropertyValue: (button: PropertyButton, data: TargetEffectsData[]) => string | null
   setEditingEffect: (ctx: ActiveEffectContext | null) => void
   presets: FxPreset[]
   onApplyPreset: (preset: FxPreset) => Promise<void>
@@ -220,6 +241,55 @@ function EffectPadWrapper({
     [targetEffectsData, setEditingEffect],
   )
 
+  // Property button bound callbacks
+  const getPropertyPresence = useCallback(
+    (button: PropertyButton): EffectPresence => {
+      return computePropertyPresence(button, targetEffectsData)
+    },
+    [computePropertyPresence, targetEffectsData],
+  )
+
+  const handlePropertyToggle = useCallback(
+    (button: PropertyButton, settingLevel?: number) => {
+      const presence = getPropertyPresence(button)
+      togglePropertyEffect(button, presence, targetEffectsData, settingLevel)
+    },
+    [getPropertyPresence, togglePropertyEffect, targetEffectsData],
+  )
+
+  const handlePropertyLongPress = useCallback(
+    (button: PropertyButton) => {
+      const normalizedType = normalizeEffectName(button.effectType)
+      for (const data of targetEffectsData) {
+        if (data.target.type === 'group' && data.groupEffects) {
+          const match = data.groupEffects.find(
+            (e) => normalizeEffectName(e.effectType) === normalizedType && e.propertyName === button.propertyName,
+          )
+          if (match) {
+            setEditingEffect({ type: 'group', groupName: data.target.name, effect: match })
+            return
+          }
+        } else if (data.target.type === 'fixture' && data.fixtureDirectEffects) {
+          const match = data.fixtureDirectEffects.find(
+            (e) => normalizeEffectName(e.effectType) === normalizedType && e.propertyName === button.propertyName,
+          )
+          if (match) {
+            setEditingEffect({ type: 'fixture', fixtureKey: data.target.key, effect: match })
+            return
+          }
+        }
+      }
+    },
+    [targetEffectsData, setEditingEffect],
+  )
+
+  const getPropertyValue = useCallback(
+    (button: PropertyButton): string | null => {
+      return getActivePropertyValue(button, targetEffectsData)
+    },
+    [getActivePropertyValue, targetEffectsData],
+  )
+
   return (
     <EffectPad
       effectsByCategory={effectsByCategory}
@@ -232,6 +302,11 @@ function EffectPadWrapper({
       presets={presets}
       onApplyPreset={onApplyPreset}
       currentProjectId={currentProjectId}
+      propertyButtons={propertyButtons}
+      getPropertyPresence={getPropertyPresence}
+      onPropertyToggle={handlePropertyToggle}
+      onPropertyLongPress={handlePropertyLongPress}
+      getPropertyValue={getPropertyValue}
     />
   )
 }

@@ -15,6 +15,7 @@ import { ChevronLeft, ChevronDown, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { BEAT_DIVISION_OPTIONS, BLEND_MODE_OPTIONS, DISTRIBUTION_STRATEGY_OPTIONS, ELEMENT_MODE_OPTIONS, getEffectDescription } from './fxConstants'
 import type { EffectLibraryEntry, EffectParameterDef } from '@/store/fixtureFx'
+import type { SettingOption, SettingPropertyDescriptor, SliderPropertyDescriptor } from '@/store/fixtures'
 
 interface EffectParameterFormProps {
   effect: EffectLibraryEntry
@@ -38,6 +39,15 @@ interface EffectParameterFormProps {
   elementMode?: string
   onElementModeChange?: (v: string) => void
   showElementMode?: boolean
+  settingOptions?: SettingOption[]
+  /** All setting properties available on the fixture (for choosing which setting to target) */
+  settingProperties?: SettingPropertyDescriptor[]
+  /** Called when user picks a different setting property */
+  onSettingPropertyChange?: (propertyName: string) => void
+  /** Non-dimmer/non-UV slider properties available on the fixture */
+  sliderProperties?: SliderPropertyDescriptor[]
+  /** Called when user picks a different slider property */
+  onSliderPropertyChange?: (propertyName: string) => void
 }
 
 export function EffectParameterForm({
@@ -62,8 +72,16 @@ export function EffectParameterForm({
   elementMode,
   onElementModeChange,
   showElementMode,
+  settingOptions,
+  settingProperties,
+  onSettingPropertyChange,
+  sliderProperties,
+  onSliderPropertyChange,
 }: EffectParameterFormProps) {
   const [showAdvanced, setShowAdvanced] = useState(false)
+
+  // Static effects don't vary over time, so speed/distribution/element-mode are irrelevant
+  const isStatic = effect.name.toLowerCase().startsWith('static')
 
   const handleParameterChange = (name: string, value: string) => {
     onParametersChange({ ...parameters, [name]: value })
@@ -96,7 +114,8 @@ export function EffectParameterForm({
         )}
       </div>
 
-      {/* Speed selector */}
+      {/* Speed selector (hidden for static effects) */}
+      {!isStatic && (
       <div>
         <Label className="text-xs text-muted-foreground mb-1.5 block">Speed</Label>
         <ToggleGroup
@@ -117,9 +136,10 @@ export function EffectParameterForm({
           ))}
         </ToggleGroup>
       </div>
+      )}
 
-      {/* Distribution strategy (multi-head fixtures only) */}
-      {showDistribution && distributionStrategy && onDistributionStrategyChange && (
+      {/* Distribution strategy (multi-head fixtures only, hidden for static) */}
+      {!isStatic && showDistribution && distributionStrategy && onDistributionStrategyChange && (
         <div>
           <Label className="text-xs text-muted-foreground mb-1.5 block">Distribution</Label>
           <Select value={distributionStrategy} onValueChange={onDistributionStrategyChange}>
@@ -138,8 +158,8 @@ export function EffectParameterForm({
         </div>
       )}
 
-      {/* Element mode (groups with multi-element fixtures only) */}
-      {showElementMode && elementMode && onElementModeChange && (
+      {/* Element mode (groups with multi-element fixtures only, hidden for static) */}
+      {!isStatic && showElementMode && elementMode && onElementModeChange && (
         <div>
           <Label className="text-xs text-muted-foreground mb-1.5 block">Element Mode</Label>
           <Select value={elementMode} onValueChange={onElementModeChange}>
@@ -158,11 +178,81 @@ export function EffectParameterForm({
         </div>
       )}
 
-      {/* Effect-specific parameters */}
+      {/* Setting property picker (when fixture has multiple settings) */}
+      {settingProperties && settingProperties.length > 1 && targetPropertyName && onSettingPropertyChange && (
+        <div>
+          <Label className="text-xs text-muted-foreground mb-1.5 block">Target Setting</Label>
+          <Select value={targetPropertyName} onValueChange={onSettingPropertyChange}>
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {settingProperties.map((sp) => (
+                <SelectItem key={sp.name} value={sp.name} className="text-xs">
+                  {sp.displayName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Slider property picker (when fixture has extra slider properties like pumpControl, fanSpeed) */}
+      {sliderProperties && sliderProperties.length > 0 && targetPropertyName && onSliderPropertyChange && (
+        <div>
+          <Label className="text-xs text-muted-foreground mb-1.5 block">Target Property</Label>
+          <Select value={targetPropertyName} onValueChange={onSliderPropertyChange}>
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {sliderProperties.map((sp) => (
+                <SelectItem key={sp.name} value={sp.name} className="text-xs">
+                  {sp.displayName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Setting options dropdown (for StaticSetting with known options) */}
+      {settingOptions && settingOptions.length > 0 && effect.parameters.some((p) => p.name === 'level') && (
+        <div>
+          <Label className="text-xs text-muted-foreground mb-1.5 block">Setting Option</Label>
+          <Select
+            value={parameters['level'] ?? '0'}
+            onValueChange={(v) => handleParameterChange('level', v)}
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {settingOptions.map((opt) => (
+                <SelectItem key={opt.level} value={String(opt.level)} className="text-xs">
+                  <span className="flex items-center gap-2">
+                    {opt.colourPreview && (
+                      <span
+                        className="inline-block size-3 rounded-full border border-border shrink-0"
+                        style={{ backgroundColor: opt.colourPreview }}
+                      />
+                    )}
+                    {opt.displayName}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Effect-specific parameters (skip 'level' when setting options are shown) */}
       {effect.parameters.length > 0 && (
         <div className="space-y-3">
           <Label className="text-xs text-muted-foreground">Parameters</Label>
-          {effect.parameters.map((param) => (
+          {effect.parameters
+            .filter((param) => !(settingOptions && settingOptions.length > 0 && param.name === 'level'))
+            .map((param) => (
             <ParameterInput
               key={param.name}
               param={param}

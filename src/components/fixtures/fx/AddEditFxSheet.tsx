@@ -16,7 +16,7 @@ import {
   type FixtureDirectEffect,
 } from '@/store/fixtureFx'
 import type { BlendMode } from '@/api/groupsApi'
-import type { Fixture } from '@/store/fixtures'
+import type { Fixture, SettingPropertyDescriptor, SliderPropertyDescriptor } from '@/store/fixtures'
 import { EffectCategoryPicker } from './EffectCategoryPicker'
 import { EffectTypePicker } from './EffectTypePicker'
 import { EffectParameterForm } from './EffectParameterForm'
@@ -51,6 +51,8 @@ export function AddEditFxSheet({ fixture, mode, onClose }: AddEditFxSheetProps) 
   const [startOnBeat, setStartOnBeat] = useState(true)
   const [parameters, setParameters] = useState<Record<string, string>>({})
   const [distributionStrategy, setDistributionStrategy] = useState('LINEAR')
+  const [selectedSettingProp, setSelectedSettingProp] = useState<string | null>(null)
+  const [selectedSliderProp, setSelectedSliderProp] = useState<string | null>(null)
 
   // Multi-head fixtures have per-head capabilities in elementGroupProperties
   const isMultiHead = (fixture.elementGroupProperties?.length ?? 0) > 0
@@ -62,6 +64,14 @@ export function AddEditFxSheet({ fixture, mode, onClose }: AddEditFxSheetProps) 
     const names = new Set<string>()
     fixture.properties?.forEach((p) => names.add(p.name))
     fixture.elementGroupProperties?.forEach((p) => names.add(p.name))
+    // Add sentinel "setting" if fixture has any setting-type properties
+    if (fixture.properties?.some((p) => p.type === 'setting')) {
+      names.add('setting')
+    }
+    // Add sentinel "slider" if fixture has non-dimmer/non-UV slider properties
+    if (fixture.properties?.some((p) => p.type === 'slider' && p.category !== 'dimmer' && p.category !== 'uv')) {
+      names.add('slider')
+    }
     return names
   }, [fixture.properties, fixture.elementGroupProperties])
 
@@ -84,13 +94,45 @@ export function AddEditFxSheet({ fixture, mode, onClose }: AddEditFxSheetProps) 
     return grouped
   }, [compatibleEffects])
 
-  // Resolve the target property name for the selected effect
+  // All setting-type properties on this fixture
+  const settingProperties = useMemo(() => {
+    return (fixture.properties?.filter((p) => p.type === 'setting') ?? []) as SettingPropertyDescriptor[]
+  }, [fixture.properties])
+
+  // All non-dimmer/non-UV slider properties on this fixture
+  const extraSliderProperties = useMemo(() => {
+    return (fixture.properties?.filter(
+      (p) => p.type === 'slider' && p.category !== 'dimmer' && p.category !== 'uv'
+    ) ?? []) as SliderPropertyDescriptor[]
+  }, [fixture.properties])
+
+  // Resolve the target property name for the selected effect.
+  // For setting effects, use the user-chosen setting property (or default to first).
+  // For slider effects matched via "slider" sentinel, use the user-chosen slider property.
   const targetPropertyName = useMemo((): string | null => {
     if (!selectedEffect) return null
-    return (
-      selectedEffect.compatibleProperties.find((name) => allPropertyNames.has(name)) ?? null
-    )
-  }, [selectedEffect, allPropertyNames])
+    const matched = selectedEffect.compatibleProperties.find((name) => allPropertyNames.has(name)) ?? null
+    if (matched === 'setting') {
+      if (selectedSettingProp && settingProperties.some((sp) => sp.name === selectedSettingProp)) {
+        return selectedSettingProp
+      }
+      return settingProperties[0]?.name ?? null
+    }
+    if (matched === 'slider') {
+      if (selectedSliderProp && extraSliderProperties.some((sp) => sp.name === selectedSliderProp)) {
+        return selectedSliderProp
+      }
+      return extraSliderProperties[0]?.name ?? null
+    }
+    return matched
+  }, [selectedEffect, allPropertyNames, settingProperties, selectedSettingProp, extraSliderProperties, selectedSliderProp])
+
+  // Get setting options for the currently-targeted setting property
+  const settingOptions = useMemo(() => {
+    if (selectedCategory !== 'setting' || !targetPropertyName) return undefined
+    const settingProp = settingProperties.find((sp) => sp.name === targetPropertyName)
+    return settingProp?.options
+  }, [selectedCategory, targetPropertyName, settingProperties])
 
   // Reset state when opening/closing
   useEffect(() => {
@@ -111,6 +153,9 @@ export function AddEditFxSheet({ fixture, mode, onClose }: AddEditFxSheetProps) 
       setPhaseOffset(mode.effect.phaseOffset)
       setParameters({ ...mode.effect.parameters })
       setDistributionStrategy(mode.effect.distributionStrategy ?? 'LINEAR')
+      // When editing a setting/slider effect, pre-select the property it targets
+      setSelectedSettingProp(mode.effect.propertyName ?? null)
+      setSelectedSliderProp(mode.effect.propertyName ?? null)
     } else {
       setStep('category')
       setSelectedCategory(null)
@@ -121,6 +166,8 @@ export function AddEditFxSheet({ fixture, mode, onClose }: AddEditFxSheetProps) 
       setStartOnBeat(true)
       setParameters({})
       setDistributionStrategy('LINEAR')
+      setSelectedSettingProp(null)
+      setSelectedSliderProp(null)
     }
   }, [isOpen, mode, library, isEdit])
 
@@ -213,6 +260,11 @@ export function AddEditFxSheet({ fixture, mode, onClose }: AddEditFxSheetProps) 
               distributionStrategy={distributionStrategy}
               onDistributionStrategyChange={setDistributionStrategy}
               showDistribution={isMultiHead}
+              settingOptions={settingOptions}
+              settingProperties={selectedCategory === 'setting' ? settingProperties : undefined}
+              onSettingPropertyChange={setSelectedSettingProp}
+              sliderProperties={selectedCategory === 'dimmer' ? extraSliderProperties : undefined}
+              onSliderPropertyChange={setSelectedSliderProp}
             />
           )}
         </div>

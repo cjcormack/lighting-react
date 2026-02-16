@@ -1,5 +1,5 @@
 import type { GroupSummary, GroupActiveEffect } from '@/api/groupsApi'
-import type { Fixture } from '@/store/fixtures'
+import type { Fixture, SettingOption } from '@/store/fixtures'
 import type { FixtureDirectEffect } from '@/store/fixtureFx'
 
 export type BuskingTarget =
@@ -15,6 +15,16 @@ export type EffectPresence = 'all' | 'some' | 'none'
 export type ActiveEffectContext =
   | { type: 'group'; groupName: string; effect: GroupActiveEffect }
   | { type: 'fixture'; fixtureKey: string; effect: FixtureDirectEffect }
+
+export interface PropertyButton {
+  kind: 'setting' | 'slider'
+  propertyName: string
+  displayName: string
+  effectType: string // "StaticSetting" or "StaticValue"
+  options?: SettingOption[] // setting options (for quick picker)
+  min?: number // slider range
+  max?: number
+}
 
 export function normalizeEffectName(s: string): string {
   return s.toLowerCase().replace(/[\s_]/g, '')

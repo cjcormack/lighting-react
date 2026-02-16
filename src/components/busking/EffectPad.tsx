@@ -1,13 +1,14 @@
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Crosshair, Bookmark } from 'lucide-react'
+import { Crosshair, Bookmark, SlidersHorizontal } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { EFFECT_CATEGORY_INFO } from '@/components/fixtures/fx/fxConstants'
 import { EffectPadButton } from './EffectPadButton'
+import { PropertyPadButton } from './PropertyPadButton'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
-import type { EffectPresence } from './buskingTypes'
+import type { EffectPresence, PropertyButton } from './buskingTypes'
 import type { FxPreset } from '@/api/fxPresetsApi'
 
 const CATEGORY_ORDER = ['dimmer', 'colour', 'position'] as const
@@ -23,6 +24,12 @@ interface EffectPadProps {
   presets: FxPreset[]
   onApplyPreset: (preset: FxPreset) => Promise<void>
   currentProjectId: number | undefined
+  // Property buttons (settings & sliders)
+  propertyButtons: PropertyButton[]
+  getPropertyPresence: (button: PropertyButton) => EffectPresence
+  onPropertyToggle: (button: PropertyButton, settingLevel?: number) => void
+  onPropertyLongPress: (button: PropertyButton) => void
+  getPropertyValue: (button: PropertyButton) => string | null
 }
 
 export function EffectPad({
@@ -36,6 +43,11 @@ export function EffectPad({
   presets,
   onApplyPreset,
   currentProjectId,
+  propertyButtons,
+  getPropertyPresence,
+  onPropertyToggle,
+  onPropertyLongPress,
+  getPropertyValue,
 }: EffectPadProps) {
   if (!hasSelection) {
     return (
@@ -65,6 +77,13 @@ export function EffectPad({
               </TabsTrigger>
             )
           })}
+          <TabsTrigger value="controls" disabled={propertyButtons.length === 0} className="gap-1 @[28rem]:gap-1.5 px-2 @[28rem]:px-3">
+            <SlidersHorizontal className="size-4" />
+            <span className="hidden @[28rem]:inline">Controls</span>
+            {propertyButtons.length > 0 && (
+              <span className="text-[10px] text-muted-foreground ml-0.5 hidden @[28rem]:inline">({propertyButtons.length})</span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="presets" className="gap-1 @[28rem]:gap-1.5 px-2 @[28rem]:px-3">
             <Bookmark className="size-4" />
             <span className="hidden @[28rem]:inline">Presets</span>
@@ -94,6 +113,27 @@ export function EffectPad({
             )}
           </TabsContent>
         ))}
+
+        <TabsContent value="controls" className="flex-1 overflow-y-auto px-2 pb-2 mt-0">
+          {propertyButtons.length > 0 ? (
+            <div className="grid grid-cols-2 @[28rem]:grid-cols-3 @[48rem]:grid-cols-4 gap-2 pt-2">
+              {propertyButtons.map((btn) => (
+                <PropertyPadButton
+                  key={`${btn.kind}:${btn.propertyName}`}
+                  button={btn}
+                  presence={getPropertyPresence(btn)}
+                  activeValue={getPropertyValue(btn)}
+                  onToggle={(level) => onPropertyToggle(btn, level)}
+                  onLongPress={() => onPropertyLongPress(btn)}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              No settings or slider controls for the selected targets
+            </div>
+          )}
+        </TabsContent>
 
         <TabsContent value="presets" className="flex-1 overflow-y-auto px-2 pb-2 mt-0">
           <PresetGrid

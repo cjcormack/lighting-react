@@ -2,11 +2,13 @@ import { useState, useMemo, useCallback } from 'react'
 import { useEffectLibraryQuery, useAddFixtureFxMutation, useRemoveFxMutation } from '@/store/fixtureFx'
 import { useApplyGroupFxMutation, useRemoveGroupFxMutation } from '@/store/groups'
 import { useFixtureListQuery } from '@/store/fixtures'
+import type { SettingPropertyDescriptor, SliderPropertyDescriptor } from '@/store/fixtures'
 import type { EffectLibraryEntry, FixtureDirectEffect } from '@/store/fixtureFx'
 import type { GroupActiveEffect, BlendMode, DistributionStrategy, EffectType } from '@/api/groupsApi'
 import type { FxPreset } from '@/api/fxPresetsApi'
 import {
   type BuskingTarget,
+  type PropertyButton,
   type EffectPresence,
   type ActiveEffectContext,
   targetKey,
@@ -54,6 +56,10 @@ export function useBuskingState() {
   // Collect all property names across selected targets
   const allPropertyNames = useMemo(() => {
     const names = new Set<string>()
+    let hasSetting = false
+    let hasExtraSlider = false
+    const isExtraSlider = (p: { type: string; category: string }) =>
+      p.type === 'slider' && p.category !== 'dimmer' && p.category !== 'uv'
     for (const target of selectedTargets.values()) {
       if (target.type === 'group') {
         target.group.capabilities.forEach((c) => names.add(c))
@@ -63,13 +69,19 @@ export function useBuskingState() {
           for (const fixture of members) {
             fixture.properties?.forEach((p) => names.add(p.name))
             fixture.elementGroupProperties?.forEach((p) => names.add(p.name))
+            if (fixture.properties?.some((p) => p.type === 'setting')) hasSetting = true
+            if (fixture.properties?.some(isExtraSlider)) hasExtraSlider = true
           }
         }
       } else {
         target.fixture.properties?.forEach((p) => names.add(p.name))
         target.fixture.elementGroupProperties?.forEach((p) => names.add(p.name))
+        if (target.fixture.properties?.some((p) => p.type === 'setting')) hasSetting = true
+        if (target.fixture.properties?.some(isExtraSlider)) hasExtraSlider = true
       }
     }
+    if (hasSetting) names.add('setting')
+    if (hasExtraSlider) names.add('slider')
     return names
   }, [selectedTargets, fixtureList])
 
@@ -81,15 +93,74 @@ export function useBuskingState() {
     )
   }, [library, allPropertyNames, selectedTargets.size])
 
-  // Group by category
+  // Whether the selected targets have actual dimmer/uv properties (not just extra sliders)
+  const hasRealDimmer = useMemo(() => {
+    return allPropertyNames.has('dimmer') || allPropertyNames.has('uv')
+  }, [allPropertyNames])
+
+  // Group by category, filtering out effects that are handled by property buttons
   const effectsByCategory = useMemo(() => {
     const grouped: Record<string, EffectLibraryEntry[]> = {}
     for (const effect of compatibleEffects) {
+      // Filter out StaticSetting — settings are shown as property buttons instead
+      if (normalizeEffectName(effect.name) === 'staticsetting') continue
+      // Filter out dimmer effects that only matched via the "slider" sentinel
+      // (e.g. hazer with pumpControl but no actual dimmer — those sliders are in Controls tab)
+      if (effect.category === 'dimmer' && !hasRealDimmer) continue
       if (!grouped[effect.category]) grouped[effect.category] = []
       grouped[effect.category].push(effect)
     }
     return grouped
-  }, [compatibleEffects])
+  }, [compatibleEffects, hasRealDimmer])
+
+  // Collect property buttons for settings and extra sliders across selected targets
+  const propertyButtons = useMemo((): PropertyButton[] => {
+    const settingSeen = new Set<string>()
+    const sliderSeen = new Set<string>()
+    const buttons: PropertyButton[] = []
+
+    const processFixtureProps = (properties?: Array<{ type: string; name: string; displayName: string; category: string; options?: Array<{ name: string; level: number; displayName: string; colourPreview?: string }> }>) => {
+      if (!properties) return
+      for (const p of properties) {
+        if (p.type === 'setting' && !settingSeen.has(p.name)) {
+          settingSeen.add(p.name)
+          buttons.push({
+            kind: 'setting',
+            propertyName: p.name,
+            displayName: p.displayName,
+            effectType: 'StaticSetting',
+            options: (p as SettingPropertyDescriptor).options,
+          })
+        }
+        if (p.type === 'slider' && p.category !== 'dimmer' && p.category !== 'uv' && !sliderSeen.has(p.name)) {
+          sliderSeen.add(p.name)
+          const slider = p as SliderPropertyDescriptor
+          buttons.push({
+            kind: 'slider',
+            propertyName: p.name,
+            displayName: p.displayName,
+            effectType: 'StaticValue',
+            min: slider.min,
+            max: slider.max,
+          })
+        }
+      }
+    }
+
+    for (const target of selectedTargets.values()) {
+      if (target.type === 'group') {
+        if (fixtureList) {
+          const members = fixtureList.filter((f) => f.groups.includes(target.name))
+          for (const fixture of members) {
+            processFixtureProps(fixture.properties)
+          }
+        }
+      } else {
+        processFixtureProps(target.fixture.properties)
+      }
+    }
+    return buttons
+  }, [selectedTargets, fixtureList])
 
   // Compute effect presence given the active effects data from all selected targets
   const computePresence = useCallback(
@@ -120,24 +191,198 @@ export function useBuskingState() {
     [],
   )
 
-  // Resolve the target property for an effect on a specific target
+  // Compute property-specific presence (matches by both effectType AND propertyName)
+  const computePropertyPresence = useCallback(
+    (button: PropertyButton, targetEffectsData: TargetEffectsData[]): EffectPresence => {
+      if (targetEffectsData.length === 0) return 'none'
+
+      const normalizedType = normalizeEffectName(button.effectType)
+      let activeCount = 0
+
+      for (const data of targetEffectsData) {
+        let hasEffect = false
+        if (data.target.type === 'group' && data.groupEffects) {
+          hasEffect = data.groupEffects.some(
+            (e) => normalizeEffectName(e.effectType) === normalizedType && e.propertyName === button.propertyName,
+          )
+        } else if (data.target.type === 'fixture' && data.fixtureDirectEffects) {
+          hasEffect = data.fixtureDirectEffects.some(
+            (e) => normalizeEffectName(e.effectType) === normalizedType && e.propertyName === button.propertyName,
+          )
+        }
+        if (hasEffect) activeCount++
+      }
+
+      if (activeCount === 0) return 'none'
+      if (activeCount === targetEffectsData.length) return 'all'
+      return 'some'
+    },
+    [],
+  )
+
+  // Toggle a property-specific effect (setting or slider)
+  const togglePropertyEffect = useCallback(
+    async (
+      button: PropertyButton,
+      presence: EffectPresence,
+      targetEffectsData: TargetEffectsData[],
+      settingLevel?: number,
+    ) => {
+      const normalizedType = normalizeEffectName(button.effectType)
+
+      if (presence === 'all' && settingLevel === undefined) {
+        // Remove from all selected targets
+        const removals: Promise<unknown>[] = []
+        for (const data of targetEffectsData) {
+          if (data.target.type === 'group' && data.groupEffects) {
+            const matching = data.groupEffects.filter(
+              (e) => normalizeEffectName(e.effectType) === normalizedType && e.propertyName === button.propertyName,
+            )
+            for (const fx of matching) {
+              removals.push(removeGroupFx({ id: fx.id, groupName: data.target.name }).unwrap())
+            }
+          } else if (data.target.type === 'fixture' && data.fixtureDirectEffects) {
+            const matching = data.fixtureDirectEffects.filter(
+              (e) => normalizeEffectName(e.effectType) === normalizedType && e.propertyName === button.propertyName,
+            )
+            for (const fx of matching) {
+              removals.push(removeFx({ id: fx.id, fixtureKey: data.target.key }).unwrap())
+            }
+          }
+        }
+        await Promise.all(removals)
+      } else {
+        // Add or update on each target
+        const paramKey = button.kind === 'setting' ? 'level' : 'value'
+        const paramValue = settingLevel !== undefined ? String(settingLevel) : button.kind === 'slider' ? '128' : '0'
+
+        const actions: Promise<unknown>[] = []
+        for (const data of targetEffectsData) {
+          // Check if already exists on this target
+          let existingFx: GroupActiveEffect | FixtureDirectEffect | undefined
+          if (data.target.type === 'group' && data.groupEffects) {
+            existingFx = data.groupEffects.find(
+              (e) => normalizeEffectName(e.effectType) === normalizedType && e.propertyName === button.propertyName,
+            )
+          } else if (data.target.type === 'fixture' && data.fixtureDirectEffects) {
+            existingFx = data.fixtureDirectEffects.find(
+              (e) => normalizeEffectName(e.effectType) === normalizedType && e.propertyName === button.propertyName,
+            )
+          }
+
+          if (existingFx && settingLevel !== undefined) {
+            // Already active but updating the value — remove and re-add
+            if (data.target.type === 'group') {
+              actions.push(removeGroupFx({ id: existingFx.id, groupName: data.target.name }).unwrap())
+            } else if (data.target.type === 'fixture') {
+              actions.push(removeFx({ id: existingFx.id, fixtureKey: data.target.key }).unwrap())
+            }
+          }
+
+          if (!existingFx || settingLevel !== undefined) {
+            if (data.target.type === 'group') {
+              actions.push(
+                applyGroupFx({
+                  groupName: data.target.name,
+                  effectType: button.effectType as EffectType,
+                  propertyName: button.propertyName,
+                  beatDivision: defaultBeatDivision,
+                  blendMode: 'OVERRIDE' as BlendMode,
+                  distribution: 'LINEAR' as DistributionStrategy,
+                  phaseOffset: 0,
+                  parameters: { [paramKey]: paramValue },
+                }).unwrap(),
+              )
+            } else {
+              actions.push(
+                addFixtureFx({
+                  effectType: button.effectType,
+                  fixtureKey: data.target.key,
+                  propertyName: button.propertyName,
+                  beatDivision: defaultBeatDivision,
+                  blendMode: 'OVERRIDE' as BlendMode,
+                  startOnBeat: true,
+                  phaseOffset: 0,
+                  parameters: { [paramKey]: paramValue },
+                }).unwrap(),
+              )
+            }
+          }
+        }
+        await Promise.all(actions)
+      }
+    },
+    [defaultBeatDivision, addFixtureFx, removeFx, applyGroupFx, removeGroupFx],
+  )
+
+  // Get the active value for a property button from the first matching active effect
+  const getActivePropertyValue = useCallback(
+    (button: PropertyButton, targetEffectsData: TargetEffectsData[]): string | null => {
+      const normalizedType = normalizeEffectName(button.effectType)
+      const paramKey = button.kind === 'setting' ? 'level' : 'value'
+
+      for (const data of targetEffectsData) {
+        if (data.target.type === 'group' && data.groupEffects) {
+          const fx = data.groupEffects.find(
+            (e) => normalizeEffectName(e.effectType) === normalizedType && e.propertyName === button.propertyName,
+          )
+          if (fx) return fx.parameters[paramKey] ?? null
+        } else if (data.target.type === 'fixture' && data.fixtureDirectEffects) {
+          const fx = data.fixtureDirectEffects.find(
+            (e) => normalizeEffectName(e.effectType) === normalizedType && e.propertyName === button.propertyName,
+          )
+          if (fx) return fx.parameters[paramKey] ?? null
+        }
+      }
+      return null
+    },
+    [],
+  )
+
+  // Resolve the target property for an effect on a specific target.
+  // For setting effects, replace the sentinel "setting" with the actual fixture setting property name.
   const resolveProperty = useCallback(
     (target: BuskingTarget, effect: EffectLibraryEntry): string | null => {
       const propNames = new Set<string>()
+      const fixtures: Array<{ properties?: Array<{ type: string; name: string; category: string }> }> = []
       if (target.type === 'group') {
         target.group.capabilities.forEach((c) => propNames.add(c))
         if (fixtureList) {
           const members = fixtureList.filter((f) => f.groups.includes(target.name))
           for (const fixture of members) {
+            fixtures.push(fixture)
             fixture.properties?.forEach((p) => propNames.add(p.name))
             fixture.elementGroupProperties?.forEach((p) => propNames.add(p.name))
           }
         }
       } else {
+        fixtures.push(target.fixture)
         target.fixture.properties?.forEach((p) => propNames.add(p.name))
         target.fixture.elementGroupProperties?.forEach((p) => propNames.add(p.name))
       }
-      return effect.compatibleProperties.find((name) => propNames.has(name)) ?? null
+      // Add sentinels so setting/slider effects can match
+      if (fixtures.some((f) => f.properties?.some((p) => p.type === 'setting'))) {
+        propNames.add('setting')
+      }
+      if (fixtures.some((f) => f.properties?.some((p) => p.type === 'slider' && p.category !== 'dimmer' && p.category !== 'uv'))) {
+        propNames.add('slider')
+      }
+      const matched = effect.compatibleProperties.find((name) => propNames.has(name)) ?? null
+      if (matched === 'setting') {
+        for (const f of fixtures) {
+          const settingProp = f.properties?.find((p) => p.type === 'setting')
+          if (settingProp) return settingProp.name
+        }
+        return null
+      }
+      if (matched === 'slider') {
+        for (const f of fixtures) {
+          const sliderProp = f.properties?.find((p) => p.type === 'slider' && p.category !== 'dimmer' && p.category !== 'uv')
+          if (sliderProp) return sliderProp.name
+        }
+        return null
+      }
+      return matched
     },
     [fixtureList],
   )
@@ -308,6 +553,12 @@ export function useBuskingState() {
     computePresence,
     toggleEffect,
     resolveProperty,
+
+    // Property buttons (settings & sliders)
+    propertyButtons,
+    computePropertyPresence,
+    togglePropertyEffect,
+    getActivePropertyValue,
 
     // Presets
     applyPreset,

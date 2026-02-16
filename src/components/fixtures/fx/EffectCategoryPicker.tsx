@@ -7,7 +7,7 @@ interface EffectCategoryPickerProps {
   onSelect: (category: string) => void
 }
 
-const CATEGORY_ORDER = ['dimmer', 'colour', 'position']
+const CATEGORY_ORDER = ['dimmer', 'colour', 'position', 'setting']
 
 export function EffectCategoryPicker({
   effectsByCategory,
