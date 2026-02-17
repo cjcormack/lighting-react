@@ -1,6 +1,6 @@
-import { useRef } from 'react'
+import React, { useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Crosshair, Bookmark, Plus } from 'lucide-react'
+import { Crosshair, Bookmark, Plus, Clock } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { cn } from '@/lib/utils'
@@ -67,30 +67,6 @@ export function EffectPad({
 
   return (
     <div className="@container flex flex-col h-full overflow-y-auto px-2 pb-2">
-      {/* Beat Division Strip */}
-      <div className="pt-2 pb-1 flex flex-col gap-1">
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Time</span>
-        <ToggleGroup
-          type="single"
-          value={String(defaultBeatDivision)}
-          onValueChange={(v) => {
-            if (v) onBeatDivisionChange(parseFloat(v))
-          }}
-          className="gap-0.5 flex-wrap justify-start"
-        >
-          {BEAT_DIVISION_OPTIONS.map((opt) => (
-            <ToggleGroupItem
-              key={opt.value}
-              value={String(opt.value)}
-              size="sm"
-              className="text-xs px-2 h-7"
-            >
-              {opt.label}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-      </div>
-
       {CATEGORY_ORDER.map((cat) => {
         if (cat === 'presets') {
           return (
@@ -104,6 +80,53 @@ export function EffectPad({
                 onCreatePreset={onCreatePreset}
               />
             </CategorySection>
+          )
+        }
+
+        if (cat === 'dimmer') {
+          // Render Time (beat division) strip before the effect categories
+          const dimmerEffects = effectsByCategory[cat] ?? []
+          const info = EFFECT_CATEGORY_INFO[cat]
+          return (
+            <React.Fragment key="dimmer-with-time">
+              <hr className="border-border mt-3 mb-0" />
+              <CategorySection label="Time" icon={Clock}>
+                <ToggleGroup
+                  type="single"
+                  value={String(defaultBeatDivision)}
+                  onValueChange={(v) => {
+                    if (v) onBeatDivisionChange(parseFloat(v))
+                  }}
+                  className="gap-0.5 flex-wrap justify-start"
+                >
+                  {BEAT_DIVISION_OPTIONS.map((opt) => (
+                    <ToggleGroupItem
+                      key={opt.value}
+                      value={String(opt.value)}
+                      size="sm"
+                      className="text-xs px-2 h-7"
+                    >
+                      {opt.label}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+              </CategorySection>
+              {dimmerEffects.length > 0 && info && (
+                <CategorySection label={info.label} icon={info.icon}>
+                  <div className="grid grid-cols-1 @[20rem]:grid-cols-2 @[28rem]:grid-cols-3 @[48rem]:grid-cols-4 gap-2">
+                    {dimmerEffects.map((effect) => (
+                      <EffectPadButton
+                        key={effect.name}
+                        effect={effect}
+                        presence={getPresence(effect.name)}
+                        onToggle={() => onToggle(effect)}
+                        onLongPress={() => onLongPress(effect)}
+                      />
+                    ))}
+                  </div>
+                </CategorySection>
+              )}
+            </React.Fragment>
           )
         }
 
