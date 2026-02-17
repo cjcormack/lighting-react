@@ -8,10 +8,11 @@ import {
 
 interface EffectsOverviewToggleProps {
   isVisible: boolean
+  isLocked?: boolean
   onToggle: () => void
 }
 
-export function EffectsOverviewToggle({ isVisible, onToggle }: EffectsOverviewToggleProps) {
+export function EffectsOverviewToggle({ isVisible, isLocked, onToggle }: EffectsOverviewToggleProps) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -19,6 +20,7 @@ export function EffectsOverviewToggle({ isVisible, onToggle }: EffectsOverviewTo
           variant="ghost"
           size="icon"
           onClick={onToggle}
+          disabled={isLocked}
           className={
             isVisible
               ? 'text-primary-foreground bg-primary-foreground/20 hover:bg-primary-foreground/30'
@@ -29,7 +31,7 @@ export function EffectsOverviewToggle({ isVisible, onToggle }: EffectsOverviewTo
         </Button>
       </TooltipTrigger>
       <TooltipContent>
-        {isVisible ? 'Hide' : 'Show'} effects overview
+        {isLocked ? 'Effects overview (locked while in FX view)' : isVisible ? 'Hide' : 'Show'} effects overview
       </TooltipContent>
     </Tooltip>
   )

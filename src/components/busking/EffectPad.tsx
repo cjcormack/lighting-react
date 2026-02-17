@@ -1,8 +1,9 @@
 import { useNavigate } from 'react-router-dom'
 import { Crosshair, Bookmark } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { cn } from '@/lib/utils'
-import { EFFECT_CATEGORY_INFO } from '@/components/fixtures/fx/fxConstants'
+import { EFFECT_CATEGORY_INFO, BEAT_DIVISION_OPTIONS } from '@/components/fixtures/fx/fxConstants'
 import { EffectPadButton } from './EffectPadButton'
 import { PropertyPadButton } from './PropertyPadButton'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
@@ -21,6 +22,9 @@ interface EffectPadProps {
   onApplyPreset: (preset: FxPreset) => Promise<void>
   getPresetPresence: (preset: FxPreset) => EffectPresence
   currentProjectId: number | undefined
+  // Beat division
+  defaultBeatDivision: number
+  onBeatDivisionChange: (value: number) => void
   // Property buttons (settings & sliders)
   propertyButtons: PropertyButton[]
   getPropertyPresence: (button: PropertyButton) => EffectPresence
@@ -39,6 +43,8 @@ export function EffectPad({
   onApplyPreset,
   getPresetPresence,
   currentProjectId,
+  defaultBeatDivision,
+  onBeatDivisionChange,
   propertyButtons,
   getPropertyPresence,
   onPropertyToggle,
@@ -56,6 +62,30 @@ export function EffectPad({
 
   return (
     <div className="@container flex flex-col h-full overflow-y-auto px-2 pb-2">
+      {/* Beat Division Strip */}
+      <div className="pt-2 pb-1 space-y-1">
+        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Time</span>
+        <ToggleGroup
+          type="single"
+          value={String(defaultBeatDivision)}
+          onValueChange={(v) => {
+            if (v) onBeatDivisionChange(parseFloat(v))
+          }}
+          className="gap-0.5 flex-wrap justify-start"
+        >
+          {BEAT_DIVISION_OPTIONS.map((opt) => (
+            <ToggleGroupItem
+              key={opt.value}
+              value={String(opt.value)}
+              size="sm"
+              className="text-xs px-2 h-7"
+            >
+              {opt.label}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      </div>
+
       {CATEGORY_ORDER.map((cat) => {
         if (cat === 'presets') {
           if (presets.length === 0) return null

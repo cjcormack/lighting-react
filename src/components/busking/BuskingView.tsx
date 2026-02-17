@@ -6,7 +6,6 @@ import { useFixtureEffectsQuery } from '@/store/fixtureFx'
 import { useFixtureListQuery } from '@/store/fixtures'
 import { useCurrentProjectQuery } from '@/store/projects'
 import { useProjectPresetListQuery } from '@/store/fxPresets'
-import { BuskingTopBar } from './BuskingTopBar'
 import { TargetList } from './TargetList'
 import { EffectPad } from './EffectPad'
 import { ActiveEffectSheet } from './ActiveEffectSheet'
@@ -112,11 +111,6 @@ export function BuskingView() {
 
   return (
     <div className="flex flex-col h-full">
-      <BuskingTopBar
-        defaultBeatDivision={defaultBeatDivision}
-        onBeatDivisionChange={setDefaultBeatDivision}
-      />
-
       {isDesktop ? (
         <div className="flex-1 flex min-h-0">
           <div className="w-72 border-r overflow-y-auto shrink-0">
@@ -133,6 +127,8 @@ export function BuskingView() {
               effectsByCategory={effectsByCategory}
               computePresence={computePresence}
               toggleEffect={toggleEffect}
+              defaultBeatDivision={defaultBeatDivision}
+              onBeatDivisionChange={setDefaultBeatDivision}
               propertyButtons={propertyButtons}
               computePropertyPresence={computePropertyPresence}
               togglePropertyEffect={togglePropertyEffect}
@@ -176,6 +172,8 @@ export function BuskingView() {
               effectsByCategory={effectsByCategory}
               computePresence={computePresence}
               toggleEffect={toggleEffect}
+              defaultBeatDivision={defaultBeatDivision}
+              onBeatDivisionChange={setDefaultBeatDivision}
               propertyButtons={propertyButtons}
               computePropertyPresence={computePropertyPresence}
               togglePropertyEffect={togglePropertyEffect}
@@ -204,6 +202,8 @@ function EffectPadWrapper({
   effectsByCategory,
   computePresence,
   toggleEffect,
+  defaultBeatDivision,
+  onBeatDivisionChange,
   propertyButtons,
   computePropertyPresence,
   togglePropertyEffect,
@@ -219,6 +219,8 @@ function EffectPadWrapper({
   effectsByCategory: Record<string, EffectLibraryEntry[]>
   computePresence: (effectName: string, data: TargetEffectsData[]) => EffectPresence
   toggleEffect: (effect: EffectLibraryEntry, presence: EffectPresence, data: TargetEffectsData[]) => Promise<void>
+  defaultBeatDivision: number
+  onBeatDivisionChange: (value: number) => void
   propertyButtons: PropertyButton[]
   computePropertyPresence: (button: PropertyButton, data: TargetEffectsData[]) => EffectPresence
   togglePropertyEffect: (button: PropertyButton, presence: EffectPresence, data: TargetEffectsData[], settingLevel?: number) => Promise<void>
@@ -338,6 +340,8 @@ function EffectPadWrapper({
       onApplyPreset={onApplyPreset}
       getPresetPresence={getPresetPresence}
       currentProjectId={currentProjectId}
+      defaultBeatDivision={defaultBeatDivision}
+      onBeatDivisionChange={onBeatDivisionChange}
       propertyButtons={propertyButtons}
       getPropertyPresence={getPropertyPresence}
       onPropertyToggle={handlePropertyToggle}

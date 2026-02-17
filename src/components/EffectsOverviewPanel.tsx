@@ -1,20 +1,33 @@
 import { useCallback } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Loader2, OctagonX } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { useFxStateQuery, tapTempo } from '../store/fx'
+import { useFxStateQuery, tapTempo } from '@/store/fx'
+import { useRemoveFxMutation } from '@/store/fixtureFx'
 import { BeatIndicator } from './BeatIndicator'
 
 interface EffectsOverviewPanelProps {
   isVisible: boolean
+  /** When locked (FX view), show extended controls like Kill All */
+  isLocked?: boolean
 }
 
-export function EffectsOverviewPanel({ isVisible }: EffectsOverviewPanelProps) {
+export function EffectsOverviewPanel({ isVisible, isLocked }: EffectsOverviewPanelProps) {
   const { data: fxState, isLoading } = useFxStateQuery()
+  const [removeFx] = useRemoveFxMutation()
 
   const handleTap = useCallback(() => {
     tapTempo()
   }, [])
+
+  const handleKillAll = useCallback(async () => {
+    if (!fxState?.activeEffects.length) return
+    await Promise.all(
+      fxState.activeEffects.map((effect) =>
+        removeFx({ id: effect.id, fixtureKey: effect.targetKey }).unwrap().catch(() => {}),
+      ),
+    )
+  }, [fxState, removeFx])
 
   const runningCount = fxState?.activeEffects.filter((e) => e.isRunning).length ?? 0
   const totalCount = fxState?.activeEffects.length ?? 0
@@ -56,6 +69,20 @@ export function EffectsOverviewPanel({ isVisible }: EffectsOverviewPanelProps) {
                     : `${runningCount} running / ${totalCount} effect${totalCount !== 1 ? 's' : ''}`}
                 </span>
               </div>
+
+              {/* Kill All - shown when in FX view (locked) */}
+              {isLocked && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleKillAll}
+                  disabled={totalCount === 0}
+                  className="ml-auto"
+                >
+                  <OctagonX className="size-4 mr-1" />
+                  Kill All
+                </Button>
+              )}
             </div>
           )}
         </div>

@@ -1,5 +1,5 @@
-import React, { useState } from "react"
-import { Outlet } from "react-router-dom"
+import React, { useState, useEffect } from "react"
+import { Outlet, useLocation } from "react-router-dom"
 import { ChevronLeft, Menu } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -26,7 +26,18 @@ export default function Layout() {
   const [open, setOpen] = React.useState(true)
   const [selectedFixture, setSelectedFixture] = useState<string | null>(null)
   const { isVisible: isOverviewVisible, toggle: toggleOverview } = useFixtureOverview()
-  const { isVisible: isEffectsVisible, toggle: toggleEffects } = useEffectsOverview()
+  const { isVisible: isEffectsVisible, isLocked: isEffectsLocked, toggle: toggleEffects, lock: lockEffects, unlock: unlockEffects } = useEffectsOverview()
+  const location = useLocation()
+  const isFxRoute = /\/projects\/\d+\/fx/.test(location.pathname)
+
+  // Auto-show & lock effects overview when on the FX busking route
+  useEffect(() => {
+    if (isFxRoute) {
+      lockEffects()
+    } else {
+      unlockEffects()
+    }
+  }, [isFxRoute, lockEffects, unlockEffects])
 
   const toggleDrawer = () => {
     setOpen(!open)
@@ -83,7 +94,7 @@ export default function Layout() {
               <div className="flex flex-wrap items-center gap-2">
                 <ConnectionStatus />
                 <FixtureOverviewToggle isVisible={isOverviewVisible} onToggle={toggleOverview} />
-                <EffectsOverviewToggle isVisible={isEffectsVisible} onToggle={toggleEffects} />
+                <EffectsOverviewToggle isVisible={isEffectsVisible} isLocked={isEffectsLocked} onToggle={toggleEffects} />
                 <ThemeToggle />
               </div>
             </div>
@@ -96,7 +107,7 @@ export default function Layout() {
           />
 
           {/* Effects Overview Panel - always rendered for animation */}
-          <EffectsOverviewPanel isVisible={isEffectsVisible} />
+          <EffectsOverviewPanel isVisible={isEffectsVisible} isLocked={isEffectsLocked} />
 
           {/* Page Content */}
           <main className="flex-1 overflow-auto bg-muted/40 min-w-0">
