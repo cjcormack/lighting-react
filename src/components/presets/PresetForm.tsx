@@ -12,20 +12,22 @@ import {
   SheetFooter,
 } from '@/components/ui/sheet'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { SearchableSelect } from '@/components/ui/searchable-select'
-import type { SearchableSelectOption } from '@/components/ui/searchable-select'
-import { Plus, Loader2 } from 'lucide-react'
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
+import { Plus, Loader2, ChevronRight, X } from 'lucide-react'
 import { useEffectLibraryQuery } from '@/store/fixtureFx'
-import { useFixtureTypeListQuery } from '@/store/fixtures'
-import { EFFECT_CATEGORY_INFO, getEffectDescription } from '@/components/fixtures/fx/fxConstants'
+import { useFixtureTypeListQuery, useFixtureListQuery } from '@/store/fixtures'
+import type { SettingPropertyDescriptor, SliderPropertyDescriptor } from '@/store/fixtures'
+import { EffectCategoryPicker } from '@/components/fixtures/fx/EffectCategoryPicker'
+import { EffectTypePicker } from '@/components/fixtures/fx/EffectTypePicker'
+import { EffectParameterForm } from '@/components/fixtures/fx/EffectParameterForm'
 import { PresetEffectRow } from './PresetEffectRow'
-import { buildFixtureTypeHierarchy } from '@/api/fxPresetsApi'
+import { FixtureTypePicker, type FixtureCountMap } from './FixtureTypePicker'
+import { buildFixtureTypeHierarchy, resolveFixtureTypeLabel } from '@/api/fxPresetsApi'
 import type { FxPreset, FxPresetEffect, FxPresetInput, FixtureTypeHierarchy } from '@/api/fxPresetsApi'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
 
@@ -39,9 +41,6 @@ const CATEGORY_TO_REQUIRED_CAPABILITY: Record<string, string | null> = {
   controls: null, // always available
 }
 
-// Sentinel values for Select components (which don't support null values)
-const NONE = '__none__'
-
 interface PresetFormProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -53,15 +52,28 @@ interface PresetFormProps {
 export function PresetForm({ open, onOpenChange, preset, onSave, isSaving }: PresetFormProps) {
   const { data: library } = useEffectLibraryQuery()
   const { data: fixtureTypes } = useFixtureTypeListQuery()
+  const { data: fixtureList } = useFixtureListQuery()
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [fixtureType, setFixtureType] = useState<string | null>(null)
   const [effects, setEffects] = useState<FxPresetEffect[]>([])
 
-  // Cascading selector state
-  const [selManufacturer, setSelManufacturer] = useState<string | null>(null)
-  const [selModel, setSelModel] = useState<string | null>(null)
+  // Add Effect dialog state
+  const [addEffectOpen, setAddEffectOpen] = useState(false)
+  const [addEffectStep, setAddEffectStep] = useState<'category' | 'effect' | 'configure'>('category')
+  const [addEffectCategory, setAddEffectCategory] = useState<string | null>(null)
+  const [addEffectEntry, setAddEffectEntry] = useState<EffectLibraryEntry | null>(null)
+  const [addBeatDivision, setAddBeatDivision] = useState(1.0)
+  const [addBlendMode, setAddBlendMode] = useState('OVERRIDE')
+  const [addPhaseOffset, setAddPhaseOffset] = useState(0)
+  const [addDistribution, setAddDistribution] = useState('LINEAR')
+  const [addParameters, setAddParameters] = useState<Record<string, string>>({})
+  const [addSelectedSettingProp, setAddSelectedSettingProp] = useState<string | null>(null)
+  const [addSelectedSliderProp, setAddSelectedSliderProp] = useState<string | null>(null)
+
+  // Fixture Type picker dialog state
+  const [fixtureTypePickerOpen, setFixtureTypePickerOpen] = useState(false)
 
   // Build hierarchy from all known fixture types
   const hierarchy = useMemo<FixtureTypeHierarchy | null>(() => {
@@ -69,84 +81,25 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving }: Pre
     return buildFixtureTypeHierarchy(fixtureTypes)
   }, [fixtureTypes])
 
-  // Derive dropdown options from hierarchy and current selections
-  const manufacturerOptions = useMemo<SearchableSelectOption[]>(() => {
-    if (!hierarchy) return []
-    return [...hierarchy.manufacturers.entries()]
-      .filter(([m]) => m !== '')
-      .map(([mfr, models]) => ({
-        value: mfr,
-        label: mfr,
-        dimmed: !models.some((m) => m.isRegistered),
-      }))
-      .sort((a, b) => {
-        if (a.dimmed !== b.dimmed) return a.dimmed ? 1 : -1
-        return a.label.localeCompare(b.label)
-      })
-  }, [hierarchy])
-
-  const modelOptions = useMemo(() => {
-    if (!hierarchy) return []
-    if (selManufacturer !== null) {
-      return hierarchy.manufacturers.get(selManufacturer) ?? []
+  // Count configured fixtures per typeKey
+  const fixtureCounts = useMemo<FixtureCountMap>(() => {
+    const counts: FixtureCountMap = new Map()
+    if (!fixtureList) return counts
+    for (const f of fixtureList) {
+      counts.set(f.typeKey, (counts.get(f.typeKey) ?? 0) + 1)
     }
-    return hierarchy.models
-  }, [hierarchy, selManufacturer])
-
-  const modelSelectOptions = useMemo<SearchableSelectOption[]>(() => {
-    return modelOptions.map((m) => ({
-      value: m.model,
-      label: !selManufacturer && m.manufacturer ? `${m.model} (${m.manufacturer})` : m.model,
-      dimmed: !m.isRegistered,
-    }))
-  }, [modelOptions, selManufacturer])
-
-  const modeOptions = useMemo(() => {
-    if (!selModel) return []
-    const model = modelOptions.find((m) => m.model === selModel)
-    if (!model || model.modes.length <= 1) return []
-    return model.modes
-  }, [modelOptions, selModel])
-
-  // Sync cascading selectors -> fixtureType
-  useEffect(() => {
-    if (!selModel) {
-      setFixtureType(null)
-      return
-    }
-    const model = modelOptions.find((m) => m.model === selModel)
-    if (!model) {
-      setFixtureType(null)
-      return
-    }
-    if (model.modes.length === 1) {
-      setFixtureType(model.modes[0].typeKey)
-    }
-    // If multiple modes, fixtureType is set from the mode dropdown separately
-  }, [selModel, modelOptions])
+    return counts
+  }, [fixtureList])
 
   // Reset form when the sheet opens or the preset changes
   useEffect(() => {
     if (open) {
       setName(preset?.name ?? '')
       setDescription(preset?.description ?? '')
-      const typeKey = preset?.fixtureType ?? null
-      setFixtureType(typeKey)
+      setFixtureType(preset?.fixtureType ?? null)
       setEffects(preset?.effects ?? [])
-
-      // Resolve typeKey back to cascading selector state
-      if (typeKey && hierarchy) {
-        const info = hierarchy.typeKeyToModel.get(typeKey)
-        if (info) {
-          setSelManufacturer(info.manufacturer)
-          setSelModel(info.model)
-          return
-        }
-      }
-      setSelManufacturer(null)
-      setSelModel(null)
     }
-  }, [open, preset, hierarchy])
+  }, [open, preset])
 
   // Group library by category
   const libraryByCategory = useMemo(() => {
@@ -181,22 +134,99 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving }: Pre
     return libraryMap.get(normalized)
   }, [libraryMap])
 
-  const handleAddEffect = (entry: EffectLibraryEntry) => {
-    const defaults: Record<string, string> = {}
-    entry.parameters.forEach((p) => {
-      defaults[p.name] = p.defaultValue
-    })
+  // Resolve the selected fixture type mode (for capabilities + property info)
+  const selectedFixtureTypeMode = useMemo(() => {
+    if (!fixtureType || !hierarchy) return null
+    const info = hierarchy.typeKeyToModel.get(fixtureType)
+    return info?.mode ?? null
+  }, [fixtureType, hierarchy])
+
+  // Resolve capabilities for the selected fixture type (null = show all categories)
+  const fixtureTypeCapabilities = selectedFixtureTypeMode?.capabilities ?? null
+
+  // Determine if Controls category should show for the selected fixture type
+  const hasControls = useMemo(() => {
+    if (!fixtureType || !hierarchy) return true // no fixture type = show all
+    const info = hierarchy.typeKeyToModel.get(fixtureType)
+    if (!info) return true
+    return info.mode.properties.some(
+      (p) => p.type === 'setting' || (p.type === 'slider' && p.category !== 'dimmer' && p.category !== 'uv'),
+    )
+  }, [fixtureType, hierarchy])
+
+  // Compute effectsByCategory filtered by fixture type capabilities (for EffectCategoryPicker)
+  const effectsByCategory = useMemo(() => {
+    const filtered: Record<string, EffectLibraryEntry[]> = {}
+    for (const cat of CATEGORY_ORDER) {
+      const entries = libraryByCategory[cat]
+      if (!entries || entries.length === 0) continue
+      if (cat === 'controls' && !hasControls) continue
+      if (fixtureTypeCapabilities) {
+        const requiredCap = CATEGORY_TO_REQUIRED_CAPABILITY[cat]
+        if (requiredCap && !fixtureTypeCapabilities.includes(requiredCap)) continue
+      }
+      filtered[cat] = entries
+    }
+    return filtered
+  }, [libraryByCategory, fixtureTypeCapabilities, hasControls])
+
+  // Setting-type properties on the selected fixture type (for configure step)
+  const settingProperties = useMemo(() => {
+    if (!selectedFixtureTypeMode) return [] as SettingPropertyDescriptor[]
+    return selectedFixtureTypeMode.properties.filter((p) => p.type === 'setting') as SettingPropertyDescriptor[]
+  }, [selectedFixtureTypeMode])
+
+  // Non-dimmer/non-UV slider properties on the selected fixture type
+  const extraSliderProperties = useMemo(() => {
+    if (!selectedFixtureTypeMode) return [] as SliderPropertyDescriptor[]
+    return selectedFixtureTypeMode.properties.filter(
+      (p) => p.type === 'slider' && p.category !== 'dimmer' && p.category !== 'uv'
+    ) as SliderPropertyDescriptor[]
+  }, [selectedFixtureTypeMode])
+
+  // Resolve the target property name for the effect being added in the dialog
+  const addTargetPropertyName = useMemo((): string | null => {
+    if (!addEffectEntry || !selectedFixtureTypeMode) return null
+    const allPropNames = new Set(selectedFixtureTypeMode.properties.map((p) => p.name))
+    if (selectedFixtureTypeMode.properties.some((p) => p.type === 'setting')) allPropNames.add('setting')
+    if (selectedFixtureTypeMode.properties.some((p) => p.type === 'slider' && p.category !== 'dimmer' && p.category !== 'uv')) allPropNames.add('slider')
+
+    const matched = addEffectEntry.compatibleProperties.find((name) => allPropNames.has(name)) ?? null
+    if (matched === 'setting') {
+      if (addSelectedSettingProp && settingProperties.some((sp) => sp.name === addSelectedSettingProp)) {
+        return addSelectedSettingProp
+      }
+      return settingProperties[0]?.name ?? null
+    }
+    if (matched === 'slider') {
+      if (addSelectedSliderProp && extraSliderProperties.some((sp) => sp.name === addSelectedSliderProp)) {
+        return addSelectedSliderProp
+      }
+      return extraSliderProperties[0]?.name ?? null
+    }
+    return matched
+  }, [addEffectEntry, selectedFixtureTypeMode, settingProperties, addSelectedSettingProp, extraSliderProperties, addSelectedSliderProp])
+
+  // Setting options for the currently-targeted setting property in the add dialog
+  const addSettingOptions = useMemo(() => {
+    if (!addEffectEntry?.compatibleProperties.includes('setting') || !addTargetPropertyName) return undefined
+    const settingProp = settingProperties.find((sp) => sp.name === addTargetPropertyName)
+    return settingProp?.options
+  }, [addEffectEntry, addTargetPropertyName, settingProperties])
+
+  const handleAddEffect = () => {
+    if (!addEffectEntry) return
 
     const newEffect: FxPresetEffect = {
-      effectType: entry.name,
-      category: entry.category,
-      propertyName: null,
-      beatDivision: 1.0,
-      blendMode: 'OVERRIDE',
-      distribution: 'LINEAR',
-      phaseOffset: 0,
+      effectType: addEffectEntry.name,
+      category: addEffectEntry.category,
+      propertyName: addTargetPropertyName,
+      beatDivision: addBeatDivision,
+      blendMode: addBlendMode,
+      distribution: addDistribution,
+      phaseOffset: addPhaseOffset,
       elementMode: null,
-      parameters: defaults,
+      parameters: { ...addParameters },
     }
     setEffects([...effects, newEffect])
   }
@@ -221,24 +251,45 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving }: Pre
     onOpenChange(false)
   }
 
-  // Resolve the selected fixture type mode (for capabilities + property info)
-  const selectedFixtureTypeMode = useMemo(() => {
+  // Add Effect dialog handlers
+  const handleOpenAddEffect = () => {
+    setAddEffectStep('category')
+    setAddEffectCategory(null)
+    setAddEffectEntry(null)
+    setAddBeatDivision(1.0)
+    setAddBlendMode('OVERRIDE')
+    setAddPhaseOffset(0)
+    setAddDistribution('LINEAR')
+    setAddParameters({})
+    setAddSelectedSettingProp(null)
+    setAddSelectedSliderProp(null)
+    setAddEffectOpen(true)
+  }
+
+  const handleSelectCategory = (cat: string) => {
+    setAddEffectCategory(cat)
+    setAddEffectStep('effect')
+  }
+
+  const handleSelectEffect = (entry: EffectLibraryEntry) => {
+    setAddEffectEntry(entry)
+    const defaults: Record<string, string> = {}
+    entry.parameters.forEach((p) => {
+      defaults[p.name] = p.defaultValue
+    })
+    setAddParameters(defaults)
+    setAddEffectStep('configure')
+  }
+
+  const handleConfirmAddEffect = () => {
+    handleAddEffect()
+    setAddEffectOpen(false)
+  }
+
+  // Fixture type label for display
+  const fixtureTypeLabel = useMemo(() => {
     if (!fixtureType || !hierarchy) return null
-    const info = hierarchy.typeKeyToModel.get(fixtureType)
-    return info?.mode ?? null
-  }, [fixtureType, hierarchy])
-
-  // Resolve capabilities for the selected fixture type (null = show all categories)
-  const fixtureTypeCapabilities = selectedFixtureTypeMode?.capabilities ?? null
-
-  // Determine if Controls category should show for the selected fixture type
-  const hasControls = useMemo(() => {
-    if (!fixtureType || !hierarchy) return true // no fixture type = show all
-    const info = hierarchy.typeKeyToModel.get(fixtureType)
-    if (!info) return true
-    return info.mode.properties.some(
-      (p) => p.type === 'setting' || (p.type === 'slider' && p.category !== 'dimmer' && p.category !== 'uv'),
-    )
+    return resolveFixtureTypeLabel(fixtureType, hierarchy)
   }, [fixtureType, hierarchy])
 
   // Validate each effect: effects that need a property picker must have a valid propertyName
@@ -309,66 +360,28 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving }: Pre
             />
           </div>
 
-          {/* Fixture Type — cascading manufacturer / model / mode */}
+          {/* Fixture Type */}
           <div className="space-y-1.5 px-1">
             <Label>Fixture Type</Label>
-            <div className="flex flex-wrap gap-1.5">
-              {/* Manufacturer */}
-              {manufacturerOptions.length > 0 && (
-                <SearchableSelect
-                  options={manufacturerOptions}
-                  value={selManufacturer}
-                  onValueChange={(v) => {
-                    setSelManufacturer(v)
-                    setSelModel(null)
+            <button
+              type="button"
+              onClick={() => setFixtureTypePickerOpen(true)}
+              className="flex items-center gap-2 w-full h-9 px-3 rounded-md border text-left text-sm hover:bg-accent/50 transition-colors"
+            >
+              <span className={fixtureTypeLabel ? 'flex-1 truncate' : 'flex-1 truncate text-muted-foreground'}>
+                {fixtureTypeLabel ?? 'Any fixture type'}
+              </span>
+              {fixtureType && (
+                <X
+                  className="size-4 text-muted-foreground hover:text-foreground shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation()
                     setFixtureType(null)
                   }}
-                  placeholder="Manufacturer"
-                  emptyLabel="Any manufacturer"
-                  className="flex-1 min-w-[120px]"
                 />
               )}
-
-              {/* Model */}
-              <SearchableSelect
-                options={modelSelectOptions}
-                value={selModel}
-                onValueChange={(v) => {
-                  setSelModel(v)
-                  if (!v) setFixtureType(null)
-                }}
-                placeholder="Model"
-                emptyLabel="Any model"
-                className="flex-1 min-w-[140px]"
-              />
-
-              {/* Mode (only shown when model has multiple modes) */}
-              {modeOptions.length > 0 && (
-                <Select
-                  value={fixtureType ?? NONE}
-                  onValueChange={(v) => {
-                    setFixtureType(v === NONE ? null : v)
-                  }}
-                >
-                  <SelectTrigger className="h-9 flex-1 min-w-[100px]">
-                    <SelectValue placeholder="Mode" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NONE}>Any mode</SelectItem>
-                    {modeOptions.map((mode) => (
-                      <SelectItem key={mode.typeKey} value={mode.typeKey}>
-                        {mode.modeName ?? mode.typeKey}
-                        {mode.channelCount != null && (
-                          <span className="text-muted-foreground ml-1 text-[10px]">
-                            ({mode.channelCount}ch)
-                          </span>
-                        )}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
+              <ChevronRight className="size-4 text-muted-foreground shrink-0" />
+            </button>
             <p className="text-[11px] text-muted-foreground">
               Optionally restrict this preset to a specific fixture type.
             </p>
@@ -378,12 +391,10 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving }: Pre
           <div className="space-y-2 px-1">
             <div className="flex items-center justify-between">
               <Label>Effects ({effects.length})</Label>
-              <AddEffectPicker
-                libraryByCategory={libraryByCategory}
-                fixtureTypeCapabilities={fixtureTypeCapabilities}
-                hasControls={hasControls}
-                onAdd={handleAddEffect}
-              />
+              <Button variant="outline" size="sm" className="h-8" onClick={handleOpenAddEffect}>
+                <Plus className="size-4 mr-1.5" />
+                Add Effect
+              </Button>
             </div>
 
             {effects.length === 0 && (
@@ -416,92 +427,82 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving }: Pre
           </Button>
         </SheetFooter>
       </SheetContent>
+
+      {/* Add Effect Dialog */}
+      <Dialog open={addEffectOpen} onOpenChange={setAddEffectOpen}>
+        <DialogContent className="max-h-[80vh] flex flex-col p-0 gap-0" showCloseButton={addEffectStep !== 'configure'}>
+          {addEffectStep !== 'configure' && (
+            <DialogHeader className="px-6 pt-6 pb-2">
+              <DialogTitle>Add Effect</DialogTitle>
+              <DialogDescription>
+                Choose an effect category and type to add to this preset.
+              </DialogDescription>
+            </DialogHeader>
+          )}
+
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            {addEffectStep === 'category' && (
+              <EffectCategoryPicker
+                effectsByCategory={effectsByCategory}
+                onSelect={handleSelectCategory}
+              />
+            )}
+
+            {addEffectStep === 'effect' && addEffectCategory && (
+              <EffectTypePicker
+                category={addEffectCategory}
+                effects={effectsByCategory[addEffectCategory] ?? []}
+                onSelect={handleSelectEffect}
+                onBack={() => setAddEffectStep('category')}
+              />
+            )}
+
+            {addEffectStep === 'configure' && addEffectEntry && (
+              <EffectParameterForm
+                effect={addEffectEntry}
+                beatDivision={addBeatDivision}
+                onBeatDivisionChange={setAddBeatDivision}
+                blendMode={addBlendMode}
+                onBlendModeChange={setAddBlendMode}
+                phaseOffset={addPhaseOffset}
+                onPhaseOffsetChange={setAddPhaseOffset}
+                startOnBeat={false}
+                onStartOnBeatChange={() => {}}
+                showStartOnBeat={false}
+                parameters={addParameters}
+                onParametersChange={setAddParameters}
+                targetPropertyName={addTargetPropertyName}
+                isEdit={false}
+                onBack={() => setAddEffectStep('effect')}
+                distributionStrategy={addDistribution}
+                onDistributionStrategyChange={setAddDistribution}
+                settingOptions={addSettingOptions}
+                settingProperties={addEffectEntry.compatibleProperties.includes('setting') ? settingProperties : undefined}
+                onSettingPropertyChange={setAddSelectedSettingProp}
+                sliderProperties={addEffectEntry.compatibleProperties.includes('slider') ? extraSliderProperties : undefined}
+                onSliderPropertyChange={setAddSelectedSliderProp}
+              />
+            )}
+          </div>
+
+          {addEffectStep === 'configure' && (
+            <div className="px-6 pb-6 pt-2">
+              <Button onClick={handleConfirmAddEffect} className="w-full">
+                Add Effect
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Fixture Type Picker Dialog */}
+      <FixtureTypePicker
+        open={fixtureTypePickerOpen}
+        onOpenChange={setFixtureTypePickerOpen}
+        hierarchy={hierarchy}
+        fixtureCounts={fixtureCounts}
+        onSelect={setFixtureType}
+      />
     </Sheet>
-  )
-}
-
-function AddEffectPicker({
-  libraryByCategory,
-  fixtureTypeCapabilities,
-  hasControls,
-  onAdd,
-}: {
-  libraryByCategory: Record<string, EffectLibraryEntry[]>
-  fixtureTypeCapabilities: string[] | null
-  hasControls: boolean
-  onAdd: (entry: EffectLibraryEntry) => void
-}) {
-  const [selectedCategory, setSelectedCategory] = useState<string>('')
-  const [selectedEffect, setSelectedEffect] = useState<string>('')
-
-  const categories = CATEGORY_ORDER.filter((cat) => {
-    if ((libraryByCategory[cat]?.length ?? 0) === 0) return false
-    if (cat === 'controls') return hasControls
-    if (!fixtureTypeCapabilities) return true
-    const requiredCap = CATEGORY_TO_REQUIRED_CAPABILITY[cat]
-    return !requiredCap || fixtureTypeCapabilities.includes(requiredCap)
-  })
-  const effectsInCategory = selectedCategory ? libraryByCategory[selectedCategory] ?? [] : []
-
-  // Reset selection if selected category is no longer visible
-  useEffect(() => {
-    if (selectedCategory && !(categories as string[]).includes(selectedCategory)) {
-      setSelectedCategory('')
-      setSelectedEffect('')
-    }
-  }, [categories, selectedCategory])
-
-  const handleAdd = () => {
-    const entry = effectsInCategory.find((e) => e.name === selectedEffect)
-    if (entry) {
-      onAdd(entry)
-      setSelectedEffect('')
-    }
-  }
-
-  return (
-    <div className="flex items-center gap-1.5">
-      <Select value={selectedCategory} onValueChange={(v) => { setSelectedCategory(v); setSelectedEffect('') }}>
-        <SelectTrigger className="h-8 text-xs w-[100px]">
-          <SelectValue placeholder="Category" />
-        </SelectTrigger>
-        <SelectContent>
-          {categories.map((cat) => {
-            const info = EFFECT_CATEGORY_INFO[cat]
-            return (
-              <SelectItem key={cat} value={cat} className="text-xs">
-                {info?.label ?? cat}
-              </SelectItem>
-            )
-          })}
-        </SelectContent>
-      </Select>
-
-      <Select value={selectedEffect} onValueChange={setSelectedEffect} disabled={!selectedCategory}>
-        <SelectTrigger className="h-8 text-xs w-[140px]">
-          <SelectValue placeholder="Effect" />
-        </SelectTrigger>
-        <SelectContent>
-          {effectsInCategory.map((entry) => (
-            <SelectItem key={entry.name} value={entry.name} className="text-xs">
-              <span>{entry.name}</span>
-              <span className="text-muted-foreground ml-1 text-[10px]">
-                {getEffectDescription(entry.name, entry.description).slice(0, 30)}
-              </span>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      <Button
-        variant="outline"
-        size="icon"
-        className="size-8 shrink-0"
-        disabled={!selectedEffect}
-        onClick={handleAdd}
-      >
-        <Plus className="size-4" />
-      </Button>
-    </div>
   )
 }
