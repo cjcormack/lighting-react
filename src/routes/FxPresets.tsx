@@ -10,9 +10,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Loader2, Plus, Bookmark, Sun, Palette, Move, ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import {
   useProjectPresetListQuery,
@@ -22,6 +24,7 @@ import {
 } from '../store/fxPresets'
 import { useFixtureListQuery } from '../store/fixtures'
 import { PresetListRow } from '../components/presets/PresetListRow'
+import { PresetDetailPanel } from '../components/presets/PresetDetailPanel'
 import { PresetForm } from '../components/presets/PresetForm'
 import { CopyPresetDialog } from '../components/presets/CopyPresetDialog'
 import {
@@ -80,13 +83,17 @@ export function ProjectFxPresets() {
 
   const [formOpen, setFormOpen] = useState(false)
   const [editingPreset, setEditingPreset] = useState<FxPreset | null>(null)
+  const [initialEditEffectIndex, setInitialEditEffectIndex] = useState<number | null>(null)
   const [deletingPreset, setDeletingPreset] = useState<FxPreset | null>(null)
   const [copyingPreset, setCopyingPreset] = useState<FxPreset | null>(null)
+  const [selectedPresetId, setSelectedPresetId] = useState<number | null>(null)
 
   // Filter state
   const [capabilityFilter, setCapabilityFilter] = useState<string[]>([])
   // Track collapsed groups (by group key)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+
+  const isDesktop = useMediaQuery('(min-width: 768px)')
 
   const isCurrentProject = currentProject?.id === projectIdNum
 
@@ -140,6 +147,23 @@ export function ProjectFxPresets() {
     return result
   }, [filteredPresets, hierarchy])
 
+  // Resolve selected preset from the current list
+  const selectedPreset = useMemo(
+    () => filteredPresets.find((p) => p.id === selectedPresetId) ?? null,
+    [filteredPresets, selectedPresetId],
+  )
+
+  // Deselect when filtered preset disappears
+  useEffect(() => {
+    if (selectedPresetId && !filteredPresets.some((p) => p.id === selectedPresetId)) {
+      setSelectedPresetId(null)
+    }
+  }, [filteredPresets, selectedPresetId])
+
+  const handleSelect = (preset: FxPreset) => {
+    setSelectedPresetId((prev) => (prev === preset.id ? null : preset.id))
+  }
+
   const toggleGroup = (key: string) => {
     setCollapsedGroups((prev) => {
       const next = new Set(prev)
@@ -154,11 +178,19 @@ export function ProjectFxPresets() {
 
   const handleCreate = () => {
     setEditingPreset(null)
+    setInitialEditEffectIndex(null)
     setFormOpen(true)
   }
 
   const handleEdit = (preset: FxPreset) => {
     setEditingPreset(preset)
+    setInitialEditEffectIndex(null)
+    setFormOpen(true)
+  }
+
+  const handleEditEffect = (preset: FxPreset, effectIndex: number) => {
+    setEditingPreset(preset)
+    setInitialEditEffectIndex(effectIndex)
     setFormOpen(true)
   }
 
@@ -183,6 +215,9 @@ export function ProjectFxPresets() {
       projectId: projectIdNum,
       presetId: deletingPreset.id,
     }).unwrap()
+    if (selectedPresetId === deletingPreset.id) {
+      setSelectedPresetId(null)
+    }
     setDeletingPreset(null)
   }
 
@@ -203,117 +238,179 @@ export function ProjectFxPresets() {
   const totalFiltered = filteredPresets.length
   const totalAll = presets?.length ?? 0
 
+  const presetListContent = totalAll === 0 ? (
+    <Card className="p-8 text-center">
+      <Bookmark className="size-10 mx-auto text-muted-foreground/30 mb-3" />
+      <p className="text-sm text-muted-foreground">
+        {isCurrentProject
+          ? 'No presets yet. Create one to bundle multiple effects together.'
+          : 'No presets in this project.'}
+      </p>
+      {isCurrentProject && (
+        <Button variant="outline" size="sm" className="mt-4 gap-1.5" onClick={handleCreate}>
+          <Plus className="size-4" />
+          Create Preset
+        </Button>
+      )}
+    </Card>
+  ) : totalFiltered === 0 ? (
+    <div className="py-8 text-center text-sm text-muted-foreground">
+      No presets match the current filters.
+    </div>
+  ) : (
+    <div className="space-y-3">
+      {groups.map((group) => {
+        const isCollapsed = collapsedGroups.has(group.key)
+        return (
+          <div key={group.key} className="rounded-lg border">
+            {groups.length > 1 && (
+              <button
+                onClick={() => toggleGroup(group.key)}
+                className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-accent/50 transition-colors rounded-t-lg"
+              >
+                {isCollapsed ? (
+                  <ChevronRight className="size-4 text-muted-foreground shrink-0" />
+                ) : (
+                  <ChevronDown className="size-4 text-muted-foreground shrink-0" />
+                )}
+                <span className="text-sm font-medium">{group.label}</span>
+                <span className="text-[11px] text-muted-foreground">
+                  ({group.presets.length})
+                </span>
+              </button>
+            )}
+            {!isCollapsed && (
+              <div
+                className={cn(
+                  'flex flex-col divide-y',
+                  groups.length > 1 && 'border-t',
+                )}
+              >
+                {group.presets.map((preset) => (
+                  <PresetListRow
+                    key={preset.id}
+                    preset={preset}
+                    selected={preset.id === selectedPresetId}
+                    onClick={() => handleSelect(preset)}
+                    onEdit={isCurrentProject && preset.canEdit ? () => handleEdit(preset) : undefined}
+                    onDelete={
+                      isCurrentProject && preset.canDelete ? () => setDeletingPreset(preset) : undefined
+                    }
+                    onCopy={!isCurrentProject ? () => setCopyingPreset(preset) : undefined}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+
+  const detailPanelProps = selectedPreset
+    ? {
+        preset: selectedPreset,
+        hierarchy,
+        onEdit:
+          isCurrentProject && selectedPreset.canEdit
+            ? () => handleEdit(selectedPreset)
+            : undefined,
+        onDelete:
+          isCurrentProject && selectedPreset.canDelete
+            ? () => setDeletingPreset(selectedPreset)
+            : undefined,
+        onCopy: !isCurrentProject ? () => setCopyingPreset(selectedPreset) : undefined,
+        onEditEffect:
+          isCurrentProject && selectedPreset.canEdit
+            ? (effectIndex: number) => handleEditEffect(selectedPreset, effectIndex)
+            : undefined,
+      }
+    : null
+
   return (
-    <div className="p-4 space-y-4">
+    <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold">FX Presets</h1>
-          <p className="text-sm text-muted-foreground">
-            {isCurrentProject
-              ? 'Create and manage effect presets for quick application during busking.'
-              : `Viewing presets for "${project.name}". Copy presets to your active project to use them.`}
-          </p>
+      <div className="p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-semibold">FX Presets</h1>
+            <p className="text-sm text-muted-foreground">
+              {isCurrentProject
+                ? 'Create and manage effect presets for quick application during busking.'
+                : `Viewing presets for "${project.name}". Copy presets to your active project to use them.`}
+            </p>
+          </div>
+          {isCurrentProject && (
+            <Button onClick={handleCreate} size="sm" className="gap-1.5">
+              <Plus className="size-4" />
+              <span className="hidden sm:inline">New Preset</span>
+            </Button>
+          )}
         </div>
-        {isCurrentProject && (
-          <Button onClick={handleCreate} size="sm" className="gap-1.5">
-            <Plus className="size-4" />
-            <span className="hidden sm:inline">New Preset</span>
-          </Button>
+
+        {totalAll > 0 && (
+          <ToggleGroup
+            type="multiple"
+            size="sm"
+            value={capabilityFilter}
+            onValueChange={setCapabilityFilter}
+          >
+            {CAPABILITY_CHIPS.map(({ value, label, icon: Icon }) => (
+              <ToggleGroupItem key={value} value={value} className="gap-1 text-xs">
+                <Icon className="size-3.5" />
+                {label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
         )}
       </div>
 
-      {/* Capability filter chips */}
-      {totalAll > 0 && (
-        <ToggleGroup
-          type="multiple"
-          size="sm"
-          value={capabilityFilter}
-          onValueChange={setCapabilityFilter}
-        >
-          {CAPABILITY_CHIPS.map(({ value, label, icon: Icon }) => (
-            <ToggleGroupItem key={value} value={value} className="gap-1 text-xs">
-              <Icon className="size-3.5" />
-              {label}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-      )}
+      {/* Content area */}
+      {isDesktop ? (
+        <div className="flex flex-1 min-h-0 px-4 pb-4 gap-4">
+          <div
+            className={cn(
+              'overflow-y-auto',
+              selectedPreset ? 'w-80 shrink-0' : 'flex-1',
+            )}
+          >
+            {presetListContent}
 
-      {/* Preset list grouped by fixture type */}
-      {totalAll === 0 ? (
-        <Card className="p-8 text-center">
-          <Bookmark className="size-10 mx-auto text-muted-foreground/30 mb-3" />
-          <p className="text-sm text-muted-foreground">
-            {isCurrentProject
-              ? 'No presets yet. Create one to bundle multiple effects together.'
-              : 'No presets in this project.'}
-          </p>
-          {isCurrentProject && (
-            <Button variant="outline" size="sm" className="mt-4 gap-1.5" onClick={handleCreate}>
-              <Plus className="size-4" />
-              Create Preset
-            </Button>
+            {totalAll > 0 && capabilityFilter.length > 0 && (
+              <p className="text-xs text-muted-foreground text-center mt-3">
+                Showing {totalFiltered} of {totalAll} presets
+              </p>
+            )}
+          </div>
+
+          {detailPanelProps && (
+            <div className="flex-1 min-w-0 overflow-y-auto border rounded-lg">
+              <PresetDetailPanel {...detailPanelProps} />
+            </div>
           )}
-        </Card>
-      ) : totalFiltered === 0 ? (
-        <div className="py-8 text-center text-sm text-muted-foreground">
-          No presets match the current filters.
         </div>
       ) : (
-        <div className="space-y-3">
-          {groups.map((group) => {
-            const isCollapsed = collapsedGroups.has(group.key)
-            return (
-              <div key={group.key} className="rounded-lg border">
-                {/* Group header — only show if there are multiple groups */}
-                {groups.length > 1 && (
-                  <button
-                    onClick={() => toggleGroup(group.key)}
-                    className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-accent/50 transition-colors rounded-t-lg"
-                  >
-                    {isCollapsed ? (
-                      <ChevronRight className="size-4 text-muted-foreground shrink-0" />
-                    ) : (
-                      <ChevronDown className="size-4 text-muted-foreground shrink-0" />
-                    )}
-                    <span className="text-sm font-medium">{group.label}</span>
-                    <span className="text-[11px] text-muted-foreground">
-                      ({group.presets.length})
-                    </span>
-                  </button>
-                )}
-                {!isCollapsed && (
-                  <div
-                    className={cn(
-                      'flex flex-col divide-y',
-                      groups.length > 1 && 'border-t',
-                    )}
-                  >
-                    {group.presets.map((preset) => (
-                      <PresetListRow
-                        key={preset.id}
-                        preset={preset}
-                        onEdit={isCurrentProject && preset.canEdit ? () => handleEdit(preset) : undefined}
-                        onDelete={
-                          isCurrentProject && preset.canDelete ? () => setDeletingPreset(preset) : undefined
-                        }
-                        onCopy={!isCurrentProject ? () => setCopyingPreset(preset) : undefined}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          })}
+        <div className="flex-1 overflow-y-auto px-4 pb-4">
+          {presetListContent}
+
+          {totalAll > 0 && capabilityFilter.length > 0 && (
+            <p className="text-xs text-muted-foreground text-center mt-3">
+              Showing {totalFiltered} of {totalAll} presets
+            </p>
+          )}
         </div>
       )}
 
-      {/* Result count */}
-      {totalAll > 0 && capabilityFilter.length > 0 && (
-        <p className="text-xs text-muted-foreground text-center">
-          Showing {totalFiltered} of {totalAll} presets
-        </p>
+      {/* Mobile detail sheet */}
+      {!isDesktop && (
+        <Sheet
+          open={selectedPreset !== null}
+          onOpenChange={(open) => { if (!open) setSelectedPresetId(null) }}
+        >
+          <SheetContent side="bottom" className="h-[85vh] overflow-y-auto p-0">
+            {detailPanelProps && <PresetDetailPanel {...detailPanelProps} />}
+          </SheetContent>
+        </Sheet>
       )}
 
       {/* Create/Edit form */}
@@ -323,6 +420,7 @@ export function ProjectFxPresets() {
         preset={editingPreset}
         onSave={handleSave}
         isSaving={isCreating || isSaving}
+        initialEditEffectIndex={initialEditEffectIndex}
       />
 
       {/* Delete confirmation */}

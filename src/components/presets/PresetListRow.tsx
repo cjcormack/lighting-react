@@ -7,21 +7,31 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { MoreHorizontal, Pencil, Trash2, Copy } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { EFFECT_CATEGORY_INFO } from '@/components/fixtures/fx/fxConstants'
 import type { FxPreset } from '@/api/fxPresetsApi'
 
 interface PresetListRowProps {
   preset: FxPreset
+  selected?: boolean
+  onClick?: () => void
   onEdit?: () => void
   onDelete?: () => void
   onCopy?: () => void
 }
 
-export function PresetListRow({ preset, onEdit, onDelete, onCopy }: PresetListRowProps) {
+export function PresetListRow({ preset, selected, onClick, onEdit, onDelete, onCopy }: PresetListRowProps) {
   const categories = [...new Set(preset.effects.map((e) => e.category))]
 
   return (
-    <div className="group flex items-center gap-2 rounded-md px-3 py-2.5 min-h-[44px] hover:bg-accent/50 transition-colors">
+    <div
+      className={cn(
+        "group flex items-center gap-2 rounded-md px-3 py-2.5 min-h-[44px] hover:bg-accent/50 transition-colors",
+        selected && "bg-accent",
+        onClick && "cursor-pointer",
+      )}
+      onClick={onClick}
+    >
       {/* Name and description */}
       <div className="min-w-0 flex-1">
         <div className="font-medium text-sm truncate">{preset.name}</div>
