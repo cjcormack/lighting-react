@@ -33,8 +33,6 @@ export function BuskingView() {
     toggleTarget,
     defaultBeatDivision,
     setDefaultBeatDivision,
-    activeCategory,
-    setActiveCategory,
     effectsByCategory,
     computePresence,
     toggleEffect,
@@ -133,8 +131,6 @@ export function BuskingView() {
               selectedTargets={selectedArray}
               targetEffectsData={targetEffectsData}
               effectsByCategory={effectsByCategory}
-              activeCategory={activeCategory}
-              onCategoryChange={setActiveCategory}
               computePresence={computePresence}
               toggleEffect={toggleEffect}
               propertyButtons={propertyButtons}
@@ -178,8 +174,6 @@ export function BuskingView() {
               selectedTargets={selectedArray}
               targetEffectsData={targetEffectsData}
               effectsByCategory={effectsByCategory}
-              activeCategory={activeCategory}
-              onCategoryChange={setActiveCategory}
               computePresence={computePresence}
               toggleEffect={toggleEffect}
               propertyButtons={propertyButtons}
@@ -208,8 +202,6 @@ function EffectPadWrapper({
   selectedTargets,
   targetEffectsData,
   effectsByCategory,
-  activeCategory,
-  onCategoryChange,
   computePresence,
   toggleEffect,
   propertyButtons,
@@ -225,8 +217,6 @@ function EffectPadWrapper({
   selectedTargets: BuskingTarget[]
   targetEffectsData: TargetEffectsData[]
   effectsByCategory: Record<string, EffectLibraryEntry[]>
-  activeCategory: string
-  onCategoryChange: (cat: string) => void
   computePresence: (effectName: string, data: TargetEffectsData[]) => EffectPresence
   toggleEffect: (effect: EffectLibraryEntry, presence: EffectPresence, data: TargetEffectsData[]) => Promise<void>
   propertyButtons: PropertyButton[]
@@ -340,8 +330,6 @@ function EffectPadWrapper({
   return (
     <EffectPad
       effectsByCategory={effectsByCategory}
-      activeCategory={activeCategory}
-      onCategoryChange={onCategoryChange}
       getPresence={getPresence}
       onToggle={handleToggle}
       onLongPress={handleLongPress}

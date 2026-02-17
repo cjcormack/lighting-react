@@ -28,7 +28,6 @@ export interface TargetEffectsData {
 export function useBuskingState() {
   const [selectedTargets, setSelectedTargets] = useState<Map<string, BuskingTarget>>(new Map())
   const [defaultBeatDivision, setDefaultBeatDivision] = useState(1.0)
-  const [activeCategory, setActiveCategory] = useState<string>('dimmer')
   const [editingEffect, setEditingEffect] = useState<ActiveEffectContext | null>(null)
 
   const { data: library } = useEffectLibraryQuery()
@@ -530,10 +529,6 @@ export function useBuskingState() {
     // Beat division
     defaultBeatDivision,
     setDefaultBeatDivision,
-
-    // Category
-    activeCategory,
-    setActiveCategory,
 
     // Effect data
     effectsByCategory,
