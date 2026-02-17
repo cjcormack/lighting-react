@@ -1,5 +1,6 @@
+import { useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Crosshair, Bookmark } from 'lucide-react'
+import { Crosshair, Bookmark, Plus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { cn } from '@/lib/utils'
@@ -31,6 +32,8 @@ interface EffectPadProps {
   onPropertyToggle: (button: PropertyButton, settingLevel?: number) => void
   onPropertyLongPress: (button: PropertyButton) => void
   getPropertyValue: (button: PropertyButton) => string | null
+  onCreatePreset: () => void
+  onEditPreset: (preset: FxPreset) => void
 }
 
 export function EffectPad({
@@ -50,6 +53,8 @@ export function EffectPad({
   onPropertyToggle,
   onPropertyLongPress,
   getPropertyValue,
+  onCreatePreset,
+  onEditPreset,
 }: EffectPadProps) {
   if (!hasSelection) {
     return (
@@ -63,7 +68,7 @@ export function EffectPad({
   return (
     <div className="@container flex flex-col h-full overflow-y-auto px-2 pb-2">
       {/* Beat Division Strip */}
-      <div className="pt-2 pb-1 space-y-1">
+      <div className="pt-2 pb-1 flex flex-col gap-1">
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Time</span>
         <ToggleGroup
           type="single"
@@ -88,14 +93,15 @@ export function EffectPad({
 
       {CATEGORY_ORDER.map((cat) => {
         if (cat === 'presets') {
-          if (presets.length === 0) return null
           return (
             <CategorySection key={cat} label="Presets" icon={Bookmark}>
               <PresetGrid
                 presets={presets}
                 onApplyPreset={onApplyPreset}
+                onEditPreset={onEditPreset}
                 getPresetPresence={getPresetPresence}
                 currentProjectId={currentProjectId}
+                onCreatePreset={onCreatePreset}
               />
             </CategorySection>
           )
@@ -169,66 +175,53 @@ function CategorySection({
   )
 }
 
+const MOVE_THRESHOLD = 10
+
 function PresetGrid({
   presets,
   onApplyPreset,
+  onEditPreset,
   getPresetPresence,
   currentProjectId,
+  onCreatePreset,
 }: {
   presets: FxPreset[]
   onApplyPreset: (preset: FxPreset) => Promise<void>
+  onEditPreset: (preset: FxPreset) => void
   getPresetPresence: (preset: FxPreset) => EffectPresence
   currentProjectId: number | undefined
+  onCreatePreset: () => void
 }) {
   const navigate = useNavigate()
 
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-1 @[20rem]:grid-cols-2 @[28rem]:grid-cols-3 @[48rem]:grid-cols-4 gap-2">
-        {presets.map((preset) => {
-          const presence = getPresetPresence(preset)
-          return (
-            <button
-              key={preset.id}
-              onClick={() => onApplyPreset(preset)}
-              className={cn(
-                'relative flex flex-col items-center justify-center rounded-lg border px-2 py-3 text-center transition-all',
-                'min-h-[64px] select-none touch-manipulation',
-                'active:scale-95',
-                presence === 'none' && 'border-border bg-card hover:bg-accent/50',
-                presence === 'some' && 'border-primary/40 bg-primary/10 hover:bg-primary/15',
-                presence === 'all' && 'border-primary bg-primary/20 ring-1 ring-primary/50 hover:bg-primary/25',
-              )}
-            >
-              <span
-                className={cn(
-                  'text-sm font-medium leading-tight',
-                  presence !== 'none' ? 'text-primary' : 'text-foreground',
-                )}
-              >
-                {preset.name}
-              </span>
-              {preset.description && (
-                <span className="mt-0.5 text-[10px] leading-tight text-muted-foreground line-clamp-1">
-                  {preset.description}
-                </span>
-              )}
-              <Badge variant="secondary" className="mt-1 text-[9px] px-1.5 py-0 leading-tight">
-                {preset.effects.length} {preset.effects.length === 1 ? 'effect' : 'effects'}
-              </Badge>
-              {presence !== 'none' && (
-                <div
-                  className={cn(
-                    'absolute top-1.5 right-1.5 size-2 rounded-full',
-                    presence === 'all' ? 'bg-primary' : 'bg-primary/50',
-                  )}
-                />
-              )}
-            </button>
-          )
-        })}
+        {presets.map((preset) => (
+          <PresetPadButton
+            key={preset.id}
+            preset={preset}
+            presence={getPresetPresence(preset)}
+            onToggle={() => onApplyPreset(preset)}
+            onLongPress={() => onEditPreset(preset)}
+          />
+        ))}
+        {currentProjectId && (
+          <button
+            onClick={onCreatePreset}
+            className={cn(
+              'flex flex-col items-center justify-center rounded-lg border border-dashed px-2 py-3 text-center transition-all',
+              'min-h-[64px] select-none touch-manipulation',
+              'border-border hover:bg-accent/50 hover:border-muted-foreground/50',
+              'active:scale-95',
+            )}
+          >
+            <Plus className="size-5 text-muted-foreground mb-0.5" />
+            <span className="text-xs text-muted-foreground">New Preset</span>
+          </button>
+        )}
       </div>
-      {currentProjectId && (
+      {currentProjectId && presets.length > 0 && (
         <div className="text-center pt-1">
           <button
             className="text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -239,5 +232,109 @@ function PresetGrid({
         </div>
       )}
     </div>
+  )
+}
+
+function PresetPadButton({
+  preset,
+  presence,
+  onToggle,
+  onLongPress,
+}: {
+  preset: FxPreset
+  presence: EffectPresence
+  onToggle: () => void
+  onLongPress: () => void
+}) {
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const didLongPress = useRef(false)
+  const didMove = useRef(false)
+  const startPos = useRef<{ x: number; y: number } | null>(null)
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    didLongPress.current = false
+    didMove.current = false
+    startPos.current = { x: e.clientX, y: e.clientY }
+    pressTimer.current = setTimeout(() => {
+      didLongPress.current = true
+      if (!didMove.current) {
+        onLongPress()
+      }
+    }, 500)
+  }
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (startPos.current && !didMove.current) {
+      const dx = e.clientX - startPos.current.x
+      const dy = e.clientY - startPos.current.y
+      if (dx * dx + dy * dy > MOVE_THRESHOLD * MOVE_THRESHOLD) {
+        didMove.current = true
+        if (pressTimer.current) {
+          clearTimeout(pressTimer.current)
+          pressTimer.current = null
+        }
+      }
+    }
+  }
+
+  const handlePointerUp = () => {
+    if (pressTimer.current) {
+      clearTimeout(pressTimer.current)
+      pressTimer.current = null
+    }
+    if (!didLongPress.current && !didMove.current) {
+      onToggle()
+    }
+    startPos.current = null
+  }
+
+  const handlePointerLeave = () => {
+    if (pressTimer.current) {
+      clearTimeout(pressTimer.current)
+      pressTimer.current = null
+    }
+    startPos.current = null
+  }
+
+  return (
+    <button
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={handlePointerLeave}
+      className={cn(
+        'relative flex flex-col items-center justify-center rounded-lg border px-2 py-3 text-center transition-all',
+        'min-h-[64px] select-none touch-manipulation',
+        'active:scale-95',
+        presence === 'none' && 'border-border bg-card hover:bg-accent/50',
+        presence === 'some' && 'border-primary/40 bg-primary/10 hover:bg-primary/15',
+        presence === 'all' && 'border-primary bg-primary/20 ring-1 ring-primary/50 hover:bg-primary/25',
+      )}
+    >
+      <span
+        className={cn(
+          'text-sm font-medium leading-tight',
+          presence !== 'none' ? 'text-primary' : 'text-foreground',
+        )}
+      >
+        {preset.name}
+      </span>
+      {preset.description && (
+        <span className="mt-0.5 text-[10px] leading-tight text-muted-foreground line-clamp-1">
+          {preset.description}
+        </span>
+      )}
+      <Badge variant="secondary" className="mt-1 text-[9px] px-1.5 py-0 leading-tight">
+        {preset.effects.length} {preset.effects.length === 1 ? 'effect' : 'effects'}
+      </Badge>
+      {presence !== 'none' && (
+        <div
+          className={cn(
+            'absolute top-1.5 right-1.5 size-2 rounded-full',
+            presence === 'all' ? 'bg-primary' : 'bg-primary/50',
+          )}
+        />
+      )}
+    </button>
   )
 }

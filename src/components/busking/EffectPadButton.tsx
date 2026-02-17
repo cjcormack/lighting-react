@@ -1,7 +1,10 @@
+import { useRef } from 'react'
 import { cn } from '@/lib/utils'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
 import type { EffectPresence } from './buskingTypes'
 import { getEffectDescription } from '@/components/fixtures/fx/fxConstants'
+
+const MOVE_THRESHOLD = 10
 
 interface EffectPadButtonProps {
   effect: EffectLibraryEntry
@@ -11,39 +14,60 @@ interface EffectPadButtonProps {
 }
 
 export function EffectPadButton({ effect, presence, onToggle, onLongPress }: EffectPadButtonProps) {
-  let pressTimer: ReturnType<typeof setTimeout> | null = null
-  let didLongPress = false
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const didLongPress = useRef(false)
+  const didMove = useRef(false)
+  const startPos = useRef<{ x: number; y: number } | null>(null)
 
-  const handlePointerDown = () => {
-    didLongPress = false
-    pressTimer = setTimeout(() => {
-      didLongPress = true
-      if (presence !== 'none') {
+  const handlePointerDown = (e: React.PointerEvent) => {
+    didLongPress.current = false
+    didMove.current = false
+    startPos.current = { x: e.clientX, y: e.clientY }
+    pressTimer.current = setTimeout(() => {
+      didLongPress.current = true
+      if (!didMove.current) {
         onLongPress()
       }
     }, 500)
   }
 
-  const handlePointerUp = () => {
-    if (pressTimer) {
-      clearTimeout(pressTimer)
-      pressTimer = null
-    }
-    if (!didLongPress) {
-      onToggle()
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (startPos.current && !didMove.current) {
+      const dx = e.clientX - startPos.current.x
+      const dy = e.clientY - startPos.current.y
+      if (dx * dx + dy * dy > MOVE_THRESHOLD * MOVE_THRESHOLD) {
+        didMove.current = true
+        if (pressTimer.current) {
+          clearTimeout(pressTimer.current)
+          pressTimer.current = null
+        }
+      }
     }
   }
 
-  const handlePointerLeave = () => {
-    if (pressTimer) {
-      clearTimeout(pressTimer)
-      pressTimer = null
+  const handlePointerUp = () => {
+    if (pressTimer.current) {
+      clearTimeout(pressTimer.current)
+      pressTimer.current = null
     }
+    if (!didLongPress.current && !didMove.current) {
+      onToggle()
+    }
+    startPos.current = null
+  }
+
+  const handlePointerLeave = () => {
+    if (pressTimer.current) {
+      clearTimeout(pressTimer.current)
+      pressTimer.current = null
+    }
+    startPos.current = null
   }
 
   return (
     <button
       onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerLeave}
       className={cn(

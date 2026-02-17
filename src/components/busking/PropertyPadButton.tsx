@@ -11,6 +11,7 @@ interface PropertyPadButtonProps {
 }
 
 const HOLD_MS = 300
+const MOVE_THRESHOLD = 10
 
 export function PropertyPadButton({
   button,
@@ -21,6 +22,8 @@ export function PropertyPadButton({
 }: PropertyPadButtonProps) {
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const didLongPress = useRef(false)
+  const didMove = useRef(false)
+  const startPos = useRef<{ x: number; y: number } | null>(null)
   const buttonElRef = useRef<HTMLButtonElement>(null)
 
   // Slider hold-to-slide state
@@ -93,9 +96,27 @@ export function PropertyPadButton({
     setHoveredLevel(null)
   }, [])
 
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (startPos.current && !didMove.current) {
+        const dx = e.clientX - startPos.current.x
+        const dy = e.clientY - startPos.current.y
+        if (dx * dx + dy * dy > MOVE_THRESHOLD * MOVE_THRESHOLD) {
+          didMove.current = true
+          if (!slidingRef.current && !pickingRef.current) {
+            clearTimer()
+          }
+        }
+      }
+    },
+    [clearTimer],
+  )
+
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
       didLongPress.current = false
+      didMove.current = false
+      startPos.current = { x: e.clientX, y: e.clientY }
 
       // If the picker is already open, don't start a new hold timer —
       // pointerUp will handle tapping the button to close it
@@ -173,6 +194,7 @@ export function PropertyPadButton({
 
   const handlePointerUp = useCallback(() => {
     clearTimer()
+    startPos.current = null
 
     if (slidingRef.current) {
       const val = sliderValueRef.current
@@ -192,6 +214,8 @@ export function PropertyPadButton({
       return
     }
 
+    if (didMove.current) return
+
     if (isSettingWithOptions) {
       if (didLongPress.current) return
       if (presence !== 'none') {
@@ -207,6 +231,7 @@ export function PropertyPadButton({
   }, [clearTimer, isSettingWithOptions, presence, onToggle, closePicker])
 
   const handlePointerLeave = useCallback(() => {
+    startPos.current = null
     if (slidingRef.current || pickingRef.current) return
     clearTimer()
   }, [clearTimer])
@@ -286,6 +311,7 @@ export function PropertyPadButton({
       <button
         ref={buttonElRef}
         onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerLeave}
         className={cn(

@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog'
 import { Plus, Loader2, ChevronRight, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -54,9 +55,14 @@ interface PresetFormProps {
   isSaving: boolean
   /** Open with a specific effect's edit dialog shown */
   initialEditEffectIndex?: number | null
+  /** Pre-populate fixture type when creating a new preset */
+  defaultFixtureType?: string | null
+  /** If provided, shows a Delete button when editing an existing preset */
+  onDelete?: () => void
+  isDeleting?: boolean
 }
 
-export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initialEditEffectIndex }: PresetFormProps) {
+export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initialEditEffectIndex, defaultFixtureType, onDelete, isDeleting }: PresetFormProps) {
   const { data: library } = useEffectLibraryQuery()
   const { data: fixtureTypes } = useFixtureTypeListQuery()
   const { data: fixtureList } = useFixtureListQuery()
@@ -93,6 +99,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
 
   // Fixture Type picker dialog state
   const [fixtureTypePickerOpen, setFixtureTypePickerOpen] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   // Build hierarchy from all known fixture types
   const hierarchy = useMemo<FixtureTypeHierarchy | null>(() => {
@@ -115,10 +122,10 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
     if (open) {
       setName(preset?.name ?? '')
       setDescription(preset?.description ?? '')
-      setFixtureType(preset?.fixtureType ?? null)
+      setFixtureType(preset?.fixtureType ?? defaultFixtureType ?? null)
       setEffects(preset?.effects ?? [])
     }
-  }, [open, preset])
+  }, [open, preset, defaultFixtureType])
 
   // Group library by category
   const libraryByCategory = useMemo(() => {
@@ -590,10 +597,21 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
         </div>
 
         <SheetFooter className="border-t pt-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
+          {preset && onDelete && (
+            <Button
+              variant="outline"
+              onClick={() => setConfirmDelete(true)}
+              disabled={isSaving || isDeleting}
+              className="text-destructive hover:text-destructive"
+            >
+              {isDeleting && <Loader2 className="size-4 mr-2 animate-spin" />}
+              Delete
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving || isDeleting}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={!isValid || isSaving}>
+          <Button onClick={handleSave} disabled={!isValid || isSaving || isDeleting}>
             {isSaving && <Loader2 className="size-4 mr-2 animate-spin" />}
             {preset ? 'Update' : 'Create'}
           </Button>
@@ -726,6 +744,31 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
         fixtureCounts={fixtureCounts}
         onSelect={setFixtureType}
       />
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Preset</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete "{preset?.name}"? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDelete(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setConfirmDelete(false)
+                onDelete?.()
+              }}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Sheet>
   )
 }

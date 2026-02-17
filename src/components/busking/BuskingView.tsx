@@ -5,10 +5,12 @@ import { useGroupActiveEffectsQuery } from '@/store/groups'
 import { useFixtureEffectsQuery } from '@/store/fixtureFx'
 import { useFixtureListQuery } from '@/store/fixtures'
 import { useCurrentProjectQuery } from '@/store/projects'
-import { useProjectPresetListQuery } from '@/store/fxPresets'
+import { useProjectPresetListQuery, useCreateProjectPresetMutation, useSaveProjectPresetMutation, useDeleteProjectPresetMutation } from '@/store/fxPresets'
 import { TargetList } from './TargetList'
 import { EffectPad } from './EffectPad'
 import { ActiveEffectSheet } from './ActiveEffectSheet'
+import { ConfigureEffectSheet } from './ConfigureEffectSheet'
+import { PresetForm } from '@/components/presets/PresetForm'
 import { useBuskingState, type TargetEffectsData } from './useBuskingState'
 import {
   type BuskingTarget,
@@ -20,7 +22,7 @@ import {
 } from './buskingTypes'
 import { inferPresetCapabilities } from '@/api/fxPresetsApi'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
-import type { FxPreset } from '@/api/fxPresetsApi'
+import type { FxPreset, FxPresetInput } from '@/api/fxPresetsApi'
 
 export function BuskingView() {
   const isDesktop = useMediaQuery('(min-width: 768px)')
@@ -41,9 +43,14 @@ export function BuskingView() {
     getActivePropertyValue,
     applyPreset,
     computePresetPresence,
+    applyEffectWithParams,
     editingEffect,
     setEditingEffect,
   } = useBuskingState()
+
+  const [configuringEffect, setConfiguringEffect] = useState<EffectLibraryEntry | null>(null)
+  const [presetFormOpen, setPresetFormOpen] = useState(false)
+  const [editingPreset, setEditingPreset] = useState<FxPreset | null>(null)
 
   // Fetch presets for the current project
   const { data: currentProject } = useCurrentProjectQuery()
@@ -51,6 +58,9 @@ export function BuskingView() {
     skip: !currentProject,
   })
   const { data: fixtureList } = useFixtureListQuery()
+  const [createPreset, { isLoading: isCreatingPreset }] = useCreateProjectPresetMutation()
+  const [savePreset, { isLoading: isSavingPreset }] = useSaveProjectPresetMutation()
+  const [deletePreset, { isLoading: isDeletingPreset }] = useDeleteProjectPresetMutation()
 
   // On mobile, switch to effects tab when a target is selected
   const handleSelectTarget = useCallback(
@@ -109,6 +119,46 @@ export function BuskingView() {
     [applyPreset, targetEffectsData],
   )
 
+  // Determine common fixture type from selected targets for preset pre-population
+  const commonFixtureType = useMemo(() => {
+    if (selectedArray.length === 0 || !fixtureList) return null
+    const typeKeys = new Set<string>()
+    for (const target of selectedArray) {
+      if (target.type === 'fixture') {
+        typeKeys.add(target.fixture.typeKey)
+      } else {
+        const members = fixtureList.filter((f) => f.groups.includes(target.name))
+        members.forEach((f) => typeKeys.add(f.typeKey))
+      }
+    }
+    if (typeKeys.size === 1) return [...typeKeys][0]
+    return null
+  }, [selectedArray, fixtureList])
+
+  const handleSavePreset = useCallback(
+    async (input: FxPresetInput) => {
+      if (!currentProject) return
+      if (editingPreset) {
+        await savePreset({ projectId: currentProject.id, presetId: editingPreset.id, ...input }).unwrap()
+      } else {
+        await createPreset({ projectId: currentProject.id, ...input }).unwrap()
+      }
+    },
+    [currentProject, createPreset, savePreset, editingPreset],
+  )
+
+  const handleEditPreset = useCallback((preset: FxPreset) => {
+    setEditingPreset(preset)
+    setPresetFormOpen(true)
+  }, [])
+
+  const handleDeletePreset = useCallback(async () => {
+    if (!currentProject || !editingPreset) return
+    await deletePreset({ projectId: currentProject.id, presetId: editingPreset.id }).unwrap()
+    setPresetFormOpen(false)
+    setEditingPreset(null)
+  }, [currentProject, editingPreset, deletePreset])
+
   return (
     <div className="flex flex-col h-full">
       {isDesktop ? (
@@ -134,10 +184,13 @@ export function BuskingView() {
               togglePropertyEffect={togglePropertyEffect}
               getActivePropertyValue={getActivePropertyValue}
               setEditingEffect={setEditingEffect}
+              setConfiguringEffect={setConfiguringEffect}
               presets={filteredPresets}
               onApplyPreset={handleApplyPreset}
               computePresetPresence={computePresetPresence}
               currentProjectId={currentProject?.id}
+              onCreatePreset={() => { setEditingPreset(null); setPresetFormOpen(true) }}
+              onEditPreset={handleEditPreset}
             />
           </div>
         </div>
@@ -179,16 +232,41 @@ export function BuskingView() {
               togglePropertyEffect={togglePropertyEffect}
               getActivePropertyValue={getActivePropertyValue}
               setEditingEffect={setEditingEffect}
+              setConfiguringEffect={setConfiguringEffect}
               presets={filteredPresets}
               onApplyPreset={handleApplyPreset}
               computePresetPresence={computePresetPresence}
               currentProjectId={currentProject?.id}
+              onCreatePreset={() => { setEditingPreset(null); setPresetFormOpen(true) }}
+              onEditPreset={handleEditPreset}
             />
           </TabsContent>
         </Tabs>
       )}
 
       <ActiveEffectSheet context={editingEffect} onClose={() => setEditingEffect(null)} />
+      <ConfigureEffectSheet
+        effect={configuringEffect}
+        defaultBeatDivision={defaultBeatDivision}
+        hasGroupTarget={selectedArray.some((t) => t.type === 'group')}
+        onApply={(params) => {
+          if (configuringEffect) {
+            applyEffectWithParams(configuringEffect, targetEffectsData, params)
+          }
+          setConfiguringEffect(null)
+        }}
+        onClose={() => setConfiguringEffect(null)}
+      />
+      <PresetForm
+        open={presetFormOpen}
+        onOpenChange={(open) => { setPresetFormOpen(open); if (!open) setEditingPreset(null) }}
+        preset={editingPreset}
+        onSave={handleSavePreset}
+        isSaving={isCreatingPreset || isSavingPreset}
+        defaultFixtureType={editingPreset ? undefined : commonFixtureType}
+        onDelete={editingPreset ? handleDeletePreset : undefined}
+        isDeleting={isDeletingPreset}
+      />
     </div>
   )
 }
@@ -209,10 +287,13 @@ function EffectPadWrapper({
   togglePropertyEffect,
   getActivePropertyValue,
   setEditingEffect,
+  setConfiguringEffect,
   presets,
   onApplyPreset,
   computePresetPresence,
   currentProjectId,
+  onCreatePreset,
+  onEditPreset,
 }: {
   selectedTargets: BuskingTarget[]
   targetEffectsData: TargetEffectsData[]
@@ -226,10 +307,13 @@ function EffectPadWrapper({
   togglePropertyEffect: (button: PropertyButton, presence: EffectPresence, data: TargetEffectsData[], settingLevel?: number) => Promise<void>
   getActivePropertyValue: (button: PropertyButton, data: TargetEffectsData[]) => string | null
   setEditingEffect: (ctx: ActiveEffectContext | null) => void
+  setConfiguringEffect: (effect: EffectLibraryEntry | null) => void
   presets: FxPreset[]
   onApplyPreset: (preset: FxPreset) => Promise<void>
   computePresetPresence: (preset: FxPreset, data: TargetEffectsData[]) => EffectPresence
   currentProjectId: number | undefined
+  onCreatePreset: () => void
+  onEditPreset: (preset: FxPreset) => void
 }) {
   const getPresence = useCallback(
     (effectName: string): EffectPresence => {
@@ -269,8 +353,10 @@ function EffectPadWrapper({
           }
         }
       }
+      // Effect not active on any target — open configure sheet
+      setConfiguringEffect(effect)
     },
-    [targetEffectsData, setEditingEffect],
+    [targetEffectsData, setEditingEffect, setConfiguringEffect],
   )
 
   // Property button bound callbacks
@@ -347,6 +433,8 @@ function EffectPadWrapper({
       onPropertyToggle={handlePropertyToggle}
       onPropertyLongPress={handlePropertyLongPress}
       getPropertyValue={getPropertyValue}
+      onCreatePreset={onCreatePreset}
+      onEditPreset={onEditPreset}
     />
   )
 }

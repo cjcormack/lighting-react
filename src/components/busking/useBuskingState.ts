@@ -475,6 +475,56 @@ export function useBuskingState() {
     [defaultBeatDivision, resolveProperty, addFixtureFx, removeFx, applyGroupFx, removeGroupFx],
   )
 
+  const applyEffectWithParams = useCallback(
+    async (
+      effect: EffectLibraryEntry,
+      targetEffectsData: TargetEffectsData[],
+      params: {
+        beatDivision: number
+        blendMode: string
+        phaseOffset: number
+        distribution: string
+        parameters: Record<string, string>
+      },
+    ) => {
+      const additions: Promise<unknown>[] = []
+      for (const data of targetEffectsData) {
+        const propertyName = resolveProperty(data.target, effect)
+        if (!propertyName) continue
+
+        if (data.target.type === 'group') {
+          additions.push(
+            applyGroupFx({
+              groupName: data.target.name,
+              effectType: effect.name as EffectType,
+              propertyName,
+              beatDivision: params.beatDivision,
+              blendMode: params.blendMode as BlendMode,
+              distribution: params.distribution as DistributionStrategy,
+              phaseOffset: params.phaseOffset,
+              parameters: { ...params.parameters },
+            }).unwrap(),
+          )
+        } else {
+          additions.push(
+            addFixtureFx({
+              effectType: effect.name,
+              fixtureKey: data.target.key,
+              propertyName,
+              beatDivision: params.beatDivision,
+              blendMode: params.blendMode as BlendMode,
+              startOnBeat: true,
+              phaseOffset: params.phaseOffset,
+              parameters: { ...params.parameters },
+            }).unwrap(),
+          )
+        }
+      }
+      await Promise.all(additions)
+    },
+    [resolveProperty, addFixtureFx, applyGroupFx],
+  )
+
   const applyPreset = useCallback(
     async (preset: FxPreset, _presence: EffectPresence, targetEffectsData: TargetEffectsData[]) => {
       const projectId = currentProject?.id
@@ -542,6 +592,9 @@ export function useBuskingState() {
     computePropertyPresence,
     togglePropertyEffect,
     getActivePropertyValue,
+
+    // Apply with custom params
+    applyEffectWithParams,
 
     // Presets
     applyPreset,
