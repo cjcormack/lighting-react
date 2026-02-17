@@ -159,7 +159,7 @@ export function AddEditGroupFxSheet({ group, mode, onClose }: AddEditGroupFxShee
 
   // Get setting options for the currently-targeted setting property
   const settingOptions = useMemo(() => {
-    if (selectedCategory !== 'setting' || !targetPropertyName) return undefined
+    if (!selectedEffect?.compatibleProperties.includes('setting') || !targetPropertyName) return undefined
     const settingProp = settingProperties.find((sp) => sp.name === targetPropertyName)
     return settingProp?.options
   }, [selectedCategory, targetPropertyName, settingProperties])
@@ -296,9 +296,9 @@ export function AddEditGroupFxSheet({ group, mode, onClose }: AddEditGroupFxShee
               onElementModeChange={(v) => setElementMode(v as ElementMode)}
               showElementMode={hasMultiElementMembers}
               settingOptions={settingOptions}
-              settingProperties={selectedCategory === 'setting' ? settingProperties : undefined}
+              settingProperties={selectedEffect?.compatibleProperties.includes('setting') ? settingProperties : undefined}
               onSettingPropertyChange={setSelectedSettingProp}
-              sliderProperties={selectedCategory === 'dimmer' ? extraSliderProperties : undefined}
+              sliderProperties={selectedEffect?.compatibleProperties.includes('slider') ? extraSliderProperties : undefined}
               onSliderPropertyChange={setSelectedSliderProp}
             />
           )}

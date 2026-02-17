@@ -1,4 +1,4 @@
-import { Sun, Palette, Move, Settings2, SlidersHorizontal, type LucideIcon } from 'lucide-react'
+import { Sun, Palette, Move, SlidersHorizontal, type LucideIcon } from 'lucide-react'
 
 export const BEAT_DIVISION_OPTIONS = [
   { value: 0.25, label: '1/16', description: 'Sixteenth note' },
@@ -25,7 +25,6 @@ export const EFFECT_CATEGORY_INFO: Record<
   dimmer: { label: 'Dimmer', icon: Sun, description: 'Intensity and brightness effects' },
   colour: { label: 'Colour', icon: Palette, description: 'RGB colour cycling and effects' },
   position: { label: 'Position', icon: Move, description: 'Pan/tilt movement patterns' },
-  setting: { label: 'Setting', icon: Settings2, description: 'Fixture mode and option settings' },
   controls: { label: 'Controls', icon: SlidersHorizontal, description: 'Settings and slider controls' },
 }
 

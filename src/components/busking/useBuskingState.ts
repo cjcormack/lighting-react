@@ -98,25 +98,17 @@ export function useBuskingState() {
     )
   }, [library, allPropertyNames, selectedTargets.size])
 
-  // Whether the selected targets have actual dimmer/uv properties (not just extra sliders)
-  const hasRealDimmer = useMemo(() => {
-    return allPropertyNames.has('dimmer') || allPropertyNames.has('uv')
-  }, [allPropertyNames])
-
-  // Group by category, filtering out effects that are handled by property buttons
+  // Group by category, filtering out controls (shown as property buttons instead)
   const effectsByCategory = useMemo(() => {
     const grouped: Record<string, EffectLibraryEntry[]> = {}
     for (const effect of compatibleEffects) {
-      // Filter out StaticSetting — settings are shown as property buttons instead
-      if (normalizeEffectName(effect.name) === 'staticsetting') continue
-      // Filter out dimmer effects that only matched via the "slider" sentinel
-      // (e.g. hazer with pumpControl but no actual dimmer — those sliders are in Controls tab)
-      if (effect.category === 'dimmer' && !hasRealDimmer) continue
+      // Skip controls category — rendered as property buttons in the Controls tab
+      if (effect.category === 'controls') continue
       if (!grouped[effect.category]) grouped[effect.category] = []
       grouped[effect.category].push(effect)
     }
     return grouped
-  }, [compatibleEffects, hasRealDimmer])
+  }, [compatibleEffects])
 
   // Collect property buttons for settings and extra sliders across selected targets
   const propertyButtons = useMemo((): PropertyButton[] => {

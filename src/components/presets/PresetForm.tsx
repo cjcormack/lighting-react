@@ -148,40 +148,37 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving }: Pre
     }
   }, [open, preset, hierarchy])
 
-  // Group library by category, with a virtual "controls" category for settings + sliders
+  // Group library by category
   const libraryByCategory = useMemo(() => {
     if (!library) return {}
     const grouped: Record<string, EffectLibraryEntry[]> = {}
-    const controls: EffectLibraryEntry[] = []
     for (const entry of library) {
       if (!grouped[entry.category]) grouped[entry.category] = []
       grouped[entry.category].push(entry)
-
-      // Build virtual "controls" category: setting effects + slider-compatible dimmer effects
-      if (entry.category === 'setting') {
-        controls.push(entry)
-      } else if (entry.compatibleProperties.includes('slider')) {
-        controls.push(entry)
-      }
-    }
-    if (controls.length > 0) {
-      grouped['controls'] = controls
     }
     return grouped
   }, [library])
 
-  // Library lookup by normalized name
+  // Library lookup by normalized name, with category-qualified keys for disambiguation
   const libraryMap = useMemo(() => {
     if (!library) return new Map<string, EffectLibraryEntry>()
     const map = new Map<string, EffectLibraryEntry>()
     for (const entry of library) {
-      map.set(entry.name.toLowerCase().replace(/[\s_]/g, ''), entry)
+      const normalized = entry.name.toLowerCase().replace(/[\s_]/g, '')
+      map.set(`${entry.category}:${normalized}`, entry)
+      // Name-only key as fallback (last entry wins if duplicates exist)
+      map.set(normalized, entry)
     }
     return map
   }, [library])
 
-  const findLibraryEntry = useCallback((effectType: string): EffectLibraryEntry | undefined => {
-    return libraryMap.get(effectType.toLowerCase().replace(/[\s_]/g, ''))
+  const findLibraryEntry = useCallback((effectType: string, category?: string): EffectLibraryEntry | undefined => {
+    const normalized = effectType.toLowerCase().replace(/[\s_]/g, '')
+    if (category) {
+      const qualified = libraryMap.get(`${category}:${normalized}`)
+      if (qualified) return qualified
+    }
+    return libraryMap.get(normalized)
   }, [libraryMap])
 
   const handleAddEffect = (entry: EffectLibraryEntry) => {
@@ -247,7 +244,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving }: Pre
   // Validate each effect: effects that need a property picker must have a valid propertyName
   const effectErrors = useMemo<boolean[]>(() => {
     return effects.map((effect) => {
-      const entry = findLibraryEntry(effect.effectType)
+      const entry = findLibraryEntry(effect.effectType, effect.category)
       if (!entry) return false
       const needsProp = entry.compatibleProperties.includes('setting') ||
         entry.compatibleProperties.includes('slider')
@@ -399,7 +396,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving }: Pre
               <PresetEffectRow
                 key={`${effect.effectType}-${index}`}
                 effect={effect}
-                libraryEntry={findLibraryEntry(effect.effectType)}
+                libraryEntry={findLibraryEntry(effect.effectType, effect.category)}
                 fixtureTypeMode={selectedFixtureTypeMode}
                 hasError={effectErrors[index]}
                 onChange={(updated) => handleUpdateEffect(index, updated)}
