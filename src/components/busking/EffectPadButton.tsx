@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import { cn } from '@/lib/utils'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
 import type { EffectPresence } from './buskingTypes'
-import { getEffectDescription } from '@/components/fixtures/fx/fxConstants'
+import { getEffectDescription } from '@/components/fx/fxConstants'
 
 const MOVE_THRESHOLD = 10
 

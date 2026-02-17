@@ -135,16 +135,15 @@ export function BuskingView() {
     return null
   }, [selectedArray, fixtureList])
 
-  // Detect whether any selected target has multi-element (multi-head) fixtures
+  // Detect whether any selected GROUP target has multi-element (multi-head) fixtures.
+  // Element Mode is a group-only concept (PER_FIXTURE vs FLAT across the group),
+  // so individual fixtures never show this option.
   const hasMultiElementTarget = useMemo(() => {
     if (!fixtureList) return false
     return selectedArray.some((target) => {
-      if (target.type === 'group') {
-        const members = fixtureList.filter((f) => f.groups.includes(target.name))
-        return members.some((f) => f.elements && f.elements.length > 1)
-      }
-      // Single fixture: check elementGroupProperties
-      return (target.fixture.elementGroupProperties?.length ?? 0) > 0
+      if (target.type !== 'group') return false
+      const members = fixtureList.filter((f) => f.groups.includes(target.name))
+      return members.some((f) => f.elements && f.elements.length > 1)
     })
   }, [selectedArray, fixtureList])
 

@@ -24,14 +24,14 @@ import { Badge } from '@/components/ui/badge'
 import { useEffectLibraryQuery } from '@/store/fixtureFx'
 import { useFixtureTypeListQuery, useFixtureListQuery } from '@/store/fixtures'
 import type { SettingPropertyDescriptor, SliderPropertyDescriptor } from '@/store/fixtures'
-import { EffectCategoryPicker } from '@/components/fixtures/fx/EffectCategoryPicker'
-import { EffectTypePicker } from '@/components/fixtures/fx/EffectTypePicker'
-import { EffectParameterForm } from '@/components/fixtures/fx/EffectParameterForm'
+import { EffectCategoryPicker } from '@/components/fx/EffectCategoryPicker'
+import { EffectTypePicker } from '@/components/fx/EffectTypePicker'
+import { EffectParameterForm } from '@/components/fx/EffectParameterForm'
 import {
   BEAT_DIVISION_OPTIONS,
   EFFECT_CATEGORY_INFO,
   getEffectDescription,
-} from '@/components/fixtures/fx/fxConstants'
+} from '@/components/fx/fxConstants'
 import { FixtureTypePicker, type FixtureCountMap } from './FixtureTypePicker'
 import { buildFixtureTypeHierarchy, resolveFixtureTypeLabel } from '@/api/fxPresetsApi'
 import type { FxPreset, FxPresetEffect, FxPresetInput, FixtureTypeHierarchy } from '@/api/fxPresetsApi'
@@ -125,6 +125,10 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
     const typeInfo = fixtureTypes.find((t) => t.typeKey === fixtureType)
     return (typeInfo?.elementGroupProperties?.length ?? 0) > 0
   }, [fixtureType, fixtureTypes])
+
+  // Show element mode when no fixture type selected (preset may apply to groups with
+  // multi-head fixtures) or when the selected fixture type is itself multi-head.
+  const showElementMode = !fixtureType || isMultiHeadType
 
   // Reset form when the sheet opens or the preset changes
   useEffect(() => {
@@ -290,7 +294,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
       blendMode: addBlendMode,
       distribution: addDistribution,
       phaseOffset: addPhaseOffset,
-      elementMode: isMultiHeadType ? addElementMode : null,
+      elementMode: showElementMode ? addElementMode : null,
       parameters: { ...addParameters },
     }
     setEffects([...effects, newEffect])
@@ -380,7 +384,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
       blendMode: editBlendMode,
       distribution: editDistribution,
       phaseOffset: editPhaseOffset,
-      elementMode: isMultiHeadType ? editElementMode : null,
+      elementMode: showElementMode ? editElementMode : null,
       parameters: { ...editParameters },
     }
     handleUpdateEffect(editEffectIndex, updated)
@@ -677,9 +681,10 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
                 onBack={() => setAddEffectStep('effect')}
                 distributionStrategy={addDistribution}
                 onDistributionStrategyChange={setAddDistribution}
+                showDistribution
                 elementMode={addElementMode}
                 onElementModeChange={setAddElementMode}
-                showElementMode={isMultiHeadType}
+                showElementMode={showElementMode}
                 settingOptions={addSettingOptions}
                 settingProperties={addEffectEntry.compatibleProperties.includes('setting') ? settingProperties : undefined}
                 onSettingPropertyChange={setAddSelectedSettingProp}
@@ -722,9 +727,10 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
                   isEdit={true}
                   distributionStrategy={editDistribution}
                   onDistributionStrategyChange={setEditDistribution}
+                  showDistribution
                   elementMode={editElementMode}
                   onElementModeChange={setEditElementMode}
-                  showElementMode={isMultiHeadType}
+                  showElementMode={showElementMode}
                   settingOptions={editSettingOptions}
                   settingProperties={editEffectEntry.compatibleProperties.includes('setting') ? settingProperties : undefined}
                   onSettingPropertyChange={setEditSelectedSettingProp}

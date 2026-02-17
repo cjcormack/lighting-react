@@ -8,7 +8,7 @@ import {
   SheetDescription,
   SheetFooter,
 } from '@/components/ui/sheet'
-import { EffectParameterForm } from '@/components/fixtures/fx/EffectParameterForm'
+import { EffectParameterForm } from '@/components/fx/EffectParameterForm'
 import {
   useEffectLibraryQuery,
   useUpdateFxMutation,
@@ -101,13 +101,12 @@ export function ActiveEffectSheet({ context, onClose }: ActiveEffectSheetProps) 
   const handleUpdate = async () => {
     if (!context || !selectedEffect) return
 
-    const body = {
+    const baseBody = {
       effectType: selectedEffect.name,
       beatDivision,
       blendMode,
       phaseOffset,
       parameters,
-      distributionStrategy,
     }
 
     if (context.type === 'group') {
@@ -115,7 +114,8 @@ export function ActiveEffectSheet({ context, onClose }: ActiveEffectSheetProps) 
         id: context.effect.id,
         groupName: context.groupName,
         body: {
-          ...body,
+          ...baseBody,
+          distributionStrategy,
           ...(showElementMode ? { elementMode } : {}),
         },
       })
@@ -123,7 +123,10 @@ export function ActiveEffectSheet({ context, onClose }: ActiveEffectSheetProps) 
       await updateFx({
         id: context.effect.id,
         fixtureKey: context.fixtureKey,
-        body,
+        body: {
+          ...baseBody,
+          ...(showDistribution ? { distributionStrategy } : {}),
+        },
       })
     }
     onClose()

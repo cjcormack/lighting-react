@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { MoreHorizontal, Pencil, Trash2, Copy } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { EFFECT_CATEGORY_INFO } from '@/components/fixtures/fx/fxConstants'
+import { EFFECT_CATEGORY_INFO } from '@/components/fx/fxConstants'
 import type { FxPreset } from '@/api/fxPresetsApi'
 
 interface PresetListRowProps {

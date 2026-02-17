@@ -6,8 +6,8 @@ import { Loader2 } from 'lucide-react'
 import { useGroupQuery, useGroupPropertiesQuery } from '../../store/groups'
 import { GroupPropertyVisualizer, GroupVirtualDimmerSlider } from '../fixtures/GroupPropertyVisualizers'
 import { GroupMembersSection } from './GroupMembersSection'
-import { GroupFxBadge } from './fx/GroupFxBadge'
-import { GroupFxSection } from './fx/GroupFxSection'
+import { FxBadge } from '../fx/FxBadge'
+import { FxSection } from '../fx/FxSection'
 import type { GroupSummary, GroupPropertyDescriptor, GroupColourPropertyDescriptor } from '../../api/groupsApi'
 
 interface GroupCardProps {
@@ -36,7 +36,7 @@ export function GroupCard({ group, onFixtureClick }: GroupCardProps) {
         />
 
         {/* Effects section */}
-        <GroupFxSection group={group} />
+        <FxSection group={group} />
 
         {/* Compact fixture member grid */}
         <GroupMembersSection
@@ -82,7 +82,7 @@ function GroupCardHeader({
             {cap}
           </Badge>
         ))}
-        <GroupFxBadge groupName={group.name} />
+        <FxBadge groupName={group.name} />
       </div>
     </CardHeader>
   )

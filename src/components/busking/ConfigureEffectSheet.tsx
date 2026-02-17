@@ -8,7 +8,7 @@ import {
   SheetDescription,
   SheetFooter,
 } from '@/components/ui/sheet'
-import { EffectParameterForm } from '@/components/fixtures/fx/EffectParameterForm'
+import { EffectParameterForm } from '@/components/fx/EffectParameterForm'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
 
 interface ConfigureEffectSheetProps {

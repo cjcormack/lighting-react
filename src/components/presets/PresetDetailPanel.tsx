@@ -6,7 +6,7 @@ import {
   getBeatDivisionLabel,
   getDistributionLabel,
   getEffectDescription,
-} from '@/components/fixtures/fx/fxConstants'
+} from '@/components/fx/fxConstants'
 import { resolveFixtureTypeLabel } from '@/api/fxPresetsApi'
 import type { FxPreset, FxPresetEffect, FixtureTypeHierarchy } from '@/api/fxPresetsApi'
 
