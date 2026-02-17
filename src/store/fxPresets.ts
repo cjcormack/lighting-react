@@ -1,7 +1,14 @@
 import { restApi } from './restApi'
 import { lightingApi } from '../api/lightingApi'
 import { store } from './index'
-import type { FxPreset, FxPresetInput, CopyPresetRequest, CopyPresetResponse } from '../api/fxPresetsApi'
+import type {
+  FxPreset,
+  FxPresetInput,
+  CopyPresetRequest,
+  CopyPresetResponse,
+  TogglePresetRequest,
+  TogglePresetResponse,
+} from '../api/fxPresetsApi'
 
 // Subscribe to WebSocket preset list changes - invalidate all preset caches
 lightingApi.fxPresets.subscribe(function () {
@@ -89,6 +96,17 @@ export const fxPresetsApi = restApi.injectEndpoints({
         { type: 'FxPreset', id: targetProjectId },
       ],
     }),
+
+    togglePreset: build.mutation<
+      TogglePresetResponse,
+      { projectId: number; presetId: number } & TogglePresetRequest
+    >({
+      query: ({ projectId, presetId, ...body }) => ({
+        url: `project/${projectId}/fx-presets/${presetId}/toggle`,
+        method: 'POST',
+        body,
+      }),
+    }),
   }),
   overrideExisting: false,
 })
@@ -100,4 +118,5 @@ export const {
   useSaveProjectPresetMutation,
   useDeleteProjectPresetMutation,
   useCopyPresetMutation,
+  useTogglePresetMutation,
 } = fxPresetsApi

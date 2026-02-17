@@ -1,4 +1,3 @@
-import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Crosshair, Bookmark, SlidersHorizontal } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -23,6 +22,7 @@ interface EffectPadProps {
   hasSelection: boolean
   presets: FxPreset[]
   onApplyPreset: (preset: FxPreset) => Promise<void>
+  getPresetPresence: (preset: FxPreset) => EffectPresence
   currentProjectId: number | undefined
   // Property buttons (settings & sliders)
   propertyButtons: PropertyButton[]
@@ -42,6 +42,7 @@ export function EffectPad({
   hasSelection,
   presets,
   onApplyPreset,
+  getPresetPresence,
   currentProjectId,
   propertyButtons,
   getPropertyPresence,
@@ -68,27 +69,27 @@ export function EffectPad({
             const Icon = info.icon
             const count = effectsByCategory[cat]?.length ?? 0
             return (
-              <TabsTrigger key={cat} value={cat} disabled={count === 0} className="gap-1 @[28rem]:gap-1.5 px-2 @[28rem]:px-3">
+              <TabsTrigger key={cat} value={cat} disabled={count === 0} className="gap-1 @[38rem]:gap-1.5 px-2 @[38rem]:px-3">
                 <Icon className="size-4" />
-                <span className="hidden @[28rem]:inline">{info.label}</span>
+                <span className="hidden @[38rem]:inline">{info.label}</span>
                 {count > 0 && (
-                  <span className="text-[10px] text-muted-foreground ml-0.5 hidden @[28rem]:inline">({count})</span>
+                  <span className="text-[10px] text-muted-foreground ml-0.5 hidden @[38rem]:inline">({count})</span>
                 )}
               </TabsTrigger>
             )
           })}
-          <TabsTrigger value="controls" disabled={propertyButtons.length === 0} className="gap-1 @[28rem]:gap-1.5 px-2 @[28rem]:px-3">
+          <TabsTrigger value="controls" disabled={propertyButtons.length === 0} className="gap-1 @[38rem]:gap-1.5 px-2 @[38rem]:px-3">
             <SlidersHorizontal className="size-4" />
-            <span className="hidden @[28rem]:inline">Controls</span>
+            <span className="hidden @[38rem]:inline">Controls</span>
             {propertyButtons.length > 0 && (
-              <span className="text-[10px] text-muted-foreground ml-0.5 hidden @[28rem]:inline">({propertyButtons.length})</span>
+              <span className="text-[10px] text-muted-foreground ml-0.5 hidden @[38rem]:inline">({propertyButtons.length})</span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="presets" className="gap-1 @[28rem]:gap-1.5 px-2 @[28rem]:px-3">
+          <TabsTrigger value="presets" className="gap-1 @[38rem]:gap-1.5 px-2 @[38rem]:px-3">
             <Bookmark className="size-4" />
-            <span className="hidden @[28rem]:inline">Presets</span>
+            <span className="hidden @[38rem]:inline">Presets</span>
             {presets.length > 0 && (
-              <span className="text-[10px] text-muted-foreground ml-0.5 hidden @[28rem]:inline">({presets.length})</span>
+              <span className="text-[10px] text-muted-foreground ml-0.5 hidden @[38rem]:inline">({presets.length})</span>
             )}
           </TabsTrigger>
         </TabsList>
@@ -139,6 +140,7 @@ export function EffectPad({
           <PresetGrid
             presets={presets}
             onApplyPreset={onApplyPreset}
+            getPresetPresence={getPresetPresence}
             currentProjectId={currentProjectId}
           />
         </TabsContent>
@@ -150,27 +152,15 @@ export function EffectPad({
 function PresetGrid({
   presets,
   onApplyPreset,
+  getPresetPresence,
   currentProjectId,
 }: {
   presets: FxPreset[]
   onApplyPreset: (preset: FxPreset) => Promise<void>
+  getPresetPresence: (preset: FxPreset) => EffectPresence
   currentProjectId: number | undefined
 }) {
   const navigate = useNavigate()
-  const [applyingId, setApplyingId] = useState<number | null>(null)
-
-  const handleApply = useCallback(
-    async (preset: FxPreset) => {
-      if (applyingId !== null) return
-      setApplyingId(preset.id)
-      try {
-        await onApplyPreset(preset)
-      } finally {
-        setTimeout(() => setApplyingId(null), 300)
-      }
-    },
-    [applyingId, onApplyPreset],
-  )
 
   if (presets.length === 0) {
     return (
@@ -192,29 +182,48 @@ function PresetGrid({
   return (
     <div className="space-y-2 pt-2">
       <div className="grid grid-cols-1 @[20rem]:grid-cols-2 @[28rem]:grid-cols-3 @[48rem]:grid-cols-4 gap-2">
-        {presets.map((preset) => (
-          <button
-            key={preset.id}
-            onClick={() => handleApply(preset)}
-            disabled={applyingId !== null}
-            className={cn(
-              'relative flex flex-col items-center justify-center rounded-lg border px-2 py-3 text-center transition-all',
-              'min-h-[64px] select-none touch-manipulation',
-              'active:scale-95 border-border bg-card hover:bg-accent/50',
-              applyingId === preset.id && 'bg-primary/20 border-primary ring-1 ring-primary/50 scale-95',
-            )}
-          >
-            <span className="text-sm font-medium leading-tight">{preset.name}</span>
-            {preset.description && (
-              <span className="mt-0.5 text-[10px] leading-tight text-muted-foreground line-clamp-1">
-                {preset.description}
+        {presets.map((preset) => {
+          const presence = getPresetPresence(preset)
+          return (
+            <button
+              key={preset.id}
+              onClick={() => onApplyPreset(preset)}
+              className={cn(
+                'relative flex flex-col items-center justify-center rounded-lg border px-2 py-3 text-center transition-all',
+                'min-h-[64px] select-none touch-manipulation',
+                'active:scale-95',
+                presence === 'none' && 'border-border bg-card hover:bg-accent/50',
+                presence === 'some' && 'border-primary/40 bg-primary/10 hover:bg-primary/15',
+                presence === 'all' && 'border-primary bg-primary/20 ring-1 ring-primary/50 hover:bg-primary/25',
+              )}
+            >
+              <span
+                className={cn(
+                  'text-sm font-medium leading-tight',
+                  presence !== 'none' ? 'text-primary' : 'text-foreground',
+                )}
+              >
+                {preset.name}
               </span>
-            )}
-            <Badge variant="secondary" className="mt-1 text-[9px] px-1.5 py-0 leading-tight">
-              {preset.effects.length} {preset.effects.length === 1 ? 'effect' : 'effects'}
-            </Badge>
-          </button>
-        ))}
+              {preset.description && (
+                <span className="mt-0.5 text-[10px] leading-tight text-muted-foreground line-clamp-1">
+                  {preset.description}
+                </span>
+              )}
+              <Badge variant="secondary" className="mt-1 text-[9px] px-1.5 py-0 leading-tight">
+                {preset.effects.length} {preset.effects.length === 1 ? 'effect' : 'effects'}
+              </Badge>
+              {presence !== 'none' && (
+                <div
+                  className={cn(
+                    'absolute top-1.5 right-1.5 size-2 rounded-full',
+                    presence === 'all' ? 'bg-primary' : 'bg-primary/50',
+                  )}
+                />
+              )}
+            </button>
+          )
+        })}
       </div>
       {currentProjectId && (
         <div className="text-center pt-1">

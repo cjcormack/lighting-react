@@ -43,6 +43,7 @@ export function BuskingView() {
     togglePropertyEffect,
     getActivePropertyValue,
     applyPreset,
+    computePresetPresence,
     editingEffect,
     setEditingEffect,
   } = useBuskingState()
@@ -105,7 +106,9 @@ export function BuskingView() {
   }, [presets, selectedArray, fixtureList])
 
   const handleApplyPreset = useCallback(
-    (preset: FxPreset) => applyPreset(preset, targetEffectsData),
+    (preset: FxPreset) => {
+      return applyPreset(preset, 'none', targetEffectsData)
+    },
     [applyPreset, targetEffectsData],
   )
 
@@ -141,6 +144,7 @@ export function BuskingView() {
               setEditingEffect={setEditingEffect}
               presets={filteredPresets}
               onApplyPreset={handleApplyPreset}
+              computePresetPresence={computePresetPresence}
               currentProjectId={currentProject?.id}
             />
           </div>
@@ -185,6 +189,7 @@ export function BuskingView() {
               setEditingEffect={setEditingEffect}
               presets={filteredPresets}
               onApplyPreset={handleApplyPreset}
+              computePresetPresence={computePresetPresence}
               currentProjectId={currentProject?.id}
             />
           </TabsContent>
@@ -214,6 +219,7 @@ function EffectPadWrapper({
   setEditingEffect,
   presets,
   onApplyPreset,
+  computePresetPresence,
   currentProjectId,
 }: {
   selectedTargets: BuskingTarget[]
@@ -230,6 +236,7 @@ function EffectPadWrapper({
   setEditingEffect: (ctx: ActiveEffectContext | null) => void
   presets: FxPreset[]
   onApplyPreset: (preset: FxPreset) => Promise<void>
+  computePresetPresence: (preset: FxPreset, data: TargetEffectsData[]) => EffectPresence
   currentProjectId: number | undefined
 }) {
   const getPresence = useCallback(
@@ -323,6 +330,13 @@ function EffectPadWrapper({
     [getActivePropertyValue, targetEffectsData],
   )
 
+  const getPresetPresence = useCallback(
+    (preset: FxPreset): EffectPresence => {
+      return computePresetPresence(preset, targetEffectsData)
+    },
+    [computePresetPresence, targetEffectsData],
+  )
+
   return (
     <EffectPad
       effectsByCategory={effectsByCategory}
@@ -334,6 +348,7 @@ function EffectPadWrapper({
       hasSelection={selectedTargets.length > 0}
       presets={presets}
       onApplyPreset={onApplyPreset}
+      getPresetPresence={getPresetPresence}
       currentProjectId={currentProjectId}
       propertyButtons={propertyButtons}
       getPropertyPresence={getPropertyPresence}

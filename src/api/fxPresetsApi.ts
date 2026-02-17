@@ -46,6 +46,22 @@ export interface CopyPresetResponse {
   message: string
 }
 
+// Toggle request/response
+export interface TogglePresetTarget {
+  type: 'group' | 'fixture'
+  key: string
+}
+
+export interface TogglePresetRequest {
+  targets: TogglePresetTarget[]
+  beatDivision?: number
+}
+
+export interface TogglePresetResponse {
+  action: 'applied' | 'removed'
+  effectCount: number
+}
+
 // Maps effect category to the fixture capability it requires
 const CATEGORY_TO_CAPABILITY: Record<string, string> = {
   dimmer: 'dimmer',

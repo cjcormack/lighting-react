@@ -23,6 +23,7 @@ export interface FixtureDirectEffect {
   parameters: Record<string, string>
   isGroupTarget: false
   distributionStrategy: string | null
+  presetId: number | null
 }
 
 export interface FixtureIndirectEffect {

@@ -97,6 +97,7 @@ export interface GroupActiveEffect {
   currentPhase: number
   parameters: Record<string, string>
   elementMode: ElementMode | null
+  presetId: number | null
 }
 
 export interface ClearFxResponse {

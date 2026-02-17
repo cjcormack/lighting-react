@@ -2,10 +2,13 @@ import { useState, useMemo, useCallback } from 'react'
 import { useEffectLibraryQuery, useAddFixtureFxMutation, useRemoveFxMutation } from '@/store/fixtureFx'
 import { useApplyGroupFxMutation, useRemoveGroupFxMutation } from '@/store/groups'
 import { useFixtureListQuery } from '@/store/fixtures'
+import { useCurrentProjectQuery } from '@/store/projects'
+import { useTogglePresetMutation } from '@/store/fxPresets'
 import type { SettingPropertyDescriptor, SliderPropertyDescriptor } from '@/store/fixtures'
 import type { EffectLibraryEntry, FixtureDirectEffect } from '@/store/fixtureFx'
 import type { GroupActiveEffect, BlendMode, DistributionStrategy, EffectType } from '@/api/groupsApi'
 import type { FxPreset } from '@/api/fxPresetsApi'
+import type { TogglePresetTarget } from '@/api/fxPresetsApi'
 import {
   type BuskingTarget,
   type PropertyButton,
@@ -30,11 +33,13 @@ export function useBuskingState() {
 
   const { data: library } = useEffectLibraryQuery()
   const { data: fixtureList } = useFixtureListQuery()
+  const { data: currentProject } = useCurrentProjectQuery()
 
   const [addFixtureFx] = useAddFixtureFxMutation()
   const [removeFx] = useRemoveFxMutation()
   const [applyGroupFx] = useApplyGroupFxMutation()
   const [removeGroupFx] = useRemoveGroupFxMutation()
+  const [togglePresetMutation] = useTogglePresetMutation()
 
   const selectTarget = useCallback((target: BuskingTarget) => {
     setSelectedTargets(new Map([[targetKey(target), target]]))
@@ -480,57 +485,48 @@ export function useBuskingState() {
   )
 
   const applyPreset = useCallback(
-    async (preset: FxPreset, targetEffectsData: TargetEffectsData[]) => {
-      const additions: Promise<unknown>[] = []
+    async (preset: FxPreset, _presence: EffectPresence, targetEffectsData: TargetEffectsData[]) => {
+      const projectId = currentProject?.id
+      if (!projectId || targetEffectsData.length === 0) return
 
-      for (const presetEffect of preset.effects) {
-        // Find the library entry for this effect to resolve properties
-        const normalized = presetEffect.effectType.toLowerCase().replace(/[\s_]/g, '')
-        const libraryEntry = library?.find(
-          (e) => e.name.toLowerCase().replace(/[\s_]/g, '') === normalized,
-        )
+      const targets: TogglePresetTarget[] = targetEffectsData.map((data) => ({
+        type: data.target.type,
+        key: data.target.type === 'group' ? data.target.name : data.target.key,
+      }))
 
-        for (const data of targetEffectsData) {
-          // Resolve which property to target
-          let propertyName = presetEffect.propertyName
-          if (!propertyName && libraryEntry) {
-            propertyName = resolveProperty(data.target, libraryEntry)
-          }
-          if (!propertyName) continue
+      await togglePresetMutation({
+        projectId,
+        presetId: preset.id,
+        targets,
+        beatDivision: defaultBeatDivision,
+      }).unwrap()
+    },
+    [currentProject?.id, defaultBeatDivision, togglePresetMutation],
+  )
 
-          if (data.target.type === 'group') {
-            additions.push(
-              applyGroupFx({
-                groupName: data.target.name,
-                effectType: presetEffect.effectType as EffectType,
-                propertyName,
-                beatDivision: presetEffect.beatDivision,
-                blendMode: (presetEffect.blendMode || 'OVERRIDE') as BlendMode,
-                distribution: (presetEffect.distribution || 'LINEAR') as DistributionStrategy,
-                phaseOffset: presetEffect.phaseOffset,
-                parameters: { ...presetEffect.parameters },
-              }).unwrap(),
-            )
-          } else {
-            additions.push(
-              addFixtureFx({
-                effectType: presetEffect.effectType,
-                fixtureKey: data.target.key,
-                propertyName,
-                beatDivision: presetEffect.beatDivision,
-                blendMode: (presetEffect.blendMode || 'OVERRIDE') as BlendMode,
-                startOnBeat: true,
-                phaseOffset: presetEffect.phaseOffset,
-                parameters: { ...presetEffect.parameters },
-              }).unwrap(),
-            )
-          }
+  // Check whether a preset is active on all targets by looking for effects
+  // tagged with the preset's ID. This is deterministic — only effects applied
+  // via the toggle endpoint will match.
+  const computePresetPresence = useCallback(
+    (preset: FxPreset, targetEffectsData: TargetEffectsData[]): EffectPresence => {
+      if (targetEffectsData.length === 0 || preset.effects.length === 0) return 'none'
+
+      let activeCount = 0
+      for (const data of targetEffectsData) {
+        let hasPreset = false
+        if (data.target.type === 'group' && data.groupEffects) {
+          hasPreset = data.groupEffects.some((e) => e.presetId === preset.id)
+        } else if (data.target.type === 'fixture' && data.fixtureDirectEffects) {
+          hasPreset = data.fixtureDirectEffects.some((e) => e.presetId === preset.id)
         }
+        if (hasPreset) activeCount++
       }
 
-      await Promise.all(additions)
+      if (activeCount === 0) return 'none'
+      if (activeCount === targetEffectsData.length) return 'all'
+      return 'some'
     },
-    [library, resolveProperty, applyGroupFx, addFixtureFx],
+    [],
   )
 
   return {
@@ -562,6 +558,7 @@ export function useBuskingState() {
 
     // Presets
     applyPreset,
+    computePresetPresence,
 
     // Bottom sheet
     editingEffect,
