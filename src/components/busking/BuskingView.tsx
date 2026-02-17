@@ -135,6 +135,27 @@ export function BuskingView() {
     return null
   }, [selectedArray, fixtureList])
 
+  // Detect whether any selected target has multi-element (multi-head) fixtures
+  const hasMultiElementTarget = useMemo(() => {
+    if (!fixtureList) return false
+    return selectedArray.some((target) => {
+      if (target.type === 'group') {
+        const members = fixtureList.filter((f) => f.groups.includes(target.name))
+        return members.some((f) => f.elements && f.elements.length > 1)
+      }
+      // Single fixture: check elementGroupProperties
+      return (target.fixture.elementGroupProperties?.length ?? 0) > 0
+    })
+  }, [selectedArray, fixtureList])
+
+  // Show distribution for groups or multi-head single fixtures
+  const showDistribution = useMemo(() => {
+    return selectedArray.some((target) => {
+      if (target.type === 'group') return true
+      return (target.fixture.elementGroupProperties?.length ?? 0) > 0
+    })
+  }, [selectedArray])
+
   const handleSavePreset = useCallback(
     async (input: FxPresetInput) => {
       if (!currentProject) return
@@ -248,7 +269,8 @@ export function BuskingView() {
       <ConfigureEffectSheet
         effect={configuringEffect}
         defaultBeatDivision={defaultBeatDivision}
-        hasGroupTarget={selectedArray.some((t) => t.type === 'group')}
+        showDistribution={showDistribution}
+        showElementMode={hasMultiElementTarget}
         onApply={(params) => {
           if (configuringEffect) {
             applyEffectWithParams(configuringEffect, targetEffectsData, params)

@@ -19,11 +19,14 @@ interface ConfigureEffectSheetProps {
     blendMode: string
     phaseOffset: number
     distribution: string
+    elementMode?: string
     parameters: Record<string, string>
   }) => void
   onClose: () => void
-  /** Whether the targets include a group (for showing distribution) */
-  hasGroupTarget: boolean
+  /** Whether to show the distribution strategy selector */
+  showDistribution: boolean
+  /** Whether to show the element mode selector (multi-head fixtures) */
+  showElementMode: boolean
 }
 
 export function ConfigureEffectSheet({
@@ -31,7 +34,8 @@ export function ConfigureEffectSheet({
   defaultBeatDivision,
   onApply,
   onClose,
-  hasGroupTarget,
+  showDistribution,
+  showElementMode,
 }: ConfigureEffectSheetProps) {
   const isOpen = effect !== null
 
@@ -39,6 +43,7 @@ export function ConfigureEffectSheet({
   const [blendMode, setBlendMode] = useState('OVERRIDE')
   const [phaseOffset, setPhaseOffset] = useState(0)
   const [distribution, setDistribution] = useState('LINEAR')
+  const [elementMode, setElementMode] = useState('PER_FIXTURE')
   const [parameters, setParameters] = useState<Record<string, string>>({})
 
   // Reset state when a new effect is opened
@@ -48,6 +53,7 @@ export function ConfigureEffectSheet({
     setBlendMode('OVERRIDE')
     setPhaseOffset(0)
     setDistribution('LINEAR')
+    setElementMode('PER_FIXTURE')
     const defaults: Record<string, string> = {}
     effect.parameters.forEach((p) => {
       defaults[p.name] = p.defaultValue
@@ -64,10 +70,15 @@ export function ConfigureEffectSheet({
     return effect.compatibleProperties[0] ?? null
   }, [effect])
 
-  const showDistribution = hasGroupTarget
-
   const handleApply = () => {
-    onApply({ beatDivision, blendMode, phaseOffset, distribution, parameters })
+    onApply({
+      beatDivision,
+      blendMode,
+      phaseOffset,
+      distribution,
+      ...(showElementMode ? { elementMode } : {}),
+      parameters,
+    })
   }
 
   return (
@@ -98,6 +109,9 @@ export function ConfigureEffectSheet({
               distributionStrategy={distribution}
               onDistributionStrategyChange={setDistribution}
               showDistribution={showDistribution}
+              elementMode={elementMode}
+              onElementModeChange={setElementMode}
+              showElementMode={showElementMode}
             />
           )}
         </div>

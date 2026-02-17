@@ -6,7 +6,7 @@ import { useCurrentProjectQuery } from '@/store/projects'
 import { useTogglePresetMutation } from '@/store/fxPresets'
 import type { SettingPropertyDescriptor, SliderPropertyDescriptor } from '@/store/fixtures'
 import type { EffectLibraryEntry, FixtureDirectEffect } from '@/store/fixtureFx'
-import type { GroupActiveEffect, BlendMode, DistributionStrategy, EffectType } from '@/api/groupsApi'
+import type { GroupActiveEffect, BlendMode, DistributionStrategy, EffectType, ElementMode } from '@/api/groupsApi'
 import type { FxPreset } from '@/api/fxPresetsApi'
 import type { TogglePresetTarget } from '@/api/fxPresetsApi'
 import {
@@ -484,6 +484,7 @@ export function useBuskingState() {
         blendMode: string
         phaseOffset: number
         distribution: string
+        elementMode?: string
         parameters: Record<string, string>
       },
     ) => {
@@ -503,6 +504,7 @@ export function useBuskingState() {
               distribution: params.distribution as DistributionStrategy,
               phaseOffset: params.phaseOffset,
               parameters: { ...params.parameters },
+              ...(params.elementMode ? { elementMode: params.elementMode as ElementMode } : {}),
             }).unwrap(),
           )
         } else {
@@ -516,6 +518,7 @@ export function useBuskingState() {
               startOnBeat: true,
               phaseOffset: params.phaseOffset,
               parameters: { ...params.parameters },
+              distributionStrategy: params.distribution,
             }).unwrap(),
           )
         }

@@ -84,6 +84,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
   const [addParameters, setAddParameters] = useState<Record<string, string>>({})
   const [addSelectedSettingProp, setAddSelectedSettingProp] = useState<string | null>(null)
   const [addSelectedSliderProp, setAddSelectedSliderProp] = useState<string | null>(null)
+  const [addElementMode, setAddElementMode] = useState('PER_FIXTURE')
 
   // Edit Effect dialog state
   const [editEffectOpen, setEditEffectOpen] = useState(false)
@@ -96,6 +97,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
   const [editParameters, setEditParameters] = useState<Record<string, string>>({})
   const [editSelectedSettingProp, setEditSelectedSettingProp] = useState<string | null>(null)
   const [editSelectedSliderProp, setEditSelectedSliderProp] = useState<string | null>(null)
+  const [editElementMode, setEditElementMode] = useState('PER_FIXTURE')
 
   // Fixture Type picker dialog state
   const [fixtureTypePickerOpen, setFixtureTypePickerOpen] = useState(false)
@@ -116,6 +118,13 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
     }
     return counts
   }, [fixtureList])
+
+  // Detect whether the selected fixture type is multi-head (has element group properties)
+  const isMultiHeadType = useMemo(() => {
+    if (!fixtureType || !fixtureTypes) return false
+    const typeInfo = fixtureTypes.find((t) => t.typeKey === fixtureType)
+    return (typeInfo?.elementGroupProperties?.length ?? 0) > 0
+  }, [fixtureType, fixtureTypes])
 
   // Reset form when the sheet opens or the preset changes
   useEffect(() => {
@@ -281,7 +290,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
       blendMode: addBlendMode,
       distribution: addDistribution,
       phaseOffset: addPhaseOffset,
-      elementMode: null,
+      elementMode: isMultiHeadType ? addElementMode : null,
       parameters: { ...addParameters },
     }
     setEffects([...effects, newEffect])
@@ -316,6 +325,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
     setAddBlendMode('OVERRIDE')
     setAddPhaseOffset(0)
     setAddDistribution('LINEAR')
+    setAddElementMode('PER_FIXTURE')
     setAddParameters({})
     setAddSelectedSettingProp(null)
     setAddSelectedSliderProp(null)
@@ -353,6 +363,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
     setEditBlendMode(effect.blendMode)
     setEditPhaseOffset(effect.phaseOffset)
     setEditDistribution(effect.distribution)
+    setEditElementMode(effect.elementMode ?? 'PER_FIXTURE')
     setEditParameters({ ...effect.parameters })
     setEditSelectedSettingProp(effect.propertyName)
     setEditSelectedSliderProp(effect.propertyName)
@@ -369,7 +380,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
       blendMode: editBlendMode,
       distribution: editDistribution,
       phaseOffset: editPhaseOffset,
-      elementMode: effects[editEffectIndex]?.elementMode ?? null,
+      elementMode: isMultiHeadType ? editElementMode : null,
       parameters: { ...editParameters },
     }
     handleUpdateEffect(editEffectIndex, updated)
@@ -666,6 +677,9 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
                 onBack={() => setAddEffectStep('effect')}
                 distributionStrategy={addDistribution}
                 onDistributionStrategyChange={setAddDistribution}
+                elementMode={addElementMode}
+                onElementModeChange={setAddElementMode}
+                showElementMode={isMultiHeadType}
                 settingOptions={addSettingOptions}
                 settingProperties={addEffectEntry.compatibleProperties.includes('setting') ? settingProperties : undefined}
                 onSettingPropertyChange={setAddSelectedSettingProp}
@@ -708,6 +722,9 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
                   isEdit={true}
                   distributionStrategy={editDistribution}
                   onDistributionStrategyChange={setEditDistribution}
+                  elementMode={editElementMode}
+                  onElementModeChange={setEditElementMode}
+                  showElementMode={isMultiHeadType}
                   settingOptions={editSettingOptions}
                   settingProperties={editEffectEntry.compatibleProperties.includes('setting') ? settingProperties : undefined}
                   onSettingPropertyChange={setEditSelectedSettingProp}
