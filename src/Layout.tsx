@@ -19,6 +19,8 @@ import { EffectsOverviewPanel } from "./components/EffectsOverviewPanel"
 import { FixtureDetailModal } from "./components/groups/FixtureDetailModal"
 import { useFixtureOverview } from "./hooks/useFixtureOverview"
 import { useEffectsOverview } from "./hooks/useEffectsOverview"
+import { AiChatToggle } from "./components/ai/AiChatToggle"
+import { AiChatPanel } from "./components/ai/AiChatPanel"
 
 const DRAWER_WIDTH = 240
 const DRAWER_COLLAPSED_WIDTH = 64
@@ -27,6 +29,7 @@ export default function Layout() {
   const [open, setOpen] = React.useState(true)
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [selectedFixture, setSelectedFixture] = useState<string | null>(null)
+  const [isAiChatVisible, setIsAiChatVisible] = useState(false)
   const { isVisible: isOverviewVisible, toggle: toggleOverview } = useFixtureOverview()
   const { isVisible: isEffectsVisible, isLocked: isEffectsLocked, toggle: toggleEffects, lock: lockEffects, unlock: unlockEffects } = useEffectsOverview()
   const location = useLocation()
@@ -154,6 +157,7 @@ export default function Layout() {
                 <ConnectionStatus />
                 <FixtureOverviewToggle isVisible={isOverviewVisible} onToggle={toggleOverview} />
                 <EffectsOverviewToggle isVisible={isEffectsVisible} isLocked={isEffectsLocked} onToggle={toggleEffects} />
+                <AiChatToggle isVisible={isAiChatVisible} onToggle={() => setIsAiChatVisible(!isAiChatVisible)} />
                 <ThemeToggle />
               </div>
             </div>
@@ -180,6 +184,12 @@ export default function Layout() {
             isEditing
           />
         </div>
+
+        {/* AI Chat Panel */}
+        <AiChatPanel
+          isOpen={isAiChatVisible}
+          onClose={() => setIsAiChatVisible(false)}
+        />
       </div>
     </TooltipProvider>
   )
