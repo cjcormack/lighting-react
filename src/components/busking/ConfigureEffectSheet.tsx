@@ -9,6 +9,7 @@ import {
   SheetFooter,
 } from '@/components/ui/sheet'
 import { EffectParameterForm } from '@/components/fx/EffectParameterForm'
+import type { ExtendedChannelFlags } from '@/components/fx/colourUtils'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
 
 interface ConfigureEffectSheetProps {
@@ -27,6 +28,8 @@ interface ConfigureEffectSheetProps {
   showDistribution: boolean
   /** Whether to show the element mode selector (multi-head fixtures) */
   showElementMode: boolean
+  /** Extended colour channels available on the target */
+  extendedChannels?: ExtendedChannelFlags
 }
 
 export function ConfigureEffectSheet({
@@ -36,6 +39,7 @@ export function ConfigureEffectSheet({
   onClose,
   showDistribution,
   showElementMode,
+  extendedChannels,
 }: ConfigureEffectSheetProps) {
   const isOpen = effect !== null
 
@@ -112,6 +116,7 @@ export function ConfigureEffectSheet({
               elementMode={elementMode}
               onElementModeChange={setElementMode}
               showElementMode={showElementMode}
+              extendedChannels={effect.category === 'colour' ? extendedChannels : undefined}
             />
           )}
         </div>

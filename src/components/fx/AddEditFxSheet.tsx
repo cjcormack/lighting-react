@@ -25,6 +25,7 @@ import type { GroupSummary, GroupActiveEffect, BlendMode, DistributionStrategy, 
 import { EffectCategoryPicker } from './EffectCategoryPicker'
 import { EffectTypePicker } from './EffectTypePicker'
 import { EffectParameterForm } from './EffectParameterForm'
+import { detectExtendedChannels } from './colourUtils'
 
 // ─── Target discriminated union ────────────────────────────────────────────
 
@@ -102,6 +103,13 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
   }, [target, memberFixtures])
 
   const showStartOnBeat = target.type === 'fixture'
+
+  // Extended colour channels (W/A/UV) available on the target
+  const extendedChannels = useMemo(() => {
+    const fixtures =
+      target.type === 'fixture' ? [target.fixture] : memberFixtures
+    return detectExtendedChannels(fixtures.map((f) => f.properties ?? []))
+  }, [target, memberFixtures])
 
   // ─── Property computation ──────────────────────────────────────────────
 
@@ -387,6 +395,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
               onSettingPropertyChange={setSelectedSettingProp}
               sliderProperties={selectedEffect?.compatibleProperties.includes('slider') ? extraSliderProperties : undefined}
               onSliderPropertyChange={setSelectedSliderProp}
+              extendedChannels={selectedEffect?.category === 'colour' ? extendedChannels : undefined}
             />
           )}
         </div>

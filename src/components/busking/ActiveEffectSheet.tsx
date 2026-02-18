@@ -23,6 +23,7 @@ import {
   useResumeGroupFxMutation,
 } from '@/store/groups'
 import { useFixtureListQuery } from '@/store/fixtures'
+import { detectExtendedChannels } from '@/components/fx/colourUtils'
 import type { ActiveEffectContext } from './buskingTypes'
 import { normalizeEffectName } from './buskingTypes'
 import type { ElementMode } from '@/api/groupsApi'
@@ -80,6 +81,16 @@ export function ActiveEffectSheet({ context, onClose }: ActiveEffectSheetProps) 
     const groupName = context.groupName
     const members = fixtureList.filter((f) => f.groups.includes(groupName))
     return members.some((f) => f.elements && f.elements.length > 1)
+  }, [context, fixtureList])
+
+  // Extended colour channels (W/A/UV) available on the target
+  const extendedChannels = useMemo(() => {
+    if (!context || !fixtureList) return undefined
+    const fixtures =
+      context.type === 'fixture'
+        ? fixtureList.filter((f) => f.key === context.fixtureKey)
+        : fixtureList.filter((f) => f.groups.includes(context.groupName))
+    return detectExtendedChannels(fixtures.map((f) => f.properties ?? []))
   }, [context, fixtureList])
 
   // Load state from context when it changes
@@ -197,6 +208,7 @@ export function ActiveEffectSheet({ context, onClose }: ActiveEffectSheetProps) 
               elementMode={elementMode}
               onElementModeChange={(v) => setElementMode(v as ElementMode)}
               showElementMode={showElementMode}
+              extendedChannels={selectedEffect?.category === 'colour' ? extendedChannels : undefined}
             />
           )}
         </div>

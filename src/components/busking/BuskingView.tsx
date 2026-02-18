@@ -20,7 +20,8 @@ import {
   targetKey,
   normalizeEffectName,
 } from './buskingTypes'
-import { inferPresetCapabilities } from '@/api/fxPresetsApi'
+import { inferPresetCapabilities, inferPresetExtendedChannels } from '@/api/fxPresetsApi'
+import { detectExtendedChannels } from '@/components/fx/colourUtils'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
 import type { FxPreset, FxPresetInput } from '@/api/fxPresetsApi'
 
@@ -82,6 +83,21 @@ export function BuskingView() {
   // Fetch effects data for selected targets
   const targetEffectsData = useSelectedTargetEffects(selectedArray)
 
+  // Extended colour channels (W/A/UV) available across selected targets
+  const extendedChannels = useMemo(() => {
+    const propertySets: Array<readonly { type: string; category?: string; whiteChannel?: unknown; amberChannel?: unknown; uvChannel?: unknown }[]> = []
+    for (const target of selectedArray) {
+      if (target.type === 'fixture') {
+        if (target.fixture.properties) propertySets.push(target.fixture.properties)
+      } else if (fixtureList) {
+        for (const f of fixtureList.filter((fi) => fi.groups.includes(target.name))) {
+          if (f.properties) propertySets.push(f.properties)
+        }
+      }
+    }
+    return detectExtendedChannels(propertySets)
+  }, [selectedArray, fixtureList])
+
   // Filter presets to those compatible with selected targets
   const filteredPresets = useMemo(() => {
     if (!presets || selectedArray.length === 0) return presets ?? []
@@ -108,9 +124,19 @@ export function BuskingView() {
       if (!requiredCaps.every((cap) => targetCaps.has(cap))) return false
       // Check fixture type if set on preset
       if (preset.fixtureType && !targetTypeKeys.has(preset.fixtureType)) return false
+      // Check extended colour channel compatibility
+      const requiredExt = inferPresetExtendedChannels(preset.effects)
+      if (requiredExt && extendedChannels) {
+        if (requiredExt.white && !extendedChannels.white) return false
+        if (requiredExt.amber && !extendedChannels.amber) return false
+        if (requiredExt.uv && !extendedChannels.uv) return false
+      } else if (requiredExt && !extendedChannels) {
+        // Preset needs extended channels but target has none
+        return false
+      }
       return true
     })
-  }, [presets, selectedArray, fixtureList])
+  }, [presets, selectedArray, fixtureList, extendedChannels])
 
   const handleApplyPreset = useCallback(
     (preset: FxPreset) => {
@@ -270,6 +296,7 @@ export function BuskingView() {
         defaultBeatDivision={defaultBeatDivision}
         showDistribution={showDistribution}
         showElementMode={hasMultiElementTarget}
+        extendedChannels={extendedChannels}
         onApply={(params) => {
           if (configuringEffect) {
             applyEffectWithParams(configuringEffect, targetEffectsData, params)

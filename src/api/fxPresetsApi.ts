@@ -79,6 +79,43 @@ export function inferPresetCapabilities(effects: FxPresetEffect[]): string[] {
   return [...caps]
 }
 
+/**
+ * Detect which extended colour channels (W/A/UV) a preset's effects use.
+ *
+ * Scans parameter values in colour-category effects for the extended format
+ * (`;wNNN`, `;aNNN`, `;uvNNN`). Returns flags for which channels have non-zero
+ * values, or undefined if none are used.
+ */
+export function inferPresetExtendedChannels(effects: FxPresetEffect[]): { white: boolean; amber: boolean; uv: boolean } | undefined {
+  let white = false
+  let amber = false
+  let uv = false
+
+  for (const e of effects) {
+    if (e.category !== 'colour') continue
+    for (const val of Object.values(e.parameters)) {
+      if (!val.includes(';')) continue
+      const parts = val.split(';')
+      for (let i = 1; i < parts.length; i++) {
+        const part = parts[i].trim().toLowerCase()
+        if (part.startsWith('uv')) {
+          const n = parseInt(part.slice(2), 10)
+          if (n > 0) uv = true
+        } else if (part.startsWith('w')) {
+          const n = parseInt(part.slice(1), 10)
+          if (n > 0) white = true
+        } else if (part.startsWith('a')) {
+          const n = parseInt(part.slice(1), 10)
+          if (n > 0) amber = true
+        }
+      }
+    }
+  }
+
+  if (!white && !amber && !uv) return undefined
+  return { white, amber, uv }
+}
+
 // --- Fixture type hierarchy helpers ---
 
 export interface FixtureTypeMode {

@@ -27,6 +27,7 @@ import type { SettingPropertyDescriptor, SliderPropertyDescriptor } from '@/stor
 import { EffectCategoryPicker } from '@/components/fx/EffectCategoryPicker'
 import { EffectTypePicker } from '@/components/fx/EffectTypePicker'
 import { EffectParameterForm } from '@/components/fx/EffectParameterForm'
+import { detectExtendedChannels } from '@/components/fx/colourUtils'
 import {
   BEAT_DIVISION_OPTIONS,
   EFFECT_CATEGORY_INFO,
@@ -221,6 +222,15 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
     return selectedFixtureTypeMode.properties.filter(
       (p) => p.type === 'slider' && p.category !== 'dimmer' && p.category !== 'uv'
     ) as SliderPropertyDescriptor[]
+  }, [selectedFixtureTypeMode])
+
+  // Extended colour channels from selected fixture type (or all if no type selected)
+  const extendedChannels = useMemo(() => {
+    if (!selectedFixtureTypeMode) {
+      // No fixture type selected — show all extended channels so user can configure them
+      return { white: true, amber: true, uv: true }
+    }
+    return detectExtendedChannels([selectedFixtureTypeMode.properties])
   }, [selectedFixtureTypeMode])
 
   // Resolve the target property name for the effect being added in the dialog
@@ -690,6 +700,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
                 onSettingPropertyChange={setAddSelectedSettingProp}
                 sliderProperties={addEffectEntry.compatibleProperties.includes('slider') ? extraSliderProperties : undefined}
                 onSliderPropertyChange={setAddSelectedSliderProp}
+                extendedChannels={addEffectEntry.category === 'colour' ? extendedChannels : undefined}
               />
             )}
           </div>
@@ -736,6 +747,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
                   onSettingPropertyChange={setEditSelectedSettingProp}
                   sliderProperties={editEffectEntry.compatibleProperties.includes('slider') ? extraSliderProperties : undefined}
                   onSliderPropertyChange={setEditSelectedSliderProp}
+                  extendedChannels={editEffectEntry.category === 'colour' ? extendedChannels : undefined}
                 />
               </div>
               <div className="flex gap-2 px-6 pb-6 pt-2">

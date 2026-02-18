@@ -16,6 +16,8 @@ import { useState } from 'react'
 import { BEAT_DIVISION_OPTIONS, BLEND_MODE_OPTIONS, DISTRIBUTION_STRATEGY_OPTIONS, ELEMENT_MODE_OPTIONS, getEffectDescription } from './fxConstants'
 import type { EffectLibraryEntry, EffectParameterDef } from '@/store/fixtureFx'
 import type { SettingOption, SettingPropertyDescriptor, SliderPropertyDescriptor } from '@/store/fixtures'
+import { FxColourPicker } from './FxColourPicker'
+import { FxColourListPicker } from './FxColourListPicker'
 
 interface EffectParameterFormProps {
   effect: EffectLibraryEntry
@@ -48,6 +50,8 @@ interface EffectParameterFormProps {
   sliderProperties?: SliderPropertyDescriptor[]
   /** Called when user picks a different slider property */
   onSliderPropertyChange?: (propertyName: string) => void
+  /** Extended colour channels available on the target fixture (for colour effects) */
+  extendedChannels?: { white?: boolean; amber?: boolean; uv?: boolean }
 }
 
 export function EffectParameterForm({
@@ -77,6 +81,7 @@ export function EffectParameterForm({
   onSettingPropertyChange,
   sliderProperties,
   onSliderPropertyChange,
+  extendedChannels,
 }: EffectParameterFormProps) {
   const [showAdvanced, setShowAdvanced] = useState(false)
 
@@ -258,6 +263,7 @@ export function EffectParameterForm({
               param={param}
               value={parameters[param.name] ?? param.defaultValue}
               onChange={(v) => handleParameterChange(param.name, v)}
+              extendedChannels={extendedChannels}
             />
           ))}
         </div>
@@ -333,10 +339,12 @@ function ParameterInput({
   param,
   value,
   onChange,
+  extendedChannels,
 }: {
   param: EffectParameterDef
   value: string
   onChange: (v: string) => void
+  extendedChannels?: { white?: boolean; amber?: boolean; uv?: boolean }
 }) {
   const paramType = param.type.toLowerCase()
 
@@ -467,7 +475,33 @@ function ParameterInput({
     )
   }
 
-  // Default: text input (for colour, colourList, etc.)
+  // Colour → colour picker
+  if (paramType === 'colour') {
+    return (
+      <FxColourPicker
+        value={value}
+        onChange={onChange}
+        label={formatParamName(param.name)}
+        description={param.description}
+        extendedChannels={extendedChannels}
+      />
+    )
+  }
+
+  // ColourList → multi-colour picker with drag-to-reorder
+  if (paramType === 'colourlist') {
+    return (
+      <FxColourListPicker
+        value={value}
+        onChange={onChange}
+        label={formatParamName(param.name)}
+        description={param.description}
+        extendedChannels={extendedChannels}
+      />
+    )
+  }
+
+  // Default: text input
   return (
     <div>
       <Label className="text-xs mb-1.5 block">{formatParamName(param.name)}</Label>
