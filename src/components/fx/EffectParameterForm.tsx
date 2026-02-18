@@ -91,9 +91,6 @@ export function EffectParameterForm({
 }: EffectParameterFormProps) {
   const [showAdvanced, setShowAdvanced] = useState(false)
 
-  // Static effects don't vary over time, so speed/distribution/element-mode are irrelevant
-  const isStatic = effect.name.toLowerCase().startsWith('static')
-
   const handleParameterChange = (name: string, value: string) => {
     onParametersChange({ ...parameters, [name]: value })
   }
@@ -125,8 +122,7 @@ export function EffectParameterForm({
         )}
       </div>
 
-      {/* Speed selector (hidden for static effects) */}
-      {!isStatic && (
+      {/* Speed selector */}
       <div>
         <Label className="text-xs text-muted-foreground mb-1.5 block">Speed</Label>
         <ToggleGroup
@@ -147,10 +143,9 @@ export function EffectParameterForm({
           ))}
         </ToggleGroup>
       </div>
-      )}
 
-      {/* Distribution strategy (multi-head fixtures only, hidden for static) */}
-      {!isStatic && showDistribution && distributionStrategy && onDistributionStrategyChange && (
+      {/* Distribution strategy (multi-head fixtures only) */}
+      {showDistribution && distributionStrategy && onDistributionStrategyChange && (
         <div>
           <Label className="text-xs text-muted-foreground mb-1.5 block">Distribution</Label>
           <Select value={distributionStrategy} onValueChange={onDistributionStrategyChange}>
@@ -169,8 +164,8 @@ export function EffectParameterForm({
         </div>
       )}
 
-      {/* Element mode (groups with multi-element fixtures only, hidden for static) */}
-      {!isStatic && showElementMode && elementMode && onElementModeChange && (
+      {/* Element mode (groups with multi-element fixtures only) */}
+      {showElementMode && elementMode && onElementModeChange && (
         <div>
           <Label className="text-xs text-muted-foreground mb-1.5 block">Element Mode</Label>
           <Select value={elementMode} onValueChange={onElementModeChange}>
@@ -189,8 +184,8 @@ export function EffectParameterForm({
         </div>
       )}
 
-      {/* Element filter (multi-head fixtures, hidden for static) */}
-      {!isStatic && showElementFilter && elementFilter && onElementFilterChange && (
+      {/* Element filter (multi-head fixtures) */}
+      {showElementFilter && elementFilter && onElementFilterChange && (
         <div>
           <Label className="text-xs text-muted-foreground mb-1.5 block">Element Filter</Label>
           <Select value={elementFilter} onValueChange={onElementFilterChange}>
