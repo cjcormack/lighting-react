@@ -195,6 +195,25 @@ export function ProjectFxPresets() {
     }
   }
 
+  const handleDuplicate = async (preset: FxPreset) => {
+    // Generate a unique name by appending " (Copy)" or " (Copy N)"
+    const existingNames = new Set(presets?.map((p) => p.name) ?? [])
+    let newName = `${preset.name} (Copy)`
+    if (existingNames.has(newName)) {
+      let n = 2
+      while (existingNames.has(`${preset.name} (Copy ${n})`)) n++
+      newName = `${preset.name} (Copy ${n})`
+    }
+
+    await createPreset({
+      projectId: projectIdNum,
+      name: newName,
+      description: preset.description,
+      fixtureType: preset.fixtureType,
+      effects: preset.effects,
+    }).unwrap()
+  }
+
   const handleSave = async (input: FxPresetInput) => {
     if (editingPreset) {
       await savePreset({
@@ -295,6 +314,7 @@ export function ProjectFxPresets() {
                     onDelete={
                       isCurrentProject && preset.canDelete ? () => setDeletingPreset(preset) : undefined
                     }
+                    onDuplicate={isCurrentProject ? () => handleDuplicate(preset) : undefined}
                     onCopy={!isCurrentProject ? () => setCopyingPreset(preset) : undefined}
                     onEditEffect={
                       isCurrentProject && preset.canEdit

@@ -6,7 +6,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { MoreHorizontal, Pencil, Trash2, Copy, ChevronDown, ChevronRight } from 'lucide-react'
+import { MoreHorizontal, Pencil, Trash2, Copy, CopyPlus, ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { EFFECT_CATEGORY_INFO } from '@/components/fx/fxConstants'
 import { PresetEffectDetail } from './PresetDetailPanel'
@@ -21,6 +21,7 @@ interface PresetListRowProps {
   onEdit?: () => void
   onDelete?: () => void
   onCopy?: () => void
+  onDuplicate?: () => void
   onEditEffect?: (index: number) => void
 }
 
@@ -33,6 +34,7 @@ export function PresetListRow({
   onEdit,
   onDelete,
   onCopy,
+  onDuplicate,
   onEditEffect,
 }: PresetListRowProps) {
   const categories = [...new Set(preset.effects.map((e) => e.category))]
@@ -98,7 +100,7 @@ export function PresetListRow({
         </Badge>
 
         {/* Overflow menu */}
-        {(onEdit || onDelete || onCopy) && (
+        {(onEdit || onDelete || onCopy || onDuplicate) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -115,6 +117,12 @@ export function PresetListRow({
                 <DropdownMenuItem onClick={onEdit}>
                   <Pencil className="size-4 mr-2" />
                   Edit
+                </DropdownMenuItem>
+              )}
+              {onDuplicate && (
+                <DropdownMenuItem onClick={onDuplicate}>
+                  <CopyPlus className="size-4 mr-2" />
+                  Duplicate
                 </DropdownMenuItem>
               )}
               {onCopy && (
