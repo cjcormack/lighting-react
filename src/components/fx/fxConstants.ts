@@ -45,9 +45,22 @@ export const ELEMENT_MODE_OPTIONS = [
   { value: 'FLAT', label: 'Flat', description: 'All heads treated as one continuous strip' },
 ] as const
 
+export const ELEMENT_FILTER_OPTIONS = [
+  { value: 'ALL', label: 'All', description: 'All elements' },
+  { value: 'ODD', label: 'Odd', description: 'Elements 1, 3, 5, ...' },
+  { value: 'EVEN', label: 'Even', description: 'Elements 2, 4, 6, ...' },
+  { value: 'FIRST_HALF', label: 'First Half', description: 'First half of elements' },
+  { value: 'SECOND_HALF', label: 'Second Half', description: 'Second half of elements' },
+] as const
+
 export function getElementModeLabel(mode: string): string {
   const option = ELEMENT_MODE_OPTIONS.find((o) => o.value === mode)
   return option?.label ?? mode.toLowerCase()
+}
+
+export function getElementFilterLabel(filter: string): string {
+  const option = ELEMENT_FILTER_OPTIONS.find((o) => o.value === filter)
+  return option?.label ?? filter.toLowerCase()
 }
 
 /** Fallback descriptions if the library API doesn't provide them */

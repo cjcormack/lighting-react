@@ -10,6 +10,7 @@ export interface FxPresetEffect {
   distribution: string
   phaseOffset: number
   elementMode: string | null
+  elementFilter: string | null
   parameters: Record<string, string>
 }
 

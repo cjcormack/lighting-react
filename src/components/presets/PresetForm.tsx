@@ -83,6 +83,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
   const [addSelectedSettingProp, setAddSelectedSettingProp] = useState<string | null>(null)
   const [addSelectedSliderProp, setAddSelectedSliderProp] = useState<string | null>(null)
   const [addElementMode, setAddElementMode] = useState('PER_FIXTURE')
+  const [addElementFilter, setAddElementFilter] = useState('ALL')
 
   // Edit Effect state
   const [editEffectIndex, setEditEffectIndex] = useState<number | null>(null)
@@ -95,6 +96,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
   const [editSelectedSettingProp, setEditSelectedSettingProp] = useState<string | null>(null)
   const [editSelectedSliderProp, setEditSelectedSliderProp] = useState<string | null>(null)
   const [editElementMode, setEditElementMode] = useState('PER_FIXTURE')
+  const [editElementFilter, setEditElementFilter] = useState('ALL')
 
   // Build hierarchy from all known fixture types
   const hierarchy = useMemo<FixtureTypeHierarchy | null>(() => {
@@ -298,6 +300,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
       distribution: addDistribution,
       phaseOffset: addPhaseOffset,
       elementMode: showElementMode ? addElementMode : null,
+      elementFilter: addElementFilter !== 'ALL' ? addElementFilter : null,
       parameters: { ...addParameters },
     }
     setEffects([...effects, newEffect])
@@ -333,6 +336,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
     setAddPhaseOffset(0)
     setAddDistribution('LINEAR')
     setAddElementMode('PER_FIXTURE')
+    setAddElementFilter('ALL')
     setAddParameters({})
     setAddSelectedSettingProp(null)
     setAddSelectedSliderProp(null)
@@ -371,6 +375,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
     setEditPhaseOffset(effect.phaseOffset)
     setEditDistribution(effect.distribution)
     setEditElementMode(effect.elementMode ?? 'PER_FIXTURE')
+    setEditElementFilter(effect.elementFilter ?? 'ALL')
     setEditParameters({ ...effect.parameters })
     setEditSelectedSettingProp(effect.propertyName)
     setEditSelectedSliderProp(effect.propertyName)
@@ -388,6 +393,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
       distribution: editDistribution,
       phaseOffset: editPhaseOffset,
       elementMode: showElementMode ? editElementMode : null,
+      elementFilter: editElementFilter !== 'ALL' ? editElementFilter : null,
       parameters: { ...editParameters },
     }
     handleUpdateEffect(editEffectIndex, updated)
@@ -710,6 +716,9 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
                   elementMode={addElementMode}
                   onElementModeChange={setAddElementMode}
                   showElementMode={showElementMode}
+                  elementFilter={addElementFilter}
+                  onElementFilterChange={setAddElementFilter}
+                  showElementFilter
                   settingOptions={addSettingOptions}
                   settingProperties={addEffectEntry.compatibleProperties.includes('setting') ? settingProperties : undefined}
                   onSettingPropertyChange={setAddSelectedSettingProp}
@@ -755,6 +764,9 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
                 elementMode={editElementMode}
                 onElementModeChange={setEditElementMode}
                 showElementMode={showElementMode}
+                elementFilter={editElementFilter}
+                onElementFilterChange={setEditElementFilter}
+                showElementFilter
                 settingOptions={editSettingOptions}
                 settingProperties={editEffectEntry.compatibleProperties.includes('setting') ? settingProperties : undefined}
                 onSettingPropertyChange={setEditSelectedSettingProp}

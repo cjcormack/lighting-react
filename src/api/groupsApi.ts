@@ -80,6 +80,7 @@ export interface ApplyFxRequest {
   phaseOffset: number
   parameters: Record<string, string>
   elementMode?: ElementMode
+  elementFilter?: string
 }
 
 export interface ApplyFxResponse {
@@ -98,6 +99,7 @@ export interface GroupActiveEffect {
   currentPhase: number
   parameters: Record<string, string>
   elementMode: ElementMode | null
+  elementFilter: string | null
   presetId: number | null
 }
 

@@ -13,7 +13,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { ChevronLeft, ChevronDown, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
-import { BEAT_DIVISION_OPTIONS, BLEND_MODE_OPTIONS, DISTRIBUTION_STRATEGY_OPTIONS, ELEMENT_MODE_OPTIONS, getEffectDescription } from './fxConstants'
+import { BEAT_DIVISION_OPTIONS, BLEND_MODE_OPTIONS, DISTRIBUTION_STRATEGY_OPTIONS, ELEMENT_MODE_OPTIONS, ELEMENT_FILTER_OPTIONS, getEffectDescription } from './fxConstants'
 import type { EffectLibraryEntry, EffectParameterDef } from '@/store/fixtureFx'
 import type { SettingOption, SettingPropertyDescriptor, SliderPropertyDescriptor } from '@/store/fixtures'
 import { FxColourPicker } from './FxColourPicker'
@@ -41,6 +41,9 @@ interface EffectParameterFormProps {
   elementMode?: string
   onElementModeChange?: (v: string) => void
   showElementMode?: boolean
+  elementFilter?: string
+  onElementFilterChange?: (v: string) => void
+  showElementFilter?: boolean
   settingOptions?: SettingOption[]
   /** All setting properties available on the fixture (for choosing which setting to target) */
   settingProperties?: SettingPropertyDescriptor[]
@@ -76,6 +79,9 @@ export function EffectParameterForm({
   elementMode,
   onElementModeChange,
   showElementMode,
+  elementFilter,
+  onElementFilterChange,
+  showElementFilter,
   settingOptions,
   settingProperties,
   onSettingPropertyChange,
@@ -173,6 +179,26 @@ export function EffectParameterForm({
             </SelectTrigger>
             <SelectContent>
               {ELEMENT_MODE_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value} className="text-xs">
+                  <span>{option.label}</span>
+                  <span className="text-muted-foreground ml-2">{option.description}</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Element filter (multi-head fixtures, hidden for static) */}
+      {!isStatic && showElementFilter && elementFilter && onElementFilterChange && (
+        <div>
+          <Label className="text-xs text-muted-foreground mb-1.5 block">Element Filter</Label>
+          <Select value={elementFilter} onValueChange={onElementFilterChange}>
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ELEMENT_FILTER_OPTIONS.map((option) => (
                 <SelectItem key={option.value} value={option.value} className="text-xs">
                   <span>{option.label}</span>
                   <span className="text-muted-foreground ml-2">{option.description}</span>

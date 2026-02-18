@@ -33,6 +33,7 @@ export interface UpdateGroupFxRequest {
   phaseOffset?: number
   distributionStrategy?: string
   elementMode?: ElementMode
+  elementFilter?: string
 }
 
 export const groupsApi = restApi.injectEndpoints({

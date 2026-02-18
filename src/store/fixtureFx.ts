@@ -23,6 +23,7 @@ export interface FixtureDirectEffect {
   parameters: Record<string, string>
   isGroupTarget: false
   distributionStrategy: string | null
+  elementFilter: string | null
   presetId: number | null
 }
 
@@ -71,6 +72,7 @@ export interface AddFixtureFxRequest {
   phaseOffset: number
   parameters: Record<string, string>
   distributionStrategy?: string
+  elementFilter?: string
 }
 
 export interface UpdateFxRequest {
@@ -80,6 +82,7 @@ export interface UpdateFxRequest {
   blendMode?: string
   phaseOffset?: number
   distributionStrategy?: string
+  elementFilter?: string
 }
 
 // === RTK Query Endpoints ===

@@ -75,6 +75,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
   const [parameters, setParameters] = useState<Record<string, string>>({})
   const [distributionStrategy, setDistributionStrategy] = useState('LINEAR')
   const [elementMode, setElementMode] = useState<ElementMode>('PER_FIXTURE')
+  const [elementFilter, setElementFilter] = useState('ALL')
   const [selectedSettingProp, setSelectedSettingProp] = useState<string | null>(null)
   const [selectedSliderProp, setSelectedSliderProp] = useState<string | null>(null)
 
@@ -243,8 +244,10 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
       if (target.type === 'group' && 'distribution' in mode.effect) {
         setDistributionStrategy(mode.effect.distribution)
         setElementMode((mode.effect as GroupActiveEffect).elementMode ?? 'PER_FIXTURE')
+        setElementFilter((mode.effect as GroupActiveEffect).elementFilter ?? 'ALL')
       } else {
         setDistributionStrategy((mode.effect as FixtureDirectEffect).distributionStrategy ?? 'LINEAR')
+        setElementFilter((mode.effect as FixtureDirectEffect).elementFilter ?? 'ALL')
       }
     } else {
       setStep('category')
@@ -257,6 +260,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
       setParameters({})
       setDistributionStrategy('LINEAR')
       setElementMode('PER_FIXTURE')
+      setElementFilter('ALL')
       setSelectedSettingProp(null)
       setSelectedSliderProp(null)
     }
@@ -282,6 +286,8 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
       const fixture = target.fixture
       const fixtureIsMultiHead = (fixture.elementGroupProperties?.length ?? 0) > 0
 
+      const filterPayload = fixtureIsMultiHead && elementFilter !== 'ALL' ? { elementFilter } : {}
+
       if (isEdit && mode?.mode === 'edit') {
         await updateFixtureFx({
           id: mode.effectId,
@@ -293,6 +299,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
             phaseOffset,
             parameters,
             ...(fixtureIsMultiHead ? { distributionStrategy } : {}),
+            ...filterPayload,
           },
         })
       } else if (selectedEffect && targetPropertyName) {
@@ -306,10 +313,13 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
           phaseOffset,
           parameters,
           ...(fixtureIsMultiHead ? { distributionStrategy } : {}),
+          ...filterPayload,
         })
       }
     } else {
       const group = target.group
+      const showFilter = isMultiHead || hasMultiElementMembers
+      const filterPayload = showFilter && elementFilter !== 'ALL' ? { elementFilter } : {}
 
       if (isEdit && mode?.mode === 'edit') {
         await updateGroupFx({
@@ -323,6 +333,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
             parameters,
             distributionStrategy,
             ...(hasMultiElementMembers ? { elementMode } : {}),
+            ...filterPayload,
           },
         })
       } else if (selectedEffect && targetPropertyName) {
@@ -336,6 +347,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
           phaseOffset,
           parameters,
           ...(hasMultiElementMembers ? { elementMode } : {}),
+          ...filterPayload,
         })
       }
     }
@@ -390,6 +402,9 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
               elementMode={elementMode}
               onElementModeChange={(v) => setElementMode(v as ElementMode)}
               showElementMode={hasMultiElementMembers}
+              elementFilter={elementFilter}
+              onElementFilterChange={setElementFilter}
+              showElementFilter={isMultiHead}
               settingOptions={settingOptions}
               settingProperties={selectedEffect?.compatibleProperties.includes('setting') ? settingProperties : undefined}
               onSettingPropertyChange={setSelectedSettingProp}
