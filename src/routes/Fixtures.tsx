@@ -5,10 +5,11 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { Search, ChevronRight, Loader2, Settings2, SlidersHorizontal } from "lucide-react"
+import { Search, Loader2, Settings2, SlidersHorizontal } from "lucide-react"
 import { Fixture, useFixtureListQuery } from "../store/fixtures"
 import { EditModeProvider, useEditMode } from "../components/fixtures/EditModeContext"
 import { FxBadge } from "../components/fx/FxBadge"
+import { Breadcrumbs } from "../components/Breadcrumbs"
 import { FixtureContent, FixtureViewMode } from "../components/fixtures/FixtureContent"
 import { GroupDetailModal } from "../components/fixtures/GroupDetailModal"
 import { useCurrentProjectQuery, useProjectQuery } from "../store/projects"
@@ -70,40 +71,12 @@ export function ProjectFixtures() {
   return (
     <Card className="m-4 p-4">
       <div className="mb-4">
-        <Breadcrumbs projectName={project.name} />
+        <Breadcrumbs projectName={project.name} currentPage="Fixtures" />
       </div>
       <Suspense fallback={<div>Loading...</div>}>
         <FixturesContainer />
       </Suspense>
     </Card>
-  )
-}
-
-// Breadcrumbs component
-function Breadcrumbs({ projectName }: { projectName: string }) {
-  const navigate = useNavigate()
-
-  return (
-    <nav className="flex items-center gap-1 text-sm flex-wrap">
-      <button
-        onClick={() => navigate("/projects")}
-        className="text-muted-foreground hover:text-foreground transition-colors"
-      >
-        Projects
-      </button>
-      <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" />
-      <button
-        onClick={() => navigate("/projects")}
-        className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
-      >
-        {projectName}
-        <Badge variant="default" className="text-xs">
-          active
-        </Badge>
-      </button>
-      <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" />
-      <span className="font-medium">Fixtures</span>
-    </nav>
   )
 }
 

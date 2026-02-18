@@ -1,12 +1,12 @@
 import { Suspense, useState, useEffect } from 'react'
 import { useParams, useNavigate, Navigate } from 'react-router-dom'
 import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { ChevronRight, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import { useGroupListQuery } from '../store/groups'
 import { GroupCard } from '../components/groups/GroupCard'
 import { FixtureDetailModal } from '../components/groups/FixtureDetailModal'
+import { Breadcrumbs } from '../components/Breadcrumbs'
 
 // Redirect component for /groups route
 export function GroupsRedirect() {
@@ -61,40 +61,12 @@ export function ProjectGroups() {
   return (
     <Card className="m-4 p-4">
       <div className="mb-4">
-        <Breadcrumbs projectName={project.name} />
+        <Breadcrumbs projectName={project.name} currentPage="Groups" />
       </div>
       <Suspense fallback={<GroupsLoading />}>
         <GroupsContainer />
       </Suspense>
     </Card>
-  )
-}
-
-// Breadcrumbs component
-function Breadcrumbs({ projectName }: { projectName: string }) {
-  const navigate = useNavigate()
-
-  return (
-    <nav className="flex items-center gap-1 text-sm flex-wrap">
-      <button
-        onClick={() => navigate('/projects')}
-        className="text-muted-foreground hover:text-foreground transition-colors"
-      >
-        Projects
-      </button>
-      <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" />
-      <button
-        onClick={() => navigate('/projects')}
-        className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
-      >
-        {projectName}
-        <Badge variant="default" className="text-xs">
-          active
-        </Badge>
-      </button>
-      <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" />
-      <span className="font-medium">Groups</span>
-    </nav>
   )
 }
 

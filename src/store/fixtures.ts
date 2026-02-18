@@ -163,6 +163,7 @@ export type Fixture = {
   mode?: ModeInfo
   capabilities: string[]
   groups: string[]
+  compatiblePresetIds: number[]
 }
 
 /**

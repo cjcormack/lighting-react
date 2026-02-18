@@ -16,9 +16,12 @@ import {
   Layers,
   LayoutGrid,
   SlidersHorizontal,
+  AudioWaveform,
+  Bookmark,
 } from "lucide-react"
 import { useProjectQuery, useCurrentProjectQuery } from "../store/projects"
 import { useFixtureListQuery } from "../store/fixtures"
+import { useProjectPresetListQuery } from "../store/fxPresets"
 import { useGroupListQuery } from "../store/groups"
 import { useGetUniverseQuery } from "../store/universes"
 import { useState } from "react"
@@ -42,6 +45,9 @@ export default function ProjectOverview() {
     skip: !project?.isCurrent,
   })
   const { data: universes } = useGetUniverseQuery(undefined, {
+    skip: !project?.isCurrent,
+  })
+  const { data: presets } = useProjectPresetListQuery(Number(projectId), {
     skip: !project?.isCurrent,
   })
 
@@ -133,6 +139,19 @@ export default function ProjectOverview() {
                 icon={<Layers className="size-5" />}
                 description="Fixture groups for control"
                 onClick={() => navigate(`/projects/${project.id}/groups`)}
+              />
+              <QuickNavCard
+                title="FX"
+                icon={<AudioWaveform className="size-5" />}
+                description="Live effects busking controls"
+                onClick={() => navigate(`/projects/${project.id}/fx`)}
+              />
+              <QuickNavCard
+                title="FX Presets"
+                count={presets?.length}
+                icon={<Bookmark className="size-5" />}
+                description="Saved effect preset bundles"
+                onClick={() => navigate(`/projects/${project.id}/presets`)}
               />
               {universes && universes.length >= 1 && (
                 <QuickNavCard

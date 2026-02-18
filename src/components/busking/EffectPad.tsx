@@ -19,6 +19,8 @@ interface EffectPadProps {
   onToggle: (effect: EffectLibraryEntry) => void
   onLongPress: (effect: EffectLibraryEntry) => void
   hasSelection: boolean
+  /** Content rendered at the top of the scrollable area (e.g. selected target summary) */
+  headerContent?: React.ReactNode
   presets: FxPreset[]
   onApplyPreset: (preset: FxPreset) => Promise<void>
   getPresetPresence: (preset: FxPreset) => EffectPresence
@@ -42,6 +44,7 @@ export function EffectPad({
   onToggle,
   onLongPress,
   hasSelection,
+  headerContent,
   presets,
   onApplyPreset,
   getPresetPresence,
@@ -67,6 +70,7 @@ export function EffectPad({
 
   return (
     <div className="@container flex flex-col h-full overflow-y-auto px-2 pb-2">
+      {headerContent}
       {CATEGORY_ORDER.map((cat) => {
         if (cat === 'presets') {
           return (
@@ -97,7 +101,7 @@ export function EffectPad({
                   onValueChange={(v) => {
                     if (v) onBeatDivisionChange(parseFloat(v))
                   }}
-                  className="gap-0.5 flex-wrap justify-start"
+                  className="h-auto gap-0.5 flex-wrap justify-start"
                 >
                   {BEAT_DIVISION_OPTIONS.map((opt) => (
                     <ToggleGroupItem

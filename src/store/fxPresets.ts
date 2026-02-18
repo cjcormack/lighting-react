@@ -54,6 +54,8 @@ export const fxPresetsApi = restApi.injectEndpoints({
       invalidatesTags: (_result, _error, { projectId }) => [
         { type: 'FxPreset', id: projectId },
         'FxPreset',
+        'Fixture',
+        'GroupList',
       ],
     }),
 
@@ -69,6 +71,8 @@ export const fxPresetsApi = restApi.injectEndpoints({
       invalidatesTags: (_result, _error, { projectId }) => [
         { type: 'FxPreset', id: projectId },
         'FxPreset',
+        'Fixture',
+        'GroupList',
       ],
     }),
 
@@ -80,6 +84,8 @@ export const fxPresetsApi = restApi.injectEndpoints({
       invalidatesTags: (_result, _error, { projectId }) => [
         { type: 'FxPreset', id: projectId },
         'FxPreset',
+        'Fixture',
+        'GroupList',
       ],
     }),
 
@@ -106,6 +112,20 @@ export const fxPresetsApi = restApi.injectEndpoints({
         method: 'POST',
         body,
       }),
+      invalidatesTags: (_result, _error, { targets }) => {
+        const tags: Array<
+          | { type: 'FixtureEffects'; id: string }
+          | { type: 'GroupActiveEffects'; id: string }
+        > = []
+        for (const t of targets) {
+          if (t.type === 'fixture') {
+            tags.push({ type: 'FixtureEffects', id: t.key })
+          } else {
+            tags.push({ type: 'GroupActiveEffects', id: t.key })
+          }
+        }
+        return tags
+      },
     }),
   }),
   overrideExisting: false,

@@ -20,6 +20,7 @@ import type { Fixture } from '@/store/fixtures'
 import type { GroupSummary, GroupActiveEffect } from '@/api/groupsApi'
 import { ActiveEffectItem } from './ActiveEffectItem'
 import { AddEditFxSheet, type FxTarget, type SheetMode } from './AddEditFxSheet'
+import { PresetPicker } from './PresetPicker'
 
 // ─── Public API ────────────────────────────────────────────────────────────
 
@@ -59,7 +60,17 @@ function FixtureFxSection({ fixture }: { fixture: Fixture }) {
       totalCount={totalCount}
       isExpanded={isExpanded}
       onToggle={() => setIsExpanded(!isExpanded)}
-      onAdd={() => setSheetState({ mode: 'add' })}
+      onAdd={() => {
+        if (!isExpanded) setIsExpanded(true)
+        setSheetState({ mode: 'add' })
+      }}
+      presetPicker={
+        <PresetPicker
+          targetType="fixture"
+          targetKey={fixture.key}
+          compatiblePresetIds={fixture.compatiblePresetIds}
+        />
+      }
     >
       {directEffects.map((effect) => (
         <ActiveEffectItem
@@ -124,7 +135,17 @@ function GroupFxSection({ group }: { group: GroupSummary }) {
       totalCount={totalCount}
       isExpanded={isExpanded}
       onToggle={() => setIsExpanded(!isExpanded)}
-      onAdd={() => setSheetState({ mode: 'add' })}
+      onAdd={() => {
+        if (!isExpanded) setIsExpanded(true)
+        setSheetState({ mode: 'add' })
+      }}
+      presetPicker={
+        <PresetPicker
+          targetType="group"
+          targetKey={group.name}
+          compatiblePresetIds={group.compatiblePresetIds}
+        />
+      }
     >
       {effects?.map((effect) => (
         <ActiveEffectItem
@@ -164,31 +185,46 @@ interface FxSectionShellProps {
   isExpanded: boolean
   onToggle: () => void
   onAdd: () => void
+  presetPicker?: React.ReactNode
   children: React.ReactNode
 }
 
-function FxSectionShell({ totalCount, isExpanded, onToggle, onAdd, children }: FxSectionShellProps) {
+function FxSectionShell({ totalCount, isExpanded, onToggle, onAdd, presetPicker, children }: FxSectionShellProps) {
   return (
     <div className="pt-3 border-t">
-      <button
-        className="w-full flex items-center justify-between text-sm"
-        onClick={onToggle}
-      >
-        <div className="flex items-center gap-2">
-          <AudioWaveform className="size-4 text-muted-foreground" />
+      <div className="flex items-center justify-between">
+        <button
+          className="flex items-center gap-2 text-sm flex-1 min-w-0"
+          onClick={onToggle}
+        >
+          <AudioWaveform className="size-4 text-muted-foreground shrink-0" />
           <h4 className="font-medium text-muted-foreground">Effects</h4>
           {totalCount > 0 && (
             <Badge variant="secondary" className="text-xs">
               {totalCount}
             </Badge>
           )}
+          {isExpanded ? (
+            <ChevronDown className="size-4 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="size-4 text-muted-foreground" />
+          )}
+        </button>
+        <div className="flex items-center gap-0.5 shrink-0">
+          {presetPicker}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7"
+            onClick={(e) => {
+              e.stopPropagation()
+              onAdd()
+            }}
+          >
+            <Plus className="size-4" />
+          </Button>
         </div>
-        {isExpanded ? (
-          <ChevronDown className="size-4 text-muted-foreground" />
-        ) : (
-          <ChevronRight className="size-4 text-muted-foreground" />
-        )}
-      </button>
+      </div>
 
       {isExpanded && (
         <div className="mt-2 space-y-2">
@@ -197,15 +233,6 @@ function FxSectionShell({ totalCount, isExpanded, onToggle, onAdd, children }: F
           {totalCount === 0 && (
             <p className="text-xs text-muted-foreground">No effects active</p>
           )}
-
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            onClick={onAdd}
-          >
-            <Plus className="size-4 mr-1" /> Add Effect
-          </Button>
         </div>
       )}
     </div>

@@ -122,13 +122,6 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
               collapsed
               onClick={() => navigate(`/projects/${viewedProject.id}/chases`)}
             />
-            <NavItem
-              icon={<Bookmark className="size-5" />}
-              label="Presets"
-              isActive={location.pathname.includes("/presets")}
-              collapsed
-              onClick={() => navigate(`/projects/${viewedProject.id}/presets`)}
-            />
 
             {/* Hardware items - only for active project */}
             {isViewingActiveProject && (
@@ -153,6 +146,13 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
                   isActive={location.pathname.includes("/fx")}
                   collapsed
                   onClick={() => navigate(`/projects/${viewedProject.id}/fx`)}
+                />
+                <NavItem
+                  icon={<Bookmark className="size-5" />}
+                  label="FX Presets"
+                  isActive={location.pathname.includes("/presets")}
+                  collapsed
+                  onClick={() => navigate(`/projects/${viewedProject.id}/presets`)}
                 />
                 {(universes ?? []).map((universe) => (
                   <NavItem
@@ -238,13 +238,6 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
               collapsed={false}
               onClick={() => navigate(`/projects/${viewedProject.id}/chases`)}
             />
-            <NavItem
-              icon={<Bookmark className="size-4" />}
-              label="Presets"
-              isActive={location.pathname.includes("/presets")}
-              collapsed={false}
-              onClick={() => navigate(`/projects/${viewedProject.id}/presets`)}
-            />
 
             {/* Hardware items - only for active project */}
             {isViewingActiveProject && (
@@ -269,6 +262,13 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
                   isActive={location.pathname.includes("/fx")}
                   collapsed={false}
                   onClick={() => navigate(`/projects/${viewedProject.id}/fx`)}
+                />
+                <NavItem
+                  icon={<Bookmark className="size-4" />}
+                  label="FX Presets"
+                  isActive={location.pathname.includes("/presets")}
+                  collapsed={false}
+                  onClick={() => navigate(`/projects/${viewedProject.id}/presets`)}
                 />
                 {(universes ?? []).map((universe) => (
                   <NavItem

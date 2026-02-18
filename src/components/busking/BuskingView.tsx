@@ -1,6 +1,6 @@
-import { useState, useCallback, useMemo } from 'react'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useGroupActiveEffectsQuery } from '@/store/groups'
 import { useFixtureEffectsQuery } from '@/store/fixtureFx'
 import { useFixtureListQuery } from '@/store/fixtures'
@@ -8,9 +8,11 @@ import { useCurrentProjectQuery } from '@/store/projects'
 import { useProjectPresetListQuery, useCreateProjectPresetMutation, useSaveProjectPresetMutation, useDeleteProjectPresetMutation } from '@/store/fxPresets'
 import { TargetList } from './TargetList'
 import { EffectPad } from './EffectPad'
+import { SelectedTargetSummary } from './SelectedTargetSummary'
 import { ActiveEffectSheet } from './ActiveEffectSheet'
 import { ConfigureEffectSheet } from './ConfigureEffectSheet'
 import { PresetForm } from '@/components/presets/PresetForm'
+import { FixtureDetailModal } from '@/components/groups/FixtureDetailModal'
 import { useBuskingState, type TargetEffectsData } from './useBuskingState'
 import {
   type BuskingTarget,
@@ -25,14 +27,20 @@ import { detectExtendedChannels } from '@/components/fx/colourUtils'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
 import type { FxPreset, FxPresetInput } from '@/api/fxPresetsApi'
 
-export function BuskingView() {
-  const isDesktop = useMediaQuery('(min-width: 768px)')
-  const [mobileTab, setMobileTab] = useState('targets')
+interface BuskingViewProps {
+  /** Called whenever the set of selected targets changes, with control functions */
+  onSelectionChange?: (targetNames: string[], controls: { clearSelection: () => void; openTargetPicker: () => void }) => void
+}
+
+export function BuskingView({ onSelectionChange }: BuskingViewProps) {
+  const isDesktop = useMediaQuery('(min-width: 900px)')
+  const [targetSheetOpen, setTargetSheetOpen] = useState(false)
 
   const {
     selectedTargets,
     selectTarget,
     toggleTarget,
+    clearSelection,
     defaultBeatDivision,
     setDefaultBeatDivision,
     effectsByCategory,
@@ -52,6 +60,7 @@ export function BuskingView() {
   const [configuringEffect, setConfiguringEffect] = useState<EffectLibraryEntry | null>(null)
   const [presetFormOpen, setPresetFormOpen] = useState(false)
   const [editingPreset, setEditingPreset] = useState<FxPreset | null>(null)
+  const [detailFixtureKey, setDetailFixtureKey] = useState<string | null>(null)
 
   // Fetch presets for the current project
   const { data: currentProject } = useCurrentProjectQuery()
@@ -63,12 +72,12 @@ export function BuskingView() {
   const [savePreset, { isLoading: isSavingPreset }] = useSaveProjectPresetMutation()
   const [deletePreset, { isLoading: isDeletingPreset }] = useDeleteProjectPresetMutation()
 
-  // On mobile, switch to effects tab when a target is selected
+  // On mobile, close the target sheet when a target is selected
   const handleSelectTarget = useCallback(
     (target: BuskingTarget) => {
       selectTarget(target)
       if (!isDesktop) {
-        setMobileTab('effects')
+        setTargetSheetOpen(false)
       }
     },
     [selectTarget, isDesktop],
@@ -79,6 +88,67 @@ export function BuskingView() {
     () => Array.from(selectedTargets.values()),
     [selectedTargets],
   )
+
+  // Track which group cards are expanded (default: all expanded)
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
+    const groups = new Set<string>()
+    for (const t of selectedTargets.values()) {
+      if (t.type === 'group') groups.add(t.name)
+    }
+    return groups
+  })
+
+  // Auto-expand newly added groups
+  useEffect(() => {
+    setExpandedGroups((prev) => {
+      const currentGroupNames = new Set<string>()
+      for (const t of selectedTargets.values()) {
+        if (t.type === 'group') currentGroupNames.add(t.name)
+      }
+      // Add any new groups that aren't already tracked
+      let changed = false
+      const next = new Set(prev)
+      for (const name of currentGroupNames) {
+        if (!next.has(name)) {
+          next.add(name)
+          changed = true
+        }
+      }
+      // Remove groups that are no longer selected
+      for (const name of next) {
+        if (!currentGroupNames.has(name)) {
+          next.delete(name)
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [selectedTargets])
+
+  const toggleGroupExpanded = useCallback((groupName: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(groupName)) {
+        next.delete(groupName)
+      } else {
+        next.add(groupName)
+      }
+      return next
+    })
+  }, [])
+
+  // Stable ref for openTargetPicker to avoid effect re-fires
+  const openTargetPicker = useCallback(() => setTargetSheetOpen(true), [])
+
+  // Notify parent of selection changes for breadcrumb display
+  useEffect(() => {
+    onSelectionChange?.(
+      selectedArray.map((t) =>
+        t.type === 'group' ? t.name : t.fixture.name,
+      ),
+      { clearSelection, openTargetPicker },
+    )
+  }, [selectedArray, onSelectionChange, clearSelection, openTargetPicker])
 
   // Fetch effects data for selected targets
   const targetEffectsData = useSelectedTargetEffects(selectedArray)
@@ -216,7 +286,7 @@ export function BuskingView() {
               onToggle={toggleTarget}
             />
           </div>
-          <div className="flex-1 min-w-0 overflow-hidden">
+          <div className="flex-1 min-w-0 min-h-0">
             <EffectPadWrapper
               selectedTargets={selectedArray}
               targetEffectsData={targetEffectsData}
@@ -237,57 +307,75 @@ export function BuskingView() {
               currentProjectId={currentProject?.id}
               onCreatePreset={() => { setEditingPreset(null); setPresetFormOpen(true) }}
               onEditPreset={handleEditPreset}
+              headerContent={
+                <SelectedTargetSummary
+                  targets={selectedArray}
+                  onDeselect={toggleTarget}
+                  expandedGroups={expandedGroups}
+                  onToggleGroupExpanded={toggleGroupExpanded}
+                  onFixtureClick={setDetailFixtureKey}
+                />
+              }
             />
           </div>
         </div>
+      ) : selectedTargets.size === 0 ? (
+        /* Mobile: nothing selected — show target list inline for discoverability */
+        <div className="flex-1 overflow-y-auto">
+          <TargetList
+            selectedTargets={selectedTargets}
+            onSelect={handleSelectTarget}
+            onToggle={toggleTarget}
+          />
+        </div>
       ) : (
-        <Tabs
-          value={mobileTab}
-          onValueChange={setMobileTab}
-          className="flex-1 flex flex-col min-h-0"
-        >
-          <TabsList className="mx-2 mt-2 w-auto self-start">
-            <TabsTrigger value="targets">Targets</TabsTrigger>
-            <TabsTrigger value="effects">
-              Effects
-              {selectedTargets.size > 0 && (
-                <span className="ml-1 text-[10px] text-muted-foreground">
-                  ({selectedTargets.size})
-                </span>
-              )}
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="targets" className="flex-1 overflow-y-auto mt-0">
-            <TargetList
-              selectedTargets={selectedTargets}
-              onSelect={handleSelectTarget}
-              onToggle={toggleTarget}
-            />
-          </TabsContent>
-          <TabsContent value="effects" className="flex-1 overflow-hidden mt-0">
-            <EffectPadWrapper
-              selectedTargets={selectedArray}
-              targetEffectsData={targetEffectsData}
-              effectsByCategory={effectsByCategory}
-              computePresence={computePresence}
-              toggleEffect={toggleEffect}
-              defaultBeatDivision={defaultBeatDivision}
-              onBeatDivisionChange={setDefaultBeatDivision}
-              propertyButtons={propertyButtons}
-              computePropertyPresence={computePropertyPresence}
-              togglePropertyEffect={togglePropertyEffect}
-              getActivePropertyValue={getActivePropertyValue}
-              setEditingEffect={setEditingEffect}
-              setConfiguringEffect={setConfiguringEffect}
-              presets={filteredPresets}
-              onApplyPreset={handleApplyPreset}
-              computePresetPresence={computePresetPresence}
-              currentProjectId={currentProject?.id}
-              onCreatePreset={() => { setEditingPreset(null); setPresetFormOpen(true) }}
-              onEditPreset={handleEditPreset}
-            />
-          </TabsContent>
-        </Tabs>
+        /* Mobile: targets selected — show effects with sheet for quick target switching */
+        <div className="flex-1 min-h-0">
+          <EffectPadWrapper
+            selectedTargets={selectedArray}
+            targetEffectsData={targetEffectsData}
+            effectsByCategory={effectsByCategory}
+            computePresence={computePresence}
+            toggleEffect={toggleEffect}
+            defaultBeatDivision={defaultBeatDivision}
+            onBeatDivisionChange={setDefaultBeatDivision}
+            propertyButtons={propertyButtons}
+            computePropertyPresence={computePropertyPresence}
+            togglePropertyEffect={togglePropertyEffect}
+            getActivePropertyValue={getActivePropertyValue}
+            setEditingEffect={setEditingEffect}
+            setConfiguringEffect={setConfiguringEffect}
+            presets={filteredPresets}
+            onApplyPreset={handleApplyPreset}
+            computePresetPresence={computePresetPresence}
+            currentProjectId={currentProject?.id}
+            onCreatePreset={() => { setEditingPreset(null); setPresetFormOpen(true) }}
+            onEditPreset={handleEditPreset}
+            headerContent={
+              <SelectedTargetSummary
+                targets={selectedArray}
+                onDeselect={toggleTarget}
+                expandedGroups={expandedGroups}
+                onToggleGroupExpanded={toggleGroupExpanded}
+                onFixtureClick={setDetailFixtureKey}
+              />
+            }
+          />
+          <Sheet open={targetSheetOpen} onOpenChange={setTargetSheetOpen}>
+            <SheetContent side="bottom" className="h-[70vh]">
+              <SheetHeader>
+                <SheetTitle>Select Targets</SheetTitle>
+              </SheetHeader>
+              <div className="overflow-y-auto flex-1 -mx-6">
+                <TargetList
+                  selectedTargets={selectedTargets}
+                  onSelect={handleSelectTarget}
+                  onToggle={toggleTarget}
+                />
+              </div>
+            </SheetContent>
+          </Sheet>
+        </div>
       )}
 
       <ActiveEffectSheet context={editingEffect} onClose={() => setEditingEffect(null)} />
@@ -314,6 +402,10 @@ export function BuskingView() {
         defaultFixtureType={editingPreset ? undefined : commonFixtureType}
         onDelete={editingPreset ? handleDeletePreset : undefined}
         isDeleting={isDeletingPreset}
+      />
+      <FixtureDetailModal
+        fixtureKey={detailFixtureKey}
+        onClose={() => setDetailFixtureKey(null)}
       />
     </div>
   )
@@ -342,6 +434,7 @@ function EffectPadWrapper({
   currentProjectId,
   onCreatePreset,
   onEditPreset,
+  headerContent,
 }: {
   selectedTargets: BuskingTarget[]
   targetEffectsData: TargetEffectsData[]
@@ -362,6 +455,7 @@ function EffectPadWrapper({
   currentProjectId: number | undefined
   onCreatePreset: () => void
   onEditPreset: (preset: FxPreset) => void
+  headerContent?: React.ReactNode
 }) {
   const getPresence = useCallback(
     (effectName: string): EffectPresence => {
@@ -470,6 +564,7 @@ function EffectPadWrapper({
       onToggle={handleToggle}
       onLongPress={handleLongPress}
       hasSelection={selectedTargets.length > 0}
+      headerContent={headerContent}
       presets={presets}
       onApplyPreset={onApplyPreset}
       getPresetPresence={getPresetPresence}

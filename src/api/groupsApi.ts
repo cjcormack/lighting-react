@@ -10,6 +10,7 @@ export interface GroupSummary {
   capabilities: string[]
   symmetricMode: string
   defaultDistribution: string
+  compatiblePresetIds: number[]
 }
 
 export interface GroupMember {

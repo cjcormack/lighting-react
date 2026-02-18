@@ -44,6 +44,10 @@ export function useBuskingState() {
     setSelectedTargets(new Map([[targetKey(target), target]]))
   }, [])
 
+  const clearSelection = useCallback(() => {
+    setSelectedTargets(new Map())
+  }, [])
+
   const toggleTarget = useCallback((target: BuskingTarget) => {
     setSelectedTargets((prev) => {
       const next = new Map(prev)
@@ -578,6 +582,7 @@ export function useBuskingState() {
     selectedTargets,
     selectTarget,
     toggleTarget,
+    clearSelection,
 
     // Beat division
     defaultBeatDivision,

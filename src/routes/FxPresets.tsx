@@ -10,11 +10,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Loader2, Plus, Bookmark, Sun, Palette, Move, ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import {
   useProjectPresetListQuery,
@@ -24,7 +22,6 @@ import {
 } from '../store/fxPresets'
 import { useFixtureListQuery } from '../store/fixtures'
 import { PresetListRow } from '../components/presets/PresetListRow'
-import { PresetDetailPanel } from '../components/presets/PresetDetailPanel'
 import { PresetForm } from '../components/presets/PresetForm'
 import { CopyPresetDialog } from '../components/presets/CopyPresetDialog'
 import {
@@ -33,6 +30,7 @@ import {
   resolveFixtureTypeLabel,
 } from '../api/fxPresetsApi'
 import type { FxPreset, FxPresetInput, FixtureTypeHierarchy } from '../api/fxPresetsApi'
+import { Breadcrumbs } from '../components/Breadcrumbs'
 
 const CAPABILITY_CHIPS = [
   { value: 'dimmer', label: 'Dimmer', icon: Sun },
@@ -86,14 +84,13 @@ export function ProjectFxPresets() {
   const [initialEditEffectIndex, setInitialEditEffectIndex] = useState<number | null>(null)
   const [deletingPreset, setDeletingPreset] = useState<FxPreset | null>(null)
   const [copyingPreset, setCopyingPreset] = useState<FxPreset | null>(null)
-  const [selectedPresetId, setSelectedPresetId] = useState<number | null>(null)
 
   // Filter state
   const [capabilityFilter, setCapabilityFilter] = useState<string[]>([])
   // Track collapsed groups (by group key)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
-
-  const isDesktop = useMediaQuery('(min-width: 768px)')
+  // Track expanded presets (showing effects inline)
+  const [expandedPresetIds, setExpandedPresetIds] = useState<Set<number>>(new Set())
 
   const isCurrentProject = currentProject?.id === projectIdNum
 
@@ -147,23 +144,6 @@ export function ProjectFxPresets() {
     return result
   }, [filteredPresets, hierarchy])
 
-  // Resolve selected preset from the current list
-  const selectedPreset = useMemo(
-    () => filteredPresets.find((p) => p.id === selectedPresetId) ?? null,
-    [filteredPresets, selectedPresetId],
-  )
-
-  // Deselect when filtered preset disappears
-  useEffect(() => {
-    if (selectedPresetId && !filteredPresets.some((p) => p.id === selectedPresetId)) {
-      setSelectedPresetId(null)
-    }
-  }, [filteredPresets, selectedPresetId])
-
-  const handleSelect = (preset: FxPreset) => {
-    setSelectedPresetId((prev) => (prev === preset.id ? null : preset.id))
-  }
-
   const toggleGroup = (key: string) => {
     setCollapsedGroups((prev) => {
       const next = new Set(prev)
@@ -171,6 +151,18 @@ export function ProjectFxPresets() {
         next.delete(key)
       } else {
         next.add(key)
+      }
+      return next
+    })
+  }
+
+  const togglePresetExpanded = (presetId: number) => {
+    setExpandedPresetIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(presetId)) {
+        next.delete(presetId)
+      } else {
+        next.add(presetId)
       }
       return next
     })
@@ -194,6 +186,15 @@ export function ProjectFxPresets() {
     setFormOpen(true)
   }
 
+  // Clicking a preset row: edit for current project, copy for other projects
+  const handleRowClick = (preset: FxPreset) => {
+    if (isCurrentProject && preset.canEdit) {
+      handleEdit(preset)
+    } else if (!isCurrentProject) {
+      setCopyingPreset(preset)
+    }
+  }
+
   const handleSave = async (input: FxPresetInput) => {
     if (editingPreset) {
       await savePreset({
@@ -215,9 +216,6 @@ export function ProjectFxPresets() {
       projectId: projectIdNum,
       presetId: deletingPreset.id,
     }).unwrap()
-    if (selectedPresetId === deletingPreset.id) {
-      setSelectedPresetId(null)
-    }
     setDeletingPreset(null)
   }
 
@@ -290,13 +288,19 @@ export function ProjectFxPresets() {
                   <PresetListRow
                     key={preset.id}
                     preset={preset}
-                    selected={preset.id === selectedPresetId}
-                    onClick={() => handleSelect(preset)}
+                    expanded={expandedPresetIds.has(preset.id)}
+                    onToggleExpand={() => togglePresetExpanded(preset.id)}
+                    onClick={() => handleRowClick(preset)}
                     onEdit={isCurrentProject && preset.canEdit ? () => handleEdit(preset) : undefined}
                     onDelete={
                       isCurrentProject && preset.canDelete ? () => setDeletingPreset(preset) : undefined
                     }
                     onCopy={!isCurrentProject ? () => setCopyingPreset(preset) : undefined}
+                    onEditEffect={
+                      isCurrentProject && preset.canEdit
+                        ? (effectIndex) => handleEditEffect(preset, effectIndex)
+                        : undefined
+                    }
                   />
                 ))}
               </div>
@@ -307,30 +311,11 @@ export function ProjectFxPresets() {
     </div>
   )
 
-  const detailPanelProps = selectedPreset
-    ? {
-        preset: selectedPreset,
-        hierarchy,
-        onEdit:
-          isCurrentProject && selectedPreset.canEdit
-            ? () => handleEdit(selectedPreset)
-            : undefined,
-        onDelete:
-          isCurrentProject && selectedPreset.canDelete
-            ? () => setDeletingPreset(selectedPreset)
-            : undefined,
-        onCopy: !isCurrentProject ? () => setCopyingPreset(selectedPreset) : undefined,
-        onEditEffect:
-          isCurrentProject && selectedPreset.canEdit
-            ? (effectIndex: number) => handleEditEffect(selectedPreset, effectIndex)
-            : undefined,
-      }
-    : null
-
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="p-4 space-y-4">
+        <Breadcrumbs projectName={project.name} currentPage="Presets" />
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-semibold">FX Presets</h1>
@@ -365,53 +350,16 @@ export function ProjectFxPresets() {
         )}
       </div>
 
-      {/* Content area */}
-      {isDesktop ? (
-        <div className="flex flex-1 min-h-0 px-4 pb-4 gap-4">
-          <div
-            className={cn(
-              'overflow-y-auto',
-              selectedPreset ? 'w-80 shrink-0' : 'flex-1',
-            )}
-          >
-            {presetListContent}
+      {/* Content area — single column */}
+      <div className="flex-1 overflow-y-auto px-4 pb-4">
+        {presetListContent}
 
-            {totalAll > 0 && capabilityFilter.length > 0 && (
-              <p className="text-xs text-muted-foreground text-center mt-3">
-                Showing {totalFiltered} of {totalAll} presets
-              </p>
-            )}
-          </div>
-
-          {detailPanelProps && (
-            <div className="flex-1 min-w-0 overflow-y-auto border rounded-lg">
-              <PresetDetailPanel {...detailPanelProps} />
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="flex-1 overflow-y-auto px-4 pb-4">
-          {presetListContent}
-
-          {totalAll > 0 && capabilityFilter.length > 0 && (
-            <p className="text-xs text-muted-foreground text-center mt-3">
-              Showing {totalFiltered} of {totalAll} presets
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Mobile detail sheet */}
-      {!isDesktop && (
-        <Sheet
-          open={selectedPreset !== null}
-          onOpenChange={(open) => { if (!open) setSelectedPresetId(null) }}
-        >
-          <SheetContent side="bottom" className="h-[85vh] overflow-y-auto p-0">
-            {detailPanelProps && <PresetDetailPanel {...detailPanelProps} />}
-          </SheetContent>
-        </Sheet>
-      )}
+        {totalAll > 0 && capabilityFilter.length > 0 && (
+          <p className="text-xs text-muted-foreground text-center mt-3">
+            Showing {totalFiltered} of {totalAll} presets
+          </p>
+        )}
+      </div>
 
       {/* Create/Edit form */}
       <PresetForm

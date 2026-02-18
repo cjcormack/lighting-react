@@ -99,7 +99,7 @@ export function PresetDetailPanel({
   )
 }
 
-function PresetEffectDetail({ effect, onClick }: { effect: FxPresetEffect; onClick?: () => void }) {
+export function PresetEffectDetail({ effect, onClick }: { effect: FxPresetEffect; onClick?: () => void }) {
   const categoryInfo = EFFECT_CATEGORY_INFO[effect.category]
   const CategoryIcon = categoryInfo?.icon
   const description = getEffectDescription(effect.effectType)

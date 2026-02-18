@@ -145,9 +145,10 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
       />
       <Card
         className={cn(
-          "flex flex-col gap-0 py-3",
+          "flex flex-col gap-0 py-3 cursor-pointer hover:bg-accent/50 transition-colors",
           project.isCurrent && "bg-blue-100 dark:bg-blue-900"
         )}
+        onClick={() => navigate(`/projects/${project.id}`)}
       >
         <CardHeader className="p-0 px-3">
           <div className="flex items-start justify-between gap-2">
