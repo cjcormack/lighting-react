@@ -546,10 +546,9 @@ export function useBuskingState() {
         projectId,
         presetId: preset.id,
         targets,
-        beatDivision: defaultBeatDivision,
       }).unwrap()
     },
-    [currentProject?.id, defaultBeatDivision, togglePresetMutation],
+    [currentProject?.id, togglePresetMutation],
   )
 
   // Check whether a preset is active on all targets by looking for effects

@@ -74,25 +74,17 @@ export function EffectPad({
       {CATEGORY_ORDER.map((cat) => {
         if (cat === 'presets') {
           return (
-            <CategorySection key={cat} label="Presets" icon={Bookmark}>
-              <PresetGrid
-                presets={presets}
-                onApplyPreset={onApplyPreset}
-                onEditPreset={onEditPreset}
-                getPresetPresence={getPresetPresence}
-                currentProjectId={currentProjectId}
-                onCreatePreset={onCreatePreset}
-              />
-            </CategorySection>
-          )
-        }
-
-        if (cat === 'dimmer') {
-          // Render Time (beat division) strip before the effect categories
-          const dimmerEffects = effectsByCategory[cat] ?? []
-          const info = EFFECT_CATEGORY_INFO[cat]
-          return (
-            <React.Fragment key="dimmer-with-time">
+            <React.Fragment key={cat}>
+              <CategorySection label="Presets" icon={Bookmark}>
+                <PresetGrid
+                  presets={presets}
+                  onApplyPreset={onApplyPreset}
+                  onEditPreset={onEditPreset}
+                  getPresetPresence={getPresetPresence}
+                  currentProjectId={currentProjectId}
+                  onCreatePreset={onCreatePreset}
+                />
+              </CategorySection>
               <hr className="border-border mt-3 mb-0" />
               <CategorySection label="Time" icon={Clock}>
                 <ToggleGroup
@@ -115,21 +107,6 @@ export function EffectPad({
                   ))}
                 </ToggleGroup>
               </CategorySection>
-              {dimmerEffects.length > 0 && info && (
-                <CategorySection label={info.label} icon={info.icon}>
-                  <div className="grid grid-cols-1 @[20rem]:grid-cols-2 @[28rem]:grid-cols-3 @[48rem]:grid-cols-4 gap-2">
-                    {dimmerEffects.map((effect) => (
-                      <EffectPadButton
-                        key={effect.name}
-                        effect={effect}
-                        presence={getPresence(effect.name)}
-                        onToggle={() => onToggle(effect)}
-                        onLongPress={() => onLongPress(effect)}
-                      />
-                    ))}
-                  </div>
-                </CategorySection>
-              )}
             </React.Fragment>
           )
         }
