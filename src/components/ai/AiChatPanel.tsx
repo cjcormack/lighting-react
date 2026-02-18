@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { Send, Plus, Trash2, Loader2, ChevronDown, MessageSquare } from 'lucide-react'
+import { Send, Plus, Trash2, Loader2, MessageSquare, Sparkles } from 'lucide-react'
 import Markdown from 'react-markdown'
 
 import { Button } from '@/components/ui/button'
@@ -149,7 +149,10 @@ export function AiChatPanel({ isOpen, onClose }: AiChatPanelProps) {
       >
         <SheetHeader className="pl-4 pr-10 py-3 border-b flex-none">
           <div className="flex items-center justify-between">
-            <SheetTitle className="text-base">AI Assistant</SheetTitle>
+            <SheetTitle className="text-base flex items-center gap-1.5">
+              <Sparkles className="size-4" />
+              Lux
+            </SheetTitle>
             <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
@@ -172,7 +175,7 @@ export function AiChatPanel({ isOpen, onClose }: AiChatPanelProps) {
             </div>
           </div>
           <SheetDescription className="sr-only">
-            Chat with Claude to control your lighting
+            AI lighting assistant powered by Claude
           </SheetDescription>
         </SheetHeader>
 
@@ -213,8 +216,9 @@ export function AiChatPanel({ isOpen, onClose }: AiChatPanelProps) {
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 min-h-0">
           {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm gap-2">
-              <span>Ask me to create lighting effects!</span>
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm gap-3">
+              <Sparkles className="size-8 opacity-40" />
+              <span>Ask Lux to create lighting effects!</span>
               <span className="text-xs text-center">
                 e.g. &quot;Create a slow rainbow wash across all fixtures&quot;
               </span>

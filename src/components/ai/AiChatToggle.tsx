@@ -29,7 +29,7 @@ export function AiChatToggle({ isVisible, onToggle }: AiChatToggleProps) {
         </Button>
       </TooltipTrigger>
       <TooltipContent>
-        {isVisible ? 'Hide' : 'Show'} AI assistant
+        {isVisible ? 'Hide' : 'Show'} Lux
       </TooltipContent>
     </Tooltip>
   )
