@@ -68,7 +68,7 @@ export default function Layout() {
 
   return (
     <TooltipProvider delayDuration={0}>
-      <div className="flex h-screen">
+      <div className="flex h-dvh">
         {/* Desktop Sidebar */}
         {isDesktop && (
           <aside

@@ -54,7 +54,16 @@ function CountBadge({ count }: { count: number }) {
   )
 }
 
-export function FixtureTypePicker({ open, onOpenChange, hierarchy, fixtureCounts, onSelect }: FixtureTypePickerProps) {
+/**
+ * Inline fixture type picker content (no Dialog wrapper).
+ * Can be embedded directly in a Sheet or any container.
+ */
+export function FixtureTypePickerContent({ hierarchy, fixtureCounts, onSelect, onClose }: {
+  hierarchy: FixtureTypeHierarchy | null
+  fixtureCounts: FixtureCountMap
+  onSelect: (typeKey: string | null) => void
+  onClose: () => void
+}) {
   const [step, setStep] = useState<Step>('manufacturer')
   const [selectedManufacturer, setSelectedManufacturer] = useState<ManufacturerEntry | null>(null)
   const [selectedModel, setSelectedModel] = useState<FixtureTypeModel | null>(null)
@@ -103,7 +112,7 @@ export function FixtureTypePicker({ open, onOpenChange, hierarchy, fixtureCounts
   const handleSelectModel = (model: FixtureTypeModel) => {
     if (model.modes.length === 1) {
       onSelect(model.modes[0].typeKey)
-      handleClose()
+      onClose()
     } else {
       setSelectedModel(model)
       setStep('mode')
@@ -112,48 +121,30 @@ export function FixtureTypePicker({ open, onOpenChange, hierarchy, fixtureCounts
 
   const handleSelectMode = (mode: FixtureTypeMode) => {
     onSelect(mode.typeKey)
-    handleClose()
+    onClose()
   }
 
   const handleClear = () => {
     onSelect(null)
-    handleClose()
-  }
-
-  const handleClose = () => {
-    onOpenChange(false)
-    // Reset after close animation
-    setTimeout(() => {
-      setStep('manufacturer')
-      setSelectedManufacturer(null)
-      setSelectedModel(null)
-    }, 150)
-  }
-
-  const handleBackToManufacturers = () => {
-    setSelectedManufacturer(null)
-    setStep('manufacturer')
-  }
-
-  const handleBackToModels = () => {
-    setSelectedModel(null)
-    setStep('model')
+    onClose()
   }
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose() }}>
-      <DialogContent className="max-h-[80vh] flex flex-col p-0 gap-0" showCloseButton={step === 'manufacturer'}>
-        {step === 'manufacturer' && (
-          <DialogHeader className="px-6 pt-6 pb-2">
-            <DialogTitle>Select Fixture Type</DialogTitle>
-            <DialogDescription>
-              Optionally restrict this preset to a specific fixture type.
-            </DialogDescription>
-          </DialogHeader>
-        )}
+    <>
+      {step === 'manufacturer' && (
+        <>
+          <div className="flex items-center gap-2 px-4 pt-4 pb-3">
+            <Button variant="ghost" size="icon" className="size-7 shrink-0" onClick={onClose}>
+              <ChevronLeft className="size-4" />
+            </Button>
+            <div>
+              <h3 className="font-medium">Select Fixture Type</h3>
+              <p className="text-xs text-muted-foreground">
+                Optionally restrict this preset to a specific fixture type.
+              </p>
+            </div>
+          </div>
 
-        {/* Step 1: Manufacturer */}
-        {step === 'manufacturer' && (
           <div className="flex-1 overflow-y-auto px-4 pb-4">
             {/* Clear option */}
             <button
@@ -192,105 +183,121 @@ export function FixtureTypePicker({ open, onOpenChange, hierarchy, fixtureCounts
               ))}
             </div>
           </div>
-        )}
+        </>
+      )}
 
-        {/* Step 2: Model */}
-        {step === 'model' && selectedManufacturer && (
-          <div className="flex flex-col min-h-0 flex-1">
-            <div className="flex items-center gap-2 px-4 pt-4 pb-3">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-7 shrink-0"
-                onClick={handleBackToManufacturers}
-              >
-                <ChevronLeft className="size-4" />
-              </Button>
-              <h3 className="font-medium">{selectedManufacturer.name}</h3>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-4 pb-4">
-              <div className="flex flex-col gap-1">
-                {selectedManufacturer.models.map((model) => (
-                  <button
-                    key={model.model}
-                    onClick={() => handleSelectModel(model)}
-                    className={cn(
-                      'flex items-center gap-2 p-3 rounded-md border text-left hover:bg-accent/50 transition-colors',
-                      !model.isRegistered && 'opacity-50',
-                    )}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium">{model.model}</div>
-                      {model.modes.length === 1 && model.modes[0].channelCount != null && (
-                        <div className="text-xs text-muted-foreground">
-                          {model.modes[0].channelCount} channels
-                        </div>
-                      )}
-                    </div>
-                    {model.modes.length > 1 && (
-                      <span className="text-[10px] text-muted-foreground shrink-0">
-                        {model.modes.length} modes
-                      </span>
-                    )}
-                    <CountBadge count={countForModel(fixtureCounts, model)} />
-                    <ChevronRight className="size-4 text-muted-foreground shrink-0" />
-                  </button>
-                ))}
-              </div>
-            </div>
+      {/* Step 2: Model */}
+      {step === 'model' && selectedManufacturer && (
+        <div className="flex flex-col min-h-0 flex-1">
+          <div className="flex items-center gap-2 px-4 pt-4 pb-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7 shrink-0"
+              onClick={() => { setSelectedManufacturer(null); setStep('manufacturer') }}
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+            <h3 className="font-medium">{selectedManufacturer.name}</h3>
           </div>
-        )}
 
-        {/* Step 3: Mode */}
-        {step === 'mode' && selectedModel && (
-          <div className="flex flex-col min-h-0 flex-1">
-            <div className="flex items-center gap-2 px-4 pt-4 pb-3">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-7 shrink-0"
-                onClick={handleBackToModels}
-              >
-                <ChevronLeft className="size-4" />
-              </Button>
-              <div>
-                <h3 className="font-medium">{selectedModel.model}</h3>
-                <p className="text-xs text-muted-foreground">
-                  {selectedManufacturer?.name ?? GENERIC_MANUFACTURER}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-4 pb-4">
-              <div className="flex flex-col gap-1">
-                {selectedModel.modes.map((mode) => (
-                  <button
-                    key={mode.typeKey}
-                    onClick={() => handleSelectMode(mode)}
-                    className={cn(
-                      'flex items-center gap-2 p-3 rounded-md border text-left hover:bg-accent/50 transition-colors',
-                      !mode.isRegistered && 'opacity-50',
-                    )}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium">
-                        {mode.modeName ?? mode.typeKey}
+          <div className="flex-1 overflow-y-auto px-4 pb-4">
+            <div className="flex flex-col gap-1">
+              {selectedManufacturer.models.map((model) => (
+                <button
+                  key={model.model}
+                  onClick={() => handleSelectModel(model)}
+                  className={cn(
+                    'flex items-center gap-2 p-3 rounded-md border text-left hover:bg-accent/50 transition-colors',
+                    !model.isRegistered && 'opacity-50',
+                  )}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium">{model.model}</div>
+                    {model.modes.length === 1 && model.modes[0].channelCount != null && (
+                      <div className="text-xs text-muted-foreground">
+                        {model.modes[0].channelCount} channels
                       </div>
-                      {mode.channelCount != null && (
-                        <div className="text-xs text-muted-foreground">
-                          {mode.channelCount} channels
-                        </div>
-                      )}
-                    </div>
-                    <CountBadge count={countForMode(fixtureCounts, mode)} />
-                    <ChevronRight className="size-4 text-muted-foreground shrink-0" />
-                  </button>
-                ))}
-              </div>
+                    )}
+                  </div>
+                  {model.modes.length > 1 && (
+                    <span className="text-[10px] text-muted-foreground shrink-0">
+                      {model.modes.length} modes
+                    </span>
+                  )}
+                  <CountBadge count={countForModel(fixtureCounts, model)} />
+                  <ChevronRight className="size-4 text-muted-foreground shrink-0" />
+                </button>
+              ))}
             </div>
           </div>
-        )}
+        </div>
+      )}
+
+      {/* Step 3: Mode */}
+      {step === 'mode' && selectedModel && (
+        <div className="flex flex-col min-h-0 flex-1">
+          <div className="flex items-center gap-2 px-4 pt-4 pb-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7 shrink-0"
+              onClick={() => { setSelectedModel(null); setStep('model') }}
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+            <div>
+              <h3 className="font-medium">{selectedModel.model}</h3>
+              <p className="text-xs text-muted-foreground">
+                {selectedManufacturer?.name ?? GENERIC_MANUFACTURER}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-4 pb-4">
+            <div className="flex flex-col gap-1">
+              {selectedModel.modes.map((mode) => (
+                <button
+                  key={mode.typeKey}
+                  onClick={() => handleSelectMode(mode)}
+                  className={cn(
+                    'flex items-center gap-2 p-3 rounded-md border text-left hover:bg-accent/50 transition-colors',
+                    !mode.isRegistered && 'opacity-50',
+                  )}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium">
+                      {mode.modeName ?? mode.typeKey}
+                    </div>
+                    {mode.channelCount != null && (
+                      <div className="text-xs text-muted-foreground">
+                        {mode.channelCount} channels
+                      </div>
+                    )}
+                  </div>
+                  <CountBadge count={countForMode(fixtureCounts, mode)} />
+                  <ChevronRight className="size-4 text-muted-foreground shrink-0" />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
+/** Dialog-wrapped fixture type picker (for standalone use outside a Sheet). */
+export function FixtureTypePicker({ open, onOpenChange, hierarchy, fixtureCounts, onSelect }: FixtureTypePickerProps) {
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onOpenChange(false) }}>
+      <DialogContent className="max-h-[80vh] flex flex-col p-0 gap-0" showCloseButton={false}>
+        <FixtureTypePickerContent
+          hierarchy={hierarchy}
+          fixtureCounts={fixtureCounts}
+          onSelect={onSelect}
+          onClose={() => onOpenChange(false)}
+        />
       </DialogContent>
     </Dialog>
   )

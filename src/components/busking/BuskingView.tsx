@@ -33,7 +33,7 @@ interface BuskingViewProps {
 }
 
 export function BuskingView({ onSelectionChange }: BuskingViewProps) {
-  const isDesktop = useMediaQuery('(min-width: 900px)')
+  const isDesktop = useMediaQuery('(min-width: 768px)')
   const [targetSheetOpen, setTargetSheetOpen] = useState(false)
 
   const {
@@ -279,7 +279,7 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
     <div className="flex flex-col h-full">
       {isDesktop ? (
         <div className="flex-1 flex min-h-0">
-          <div className="w-72 border-r overflow-y-auto shrink-0">
+          <div className="w-52 lg:w-72 border-r overflow-y-auto shrink-0">
             <TargetList
               selectedTargets={selectedTargets}
               onSelect={handleSelectTarget}

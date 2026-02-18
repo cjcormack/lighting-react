@@ -11,15 +11,7 @@ import {
   SheetTitle,
   SheetFooter,
 } from '@/components/ui/sheet'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog'
-import { Plus, Loader2, ChevronRight, X } from 'lucide-react'
+import { Plus, Loader2, ChevronRight, ChevronLeft, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useEffectLibraryQuery } from '@/store/fixtureFx'
 import { useFixtureTypeListQuery, useFixtureListQuery } from '@/store/fixtures'
@@ -33,7 +25,7 @@ import {
   EFFECT_CATEGORY_INFO,
   getEffectDescription,
 } from '@/components/fx/fxConstants'
-import { FixtureTypePicker, type FixtureCountMap } from './FixtureTypePicker'
+import { FixtureTypePickerContent, type FixtureCountMap } from './FixtureTypePicker'
 import { buildFixtureTypeHierarchy, resolveFixtureTypeLabel } from '@/api/fxPresetsApi'
 import type { FxPreset, FxPresetEffect, FxPresetInput, FixtureTypeHierarchy } from '@/api/fxPresetsApi'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
@@ -47,6 +39,9 @@ const CATEGORY_TO_REQUIRED_CAPABILITY: Record<string, string | null> = {
   position: 'position',
   controls: null, // always available
 }
+
+/** Which view is showing inside the Sheet */
+type SheetView = 'form' | 'add-effect' | 'edit-effect' | 'fixture-type' | 'confirm-delete'
 
 interface PresetFormProps {
   open: boolean
@@ -73,8 +68,10 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
   const [fixtureType, setFixtureType] = useState<string | null>(null)
   const [effects, setEffects] = useState<FxPresetEffect[]>([])
 
-  // Add Effect dialog state
-  const [addEffectOpen, setAddEffectOpen] = useState(false)
+  // Current view inside the sheet (replaces separate Dialog open states)
+  const [view, setView] = useState<SheetView>('form')
+
+  // Add Effect state
   const [addEffectStep, setAddEffectStep] = useState<'category' | 'effect' | 'configure'>('category')
   const [addEffectCategory, setAddEffectCategory] = useState<string | null>(null)
   const [addEffectEntry, setAddEffectEntry] = useState<EffectLibraryEntry | null>(null)
@@ -87,8 +84,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
   const [addSelectedSliderProp, setAddSelectedSliderProp] = useState<string | null>(null)
   const [addElementMode, setAddElementMode] = useState('PER_FIXTURE')
 
-  // Edit Effect dialog state
-  const [editEffectOpen, setEditEffectOpen] = useState(false)
+  // Edit Effect state
   const [editEffectIndex, setEditEffectIndex] = useState<number | null>(null)
   const [editEffectEntry, setEditEffectEntry] = useState<EffectLibraryEntry | null>(null)
   const [editBeatDivision, setEditBeatDivision] = useState(1.0)
@@ -99,10 +95,6 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
   const [editSelectedSettingProp, setEditSelectedSettingProp] = useState<string | null>(null)
   const [editSelectedSliderProp, setEditSelectedSliderProp] = useState<string | null>(null)
   const [editElementMode, setEditElementMode] = useState('PER_FIXTURE')
-
-  // Fixture Type picker dialog state
-  const [fixtureTypePickerOpen, setFixtureTypePickerOpen] = useState(false)
-  const [confirmDelete, setConfirmDelete] = useState(false)
 
   // Build hierarchy from all known fixture types
   const hierarchy = useMemo<FixtureTypeHierarchy | null>(() => {
@@ -138,6 +130,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
       setDescription(preset?.description ?? '')
       setFixtureType(preset?.fixtureType ?? defaultFixtureType ?? null)
       setEffects(preset?.effects ?? [])
+      setView('form')
     }
   }, [open, preset, defaultFixtureType])
 
@@ -233,7 +226,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
     return detectExtendedChannels([selectedFixtureTypeMode.properties])
   }, [selectedFixtureTypeMode])
 
-  // Resolve the target property name for the effect being added in the dialog
+  // Resolve the target property name for the effect being added
   const addTargetPropertyName = useMemo((): string | null => {
     if (!addEffectEntry || !selectedFixtureTypeMode) return null
     const allPropNames = new Set(selectedFixtureTypeMode.properties.map((p) => p.name))
@@ -256,7 +249,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
     return matched
   }, [addEffectEntry, selectedFixtureTypeMode, settingProperties, addSelectedSettingProp, extraSliderProperties, addSelectedSliderProp])
 
-  // Setting options for the currently-targeted setting property in the add dialog
+  // Setting options for the currently-targeted setting property in the add view
   const addSettingOptions = useMemo(() => {
     if (!addEffectEntry?.compatibleProperties.includes('setting') || !addTargetPropertyName) return undefined
     const settingProp = settingProperties.find((sp) => sp.name === addTargetPropertyName)
@@ -330,7 +323,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
     onOpenChange(false)
   }
 
-  // Add Effect dialog handlers
+  // Add Effect handlers
   const handleOpenAddEffect = () => {
     setAddEffectStep('category')
     setAddEffectCategory(null)
@@ -343,7 +336,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
     setAddParameters({})
     setAddSelectedSettingProp(null)
     setAddSelectedSliderProp(null)
-    setAddEffectOpen(true)
+    setView('add-effect')
   }
 
   const handleSelectCategory = (cat: string) => {
@@ -363,10 +356,10 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
 
   const handleConfirmAddEffect = () => {
     handleAddEffect()
-    setAddEffectOpen(false)
+    setView('form')
   }
 
-  // Edit Effect dialog handlers
+  // Edit Effect handlers
   const handleOpenEditEffect = useCallback((index: number) => {
     const effect = effects[index]
     if (!effect) return
@@ -381,7 +374,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
     setEditParameters({ ...effect.parameters })
     setEditSelectedSettingProp(effect.propertyName)
     setEditSelectedSliderProp(effect.propertyName)
-    setEditEffectOpen(true)
+    setView('edit-effect')
   }, [effects, findLibraryEntry])
 
   const handleConfirmEditEffect = () => {
@@ -398,16 +391,16 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
       parameters: { ...editParameters },
     }
     handleUpdateEffect(editEffectIndex, updated)
-    setEditEffectOpen(false)
+    setView('form')
   }
 
   const handleRemoveEditingEffect = () => {
     if (editEffectIndex === null) return
     handleRemoveEffect(editEffectIndex)
-    setEditEffectOpen(false)
+    setView('form')
   }
 
-  // Open edit dialog for the initial effect index when the form opens (fire once)
+  // Open edit view for the initial effect index when the form opens (fire once)
   const initialEditConsumed = useRef(false)
   useEffect(() => {
     if (!open) {
@@ -457,353 +450,378 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
 
   const isValid = name.trim().length > 0 && effects.length > 0 && !hasEffectErrors
 
+  // Block sheet close when not on the main form view
+  const handleSheetOpenChange = useCallback(
+    (value: boolean) => {
+      if (!value && view !== 'form') {
+        // Back to form instead of closing
+        setView('form')
+        return
+      }
+      onOpenChange(value)
+    },
+    [onOpenChange, view],
+  )
+
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={handleSheetOpenChange}>
       <SheetContent
         side="right"
         className="w-full sm:max-w-lg flex flex-col overflow-hidden"
       >
-        <SheetHeader>
-          <SheetTitle>{preset ? 'Edit Preset' : 'New Preset'}</SheetTitle>
-          <SheetDescription>
-            {preset
-              ? 'Update the preset name, description, and effects.'
-              : 'Create a new FX preset with one or more effects.'}
-          </SheetDescription>
-        </SheetHeader>
+        {/* ===== Main form view ===== */}
+        {view === 'form' && (
+          <>
+            <SheetHeader>
+              <SheetTitle>{preset ? 'Edit Preset' : 'New Preset'}</SheetTitle>
+              <SheetDescription>
+                {preset
+                  ? 'Update the preset name, description, and effects.'
+                  : 'Create a new FX preset with one or more effects.'}
+              </SheetDescription>
+            </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto space-y-4 py-4">
-          {/* Name */}
-          <div className="space-y-1.5 px-1">
-            <Label htmlFor="preset-name">Name *</Label>
-            <Input
-              id="preset-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="My Preset"
-              className="h-9"
-            />
-          </div>
-
-          {/* Description */}
-          <div className="space-y-1.5 px-1">
-            <Label htmlFor="preset-description">Description</Label>
-            <Textarea
-              id="preset-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional description..."
-              rows={2}
-              className="resize-none text-sm"
-            />
-          </div>
-
-          {/* Fixture Type */}
-          <div className="space-y-1.5 px-1">
-            <Label>Fixture Type</Label>
-            <button
-              type="button"
-              onClick={() => setFixtureTypePickerOpen(true)}
-              className="flex items-center gap-2 w-full h-9 px-3 rounded-md border text-left text-sm hover:bg-accent/50 transition-colors"
-            >
-              <span className={fixtureTypeLabel ? 'flex-1 truncate' : 'flex-1 truncate text-muted-foreground'}>
-                {fixtureTypeLabel ?? 'Any fixture type'}
-              </span>
-              {fixtureType && (
-                <X
-                  className="size-4 text-muted-foreground hover:text-foreground shrink-0"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setFixtureType(null)
-                  }}
+            <div className="flex-1 overflow-y-auto space-y-4 py-4">
+              {/* Name */}
+              <div className="space-y-1.5 px-1">
+                <Label htmlFor="preset-name">Name *</Label>
+                <Input
+                  id="preset-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="My Preset"
+                  className="h-9"
                 />
-              )}
-              <ChevronRight className="size-4 text-muted-foreground shrink-0" />
-            </button>
-            <p className="text-[11px] text-muted-foreground">
-              Optionally restrict this preset to a specific fixture type.
-            </p>
-          </div>
-
-          {/* Effects list */}
-          <div className="space-y-2 px-1">
-            <div className="flex items-center justify-between">
-              <Label>Effects ({effects.length})</Label>
-              <Button variant="outline" size="sm" className="h-8" onClick={handleOpenAddEffect}>
-                <Plus className="size-4 mr-1.5" />
-                Add Effect
-              </Button>
-            </div>
-
-            {effects.length === 0 && (
-              <div className="py-6 text-center text-sm text-muted-foreground border border-dashed rounded-lg">
-                No effects added yet. Use the button above to add effects.
               </div>
-            )}
 
-            {effects.map((effect, index) => {
-              const entry = findLibraryEntry(effect.effectType, effect.category)
-              const catInfo = EFFECT_CATEGORY_INFO[effect.category]
-              const CatIcon = catInfo?.icon
-              const closestBeat = BEAT_DIVISION_OPTIONS.reduce((prev, curr) =>
-                Math.abs(curr.value - effect.beatDivision) < Math.abs(prev.value - effect.beatDivision) ? curr : prev,
-              )
-              const hasError = effectErrors[index]
+              {/* Description */}
+              <div className="space-y-1.5 px-1">
+                <Label htmlFor="preset-description">Description</Label>
+                <Textarea
+                  id="preset-description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Optional description..."
+                  rows={2}
+                  className="resize-none text-sm"
+                />
+              </div>
 
-              // Resolve display value for static effects
-              let staticValueLabel: string | null = null
-              if (!hasError && entry) {
-                if (entry.compatibleProperties.includes('setting') && effect.propertyName) {
-                  const settingProp = settingProperties.find((sp) => sp.name === effect.propertyName)
-                  const level = effect.parameters['level']
-                  if (settingProp && level != null) {
-                    const opt = settingProp.options.find((o) => String(o.level) === level)
-                    staticValueLabel = opt?.displayName ?? level
-                  }
-                } else if (entry.compatibleProperties.includes('slider') && effect.propertyName) {
-                  const paramName = entry.parameters.find((p) => p.type === 'ubyte')?.name ?? 'value'
-                  const val = effect.parameters[paramName]
-                  if (val != null) {
-                    staticValueLabel = val
-                  }
-                }
-              }
-
-              return (
-                <div
-                  key={`${effect.effectType}-${index}`}
-                  className={`flex items-center gap-2 px-3 py-2 border rounded-lg cursor-pointer hover:bg-accent/50 transition-colors ${hasError ? 'border-destructive' : ''}`}
-                  onClick={() => handleOpenEditEffect(index)}
+              {/* Fixture Type */}
+              <div className="space-y-1.5 px-1">
+                <Label>Fixture Type</Label>
+                <button
+                  type="button"
+                  onClick={() => setView('fixture-type')}
+                  className="flex items-center gap-2 w-full h-9 px-3 rounded-md border text-left text-sm hover:bg-accent/50 transition-colors"
                 >
-                  {CatIcon && <CatIcon className="size-4 text-muted-foreground shrink-0" />}
-                  <span className="text-sm font-medium truncate">{effect.effectType}</span>
-                  {effect.propertyName && !hasError && (
-                    <span className="text-xs text-muted-foreground truncate">
-                      &rarr; {effect.propertyName}
-                      {staticValueLabel && ` = ${staticValueLabel}`}
-                    </span>
-                  )}
-                  {hasError && (
-                    <span className="text-xs text-destructive truncate">
-                      {!selectedFixtureTypeMode
-                        ? 'needs fixture type'
-                        : effect.propertyName
-                          ? `→ ${effect.propertyName} (invalid)`
-                          : 'needs target property'}
-                    </span>
-                  )}
-                  {!hasError && (
-                    <span className="text-[10px] text-muted-foreground truncate hidden sm:inline">
-                      {entry
-                        ? getEffectDescription(entry.name, entry.description)
-                        : effect.category}
-                    </span>
-                  )}
-                  <div className="ml-auto flex items-center gap-1.5 shrink-0">
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                      {closestBeat.label}
-                    </Badge>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-7 text-muted-foreground hover:text-destructive"
+                  <span className={fixtureTypeLabel ? 'flex-1 truncate' : 'flex-1 truncate text-muted-foreground'}>
+                    {fixtureTypeLabel ?? 'Any fixture type'}
+                  </span>
+                  {fixtureType && (
+                    <X
+                      className="size-4 text-muted-foreground hover:text-foreground shrink-0"
                       onClick={(e) => {
                         e.stopPropagation()
-                        handleRemoveEffect(index)
+                        setFixtureType(null)
                       }}
-                    >
-                      <X className="size-3.5" />
-                    </Button>
-                  </div>
+                    />
+                  )}
+                  <ChevronRight className="size-4 text-muted-foreground shrink-0" />
+                </button>
+                <p className="text-[11px] text-muted-foreground">
+                  Optionally restrict this preset to a specific fixture type.
+                </p>
+              </div>
+
+              {/* Effects list */}
+              <div className="space-y-2 px-1">
+                <div className="flex items-center justify-between">
+                  <Label>Effects ({effects.length})</Label>
+                  <Button variant="outline" size="sm" className="h-8" onClick={handleOpenAddEffect}>
+                    <Plus className="size-4 mr-1.5" />
+                    Add Effect
+                  </Button>
                 </div>
-              )
-            })}
-          </div>
-        </div>
 
-        <SheetFooter className="border-t pt-4">
-          {preset && onDelete && (
-            <Button
-              variant="outline"
-              onClick={() => setConfirmDelete(true)}
-              disabled={isSaving || isDeleting}
-              className="text-destructive hover:text-destructive"
-            >
-              {isDeleting && <Loader2 className="size-4 mr-2 animate-spin" />}
-              Delete
-            </Button>
-          )}
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving || isDeleting}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={!isValid || isSaving || isDeleting}>
-            {isSaving && <Loader2 className="size-4 mr-2 animate-spin" />}
-            {preset ? 'Update' : 'Create'}
-          </Button>
-        </SheetFooter>
-      </SheetContent>
+                {effects.length === 0 && (
+                  <div className="py-6 text-center text-sm text-muted-foreground border border-dashed rounded-lg">
+                    No effects added yet. Use the button above to add effects.
+                  </div>
+                )}
 
-      {/* Add Effect Dialog */}
-      <Dialog open={addEffectOpen} onOpenChange={setAddEffectOpen}>
-        <DialogContent className="max-h-[80vh] flex flex-col p-0 gap-0" showCloseButton={addEffectStep !== 'configure'}>
-          {addEffectStep !== 'configure' && (
-            <DialogHeader className="px-6 pt-6 pb-2">
-              <DialogTitle>Add Effect</DialogTitle>
-              <DialogDescription>
-                Choose an effect category and type to add to this preset.
-              </DialogDescription>
-            </DialogHeader>
-          )}
+                {effects.map((effect, index) => {
+                  const entry = findLibraryEntry(effect.effectType, effect.category)
+                  const catInfo = EFFECT_CATEGORY_INFO[effect.category]
+                  const CatIcon = catInfo?.icon
+                  const closestBeat = BEAT_DIVISION_OPTIONS.reduce((prev, curr) =>
+                    Math.abs(curr.value - effect.beatDivision) < Math.abs(prev.value - effect.beatDivision) ? curr : prev,
+                  )
+                  const hasError = effectErrors[index]
 
-          <div className="flex-1 min-h-0 overflow-y-auto">
-            {addEffectStep === 'category' && (
-              <EffectCategoryPicker
-                effectsByCategory={effectsByCategory}
-                onSelect={handleSelectCategory}
-              />
-            )}
+                  // Resolve display value for static effects
+                  let staticValueLabel: string | null = null
+                  if (!hasError && entry) {
+                    if (entry.compatibleProperties.includes('setting') && effect.propertyName) {
+                      const settingProp = settingProperties.find((sp) => sp.name === effect.propertyName)
+                      const level = effect.parameters['level']
+                      if (settingProp && level != null) {
+                        const opt = settingProp.options.find((o) => String(o.level) === level)
+                        staticValueLabel = opt?.displayName ?? level
+                      }
+                    } else if (entry.compatibleProperties.includes('slider') && effect.propertyName) {
+                      const paramName = entry.parameters.find((p) => p.type === 'ubyte')?.name ?? 'value'
+                      const val = effect.parameters[paramName]
+                      if (val != null) {
+                        staticValueLabel = val
+                      }
+                    }
+                  }
 
-            {addEffectStep === 'effect' && addEffectCategory && (
-              <EffectTypePicker
-                category={addEffectCategory}
-                effects={effectsByCategory[addEffectCategory] ?? []}
-                onSelect={handleSelectEffect}
-                onBack={() => setAddEffectStep('category')}
-              />
-            )}
-
-            {addEffectStep === 'configure' && addEffectEntry && (
-              <EffectParameterForm
-                effect={addEffectEntry}
-                beatDivision={addBeatDivision}
-                onBeatDivisionChange={setAddBeatDivision}
-                blendMode={addBlendMode}
-                onBlendModeChange={setAddBlendMode}
-                phaseOffset={addPhaseOffset}
-                onPhaseOffsetChange={setAddPhaseOffset}
-                startOnBeat={false}
-                onStartOnBeatChange={() => {}}
-                showStartOnBeat={false}
-                parameters={addParameters}
-                onParametersChange={setAddParameters}
-                targetPropertyName={addTargetPropertyName}
-                isEdit={false}
-                onBack={() => setAddEffectStep('effect')}
-                distributionStrategy={addDistribution}
-                onDistributionStrategyChange={setAddDistribution}
-                showDistribution
-                elementMode={addElementMode}
-                onElementModeChange={setAddElementMode}
-                showElementMode={showElementMode}
-                settingOptions={addSettingOptions}
-                settingProperties={addEffectEntry.compatibleProperties.includes('setting') ? settingProperties : undefined}
-                onSettingPropertyChange={setAddSelectedSettingProp}
-                sliderProperties={addEffectEntry.compatibleProperties.includes('slider') ? extraSliderProperties : undefined}
-                onSliderPropertyChange={setAddSelectedSliderProp}
-                extendedChannels={addEffectEntry.category === 'colour' ? extendedChannels : undefined}
-              />
-            )}
-          </div>
-
-          {addEffectStep === 'configure' && (
-            <div className="px-6 pb-6 pt-2">
-              <Button onClick={handleConfirmAddEffect} className="w-full">
-                Add Effect
-              </Button>
+                  return (
+                    <div
+                      key={`${effect.effectType}-${index}`}
+                      className={`flex items-center gap-2 px-3 py-2 border rounded-lg cursor-pointer hover:bg-accent/50 transition-colors ${hasError ? 'border-destructive' : ''}`}
+                      onClick={() => handleOpenEditEffect(index)}
+                    >
+                      {CatIcon && <CatIcon className="size-4 text-muted-foreground shrink-0" />}
+                      <span className="text-sm font-medium truncate">{effect.effectType}</span>
+                      {effect.propertyName && !hasError && (
+                        <span className="text-xs text-muted-foreground truncate">
+                          &rarr; {effect.propertyName}
+                          {staticValueLabel && ` = ${staticValueLabel}`}
+                        </span>
+                      )}
+                      {hasError && (
+                        <span className="text-xs text-destructive truncate">
+                          {!selectedFixtureTypeMode
+                            ? 'needs fixture type'
+                            : effect.propertyName
+                              ? `→ ${effect.propertyName} (invalid)`
+                              : 'needs target property'}
+                        </span>
+                      )}
+                      {!hasError && (
+                        <span className="text-[10px] text-muted-foreground truncate hidden sm:inline">
+                          {entry
+                            ? getEffectDescription(entry.name, entry.description)
+                            : effect.category}
+                        </span>
+                      )}
+                      <div className="ml-auto flex items-center gap-1.5 shrink-0">
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                          {closestBeat.label}
+                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-7 text-muted-foreground hover:text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleRemoveEffect(index)
+                          }}
+                        >
+                          <X className="size-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
 
-      {/* Edit Effect Dialog */}
-      <Dialog open={editEffectOpen} onOpenChange={setEditEffectOpen}>
-        <DialogContent className="max-h-[80vh] flex flex-col p-0 gap-0" showCloseButton={false}>
-          {editEffectEntry && (
-            <>
-              <div className="flex-1 min-h-0 overflow-y-auto">
+            <SheetFooter className="border-t pt-4">
+              {preset && onDelete && (
+                <Button
+                  variant="outline"
+                  onClick={() => setView('confirm-delete')}
+                  disabled={isSaving || isDeleting}
+                  className="text-destructive hover:text-destructive"
+                >
+                  {isDeleting && <Loader2 className="size-4 mr-2 animate-spin" />}
+                  Delete
+                </Button>
+              )}
+              <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving || isDeleting}>
+                Cancel
+              </Button>
+              <Button onClick={handleSave} disabled={!isValid || isSaving || isDeleting}>
+                {isSaving && <Loader2 className="size-4 mr-2 animate-spin" />}
+                {preset ? 'Update' : 'Create'}
+              </Button>
+            </SheetFooter>
+          </>
+        )}
+
+        {/* ===== Add Effect view (inline in sheet) ===== */}
+        {view === 'add-effect' && (
+          <>
+            {addEffectStep !== 'configure' && (
+              <SheetHeader>
+                <SheetTitle className="flex items-center gap-2">
+                  <button onClick={() => setView('form')} className="hover:bg-accent rounded p-0.5 -ml-1">
+                    <ChevronLeft className="size-5" />
+                  </button>
+                  Add Effect
+                </SheetTitle>
+                <SheetDescription>
+                  Choose an effect category and type to add to this preset.
+                </SheetDescription>
+              </SheetHeader>
+            )}
+
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              {addEffectStep === 'category' && (
+                <EffectCategoryPicker
+                  effectsByCategory={effectsByCategory}
+                  onSelect={handleSelectCategory}
+                />
+              )}
+
+              {addEffectStep === 'effect' && addEffectCategory && (
+                <EffectTypePicker
+                  category={addEffectCategory}
+                  effects={effectsByCategory[addEffectCategory] ?? []}
+                  onSelect={handleSelectEffect}
+                  onBack={() => setAddEffectStep('category')}
+                />
+              )}
+
+              {addEffectStep === 'configure' && addEffectEntry && (
                 <EffectParameterForm
-                  effect={editEffectEntry}
-                  beatDivision={editBeatDivision}
-                  onBeatDivisionChange={setEditBeatDivision}
-                  blendMode={editBlendMode}
-                  onBlendModeChange={setEditBlendMode}
-                  phaseOffset={editPhaseOffset}
-                  onPhaseOffsetChange={setEditPhaseOffset}
+                  effect={addEffectEntry}
+                  beatDivision={addBeatDivision}
+                  onBeatDivisionChange={setAddBeatDivision}
+                  blendMode={addBlendMode}
+                  onBlendModeChange={setAddBlendMode}
+                  phaseOffset={addPhaseOffset}
+                  onPhaseOffsetChange={setAddPhaseOffset}
                   startOnBeat={false}
                   onStartOnBeatChange={() => {}}
                   showStartOnBeat={false}
-                  parameters={editParameters}
-                  onParametersChange={setEditParameters}
-                  targetPropertyName={editTargetPropertyName}
-                  isEdit={true}
-                  distributionStrategy={editDistribution}
-                  onDistributionStrategyChange={setEditDistribution}
+                  parameters={addParameters}
+                  onParametersChange={setAddParameters}
+                  targetPropertyName={addTargetPropertyName}
+                  isEdit={false}
+                  onBack={() => setAddEffectStep('effect')}
+                  distributionStrategy={addDistribution}
+                  onDistributionStrategyChange={setAddDistribution}
                   showDistribution
-                  elementMode={editElementMode}
-                  onElementModeChange={setEditElementMode}
+                  elementMode={addElementMode}
+                  onElementModeChange={setAddElementMode}
                   showElementMode={showElementMode}
-                  settingOptions={editSettingOptions}
-                  settingProperties={editEffectEntry.compatibleProperties.includes('setting') ? settingProperties : undefined}
-                  onSettingPropertyChange={setEditSelectedSettingProp}
-                  sliderProperties={editEffectEntry.compatibleProperties.includes('slider') ? extraSliderProperties : undefined}
-                  onSliderPropertyChange={setEditSelectedSliderProp}
-                  extendedChannels={editEffectEntry.category === 'colour' ? extendedChannels : undefined}
+                  settingOptions={addSettingOptions}
+                  settingProperties={addEffectEntry.compatibleProperties.includes('setting') ? settingProperties : undefined}
+                  onSettingPropertyChange={setAddSelectedSettingProp}
+                  sliderProperties={addEffectEntry.compatibleProperties.includes('slider') ? extraSliderProperties : undefined}
+                  onSliderPropertyChange={setAddSelectedSliderProp}
+                  extendedChannels={addEffectEntry.category === 'colour' ? extendedChannels : undefined}
                 />
-              </div>
-              <div className="flex gap-2 px-6 pb-6 pt-2">
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={handleRemoveEditingEffect}
-                  className="mr-auto"
-                >
-                  Remove
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => setEditEffectOpen(false)}>
-                  Cancel
-                </Button>
-                <Button size="sm" onClick={handleConfirmEditEffect}>
-                  Update
-                </Button>
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+              )}
+            </div>
 
-      {/* Fixture Type Picker Dialog */}
-      <FixtureTypePicker
-        open={fixtureTypePickerOpen}
-        onOpenChange={setFixtureTypePickerOpen}
-        hierarchy={hierarchy}
-        fixtureCounts={fixtureCounts}
-        onSelect={setFixtureType}
-      />
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Preset</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete "{preset?.name}"? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmDelete(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                setConfirmDelete(false)
-                onDelete?.()
-              }}
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            {addEffectStep === 'configure' && (
+              <div className="border-t px-4 pb-4 pt-2">
+                <Button onClick={handleConfirmAddEffect} className="w-full">
+                  Add Effect
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ===== Edit Effect view (inline in sheet) ===== */}
+        {view === 'edit-effect' && editEffectEntry && (
+          <>
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <EffectParameterForm
+                effect={editEffectEntry}
+                beatDivision={editBeatDivision}
+                onBeatDivisionChange={setEditBeatDivision}
+                blendMode={editBlendMode}
+                onBlendModeChange={setEditBlendMode}
+                phaseOffset={editPhaseOffset}
+                onPhaseOffsetChange={setEditPhaseOffset}
+                startOnBeat={false}
+                onStartOnBeatChange={() => {}}
+                showStartOnBeat={false}
+                parameters={editParameters}
+                onParametersChange={setEditParameters}
+                targetPropertyName={editTargetPropertyName}
+                isEdit={true}
+                distributionStrategy={editDistribution}
+                onDistributionStrategyChange={setEditDistribution}
+                showDistribution
+                elementMode={editElementMode}
+                onElementModeChange={setEditElementMode}
+                showElementMode={showElementMode}
+                settingOptions={editSettingOptions}
+                settingProperties={editEffectEntry.compatibleProperties.includes('setting') ? settingProperties : undefined}
+                onSettingPropertyChange={setEditSelectedSettingProp}
+                sliderProperties={editEffectEntry.compatibleProperties.includes('slider') ? extraSliderProperties : undefined}
+                onSliderPropertyChange={setEditSelectedSliderProp}
+                extendedChannels={editEffectEntry.category === 'colour' ? extendedChannels : undefined}
+              />
+            </div>
+            <div className="flex gap-2 border-t px-4 pb-4 pt-2">
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleRemoveEditingEffect}
+                className="mr-auto"
+              >
+                Remove
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setView('form')}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleConfirmEditEffect}>
+                Update
+              </Button>
+            </div>
+          </>
+        )}
+
+        {/* ===== Fixture Type picker view (inline in sheet) ===== */}
+        {view === 'fixture-type' && (
+          <FixtureTypePickerContent
+            hierarchy={hierarchy}
+            fixtureCounts={fixtureCounts}
+            onSelect={(typeKey) => {
+              setFixtureType(typeKey)
+              setView('form')
+            }}
+            onClose={() => setView('form')}
+          />
+        )}
+
+        {/* ===== Delete confirmation view (inline in sheet) ===== */}
+        {view === 'confirm-delete' && (
+          <>
+            <SheetHeader>
+              <SheetTitle>Delete Preset</SheetTitle>
+              <SheetDescription>
+                Are you sure you want to delete &ldquo;{preset?.name}&rdquo;? This action cannot be undone.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="flex-1" />
+            <SheetFooter className="border-t pt-4">
+              <Button variant="outline" onClick={() => setView('form')}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  setView('form')
+                  onDelete?.()
+                }}
+              >
+                Delete
+              </Button>
+            </SheetFooter>
+          </>
+        )}
+      </SheetContent>
     </Sheet>
   )
 }
