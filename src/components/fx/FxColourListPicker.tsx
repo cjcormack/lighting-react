@@ -20,13 +20,17 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
-  resolveColourToHex,
   parseExtendedColour,
   serializeExtendedColour,
   isValidHexColour,
+  isPaletteRef,
+  isAllPaletteRef,
+  resolveColourToHex,
+  resolveColourWithPalette,
   COLOUR_PRESETS,
   type ExtendedColour,
 } from './colourUtils'
+import { useFxStateQuery } from '@/store/fx'
 
 interface FxColourListPickerProps {
   value: string
@@ -42,6 +46,7 @@ interface FxColourListPickerProps {
 
 interface ColourItem {
   id: string
+  raw: string
   colour: ExtendedColour
 }
 
@@ -57,8 +62,15 @@ export function FxColourListPicker({
   description,
   extendedChannels,
 }: FxColourListPickerProps) {
-  const [items, setItems] = useState<ColourItem[]>(() => parseColourList(value))
+  const useAllPalette = isAllPaletteRef(value.trim())
+  const [items, setItems] = useState<ColourItem[]>(() =>
+    useAllPalette ? [] : parseColourList(value),
+  )
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  // Store the previous non-P* value so we can restore when unchecking
+  const [savedValue, setSavedValue] = useState<string>(() =>
+    useAllPalette ? 'P1,P2,P3' : value,
+  )
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -75,7 +87,13 @@ export function FxColourListPicker({
   const emitChange = useCallback(
     (newItems: ColourItem[]) => {
       setItems(newItems)
-      onChange(newItems.map((i) => serializeExtendedColour(i.colour)).join(','))
+      const newValue = newItems
+        .map((i) =>
+          isPaletteRef(i.raw) ? i.raw : serializeExtendedColour(i.colour),
+        )
+        .join(',')
+      setSavedValue(newValue)
+      onChange(newValue)
     },
     [onChange]
   )
@@ -95,16 +113,20 @@ export function FxColourListPicker({
   )
 
   const handleColourChange = useCallback(
-    (index: number, colour: ExtendedColour) => {
+    (index: number, colour: ExtendedColour, raw?: string) => {
       const newItems = [...items]
-      newItems[index] = { ...newItems[index], colour }
+      newItems[index] = {
+        ...newItems[index],
+        colour,
+        raw: raw ?? serializeExtendedColour(colour),
+      }
       emitChange(newItems)
     },
     [items, emitChange]
   )
 
   const handleAdd = useCallback(() => {
-    const newItems = [...items, { id: makeId(), colour: { hex: '#ffffff', white: 0, amber: 0, uv: 0 } }]
+    const newItems = [...items, { id: makeId(), raw: '#ffffff', colour: { hex: '#ffffff', white: 0, amber: 0, uv: 0 } }]
     emitChange(newItems)
     setEditingIndex(newItems.length - 1)
   }, [items, emitChange])
@@ -119,45 +141,72 @@ export function FxColourListPicker({
     [items, emitChange, editingIndex]
   )
 
+  const handleToggleAllPalette = useCallback(
+    (checked: boolean) => {
+      if (checked) {
+        setEditingIndex(null)
+        onChange('P*')
+      } else {
+        const restored = parseColourList(savedValue)
+        setItems(restored)
+        onChange(savedValue)
+      }
+    },
+    [onChange, savedValue],
+  )
+
   return (
     <div>
       {label && <Label className="text-xs mb-1.5 block">{label}</Label>}
       {description && (
         <p className="text-[11px] text-muted-foreground mb-1">{description}</p>
       )}
-      <div className="flex items-center gap-1 flex-wrap">
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext
-            items={items.map((i) => i.id)}
-            strategy={horizontalListSortingStrategy}
+      <label className="flex items-center gap-1.5 mb-1.5 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={useAllPalette}
+          onChange={(e) => handleToggleAllPalette(e.target.checked)}
+          className="rounded border-border"
+        />
+        <span className="text-[11px] text-muted-foreground">
+          Use entire palette
+        </span>
+      </label>
+      {!useAllPalette && (
+        <div className="flex items-center gap-1 flex-wrap">
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
           >
-            {items.map((item, index) => (
-              <SortableColourSwatch
-                key={item.id}
-                item={item}
-                index={index}
-                isEditing={editingIndex === index}
-                onEdit={() => setEditingIndex(editingIndex === index ? null : index)}
-                onRemove={() => handleRemove(index)}
-                onColourChange={(colour) => handleColourChange(index, colour)}
-                extendedChannels={extendedChannels}
-              />
-            ))}
-          </SortableContext>
-        </DndContext>
-        <button
-          type="button"
-          onClick={handleAdd}
-          className="w-7 h-7 rounded border border-dashed border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-foreground/50 transition-colors text-sm"
-          title="Add colour"
-        >
-          +
-        </button>
-      </div>
+            <SortableContext
+              items={items.map((i) => i.id)}
+              strategy={horizontalListSortingStrategy}
+            >
+              {items.map((item, index) => (
+                <SortableColourSwatch
+                  key={item.id}
+                  item={item}
+                  index={index}
+                  isEditing={editingIndex === index}
+                  onEdit={() => setEditingIndex(editingIndex === index ? null : index)}
+                  onRemove={() => handleRemove(index)}
+                  onColourChange={(colour, raw) => handleColourChange(index, colour, raw)}
+                  extendedChannels={extendedChannels}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
+          <button
+            type="button"
+            onClick={handleAdd}
+            className="w-7 h-7 rounded border border-dashed border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-foreground/50 transition-colors text-sm"
+            title="Add colour"
+          >
+            +
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -176,13 +225,17 @@ function SortableColourSwatch({
   isEditing: boolean
   onEdit: () => void
   onRemove: () => void
-  onColourChange: (colour: ExtendedColour) => void
+  onColourChange: (colour: ExtendedColour, raw?: string) => void
   extendedChannels?: {
     white?: boolean
     amber?: boolean
     uv?: boolean
   }
 }) {
+  const { data: fxState } = useFxStateQuery()
+  const palette = fxState?.palette ?? []
+  const isPalRef = isPaletteRef(item.raw)
+
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: item.id })
 
@@ -193,11 +246,16 @@ function SortableColourSwatch({
     opacity: isDragging ? 0.5 : undefined,
   }
 
-  const [hexInput, setHexInput] = useState(item.colour.hex)
+  const [hexInput, setHexInput] = useState(isPalRef ? item.raw : item.colour.hex)
 
   const handleHexChange = useCallback(
     (hex: string) => {
       setHexInput(hex)
+      // Check for palette ref input
+      if (isPaletteRef(hex)) {
+        onColourChange(item.colour, hex.trim().toUpperCase())
+        return
+      }
       const normalized = hex.startsWith('#') ? hex : `#${hex}`
       if (isValidHexColour(normalized)) {
         onColourChange({ ...item.colour, hex: normalized.toLowerCase() })
@@ -236,12 +294,22 @@ function SortableColourSwatch({
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="w-7 h-7 rounded border border-border cursor-grab active:cursor-grabbing"
-            style={{ backgroundColor: item.colour.hex }}
+            className="w-7 h-7 rounded border border-border cursor-grab active:cursor-grabbing relative overflow-hidden"
+            style={{
+              backgroundColor: isPalRef
+                ? resolveColourWithPalette(item.raw, palette)
+                : item.colour.hex,
+            }}
             onClick={onEdit}
             {...attributes}
             {...listeners}
-          />
+          >
+            {isPalRef && (
+              <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold text-white drop-shadow-[0_0_2px_rgba(0,0,0,0.8)] pointer-events-none">
+                {item.raw.toUpperCase()}
+              </span>
+            )}
+          </button>
         </PopoverTrigger>
         {/* Remove button */}
         <button
@@ -285,6 +353,32 @@ function SortableColourSwatch({
               />
             ))}
           </div>
+
+          {/* Palette references */}
+          {palette.length > 0 && (
+            <div className="flex gap-1 flex-wrap">
+              {palette.map((colour, i) => {
+                const ref = `P${i + 1}`
+                return (
+                  <button
+                    key={ref}
+                    type="button"
+                    title={ref}
+                    className="w-5 h-5 rounded border border-border hover:scale-110 transition-transform relative overflow-hidden"
+                    style={{ backgroundColor: resolveColourToHex(colour) }}
+                    onClick={() => {
+                      setHexInput(ref)
+                      onColourChange(item.colour, ref)
+                    }}
+                  >
+                    <span className="absolute inset-0 flex items-center justify-center text-[7px] font-bold text-white drop-shadow-[0_0_2px_rgba(0,0,0,0.8)]">
+                      {ref}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
 
           {/* Extended channels */}
           {hasExtended && (
@@ -358,8 +452,14 @@ function ExtendedSlider({
 /** Parse a comma-separated colour list into ColourItem array */
 function parseColourList(value: string): ColourItem[] {
   if (!value.trim()) return []
-  return value.split(',').map((s) => ({
-    id: makeId(),
-    colour: parseExtendedColour(s.trim()),
-  }))
+  return value.split(',').map((s) => {
+    const trimmed = s.trim()
+    return {
+      id: makeId(),
+      raw: trimmed,
+      colour: isPaletteRef(trimmed)
+        ? { hex: '#000000', white: 0, amber: 0, uv: 0 }
+        : parseExtendedColour(trimmed),
+    }
+  })
 }

@@ -16,6 +16,7 @@ export interface FxState {
   bpm: number
   isClockRunning: boolean
   activeEffects: FxEffectState[]
+  palette: string[]
 }
 
 export interface BeatSync {
@@ -25,9 +26,10 @@ export interface BeatSync {
 }
 
 type FxMessage =
-  | { type: 'fxState'; bpm: number; isClockRunning: boolean; activeEffects: FxEffectState[] }
+  | { type: 'fxState'; bpm: number; isClockRunning: boolean; activeEffects: FxEffectState[]; palette?: string[] }
   | { type: 'beatSync'; beatNumber: number; bpm: number; timestampMs: number }
   | { type: 'fxChanged'; changeType: string; effectId?: number }
+  | { type: 'paletteChanged'; palette: string[] }
 
 // === API Interface ===
 
@@ -38,6 +40,10 @@ export interface FxApi {
   requestBeatSync(): void
   setBpm(bpm: number): void
   tap(): void
+  setPalette(colours: string[]): void
+  setPaletteColour(index: number, colour: string): void
+  addPaletteColour(colour: string): void
+  removePaletteColour(index: number): void
 }
 
 export function createFxApi(conn: InternalApiConnection): FxApi {
@@ -49,6 +55,7 @@ export function createFxApi(conn: InternalApiConnection): FxApi {
     bpm: 120,
     isClockRunning: false,
     activeEffects: [],
+    palette: [],
   }
 
   const notifyState = (state: FxState) => {
@@ -69,7 +76,11 @@ export function createFxApi(conn: InternalApiConnection): FxApi {
           bpm: message.bpm,
           isClockRunning: message.isClockRunning,
           activeEffects: message.activeEffects,
+          palette: message.palette ?? currentState.palette,
         }
+        notifyState(currentState)
+      } else if (message.type === 'paletteChanged') {
+        currentState = { ...currentState, palette: message.palette }
         notifyState(currentState)
       } else if (message.type === 'beatSync') {
         // Update BPM from beat sync (always reflects the latest tempo)
@@ -128,6 +139,22 @@ export function createFxApi(conn: InternalApiConnection): FxApi {
 
     tap(): void {
       conn.send(JSON.stringify({ type: 'tapTempo' }))
+    },
+
+    setPalette(colours: string[]): void {
+      conn.send(JSON.stringify({ type: 'setPalette', colours }))
+    },
+
+    setPaletteColour(index: number, colour: string): void {
+      conn.send(JSON.stringify({ type: 'setPaletteColour', index, colour }))
+    },
+
+    addPaletteColour(colour: string): void {
+      conn.send(JSON.stringify({ type: 'addPaletteColour', colour }))
+    },
+
+    removePaletteColour(index: number): void {
+      conn.send(JSON.stringify({ type: 'removePaletteColour', index }))
     },
   }
 }

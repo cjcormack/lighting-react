@@ -134,6 +134,42 @@ export type ExtendedChannelFlags = {
  *
  * Returns undefined if no extended channels are available.
  */
+// --- Palette reference support ---
+
+/** Regex for palette references: P followed by digits (1-indexed) */
+const PALETTE_REF_REGEX = /^P(\d+)$/i
+
+/** Check if a colour string is a palette reference (e.g., "P1", "P2") or the all-palette wildcard "P*". */
+export function isPaletteRef(value: string): boolean {
+  const trimmed = value.trim()
+  return PALETTE_REF_REGEX.test(trimmed) || trimmed.toUpperCase() === 'P*'
+}
+
+/** Check if a colour string is the "all palette colours" wildcard ("P*"). */
+export function isAllPaletteRef(value: string): boolean {
+  return value.trim().toUpperCase() === 'P*'
+}
+
+/** Extract the 1-based index from a palette reference. Returns null if not a palette ref. */
+export function parsePaletteIndex(value: string): number | null {
+  const match = value.trim().match(PALETTE_REF_REGEX)
+  return match ? parseInt(match[1], 10) : null
+}
+
+/**
+ * Resolve a colour string against a palette, returning a plain hex string for display.
+ * - Palette refs ("P1", "P2") resolve to the palette colour (with wrapping)
+ * - Normal colour strings pass through to resolveColourToHex
+ */
+export function resolveColourWithPalette(value: string, palette: string[]): string {
+  if (isPaletteRef(value) && palette.length > 0) {
+    const index = parsePaletteIndex(value)!
+    const wrappedIndex = ((index - 1) % palette.length + palette.length) % palette.length
+    return resolveColourToHex(palette[wrappedIndex])
+  }
+  return resolveColourToHex(value)
+}
+
 export function detectExtendedChannels(
   propertySets: ReadonlyArray<ReadonlyArray<{ type: string; category?: string; whiteChannel?: unknown; amberChannel?: unknown; uvChannel?: unknown }>>,
 ): ExtendedChannelFlags | undefined {

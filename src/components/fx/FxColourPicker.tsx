@@ -8,9 +8,12 @@ import {
   parseExtendedColour,
   serializeExtendedColour,
   isValidHexColour,
+  isPaletteRef,
+  resolveColourWithPalette,
   COLOUR_PRESETS,
   type ExtendedColour,
 } from './colourUtils'
+import { useFxStateQuery } from '@/store/fx'
 
 interface FxColourPickerProps {
   value: string
@@ -32,18 +35,29 @@ export function FxColourPicker({
   description,
   extendedChannels,
 }: FxColourPickerProps) {
+  const { data: fxState } = useFxStateQuery()
+  const palette = fxState?.palette ?? []
+  const isPalRef = isPaletteRef(value)
+
   const [isOpen, setIsOpen] = useState(false)
   const [localColour, setLocalColour] = useState<ExtendedColour>(() => parseExtendedColour(value))
-  const [hexInput, setHexInput] = useState(() => resolveColourToHex(value))
+  const [hexInput, setHexInput] = useState(() => isPaletteRef(value) ? value.trim() : resolveColourToHex(value))
 
   // Sync from parent value when popover opens
   useEffect(() => {
     if (isOpen) {
-      const parsed = parseExtendedColour(value)
-      setLocalColour(parsed)
-      setHexInput(parsed.hex)
+      if (isPaletteRef(value)) {
+        setHexInput(value.trim())
+        // Resolve palette ref for the picker display
+        const resolved = resolveColourWithPalette(value, palette)
+        setLocalColour(parseExtendedColour(resolved))
+      } else {
+        const parsed = parseExtendedColour(value)
+        setLocalColour(parsed)
+        setHexInput(parsed.hex)
+      }
     }
-  }, [isOpen, value])
+  }, [isOpen, value, palette])
 
   const emitChange = useCallback(
     (colour: ExtendedColour) => {
@@ -56,13 +70,18 @@ export function FxColourPicker({
   const handleHexChange = useCallback(
     (hex: string) => {
       setHexInput(hex)
+      // Check for palette ref input (e.g., "P1", "P2")
+      if (isPaletteRef(hex)) {
+        onChange(hex.trim().toUpperCase())
+        return
+      }
       // Only emit when valid to avoid intermediate states
       const normalized = hex.startsWith('#') ? hex : `#${hex}`
       if (isValidHexColour(normalized)) {
         emitChange({ ...localColour, hex: normalized.toLowerCase() })
       }
     },
-    [emitChange, localColour]
+    [emitChange, localColour, onChange]
   )
 
   const handlePickerChange = useCallback(
@@ -92,7 +111,7 @@ export function FxColourPicker({
   const hasExtended =
     extendedChannels?.white || extendedChannels?.amber || extendedChannels?.uv
 
-  const displayHex = resolveColourToHex(value)
+  const displayHex = isPalRef ? resolveColourWithPalette(value, palette) : resolveColourToHex(value)
 
   return (
     <div>
@@ -107,10 +126,18 @@ export function FxColourPicker({
             className="flex items-center gap-2 h-8 px-2 rounded-md border border-input bg-background text-xs hover:bg-accent/50 transition-colors"
           >
             <span
-              className="w-5 h-5 rounded border border-border shrink-0"
+              className="w-5 h-5 rounded border border-border shrink-0 relative"
               style={{ backgroundColor: displayHex }}
-            />
-            <span className="font-mono text-muted-foreground">{displayHex}</span>
+            >
+              {isPalRef && (
+                <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold text-white drop-shadow-[0_0_2px_rgba(0,0,0,0.8)]">
+                  {value.trim().toUpperCase()}
+                </span>
+              )}
+            </span>
+            <span className="font-mono text-muted-foreground">
+              {isPalRef ? value.trim().toUpperCase() : displayHex}
+            </span>
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-3" align="start" side="right">
@@ -140,6 +167,32 @@ export function FxColourPicker({
                 />
               ))}
             </div>
+
+            {/* Palette references */}
+            {palette.length > 0 && (
+              <div className="flex gap-1 flex-wrap">
+                {palette.map((colour, i) => {
+                  const ref = `P${i + 1}`
+                  return (
+                    <button
+                      key={ref}
+                      type="button"
+                      title={ref}
+                      className="w-5 h-5 rounded border border-border hover:scale-110 transition-transform relative overflow-hidden"
+                      style={{ backgroundColor: resolveColourToHex(colour) }}
+                      onClick={() => {
+                        setHexInput(ref)
+                        onChange(ref)
+                      }}
+                    >
+                      <span className="absolute inset-0 flex items-center justify-center text-[7px] font-bold text-white drop-shadow-[0_0_2px_rgba(0,0,0,0.8)]">
+                        {ref}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
 
             {/* Extended channels (W/A/UV) */}
             {hasExtended && (
