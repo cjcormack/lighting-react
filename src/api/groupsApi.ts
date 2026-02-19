@@ -81,6 +81,7 @@ export interface ApplyFxRequest {
   parameters: Record<string, string>
   elementMode?: ElementMode
   elementFilter?: string
+  stepTiming?: boolean
 }
 
 export interface ApplyFxResponse {
@@ -100,6 +101,7 @@ export interface GroupActiveEffect {
   parameters: Record<string, string>
   elementMode: ElementMode | null
   elementFilter: string | null
+  stepTiming: boolean
   presetId: number | null
 }
 

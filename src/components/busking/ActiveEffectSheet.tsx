@@ -52,6 +52,7 @@ export function ActiveEffectSheet({ context, onClose }: ActiveEffectSheetProps) 
   const [phaseOffset, setPhaseOffset] = useState(0)
   const [parameters, setParameters] = useState<Record<string, string>>({})
   const [distributionStrategy, setDistributionStrategy] = useState('LINEAR')
+  const [stepTiming, setStepTiming] = useState(false)
   const [elementMode, setElementMode] = useState<ElementMode>('PER_FIXTURE')
 
   const selectedEffect = useMemo(() => {
@@ -101,6 +102,7 @@ export function ActiveEffectSheet({ context, onClose }: ActiveEffectSheetProps) 
     setBlendMode(effect.blendMode)
     setPhaseOffset(effect.phaseOffset)
     setParameters({ ...effect.parameters })
+    setStepTiming(context.effect.stepTiming ?? false)
     if (context.type === 'group') {
       setDistributionStrategy(context.effect.distribution)
       setElementMode(context.effect.elementMode ?? 'PER_FIXTURE')
@@ -127,6 +129,7 @@ export function ActiveEffectSheet({ context, onClose }: ActiveEffectSheetProps) 
         body: {
           ...baseBody,
           distributionStrategy,
+          stepTiming,
           ...(showElementMode ? { elementMode } : {}),
         },
       })
@@ -136,6 +139,7 @@ export function ActiveEffectSheet({ context, onClose }: ActiveEffectSheetProps) 
         fixtureKey: context.fixtureKey,
         body: {
           ...baseBody,
+          stepTiming,
           ...(showDistribution ? { distributionStrategy } : {}),
         },
       })
@@ -209,6 +213,8 @@ export function ActiveEffectSheet({ context, onClose }: ActiveEffectSheetProps) 
               onElementModeChange={(v) => setElementMode(v as ElementMode)}
               showElementMode={showElementMode}
               extendedChannels={selectedEffect?.category === 'colour' ? extendedChannels : undefined}
+              stepTiming={stepTiming}
+              onStepTimingChange={setStepTiming}
             />
           )}
         </div>

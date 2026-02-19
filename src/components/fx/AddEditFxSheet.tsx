@@ -76,6 +76,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
   const [distributionStrategy, setDistributionStrategy] = useState('LINEAR')
   const [elementMode, setElementMode] = useState<ElementMode>('PER_FIXTURE')
   const [elementFilter, setElementFilter] = useState('ALL')
+  const [stepTiming, setStepTiming] = useState(false)
   const [selectedSettingProp, setSelectedSettingProp] = useState<string | null>(null)
   const [selectedSliderProp, setSelectedSliderProp] = useState<string | null>(null)
 
@@ -241,6 +242,8 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
       setSelectedSettingProp(mode.effect.propertyName ?? null)
       setSelectedSliderProp(mode.effect.propertyName ?? null)
 
+      setStepTiming(mode.effect.stepTiming ?? false)
+
       if (target.type === 'group' && 'distribution' in mode.effect) {
         setDistributionStrategy(mode.effect.distribution)
         setElementMode((mode.effect as GroupActiveEffect).elementMode ?? 'PER_FIXTURE')
@@ -261,6 +264,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
       setDistributionStrategy('LINEAR')
       setElementMode('PER_FIXTURE')
       setElementFilter('ALL')
+      setStepTiming(false)
       setSelectedSettingProp(null)
       setSelectedSliderProp(null)
     }
@@ -298,6 +302,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
             blendMode,
             phaseOffset,
             parameters,
+            stepTiming,
             ...(fixtureIsMultiHead ? { distributionStrategy } : {}),
             ...filterPayload,
           },
@@ -312,6 +317,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
           startOnBeat,
           phaseOffset,
           parameters,
+          stepTiming,
           ...(fixtureIsMultiHead ? { distributionStrategy } : {}),
           ...filterPayload,
         })
@@ -332,6 +338,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
             phaseOffset,
             parameters,
             distributionStrategy,
+            stepTiming,
             ...(hasMultiElementMembers ? { elementMode } : {}),
             ...filterPayload,
           },
@@ -346,6 +353,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
           distribution: distributionStrategy as DistributionStrategy,
           phaseOffset,
           parameters,
+          stepTiming,
           ...(hasMultiElementMembers ? { elementMode } : {}),
           ...filterPayload,
         })
@@ -411,6 +419,8 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
               sliderProperties={selectedEffect?.compatibleProperties.includes('slider') ? extraSliderProperties : undefined}
               onSliderPropertyChange={setSelectedSliderProp}
               extendedChannels={selectedEffect?.category === 'colour' ? extendedChannels : undefined}
+              stepTiming={stepTiming}
+              onStepTimingChange={setStepTiming}
             />
           )}
         </div>

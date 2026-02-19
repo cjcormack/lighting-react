@@ -11,6 +11,7 @@ export interface FxPresetEffect {
   phaseOffset: number
   elementMode: string | null
   elementFilter: string | null
+  stepTiming: boolean | null
   parameters: Record<string, string>
 }
 

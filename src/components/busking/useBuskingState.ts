@@ -489,6 +489,7 @@ export function useBuskingState() {
         phaseOffset: number
         distribution: string
         elementMode?: string
+        stepTiming?: boolean
         parameters: Record<string, string>
       },
     ) => {
@@ -509,6 +510,7 @@ export function useBuskingState() {
               phaseOffset: params.phaseOffset,
               parameters: { ...params.parameters },
               ...(params.elementMode ? { elementMode: params.elementMode as ElementMode } : {}),
+              ...(params.stepTiming !== undefined ? { stepTiming: params.stepTiming } : {}),
             }).unwrap(),
           )
         } else {
@@ -523,6 +525,7 @@ export function useBuskingState() {
               phaseOffset: params.phaseOffset,
               parameters: { ...params.parameters },
               distributionStrategy: params.distribution,
+              ...(params.stepTiming !== undefined ? { stepTiming: params.stepTiming } : {}),
             }).unwrap(),
           )
         }

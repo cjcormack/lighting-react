@@ -11,6 +11,7 @@ interface ActiveEffectItemProps {
   blendMode: string
   isRunning: boolean
   distributionStrategy?: string
+  stepTiming?: boolean
   /** Optional badge to show next to the effect name (e.g. "via GroupName" or element mode) */
   badge?: string
   /** Called when pause/resume is clicked. Omit to hide all action buttons. */
@@ -26,6 +27,7 @@ export function ActiveEffectItem({
   blendMode,
   isRunning,
   distributionStrategy,
+  stepTiming,
   badge,
   onPauseResume,
   onEdit,
@@ -64,6 +66,12 @@ export function ActiveEffectItem({
             <>
               <span className="text-muted-foreground/50">&middot;</span>
               <span>{getDistributionLabel(distributionStrategy)}</span>
+            </>
+          )}
+          {stepTiming && (
+            <>
+              <span className="text-muted-foreground/50">&middot;</span>
+              <span>step</span>
             </>
           )}
         </div>

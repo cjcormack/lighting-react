@@ -143,6 +143,13 @@ export function PresetEffectDetail({ effect, onClick }: { effect: FxPresetEffect
           </>
         )}
 
+        {effect.stepTiming && (
+          <>
+            <span className="text-muted-foreground">Step Timing</span>
+            <span>Yes</span>
+          </>
+        )}
+
         {effect.phaseOffset !== 0 && (
           <>
             <span className="text-muted-foreground">Phase Offset</span>

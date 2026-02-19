@@ -1,6 +1,7 @@
 import { Sun, Palette, Move, SlidersHorizontal, type LucideIcon } from 'lucide-react'
 
 export const BEAT_DIVISION_OPTIONS = [
+  { value: 0.125, label: '1/32', description: 'Thirty-second note' },
   { value: 0.25, label: '1/16', description: 'Sixteenth note' },
   { value: 0.333, label: 'Trip', description: 'Triplet' },
   { value: 0.5, label: '1/8', description: 'Eighth note' },

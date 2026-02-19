@@ -21,6 +21,7 @@ interface ConfigureEffectSheetProps {
     phaseOffset: number
     distribution: string
     elementMode?: string
+    stepTiming?: boolean
     parameters: Record<string, string>
   }) => void
   onClose: () => void
@@ -48,6 +49,7 @@ export function ConfigureEffectSheet({
   const [phaseOffset, setPhaseOffset] = useState(0)
   const [distribution, setDistribution] = useState('LINEAR')
   const [elementMode, setElementMode] = useState('PER_FIXTURE')
+  const [stepTiming, setStepTiming] = useState(false)
   const [parameters, setParameters] = useState<Record<string, string>>({})
 
   // Reset state when a new effect is opened
@@ -58,6 +60,7 @@ export function ConfigureEffectSheet({
     setPhaseOffset(0)
     setDistribution('LINEAR')
     setElementMode('PER_FIXTURE')
+    setStepTiming(false)
     const defaults: Record<string, string> = {}
     effect.parameters.forEach((p) => {
       defaults[p.name] = p.defaultValue
@@ -81,6 +84,7 @@ export function ConfigureEffectSheet({
       phaseOffset,
       distribution,
       ...(showElementMode ? { elementMode } : {}),
+      stepTiming,
       parameters,
     })
   }
@@ -117,6 +121,8 @@ export function ConfigureEffectSheet({
               onElementModeChange={setElementMode}
               showElementMode={showElementMode}
               extendedChannels={effect.category === 'colour' ? extendedChannels : undefined}
+              stepTiming={stepTiming}
+              onStepTimingChange={setStepTiming}
             />
           )}
         </div>

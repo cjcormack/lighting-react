@@ -55,6 +55,8 @@ interface EffectParameterFormProps {
   onSliderPropertyChange?: (propertyName: string) => void
   /** Extended colour channels available on the target fixture (for colour effects) */
   extendedChannels?: { white?: boolean; amber?: boolean; uv?: boolean }
+  stepTiming?: boolean
+  onStepTimingChange?: (v: boolean) => void
 }
 
 export function EffectParameterForm({
@@ -88,6 +90,8 @@ export function EffectParameterForm({
   sliderProperties,
   onSliderPropertyChange,
   extendedChannels,
+  stepTiming,
+  onStepTimingChange,
 }: EffectParameterFormProps) {
   const [showAdvanced, setShowAdvanced] = useState(false)
 
@@ -143,6 +147,20 @@ export function EffectParameterForm({
           ))}
         </ToggleGroup>
       </div>
+
+      {/* Step timing (multi-head fixtures only) */}
+      {showDistribution && stepTiming !== undefined && onStepTimingChange && (
+        <label className="flex items-center gap-2 text-xs cursor-pointer">
+          <input
+            type="checkbox"
+            checked={stepTiming}
+            onChange={(e) => onStepTimingChange(e.target.checked)}
+            className="rounded border-input"
+          />
+          <span>Step Timing</span>
+          <span className="text-muted-foreground">Beat division controls per-head step rate</span>
+        </label>
+      )}
 
       {/* Distribution strategy (multi-head fixtures only) */}
       {showDistribution && distributionStrategy && onDistributionStrategyChange && (

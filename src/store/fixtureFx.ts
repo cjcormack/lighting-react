@@ -24,6 +24,7 @@ export interface FixtureDirectEffect {
   isGroupTarget: false
   distributionStrategy: string | null
   elementFilter: string | null
+  stepTiming: boolean
   presetId: number | null
 }
 
@@ -39,6 +40,7 @@ export interface FixtureIndirectEffect {
   currentPhase: number
   parameters: Record<string, string>
   distributionStrategy: string
+  stepTiming: boolean
 }
 
 export interface FixtureEffects {
@@ -73,6 +75,7 @@ export interface AddFixtureFxRequest {
   parameters: Record<string, string>
   distributionStrategy?: string
   elementFilter?: string
+  stepTiming?: boolean
 }
 
 export interface UpdateFxRequest {
@@ -83,6 +86,7 @@ export interface UpdateFxRequest {
   phaseOffset?: number
   distributionStrategy?: string
   elementFilter?: string
+  stepTiming?: boolean
 }
 
 // === RTK Query Endpoints ===

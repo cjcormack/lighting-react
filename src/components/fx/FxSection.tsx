@@ -81,6 +81,7 @@ function FixtureFxSection({ fixture }: { fixture: Fixture }) {
           blendMode={effect.blendMode}
           isRunning={effect.isRunning}
           distributionStrategy={effect.distributionStrategy ?? undefined}
+          stepTiming={effect.stepTiming}
           onPauseResume={() =>
             effect.isRunning
               ? pauseFx({ id: effect.id, fixtureKey: fixture.key })
@@ -102,6 +103,7 @@ function FixtureFxSection({ fixture }: { fixture: Fixture }) {
           blendMode={effect.blendMode}
           isRunning={effect.isRunning}
           distributionStrategy={effect.distributionStrategy ?? undefined}
+          stepTiming={effect.stepTiming}
           badge={'groupName' in effect ? `via ${effect.groupName}` : undefined}
         />
       ))}
@@ -156,6 +158,7 @@ function GroupFxSection({ group }: { group: GroupSummary }) {
           blendMode={effect.blendMode}
           isRunning={effect.isRunning}
           distributionStrategy={effect.distribution}
+          stepTiming={effect.stepTiming}
           badge={effect.elementMode ? getElementModeLabel(effect.elementMode) : undefined}
           onPauseResume={() =>
             effect.isRunning

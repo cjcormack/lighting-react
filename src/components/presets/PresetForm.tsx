@@ -84,6 +84,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
   const [addSelectedSliderProp, setAddSelectedSliderProp] = useState<string | null>(null)
   const [addElementMode, setAddElementMode] = useState('PER_FIXTURE')
   const [addElementFilter, setAddElementFilter] = useState('ALL')
+  const [addStepTiming, setAddStepTiming] = useState(false)
 
   // Edit Effect state
   const [editEffectIndex, setEditEffectIndex] = useState<number | null>(null)
@@ -97,6 +98,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
   const [editSelectedSliderProp, setEditSelectedSliderProp] = useState<string | null>(null)
   const [editElementMode, setEditElementMode] = useState('PER_FIXTURE')
   const [editElementFilter, setEditElementFilter] = useState('ALL')
+  const [editStepTiming, setEditStepTiming] = useState(false)
 
   // Build hierarchy from all known fixture types
   const hierarchy = useMemo<FixtureTypeHierarchy | null>(() => {
@@ -301,6 +303,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
       phaseOffset: addPhaseOffset,
       elementMode: showElementMode ? addElementMode : null,
       elementFilter: addElementFilter !== 'ALL' ? addElementFilter : null,
+      stepTiming: addStepTiming || null,
       parameters: { ...addParameters },
     }
     setEffects([...effects, newEffect])
@@ -337,6 +340,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
     setAddDistribution('LINEAR')
     setAddElementMode('PER_FIXTURE')
     setAddElementFilter('ALL')
+    setAddStepTiming(false)
     setAddParameters({})
     setAddSelectedSettingProp(null)
     setAddSelectedSliderProp(null)
@@ -376,6 +380,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
     setEditDistribution(effect.distribution)
     setEditElementMode(effect.elementMode ?? 'PER_FIXTURE')
     setEditElementFilter(effect.elementFilter ?? 'ALL')
+    setEditStepTiming(effect.stepTiming ?? false)
     setEditParameters({ ...effect.parameters })
     setEditSelectedSettingProp(effect.propertyName)
     setEditSelectedSliderProp(effect.propertyName)
@@ -394,6 +399,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
       phaseOffset: editPhaseOffset,
       elementMode: showElementMode ? editElementMode : null,
       elementFilter: editElementFilter !== 'ALL' ? editElementFilter : null,
+      stepTiming: editStepTiming || null,
       parameters: { ...editParameters },
     }
     handleUpdateEffect(editEffectIndex, updated)
@@ -725,6 +731,8 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
                   sliderProperties={addEffectEntry.compatibleProperties.includes('slider') ? extraSliderProperties : undefined}
                   onSliderPropertyChange={setAddSelectedSliderProp}
                   extendedChannels={addEffectEntry.category === 'colour' ? extendedChannels : undefined}
+                  stepTiming={addStepTiming}
+                  onStepTimingChange={setAddStepTiming}
                 />
               )}
             </div>
@@ -773,6 +781,8 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
                 sliderProperties={editEffectEntry.compatibleProperties.includes('slider') ? extraSliderProperties : undefined}
                 onSliderPropertyChange={setEditSelectedSliderProp}
                 extendedChannels={editEffectEntry.category === 'colour' ? extendedChannels : undefined}
+                stepTiming={editStepTiming}
+                onStepTimingChange={setEditStepTiming}
               />
             </div>
             <div className="flex gap-2 border-t px-4 pb-4 pt-2">
