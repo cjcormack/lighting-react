@@ -1,18 +1,18 @@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Pencil, Trash2, Copy } from 'lucide-react'
-import {
-  EFFECT_CATEGORY_INFO,
-  getBeatDivisionLabel,
-  getDistributionLabel,
-  getEffectDescription,
-} from '@/components/fx/fxConstants'
+import { EFFECT_CATEGORY_INFO } from '@/components/fx/fxConstants'
+import { EffectSummary } from '@/components/fx/EffectSummary'
+import { fromPresetEffect } from '@/components/fx/effectSummaryTypes'
 import { resolveFixtureTypeLabel } from '@/api/fxPresetsApi'
-import type { FxPreset, FxPresetEffect, FixtureTypeHierarchy } from '@/api/fxPresetsApi'
+import type { FxPreset, FixtureTypeHierarchy } from '@/api/fxPresetsApi'
+import type { EffectLibraryEntry } from '@/store/fixtureFx'
 
 interface PresetDetailPanelProps {
   preset: FxPreset
   hierarchy: FixtureTypeHierarchy | null
+  library?: EffectLibraryEntry[]
+  palette?: string[]
   onEdit?: () => void
   onDelete?: () => void
   onCopy?: () => void
@@ -22,6 +22,8 @@ interface PresetDetailPanelProps {
 export function PresetDetailPanel({
   preset,
   hierarchy,
+  library,
+  palette,
   onEdit,
   onDelete,
   onCopy,
@@ -88,93 +90,14 @@ export function PresetDetailPanel({
       {/* Effects */}
       <div className="space-y-2">
         {preset.effects.map((effect, index) => (
-          <PresetEffectDetail
+          <EffectSummary
             key={`${effect.effectType}-${index}`}
-            effect={effect}
+            effect={fromPresetEffect(effect, library)}
+            palette={palette}
             onClick={onEditEffect ? () => onEditEffect(index) : undefined}
           />
         ))}
       </div>
     </div>
-  )
-}
-
-export function PresetEffectDetail({ effect, onClick }: { effect: FxPresetEffect; onClick?: () => void }) {
-  const categoryInfo = EFFECT_CATEGORY_INFO[effect.category]
-  const CategoryIcon = categoryInfo?.icon
-  const description = getEffectDescription(effect.effectType)
-
-  const customParams = Object.entries(effect.parameters)
-  const blendLabel =
-    effect.blendMode !== 'OVERRIDE'
-      ? effect.blendMode.charAt(0) + effect.blendMode.slice(1).toLowerCase()
-      : null
-
-  return (
-    <div
-      className={`border rounded-lg p-3 space-y-2 ${onClick ? 'cursor-pointer hover:bg-accent/50 transition-colors' : ''}`}
-      onClick={onClick}
-    >
-      {/* Effect header */}
-      <div className="flex items-center gap-2">
-        {CategoryIcon && <CategoryIcon className="size-4 text-muted-foreground shrink-0" />}
-        <span className="text-sm font-medium">{effect.effectType}</span>
-        {effect.propertyName && (
-          <span className="text-xs text-muted-foreground">&rarr; {effect.propertyName}</span>
-        )}
-      </div>
-
-      {description && (
-        <p className="text-xs text-muted-foreground">{description}</p>
-      )}
-
-      {/* Parameters grid */}
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-        <span className="text-muted-foreground">Speed</span>
-        <span>{getBeatDivisionLabel(effect.beatDivision)}</span>
-
-        <span className="text-muted-foreground">Distribution</span>
-        <span>{getDistributionLabel(effect.distribution)}</span>
-
-        {blendLabel && (
-          <>
-            <span className="text-muted-foreground">Blend</span>
-            <span>{blendLabel}</span>
-          </>
-        )}
-
-        {effect.stepTiming && (
-          <>
-            <span className="text-muted-foreground">Step Timing</span>
-            <span>Yes</span>
-          </>
-        )}
-
-        {effect.phaseOffset !== 0 && (
-          <>
-            <span className="text-muted-foreground">Phase Offset</span>
-            <span>{effect.phaseOffset}</span>
-          </>
-        )}
-
-        {customParams.map(([key, value]) => (
-          <ParamRow key={key} name={key} value={value} />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function ParamRow({ name, value }: { name: string; value: string }) {
-  const label = name
-    .replace(/([A-Z])/g, ' $1')
-    .replace(/^./, (s) => s.toUpperCase())
-    .trim()
-
-  return (
-    <>
-      <span className="text-muted-foreground">{label}</span>
-      <span>{value}</span>
-    </>
   )
 }

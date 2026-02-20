@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { AudioWaveform, ChevronDown, ChevronRight, Plus } from 'lucide-react'
+import { AudioWaveform, ChevronDown, ChevronRight, Pause, Pencil, Play, Plus, X } from 'lucide-react'
 import {
   useFixtureEffectsQuery,
+  useEffectLibraryQuery,
   useRemoveFxMutation,
   usePauseFxMutation,
   useResumeFxMutation,
-  type FixtureDirectEffect,
 } from '@/store/fixtureFx'
 import {
   useGroupActiveEffectsQuery,
@@ -15,11 +15,13 @@ import {
   useResumeGroupFxMutation,
   useRemoveGroupFxMutation,
 } from '@/store/groups'
+import { useFxStateQuery } from '@/store/fx'
 import { getElementModeLabel } from './fxConstants'
+import { EffectSummary } from './EffectSummary'
+import { fromFixtureDirectEffect, fromFixtureIndirectEffect, fromGroupActiveEffect } from './effectSummaryTypes'
 import type { Fixture } from '@/store/fixtures'
-import type { GroupSummary, GroupActiveEffect } from '@/api/groupsApi'
-import { ActiveEffectItem } from './ActiveEffectItem'
-import { AddEditFxSheet, type FxTarget, type SheetMode } from './AddEditFxSheet'
+import type { GroupSummary } from '@/api/groupsApi'
+import { AddEditFxSheet, type SheetMode } from './AddEditFxSheet'
 import { PresetPicker } from './PresetPicker'
 
 // ─── Public API ────────────────────────────────────────────────────────────
@@ -42,6 +44,8 @@ export function FxSection(props: FxSectionProps) {
 
 function FixtureFxSection({ fixture }: { fixture: Fixture }) {
   const { data: effects, isLoading } = useFixtureEffectsQuery(fixture.key)
+  const { data: library } = useEffectLibraryQuery()
+  const { data: fxState } = useFxStateQuery()
   const [isExpanded, setIsExpanded] = useState(false)
   const [sheetState, setSheetState] = useState<SheetMode | undefined>(undefined)
 
@@ -52,6 +56,7 @@ function FixtureFxSection({ fixture }: { fixture: Fixture }) {
   const directEffects = effects?.direct ?? []
   const indirectEffects = effects?.indirect ?? []
   const totalCount = directEffects.length + indirectEffects.length
+  const palette = fxState?.palette
 
   if (isLoading) return null
 
@@ -73,38 +78,53 @@ function FixtureFxSection({ fixture }: { fixture: Fixture }) {
       }
     >
       {directEffects.map((effect) => (
-        <ActiveEffectItem
+        <EffectSummary
           key={effect.id}
-          effectType={effect.effectType}
-          propertyName={effect.propertyName}
-          beatDivision={effect.beatDivision}
-          blendMode={effect.blendMode}
+          effect={fromFixtureDirectEffect(effect, library)}
           isRunning={effect.isRunning}
-          distributionStrategy={effect.distributionStrategy ?? undefined}
-          stepTiming={effect.stepTiming}
-          onPauseResume={() =>
-            effect.isRunning
-              ? pauseFx({ id: effect.id, fixtureKey: fixture.key })
-              : resumeFx({ id: effect.id, fixtureKey: fixture.key })
+          palette={palette}
+          actions={
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7"
+                onClick={() =>
+                  effect.isRunning
+                    ? pauseFx({ id: effect.id, fixtureKey: fixture.key })
+                    : resumeFx({ id: effect.id, fixtureKey: fixture.key })
+                }
+              >
+                {effect.isRunning ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7"
+                onClick={() => setSheetState({ mode: 'edit', effectId: effect.id, effect })}
+              >
+                <Pencil className="size-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 text-destructive hover:text-destructive"
+                onClick={() => removeFx({ id: effect.id, fixtureKey: fixture.key })}
+              >
+                <X className="size-3.5" />
+              </Button>
+            </>
           }
-          onEdit={() =>
-            setSheetState({ mode: 'edit', effectId: effect.id, effect })
-          }
-          onRemove={() => removeFx({ id: effect.id, fixtureKey: fixture.key })}
         />
       ))}
 
       {indirectEffects.map((effect) => (
-        <ActiveEffectItem
+        <EffectSummary
           key={effect.id}
-          effectType={effect.effectType}
-          propertyName={effect.propertyName}
-          beatDivision={effect.beatDivision}
-          blendMode={effect.blendMode}
+          effect={fromFixtureIndirectEffect(effect, library)}
           isRunning={effect.isRunning}
-          distributionStrategy={effect.distributionStrategy ?? undefined}
-          stepTiming={effect.stepTiming}
-          badge={'groupName' in effect ? `via ${effect.groupName}` : undefined}
+          badge={`via ${effect.groupName}`}
+          palette={palette}
         />
       ))}
 
@@ -121,6 +141,8 @@ function FixtureFxSection({ fixture }: { fixture: Fixture }) {
 
 function GroupFxSection({ group }: { group: GroupSummary }) {
   const { data: effects, isLoading } = useGroupActiveEffectsQuery(group.name)
+  const { data: library } = useEffectLibraryQuery()
+  const { data: fxState } = useFxStateQuery()
   const [isExpanded, setIsExpanded] = useState(false)
   const [sheetState, setSheetState] = useState<SheetMode | undefined>(undefined)
 
@@ -129,6 +151,7 @@ function GroupFxSection({ group }: { group: GroupSummary }) {
   const [removeFx] = useRemoveGroupFxMutation()
 
   const totalCount = effects?.length ?? 0
+  const palette = fxState?.palette
 
   if (isLoading) return null
 
@@ -150,25 +173,44 @@ function GroupFxSection({ group }: { group: GroupSummary }) {
       }
     >
       {effects?.map((effect) => (
-        <ActiveEffectItem
+        <EffectSummary
           key={effect.id}
-          effectType={effect.effectType}
-          propertyName={effect.propertyName}
-          beatDivision={effect.beatDivision}
-          blendMode={effect.blendMode}
+          effect={fromGroupActiveEffect(effect, library)}
           isRunning={effect.isRunning}
-          distributionStrategy={effect.distribution}
-          stepTiming={effect.stepTiming}
           badge={effect.elementMode ? getElementModeLabel(effect.elementMode) : undefined}
-          onPauseResume={() =>
-            effect.isRunning
-              ? pauseFx({ id: effect.id, groupName: group.name })
-              : resumeFx({ id: effect.id, groupName: group.name })
+          palette={palette}
+          actions={
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7"
+                onClick={() =>
+                  effect.isRunning
+                    ? pauseFx({ id: effect.id, groupName: group.name })
+                    : resumeFx({ id: effect.id, groupName: group.name })
+                }
+              >
+                {effect.isRunning ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7"
+                onClick={() => setSheetState({ mode: 'edit', effectId: effect.id, effect })}
+              >
+                <Pencil className="size-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 text-destructive hover:text-destructive"
+                onClick={() => removeFx({ id: effect.id, groupName: group.name })}
+              >
+                <X className="size-3.5" />
+              </Button>
+            </>
           }
-          onEdit={() =>
-            setSheetState({ mode: 'edit', effectId: effect.id, effect })
-          }
-          onRemove={() => removeFx({ id: effect.id, groupName: group.name })}
         />
       ))}
 

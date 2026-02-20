@@ -9,13 +9,17 @@ import {
 import { MoreHorizontal, Pencil, Trash2, Copy, CopyPlus, ChevronDown, ChevronRight, Clapperboard } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { EFFECT_CATEGORY_INFO } from '@/components/fx/fxConstants'
-import { PresetEffectDetail } from './PresetDetailPanel'
+import { EffectSummary } from '@/components/fx/EffectSummary'
+import { fromPresetEffect } from '@/components/fx/effectSummaryTypes'
 import type { FxPreset } from '@/api/fxPresetsApi'
+import type { EffectLibraryEntry } from '@/store/fixtureFx'
 
 interface PresetListRowProps {
   preset: FxPreset
   selected?: boolean
   expanded?: boolean
+  library?: EffectLibraryEntry[]
+  palette?: string[]
   onToggleExpand?: () => void
   onClick?: () => void
   onEdit?: () => void
@@ -29,6 +33,8 @@ export function PresetListRow({
   preset,
   selected,
   expanded,
+  library,
+  palette,
   onToggleExpand,
   onClick,
   onEdit,
@@ -154,9 +160,10 @@ export function PresetListRow({
       {expanded && preset.effects.length > 0 && (
         <div className="px-3 pb-3 pt-1 space-y-2 ml-5">
           {preset.effects.map((effect, index) => (
-            <PresetEffectDetail
+            <EffectSummary
               key={`${effect.effectType}-${index}`}
-              effect={effect}
+              effect={fromPresetEffect(effect, library)}
+              palette={palette}
               onClick={onEditEffect ? () => onEditEffect(index) : undefined}
             />
           ))}

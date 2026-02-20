@@ -41,8 +41,6 @@ import {
   AudioWaveform,
   ChevronDown,
   ChevronRight,
-  Layers,
-  LayoutGrid,
   Globe,
   RotateCcw,
   Replace,
@@ -66,13 +64,11 @@ import { CopyCueDialog } from '../components/cues/CopyCueDialog'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { useProjectPresetListQuery } from '../store/fxPresets'
 import type { FxPreset } from '../api/fxPresetsApi'
-import type { Cue, CueInput, CueAdHocEffect, CueCurrentState } from '../api/cuesApi'
-import {
-  EFFECT_CATEGORY_INFO,
-  getBeatDivisionLabel,
-  getDistributionLabel,
-  getEffectDescription,
-} from '../components/fx/fxConstants'
+import type { Cue, CueInput, CueCurrentState } from '../api/cuesApi'
+import { EffectSummary } from '../components/fx/EffectSummary'
+import { PresetApplicationSummary } from '../components/fx/PresetApplicationSummary'
+import { fromPresetEffect, fromCueAdHocEffect } from '../components/fx/effectSummaryTypes'
+import { useEffectLibraryQuery } from '../store/fixtureFx'
 
 // Redirect /cues → /projects/:projectId/cues
 export function CuesRedirect() {
@@ -104,6 +100,7 @@ export function ProjectCues() {
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
   const { data: cues, isLoading: cuesLoading } = useProjectCueListQuery(projectIdNum)
   const { data: presets } = useProjectPresetListQuery(projectIdNum)
+  const { data: library } = useEffectLibraryQuery()
 
   const [createCue, { isLoading: isCreating }] = useCreateProjectCueMutation()
   const [saveCue, { isLoading: isSaving }] = useSaveProjectCueMutation()
@@ -277,6 +274,7 @@ export function ProjectCues() {
           key={cue.id}
           cue={cue}
           presets={presets}
+          library={library}
           isCurrentProject={isCurrentProject}
           isActive={activeCueIds.has(cue.id)}
           isFirst={index === 0}
@@ -409,6 +407,7 @@ export function ProjectCues() {
 function CueListRow({
   cue,
   presets,
+  library,
   isCurrentProject,
   isActive,
   isFirst,
@@ -428,6 +427,7 @@ function CueListRow({
 }: {
   cue: Cue
   presets?: FxPreset[]
+  library?: import('@/store/fixtureFx').EffectLibraryEntry[]
   isCurrentProject: boolean
   isActive?: boolean
   isFirst?: boolean
@@ -673,74 +673,29 @@ function CueListRow({
           {cue.presetApplications.map((pa, index) => {
             const fullPreset = presets?.find((p) => p.id === pa.presetId)
             const presetEffects = fullPreset?.effects ?? []
-            const categories = [...new Set(presetEffects.map((e) => e.category))]
 
             return (
-              <div
+              <PresetApplicationSummary
                 key={`preset-${index}`}
-                className="border rounded-lg p-3 space-y-1.5"
-              >
-                <div className="flex items-center gap-2">
-                  <Bookmark className="size-4 text-muted-foreground shrink-0" />
-                  <span className="text-sm font-medium">
-                    {pa.presetName ?? `Preset #${pa.presetId}`}
-                  </span>
-                  {/* Effect category icons */}
-                  <div className="flex items-center gap-0.5">
-                    {categories.map((cat) => {
-                      const info = EFFECT_CATEGORY_INFO[cat]
-                      if (!info) return null
-                      const CatIcon = info.icon
-                      return (
-                        <span key={cat} title={info.label}>
-                          <CatIcon className="size-3 text-muted-foreground" />
-                        </span>
-                      )
-                    })}
-                  </div>
-                  {presetEffects.length > 0 && (
-                    <span className="text-[10px] text-muted-foreground">
-                      {presetEffects.length} fx
-                    </span>
-                  )}
-                </div>
-
-                {/* Effect names */}
-                {presetEffects.length > 0 && (
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {presetEffects.map((fx, fi) => {
-                      const catInfo = EFFECT_CATEGORY_INFO[fx.category]
-                      const FxIcon = catInfo?.icon
-                      return (
-                        <span key={fi} className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-                          {FxIcon && <FxIcon className="size-2.5" />}
-                          {fx.effectType}
-                        </span>
-                      )
-                    })}
-                  </div>
-                )}
-
-                {/* Targets */}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {pa.targets.map((t, ti) => (
-                    <span key={ti} className="flex items-center gap-0.5 text-[11px] text-muted-foreground">
-                      {t.type === 'group' ? (
-                        <Layers className="size-3" />
-                      ) : (
-                        <LayoutGrid className="size-3" />
-                      )}
-                      {t.key}
-                    </span>
-                  ))}
-                </div>
-              </div>
+                presetName={pa.presetName}
+                presetId={pa.presetId}
+                effects={presetEffects.map((e) => fromPresetEffect(e, library))}
+                targets={pa.targets}
+                palette={cue.palette}
+                onClick={onEdit}
+              />
             )
           })}
 
           {/* Ad-hoc effects */}
           {cue.adHocEffects.map((effect, index) => (
-            <CueEffectDetail key={`effect-${index}`} effect={effect} />
+            <EffectSummary
+              key={`effect-${index}`}
+              effect={fromCueAdHocEffect(effect, library)}
+              target={{ type: effect.targetType, key: effect.targetKey }}
+              palette={cue.palette}
+              onClick={onEdit}
+            />
           ))}
         </div>
       )}
@@ -768,65 +723,3 @@ function CueListRow({
   )
 }
 
-/** Inline detail card for a cue ad-hoc effect (matches PresetEffectDetail pattern) */
-function CueEffectDetail({ effect }: { effect: CueAdHocEffect }) {
-  const categoryInfo = EFFECT_CATEGORY_INFO[effect.category]
-  const CategoryIcon = categoryInfo?.icon
-  const description = getEffectDescription(effect.effectType)
-  const blendLabel =
-    effect.blendMode !== 'OVERRIDE'
-      ? effect.blendMode.charAt(0) + effect.blendMode.slice(1).toLowerCase()
-      : null
-
-  return (
-    <div className="border rounded-lg p-3 space-y-2">
-      {/* Header */}
-      <div className="flex items-center gap-2">
-        {CategoryIcon && <CategoryIcon className="size-4 text-muted-foreground shrink-0" />}
-        <span className="text-sm font-medium">{effect.effectType}</span>
-        <span className="flex items-center gap-0.5 text-[11px] text-muted-foreground">
-          {effect.targetType === 'group' ? (
-            <Layers className="size-3" />
-          ) : (
-            <LayoutGrid className="size-3" />
-          )}
-          {effect.targetKey}
-        </span>
-      </div>
-
-      {description && (
-        <p className="text-xs text-muted-foreground">{description}</p>
-      )}
-
-      {/* Parameters grid */}
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-        <span className="text-muted-foreground">Speed</span>
-        <span>{getBeatDivisionLabel(effect.beatDivision)}</span>
-
-        <span className="text-muted-foreground">Distribution</span>
-        <span>{getDistributionLabel(effect.distribution)}</span>
-
-        {blendLabel && (
-          <>
-            <span className="text-muted-foreground">Blend</span>
-            <span>{blendLabel}</span>
-          </>
-        )}
-
-        {effect.stepTiming && (
-          <>
-            <span className="text-muted-foreground">Step Timing</span>
-            <span>Yes</span>
-          </>
-        )}
-
-        {effect.phaseOffset !== 0 && (
-          <>
-            <span className="text-muted-foreground">Phase Offset</span>
-            <span>{effect.phaseOffset}</span>
-          </>
-        )}
-      </div>
-    </div>
-  )
-}

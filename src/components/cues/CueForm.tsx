@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -18,16 +18,16 @@ import {
   Palette,
   Bookmark,
   AudioWaveform,
-  Layers,
-  LayoutGrid,
   Eraser,
   Globe,
   Check,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useEffectLibraryQuery, type EffectLibraryEntry } from '@/store/fixtureFx'
+import { useEffectLibraryQuery } from '@/store/fixtureFx'
 import { useProjectPresetListQuery } from '@/store/fxPresets'
-import { EFFECT_CATEGORY_INFO, BEAT_DIVISION_OPTIONS, getEffectDescription } from '@/components/fx/fxConstants'
+import { EffectSummary } from '@/components/fx/EffectSummary'
+import { PresetApplicationSummary } from '@/components/fx/PresetApplicationSummary'
+import { fromPresetEffect, fromCueAdHocEffect } from '@/components/fx/effectSummaryTypes'
 import { CuePaletteEditor } from './CuePaletteEditor'
 import { CuePresetPicker } from './CuePresetPicker'
 import { CueEffectFlow } from './CueEffectFlow'
@@ -88,30 +88,6 @@ export function CueForm({
   const [editingEffectIndex, setEditingEffectIndex] = useState<number | null>(null)
 
   const isEditing = cue !== null
-
-  // ── Library lookup ──
-  const libraryMap = useMemo(() => {
-    if (!library) return new Map<string, EffectLibraryEntry>()
-    const map = new Map<string, EffectLibraryEntry>()
-    for (const entry of library) {
-      const normalized = entry.name.toLowerCase().replace(/[\s_]/g, '')
-      map.set(`${entry.category}:${normalized}`, entry)
-      map.set(normalized, entry)
-    }
-    return map
-  }, [library])
-
-  const findLibraryEntry = useCallback(
-    (effectType: string, category?: string): EffectLibraryEntry | undefined => {
-      const normalized = effectType.toLowerCase().replace(/[\s_]/g, '')
-      if (category) {
-        const qualified = libraryMap.get(`${category}:${normalized}`)
-        if (qualified) return qualified
-      }
-      return libraryMap.get(normalized)
-    },
-    [libraryMap],
-  )
 
   // ── Reset form when sheet opens ──
   useEffect(() => {
@@ -370,80 +346,30 @@ export function CueForm({
                 {presetApps.map((pa, index) => {
                   const fullPreset = presets?.find((p) => p.id === pa.presetId)
                   const presetEffects = fullPreset?.effects ?? []
-                  const categories = [...new Set(presetEffects.map((e) => e.category))]
 
                   return (
-                    <div
+                    <PresetApplicationSummary
                       key={`preset-${index}`}
-                      className="flex items-center gap-2 px-3 py-2 border rounded-lg cursor-pointer hover:bg-accent/50 transition-colors"
+                      presetName={pa.presetName}
+                      presetId={pa.presetId}
+                      effects={presetEffects.map((e) => fromPresetEffect(e, library))}
+                      targets={pa.targets}
+                      palette={palette}
                       onClick={() => handleEditPreset(index)}
-                    >
-                      <Bookmark className="size-4 text-muted-foreground shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-medium truncate">
-                            {pa.presetName ?? `Preset #${pa.presetId}`}
-                          </span>
-                          {/* Effect category icons */}
-                          {categories.map((cat) => {
-                            const info = EFFECT_CATEGORY_INFO[cat]
-                            if (!info) return null
-                            const CatIcon = info.icon
-                            return (
-                              <span key={cat} title={info.label}>
-                                <CatIcon className="size-3 text-muted-foreground" />
-                              </span>
-                            )
-                          })}
-                          {presetEffects.length > 0 && (
-                            <span className="text-[10px] text-muted-foreground">
-                              {presetEffects.length} fx
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                          {/* Effect names */}
-                          {presetEffects.map((fx, fi) => {
-                            const catInfo = EFFECT_CATEGORY_INFO[fx.category]
-                            const FxIcon = catInfo?.icon
-                            return (
-                              <span key={`fx-${fi}`} className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-                                {FxIcon && <FxIcon className="size-2.5" />}
-                                {fx.effectType}
-                              </span>
-                            )
-                          })}
-                          {/* Targets */}
-                          {presetEffects.length > 0 && pa.targets.length > 0 && (
-                            <span className="text-[10px] text-muted-foreground">·</span>
-                          )}
-                          {pa.targets.map((t, ti) => (
-                            <span key={`t-${ti}`} className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-                              {t.type === 'group' ? (
-                                <Layers className="size-2.5" />
-                              ) : (
-                                <LayoutGrid className="size-2.5" />
-                              )}
-                              {t.key}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
-                        {pa.targets.length} target{pa.targets.length !== 1 ? 's' : ''}
-                      </Badge>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-7 text-muted-foreground hover:text-destructive shrink-0"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleRemovePreset(index)
-                        }}
-                      >
-                        <X className="size-3.5" />
-                      </Button>
-                    </div>
+                      actions={
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-7 text-muted-foreground hover:text-destructive shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleRemovePreset(index)
+                          }}
+                        >
+                          <X className="size-3.5" />
+                        </Button>
+                      }
+                    />
                   )
                 })}
               </div>
@@ -472,42 +398,14 @@ export function CueForm({
                   </p>
                 )}
 
-                {adHocEffects.map((effect, index) => {
-                  const entry = findLibraryEntry(effect.effectType, effect.category)
-                  const catInfo = EFFECT_CATEGORY_INFO[effect.category]
-                  const CatIcon = catInfo?.icon
-                  const closestBeat = BEAT_DIVISION_OPTIONS.reduce((prev, curr) =>
-                    Math.abs(curr.value - effect.beatDivision) < Math.abs(prev.value - effect.beatDivision) ? curr : prev,
-                  )
-
-                  return (
-                    <div
-                      key={`effect-${index}`}
-                      className="flex items-center gap-2 px-3 py-2 border rounded-lg cursor-pointer hover:bg-accent/50 transition-colors"
-                      onClick={() => handleEditEffect(index)}
-                    >
-                      {CatIcon && <CatIcon className="size-4 text-muted-foreground shrink-0" />}
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">{effect.effectType}</div>
-                        <div className="flex items-center gap-1 mt-0.5">
-                          <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-                            {effect.targetType === 'group' ? (
-                              <Layers className="size-2.5" />
-                            ) : (
-                              <LayoutGrid className="size-2.5" />
-                            )}
-                            {effect.targetKey}
-                          </span>
-                          {entry && (
-                            <span className="text-[10px] text-muted-foreground hidden sm:inline">
-                              {getEffectDescription(entry.name, entry.description)}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
-                        {closestBeat.label}
-                      </Badge>
+                {adHocEffects.map((effect, index) => (
+                  <EffectSummary
+                    key={`effect-${index}`}
+                    effect={fromCueAdHocEffect(effect, library)}
+                    target={{ type: effect.targetType, key: effect.targetKey }}
+                    palette={palette}
+                    onClick={() => handleEditEffect(index)}
+                    actions={
                       <Button
                         variant="ghost"
                         size="icon"
@@ -519,9 +417,9 @@ export function CueForm({
                       >
                         <X className="size-3.5" />
                       </Button>
-                    </div>
-                  )
-                })}
+                    }
+                  />
+                ))}
               </div>
             </div>
 
