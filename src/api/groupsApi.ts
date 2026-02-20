@@ -103,6 +103,7 @@ export interface GroupActiveEffect {
   elementFilter: string | null
   stepTiming: boolean
   presetId: number | null
+  cueId: number | null
 }
 
 export interface ClearFxResponse {

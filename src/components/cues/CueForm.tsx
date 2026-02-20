@@ -21,7 +21,10 @@ import {
   Layers,
   LayoutGrid,
   Eraser,
+  Globe,
+  Check,
 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { useEffectLibraryQuery, type EffectLibraryEntry } from '@/store/fixtureFx'
 import { useProjectPresetListQuery } from '@/store/fxPresets'
 import { EFFECT_CATEGORY_INFO, BEAT_DIVISION_OPTIONS, getEffectDescription } from '@/components/fx/fxConstants'
@@ -37,7 +40,6 @@ type CueFormView =
   | 'edit-preset'
   | 'add-effect'
   | 'edit-effect'
-  | 'confirm-delete'
 
 /** Local representation of a preset application (with resolved name for display) */
 interface CuePresetAppLocal {
@@ -53,8 +55,6 @@ interface CueFormProps {
   projectId: number
   onSave: (input: CueInput) => Promise<void>
   isSaving: boolean
-  onDelete?: () => void
-  isDeleting?: boolean
   initialState?: CueCurrentState
 }
 
@@ -65,8 +65,6 @@ export function CueForm({
   projectId,
   onSave,
   isSaving,
-  onDelete,
-  isDeleting,
   initialState,
 }: CueFormProps) {
   const { data: library } = useEffectLibraryQuery()
@@ -75,6 +73,7 @@ export function CueForm({
   // ── Local editing state ──
   const [name, setName] = useState('')
   const [palette, setPalette] = useState<string[]>([])
+  const [updateGlobalPalette, setUpdateGlobalPalette] = useState(false)
   const [presetApps, setPresetApps] = useState<CuePresetAppLocal[]>([])
   const [adHocEffects, setAdHocEffects] = useState<CueAdHocEffect[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -121,6 +120,7 @@ export function CueForm({
       const source = cue ?? initialState
       setName(cue?.name ?? '')
       setPalette(source?.palette ?? [])
+      setUpdateGlobalPalette(cue?.updateGlobalPalette ?? false)
       setPresetApps(
         source?.presetApplications.map((pa) => ({
           presetId: pa.presetId,
@@ -147,6 +147,7 @@ export function CueForm({
       await onSave({
         name: name.trim(),
         palette,
+        updateGlobalPalette,
         presetApplications: presetApps.map((pa) => ({
           presetId: pa.presetId,
           targets: pa.targets,
@@ -269,6 +270,7 @@ export function CueForm({
                     onClick={() => {
                       setName('')
                       setPalette([])
+                      setUpdateGlobalPalette(false)
                       setPresetApps([])
                       setAdHocEffects([])
                       setError(null)
@@ -318,6 +320,27 @@ export function CueForm({
                   )}
                 </Label>
                 <CuePaletteEditor palette={palette} onChange={setPalette} />
+
+                {palette.length > 0 && (
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 mt-2 px-1 w-full text-left"
+                    onClick={() => setUpdateGlobalPalette(!updateGlobalPalette)}
+                  >
+                    <div className={cn(
+                      'size-4 rounded border flex items-center justify-center shrink-0 transition-colors',
+                      updateGlobalPalette
+                        ? 'bg-primary border-primary text-primary-foreground'
+                        : 'border-muted-foreground/40',
+                    )}>
+                      {updateGlobalPalette && <Check className="size-3" />}
+                    </div>
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Globe className="size-3" />
+                      Update global palette on apply
+                    </span>
+                  </button>
+                )}
               </div>
 
               {/* ── Preset Applications ── */}
@@ -503,21 +526,10 @@ export function CueForm({
             </div>
 
             <SheetFooter className="border-t pt-4">
-              {isEditing && onDelete && (
-                <Button
-                  variant="outline"
-                  onClick={() => setView('confirm-delete')}
-                  disabled={isSaving || isDeleting}
-                  className="text-destructive hover:text-destructive"
-                >
-                  {isDeleting && <Loader2 className="size-4 mr-2 animate-spin" />}
-                  Delete
-                </Button>
-              )}
-              <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving || isDeleting}>
+              <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
                 Cancel
               </Button>
-              <Button onClick={handleSave} disabled={!isValid || isSaving || isDeleting}>
+              <Button onClick={handleSave} disabled={!isValid || isSaving}>
                 {isSaving && <Loader2 className="size-4 mr-2 animate-spin" />}
                 {isEditing ? 'Save' : 'Create'}
               </Button>
@@ -550,6 +562,7 @@ export function CueForm({
           <CueEffectFlow
             onConfirm={handleEffectConfirm}
             onCancel={() => setView('main')}
+            palette={palette}
           />
         )}
 
@@ -561,35 +574,10 @@ export function CueForm({
             existingEffect={adHocEffects[editingEffectIndex]}
             onUpdate={handleEffectUpdate}
             onRemove={handleEffectRemove}
+            palette={palette}
           />
         )}
 
-        {/* ═══════ Delete confirmation view ═══════ */}
-        {view === 'confirm-delete' && (
-          <>
-            <SheetHeader>
-              <SheetTitle>Delete Cue</SheetTitle>
-              <SheetDescription>
-                Are you sure you want to delete &ldquo;{cue?.name}&rdquo;? This action cannot be undone.
-              </SheetDescription>
-            </SheetHeader>
-            <div className="flex-1" />
-            <SheetFooter className="border-t pt-4">
-              <Button variant="outline" onClick={() => setView('main')}>
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={() => {
-                  setView('main')
-                  onDelete?.()
-                }}
-              >
-                Delete
-              </Button>
-            </SheetFooter>
-          </>
-        )}
       </SheetContent>
     </Sheet>
   )

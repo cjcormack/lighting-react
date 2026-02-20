@@ -1,12 +1,15 @@
+import { useMemo } from 'react'
 import { restApi } from './restApi'
 import { lightingApi } from '../api/lightingApi'
 import { store } from './index'
+import { useFxStateQuery } from './fx'
 import type {
   Cue,
   CueInput,
   CopyCueRequest,
   CopyCueResponse,
   ApplyCueResponse,
+  StopCueResponse,
   CueCurrentState,
 } from '../api/cuesApi'
 
@@ -83,10 +86,24 @@ export const cuesApi = restApi.injectEndpoints({
 
     applyCue: build.mutation<
       ApplyCueResponse,
+      { projectId: number; cueId: number; replaceAll?: boolean }
+    >({
+      query: ({ projectId, cueId, replaceAll }) => ({
+        url: `project/${projectId}/cues/${cueId}/apply${replaceAll ? '?replaceAll=true' : ''}`,
+        method: 'POST',
+      }),
+      invalidatesTags: () => [
+        'FixtureEffects',
+        'GroupActiveEffects',
+      ],
+    }),
+
+    stopCue: build.mutation<
+      StopCueResponse,
       { projectId: number; cueId: number }
     >({
       query: ({ projectId, cueId }) => ({
-        url: `project/${projectId}/cues/${cueId}/apply`,
+        url: `project/${projectId}/cues/${cueId}/stop`,
         method: 'POST',
       }),
       invalidatesTags: () => [
@@ -110,5 +127,18 @@ export const {
   useDeleteProjectCueMutation,
   useCopyCueMutation,
   useApplyCueMutation,
+  useStopCueMutation,
   useLazyCurrentCueStateQuery,
 } = cuesApi
+
+/** Derive active cue IDs from the real-time FxState WebSocket stream. */
+export function useActiveCueIds(): Set<number> {
+  const { data: fxState } = useFxStateQuery()
+  return useMemo(() => {
+    const ids = new Set<number>()
+    for (const effect of fxState?.activeEffects ?? []) {
+      if (effect.cueId != null) ids.add(effect.cueId)
+    }
+    return ids
+  }, [fxState])
+}

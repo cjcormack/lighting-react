@@ -42,6 +42,8 @@ interface FxColourListPickerProps {
     amber?: boolean
     uv?: boolean
   }
+  /** Override palette (e.g. cue palette). Falls back to global FxState palette. */
+  palette?: string[]
 }
 
 interface ColourItem {
@@ -61,6 +63,7 @@ export function FxColourListPicker({
   label,
   description,
   extendedChannels,
+  palette: paletteProp,
 }: FxColourListPickerProps) {
   const useAllPalette = isAllPaletteRef(value.trim())
   const [items, setItems] = useState<ColourItem[]>(() =>
@@ -193,6 +196,7 @@ export function FxColourListPicker({
                   onRemove={() => handleRemove(index)}
                   onColourChange={(colour, raw) => handleColourChange(index, colour, raw)}
                   extendedChannels={extendedChannels}
+                  palette={paletteProp}
                 />
               ))}
             </SortableContext>
@@ -219,6 +223,7 @@ function SortableColourSwatch({
   onRemove,
   onColourChange,
   extendedChannels,
+  palette: paletteProp,
 }: {
   item: ColourItem
   index: number
@@ -231,9 +236,10 @@ function SortableColourSwatch({
     amber?: boolean
     uv?: boolean
   }
+  palette?: string[]
 }) {
   const { data: fxState } = useFxStateQuery()
-  const palette = fxState?.palette ?? []
+  const palette = paletteProp ?? fxState?.palette ?? []
   const isPalRef = isPaletteRef(item.raw)
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =

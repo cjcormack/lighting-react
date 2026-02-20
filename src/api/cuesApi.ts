@@ -39,6 +39,7 @@ export interface Cue {
   id: number
   name: string
   palette: string[]
+  updateGlobalPalette: boolean
   presetApplications: CuePresetApplicationDetail[]
   adHocEffects: CueAdHocEffect[]
   canEdit: boolean
@@ -49,6 +50,7 @@ export interface Cue {
 export interface CueInput {
   name: string
   palette: string[]
+  updateGlobalPalette: boolean
   presetApplications: CuePresetApplication[]
   adHocEffects: CueAdHocEffect[]
 }
@@ -71,6 +73,12 @@ export interface CopyCueResponse {
 export interface ApplyCueResponse {
   effectCount: number
   cueName: string
+}
+
+// Stop response
+export interface StopCueResponse {
+  removedCount: number
+  cueId: number
 }
 
 // Current lighting state snapshot (palette + active effects)

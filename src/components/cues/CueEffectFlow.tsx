@@ -34,6 +34,8 @@ interface CueEffectFlowProps {
   onUpdate?: (effect: CueAdHocEffect) => void
   /** Edit mode: remove the effect */
   onRemove?: () => void
+  /** Override palette for colour pickers (e.g. cue palette). */
+  palette?: string[]
 }
 
 export function CueEffectFlow({
@@ -42,6 +44,7 @@ export function CueEffectFlow({
   existingEffect,
   onUpdate,
   onRemove,
+  palette,
 }: CueEffectFlowProps) {
   const { data: library } = useEffectLibraryQuery()
   const { data: groups } = useGroupListQuery()
@@ -407,6 +410,7 @@ export function CueEffectFlow({
               onStepTimingChange={setStepTiming}
               // Extended channels: show all since targets may be mixed
               extendedChannels={{ white: true, amber: true, uv: true }}
+              palette={palette}
             />
           </div>
 

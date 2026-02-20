@@ -1,24 +1,32 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+  ContextMenuSeparator,
+} from '@/components/ui/context-menu'
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
 import {
   Loader2,
   Plus,
   Clapperboard,
-  MoreHorizontal,
   Pencil,
   Trash2,
   Copy,
   CopyPlus,
   Play,
+  Square,
   Palette,
   Bookmark,
   AudioWaveform,
@@ -26,6 +34,10 @@ import {
   ChevronRight,
   Layers,
   LayoutGrid,
+  Globe,
+  RotateCcw,
+  Replace,
+  MoreHorizontal,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
@@ -35,8 +47,11 @@ import {
   useSaveProjectCueMutation,
   useDeleteProjectCueMutation,
   useApplyCueMutation,
+  useStopCueMutation,
   useLazyCurrentCueStateQuery,
+  useActiveCueIds,
 } from '../store/cues'
+import { setPalette } from '../store/fx'
 import { CueForm } from '../components/cues/CueForm'
 import { CopyCueDialog } from '../components/cues/CopyCueDialog'
 import { Breadcrumbs } from '../components/Breadcrumbs'
@@ -85,11 +100,14 @@ export function ProjectCues() {
   const [saveCue, { isLoading: isSaving }] = useSaveProjectCueMutation()
   const [deleteCue, { isLoading: isDeleting }] = useDeleteProjectCueMutation()
   const [applyCue] = useApplyCueMutation()
+  const [stopCue] = useStopCueMutation()
   const [fetchCurrentState] = useLazyCurrentCueStateQuery()
+  const activeCueIds = useActiveCueIds()
 
   const [formOpen, setFormOpen] = useState(false)
   const [editingCue, setEditingCue] = useState<Cue | null>(null)
   const [copyingCue, setCopyingCue] = useState<Cue | null>(null)
+  const [deletingCue, setDeletingCue] = useState<Cue | null>(null)
   const [expandedCueIds, setExpandedCueIds] = useState<Set<number>>(new Set())
   const [initialState, setInitialState] = useState<CueCurrentState | undefined>()
 
@@ -123,19 +141,38 @@ export function ProjectCues() {
     setFormOpen(true)
   }
 
-  const handleRowClick = (cue: Cue) => {
+  const handleRowTap = (cue: Cue) => {
     if (isCurrentProject) {
-      handleEdit(cue)
+      // Toggle: apply if not active, stop if active
+      if (activeCueIds.has(cue.id)) {
+        handleStop(cue)
+      } else {
+        handleApply(cue)
+      }
     } else {
       setCopyingCue(cue)
     }
   }
 
-  const handleApply = async (cue: Cue) => {
+  const handleApply = async (cue: Cue, replaceAll?: boolean) => {
     try {
-      await applyCue({ projectId: projectIdNum, cueId: cue.id }).unwrap()
+      await applyCue({ projectId: projectIdNum, cueId: cue.id, replaceAll }).unwrap()
     } catch {
       // Error could be shown via toast
+    }
+  }
+
+  const handleStop = async (cue: Cue) => {
+    try {
+      await stopCue({ projectId: projectIdNum, cueId: cue.id }).unwrap()
+    } catch {
+      // Error could be shown via toast
+    }
+  }
+
+  const handleCopyPaletteToGlobal = (cue: Cue) => {
+    if (cue.palette.length > 0) {
+      setPalette(cue.palette)
     }
   }
 
@@ -152,6 +189,7 @@ export function ProjectCues() {
       projectId: projectIdNum,
       name: newName,
       palette: cue.palette,
+      updateGlobalPalette: cue.updateGlobalPalette,
       presetApplications: cue.presetApplications.map((pa) => ({
         presetId: pa.presetId,
         targets: pa.targets,
@@ -175,14 +213,13 @@ export function ProjectCues() {
     }
   }
 
-  const handleDelete = async () => {
-    if (!editingCue) return
+  const handleDeleteConfirmed = async () => {
+    if (!deletingCue) return
     await deleteCue({
       projectId: projectIdNum,
-      cueId: editingCue.id,
+      cueId: deletingCue.id,
     }).unwrap()
-    setFormOpen(false)
-    setEditingCue(null)
+    setDeletingCue(null)
   }
 
   if (projectLoading || currentLoading || cuesLoading) {
@@ -218,18 +255,25 @@ export function ProjectCues() {
     </Card>
   ) : (
     <div className="rounded-lg border flex flex-col divide-y">
-      {cues!.map((cue) => (
+      {cues!.map((cue, index) => (
         <CueListRow
           key={cue.id}
           cue={cue}
           presets={presets}
           isCurrentProject={isCurrentProject}
+          isActive={activeCueIds.has(cue.id)}
+          isFirst={index === 0}
+          isLast={index === cues!.length - 1}
+          hasOtherActiveCues={activeCueIds.size > 0 && !activeCueIds.has(cue.id) || activeCueIds.size > 1}
           expanded={expandedCueIds.has(cue.id)}
           onToggleExpand={() => toggleCueExpanded(cue.id)}
-          onClick={() => handleRowClick(cue)}
+          onTap={() => handleRowTap(cue)}
           onApply={isCurrentProject ? () => handleApply(cue) : undefined}
+          onApplyReplace={isCurrentProject ? () => handleApply(cue, true) : undefined}
+          onStop={isCurrentProject ? () => handleStop(cue) : undefined}
+          onCopyPaletteToGlobal={isCurrentProject && cue.palette.length > 0 ? () => handleCopyPaletteToGlobal(cue) : undefined}
           onEdit={isCurrentProject && cue.canEdit ? () => handleEdit(cue) : undefined}
-          onDelete={isCurrentProject && cue.canDelete ? () => handleEdit(cue) : undefined}
+          onDelete={isCurrentProject && cue.canDelete ? () => setDeletingCue(cue) : undefined}
           onDuplicate={isCurrentProject ? () => handleDuplicate(cue) : undefined}
           onCopy={!isCurrentProject ? () => setCopyingCue(cue) : undefined}
         />
@@ -273,8 +317,6 @@ export function ProjectCues() {
         projectId={projectIdNum}
         onSave={handleSave}
         isSaving={isCreating || isSaving}
-        onDelete={editingCue?.canDelete ? handleDelete : undefined}
-        isDeleting={isDeleting}
         initialState={!editingCue ? initialState : undefined}
       />
 
@@ -291,19 +333,49 @@ export function ProjectCues() {
         />
       )}
 
+      {/* Delete confirmation overlay */}
+      {deletingCue && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <Card className="max-w-sm mx-4 p-6 space-y-4">
+            <div>
+              <h3 className="font-semibold">Delete Cue</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                Are you sure you want to delete &ldquo;{deletingCue.name}&rdquo;? This action cannot be undone.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setDeletingCue(null)} disabled={isDeleting}>
+                Cancel
+              </Button>
+              <Button variant="destructive" size="sm" onClick={handleDeleteConfirmed} disabled={isDeleting}>
+                {isDeleting && <Loader2 className="size-4 mr-2 animate-spin" />}
+                Delete
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
     </div>
   )
 }
 
-// Cue list row component
+// Cue list row component — tap to toggle active, long-press / right-click for context menu
 function CueListRow({
   cue,
   presets,
   isCurrentProject,
+  isActive,
+  isFirst,
+  isLast,
+  hasOtherActiveCues,
   expanded,
   onToggleExpand,
-  onClick,
+  onTap,
   onApply,
+  onApplyReplace,
+  onStop,
+  onCopyPaletteToGlobal,
   onEdit,
   onDelete,
   onCopy,
@@ -312,10 +384,17 @@ function CueListRow({
   cue: Cue
   presets?: FxPreset[]
   isCurrentProject: boolean
+  isActive?: boolean
+  isFirst?: boolean
+  isLast?: boolean
+  hasOtherActiveCues?: boolean
   expanded?: boolean
   onToggleExpand?: () => void
-  onClick?: () => void
+  onTap?: () => void
   onApply?: () => void
+  onApplyReplace?: () => void
+  onStop?: () => void
+  onCopyPaletteToGlobal?: () => void
   onEdit?: () => void
   onDelete?: () => void
   onCopy?: () => void
@@ -325,14 +404,110 @@ function CueListRow({
   const adHocCount = cue.adHocEffects.length
   const hasExpandableContent = presetCount > 0 || adHocCount > 0
 
-  return (
-    <div className={cn(expanded && 'bg-accent/30')}>
+  // ── Long-press → open context menu (all pointer types) ──
+  const triggerRef = useRef<HTMLDivElement>(null)
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const didLongPress = useRef(false)
+  const startPos = useRef<{ x: number; y: number } | null>(null)
+  const isLongPressPointer = useRef(false)
+
+  const clearPress = useCallback(() => {
+    if (pressTimer.current) {
+      clearTimeout(pressTimer.current)
+      pressTimer.current = null
+    }
+    startPos.current = null
+  }, [])
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    // Skip right-click — Radix ContextMenu handles that natively
+    if (e.button === 2) return
+    isLongPressPointer.current = true
+    didLongPress.current = false
+    startPos.current = { x: e.clientX, y: e.clientY }
+    const clientX = e.clientX
+    const clientY = e.clientY
+    pressTimer.current = setTimeout(() => {
+      didLongPress.current = true
+      pressTimer.current = null
+      // Dispatch a synthetic contextmenu event so Radix ContextMenu opens at the press point
+      triggerRef.current?.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          bubbles: true,
+          clientX,
+          clientY,
+        }),
+      )
+    }, 500)
+  }, [])
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!startPos.current) return
+    const dx = e.clientX - startPos.current.x
+    const dy = e.clientY - startPos.current.y
+    if (dx * dx + dy * dy > 10 * 10) {
+      clearPress()
+    }
+  }, [clearPress])
+
+  const handlePointerUp = useCallback(() => {
+    if (!isLongPressPointer.current) return
+    isLongPressPointer.current = false
+    const wasLongPress = didLongPress.current
+    clearPress()
+    if (!wasLongPress) {
+      onTap?.()
+    }
+  }, [clearPress, onTap])
+
+  // Shared menu item definitions used by both ContextMenu (long-press / right-click) and DropdownMenu (... button)
+  type MenuItemDef = { icon: typeof Play; label: string; onClick: () => void; variant?: 'destructive' }
+  type MenuDef = (MenuItemDef | 'separator')[]
+
+  const menuDefs: MenuDef = []
+  if (isActive && onStop) menuDefs.push({ icon: Square, label: 'Stop', onClick: onStop })
+  if (isActive && onApply) menuDefs.push({ icon: RotateCcw, label: 'Re-apply', onClick: onApply })
+  if (!isActive && onApply) menuDefs.push({ icon: Play, label: 'Apply', onClick: onApply })
+  if (hasOtherActiveCues && onApplyReplace) menuDefs.push({ icon: Replace, label: 'Replace all & apply', onClick: onApplyReplace })
+  if (onCopyPaletteToGlobal) menuDefs.push({ icon: Globe, label: 'Copy palette to global', onClick: onCopyPaletteToGlobal })
+  if ((onApply || onStop) && (onEdit || onDuplicate || onCopy || onDelete)) menuDefs.push('separator')
+  if (onEdit) menuDefs.push({ icon: Pencil, label: 'Edit', onClick: onEdit })
+  if (onDuplicate) menuDefs.push({ icon: CopyPlus, label: 'Duplicate', onClick: onDuplicate })
+  if (onCopy) menuDefs.push({ icon: Copy, label: 'Copy to Project', onClick: onCopy })
+  if (onDelete) {
+    menuDefs.push('separator')
+    menuDefs.push({ icon: Trash2, label: 'Delete', onClick: onDelete, variant: 'destructive' })
+  }
+
+  const hasMenu = menuDefs.length > 0
+
+  const isExpanded = expanded && hasExpandableContent
+
+  const rowContent = (
+    <div
+      ref={triggerRef}
+      className={cn(
+        'border-l-[3px] transition-colors overflow-hidden',
+        isActive
+          ? 'border-l-primary'
+          : 'border-l-transparent',
+        isActive && isFirst && 'rounded-tl-lg',
+        isActive && isLast && 'rounded-bl-lg',
+      )}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={clearPress}
+    >
       <div
         className={cn(
-          'group flex items-center gap-2 rounded-md px-3 py-2.5 min-h-[44px] hover:bg-accent/50 transition-colors',
-          onClick && 'cursor-pointer',
+          'group flex items-center gap-2 px-3 py-2.5 min-h-[44px] transition-colors select-none touch-manipulation',
+          onTap && 'cursor-pointer',
+          isActive
+            ? 'bg-primary/10 hover:bg-primary/15'
+            : 'hover:bg-accent/50',
         )}
-        onClick={onClick}
+        // Clicks handled via pointer events (handlePointerUp) for long-press detection
       >
         {/* Expand/collapse toggle */}
         {onToggleExpand && hasExpandableContent && (
@@ -358,7 +533,10 @@ function CueListRow({
 
         {/* Name */}
         <div className="min-w-0 flex-1">
-          <div className="font-medium text-sm truncate">{cue.name}</div>
+          <div className={cn(
+            'font-medium text-sm truncate',
+            isActive && 'text-primary',
+          )}>{cue.name}</div>
           <div className="flex items-center gap-2 mt-0.5">
             {/* Palette swatches preview (first 6) */}
             {cue.palette.length > 0 && (
@@ -406,65 +584,33 @@ function CueListRow({
           )}
         </div>
 
-        {/* Apply button for current project */}
-        {isCurrentProject && onApply && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-8 shrink-0 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
-            onClick={(e) => {
-              e.stopPropagation()
-              onApply()
-            }}
-            title="Apply cue"
-          >
-            <Play className="size-4" />
-          </Button>
-        )}
-
-        {/* Overflow menu */}
-        {(onEdit || onDelete || onCopy || onDuplicate) && (
+        {/* Overflow menu button */}
+        {hasMenu && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-8 shrink-0 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+              <button
+                className="size-7 flex items-center justify-center shrink-0 rounded text-muted-foreground hover:text-foreground hover:bg-accent"
+                onPointerDown={(e) => {
+                  // Cancel any pending long-press so the context menu doesn't also open
+                  clearPress()
+                  isLongPressPointer.current = false
+                  e.stopPropagation()
+                }}
                 onClick={(e) => e.stopPropagation()}
               >
                 <MoreHorizontal className="size-4" />
-              </Button>
+              </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {onApply && (
-                <DropdownMenuItem onClick={onApply}>
-                  <Play className="size-4 mr-2" />
-                  Apply
-                </DropdownMenuItem>
-              )}
-              {onEdit && (
-                <DropdownMenuItem onClick={onEdit}>
-                  <Pencil className="size-4 mr-2" />
-                  Edit
-                </DropdownMenuItem>
-              )}
-              {onDuplicate && (
-                <DropdownMenuItem onClick={onDuplicate}>
-                  <CopyPlus className="size-4 mr-2" />
-                  Duplicate
-                </DropdownMenuItem>
-              )}
-              {onCopy && (
-                <DropdownMenuItem onClick={onCopy}>
-                  <Copy className="size-4 mr-2" />
-                  Copy to Project
-                </DropdownMenuItem>
-              )}
-              {onDelete && (
-                <DropdownMenuItem onClick={onDelete} className="text-destructive">
-                  <Trash2 className="size-4 mr-2" />
-                  Delete
-                </DropdownMenuItem>
+              {menuDefs.map((item, i) =>
+                item === 'separator' ? (
+                  <DropdownMenuSeparator key={i} />
+                ) : (
+                  <DropdownMenuItem key={i} onClick={item.onClick} variant={item.variant}>
+                    <item.icon className="size-4 mr-2" />
+                    {item.label}
+                  </DropdownMenuItem>
+                ),
               )}
             </DropdownMenuContent>
           </DropdownMenu>
@@ -472,8 +618,8 @@ function CueListRow({
       </div>
 
       {/* ── Expanded content: preset applications and ad-hoc effects ── */}
-      {expanded && hasExpandableContent && (
-        <div className="px-3 pb-3 pt-1 space-y-2 ml-5">
+      {isExpanded && (
+        <div className="px-3 pb-3 pt-1 space-y-2 ml-5 bg-accent/30">
           {/* Preset applications */}
           {cue.presetApplications.map((pa, index) => {
             const fullPreset = presets?.find((p) => p.id === pa.presetId)
@@ -550,6 +696,26 @@ function CueListRow({
         </div>
       )}
     </div>
+  )
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        {rowContent}
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        {menuDefs.map((item, i) =>
+          item === 'separator' ? (
+            <ContextMenuSeparator key={i} />
+          ) : (
+            <ContextMenuItem key={i} onClick={item.onClick} variant={item.variant}>
+              <item.icon className="size-4 mr-2" />
+              {item.label}
+            </ContextMenuItem>
+          ),
+        )}
+      </ContextMenuContent>
+    </ContextMenu>
   )
 }
 

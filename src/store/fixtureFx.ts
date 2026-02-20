@@ -26,6 +26,7 @@ export interface FixtureDirectEffect {
   elementFilter: string | null
   stepTiming: boolean
   presetId: number | null
+  cueId: number | null
 }
 
 export interface FixtureIndirectEffect {

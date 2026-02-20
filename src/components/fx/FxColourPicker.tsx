@@ -26,6 +26,8 @@ interface FxColourPickerProps {
     amber?: boolean
     uv?: boolean
   }
+  /** Override palette (e.g. cue palette). Falls back to global FxState palette. */
+  palette?: string[]
 }
 
 export function FxColourPicker({
@@ -34,9 +36,10 @@ export function FxColourPicker({
   label,
   description,
   extendedChannels,
+  palette: paletteProp,
 }: FxColourPickerProps) {
   const { data: fxState } = useFxStateQuery()
-  const palette = fxState?.palette ?? []
+  const palette = paletteProp ?? fxState?.palette ?? []
   const isPalRef = isPaletteRef(value)
 
   const [isOpen, setIsOpen] = useState(false)

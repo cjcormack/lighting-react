@@ -10,6 +10,7 @@ export interface FxEffectState {
   isRunning: boolean
   phase: number
   blendMode: string
+  cueId: number | null
 }
 
 export interface FxState {

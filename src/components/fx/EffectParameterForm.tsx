@@ -57,6 +57,8 @@ interface EffectParameterFormProps {
   extendedChannels?: { white?: boolean; amber?: boolean; uv?: boolean }
   stepTiming?: boolean
   onStepTimingChange?: (v: boolean) => void
+  /** Override palette for colour pickers (e.g. cue palette). */
+  palette?: string[]
 }
 
 export function EffectParameterForm({
@@ -92,6 +94,7 @@ export function EffectParameterForm({
   extendedChannels,
   stepTiming,
   onStepTimingChange,
+  palette,
 }: EffectParameterFormProps) {
   const [showAdvanced, setShowAdvanced] = useState(false)
 
@@ -303,6 +306,7 @@ export function EffectParameterForm({
               value={parameters[param.name] ?? param.defaultValue}
               onChange={(v) => handleParameterChange(param.name, v)}
               extendedChannels={extendedChannels}
+              palette={palette}
             />
           ))}
         </div>
@@ -379,11 +383,13 @@ function ParameterInput({
   value,
   onChange,
   extendedChannels,
+  palette,
 }: {
   param: EffectParameterDef
   value: string
   onChange: (v: string) => void
   extendedChannels?: { white?: boolean; amber?: boolean; uv?: boolean }
+  palette?: string[]
 }) {
   const paramType = param.type.toLowerCase()
 
@@ -523,6 +529,7 @@ function ParameterInput({
         label={formatParamName(param.name)}
         description={param.description}
         extendedChannels={extendedChannels}
+        palette={palette}
       />
     )
   }
@@ -536,6 +543,7 @@ function ParameterInput({
         label={formatParamName(param.name)}
         description={param.description}
         extendedChannels={extendedChannels}
+        palette={palette}
       />
     )
   }
