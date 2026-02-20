@@ -24,6 +24,8 @@ export interface FxPreset {
   effects: FxPresetEffect[]
   canEdit: boolean
   canDelete: boolean
+  cannotDeleteReason: string | null
+  cueUsageCount: number
 }
 
 // Input for create/update

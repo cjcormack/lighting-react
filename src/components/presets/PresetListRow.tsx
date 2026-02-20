@@ -6,7 +6,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { MoreHorizontal, Pencil, Trash2, Copy, CopyPlus, ChevronDown, ChevronRight } from 'lucide-react'
+import { MoreHorizontal, Pencil, Trash2, Copy, CopyPlus, ChevronDown, ChevronRight, Clapperboard } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { EFFECT_CATEGORY_INFO } from '@/components/fx/fxConstants'
 import { PresetEffectDetail } from './PresetDetailPanel'
@@ -98,6 +98,14 @@ export function PresetListRow({
         <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">
           {preset.effects.length} fx
         </Badge>
+
+        {/* Cue usage count */}
+        {preset.cueUsageCount > 0 && (
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 gap-1" title={`Used in ${preset.cueUsageCount} cue${preset.cueUsageCount !== 1 ? 's' : ''}`}>
+            <Clapperboard className="size-3" />
+            {preset.cueUsageCount}
+          </Badge>
+        )}
 
         {/* Overflow menu */}
         {(onEdit || onDelete || onCopy || onDuplicate) && (

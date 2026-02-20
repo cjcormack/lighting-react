@@ -28,6 +28,8 @@ export interface ProjectDetail {
   scriptCount: number;
   sceneCount: number;
   chaseCount: number;
+  fxPresetCount: number;
+  cueCount: number;
 }
 
 // For creating a new project

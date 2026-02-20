@@ -10,6 +10,7 @@ import {createProjectApi, ProjectApi} from "./projectApi";
 import {createGroupsApi, GroupsApi} from "./groupsApi";
 import {createFxApi, FxApi} from "./fxApi";
 import {createFxPresetsWsApi, FxPresetsWsApi} from "./fxPresetsWsApi";
+import {createCuesWsApi, CuesWsApi} from "./cuesWsApi";
 
 interface LightingApi {
   universes: UniversesApi
@@ -23,6 +24,7 @@ interface LightingApi {
   groups: GroupsApi
   fx: FxApi
   fxPresets: FxPresetsWsApi
+  cues: CuesWsApi
 }
 
 export const lightingApi = createLightingApi()
@@ -52,6 +54,7 @@ function createLightingApi(): LightingApi {
   const groupsApi = createGroupsApi(connection)
   const fxApi = createFxApi(connection)
   const fxPresetsWsApi = createFxPresetsWsApi(connection)
+  const cuesWsApi = createCuesWsApi(connection)
 
   return {
     universes: universesApi,
@@ -65,5 +68,6 @@ function createLightingApi(): LightingApi {
     groups: groupsApi,
     fx: fxApi,
     fxPresets: fxPresetsWsApi,
+    cues: cuesWsApi,
   }
 }

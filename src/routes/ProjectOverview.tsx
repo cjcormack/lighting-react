@@ -18,6 +18,7 @@ import {
   SlidersHorizontal,
   AudioWaveform,
   Bookmark,
+  Clapperboard,
 } from "lucide-react"
 import { useProjectQuery, useCurrentProjectQuery } from "../store/projects"
 import { useFixtureListQuery } from "../store/fixtures"
@@ -152,6 +153,13 @@ export default function ProjectOverview() {
                 icon={<Bookmark className="size-5" />}
                 description="Saved effect preset bundles"
                 onClick={() => navigate(`/projects/${project.id}/presets`)}
+              />
+              <QuickNavCard
+                title="Cues"
+                count={project.cueCount}
+                icon={<Clapperboard className="size-5" />}
+                description="Saved palette + effects looks"
+                onClick={() => navigate(`/projects/${project.id}/cues`)}
               />
               {universes && universes.length >= 1 && (
                 <QuickNavCard

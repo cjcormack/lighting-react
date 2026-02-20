@@ -28,6 +28,7 @@ import {
   FolderOpen,
   AudioWaveform,
   Bookmark,
+  Clapperboard,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useProjectListQuery } from "./store/projects"
@@ -121,6 +122,13 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
               isActive={location.pathname.includes("/chases")}
               collapsed
               onClick={() => navigate(`/projects/${viewedProject.id}/chases`)}
+            />
+            <NavItem
+              icon={<Clapperboard className="size-5" />}
+              label="Cues"
+              isActive={location.pathname.includes("/cues")}
+              collapsed
+              onClick={() => navigate(`/projects/${viewedProject.id}/cues`)}
             />
 
             {/* Hardware items - only for active project */}
@@ -237,6 +245,13 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
               isActive={location.pathname.includes("/chases")}
               collapsed={false}
               onClick={() => navigate(`/projects/${viewedProject.id}/chases`)}
+            />
+            <NavItem
+              icon={<Clapperboard className="size-4" />}
+              label="Cues"
+              isActive={location.pathname.includes("/cues")}
+              collapsed={false}
+              onClick={() => navigate(`/projects/${viewedProject.id}/cues`)}
             />
 
             {/* Hardware items - only for active project */}
