@@ -142,3 +142,15 @@ export function useActiveCueIds(): Set<number> {
     return ids
   }, [fxState])
 }
+
+/** Derive active cue stack IDs from the real-time FxState WebSocket stream. */
+export function useActiveCueStackIds(): Set<number> {
+  const { data: fxState } = useFxStateQuery()
+  return useMemo(() => {
+    const ids = new Set<number>()
+    for (const effect of fxState?.activeEffects ?? []) {
+      if (effect.cueStackId != null) ids.add(effect.cueStackId)
+    }
+    return ids
+  }, [fxState])
+}

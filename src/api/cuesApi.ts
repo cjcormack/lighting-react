@@ -42,6 +42,13 @@ export interface Cue {
   updateGlobalPalette: boolean
   presetApplications: CuePresetApplicationDetail[]
   adHocEffects: CueAdHocEffect[]
+  cueStackId: number | null
+  cueStackName: string | null
+  sortOrder: number
+  autoAdvance: boolean
+  autoAdvanceDelayMs: number | null
+  fadeDurationMs: number | null
+  fadeCurve: string
   canEdit: boolean
   canDelete: boolean
 }
@@ -53,6 +60,12 @@ export interface CueInput {
   updateGlobalPalette: boolean
   presetApplications: CuePresetApplication[]
   adHocEffects: CueAdHocEffect[]
+  cueStackId?: number | null
+  sortOrder?: number
+  autoAdvance?: boolean
+  autoAdvanceDelayMs?: number | null
+  fadeDurationMs?: number | null
+  fadeCurve?: string
 }
 
 // Copy request/response

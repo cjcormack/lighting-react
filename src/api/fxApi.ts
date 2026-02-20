@@ -11,6 +11,7 @@ export interface FxEffectState {
   phase: number
   blendMode: string
   cueId: number | null
+  cueStackId: number | null
 }
 
 export interface FxState {

@@ -30,6 +30,7 @@ export interface ProjectDetail {
   chaseCount: number;
   fxPresetCount: number;
   cueCount: number;
+  cueStackCount: number;
 }
 
 // For creating a new project

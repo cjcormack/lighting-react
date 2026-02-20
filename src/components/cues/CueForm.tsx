@@ -12,6 +12,13 @@ import {
   SheetFooter,
 } from '@/components/ui/sheet'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Plus,
   Loader2,
   X,
@@ -56,6 +63,8 @@ interface CueFormProps {
   onSave: (input: CueInput) => Promise<void>
   isSaving: boolean
   initialState?: CueCurrentState
+  /** Whether the cue belongs to (or is being created in) a cue stack */
+  isInStack?: boolean
 }
 
 export function CueForm({
@@ -66,6 +75,7 @@ export function CueForm({
   onSave,
   isSaving,
   initialState,
+  isInStack = false,
 }: CueFormProps) {
   const { data: library } = useEffectLibraryQuery()
   const { data: presets } = useProjectPresetListQuery(projectId)
@@ -76,6 +86,10 @@ export function CueForm({
   const [updateGlobalPalette, setUpdateGlobalPalette] = useState(false)
   const [presetApps, setPresetApps] = useState<CuePresetAppLocal[]>([])
   const [adHocEffects, setAdHocEffects] = useState<CueAdHocEffect[]>([])
+  const [autoAdvance, setAutoAdvance] = useState(false)
+  const [autoAdvanceDelayMs, setAutoAdvanceDelayMs] = useState<string>('')
+  const [fadeDurationMs, setFadeDurationMs] = useState<string>('')
+  const [fadeCurve, setFadeCurve] = useState('LINEAR')
   const [error, setError] = useState<string | null>(null)
 
   // Current view inside the sheet
@@ -105,6 +119,10 @@ export function CueForm({
         })) ?? [],
       )
       setAdHocEffects(source?.adHocEffects ?? [])
+      setAutoAdvance(cue?.autoAdvance ?? false)
+      setAutoAdvanceDelayMs(cue?.autoAdvanceDelayMs != null ? String(cue.autoAdvanceDelayMs) : '')
+      setFadeDurationMs(cue?.fadeDurationMs != null ? String(cue.fadeDurationMs) : '')
+      setFadeCurve(cue?.fadeCurve ?? 'LINEAR')
       setError(null)
       setView('main')
       setEditingPresetIndex(null)
@@ -129,6 +147,10 @@ export function CueForm({
           targets: pa.targets,
         })),
         adHocEffects,
+        autoAdvance,
+        autoAdvanceDelayMs: autoAdvanceDelayMs ? Number(autoAdvanceDelayMs) : null,
+        fadeDurationMs: fadeDurationMs ? Number(fadeDurationMs) : null,
+        fadeCurve,
       })
       onOpenChange(false)
     } catch (e) {
@@ -421,6 +443,94 @@ export function CueForm({
                   />
                 ))}
               </div>
+
+              {/* ── Stack Transition Settings (only for cues in a stack) ── */}
+              {isInStack && (
+                <div className="space-y-3 px-1 pt-2 border-t">
+                  <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Transition
+                  </Label>
+
+                  {/* Auto-advance */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label>Auto-advance</Label>
+                        <p className="text-xs text-muted-foreground">Advance to next cue after delay</p>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={autoAdvance}
+                        onClick={() => setAutoAdvance(!autoAdvance)}
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                          autoAdvance ? 'bg-primary' : 'bg-muted'
+                        }`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block size-5 rounded-full bg-background shadow-lg transition-transform ${
+                            autoAdvance ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                    {autoAdvance && (
+                      <div className="space-y-1.5 pl-1">
+                        <Label htmlFor="cue-auto-advance-delay">Delay (ms)</Label>
+                        <Input
+                          id="cue-auto-advance-delay"
+                          type="number"
+                          min="100"
+                          step="100"
+                          value={autoAdvanceDelayMs}
+                          onChange={(e) => setAutoAdvanceDelayMs(e.target.value)}
+                          placeholder="e.g. 5000"
+                          className="h-9"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Crossfade */}
+                  <div className="space-y-2">
+                    <Label>Crossfade</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Fade in from previous cue. Leave empty for snap-cut.
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="cue-fade-duration" className="text-xs">Duration (ms)</Label>
+                        <Input
+                          id="cue-fade-duration"
+                          type="number"
+                          min="0"
+                          step="100"
+                          value={fadeDurationMs}
+                          onChange={(e) => setFadeDurationMs(e.target.value)}
+                          placeholder="e.g. 2000"
+                          className="h-9"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Easing curve</Label>
+                        <Select value={fadeCurve} onValueChange={setFadeCurve}>
+                          <SelectTrigger className="h-9">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="LINEAR">Linear</SelectItem>
+                            <SelectItem value="SINE_IN_OUT">Sine In/Out</SelectItem>
+                            <SelectItem value="CUBIC_IN_OUT">Cubic In/Out</SelectItem>
+                            <SelectItem value="EASE_IN">Ease In</SelectItem>
+                            <SelectItem value="EASE_OUT">Ease Out</SelectItem>
+                            <SelectItem value="EASE_IN_OUT">Ease In/Out</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <SheetFooter className="border-t pt-4">
