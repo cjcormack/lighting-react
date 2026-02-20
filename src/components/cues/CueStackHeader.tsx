@@ -11,12 +11,15 @@ import {
   Layers,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { resolveColourToHex } from '@/components/fx/colourUtils'
 import type { CueStack } from '@/api/cueStacksApi'
 
 interface CueStackHeaderProps {
   stack: CueStack
   isActive: boolean
   isAdvancing: boolean
+  /** Effective palette for this stack from the backend (fxState.stackPalettes) */
+  effectivePalette?: string[]
   onActivate: () => void
   onDeactivate: () => void
   onAdvanceForward: () => void
@@ -28,6 +31,7 @@ export function CueStackHeader({
   stack,
   isActive,
   isAdvancing,
+  effectivePalette,
   onActivate,
   onDeactivate,
   onAdvanceForward,
@@ -71,6 +75,23 @@ export function CueStackHeader({
         {!isActive && totalCues > 0 && (
           <div className="text-xs text-muted-foreground mt-0.5">
             {totalCues} cue{totalCues !== 1 ? 's' : ''}
+          </div>
+        )}
+        {isActive && effectivePalette && effectivePalette.length > 0 && (
+          <div className="flex items-center gap-0.5 mt-1">
+            {effectivePalette.slice(0, 8).map((colour, i) => (
+              <div
+                key={i}
+                className="size-3.5 rounded-sm border border-border/50"
+                style={{ backgroundColor: resolveColourToHex(colour) }}
+                title={`P${i + 1}`}
+              />
+            ))}
+            {effectivePalette.length > 8 && (
+              <span className="text-[10px] text-muted-foreground ml-0.5">
+                +{effectivePalette.length - 8}
+              </span>
+            )}
           </div>
         )}
       </div>

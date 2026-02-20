@@ -155,6 +155,12 @@ export function useActiveCueStackIds(): Set<number> {
   }, [fxState])
 }
 
+/** Get effective palettes for all active cue stacks from the real-time FxState. */
+export function useStackPalettes(): Record<number, string[]> {
+  const { data: fxState } = useFxStateQuery()
+  return fxState?.stackPalettes ?? {}
+}
+
 /**
  * Derive which cue is the "active" one per stack from the real-time FxState.
  *

@@ -19,6 +19,8 @@ export interface FxState {
   isClockRunning: boolean
   activeEffects: FxEffectState[]
   palette: string[]
+  /** Effective palette for each active cue stack, keyed by stack ID */
+  stackPalettes: Record<number, string[]>
 }
 
 export interface BeatSync {
@@ -28,10 +30,11 @@ export interface BeatSync {
 }
 
 type FxMessage =
-  | { type: 'fxState'; bpm: number; isClockRunning: boolean; activeEffects: FxEffectState[]; palette?: string[] }
+  | { type: 'fxState'; bpm: number; isClockRunning: boolean; activeEffects: FxEffectState[]; palette?: string[]; stackPalettes?: Record<number, string[]> }
   | { type: 'beatSync'; beatNumber: number; bpm: number; timestampMs: number }
   | { type: 'fxChanged'; changeType: string; effectId?: number }
   | { type: 'paletteChanged'; palette: string[] }
+  | { type: 'stackPalettesChanged'; stackPalettes: Record<number, string[]> }
 
 // === API Interface ===
 
@@ -58,6 +61,7 @@ export function createFxApi(conn: InternalApiConnection): FxApi {
     isClockRunning: false,
     activeEffects: [],
     palette: [],
+    stackPalettes: {},
   }
 
   const notifyState = (state: FxState) => {
@@ -79,10 +83,14 @@ export function createFxApi(conn: InternalApiConnection): FxApi {
           isClockRunning: message.isClockRunning,
           activeEffects: message.activeEffects,
           palette: message.palette ?? currentState.palette,
+          stackPalettes: message.stackPalettes ?? currentState.stackPalettes,
         }
         notifyState(currentState)
       } else if (message.type === 'paletteChanged') {
         currentState = { ...currentState, palette: message.palette }
+        notifyState(currentState)
+      } else if (message.type === 'stackPalettesChanged') {
+        currentState = { ...currentState, stackPalettes: message.stackPalettes }
         notifyState(currentState)
       } else if (message.type === 'beatSync') {
         // Update BPM from beat sync (always reflects the latest tempo)

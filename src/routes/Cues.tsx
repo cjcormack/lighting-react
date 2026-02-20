@@ -79,6 +79,7 @@ import {
   useActiveCueIds,
   useActiveCueStackIds,
   useStackActiveCueIds,
+  useStackPalettes,
 } from '../store/cues'
 import {
   useProjectCueStackListQuery,
@@ -170,6 +171,7 @@ export function ProjectCues() {
   const activeCueIds = useActiveCueIds()
   const activeCueStackIds = useActiveCueStackIds()
   const stackActiveCueIds = useStackActiveCueIds()
+  const stackPalettes = useStackPalettes()
 
   // Cue stack mutations
   const [createStack, { isLoading: isCreatingStack }] = useCreateProjectCueStackMutation()
@@ -686,6 +688,7 @@ export function ProjectCues() {
               stack={selectedStack}
               isActive={activeCueStackIds.has(selectedStack.id)}
               isAdvancing={isAdvancing}
+              effectivePalette={stackPalettes[selectedStack.id]}
               onActivate={() => handleActivateStack(selectedStack.id)}
               onDeactivate={() => handleDeactivateStack(selectedStack.id)}
               onAdvanceForward={() => handleAdvanceStack(selectedStack.id)}

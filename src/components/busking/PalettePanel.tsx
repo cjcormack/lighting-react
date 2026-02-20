@@ -59,7 +59,7 @@ function paletteEquals(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((v, i) => v === b[i])
 }
 
-export function PalettePanel() {
+export function PalettePanel({ label }: { label?: string } = {}) {
   const { data: fxState } = useFxStateQuery()
   const serverPalette = fxState?.palette ?? []
 
@@ -153,7 +153,7 @@ export function PalettePanel() {
     <div className="flex items-center gap-2">
       <div className="flex items-center gap-1.5 text-muted-foreground shrink-0">
         <Palette className="size-3.5" />
-        <Label className="text-xs">Palette</Label>
+        <Label className="text-xs">{label ? `${label} Palette` : 'Palette'}</Label>
       </div>
       <div className="flex items-center gap-1 flex-wrap">
         <DndContext

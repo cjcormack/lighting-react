@@ -6,6 +6,7 @@ import { useFxStateQuery, tapTempo } from '@/store/fx'
 import { useRemoveFxMutation } from '@/store/fixtureFx'
 import { BeatIndicator } from './BeatIndicator'
 import { PalettePanel } from './busking/PalettePanel'
+import { ActiveStackPalettes } from './ActiveStackPalettes'
 
 interface EffectsOverviewPanelProps {
   isVisible: boolean
@@ -71,8 +72,9 @@ export function EffectsOverviewPanel({ isVisible, isLocked }: EffectsOverviewPan
                 </span>
               </div>
 
-              {/* Palette - inline, wraps to next line on narrow viewports */}
-              <PalettePanel />
+              {/* Palette — global, then active cue stack palettes inline */}
+              <PalettePanel label="Global" />
+              <ActiveStackPalettes />
 
               {/* Kill All - shown when in FX view (locked), pushed to end */}
               {isLocked && (
