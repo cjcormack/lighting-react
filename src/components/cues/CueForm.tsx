@@ -65,6 +65,8 @@ interface CueFormProps {
   initialState?: CueCurrentState
   /** Whether the cue belongs to (or is being created in) a cue stack */
   isInStack?: boolean
+  /** Palette inherited from previous cues in the stack (for display & picker context) */
+  inheritedPalette?: string[]
 }
 
 export function CueForm({
@@ -76,6 +78,7 @@ export function CueForm({
   isSaving,
   initialState,
   isInStack = false,
+  inheritedPalette,
 }: CueFormProps) {
   const { data: library } = useEffectLibraryQuery()
   const { data: presets } = useProjectPresetListQuery(projectId)
@@ -102,6 +105,9 @@ export function CueForm({
   const [editingEffectIndex, setEditingEffectIndex] = useState<number | null>(null)
 
   const isEditing = cue !== null
+
+  // Effective palette for pickers: use own palette if non-empty, otherwise fall back to inherited
+  const effectivePalette = palette.length > 0 ? palette : (inheritedPalette ?? [])
 
   // ── Reset form when sheet opens ──
   useEffect(() => {
@@ -317,7 +323,7 @@ export function CueForm({
                     </Badge>
                   )}
                 </Label>
-                <CuePaletteEditor palette={palette} onChange={setPalette} />
+                <CuePaletteEditor palette={palette} onChange={setPalette} inheritedPalette={inheritedPalette} />
 
                 {palette.length > 0 && (
                   <button
@@ -376,7 +382,7 @@ export function CueForm({
                       presetId={pa.presetId}
                       effects={presetEffects.map((e) => fromPresetEffect(e, library))}
                       targets={pa.targets}
-                      palette={palette}
+                      palette={effectivePalette}
                       onClick={() => handleEditPreset(index)}
                       actions={
                         <Button
@@ -425,7 +431,7 @@ export function CueForm({
                     key={`effect-${index}`}
                     effect={fromCueAdHocEffect(effect, library)}
                     target={{ type: effect.targetType, key: effect.targetKey }}
-                    palette={palette}
+                    palette={effectivePalette}
                     onClick={() => handleEditEffect(index)}
                     actions={
                       <Button
@@ -570,7 +576,7 @@ export function CueForm({
           <CueEffectFlow
             onConfirm={handleEffectConfirm}
             onCancel={() => setView('main')}
-            palette={palette}
+            palette={effectivePalette}
           />
         )}
 
@@ -582,7 +588,7 @@ export function CueForm({
             existingEffect={adHocEffects[editingEffectIndex]}
             onUpdate={handleEffectUpdate}
             onRemove={handleEffectRemove}
-            palette={palette}
+            palette={effectivePalette}
           />
         )}
 

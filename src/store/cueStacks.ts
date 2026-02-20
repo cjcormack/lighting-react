@@ -160,6 +160,28 @@ export const cueStacksApi = restApi.injectEndpoints({
         method: 'POST',
         body,
       }),
+      // Optimistic update: immediately set activeCueId so the UI highlights correctly
+      async onQueryStarted({ projectId, stackId, cueId }, { dispatch, queryFulfilled }) {
+        const patchResult = dispatch(
+          cueStacksApi.util.updateQueryData('projectCueStackList', projectId, (draft) => {
+            const stack = draft.find((s) => s.id === stackId)
+            if (stack) {
+              stack.activeCueId = cueId ?? stack.cues[0]?.id ?? null
+            }
+          }),
+        )
+        try {
+          const { data } = await queryFulfilled
+          dispatch(
+            cueStacksApi.util.updateQueryData('projectCueStackList', projectId, (draft) => {
+              const stack = draft.find((s) => s.id === stackId)
+              if (stack) stack.activeCueId = data.cueId
+            }),
+          )
+        } catch {
+          patchResult.undo()
+        }
+      },
       invalidatesTags: () => [
         'FixtureEffects',
         'GroupActiveEffects',
@@ -174,6 +196,20 @@ export const cueStacksApi = restApi.injectEndpoints({
         url: `project/${projectId}/cue-stacks/${stackId}/deactivate`,
         method: 'POST',
       }),
+      // Optimistic update: clear activeCueId immediately
+      async onQueryStarted({ projectId, stackId }, { dispatch, queryFulfilled }) {
+        const patchResult = dispatch(
+          cueStacksApi.util.updateQueryData('projectCueStackList', projectId, (draft) => {
+            const stack = draft.find((s) => s.id === stackId)
+            if (stack) stack.activeCueId = null
+          }),
+        )
+        try {
+          await queryFulfilled
+        } catch {
+          patchResult.undo()
+        }
+      },
       invalidatesTags: () => [
         'FixtureEffects',
         'GroupActiveEffects',
@@ -189,6 +225,35 @@ export const cueStacksApi = restApi.injectEndpoints({
         method: 'POST',
         body,
       }),
+      // Optimistic update: compute next cue locally for instant feedback
+      async onQueryStarted({ projectId, stackId, direction }, { dispatch, queryFulfilled }) {
+        const patchResult = dispatch(
+          cueStacksApi.util.updateQueryData('projectCueStackList', projectId, (draft) => {
+            const stack = draft.find((s) => s.id === stackId)
+            if (!stack || stack.cues.length === 0) return
+            const currentIdx = stack.cues.findIndex((c) => c.id === stack.activeCueId)
+            const delta = direction === 'FORWARD' ? 1 : -1
+            let nextIdx = currentIdx + delta
+            if (stack.loop) {
+              nextIdx = ((nextIdx % stack.cues.length) + stack.cues.length) % stack.cues.length
+            } else {
+              nextIdx = Math.max(0, Math.min(stack.cues.length - 1, nextIdx))
+            }
+            stack.activeCueId = stack.cues[nextIdx]?.id ?? stack.activeCueId
+          }),
+        )
+        try {
+          const { data } = await queryFulfilled
+          dispatch(
+            cueStacksApi.util.updateQueryData('projectCueStackList', projectId, (draft) => {
+              const stack = draft.find((s) => s.id === stackId)
+              if (stack) stack.activeCueId = data.cueId
+            }),
+          )
+        } catch {
+          patchResult.undo()
+        }
+      },
       invalidatesTags: () => [
         'FixtureEffects',
         'GroupActiveEffects',
@@ -204,6 +269,20 @@ export const cueStacksApi = restApi.injectEndpoints({
         method: 'POST',
         body,
       }),
+      // Optimistic update: immediately set activeCueId to the target cue
+      async onQueryStarted({ projectId, stackId, cueId }, { dispatch, queryFulfilled }) {
+        const patchResult = dispatch(
+          cueStacksApi.util.updateQueryData('projectCueStackList', projectId, (draft) => {
+            const stack = draft.find((s) => s.id === stackId)
+            if (stack) stack.activeCueId = cueId
+          }),
+        )
+        try {
+          await queryFulfilled
+        } catch {
+          patchResult.undo()
+        }
+      },
       invalidatesTags: () => [
         'FixtureEffects',
         'GroupActiveEffects',

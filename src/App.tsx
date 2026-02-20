@@ -9,7 +9,7 @@ import ProjectScripts, { ScriptsRedirect } from "./routes/ProjectScripts";
 import { ProjectScenes, ScenesRedirect, ChasesRedirect } from "./routes/ProjectScenes";
 import { FxRedirect, ProjectFxBusking } from "./routes/FxBusking";
 import { PresetsRedirect, ProjectFxPresets } from "./routes/FxPresets";
-import { CuesRedirect, ProjectCues } from "./routes/Cues";
+import { CuesRedirect, CuesBaseRedirect, ProjectCues } from "./routes/Cues";
 import ProjectOverview, { ProjectOverviewRedirect } from "./routes/ProjectOverview";
 
 function App() {
@@ -56,6 +56,18 @@ function App() {
         },
         {
           path: "projects/:projectId/cues",
+          element: <CuesBaseRedirect />,
+        },
+        {
+          path: "projects/:projectId/cues/all",
+          element: <ProjectCues />,
+        },
+        {
+          path: "projects/:projectId/cues/standalone",
+          element: <ProjectCues />,
+        },
+        {
+          path: "projects/:projectId/cues/stacks/:stackId",
           element: <ProjectCues />,
         },
         {

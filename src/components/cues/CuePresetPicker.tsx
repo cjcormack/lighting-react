@@ -1,6 +1,4 @@
 import { useState, useMemo } from 'react'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { ChevronLeft, ChevronRight, Bookmark } from 'lucide-react'
 import { useProjectPresetListQuery } from '@/store/fxPresets'
 import { useGroupListQuery } from '@/store/groups'
@@ -32,9 +30,11 @@ export function CuePresetPicker({
   const { data: groups } = useGroupListQuery()
   const { data: fixtures } = useFixtureListQuery()
 
-  // If editing (existingPresetId set), start at preset step with existing targets
+  // If editing (existingPresetId set), start at preset step with existing target
   const [step, setStep] = useState<Step>(existingPresetId != null ? 'preset' : 'targets')
-  const [selectedTargets, setSelectedTargets] = useState<CueTarget[]>(existingTargets ?? [])
+  const [selectedTarget, setSelectedTarget] = useState<CueTarget | null>(
+    existingTargets?.[0] ?? null,
+  )
 
   // Set of all preset IDs available in this project
   const allPresetIds = useMemo(() => {
@@ -66,30 +66,20 @@ export function CuePresetPicker({
     return disabled
   }, [groups, fixtures, presets, allPresetIds])
 
-  // Compute compatible preset IDs from selected targets
+  // Compute compatible preset IDs from the selected target
   const compatiblePresetIds = useMemo(() => {
-    if (selectedTargets.length === 0) return null
+    if (!selectedTarget) return null
 
-    const sets: Set<number>[] = []
-    for (const target of selectedTargets) {
-      if (target.type === 'group') {
-        const group = groups?.find((g) => g.name === target.key)
-        if (group) sets.push(new Set(group.compatiblePresetIds))
-      } else {
-        const fixture = fixtures?.find((f) => f.key === target.key)
-        if (fixture) sets.push(new Set(fixture.compatiblePresetIds))
-      }
+    if (selectedTarget.type === 'group') {
+      const group = groups?.find((g) => g.name === selectedTarget.key)
+      if (group) return new Set(group.compatiblePresetIds)
+    } else {
+      const fixture = fixtures?.find((f) => f.key === selectedTarget.key)
+      if (fixture) return new Set(fixture.compatiblePresetIds)
     }
 
-    if (sets.length === 0) return null
-
-    // Union of all compatible preset IDs (show any preset that works for at least one target)
-    const union = new Set<number>()
-    for (const s of sets) {
-      for (const id of s) union.add(id)
-    }
-    return union
-  }, [selectedTargets, groups, fixtures])
+    return null
+  }, [selectedTarget, groups, fixtures])
 
   // Filter to only compatible presets (or show all if no targets selected yet)
   const filteredPresets = useMemo(() => {
@@ -98,11 +88,17 @@ export function CuePresetPicker({
     return presets.filter((p) => compatiblePresetIds.has(p.id))
   }, [presets, compatiblePresetIds])
 
+  const handleTargetSelect = (target: CueTarget) => {
+    setSelectedTarget(target)
+    setStep('preset')
+  }
+
   const handleSelectPreset = (preset: { id: number; name: string }) => {
+    if (!selectedTarget) return
     onConfirm({
       presetId: preset.id,
       presetName: preset.name,
-      targets: selectedTargets,
+      targets: [selectedTarget],
     })
   }
 
@@ -115,34 +111,18 @@ export function CuePresetPicker({
               <ChevronLeft className="size-5" />
             </button>
             <div>
-              <h3 className="font-medium text-sm">Select Targets</h3>
+              <h3 className="font-medium text-sm">Select Target</h3>
               <p className="text-xs text-muted-foreground">
-                Choose which fixtures or groups to apply a preset to.
+                Choose a fixture or group to apply a preset to.
               </p>
             </div>
           </div>
 
           <div className="flex-1 overflow-y-auto">
             <CueTargetPicker
-              selectedTargets={selectedTargets}
-              onChange={setSelectedTargets}
+              onSelect={handleTargetSelect}
               disabledKeys={disabledKeys}
             />
-          </div>
-
-          <div className="border-t px-4 pb-4 pt-2">
-            <Button
-              onClick={() => setStep('preset')}
-              disabled={selectedTargets.length === 0}
-              className="w-full"
-            >
-              Next — Choose Preset
-              {selectedTargets.length > 0 && (
-                <Badge variant="secondary" className="ml-2 text-[10px]">
-                  {selectedTargets.length} target{selectedTargets.length !== 1 ? 's' : ''}
-                </Badge>
-              )}
-            </Button>
           </div>
         </>
       )}
@@ -155,6 +135,7 @@ export function CuePresetPicker({
                 if (existingPresetId != null) {
                   onCancel()
                 } else {
+                  setSelectedTarget(null)
                   setStep('targets')
                 }
               }}
@@ -165,8 +146,7 @@ export function CuePresetPicker({
             <div>
               <h3 className="font-medium text-sm">Choose Preset</h3>
               <p className="text-xs text-muted-foreground">
-                {selectedTargets.length} target{selectedTargets.length !== 1 ? 's' : ''} selected.
-                Pick a preset to apply.
+                {selectedTarget?.key ?? 'Target'} — pick a preset to apply.
               </p>
             </div>
           </div>

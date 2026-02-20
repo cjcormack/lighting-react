@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { HexColorPicker } from 'react-colorful'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Slider } from '@/components/ui/slider'
@@ -29,6 +29,8 @@ import {
 interface CuePaletteEditorProps {
   palette: string[]
   onChange: (palette: string[]) => void
+  /** Palette inherited from earlier cues in the stack, shown as ghost swatches when own palette is empty */
+  inheritedPalette?: string[]
 }
 
 interface PaletteItem {
@@ -54,12 +56,18 @@ function serializeItems(items: PaletteItem[]): string[] {
   return items.map((i) => serializeExtendedColour(i.colour))
 }
 
-export function CuePaletteEditor({ palette, onChange }: CuePaletteEditorProps) {
+export function CuePaletteEditor({ palette, onChange, inheritedPalette }: CuePaletteEditorProps) {
   const [items, setItems] = useState<PaletteItem[]>(() => parsePaletteItems(palette))
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  // Track internal changes so the sync effect doesn't clobber editingIndex
+  const internalChange = useRef(false)
 
   // Sync items when palette prop changes from outside (e.g. opening with existing cue)
   useEffect(() => {
+    if (internalChange.current) {
+      internalChange.current = false
+      return
+    }
     setItems(parsePaletteItems(palette))
     setEditingIndex(null)
   }, [palette])
@@ -71,6 +79,7 @@ export function CuePaletteEditor({ palette, onChange }: CuePaletteEditorProps) {
 
   const emitChange = useCallback(
     (newItems: PaletteItem[]) => {
+      internalChange.current = true
       setItems(newItems)
       onChange(serializeItems(newItems))
     },
@@ -128,40 +137,60 @@ export function CuePaletteEditor({ palette, onChange }: CuePaletteEditorProps) {
     [items, emitChange, editingIndex],
   )
 
+  const showInherited = items.length === 0 && inheritedPalette && inheritedPalette.length > 0
+
   return (
-    <div className="flex items-center gap-1 flex-wrap">
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
-      >
-        <SortableContext
-          items={items.map((i) => i.id)}
-          strategy={horizontalListSortingStrategy}
+    <div className="space-y-1">
+      <div className="flex items-center gap-1 flex-wrap">
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
         >
-          {items.map((item, index) => (
-            <SortablePaletteSwatch
-              key={item.id}
-              item={item}
-              index={index}
-              isEditing={editingIndex === index}
-              onEdit={() =>
-                setEditingIndex(editingIndex === index ? null : index)
-              }
-              onRemove={() => handleRemove(index)}
-              onColourChange={(colour) => handleColourChange(index, colour)}
-            />
-          ))}
-        </SortableContext>
-      </DndContext>
-      <button
-        type="button"
-        onClick={handleAdd}
-        className="w-7 h-7 rounded border border-dashed border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-foreground/50 transition-colors text-sm"
-        title="Add colour"
-      >
-        +
-      </button>
+          <SortableContext
+            items={items.map((i) => i.id)}
+            strategy={horizontalListSortingStrategy}
+          >
+            {items.map((item, index) => (
+              <SortablePaletteSwatch
+                key={item.id}
+                item={item}
+                index={index}
+                isEditing={editingIndex === index}
+                onEdit={() =>
+                  setEditingIndex(editingIndex === index ? null : index)
+                }
+                onRemove={() => handleRemove(index)}
+                onColourChange={(colour) => handleColourChange(index, colour)}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
+        <button
+          type="button"
+          onClick={handleAdd}
+          className="w-7 h-7 rounded border border-dashed border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-foreground/50 transition-colors text-sm"
+          title="Add colour"
+        >
+          +
+        </button>
+      </div>
+      {showInherited && (
+        <div className="flex items-center gap-1 flex-wrap">
+          <span className="text-[10px] text-muted-foreground mr-0.5">Inherited:</span>
+          {inheritedPalette.map((raw, i) => {
+            const hex = raw.split(';')[0]
+            return (
+              <div
+                key={i}
+                className="w-5 h-5 rounded border border-border/50 opacity-40"
+                style={{ backgroundColor: hex }}
+                title={`Inherited P${i + 1}`}
+              />
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

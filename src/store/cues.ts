@@ -154,3 +154,29 @@ export function useActiveCueStackIds(): Set<number> {
     return ids
   }, [fxState])
 }
+
+/**
+ * Derive which cue is the "active" one per stack from the real-time FxState.
+ *
+ * During crossfades both the outgoing and incoming cue have effects running.
+ * We pick the cue whose effects were added most recently (highest effect id)
+ * as the authoritative active cue for display purposes.
+ */
+export function useStackActiveCueIds(): Map<number, number> {
+  const { data: fxState } = useFxStateQuery()
+  return useMemo(() => {
+    const map = new Map<number, { cueId: number; maxEffectId: number }>()
+    for (const effect of fxState?.activeEffects ?? []) {
+      if (effect.cueStackId == null || effect.cueId == null) continue
+      const current = map.get(effect.cueStackId)
+      if (!current || effect.id > current.maxEffectId) {
+        map.set(effect.cueStackId, { cueId: effect.cueId, maxEffectId: effect.id })
+      }
+    }
+    const result = new Map<number, number>()
+    for (const [stackId, { cueId }] of map) {
+      result.set(stackId, cueId)
+    }
+    return result
+  }, [fxState])
+}

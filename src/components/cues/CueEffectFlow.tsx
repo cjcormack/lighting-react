@@ -1,6 +1,5 @@
 import { useState, useMemo, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { ChevronLeft, Trash2 } from 'lucide-react'
 import { useEffectLibraryQuery, type EffectLibraryEntry } from '@/store/fixtureFx'
 import { useGroupListQuery } from '@/store/groups'
@@ -53,7 +52,7 @@ export function CueEffectFlow({
   const isEdit = !!existingEffect
 
   // ── Target selection state (add mode only) ──
-  const [selectedTargets, setSelectedTargets] = useState<CueTarget[]>([])
+  const [selectedTarget, setSelectedTarget] = useState<CueTarget | null>(null)
 
   // ── Flow step state ──
   const [step, setStep] = useState<AddStep>(isEdit ? 'configure' : 'targets')
@@ -155,42 +154,30 @@ export function CueEffectFlow({
   }, [groups, fixtures, requiredCaps])
 
   // ── Capability-aware filtering ──
-  // Compute intersection of capabilities from selected targets
+  // Compute capabilities from the selected target
   const targetCapabilities = useMemo(() => {
-    const targets = isEdit
-      ? [{ type: existingEffect!.targetType, key: existingEffect!.targetKey }]
-      : selectedTargets
+    const target = isEdit
+      ? { type: existingEffect!.targetType, key: existingEffect!.targetKey }
+      : selectedTarget
 
-    if (targets.length === 0) return null
+    if (!target) return null
 
-    const capSets: Set<string>[] = []
-    for (const target of targets) {
-      if (target.type === 'group') {
-        const group = groups?.find((g) => g.name === target.key)
-        if (group) capSets.push(new Set(group.capabilities))
-      } else {
-        const fixture = fixtures?.find((f) => f.key === target.key)
-        if (fixture) capSets.push(new Set(fixture.capabilities))
-      }
+    if (target.type === 'group') {
+      const group = groups?.find((g) => g.name === target.key)
+      if (group) return new Set(group.capabilities)
+    } else {
+      const fixture = fixtures?.find((f) => f.key === target.key)
+      if (fixture) return new Set(fixture.capabilities)
     }
 
-    if (capSets.length === 0) return null
+    return null
+  }, [selectedTarget, groups, fixtures, isEdit, existingEffect])
 
-    // Intersection: keep only capabilities present in ALL targets
-    const intersection = new Set(capSets[0])
-    for (let i = 1; i < capSets.length; i++) {
-      for (const cap of intersection) {
-        if (!capSets[i].has(cap)) intersection.delete(cap)
-      }
-    }
-    return intersection
-  }, [selectedTargets, groups, fixtures, isEdit, existingEffect])
-
-  // Check if any selected target is a group (affects element mode visibility)
+  // Check if the selected target is a group (affects element mode visibility)
   const hasGroupTarget = useMemo(() => {
     if (isEdit) return existingEffect!.targetType === 'group'
-    return selectedTargets.some((t) => t.type === 'group')
-  }, [selectedTargets, isEdit, existingEffect])
+    return selectedTarget?.type === 'group'
+  }, [selectedTarget, isEdit, existingEffect])
 
   // Filter library by capabilities
   const effectsByCategory = useMemo(() => {
@@ -213,7 +200,8 @@ export function CueEffectFlow({
 
   // ── Handlers ──
 
-  const handleTargetsNext = () => {
+  const handleTargetSelect = (target: CueTarget) => {
+    setSelectedTarget(target)
     setStep('category')
   }
 
@@ -233,12 +221,11 @@ export function CueEffectFlow({
   }
 
   const handleConfirmAdd = () => {
-    if (!activeEntry) return
+    if (!activeEntry || !selectedTarget) return
 
-    // Build one CueAdHocEffect per selected target
-    const effects: CueAdHocEffect[] = selectedTargets.map((target) => ({
-      targetType: target.type,
-      targetKey: target.key,
+    const effects: CueAdHocEffect[] = [{
+      targetType: selectedTarget.type,
+      targetKey: selectedTarget.key,
       effectType: activeEntry.name,
       category: activeEntry.category,
       propertyName: null, // backend auto-resolves
@@ -250,7 +237,7 @@ export function CueEffectFlow({
       elementFilter: elementFilter !== 'ALL' ? elementFilter : null,
       stepTiming: stepTiming || null,
       parameters: { ...parameters },
-    }))
+    }]
 
     onConfirm(effects)
   }
@@ -279,6 +266,7 @@ export function CueEffectFlow({
         onCancel()
         break
       case 'category':
+        setSelectedTarget(null)
         setStep('targets')
         break
       case 'effect':
@@ -306,34 +294,18 @@ export function CueEffectFlow({
               <ChevronLeft className="size-5" />
             </button>
             <div>
-              <h3 className="font-medium text-sm">Select Targets</h3>
+              <h3 className="font-medium text-sm">Select Target</h3>
               <p className="text-xs text-muted-foreground">
-                Choose which fixtures or groups to apply the effect to.
+                Choose a fixture or group to apply the effect to.
               </p>
             </div>
           </div>
 
           <div className="flex-1 overflow-y-auto">
             <CueTargetPicker
-              selectedTargets={selectedTargets}
-              onChange={setSelectedTargets}
+              onSelect={handleTargetSelect}
               disabledKeys={disabledKeys}
             />
-          </div>
-
-          <div className="border-t px-4 pb-4 pt-2">
-            <Button
-              onClick={handleTargetsNext}
-              disabled={selectedTargets.length === 0}
-              className="w-full"
-            >
-              Next — Choose Effect
-              {selectedTargets.length > 0 && (
-                <Badge variant="secondary" className="ml-2 text-[10px]">
-                  {selectedTargets.length} target{selectedTargets.length !== 1 ? 's' : ''}
-                </Badge>
-              )}
-            </Button>
           </div>
         </>
       )}
@@ -348,8 +320,7 @@ export function CueEffectFlow({
             <div>
               <h3 className="font-medium text-sm">Choose Category</h3>
               <p className="text-xs text-muted-foreground">
-                {selectedTargets.length} target{selectedTargets.length !== 1 ? 's' : ''} selected.
-                Pick an effect category.
+                {selectedTarget?.key ?? 'Target'} — pick an effect category.
               </p>
             </div>
           </div>
@@ -426,11 +397,6 @@ export function CueEffectFlow({
               onClick={isEdit ? handleConfirmEdit : handleConfirmAdd}
             >
               {isEdit ? 'Save Changes' : 'Add Effect'}
-              {!isEdit && selectedTargets.length > 1 && (
-                <Badge variant="secondary" className="ml-2 text-[10px]">
-                  x{selectedTargets.length}
-                </Badge>
-              )}
             </Button>
           </div>
         </>

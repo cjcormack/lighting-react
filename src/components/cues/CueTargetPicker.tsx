@@ -6,35 +6,16 @@ import { cn } from '@/lib/utils'
 import type { CueTarget } from '@/api/cuesApi'
 
 interface CueTargetPickerProps {
-  selectedTargets: CueTarget[]
-  onChange: (targets: CueTarget[]) => void
+  /** Called immediately when a fixture or group is clicked. */
+  onSelect: (target: CueTarget) => void
   /** Keys that should be greyed out (e.g. no compatible presets / no compatible effects).
    *  Map from "group:<name>" or "fixture:<key>" → reason string. */
   disabledKeys?: Map<string, string>
 }
 
-function isSelected(targets: CueTarget[], type: CueTarget['type'], key: string): boolean {
-  return targets.some((t) => t.type === type && t.key === key)
-}
-
-function toggleTarget(
-  targets: CueTarget[],
-  type: CueTarget['type'],
-  key: string,
-): CueTarget[] {
-  if (isSelected(targets, type, key)) {
-    return targets.filter((t) => !(t.type === type && t.key === key))
-  }
-  return [...targets, { type, key }]
-}
-
-export function CueTargetPicker({ selectedTargets, onChange, disabledKeys }: CueTargetPickerProps) {
+export function CueTargetPicker({ onSelect, disabledKeys }: CueTargetPickerProps) {
   const { data: groups } = useGroupListQuery()
   const { data: fixtures } = useFixtureListQuery()
-
-  const handleToggle = (type: CueTarget['type'], key: string) => {
-    onChange(toggleTarget(selectedTargets, type, key))
-  }
 
   return (
     <div className="flex flex-col gap-1 p-2">
@@ -44,13 +25,12 @@ export function CueTargetPicker({ selectedTargets, onChange, disabledKeys }: Cue
             Groups
           </div>
           {groups.map((group) => {
-            const selected = isSelected(selectedTargets, 'group', group.name)
             const disabledReason = disabledKeys?.get(`group:${group.name}`)
             const isDisabled = disabledReason != null
             return (
               <button
                 key={`group:${group.name}`}
-                onClick={() => !isDisabled && handleToggle('group', group.name)}
+                onClick={() => !isDisabled && onSelect({ type: 'group', key: group.name })}
                 disabled={isDisabled}
                 title={disabledReason ?? undefined}
                 className={cn(
@@ -59,16 +39,8 @@ export function CueTargetPicker({ selectedTargets, onChange, disabledKeys }: Cue
                   isDisabled
                     ? 'opacity-40 cursor-not-allowed'
                     : 'hover:bg-accent/50 active:bg-accent cursor-pointer',
-                  selected && !isDisabled && 'bg-accent ring-1 ring-primary/30',
                 )}
               >
-                <input
-                  type="checkbox"
-                  checked={selected}
-                  disabled={isDisabled}
-                  onChange={() => {}}
-                  className="rounded border-border pointer-events-none"
-                />
                 <Layers className="size-4 text-muted-foreground shrink-0" />
                 <span className="truncate flex-1 text-left">{group.name}</span>
                 {isDisabled && (
@@ -91,13 +63,12 @@ export function CueTargetPicker({ selectedTargets, onChange, disabledKeys }: Cue
             Fixtures
           </div>
           {fixtures.map((fixture) => {
-            const selected = isSelected(selectedTargets, 'fixture', fixture.key)
             const disabledReason = disabledKeys?.get(`fixture:${fixture.key}`)
             const isDisabled = disabledReason != null
             return (
               <button
                 key={`fixture:${fixture.key}`}
-                onClick={() => !isDisabled && handleToggle('fixture', fixture.key)}
+                onClick={() => !isDisabled && onSelect({ type: 'fixture', key: fixture.key })}
                 disabled={isDisabled}
                 title={disabledReason ?? undefined}
                 className={cn(
@@ -106,16 +77,8 @@ export function CueTargetPicker({ selectedTargets, onChange, disabledKeys }: Cue
                   isDisabled
                     ? 'opacity-40 cursor-not-allowed'
                     : 'hover:bg-accent/50 active:bg-accent cursor-pointer',
-                  selected && !isDisabled && 'bg-accent ring-1 ring-primary/30',
                 )}
               >
-                <input
-                  type="checkbox"
-                  checked={selected}
-                  disabled={isDisabled}
-                  onChange={() => {}}
-                  className="rounded border-border pointer-events-none"
-                />
                 <LayoutGrid className="size-4 text-muted-foreground shrink-0" />
                 <span className="truncate flex-1 text-left">{fixture.name}</span>
                 {isDisabled && (

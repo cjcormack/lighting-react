@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -78,6 +78,7 @@ import {
   useLazyCurrentCueStateQuery,
   useActiveCueIds,
   useActiveCueStackIds,
+  useStackActiveCueIds,
 } from '../store/cues'
 import {
   useProjectCueStackListQuery,
@@ -112,14 +113,14 @@ import { PresetApplicationSummary } from '../components/fx/PresetApplicationSumm
 import { fromPresetEffect, fromCueAdHocEffect } from '../components/fx/effectSummaryTypes'
 import { useEffectLibraryQuery } from '../store/fixtureFx'
 
-// Redirect /cues → /projects/:projectId/cues
+// Redirect /cues → /projects/:projectId/cues/all
 export function CuesRedirect() {
   const { data: currentProject, isLoading } = useCurrentProjectQuery()
   const navigate = useNavigate()
 
   useEffect(() => {
     if (!isLoading && currentProject) {
-      navigate(`/projects/${currentProject.id}/cues`, { replace: true })
+      navigate(`/projects/${currentProject.id}/cues/all`, { replace: true })
     }
   }, [currentProject, isLoading, navigate])
 
@@ -134,9 +135,23 @@ export function CuesRedirect() {
   return null
 }
 
+// Redirect /projects/:projectId/cues → /projects/:projectId/cues/all
+export function CuesBaseRedirect() {
+  const { projectId } = useParams()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    navigate(`/projects/${projectId}/cues/all`, { replace: true })
+  }, [navigate, projectId])
+
+  return null
+}
+
 // Main cues management route
 export function ProjectCues() {
-  const { projectId } = useParams()
+  const { projectId, stackId: stackIdParam } = useParams()
+  const navigate = useNavigate()
+  const location = useLocation()
   const projectIdNum = Number(projectId)
   const isDesktop = useMediaQuery('(min-width: 768px)')
   const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
@@ -154,6 +169,7 @@ export function ProjectCues() {
   const [fetchCurrentState] = useLazyCurrentCueStateQuery()
   const activeCueIds = useActiveCueIds()
   const activeCueStackIds = useActiveCueStackIds()
+  const stackActiveCueIds = useStackActiveCueIds()
 
   // Cue stack mutations
   const [createStack, { isLoading: isCreatingStack }] = useCreateProjectCueStackMutation()
@@ -167,8 +183,25 @@ export function ProjectCues() {
   const [removeCueFromStack] = useRemoveCueFromCueStackMutation()
   const [reorderCues] = useReorderCueStackCuesMutation()
 
+  // Derive selectedView entirely from URL path
+  const selectedView: CueStackView = stackIdParam
+    ? Number(stackIdParam)
+    : location.pathname.endsWith('/standalone')
+      ? 'standalone'
+      : 'all'
+
+  const handleSelectView = useCallback(
+    (view: CueStackView) => {
+      if (typeof view === 'number') {
+        navigate(`/projects/${projectId}/cues/stacks/${view}`)
+      } else {
+        navigate(`/projects/${projectId}/cues/${view}`)
+      }
+    },
+    [navigate, projectId],
+  )
+
   // UI state
-  const [selectedView, setSelectedView] = useState<CueStackView>('all')
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [editingCue, setEditingCue] = useState<Cue | null>(null)
@@ -205,6 +238,13 @@ export function ProjectCues() {
     }
     return null
   }, [selectedView, stacks])
+
+  // Redirect to all-cues view if the stack ID in the URL doesn't match any loaded stack
+  useEffect(() => {
+    if (stackIdParam && stacks && !stacks.find((s) => s.id === Number(stackIdParam))) {
+      navigate(`/projects/${projectId}/cues/all`, { replace: true })
+    }
+  }, [stackIdParam, stacks, navigate, projectId])
 
   const selectedViewLabel = useMemo(() => {
     if (selectedView === 'all') return 'All Cues'
@@ -267,13 +307,51 @@ export function ProjectCues() {
     })
   }
 
+  // Compute inherited palette for a cue in a stack: walk backwards through
+  // the stack's cues (before the given cue) to find the last one with a non-empty
+  // palette, falling back to the stack's own base palette.
+  // If beforeCueId is omitted, walks from the end (for new cues appended at the end).
+  const computeInheritedPalette = useCallback(
+    (stackId: number, beforeCueId?: number): string[] => {
+      const stack = stacks?.find((s) => s.id === stackId)
+      if (!stack) return []
+
+      const stackCues = (cues ?? [])
+        .filter((c) => c.cueStackId === stackId)
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+
+      // Determine the starting index: just before the given cue, or from the end
+      let startIdx = stackCues.length - 1
+      if (beforeCueId != null) {
+        const cueIdx = stackCues.findIndex((c) => c.id === beforeCueId)
+        if (cueIdx >= 0) startIdx = cueIdx - 1
+      }
+
+      for (let i = startIdx; i >= 0; i--) {
+        if (stackCues[i].palette.length > 0) {
+          return stackCues[i].palette
+        }
+      }
+
+      // Fall back to the stack's base palette
+      return stack.palette
+    },
+    [cues, stacks],
+  )
+
   const handleCreate = async () => {
     setEditingCue(null)
-    try {
-      const result = await fetchCurrentState(projectIdNum).unwrap()
-      setInitialState(result)
-    } catch {
+    if (typeof selectedView === 'number') {
+      // Creating in a stack: start empty, use inherited palette for context
       setInitialState(undefined)
+    } else {
+      // Standalone cue: pre-populate from current state
+      try {
+        const result = await fetchCurrentState(projectIdNum).unwrap()
+        setInitialState(result)
+      } catch {
+        setInitialState(undefined)
+      }
     }
     setFormOpen(true)
   }
@@ -412,7 +490,7 @@ export function ProjectCues() {
         ...input,
       }).unwrap()
       // Select the newly created stack
-      setSelectedView(result.id)
+      handleSelectView(result.id)
     }
   }
 
@@ -425,7 +503,7 @@ export function ProjectCues() {
     }).unwrap()
     // If we were viewing this stack, go back to all
     if (selectedView === deletingStack.id) {
-      setSelectedView('all')
+      handleSelectView('all')
     }
     setDeletingStack(null)
   }
@@ -495,14 +573,11 @@ export function ProjectCues() {
   const panelProps = {
     stacks: stacks ?? [],
     selectedView,
-    onSelectView: setSelectedView,
+    onSelectView: handleSelectView,
     activeStackIds: activeCueStackIds,
     standaloneCueCount,
     totalCueCount,
     onCreateStack: handleCreateStack,
-    onActivateStack: handleActivateStack,
-    onDeactivateStack: handleDeactivateStack,
-    onAdvanceStack: handleAdvanceStack,
   }
 
   const cueListContent =
@@ -536,6 +611,7 @@ export function ProjectCues() {
         isCurrentProject={isCurrentProject}
         activeCueIds={activeCueIds}
         activeCueStackIds={activeCueStackIds}
+        stackActiveCueIds={stackActiveCueIds}
         expandedCueIds={expandedCueIds}
         stacks={stacks}
         selectedView={selectedView}
@@ -560,7 +636,12 @@ export function ProjectCues() {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="p-4 space-y-4">
-        <Breadcrumbs projectName={project.name} currentPage="Cues" />
+        <Breadcrumbs
+          projectName={project.name}
+          currentPage="Cues"
+          extra={[selectedViewLabel]}
+          onCurrentPageClick={() => handleSelectView('all')}
+        />
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0 flex-1">
             <h1 className="text-lg font-semibold">Cues</h1>
@@ -630,6 +711,13 @@ export function ProjectCues() {
         isSaving={isCreating || isSaving}
         initialState={!editingCue ? initialState : undefined}
         isInStack={editingCue ? editingCue.cueStackId != null : typeof selectedView === 'number'}
+        inheritedPalette={
+          !editingCue && typeof selectedView === 'number'
+            ? computeInheritedPalette(selectedView)
+            : editingCue?.cueStackId != null
+              ? computeInheritedPalette(editingCue.cueStackId, editingCue.id)
+              : undefined
+        }
       />
 
       {/* Create/Edit stack form (Sheet) */}
@@ -836,6 +924,7 @@ function CueListRows({
   isCurrentProject,
   activeCueIds,
   activeCueStackIds,
+  stackActiveCueIds,
   expandedCueIds,
   stacks,
   selectedView,
@@ -860,6 +949,7 @@ function CueListRows({
   isCurrentProject: boolean
   activeCueIds: Set<number>
   activeCueStackIds: Set<number>
+  stackActiveCueIds: Map<number, number>
   expandedCueIds: Set<number>
   stacks?: CueStack[]
   selectedView: CueStackView
@@ -933,8 +1023,7 @@ function CueListRows({
       isActiveCueInStack={
         cue.cueStackId != null &&
         activeCueStackIds.has(cue.cueStackId) &&
-        (stacks?.find((s) => s.id === cue.cueStackId)?.activeCueId ===
-          cue.id)
+        stackActiveCueIds.get(cue.cueStackId) === cue.id
       }
       stackName={cue.cueStackName}
       showStackBadge={selectedView === 'all' && cue.cueStackId != null}
@@ -1180,8 +1269,12 @@ function CueListRow({
 
   const isExpanded = expanded && hasExpandableContent
 
-  // Determine active styling: cue is active if it's directly active OR the active cue in an active stack
-  const isEffectivelyActive = isActive || isActiveCueInStack
+  // Determine active styling:
+  // - For standalone cues, use the effect-based isActive flag.
+  // - For cues in an active stack, use isActiveCueInStack which is derived from
+  //   the real-time FxState WebSocket (highest effect ID per stack picks the
+  //   newest cue, avoiding dual-highlight during crossfades).
+  const isEffectivelyActive = isInActiveStack ? isActiveCueInStack : isActive
 
   const rowContent = (
     <div
