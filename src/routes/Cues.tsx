@@ -2,6 +2,15 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import {
   ContextMenu,
@@ -108,6 +117,8 @@ export function ProjectCues() {
   const [editingCue, setEditingCue] = useState<Cue | null>(null)
   const [copyingCue, setCopyingCue] = useState<Cue | null>(null)
   const [deletingCue, setDeletingCue] = useState<Cue | null>(null)
+  const [duplicatingCue, setDuplicatingCue] = useState<Cue | null>(null)
+  const [duplicateName, setDuplicateName] = useState('')
   const [expandedCueIds, setExpandedCueIds] = useState<Set<number>>(new Set())
   const [initialState, setInitialState] = useState<CueCurrentState | undefined>()
 
@@ -176,7 +187,7 @@ export function ProjectCues() {
     }
   }
 
-  const handleDuplicate = async (cue: Cue) => {
+  const handleDuplicate = (cue: Cue) => {
     const existingNames = new Set(cues?.map((c) => c.name) ?? [])
     let newName = `${cue.name} (Copy)`
     if (existingNames.has(newName)) {
@@ -184,18 +195,24 @@ export function ProjectCues() {
       while (existingNames.has(`${cue.name} (Copy ${n})`)) n++
       newName = `${cue.name} (Copy ${n})`
     }
+    setDuplicateName(newName)
+    setDuplicatingCue(cue)
+  }
 
+  const handleDuplicateConfirmed = async () => {
+    if (!duplicatingCue || !duplicateName.trim()) return
     await createCue({
       projectId: projectIdNum,
-      name: newName,
-      palette: cue.palette,
-      updateGlobalPalette: cue.updateGlobalPalette,
-      presetApplications: cue.presetApplications.map((pa) => ({
+      name: duplicateName.trim(),
+      palette: duplicatingCue.palette,
+      updateGlobalPalette: duplicatingCue.updateGlobalPalette,
+      presetApplications: duplicatingCue.presetApplications.map((pa) => ({
         presetId: pa.presetId,
         targets: pa.targets,
       })),
-      adHocEffects: cue.adHocEffects,
+      adHocEffects: duplicatingCue.adHocEffects,
     }).unwrap()
+    setDuplicatingCue(null)
   }
 
   const handleSave = async (input: CueInput) => {
@@ -356,6 +373,34 @@ export function ProjectCues() {
         </div>
       )}
 
+      {/* Duplicate name prompt */}
+      <Dialog open={!!duplicatingCue} onOpenChange={(open) => { if (!open) setDuplicatingCue(null) }}>
+        <DialogContent showCloseButton={false} className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Duplicate Cue</DialogTitle>
+            <DialogDescription>Enter a name for the new cue.</DialogDescription>
+          </DialogHeader>
+          <Input
+            autoFocus
+            value={duplicateName}
+            onChange={(e) => setDuplicateName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && duplicateName.trim()) handleDuplicateConfirmed()
+            }}
+            placeholder="Cue name"
+          />
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setDuplicatingCue(null)} disabled={isCreating}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={handleDuplicateConfirmed} disabled={isCreating || !duplicateName.trim()}>
+              {isCreating && <Loader2 className="size-4 mr-2 animate-spin" />}
+              Duplicate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   )
 }
@@ -422,6 +467,9 @@ function CueListRow({
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     // Skip right-click — Radix ContextMenu handles that natively
     if (e.button === 2) return
+    // Skip if the event originated from an interactive child (button, dropdown trigger, etc.)
+    const target = e.target as HTMLElement
+    if (target.closest('button, [role="menuitem"], [data-slot="dropdown-menu-trigger"]')) return
     isLongPressPointer.current = true
     didLongPress.current = false
     startPos.current = { x: e.clientX, y: e.clientY }
@@ -596,6 +644,7 @@ function CueListRow({
                   isLongPressPointer.current = false
                   e.stopPropagation()
                 }}
+                onPointerUp={(e) => e.stopPropagation()}
                 onClick={(e) => e.stopPropagation()}
               >
                 <MoreHorizontal className="size-4" />
