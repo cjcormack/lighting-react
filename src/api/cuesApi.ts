@@ -73,7 +73,9 @@ export interface ApplyCueResponse {
   cueName: string
 }
 
-// Create from state request
-export interface CreateCueFromStateRequest {
-  name: string
+// Current lighting state snapshot (palette + active effects)
+export interface CueCurrentState {
+  palette: string[]
+  presetApplications: CuePresetApplicationDetail[]
+  adHocEffects: CueAdHocEffect[]
 }

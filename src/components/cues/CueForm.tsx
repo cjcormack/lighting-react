@@ -20,6 +20,7 @@ import {
   AudioWaveform,
   Layers,
   LayoutGrid,
+  Eraser,
 } from 'lucide-react'
 import { useEffectLibraryQuery, type EffectLibraryEntry } from '@/store/fixtureFx'
 import { useProjectPresetListQuery } from '@/store/fxPresets'
@@ -27,7 +28,7 @@ import { EFFECT_CATEGORY_INFO, BEAT_DIVISION_OPTIONS, getEffectDescription } fro
 import { CuePaletteEditor } from './CuePaletteEditor'
 import { CuePresetPicker } from './CuePresetPicker'
 import { CueEffectFlow } from './CueEffectFlow'
-import type { Cue, CueInput, CueAdHocEffect } from '@/api/cuesApi'
+import type { Cue, CueInput, CueAdHocEffect, CueCurrentState } from '@/api/cuesApi'
 
 /** Which view is showing inside the Sheet */
 type CueFormView =
@@ -54,6 +55,7 @@ interface CueFormProps {
   isSaving: boolean
   onDelete?: () => void
   isDeleting?: boolean
+  initialState?: CueCurrentState
 }
 
 export function CueForm({
@@ -65,6 +67,7 @@ export function CueForm({
   isSaving,
   onDelete,
   isDeleting,
+  initialState,
 }: CueFormProps) {
   const { data: library } = useEffectLibraryQuery()
   const { data: presets } = useProjectPresetListQuery(projectId)
@@ -114,22 +117,24 @@ export function CueForm({
   // ── Reset form when sheet opens ──
   useEffect(() => {
     if (open) {
+      // When editing an existing cue, populate from it; when creating, use initialState if available
+      const source = cue ?? initialState
       setName(cue?.name ?? '')
-      setPalette(cue?.palette ?? [])
+      setPalette(source?.palette ?? [])
       setPresetApps(
-        cue?.presetApplications.map((pa) => ({
+        source?.presetApplications.map((pa) => ({
           presetId: pa.presetId,
           presetName: pa.presetName,
           targets: pa.targets,
         })) ?? [],
       )
-      setAdHocEffects(cue?.adHocEffects ?? [])
+      setAdHocEffects(source?.adHocEffects ?? [])
       setError(null)
       setView('main')
       setEditingPresetIndex(null)
       setEditingEffectIndex(null)
     }
-  }, [open, cue])
+  }, [open, cue, initialState])
 
   // ── Save handler ──
   const handleSave = async () => {
@@ -252,8 +257,28 @@ export function CueForm({
         {/* ═══════ Main form view ═══════ */}
         {view === 'main' && (
           <>
-            <SheetHeader>
-              <SheetTitle>{isEditing ? 'Edit Cue' : 'New Cue'}</SheetTitle>
+            <SheetHeader className="pr-10">
+              <div className="flex items-center justify-between">
+                <SheetTitle>{isEditing ? 'Edit Cue' : 'New Cue'}</SheetTitle>
+                {!isEditing && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs gap-1 text-muted-foreground"
+                    disabled={name === '' && palette.length === 0 && presetApps.length === 0 && adHocEffects.length === 0}
+                    onClick={() => {
+                      setName('')
+                      setPalette([])
+                      setPresetApps([])
+                      setAdHocEffects([])
+                      setError(null)
+                    }}
+                  >
+                    <Eraser className="size-3.5" />
+                    Clear
+                  </Button>
+                )}
+              </div>
               <SheetDescription>
                 {isEditing
                   ? 'Update the cue name, palette, presets, and effects.'
@@ -262,6 +287,7 @@ export function CueForm({
             </SheetHeader>
 
             <div className="flex-1 overflow-y-auto space-y-4 py-4">
+
               {/* Error message */}
               {error && (
                 <div className="px-1 text-sm text-destructive">{error}</div>

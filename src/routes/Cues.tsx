@@ -4,17 +4,6 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -30,11 +19,9 @@ import {
   Copy,
   CopyPlus,
   Play,
-  Download,
   Palette,
   Bookmark,
   AudioWaveform,
-  XCircle,
   ChevronDown,
   ChevronRight,
   Layers,
@@ -48,14 +35,14 @@ import {
   useSaveProjectCueMutation,
   useDeleteProjectCueMutation,
   useApplyCueMutation,
-  useCreateCueFromStateMutation,
+  useLazyCurrentCueStateQuery,
 } from '../store/cues'
 import { CueForm } from '../components/cues/CueForm'
 import { CopyCueDialog } from '../components/cues/CopyCueDialog'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { useProjectPresetListQuery } from '../store/fxPresets'
 import type { FxPreset } from '../api/fxPresetsApi'
-import type { Cue, CueInput, CueAdHocEffect } from '../api/cuesApi'
+import type { Cue, CueInput, CueAdHocEffect, CueCurrentState } from '../api/cuesApi'
 import {
   EFFECT_CATEGORY_INFO,
   getBeatDivisionLabel,
@@ -98,15 +85,13 @@ export function ProjectCues() {
   const [saveCue, { isLoading: isSaving }] = useSaveProjectCueMutation()
   const [deleteCue, { isLoading: isDeleting }] = useDeleteProjectCueMutation()
   const [applyCue] = useApplyCueMutation()
-  const [createFromState, { isLoading: isCreatingFromState }] = useCreateCueFromStateMutation()
+  const [fetchCurrentState] = useLazyCurrentCueStateQuery()
 
   const [formOpen, setFormOpen] = useState(false)
   const [editingCue, setEditingCue] = useState<Cue | null>(null)
   const [copyingCue, setCopyingCue] = useState<Cue | null>(null)
   const [expandedCueIds, setExpandedCueIds] = useState<Set<number>>(new Set())
-  const [fromStateOpen, setFromStateOpen] = useState(false)
-  const [fromStateName, setFromStateName] = useState('')
-  const [fromStateError, setFromStateError] = useState<string | null>(null)
+  const [initialState, setInitialState] = useState<CueCurrentState | undefined>()
 
   const isCurrentProject = currentProject?.id === projectIdNum
 
@@ -122,8 +107,14 @@ export function ProjectCues() {
     })
   }
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     setEditingCue(null)
+    try {
+      const result = await fetchCurrentState(projectIdNum).unwrap()
+      setInitialState(result)
+    } catch {
+      setInitialState(undefined)
+    }
     setFormOpen(true)
   }
 
@@ -194,28 +185,6 @@ export function ProjectCues() {
     setEditingCue(null)
   }
 
-  const handleFromState = async () => {
-    if (!fromStateName.trim()) {
-      setFromStateError('Name is required')
-      return
-    }
-    try {
-      await createFromState({
-        projectId: projectIdNum,
-        name: fromStateName.trim(),
-      }).unwrap()
-      setFromStateOpen(false)
-      setFromStateName('')
-      setFromStateError(null)
-    } catch (e) {
-      if (e && typeof e === 'object' && 'status' in e && (e as { status: number }).status === 409) {
-        setFromStateError('A cue with this name already exists')
-      } else {
-        setFromStateError('Failed to create cue from state')
-      }
-    }
-  }
-
   if (projectLoading || currentLoading || cuesLoading) {
     return (
       <Card className="m-4 p-4 flex items-center justify-center">
@@ -241,16 +210,10 @@ export function ProjectCues() {
           : 'No cues in this project.'}
       </p>
       {isCurrentProject && (
-        <div className="flex items-center justify-center gap-2 mt-4">
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={handleCreate}>
-            <Plus className="size-4" />
-            New Cue
-          </Button>
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => { setFromStateName(''); setFromStateError(null); setFromStateOpen(true) }}>
-            <Download className="size-4" />
-            From Current State
-          </Button>
-        </div>
+        <Button variant="outline" size="sm" className="gap-1.5 mt-4" onClick={handleCreate}>
+          <Plus className="size-4" />
+          New Cue
+        </Button>
       )}
     </Card>
   ) : (
@@ -289,22 +252,10 @@ export function ProjectCues() {
             </p>
           </div>
           {isCurrentProject && (
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5"
-                onClick={() => { setFromStateName(''); setFromStateError(null); setFromStateOpen(true) }}
-                disabled={isCreatingFromState}
-              >
-                <Download className="size-4" />
-                <span className="hidden sm:inline">From State</span>
-              </Button>
-              <Button onClick={handleCreate} size="sm" className="gap-1.5">
-                <Plus className="size-4" />
-                <span className="hidden sm:inline">New Cue</span>
-              </Button>
-            </div>
+            <Button onClick={handleCreate} size="sm" className="gap-1.5">
+              <Plus className="size-4" />
+              <span className="hidden sm:inline">New Cue</span>
+            </Button>
           )}
         </div>
       </div>
@@ -324,6 +275,7 @@ export function ProjectCues() {
         isSaving={isCreating || isSaving}
         onDelete={editingCue?.canDelete ? handleDelete : undefined}
         isDeleting={isDeleting}
+        initialState={!editingCue ? initialState : undefined}
       />
 
       {/* Copy dialog */}
@@ -339,48 +291,6 @@ export function ProjectCues() {
         />
       )}
 
-      {/* From Current State dialog */}
-      <Dialog open={fromStateOpen} onOpenChange={(open) => { if (!open) setFromStateOpen(false) }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Create Cue from Current State</DialogTitle>
-            <DialogDescription>
-              Capture the current palette and active effects as a new cue.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            {fromStateError && (
-              <Alert variant="destructive">
-                <XCircle className="size-4" />
-                <AlertDescription>{fromStateError}</AlertDescription>
-              </Alert>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="from-state-name">Cue Name *</Label>
-              <Input
-                id="from-state-name"
-                value={fromStateName}
-                onChange={(e) => setFromStateName(e.target.value)}
-                placeholder="Enter cue name"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !isCreatingFromState) {
-                    handleFromState()
-                  }
-                }}
-                autoFocus
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setFromStateOpen(false)} disabled={isCreatingFromState}>
-              Cancel
-            </Button>
-            <Button onClick={handleFromState} disabled={!fromStateName.trim() || isCreatingFromState}>
-              {isCreatingFromState ? 'Creating...' : 'Create'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

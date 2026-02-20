@@ -7,7 +7,7 @@ import type {
   CopyCueRequest,
   CopyCueResponse,
   ApplyCueResponse,
-  CreateCueFromStateRequest,
+  CueCurrentState,
 } from '../api/cuesApi'
 
 // Subscribe to WebSocket cue list changes - invalidate all cue caches
@@ -95,19 +95,8 @@ export const cuesApi = restApi.injectEndpoints({
       ],
     }),
 
-    createCueFromState: build.mutation<
-      Cue,
-      { projectId: number } & CreateCueFromStateRequest
-    >({
-      query: ({ projectId, ...body }) => ({
-        url: `project/${projectId}/cues/from-state`,
-        method: 'POST',
-        body,
-      }),
-      invalidatesTags: (_result, _error, { projectId }) => [
-        { type: 'CueList', id: projectId },
-        'CueList',
-      ],
+    currentCueState: build.query<CueCurrentState, number>({
+      query: (projectId) => `project/${projectId}/cues/current-state`,
     }),
   }),
   overrideExisting: false,
@@ -121,5 +110,5 @@ export const {
   useDeleteProjectCueMutation,
   useCopyCueMutation,
   useApplyCueMutation,
-  useCreateCueFromStateMutation,
+  useLazyCurrentCueStateQuery,
 } = cuesApi
