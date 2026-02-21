@@ -772,7 +772,7 @@ function CueSlotCell({
           className={cn(
             'relative rounded-md border flex flex-col items-center justify-center gap-0.5 min-h-[3.5rem] px-1.5 py-1 select-none transition-all touch-none',
             isEditMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer',
-            isActive && !isEditMode && 'border-l-4 border-l-primary bg-primary/10',
+            isActive && !isEditMode && 'border-primary bg-primary/20',
             !isActive && !isEditMode && 'hover:bg-muted/50',
             isOver && 'ring-2 ring-primary ring-offset-1',
             isDragging && 'opacity-40',
@@ -797,11 +797,6 @@ function CueSlotCell({
           )}
 
           <SlotItemContent name={slot.itemName} itemType={slot.itemType} palette={slot.palette} />
-
-          {/* Active indicator */}
-          {isActive && !isEditMode && (
-            <div className="size-1.5 rounded-full bg-primary animate-pulse mt-0.5" />
-          )}
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent>
