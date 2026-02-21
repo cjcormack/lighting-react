@@ -720,15 +720,28 @@ function CueSlotCell({
     [setDropRef, setDragRef],
   )
 
-  // Empty slot — drop target + context menu for "Edit slots"
+  // Empty slot — drop target + context menu / long-press for "Edit slots"
   if (!slot) {
+    const emptyPointerHandlers = isEditMode
+      ? {}
+      : {
+          onPointerDown: handlePointerDown,
+          onPointerMove: handlePointerMove,
+          onPointerUp: handlePointerUp,
+          onPointerCancel: clearPress,
+        }
+
     return (
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <div
-            ref={setDropRef}
+            ref={(node) => {
+              setDropRef(node)
+              ;(triggerRef as React.MutableRefObject<HTMLDivElement | null>).current = node
+            }}
+            {...emptyPointerHandlers}
             className={cn(
-              'rounded-md border-2 border-dashed flex items-center justify-center min-h-[3.5rem] transition-colors',
+              'rounded-md border-2 border-dashed flex items-center justify-center min-h-[3.5rem] transition-colors touch-none select-none',
               isOver
                 ? 'border-primary bg-primary/5'
                 : 'border-muted-foreground/25 text-muted-foreground/40',
