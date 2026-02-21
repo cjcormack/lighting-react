@@ -125,7 +125,7 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
             />
             <NavItem
               icon={<Clapperboard className="size-5" />}
-              label="Cues"
+              label="FX Cues"
               isActive={location.pathname.includes("/cues")}
               collapsed
               onClick={() => navigate(`/projects/${viewedProject.id}/cues`)}
@@ -248,7 +248,7 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
             />
             <NavItem
               icon={<Clapperboard className="size-4" />}
-              label="Cues"
+              label="FX Cues"
               isActive={location.pathname.includes("/cues")}
               collapsed={false}
               onClick={() => navigate(`/projects/${viewedProject.id}/cues`)}

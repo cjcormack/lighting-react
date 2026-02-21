@@ -63,11 +63,11 @@ export function CueStackForm({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>{stack ? 'Edit Cue Stack' : 'New Cue Stack'}</SheetTitle>
+          <SheetTitle>{stack ? 'Edit FX Cue Stack' : 'New FX Cue Stack'}</SheetTitle>
           <SheetDescription>
             {stack
               ? 'Update stack settings.'
-              : 'Create a stack to group cues for sequential playback.'}
+              : 'Create a stack to group FX cues for sequential playback.'}
           </SheetDescription>
         </SheetHeader>
 

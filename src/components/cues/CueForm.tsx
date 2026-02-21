@@ -264,7 +264,7 @@ export function CueForm({
           <>
             <SheetHeader className="pr-10">
               <div className="flex items-center justify-between">
-                <SheetTitle>{isEditing ? 'Edit Cue' : 'New Cue'}</SheetTitle>
+                <SheetTitle>{isEditing ? 'Edit FX Cue' : 'New FX Cue'}</SheetTitle>
                 {!isEditing && (
                   <Button
                     variant="ghost"
@@ -287,8 +287,8 @@ export function CueForm({
               </div>
               <SheetDescription>
                 {isEditing
-                  ? 'Update the cue name, palette, presets, and effects.'
-                  : 'Create a new cue with a palette, presets, and ad-hoc effects.'}
+                  ? 'Update the FX cue name, palette, presets, and effects.'
+                  : 'Create a new FX cue with a palette, presets, and ad-hoc effects.'}
               </SheetDescription>
             </SheetHeader>
 
@@ -306,7 +306,7 @@ export function CueForm({
                   id="cue-name"
                   value={name}
                   onChange={(e) => { setName(e.target.value); setError(null) }}
-                  placeholder="My Cue"
+                  placeholder="My FX Cue"
                   className="h-9"
                   autoFocus
                 />

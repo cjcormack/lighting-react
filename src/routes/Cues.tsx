@@ -249,7 +249,7 @@ export function ProjectCues() {
   }, [stackIdParam, stacks, navigate, projectId])
 
   const selectedViewLabel = useMemo(() => {
-    if (selectedView === 'all') return 'All Cues'
+    if (selectedView === 'all') return 'All FX Cues'
     if (selectedView === 'standalone') return 'Standalone'
     return selectedStack?.name ?? 'Stack'
   }, [selectedView, selectedStack])
@@ -588,10 +588,10 @@ export function ProjectCues() {
         <Clapperboard className="size-10 mx-auto text-muted-foreground/30 mb-3" />
         <p className="text-sm text-muted-foreground">
           {typeof selectedView === 'number'
-            ? 'No cues in this stack yet.'
+            ? 'No FX cues in this stack yet.'
             : isCurrentProject
-              ? 'No cues yet. Create one to save a complete look (palette + effects).'
-              : 'No cues in this project.'}
+              ? 'No FX cues yet. Create one to save a complete look (palette + effects).'
+              : 'No FX cues in this project.'}
         </p>
         {isCurrentProject && (
           <Button
@@ -601,7 +601,7 @@ export function ProjectCues() {
             onClick={handleCreate}
           >
             <Plus className="size-4" />
-            New Cue
+            New FX Cue
           </Button>
         )}
       </Card>
@@ -640,17 +640,17 @@ export function ProjectCues() {
       <div className="p-4 space-y-4">
         <Breadcrumbs
           projectName={project.name}
-          currentPage="Cues"
+          currentPage="FX Cues"
           extra={[selectedViewLabel]}
           onCurrentPageClick={() => handleSelectView('all')}
         />
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <h1 className="text-lg font-semibold">Cues</h1>
+            <h1 className="text-lg font-semibold">FX Cues</h1>
             <p className="text-sm text-muted-foreground">
               {isCurrentProject
                 ? 'Save and recall complete looks (palette + effects) with a single click.'
-                : `Viewing cues for "${project.name}". Copy cues to your active project to use them.`}
+                : `Viewing FX cues for "${project.name}". Copy FX cues to your active project to use them.`}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -666,7 +666,7 @@ export function ProjectCues() {
             {isCurrentProject && (
               <Button onClick={handleCreate} size="sm" className="gap-1.5">
                 <Plus className="size-4" />
-                <span className="hidden sm:inline">New Cue</span>
+                <span className="hidden sm:inline">New FX Cue</span>
               </Button>
             )}
           </div>
@@ -750,7 +750,7 @@ export function ProjectCues() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <Card className="max-w-sm mx-4 p-6 space-y-4">
             <div>
-              <h3 className="font-semibold">Delete Cue</h3>
+              <h3 className="font-semibold">Delete FX Cue</h3>
               <p className="text-sm text-muted-foreground mt-1">
                 Are you sure you want to delete &ldquo;{deletingCue.name}&rdquo;?
                 This action cannot be undone.
@@ -836,8 +836,8 @@ export function ProjectCues() {
       >
         <DialogContent showCloseButton={false} className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Duplicate Cue</DialogTitle>
-            <DialogDescription>Enter a name for the new cue.</DialogDescription>
+            <DialogTitle>Duplicate FX Cue</DialogTitle>
+            <DialogDescription>Enter a name for the new FX cue.</DialogDescription>
           </DialogHeader>
           <Input
             autoFocus
@@ -847,7 +847,7 @@ export function ProjectCues() {
               if (e.key === 'Enter' && duplicateName.trim())
                 handleDuplicateConfirmed()
             }}
-            placeholder="Cue name"
+            placeholder="FX Cue name"
           />
           <DialogFooter>
             <Button

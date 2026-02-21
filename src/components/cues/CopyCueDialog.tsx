@@ -78,16 +78,16 @@ export function CopyCueDialog({
 
   const errorMessage =
     error && 'status' in error && error.status === 409
-      ? 'A cue with this name already exists in the target project'
+      ? 'An FX cue with this name already exists in the target project'
       : error
-        ? 'Failed to copy cue'
+        ? 'Failed to copy FX cue'
         : undefined
 
   return (
     <Dialog open={open} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Copy Cue to Project</DialogTitle>
+          <DialogTitle>Copy FX Cue to Project</DialogTitle>
           <DialogDescription>
             Copy &quot;{cueName}&quot; to another project.
           </DialogDescription>

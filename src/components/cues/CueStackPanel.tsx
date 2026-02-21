@@ -53,7 +53,7 @@ function PanelContent({
             onClick={() => onSelectView('all')}
           >
             <Clapperboard className="size-4 shrink-0" />
-            <span className="flex-1 text-left">All Cues</span>
+            <span className="flex-1 text-left">All FX Cues</span>
             <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
               {totalCueCount}
             </Badge>
@@ -175,7 +175,7 @@ export function CueStackMobileSheet({
       </SheetTrigger>
       <SheetContent side="bottom" className="h-[70vh]">
         <SheetHeader>
-          <SheetTitle>Cue Stacks</SheetTitle>
+          <SheetTitle>FX Cue Stacks</SheetTitle>
         </SheetHeader>
         <div className="flex-1 overflow-hidden -mx-6">
           <PanelContent

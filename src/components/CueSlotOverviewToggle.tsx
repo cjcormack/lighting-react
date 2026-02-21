@@ -29,7 +29,7 @@ export function CueSlotOverviewToggle({ isVisible, onToggle }: CueSlotOverviewTo
         </Button>
       </TooltipTrigger>
       <TooltipContent>
-        {isVisible ? 'Hide' : 'Show'} cue slots
+        {isVisible ? 'Hide' : 'Show'} FX cue slots
       </TooltipContent>
     </Tooltip>
   )

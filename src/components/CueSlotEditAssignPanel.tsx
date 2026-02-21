@@ -33,7 +33,7 @@ export function EditModeAssignPanel({ projectId }: EditModeAssignPanelProps) {
         <TabsList className="w-full">
           <TabsTrigger value="cues" className="text-xs">
             <ListMusic className="size-3.5" />
-            Cues
+            FX Cues
           </TabsTrigger>
           <TabsTrigger value="stacks" className="text-xs">
             <Layers className="size-3.5" />
@@ -44,7 +44,7 @@ export function EditModeAssignPanel({ projectId }: EditModeAssignPanelProps) {
         <TabsContent value="cues">
           <div className="max-h-48 overflow-y-auto">
             {standaloneCues.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-3">No standalone cues</p>
+              <p className="text-xs text-muted-foreground text-center py-3">No standalone FX cues</p>
             ) : (
               <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
                 {standaloneCues.map((cue) => (
@@ -64,7 +64,7 @@ export function EditModeAssignPanel({ projectId }: EditModeAssignPanelProps) {
         <TabsContent value="stacks">
           <div className="max-h-48 overflow-y-auto space-y-2">
             {(stacks ?? []).length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-3">No cue stacks</p>
+              <p className="text-xs text-muted-foreground text-center py-3">No FX cue stacks</p>
             ) : (
               <>
                 <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
@@ -87,7 +87,7 @@ export function EditModeAssignPanel({ projectId }: EditModeAssignPanelProps) {
                 {expandedStack && expandedStack.cues.length > 0 && (
                   <div>
                     <p className="text-xs text-muted-foreground mb-1.5">
-                      {expandedStack.name} cues
+                      {expandedStack.name} FX cues
                     </p>
                     <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
                       {expandedStack.cues.map((cue) => (
