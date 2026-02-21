@@ -123,13 +123,6 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
               collapsed
               onClick={() => navigate(`/projects/${viewedProject.id}/chases`)}
             />
-            <NavItem
-              icon={<Clapperboard className="size-5" />}
-              label="FX Cues"
-              isActive={location.pathname.includes("/cues")}
-              collapsed
-              onClick={() => navigate(`/projects/${viewedProject.id}/cues`)}
-            />
 
             {/* Hardware items - only for active project */}
             {isViewingActiveProject && (
@@ -154,6 +147,13 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
                   isActive={location.pathname.includes("/fx")}
                   collapsed
                   onClick={() => navigate(`/projects/${viewedProject.id}/fx`)}
+                />
+                <NavItem
+                  icon={<Clapperboard className="size-5" />}
+                  label="FX Cues"
+                  isActive={location.pathname.includes("/cues")}
+                  collapsed
+                  onClick={() => navigate(`/projects/${viewedProject.id}/cues`)}
                 />
                 <NavItem
                   icon={<Bookmark className="size-5" />}
@@ -246,13 +246,6 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
               collapsed={false}
               onClick={() => navigate(`/projects/${viewedProject.id}/chases`)}
             />
-            <NavItem
-              icon={<Clapperboard className="size-4" />}
-              label="FX Cues"
-              isActive={location.pathname.includes("/cues")}
-              collapsed={false}
-              onClick={() => navigate(`/projects/${viewedProject.id}/cues`)}
-            />
 
             {/* Hardware items - only for active project */}
             {isViewingActiveProject && (
@@ -277,6 +270,13 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
                   isActive={location.pathname.includes("/fx")}
                   collapsed={false}
                   onClick={() => navigate(`/projects/${viewedProject.id}/fx`)}
+                />
+                <NavItem
+                  icon={<Clapperboard className="size-4" />}
+                  label="FX Cues"
+                  isActive={location.pathname.includes("/cues")}
+                  collapsed={false}
+                  onClick={() => navigate(`/projects/${viewedProject.id}/cues`)}
                 />
                 <NavItem
                   icon={<Bookmark className="size-4" />}
