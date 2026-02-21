@@ -18,6 +18,8 @@ export enum InternalEventType {
 export function createInternalApiConnection(baseUrl: string, wsUrl: string): InternalApiConnection {
   let nextEventSubscriptionId = 1
   const eventSubscriptions = new Map<number, (evType: InternalEventType, ev: Event) => void>()
+  let reconnectDelay = 1000
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
   const notifyEvent = (ev: Event) => {
     eventSubscriptions.forEach((fn) => {
@@ -28,24 +30,36 @@ export function createInternalApiConnection(baseUrl: string, wsUrl: string): Int
     })
   }
 
+  function scheduleReconnect() {
+    if (reconnectTimer) return
+    console.log(`WebSocket closed, reconnecting in ${reconnectDelay}ms...`)
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null
+      reconnectDelay = Math.min(reconnectDelay * 2, 30_000)
+      ws = connect()
+    }, reconnectDelay)
+  }
+
   function connect(): WebSocket {
-    const ws = new WebSocket(wsUrl)
+    const newWs = new WebSocket(wsUrl)
 
-    ws.onopen = (ev) => {
+    newWs.onopen = (ev) => {
+      reconnectDelay = 1000
       notifyEvent(ev)
     }
-    ws.onerror = (ev) => {
+    newWs.onerror = (ev) => {
       notifyEvent(ev)
     }
-    ws.onclose = (ev) => {
+    newWs.onclose = (ev) => {
       notifyEvent(ev)
-    }
-
-    ws.onmessage = (ev) => {
-      notifyEvent(ev)
+      scheduleReconnect()
     }
 
-    return ws
+    newWs.onmessage = (ev) => {
+      notifyEvent(ev)
+    }
+
+    return newWs
   }
 
   let ws = connect()
@@ -67,9 +81,14 @@ export function createInternalApiConnection(baseUrl: string, wsUrl: string): Int
       }
     },
     reconnect() {
-      if (ws.readyState !== WebSocket.CLOSED) {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer)
+        reconnectTimer = null
+      }
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
         return
       }
+      reconnectDelay = 1000
       ws = connect()
     },
     subscribe(fn: (evType: InternalEventType, ev: Event) => void): Subscription {
