@@ -198,6 +198,43 @@ export function CueEffectFlow({
     return filtered
   }, [libraryByCategory, targetCapabilities])
 
+  // Disable individual control effects that don't match the target's properties
+  const disabledControlEffects = useMemo(() => {
+    const disabled = new Map<string, string>()
+    const target = isEdit
+      ? { type: existingEffect!.targetType, key: existingEffect!.targetKey }
+      : selectedTarget
+    if (!target) return disabled
+
+    // Only filter for fixture targets (group property data isn't in GroupSummary)
+    if (target.type !== 'fixture') return disabled
+    const fixture = fixtures?.find((f) => f.key === target.key)
+    if (!fixture) return disabled
+
+    const controlEffects = effectsByCategory['controls']
+    if (!controlEffects) return disabled
+
+    const hasSettings = fixture.properties?.some((p) => p.type === 'setting') ?? false
+    const hasSliders = fixture.properties?.some(
+      (p) => p.type === 'slider' && p.category !== 'dimmer' && p.category !== 'uv',
+    ) ?? false
+    const availableProps = new Set<string>()
+    if (hasSettings) availableProps.add('setting')
+    if (hasSliders) availableProps.add('slider')
+
+    for (const effect of controlEffects) {
+      const hasMatch = effect.compatibleProperties.some((p) => availableProps.has(p))
+      if (!hasMatch) {
+        const needsSetting = effect.compatibleProperties.includes('setting')
+        const reason = needsSetting
+          ? 'No setting properties on this fixture'
+          : 'No slider controls on this fixture'
+        disabled.set(effect.name, reason)
+      }
+    }
+    return disabled
+  }, [selectedTarget, fixtures, effectsByCategory, isEdit, existingEffect])
+
   // ── Handlers ──
 
   const handleTargetSelect = (target: CueTarget) => {
@@ -343,6 +380,7 @@ export function CueEffectFlow({
               effects={effectsByCategory[selectedCategory] ?? []}
               onSelect={handleSelectEffect}
               onBack={handleBack}
+              disabledEffects={selectedCategory === 'controls' ? disabledControlEffects : undefined}
             />
           </div>
         </>

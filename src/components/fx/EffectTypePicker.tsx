@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { getEffectDescription, EFFECT_CATEGORY_INFO } from './fxConstants'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
 
@@ -8,6 +9,8 @@ interface EffectTypePickerProps {
   effects: EffectLibraryEntry[]
   onSelect: (effect: EffectLibraryEntry) => void
   onBack: () => void
+  /** Map of effect name → reason string for effects that should be shown but disabled */
+  disabledEffects?: Map<string, string>
 }
 
 export function EffectTypePicker({
@@ -15,6 +18,7 @@ export function EffectTypePicker({
   effects,
   onSelect,
   onBack,
+  disabledEffects,
 }: EffectTypePickerProps) {
   const categoryInfo = EFFECT_CATEGORY_INFO[category]
 
@@ -28,21 +32,39 @@ export function EffectTypePicker({
       </div>
 
       <div className="flex flex-col gap-1">
-        {effects.map((effect) => (
-          <button
-            key={effect.name}
-            onClick={() => onSelect(effect)}
-            className="flex items-center gap-2 p-3 rounded-md border text-left hover:bg-accent/50 transition-colors"
-          >
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium">{effect.name}</div>
-              <div className="text-xs text-muted-foreground">
-                {getEffectDescription(effect.name, effect.description)}
+        {effects.map((effect) => {
+          const disabledReason = disabledEffects?.get(effect.name)
+          const isDisabled = !!disabledReason
+
+          return (
+            <button
+              key={effect.name}
+              disabled={isDisabled}
+              onClick={() => !isDisabled && onSelect(effect)}
+              className={cn(
+                'flex items-center gap-2 p-3 rounded-md border text-left transition-colors',
+                isDisabled
+                  ? 'opacity-40 cursor-not-allowed'
+                  : 'hover:bg-accent/50 cursor-pointer',
+              )}
+            >
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium">{effect.name}</div>
+                <div className="text-xs text-muted-foreground">
+                  {getEffectDescription(effect.name, effect.description)}
+                </div>
+                {isDisabled && (
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {disabledReason}
+                  </div>
+                )}
               </div>
-            </div>
-            <ChevronRight className="size-4 text-muted-foreground shrink-0" />
-          </button>
-        ))}
+              {!isDisabled && (
+                <ChevronRight className="size-4 text-muted-foreground shrink-0" />
+              )}
+            </button>
+          )
+        })}
       </div>
     </div>
   )

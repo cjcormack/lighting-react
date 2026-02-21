@@ -221,6 +221,32 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
     ) as SliderPropertyDescriptor[]
   }, [selectedFixtureTypeMode])
 
+  // Disable individual control effects that don't match available property types
+  const disabledControlEffects = useMemo(() => {
+    const disabled = new Map<string, string>()
+    if (!fixtureType || !selectedFixtureTypeMode) return disabled // no type = don't disable
+    const controlEffects = effectsByCategory['controls']
+    if (!controlEffects) return disabled
+
+    const hasSettings = settingProperties.length > 0
+    const hasSliders = extraSliderProperties.length > 0
+    const availableProps = new Set<string>()
+    if (hasSettings) availableProps.add('setting')
+    if (hasSliders) availableProps.add('slider')
+
+    for (const effect of controlEffects) {
+      const hasMatch = effect.compatibleProperties.some((p) => availableProps.has(p))
+      if (!hasMatch) {
+        const needsSetting = effect.compatibleProperties.includes('setting')
+        const reason = needsSetting
+          ? 'No setting properties on this fixture type'
+          : 'No slider controls on this fixture type'
+        disabled.set(effect.name, reason)
+      }
+    }
+    return disabled
+  }, [fixtureType, selectedFixtureTypeMode, effectsByCategory, settingProperties, extraSliderProperties])
+
   // Extended colour channels from selected fixture type (or all if no type selected)
   const extendedChannels = useMemo(() => {
     if (!selectedFixtureTypeMode) {
@@ -696,6 +722,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
                   effects={effectsByCategory[addEffectCategory] ?? []}
                   onSelect={handleSelectEffect}
                   onBack={() => setAddEffectStep('category')}
+                  disabledEffects={addEffectCategory === 'controls' ? disabledControlEffects : undefined}
                 />
               )}
 
