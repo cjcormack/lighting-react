@@ -31,6 +31,7 @@ import {
   setPalette,
 } from '@/store/fx'
 import { Check, Palette, Undo2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface PaletteItem {
   id: string
@@ -59,7 +60,7 @@ function paletteEquals(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((v, i) => v === b[i])
 }
 
-export function PalettePanel({ label }: { label?: string } = {}) {
+export function PalettePanel({ label, compact }: { label?: string; compact?: boolean } = {}) {
   const { data: fxState } = useFxStateQuery()
   const serverPalette = fxState?.palette ?? []
 
@@ -150,12 +151,14 @@ export function PalettePanel({ label }: { label?: string } = {}) {
   }, [serverPalette])
 
   return (
-    <div className="flex items-center gap-2">
-      <div className="flex items-center gap-1.5 text-muted-foreground shrink-0">
-        <Palette className="size-3.5" />
-        <Label className="text-xs">{label ? `${label} Palette` : 'Palette'}</Label>
+    <div className={cn("flex items-center gap-2", compact && "shrink-0")}>
+      <div className={cn("flex items-center text-muted-foreground shrink-0", compact ? "gap-1" : "gap-1.5")}>
+        <Palette className={compact ? "size-3" : "size-3.5"} />
+        {!compact && (
+          <Label className="text-xs">{label ? `${label} Palette` : 'Palette'}</Label>
+        )}
       </div>
-      <div className="flex items-center gap-1 flex-wrap">
+      <div className={cn("flex items-center gap-1", compact ? "flex-nowrap" : "flex-wrap")}>
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -170,6 +173,7 @@ export function PalettePanel({ label }: { label?: string } = {}) {
                 key={item.id}
                 item={item}
                 index={index}
+                compact={compact}
                 isEditing={editingIndex === index}
                 onEdit={() =>
                   setEditingIndex(editingIndex === index ? null : index)
@@ -183,7 +187,10 @@ export function PalettePanel({ label }: { label?: string } = {}) {
         <button
           type="button"
           onClick={handleAdd}
-          className="w-7 h-7 rounded border border-dashed border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-foreground/50 transition-colors text-sm"
+          className={cn(
+            "rounded border border-dashed border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-foreground/50 transition-colors text-sm",
+            compact ? "w-6 h-6" : "w-7 h-7"
+          )}
           title="Add colour"
         >
           +
@@ -217,6 +224,7 @@ export function PalettePanel({ label }: { label?: string } = {}) {
 function SortablePaletteSwatch({
   item,
   index,
+  compact,
   isEditing,
   onEdit,
   onRemove,
@@ -224,6 +232,7 @@ function SortablePaletteSwatch({
 }: {
   item: PaletteItem
   index: number
+  compact?: boolean
   isEditing: boolean
   onEdit: () => void
   onRemove: () => void
@@ -290,7 +299,10 @@ function SortablePaletteSwatch({
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="w-7 h-7 rounded border border-border cursor-grab active:cursor-grabbing relative overflow-hidden"
+            className={cn(
+              "rounded border border-border cursor-grab active:cursor-grabbing relative overflow-hidden",
+              compact ? "w-6 h-6" : "w-7 h-7"
+            )}
             style={{ backgroundColor: item.colour.hex }}
             onClick={onEdit}
             {...attributes}

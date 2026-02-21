@@ -175,7 +175,7 @@ export default function Layout() {
           />
 
           {/* Effects Overview Panel - always rendered for animation */}
-          <EffectsOverviewPanel isVisible={isEffectsVisible} isLocked={isEffectsLocked} />
+          <EffectsOverviewPanel isVisible={isEffectsVisible} isLocked={isEffectsLocked} isDesktop={isDesktop} />
 
           {/* Cue Slot DnD Provider wraps panel + page content for cross-component drag-and-drop */}
           <CueSlotDndProvider isVisible={isCueSlotsVisible}>

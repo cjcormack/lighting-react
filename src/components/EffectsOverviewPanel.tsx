@@ -12,9 +12,10 @@ interface EffectsOverviewPanelProps {
   isVisible: boolean
   /** When locked (FX view), show extended controls like Kill All */
   isLocked?: boolean
+  isDesktop: boolean
 }
 
-export function EffectsOverviewPanel({ isVisible, isLocked }: EffectsOverviewPanelProps) {
+export function EffectsOverviewPanel({ isVisible, isLocked, isDesktop }: EffectsOverviewPanelProps) {
   const { data: fxState, isLoading } = useFxStateQuery()
   const [removeFx] = useRemoveFxMutation()
 
@@ -42,12 +43,12 @@ export function EffectsOverviewPanel({ isVisible, isLocked }: EffectsOverviewPan
       )}
     >
       <div className="overflow-hidden">
-        <div className="border-b bg-background px-4 py-3">
+        <div className={cn("border-b bg-background px-4", isDesktop ? "py-3" : "py-2")}>
           {isLoading ? (
             <div className="flex justify-center">
               <Loader2 className="size-4 animate-spin" />
             </div>
-          ) : (
+          ) : isDesktop ? (
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
               {/* Beat Indicator + BPM Display */}
               <div className="flex items-center gap-3">
@@ -89,6 +90,40 @@ export function EffectsOverviewPanel({ isVisible, isLocked }: EffectsOverviewPan
                   Kill All
                 </Button>
               )}
+            </div>
+          ) : (
+            /* MOBILE: two-row compact layout */
+            <div className="space-y-2">
+              {/* Row 1: Controls */}
+              <div className="flex items-center gap-3">
+                <BeatIndicator />
+                <span className="text-lg font-bold tabular-nums min-w-[4ch] text-right">
+                  {fxState?.bpm.toFixed(1) ?? '—'}
+                </span>
+                <Button variant="outline" size="sm" onClick={handleTap} className="px-2 h-7">
+                  Tap
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  {totalCount === 0 ? 'No FX' : `${runningCount}/${totalCount} FX`}
+                </span>
+                {isLocked && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleKillAll}
+                    disabled={totalCount === 0}
+                    className="ml-auto h-7 px-2"
+                    title="Kill All"
+                  >
+                    <OctagonX className="size-3.5" />
+                  </Button>
+                )}
+              </div>
+              {/* Row 2: Palette strip (horizontal scroll) */}
+              <div className="flex items-center gap-2 overflow-x-auto -mx-4 px-4 pb-1 scrollbar-thin">
+                <PalettePanel label="Global" compact />
+                <ActiveStackPalettes compact />
+              </div>
             </div>
           )}
         </div>
