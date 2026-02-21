@@ -5,11 +5,14 @@ import {
   ListMusic,
   Eye,
   Trash2,
+  Pencil,
+  X,
 } from 'lucide-react'
 import {
   DndContext,
   useDraggable,
   useDroppable,
+  useDndMonitor,
   PointerSensor,
   useSensor,
   useSensors,
@@ -17,6 +20,7 @@ import {
   type DragStartEvent,
   DragOverlay,
 } from '@dnd-kit/core'
+import { Button } from '@/components/ui/button'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -35,6 +39,7 @@ import {
 } from '../store/cueSlots'
 import { useApplyCueMutation, useStopCueMutation, useActiveCueIds, useActiveCueStackIds } from '../store/cues'
 import { useActivateCueStackMutation, useDeactivateCueStackMutation } from '../store/cueStacks'
+import { EditModeAssignPanel } from './CueSlotEditAssignPanel'
 
 export { type CueSlot } from '../store/cueSlots'
 
@@ -48,7 +53,6 @@ function getInitialPage(): number {
 }
 
 // ─── DnD data types ───────────────────────────────────────────────────
-// Used by both the panel (droppables) and external draggable sources (Cues.tsx)
 
 export interface CueSlotAssignDragData {
   type: 'cue-slot-assign'
@@ -70,20 +74,63 @@ export interface CueSlotDropTargetData {
   slotIndex: number
 }
 
-// ─── Context for external DnD integration ──────────────────────────────
-// Layout wraps CueSlotDndProvider around the panel + Outlet to enable
-// cross-component drag-and-drop from cue list rows to slot targets.
+// ─── Context for DnD + edit mode ─────────────────────────────────────
 
 interface CueSlotDndContextValue {
   isSlotPanelVisible: boolean
+  isEditMode: boolean
+  enterEditMode: () => void
+  exitEditMode: () => void
 }
 
 const CueSlotDndContext = createContext<CueSlotDndContextValue>({
   isSlotPanelVisible: false,
+  isEditMode: false,
+  enterEditMode: () => {},
+  exitEditMode: () => {},
 })
 
 export function useCueSlotDnd() {
   return useContext(CueSlotDndContext)
+}
+
+// ─── Shared visual content ────────────────────────────────────────────
+
+export function SlotItemContent({
+  name,
+  itemType,
+  palette,
+}: {
+  name: string
+  itemType: 'cue' | 'cue_stack'
+  palette: string[]
+}) {
+  const swatches = palette.slice(0, 6)
+  return (
+    <>
+      <span className="text-xs font-medium leading-tight text-center line-clamp-2 w-full">
+        {name}
+      </span>
+      <div className="flex items-center gap-1 mt-0.5">
+        {itemType === 'cue_stack' ? (
+          <Layers className="size-3 text-muted-foreground shrink-0" />
+        ) : (
+          <ListMusic className="size-3 text-muted-foreground shrink-0" />
+        )}
+        {swatches.length > 0 && (
+          <div className="flex gap-px">
+            {swatches.map((color, i) => (
+              <div
+                key={i}
+                className="size-2.5 rounded-full border border-background"
+                style={{ backgroundColor: color }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  )
 }
 
 interface CueSlotDndProviderProps {
@@ -97,6 +144,15 @@ export function CueSlotDndProvider({ isVisible, children }: CueSlotDndProviderPr
   const [assignSlot] = useAssignCueSlotMutation()
   const [swapSlots] = useSwapCueSlotsMutation()
   const [draggedLabel, setDraggedLabel] = useState<string | null>(null)
+  const [isEditMode, setIsEditMode] = useState(false)
+
+  const enterEditMode = useCallback(() => setIsEditMode(true), [])
+  const exitEditMode = useCallback(() => setIsEditMode(false), [])
+
+  // Auto-exit edit mode when panel hides
+  useEffect(() => {
+    if (!isVisible) setIsEditMode(false)
+  }, [isVisible])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -159,7 +215,7 @@ export function CueSlotDndProvider({ isVisible, children }: CueSlotDndProviderPr
   )
 
   return (
-    <CueSlotDndContext.Provider value={{ isSlotPanelVisible: isVisible }}>
+    <CueSlotDndContext.Provider value={{ isSlotPanelVisible: isVisible, isEditMode, enterEditMode, exitEditMode }}>
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         {children}
         <DragOverlay>
@@ -184,6 +240,7 @@ export function CueSlotOverviewPanel({ isVisible }: CueSlotOverviewPanelProps) {
   const { data: currentProject } = useCurrentProjectQuery()
   const projectId = currentProject?.id
   const { data: slots } = useProjectCueSlotsQuery(projectId!, { skip: !projectId })
+  const { isEditMode, exitEditMode } = useCueSlotDnd()
 
   const [page, setPage] = useState(getInitialPage)
 
@@ -301,6 +358,86 @@ export function CueSlotOverviewPanel({ isVisible }: CueSlotOverviewPanelProps) {
     return () => el.removeEventListener('wheel', onWheel)
   }, [setPagePersist])
 
+  // Dismiss edit mode on click outside panel or Escape key
+  useEffect(() => {
+    if (!isEditMode) return
+    const handlePointerDown = (e: PointerEvent) => {
+      const panel = panelRef.current
+      if (panel && !panel.contains(e.target as Node)) {
+        exitEditMode()
+      }
+    }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') exitEditMode()
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isEditMode, exitEditMode])
+
+  // Edge-drag page navigation: change page when dragging near left/right edges
+  const [isDraggingAny, setIsDraggingAny] = useState(false)
+  const edgeScrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const edgeScrollDirection = useRef<'left' | 'right' | null>(null)
+
+  const clearEdgeScroll = useCallback(() => {
+    if (edgeScrollTimer.current) {
+      clearTimeout(edgeScrollTimer.current)
+      edgeScrollTimer.current = null
+    }
+    edgeScrollDirection.current = null
+  }, [])
+
+  useDndMonitor({
+    onDragStart() {
+      setIsDraggingAny(true)
+    },
+    onDragMove(event) {
+      if (!panelRef.current) return
+      const rect = panelRef.current.getBoundingClientRect()
+      const activator = event.activatorEvent as PointerEvent
+      if (!activator.clientX) return
+      const currentX = activator.clientX + event.delta.x
+
+      const edgeThreshold = 40
+      let direction: 'left' | 'right' | null = null
+
+      if (currentX < rect.left + edgeThreshold && pageRef.current > 0) {
+        direction = 'left'
+      } else if (currentX > rect.right - edgeThreshold && pageRef.current < totalPagesRef.current - 1) {
+        direction = 'right'
+      }
+
+      if (direction !== edgeScrollDirection.current) {
+        clearEdgeScroll()
+        edgeScrollDirection.current = direction
+        if (direction) {
+          const dir = direction
+          edgeScrollTimer.current = setTimeout(() => {
+            if (dir === 'left') {
+              setPagePersist(Math.max(0, pageRef.current - 1))
+            } else {
+              setPagePersist(Math.min(totalPagesRef.current - 1, pageRef.current + 1))
+            }
+            edgeScrollTimer.current = null
+            edgeScrollDirection.current = null
+          }, 400)
+        }
+      }
+    },
+    onDragEnd() {
+      setIsDraggingAny(false)
+      clearEdgeScroll()
+    },
+    onDragCancel() {
+      setIsDraggingAny(false)
+      clearEdgeScroll()
+    },
+  })
+
   const handleSlotTap = useCallback(
     (slot: CueSlot) => {
       if (!projectId) return
@@ -364,26 +501,46 @@ export function CueSlotOverviewPanel({ isVisible }: CueSlotOverviewPanelProps) {
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
         >
-          {/* Slot grid — droppables/draggables use the parent DndContext from CueSlotDndProvider */}
-          <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
-            {slotsForPage.map((slot, index) => (
-              <CueSlotCell
-                key={`${page}-${index}`}
-                slot={slot}
-                page={page}
-                slotIndex={index}
-                isActive={
-                  slot
-                    ? slot.itemType === 'cue'
-                      ? activeCueIds.has(slot.itemId)
-                      : activeCueStackIds.has(slot.itemId)
-                    : false
-                }
-                onTap={handleSlotTap}
-                onView={handleViewSlot}
-                onClear={handleClearSlot}
-              />
-            ))}
+          {/* Edit mode header */}
+          {isEditMode && (
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium text-muted-foreground">Editing slots</span>
+              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={exitEditMode}>
+                Done
+              </Button>
+            </div>
+          )}
+
+          {/* Slot grid */}
+          <div className="relative">
+            <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
+              {slotsForPage.map((slot, index) => (
+                <CueSlotCell
+                  key={`${page}-${index}`}
+                  slot={slot}
+                  page={page}
+                  slotIndex={index}
+                  isActive={
+                    slot
+                      ? slot.itemType === 'cue'
+                        ? activeCueIds.has(slot.itemId)
+                        : activeCueStackIds.has(slot.itemId)
+                      : false
+                  }
+                  isEditMode={isEditMode}
+                  onTap={handleSlotTap}
+                  onView={handleViewSlot}
+                  onClear={handleClearSlot}
+                />
+              ))}
+            </div>
+            {/* Edge indicators during drag */}
+            {isDraggingAny && page > 0 && (
+              <div className="absolute inset-y-0 -left-3 w-3 bg-gradient-to-r from-primary/20 to-transparent pointer-events-none" />
+            )}
+            {isDraggingAny && page < totalPages - 1 && (
+              <div className="absolute inset-y-0 -right-3 w-3 bg-gradient-to-l from-primary/20 to-transparent pointer-events-none" />
+            )}
           </div>
 
           {/* Page dots */}
@@ -403,6 +560,20 @@ export function CueSlotOverviewPanel({ isVisible }: CueSlotOverviewPanelProps) {
               ))}
             </div>
           )}
+
+          {/* Edit mode assign panel (inline, not portalled) */}
+          {projectId && (
+            <div
+              className={cn(
+                'grid transition-all duration-200 ease-in-out',
+                isEditMode ? 'grid-rows-[1fr] mt-3' : 'grid-rows-[0fr]',
+              )}
+            >
+              <div className="overflow-hidden">
+                <EditModeAssignPanel projectId={projectId} />
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -416,6 +587,7 @@ interface CueSlotCellProps {
   page: number
   slotIndex: number
   isActive: boolean
+  isEditMode: boolean
   onTap: (slot: CueSlot) => void
   onView: (slot: CueSlot) => void
   onClear: (slot: CueSlot) => void
@@ -426,10 +598,12 @@ function CueSlotCell({
   page,
   slotIndex,
   isActive,
+  isEditMode,
   onTap,
   onView,
   onClear,
 }: CueSlotCellProps) {
+  const { enterEditMode } = useCueSlotDnd()
   const droppableId = `slot-${page}-${slotIndex}`
 
   const { setNodeRef: setDropRef, isOver } = useDroppable({
@@ -447,12 +621,13 @@ function CueSlotCell({
     data: slot
       ? ({ type: 'slot-item', page, slotIndex, slot } satisfies CueSlotSwapDragData)
       : undefined,
-    disabled: !slot,
+    disabled: !slot || !isEditMode,
   })
 
-  // Long-press state
+  // Long-press + two-stage press state
   const triggerRef = useRef<HTMLDivElement>(null)
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const editModeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const didLongPress = useRef(false)
   const startPos = useRef<{ x: number; y: number } | null>(null)
   const isLongPressPointer = useRef(false)
@@ -462,12 +637,16 @@ function CueSlotCell({
       clearTimeout(pressTimer.current)
       pressTimer.current = null
     }
+    if (editModeTimer.current) {
+      clearTimeout(editModeTimer.current)
+      editModeTimer.current = null
+    }
     startPos.current = null
   }, [])
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
-      if (e.button === 2 || !slot) return
+      if (e.button === 2) return
       isLongPressPointer.current = true
       didLongPress.current = false
       startPos.current = { x: e.clientX, y: e.clientY }
@@ -476,6 +655,7 @@ function CueSlotCell({
       pressTimer.current = setTimeout(() => {
         didLongPress.current = true
         pressTimer.current = null
+        // Stage 1: Open context menu
         triggerRef.current?.dispatchEvent(
           new MouseEvent('contextmenu', {
             bubbles: true,
@@ -483,9 +663,19 @@ function CueSlotCell({
             clientY,
           }),
         )
+        // Stage 2: If still holding after another 500ms, dismiss menu and enter edit mode
+        editModeTimer.current = setTimeout(() => {
+          editModeTimer.current = null
+          if (isLongPressPointer.current) {
+            // Dismiss the Radix context menu by dispatching Escape
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+            navigator.vibrate?.(10)
+            enterEditMode()
+          }
+        }, 500)
       }, 500)
     },
-    [slot],
+    [enterEditMode],
   )
 
   const handlePointerMove = useCallback(
@@ -505,10 +695,20 @@ function CueSlotCell({
     isLongPressPointer.current = false
     const wasLongPress = didLongPress.current
     clearPress()
-    if (!wasLongPress && slot) {
+    if (!wasLongPress && slot && !isEditMode) {
       onTap(slot)
     }
-  }, [clearPress, slot, onTap])
+  }, [clearPress, slot, onTap, isEditMode])
+
+  // In edit mode, dnd-kit handles pointer events for dragging; otherwise our custom handlers
+  const pointerHandlers = isEditMode
+    ? {}
+    : {
+        onPointerDown: handlePointerDown,
+        onPointerMove: handlePointerMove,
+        onPointerUp: handlePointerUp,
+        onPointerCancel: clearPress,
+      }
 
   // Merge refs for drag and drop
   const setRef = useCallback(
@@ -520,26 +720,34 @@ function CueSlotCell({
     [setDropRef, setDragRef],
   )
 
+  // Empty slot — drop target + context menu for "Edit slots"
   if (!slot) {
-    // Empty slot — drop target only
     return (
-      <div
-        ref={setDropRef}
-        className={cn(
-          'rounded-md border-2 border-dashed flex items-center justify-center min-h-[3.5rem] transition-colors',
-          isOver
-            ? 'border-primary bg-primary/5'
-            : 'border-muted-foreground/25 text-muted-foreground/40',
-        )}
-      >
-        <span className="text-xs">{isOver ? '+' : '—'}</span>
-      </div>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div
+            ref={setDropRef}
+            className={cn(
+              'rounded-md border-2 border-dashed flex items-center justify-center min-h-[3.5rem] transition-colors',
+              isOver
+                ? 'border-primary bg-primary/5'
+                : 'border-muted-foreground/25 text-muted-foreground/40',
+            )}
+          >
+            <span className="text-xs">{isOver ? '+' : '—'}</span>
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onSelect={enterEditMode}>
+            <Pencil className="mr-2 size-4" />
+            Edit slots
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
     )
   }
 
   // Filled slot
-  const paletteSwatches = slot.palette.slice(0, 6)
-
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
@@ -547,45 +755,38 @@ function CueSlotCell({
           ref={setRef}
           {...dragAttributes}
           {...dragListeners}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerCancel={clearPress}
+          {...pointerHandlers}
           className={cn(
-            'rounded-md border flex flex-col items-center justify-center gap-0.5 min-h-[3.5rem] px-1.5 py-1 cursor-pointer select-none transition-all touch-none',
-            isActive && 'border-l-4 border-l-primary bg-primary/10',
-            !isActive && 'hover:bg-muted/50',
+            'relative rounded-md border flex flex-col items-center justify-center gap-0.5 min-h-[3.5rem] px-1.5 py-1 select-none transition-all touch-none',
+            isEditMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer',
+            isActive && !isEditMode && 'border-l-4 border-l-primary bg-primary/10',
+            !isActive && !isEditMode && 'hover:bg-muted/50',
             isOver && 'ring-2 ring-primary ring-offset-1',
             isDragging && 'opacity-40',
+            isEditMode && !isDragging && 'animate-[wiggle_0.3s_ease-in-out_infinite]',
           )}
+          style={{
+            animationDelay: isEditMode && !isDragging ? `${slotIndex * 50}ms` : undefined,
+          }}
         >
-          {/* Item name */}
-          <span className="text-xs font-medium leading-tight text-center line-clamp-2 w-full">
-            {slot.itemName}
-          </span>
+          {/* Edit mode X button */}
+          {isEditMode && (
+            <button
+              className="absolute -top-1.5 -right-1.5 size-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow-sm z-10"
+              onClick={(e) => {
+                e.stopPropagation()
+                onClear(slot)
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <X className="size-3" />
+            </button>
+          )}
 
-          {/* Type badge + palette swatches */}
-          <div className="flex items-center gap-1 mt-0.5">
-            {slot.itemType === 'cue_stack' ? (
-              <Layers className="size-3 text-muted-foreground shrink-0" />
-            ) : (
-              <ListMusic className="size-3 text-muted-foreground shrink-0" />
-            )}
-            {paletteSwatches.length > 0 && (
-              <div className="flex gap-px">
-                {paletteSwatches.map((color, i) => (
-                  <div
-                    key={i}
-                    className="size-2.5 rounded-full border border-background"
-                    style={{ backgroundColor: color }}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
+          <SlotItemContent name={slot.itemName} itemType={slot.itemType} palette={slot.palette} />
 
           {/* Active indicator */}
-          {isActive && (
+          {isActive && !isEditMode && (
             <div className="size-1.5 rounded-full bg-primary animate-pulse mt-0.5" />
           )}
         </div>
@@ -594,6 +795,11 @@ function CueSlotCell({
         <ContextMenuItem onSelect={() => onView(slot)}>
           <Eye className="mr-2 size-4" />
           View
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem onSelect={enterEditMode}>
+          <Pencil className="mr-2 size-4" />
+          Edit slots
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem

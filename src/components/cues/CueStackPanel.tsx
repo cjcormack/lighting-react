@@ -12,12 +12,9 @@ import {
   Layers,
   Clapperboard,
   ListFilter,
-  GripVertical,
 } from 'lucide-react'
-import { useDraggable } from '@dnd-kit/core'
 import { cn } from '@/lib/utils'
 import type { CueStack } from '@/api/cueStacksApi'
-import { useCueSlotDnd, type CueSlotAssignDragData } from '../CueSlotOverviewPanel'
 
 export type CueStackView = 'all' | 'standalone' | number
 
@@ -115,7 +112,6 @@ function PanelContent({
   )
 }
 
-/** Draggable stack entry for slot assignment */
 function StackEntry({
   stack,
   isActive,
@@ -127,48 +123,16 @@ function StackEntry({
   isSelected: boolean
   onSelect: () => void
 }) {
-  const { isSlotPanelVisible } = useCueSlotDnd()
-  const {
-    attributes: dragAttrs,
-    listeners: dragListeners,
-    setNodeRef: setDragRef,
-    isDragging,
-  } = useDraggable({
-    id: `stack-to-slot-${stack.id}`,
-    data: {
-      type: 'cue-slot-assign',
-      itemType: 'cue_stack',
-      itemId: stack.id,
-      itemName: stack.name,
-    } satisfies CueSlotAssignDragData,
-    disabled: !isSlotPanelVisible,
-  })
-
   return (
     <button
-      ref={setDragRef}
       className={cn(
         'w-full flex items-center gap-2 px-2.5 py-2 rounded-md text-sm transition-colors',
         isSelected
           ? 'bg-accent text-accent-foreground font-medium'
           : 'hover:bg-accent/50 text-muted-foreground',
-        isDragging && 'opacity-50',
       )}
       onClick={onSelect}
     >
-      {isSlotPanelVisible && (
-        <button
-          className="size-5 flex items-center justify-center shrink-0 text-muted-foreground/50 hover:text-muted-foreground cursor-grab active:cursor-grabbing touch-none"
-          {...dragAttrs}
-          {...dragListeners}
-          onPointerDown={(e) => {
-            e.stopPropagation()
-            dragListeners?.onPointerDown?.(e)
-          }}
-        >
-          <GripVertical className="size-3.5" />
-        </button>
-      )}
       <Layers className="size-4 shrink-0" />
       <span className="flex-1 text-left truncate">{stack.name}</span>
       {isActive && (

@@ -148,3 +148,10 @@
   border: 2px solid white;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
+
+/* Cue slot edit mode wiggle animation */
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-1.5deg); }
+  75% { transform: rotate(1.5deg); }
+}
