@@ -21,6 +21,9 @@ import { useFixtureOverview } from "./hooks/useFixtureOverview"
 import { useEffectsOverview } from "./hooks/useEffectsOverview"
 import { AiChatToggle } from "./components/ai/AiChatToggle"
 import { AiChatPanel } from "./components/ai/AiChatPanel"
+import { CueSlotOverviewToggle } from "./components/CueSlotOverviewToggle"
+import { CueSlotOverviewPanel, CueSlotDndProvider } from "./components/CueSlotOverviewPanel"
+import { useCueSlotOverview } from "./hooks/useCueSlotOverview"
 
 const DRAWER_WIDTH = 240
 const DRAWER_COLLAPSED_WIDTH = 64
@@ -32,6 +35,7 @@ export default function Layout() {
   const [isAiChatVisible, setIsAiChatVisible] = useState(false)
   const { isVisible: isOverviewVisible, toggle: toggleOverview } = useFixtureOverview()
   const { isVisible: isEffectsVisible, isLocked: isEffectsLocked, toggle: toggleEffects, lock: lockEffects, unlock: unlockEffects } = useEffectsOverview()
+  const { isVisible: isCueSlotsVisible, toggle: toggleCueSlots } = useCueSlotOverview()
   const location = useLocation()
   const isFxRoute = /\/projects\/\d+\/fx/.test(location.pathname)
   const isDesktop = useMediaQuery('(min-width: 768px)')
@@ -156,6 +160,7 @@ export default function Layout() {
               <div className="flex flex-wrap items-center gap-2">
                 <ConnectionStatus />
                 <FixtureOverviewToggle isVisible={isOverviewVisible} onToggle={toggleOverview} />
+                <CueSlotOverviewToggle isVisible={isCueSlotsVisible} onToggle={toggleCueSlots} />
                 <EffectsOverviewToggle isVisible={isEffectsVisible} isLocked={isEffectsLocked} onToggle={toggleEffects} />
                 <AiChatToggle isVisible={isAiChatVisible} onToggle={() => setIsAiChatVisible(!isAiChatVisible)} />
                 <ThemeToggle />
@@ -172,10 +177,16 @@ export default function Layout() {
           {/* Effects Overview Panel - always rendered for animation */}
           <EffectsOverviewPanel isVisible={isEffectsVisible} isLocked={isEffectsLocked} />
 
-          {/* Page Content */}
-          <main className="flex-1 overflow-auto bg-muted/40 min-w-0">
-            <Outlet />
-          </main>
+          {/* Cue Slot DnD Provider wraps panel + page content for cross-component drag-and-drop */}
+          <CueSlotDndProvider isVisible={isCueSlotsVisible}>
+            {/* Cue Slot Overview Panel - always rendered for animation */}
+            <CueSlotOverviewPanel isVisible={isCueSlotsVisible} />
+
+            {/* Page Content */}
+            <main className="flex-1 overflow-auto bg-muted/40 min-w-0">
+              <Outlet />
+            </main>
+          </CueSlotDndProvider>
 
           {/* Fixture Detail Modal - opens in edit mode from overview */}
           <FixtureDetailModal

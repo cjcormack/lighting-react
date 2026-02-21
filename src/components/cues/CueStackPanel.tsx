@@ -12,9 +12,12 @@ import {
   Layers,
   Clapperboard,
   ListFilter,
+  GripVertical,
 } from 'lucide-react'
+import { useDraggable } from '@dnd-kit/core'
 import { cn } from '@/lib/utils'
 import type { CueStack } from '@/api/cueStacksApi'
+import { useCueSlotDnd, type CueSlotAssignDragData } from '../CueSlotOverviewPanel'
 
 export type CueStackView = 'all' | 'standalone' | number
 
@@ -82,36 +85,15 @@ function PanelContent({
               Stacks
             </div>
             <div className="space-y-0.5">
-              {stacks.map((stack) => {
-                const isActive = activeStackIds.has(stack.id)
-                const isSelected = selectedView === stack.id
-                return (
-                  <button
-                    key={stack.id}
-                    className={cn(
-                      'w-full flex items-center gap-2 px-2.5 py-2 rounded-md text-sm transition-colors',
-                      isSelected
-                        ? 'bg-accent text-accent-foreground font-medium'
-                        : 'hover:bg-accent/50',
-                      isActive && !isSelected && 'text-primary',
-                    )}
-                    onClick={() => onSelectView(stack.id)}
-                  >
-                    <Layers className="size-4 shrink-0" />
-                    <span className="flex-1 text-left truncate">{stack.name}</span>
-                    <div className="flex items-center gap-1 shrink-0">
-                      {isActive && (
-                        <Badge variant="default" className="text-[10px] px-1.5 py-0">
-                          active
-                        </Badge>
-                      )}
-                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                        {stack.cues.length}
-                      </Badge>
-                    </div>
-                  </button>
-                )
-              })}
+              {stacks.map((stack) => (
+                <StackEntry
+                  key={stack.id}
+                  stack={stack}
+                  isActive={activeStackIds.has(stack.id)}
+                  isSelected={selectedView === stack.id}
+                  onSelect={() => onSelectView(stack.id)}
+                />
+              ))}
             </div>
           </div>
         )}
@@ -130,6 +112,72 @@ function PanelContent({
         </Button>
       </div>
     </div>
+  )
+}
+
+/** Draggable stack entry for slot assignment */
+function StackEntry({
+  stack,
+  isActive,
+  isSelected,
+  onSelect,
+}: {
+  stack: CueStack
+  isActive: boolean
+  isSelected: boolean
+  onSelect: () => void
+}) {
+  const { isSlotPanelVisible } = useCueSlotDnd()
+  const {
+    attributes: dragAttrs,
+    listeners: dragListeners,
+    setNodeRef: setDragRef,
+    isDragging,
+  } = useDraggable({
+    id: `stack-to-slot-${stack.id}`,
+    data: {
+      type: 'cue-slot-assign',
+      itemType: 'cue_stack',
+      itemId: stack.id,
+      itemName: stack.name,
+    } satisfies CueSlotAssignDragData,
+    disabled: !isSlotPanelVisible,
+  })
+
+  return (
+    <button
+      ref={setDragRef}
+      className={cn(
+        'w-full flex items-center gap-2 px-2.5 py-2 rounded-md text-sm transition-colors',
+        isSelected
+          ? 'bg-accent text-accent-foreground font-medium'
+          : 'hover:bg-accent/50 text-muted-foreground',
+        isDragging && 'opacity-50',
+      )}
+      onClick={onSelect}
+    >
+      {isSlotPanelVisible && (
+        <button
+          className="size-5 flex items-center justify-center shrink-0 text-muted-foreground/50 hover:text-muted-foreground cursor-grab active:cursor-grabbing touch-none"
+          {...dragAttrs}
+          {...dragListeners}
+          onPointerDown={(e) => {
+            e.stopPropagation()
+            dragListeners?.onPointerDown?.(e)
+          }}
+        >
+          <GripVertical className="size-3.5" />
+        </button>
+      )}
+      <Layers className="size-4 shrink-0" />
+      <span className="flex-1 text-left truncate">{stack.name}</span>
+      {isActive && (
+        <span className="size-1.5 rounded-full bg-primary shrink-0" />
+      )}
+      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+        {stack.cues.length}
+      </Badge>
+    </button>
   )
 }
 

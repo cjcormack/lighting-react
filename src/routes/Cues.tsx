@@ -31,6 +31,7 @@ import {
   closestCenter,
   KeyboardSensor,
   PointerSensor,
+  useDraggable,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -107,6 +108,7 @@ import { CopyCueDialog } from '../components/cues/CopyCueDialog'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { useProjectPresetListQuery } from '../store/fxPresets'
 import type { FxPreset } from '../api/fxPresetsApi'
+import { useCueSlotDnd, type CueSlotAssignDragData } from '../components/CueSlotOverviewPanel'
 import type { Cue, CueInput, CueCurrentState } from '../api/cuesApi'
 import type { CueStack, CueStackInput } from '../api/cueStacksApi'
 import { EffectSummary } from '../components/fx/EffectSummary'
@@ -1125,6 +1127,25 @@ function CueListRow({
     isDragging,
   } = useSortable({ id: cue.id, disabled: !isSortable })
 
+  // When not in sortable mode, enable dragging to assign this cue to a slot
+  const { isSlotPanelVisible } = useCueSlotDnd()
+  const canDragToSlot = !isSortable && isSlotPanelVisible
+  const {
+    attributes: slotDragAttrs,
+    listeners: slotDragListeners,
+    setNodeRef: setSlotDragRef,
+    isDragging: isSlotDragging,
+  } = useDraggable({
+    id: `cue-to-slot-${cue.id}`,
+    data: {
+      type: 'cue-slot-assign',
+      itemType: 'cue',
+      itemId: cue.id,
+      itemName: cue.name,
+    } satisfies CueSlotAssignDragData,
+    disabled: !canDragToSlot,
+  })
+
   const sortableStyle = isSortable
     ? {
         transform: CSS.Transform.toString(transform),
@@ -1132,7 +1153,9 @@ function CueListRow({
         zIndex: isDragging ? 50 : undefined,
         opacity: isDragging ? 0.5 : undefined,
       }
-    : undefined
+    : isSlotDragging
+      ? { opacity: 0.5 }
+      : undefined
 
   const presetCount = cue.presetApplications.length
   const adHocCount = cue.adHocEffects.length
@@ -1282,9 +1305,10 @@ function CueListRow({
   const rowContent = (
     <div
       ref={(node) => {
-        // Merge refs: triggerRef for long-press + setNodeRef for sortable
+        // Merge refs: triggerRef for long-press + setNodeRef for sortable + setSlotDragRef for slot assignment
         ;(triggerRef as React.MutableRefObject<HTMLDivElement | null>).current = node
         setNodeRef(node)
+        setSlotDragRef(node)
       }}
       style={sortableStyle}
       className={cn(
@@ -1308,7 +1332,7 @@ function CueListRow({
             : 'hover:bg-accent/50',
         )}
       >
-        {/* Drag handle (only in sortable/stack view) */}
+        {/* Drag handle (sortable in stack view, or slot-assign when slot panel visible) */}
         {isSortable && (
           <button
             className="size-5 flex items-center justify-center shrink-0 text-muted-foreground/50 hover:text-muted-foreground cursor-grab active:cursor-grabbing touch-none"
@@ -1318,6 +1342,20 @@ function CueListRow({
               clearPress()
               isLongPressPointer.current = false
               listeners?.onPointerDown?.(e)
+            }}
+          >
+            <GripVertical className="size-3.5" />
+          </button>
+        )}
+        {canDragToSlot && (
+          <button
+            className="size-5 flex items-center justify-center shrink-0 text-muted-foreground/50 hover:text-muted-foreground cursor-grab active:cursor-grabbing touch-none"
+            {...slotDragAttrs}
+            {...slotDragListeners}
+            onPointerDown={(e) => {
+              clearPress()
+              isLongPressPointer.current = false
+              slotDragListeners?.onPointerDown?.(e)
             }}
           >
             <GripVertical className="size-3.5" />
