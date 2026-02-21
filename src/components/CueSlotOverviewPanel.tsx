@@ -1,8 +1,6 @@
-import { useState, useCallback, useRef, useMemo, createContext, useContext } from 'react'
+import { useState, useCallback, useRef, useMemo, useEffect, createContext, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  ChevronLeft,
-  ChevronRight,
   Layers,
   ListMusic,
   Eye,
@@ -19,7 +17,6 @@ import {
   type DragStartEvent,
   DragOverlay,
 } from '@dnd-kit/core'
-import { Button } from '@/components/ui/button'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -226,13 +223,83 @@ export function CueSlotOverviewPanel({ isVisible }: CueSlotOverviewPanelProps) {
     localStorage.setItem(PAGE_STORAGE_KEY, String(p))
   }, [])
 
-  const prevPage = useCallback(() => {
-    setPagePersist(Math.max(0, page - 1))
-  }, [page, setPagePersist])
+  // Swipe handling for touch page navigation
+  const swipeStartX = useRef<number | null>(null)
+  const swipeStartY = useRef<number | null>(null)
+  const swiping = useRef(false)
 
-  const nextPage = useCallback(() => {
-    setPagePersist(Math.min(totalPages - 1, page + 1))
-  }, [page, totalPages, setPagePersist])
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    swipeStartX.current = e.touches[0].clientX
+    swipeStartY.current = e.touches[0].clientY
+    swiping.current = false
+  }, [])
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (swipeStartX.current === null || swipeStartY.current === null) return
+    const dx = e.touches[0].clientX - swipeStartX.current
+    const dy = e.touches[0].clientY - swipeStartY.current
+    // Only count as swipe if horizontal movement dominates vertical
+    if (Math.abs(dx) > 30 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      swiping.current = true
+    }
+  }, [])
+
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      if (swipeStartX.current === null) return
+      const dx = e.changedTouches[0].clientX - swipeStartX.current
+      if (swiping.current) {
+        if (dx < -50 && page < totalPages - 1) {
+          setPagePersist(page + 1)
+        } else if (dx > 50 && page > 0) {
+          setPagePersist(page - 1)
+        }
+      }
+      swipeStartX.current = null
+      swipeStartY.current = null
+      swiping.current = false
+    },
+    [page, totalPages, setPagePersist],
+  )
+
+  // Trackpad horizontal scroll → page navigation
+  // Must use native listener with { passive: false } to allow preventDefault
+  const panelRef = useRef<HTMLDivElement>(null)
+  const wheelAccum = useRef(0)
+  const wheelTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pageRef = useRef(page)
+  const totalPagesRef = useRef(totalPages)
+  pageRef.current = page
+  totalPagesRef.current = totalPages
+
+  useEffect(() => {
+    const el = panelRef.current
+    if (!el) return
+
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return
+
+      e.preventDefault()
+      wheelAccum.current += e.deltaX
+
+      if (wheelTimeout.current) clearTimeout(wheelTimeout.current)
+      wheelTimeout.current = setTimeout(() => {
+        wheelAccum.current = 0
+      }, 200)
+
+      const threshold = 80
+      if (wheelAccum.current > threshold) {
+        wheelAccum.current = 0
+        setPagePersist(Math.min(totalPagesRef.current - 1, pageRef.current + 1))
+      } else if (wheelAccum.current < -threshold) {
+        wheelAccum.current = 0
+        setPagePersist(Math.max(0, pageRef.current - 1))
+      }
+    }
+
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [setPagePersist])
 
   const handleSlotTap = useCallback(
     (slot: CueSlot) => {
@@ -290,32 +357,13 @@ export function CueSlotOverviewPanel({ isVisible }: CueSlotOverviewPanelProps) {
       )}
     >
       <div className="overflow-hidden">
-        <div className="border-b bg-background px-4 py-3">
-          {/* Pagination header */}
-          <div className="flex items-center gap-2 mb-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7"
-              onClick={prevPage}
-              disabled={page === 0}
-            >
-              <ChevronLeft className="size-4" />
-            </Button>
-            <span className="text-sm font-medium tabular-nums min-w-[5rem] text-center">
-              Page {page + 1} of {totalPages}
-            </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7"
-              onClick={nextPage}
-              disabled={page >= totalPages - 1}
-            >
-              <ChevronRight className="size-4" />
-            </Button>
-          </div>
-
+        <div
+          ref={panelRef}
+          className="border-b bg-background px-4 py-3"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
           {/* Slot grid — droppables/draggables use the parent DndContext from CueSlotDndProvider */}
           <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
             {slotsForPage.map((slot, index) => (
@@ -337,6 +385,24 @@ export function CueSlotOverviewPanel({ isVisible }: CueSlotOverviewPanelProps) {
               />
             ))}
           </div>
+
+          {/* Page dots */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-1.5 mt-2">
+              {Array.from({ length: totalPages }, (_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setPagePersist(i)}
+                  className={cn(
+                    'rounded-full transition-all',
+                    i === page
+                      ? 'size-2 bg-primary'
+                      : 'size-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/50',
+                  )}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
