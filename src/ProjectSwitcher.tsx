@@ -123,6 +123,25 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
               collapsed
               onClick={() => navigate(`/projects/${viewedProject.id}/chases`)}
             />
+            {/* FX Cues & Presets - shown here for non-active projects */}
+            {!isViewingActiveProject && (
+              <>
+                <NavItem
+                  icon={<Clapperboard className="size-5" />}
+                  label="FX Cues"
+                  isActive={location.pathname.includes("/cues")}
+                  collapsed
+                  onClick={() => navigate(`/projects/${viewedProject.id}/cues`)}
+                />
+                <NavItem
+                  icon={<Bookmark className="size-5" />}
+                  label="FX Presets"
+                  isActive={location.pathname.includes("/presets")}
+                  collapsed
+                  onClick={() => navigate(`/projects/${viewedProject.id}/presets`)}
+                />
+              </>
+            )}
 
             {/* Hardware items - only for active project */}
             {isViewingActiveProject && (
@@ -246,6 +265,25 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
               collapsed={false}
               onClick={() => navigate(`/projects/${viewedProject.id}/chases`)}
             />
+            {/* FX Cues & Presets - shown here for non-active projects */}
+            {!isViewingActiveProject && (
+              <>
+                <NavItem
+                  icon={<Clapperboard className="size-4" />}
+                  label="FX Cues"
+                  isActive={location.pathname.includes("/cues")}
+                  collapsed={false}
+                  onClick={() => navigate(`/projects/${viewedProject.id}/cues`)}
+                />
+                <NavItem
+                  icon={<Bookmark className="size-4" />}
+                  label="FX Presets"
+                  isActive={location.pathname.includes("/presets")}
+                  collapsed={false}
+                  onClick={() => navigate(`/projects/${viewedProject.id}/presets`)}
+                />
+              </>
+            )}
 
             {/* Hardware items - only for active project */}
             {isViewingActiveProject && (
