@@ -218,7 +218,7 @@ export function CueSlotDndProvider({ isVisible, children }: CueSlotDndProviderPr
     <CueSlotDndContext.Provider value={{ isSlotPanelVisible: isVisible, isEditMode, enterEditMode, exitEditMode }}>
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         {children}
-        <DragOverlay>
+        <DragOverlay dropAnimation={null}>
           {draggedLabel ? (
             <div className="rounded-md border bg-background px-2 py-1.5 shadow-lg text-sm font-medium opacity-90">
               {draggedLabel}
