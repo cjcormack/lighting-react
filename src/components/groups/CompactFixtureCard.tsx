@@ -586,6 +586,12 @@ export const MultiElementCompactCard = memo(function MultiElementCompactCard({
   const virtualDimmerGroupColourProp = !hasRealDimmer
     ? findGroupColourProperty(fixture) : undefined
 
+  const hasDimmerRow = !!dimmerProp || !!groupDimmerProp || !!virtualDimmerGroupColourProp
+
+  // Compact display fallbacks for fixtures without colour/dimmer
+  const compactPrimary = !hasColour ? findCompactPrimary(fixture.properties) : undefined
+  const compactSecondary = !hasDimmerRow ? findCompactSecondary(fixture.properties) : undefined
+
   return (
     <div
       className="p-2 border rounded cursor-pointer hover:bg-accent/50 transition-colors min-w-[100px] flex-1"
@@ -600,17 +606,19 @@ export const MultiElementCompactCard = memo(function MultiElementCompactCard({
         )}
       </div>
 
-      {/* Head squares - or invisible placeholder */}
+      {/* Head squares - or compact primary fallback - or invisible placeholder */}
       <div className={cn('mt-1.5', COLOUR_ROW_HEIGHT)}>
-        {hasColour && (
+        {hasColour ? (
           <MultiHeadIndicator
             elements={fixture.elements ?? []}
             fixtureDimmer={dimmerProp}
           />
-        )}
+        ) : compactPrimary ? (
+          <CompactPropertyDisplay property={compactPrimary} />
+        ) : null}
       </div>
 
-      {/* Dimmer bar - or invisible placeholder */}
+      {/* Dimmer bar - or compact secondary fallback - or invisible placeholder */}
       <div className={cn('mt-1.5', DIMMER_ROW_HEIGHT)}>
         {dimmerProp ? (
           <DimmerBar dimmerProp={dimmerProp} />
@@ -618,6 +626,8 @@ export const MultiElementCompactCard = memo(function MultiElementCompactCard({
           <GroupDimmerBar property={groupDimmerProp} />
         ) : virtualDimmerGroupColourProp ? (
           <GroupVirtualDimmerBar colourProp={virtualDimmerGroupColourProp} />
+        ) : compactSecondary ? (
+          <CompactPropertyDisplay property={compactSecondary} />
         ) : null}
       </div>
     </div>
