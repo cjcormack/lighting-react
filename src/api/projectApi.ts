@@ -2,12 +2,15 @@ import { InternalApiConnection } from "./internalApi";
 import { Subscription } from "./subscription";
 import { ScriptSetting } from "../store/scripts";
 
+export type ProjectMode = 'SCRIPT_BASED' | 'DB_BASED';
+
 // Project summary for list views
 export interface ProjectSummary {
   id: number;
   name: string;
   description: string | null;
   isCurrent: boolean;
+  mode: ProjectMode;
 }
 
 // Full project details for editing/viewing
@@ -16,6 +19,7 @@ export interface ProjectDetail {
   name: string;
   description: string | null;
   isCurrent: boolean;
+  mode: ProjectMode;
   loadFixturesScriptId: number | null;
   loadFixturesScriptName: string | null;
   initialSceneId: number | null;
@@ -37,12 +41,14 @@ export interface ProjectDetail {
 export interface CreateProjectRequest {
   name: string;
   description?: string;
+  mode?: ProjectMode;
 }
 
 // For updating a project
 export interface UpdateProjectRequest {
   name?: string;
   description?: string | null;
+  mode?: ProjectMode;
   loadFixturesScriptId?: number | null;
   initialSceneId?: number | null;
   trackChangedScriptId?: number | null;

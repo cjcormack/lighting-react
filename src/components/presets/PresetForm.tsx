@@ -841,6 +841,9 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
               setView('form')
             }}
             onClose={() => setView('form')}
+            options={{
+              subtitle: 'Optionally restrict this preset to a specific fixture type.',
+            }}
           />
         )}
 

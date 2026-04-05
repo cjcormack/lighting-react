@@ -54,16 +54,35 @@ function CountBadge({ count }: { count: number }) {
   )
 }
 
+export interface FixtureTypePickerContentOptions {
+  /** Header title (default: "Select Fixture Type") */
+  title?: string
+  /** Subtitle below the header */
+  subtitle?: string
+  /** Show the "Any fixture type" clear option (default: true) */
+  showClearOption?: boolean
+  /** Dim types that aren't currently registered/in use (default: true) */
+  dimUnregistered?: boolean
+  /** Close the picker after selection (default: true). Set false to let parent handle navigation. */
+  closeOnSelect?: boolean
+}
+
 /**
  * Inline fixture type picker content (no Dialog wrapper).
  * Can be embedded directly in a Sheet or any container.
  */
-export function FixtureTypePickerContent({ hierarchy, fixtureCounts, onSelect, onClose }: {
+export function FixtureTypePickerContent({ hierarchy, fixtureCounts, onSelect, onClose, options }: {
   hierarchy: FixtureTypeHierarchy | null
   fixtureCounts: FixtureCountMap
   onSelect: (typeKey: string | null) => void
   onClose: () => void
+  options?: FixtureTypePickerContentOptions
 }) {
+  const title = options?.title ?? 'Select Fixture Type'
+  const subtitle = options?.subtitle
+  const showClearOption = options?.showClearOption ?? true
+  const dimUnregistered = options?.dimUnregistered ?? true
+  const closeOnSelect = options?.closeOnSelect ?? true
   const [step, setStep] = useState<Step>('manufacturer')
   const [selectedManufacturer, setSelectedManufacturer] = useState<ManufacturerEntry | null>(null)
   const [selectedModel, setSelectedModel] = useState<FixtureTypeModel | null>(null)
@@ -112,7 +131,7 @@ export function FixtureTypePickerContent({ hierarchy, fixtureCounts, onSelect, o
   const handleSelectModel = (model: FixtureTypeModel) => {
     if (model.modes.length === 1) {
       onSelect(model.modes[0].typeKey)
-      onClose()
+      if (closeOnSelect) onClose()
     } else {
       setSelectedModel(model)
       setStep('mode')
@@ -121,12 +140,12 @@ export function FixtureTypePickerContent({ hierarchy, fixtureCounts, onSelect, o
 
   const handleSelectMode = (mode: FixtureTypeMode) => {
     onSelect(mode.typeKey)
-    onClose()
+    if (closeOnSelect) onClose()
   }
 
   const handleClear = () => {
     onSelect(null)
-    onClose()
+    if (closeOnSelect) onClose()
   }
 
   return (
@@ -138,22 +157,24 @@ export function FixtureTypePickerContent({ hierarchy, fixtureCounts, onSelect, o
               <ChevronLeft className="size-4" />
             </Button>
             <div>
-              <h3 className="font-medium">Select Fixture Type</h3>
-              <p className="text-xs text-muted-foreground">
-                Optionally restrict this preset to a specific fixture type.
-              </p>
+              <h3 className="font-medium">{title}</h3>
+              {subtitle && (
+                <p className="text-xs text-muted-foreground">{subtitle}</p>
+              )}
             </div>
           </div>
 
           <div className="flex-1 overflow-y-auto px-4 pb-4">
             {/* Clear option */}
-            <button
-              onClick={handleClear}
-              className="flex items-center gap-2 w-full p-3 rounded-md border border-dashed text-left hover:bg-accent/50 transition-colors mb-2"
-            >
-              <X className="size-4 text-muted-foreground shrink-0" />
-              <span className="text-sm text-muted-foreground">Any fixture type</span>
-            </button>
+            {showClearOption && (
+              <button
+                onClick={handleClear}
+                className="flex items-center gap-2 w-full p-3 rounded-md border border-dashed text-left hover:bg-accent/50 transition-colors mb-2"
+              >
+                <X className="size-4 text-muted-foreground shrink-0" />
+                <span className="text-sm text-muted-foreground">Any fixture type</span>
+              </button>
+            )}
 
             {manufacturers.length === 0 && (
               <div className="py-6 text-center text-sm text-muted-foreground">
@@ -168,7 +189,7 @@ export function FixtureTypePickerContent({ hierarchy, fixtureCounts, onSelect, o
                   onClick={() => handleSelectManufacturer(entry)}
                   className={cn(
                     'flex items-center gap-2 p-3 rounded-md border text-left hover:bg-accent/50 transition-colors',
-                    !entry.hasRegistered && 'opacity-50',
+                    dimUnregistered && !entry.hasRegistered && 'opacity-50',
                   )}
                 >
                   <div className="flex-1 min-w-0">
@@ -209,7 +230,7 @@ export function FixtureTypePickerContent({ hierarchy, fixtureCounts, onSelect, o
                   onClick={() => handleSelectModel(model)}
                   className={cn(
                     'flex items-center gap-2 p-3 rounded-md border text-left hover:bg-accent/50 transition-colors',
-                    !model.isRegistered && 'opacity-50',
+                    dimUnregistered && !model.isRegistered && 'opacity-50',
                   )}
                 >
                   <div className="flex-1 min-w-0">
@@ -262,7 +283,7 @@ export function FixtureTypePickerContent({ hierarchy, fixtureCounts, onSelect, o
                   onClick={() => handleSelectMode(mode)}
                   className={cn(
                     'flex items-center gap-2 p-3 rounded-md border text-left hover:bg-accent/50 transition-colors',
-                    !mode.isRegistered && 'opacity-50',
+                    dimUnregistered && !mode.isRegistered && 'opacity-50',
                   )}
                 >
                   <div className="flex-1 min-w-0">

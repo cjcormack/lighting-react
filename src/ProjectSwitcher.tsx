@@ -29,6 +29,7 @@ import {
   AudioWaveform,
   Bookmark,
   Clapperboard,
+  TableProperties,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useProjectListQuery } from "./store/projects"
@@ -102,6 +103,13 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
             />
 
             {/* Navigation items */}
+            <NavItem
+              icon={<TableProperties className="size-5" />}
+              label="Patch List"
+              isActive={location.pathname.includes("/patches")}
+              collapsed
+              onClick={() => navigate(`/projects/${viewedProject.id}/patches`)}
+            />
             <NavItem
               icon={<Braces className="size-5" />}
               label="Scripts"
@@ -244,6 +252,13 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
 
           {/* Navigation items */}
           <div className="flex-1 px-2 space-y-0.5">
+            <NavItem
+              icon={<TableProperties className="size-4" />}
+              label="Patch List"
+              isActive={location.pathname.includes("/patches")}
+              collapsed={false}
+              onClick={() => navigate(`/projects/${viewedProject.id}/patches`)}
+            />
             <NavItem
               icon={<Braces className="size-4" />}
               label="Scripts"

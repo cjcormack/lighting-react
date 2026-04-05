@@ -18,7 +18,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
+import { Badge } from "@/components/ui/badge"
 import { Loader2, Plus } from "lucide-react"
+import type { ProjectMode } from "./api/projectApi"
 import {
   useProjectQuery,
   useUpdateProjectMutation,
@@ -76,6 +78,7 @@ export default function EditProjectDialog({
   // Form state
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
+  const [mode, setMode] = useState<ProjectMode>("SCRIPT_BASED")
   const [loadFixturesScriptId, setLoadFixturesScriptId] = useState<string>("")
   const [initialSceneId, setInitialSceneId] = useState<string>("none")
   const [trackChangedScriptId, setTrackChangedScriptId] = useState<string>("none")
@@ -87,6 +90,7 @@ export default function EditProjectDialog({
     if (project) {
       setName(project.name)
       setDescription(project.description || "")
+      setMode(project.mode)
       setLoadFixturesScriptId(project.loadFixturesScriptId?.toString() || "")
       setInitialSceneId(project.initialSceneId?.toString() || "none")
       setTrackChangedScriptId(project.trackChangedScriptId?.toString() || "none")
@@ -100,12 +104,13 @@ export default function EditProjectDialog({
   }
 
   const handleSave = async () => {
-    if (loadFixturesScriptId === "") return // Required field
+    if (mode === "SCRIPT_BASED" && loadFixturesScriptId === "") return
     await updateProject({
       id: projectId,
       name,
       description: description || null,
-      loadFixturesScriptId: Number(loadFixturesScriptId),
+      mode,
+      loadFixturesScriptId: mode === "SCRIPT_BASED" ? Number(loadFixturesScriptId) : undefined,
       initialSceneId:
         initialSceneId === "none" ? null : Number(initialSceneId),
       trackChangedScriptId:
@@ -136,7 +141,7 @@ export default function EditProjectDialog({
     refetchScripts()
   }
 
-  const isValid = name.trim().length > 0 && loadFixturesScriptId !== ""
+  const isValid = name.trim().length > 0 && (mode === "DB_BASED" || loadFixturesScriptId !== "")
   const isCreating =
     isCreatingInitialScene || isCreatingTrackChanged || isCreatingRunLoop
 
@@ -186,8 +191,48 @@ export default function EditProjectDialog({
           <Separator />
 
           <div className="space-y-4">
-            <h3 className="font-semibold">Startup Configuration</h3>
+            <h3 className="font-semibold">Configuration Mode</h3>
             <div className="space-y-2">
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={mode === "SCRIPT_BASED" ? "default" : "outline"}
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => setMode("SCRIPT_BASED")}
+                >
+                  Script-Based
+                </Button>
+                <Button
+                  type="button"
+                  variant={mode === "DB_BASED" ? "default" : "outline"}
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => setMode("DB_BASED")}
+                >
+                  DB-Based
+                </Button>
+              </div>
+              {project && mode !== project.mode && (
+                <p className="text-xs text-amber-600">
+                  {mode === "DB_BASED"
+                    ? "Current fixtures will be imported into the database. You can edit them in the Patch List."
+                    : "A load-fixtures script will be generated from your current patches."}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {mode === "SCRIPT_BASED"
+                  ? "Configure fixtures via Kotlin DSL scripts."
+                  : "Configure fixtures through the Patch List UI."}
+              </p>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-4">
+            <h3 className="font-semibold">Startup Configuration</h3>
+            {mode === "SCRIPT_BASED" && <div className="space-y-2">
               <Label htmlFor="load-fixtures">Load Fixtures Script *</Label>
               <Select
                 value={loadFixturesScriptId}
@@ -208,7 +253,7 @@ export default function EditProjectDialog({
                 Script to run when project loads to configure fixtures
                 (required)
               </p>
-            </div>
+            </div>}
             <div className="space-y-2">
               <Label htmlFor="initial-scene">Initial Scene</Label>
               <div className="flex gap-2">

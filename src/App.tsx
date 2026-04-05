@@ -11,6 +11,7 @@ import { FxRedirect, ProjectFxBusking } from "./routes/FxBusking";
 import { PresetsRedirect, ProjectFxPresets } from "./routes/FxPresets";
 import { CuesRedirect, CuesBaseRedirect, ProjectCues } from "./routes/Cues";
 import ProjectOverview, { ProjectOverviewRedirect } from "./routes/ProjectOverview";
+import { ProjectPatches, PatchesRedirect } from "./routes/Patches";
 
 function App() {
   const router = createBrowserRouter([
@@ -73,6 +74,14 @@ function App() {
         {
           path: "cues",
           element: <CuesRedirect />,
+        },
+        {
+          path: "projects/:projectId/patches",
+          element: <ProjectPatches />,
+        },
+        {
+          path: "patches",
+          element: <PatchesRedirect />,
         },
         {
           path: "projects/:projectId/channels/:universe",
