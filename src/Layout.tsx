@@ -26,6 +26,7 @@ import { CueSlotOverviewPanel, CueSlotDndProvider } from "./components/CueSlotOv
 import { useCueSlotOverview } from "./hooks/useCueSlotOverview"
 import EditProjectDialog from "./EditProjectDialog"
 import CommandPalette from "./components/CommandPalette"
+import { AddEditFxSheet, type FxTarget } from "./components/fx/AddEditFxSheet"
 
 const DRAWER_WIDTH = 240
 const DRAWER_COLLAPSED_WIDTH = 64
@@ -36,6 +37,7 @@ export default function Layout() {
   const [selectedFixture, setSelectedFixture] = useState<string | null>(null)
   const [isAiChatVisible, setIsAiChatVisible] = useState(false)
   const [editProjectId, setEditProjectId] = useState<number | null>(null)
+  const [applyFxTarget, setApplyFxTarget] = useState<FxTarget | null>(null)
   const { isVisible: isOverviewVisible, toggle: toggleOverview } = useFixtureOverview()
   const { isVisible: isEffectsVisible, isLocked: isEffectsLocked, toggle: toggleEffects, lock: lockEffects, unlock: unlockEffects } = useEffectsOverview()
   const { isVisible: isCueSlotsVisible, toggle: toggleCueSlots } = useCueSlotOverview()
@@ -225,6 +227,7 @@ export default function Layout() {
         {/* Command Palette */}
         <CommandPalette
           onConfigureProject={viewedProject ? () => setEditProjectId(viewedProject.id) : undefined}
+          onApplyFx={setApplyFxTarget}
           toggles={[
             { label: "Fixture Overview", icon: LayoutGrid, isVisible: isOverviewVisible, onToggle: toggleOverview },
             { label: "Cue Slots", icon: Grid3X3, isVisible: isCueSlotsVisible, onToggle: toggleCueSlots },
@@ -239,6 +242,15 @@ export default function Layout() {
             open={true}
             setOpen={(o) => !o && setEditProjectId(null)}
             projectId={editProjectId}
+          />
+        )}
+
+        {/* Apply FX Sheet (triggered by command palette) */}
+        {applyFxTarget && (
+          <AddEditFxSheet
+            target={applyFxTarget}
+            mode={{ mode: "add" }}
+            onClose={() => setApplyFxTarget(null)}
           />
         )}
       </div>
