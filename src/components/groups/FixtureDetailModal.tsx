@@ -11,6 +11,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Settings2, SlidersHorizontal } from 'lucide-react'
 import { useFixtureListQuery } from '../../store/fixtures'
 import { FixtureContent, FixtureViewMode } from '../fixtures/FixtureContent'
+import { FixtureParkButton } from '../fixtures/FixtureParkButton'
 
 interface FixtureDetailModalProps {
   fixtureKey: string | null
@@ -64,6 +65,7 @@ export function FixtureDetailModal({ fixtureKey, onClose, isEditing: externalIsE
                   <SlidersHorizontal className="h-4 w-4" />
                 </ToggleGroupItem>
               </ToggleGroup>
+              {fixture && <FixtureParkButton fixture={fixture} />}
               {showEditButton && (
                 <Button
                   variant={isEditing ? 'default' : 'outline'}

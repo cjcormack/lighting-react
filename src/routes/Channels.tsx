@@ -1,13 +1,27 @@
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useState, useCallback } from "react"
 import { Card } from "@/components/ui/card"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { useParams, useNavigate, Navigate } from "react-router-dom"
-import { ChevronRight, Loader2 } from "lucide-react"
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+} from "@/components/ui/context-menu"
+import { useParams, useNavigate, useSearchParams, Navigate } from "react-router-dom"
+import { ChevronRight, Loader2, Lock, LockOpen } from "lucide-react"
 import { useGetChannelQuery, useUpdateChannelMutation } from "../store/channels"
 import { useGetChannelMappingQuery } from "../store/channelMapping"
+import {
+  useGetChannelParkStateQuery,
+  useGetParkStateListQuery,
+  useParkChannelMutation,
+  useUnparkChannelMutation,
+} from "../store/park"
 import { useCurrentProjectQuery, useProjectQuery } from "../store/projects"
 import { EditModeProvider, useEditMode } from "@/components/fixtures/EditModeContext"
 import { FixtureDetailModal } from "@/components/groups/FixtureDetailModal"
@@ -33,10 +47,19 @@ export const ChannelSlider = ({
     channelNo: id,
   })
 
+  const { data: parkedValue } = useGetChannelParkStateQuery({
+    universe: universe,
+    channelNo: id,
+  })
+
+  const isParked = parkedValue !== undefined
   const value = maybeValue || 0
-  const percentage = Math.round((value / 255) * 100)
+  const displayValue = isParked ? parkedValue : value
+  const percentage = Math.round((displayValue / 255) * 100)
 
   const [runUpdateChannelMutation] = useUpdateChannelMutation()
+  const [runParkChannel] = useParkChannelMutation()
+  const [runUnparkChannel] = useUnparkChannelMutation()
 
   const setValue = (value: number) => {
     runUpdateChannelMutation({
@@ -70,13 +93,28 @@ export const ChannelSlider = ({
     }
   }
 
-  return (
-    <div>
-      <div className="flex items-center gap-2">
-        <span className="text-xs font-medium w-8 shrink-0 text-muted-foreground">
+  const handleParkToggle = useCallback(() => {
+    if (isParked) {
+      runUnparkChannel({ universe, channelNo: id })
+    } else {
+      runParkChannel({ universe, channelNo: id, value })
+    }
+  }, [isParked, universe, id, value, runParkChannel, runUnparkChannel])
+
+  const channelContent = (
+    <div className={`rounded px-1 py-0.5 ${isParked ? "bg-amber-50/70 dark:bg-amber-900/20" : ""}`}>
+      <div className="flex items-center gap-2 group/channel">
+        {/* Channel number + park badge */}
+        <span className="text-xs font-medium w-8 shrink-0 text-muted-foreground relative">
           {id}
+          {isParked && (
+            <span className="absolute -top-1 -right-1 flex size-3 items-center justify-center rounded-full bg-amber-500 text-[7px] font-bold text-white leading-none">
+              P
+            </span>
+          )}
         </span>
-        {isEditing ? (
+
+        {isEditing && !isParked ? (
           <>
             <Slider
               className="flex-1 min-w-12 shrink-0"
@@ -94,19 +132,62 @@ export const ChannelSlider = ({
               className="w-12 sm:w-14 h-7 text-xs px-1 shrink-0"
             />
           </>
+        ) : isEditing && isParked ? (
+          <>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex-1 min-w-12 shrink-0 h-2 bg-muted rounded-full overflow-hidden opacity-70">
+                  <div
+                    className="h-full bg-amber-500 transition-all"
+                    style={{ width: `${percentage}%` }}
+                  />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                Parked at {parkedValue}. Right-click to unpark.
+              </TooltipContent>
+            </Tooltip>
+            <span className="w-8 sm:w-10 text-xs text-right text-amber-600 dark:text-amber-400 font-medium shrink-0">
+              {parkedValue}
+            </span>
+          </>
         ) : (
           <>
             <div className="flex-1 min-w-12 shrink-0 h-2 bg-muted rounded-full overflow-hidden">
               <div
-                className="h-full bg-primary transition-all"
+                className={`h-full transition-all ${isParked ? "bg-amber-500" : "bg-primary"}`}
                 style={{ width: `${percentage}%` }}
               />
             </div>
-            <span className="w-8 sm:w-10 text-xs text-right text-muted-foreground shrink-0">
-              {value}
+            <span className={`w-8 sm:w-10 text-xs text-right shrink-0 ${isParked ? "text-amber-600 dark:text-amber-400 font-medium" : "text-muted-foreground"}`}>
+              {displayValue}
             </span>
           </>
         )}
+
+        {/* Park/unpark button - visible on hover, in edit mode, or on touch devices */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                handleParkToggle()
+              }}
+              className={`shrink-0 p-0.5 rounded transition-opacity ${
+                isParked
+                  ? "text-amber-600 dark:text-amber-400 opacity-100"
+                  : isEditing
+                    ? "text-muted-foreground opacity-70 hover:opacity-100"
+                    : "text-muted-foreground opacity-0 group-hover/channel:opacity-100 pointer-coarse:opacity-70"
+              } hover:text-foreground`}
+            >
+              {isParked ? <Lock className="size-3" /> : <LockOpen className="size-3" />}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {isParked ? "Unpark channel" : "Park at current value"}
+          </TooltipContent>
+        </Tooltip>
       </div>
       <div className="flex items-center gap-1 ml-8 text-[10px] truncate">
         {mapping ? (
@@ -130,6 +211,29 @@ export const ChannelSlider = ({
         )}
       </div>
     </div>
+  )
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div>{channelContent}</div>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        {isParked ? (
+          <ContextMenuItem onClick={() => runUnparkChannel({ universe, channelNo: id })}>
+            <LockOpen className="size-4" />
+            Unpark
+          </ContextMenuItem>
+        ) : (
+          <ContextMenuItem
+            onClick={() => runParkChannel({ universe, channelNo: id, value })}
+          >
+            <Lock className="size-4" />
+            Park at current value ({value})
+          </ContextMenuItem>
+        )}
+      </ContextMenuContent>
+    </ContextMenu>
   )
 }
 
@@ -200,26 +304,73 @@ export function ProjectChannels() {
 function ProjectChannelsContent({ projectName, universe }: { projectName: string; universe: number }) {
   const { isEditing, toggleEditing } = useEditMode()
   const [selectedFixtureKey, setSelectedFixtureKey] = useState<string | null>(null)
+  const [searchParams] = useSearchParams()
+  const [showParkedOnly, setShowParkedOnly] = useState(searchParams.get("parked") === "true")
+
+  const { data: parkStateList } = useGetParkStateListQuery()
+  const [runUnparkChannel] = useUnparkChannelMutation()
+
+  const parkedCount = parkStateList?.filter((p) => p.universe === universe).length ?? 0
+  const parkedChannelSet = new Set(
+    parkStateList?.filter((p) => p.universe === universe).map((p) => p.channel) ?? []
+  )
 
   return (
     <>
       <Card className="m-4 p-4">
         <div className="flex items-start justify-between mb-4">
           <Breadcrumbs projectName={projectName} universe={universe} />
-          <Button
-            variant={isEditing ? "default" : "outline"}
-            size="sm"
-            onClick={toggleEditing}
-            className="shrink-0"
-          >
-            {isEditing ? "Done" : "Edit"}
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            {parkedCount > 0 && (
+              <>
+                <Button
+                  variant={showParkedOnly ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setShowParkedOnly(!showParkedOnly)}
+                  className="gap-1.5"
+                >
+                  <Lock className="size-3.5" />
+                  {showParkedOnly ? "Show All" : `Parked`}
+                  <Badge variant="secondary" className="ml-0.5 px-1.5 py-0 text-[10px]">
+                    {parkedCount}
+                  </Badge>
+                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (confirm(`Unpark all ${parkedCount} channel(s) in universe ${universe}?`)) {
+                          parkStateList
+                            ?.filter((p) => p.universe === universe)
+                            .forEach((p) => runUnparkChannel({ universe: p.universe, channelNo: p.channel }))
+                        }
+                      }}
+                    >
+                      <LockOpen className="size-3.5" />
+                      Unpark All
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Unpark all channels in this universe</TooltipContent>
+                </Tooltip>
+              </>
+            )}
+            <Button
+              variant={isEditing ? "default" : "outline"}
+              size="sm"
+              onClick={toggleEditing}
+            >
+              {isEditing ? "Done" : "Edit"}
+            </Button>
+          </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           <ChannelGroups
             universe={universe}
             isEditing={isEditing}
             onFixtureClick={setSelectedFixtureKey}
+            filterParked={showParkedOnly ? parkedChannelSet : undefined}
           />
         </div>
       </Card>
@@ -264,32 +415,46 @@ const ChannelGroups = ({
   universe,
   isEditing,
   onFixtureClick,
+  filterParked,
 }: {
   universe: number
   isEditing: boolean
   onFixtureClick?: (fixtureKey: string) => void
+  filterParked?: Set<number>
 }) => {
   const channelCount = 512
   const groupSize = 8
 
   return (
     <>
-      {Array.from(Array(channelCount / groupSize)).map((_, groupNo) => (
-        <Card key={groupNo} className="p-4">
-          {Array.from(Array(groupSize)).map((_, itemNo) => {
-            const channelNo = groupNo * groupSize + itemNo + 1
-            return (
-              <ChannelSlider
-                key={itemNo}
-                universe={universe}
-                id={channelNo}
-                isEditing={isEditing}
-                onFixtureClick={onFixtureClick}
-              />
-            )
-          })}
-        </Card>
-      ))}
+      {Array.from(Array(channelCount / groupSize)).map((_, groupNo) => {
+        const channels = Array.from(Array(groupSize)).map((_, itemNo) => groupNo * groupSize + itemNo + 1)
+
+        // If filtering to parked only, skip groups with no parked channels
+        if (filterParked && !channels.some((ch) => filterParked.has(ch))) {
+          return null
+        }
+
+        return (
+          <Card key={groupNo} className="p-4">
+            {channels.map((channelNo) => {
+              // If filtering, hide non-parked channels within visible groups
+              if (filterParked && !filterParked.has(channelNo)) {
+                return null
+              }
+              return (
+                <ChannelSlider
+                  key={channelNo}
+                  universe={universe}
+                  id={channelNo}
+                  isEditing={isEditing}
+                  onFixtureClick={onFixtureClick}
+                />
+              )
+            })}
+          </Card>
+        )
+      })}
     </>
   )
 }

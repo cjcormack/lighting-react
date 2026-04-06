@@ -4,7 +4,8 @@ import { Command } from "cmdk"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
 import {
   Settings, FolderOpen, PlusCircle, Search, TableProperties, Bookmark,
-  Clapperboard, AudioWaveform, LayoutGrid, Layers, ArrowLeft,
+  Clapperboard, AudioWaveform, LayoutGrid, Layers, ArrowLeft, Lock, LockOpen,
+  SlidersHorizontal,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { useProjectListQuery, useCurrentProjectQuery } from "@/store/projects"
@@ -14,6 +15,8 @@ import type { GroupSummary } from "@/api/groupsApi"
 import { useNavItems, filterNavItems } from "@/navigation"
 import { useViewedProject } from "@/ProjectSwitcher"
 import type { FxTarget } from "@/components/fx/AddEditFxSheet"
+import { useGetParkStateListQuery, useUnparkAllMutation, useUnparkChannelMutation } from "@/store/park"
+import { useGetChannelMappingListQuery } from "@/store/channelMapping"
 
 export interface ToggleState {
   label: string
@@ -25,6 +28,8 @@ export interface ToggleState {
 interface CommandPaletteProps {
   onConfigureProject?: () => void
   onApplyFx?: (target: FxTarget) => void
+  onParkChannelAtValue?: () => void
+  onSetChannelValue?: () => void
   toggles?: ToggleState[]
 }
 
@@ -119,7 +124,7 @@ function GroupItem({ group, onSelect }: { group: GroupSummary; onSelect: () => v
 
 // ─── Main component ───────────────────────────────────────────────────────
 
-export default function CommandPalette({ onConfigureProject, onApplyFx, toggles }: CommandPaletteProps) {
+export default function CommandPalette({ onConfigureProject, onApplyFx, onParkChannelAtValue, onSetChannelValue, toggles }: CommandPaletteProps) {
   const [open, setOpen] = useState(false)
   const [pages, setPages] = useState<string[]>([])
   const [search, setSearch] = useState("")
@@ -129,6 +134,12 @@ export default function CommandPalette({ onConfigureProject, onApplyFx, toggles 
   const { data: fixtures } = useFixtureListQuery()
   const { data: groups } = useGroupListQuery()
   const allNavItems = useNavItems()
+
+  const { data: parkStateList } = useGetParkStateListQuery()
+  const [runUnparkAll] = useUnparkAllMutation()
+  const [runUnparkChannel] = useUnparkChannelMutation()
+  const { data: channelMappings } = useGetChannelMappingListQuery()
+  const parkedCount = parkStateList?.length ?? 0
 
   const viewedProject = useViewedProject()
   const isViewingActiveProject = viewedProject?.id === currentProject?.id
@@ -191,7 +202,11 @@ export default function CommandPalette({ onConfigureProject, onApplyFx, toggles 
         )}
         <Search className="size-4 text-muted-foreground shrink-0 mr-2" />
         <Command.Input
-          placeholder={activePage === "apply-fx" ? "Select a fixture or group..." : "Type a command or search..."}
+          placeholder={
+            activePage === "apply-fx" ? "Select a fixture or group..."
+            : activePage === "unpark-channel" ? "Select a channel to unpark..."
+            : "Type a command or search..."
+          }
           value={search}
           onValueChange={setSearch}
           onKeyDown={(e) => {
@@ -290,6 +305,67 @@ export default function CommandPalette({ onConfigureProject, onApplyFx, toggles 
                 <PlusCircle className="size-4 text-muted-foreground" />
                 Create New Project
               </Command.Item>
+              {viewedProject && isViewingActiveProject && parkedCount > 0 && (
+                <>
+                  <Command.Item
+                    value="View Parked Channels"
+                    keywords={["park", "locked", "channels", "override"]}
+                    onSelect={() => {
+                      const firstUniverse = parkStateList?.[0]?.universe ?? 0
+                      runAction(() => navigate(`/projects/${viewedProject.id}/channels/${firstUniverse}?parked=true`))
+                    }}
+                    className={itemClassName}
+                  >
+                    <Lock className="size-4 text-muted-foreground" />
+                    <span className="flex-1">View Parked Channels</span>
+                    <span className="text-xs text-muted-foreground">{parkedCount}</span>
+                  </Command.Item>
+                  <Command.Item
+                    value="Unpark Channel"
+                    keywords={["unpark", "unlock", "release", "channel"]}
+                    onSelect={() => pushPage("unpark-channel")}
+                    className={itemClassName}
+                  >
+                    <LockOpen className="size-4 text-muted-foreground" />
+                    Unpark Channel...
+                  </Command.Item>
+                  <Command.Item
+                    value="Unpark All Channels"
+                    keywords={["unpark", "unlock", "clear", "release"]}
+                    onSelect={() => {
+                      if (confirm(`Unpark all ${parkedCount} channel(s)?`)) {
+                        runAction(() => runUnparkAll())
+                      }
+                    }}
+                    className={itemClassName}
+                  >
+                    <LockOpen className="size-4 text-muted-foreground" />
+                    Unpark All Channels
+                  </Command.Item>
+                </>
+              )}
+              {viewedProject && isViewingActiveProject && onParkChannelAtValue && (
+                <Command.Item
+                  value="Park Channel at Value"
+                  keywords={["park", "lock", "channel", "set", "override"]}
+                  onSelect={() => runAction(onParkChannelAtValue)}
+                  className={itemClassName}
+                >
+                  <Lock className="size-4 text-muted-foreground" />
+                  Park Channel at Value...
+                </Command.Item>
+              )}
+              {viewedProject && isViewingActiveProject && onSetChannelValue && (
+                <Command.Item
+                  value="Set Channel Value"
+                  keywords={["channel", "set", "dmx", "level"]}
+                  onSelect={() => runAction(onSetChannelValue)}
+                  className={itemClassName}
+                >
+                  <SlidersHorizontal className="size-4 text-muted-foreground" />
+                  Set Channel Value...
+                </Command.Item>
+              )}
             </Command.Group>
 
             {/* View Toggles */}
@@ -393,6 +469,36 @@ export default function CommandPalette({ onConfigureProject, onApplyFx, toggles 
             )}
           </>
         )}
+
+        {/* Unpark Channel sub-page: list parked channels */}
+        {activePage === "unpark-channel" && parkStateList && parkStateList.length > 0 && (
+          <Command.Group heading="Parked Channels" className={groupClassName}>
+            {parkStateList.map((parked) => {
+              const mapping = channelMappings?.[parked.universe]?.[parked.channel]
+              const label = mapping
+                ? `${mapping.fixtureName}${mapping.description ? ` · ${mapping.description}` : ""}`
+                : "Unmapped"
+              return (
+                <Command.Item
+                  key={`${parked.universe}:${parked.channel}`}
+                  value={`${parked.universe}-${parked.channel} ${label}`}
+                  keywords={[String(parked.channel), mapping?.fixtureName ?? "", mapping?.description ?? ""]}
+                  onSelect={() => runAction(() => runUnparkChannel({ universe: parked.universe, channelNo: parked.channel }))}
+                  className={itemClassName}
+                >
+                  <LockOpen className="size-4 text-muted-foreground" />
+                  <span className="flex-1 truncate">
+                    <span className="font-mono text-xs">{parked.universe}-{String(parked.channel).padStart(3, "0")}</span>
+                    {" "}
+                    <span className="text-muted-foreground">{label}</span>
+                  </span>
+                  <span className="text-xs text-amber-500 font-mono">{parked.value}</span>
+                </Command.Item>
+              )
+            })}
+          </Command.Group>
+        )}
+
       </Command.List>
 
       <div className="border-t px-3 py-2 text-xs text-muted-foreground flex items-center gap-4">

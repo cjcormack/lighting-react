@@ -1,6 +1,7 @@
 import { memo, useCallback } from 'react'
 import { Slider } from '@/components/ui/slider'
 import { Badge } from '@/components/ui/badge'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import {
   Select,
   SelectContent,
@@ -8,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Lock } from 'lucide-react'
 import type {
   PropertyDescriptor,
   SliderPropertyDescriptor,
@@ -23,8 +25,21 @@ import {
   useUpdateChannel,
 } from '../../hooks/usePropertyValues'
 import { useVirtualDimmer } from '../../hooks/useVirtualDimmer'
+import { usePropertyParkStatus } from '../../hooks/usePropertyParkStatus'
 import { cn } from '@/lib/utils'
 import { ColourPickerPopover } from './ColourPickerPopover'
+
+/** Small amber lock icon shown next to parked property names */
+function ParkedIndicator() {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Lock className="size-3 text-amber-500 shrink-0" />
+      </TooltipTrigger>
+      <TooltipContent>Channel(s) parked — value locked</TooltipContent>
+    </Tooltip>
+  )
+}
 
 interface PropertyVisualizerProps {
   property: PropertyDescriptor
@@ -43,7 +58,9 @@ export const ColourSwatch = memo(function ColourSwatch({
 }) {
   const colour = useColourValue(property)
   const updateChannel = useUpdateChannel()
+  const { isAnyParked } = usePropertyParkStatus(property)
 
+  const canEdit = isEditing && !isAnyParked
   const hasExtendedChannels = property.whiteChannel || property.amberChannel || property.uvChannel
 
   const hasActiveUv = colour.uv !== undefined && colour.uv > 0
@@ -81,9 +98,12 @@ export const ColourSwatch = memo(function ColourSwatch({
   return (
     <div className="py-2">
       <div className="flex items-center gap-3">
-        <span className="text-sm font-medium w-20 shrink-0">{property.displayName}</span>
+        <span className="text-sm font-medium w-20 shrink-0 flex items-center gap-1">
+          {property.displayName}
+          {isAnyParked && <ParkedIndicator />}
+        </span>
         <div className="relative shrink-0">
-          {isEditing ? (
+          {canEdit ? (
             <ColourPickerPopover
               r={colour.r}
               g={colour.g}
@@ -120,7 +140,7 @@ export const ColourSwatch = memo(function ColourSwatch({
         </div>
       </div>
 
-      {isEditing && (
+      {canEdit && (
         <div className="mt-2 space-y-2 pl-[92px]">
           <ColourChannelSlider
             label="R"
@@ -208,9 +228,12 @@ export const PositionIndicator = memo(function PositionIndicator({
 }) {
   const position = usePositionValue(property)
   const updateChannel = useUpdateChannel()
+  const { isAnyParked } = usePropertyParkStatus(property)
+
+  const canEdit = isEditing && !isAnyParked
 
   const handleGridClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isEditing) return
+    if (!canEdit) return
 
     const rect = e.currentTarget.getBoundingClientRect()
     const x = (e.clientX - rect.left) / rect.width
@@ -226,11 +249,14 @@ export const PositionIndicator = memo(function PositionIndicator({
   return (
     <div className="py-2">
       <div className="flex items-center gap-3">
-        <span className="text-sm font-medium w-20 shrink-0">{property.displayName}</span>
+        <span className="text-sm font-medium w-20 shrink-0 flex items-center gap-1">
+          {property.displayName}
+          {isAnyParked && <ParkedIndicator />}
+        </span>
         <div
           className={cn(
             'w-16 h-16 border rounded relative bg-muted',
-            isEditing && 'cursor-crosshair'
+            canEdit && 'cursor-crosshair'
           )}
           onClick={handleGridClick}
         >
@@ -256,7 +282,7 @@ export const PositionIndicator = memo(function PositionIndicator({
         </div>
       </div>
 
-      {isEditing && (
+      {canEdit && (
         <div className="mt-2 space-y-2 pl-[92px]">
           <div className="flex items-center gap-2">
             <span className="w-8 text-xs font-medium">Pan</span>
@@ -300,14 +326,19 @@ export const SliderProperty = memo(function SliderProperty({
 }) {
   const value = useSliderValue(property)
   const updateChannel = useUpdateChannel()
+  const { isAnyParked } = usePropertyParkStatus(property)
 
   const percentage = Math.round(((value - property.min) / (property.max - property.min)) * 100)
+  const canEdit = isEditing && !isAnyParked
 
   return (
     <div className="py-2">
       <div className="flex items-center gap-3">
-        <span className="text-sm font-medium w-20 shrink-0">{property.displayName}</span>
-        {isEditing ? (
+        <span className="text-sm font-medium w-20 shrink-0 flex items-center gap-1">
+          {property.displayName}
+          {isAnyParked && <ParkedIndicator />}
+        </span>
+        {canEdit ? (
           <>
             <Slider
               value={[value]}
@@ -325,11 +356,11 @@ export const SliderProperty = memo(function SliderProperty({
           <>
             <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
               <div
-                className="h-full bg-primary transition-all"
+                className={cn("h-full transition-all", isAnyParked ? "bg-amber-500" : "bg-primary")}
                 style={{ width: `${percentage}%` }}
               />
             </div>
-            <span className="w-[4.5rem] text-xs text-right text-muted-foreground whitespace-nowrap">
+            <span className={cn("w-[4.5rem] text-xs text-right whitespace-nowrap", isAnyParked ? "text-amber-600 dark:text-amber-400 font-medium" : "text-muted-foreground")}>
               {value} ({percentage}%)
             </span>
           </>
@@ -351,6 +382,9 @@ export const SettingProperty = memo(function SettingProperty({
 }) {
   const { option } = useSettingValue(property)
   const updateChannel = useUpdateChannel()
+  const { isAnyParked } = usePropertyParkStatus(property)
+
+  const canEdit = isEditing && !isAnyParked
 
   const handleChange = (value: string) => {
     const selectedOption = property.options.find((o) => o.name === value)
@@ -362,8 +396,11 @@ export const SettingProperty = memo(function SettingProperty({
   return (
     <div className="py-2">
       <div className="flex items-center gap-3">
-        <span className="text-sm font-medium w-20 shrink-0">{property.displayName}</span>
-        {isEditing ? (
+        <span className="text-sm font-medium w-20 shrink-0 flex items-center gap-1">
+          {property.displayName}
+          {isAnyParked && <ParkedIndicator />}
+        </span>
+        {canEdit ? (
           <Select value={option?.name} onValueChange={handleChange}>
             <SelectTrigger className="flex-1 h-8">
               <SelectValue />
@@ -432,12 +469,18 @@ export const VirtualDimmerSlider = memo(function VirtualDimmerSlider({
   nameExtra?: React.ReactNode
 }) {
   const { value, percentage, setValue } = useVirtualDimmer(colourProp)
+  const { isAnyParked } = usePropertyParkStatus(colourProp)
+
+  const canEdit = isEditing && !isAnyParked
 
   return (
     <div className="py-2">
       <div className="flex items-center gap-3">
-        <span className="text-sm font-medium w-20 shrink-0">Dimmer{nameExtra}</span>
-        {isEditing ? (
+        <span className="text-sm font-medium w-20 shrink-0 flex items-center gap-1">
+          Dimmer{nameExtra}
+          {isAnyParked && <ParkedIndicator />}
+        </span>
+        {canEdit ? (
           <>
             <Slider
               value={[value]}
@@ -455,11 +498,11 @@ export const VirtualDimmerSlider = memo(function VirtualDimmerSlider({
           <>
             <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
               <div
-                className="h-full bg-primary transition-all"
+                className={cn("h-full transition-all", isAnyParked ? "bg-amber-500" : "bg-primary")}
                 style={{ width: `${percentage}%` }}
               />
             </div>
-            <span className="w-[4.5rem] text-xs text-right text-muted-foreground whitespace-nowrap">
+            <span className={cn("w-[4.5rem] text-xs text-right whitespace-nowrap", isAnyParked ? "text-amber-600 dark:text-amber-400 font-medium" : "text-muted-foreground")}>
               {value} ({percentage}%)
             </span>
           </>

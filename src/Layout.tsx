@@ -27,6 +27,7 @@ import { useCueSlotOverview } from "./hooks/useCueSlotOverview"
 import EditProjectDialog from "./EditProjectDialog"
 import CommandPalette from "./components/CommandPalette"
 import { AddEditFxSheet, type FxTarget } from "./components/fx/AddEditFxSheet"
+import { ChannelValueDialog } from "./components/ChannelValueDialog"
 
 const DRAWER_WIDTH = 240
 const DRAWER_COLLAPSED_WIDTH = 64
@@ -38,6 +39,7 @@ export default function Layout() {
   const [isAiChatVisible, setIsAiChatVisible] = useState(false)
   const [editProjectId, setEditProjectId] = useState<number | null>(null)
   const [applyFxTarget, setApplyFxTarget] = useState<FxTarget | null>(null)
+  const [channelDialogMode, setChannelDialogMode] = useState<"park" | "set" | null>(null)
   const { isVisible: isOverviewVisible, toggle: toggleOverview } = useFixtureOverview()
   const { isVisible: isEffectsVisible, isLocked: isEffectsLocked, toggle: toggleEffects, lock: lockEffects, unlock: unlockEffects } = useEffectsOverview()
   const { isVisible: isCueSlotsVisible, toggle: toggleCueSlots } = useCueSlotOverview()
@@ -228,12 +230,21 @@ export default function Layout() {
         <CommandPalette
           onConfigureProject={viewedProject ? () => setEditProjectId(viewedProject.id) : undefined}
           onApplyFx={setApplyFxTarget}
+          onParkChannelAtValue={() => setChannelDialogMode("park")}
+          onSetChannelValue={() => setChannelDialogMode("set")}
           toggles={[
             { label: "Fixture Overview", icon: LayoutGrid, isVisible: isOverviewVisible, onToggle: toggleOverview },
             { label: "Cue Slots", icon: Grid3X3, isVisible: isCueSlotsVisible, onToggle: toggleCueSlots },
             { label: "Effects Overview", icon: AudioWaveform, isVisible: isEffectsVisible, onToggle: toggleEffects },
             { label: "Lux (AI Chat)", icon: Sparkles, isVisible: isAiChatVisible, onToggle: () => setIsAiChatVisible(v => !v) },
           ]}
+        />
+
+        {/* Channel Value Dialog (Park / Set) */}
+        <ChannelValueDialog
+          open={channelDialogMode !== null}
+          onOpenChange={(open) => { if (!open) setChannelDialogMode(null) }}
+          mode={channelDialogMode ?? "set"}
         />
 
         {/* Edit Project Dialog (shared - triggered by sidebar footer or command palette) */}

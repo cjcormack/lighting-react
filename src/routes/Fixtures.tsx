@@ -9,6 +9,7 @@ import { Search, Loader2, Settings2, SlidersHorizontal } from "lucide-react"
 import { Fixture, useFixtureListQuery } from "../store/fixtures"
 import { EditModeProvider, useEditMode } from "../components/fixtures/EditModeContext"
 import { FxBadge } from "../components/fx/FxBadge"
+import { FixtureParkButton } from "../components/fixtures/FixtureParkButton"
 import { Breadcrumbs } from "../components/Breadcrumbs"
 import { FixtureContent, FixtureViewMode } from "../components/fixtures/FixtureContent"
 import { GroupDetailModal } from "../components/fixtures/GroupDetailModal"
@@ -229,14 +230,16 @@ function FixtureCardHeader({ fixture }: { fixture: Fixture }) {
             </p>
           )}
         </div>
-        <Button
-          variant={isEditing ? "default" : "outline"}
-          size="sm"
-          onClick={toggleEditing}
-          className="shrink-0"
-        >
-          {isEditing ? "Done" : "Edit"}
-        </Button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <FixtureParkButton fixture={fixture} />
+          <Button
+            variant={isEditing ? "default" : "outline"}
+            size="sm"
+            onClick={toggleEditing}
+          >
+            {isEditing ? "Done" : "Edit"}
+          </Button>
+        </div>
       </div>
       <div className="flex flex-wrap gap-1 mt-1">
         {hasElements && (

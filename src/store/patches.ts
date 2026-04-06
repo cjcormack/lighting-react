@@ -59,6 +59,16 @@ export const patchesApi = restApi.injectEndpoints({
       providesTags: ['UniverseConfig'],
     }),
 
+    // Update a universe config (address, controller type)
+    updateUniverseConfig: build.mutation<UniverseConfig, { projectId: number; configId: number; address?: string; controllerType?: string }>({
+      query: ({ projectId, configId, ...body }) => ({
+        url: `project/${projectId}/universe-configs/${configId}`,
+        method: 'PUT',
+        body,
+      }),
+      invalidatesTags: ['UniverseConfig', 'Fixture'],
+    }),
+
     // List patch groups for a project
     patchGroupList: build.query<PatchGroup[], number>({
       query: (projectId) => `project/${projectId}/patch-groups`,
@@ -99,6 +109,7 @@ export const {
   useUpdatePatchMutation,
   useDeletePatchMutation,
   useUniverseConfigListQuery,
+  useUpdateUniverseConfigMutation,
   usePatchGroupListQuery,
   usePatchGroupDetailQuery,
   useUpdatePatchGroupMutation,

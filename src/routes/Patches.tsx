@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/table"
 import { Loader2, Plus, Pencil, Check } from "lucide-react"
 import { useCurrentProjectQuery, useProjectQuery } from "../store/projects"
-import { usePatchListQuery, useUniverseConfigListQuery, usePatchGroupListQuery } from "../store/patches"
+import { usePatchListQuery, useUniverseConfigListQuery, useUpdateUniverseConfigMutation, usePatchGroupListQuery } from "../store/patches"
 import { useFixtureListQuery, type Fixture } from "../store/fixtures"
 import { Breadcrumbs } from "@/components/Breadcrumbs"
 import { AddFixtureSheet } from "@/components/patches/AddFixtureSheet"
@@ -139,7 +139,7 @@ function PatchListContent({
               <div className="flex flex-wrap gap-2 items-center">
                 <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Universes</span>
                 {universeConfigs.map((config) => (
-                  <UniverseChip key={config.id} config={config} />
+                  <UniverseChip key={config.id} config={config} projectId={projectId} />
                 ))}
               </div>
             )}
@@ -212,9 +212,24 @@ function PatchListContent({
 
 // ─── Universe chips ───────────────────────────────────────────────────
 
-function UniverseChip({ config }: { config: UniverseConfig }) {
+function UniverseChip({ config, projectId }: { config: UniverseConfig; projectId: number }) {
   const [editing, setEditing] = useState(false)
   const [address, setAddress] = useState(config.address ?? '')
+  const [runUpdateConfig] = useUpdateUniverseConfigMutation()
+
+  // Sync local state when config changes from server
+  useEffect(() => {
+    setAddress(config.address ?? '')
+  }, [config.address])
+
+  const handleSave = () => {
+    runUpdateConfig({
+      projectId,
+      configId: config.id,
+      address: address,
+    })
+    setEditing(false)
+  }
 
   return (
     <Popover open={editing} onOpenChange={setEditing}>
@@ -236,11 +251,12 @@ function UniverseChip({ config }: { config: UniverseConfig }) {
             <Input
               value={address}
               onChange={(e) => setAddress(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSave() }}
               placeholder="e.g. 192.168.1.100"
               className="text-xs h-8"
               autoFocus
             />
-            <Button size="sm" className="h-8 px-2" onClick={() => setEditing(false)}>
+            <Button size="sm" className="h-8 px-2" onClick={handleSave}>
               <Check className="size-3.5" />
             </Button>
           </div>
