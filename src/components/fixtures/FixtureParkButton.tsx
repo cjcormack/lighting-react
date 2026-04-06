@@ -5,7 +5,7 @@ import { Lock, LockOpen } from "lucide-react"
 import type { Fixture } from "@/store/fixtures"
 import { useFixturePark } from "@/hooks/useFixturePark"
 
-export function FixtureParkButton({ fixture }: { fixture: Fixture }) {
+export function FixtureParkButton({ fixture, iconOnly = false }: { fixture: Fixture; iconOnly?: boolean }) {
   const { parkedCount, totalChannels, isPartiallyParked, isAnyParked, parkFixture, unparkFixture } =
     useFixturePark(fixture)
 
@@ -14,22 +14,16 @@ export function FixtureParkButton({ fixture }: { fixture: Fixture }) {
       <TooltipTrigger asChild>
         <Button
           variant={isAnyParked ? "default" : "outline"}
-          size="sm"
-          className={isAnyParked ? "bg-amber-500 hover:bg-amber-600 text-white" : ""}
+          size={iconOnly ? "icon" : "sm"}
+          className={[
+            isAnyParked ? "bg-amber-500 hover:bg-amber-600 text-white" : "",
+            iconOnly ? "size-8" : "",
+          ].filter(Boolean).join(" ")}
           onClick={isAnyParked ? unparkFixture : parkFixture}
         >
-          {isAnyParked ? (
-            <>
-              <LockOpen className="size-3.5 mr-1" />
-              Unpark
-            </>
-          ) : (
-            <>
-              <Lock className="size-3.5 mr-1" />
-              Park
-            </>
-          )}
-          {isPartiallyParked && (
+          {isAnyParked ? <LockOpen className="size-3.5" /> : <Lock className="size-3.5" />}
+          {!iconOnly && (isAnyParked ? " Unpark" : " Park")}
+          {!iconOnly && isPartiallyParked && (
             <Badge variant="secondary" className="ml-1 px-1 py-0 text-[10px]">
               {parkedCount}/{totalChannels}
             </Badge>

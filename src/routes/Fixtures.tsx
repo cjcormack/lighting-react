@@ -1,11 +1,12 @@
 import { Suspense, useState, useMemo, useEffect, createContext, useContext } from "react"
 import { useParams, useNavigate, Navigate } from "react-router-dom"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardAction } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { Search, Loader2, Settings2, SlidersHorizontal } from "lucide-react"
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
+import { Search, Loader2, Settings2, SlidersHorizontal, Pencil, Check } from "lucide-react"
 import { Fixture, useFixtureListQuery } from "../store/fixtures"
 import { EditModeProvider, useEditMode } from "../components/fixtures/EditModeContext"
 import { FxBadge } from "../components/fx/FxBadge"
@@ -168,7 +169,7 @@ function AllFixturesView({
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(min(340px,100%),1fr))] gap-4">
       {filteredFixtures.map((fixture) => (
         <FixtureCard fixture={fixture} key={fixture.key} />
       ))}
@@ -221,27 +222,29 @@ function FixtureCardHeader({ fixture }: { fixture: Fixture }) {
 
   return (
     <CardHeader className="pb-2">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <CardTitle className="text-lg truncate">{fixture.name}</CardTitle>
-          {(fixture.manufacturer || fixture.model) && (
-            <p className="text-xs text-muted-foreground truncate">
-              {[fixture.manufacturer, fixture.model].filter(Boolean).join(" ")}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <FixtureParkButton fixture={fixture} />
-          <Button
-            variant={isEditing ? "default" : "outline"}
-            size="sm"
-            onClick={toggleEditing}
-          >
-            {isEditing ? "Done" : "Edit"}
-          </Button>
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-1 mt-1">
+      <CardTitle className="text-lg truncate">{fixture.name}</CardTitle>
+      {(fixture.manufacturer || fixture.model) && (
+        <p className="text-xs text-muted-foreground truncate">
+          {[fixture.manufacturer, fixture.model].filter(Boolean).join(" ")}
+        </p>
+      )}
+      <CardAction className="flex items-center gap-1">
+        <FixtureParkButton fixture={fixture} iconOnly />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant={isEditing ? "default" : "outline"}
+              size="icon"
+              className="size-8"
+              onClick={toggleEditing}
+            >
+              {isEditing ? <Check className="size-3.5" /> : <Pencil className="size-3.5" />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{isEditing ? "Done editing" : "Edit"}</TooltipContent>
+        </Tooltip>
+      </CardAction>
+      <div className="flex flex-wrap gap-1">
         {hasElements && (
           <Badge variant="secondary" className="text-xs">
             {fixture.elements!.length} heads
