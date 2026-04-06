@@ -19,9 +19,11 @@ import {
   AudioWaveform,
   Bookmark,
   Clapperboard,
+  TableProperties,
 } from "lucide-react"
 import { useProjectQuery, useCurrentProjectQuery } from "../store/projects"
 import { useFixtureListQuery } from "../store/fixtures"
+import { usePatchListQuery } from "../store/patches"
 import { useProjectPresetListQuery } from "../store/fxPresets"
 import { useGroupListQuery } from "../store/groups"
 import { useGetUniverseQuery } from "../store/universes"
@@ -50,6 +52,9 @@ export default function ProjectOverview() {
   })
   const { data: presets } = useProjectPresetListQuery(Number(projectId), {
     skip: !project?.isCurrent,
+  })
+  const { data: patches } = usePatchListQuery(Number(projectId), {
+    skip: !project || project.mode !== 'DB_BASED',
   })
 
   if (!projectId) {
@@ -104,6 +109,13 @@ export default function ProjectOverview() {
 
         {/* Quick Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <QuickNavCard
+            title="Patch List"
+            count={project.mode === 'DB_BASED' ? patches?.length : fixtures?.length}
+            icon={<TableProperties className="size-5" />}
+            description={project.mode === 'DB_BASED' ? 'Manage fixture patching' : 'View fixture patching'}
+            onClick={() => navigate(`/projects/${project.id}/patches`)}
+          />
           <QuickNavCard
             title="Scripts"
             count={project.scriptCount}
@@ -183,13 +195,23 @@ export default function ProjectOverview() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <ConfigItem
-              icon={<Layers className="size-4" />}
-              label="Load Fixtures Script"
-              value={project.loadFixturesScriptName}
-              description="Script that runs at startup to define fixtures"
-              onClick={project.loadFixturesScriptId ? () => navigate(`/projects/${project.id}/scripts/${project.loadFixturesScriptId}`) : undefined}
-            />
+            {project.mode === 'DB_BASED' ? (
+              <ConfigItem
+                icon={<TableProperties className="size-4" />}
+                label="Fixture Configuration"
+                value="DB-Based"
+                description="Fixtures configured via the Patch List"
+                onClick={() => navigate(`/projects/${project.id}/patches`)}
+              />
+            ) : (
+              <ConfigItem
+                icon={<Layers className="size-4" />}
+                label="Load Fixtures Script"
+                value={project.loadFixturesScriptName}
+                description="Script that runs at startup to define fixtures"
+                onClick={project.loadFixturesScriptId ? () => navigate(`/projects/${project.id}/scripts/${project.loadFixturesScriptId}`) : undefined}
+              />
+            )}
             <ConfigItem
               icon={<Play className="size-4" />}
               label="Initial Scene"
