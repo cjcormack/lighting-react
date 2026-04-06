@@ -99,7 +99,13 @@ REST API is used for CRUD operations on scripts, scenes, fixtures, etc.
 ### Components
 - Route components in `src/routes/`
 - Shared/utility components in `src/`
-- Use MUI components consistently for UI
+- Use Radix UI primitives (via `src/components/ui/`) and Tailwind for UI
+
+### Navigation Registry
+- All navigation items are defined in `src/navigation.ts`
+- When adding a new page/route, add an entry to the `navItems` array in `src/navigation.ts`
+- This automatically registers the page in both the sidebar and the Cmd+K command palette
+- Dynamic items (e.g. universes) are handled by the `useNavItems()` hook
 
 ### TypeScript
 - Strict mode enabled

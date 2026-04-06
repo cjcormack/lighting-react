@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react"
 import { Outlet, useLocation } from "react-router-dom"
-import { ChevronLeft, Menu } from "lucide-react"
+import { ChevronLeft, Menu, Settings, LayoutGrid, Grid3X3, AudioWaveform, Sparkles } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -10,7 +10,7 @@ import { useMediaQuery } from "@/hooks/useMediaQuery"
 
 import TrackStatus from "./TrackStatus"
 import { ConnectionStatus } from "./connection"
-import ProjectSwitcher from "./ProjectSwitcher"
+import ProjectSwitcher, { useViewedProject, NavItem } from "./ProjectSwitcher"
 import ThemeToggle from "./ThemeToggle"
 import { FixtureOverviewToggle } from "./components/FixtureOverviewToggle"
 import { FixtureOverviewPanel } from "./components/FixtureOverviewPanel"
@@ -24,6 +24,8 @@ import { AiChatPanel } from "./components/ai/AiChatPanel"
 import { CueSlotOverviewToggle } from "./components/CueSlotOverviewToggle"
 import { CueSlotOverviewPanel, CueSlotDndProvider } from "./components/CueSlotOverviewPanel"
 import { useCueSlotOverview } from "./hooks/useCueSlotOverview"
+import EditProjectDialog from "./EditProjectDialog"
+import CommandPalette from "./components/CommandPalette"
 
 const DRAWER_WIDTH = 240
 const DRAWER_COLLAPSED_WIDTH = 64
@@ -33,12 +35,14 @@ export default function Layout() {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [selectedFixture, setSelectedFixture] = useState<string | null>(null)
   const [isAiChatVisible, setIsAiChatVisible] = useState(false)
+  const [editProjectId, setEditProjectId] = useState<number | null>(null)
   const { isVisible: isOverviewVisible, toggle: toggleOverview } = useFixtureOverview()
   const { isVisible: isEffectsVisible, isLocked: isEffectsLocked, toggle: toggleEffects, lock: lockEffects, unlock: unlockEffects } = useEffectsOverview()
   const { isVisible: isCueSlotsVisible, toggle: toggleCueSlots } = useCueSlotOverview()
   const location = useLocation()
   const isFxRoute = /\/projects\/\d+\/fx/.test(location.pathname)
   const isDesktop = useMediaQuery('(min-width: 768px)')
+  const viewedProject = useViewedProject()
 
   // Auto-show & lock effects overview when on the FX busking route
   useEffect(() => {
@@ -62,15 +66,31 @@ export default function Layout() {
 
   // Sidebar content (shared between desktop and mobile)
   const renderSidebarContent = (collapsed: boolean) => (
-    <div className="flex-1 overflow-y-auto py-2">
-      <div className="px-2">
-        <TrackStatus collapsed={collapsed} />
+    <>
+      <div className="flex-1 overflow-y-auto py-2">
+        <div className="px-2">
+          <TrackStatus collapsed={collapsed} />
+        </div>
+
+        <Separator className="my-2" />
+
+        <ProjectSwitcher collapsed={collapsed} />
       </div>
 
-      <Separator className="my-2" />
-
-      <ProjectSwitcher collapsed={collapsed} />
-    </div>
+      {/* Configure footer - outside scroll area so it's always visible */}
+      {viewedProject && (
+        <div className="border-t px-2 py-2">
+          <NavItem
+            icon={<Settings className={collapsed ? "size-5" : "size-4"} />}
+            label="Configure Project"
+            isActive={false}
+            collapsed={collapsed}
+            onClick={() => setEditProjectId(viewedProject.id)}
+            muted
+          />
+        </div>
+      )}
+    </>
   )
 
   return (
@@ -201,6 +221,26 @@ export default function Layout() {
           isOpen={isAiChatVisible}
           onClose={() => setIsAiChatVisible(false)}
         />
+
+        {/* Command Palette */}
+        <CommandPalette
+          onConfigureProject={viewedProject ? () => setEditProjectId(viewedProject.id) : undefined}
+          toggles={[
+            { label: "Fixture Overview", icon: LayoutGrid, isVisible: isOverviewVisible, onToggle: toggleOverview },
+            { label: "Cue Slots", icon: Grid3X3, isVisible: isCueSlotsVisible, onToggle: toggleCueSlots },
+            { label: "Effects Overview", icon: AudioWaveform, isVisible: isEffectsVisible, onToggle: toggleEffects },
+            { label: "Lux (AI Chat)", icon: Sparkles, isVisible: isAiChatVisible, onToggle: () => setIsAiChatVisible(v => !v) },
+          ]}
+        />
+
+        {/* Edit Project Dialog (shared - triggered by sidebar footer or command palette) */}
+        {editProjectId !== null && (
+          <EditProjectDialog
+            open={true}
+            setOpen={(o) => !o && setEditProjectId(null)}
+            projectId={editProjectId}
+          />
+        )}
       </div>
     </TooltipProvider>
   )

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { useParams, useNavigate } from "react-router-dom"
+import { useParams, useNavigate, useSearchParams } from "react-router-dom"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -78,9 +78,18 @@ function PatchListContent({
   isDbBased: boolean
   isCurrent: boolean
 }) {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [addFixtureOpen, setAddFixtureOpen] = useState(false)
   const [editingPatchId, setEditingPatchId] = useState<number | null>(null)
   const [editingGroup, setEditingGroup] = useState<{ id: number; name: string } | null>(null)
+
+  // Open add-fixture sheet when navigated with ?action=new (e.g. from command palette)
+  useEffect(() => {
+    if (searchParams.get("action") === "new" && isDbBased) {
+      setAddFixtureOpen(true)
+      setSearchParams({}, { replace: true })
+    }
+  }, [searchParams, isDbBased, setSearchParams])
 
   const { data: patches, isLoading: patchesLoading } = usePatchListQuery(projectId, { skip: !isDbBased })
   const { data: fixtureList } = useFixtureListQuery(undefined, { skip: isDbBased || !isCurrent })

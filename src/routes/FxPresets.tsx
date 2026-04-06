@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -79,6 +79,7 @@ export function ProjectFxPresets() {
   const [savePreset, { isLoading: isSaving }] = useSaveProjectPresetMutation()
   const [deletePreset] = useDeleteProjectPresetMutation()
 
+  const [searchParams, setSearchParams] = useSearchParams()
   const [formOpen, setFormOpen] = useState(false)
   const [editingPreset, setEditingPreset] = useState<FxPreset | null>(null)
   const [initialEditEffectIndex, setInitialEditEffectIndex] = useState<number | null>(null)
@@ -93,6 +94,16 @@ export function ProjectFxPresets() {
   const [expandedPresetIds, setExpandedPresetIds] = useState<Set<number>>(new Set())
 
   const isCurrentProject = currentProject?.id === projectIdNum
+
+  // Open create form when navigated with ?action=new (e.g. from command palette)
+  useEffect(() => {
+    if (searchParams.get("action") === "new" && isCurrentProject) {
+      setEditingPreset(null)
+      setInitialEditEffectIndex(null)
+      setFormOpen(true)
+      setSearchParams({}, { replace: true })
+    }
+  }, [searchParams, isCurrentProject, setSearchParams])
 
   // Build hierarchy for label resolution
   const hierarchy = useMemo<FixtureTypeHierarchy | null>(() => {

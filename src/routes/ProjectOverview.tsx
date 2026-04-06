@@ -21,6 +21,7 @@ import {
   Clapperboard,
   TableProperties,
 } from "lucide-react"
+import { Breadcrumbs } from "@/components/Breadcrumbs"
 import { useProjectQuery, useCurrentProjectQuery } from "../store/projects"
 import { useFixtureListQuery } from "../store/fixtures"
 import { usePatchListQuery } from "../store/patches"
@@ -88,6 +89,9 @@ export default function ProjectOverview() {
         projectId={project.id}
       />
       <div className="p-4 space-y-6">
+        {/* Breadcrumbs */}
+        <Breadcrumbs projectName={project.name} isActive={project.isCurrent} />
+
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>

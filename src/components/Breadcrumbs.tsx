@@ -4,7 +4,9 @@ import { Badge } from '@/components/ui/badge'
 
 interface BreadcrumbsProps {
   projectName: string
-  currentPage: string
+  isActive?: boolean
+  /** Current page name (e.g. "Fixtures", "Scripts"). Omit for project overview. */
+  currentPage?: string
   /** Optional trailing segments shown after the current page (e.g. selected fixture/group names) */
   extra?: string[]
   /** Called when the currentPage segment is clicked (only active when extra segments are shown) */
@@ -13,7 +15,7 @@ interface BreadcrumbsProps {
   onExtraClick?: () => void
 }
 
-export function Breadcrumbs({ projectName, currentPage, extra, onCurrentPageClick, onExtraClick }: BreadcrumbsProps) {
+export function Breadcrumbs({ projectName, isActive = true, currentPage, extra, onCurrentPageClick, onExtraClick }: BreadcrumbsProps) {
   const navigate = useNavigate()
   const { projectId } = useParams()
 
@@ -26,45 +28,60 @@ export function Breadcrumbs({ projectName, currentPage, extra, onCurrentPageClic
         Projects
       </button>
       <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" />
-      <button
-        onClick={() => navigate(`/projects/${projectId}`)}
-        className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
-      >
-        {projectName}
-        <Badge variant="default" className="text-xs">
-          active
-        </Badge>
-      </button>
-      <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" />
-      {extra && extra.length > 0 ? (
+
+      {/* Project name - final segment if no currentPage */}
+      {!currentPage ? (
+        <span className="font-medium flex items-center gap-2">
+          {projectName}
+          <Badge variant={isActive ? "default" : "outline"} className="text-xs">
+            {isActive ? "active" : "inactive"}
+          </Badge>
+        </span>
+      ) : (
         <>
           <button
-            onClick={onCurrentPageClick}
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            onClick={() => navigate(`/projects/${projectId}`)}
+            className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
           >
-            {currentPage}
+            {projectName}
+            <Badge variant={isActive ? "default" : "outline"} className="text-xs">
+              {isActive ? "active" : "inactive"}
+            </Badge>
           </button>
           <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" />
-          {onExtraClick ? (
+
+          {/* Current page + optional extra segments */}
+          {extra && extra.length > 0 ? (
+            <>
+              <button
+                onClick={onCurrentPageClick}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {currentPage}
+              </button>
+              <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" />
+              {onExtraClick ? (
+                <button
+                  onClick={onExtraClick}
+                  className="font-medium truncate max-w-[300px] hover:text-muted-foreground transition-colors"
+                >
+                  {extra.join(', ')}
+                </button>
+              ) : (
+                <span className="font-medium truncate max-w-[300px]">{extra.join(', ')}</span>
+              )}
+            </>
+          ) : onCurrentPageClick ? (
             <button
-              onClick={onExtraClick}
-              className="font-medium truncate max-w-[300px] hover:text-muted-foreground transition-colors"
+              onClick={onCurrentPageClick}
+              className="font-medium hover:text-muted-foreground transition-colors"
             >
-              {extra.join(', ')}
+              {currentPage}
             </button>
           ) : (
-            <span className="font-medium truncate max-w-[300px]">{extra.join(', ')}</span>
+            <span className="font-medium">{currentPage}</span>
           )}
         </>
-      ) : onCurrentPageClick ? (
-        <button
-          onClick={onCurrentPageClick}
-          className="font-medium hover:text-muted-foreground transition-colors"
-        >
-          {currentPage}
-        </button>
-      ) : (
-        <span className="font-medium">{currentPage}</span>
       )}
     </nav>
   )

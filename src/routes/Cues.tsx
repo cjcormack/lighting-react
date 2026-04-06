@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react'
-import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -203,6 +203,8 @@ export function ProjectCues() {
     [navigate, projectId],
   )
 
+  const [searchParams, setSearchParams] = useSearchParams()
+
   // UI state
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
@@ -226,6 +228,16 @@ export function ProjectCues() {
   const [movingCue, setMovingCue] = useState<Cue | null>(null)
 
   const isCurrentProject = currentProject?.id === projectIdNum
+
+  // Open create form when navigated with ?action=new (e.g. from command palette)
+  useEffect(() => {
+    if (searchParams.get("action") === "new" && isCurrentProject) {
+      setEditingCue(null)
+      setInitialState(undefined)
+      setFormOpen(true)
+      setSearchParams({}, { replace: true })
+    }
+  }, [searchParams, isCurrentProject, setSearchParams])
 
   // Derived data
   const standaloneCueCount = useMemo(
