@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { Loader2 } from 'lucide-react'
 import { CompactFixtureCard, MultiElementCompactCard } from './CompactFixtureCard'
+import { useFixtureListQuery, type Fixture } from '../../store/fixtures'
 import type { GroupMember } from '../../api/groupsApi'
 
 interface GroupMembersSectionProps {
@@ -14,6 +15,15 @@ export function GroupMembersSection({
   isLoading,
   onFixtureClick,
 }: GroupMembersSectionProps) {
+  const { data: fixtureList } = useFixtureListQuery()
+
+  // Build a key→fixture lookup (single subscription shared across all member cards)
+  const fixtureMap = useMemo(() => {
+    const map = new Map<string, Fixture>()
+    fixtureList?.forEach((f) => map.set(f.key, f))
+    return map
+  }, [fixtureList])
+
   // Group elements by their parent fixture
   const { regularFixtures, multiElementFixtures } = useMemo(() => {
     if (!members) {
@@ -74,6 +84,7 @@ export function GroupMembersSection({
             fixtureKey={member.fixtureKey}
             fixtureName={member.fixtureName}
             tags={member.tags}
+            fixture={fixtureMap.get(member.fixtureKey)}
             onClick={() => onFixtureClick(member.fixtureKey)}
           />
         ))}
@@ -84,6 +95,7 @@ export function GroupMembersSection({
             key={parentKey}
             parentKey={parentKey}
             elementCount={elements.length}
+            fixture={fixtureMap.get(parentKey)}
             onClick={() => onFixtureClick(parentKey)}
           />
         ))}

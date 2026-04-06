@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react"
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { Card } from "@/components/ui/card"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
@@ -10,14 +10,12 @@ import {
   ContextMenuTrigger,
   ContextMenuContent,
   ContextMenuItem,
-  ContextMenuSeparator,
 } from "@/components/ui/context-menu"
 import { useParams, useNavigate, useSearchParams, Navigate } from "react-router-dom"
 import { ChevronRight, Loader2, Lock, LockOpen } from "lucide-react"
 import { useGetChannelQuery, useUpdateChannelMutation } from "../store/channels"
-import { useGetChannelMappingQuery } from "../store/channelMapping"
+import { useGetChannelMappingListQuery, type ChannelMappingEntry } from "../store/channelMapping"
 import {
-  useGetChannelParkStateQuery,
   useGetParkStateListQuery,
   useParkChannelMutation,
   useUnparkChannelMutation,
@@ -25,29 +23,29 @@ import {
 import { useCurrentProjectQuery, useProjectQuery } from "../store/projects"
 import { EditModeProvider, useEditMode } from "@/components/fixtures/EditModeContext"
 import { FixtureDetailModal } from "@/components/groups/FixtureDetailModal"
+import { useVirtualizer } from "@tanstack/react-virtual"
 
-export const ChannelSlider = ({
+// Pre-computed static channel groups: 64 groups of 8 channels each
+const CHANNEL_GROUPS: number[][] = Array.from({ length: 64 }, (_, g) =>
+  Array.from({ length: 8 }, (_, i) => g * 8 + i + 1),
+)
+
+export const ChannelSlider = React.memo(({
   universe,
   id,
   isEditing,
+  mapping,
+  parkedValue,
   onFixtureClick,
 }: {
   universe: number
   id: number
   isEditing: boolean
+  mapping?: ChannelMappingEntry
+  parkedValue?: number
   onFixtureClick?: (fixtureKey: string) => void
 }) => {
   const { data: maybeValue } = useGetChannelQuery({
-    universe: universe,
-    channelNo: id,
-  })
-
-  const { data: mapping } = useGetChannelMappingQuery({
-    universe: universe,
-    channelNo: id,
-  })
-
-  const { data: parkedValue } = useGetChannelParkStateQuery({
     universe: universe,
     channelNo: id,
   })
@@ -61,37 +59,22 @@ export const ChannelSlider = ({
   const [runParkChannel] = useParkChannelMutation()
   const [runUnparkChannel] = useUnparkChannelMutation()
 
-  const setValue = (value: number) => {
-    runUpdateChannelMutation({
-      universe: universe,
-      channelNo: id,
-      value: value,
-    })
-  }
-
-  const handleSliderChange = (values: number[]) => {
+  const handleSliderChange = useCallback((values: number[]) => {
     if (values[0] !== undefined) {
-      setValue(values[0])
+      runUpdateChannelMutation({ universe, channelNo: id, value: values[0] })
     }
-  }
+  }, [runUpdateChannelMutation, universe, id])
 
-  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.value === "") {
-      setValue(0)
+      runUpdateChannelMutation({ universe, channelNo: id, value: 0 })
       return
     }
-
     const valueNumber = Number(event.target.value)
-    if (isNaN(valueNumber)) {
-      return
-    } else if (valueNumber < 0) {
-      setValue(0)
-    } else if (valueNumber > 255) {
-      setValue(255)
-    } else {
-      setValue(valueNumber)
-    }
-  }
+    if (isNaN(valueNumber)) return
+    const clamped = Math.max(0, Math.min(255, valueNumber))
+    runUpdateChannelMutation({ universe, channelNo: id, value: clamped })
+  }, [runUpdateChannelMutation, universe, id])
 
   const handleParkToggle = useCallback(() => {
     if (isParked) {
@@ -235,7 +218,7 @@ export const ChannelSlider = ({
       </ContextMenuContent>
     </ContextMenu>
   )
-}
+})
 
 // Redirect component for /channels (no universe) - redirects to /channels/0
 export function ChannelsBaseRedirect() {
@@ -301,19 +284,57 @@ export function ProjectChannels() {
   )
 }
 
+/** Hook to track the number of grid columns via ResizeObserver */
+function useGridColumns(ref: React.RefObject<HTMLDivElement | null>) {
+  const [columns, setColumns] = useState(1)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? 0
+      // Match Tailwind breakpoints: xl:4, lg:3, md:2, default:1
+      // These are container widths, not viewport — the grid is inside a Card with padding
+      if (width >= 1100) setColumns(4)
+      else if (width >= 800) setColumns(3)
+      else if (width >= 500) setColumns(2)
+      else setColumns(1)
+    })
+
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [ref])
+
+  return columns
+}
+
 function ProjectChannelsContent({ projectName, universe }: { projectName: string; universe: number }) {
   const { isEditing, toggleEditing } = useEditMode()
   const [selectedFixtureKey, setSelectedFixtureKey] = useState<string | null>(null)
   const [searchParams] = useSearchParams()
   const [showParkedOnly, setShowParkedOnly] = useState(searchParams.get("parked") === "true")
 
+  // Lifted queries — single subscription for all mappings and park states
   const { data: parkStateList } = useGetParkStateListQuery()
+  const { data: mappingRecord } = useGetChannelMappingListQuery()
   const [runUnparkChannel] = useUnparkChannelMutation()
 
-  const parkedCount = parkStateList?.filter((p) => p.universe === universe).length ?? 0
-  const parkedChannelSet = new Set(
-    parkStateList?.filter((p) => p.universe === universe).map((p) => p.channel) ?? []
+  const parkedChannelSet = useMemo(
+    () => new Set(parkStateList?.filter((p) => p.universe === universe).map((p) => p.channel) ?? []),
+    [parkStateList, universe],
   )
+  const parkedCount = parkedChannelSet.size
+
+  // Build per-channel park value lookup for this universe
+  const parkValueMap = useMemo(() => {
+    const map = new Map<number, number>()
+    parkStateList?.filter((p) => p.universe === universe).forEach((p) => map.set(p.channel, p.value))
+    return map
+  }, [parkStateList, universe])
+
+  // Channel mappings for this universe
+  const universeMappings = mappingRecord?.[universe]
 
   return (
     <>
@@ -365,14 +386,14 @@ function ProjectChannelsContent({ projectName, universe }: { projectName: string
             </Button>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          <ChannelGroups
-            universe={universe}
-            isEditing={isEditing}
-            onFixtureClick={setSelectedFixtureKey}
-            filterParked={showParkedOnly ? parkedChannelSet : undefined}
-          />
-        </div>
+        <ChannelGroups
+          universe={universe}
+          isEditing={isEditing}
+          onFixtureClick={setSelectedFixtureKey}
+          filterParked={showParkedOnly ? parkedChannelSet : undefined}
+          universeMappings={universeMappings}
+          parkValueMap={parkValueMap}
+        />
       </Card>
       <FixtureDetailModal
         fixtureKey={selectedFixtureKey}
@@ -416,45 +437,100 @@ const ChannelGroups = ({
   isEditing,
   onFixtureClick,
   filterParked,
+  universeMappings,
+  parkValueMap,
 }: {
   universe: number
   isEditing: boolean
   onFixtureClick?: (fixtureKey: string) => void
   filterParked?: Set<number>
+  universeMappings?: Record<number, ChannelMappingEntry>
+  parkValueMap: Map<number, number>
 }) => {
-  const channelCount = 512
-  const groupSize = 8
+  const gridRef = useRef<HTMLDivElement>(null)
+  const columns = useGridColumns(gridRef)
+
+  // Filter groups when showing parked-only
+  const visibleGroups = useMemo(() => {
+    if (!filterParked) return CHANNEL_GROUPS
+    return CHANNEL_GROUPS.filter((channels) => channels.some((ch) => filterParked.has(ch)))
+  }, [filterParked])
+
+  // Arrange groups into rows based on column count
+  const rows = useMemo(() => {
+    const result: number[][] = []
+    for (let i = 0; i < visibleGroups.length; i += columns) {
+      // Store the indices into visibleGroups for this row
+      result.push(Array.from({ length: Math.min(columns, visibleGroups.length - i) }, (_, j) => i + j))
+    }
+    return result
+  }, [visibleGroups, columns])
+
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => gridRef.current,
+    estimateSize: () => (isEditing ? 340 : 280),
+    overscan: 3,
+    measureElement: (el) => el.getBoundingClientRect().height,
+  })
+
+  // Invalidate cached measurements when edit mode changes row heights
+  useEffect(() => {
+    virtualizer.measure()
+  }, [isEditing, virtualizer])
 
   return (
-    <>
-      {Array.from(Array(channelCount / groupSize)).map((_, groupNo) => {
-        const channels = Array.from(Array(groupSize)).map((_, itemNo) => groupNo * groupSize + itemNo + 1)
-
-        // If filtering to parked only, skip groups with no parked channels
-        if (filterParked && !channels.some((ch) => filterParked.has(ch))) {
-          return null
-        }
-
-        return (
-          <Card key={groupNo} className="p-4">
-            {channels.map((channelNo) => {
-              // If filtering, hide non-parked channels within visible groups
-              if (filterParked && !filterParked.has(channelNo)) {
-                return null
-              }
-              return (
-                <ChannelSlider
-                  key={channelNo}
-                  universe={universe}
-                  id={channelNo}
-                  isEditing={isEditing}
-                  onFixtureClick={onFixtureClick}
-                />
-              )
-            })}
-          </Card>
-        )
-      })}
-    </>
+    <div
+      ref={gridRef}
+      className="overflow-y-auto"
+      style={{ maxHeight: "calc(100vh - 10rem)" }}
+    >
+      <div
+        style={{
+          height: `${virtualizer.getTotalSize()}px`,
+          width: "100%",
+          position: "relative",
+        }}
+      >
+        {virtualizer.getVirtualItems().map((virtualRow) => {
+          const rowGroupIndices = rows[virtualRow.index]
+          return (
+            <div
+              key={virtualRow.index}
+              ref={virtualizer.measureElement}
+              data-index={virtualRow.index}
+              className="grid gap-4 absolute w-full"
+              style={{
+                gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+                transform: `translateY(${virtualRow.start}px)`,
+                paddingBottom: "1rem",
+              }}
+            >
+              {rowGroupIndices.map((groupIdx) => {
+                const channels = visibleGroups[groupIdx]
+                return (
+                  <Card key={groupIdx} className="p-4">
+                    {channels.map((channelNo) => {
+                      if (filterParked && !filterParked.has(channelNo)) return null
+                      return (
+                        <ChannelSlider
+                          key={channelNo}
+                          universe={universe}
+                          id={channelNo}
+                          isEditing={isEditing}
+                          mapping={universeMappings?.[channelNo]}
+                          parkedValue={parkValueMap.get(channelNo)}
+                          onFixtureClick={onFixtureClick}
+                        />
+                      )
+                    })}
+                  </Card>
+                )
+              })}
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }

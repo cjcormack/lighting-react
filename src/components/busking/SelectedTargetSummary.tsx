@@ -67,6 +67,7 @@ function FixtureTargetCard({
         fixtureKey={target.key}
         fixtureName={target.fixture.name}
         tags={[]}
+        fixture={target.fixture}
         onClick={() => onFixtureClick?.(target.key)}
       />
       {onDeselect && (
@@ -182,6 +183,7 @@ function GroupMemberCards({
           fixtureKey={fixture.key}
           fixtureName={fixture.name}
           tags={[]}
+          fixture={fixture}
           onClick={() => onFixtureClick?.(fixture.key)}
         />
       ))}
@@ -190,6 +192,7 @@ function GroupMemberCards({
           key={parentKey}
           parentKey={parentKey}
           elementCount={fixture.elements?.length ?? 0}
+          fixture={fixture}
           onClick={() => onFixtureClick?.(parentKey)}
         />
       ))}

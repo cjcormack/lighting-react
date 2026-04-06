@@ -61,6 +61,7 @@ export function FixtureOverviewPanel({ onFixtureClick, isVisible }: FixtureOverv
                   fixtureKey={fixture.key}
                   fixtureName={fixture.name}
                   tags={[]}
+                  fixture={fixture}
                   onClick={() => onFixtureClick(fixture.key)}
                 />
               ))}
@@ -71,6 +72,7 @@ export function FixtureOverviewPanel({ onFixtureClick, isVisible }: FixtureOverv
                   key={fixture.key}
                   parentKey={fixture.key}
                   elementCount={fixture.elements!.length}
+                  fixture={fixture}
                   onClick={() => onFixtureClick(fixture.key)}
                 />
               ))}

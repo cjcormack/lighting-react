@@ -1,4 +1,4 @@
-import { Suspense, useState, useMemo, useEffect, createContext, useContext } from "react"
+import React, { Suspense, useState, useMemo, useEffect, createContext, useContext } from "react"
 import { useParams, useNavigate, Navigate } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle, CardAction } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -158,6 +158,8 @@ function AllFixturesView({
   filteredFixtures: Fixture[]
   filter: string
 }) {
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
+
   if (filteredFixtures.length === 0) {
     return (
       <p className="text-muted-foreground text-center py-8">
@@ -169,32 +171,32 @@ function AllFixturesView({
   }
 
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(min(340px,100%),1fr))] gap-4">
-      {filteredFixtures.map((fixture) => (
-        <FixtureCard fixture={fixture} key={fixture.key} />
-      ))}
-    </div>
+    <>
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(min(340px,100%),1fr))] gap-4">
+        {filteredFixtures.map((fixture) => (
+          <FixtureCard fixture={fixture} key={fixture.key} onGroupClick={setSelectedGroup} />
+        ))}
+      </div>
+      <GroupDetailModal
+        groupName={selectedGroup}
+        onClose={() => setSelectedGroup(null)}
+      />
+    </>
   )
 }
 
-const FixtureCard = ({ fixture }: { fixture: Fixture }) => {
-  const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
-
+const FixtureCard = React.memo(({ fixture, onGroupClick }: { fixture: Fixture; onGroupClick: (groupName: string) => void }) => {
   return (
     <EditModeProvider>
       <Card>
         <FixtureCardHeader fixture={fixture} />
         <CardContent>
-          <FixtureCardContent fixture={fixture} onGroupClick={setSelectedGroup} />
+          <FixtureCardContent fixture={fixture} onGroupClick={onGroupClick} />
         </CardContent>
       </Card>
-      <GroupDetailModal
-        groupName={selectedGroup}
-        onClose={() => setSelectedGroup(null)}
-      />
     </EditModeProvider>
   )
-}
+})
 
 function FixtureCardContent({
   fixture,

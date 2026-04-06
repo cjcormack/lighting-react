@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import { Slider } from '@/components/ui/slider'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -91,26 +91,20 @@ function PropertiesView({
   isEditing: boolean
   onGroupClick?: (groupName: string) => void
 }) {
-  // Group fixture-level properties by category
-  const colourProps =
-    fixture.properties?.filter((p) => p.type === 'colour') ?? []
-  const positionProps =
-    fixture.properties?.filter((p) => p.type === 'position') ?? []
-  const dimmerProps =
-    fixture.properties?.filter(
-      (p) => p.type === 'slider' && p.category === 'dimmer'
-    ) ?? []
-  const otherSliders =
-    fixture.properties?.filter(
-      (p) => p.type === 'slider' && p.category !== 'dimmer'
-    ) ?? []
-  const settingProps =
-    fixture.properties?.filter((p) => p.type === 'setting') ?? []
+  // Group fixture-level properties by category (memoized to avoid re-filtering on every render)
+  const { colourProps, positionProps, dimmerProps, otherSliders, settingProps } = useMemo(() => ({
+    colourProps: fixture.properties?.filter((p) => p.type === 'colour') ?? [],
+    positionProps: fixture.properties?.filter((p) => p.type === 'position') ?? [],
+    dimmerProps: fixture.properties?.filter((p) => p.type === 'slider' && p.category === 'dimmer') ?? [],
+    otherSliders: fixture.properties?.filter((p) => p.type === 'slider' && p.category !== 'dimmer') ?? [],
+    settingProps: fixture.properties?.filter((p) => p.type === 'setting') ?? [],
+  }), [fixture.properties])
 
   // Categorize element group properties (all-heads virtual properties)
-  const egp = fixture.elementGroupProperties
-    ? categorizeGroupProperties(fixture.elementGroupProperties)
-    : null
+  const egp = useMemo(
+    () => fixture.elementGroupProperties ? categorizeGroupProperties(fixture.elementGroupProperties) : null,
+    [fixture.elementGroupProperties],
+  )
 
   const hasFixtureProperties =
     fixture.properties && fixture.properties.length > 0
@@ -499,7 +493,7 @@ function ChannelsView({
   )
 }
 
-function ChannelSlider({
+const ChannelSlider = React.memo(function ChannelSlider({
   universe,
   id,
   description,
@@ -520,37 +514,22 @@ function ChannelSlider({
 
   const [runUpdateChannelMutation] = useUpdateChannelMutation()
 
-  const setValue = (value: number) => {
-    runUpdateChannelMutation({
-      universe: universe,
-      channelNo: id,
-      value: value,
-    })
-  }
-
-  const handleSliderChange = (values: number[]) => {
+  const handleSliderChange = useCallback((values: number[]) => {
     if (values[0] !== undefined) {
-      setValue(values[0])
+      runUpdateChannelMutation({ universe, channelNo: id, value: values[0] })
     }
-  }
+  }, [runUpdateChannelMutation, universe, id])
 
-  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.value === '') {
-      setValue(0)
+      runUpdateChannelMutation({ universe, channelNo: id, value: 0 })
       return
     }
-
     const valueNumber = Number(event.target.value)
-    if (isNaN(valueNumber)) {
-      return
-    } else if (valueNumber < 0) {
-      setValue(0)
-    } else if (valueNumber > 255) {
-      setValue(255)
-    } else {
-      setValue(valueNumber)
-    }
-  }
+    if (isNaN(valueNumber)) return
+    const clamped = Math.max(0, Math.min(255, valueNumber))
+    runUpdateChannelMutation({ universe, channelNo: id, value: clamped })
+  }, [runUpdateChannelMutation, universe, id])
 
   return (
     <div className="py-1.5">
@@ -598,4 +577,4 @@ function ChannelSlider({
       </div>
     </div>
   )
-}
+})

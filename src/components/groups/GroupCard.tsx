@@ -15,7 +15,7 @@ interface GroupCardProps {
   onFixtureClick: (fixtureKey: string) => void
 }
 
-export function GroupCard({ group, onFixtureClick }: GroupCardProps) {
+function GroupCardInner({ group, onFixtureClick }: GroupCardProps) {
   const [isEditing, setIsEditing] = useState(false)
   const { data: groupDetail, isLoading: membersLoading } = useGroupQuery(group.name)
   const { data: properties, isLoading: propertiesLoading } = useGroupPropertiesQuery(group.name)
@@ -48,6 +48,8 @@ export function GroupCard({ group, onFixtureClick }: GroupCardProps) {
     </Card>
   )
 }
+
+export const GroupCard = React.memo(GroupCardInner)
 
 function GroupCardHeader({
   group,

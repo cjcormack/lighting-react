@@ -50,6 +50,8 @@ interface CompactFixtureCardProps {
   fixtureName: string
   tags: string[]
   onClick: () => void
+  /** Pass a pre-resolved fixture to avoid an internal useFixtureListQuery + .find() */
+  fixture?: Fixture
 }
 
 /**
@@ -113,9 +115,10 @@ export const CompactFixtureCard = memo(function CompactFixtureCard({
   fixtureKey,
   fixtureName,
   onClick,
+  fixture: fixtureProp,
 }: CompactFixtureCardProps) {
-  const { data: fixtureList } = useFixtureListQuery()
-  const fixture = fixtureList?.find((f) => f.key === fixtureKey)
+  const { data: fixtureList } = useFixtureListQuery(undefined, { skip: !!fixtureProp })
+  const fixture = fixtureProp ?? fixtureList?.find((f) => f.key === fixtureKey)
   const { data: effects } = useFixtureEffectsQuery(fixtureKey)
   const allEffects = [...(effects?.direct ?? []), ...(effects?.indirect ?? [])]
   const hasActiveFx = allEffects.length > 0
@@ -539,15 +542,18 @@ interface MultiElementCompactCardProps {
   parentKey: string
   elementCount: number
   onClick: () => void
+  /** Pass a pre-resolved fixture to avoid an internal useFixtureListQuery + .find() */
+  fixture?: Fixture
 }
 
 export const MultiElementCompactCard = memo(function MultiElementCompactCard({
   parentKey,
   elementCount,
   onClick,
+  fixture: fixtureProp,
 }: MultiElementCompactCardProps) {
-  const { data: fixtureList } = useFixtureListQuery()
-  const fixture = fixtureList?.find((f) => f.key === parentKey)
+  const { data: fixtureList } = useFixtureListQuery(undefined, { skip: !!fixtureProp })
+  const fixture = fixtureProp ?? fixtureList?.find((f) => f.key === parentKey)
   const { data: effects } = useFixtureEffectsQuery(parentKey)
   const allEffects = [...(effects?.direct ?? []), ...(effects?.indirect ?? [])]
   const hasActiveFx = allEffects.length > 0
