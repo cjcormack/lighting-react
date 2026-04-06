@@ -1,4 +1,5 @@
 import React from "react"
+import { Toaster } from "sonner"
 import Layout from "./Layout"
 import {createBrowserRouter, RouterProvider} from "react-router-dom";
 import { ChannelsRedirect, ChannelsBaseRedirect, ProjectChannels } from "./routes/Channels";
@@ -134,6 +135,7 @@ function App() {
   return (
       <React.StrictMode>
         <RouterProvider router={router}/>
+        <Toaster position="bottom-right" />
       </React.StrictMode>
   )
 }

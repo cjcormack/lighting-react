@@ -175,27 +175,26 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
             }}
           />
 
-          <Separator />
+        </div>
 
+        <SheetFooter className="flex-row justify-between">
           <Button
             variant="destructive"
             size="sm"
-            className="w-full"
             onClick={handleDelete}
             disabled={isDeleting}
           >
             <Trash2 className="size-3.5 mr-1.5" />
-            {isDeleting ? 'Deleting...' : 'Delete Group'}
+            {isDeleting ? 'Deleting...' : 'Delete'}
           </Button>
-        </div>
-
-        <SheetFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isUpdating}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={!isValid || !hasChanges || isUpdating}>
-            {isUpdating ? 'Saving...' : 'Save'}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isUpdating}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={!isValid || !hasChanges || isUpdating}>
+              {isUpdating ? 'Saving...' : 'Save'}
+            </Button>
+          </div>
         </SheetFooter>
       </SheetContent>
     </Sheet>

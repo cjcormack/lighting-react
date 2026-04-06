@@ -24,8 +24,8 @@ export const patchesApi = restApi.injectEndpoints({
       providesTags: ['Patch'],
     }),
 
-    // Create patches (batch)
-    createPatches: build.mutation<FixturePatch[], { projectId: number } & CreatePatchRequest>({
+    // Create a single patch
+    createPatch: build.mutation<FixturePatch, { projectId: number } & CreatePatchRequest>({
       query: ({ projectId, ...body }) => ({
         url: `project/${projectId}/patches`,
         method: 'POST',
@@ -95,7 +95,7 @@ export const patchesApi = restApi.injectEndpoints({
 
 export const {
   usePatchListQuery,
-  useCreatePatchesMutation,
+  useCreatePatchMutation,
   useUpdatePatchMutation,
   useDeletePatchMutation,
   useUniverseConfigListQuery,

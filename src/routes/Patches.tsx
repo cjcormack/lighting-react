@@ -270,8 +270,8 @@ function PatchTable({
       <TableHeader>
         <TableRow>
           <TableHead className="w-[5rem]">Address</TableHead>
-          <TableHead className="hidden sm:table-cell">Key</TableHead>
-          <TableHead className="hidden md:table-cell">Type</TableHead>
+          <TableHead className="hidden sm:table-cell">Type</TableHead>
+          <TableHead className="hidden md:table-cell">Key</TableHead>
           <TableHead>Name</TableHead>
           <TableHead className="hidden lg:table-cell">Groups</TableHead>
         </TableRow>
@@ -289,9 +289,6 @@ function PatchTable({
               {row.address}
             </TableCell>
             <TableCell className="hidden sm:table-cell">
-              <code className="text-xs text-muted-foreground">{row.key}</code>
-            </TableCell>
-            <TableCell className="hidden md:table-cell">
               <div className="flex items-center gap-1.5">
                 <span className="text-xs text-muted-foreground">{row.fixtureType}</span>
                 <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono shrink-0">
@@ -299,10 +296,13 @@ function PatchTable({
                 </Badge>
               </div>
             </TableCell>
+            <TableCell className="hidden md:table-cell">
+              <code className="text-xs text-muted-foreground">{row.key}</code>
+            </TableCell>
             <TableCell>
               <div className="font-medium text-sm">{row.displayName}</div>
               {row.fixtureType && (
-                <div className="md:hidden text-[11px] text-muted-foreground flex items-center gap-1">
+                <div className="sm:hidden text-[11px] text-muted-foreground flex items-center gap-1">
                   <span>{row.fixtureType}</span>
                   <span className="font-mono">{row.channelCount}ch</span>
                 </div>

@@ -1,16 +1,18 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
+  SheetFooter,
 } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ChevronLeft, AlertTriangle } from 'lucide-react'
+import { toast } from 'sonner'
 import { useFixtureTypeListQuery } from '@/store/fixtures'
-import { useCreatePatchesMutation, usePatchGroupListQuery } from '@/store/patches'
+import { useCreatePatchMutation, usePatchGroupListQuery } from '@/store/patches'
 import { GroupComboInput } from './GroupComboInput'
 import { FixtureTypePickerContent, type FixtureCountMap } from '@/components/presets/FixtureTypePicker'
 import { buildFixtureTypeHierarchy, type FixtureTypeHierarchy } from '@/api/fxPresetsApi'
@@ -25,6 +27,36 @@ interface AddFixtureSheetProps {
 
 type Step = 'type' | 'configure'
 
+function nameToKey(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
+/** Parse a trailing number: "FOH 3" → { base: "FOH", number: 3 }. Returns null if no trailing number. */
+function parseTrailingNumber(value: string): { base: string; number: number } | null {
+  const match = value.match(/^(.*?)\s+(\d+)$/)
+  if (!match) return null
+  return { base: match[1], number: parseInt(match[2], 10) }
+}
+
+/** Increment trailing number: "FOH 3" → "FOH 4". No number → unchanged. */
+function incrementName(name: string): string {
+  const parsed = parseTrailingNumber(name)
+  if (!parsed) return name
+  return `${parsed.base} ${parsed.number + 1}`
+}
+
+/** Find next available start channel that fits `channelCount` */
+function nextFittingChannel(patches: FixturePatch[], channelCount: number): number {
+  const sorted = patches.slice().sort((a, b) => a.startChannel - b.startChannel)
+  let candidate = 1
+  for (const p of sorted) {
+    const pEnd = p.startChannel + (p.channelCount ?? 1) - 1
+    if (candidate + channelCount - 1 < p.startChannel) return candidate
+    candidate = pEnd + 1
+  }
+  return candidate <= 512 ? candidate : 1
+}
+
 export function AddFixtureSheet({
   open,
   onOpenChange,
@@ -33,16 +65,22 @@ export function AddFixtureSheet({
 }: AddFixtureSheetProps) {
   const [step, setStep] = useState<Step>('type')
   const [selectedTypeKey, setSelectedTypeKey] = useState<string | null>(null)
-  const [count, setCount] = useState(1)
-  const [universe, setUniverse] = useState(0)
+
+  const [fixtureName, setFixtureName] = useState('')
+  const [key, setKey] = useState('')
+  const [keyManuallyEdited, setKeyManuallyEdited] = useState(false)
+  const [universe, setUniverse] = useState(() => {
+    if (existingPatches.length === 0) return 0
+    return existingPatches[existingPatches.length - 1].universe
+  })
   const [startChannel, setStartChannel] = useState(1)
-  const [keyPrefix, setKeyPrefix] = useState('')
-  const [namePrefix, setNamePrefix] = useState('')
   const [address, setAddress] = useState('')
   const [groupName, setGroupName] = useState('')
 
+  const nameInputRef = useRef<HTMLInputElement>(null)
+
   const { data: fixtureTypes } = useFixtureTypeListQuery()
-  const [createPatches, { isLoading }] = useCreatePatchesMutation()
+  const [createPatch, { isLoading }] = useCreatePatchMutation()
   const { data: patchGroups } = usePatchGroupListQuery(projectId)
 
   const hierarchy = useMemo<FixtureTypeHierarchy | null>(() => {
@@ -50,7 +88,6 @@ export function AddFixtureSheet({
     return buildFixtureTypeHierarchy(fixtureTypes)
   }, [fixtureTypes])
 
-  // Get counts from existing patches for the badge display
   const fixtureCounts = useMemo<FixtureCountMap>(() => {
     const map = new Map<string, number>()
     for (const p of existingPatches) {
@@ -61,94 +98,132 @@ export function AddFixtureSheet({
 
   const selectedType = fixtureTypes?.find(t => t.typeKey === selectedTypeKey)
   const channelCount = selectedType?.channelCount ?? 0
-
-  // Check if the selected universe already exists
   const universeExists = existingPatches.some(p => p.universe === universe)
 
-  // Validation
-  const lastChannel = startChannel + (channelCount * count) - 1
-  const channelOverflow = lastChannel > 512
-  const maxStartChannel = channelCount > 0 ? 512 - (channelCount * count) + 1 : 512
+  // Key derives from name unless manually edited
+  const effectiveKey = keyManuallyEdited ? key : nameToKey(fixtureName)
 
-  // Check overlaps
+  // Validation
+  const lastChannel = startChannel + channelCount - 1
+  const channelOverflow = lastChannel > 512
+  const existingKeys = useMemo(() => new Set(existingPatches.map(p => p.key)), [existingPatches])
+  const keyConflict = effectiveKey ? existingKeys.has(effectiveKey) : false
+
   const universePatch = existingPatches.filter(p => p.universe === universe)
   const overlapWarning = useMemo(() => {
-    for (let i = 0; i < count; i++) {
-      const start = startChannel + (channelCount * i)
-      const end = start + channelCount - 1
-      const overlap = universePatch.find(p => {
-        const pEnd = p.startChannel + (p.channelCount ?? 1) - 1
-        return start <= pEnd && end >= p.startChannel
-      })
-      if (overlap) return `Overlaps with "${overlap.displayName}" (channels ${overlap.startChannel}-${overlap.startChannel + (overlap.channelCount ?? 1) - 1})`
-    }
+    if (channelCount === 0) return null
+    const overlap = universePatch.find(p => {
+      const pEnd = p.startChannel + (p.channelCount ?? 1) - 1
+      return startChannel <= pEnd && lastChannel >= p.startChannel
+    })
+    if (overlap) return `Overlaps with "${overlap.displayName}" (ch ${overlap.startChannel}-${overlap.startChannel + (overlap.channelCount ?? 1) - 1})`
     return null
-  }, [startChannel, count, channelCount, universePatch])
+  }, [startChannel, channelCount, lastChannel, universePatch])
 
-  // Key conflict check
-  const existingKeys = new Set(existingPatches.map(p => p.key))
-  const generatedKeys = Array.from({ length: count }, (_, i) =>
-    count === 1 ? keyPrefix : `${keyPrefix}-${i + 1}`
-  )
-  const keyConflict = generatedKeys.find(k => existingKeys.has(k))
+  const isValid = selectedTypeKey && effectiveKey && fixtureName.trim() && !channelOverflow && !overlapWarning && !keyConflict && startChannel >= 1
 
-  const isValid = selectedTypeKey && keyPrefix && namePrefix && !channelOverflow && !overlapWarning && !keyConflict && startChannel >= 1
+  // Handlers
+  const handleNameChange = (value: string) => {
+    setFixtureName(value)
+    if (!keyManuallyEdited) {
+      setKey(nameToKey(value))
+    }
+  }
 
-  const handleTypeSelect = (typeKey: string | null) => {
+  const handleKeyChange = (value: string) => {
+    if (value === '') {
+      setKeyManuallyEdited(false)
+      setKey(nameToKey(fixtureName))
+    } else {
+      setKeyManuallyEdited(true)
+      setKey(value)
+    }
+  }
+
+  const handleTypeSelect = useCallback((typeKey: string | null) => {
     if (!typeKey) return
     setSelectedTypeKey(typeKey)
 
-    // Auto-fill prefix from model name
     const type = fixtureTypes?.find(t => t.typeKey === typeKey)
     if (type?.model) {
-      const prefix = type.model.toLowerCase().replace(/\s+/g, '-')
-      setKeyPrefix(prefix)
-      setNamePrefix(type.model)
+      setFixtureName(type.model)
+      setKey(nameToKey(type.model))
+      setKeyManuallyEdited(false)
     }
 
-    // Auto-suggest start channel (first gap in universe)
+    const lastUniverse = existingPatches.length > 0
+      ? existingPatches[existingPatches.length - 1].universe
+      : 0
+    setUniverse(lastUniverse)
+
     const typeChannelCount = type?.channelCount ?? 1
-    const patchesInUniverse = existingPatches
-      .filter(p => p.universe === universe)
-      .sort((a, b) => a.startChannel - b.startChannel)
-
-    let suggested = 1
-    for (const p of patchesInUniverse) {
-      const pEnd = p.startChannel + (p.channelCount ?? 1)
-      if (suggested < p.startChannel && suggested + typeChannelCount - 1 < p.startChannel) break
-      suggested = pEnd
-    }
-    setStartChannel(suggested)
+    const patchesInUniverse = existingPatches.filter(p => p.universe === lastUniverse)
+    setStartChannel(nextFittingChannel(patchesInUniverse, typeChannelCount))
 
     setStep('configure')
+    setTimeout(() => nameInputRef.current?.focus(), 50)
+  }, [fixtureTypes, existingPatches])
+
+  const handleUniverseChange = (newUniverse: number) => {
+    setUniverse(newUniverse)
+    const patchesInUniverse = existingPatches.filter(p => p.universe === newUniverse)
+    setStartChannel(nextFittingChannel(patchesInUniverse, channelCount))
   }
 
-  const handleCreate = async () => {
-    if (!selectedTypeKey) return
-    await createPatches({
+  const doPatch = async () => {
+    if (!selectedTypeKey || !isValid) return
+    const patchedName = fixtureName.trim()
+    const patchedKey = effectiveKey
+
+    await createPatch({
       projectId,
       universe,
       fixtureTypeKey: selectedTypeKey,
-      count,
+      key: patchedKey,
+      name: patchedName,
       startChannel,
-      keyPrefix,
-      namePrefix,
       address: !universeExists && address ? address : undefined,
       groupName: groupName || undefined,
     }).unwrap()
-    handleClose()
+
+    toast.success(`Patched ${patchedName}`, {
+      description: `${patchedKey} at ${universe}-${String(startChannel).padStart(3, '0')}`,
+    })
+
+    // Advance for next fixture: increment name (if it has a trailing number),
+    // re-derive key, and move start channel forward
+    const nextName = incrementName(patchedName)
+    setFixtureName(nextName)
+    if (!keyManuallyEdited) {
+      setKey(nameToKey(nextName))
+    } else {
+      // Also increment key if it was manually edited but has a trailing number pattern
+      const keyParsed = key.match(/^(.*?)-(\d+)$/)
+      if (keyParsed) {
+        setKey(`${keyParsed[1]}-${parseInt(keyParsed[2], 10) + 1}`)
+      }
+    }
+    setStartChannel(startChannel + channelCount)
+    nameInputRef.current?.focus()
   }
 
   const handleClose = () => {
     setStep('type')
     setSelectedTypeKey(null)
-    setCount(1)
+    setFixtureName('')
+    setKey('')
+    setKeyManuallyEdited(false)
     setStartChannel(1)
-    setKeyPrefix('')
-    setNamePrefix('')
     setAddress('')
     setGroupName('')
     onOpenChange(false)
+  }
+
+  const handleFormKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && isValid && !isLoading) {
+      e.preventDefault()
+      doPatch()
+    }
   }
 
   return (
@@ -157,7 +232,7 @@ export function AddFixtureSheet({
         {step === 'type' && (
           <>
             <SheetHeader className="sr-only">
-              <SheetTitle>Add Fixture</SheetTitle>
+              <SheetTitle>Patch Fixture</SheetTitle>
             </SheetHeader>
             <FixtureTypePickerContent
               hierarchy={hierarchy}
@@ -165,7 +240,7 @@ export function AddFixtureSheet({
               onSelect={handleTypeSelect}
               onClose={handleClose}
               options={{
-                title: 'Add Fixture',
+                title: 'Patch Fixture',
                 subtitle: 'Choose a fixture type to patch.',
                 showClearOption: false,
                 dimUnregistered: false,
@@ -192,24 +267,13 @@ export function AddFixtureSheet({
                 </SheetTitle>
                 <p className="text-xs text-muted-foreground">
                   {selectedType.channelCount} channels
-                  {selectedType.modeName && ` (${selectedType.modeName})`}
+                  {selectedType.modeName && ` · ${selectedType.modeName}`}
                 </p>
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-4">
+            <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-4" onKeyDown={handleFormKeyDown}>
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="patch-count">Count</Label>
-                  <Input
-                    id="patch-count"
-                    type="number"
-                    min={1}
-                    max={50}
-                    value={count}
-                    onChange={e => setCount(Math.max(1, Number(e.target.value) || 1))}
-                  />
-                </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="patch-universe">Universe</Label>
                   <Input
@@ -217,7 +281,18 @@ export function AddFixtureSheet({
                     type="number"
                     min={0}
                     value={universe}
-                    onChange={e => setUniverse(Number(e.target.value) || 0)}
+                    onChange={e => handleUniverseChange(Number(e.target.value) || 0)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="patch-start">Start Channel</Label>
+                  <Input
+                    id="patch-start"
+                    type="number"
+                    min={1}
+                    max={512}
+                    value={startChannel}
+                    onChange={e => setStartChannel(Math.max(1, Number(e.target.value) || 1))}
                   />
                 </div>
               </div>
@@ -236,46 +311,24 @@ export function AddFixtureSheet({
               )}
 
               <div className="space-y-1.5">
-                <Label htmlFor="patch-start">Start Channel</Label>
+                <Label htmlFor="patch-name">Name</Label>
                 <Input
-                  id="patch-start"
-                  type="number"
-                  min={1}
-                  max={512}
-                  value={startChannel}
-                  onChange={e => setStartChannel(Math.max(1, Number(e.target.value) || 1))}
+                  ref={nameInputRef}
+                  id="patch-name"
+                  value={fixtureName}
+                  onChange={e => handleNameChange(e.target.value)}
+                  placeholder="e.g. Front PAR 1"
                 />
-                {channelCount > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    Uses channels {startChannel}-{Math.min(lastChannel, 512)}
-                    {count > 1 && ` (${count} fixtures)`}
-                  </p>
-                )}
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="patch-key">Key Prefix</Label>
+                <Label htmlFor="patch-key">Key</Label>
                 <Input
                   id="patch-key"
-                  value={keyPrefix}
-                  onChange={e => setKeyPrefix(e.target.value)}
-                  placeholder="e.g. par"
-                />
-                {count > 1 && keyPrefix && (
-                  <p className="text-xs text-muted-foreground">
-                    Keys: {generatedKeys.slice(0, 3).join(', ')}
-                    {count > 3 && `, ... (${count} total)`}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="patch-name">Name Prefix</Label>
-                <Input
-                  id="patch-name"
-                  value={namePrefix}
-                  onChange={e => setNamePrefix(e.target.value)}
-                  placeholder="e.g. PAR"
+                  value={effectiveKey}
+                  onChange={e => handleKeyChange(e.target.value)}
+                  placeholder="auto-derived from name"
+                  className="font-mono text-xs"
                 />
               </div>
 
@@ -291,37 +344,37 @@ export function AddFixtureSheet({
 
               {/* Warnings */}
               {channelOverflow && (
-                <div className="flex items-start gap-2 p-3 rounded-md bg-destructive/10 text-destructive text-sm">
-                  <AlertTriangle className="size-4 shrink-0 mt-0.5" />
-                  <span>Extends to channel {lastChannel}. Max start channel: {maxStartChannel}</span>
-                </div>
+                <Warning>Extends to channel {lastChannel}. Max start: {512 - channelCount + 1}</Warning>
               )}
               {overlapWarning && (
-                <div className="flex items-start gap-2 p-3 rounded-md bg-destructive/10 text-destructive text-sm">
-                  <AlertTriangle className="size-4 shrink-0 mt-0.5" />
-                  <span>{overlapWarning}</span>
-                </div>
+                <Warning>{overlapWarning}</Warning>
               )}
               {keyConflict && (
-                <div className="flex items-start gap-2 p-3 rounded-md bg-destructive/10 text-destructive text-sm">
-                  <AlertTriangle className="size-4 shrink-0 mt-0.5" />
-                  <span>Key "{keyConflict}" already exists</span>
-                </div>
+                <Warning>Key &ldquo;{effectiveKey}&rdquo; already exists</Warning>
               )}
             </div>
 
-            <div className="px-4 py-3 border-t">
+            <SheetFooter className="px-4 py-3 border-t">
+              <Button variant="outline" onClick={handleClose}>Close</Button>
               <Button
-                className="w-full"
                 disabled={!isValid || isLoading}
-                onClick={handleCreate}
+                onClick={doPatch}
               >
-                {isLoading ? "Creating..." : count === 1 ? "Add Fixture" : `Add ${count} Fixtures`}
+                {isLoading ? "Patching..." : "Patch"}
               </Button>
-            </div>
+            </SheetFooter>
           </>
         )}
       </SheetContent>
     </Sheet>
+  )
+}
+
+function Warning({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-2 p-3 rounded-md bg-destructive/10 text-destructive text-sm">
+      <AlertTriangle className="size-4 shrink-0 mt-0.5" />
+      <span>{children}</span>
+    </div>
   )
 }

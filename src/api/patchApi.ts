@@ -29,10 +29,9 @@ export interface UniverseConfig {
 export interface CreatePatchRequest {
   universe: number;
   fixtureTypeKey: string;
-  count: number;
+  key: string;
+  name: string;
   startChannel: number;
-  keyPrefix: string;
-  namePrefix: string;
   address?: string;
   groupName?: string;
 }

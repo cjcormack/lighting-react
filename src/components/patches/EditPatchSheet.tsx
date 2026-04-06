@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Separator } from '@/components/ui/separator'
 import { Trash2, X } from 'lucide-react'
 import { useUpdatePatchMutation, useDeletePatchMutation, usePatchGroupListQuery } from '@/store/patches'
 import { GroupComboInput } from './GroupComboInput'
@@ -165,27 +164,26 @@ export function EditPatchSheet({ open, onOpenChange, patch, projectId, existingP
             />
           </div>
 
-          <Separator />
+        </div>
 
+        <SheetFooter className="flex-row justify-between">
           <Button
             variant="destructive"
             size="sm"
-            className="w-full"
             onClick={handleDelete}
             disabled={isDeleting}
           >
             <Trash2 className="size-3.5 mr-1.5" />
-            {isDeleting ? 'Deleting...' : 'Delete Fixture'}
+            {isDeleting ? 'Deleting...' : 'Delete'}
           </Button>
-        </div>
-
-        <SheetFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isUpdating}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={!isValid || !hasChanges || isUpdating}>
-            {isUpdating ? 'Saving...' : 'Save'}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isUpdating}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={!isValid || !hasChanges || isUpdating}>
+              {isUpdating ? 'Saving...' : 'Save'}
+            </Button>
+          </div>
         </SheetFooter>
       </SheetContent>
     </Sheet>
