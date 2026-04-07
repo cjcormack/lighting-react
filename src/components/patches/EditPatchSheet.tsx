@@ -124,6 +124,7 @@ export function EditPatchSheet({ open, onOpenChange, patch, projectId, existingP
               max={512}
               value={startChannel}
               onChange={(e) => setStartChannel(Math.max(1, Number(e.target.value) || 1))}
+              onFocus={(e) => e.target.select()}
             />
             <p className="text-xs text-muted-foreground">
               Channels {startChannel}-{Math.min(lastChannel, 512)} on universe {patch.universe}

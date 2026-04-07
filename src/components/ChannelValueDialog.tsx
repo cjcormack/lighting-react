@@ -134,10 +134,10 @@ export function ChannelValueDialog({ open, onOpenChange, mode }: ChannelValueDia
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3">
           {/* Input row */}
-          <div className="flex items-center gap-1.5">
-            <div className="flex flex-col gap-1">
+          <div className="flex items-end gap-1.5">
+            <div className="flex flex-col gap-1 min-w-0 flex-1">
               <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Uni</label>
               <Input
                 ref={universeRef}
@@ -146,11 +146,11 @@ export function ChannelValueDialog({ open, onOpenChange, mode }: ChannelValueDia
                 onChange={(e) => setUniverse(e.target.value)}
                 onKeyDown={handleUniverseKeyDown}
                 min={0}
-                className="w-14 h-9 text-sm text-center font-mono"
+                className="h-9 text-sm text-center font-mono"
               />
             </div>
-            <span className="text-muted-foreground mt-5 font-mono">-</span>
-            <div className="flex flex-col gap-1">
+            <span className="text-muted-foreground pb-2 font-mono shrink-0">-</span>
+            <div className="flex flex-col gap-1 min-w-0 flex-[2]">
               <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Channel</label>
               <Input
                 ref={channelRef}
@@ -161,11 +161,11 @@ export function ChannelValueDialog({ open, onOpenChange, mode }: ChannelValueDia
                 min={1}
                 max={512}
                 placeholder="1-512"
-                className="w-24 h-9 text-sm text-center font-mono"
+                className="h-9 text-sm text-center font-mono"
               />
             </div>
-            <span className="text-muted-foreground mt-5 font-mono">=</span>
-            <div className="flex flex-col gap-1">
+            <span className="text-muted-foreground pb-2 font-mono shrink-0">=</span>
+            <div className="flex flex-col gap-1 min-w-0 flex-[2]">
               <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Value</label>
               <Input
                 ref={valueRef}
@@ -176,20 +176,22 @@ export function ChannelValueDialog({ open, onOpenChange, mode }: ChannelValueDia
                 min={0}
                 max={255}
                 placeholder="0-255"
-                className="w-24 h-9 text-sm text-center font-mono"
+                className="h-9 text-sm text-center font-mono"
               />
             </div>
-            <Button type="submit" disabled={!isValid} className="mt-5 shrink-0">
+          </div>
+
+          {/* Submit + keyboard hint */}
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[10px] text-muted-foreground">
+              <kbd className="rounded border bg-muted px-1 py-0.5 font-mono text-[10px]">-</kbd> channel{" · "}
+              <kbd className="rounded border bg-muted px-1 py-0.5 font-mono text-[10px]">=</kbd> value{" · "}
+              <kbd className="rounded border bg-muted px-1 py-0.5 font-mono text-[10px]">Enter</kbd> submit
+            </p>
+            <Button type="submit" disabled={!isValid} className="shrink-0">
               {buttonLabel}
             </Button>
           </div>
-
-          {/* Keyboard hint */}
-          <p className="text-[10px] text-muted-foreground">
-            Type <kbd className="rounded border bg-muted px-1 py-0.5 font-mono text-[10px]">-</kbd> to advance to channel,{" "}
-            <kbd className="rounded border bg-muted px-1 py-0.5 font-mono text-[10px]">=</kbd> to advance to value,{" "}
-            <kbd className="rounded border bg-muted px-1 py-0.5 font-mono text-[10px]">Enter</kbd> to submit
-          </p>
 
           {/* Channel info panel */}
           {isValidChannel && (

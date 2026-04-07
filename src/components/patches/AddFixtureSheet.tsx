@@ -78,6 +78,8 @@ export function AddFixtureSheet({
   const [groupName, setGroupName] = useState('')
 
   const nameInputRef = useRef<HTMLInputElement>(null)
+  const universeInputRef = useRef<HTMLInputElement>(null)
+  const startChannelInputRef = useRef<HTMLInputElement>(null)
 
   const { data: fixtureTypes } = useFixtureTypeListQuery()
   const [createPatch, { isLoading }] = useCreatePatchMutation()
@@ -161,7 +163,10 @@ export function AddFixtureSheet({
     setStartChannel(nextFittingChannel(patchesInUniverse, typeChannelCount))
 
     setStep('configure')
-    setTimeout(() => nameInputRef.current?.focus(), 50)
+    setTimeout(() => {
+      universeInputRef.current?.focus()
+      universeInputRef.current?.select()
+    }, 50)
   }, [fixtureTypes, existingPatches])
 
   const handleUniverseChange = (newUniverse: number) => {
@@ -228,7 +233,7 @@ export function AddFixtureSheet({
 
   return (
     <Sheet open={open} onOpenChange={(v) => { if (!v) handleClose() }}>
-      <SheetContent className="flex flex-col gap-0 p-0 sm:max-w-md">
+      <SheetContent className="flex flex-col gap-0 p-0 !w-full sm:!w-3/4 sm:max-w-md">
         {step === 'type' && (
           <>
             <SheetHeader className="sr-only">
@@ -273,28 +278,48 @@ export function AddFixtureSheet({
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-4" onKeyDown={handleFormKeyDown}>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="patch-universe">Universe</Label>
-                  <Input
-                    id="patch-universe"
-                    type="number"
-                    min={0}
-                    value={universe}
-                    onChange={e => handleUniverseChange(Number(e.target.value) || 0)}
-                  />
+              <div>
+                <div className="flex items-end gap-1.5">
+                  <div className="flex flex-col gap-1 min-w-0 flex-1">
+                    <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Universe</label>
+                    <Input
+                      ref={universeInputRef}
+                      id="patch-universe"
+                      type="number"
+                      min={0}
+                      value={universe}
+                      onChange={e => handleUniverseChange(Number(e.target.value) || 0)}
+                      onFocus={e => e.target.select()}
+                      onKeyDown={e => {
+                        if (e.key === '-') {
+                          e.preventDefault()
+                          startChannelInputRef.current?.focus()
+                          startChannelInputRef.current?.select()
+                        }
+                      }}
+                      className="h-9 text-sm text-center font-mono"
+                    />
+                  </div>
+                  <span className="text-muted-foreground pb-2 font-mono shrink-0">-</span>
+                  <div className="flex flex-col gap-1 min-w-0 flex-[2]">
+                    <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Start Channel</label>
+                    <Input
+                      ref={startChannelInputRef}
+                      id="patch-start"
+                      type="number"
+                      min={1}
+                      max={512}
+                      value={startChannel}
+                      onChange={e => setStartChannel(Math.max(1, Number(e.target.value) || 1))}
+                      onFocus={e => e.target.select()}
+                      className="h-9 text-sm text-center font-mono"
+                    />
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="patch-start">Start Channel</Label>
-                  <Input
-                    id="patch-start"
-                    type="number"
-                    min={1}
-                    max={512}
-                    value={startChannel}
-                    onChange={e => setStartChannel(Math.max(1, Number(e.target.value) || 1))}
-                  />
-                </div>
+                <p className="text-[10px] text-muted-foreground mt-1.5">
+                  <kbd className="rounded border bg-muted px-1 py-0.5 font-mono text-[10px]">-</kbd> channel
+                  {" · "}Channels {startChannel}-{Math.min(lastChannel, 512)}
+                </p>
               </div>
 
               {!universeExists && (

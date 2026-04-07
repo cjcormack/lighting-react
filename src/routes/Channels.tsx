@@ -12,7 +12,14 @@ import {
   ContextMenuItem,
 } from "@/components/ui/context-menu"
 import { useParams, useNavigate, useSearchParams, Navigate } from "react-router-dom"
-import { ChevronRight, Loader2, Lock, LockOpen } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu"
+import { ChevronRight, Loader2, Lock, LockOpen, MoreHorizontal, SlidersHorizontal, Pencil, Check } from "lucide-react"
 import { useGetChannelQuery, useUpdateChannelMutation } from "../store/channels"
 import { useGetChannelMappingListQuery, type ChannelMappingEntry } from "../store/channelMapping"
 import {
@@ -23,6 +30,7 @@ import {
 import { useCurrentProjectQuery, useProjectQuery } from "../store/projects"
 import { EditModeProvider, useEditMode } from "@/components/fixtures/EditModeContext"
 import { FixtureDetailModal } from "@/components/groups/FixtureDetailModal"
+import { ChannelValueDialog } from "@/components/ChannelValueDialog"
 import { useVirtualizer } from "@tanstack/react-virtual"
 
 // Pre-computed static channel groups: 64 groups of 8 channels each
@@ -314,6 +322,7 @@ function ProjectChannelsContent({ projectName, universe }: { projectName: string
   const [selectedFixtureKey, setSelectedFixtureKey] = useState<string | null>(null)
   const [searchParams] = useSearchParams()
   const [showParkedOnly, setShowParkedOnly] = useState(searchParams.get("parked") === "true")
+  const [channelDialogMode, setChannelDialogMode] = useState<"park" | "set" | null>(null)
 
   // Lifted queries — single subscription for all mappings and park states
   const { data: parkStateList } = useGetParkStateListQuery()
@@ -336,19 +345,28 @@ function ProjectChannelsContent({ projectName, universe }: { projectName: string
   // Channel mappings for this universe
   const universeMappings = mappingRecord?.[universe]
 
+  const handleUnparkAll = () => {
+    if (confirm(`Unpark all ${parkedCount} channel(s) in universe ${universe}?`)) {
+      parkStateList
+        ?.filter((p) => p.universe === universe)
+        .forEach((p) => runUnparkChannel({ universe: p.universe, channelNo: p.channel }))
+    }
+  }
+
   return (
     <>
       <Card className="m-4 p-4">
-        <div className="flex items-start justify-between mb-4">
+        <div className="flex items-start justify-between gap-2 mb-4">
           <Breadcrumbs projectName={projectName} universe={universe} />
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2">
+            {/* Inline buttons — hidden on narrow viewports */}
             {parkedCount > 0 && (
               <>
                 <Button
                   variant={showParkedOnly ? "default" : "outline"}
                   size="sm"
                   onClick={() => setShowParkedOnly(!showParkedOnly)}
-                  className="gap-1.5"
+                  className="gap-1.5 hidden sm:inline-flex"
                 >
                   <Lock className="size-3.5" />
                   {showParkedOnly ? "Show All" : `Parked`}
@@ -356,34 +374,89 @@ function ProjectChannelsContent({ projectName, universe }: { projectName: string
                     {parkedCount}
                   </Badge>
                 </Button>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        if (confirm(`Unpark all ${parkedCount} channel(s) in universe ${universe}?`)) {
-                          parkStateList
-                            ?.filter((p) => p.universe === universe)
-                            .forEach((p) => runUnparkChannel({ universe: p.universe, channelNo: p.channel }))
-                        }
-                      }}
-                    >
-                      <LockOpen className="size-3.5" />
-                      Unpark All
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Unpark all channels in this universe</TooltipContent>
-                </Tooltip>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleUnparkAll}
+                  className="hidden sm:inline-flex"
+                >
+                  <LockOpen className="size-3.5" />
+                  Unpark All
+                </Button>
               </>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setChannelDialogMode("set")}
+              className="hidden sm:inline-flex"
+            >
+              <SlidersHorizontal className="size-3.5" />
+              Set Value
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setChannelDialogMode("park")}
+              className="hidden sm:inline-flex"
+            >
+              <Lock className="size-3.5" />
+              Park at Value
+            </Button>
+            {/* Edit — always visible, icon-only on narrow */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={isEditing ? "default" : "outline"}
+                  size="icon"
+                  className="size-8 sm:hidden"
+                  onClick={toggleEditing}
+                >
+                  {isEditing ? <Check className="size-3.5" /> : <Pencil className="size-3.5" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{isEditing ? "Done editing" : "Edit"}</TooltipContent>
+            </Tooltip>
             <Button
               variant={isEditing ? "default" : "outline"}
               size="sm"
               onClick={toggleEditing}
+              className="hidden sm:inline-flex"
             >
               {isEditing ? "Done" : "Edit"}
             </Button>
+
+            {/* Overflow menu — visible on narrow viewports */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="size-8 sm:hidden">
+                  <MoreHorizontal className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setChannelDialogMode("set")}>
+                  <SlidersHorizontal className="size-4" />
+                  Set Channel Value
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setChannelDialogMode("park")}>
+                  <Lock className="size-4" />
+                  Park Channel at Value
+                </DropdownMenuItem>
+                {parkedCount > 0 && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setShowParkedOnly(!showParkedOnly)}>
+                      <Lock className="size-4" />
+                      {showParkedOnly ? "Show All Channels" : `Show Parked (${parkedCount})`}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleUnparkAll}>
+                      <LockOpen className="size-4" />
+                      Unpark All ({parkedCount})
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
         <ChannelGroups
@@ -399,6 +472,11 @@ function ProjectChannelsContent({ projectName, universe }: { projectName: string
         fixtureKey={selectedFixtureKey}
         onClose={() => setSelectedFixtureKey(null)}
         isEditing={isEditing}
+      />
+      <ChannelValueDialog
+        open={channelDialogMode !== null}
+        onOpenChange={(open) => { if (!open) setChannelDialogMode(null) }}
+        mode={channelDialogMode ?? "set"}
       />
     </>
   )
