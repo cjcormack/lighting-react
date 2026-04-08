@@ -1,6 +1,6 @@
 import { InternalApiConnection } from "./internalApi";
 import { Subscription } from "./subscription";
-import { ScriptSetting } from "../store/scripts";
+import { ScriptSetting, ScriptType } from "../store/scripts";
 
 export type ProjectMode = 'SCRIPT_BASED' | 'DB_BASED';
 
@@ -77,6 +77,7 @@ export interface ProjectScriptDetail {
   name: string;
   script: string;
   settings: ScriptSetting[];
+  scriptType: ScriptType;
   // Usage tracking fields
   sceneNames?: string[];
   chaseNames?: string[];

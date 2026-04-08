@@ -1,6 +1,7 @@
 import {
   TableProperties,
   Braces,
+  Sparkles,
   Spotlight,
   IterationCw,
   LayoutGrid,
@@ -45,6 +46,14 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/scripts`,
     visibility: "always",
     pathMatch: "/scripts",
+  },
+  {
+    id: "fx-library",
+    label: "FX Library",
+    icon: Sparkles,
+    path: (p) => `/projects/${p}/fx-library`,
+    visibility: "always",
+    pathMatch: "/fx-library",
   },
   {
     id: "scenes",

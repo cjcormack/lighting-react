@@ -61,7 +61,7 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
             key={item.id}
             icon={<item.icon className="size-5" />}
             label={item.label}
-            isActive={location.pathname.includes(item.pathMatch)}
+            isActive={new RegExp(item.pathMatch + '(/|$)').test(location.pathname)}
             collapsed
             onClick={() => navigate(item.path(viewedProject.id))}
           />
@@ -98,7 +98,7 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
             key={item.id}
             icon={<item.icon className="size-4" />}
             label={item.label}
-            isActive={location.pathname.includes(item.pathMatch)}
+            isActive={new RegExp(item.pathMatch + '(/|$)').test(location.pathname)}
             collapsed={false}
             onClick={() => navigate(item.path(viewedProject.id))}
           />

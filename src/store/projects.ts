@@ -211,6 +211,7 @@ export const projectsApi = restApi.injectEndpoints({
           method: 'POST',
           body: request,
         }),
+        invalidatesTags: ['FxLibrary'],
       }),
 
       // Save script
@@ -220,7 +221,7 @@ export const projectsApi = restApi.injectEndpoints({
           method: 'PUT',
           body: request,
         }),
-        invalidatesTags: ['Script'],
+        invalidatesTags: ['Script', 'FxLibrary'],
       }),
 
       // Delete script
@@ -229,7 +230,7 @@ export const projectsApi = restApi.injectEndpoints({
           url: `project/${projectId}/scripts/${scriptId}`,
           method: 'DELETE',
         }),
-        invalidatesTags: ['Script'],
+        invalidatesTags: ['Script', 'FxLibrary'],
       }),
 
       // Create script
@@ -239,7 +240,7 @@ export const projectsApi = restApi.injectEndpoints({
           method: 'POST',
           body: script,
         }),
-        invalidatesTags: ['Script'],
+        invalidatesTags: ['Script', 'FxLibrary'],
       }),
     }
   },

@@ -11,6 +11,8 @@ import {
   Repeat,
   Spotlight,
   Play,
+  Sparkles,
+  AudioWaveform,
 } from "lucide-react"
 
 import { Card } from "@/components/ui/card"
@@ -46,7 +48,7 @@ import {
   useDeleteProjectScriptMutation,
 } from "../store/projects"
 import { ProjectScriptDetail } from "../api/projectApi"
-import { Script, ScriptSetting } from "../store/scripts"
+import { Script, ScriptSetting, ScriptType } from "../store/scripts"
 import CopyScriptDialog from "../CopyScriptDialog"
 
 // Redirect component for /scripts route
@@ -340,6 +342,17 @@ const getScriptUsage = (script: Script): ScriptUsage => {
   return { icon: <Braces className="size-4" />, tooltip: "Not used" }
 }
 
+const getScriptTypeInfo = (scriptType: ScriptType): ScriptUsage | null => {
+  switch (scriptType) {
+    case 'FX_DEFINITION':
+      return { icon: <Sparkles className="size-4" />, tooltip: "FX Definition Script" }
+    case 'FX_APPLICATION':
+      return { icon: <AudioWaveform className="size-4" />, tooltip: "FX Application Script" }
+    default:
+      return null // GENERAL scripts use the regular usage-based icon
+  }
+}
+
 // Helper for scripts that only have scene/chase names (from other projects)
 const getScriptUsageFromNames = (sceneNames: string[], chaseNames: string[]): ScriptUsage => {
   if (sceneNames.length > 0) {
@@ -382,14 +395,20 @@ function ScriptListEntry({
 
   const isSelected = location.pathname === `/projects/${projectId}/scripts/${scriptId}`
 
+  // Script type determines the icon for FX scripts
+  const scriptType = script.scriptType ?? 'GENERAL'
+  const scriptTypeInfo = getScriptTypeInfo(scriptType)
+
   // Get usage info (now available for all projects)
-  const usage = "usedByProperties" in script && script.usedByProperties
-    ? getScriptUsage(script as Script)
-    : "sceneNames" in script && (script.sceneNames?.length ?? 0) > 0
-      ? getScriptUsageFromNames(script.sceneNames!, script.chaseNames ?? [])
-      : "chaseNames" in script && (script.chaseNames?.length ?? 0) > 0
-        ? getScriptUsageFromNames([], script.chaseNames!)
-        : { icon: <Braces className="size-4" />, tooltip: "Not used" }
+  const usage = scriptTypeInfo
+    ? scriptTypeInfo
+    : "usedByProperties" in script && script.usedByProperties
+      ? getScriptUsage(script as Script)
+      : "sceneNames" in script && (script.sceneNames?.length ?? 0) > 0
+        ? getScriptUsageFromNames(script.sceneNames!, script.chaseNames ?? [])
+        : "chaseNames" in script && (script.chaseNames?.length ?? 0) > 0
+          ? getScriptUsageFromNames([], script.chaseNames!)
+          : { icon: <Braces className="size-4" />, tooltip: "Not used" }
 
   const handleClick = () => {
     navigate(`/projects/${projectId}/scripts/${scriptId}`)
@@ -560,6 +579,7 @@ function ReadOnlyScriptView({
     <ScriptEditor
       script={script}
       id={script.id}
+      scriptType={script.scriptType ?? 'GENERAL'}
       readOnly
     />
   )
@@ -651,12 +671,14 @@ function EditableScriptEditor({
   const canSave = hasChanged && currentName !== "" && currentScript !== ""
   const canReset = hasChanged
 
+  const scriptType = script.scriptType ?? 'GENERAL'
+
   const handleCompile = () => {
-    runCompileMutation({ projectId, script: currentScript, settings: currentSettings })
+    runCompileMutation({ projectId, script: currentScript, settings: currentSettings, scriptType })
   }
 
   const handleRun = () => {
-    runRunMutation({ projectId, script: currentScript, settings: currentSettings })
+    runRunMutation({ projectId, script: currentScript, settings: currentSettings, scriptType, scriptId: script.id })
   }
 
   const handleSave = async () => {
@@ -666,6 +688,7 @@ function EditableScriptEditor({
       name: currentName,
       script: currentScript,
       settings: currentSettings,
+      scriptType,
     })
     setEdits({})
   }
@@ -704,6 +727,7 @@ function EditableScriptEditor({
       <ScriptEditor
         script={editableScript}
         id={script.id}
+        scriptType={scriptType}
         onNameChange={(name) => setEdits({ ...edits, name: name !== script.name ? name : undefined })}
         onScriptChange={(code) => {
           const normalized = code.trim()
@@ -779,6 +803,7 @@ function ViewProjectScript({
       <ScriptEditor
         script={script}
         id={`${projectId}-${scriptId}`}
+        scriptType={script.scriptType ?? 'GENERAL'}
         readOnly
         headerActions={
           <Button

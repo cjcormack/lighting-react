@@ -60,9 +60,13 @@ export interface EffectLibraryEntry {
   name: string
   category: string
   outputType: string
-  description: string
+  effectMode: string
+  description?: string
   parameters: EffectParameterDef[]
   compatibleProperties: string[]
+  source?: string
+  sourceDefinitionId?: number | null
+  script?: string | null
 }
 
 export interface AddFixtureFxRequest {
@@ -103,6 +107,7 @@ export const fixtureFxApi = restApi.injectEndpoints({
 
     effectLibrary: build.query<EffectLibraryEntry[], void>({
       query: () => 'fx/library',
+      providesTags: ['FxLibrary'],
     }),
 
     addFixtureFx: build.mutation<{ effectId: number }, AddFixtureFxRequest>({

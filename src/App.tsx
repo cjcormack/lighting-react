@@ -7,6 +7,7 @@ import { FixturesRedirect, ProjectFixtures } from "./routes/Fixtures";
 import { GroupsRedirect, ProjectGroups } from "./routes/Groups";
 import Projects from "./routes/Projects";
 import ProjectScripts, { ScriptsRedirect } from "./routes/ProjectScripts";
+import { ProjectFxLibrary, FxLibraryRedirect } from "./routes/FxLibrary";
 import { ProjectScenes, ScenesRedirect, ChasesRedirect } from "./routes/ProjectScenes";
 import { FxRedirect, ProjectFxBusking } from "./routes/FxBusking";
 import { PresetsRedirect, ProjectFxPresets } from "./routes/FxPresets";
@@ -103,6 +104,14 @@ function App() {
         {
           path: "projects/:projectId/scripts/:scriptId?",
           element: <ProjectScripts />,
+        },
+        {
+          path: "fx-library",
+          element: <FxLibraryRedirect />,
+        },
+        {
+          path: "projects/:projectId/fx-library",
+          element: <ProjectFxLibrary />,
         },
         {
           path: "scenes",

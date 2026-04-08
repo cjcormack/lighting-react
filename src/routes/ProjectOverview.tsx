@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
   Braces,
+  Sparkles,
   Spotlight,
   IterationCw,
   Settings,
@@ -126,6 +127,12 @@ export default function ProjectOverview() {
             icon={<Braces className="size-5" />}
             description="Kotlin lighting scripts"
             onClick={() => navigate(`/projects/${project.id}/scripts`)}
+          />
+          <QuickNavCard
+            title="FX Library"
+            icon={<Sparkles className="size-5" />}
+            description="Built-in and custom effects"
+            onClick={() => navigate(`/projects/${project.id}/fx-library`)}
           />
           <QuickNavCard
             title="Scenes"
