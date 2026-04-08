@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import {
   Sheet,
   SheetContent,
+  SheetBody,
   SheetHeader,
   SheetTitle,
   SheetFooter,
@@ -112,7 +113,7 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
           <SheetTitle>Edit Group</SheetTitle>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto space-y-4 py-4">
+        <SheetBody>
           <div className="space-y-1.5">
             <Label htmlFor="group-name">Group Name</Label>
             <Input
@@ -175,7 +176,7 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
             }}
           />
 
-        </div>
+        </SheetBody>
 
         <SheetFooter className="flex-row justify-between">
           <Button

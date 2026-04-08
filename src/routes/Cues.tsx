@@ -827,12 +827,11 @@ export function ProjectCues() {
           <DialogFooter>
             <Button
               variant="outline"
-              size="sm"
               onClick={() => setDeletingStack(null)}
             >
               Cancel
             </Button>
-            <Button variant="destructive" size="sm" onClick={handleDeleteStack}>
+            <Button variant="destructive" onClick={handleDeleteStack}>
               Delete Stack
             </Button>
           </DialogFooter>
@@ -864,14 +863,12 @@ export function ProjectCues() {
           <DialogFooter>
             <Button
               variant="outline"
-              size="sm"
               onClick={() => setDuplicatingCue(null)}
               disabled={isCreating}
             >
               Cancel
             </Button>
             <Button
-              size="sm"
               onClick={handleDuplicateConfirmed}
               disabled={isCreating || !duplicateName.trim()}
             >
@@ -919,7 +916,6 @@ export function ProjectCues() {
           <DialogFooter>
             <Button
               variant="outline"
-              size="sm"
               onClick={() => setMovingCue(null)}
             >
               Cancel

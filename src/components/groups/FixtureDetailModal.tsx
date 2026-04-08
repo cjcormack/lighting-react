@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
@@ -39,12 +40,12 @@ export function FixtureDetailModal({ fixtureKey, onClose, isEditing: externalIsE
   const hasElements = (fixture?.elements?.length ?? 0) > 0
 
   return (
-    <Dialog open={fixtureKey !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
+    <Sheet open={fixtureKey !== null} onOpenChange={(open) => !open && onClose()}>
+      <SheetContent className="flex flex-col sm:max-w-lg">
+        <SheetHeader>
           <div className="flex items-center justify-between pr-8">
             <div>
-              <DialogTitle>{fixture?.name ?? 'Fixture'}</DialogTitle>
+              <SheetTitle>{fixture?.name ?? 'Fixture'}</SheetTitle>
               {fixture && (fixture.manufacturer || fixture.model) && (
                 <p className="text-sm text-muted-foreground">
                   {[fixture.manufacturer, fixture.model].filter(Boolean).join(' ')}
@@ -94,8 +95,9 @@ export function FixtureDetailModal({ fixtureKey, onClose, isEditing: externalIsE
               ))}
             </div>
           )}
-        </DialogHeader>
+        </SheetHeader>
 
+        <SheetBody>
         {fixture && (
           <FixtureContent
             fixture={fixture}
@@ -103,7 +105,8 @@ export function FixtureDetailModal({ fixtureKey, onClose, isEditing: externalIsE
             viewMode={viewMode}
           />
         )}
-      </DialogContent>
-    </Dialog>
+        </SheetBody>
+      </SheetContent>
+    </Sheet>
   )
 }

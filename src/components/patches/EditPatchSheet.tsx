@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import {
   Sheet,
   SheetContent,
+  SheetBody,
   SheetHeader,
   SheetTitle,
   SheetFooter,
@@ -92,7 +93,7 @@ export function EditPatchSheet({ open, onOpenChange, patch, projectId, existingP
           {typeLabel && <p className="text-xs text-muted-foreground">{typeLabel} &middot; {channelCount}ch</p>}
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto space-y-4 py-4">
+        <SheetBody>
           <div className="space-y-1.5">
             <Label htmlFor="edit-name">Display Name</Label>
             <Input
@@ -165,7 +166,7 @@ export function EditPatchSheet({ open, onOpenChange, patch, projectId, existingP
             />
           </div>
 
-        </div>
+        </SheetBody>
 
         <SheetFooter className="flex-row justify-between">
           <Button

@@ -1,11 +1,12 @@
 import { useState, useEffect, Dispatch, SetStateAction } from "react"
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -147,13 +148,13 @@ export default function EditProjectDialog({
 
   if (isProjectLoading) {
     return (
-      <Dialog open={open} onOpenChange={open => !open && handleClose()}>
-        <DialogContent>
+      <Sheet open={open} onOpenChange={open => !open && handleClose()}>
+        <SheetContent className="flex flex-col sm:max-w-lg">
           <div className="flex justify-center p-8">
             <Loader2 className="size-6 animate-spin" />
           </div>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     )
   }
 
@@ -161,12 +162,12 @@ export default function EditProjectDialog({
   const sceneOnlyScenes = scenes?.filter(s => s.mode === "SCENE") || []
 
   return (
-    <Dialog open={open} onOpenChange={open => !open && handleClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Configure Project: {project?.name}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-6">
+    <Sheet open={open} onOpenChange={open => !open && handleClose()}>
+      <SheetContent className="flex flex-col sm:max-w-lg">
+        <SheetHeader>
+          <SheetTitle>Configure Project: {project?.name}</SheetTitle>
+        </SheetHeader>
+        <SheetBody>
           <div className="space-y-4">
             <h3 className="font-semibold">Basic Information</h3>
             <div className="space-y-2">
@@ -394,16 +395,16 @@ export default function EditProjectDialog({
               </p>
             </div>
           </div>
-        </div>
-        <DialogFooter>
+        </SheetBody>
+        <SheetFooter className="flex-row justify-end gap-2">
           <Button variant="outline" onClick={handleClose} disabled={isUpdating}>
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={!isValid || isUpdating}>
             {isUpdating ? "Saving..." : "Save"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   )
 }

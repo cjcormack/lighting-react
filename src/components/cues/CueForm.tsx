@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import {
   Sheet,
   SheetContent,
+  SheetBody,
   SheetDescription,
   SheetHeader,
   SheetTitle,
@@ -257,7 +258,7 @@ export function CueForm({
     <Sheet open={open} onOpenChange={handleSheetOpenChange}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-lg flex flex-col overflow-hidden"
+        className="flex flex-col sm:max-w-lg"
       >
         {/* ═══════ Main form view ═══════ */}
         {view === 'main' && (
@@ -292,15 +293,15 @@ export function CueForm({
               </SheetDescription>
             </SheetHeader>
 
-            <div className="flex-1 overflow-y-auto space-y-4 py-4">
+            <SheetBody>
 
               {/* Error message */}
               {error && (
-                <div className="px-1 text-sm text-destructive">{error}</div>
+                <div className="text-sm text-destructive">{error}</div>
               )}
 
               {/* Name */}
-              <div className="space-y-1.5 px-1">
+              <div className="space-y-1.5">
                 <Label htmlFor="cue-name">Name *</Label>
                 <Input
                   id="cue-name"
@@ -313,7 +314,7 @@ export function CueForm({
               </div>
 
               {/* ── Palette (inline editor) ── */}
-              <div className="space-y-1.5 px-1">
+              <div className="space-y-1.5">
                 <Label className="flex items-center gap-1.5">
                   <Palette className="size-3.5" />
                   Palette
@@ -348,7 +349,7 @@ export function CueForm({
               </div>
 
               {/* ── Preset Applications ── */}
-              <div className="space-y-1.5 px-1">
+              <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <Label className="flex items-center gap-1.5">
                     <Bookmark className="size-3.5" />
@@ -403,7 +404,7 @@ export function CueForm({
               </div>
 
               {/* ── Ad-hoc Effects ── */}
-              <div className="space-y-1.5 px-1">
+              <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <Label className="flex items-center gap-1.5">
                     <AudioWaveform className="size-3.5" />
@@ -452,7 +453,7 @@ export function CueForm({
 
               {/* ── Stack Transition Settings (only for cues in a stack) ── */}
               {isInStack && (
-                <div className="space-y-3 px-1 pt-2 border-t">
+                <div className="space-y-3 pt-2 border-t">
                   <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                     Transition
                   </Label>
@@ -537,9 +538,9 @@ export function CueForm({
                   </div>
                 </div>
               )}
-            </div>
+            </SheetBody>
 
-            <SheetFooter className="border-t pt-4">
+            <SheetFooter className="flex-row justify-end gap-2">
               <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
                 Cancel
               </Button>

@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Loader2 } from 'lucide-react'
@@ -41,12 +42,12 @@ export function GroupDetailModal({
   }, [groupName])
 
   return (
-    <Dialog open={groupName !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
+    <Sheet open={groupName !== null} onOpenChange={(open) => !open && onClose()}>
+      <SheetContent className="flex flex-col sm:max-w-lg">
+        <SheetHeader>
           <div className="flex items-center justify-between pr-8">
             <div>
-              <DialogTitle>{group?.name ?? 'Group'}</DialogTitle>
+              <SheetTitle>{group?.name ?? 'Group'}</SheetTitle>
               {group && (
                 <p className="text-sm text-muted-foreground">
                   {group.memberCount} fixture{group.memberCount !== 1 ? 's' : ''}
@@ -72,8 +73,9 @@ export function GroupDetailModal({
               ))}
             </div>
           )}
-        </DialogHeader>
+        </SheetHeader>
 
+        <SheetBody>
         {groupName && (
           <div className="space-y-4">
             {/* Inline properties section */}
@@ -97,13 +99,14 @@ export function GroupDetailModal({
             )}
           </div>
         )}
-      </DialogContent>
+        </SheetBody>
+      </SheetContent>
 
       {/* Nested fixture modal */}
       <FixtureDetailModal
         fixtureKey={selectedFixture}
         onClose={() => setSelectedFixture(null)}
       />
-    </Dialog>
+    </Sheet>
   )
 }

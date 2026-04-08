@@ -1,12 +1,13 @@
 import { Dispatch, SetStateAction, useState, useEffect } from "react"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -69,16 +70,16 @@ export default function CloneProjectDialog({
         : undefined
 
   return (
-    <Dialog open={open} onOpenChange={open => !open && handleClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Clone Project</DialogTitle>
-          <DialogDescription>
+    <Sheet open={open} onOpenChange={open => !open && handleClose()}>
+      <SheetContent className="flex flex-col sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>Clone Project</SheetTitle>
+          <SheetDescription>
             Clone &quot;{sourceProjectName}&quot; with all its scripts, scenes,
             and settings.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
+          </SheetDescription>
+        </SheetHeader>
+        <SheetBody>
           {errorMessage && (
             <Alert variant="destructive">
               <XCircle className="size-4" />
@@ -104,16 +105,16 @@ export default function CloneProjectDialog({
               placeholder="Leave empty to use the original project's description"
             />
           </div>
-        </div>
-        <DialogFooter>
+        </SheetBody>
+        <SheetFooter className="flex-row justify-end gap-2">
           <Button variant="outline" onClick={handleClose} disabled={isLoading}>
             Cancel
           </Button>
           <Button onClick={handleClone} disabled={!isValid || isLoading}>
             {isLoading ? "Cloning..." : "Clone"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   )
 }

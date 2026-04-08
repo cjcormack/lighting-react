@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from "react"
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog"
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -127,13 +128,14 @@ export function ChannelValueDialog({ open, onOpenChange, mode }: ChannelValueDia
     valueNum <= 255
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="flex flex-col sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>{title}</SheetTitle>
+          <SheetDescription>{description}</SheetDescription>
+        </SheetHeader>
 
+        <SheetBody>
         <form onSubmit={handleSubmit} className="space-y-3">
           {/* Input row */}
           <div className="flex items-end gap-1.5">
@@ -227,7 +229,8 @@ export function ChannelValueDialog({ open, onOpenChange, mode }: ChannelValueDia
             </div>
           )}
         </form>
-      </DialogContent>
-    </Dialog>
+        </SheetBody>
+      </SheetContent>
+    </Sheet>
   )
 }

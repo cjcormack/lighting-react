@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   Sheet,
   SheetContent,
+  SheetBody,
   SheetDescription,
   SheetHeader,
   SheetTitle,
@@ -505,7 +506,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
     <Sheet open={open} onOpenChange={handleSheetOpenChange}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-lg flex flex-col overflow-hidden"
+        className="flex flex-col sm:max-w-lg"
       >
         {/* ===== Main form view ===== */}
         {view === 'form' && (
@@ -519,9 +520,9 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
               </SheetDescription>
             </SheetHeader>
 
-            <div className="flex-1 overflow-y-auto space-y-4 py-4">
+            <SheetBody>
               {/* Name */}
-              <div className="space-y-1.5 px-1">
+              <div className="space-y-1.5">
                 <Label htmlFor="preset-name">Name *</Label>
                 <Input
                   id="preset-name"
@@ -533,7 +534,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
               </div>
 
               {/* Description */}
-              <div className="space-y-1.5 px-1">
+              <div className="space-y-1.5">
                 <Label htmlFor="preset-description">Description</Label>
                 <Textarea
                   id="preset-description"
@@ -546,7 +547,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
               </div>
 
               {/* Fixture Type */}
-              <div className="space-y-1.5 px-1">
+              <div className="space-y-1.5">
                 <Label>Fixture Type</Label>
                 <button
                   type="button"
@@ -573,7 +574,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
               </div>
 
               {/* Effects list */}
-              <div className="space-y-2 px-1">
+              <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label>Effects ({effects.length})</Label>
                   <Button variant="outline" size="sm" className="h-8" onClick={handleOpenAddEffect}>
@@ -666,9 +667,9 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
                   )
                 })}
               </div>
-            </div>
+            </SheetBody>
 
-            <SheetFooter className="border-t pt-4">
+            <SheetFooter className="flex-row justify-end gap-2">
               {preset && onDelete && (
                 <Button
                   variant="outline"
@@ -708,7 +709,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
               </SheetHeader>
             )}
 
-            <div className="flex-1 min-h-0 overflow-y-auto">
+            <SheetBody className="space-y-0 p-0">
               {addEffectStep === 'category' && (
                 <EffectCategoryPicker
                   effectsByCategory={effectsByCategory}
@@ -762,14 +763,14 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
                   onStepTimingChange={setAddStepTiming}
                 />
               )}
-            </div>
+            </SheetBody>
 
             {addEffectStep === 'configure' && (
-              <div className="border-t px-4 pb-4 pt-2">
+              <SheetFooter>
                 <Button onClick={handleConfirmAddEffect} className="w-full">
                   Add Effect
                 </Button>
-              </div>
+              </SheetFooter>
             )}
           </>
         )}
@@ -777,7 +778,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
         {/* ===== Edit Effect view (inline in sheet) ===== */}
         {view === 'edit-effect' && editEffectEntry && (
           <>
-            <div className="flex-1 min-h-0 overflow-y-auto">
+            <SheetBody className="space-y-0 p-0">
               <EffectParameterForm
                 effect={editEffectEntry}
                 beatDivision={editBeatDivision}
@@ -811,23 +812,24 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
                 stepTiming={editStepTiming}
                 onStepTimingChange={setEditStepTiming}
               />
-            </div>
-            <div className="flex gap-2 border-t px-4 pb-4 pt-2">
+            </SheetBody>
+            <SheetFooter className="flex-row justify-between">
               <Button
                 variant="destructive"
                 size="sm"
                 onClick={handleRemoveEditingEffect}
-                className="mr-auto"
               >
                 Remove
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setView('form')}>
-                Cancel
-              </Button>
-              <Button size="sm" onClick={handleConfirmEditEffect}>
-                Update
-              </Button>
-            </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setView('form')}>
+                  Cancel
+                </Button>
+                <Button onClick={handleConfirmEditEffect}>
+                  Update
+                </Button>
+              </div>
+            </SheetFooter>
           </>
         )}
 
@@ -857,7 +859,7 @@ export function PresetForm({ open, onOpenChange, preset, onSave, isSaving, initi
               </SheetDescription>
             </SheetHeader>
             <div className="flex-1" />
-            <SheetFooter className="border-t pt-4">
+            <SheetFooter className="flex-row justify-end gap-2">
               <Button variant="outline" onClick={() => setView('form')}>
                 Cancel
               </Button>

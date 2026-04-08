@@ -1,12 +1,9 @@
 import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog'
+  Sheet,
+  SheetContent,
+} from '@/components/ui/sheet'
 import { Badge } from '@/components/ui/badge'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -308,18 +305,18 @@ export function FixtureTypePickerContent({ hierarchy, fixtureCounts, onSelect, o
   )
 }
 
-/** Dialog-wrapped fixture type picker (for standalone use outside a Sheet). */
+/** Sheet-wrapped fixture type picker (for standalone use outside a parent Sheet). */
 export function FixtureTypePicker({ open, onOpenChange, hierarchy, fixtureCounts, onSelect }: FixtureTypePickerProps) {
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) onOpenChange(false) }}>
-      <DialogContent className="max-h-[80vh] flex flex-col p-0 gap-0" showCloseButton={false}>
+    <Sheet open={open} onOpenChange={(v) => { if (!v) onOpenChange(false) }}>
+      <SheetContent className="flex flex-col p-0 gap-0 sm:max-w-md">
         <FixtureTypePickerContent
           hierarchy={hierarchy}
           fixtureCounts={fixtureCounts}
           onSelect={onSelect}
           onClose={() => onOpenChange(false)}
         />
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   )
 }

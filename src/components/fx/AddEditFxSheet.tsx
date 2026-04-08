@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import {
   Sheet,
   SheetContent,
+  SheetBody,
   SheetHeader,
   SheetTitle,
   SheetDescription,
@@ -364,13 +365,13 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent side="right" className="w-full sm:max-w-md flex flex-col">
+      <SheetContent side="right" className="flex flex-col sm:max-w-md">
         <SheetHeader>
           <SheetTitle>{isEdit ? 'Edit Effect' : 'Add Effect'}</SheetTitle>
           <SheetDescription>{targetLabel}</SheetDescription>
         </SheetHeader>
 
-        <div className="flex-1 min-h-0 overflow-y-auto">
+        <SheetBody className="space-y-0 p-0">
           {step === 'category' && (
             <EffectCategoryPicker
               effectsByCategory={effectsByCategory}
@@ -423,7 +424,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
               onStepTimingChange={setStepTiming}
             />
           )}
-        </div>
+        </SheetBody>
 
         {step === 'configure' && (
           <SheetFooter>

@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import {
   Sheet,
   SheetContent,
+  SheetBody,
   SheetHeader,
   SheetTitle,
   SheetDescription,
@@ -91,13 +92,13 @@ export function ConfigureEffectSheet({
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent side="right" className="w-full sm:max-w-md flex flex-col">
+      <SheetContent side="right" className="flex flex-col sm:max-w-md">
         <SheetHeader>
           <SheetTitle>{effect?.name ?? 'Configure Effect'}</SheetTitle>
           <SheetDescription>Customise parameters before applying</SheetDescription>
         </SheetHeader>
 
-        <div className="flex-1 min-h-0 overflow-y-auto">
+        <SheetBody className="space-y-0 p-0">
           {effect && (
             <EffectParameterForm
               effect={effect}
@@ -125,9 +126,9 @@ export function ConfigureEffectSheet({
               onStepTimingChange={setStepTiming}
             />
           )}
-        </div>
+        </SheetBody>
 
-        <SheetFooter className="flex-row gap-2 sm:flex-row">
+        <SheetFooter className="flex-row gap-2">
           <Button variant="outline" onClick={onClose} className="flex-1">
             Cancel
           </Button>

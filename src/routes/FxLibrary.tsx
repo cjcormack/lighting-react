@@ -23,6 +23,7 @@ import {
 import {
   Sheet,
   SheetContent,
+  SheetBody,
   SheetFooter,
   SheetHeader,
   SheetTitle,
@@ -284,12 +285,12 @@ function FxLibraryContent({
         }}
       >
         {sheetMode.type === "view" && (
-          <SheetContent side="right" className="flex flex-col w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
+          <SheetContent side="right" className="flex flex-col sm:max-w-lg">
             <EffectDetailSheet effect={sheetMode.effect} />
           </SheetContent>
         )}
         {sheetMode.type === "edit" && (
-          <SheetContent side="right" className="flex flex-col w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
+          <SheetContent side="right" className="flex flex-col sm:max-w-lg">
             <EditFxDefinitionSheet
               definitionId={sheetMode.definitionId}
               onClose={() => setSheetMode({ type: "closed" })}
@@ -297,7 +298,7 @@ function FxLibraryContent({
           </SheetContent>
         )}
         {sheetMode.type === "new" && (
-          <SheetContent side="right" className="flex flex-col w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
+          <SheetContent side="right" className="flex flex-col sm:max-w-lg">
             <NewFxDefinitionSheet
               onClose={() => setSheetMode({ type: "closed" })}
               onCreated={(id) => setSheetMode({ type: "edit", definitionId: id })}
@@ -418,7 +419,7 @@ function EffectDetailSheet({ effect }: { effect: EffectLibraryEntry }) {
         )}
       </SheetHeader>
 
-      <div className="flex-1 overflow-y-auto space-y-4 py-4">
+      <SheetBody>
         {effect.parameters.length > 0 && (
           <div>
             <p className="text-sm font-medium text-muted-foreground mb-2">Parameters</p>
@@ -454,7 +455,7 @@ function EffectDetailSheet({ effect }: { effect: EffectLibraryEntry }) {
             compact
           />
         )}
-      </div>
+      </SheetBody>
     </>
   )
 }
@@ -575,7 +576,7 @@ function EditFxDefinitionSheet({
         resetRun={resetRun}
       />
 
-      <div className="flex-1 overflow-y-auto space-y-4 py-4">
+      <SheetBody>
         <div className="space-y-1.5">
           <Label htmlFor="edit-fx-name">Name</Label>
           <Input
@@ -621,7 +622,7 @@ function EditFxDefinitionSheet({
             }}
           />
         </div>
-      </div>
+      </SheetBody>
 
       <SheetFooter className="flex-row justify-between">
         <Button
@@ -751,7 +752,7 @@ function NewFxDefinitionSheet({
         </SheetTitle>
       </SheetHeader>
 
-      <div className="flex-1 overflow-y-auto space-y-4 py-4">
+      <SheetBody>
         {/* Metadata */}
         <div className="space-y-1.5">
           <Label htmlFor="new-fx-name">Name</Label>
@@ -898,9 +899,9 @@ function NewFxDefinitionSheet({
             onScriptChange={setScriptCode}
           />
         </div>
-      </div>
+      </SheetBody>
 
-      <SheetFooter className="flex-row justify-end">
+      <SheetFooter className="flex-row justify-end gap-2">
         <Button variant="outline" onClick={onClose}>
           Cancel
         </Button>

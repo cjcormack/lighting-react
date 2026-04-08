@@ -1,11 +1,12 @@
 import { Dispatch, SetStateAction, useState } from "react"
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -77,14 +78,14 @@ export default function AddSceneDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={open => !open && handleClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>
+    <Sheet open={open} onOpenChange={open => !open && handleClose()}>
+      <SheetContent className="flex flex-col sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>
             Create {mode === "SCENE" ? "Scene" : "Chase"}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
+          </SheetTitle>
+        </SheetHeader>
+        <SheetBody>
           <div className="space-y-2">
             <Label htmlFor="scene-name">Name *</Label>
             <Input
@@ -115,16 +116,16 @@ export default function AddSceneDialog({
               </SelectContent>
             </Select>
           </div>
-        </div>
-        <DialogFooter>
+        </SheetBody>
+        <SheetFooter className="flex-row justify-end gap-2">
           <Button variant="outline" onClick={handleClose}>
             Cancel
           </Button>
           <Button onClick={handleAdd} disabled={!isValid}>
             Init
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   )
 }

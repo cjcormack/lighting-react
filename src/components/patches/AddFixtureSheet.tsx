@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useRef } from 'react'
 import {
   Sheet,
   SheetContent,
+  SheetBody,
   SheetHeader,
   SheetTitle,
   SheetFooter,
@@ -233,7 +234,7 @@ export function AddFixtureSheet({
 
   return (
     <Sheet open={open} onOpenChange={(v) => { if (!v) handleClose() }}>
-      <SheetContent className="flex flex-col gap-0 p-0 !w-full sm:!w-3/4 sm:max-w-md">
+      <SheetContent className="flex flex-col gap-0 p-0 sm:max-w-md">
         {step === 'type' && (
           <>
             <SheetHeader className="sr-only">
@@ -277,7 +278,7 @@ export function AddFixtureSheet({
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-4" onKeyDown={handleFormKeyDown}>
+            <SheetBody onKeyDown={handleFormKeyDown}>
               <div>
                 <div className="flex items-end gap-1.5">
                   <div className="flex flex-col gap-1 min-w-0 flex-1">
@@ -377,9 +378,9 @@ export function AddFixtureSheet({
               {keyConflict && (
                 <Warning>Key &ldquo;{effectiveKey}&rdquo; already exists</Warning>
               )}
-            </div>
+            </SheetBody>
 
-            <SheetFooter className="px-4 py-3 border-t">
+            <SheetFooter className="flex-row justify-end gap-2">
               <Button variant="outline" onClick={handleClose}>Close</Button>
               <Button
                 disabled={!isValid || isLoading}

@@ -107,6 +107,43 @@ REST API is used for CRUD operations on scripts, scenes, fixtures, etc.
 - This automatically registers the page in both the sidebar and the Cmd+K command palette
 - Dynamic items (e.g. universes) are handled by the `useNavItems()` hook
 
+### Sheets vs Dialogs
+
+Use **Sheets** (slide-in from right) for any UI that involves editing, forms, or multi-step workflows. Use **Dialogs** (centered modal) only for confirmations, alerts, and status displays.
+
+#### Sheet structure
+
+All sheets must follow this structure using the shared primitives from `src/components/ui/sheet.tsx`:
+
+```tsx
+<Sheet open={open} onOpenChange={onOpenChange}>
+  <SheetContent className="flex flex-col sm:max-w-md">
+    <SheetHeader>
+      <SheetTitle>Title</SheetTitle>
+    </SheetHeader>
+    <SheetBody>
+      {/* Scrollable form content — space-y-4 and px-4 pb-4 are built in */}
+    </SheetBody>
+    <SheetFooter className="flex-row justify-end gap-2">
+      <Button variant="outline">Cancel</Button>
+      <Button>Save</Button>
+    </SheetFooter>
+  </SheetContent>
+</Sheet>
+```
+
+#### Key rules
+
+- **SheetContent**: Always include `flex flex-col`. Use `sm:max-w-md` for standard forms, `sm:max-w-lg` for complex/wide content. On mobile, sheets are fullscreen by default (`w-full` in base class).
+- **SheetBody**: Use for all scrollable content areas. It provides `flex-1 overflow-y-auto space-y-4 px-4 pb-4`. Override with `className="space-y-0 p-0"` only when embedding components that manage their own padding (e.g. EffectParameterForm, pickers).
+- **SheetFooter patterns**:
+  - Create/Edit (no delete): `className="flex-row justify-end gap-2"`
+  - Edit with delete: `className="flex-row justify-between"` — Delete button on left, Cancel+Save on right in a `<div className="flex gap-2">`
+  - Equal-width actions (busking): `className="flex-row gap-2"` with `flex-1` on each button
+- **Buttons**: Use default size in footers (no `size="sm"`). Cancel is always `variant="outline"`. Delete is `variant="destructive"`.
+- **Multi-step sheets**: Use `p-0 gap-0` on SheetContent when step 1 needs edge-to-edge content (e.g. picker lists). Use SheetBody in subsequent steps for form content.
+- **Sub-view footers** (content embedded inside a parent sheet, e.g. CueEffectFlow): Use `<div className="border-t p-4 flex items-center gap-2">` since SheetFooter can only be a direct child of SheetContent.
+
 ### TypeScript
 - Strict mode enabled
 - Prefer explicit types over `any`

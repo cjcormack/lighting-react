@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useGroupPropertiesQuery } from '../../store/groups'
@@ -44,11 +45,11 @@ export function GroupPropertiesDialog({
   const groupedProperties = groupPropertiesByCategory(properties ?? [])
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
+    <Sheet open={open} onOpenChange={handleOpenChange}>
+      <SheetContent className="flex flex-col sm:max-w-lg">
+        <SheetHeader>
           <div className="flex items-center justify-between pr-8">
-            <DialogTitle>{groupName} Properties</DialogTitle>
+            <SheetTitle>{groupName} Properties</SheetTitle>
             <Button
               variant={isEditing ? 'default' : 'outline'}
               size="sm"
@@ -57,8 +58,9 @@ export function GroupPropertiesDialog({
               {isEditing ? 'Done' : 'Edit'}
             </Button>
           </div>
-        </DialogHeader>
+        </SheetHeader>
 
+        <SheetBody>
         {isLoading ? (
           <div className="py-8 text-center text-muted-foreground">
             Loading properties...
@@ -120,8 +122,9 @@ export function GroupPropertiesDialog({
             )}
           </div>
         )}
-      </DialogContent>
-    </Dialog>
+        </SheetBody>
+      </SheetContent>
+    </Sheet>
   )
 }
 

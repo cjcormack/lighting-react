@@ -423,7 +423,7 @@ export function CueEffectFlow({
             />
           </div>
 
-          <div className="border-t px-4 pb-4 pt-2 flex gap-2">
+          <div className="border-t p-4 flex items-center gap-2">
             {isEdit && onRemove && (
               <Button variant="destructive" size="sm" onClick={onRemove} className="gap-1">
                 <Trash2 className="size-3.5" />

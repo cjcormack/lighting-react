@@ -1,12 +1,13 @@
 import { Dispatch, SetStateAction, useState, useEffect } from 'react'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -84,15 +85,15 @@ export function CopyCueDialog({
         : undefined
 
   return (
-    <Dialog open={open} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Copy FX Cue to Project</DialogTitle>
-          <DialogDescription>
+    <Sheet open={open} onOpenChange={(open) => !open && handleClose()}>
+      <SheetContent className="flex flex-col sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>Copy FX Cue to Project</SheetTitle>
+          <SheetDescription>
             Copy &quot;{cueName}&quot; to another project.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
+          </SheetDescription>
+        </SheetHeader>
+        <SheetBody>
           {errorMessage && (
             <Alert variant="destructive">
               <XCircle className="size-4" />
@@ -125,16 +126,16 @@ export function CopyCueDialog({
             />
             <p className="text-xs text-muted-foreground">Leave empty to keep the original name</p>
           </div>
-        </div>
-        <DialogFooter>
+        </SheetBody>
+        <SheetFooter className="flex-row justify-end gap-2">
           <Button variant="outline" onClick={handleClose} disabled={isLoading}>
             Cancel
           </Button>
           <Button onClick={handleCopy} disabled={!isValid || isLoading}>
             {isLoading ? 'Copying...' : 'Copy'}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   )
 }

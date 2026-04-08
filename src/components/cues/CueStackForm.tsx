@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label'
 import {
   Sheet,
   SheetContent,
+  SheetBody,
   SheetDescription,
   SheetHeader,
   SheetTitle,
@@ -61,7 +62,7 @@ export function CueStackForm({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+      <SheetContent side="right" className="flex flex-col sm:max-w-md">
         <SheetHeader>
           <SheetTitle>{stack ? 'Edit FX Cue Stack' : 'New FX Cue Stack'}</SheetTitle>
           <SheetDescription>
@@ -71,7 +72,7 @@ export function CueStackForm({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="space-y-5 py-4">
+        <SheetBody>
           {/* Name */}
           <div className="space-y-1.5">
             <Label htmlFor="stack-name">Name</Label>
@@ -122,9 +123,9 @@ export function CueStackForm({
           <p className="text-xs text-muted-foreground">
             Auto-advance and crossfade are configured per-cue in the cue editor.
           </p>
-        </div>
+        </SheetBody>
 
-        <SheetFooter>
+        <SheetFooter className="flex-row justify-end gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
             Cancel
           </Button>
