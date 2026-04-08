@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { useParams, useNavigate } from "react-router-dom"
+import { useParams, useNavigate, useSearchParams } from "react-router-dom"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -159,11 +159,20 @@ function FxLibraryContent({
   projectName: string
   isCurrent: boolean
 }) {
+  const [searchParams, setSearchParams] = useSearchParams()
   const { data: library, isLoading } = useEffectLibraryQuery()
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(
     new Set()
   )
   const [sheetMode, setSheetMode] = useState<SheetMode>({ type: "closed" })
+
+  // Open new sheet when navigated with ?action=new (e.g. from command palette)
+  useEffect(() => {
+    if (searchParams.get("action") === "new" && isCurrent) {
+      setSheetMode({ type: "new" })
+      setSearchParams({}, { replace: true })
+    }
+  }, [searchParams, isCurrent, setSearchParams])
 
   const grouped = useMemo(() => {
     if (!library) return []

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { Command } from "cmdk"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
 import {
-  Settings, FolderOpen, PlusCircle, Search, TableProperties, Bookmark,
+  Settings, FolderOpen, PlusCircle, Search, TableProperties, Bookmark, Sparkles,
   Clapperboard, AudioWaveform, LayoutGrid, Layers, ArrowLeft, Lock, LockOpen,
   SlidersHorizontal,
 } from "lucide-react"
@@ -283,6 +283,15 @@ export default function CommandPalette({ onConfigureProject, onApplyFx, onParkCh
                   >
                     <Clapperboard className="size-4 text-muted-foreground" />
                     New FX Cue
+                  </Command.Item>
+                  <Command.Item
+                    value="New FX"
+                    keywords={["effect", "definition", "script", "create", "custom"]}
+                    onSelect={() => runAction(() => navigate(`/projects/${viewedProject.id}/fx-library?action=new`))}
+                    className={itemClassName}
+                  >
+                    <Sparkles className="size-4 text-muted-foreground" />
+                    New FX
                   </Command.Item>
                   {onApplyFx && (
                     <Command.Item
