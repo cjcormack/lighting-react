@@ -5,7 +5,7 @@ import { useEffectLibraryQuery, type EffectLibraryEntry } from '@/store/fixtureF
 import { useGroupListQuery } from '@/store/groups'
 import { useFixtureListQuery } from '@/store/fixtures'
 import { CueTargetPicker } from './CueTargetPicker'
-import { TimingEditor } from './TimingEditor'
+import { TimingFields } from './TimingEditor'
 import { EffectCategoryPicker } from '@/components/fx/EffectCategoryPicker'
 import { EffectTypePicker } from '@/components/fx/EffectTypePicker'
 import { EffectParameterForm } from '@/components/fx/EffectParameterForm'
@@ -440,7 +440,7 @@ export function CueEffectFlow({
               palette={palette}
             />
             <div className="px-4 pb-4">
-              <TimingEditor values={timingValues} onChange={setTimingValues} />
+              <TimingFields values={timingValues} onChange={setTimingValues} />
             </div>
           </div>
 

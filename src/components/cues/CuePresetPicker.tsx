@@ -5,7 +5,7 @@ import { useProjectPresetListQuery } from '@/store/fxPresets'
 import { useGroupListQuery } from '@/store/groups'
 import { useFixtureListQuery } from '@/store/fixtures'
 import { CueTargetPicker } from './CueTargetPicker'
-import { TimingEditor } from './TimingEditor'
+import { TimingFields } from './TimingEditor'
 import { EFFECT_CATEGORY_INFO } from '@/components/fx/fxConstants'
 import type { CueTarget } from '@/api/cuesApi'
 
@@ -253,7 +253,7 @@ export function CuePresetPicker({
           </div>
 
           <div className="flex-1 overflow-y-auto px-4 pb-4">
-            <TimingEditor values={timingValues} onChange={setTimingValues} />
+            <TimingFields values={timingValues} onChange={setTimingValues} />
           </div>
 
           <div className="border-t p-4 flex items-center gap-2">

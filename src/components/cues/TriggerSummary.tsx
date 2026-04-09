@@ -1,41 +1,37 @@
 import { Button } from '@/components/ui/button'
-import { X, Play, Square, Timer, Repeat } from 'lucide-react'
+import { X, Play, Square } from 'lucide-react'
+import { formatMs } from '@/lib/formatMs'
 import type { CueTriggerDetail } from '@/api/cuesApi'
 
 const TRIGGER_ICONS: Record<string, typeof Play> = {
   ACTIVATION: Play,
   DEACTIVATION: Square,
-  DELAYED: Timer,
-  RECURRING: Repeat,
 }
 
 const TRIGGER_LABELS: Record<string, string> = {
   ACTIVATION: 'On activate',
   DEACTIVATION: 'On deactivate',
-  DELAYED: 'After delay',
-  RECURRING: 'Recurring',
-}
-
-function formatMs(ms: number): string {
-  if (ms >= 60000) return `${(ms / 60000).toFixed(1)}m`
-  if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`
-  return `${ms}ms`
 }
 
 function describeTrigger(trigger: CueTriggerDetail): string {
   const parts: string[] = []
 
-  // Timing description
+  // Base label from type
   const label = TRIGGER_LABELS[trigger.triggerType] ?? trigger.triggerType
-  if (trigger.triggerType === 'DELAYED' && trigger.delayMs) {
-    parts.push(`${label} ${formatMs(trigger.delayMs)}`)
-  } else if (trigger.triggerType === 'RECURRING' && trigger.intervalMs) {
+
+  // Derive timing description from fields
+  if (trigger.intervalMs) {
     const interval = formatMs(trigger.intervalMs)
     if (trigger.randomWindowMs) {
-      parts.push(`Every ~${interval} (+-${formatMs(trigger.randomWindowMs)})`)
+      parts.push(`Every ~${interval} (±${formatMs(trigger.randomWindowMs)})`)
     } else {
       parts.push(`Every ${interval}`)
     }
+    if (trigger.delayMs) {
+      parts[0] += ` after ${formatMs(trigger.delayMs)}`
+    }
+  } else if (trigger.delayMs) {
+    parts.push(`${label} after ${formatMs(trigger.delayMs)}`)
   } else {
     parts.push(label)
   }
@@ -54,7 +50,7 @@ interface TriggerSummaryProps {
 }
 
 export function TriggerSummary({ trigger, onClick, onRemove }: TriggerSummaryProps) {
-  const Icon = TRIGGER_ICONS[trigger.triggerType] ?? Timer
+  const Icon = TRIGGER_ICONS[trigger.triggerType] ?? Play
 
   return (
     <div

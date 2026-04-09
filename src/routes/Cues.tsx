@@ -109,10 +109,40 @@ import { useProjectPresetListQuery } from '../store/fxPresets'
 import type { FxPreset } from '../api/fxPresetsApi'
 import type { Cue, CueInput, CueCurrentState } from '../api/cuesApi'
 import type { CueStack, CueStackInput } from '../api/cueStacksApi'
-import { EffectSummary } from '../components/fx/EffectSummary'
-import { PresetApplicationSummary } from '../components/fx/PresetApplicationSummary'
-import { fromPresetEffect, fromCueAdHocEffect } from '../components/fx/effectSummaryTypes'
 import { useEffectLibraryQuery } from '../store/fixtureFx'
+import { CueFxTable } from '../components/cues/CueFxTable'
+
+/** Build a CueInput snapshot from a Cue (for inline editing mutations). */
+function buildCueInput(cue: Cue): CueInput {
+  return {
+    name: cue.name,
+    palette: cue.palette,
+    updateGlobalPalette: cue.updateGlobalPalette,
+    presetApplications: cue.presetApplications.map((pa) => ({
+      presetId: pa.presetId,
+      targets: pa.targets,
+      delayMs: pa.delayMs,
+      intervalMs: pa.intervalMs,
+      randomWindowMs: pa.randomWindowMs,
+      sortOrder: pa.sortOrder,
+    })),
+    adHocEffects: cue.adHocEffects.map((e) => ({ ...e })),
+    triggers: cue.triggers.map((t) => ({
+      triggerType: t.triggerType,
+      delayMs: t.delayMs,
+      intervalMs: t.intervalMs,
+      randomWindowMs: t.randomWindowMs,
+      scriptId: t.scriptId,
+      sortOrder: t.sortOrder,
+    })),
+    cueStackId: cue.cueStackId,
+    sortOrder: cue.sortOrder,
+    autoAdvance: cue.autoAdvance,
+    autoAdvanceDelayMs: cue.autoAdvanceDelayMs,
+    fadeDurationMs: cue.fadeDurationMs,
+    fadeCurve: cue.fadeCurve,
+  }
+}
 
 // Redirect /cues → /projects/:projectId/cues/all
 export function CuesRedirect() {
@@ -184,6 +214,83 @@ export function ProjectCues() {
   const [addCueToStack] = useAddCueToCueStackMutation()
   const [removeCueFromStack] = useRemoveCueFromCueStackMutation()
   const [reorderCues] = useReorderCueStackCuesMutation()
+
+  // ── Inline editing (debounced save with mutation accumulation) ──
+  const inlineSaveTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map())
+  const pendingInputs = useRef<Map<number, CueInput>>(new Map())
+
+  // Clean up pending timers on unmount
+  useEffect(() => {
+    const timers = inlineSaveTimers.current
+    return () => {
+      timers.forEach((timer) => clearTimeout(timer))
+      timers.clear()
+      pendingInputs.current.clear()
+    }
+  }, [])
+
+  const handleInlineTimingChange = useCallback(
+    (cue: Cue, variant: 'presets' | 'effects' | 'triggers', itemIndex: number, field: string, value: number | null) => {
+      // Reuse pending input to accumulate rapid edits, or build fresh from cue
+      let input = pendingInputs.current.get(cue.id)
+      if (!input) {
+        input = buildCueInput(cue)
+        pendingInputs.current.set(cue.id, input)
+      }
+
+      // Mutate the specific item's timing/beat field
+      if (variant === 'presets' && input.presetApplications[itemIndex]) {
+        const pa = input.presetApplications[itemIndex]
+        if (field === 'delayMs') pa.delayMs = value
+        else if (field === 'intervalMs') pa.intervalMs = value
+        else if (field === 'randomWindowMs') pa.randomWindowMs = value
+      } else if (variant === 'effects' && input.adHocEffects[itemIndex]) {
+        const eff = input.adHocEffects[itemIndex]
+        if (field === 'delayMs') eff.delayMs = value
+        else if (field === 'intervalMs') eff.intervalMs = value
+        else if (field === 'randomWindowMs') eff.randomWindowMs = value
+        else if (field === 'beatDivision' && value != null) eff.beatDivision = value
+      } else if (variant === 'triggers' && input.triggers?.[itemIndex]) {
+        const t = input.triggers[itemIndex]
+        if (field === 'delayMs') t.delayMs = value
+        else if (field === 'intervalMs') t.intervalMs = value
+        else if (field === 'randomWindowMs') t.randomWindowMs = value
+      }
+
+      // Debounce the save
+      const existing = inlineSaveTimers.current.get(cue.id)
+      if (existing) clearTimeout(existing)
+      inlineSaveTimers.current.set(
+        cue.id,
+        setTimeout(() => {
+          inlineSaveTimers.current.delete(cue.id)
+          const pending = pendingInputs.current.get(cue.id)
+          pendingInputs.current.delete(cue.id)
+          if (pending) saveCue({ projectId: projectIdNum, cueId: cue.id, ...pending })
+        }, 300),
+      )
+    },
+    [projectIdNum, saveCue],
+  )
+
+  const handleInlineRemove = useCallback(
+    (cue: Cue, variant: 'presets' | 'effects' | 'triggers', itemIndex: number) => {
+      // Cancel any pending debounced save — incorporate its mutations
+      const existingTimer = inlineSaveTimers.current.get(cue.id)
+      if (existingTimer) clearTimeout(existingTimer)
+      inlineSaveTimers.current.delete(cue.id)
+
+      const input = pendingInputs.current.get(cue.id) ?? buildCueInput(cue)
+      pendingInputs.current.delete(cue.id)
+
+      if (variant === 'presets') input.presetApplications.splice(itemIndex, 1)
+      else if (variant === 'effects') input.adHocEffects.splice(itemIndex, 1)
+      else if (variant === 'triggers') input.triggers?.splice(itemIndex, 1)
+
+      saveCue({ projectId: projectIdNum, cueId: cue.id, ...input })
+    },
+    [projectIdNum, saveCue],
+  )
 
   // Derive selectedView entirely from URL path
   const selectedView: CueStackView = stackIdParam
@@ -640,6 +747,8 @@ export function ProjectCues() {
         onCopy={setCopyingCue}
         onMoveToStack={handleMoveToStack}
         onRemoveFromStack={handleRemoveFromStack}
+        onInlineTimingChange={isCurrentProject ? handleInlineTimingChange : undefined}
+        onInlineRemove={isCurrentProject ? handleInlineRemove : undefined}
         isSortable={typeof selectedView === 'number' && isCurrentProject}
         dndSensors={dndSensors}
         onDragEnd={handleDragEnd}
@@ -950,6 +1059,8 @@ function CueListRows({
   onCopy,
   onMoveToStack,
   onRemoveFromStack,
+  onInlineTimingChange,
+  onInlineRemove,
   isSortable,
   dndSensors,
   onDragEnd,
@@ -975,6 +1086,8 @@ function CueListRows({
   onCopy: (cue: Cue) => void
   onMoveToStack: (cue: Cue) => void
   onRemoveFromStack: (cue: Cue) => void
+  onInlineTimingChange?: (cue: Cue, variant: 'presets' | 'effects' | 'triggers', itemIndex: number, field: string, value: number | null) => void
+  onInlineRemove?: (cue: Cue, variant: 'presets' | 'effects' | 'triggers', itemIndex: number) => void
   isSortable: boolean
   dndSensors: ReturnType<typeof useSensors>
   onDragEnd: (event: DragEndEvent) => void
@@ -1027,6 +1140,14 @@ function CueListRows({
         isCurrentProject && cue.cueStackId != null
           ? () => onRemoveFromStack(cue)
           : undefined
+      }
+      onInlineTimingChange={onInlineTimingChange
+        ? (variant, itemIndex, field, value) => onInlineTimingChange(cue, variant, itemIndex, field, value)
+        : undefined
+      }
+      onInlineRemove={onInlineRemove
+        ? (variant, itemIndex) => onInlineRemove(cue, variant, itemIndex)
+        : undefined
       }
       isInActiveStack={
         cue.cueStackId != null && activeCueStackIds.has(cue.cueStackId)
@@ -1091,6 +1212,8 @@ function CueListRow({
   onDuplicate,
   onMoveToStack,
   onRemoveFromStack,
+  onInlineTimingChange,
+  onInlineRemove,
   isInActiveStack,
   isActiveCueInStack,
   stackName,
@@ -1118,12 +1241,21 @@ function CueListRow({
   onDuplicate?: () => void
   onMoveToStack?: () => void
   onRemoveFromStack?: () => void
+  onInlineTimingChange?: (variant: 'presets' | 'effects' | 'triggers', itemIndex: number, field: string, value: number | null) => void
+  onInlineRemove?: (variant: 'presets' | 'effects' | 'triggers', itemIndex: number) => void
   isInActiveStack?: boolean
   isActiveCueInStack?: boolean
   stackName?: string | null
   showStackBadge?: boolean
   isSortable?: boolean
 }) {
+  const [editMode, setEditMode] = useState(false)
+
+  // Reset edit mode when row collapses
+  useEffect(() => {
+    if (!expanded) setEditMode(false)
+  }, [expanded])
+
   const {
     attributes,
     listeners,
@@ -1144,7 +1276,8 @@ function CueListRow({
 
   const presetCount = cue.presetApplications.length
   const adHocCount = cue.adHocEffects.length
-  const hasExpandableContent = presetCount > 0 || adHocCount > 0
+  const triggerCount = cue.triggers.length
+  const hasExpandableContent = presetCount > 0 || adHocCount > 0 || triggerCount > 0
 
   // ── Long-press → open context menu (all pointer types) ──
   const triggerRef = useRef<HTMLDivElement>(null)
@@ -1468,37 +1601,70 @@ function CueListRow({
         )}
       </div>
 
-      {/* ── Expanded content: preset applications and ad-hoc effects ── */}
+      {/* ── Expanded content: tabular preset, effect, and trigger lists ── */}
       {isExpanded && (
         <div className="px-3 pb-3 pt-1 space-y-2 ml-5 bg-accent/30">
-          {/* Preset applications */}
-          {cue.presetApplications.map((pa, index) => {
-            const fullPreset = presets?.find((p) => p.id === pa.presetId)
-            const presetEffects = fullPreset?.effects ?? []
+          {/* Edit mode toggle */}
+          {(onInlineTimingChange || onInlineRemove) && (
+            <div className="flex justify-end">
+              <button
+                className={cn(
+                  'size-6 flex items-center justify-center rounded transition-colors',
+                  editMode
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent',
+                )}
+                onClick={(e) => { e.stopPropagation(); setEditMode(!editMode) }}
+                title={editMode ? 'Exit edit mode' : 'Edit inline'}
+                aria-label={editMode ? 'Exit edit mode' : 'Edit inline'}
+                aria-pressed={editMode}
+              >
+                <Pencil className="size-3.5" />
+              </button>
+            </div>
+          )}
 
-            return (
-              <PresetApplicationSummary
-                key={`preset-${index}`}
-                presetName={pa.presetName}
-                presetId={pa.presetId}
-                effects={presetEffects.map((e) => fromPresetEffect(e, library))}
-                targets={pa.targets}
-                palette={cue.palette}
-                onClick={onEdit}
-              />
-            )
-          })}
-
-          {/* Ad-hoc effects */}
-          {cue.adHocEffects.map((effect, index) => (
-            <EffectSummary
-              key={`effect-${index}`}
-              effect={fromCueAdHocEffect(effect, library)}
-              target={{ type: effect.targetType, key: effect.targetKey }}
-              palette={cue.palette}
-              onClick={onEdit}
-            />
-          ))}
+          <CueFxTable
+            variant="presets"
+            items={cue.presetApplications}
+            onTimingChange={editMode && onInlineTimingChange
+              ? (idx, field, val) => onInlineTimingChange('presets', idx, field, val)
+              : undefined}
+            onItemClick={onEdit ? () => onEdit() : undefined}
+            onAdd={editMode && onEdit ? () => onEdit() : undefined}
+            onRemove={editMode && onInlineRemove
+              ? (idx) => onInlineRemove('presets', idx)
+              : undefined}
+            palette={cue.palette}
+            presets={presets}
+            library={library}
+          />
+          <CueFxTable
+            variant="effects"
+            items={cue.adHocEffects}
+            onTimingChange={editMode && onInlineTimingChange
+              ? (idx, field, val) => onInlineTimingChange('effects', idx, field, val)
+              : undefined}
+            onItemClick={onEdit ? () => onEdit() : undefined}
+            onAdd={editMode && onEdit ? () => onEdit() : undefined}
+            onRemove={editMode && onInlineRemove
+              ? (idx) => onInlineRemove('effects', idx)
+              : undefined}
+            palette={cue.palette}
+            library={library}
+          />
+          <CueFxTable
+            variant="triggers"
+            items={cue.triggers}
+            onTimingChange={editMode && onInlineTimingChange
+              ? (idx, field, val) => onInlineTimingChange('triggers', idx, field, val)
+              : undefined}
+            onItemClick={onEdit ? () => onEdit() : undefined}
+            onAdd={editMode && onEdit ? () => onEdit() : undefined}
+            onRemove={editMode && onInlineRemove
+              ? (idx) => onInlineRemove('triggers', idx)
+              : undefined}
+          />
         </div>
       )}
     </div>

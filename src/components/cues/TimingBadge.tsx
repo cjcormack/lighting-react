@@ -1,10 +1,5 @@
-import { Clock, Timer, Repeat } from 'lucide-react'
-
-function formatMs(ms: number): string {
-  if (ms >= 60000) return `${(ms / 60000).toFixed(1)}m`
-  if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`
-  return `${ms}ms`
-}
+import { Timer, Repeat } from 'lucide-react'
+import { formatMs } from '@/lib/formatMs'
 
 interface TimingBadgeProps {
   delayMs?: number | null

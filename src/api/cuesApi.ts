@@ -48,7 +48,7 @@ export interface CueAdHocEffect {
 
 // ─── Script trigger types ──────────────────────────────────────────
 
-export type TriggerType = 'ACTIVATION' | 'DEACTIVATION' | 'DELAYED' | 'RECURRING'
+export type TriggerType = 'ACTIVATION' | 'DEACTIVATION'
 
 /** Script trigger definition for create/update */
 export interface CueTrigger {

@@ -79,8 +79,6 @@ export function CueTriggerEditor({
 
   // Validation
   const isValid = (() => {
-    if (triggerType === 'DELAYED' && (!delayMs || Number(delayMs) <= 0)) return false
-    if (triggerType === 'RECURRING' && (!intervalMs || Number(intervalMs) <= 0)) return false
     if (scriptMode === 'existing' && scriptId == null) return false
     if (scriptMode === 'inline' && (!inlineName.trim() || !inlineCode.trim())) return false
     return true
@@ -88,9 +86,9 @@ export function CueTriggerEditor({
 
   const buildTrigger = (resolvedScriptId: number): CueTrigger => ({
     triggerType,
-    delayMs: triggerType === 'DELAYED' ? Number(delayMs) : null,
-    intervalMs: triggerType === 'RECURRING' ? Number(intervalMs) : null,
-    randomWindowMs: triggerType === 'RECURRING' && randomWindowMs ? Number(randomWindowMs) : null,
+    delayMs: delayMs ? Number(delayMs) : null,
+    intervalMs: intervalMs ? Number(intervalMs) : null,
+    randomWindowMs: randomWindowMs ? Number(randomWindowMs) : null,
     scriptId: resolvedScriptId,
     sortOrder: trigger?.sortOrder ?? 0,
   })
@@ -155,62 +153,58 @@ export function CueTriggerEditor({
             <SelectContent>
               <SelectItem value="ACTIVATION">On Activation</SelectItem>
               <SelectItem value="DEACTIVATION">On Deactivation</SelectItem>
-              <SelectItem value="DELAYED">After Delay</SelectItem>
-              <SelectItem value="RECURRING">Recurring</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
-        {/* Timing fields */}
-        {triggerType === 'DELAYED' && (
-          <div className="space-y-1.5">
-            <Label htmlFor="trigger-delay">Delay (ms)</Label>
-            <Input
-              id="trigger-delay"
-              type="number"
-              min="100"
-              step="100"
-              value={delayMs}
-              onChange={(e) => setDelayMs(e.target.value)}
-              placeholder="e.g. 5000"
-              className="h-9"
-            />
-          </div>
-        )}
+        {/* Timing fields — always visible */}
+        <div className="space-y-1.5">
+          <Label htmlFor="trigger-delay">Delay (ms)</Label>
+          <Input
+            id="trigger-delay"
+            type="number"
+            min="0"
+            step="100"
+            value={delayMs}
+            onChange={(e) => setDelayMs(e.target.value)}
+            placeholder="e.g. 5000"
+            className="h-9"
+          />
+        </div>
 
-        {triggerType === 'RECURRING' && (
-          <>
-            <div className="space-y-1.5">
-              <Label htmlFor="trigger-interval">Interval (ms)</Label>
-              <Input
-                id="trigger-interval"
-                type="number"
-                min="100"
-                step="100"
-                value={intervalMs}
-                onChange={(e) => setIntervalMs(e.target.value)}
-                placeholder="e.g. 40000"
-                className="h-9"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="trigger-random">Random window (ms)</Label>
-              <p className="text-[11px] text-muted-foreground">
-                Optional. Each interval varies by +- this amount for organic timing.
-              </p>
-              <Input
-                id="trigger-random"
-                type="number"
-                min="0"
-                step="100"
-                value={randomWindowMs}
-                onChange={(e) => setRandomWindowMs(e.target.value)}
-                placeholder="e.g. 5000"
-                className="h-9"
-              />
-            </div>
-          </>
-        )}
+        <div className="space-y-1.5">
+          <Label htmlFor="trigger-interval">Interval (ms)</Label>
+          <p className="text-[11px] text-muted-foreground">
+            Repeat at this interval. Leave empty for one-shot.
+          </p>
+          <Input
+            id="trigger-interval"
+            type="number"
+            min="100"
+            step="100"
+            value={intervalMs}
+            onChange={(e) => setIntervalMs(e.target.value)}
+            placeholder="e.g. 40000"
+            className="h-9"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="trigger-random">Random window (ms)</Label>
+          <p className="text-[11px] text-muted-foreground">
+            Each interval varies by ± this amount for organic timing.
+          </p>
+          <Input
+            id="trigger-random"
+            type="number"
+            min="0"
+            step="100"
+            value={randomWindowMs}
+            onChange={(e) => setRandomWindowMs(e.target.value)}
+            placeholder="e.g. 5000"
+            className="h-9"
+          />
+        </div>
 
         {/* Script selection / inline editor */}
         <Tabs value={scriptMode} onValueChange={(v) => setScriptMode(v as 'existing' | 'inline')}>
