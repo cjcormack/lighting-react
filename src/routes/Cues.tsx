@@ -95,7 +95,7 @@ import {
   useReorderCueStackCuesMutation,
 } from '../store/cueStacks'
 import { setPalette } from '../store/fx'
-import { CueForm } from '../components/cues/CueForm'
+import { CueForm, type CueFormView } from '../components/cues/CueForm'
 import { CueStackForm } from '../components/cues/CueStackForm'
 import { CueStackHeader } from '../components/cues/CueStackHeader'
 import {
@@ -316,6 +316,8 @@ export function ProjectCues() {
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [editingCue, setEditingCue] = useState<Cue | null>(null)
+  const [formInitialView, setFormInitialView] = useState<CueFormView | undefined>()
+  const [formEditIndex, setFormEditIndex] = useState<number | undefined>()
   const [copyingCue, setCopyingCue] = useState<Cue | null>(null)
   const [deletingCue, setDeletingCue] = useState<Cue | null>(null)
   const [duplicatingCue, setDuplicatingCue] = useState<Cue | null>(null)
@@ -462,6 +464,8 @@ export function ProjectCues() {
 
   const handleCreate = async () => {
     setEditingCue(null)
+    setFormInitialView(undefined)
+    setFormEditIndex(undefined)
     if (typeof selectedView === 'number') {
       // Creating in a stack: start empty, use inherited palette for context
       setInitialState(undefined)
@@ -477,8 +481,10 @@ export function ProjectCues() {
     setFormOpen(true)
   }
 
-  const handleEdit = (cue: Cue) => {
+  const handleEdit = (cue: Cue, deepLinkView?: CueFormView, deepLinkIndex?: number) => {
     setEditingCue(cue)
+    setFormInitialView(deepLinkView)
+    setFormEditIndex(deepLinkIndex)
     setFormOpen(true)
   }
 
@@ -842,6 +848,8 @@ export function ProjectCues() {
               ? computeInheritedPalette(editingCue.cueStackId, editingCue.id)
               : undefined
         }
+        initialView={formInitialView}
+        initialEditIndex={formEditIndex}
       />
 
       {/* Create/Edit stack form (Sheet) */}
@@ -1080,7 +1088,7 @@ function CueListRows({
   onApply: (cue: Cue, replaceAll?: boolean) => void
   onStop: (cue: Cue) => void
   onCopyPaletteToGlobal: (cue: Cue) => void
-  onEdit: (cue: Cue) => void
+  onEdit: (cue: Cue, deepLinkView?: CueFormView, deepLinkIndex?: number) => void
   onDelete: (cue: Cue) => void
   onDuplicate: (cue: Cue) => void
   onCopy: (cue: Cue) => void
@@ -1120,7 +1128,9 @@ function CueListRows({
           : undefined
       }
       onEdit={
-        isCurrentProject && cue.canEdit ? () => onEdit(cue) : undefined
+        isCurrentProject && cue.canEdit
+          ? (view, index) => onEdit(cue, view, index)
+          : undefined
       }
       onDelete={
         isCurrentProject && cue.canDelete
@@ -1235,7 +1245,7 @@ function CueListRow({
   onApplyReplace?: () => void
   onStop?: () => void
   onCopyPaletteToGlobal?: () => void
-  onEdit?: () => void
+  onEdit?: (deepLinkView?: CueFormView, deepLinkIndex?: number) => void
   onDelete?: () => void
   onCopy?: () => void
   onDuplicate?: () => void
@@ -1382,7 +1392,7 @@ function CueListRow({
     (onEdit || onDuplicate || onCopy || onDelete || onMoveToStack || onRemoveFromStack)
   )
     menuDefs.push('separator')
-  if (onEdit) menuDefs.push({ icon: Pencil, label: 'Edit', onClick: onEdit })
+  if (onEdit) menuDefs.push({ icon: Pencil, label: 'Edit', onClick: () => onEdit() })
   if (onDuplicate)
     menuDefs.push({ icon: CopyPlus, label: 'Duplicate', onClick: onDuplicate })
   if (onCopy)
@@ -1630,8 +1640,8 @@ function CueListRow({
             onTimingChange={editMode && onInlineTimingChange
               ? (idx, field, val) => onInlineTimingChange('presets', idx, field, val)
               : undefined}
-            onItemClick={onEdit ? () => onEdit() : undefined}
-            onAdd={editMode && onEdit ? () => onEdit() : undefined}
+            onItemClick={onEdit ? (idx) => onEdit('edit-preset', idx) : undefined}
+            onAdd={onEdit ? () => onEdit('add-preset') : undefined}
             onRemove={editMode && onInlineRemove
               ? (idx) => onInlineRemove('presets', idx)
               : undefined}
@@ -1645,8 +1655,8 @@ function CueListRow({
             onTimingChange={editMode && onInlineTimingChange
               ? (idx, field, val) => onInlineTimingChange('effects', idx, field, val)
               : undefined}
-            onItemClick={onEdit ? () => onEdit() : undefined}
-            onAdd={editMode && onEdit ? () => onEdit() : undefined}
+            onItemClick={onEdit ? (idx) => onEdit('edit-effect', idx) : undefined}
+            onAdd={onEdit ? () => onEdit('add-effect') : undefined}
             onRemove={editMode && onInlineRemove
               ? (idx) => onInlineRemove('effects', idx)
               : undefined}
@@ -1659,8 +1669,8 @@ function CueListRow({
             onTimingChange={editMode && onInlineTimingChange
               ? (idx, field, val) => onInlineTimingChange('triggers', idx, field, val)
               : undefined}
-            onItemClick={onEdit ? () => onEdit() : undefined}
-            onAdd={editMode && onEdit ? () => onEdit() : undefined}
+            onItemClick={onEdit ? (idx) => onEdit('edit-trigger', idx) : undefined}
+            onAdd={onEdit ? () => onEdit('add-trigger') : undefined}
             onRemove={editMode && onInlineRemove
               ? (idx) => onInlineRemove('triggers', idx)
               : undefined}

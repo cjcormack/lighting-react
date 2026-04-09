@@ -46,7 +46,7 @@ import { TimingBadge } from './TimingBadge'
 import type { Cue, CueInput, CueAdHocEffect, CueTrigger, CueTriggerDetail, CueCurrentState } from '@/api/cuesApi'
 
 /** Which view is showing inside the Sheet */
-type CueFormView =
+export type CueFormView =
   | 'main'
   | 'add-preset'
   | 'edit-preset'
@@ -78,6 +78,10 @@ interface CueFormProps {
   isInStack?: boolean
   /** Palette inherited from previous cues in the stack (for display & picker context) */
   inheritedPalette?: string[]
+  /** Deep-link: open directly to a sub-view instead of the main form */
+  initialView?: CueFormView
+  /** Deep-link: index of the item to edit (for edit-preset, edit-effect, edit-trigger views) */
+  initialEditIndex?: number
 }
 
 export function CueForm({
@@ -90,6 +94,8 @@ export function CueForm({
   initialState,
   isInStack = false,
   inheritedPalette,
+  initialView: initialViewProp,
+  initialEditIndex,
 }: CueFormProps) {
   const { data: library } = useEffectLibraryQuery()
   const { data: presets } = useProjectPresetListQuery(projectId)
@@ -150,12 +156,27 @@ export function CueForm({
       setFadeDurationMs(cue?.fadeDurationMs != null ? String(cue.fadeDurationMs) : '')
       setFadeCurve(cue?.fadeCurve ?? 'LINEAR')
       setError(null)
-      setView('main')
-      setEditingPresetIndex(null)
-      setEditingEffectIndex(null)
-      setEditingTriggerIndex(null)
+
+      // Deep-link: jump to a specific sub-view if requested
+      const targetView = initialViewProp ?? 'main'
+      setView(targetView)
+      if (targetView === 'edit-preset' && initialEditIndex != null) {
+        setEditingPresetIndex(initialEditIndex)
+      } else {
+        setEditingPresetIndex(null)
+      }
+      if (targetView === 'edit-effect' && initialEditIndex != null) {
+        setEditingEffectIndex(initialEditIndex)
+      } else {
+        setEditingEffectIndex(null)
+      }
+      if (targetView === 'edit-trigger' && initialEditIndex != null) {
+        setEditingTriggerIndex(initialEditIndex)
+      } else {
+        setEditingTriggerIndex(null)
+      }
     }
-  }, [open, cue, initialState])
+  }, [open, cue, initialState, initialViewProp, initialEditIndex])
 
   // ── Save handler ──
   const handleSave = async () => {
