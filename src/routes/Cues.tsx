@@ -64,6 +64,7 @@ import {
   ArrowRightLeft,
   LogOut,
   GripVertical,
+  Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -1569,6 +1570,15 @@ function CueListRow({
             >
               <AudioWaveform className="size-3" />
               {adHocCount}
+            </Badge>
+          )}
+          {triggerCount > 0 && (
+            <Badge
+              variant="outline"
+              className="text-[10px] px-1.5 py-0 gap-1"
+            >
+              <Zap className="size-3" />
+              {triggerCount}
             </Badge>
           )}
         </div>
