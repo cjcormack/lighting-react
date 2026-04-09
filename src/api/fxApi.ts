@@ -12,6 +12,7 @@ export interface FxEffectState {
   blendMode: string
   cueId: number | null
   cueStackId: number | null
+  timingSource?: string
 }
 
 export interface FxState {

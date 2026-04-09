@@ -1,23 +1,40 @@
 import { useState, useMemo } from 'react'
+import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight, Bookmark } from 'lucide-react'
 import { useProjectPresetListQuery } from '@/store/fxPresets'
 import { useGroupListQuery } from '@/store/groups'
 import { useFixtureListQuery } from '@/store/fixtures'
 import { CueTargetPicker } from './CueTargetPicker'
+import { TimingEditor } from './TimingEditor'
 import { EFFECT_CATEGORY_INFO } from '@/components/fx/fxConstants'
 import type { CueTarget } from '@/api/cuesApi'
 
+interface TimingValues {
+  delayMs?: number | null
+  intervalMs?: number | null
+  randomWindowMs?: number | null
+}
+
 interface CuePresetPickerProps {
   projectId: number
-  onConfirm: (app: { presetId: number; presetName: string; targets: CueTarget[] }) => void
+  onConfirm: (app: {
+    presetId: number
+    presetName: string
+    targets: CueTarget[]
+    delayMs?: number | null
+    intervalMs?: number | null
+    randomWindowMs?: number | null
+  }) => void
   onCancel: () => void
   /** For edit mode: pre-selected targets */
   existingTargets?: CueTarget[]
   /** For edit mode: pre-selected preset (skip target step) */
   existingPresetId?: number
+  /** For edit mode: pre-populate timing values */
+  existingTiming?: TimingValues
 }
 
-type Step = 'targets' | 'preset'
+type Step = 'targets' | 'preset' | 'timing'
 
 export function CuePresetPicker({
   projectId,
@@ -25,16 +42,27 @@ export function CuePresetPicker({
   onCancel,
   existingTargets,
   existingPresetId,
+  existingTiming,
 }: CuePresetPickerProps) {
   const { data: presets } = useProjectPresetListQuery(projectId)
   const { data: groups } = useGroupListQuery()
   const { data: fixtures } = useFixtureListQuery()
 
-  // If editing (existingPresetId set), start at preset step with existing target
-  const [step, setStep] = useState<Step>(existingPresetId != null ? 'preset' : 'targets')
+  // If editing (existingPresetId set), start at timing step
+  const [step, setStep] = useState<Step>(existingPresetId != null ? 'timing' : 'targets')
   const [selectedTarget, setSelectedTarget] = useState<CueTarget | null>(
     existingTargets?.[0] ?? null,
   )
+  const [selectedPresetId, setSelectedPresetId] = useState<number | null>(existingPresetId ?? null)
+  const [selectedPresetName, setSelectedPresetName] = useState<string | null>(null)
+  const [timingValues, setTimingValues] = useState<TimingValues>({
+    delayMs: existingTiming?.delayMs ?? null,
+    intervalMs: existingTiming?.intervalMs ?? null,
+    randomWindowMs: existingTiming?.randomWindowMs ?? null,
+  })
+
+  // Resolve preset name for edit mode
+  const resolvedPresetName = selectedPresetName ?? presets?.find((p) => p.id === selectedPresetId)?.name ?? 'Preset'
 
   // Set of all preset IDs available in this project
   const allPresetIds = useMemo(() => {
@@ -94,12 +122,29 @@ export function CuePresetPicker({
   }
 
   const handleSelectPreset = (preset: { id: number; name: string }) => {
-    if (!selectedTarget) return
+    setSelectedPresetId(preset.id)
+    setSelectedPresetName(preset.name)
+    setStep('timing')
+  }
+
+  const handleConfirm = () => {
+    if (!selectedTarget || selectedPresetId == null) return
     onConfirm({
-      presetId: preset.id,
-      presetName: preset.name,
+      presetId: selectedPresetId,
+      presetName: resolvedPresetName,
       targets: [selectedTarget],
+      delayMs: timingValues.delayMs,
+      intervalMs: timingValues.intervalMs,
+      randomWindowMs: timingValues.randomWindowMs,
     })
+  }
+
+  const handleBackFromTiming = () => {
+    if (existingPresetId != null) {
+      onCancel()
+    } else {
+      setStep('preset')
+    }
   }
 
   return (
@@ -132,12 +177,8 @@ export function CuePresetPicker({
           <div className="flex items-center gap-2 px-4 pt-4 pb-2">
             <button
               onClick={() => {
-                if (existingPresetId != null) {
-                  onCancel()
-                } else {
-                  setSelectedTarget(null)
-                  setStep('targets')
-                }
+                setSelectedTarget(null)
+                setStep('targets')
               }}
               className="hover:bg-accent rounded p-0.5 -ml-1"
             >
@@ -193,6 +234,34 @@ export function CuePresetPicker({
                 )
               })}
             </div>
+          </div>
+        </>
+      )}
+
+      {step === 'timing' && (
+        <>
+          <div className="flex items-center gap-2 px-4 pt-4 pb-2">
+            <button onClick={handleBackFromTiming} className="hover:bg-accent rounded p-0.5 -ml-1">
+              <ChevronLeft className="size-5" />
+            </button>
+            <div>
+              <h3 className="font-medium text-sm">{resolvedPresetName}</h3>
+              <p className="text-xs text-muted-foreground">
+                Configure when this preset should be applied.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-4 pb-4">
+            <TimingEditor values={timingValues} onChange={setTimingValues} />
+          </div>
+
+          <div className="border-t p-4 flex items-center gap-2">
+            <div className="flex-1" />
+            <Button variant="outline" onClick={onCancel}>Cancel</Button>
+            <Button onClick={handleConfirm}>
+              {existingPresetId != null ? 'Save' : 'Add Preset'}
+            </Button>
           </div>
         </>
       )}

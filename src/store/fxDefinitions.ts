@@ -15,6 +15,7 @@ export interface FxDefinition {
   script: string
   isBuiltin: boolean
   defaultStepTiming: boolean
+  timingSource?: 'BEAT' | 'WALL_CLOCK'
 }
 
 export interface CreateFxDefinitionRequest {
@@ -27,6 +28,7 @@ export interface CreateFxDefinitionRequest {
   compatibleProperties?: string[]
   script: string
   defaultStepTiming?: boolean
+  timingSource?: string
 }
 
 export interface UpdateFxDefinitionRequest {
@@ -39,6 +41,7 @@ export interface UpdateFxDefinitionRequest {
   compatibleProperties?: string[]
   script?: string
   defaultStepTiming?: boolean
+  timingSource?: string
 }
 
 export interface CompileFxDefinitionRequest {

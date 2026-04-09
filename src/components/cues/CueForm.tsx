@@ -29,6 +29,7 @@ import {
   Eraser,
   Globe,
   Check,
+  Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useEffectLibraryQuery } from '@/store/fixtureFx'
@@ -39,7 +40,10 @@ import { fromPresetEffect, fromCueAdHocEffect } from '@/components/fx/effectSumm
 import { CuePaletteEditor } from './CuePaletteEditor'
 import { CuePresetPicker } from './CuePresetPicker'
 import { CueEffectFlow } from './CueEffectFlow'
-import type { Cue, CueInput, CueAdHocEffect, CueCurrentState } from '@/api/cuesApi'
+import { CueTriggerEditor } from './CueTriggerEditor'
+import { TriggerSummary } from './TriggerSummary'
+import { TimingBadge } from './TimingBadge'
+import type { Cue, CueInput, CueAdHocEffect, CueTrigger, CueTriggerDetail, CueCurrentState } from '@/api/cuesApi'
 
 /** Which view is showing inside the Sheet */
 type CueFormView =
@@ -48,12 +52,18 @@ type CueFormView =
   | 'edit-preset'
   | 'add-effect'
   | 'edit-effect'
+  | 'add-trigger'
+  | 'edit-trigger'
 
-/** Local representation of a preset application (with resolved name for display) */
+/** Local representation of a preset application (with resolved name for display + timing) */
 interface CuePresetAppLocal {
   presetId: number
   presetName: string | null
   targets: { type: 'group' | 'fixture'; key: string }[]
+  delayMs?: number | null
+  intervalMs?: number | null
+  randomWindowMs?: number | null
+  sortOrder?: number
 }
 
 interface CueFormProps {
@@ -90,6 +100,7 @@ export function CueForm({
   const [updateGlobalPalette, setUpdateGlobalPalette] = useState(false)
   const [presetApps, setPresetApps] = useState<CuePresetAppLocal[]>([])
   const [adHocEffects, setAdHocEffects] = useState<CueAdHocEffect[]>([])
+  const [triggers, setTriggers] = useState<CueTriggerDetail[]>([])
   const [autoAdvance, setAutoAdvance] = useState(false)
   const [autoAdvanceDelayMs, setAutoAdvanceDelayMs] = useState<string>('')
   const [fadeDurationMs, setFadeDurationMs] = useState<string>('')
@@ -104,6 +115,9 @@ export function CueForm({
 
   // Index of the effect being edited
   const [editingEffectIndex, setEditingEffectIndex] = useState<number | null>(null)
+
+  // Index of the trigger being edited
+  const [editingTriggerIndex, setEditingTriggerIndex] = useState<number | null>(null)
 
   const isEditing = cue !== null
 
@@ -123,9 +137,14 @@ export function CueForm({
           presetId: pa.presetId,
           presetName: pa.presetName,
           targets: pa.targets,
+          delayMs: pa.delayMs,
+          intervalMs: pa.intervalMs,
+          randomWindowMs: pa.randomWindowMs,
+          sortOrder: pa.sortOrder,
         })) ?? [],
       )
       setAdHocEffects(source?.adHocEffects ?? [])
+      setTriggers(cue?.triggers ?? [])
       setAutoAdvance(cue?.autoAdvance ?? false)
       setAutoAdvanceDelayMs(cue?.autoAdvanceDelayMs != null ? String(cue.autoAdvanceDelayMs) : '')
       setFadeDurationMs(cue?.fadeDurationMs != null ? String(cue.fadeDurationMs) : '')
@@ -134,6 +153,7 @@ export function CueForm({
       setView('main')
       setEditingPresetIndex(null)
       setEditingEffectIndex(null)
+      setEditingTriggerIndex(null)
     }
   }, [open, cue, initialState])
 
@@ -152,8 +172,13 @@ export function CueForm({
         presetApplications: presetApps.map((pa) => ({
           presetId: pa.presetId,
           targets: pa.targets,
+          delayMs: pa.delayMs ?? null,
+          intervalMs: pa.intervalMs ?? null,
+          randomWindowMs: pa.randomWindowMs ?? null,
+          sortOrder: pa.sortOrder ?? 0,
         })),
         adHocEffects,
+        triggers: triggers.map(({ scriptName, ...rest }) => rest),
         autoAdvance,
         autoAdvanceDelayMs: autoAdvanceDelayMs ? Number(autoAdvanceDelayMs) : null,
         fadeDurationMs: fadeDurationMs ? Number(fadeDurationMs) : null,
@@ -180,22 +205,28 @@ export function CueForm({
     setView('edit-preset')
   }
 
-  const handlePresetConfirm = (app: { presetId: number; presetName: string; targets: { type: 'group' | 'fixture'; key: string }[] }) => {
+  const handlePresetConfirm = (app: { presetId: number; presetName: string; targets: { type: 'group' | 'fixture'; key: string }[]; delayMs?: number | null; intervalMs?: number | null; randomWindowMs?: number | null }) => {
     setPresetApps([...presetApps, {
       presetId: app.presetId,
       presetName: app.presetName,
       targets: app.targets,
+      delayMs: app.delayMs,
+      intervalMs: app.intervalMs,
+      randomWindowMs: app.randomWindowMs,
     }])
     setView('main')
   }
 
-  const handlePresetEditConfirm = (app: { presetId: number; presetName: string; targets: { type: 'group' | 'fixture'; key: string }[] }) => {
+  const handlePresetEditConfirm = (app: { presetId: number; presetName: string; targets: { type: 'group' | 'fixture'; key: string }[]; delayMs?: number | null; intervalMs?: number | null; randomWindowMs?: number | null }) => {
     if (editingPresetIndex === null) return
     const next = [...presetApps]
     next[editingPresetIndex] = {
       presetId: app.presetId,
       presetName: app.presetName,
       targets: app.targets,
+      delayMs: app.delayMs,
+      intervalMs: app.intervalMs,
+      randomWindowMs: app.randomWindowMs,
     }
     setPresetApps(next)
     setView('main')
@@ -271,13 +302,14 @@ export function CueForm({
                     variant="ghost"
                     size="sm"
                     className="h-7 text-xs gap-1 text-muted-foreground"
-                    disabled={name === '' && palette.length === 0 && presetApps.length === 0 && adHocEffects.length === 0}
+                    disabled={name === '' && palette.length === 0 && presetApps.length === 0 && adHocEffects.length === 0 && triggers.length === 0}
                     onClick={() => {
                       setName('')
                       setPalette([])
                       setUpdateGlobalPalette(false)
                       setPresetApps([])
                       setAdHocEffects([])
+                      setTriggers([])
                       setError(null)
                     }}
                   >
@@ -386,17 +418,20 @@ export function CueForm({
                       palette={effectivePalette}
                       onClick={() => handleEditPreset(index)}
                       actions={
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-7 text-muted-foreground hover:text-destructive shrink-0"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleRemovePreset(index)
-                          }}
-                        >
-                          <X className="size-3.5" />
-                        </Button>
+                        <>
+                          <TimingBadge delayMs={pa.delayMs} intervalMs={pa.intervalMs} randomWindowMs={pa.randomWindowMs} />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7 text-muted-foreground hover:text-destructive shrink-0"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleRemovePreset(index)
+                            }}
+                          >
+                            <X className="size-3.5" />
+                          </Button>
+                        </>
                       }
                     />
                   )
@@ -435,18 +470,55 @@ export function CueForm({
                     palette={effectivePalette}
                     onClick={() => handleEditEffect(index)}
                     actions={
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-7 text-muted-foreground hover:text-destructive shrink-0"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setAdHocEffects(adHocEffects.filter((_, i) => i !== index))
-                        }}
-                      >
-                        <X className="size-3.5" />
-                      </Button>
+                      <>
+                        <TimingBadge delayMs={effect.delayMs} intervalMs={effect.intervalMs} randomWindowMs={effect.randomWindowMs} />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-7 text-muted-foreground hover:text-destructive shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setAdHocEffects(adHocEffects.filter((_, i) => i !== index))
+                          }}
+                        >
+                          <X className="size-3.5" />
+                        </Button>
+                      </>
                     }
+                  />
+                ))}
+              </div>
+
+              {/* ── Script Hooks ── */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label className="flex items-center gap-1.5">
+                    <Zap className="size-3.5" />
+                    Script Hooks
+                    {triggers.length > 0 && (
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 ml-1">
+                        {triggers.length}
+                      </Badge>
+                    )}
+                  </Label>
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => { setEditingTriggerIndex(null); setView('add-trigger') }}>
+                    <Plus className="size-3 mr-1" />
+                    Add Hook
+                  </Button>
+                </div>
+
+                {triggers.length === 0 && (
+                  <p className="text-[11px] text-muted-foreground">
+                    No script hooks. Hooks run FX Application scripts at cue lifecycle events.
+                  </p>
+                )}
+
+                {triggers.map((trigger, index) => (
+                  <TriggerSummary
+                    key={`trigger-${index}`}
+                    trigger={trigger}
+                    onClick={() => { setEditingTriggerIndex(index); setView('edit-trigger') }}
+                    onRemove={() => setTriggers(triggers.filter((_, i) => i !== index))}
                   />
                 ))}
               </div>
@@ -569,6 +641,11 @@ export function CueForm({
             onCancel={() => setView('main')}
             existingPresetId={presetApps[editingPresetIndex]?.presetId}
             existingTargets={presetApps[editingPresetIndex]?.targets}
+            existingTiming={{
+              delayMs: presetApps[editingPresetIndex]?.delayMs,
+              intervalMs: presetApps[editingPresetIndex]?.intervalMs,
+              randomWindowMs: presetApps[editingPresetIndex]?.randomWindowMs,
+            }}
           />
         )}
 
@@ -590,6 +667,38 @@ export function CueForm({
             onUpdate={handleEffectUpdate}
             onRemove={handleEffectRemove}
             palette={effectivePalette}
+          />
+        )}
+
+        {/* ═══════ Add Trigger view ═══════ */}
+        {view === 'add-trigger' && (
+          <CueTriggerEditor
+            projectId={projectId}
+            onConfirm={(t) => {
+              setTriggers([...triggers, { ...t, scriptName: null }])
+              setView('main')
+            }}
+            onCancel={() => setView('main')}
+          />
+        )}
+
+        {/* ═══════ Edit Trigger view ═══════ */}
+        {view === 'edit-trigger' && editingTriggerIndex !== null && (
+          <CueTriggerEditor
+            projectId={projectId}
+            trigger={triggers[editingTriggerIndex]}
+            onConfirm={(t) => {
+              const next = [...triggers]
+              next[editingTriggerIndex] = { ...t, scriptName: null }
+              setTriggers(next)
+              setView('main')
+            }}
+            onCancel={() => setView('main')}
+            onRemove={() => {
+              setTriggers(triggers.filter((_, i) => i !== editingTriggerIndex))
+              setEditingTriggerIndex(null)
+              setView('main')
+            }}
           />
         )}
 

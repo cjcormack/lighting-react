@@ -5,6 +5,7 @@ import { useEffectLibraryQuery, type EffectLibraryEntry } from '@/store/fixtureF
 import { useGroupListQuery } from '@/store/groups'
 import { useFixtureListQuery } from '@/store/fixtures'
 import { CueTargetPicker } from './CueTargetPicker'
+import { TimingEditor } from './TimingEditor'
 import { EffectCategoryPicker } from '@/components/fx/EffectCategoryPicker'
 import { EffectTypePicker } from '@/components/fx/EffectTypePicker'
 import { EffectParameterForm } from '@/components/fx/EffectParameterForm'
@@ -72,6 +73,17 @@ export function CueEffectFlow({
   const [parameters, setParameters] = useState<Record<string, string>>(
     existingEffect?.parameters ?? {},
   )
+
+  // Timing state
+  const [timingValues, setTimingValues] = useState<{
+    delayMs?: number | null
+    intervalMs?: number | null
+    randomWindowMs?: number | null
+  }>({
+    delayMs: existingEffect?.delayMs ?? null,
+    intervalMs: existingEffect?.intervalMs ?? null,
+    randomWindowMs: existingEffect?.randomWindowMs ?? null,
+  })
 
   // ── Library lookup ──
   const libraryMap = useMemo(() => {
@@ -274,6 +286,9 @@ export function CueEffectFlow({
       elementFilter: elementFilter !== 'ALL' ? elementFilter : null,
       stepTiming: stepTiming || null,
       parameters: { ...parameters },
+      delayMs: timingValues.delayMs,
+      intervalMs: timingValues.intervalMs,
+      randomWindowMs: timingValues.randomWindowMs,
     }]
 
     onConfirm(effects)
@@ -294,6 +309,9 @@ export function CueEffectFlow({
       elementFilter: elementFilter !== 'ALL' ? elementFilter : null,
       stepTiming: stepTiming || null,
       parameters: { ...parameters },
+      delayMs: timingValues.delayMs,
+      intervalMs: timingValues.intervalMs,
+      randomWindowMs: timingValues.randomWindowMs,
     })
   }
 
@@ -421,6 +439,9 @@ export function CueEffectFlow({
               extendedChannels={{ white: true, amber: true, uv: true }}
               palette={palette}
             />
+            <div className="px-4 pb-4">
+              <TimingEditor values={timingValues} onChange={setTimingValues} />
+            </div>
           </div>
 
           <div className="border-t p-4 flex items-center gap-2">

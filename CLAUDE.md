@@ -80,6 +80,18 @@ DMX fixture definitions - describes what channels a fixture uses and how to cont
 ### Channels
 Raw DMX channel control per universe. Shows all 512 channels with current values.
 
+### FX Cues & Triggers
+Cues bundle palettes, FX preset applications, ad-hoc effects, and **script hooks** into named snapshots.
+
+**Timed effects**: Preset applications and ad-hoc effects can have optional timing (delayMs, intervalMs, randomWindowMs) to fire after a delay or on a recurring interval. Immediate (no timing) is the default.
+
+**Script hooks** (triggers) automate FX_APPLICATION script execution on cue lifecycle events:
+- **ACTIVATION** / **DEACTIVATION** — fire when the cue starts/stops
+- **DELAYED** — fire after a configurable delay
+- **RECURRING** — fire at an interval with optional randomisation for organic timing
+
+FX definitions have a `timingSource` field (`BEAT` or `WALL_CLOCK`) controlling whether effects sync to BPM or run on a fixed 50Hz wall-clock timer.
+
 ## API Communication
 
 The app maintains a persistent WebSocket connection to the backend for:

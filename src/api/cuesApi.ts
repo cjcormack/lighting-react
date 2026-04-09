@@ -4,10 +4,14 @@ export interface CueTarget {
   key: string
 }
 
-// Preset application within a cue
+// Preset application within a cue (with optional timing)
 export interface CuePresetApplication {
   presetId: number
   targets: CueTarget[]
+  delayMs?: number | null
+  intervalMs?: number | null
+  randomWindowMs?: number | null
+  sortOrder?: number
 }
 
 // Resolved preset application with name (from API response)
@@ -15,9 +19,13 @@ export interface CuePresetApplicationDetail {
   presetId: number
   presetName: string | null
   targets: CueTarget[]
+  delayMs?: number | null
+  intervalMs?: number | null
+  randomWindowMs?: number | null
+  sortOrder?: number
 }
 
-// Ad-hoc effect stored inline in a cue
+// Ad-hoc effect stored inline in a cue (with optional timing)
 export interface CueAdHocEffect {
   targetType: 'group' | 'fixture'
   targetKey: string
@@ -32,6 +40,35 @@ export interface CueAdHocEffect {
   elementFilter: string | null
   stepTiming: boolean | null
   parameters: Record<string, string>
+  delayMs?: number | null
+  intervalMs?: number | null
+  randomWindowMs?: number | null
+  sortOrder?: number
+}
+
+// ─── Script trigger types ──────────────────────────────────────────
+
+export type TriggerType = 'ACTIVATION' | 'DEACTIVATION' | 'DELAYED' | 'RECURRING'
+
+/** Script trigger definition for create/update */
+export interface CueTrigger {
+  triggerType: TriggerType
+  delayMs?: number | null
+  intervalMs?: number | null
+  randomWindowMs?: number | null
+  scriptId: number
+  sortOrder?: number
+}
+
+/** Script trigger with resolved name (from API response) */
+export interface CueTriggerDetail {
+  triggerType: TriggerType
+  delayMs?: number | null
+  intervalMs?: number | null
+  randomWindowMs?: number | null
+  scriptId: number
+  scriptName?: string | null
+  sortOrder?: number
 }
 
 // Full cue from API
@@ -42,6 +79,7 @@ export interface Cue {
   updateGlobalPalette: boolean
   presetApplications: CuePresetApplicationDetail[]
   adHocEffects: CueAdHocEffect[]
+  triggers: CueTriggerDetail[]
   cueStackId: number | null
   cueStackName: string | null
   sortOrder: number
@@ -60,6 +98,7 @@ export interface CueInput {
   updateGlobalPalette: boolean
   presetApplications: CuePresetApplication[]
   adHocEffects: CueAdHocEffect[]
+  triggers?: CueTrigger[]
   cueStackId?: number | null
   sortOrder?: number
   autoAdvance?: boolean
