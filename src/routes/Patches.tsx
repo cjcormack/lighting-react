@@ -16,7 +16,6 @@ import {
 import { Loader2, Plus, Pencil, Check } from "lucide-react"
 import { useCurrentProjectQuery, useProjectQuery } from "../store/projects"
 import { usePatchListQuery, useUniverseConfigListQuery, useUpdateUniverseConfigMutation, usePatchGroupListQuery } from "../store/patches"
-import { useFixtureListQuery, type Fixture } from "../store/fixtures"
 import { Breadcrumbs } from "@/components/Breadcrumbs"
 import { AddFixtureSheet } from "@/components/patches/AddFixtureSheet"
 import { EditPatchSheet } from "@/components/patches/EditPatchSheet"
@@ -59,8 +58,6 @@ export function ProjectPatches() {
     <PatchListContent
       projectId={projectIdNum}
       projectName={project.name}
-      isDbBased={project.mode === "DB_BASED"}
-      isCurrent={project.isCurrent}
     />
   )
 }
@@ -70,13 +67,9 @@ export function ProjectPatches() {
 function PatchListContent({
   projectId,
   projectName,
-  isDbBased,
-  isCurrent,
 }: {
   projectId: number
   projectName: string
-  isDbBased: boolean
-  isCurrent: boolean
 }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const [addFixtureOpen, setAddFixtureOpen] = useState(false)
@@ -85,20 +78,19 @@ function PatchListContent({
 
   // Open add-fixture sheet when navigated with ?action=new (e.g. from command palette)
   useEffect(() => {
-    if (searchParams.get("action") === "new" && isDbBased) {
+    if (searchParams.get("action") === "new") {
       setAddFixtureOpen(true)
       setSearchParams({}, { replace: true })
     }
-  }, [searchParams, isDbBased, setSearchParams])
+  }, [searchParams, setSearchParams])
 
-  const { data: patches, isLoading: patchesLoading } = usePatchListQuery(projectId, { skip: !isDbBased })
-  const { data: fixtureList } = useFixtureListQuery(undefined, { skip: isDbBased || !isCurrent })
-  const { data: universeConfigs } = useUniverseConfigListQuery(projectId, { skip: !isDbBased })
-  const { data: patchGroups } = usePatchGroupListQuery(projectId, { skip: !isDbBased })
+  const { data: patches, isLoading: patchesLoading } = usePatchListQuery(projectId)
+  const { data: universeConfigs } = useUniverseConfigListQuery(projectId)
+  const { data: patchGroups } = usePatchGroupListQuery(projectId)
 
   const rows = useMemo(
-    () => buildPatchRows(isDbBased ? patches : undefined, !isDbBased ? fixtureList : undefined),
-    [isDbBased, patches, fixtureList],
+    () => buildPatchRows(patches),
+    [patches],
   )
 
   const editingPatch = patches?.find(p => p.id === editingPatchId) ?? null
@@ -115,17 +107,13 @@ function PatchListContent({
           <div>
             <h1 className="text-lg font-semibold">Patch List</h1>
             <p className="text-sm text-muted-foreground">
-              {isDbBased
-                ? `${totalPatches} fixture${totalPatches !== 1 ? 's' : ''} patched${totalGroups > 0 ? `, ${totalGroups} group${totalGroups !== 1 ? 's' : ''}` : ''}.`
-                : 'Showing fixtures configured by the load-fixtures script.'}
+              {`${totalPatches} fixture${totalPatches !== 1 ? 's' : ''} patched${totalGroups > 0 ? `, ${totalGroups} group${totalGroups !== 1 ? 's' : ''}` : ''}.`}
             </p>
           </div>
-          {isDbBased && (
-            <Button onClick={() => setAddFixtureOpen(true)} size="sm" className="gap-1.5 shrink-0">
-              <Plus className="size-4" />
-              <span className="hidden sm:inline">Patch</span>
-            </Button>
-          )}
+          <Button onClick={() => setAddFixtureOpen(true)} size="sm" className="gap-1.5 shrink-0">
+            <Plus className="size-4" />
+            <span className="hidden sm:inline">Patch</span>
+          </Button>
         </div>
       </div>
 
@@ -133,7 +121,7 @@ function PatchListContent({
       <div className="flex-1 overflow-y-auto px-4 pb-4">
 
         {/* Universe config chips */}
-        {isDbBased && (universeConfigs?.length || patchGroups?.length) ? (
+        {(universeConfigs?.length || patchGroups?.length) ? (
           <div className="flex flex-col gap-2 mb-4">
             {universeConfigs && universeConfigs.length > 0 && (
               <div className="flex flex-wrap gap-2 items-center">
@@ -165,47 +153,38 @@ function PatchListContent({
           <div className="flex justify-center py-8"><Loader2 className="size-6 animate-spin" /></div>
         ) : rows.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
-            {isDbBased
-              ? "No fixtures patched yet. Click \"Add Fixture\" to get started."
-              : isCurrent
-                ? "No fixtures configured. Run the load-fixtures script first."
-                : "Switch to this project to see the patch list."}
+            No fixtures patched yet. Click "Patch" to get started.
           </div>
         ) : (
           <PatchTable
             rows={rows}
-            isDbBased={isDbBased}
-            onRowClick={isDbBased ? (id) => setEditingPatchId(id) : undefined}
-            onGroupClick={isDbBased ? (id, name) => setEditingGroup({ id, name }) : undefined}
+            onRowClick={(id) => setEditingPatchId(id)}
+            onGroupClick={(id, name) => setEditingGroup({ id, name })}
           />
         )}
       </div>
 
-      {isDbBased && (
-        <>
-          <AddFixtureSheet
-            open={addFixtureOpen}
-            onOpenChange={setAddFixtureOpen}
-            projectId={projectId}
-            existingPatches={patches ?? []}
-          />
-          <EditPatchSheet
-            open={editingPatchId != null}
-            onOpenChange={(open) => { if (!open) setEditingPatchId(null) }}
-            patch={editingPatch}
-            projectId={projectId}
-            existingPatches={patches ?? []}
-          />
-          <EditGroupSheet
-            open={editingGroup != null}
-            onOpenChange={(open) => { if (!open) setEditingGroup(null) }}
-            groupId={editingGroup?.id ?? null}
-            groupName={editingGroup?.name ?? ''}
-            projectId={projectId}
-            patches={patches ?? []}
-          />
-        </>
-      )}
+      <AddFixtureSheet
+        open={addFixtureOpen}
+        onOpenChange={setAddFixtureOpen}
+        projectId={projectId}
+        existingPatches={patches ?? []}
+      />
+      <EditPatchSheet
+        open={editingPatchId != null}
+        onOpenChange={(open) => { if (!open) setEditingPatchId(null) }}
+        patch={editingPatch}
+        projectId={projectId}
+        existingPatches={patches ?? []}
+      />
+      <EditGroupSheet
+        open={editingGroup != null}
+        onOpenChange={(open) => { if (!open) setEditingGroup(null) }}
+        groupId={editingGroup?.id ?? null}
+        groupName={editingGroup?.name ?? ''}
+        projectId={projectId}
+        patches={patches ?? []}
+      />
     </div>
   )
 }
@@ -281,12 +260,10 @@ interface PatchRow {
 
 function PatchTable({
   rows,
-  isDbBased,
   onRowClick,
   onGroupClick,
 }: {
   rows: PatchRow[]
-  isDbBased: boolean
   onRowClick?: (id: number) => void
   onGroupClick?: (id: number, name: string) => void
 }) {
@@ -305,7 +282,7 @@ function PatchTable({
         {rows.map((row) => (
           <TableRow
             key={row.id ?? row.key}
-            className={isDbBased && row.id != null ? "cursor-pointer hover:bg-accent/50" : ""}
+            className={row.id != null ? "cursor-pointer hover:bg-accent/50" : ""}
             onClick={() => {
               if (row.id != null && onRowClick) onRowClick(row.id)
             }}
@@ -369,40 +346,22 @@ function formatAddress(universe: number, channel: number): string {
 
 function buildPatchRows(
   patches: FixturePatch[] | undefined,
-  fixtureList: Fixture[] | undefined,
 ): PatchRow[] {
-  const rows: PatchRow[] = []
+  if (!patches) return []
 
-  if (patches) {
-    for (const p of patches) {
-      const channelCount = p.channelCount ?? 1
-      rows.push({
-        id: p.id,
-        key: p.key,
-        displayName: p.displayName,
-        address: formatAddress(p.universe, p.startChannel),
-        channelCount,
-        fixtureType: buildTypeLabel(p.manufacturer, p.model, p.modeName),
-        groups: p.groups,
-        sortKey: p.universe * 1000 + p.startChannel,
-      })
+  const rows: PatchRow[] = patches.map((p) => {
+    const channelCount = p.channelCount ?? 1
+    return {
+      id: p.id,
+      key: p.key,
+      displayName: p.displayName,
+      address: formatAddress(p.universe, p.startChannel),
+      channelCount,
+      fixtureType: buildTypeLabel(p.manufacturer, p.model, p.modeName),
+      groups: p.groups,
+      sortKey: p.universe * 1000 + p.startChannel,
     }
-  }
-
-  if (fixtureList) {
-    for (const f of fixtureList) {
-      rows.push({
-        id: null,
-        key: f.key,
-        displayName: f.name,
-        address: formatAddress(f.universe, f.firstChannel),
-        channelCount: f.channelCount,
-        fixtureType: buildTypeLabel(f.manufacturer ?? null, f.model ?? null, null),
-        groups: [],
-        sortKey: f.universe * 1000 + f.firstChannel,
-      })
-    }
-  }
+  })
 
   rows.sort((a, b) => a.sortKey - b.sortKey)
   return rows

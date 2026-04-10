@@ -5,7 +5,6 @@ import {
   Calculator,
   Database,
   Layers,
-  LayoutGrid,
   Play,
   Repeat,
   Spotlight,
@@ -59,9 +58,6 @@ export type ScriptUsage = {
 export function getScriptUsage(script: ProjectScriptDetail): ScriptUsage {
   // Priority: Project properties > Scenes > Chases > Unmapped
   if (script.usedByProperties && script.usedByProperties.length > 0) {
-    if (script.usedByProperties.includes('loadFixturesScript')) {
-      return { icon: LayoutGrid, tooltip: 'Load Fixtures Script' }
-    }
     if (script.usedByProperties.includes('trackChangedScript')) {
       return { icon: Play, tooltip: 'Track Changed Script' }
     }

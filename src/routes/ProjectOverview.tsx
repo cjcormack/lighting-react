@@ -56,7 +56,7 @@ export default function ProjectOverview() {
     skip: !project?.isCurrent,
   })
   const { data: patches } = usePatchListQuery(Number(projectId), {
-    skip: !project || project.mode !== 'DB_BASED',
+    skip: !project,
   })
 
   if (!projectId) {
@@ -116,9 +116,9 @@ export default function ProjectOverview() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <QuickNavCard
             title="Patch List"
-            count={project.mode === 'DB_BASED' ? patches?.length : fixtures?.length}
+            count={patches?.length}
             icon={<TableProperties className="size-5" />}
-            description={project.mode === 'DB_BASED' ? 'Manage fixture patching' : 'View fixture patching'}
+            description="Manage fixture patching"
             onClick={() => navigate(`/projects/${project.id}/patches`)}
           />
           <QuickNavCard
@@ -206,23 +206,6 @@ export default function ProjectOverview() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {project.mode === 'DB_BASED' ? (
-              <ConfigItem
-                icon={<TableProperties className="size-4" />}
-                label="Fixture Configuration"
-                value="DB-Based"
-                description="Fixtures configured via the Patch List"
-                onClick={() => navigate(`/projects/${project.id}/patches`)}
-              />
-            ) : (
-              <ConfigItem
-                icon={<Layers className="size-4" />}
-                label="Load Fixtures Script"
-                value={project.loadFixturesScriptName}
-                description="Script that runs at startup to define fixtures"
-                onClick={project.loadFixturesScriptId ? () => navigate(`/projects/${project.id}/scripts/${project.loadFixturesScriptId}`) : undefined}
-              />
-            )}
             <ConfigItem
               icon={<Play className="size-4" />}
               label="Initial Scene"
