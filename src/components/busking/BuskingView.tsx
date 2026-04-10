@@ -366,7 +366,7 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
               <SheetHeader>
                 <SheetTitle>Select Targets</SheetTitle>
               </SheetHeader>
-              <div className="overflow-y-auto flex-1 -mx-6">
+              <div className="overflow-y-auto flex-1">
                 <TargetList
                   selectedTargets={selectedTargets}
                   onSelect={handleSelectTarget}

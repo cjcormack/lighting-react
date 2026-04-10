@@ -27,6 +27,79 @@ interface ScriptSettingsTableProps<T extends SettingDisplay = ScriptSetting> {
   onAddSetting?: (setting: ScriptSetting) => void
   onRemoveSetting?: (setting: T) => void
   readOnly?: boolean
+  /** When true, render without the Card wrapper and heading (for embedding in sheets) */
+  bare?: boolean
+}
+
+function SettingsTableInner<T extends SettingDisplay>({
+  settings,
+  readOnly,
+  onAddSetting,
+  onRemoveSetting,
+  onOpenAddDialog,
+}: {
+  settings: readonly T[]
+  readOnly: boolean
+  onAddSetting?: (setting: ScriptSetting) => void
+  onRemoveSetting?: (setting: T) => void
+  onOpenAddDialog: () => void
+}) {
+  return (
+    <div className="rounded-md border overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Type</TableHead>
+            <TableHead>Name</TableHead>
+            <TableHead>Details</TableHead>
+            <TableHead className="text-right">
+              {!readOnly && onAddSetting && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onOpenAddDialog}
+                >
+                  <Plus className="size-4" />
+                  Add
+                </Button>
+              )}
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {settings.length ? (
+            settings.map(setting => (
+              <TableRow key={setting.name}>
+                <TableCell className="font-medium">{setting.type}</TableCell>
+                <TableCell>{setting.name}</TableCell>
+                <TableCell>
+                  min: {setting.minValue ?? "—"}; max: {setting.maxValue ?? "—"}; default:{" "}
+                  {setting.defaultValue ?? "—"}
+                </TableCell>
+                <TableCell className="text-right">
+                  {!readOnly && onRemoveSetting && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => onRemoveSetting(setting)}
+                    >
+                      <MinusCircle className="size-5" />
+                    </Button>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))
+          ) : (
+            <TableRow>
+              <TableCell colSpan={4} className="text-muted-foreground">
+                No settings
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  )
 }
 
 export function ScriptSettingsTable<T extends SettingDisplay = ScriptSetting>({
@@ -34,6 +107,7 @@ export function ScriptSettingsTable<T extends SettingDisplay = ScriptSetting>({
   onAddSetting,
   onRemoveSetting,
   readOnly = false,
+  bare = false,
 }: ScriptSettingsTableProps<T>) {
   const [addDialogOpen, setAddDialogOpen] = useState(false)
 
@@ -52,63 +126,26 @@ export function ScriptSettingsTable<T extends SettingDisplay = ScriptSetting>({
           />
         </Suspense>
       )}
-      <Card className="p-4 m-2 flex flex-col min-w-0">
-        <h2 className="text-xl font-semibold mb-4">Settings</h2>
-        <div className="rounded-md border overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Type</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Details</TableHead>
-                <TableHead className="text-right">
-                  {!readOnly && onAddSetting && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setAddDialogOpen(true)}
-                    >
-                      <Plus className="size-4" />
-                      Add
-                    </Button>
-                  )}
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {settings.length ? (
-                settings.map(setting => (
-                  <TableRow key={setting.name}>
-                    <TableCell className="font-medium">{setting.type}</TableCell>
-                    <TableCell>{setting.name}</TableCell>
-                    <TableCell>
-                      min: {setting.minValue ?? "—"}; max: {setting.maxValue ?? "—"}; default:{" "}
-                      {setting.defaultValue ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {!readOnly && onRemoveSetting && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => onRemoveSetting(setting)}
-                        >
-                          <MinusCircle className="size-5" />
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-muted-foreground">
-                    No settings
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </Card>
+      {bare ? (
+        <SettingsTableInner
+          settings={settings}
+          readOnly={readOnly}
+          onAddSetting={onAddSetting}
+          onRemoveSetting={onRemoveSetting}
+          onOpenAddDialog={() => setAddDialogOpen(true)}
+        />
+      ) : (
+        <Card className="p-4 m-2 flex flex-col min-w-0">
+          <h2 className="text-xl font-semibold mb-4">Settings</h2>
+          <SettingsTableInner
+            settings={settings}
+            readOnly={readOnly}
+            onAddSetting={onAddSetting}
+            onRemoveSetting={onRemoveSetting}
+            onOpenAddDialog={() => setAddDialogOpen(true)}
+          />
+        </Card>
+      )}
     </>
   )
 }

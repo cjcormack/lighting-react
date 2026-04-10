@@ -177,7 +177,7 @@ export function CueStackMobileSheet({
         <SheetHeader>
           <SheetTitle>FX Cue Stacks</SheetTitle>
         </SheetHeader>
-        <div className="flex-1 overflow-hidden -mx-6">
+        <div className="flex-1 overflow-hidden">
           <PanelContent
             {...props}
             onSelectView={(view) => {
