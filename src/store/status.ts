@@ -9,7 +9,7 @@ let previousStatus: Status | null = null
 lightingApi.status.subscribe((status) => {
   if (status === Status.OPEN && previousStatus !== Status.OPEN) {
     store.dispatch(restApi.util.invalidateTags([
-      'Channel', 'Fixture', 'SceneList', 'Script', 'Project', 'ProjectList',
+      'Channel', 'Fixture', 'Script', 'Project', 'ProjectList',
       'GroupList', 'GroupActiveEffects', 'FixtureEffects', 'FxPreset',
       'CueList', 'CueStackList', 'CueSlotList', 'AiConversation',
     ]))

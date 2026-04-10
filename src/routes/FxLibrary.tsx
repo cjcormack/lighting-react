@@ -448,7 +448,7 @@ function EffectDetailSheet({ effect }: { effect: EffectLibraryEntry }) {
 
         {effect.script && (
           <ScriptEditor
-            script={{ name, script: effect.script, settings: [] }}
+            script={{ name, script: effect.script }}
             id={`view-${effect.name}`}
             scriptType={editorType}
             readOnly
@@ -611,7 +611,7 @@ function EditFxDefinitionSheet({
             </div>
           </div>
           <ScriptEditor
-            script={{ name: currentName, script: currentScript, settings: [] }}
+            script={{ name: currentName, script: currentScript }}
             id={definitionId}
             scriptType={editorType}
             compact
@@ -892,7 +892,7 @@ function NewFxDefinitionSheet({
             </div>
           </div>
           <ScriptEditor
-            script={{ name, script: scriptCode, settings: [] }}
+            script={{ name, script: scriptCode }}
             id="new-fx"
             scriptType={editorType}
             compact

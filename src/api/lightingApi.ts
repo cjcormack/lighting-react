@@ -4,7 +4,7 @@ import {createStatusApi, StatusApi} from "./statusApi";
 import {createTrackApi, TrackApi} from "./trackApi";
 import {createInternalApiConnection} from "./internalApi";
 import {createUniversesApi, UniversesApi} from "./universesApi";
-import {createSceneApi, ScenesApi} from "./scenesApi";
+
 import {createFixtureApi, FixturesApi} from "./fixturesApi";
 import {createProjectApi, ProjectApi} from "./projectApi";
 import {createGroupsApi, GroupsApi} from "./groupsApi";
@@ -22,7 +22,7 @@ interface LightingApi {
   channelMapping: ChannelMappingApi
   status: StatusApi
   track: TrackApi
-  scenes: ScenesApi
+
   fixtures: FixturesApi
   projects: ProjectApi
   groups: GroupsApi
@@ -56,7 +56,7 @@ function createLightingApi(): LightingApi {
   const channelMappingApi = createChannelMappingApi(connection)
   const statusApi = createStatusApi(connection)
   const trackApi = createTrackApi(connection)
-  const sceneApi = createSceneApi(connection)
+
   const fixtureApi = createFixtureApi(connection)
   const projectApi = createProjectApi(connection)
   const groupsApi = createGroupsApi(connection)
@@ -74,7 +74,7 @@ function createLightingApi(): LightingApi {
     channelMapping: channelMappingApi,
     status: statusApi,
     track: trackApi,
-    scenes: sceneApi,
+
     fixtures: fixtureApi,
     projects: projectApi,
     groups: groupsApi,

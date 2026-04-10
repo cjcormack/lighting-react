@@ -24,11 +24,8 @@ import {
   useProjectQuery,
   useUpdateProjectMutation,
   useProjectScriptsQuery,
-  useProjectScenesQuery,
   useCurrentProjectQuery,
-  useCreateInitialSceneMutation,
   useCreateTrackChangedScriptMutation,
-  useCreateRunLoopScriptMutation,
 } from "./store/projects"
 
 interface EditProjectDialogProps {
@@ -55,42 +52,25 @@ export default function EditProjectDialog({
       skip: !open,
     }
   )
-  const { data: scenes, refetch: refetchScenes } = useProjectScenesQuery(
-    projectId,
-    {
-      skip: !open,
-    }
-  )
   const [updateProject, { isLoading: isUpdating }] = useUpdateProjectMutation()
 
   // Create mutations (only available for current project)
-  const [createInitialScene, { isLoading: isCreatingInitialScene }] =
-    useCreateInitialSceneMutation()
   const [createTrackChangedScript, { isLoading: isCreatingTrackChanged }] =
     useCreateTrackChangedScriptMutation()
-  const [createRunLoopScript, { isLoading: isCreatingRunLoop }] =
-    useCreateRunLoopScriptMutation()
-
   // Check if this is the current project
   const isCurrentProject = currentProject?.id === projectId
 
   // Form state
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
-  const [initialSceneId, setInitialSceneId] = useState<string>("none")
   const [trackChangedScriptId, setTrackChangedScriptId] = useState<string>("none")
-  const [runLoopScriptId, setRunLoopScriptId] = useState<string>("none")
-  const [runLoopDelayMs, setRunLoopDelayMs] = useState<string>("")
 
   // Populate form when project loads
   useEffect(() => {
     if (project) {
       setName(project.name)
       setDescription(project.description || "")
-      setInitialSceneId(project.initialSceneId?.toString() || "none")
       setTrackChangedScriptId(project.trackChangedScriptId?.toString() || "none")
-      setRunLoopScriptId(project.runLoopScriptId?.toString() || "none")
-      setRunLoopDelayMs(project.runLoopDelayMs?.toString() || "")
     }
   }, [project])
 
@@ -103,22 +83,10 @@ export default function EditProjectDialog({
       id: projectId,
       name,
       description: description || null,
-      initialSceneId:
-        initialSceneId === "none" ? null : Number(initialSceneId),
       trackChangedScriptId:
         trackChangedScriptId === "none" ? null : Number(trackChangedScriptId),
-      runLoopScriptId:
-        runLoopScriptId === "none" ? null : Number(runLoopScriptId),
-      runLoopDelayMs: runLoopDelayMs ? parseInt(runLoopDelayMs, 10) : null,
     }).unwrap()
     handleClose()
-  }
-
-  const handleCreateInitialScene = async () => {
-    const result = await createInitialScene().unwrap()
-    setInitialSceneId(result.sceneId.toString())
-    refetchScripts()
-    refetchScenes()
   }
 
   const handleCreateTrackChangedScript = async () => {
@@ -127,15 +95,8 @@ export default function EditProjectDialog({
     refetchScripts()
   }
 
-  const handleCreateRunLoopScript = async () => {
-    const result = await createRunLoopScript().unwrap()
-    setRunLoopScriptId(result.scriptId.toString())
-    refetchScripts()
-  }
-
   const isValid = name.trim().length > 0
-  const isCreating =
-    isCreatingInitialScene || isCreatingTrackChanged || isCreatingRunLoop
+  const isCreating = isCreatingTrackChanged
 
   if (isProjectLoading) {
     return (
@@ -148,9 +109,6 @@ export default function EditProjectDialog({
       </Sheet>
     )
   }
-
-  // Filter scenes to only show SCENE mode (not CHASE) for initial scene
-  const sceneOnlyScenes = scenes?.filter(s => s.mode === "SCENE") || []
 
   return (
     <Sheet open={open} onOpenChange={open => !open && handleClose()}>
@@ -177,52 +135,6 @@ export default function EditProjectDialog({
                 onChange={e => setDescription(e.target.value)}
                 rows={2}
               />
-            </div>
-          </div>
-
-          <Separator />
-
-          <div className="space-y-4">
-            <h3 className="font-semibold">Startup Configuration</h3>
-            <div className="space-y-2">
-              <Label htmlFor="initial-scene">Initial Scene</Label>
-              <div className="flex gap-2">
-                <Select
-                  value={initialSceneId}
-                  onValueChange={setInitialSceneId}
-                >
-                  <SelectTrigger id="initial-scene" className="w-full">
-                    <SelectValue placeholder="None" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {sceneOnlyScenes.map(scene => (
-                      <SelectItem key={scene.id} value={String(scene.id)}>
-                        {scene.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {isCurrentProject && initialSceneId === "none" && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCreateInitialScene}
-                    disabled={isCreating}
-                    className="shrink-0"
-                  >
-                    {isCreatingInitialScene ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Plus className="size-4" />
-                    )}
-                    Create
-                  </Button>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Scene to activate when project loads
-              </p>
             </div>
           </div>
 
@@ -268,59 +180,6 @@ export default function EditProjectDialog({
               </div>
               <p className="text-xs text-muted-foreground">
                 Script to run when music track changes
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="run-loop">Run Loop Script</Label>
-              <div className="flex gap-2">
-                <Select
-                  value={runLoopScriptId}
-                  onValueChange={setRunLoopScriptId}
-                >
-                  <SelectTrigger id="run-loop" className="w-full">
-                    <SelectValue placeholder="None" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {scripts?.map(script => (
-                      <SelectItem key={script.id} value={String(script.id)}>
-                        {script.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {isCurrentProject && runLoopScriptId === "none" && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCreateRunLoopScript}
-                    disabled={isCreating}
-                    className="shrink-0"
-                  >
-                    {isCreatingRunLoop ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Plus className="size-4" />
-                    )}
-                    Create
-                  </Button>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Script to run continuously in a loop
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="run-loop-delay">Run Loop Delay (ms)</Label>
-              <Input
-                id="run-loop-delay"
-                type="number"
-                value={runLoopDelayMs}
-                onChange={e => setRunLoopDelayMs(e.target.value)}
-                disabled={runLoopScriptId === "none"}
-              />
-              <p className="text-xs text-muted-foreground">
-                Delay between run loop iterations
               </p>
             </div>
           </div>

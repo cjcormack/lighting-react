@@ -6,14 +6,10 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
   Braces,
   Sparkles,
-  Spotlight,
-  IterationCw,
   Settings,
   Loader2,
   XCircle,
   ArrowRight,
-  Play,
-  RotateCcw,
   Layers,
   LayoutGrid,
   SlidersHorizontal,
@@ -134,20 +130,6 @@ export default function ProjectOverview() {
             description="Built-in and custom effects"
             onClick={() => navigate(`/projects/${project.id}/fx-library`)}
           />
-          <QuickNavCard
-            title="Scenes"
-            count={project.sceneCount}
-            icon={<Spotlight className="size-5" />}
-            description="One-shot lighting configurations"
-            onClick={() => navigate(`/projects/${project.id}/scenes`)}
-          />
-          <QuickNavCard
-            title="Chases"
-            count={project.chaseCount}
-            icon={<IterationCw className="size-5" />}
-            description="Animated lighting sequences"
-            onClick={() => navigate(`/projects/${project.id}/chases`)}
-          />
           {project.isCurrent && (
             <>
               <QuickNavCard
@@ -207,25 +189,11 @@ export default function ProjectOverview() {
           </CardHeader>
           <CardContent className="space-y-4">
             <ConfigItem
-              icon={<Play className="size-4" />}
-              label="Initial Scene"
-              value={project.initialSceneName}
-              description="Scene that runs automatically at startup"
-              onClick={project.initialSceneId ? () => navigate(`/projects/${project.id}/scenes`) : undefined}
-            />
-            <ConfigItem
-              icon={<Spotlight className="size-4" />}
+              icon={<Sparkles className="size-4" />}
               label="Track Changed Script"
               value={project.trackChangedScriptName}
               description="Script that runs when audio track changes"
               onClick={project.trackChangedScriptId ? () => navigate(`/projects/${project.id}/scripts/${project.trackChangedScriptId}`) : undefined}
-            />
-            <ConfigItem
-              icon={<RotateCcw className="size-4" />}
-              label="Run Loop Script"
-              value={project.runLoopScriptName}
-              description={project.runLoopDelayMs ? `Runs every ${project.runLoopDelayMs}ms` : "Continuously running automation script"}
-              onClick={project.runLoopScriptId ? () => navigate(`/projects/${project.id}/scripts/${project.runLoopScriptId}`) : undefined}
             />
           </CardContent>
         </Card>

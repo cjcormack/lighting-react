@@ -75,8 +75,8 @@ export default function CloneProjectDialog({
         <SheetHeader>
           <SheetTitle>Clone Project</SheetTitle>
           <SheetDescription>
-            Clone &quot;{sourceProjectName}&quot; with all its scripts, scenes,
-            and settings.
+            Clone &quot;{sourceProjectName}&quot; with all its scripts and
+            settings.
           </SheetDescription>
         </SheetHeader>
         <SheetBody>

@@ -1,6 +1,6 @@
 import { InternalApiConnection } from "./internalApi";
 import { Subscription } from "./subscription";
-import { ScriptSetting, ScriptType } from "../store/scripts";
+import { ScriptType } from "../store/scripts";
 
 // Project summary for list views
 export interface ProjectSummary {
@@ -16,16 +16,9 @@ export interface ProjectDetail {
   name: string;
   description: string | null;
   isCurrent: boolean;
-  initialSceneId: number | null;
-  initialSceneName: string | null;
   trackChangedScriptId: number | null;
   trackChangedScriptName: string | null;
-  runLoopScriptId: number | null;
-  runLoopScriptName: string | null;
-  runLoopDelayMs: number | null;
   scriptCount: number;
-  sceneCount: number;
-  chaseCount: number;
   fxPresetCount: number;
   cueCount: number;
   cueStackCount: number;
@@ -41,25 +34,13 @@ export interface CreateProjectRequest {
 export interface UpdateProjectRequest {
   name?: string;
   description?: string | null;
-  initialSceneId?: number | null;
   trackChangedScriptId?: number | null;
-  runLoopScriptId?: number | null;
-  runLoopDelayMs?: number | null;
 }
 
 // Script summary for project config dropdowns
 export interface ProjectScript {
   id: number;
   name: string;
-  settingsCount: number;
-}
-
-// Scene summary for project config dropdowns
-export interface ProjectScene {
-  id: number;
-  name: string;
-  mode: 'SCENE' | 'CHASE';
-  scriptName: string;
 }
 
 // Full script details from any project
@@ -67,25 +48,13 @@ export interface ProjectScriptDetail {
   id: number;
   name: string;
   script: string;
-  settings: ScriptSetting[];
   scriptType: ScriptType;
   // Usage tracking fields
-  sceneNames?: string[];
-  chaseNames?: string[];
   usedByProperties?: string[];
   canDelete?: boolean;
   cannotDeleteReason?: string | null;
   canEdit?: boolean;
   cannotEditReason?: string | null;
-}
-
-// Response from create initial scene endpoint
-export interface CreateInitialSceneResponse {
-  scriptId: number;
-  scriptName: string;
-  sceneId: number;
-  sceneName: string;
-  message: string;
 }
 
 // Response from create script endpoints (track changed, run loop)
@@ -105,7 +74,7 @@ export interface CloneProjectRequest {
 export interface CloneProjectResponse {
   project: ProjectDetail;
   scriptsCloned: number;
-  scenesCloned: number;
+
   message: string;
 }
 

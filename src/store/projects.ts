@@ -6,9 +6,7 @@ import {
   ProjectDetail,
   CreateProjectRequest,
   UpdateProjectRequest,
-  ProjectScene,
   ProjectScriptDetail,
-  CreateInitialSceneResponse,
   CreateScriptResponse,
   CloneProjectRequest,
   CloneProjectResponse,
@@ -30,7 +28,6 @@ lightingApi.projects.subscribeToSwitch(function() {
   store.dispatch(restApi.util.invalidateTags([
     'ProjectList',
     'Project',
-    'SceneList',
     'Script',
     'Fixture',
     'FxPreset',
@@ -134,39 +131,16 @@ export const projectsApi = restApi.injectEndpoints({
         },
       }),
 
-      // Get scenes for any project (for config dropdowns)
-      projectScenes: build.query<ProjectScene[], number>({
-        query: (projectId) => `project/${projectId}/scenes`,
-      }),
-
       // Get full script from any project
       projectScript: build.query<ProjectScriptDetail, { projectId: number; scriptId: number }>({
         query: ({ projectId, scriptId }) => `project/${projectId}/scripts/${scriptId}`,
         providesTags: ['Script'],
       }),
 
-      // Create initial scene for current project
-      createInitialScene: build.mutation<CreateInitialSceneResponse, void>({
-        query: () => ({
-          url: 'project/current/create-initial-scene',
-          method: 'POST',
-        }),
-        invalidatesTags: ['Project', 'SceneList', 'Script'],
-      }),
-
       // Create track changed script for current project
       createTrackChangedScript: build.mutation<CreateScriptResponse, void>({
         query: () => ({
           url: 'project/current/create-track-changed-script',
-          method: 'POST',
-        }),
-        invalidatesTags: ['Project', 'Script'],
-      }),
-
-      // Create run loop script for current project
-      createRunLoopScript: build.mutation<CreateScriptResponse, void>({
-        query: () => ({
-          url: 'project/current/create-run-loop-script',
           method: 'POST',
         }),
         invalidatesTags: ['Project', 'Script'],
@@ -256,11 +230,8 @@ export const {
   useDeleteProjectMutation,
   useSetCurrentProjectMutation,
   useProjectScriptsQuery,
-  useProjectScenesQuery,
   useProjectScriptQuery,
-  useCreateInitialSceneMutation,
   useCreateTrackChangedScriptMutation,
-  useCreateRunLoopScriptMutation,
   useCloneProjectMutation,
   useCopyScriptMutation,
   useCompileProjectScriptMutation,

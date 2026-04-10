@@ -6,9 +6,6 @@ import {
   Database,
   Layers,
   Play,
-  Repeat,
-  Spotlight,
-  IterationCw,
   type LucideIcon,
 } from 'lucide-react'
 import type { ScriptType } from '@/store/scripts'
@@ -24,9 +21,9 @@ export const SCRIPT_TYPE_LABELS: Record<ScriptType, string> = {
 }
 
 export const SCRIPT_TYPE_DESCRIPTIONS: Record<ScriptType, string> = {
-  GENERAL: 'General-purpose scripts for lighting automation, scenes, and chases. Has access to fixtures, the show, FX engine, and coroutines.',
+  GENERAL: 'General-purpose scripts for lighting automation. Has access to fixtures, the show, FX engine, and coroutines.',
   FX_DEFINITION: 'Defines a reusable effect type that appears in the FX Library. Specifies parameters, properties, and the calculation logic.',
-  FX_APPLICATION: 'Applies effects to fixtures. Used by cue triggers and scenes to set up and run effect instances on the FX engine.',
+  FX_APPLICATION: 'Applies effects to fixtures. Used by cue triggers to set up and run effect instances on the FX engine.',
   FX_CALC: 'Stateless effect calculation. Receives a phase value (0-1) and parameters, returns output values. Runs every tick.',
   FX_CALC_STATEFUL: 'Stateful effect calculation with a persistent state map. Receives clock ticks and delta time for time-based effects.',
   FX_CALC_COMPOSITE: 'Composite effect calculation that can combine or layer multiple sub-effects. Receives phase and parameters.',
@@ -56,29 +53,10 @@ export type ScriptUsage = {
 }
 
 export function getScriptUsage(script: ProjectScriptDetail): ScriptUsage {
-  // Priority: Project properties > Scenes > Chases > Unmapped
+  // Priority: Project properties > Unmapped
   if (script.usedByProperties && script.usedByProperties.length > 0) {
     if (script.usedByProperties.includes('trackChangedScript')) {
       return { icon: Play, tooltip: 'Track Changed Script' }
-    }
-    if (script.usedByProperties.includes('runLoopScript')) {
-      return { icon: Repeat, tooltip: 'Run Loop Script' }
-    }
-  }
-
-  if (script.sceneNames && script.sceneNames.length > 0) {
-    const count = script.sceneNames.length
-    return {
-      icon: Spotlight,
-      tooltip: count === 1 ? `Used by scene: ${script.sceneNames[0]}` : `Used by ${count} scenes`,
-    }
-  }
-
-  if (script.chaseNames && script.chaseNames.length > 0) {
-    const count = script.chaseNames.length
-    return {
-      icon: IterationCw,
-      tooltip: count === 1 ? `Used by chase: ${script.chaseNames[0]}` : `Used by ${count} chases`,
     }
   }
 
@@ -98,7 +76,7 @@ export function getScriptTypeUsage(scriptType: ScriptType): ScriptUsage | null {
 
 export const SCRIPT_TYPE_TEMPLATES: Record<ScriptType, string> = {
   GENERAL: `// Available: show, fixtures, fxEngine, settings, coroutineScope, currentTrack
-// sceneName, sceneIsActive, step, scriptName
+// step, scriptName
 
 // Set all fixtures to a colour
 for (fixture in fixtures) {

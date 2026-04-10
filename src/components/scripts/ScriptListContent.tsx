@@ -69,7 +69,6 @@ function ScriptRow({
 }) {
   const usage = getScriptDisplayUsage(script)
   const UsageIcon = usage.icon
-  const settingsCount = script.settings.length
 
   return (
     <button
@@ -90,19 +89,6 @@ function ScriptRow({
       <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 hidden sm:inline-flex">
         {SCRIPT_TYPE_LABELS[script.scriptType]}
       </Badge>
-
-      {settingsCount > 0 && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">
-              {settingsCount} {settingsCount === 1 ? 'setting' : 'settings'}
-            </Badge>
-          </TooltipTrigger>
-          <TooltipContent>
-            {script.settings.map((s) => s.name).join(', ')}
-          </TooltipContent>
-        </Tooltip>
-      )}
     </button>
   )
 }

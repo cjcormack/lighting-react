@@ -56,7 +56,7 @@ export default function DeleteProjectConfirmDialog({
             &quot;?
           </DialogDescription>
           <p className="text-sm text-destructive">
-            This action cannot be undone. All scripts, scenes, and fixtures in
+            This action cannot be undone. All scripts and fixtures in
             this project will be permanently deleted.
           </p>
         </div>

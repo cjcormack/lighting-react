@@ -5,15 +5,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useIsDarkMode } from "@/hooks/useIsDarkMode"
-import { ScriptSettingsTable, SettingDisplay } from "./ScriptSettingsTable"
-import { ScriptSetting, EditorScriptType } from "@/store/scripts"
+import { EditorScriptType } from "@/store/scripts"
 // @ts-expect-error - no type declarations for kotlinScript
 import ReactKotlinPlayground from "@/kotlinScript/index.mjs"
 
 export interface ScriptEditorScript {
   name: string
   script: string
-  settings: readonly SettingDisplay[]
 }
 
 export interface ScriptEditorProps {
@@ -37,12 +35,6 @@ export interface ScriptEditorProps {
 
   /** Called when the script code changes (editable mode only) */
   onScriptChange?: (script: string) => void
-
-  /** Called when a setting is added (editable mode only) */
-  onAddSetting?: (setting: ScriptSetting) => void
-
-  /** Called when a setting is removed (editable mode only) */
-  onRemoveSetting?: (setting: ScriptSetting) => void
 
   /** Called when compile is clicked (editable mode only) */
   onCompile?: () => void
@@ -75,7 +67,6 @@ import uk.me.cormack.lighting7.fixture.group.*
 import uk.me.cormack.lighting7.dmx.*
 import uk.me.cormack.lighting7.show.*
 import uk.me.cormack.lighting7.scripts.*
-import uk.me.cormack.lighting7.scriptSettings.*
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.fx.effects.*
 import uk.me.cormack.lighting7.grpc.TrackDetails
@@ -88,12 +79,9 @@ class TestScript(
     fxEngine: FxEngine,
     scriptName: String,
     step: Int,
-    sceneName: String,
-    sceneIsActive: Boolean,
-    settings: Map<String, String>,
     coroutineScope: CoroutineScope,
     currentTrack: TrackDetails?
-): LightingScript(show, fixtures, fxEngine, scriptName, step, sceneName, sceneIsActive, settings, coroutineScope, currentTrack) {}
+): LightingScript(show, fixtures, fxEngine, scriptName, step, coroutineScope, currentTrack) {}
 
 fun TestScript.test() {
 //sampleStart
@@ -111,9 +99,8 @@ import java.awt.Color
 class TestFxDef(
     show: uk.me.cormack.lighting7.show.Show,
     scriptName: String,
-    settings: Map<String, String>,
     scriptId: Int?
-): uk.me.cormack.lighting7.scripts.FxDefinitionScript(show, scriptName, settings, scriptId) {}
+): uk.me.cormack.lighting7.scripts.FxDefinitionScript(show, scriptName, scriptId) {}
 
 fun TestFxDef.test() {
 //sampleStart
@@ -127,7 +114,6 @@ fun TestFxDef.test() {
     prefix: `import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.group.*
 import uk.me.cormack.lighting7.fixture.trait.*
-import uk.me.cormack.lighting7.scriptSettings.*
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.fx.effects.*
 import uk.me.cormack.lighting7.fx.group.*
@@ -138,9 +124,8 @@ class TestFxApp(
     fxEngine: FxEngine,
     scriptName: String,
     step: Int,
-    settings: Map<String, String>,
     currentTrack: uk.me.cormack.lighting7.grpc.TrackDetails?
-): uk.me.cormack.lighting7.scripts.FxApplicationScript(show, fxEngine, scriptName, step, settings, currentTrack) {}
+): uk.me.cormack.lighting7.scripts.FxApplicationScript(show, fxEngine, scriptName, step, currentTrack) {}
 
 fun TestFxApp.test() {
 //sampleStart
@@ -222,8 +207,6 @@ export function ScriptEditor({
   compact = false,
   onNameChange,
   onScriptChange,
-  onAddSetting,
-  onRemoveSetting,
   onCompile,
   onRun,
   isCompiling,
@@ -265,16 +248,6 @@ export function ScriptEditor({
             </div>
           )}
         </Card>
-      )}
-
-      {/* Settings section (hidden in compact mode) */}
-      {!compact && (
-        <ScriptSettingsTable<SettingDisplay>
-          settings={script.settings}
-          onAddSetting={readOnly ? undefined : onAddSetting}
-          onRemoveSetting={readOnly ? undefined : (onRemoveSetting as ((setting: SettingDisplay) => void) | undefined)}
-          readOnly={readOnly}
-        />
       )}
 
       {/* Kotlin playground */}

@@ -24,7 +24,6 @@ import {
   SheetFooter,
 } from '@/components/ui/sheet'
 import { ScriptEditor } from './ScriptEditor'
-import { ScriptSettingsTable } from './ScriptSettingsTable'
 import {
   ScriptCompileDialog,
   ScriptRunDialog,
@@ -37,7 +36,7 @@ import {
   SCRIPT_TYPE_TEMPLATES,
 } from './scriptUtils'
 import type { ProjectScriptDetail } from '@/api/projectApi'
-import type { ScriptSetting, ScriptType } from '@/store/scripts'
+import type { ScriptType } from '@/store/scripts'
 import {
   useCreateProjectScriptMutation,
   useCompileProjectScriptMutation,
@@ -86,7 +85,6 @@ export function ScriptForm({
   // Local edit state
   const [editName, setEditName] = useState('')
   const [editCode, setEditCode] = useState('')
-  const [editSettings, setEditSettings] = useState<ScriptSetting[]>([])
   const [editType, setEditType] = useState<ScriptType>('GENERAL')
   const [copyDialogOpen, setCopyDialogOpen] = useState(false)
 
@@ -102,13 +100,11 @@ export function ScriptForm({
       if (script) {
         setEditName(script.name)
         setEditCode(script.script)
-        setEditSettings([...script.settings])
         setEditType(script.scriptType)
         setView('form')
       } else {
         setEditName('')
         setEditCode('')
-        setEditSettings([])
         setEditType('GENERAL')
         setView(isCurrentProject ? 'type-picker' : 'form')
       }
@@ -137,22 +133,12 @@ export function ScriptForm({
     if (script) setHasEdited(true)
   }
 
-  const handleAddSetting = (setting: ScriptSetting) => {
-    setEditSettings((prev) => [...prev.filter((s) => s.name !== setting.name), setting])
-    if (script) setHasEdited(true)
-  }
-
-  const handleRemoveSetting = (setting: ScriptSetting) => {
-    setEditSettings((prev) => prev.filter((s) => s.name !== setting.name))
-    if (script) setHasEdited(true)
-  }
-
   const handleCompile = () => {
-    runCompile({ projectId, script: editCode, settings: editSettings, scriptType })
+    runCompile({ projectId, script: editCode, scriptType })
   }
 
   const handleRun = () => {
-    runRun({ projectId, script: editCode, settings: editSettings, scriptType, scriptId: script?.id })
+    runRun({ projectId, script: editCode, scriptType, scriptId: script?.id })
   }
 
   const handleCreate = async () => {
@@ -161,7 +147,6 @@ export function ScriptForm({
         projectId,
         name: editName,
         script: editCode,
-        settings: editSettings,
         scriptType: editType,
       }).unwrap()
       onOpenChange(false)
@@ -180,7 +165,6 @@ export function ScriptForm({
         scriptId: script.id,
         name: editName,
         script: editCode,
-        settings: editSettings,
         scriptType,
       }).unwrap()
       setHasEdited(false)
@@ -195,7 +179,6 @@ export function ScriptForm({
     if (!script) return
     setEditName(script.name)
     setEditCode(script.script)
-    setEditSettings([...script.settings])
     setHasEdited(false)
   }
 
@@ -211,7 +194,7 @@ export function ScriptForm({
   // Type picker step is never dirty (no user edits yet)
   const isDirty = script
     ? hasEdited
-    : view === 'form' && (editName !== '' || editCode !== SCRIPT_TYPE_TEMPLATES[editType] || editSettings.length > 0)
+    : view === 'form' && (editName !== '' || editCode !== SCRIPT_TYPE_TEMPLATES[editType])
 
   const tryDiscard = useCallback((target: 'close' | 'back') => {
     if (!isDirty) return true
@@ -239,7 +222,7 @@ export function ScriptForm({
         ? 'Edit Script'
         : script?.name ?? 'Script'
 
-  const editorScript = { name: editName, script: editCode, settings: editSettings }
+  const editorScript = { name: editName, script: editCode }
 
   return (
     <>
@@ -370,15 +353,6 @@ export function ScriptForm({
                     {SCRIPT_TYPE_LABELS[scriptType]}
                   </Badge>
                 </div>
-
-                {/* Settings */}
-                <ScriptSettingsTable
-                  settings={editSettings}
-                  onAddSetting={readOnly ? undefined : handleAddSetting}
-                  onRemoveSetting={readOnly ? undefined : handleRemoveSetting}
-                  readOnly={readOnly}
-                  bare
-                />
 
                 {/* Compile/Run buttons */}
                 {canEdit && (

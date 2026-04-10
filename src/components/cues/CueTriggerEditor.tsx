@@ -107,7 +107,6 @@ export function CueTriggerEditor({
           projectId,
           name: inlineName.trim(),
           script: inlineCode,
-          settings: [],
           scriptType: 'FX_APPLICATION',
         }).unwrap()
         onConfirm(buildTrigger(result.id))
@@ -277,7 +276,7 @@ export function CueTriggerEditor({
                 </div>
               </div>
               <ScriptEditor
-                script={{ name: inlineName || 'Inline Hook', script: inlineCode, settings: [] }}
+                script={{ name: inlineName || 'Inline Hook', script: inlineCode }}
                 id="trigger-inline"
                 scriptType="FX_APPLICATION"
                 compact

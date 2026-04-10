@@ -16,7 +16,6 @@ export type Script = ScriptDetails & {
 export type ScriptInput = {
   name: string
   script: string
-  settings: ScriptSetting[]
   scriptType?: ScriptType
 }
 
@@ -24,19 +23,9 @@ export type ScriptInput = {
 export type ScriptDetails = ScriptInput & {
   scriptType: ScriptType
   // Usage tracking fields (server-provided)
-  sceneNames: string[]
-  chaseNames: string[]
   usedByProperties: string[]
   canDelete: boolean
   cannotDeleteReason: string | null
-}
-
-export type ScriptSetting = {
-  type: 'scriptSettingInt'
-  name: string
-  minValue?: number
-  maxValue?: number
-  defaultValue?: number
 }
 
 export type CompileResultMessage = {
@@ -48,7 +37,6 @@ export type CompileResultMessage = {
 
 export type CompileRequest = {
   script: string
-  settings?: ScriptSetting[]
   scriptType?: ScriptType
 }
 
