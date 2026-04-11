@@ -1,10 +1,12 @@
 import { configureStore } from '@reduxjs/toolkit'
 import {restApi} from "./restApi";
 import { setupListeners } from "@reduxjs/toolkit/query"
+import { runnerSlice } from './runnerSlice'
 
 export const store = configureStore({
   reducer: {
     [restApi.reducerPath]: restApi.reducer,
+    runner: runnerSlice.reducer,
   },
 
   middleware: (getDefaultMiddleware) => {

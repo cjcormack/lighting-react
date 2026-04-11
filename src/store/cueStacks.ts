@@ -15,6 +15,8 @@ import type {
   CueStackActivateResponse,
   CueStackDeactivateResponse,
 } from '../api/cueStacksApi'
+export type { CueStack, CueStackCueEntry } from '../api/cueStacksApi'
+export type { CueType } from '../api/cueStacksApi'
 
 // Subscribe to WebSocket cue stack list changes - invalidate all cue stack caches
 lightingApi.cueStacks.subscribe(function () {
@@ -288,6 +290,22 @@ export const cueStacksApi = restApi.injectEndpoints({
         'GroupActiveEffects',
       ],
     }),
+
+    sortCueStackByCueNumber: build.mutation<
+      CueStackCueEntry[],
+      { projectId: number; stackId: number }
+    >({
+      query: ({ projectId, stackId }) => ({
+        url: `project/${projectId}/cue-stacks/${stackId}/sort-by-cue-number`,
+        method: 'POST',
+      }),
+      invalidatesTags: (_result, _error, { projectId }) => [
+        { type: 'CueStackList', id: projectId },
+        'CueStackList',
+        { type: 'CueList', id: projectId },
+        'CueList',
+      ],
+    }),
   }),
   overrideExisting: false,
 })
@@ -305,4 +323,5 @@ export const {
   useDeactivateCueStackMutation,
   useAdvanceCueStackMutation,
   useGoToCueInStackMutation,
+  useSortCueStackByCueNumberMutation,
 } = cueStacksApi

@@ -14,6 +14,7 @@ import {createCueStacksWsApi, CueStacksWsApi} from "./cueStacksWsApi";
 import {createCueSlotsWsApi, CueSlotsWsApi} from "./cueSlotsWsApi";
 import {createPatchApi, PatchApi} from "./patchApi";
 import {createParkApi, ParkApi} from "./parkApi";
+import {createShowSessionsWsApi, ShowSessionsWsApi} from "./showSessionsWsApi";
 
 interface LightingApi {
   universes: UniversesApi
@@ -31,6 +32,7 @@ interface LightingApi {
   cueSlots: CueSlotsWsApi
   patches: PatchApi
   park: ParkApi
+  showSessions: ShowSessionsWsApi
 }
 
 export const lightingApi = createLightingApi()
@@ -63,6 +65,7 @@ function createLightingApi(): LightingApi {
   const cueSlotsWsApi = createCueSlotsWsApi(connection)
   const patchApi = createPatchApi(connection)
   const parkApi = createParkApi(connection)
+  const showSessionsWsApi = createShowSessionsWsApi(connection)
 
   return {
     universes: universesApi,
@@ -80,5 +83,6 @@ function createLightingApi(): LightingApi {
     cueSlots: cueSlotsWsApi,
     patches: patchApi,
     park: parkApi,
+    showSessions: showSessionsWsApi,
   }
 }

@@ -1,5 +1,7 @@
 // Type definitions for cue stacks API
 
+export type CueType = 'STANDARD' | 'MARKER'
+
 export interface CueStackCueEntry {
   id: number
   name: string
@@ -11,6 +13,9 @@ export interface CueStackCueEntry {
   autoAdvanceDelayMs: number | null
   fadeDurationMs: number | null
   fadeCurve: string
+  cueNumber: string | null
+  notes: string | null
+  cueType: CueType
 }
 
 export interface CueStack {
@@ -37,6 +42,7 @@ export interface ReorderCuesRequest {
 export interface AddCueToStackRequest {
   cueId: number
   sortOrder?: number
+  insertByNumber?: boolean
 }
 
 export interface RemoveCueFromStackRequest {

@@ -8,6 +8,7 @@ import {
   Bookmark,
   Clapperboard,
   SlidersHorizontal,
+  Theater,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { useGetUniverseQuery } from "./store/universes"
@@ -93,6 +94,14 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/presets`,
     visibility: "always",
     pathMatch: "/presets",
+  },
+  {
+    id: "show",
+    label: "Show",
+    icon: Theater,
+    path: (p) => `/projects/${p}/cue-stacks`,
+    visibility: "active-only",
+    pathMatch: "/cue-stacks",
   },
 ]
 

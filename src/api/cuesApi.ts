@@ -87,6 +87,8 @@ export interface Cue {
   autoAdvanceDelayMs: number | null
   fadeDurationMs: number | null
   fadeCurve: string
+  cueNumber: string | null
+  notes: string | null
   canEdit: boolean
   canDelete: boolean
 }
@@ -105,6 +107,8 @@ export interface CueInput {
   autoAdvanceDelayMs?: number | null
   fadeDurationMs?: number | null
   fadeCurve?: string
+  cueNumber?: string | null
+  notes?: string | null
 }
 
 // Copy request/response

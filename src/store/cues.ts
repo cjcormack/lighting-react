@@ -122,6 +122,7 @@ export const cuesApi = restApi.injectEndpoints({
 export const {
   useProjectCueListQuery,
   useProjectCueQuery,
+  useLazyProjectCueQuery,
   useCreateProjectCueMutation,
   useSaveProjectCueMutation,
   useDeleteProjectCueMutation,
