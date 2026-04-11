@@ -5,7 +5,6 @@ import {
   Calculator,
   Database,
   Layers,
-  Play,
   type LucideIcon,
 } from 'lucide-react'
 import type { ScriptType } from '@/store/scripts'
@@ -52,17 +51,6 @@ export type ScriptUsage = {
   tooltip: string
 }
 
-export function getScriptUsage(script: ProjectScriptDetail): ScriptUsage {
-  // Priority: Project properties > Unmapped
-  if (script.usedByProperties && script.usedByProperties.length > 0) {
-    if (script.usedByProperties.includes('trackChangedScript')) {
-      return { icon: Play, tooltip: 'Track Changed Script' }
-    }
-  }
-
-  return { icon: Braces, tooltip: 'Not used' }
-}
-
 export function getScriptTypeUsage(scriptType: ScriptType): ScriptUsage | null {
   switch (scriptType) {
     case 'FX_DEFINITION':
@@ -75,7 +63,7 @@ export function getScriptTypeUsage(scriptType: ScriptType): ScriptUsage | null {
 }
 
 export const SCRIPT_TYPE_TEMPLATES: Record<ScriptType, string> = {
-  GENERAL: `// Available: show, fixtures, fxEngine, settings, coroutineScope, currentTrack
+  GENERAL: `// Available: show, fixtures, fxEngine, settings, coroutineScope
 // step, scriptName
 
 // Set all fixtures to a colour
@@ -100,7 +88,7 @@ registerProperty("intensity", FixturePropertyType.INTENSITY)
 
 `,
   FX_APPLICATION: `// Apply effects to fixtures
-// Available: show, fxEngine, settings, currentTrack, step
+// Available: show, fxEngine, settings, step
 
 // Look up fixtures
 // val group = show.fixtureGroups["My Group"]
@@ -157,7 +145,5 @@ context.setIntensity(((combined + 1) / 2).toFloat())
 
 /** Get the display icon/tooltip for a script, preferring type-based for FX scripts. */
 export function getScriptDisplayUsage(script: ProjectScriptDetail): ScriptUsage {
-  const typeUsage = getScriptTypeUsage(script.scriptType)
-  if (typeUsage) return typeUsage
-  return getScriptUsage(script)
+  return getScriptTypeUsage(script.scriptType) ?? { icon: Braces, tooltip: 'Not used' }
 }

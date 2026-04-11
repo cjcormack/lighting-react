@@ -3,12 +3,10 @@ import { Outlet, useLocation } from "react-router-dom"
 import { ChevronLeft, Menu, Settings, LayoutGrid, Grid3X3, AudioWaveform, Sparkles } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { useMediaQuery } from "@/hooks/useMediaQuery"
 
-import TrackStatus from "./TrackStatus"
 import { ConnectionStatus } from "./connection"
 import ProjectSwitcher, { useViewedProject, NavItem } from "./ProjectSwitcher"
 import ThemeToggle from "./ThemeToggle"
@@ -72,12 +70,6 @@ export default function Layout() {
   const renderSidebarContent = (collapsed: boolean) => (
     <>
       <div className="flex-1 overflow-y-auto py-2">
-        <div className="px-2">
-          <TrackStatus collapsed={collapsed} />
-        </div>
-
-        <Separator className="my-2" />
-
         <ProjectSwitcher collapsed={collapsed} />
       </div>
 

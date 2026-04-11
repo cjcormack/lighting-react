@@ -7,7 +7,6 @@ import {
   CreateProjectRequest,
   UpdateProjectRequest,
   ProjectScriptDetail,
-  CreateScriptResponse,
   CloneProjectRequest,
   CloneProjectResponse,
   CopyScriptRequest,
@@ -137,15 +136,6 @@ export const projectsApi = restApi.injectEndpoints({
         providesTags: ['Script'],
       }),
 
-      // Create track changed script for current project
-      createTrackChangedScript: build.mutation<CreateScriptResponse, void>({
-        query: () => ({
-          url: 'project/current/create-track-changed-script',
-          method: 'POST',
-        }),
-        invalidatesTags: ['Project', 'Script'],
-      }),
-
       // Clone a project
       cloneProject: build.mutation<CloneProjectResponse, { id: number } & CloneProjectRequest>({
         query: ({ id, ...body }) => ({
@@ -231,7 +221,6 @@ export const {
   useSetCurrentProjectMutation,
   useProjectScriptsQuery,
   useProjectScriptQuery,
-  useCreateTrackChangedScriptMutation,
   useCloneProjectMutation,
   useCopyScriptMutation,
   useCompileProjectScriptMutation,

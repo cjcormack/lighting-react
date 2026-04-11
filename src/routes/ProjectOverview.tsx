@@ -1,5 +1,5 @@
 import { useParams, useNavigate, Navigate } from "react-router-dom"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -179,24 +179,6 @@ export default function ProjectOverview() {
           )}
         </div>
 
-        {/* Project Configuration */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Project Configuration</CardTitle>
-            <CardDescription>
-              Startup and automation settings for this project
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <ConfigItem
-              icon={<Sparkles className="size-4" />}
-              label="Track Changed Script"
-              value={project.trackChangedScriptName}
-              description="Script that runs when audio track changes"
-              onClick={project.trackChangedScriptId ? () => navigate(`/projects/${project.id}/scripts/${project.trackChangedScriptId}`) : undefined}
-            />
-          </CardContent>
-        </Card>
       </div>
     </>
   )
@@ -264,51 +246,3 @@ function QuickNavCard({
   )
 }
 
-function ConfigItem({
-  icon,
-  label,
-  value,
-  description,
-  onClick,
-}: {
-  icon: React.ReactNode
-  label: string
-  value: string | null
-  description: string
-  onClick?: () => void
-}) {
-  const content = (
-    <div className="flex items-center justify-between py-2 border-b last:border-0">
-      <div className="flex items-center gap-3">
-        <div className="text-muted-foreground">{icon}</div>
-        <div>
-          <div className="font-medium">{label}</div>
-          <div className="text-sm text-muted-foreground">{description}</div>
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        {value ? (
-          <>
-            <Badge variant="outline">{value}</Badge>
-            {onClick && <ArrowRight className="size-4 text-muted-foreground" />}
-          </>
-        ) : (
-          <span className="text-sm text-muted-foreground italic">Not configured</span>
-        )}
-      </div>
-    </div>
-  )
-
-  if (onClick && value) {
-    return (
-      <button
-        onClick={onClick}
-        className="w-full text-left hover:bg-accent/50 rounded-md px-2 -mx-2 transition-colors"
-      >
-        {content}
-      </button>
-    )
-  }
-
-  return content
-}

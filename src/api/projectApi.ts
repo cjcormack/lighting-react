@@ -16,8 +16,6 @@ export interface ProjectDetail {
   name: string;
   description: string | null;
   isCurrent: boolean;
-  trackChangedScriptId: number | null;
-  trackChangedScriptName: string | null;
   scriptCount: number;
   fxPresetCount: number;
   cueCount: number;
@@ -34,7 +32,6 @@ export interface CreateProjectRequest {
 export interface UpdateProjectRequest {
   name?: string;
   description?: string | null;
-  trackChangedScriptId?: number | null;
 }
 
 // Script summary for project config dropdowns
@@ -55,13 +52,6 @@ export interface ProjectScriptDetail {
   cannotDeleteReason?: string | null;
   canEdit?: boolean;
   cannotEditReason?: string | null;
-}
-
-// Response from create script endpoints (track changed, run loop)
-export interface CreateScriptResponse {
-  scriptId: number;
-  scriptName: string;
-  message: string;
 }
 
 // Request for cloning a project

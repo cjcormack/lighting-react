@@ -26,7 +26,7 @@ import {
 import type { CueTrigger, CueTriggerDetail, TriggerType } from '@/api/cuesApi'
 
 const INLINE_TEMPLATE = `// FX Application script
-// Available: show, fxEngine, scriptName, step, settings, currentTrack
+// Available: show, fxEngine, scriptName, step, settings
 `
 
 interface CueTriggerEditorProps {

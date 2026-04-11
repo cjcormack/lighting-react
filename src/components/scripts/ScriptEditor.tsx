@@ -69,7 +69,6 @@ import uk.me.cormack.lighting7.show.*
 import uk.me.cormack.lighting7.scripts.*
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.fx.effects.*
-import uk.me.cormack.lighting7.grpc.TrackDetails
 import java.awt.Color
 import kotlinx.coroutines.*
 
@@ -80,8 +79,7 @@ class TestScript(
     scriptName: String,
     step: Int,
     coroutineScope: CoroutineScope,
-    currentTrack: TrackDetails?
-): LightingScript(show, fixtures, fxEngine, scriptName, step, coroutineScope, currentTrack) {}
+): LightingScript(show, fixtures, fxEngine, scriptName, step, coroutineScope) {}
 
 fun TestScript.test() {
 //sampleStart
@@ -124,8 +122,7 @@ class TestFxApp(
     fxEngine: FxEngine,
     scriptName: String,
     step: Int,
-    currentTrack: uk.me.cormack.lighting7.grpc.TrackDetails?
-): uk.me.cormack.lighting7.scripts.FxApplicationScript(show, fxEngine, scriptName, step, currentTrack) {}
+): uk.me.cormack.lighting7.scripts.FxApplicationScript(show, fxEngine, scriptName, step) {}
 
 fun TestFxApp.test() {
 //sampleStart
