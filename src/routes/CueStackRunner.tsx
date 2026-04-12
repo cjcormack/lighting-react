@@ -96,13 +96,19 @@ export function ProjectCueStackRunner() {
 
   const cues = stack?.cues ?? []
 
-  // Initialize runner state when stack changes
+  // Initialize runner state when stack changes — seed from server's activeCueId if available
   useEffect(() => {
     if (activeStackId != null && cues.length > 0) {
-      dispatch(resetStack({ stackId: activeStackId, cues }))
+      dispatch(resetStack({
+        stackId: activeStackId,
+        cues,
+        serverActiveCueId: stack?.activeCueId,
+        loop: stack?.loop,
+      }))
     }
     // Intentionally only depends on activeStackId — we want to reset state when the user
-    // switches stacks, NOT when cues refresh from WebSocket (which would wipe mid-run state).
+    // switches stacks, NOT when cues/stack refresh from WebSocket (which would wipe mid-run state).
+    // The closures over cues, stack.activeCueId, and stack.loop are read only on mount/stack-switch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeStackId, dispatch])
 

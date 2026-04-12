@@ -128,15 +128,37 @@ export const runnerSlice = createSlice({
 
     resetStack(
       state,
-      action: PayloadAction<{ stackId: number; cues: CueStackCueEntry[] }>,
+      action: PayloadAction<{
+        stackId: number
+        cues: CueStackCueEntry[]
+        serverActiveCueId?: number | null
+        loop?: boolean
+      }>,
     ) {
-      const { stackId, cues } = action.payload
-      state.stacks[stackId] = {
-        activeCueId: null,
-        standbyCueId: firstStandardCue(cues),
-        completedCueIds: [],
-        fadeProgress: 0,
-        autoProgress: null,
+      const { stackId, cues, serverActiveCueId, loop } = action.payload
+      if (serverActiveCueId != null && cues.some((c) => c.id === serverActiveCueId)) {
+        // Restore from server state — the cue already ran on the backend,
+        // so treat it as completed and queue the next cue as standby.
+        const activeIdx = cues.findIndex((c) => c.id === serverActiveCueId)
+        const completed = cues
+          .slice(0, activeIdx + 1)
+          .filter((c) => c.cueType === 'STANDARD')
+          .map((c) => c.id)
+        state.stacks[stackId] = {
+          activeCueId: null,
+          standbyCueId: nextStandardCue(cues, serverActiveCueId, loop ?? false),
+          completedCueIds: completed,
+          fadeProgress: 0,
+          autoProgress: null,
+        }
+      } else {
+        state.stacks[stackId] = {
+          activeCueId: null,
+          standbyCueId: firstStandardCue(cues),
+          completedCueIds: [],
+          fadeProgress: 0,
+          autoProgress: null,
+        }
       }
     },
 
