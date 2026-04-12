@@ -59,6 +59,10 @@ src/
 └── main.tsx       # Entry point
 ```
 
+## Documentation
+
+- [Show Mode Engineering](docs/show-mode-engineering.md) -- architecture, data model, and playback flow for the show programming and running feature
+
 ## Environment Variables
 
 | Variable | Description | Default |
