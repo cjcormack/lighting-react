@@ -11,7 +11,9 @@ import {
   useRemoveCueFromCueStackMutation,
 } from '@/store/cueStacks'
 import type { CueStack } from '@/api/cueStacksApi'
+import type { ShowSessionDetails } from '@/api/showSessionsApi'
 import { StackDetail } from './StackDetail'
+import { SessionOverview } from './SessionOverview'
 
 interface ProgramViewProps {
   projectId: number
@@ -20,6 +22,7 @@ interface ProgramViewProps {
   onDrillStack: (id: number | null) => void
   onSwitchToShow: () => void
   onOpenCueForm: (stackId: number, cueId: number) => void
+  activeSession?: ShowSessionDetails
 }
 
 export function ProgramView({
@@ -29,6 +32,7 @@ export function ProgramView({
   onDrillStack,
   onSwitchToShow,
   onOpenCueForm,
+  activeSession,
 }: ProgramViewProps) {
   const [createCue] = useCreateProjectCueMutation()
   const [removeCueFromStack] = useRemoveCueFromCueStackMutation()
@@ -113,7 +117,20 @@ export function ProgramView({
     )
   }
 
-  // Stack list overview
+  // Session overview (replaces stack list when a session is active)
+  if (activeSession) {
+    return (
+      <SessionOverview
+        projectId={projectId}
+        session={activeSession}
+        stacks={stacks}
+        onDrillStack={(id) => onDrillStack(id)}
+        onSwitchToShow={onSwitchToShow}
+      />
+    )
+  }
+
+  // Stack list overview (fallback when no session)
   const totalCues = stacks.reduce(
     (n, s) => n + s.cues.filter((c) => c.cueType === 'STANDARD').length,
     0,

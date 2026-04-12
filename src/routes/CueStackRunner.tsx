@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useParams, useNavigate, Navigate } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Loader2, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
@@ -18,7 +20,16 @@ import {
   useLazyProjectCueQuery,
   useCreateProjectCueMutation,
 } from '../store/cues'
+import {
+  useProjectShowSessionListQuery,
+  useCreateShowSessionMutation,
+  useActivateShowSessionMutation,
+  useDeactivateShowSessionMutation,
+  useAdvanceShowSessionMutation,
+  useGoToShowSessionEntryMutation,
+} from '../store/showSessions'
 import type { CueInput, Cue } from '../api/cuesApi'
+import type { ShowSessionEntryDto } from '../api/showSessionsApi'
 import { useFxStateQuery } from '../store/fx'
 import { lightingApi } from '../api/lightingApi'
 import {
@@ -72,13 +83,34 @@ export function ProjectCueStackRunner() {
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
   const { data: stacks, isLoading: stacksLoading } = useProjectCueStackListQuery(projectIdNum)
   const { data: fxState } = useFxStateQuery()
+  const { data: sessions } = useProjectShowSessionListQuery(projectIdNum)
 
   // Tab state
   const [activeTab, setActiveTab] = useState<'program' | 'show'>('show')
 
-  // Shared stack state — synced between tabs
-  const [activeStackId, setActiveStackId] = useState<number | null>(null)
+  // Session-driven active stack — activeEntryId drives which stack is active
+  const [activeSessionId, setActiveSessionId] = useState<number | null>(null)
+  const [activeEntryId, setActiveEntryId] = useState<number | null>(null)
   const [drillStackId, setDrillStackId] = useState<number | null>(null)
+  const [newSessionName, setNewSessionName] = useState('')
+
+  // Derive active session from local ID
+  const activeSession = useMemo(
+    () => (activeSessionId != null ? sessions?.find((s) => s.id === activeSessionId) : undefined) ?? undefined,
+    [sessions, activeSessionId],
+  )
+
+  // Auto-pick previously-active session on initial load
+  useEffect(() => {
+    if (activeSessionId != null || !sessions || sessions.length === 0) return
+    const prev = sessions.find((s) => s.activeEntryId != null)
+    if (prev) setActiveSessionId(prev.id)
+  }, [sessions, activeSessionId])
+  const activeEntry: ShowSessionEntryDto | undefined = useMemo(
+    () => activeSession?.entries.find((e) => e.id === activeEntryId),
+    [activeSession, activeEntryId],
+  )
+  const activeStackId = activeEntry?.cueStackId ?? null
 
   // Show tab state
   const [dbo, setDbo] = useState(false)
@@ -105,18 +137,46 @@ export function ProjectCueStackRunner() {
   const [createCue] = useCreateProjectCueMutation()
   const [fetchCue] = useLazyProjectCueQuery()
 
+  // Session mutations
+  const [createSession] = useCreateShowSessionMutation()
+  const [activateSessionMut] = useActivateShowSessionMutation()
+  const [deactivateSessionMut] = useDeactivateShowSessionMutation()
+  const [advanceSession] = useAdvanceShowSessionMutation()
+  const [goToEntry] = useGoToShowSessionEntryMutation()
 
-  // Auto-select first stack
+  // Sync activeEntryId from session state on initial load / session change
   useEffect(() => {
-    if (stacks && stacks.length > 0 && activeStackId == null) {
-      setActiveStackId(stacks[0].id)
+    if (!activeSession) {
+      setActiveEntryId(null)
+      return
     }
-  }, [stacks, activeStackId])
+    if (activeSession.activeEntryId != null) {
+      setActiveEntryId(activeSession.activeEntryId)
+    } else {
+      const first = activeSession.entries.find((e) => e.entryType === 'STACK')
+      setActiveEntryId(first?.id ?? null)
+    }
+    // Only re-run when the active session identity changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSession?.id])
 
-  const stack: CueStack | undefined = useMemo(
-    () => stacks?.find((s) => s.id === activeStackId),
-    [stacks, activeStackId],
+  // Subscribe to showSessionChanged WS events for real-time activeEntryId updates
+  useEffect(() => {
+    const sub = lightingApi.showSessions.subscribeToChanged((event) => {
+      if (activeSession && event.sessionId === activeSession.id) {
+        setActiveEntryId(event.activeEntryId)
+      }
+    })
+    return () => sub.unsubscribe()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSession?.id])
+
+  const stackMap = useMemo(
+    () => new Map(stacks?.map((s) => [s.id, s]) ?? []),
+    [stacks],
   )
+
+  const stack: CueStack | undefined = activeStackId != null ? stackMap.get(activeStackId) : undefined
 
   const cues = stack?.cues ?? []
 
@@ -181,13 +241,37 @@ export function ProjectCueStackRunner() {
     onAutoAdvanceComplete: handleAutoAdvanceComplete,
   })
 
+  // Next STACK entry after current (for boundary hint and GO advance)
+  const nextStackEntry = useMemo(() => {
+    if (runner.standbyCueId != null || !activeSession || activeEntryId == null) return null
+    const curIdx = activeSession.entries.findIndex((e) => e.id === activeEntryId)
+    return activeSession.entries.slice(curIdx + 1).find((e) => e.entryType === 'STACK') ?? null
+  }, [runner.standbyCueId, activeSession, activeEntryId])
+
   // GO handler
   const handleGo = useCallback(() => {
+    if (runner.standbyCueId == null) {
+      // Boundary GO: advance to next STACK entry in session
+      if (!activeSession || activeEntryId == null) return
+      const curIdx = activeSession.entries.findIndex((e) => e.id === activeEntryId)
+      const nextStack = activeSession.entries.slice(curIdx + 1).find((e) => e.entryType === 'STACK')
+      if (nextStack) {
+        advanceSession({
+          projectId: projectIdNum,
+          sessionId: activeSession.id,
+          direction: 'FORWARD',
+        })
+        // Optimistically update — WS event will confirm
+        setActiveEntryId(nextStack.id)
+        cancelAnimations()
+        setOooDismissed(false)
+      }
+      return
+    }
     if (activeStackId == null || !stack) return
-    if (runner.standbyCueId == null) return
     dispatch(go({ stackId: activeStackId, cues, loop: stack.loop }))
     fireGo()
-  }, [activeStackId, stack, cues, runner.standbyCueId, dispatch, fireGo])
+  }, [activeStackId, stack, cues, runner.standbyCueId, dispatch, fireGo, activeSession, activeEntryId, advanceSession, projectIdNum, cancelAnimations])
 
   // BACK handler
   const handleBack = useCallback(() => {
@@ -229,26 +313,34 @@ export function ProjectCueStackRunner() {
     return () => window.removeEventListener('keydown', onKey)
   }, [handleGo, handleBack, activeTab])
 
-  // Stack switch — deactivate old stack on the server if it was active.
-  // Also syncs drillStackId so Program tab follows.
-  const switchStack = useCallback(
-    (id: number) => {
+  // Switch to a session entry (Show tab strip click)
+  const handleSwitchToEntry = useCallback(
+    (entry: ShowSessionEntryDto) => {
+      if (entry.entryType !== 'STACK' || entry.cueStackId == null) return
+      // Deactivate old stack on the server if it was active
       if (activeStackId != null && stack?.activeCueId != null) {
         deactivateCueStack({ projectId: projectIdNum, stackId: activeStackId })
       }
-      setActiveStackId(id)
-      setDrillStackId(id)
+      // Tell the backend to go to this entry
+      if (activeSession) {
+        goToEntry({
+          projectId: projectIdNum,
+          sessionId: activeSession.id,
+          entryId: entry.id,
+        })
+      }
+      setActiveEntryId(entry.id)
       setOooDismissed(false)
       cancelAnimations()
     },
-    [activeStackId, stack, projectIdNum, deactivateCueStack, cancelAnimations],
+    [activeStackId, stack, activeSession, projectIdNum, deactivateCueStack, goToEntry, cancelAnimations],
   )
 
-  // When Program tab drills into a stack, also update activeStackId so Show tab follows.
+  // When Program tab drills into a stack, set drillStackId.
+  // activeStackId is now session-driven, so we don't update it here.
   const handleDrillStack = useCallback(
     (id: number | null) => {
       setDrillStackId(id)
-      if (id != null) setActiveStackId(id)
     },
     [],
   )
@@ -270,6 +362,60 @@ export function ProjectCueStackRunner() {
     sortByCueNumber({ projectId: projectIdNum, stackId: activeStackId })
     setOooDismissed(false)
   }, [activeStackId, projectIdNum, sortByCueNumber])
+
+  // ── Session management handlers ──
+
+  const handleCreateSession = useCallback(async () => {
+    const name = newSessionName.trim()
+    if (!name) return
+    try {
+      const result = await createSession({ projectId: projectIdNum, name }).unwrap()
+      setNewSessionName('')
+      // Set as active locally (no backend activate — session has no entries yet)
+      setActiveSessionId(result.id)
+      setActiveEntryId(null)
+      setDrillStackId(null)
+      setActiveTab('program')
+    } catch {
+      // Silently fail
+    }
+  }, [newSessionName, createSession, projectIdNum])
+
+  const handleActivateSession = useCallback(
+    (sessionId: number) => {
+      const session = sessions?.find((s) => s.id === sessionId)
+      setActiveSessionId(sessionId)
+      setDrillStackId(null)
+      // If session has entries, try activating on the backend too
+      if (session && session.entries.length > 0) {
+        activateSessionMut({ projectId: projectIdNum, sessionId })
+          .unwrap()
+          .then((result) => setActiveEntryId(result.activeEntryId))
+          .catch(() => {
+            // Backend activation failed — still set entry from session data
+            const firstStack = session.entries.find((e) => e.entryType === 'STACK')
+            setActiveEntryId(firstStack?.id ?? null)
+          })
+      } else {
+        setActiveEntryId(session?.activeEntryId ?? null)
+      }
+    },
+    [sessions, activateSessionMut, projectIdNum],
+  )
+
+  const handleDeactivateSession = useCallback(async () => {
+    if (!activeSession) return
+    // Deactivate on the backend if the session was activated
+    if (activeSession.activeEntryId != null) {
+      try {
+        await deactivateSessionMut({ projectId: projectIdNum, sessionId: activeSession.id }).unwrap()
+      } catch {
+        // Silently fail
+      }
+    }
+    setActiveSessionId(null)
+    setActiveEntryId(null)
+  }, [activeSession, deactivateSessionMut, projectIdNum])
 
   // ── CueForm sheet handlers ──
 
@@ -416,10 +562,90 @@ export function ProjectCueStackRunner() {
           Show
         </button>
         <div className="flex-1" />
+        {activeSession && (
+          <>
+            <button
+              className="flex items-center px-3.5 border-l text-[10px] font-bold tracking-[0.1em] uppercase text-muted-foreground/25 hover:text-destructive/60 transition-colors"
+              onClick={handleDeactivateSession}
+            >
+              Deactivate
+            </button>
+            <div className="flex items-center px-4 gap-1.5 text-[11px] text-muted-foreground/30">
+              <div className="size-1.5 rounded-full bg-green-500" />
+              {activeSession.name}
+            </div>
+          </>
+        )}
       </div>
 
+      {/* ═══ Session picker (no active session) ═══ */}
+      {!activeSession && (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 gap-4">
+          <div className="w-full max-w-[480px] mb-2">
+            <h2 className="text-lg font-bold text-muted-foreground/50 tracking-[0.06em] uppercase">
+              Choose Session
+            </h2>
+          </div>
+          <div className="flex gap-2 w-full max-w-[480px]">
+            <Input
+              className="flex-1"
+              placeholder="New session name..."
+              value={newSessionName}
+              onChange={(e) => setNewSessionName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleCreateSession()}
+              autoFocus
+            />
+            <Button
+              variant="outline"
+              className="font-bold tracking-wider text-green-400 border-green-500/30 bg-green-950/40 hover:bg-green-900/50 hover:text-green-300 shrink-0"
+              onClick={handleCreateSession}
+              disabled={!newSessionName.trim()}
+            >
+              Create
+            </Button>
+          </div>
+          {sessions && sessions.length > 0 && (
+            <>
+              <div className="flex items-center gap-2.5 w-full max-w-[480px] my-1">
+                <div className="flex-1 h-px bg-border/50" />
+                <span className="text-[9px] font-bold tracking-[0.13em] uppercase text-muted-foreground/20">
+                  or resume existing
+                </span>
+                <div className="flex-1 h-px bg-border/50" />
+              </div>
+              <div className="w-full max-w-[480px] flex flex-col gap-2">
+                {sessions.map((s) => {
+                  const stackCount = s.entries.filter((e) => e.entryType === 'STACK').length
+                  return (
+                    <div
+                      key={s.id}
+                      className="flex items-center px-4 py-3.5 bg-card border rounded-md gap-3.5 hover:bg-muted/20 hover:border-muted-foreground/20 transition-colors"
+                    >
+                      <span className="flex-1 text-[15px] font-semibold text-muted-foreground/60">
+                        {s.name}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground/30 shrink-0">
+                        {stackCount} stack{stackCount !== 1 ? 's' : ''}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="font-bold tracking-wider text-green-400 border-green-500/30 bg-green-950/40 hover:bg-green-900/50 hover:text-green-300 shrink-0"
+                        onClick={() => handleActivateSession(s.id)}
+                      >
+                        Activate
+                      </Button>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* ═══ Program tab ═══ */}
-      {activeTab === 'program' && (
+      {activeSession && activeTab === 'program' && (
         <ProgramView
           projectId={projectIdNum}
           stacks={stacks ?? []}
@@ -427,11 +653,12 @@ export function ProjectCueStackRunner() {
           onDrillStack={handleDrillStack}
           onSwitchToShow={() => setActiveTab('show')}
           onOpenCueForm={openCueForm}
+          activeSession={activeSession}
         />
       )}
 
       {/* ═══ Show tab ═══ */}
-      {activeTab === 'show' && (
+      {activeSession && activeTab === 'show' && (
         <>
           {/* Show bar */}
           <ShowBar
@@ -442,6 +669,7 @@ export function ProjectCueStackRunner() {
             stackName={stack?.name ?? ''}
             activeName={activeCue?.name ?? null}
             standbyName={standbyCue?.name ?? null}
+            nextStackName={nextStackEntry?.cueStackName ?? undefined}
             onGo={handleGo}
             onBack={handleBack}
           />
@@ -450,21 +678,46 @@ export function ProjectCueStackRunner() {
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
             {/* Stack tabs + context toggle */}
             <div className="flex h-[38px] shrink-0 items-center border-b bg-card">
-              {stacks?.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => switchStack(s.id)}
-                  className={cn(
-                    'flex items-center gap-2 px-5 h-full border-r text-[12px] font-bold tracking-[0.12em] uppercase text-muted-foreground/25 transition-colors relative shrink-0',
-                    'hover:text-muted-foreground/50 hover:bg-muted/10',
-                    s.id === activeStackId &&
-                      'text-muted-foreground/70 bg-muted/20 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary',
-                  )}
-                >
-                  {s.name}
-                  {s.loop && <span className="text-base text-muted-foreground/25">{s.id === activeStackId ? <RotateCcw className="size-3 text-muted-foreground/50" /> : <RotateCcw className="size-3" />}</span>}
-                </button>
-              ))}
+              {activeSession.entries.map((entry) => {
+                if (entry.entryType === 'MARKER') {
+                  return (
+                    <div
+                      key={entry.id}
+                      className="flex items-center h-full px-2 gap-1.5 shrink-0 pointer-events-none"
+                    >
+                      <div className="w-px h-4 bg-border/30" />
+                      <span className="text-[9px] font-bold tracking-[0.13em] uppercase text-muted-foreground/15 whitespace-nowrap">
+                        {entry.label}
+                      </span>
+                      <div className="w-px h-4 bg-border/30" />
+                    </div>
+                  )
+                }
+                const entryStack = entry.cueStackId != null ? stackMap.get(entry.cueStackId) : undefined
+                return (
+                  <button
+                    key={entry.id}
+                    onClick={() => handleSwitchToEntry(entry)}
+                    className={cn(
+                      'flex items-center gap-2 px-5 h-full border-r text-[12px] font-bold tracking-[0.12em] uppercase text-muted-foreground/25 transition-colors relative shrink-0',
+                      'hover:text-muted-foreground/50 hover:bg-muted/10',
+                      entry.id === activeEntryId &&
+                        'text-muted-foreground/70 bg-muted/20 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary',
+                    )}
+                  >
+                    {entry.cueStackName}
+                    {entryStack?.loop && (
+                      <span className="text-base text-muted-foreground/25">
+                        {entry.id === activeEntryId ? (
+                          <RotateCcw className="size-3 text-muted-foreground/50" />
+                        ) : (
+                          <RotateCcw className="size-3" />
+                        )}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
               <div className="flex-1" />
               <div className="flex items-center mr-3.5">
                 <button

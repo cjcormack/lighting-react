@@ -9,6 +9,7 @@ interface ShowBarProps {
   stackName: string
   activeName: string | null
   standbyName: string | null
+  nextStackName?: string
   onGo: () => void
   onBack: () => void
 }
@@ -21,6 +22,7 @@ export function ShowBar({
   stackName,
   activeName,
   standbyName,
+  nextStackName,
   onGo,
   onBack,
 }: ShowBarProps) {
@@ -68,18 +70,24 @@ export function ShowBar({
             <div className="text-[15px] font-semibold text-amber-400 truncate">
               {'\u25B6'} {activeName}
             </div>
-            {standbyName && (
+            {standbyName ? (
               <div className="text-[11px] text-green-500 truncate">
                 {'\u25C9'}&ensp;{'next \u2014'} {standbyName}
               </div>
-            )}
+            ) : nextStackName ? (
+              <div className="text-[11px] text-green-500 truncate">
+                {'\u2192'} {nextStackName}
+              </div>
+            ) : null}
           </div>
         ) : (
           <div className="flex flex-col justify-center flex-1 min-w-0">
             <div className="text-[13px] text-muted-foreground/40 truncate">
               {standbyName
                 ? `${stackName}  \u00B7  \u25C9 ${standbyName}`
-                : `${stackName}  \u00B7  end of stack`}
+                : nextStackName
+                  ? `${stackName}  \u00B7  \u2192 ${nextStackName}`
+                  : `${stackName}  \u00B7  end of stack`}
             </div>
           </div>
         )}
