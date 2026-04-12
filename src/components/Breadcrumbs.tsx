@@ -11,8 +11,8 @@ interface BreadcrumbsProps {
   extra?: string[]
   /** Called when the currentPage segment is clicked (only active when extra segments are shown) */
   onCurrentPageClick?: () => void
-  /** Called when the extra segment is clicked */
-  onExtraClick?: () => void
+  /** Called when an extra segment is clicked (receives the segment index) */
+  onExtraClick?: (index: number) => void
 }
 
 export function Breadcrumbs({ projectName, isActive = true, currentPage, extra, onCurrentPageClick, onExtraClick }: BreadcrumbsProps) {
@@ -59,17 +59,24 @@ export function Breadcrumbs({ projectName, isActive = true, currentPage, extra, 
               >
                 {currentPage}
               </button>
-              <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" />
-              {onExtraClick ? (
-                <button
-                  onClick={onExtraClick}
-                  className="font-medium truncate max-w-[300px] hover:text-muted-foreground transition-colors"
-                >
-                  {extra.join(', ')}
-                </button>
-              ) : (
-                <span className="font-medium truncate max-w-[300px]">{extra.join(', ')}</span>
-              )}
+              {extra.map((segment, i) => {
+                const isLast = i === extra.length - 1
+                return (
+                  <span key={i} className="contents">
+                    <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" />
+                    {isLast ? (
+                      <span className="font-medium truncate max-w-[300px]">{segment}</span>
+                    ) : (
+                      <button
+                        onClick={() => onExtraClick?.(i)}
+                        className="text-muted-foreground hover:text-foreground transition-colors truncate max-w-[300px]"
+                      >
+                        {segment}
+                      </button>
+                    )}
+                  </span>
+                )
+              })}
             </>
           ) : onCurrentPageClick ? (
             <button

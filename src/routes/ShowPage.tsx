@@ -1,9 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
-import { useParams, useNavigate, Navigate } from 'react-router-dom'
+import { useParams, useNavigate, Navigate, useLocation } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Loader2, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
@@ -50,16 +48,17 @@ import {
 } from '../components/runner/OutOfOrderBanner'
 import { CueForm } from '../components/cues/CueForm'
 import { ProgramView } from '../components/runner/program/ProgramView'
+import { SessionPicker } from '../components/runner/SessionPicker'
 import type { CueStack } from '../api/cueStacksApi'
 
-// Redirect component for /cue-stacks route
-export function CueStackRunnerRedirect() {
+// Redirect: /show or /cue-stacks (no project) → active project's /show
+export function ShowRedirect() {
   const { data: currentProject, isLoading } = useCurrentProjectQuery()
   const navigate = useNavigate()
 
   useEffect(() => {
     if (!isLoading && currentProject) {
-      navigate(`/projects/${currentProject.id}/cue-stacks`, { replace: true })
+      navigate(`/projects/${currentProject.id}/show`, { replace: true })
     }
   }, [currentProject, isLoading, navigate])
 
@@ -74,38 +73,67 @@ export function CueStackRunnerRedirect() {
   return null
 }
 
-// Main route component
-export function ProjectCueStackRunner() {
+// Redirect: /projects/:id/cue-stacks → /projects/:id/show
+export function LegacyCueStackRedirect() {
   const { projectId } = useParams()
+  return <Navigate to={`/projects/${projectId}/show`} replace />
+}
+
+type ShowMode = 'program' | 'run'
+
+// Main route component — reads session + mode from URL
+export function ShowPage() {
+  const { projectId, sessionId } = useParams()
   const projectIdNum = Number(projectId)
+  const sessionIdNum = sessionId ? Number(sessionId) : null
+  const location = useLocation()
+  const navigate = useNavigate()
   const dispatch = useDispatch()
+
+  // Derive mode from URL path
+  const mode: ShowMode = location.pathname.endsWith('/run') ? 'run' : 'program'
+
   const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
   const { data: stacks, isLoading: stacksLoading } = useProjectCueStackListQuery(projectIdNum)
   const { data: fxState } = useFxStateQuery()
   const { data: sessions } = useProjectShowSessionListQuery(projectIdNum)
 
-  // Tab state
-  const [activeTab, setActiveTab] = useState<'program' | 'show'>('show')
+  // URL helpers
+  const showBase = `/projects/${projectId}/show`
+  const sessionBase = sessionIdNum != null ? `${showBase}/sessions/${sessionIdNum}` : null
 
   // Session-driven active stack — activeEntryId drives which stack is active
-  const [activeSessionId, setActiveSessionId] = useState<number | null>(null)
   const [activeEntryId, setActiveEntryId] = useState<number | null>(null)
   const [drillStackId, setDrillStackId] = useState<number | null>(null)
-  const [newSessionName, setNewSessionName] = useState('')
 
-  // Derive active session from local ID
+  // Tracks whether we've already attempted the initial auto-redirect
+  const didAutoRedirect = useRef(false)
+
+  // Derive active session from URL
   const activeSession = useMemo(
-    () => (activeSessionId != null ? sessions?.find((s) => s.id === activeSessionId) : undefined) ?? undefined,
-    [sessions, activeSessionId],
+    () => (sessionIdNum != null ? sessions?.find((s) => s.id === sessionIdNum) : undefined) ?? undefined,
+    [sessions, sessionIdNum],
   )
 
-  // Auto-pick previously-active session on initial load
+  // Auto-redirect to previously-active session on initial page load only
   useEffect(() => {
-    if (activeSessionId != null || !sessions || sessions.length === 0) return
+    if (didAutoRedirect.current) return
+    if (sessionIdNum != null || !sessions || sessions.length === 0) return
+    didAutoRedirect.current = true
     const prev = sessions.find((s) => s.activeEntryId != null)
-    if (prev) setActiveSessionId(prev.id)
-  }, [sessions, activeSessionId])
+    if (prev) {
+      navigate(`${showBase}/sessions/${prev.id}/run`, { replace: true })
+    }
+  }, [sessions, sessionIdNum, showBase, navigate])
+
+  // Redirect away if session not found (deleted, invalid URL)
+  useEffect(() => {
+    if (sessionIdNum != null && sessions && !sessions.find((s) => s.id === sessionIdNum)) {
+      navigate(showBase, { replace: true })
+    }
+  }, [sessionIdNum, sessions, showBase, navigate])
+
   const activeEntry: ShowSessionEntryDto | undefined = useMemo(
     () => activeSession?.entries.find((e) => e.id === activeEntryId),
     [activeSession, activeEntryId],
@@ -180,7 +208,7 @@ export function ProjectCueStackRunner() {
 
   const cues = stack?.cues ?? []
 
-  // Initialize runner state when stack changes — seed from server's activeCueId if available
+  // Initialize runner state when stack changes
   useEffect(() => {
     if (activeStackId != null && cues.length > 0) {
       dispatch(resetStack({
@@ -190,9 +218,6 @@ export function ProjectCueStackRunner() {
         loop: stack?.loop,
       }))
     }
-    // Intentionally only depends on activeStackId — we want to reset state when the user
-    // switches stacks, NOT when cues/stack refresh from WebSocket (which would wipe mid-run state).
-    // The closures over cues, stack.activeCueId, and stack.loop are read only on mount/stack-switch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeStackId, dispatch])
 
@@ -214,7 +239,6 @@ export function ProjectCueStackRunner() {
   const fireGo = useCallback(() => {
     if (activeStackId == null || !stack) return
     if (stack.activeCueId == null) {
-      // Stack not yet active on the server — activate it with the standby cue
       activateCueStack({
         projectId: projectIdNum,
         stackId: activeStackId,
@@ -261,7 +285,6 @@ export function ProjectCueStackRunner() {
           sessionId: activeSession.id,
           direction: 'FORWARD',
         })
-        // Optimistically update — WS event will confirm
         setActiveEntryId(nextStack.id)
         cancelAnimations()
         setOooDismissed(false)
@@ -278,7 +301,6 @@ export function ProjectCueStackRunner() {
     if (activeStackId == null) return
     cancelAnimations()
     dispatch(back({ stackId: activeStackId, cues }))
-    // Only send backend call if the stack is active on the server
     if (stack?.activeCueId != null) {
       advanceCueStack({ projectId: projectIdNum, stackId: activeStackId, direction: 'BACKWARD' })
     }
@@ -294,10 +316,10 @@ export function ProjectCueStackRunner() {
     lightingApi.fx.tap()
   }, [])
 
-  // Keyboard handler — only when on Show tab
+  // Keyboard handler — only when in Run mode
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (activeTab !== 'show') return
+      if (mode !== 'run') return
       const tag = (e.target as HTMLElement).tagName
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return
       if (e.code === 'Space') {
@@ -311,17 +333,15 @@ export function ProjectCueStackRunner() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [handleGo, handleBack, activeTab])
+  }, [handleGo, handleBack, mode])
 
   // Switch to a session entry (Show tab strip click)
   const handleSwitchToEntry = useCallback(
     (entry: ShowSessionEntryDto) => {
       if (entry.entryType !== 'STACK' || entry.cueStackId == null) return
-      // Deactivate old stack on the server if it was active
       if (activeStackId != null && stack?.activeCueId != null) {
         deactivateCueStack({ projectId: projectIdNum, stackId: activeStackId })
       }
-      // Tell the backend to go to this entry
       if (activeSession) {
         goToEntry({
           projectId: projectIdNum,
@@ -336,8 +356,6 @@ export function ProjectCueStackRunner() {
     [activeStackId, stack, activeSession, projectIdNum, deactivateCueStack, goToEntry, cancelAnimations],
   )
 
-  // When Program tab drills into a stack, set drillStackId.
-  // activeStackId is now session-driven, so we don't update it here.
   const handleDrillStack = useCallback(
     (id: number | null) => {
       setDrillStackId(id)
@@ -356,56 +374,47 @@ export function ProjectCueStackRunner() {
   // OOO detection
   const ooo = isTheatre && !oooDismissed && detectOutOfOrder(cues)
 
-  // Fix order
   const handleFixOrder = useCallback(() => {
     if (activeStackId == null) return
     sortByCueNumber({ projectId: projectIdNum, stackId: activeStackId })
     setOooDismissed(false)
   }, [activeStackId, projectIdNum, sortByCueNumber])
 
-  // ── Session management handlers ──
+  // ── Session management handlers (now navigate via URL) ──
 
-  const handleCreateSession = useCallback(async () => {
-    const name = newSessionName.trim()
-    if (!name) return
+  const handleCreateSession = useCallback(async (name: string) => {
     try {
       const result = await createSession({ projectId: projectIdNum, name }).unwrap()
-      setNewSessionName('')
-      // Set as active locally (no backend activate — session has no entries yet)
-      setActiveSessionId(result.id)
-      setActiveEntryId(null)
-      setDrillStackId(null)
-      setActiveTab('program')
+      navigate(`${showBase}/sessions/${result.id}/program`)
     } catch {
       // Silently fail
     }
-  }, [newSessionName, createSession, projectIdNum])
+  }, [createSession, projectIdNum, showBase, navigate])
 
   const handleActivateSession = useCallback(
-    (sessionId: number) => {
-      const session = sessions?.find((s) => s.id === sessionId)
-      setActiveSessionId(sessionId)
+    (sid: number) => {
+      const session = sessions?.find((s) => s.id === sid)
       setDrillStackId(null)
-      // If session has entries, try activating on the backend too
-      if (session && session.entries.length > 0) {
-        activateSessionMut({ projectId: projectIdNum, sessionId })
+      const hasEntries = session && session.entries.length > 0
+      // Sessions with entries → run mode; empty sessions → program mode to add stacks
+      navigate(`${showBase}/sessions/${sid}/${hasEntries ? 'run' : 'program'}`)
+      if (hasEntries) {
+        activateSessionMut({ projectId: projectIdNum, sessionId: sid })
           .unwrap()
           .then((result) => setActiveEntryId(result.activeEntryId))
           .catch(() => {
-            // Backend activation failed — still set entry from session data
-            const firstStack = session.entries.find((e) => e.entryType === 'STACK')
+            const firstStack = session!.entries.find((e) => e.entryType === 'STACK')
             setActiveEntryId(firstStack?.id ?? null)
           })
       } else {
         setActiveEntryId(session?.activeEntryId ?? null)
       }
     },
-    [sessions, activateSessionMut, projectIdNum],
+    [sessions, activateSessionMut, projectIdNum, showBase, navigate],
   )
 
   const handleDeactivateSession = useCallback(async () => {
     if (!activeSession) return
-    // Deactivate on the backend if the session was activated
     if (activeSession.activeEntryId != null) {
       try {
         await deactivateSessionMut({ projectId: projectIdNum, sessionId: activeSession.id }).unwrap()
@@ -413,16 +422,14 @@ export function ProjectCueStackRunner() {
         // Silently fail
       }
     }
-    setActiveSessionId(null)
-    setActiveEntryId(null)
-  }, [activeSession, deactivateSessionMut, projectIdNum])
+    navigate(showBase)
+  }, [activeSession, deactivateSessionMut, projectIdNum, showBase, navigate])
 
   // ── CueForm sheet handlers ──
 
   const openCueForm = useCallback(
     async (stackId: number, cueId: number) => {
-      // Save scroll position if coming from Show tab
-      if (activeTab === 'show' && listScrollRef.current) {
+      if (mode === 'run' && listScrollRef.current) {
         savedScrollPos.current = listScrollRef.current.scrollTop
       }
       try {
@@ -437,7 +444,7 @@ export function ProjectCueStackRunner() {
         // Silently fail
       }
     },
-    [activeTab, fetchCue, projectIdNum],
+    [mode, fetchCue, projectIdNum],
   )
 
   const handleCueFormSave = useCallback(
@@ -457,8 +464,7 @@ export function ProjectCueStackRunner() {
     (open: boolean) => {
       setCueFormOpen(open)
       if (!open) {
-        // Restore scroll position if we came from Show tab
-        if (activeTab === 'show') {
+        if (mode === 'run') {
           requestAnimationFrame(() => {
             if (listScrollRef.current) {
               listScrollRef.current.scrollTop = savedScrollPos.current
@@ -467,7 +473,7 @@ export function ProjectCueStackRunner() {
         }
       }
     },
-    [activeTab],
+    [mode],
   )
 
   const handleDuplicate = useCallback(async () => {
@@ -479,9 +485,7 @@ export function ProjectCueStackRunner() {
       input.cueNumber = null
       input.cueStackId = cueFormStackId
       const result = await createCue({ projectId: projectIdNum, ...input }).unwrap()
-      // Close current sheet and open the duplicate
       setCueFormOpen(false)
-      // Small delay to let sheet close animation finish
       setTimeout(() => openCueForm(cueFormStackId!, result.id), 200)
     } catch {
       // Silently fail
@@ -496,9 +500,57 @@ export function ProjectCueStackRunner() {
     setCueFormOpen(false)
   }, [cueFormCueId, cueFormStackId, projectIdNum, removeCueFromStack])
 
+  // ── Breadcrumb helpers ──
+
+  const drillStack = drillStackId != null ? stackMap.get(drillStackId) : undefined
+
+  const breadcrumbExtra = useMemo(() => {
+    if (!activeSession) return undefined
+    const segments = [activeSession.name]
+    if (mode === 'program') {
+      segments.push('Program')
+      if (drillStack) segments.push(drillStack.name)
+    } else {
+      segments.push('Run')
+    }
+    return segments
+  }, [activeSession, mode, drillStack])
+
+  const handleBreadcrumbCurrentPageClick = useCallback(() => {
+    navigate(showBase)
+  }, [showBase, navigate])
+
+  const handleBreadcrumbExtraClick = useCallback(
+    (index: number) => {
+      if (!sessionBase) return
+      if (index === 0) {
+        // Clicked session name — go to program view for this session
+        navigate(`${sessionBase}/program`)
+        setDrillStackId(null)
+      } else if (index === 1) {
+        // Clicked mode name — already here (could toggle, but clicking the active mode is a no-op)
+        // If in program mode with drill, go back to session overview
+        if (mode === 'program' && drillStackId != null) {
+          setDrillStackId(null)
+        }
+      }
+    },
+    [sessionBase, navigate, mode, drillStackId],
+  )
+
+  // ── Mode toggle navigation ──
+
+  const handleSwitchMode = useCallback(
+    (targetMode: ShowMode) => {
+      if (!sessionBase || targetMode === mode) return
+      navigate(`${sessionBase}/${targetMode}`)
+    },
+    [sessionBase, mode, navigate],
+  )
+
   // Loading / redirect guards
   if (!currentLoading && currentProject && projectIdNum !== currentProject.id) {
-    return <Navigate to={`/projects/${currentProject.id}/cue-stacks`} replace />
+    return <Navigate to={`/projects/${currentProject.id}/show`} replace />
   }
 
   if (projectLoading || currentLoading || stacksLoading) {
@@ -531,134 +583,87 @@ export function ProjectCueStackRunner() {
     )
   }
 
+  // ── Session picker (no session in URL) ──
+
+  if (!activeSession) {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="px-4 pt-3 pb-2">
+          <Breadcrumbs projectName={project.name} currentPage="Show" />
+        </div>
+        <SessionPicker
+          sessions={sessions}
+          onCreateSession={handleCreateSession}
+          onActivateSession={handleActivateSession}
+        />
+      </div>
+    )
+  }
+
+  // ── Active session view ──
+
   return (
     <div className="flex flex-col h-full">
-      <div className="px-4 pt-3 pb-2">
-        <Breadcrumbs projectName={project.name} currentPage="Show" />
-      </div>
-
-      {/* Top tab bar: Program / Show + session name */}
-      <div className="flex items-stretch h-10 border-b bg-card/80 shrink-0">
-        <button
-          className={cn(
-            'flex items-center px-6 border-r text-[12px] font-bold tracking-[0.12em] uppercase text-muted-foreground/25 transition-colors relative',
-            'hover:text-muted-foreground/50 hover:bg-muted/10',
-            activeTab === 'program' &&
-              'text-muted-foreground/70 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary',
-          )}
-          onClick={() => setActiveTab('program')}
-        >
-          Program
-        </button>
-        <button
-          className={cn(
-            'flex items-center px-6 border-r text-[12px] font-bold tracking-[0.12em] uppercase text-muted-foreground/25 transition-colors relative',
-            'hover:text-muted-foreground/50 hover:bg-muted/10',
-            activeTab === 'show' &&
-              'text-muted-foreground/70 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary',
-          )}
-          onClick={() => setActiveTab('show')}
-        >
-          Show
-        </button>
+      {/* Header row: breadcrumbs + mode toggle + session status */}
+      <div className="flex items-center px-4 pt-3 pb-2 gap-3">
+        <Breadcrumbs
+          projectName={project.name}
+          currentPage="Show"
+          extra={breadcrumbExtra}
+          onCurrentPageClick={handleBreadcrumbCurrentPageClick}
+          onExtraClick={handleBreadcrumbExtraClick}
+        />
         <div className="flex-1" />
-        {activeSession && (
-          <>
-            <button
-              className="flex items-center px-3.5 border-l text-[10px] font-bold tracking-[0.1em] uppercase text-muted-foreground/25 hover:text-destructive/60 transition-colors"
-              onClick={handleDeactivateSession}
-            >
-              Deactivate
-            </button>
-            <div className="flex items-center px-4 gap-1.5 text-[11px] text-muted-foreground/30">
-              <div className="size-1.5 rounded-full bg-green-500" />
-              {activeSession.name}
-            </div>
-          </>
-        )}
+
+        {/* Mode toggle */}
+        <div className="flex items-center">
+          <button
+            onClick={() => handleSwitchMode('program')}
+            className={cn(
+              'h-[26px] px-3 text-[10px] font-bold tracking-wider uppercase border border-border bg-card text-muted-foreground/25 transition-colors rounded-l-sm',
+              mode === 'program' && 'bg-muted/30 text-muted-foreground/60 border-muted-foreground/20',
+            )}
+          >
+            Program
+          </button>
+          <button
+            onClick={() => handleSwitchMode('run')}
+            className={cn(
+              'h-[26px] px-3 text-[10px] font-bold tracking-wider uppercase border border-l-0 border-border bg-card text-muted-foreground/25 transition-colors rounded-r-sm',
+              mode === 'run' && 'bg-muted/30 text-muted-foreground/60 border-muted-foreground/20',
+            )}
+          >
+            Run
+          </button>
+        </div>
+
+        {/* Session status */}
+        <div className="flex items-center gap-1.5">
+          <div className="size-1.5 rounded-full bg-green-500" />
+          <button
+            className="text-[10px] font-bold tracking-[0.1em] uppercase text-muted-foreground/25 hover:text-destructive/60 transition-colors"
+            onClick={handleDeactivateSession}
+          >
+            Deactivate
+          </button>
+        </div>
       </div>
 
-      {/* ═══ Session picker (no active session) ═══ */}
-      {!activeSession && (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 gap-4">
-          <div className="w-full max-w-[480px] mb-2">
-            <h2 className="text-lg font-bold text-muted-foreground/50 tracking-[0.06em] uppercase">
-              Choose Session
-            </h2>
-          </div>
-          <div className="flex gap-2 w-full max-w-[480px]">
-            <Input
-              className="flex-1"
-              placeholder="New session name..."
-              value={newSessionName}
-              onChange={(e) => setNewSessionName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleCreateSession()}
-              autoFocus
-            />
-            <Button
-              variant="outline"
-              className="font-bold tracking-wider text-green-400 border-green-500/30 bg-green-950/40 hover:bg-green-900/50 hover:text-green-300 shrink-0"
-              onClick={handleCreateSession}
-              disabled={!newSessionName.trim()}
-            >
-              Create
-            </Button>
-          </div>
-          {sessions && sessions.length > 0 && (
-            <>
-              <div className="flex items-center gap-2.5 w-full max-w-[480px] my-1">
-                <div className="flex-1 h-px bg-border/50" />
-                <span className="text-[9px] font-bold tracking-[0.13em] uppercase text-muted-foreground/20">
-                  or resume existing
-                </span>
-                <div className="flex-1 h-px bg-border/50" />
-              </div>
-              <div className="w-full max-w-[480px] flex flex-col gap-2">
-                {sessions.map((s) => {
-                  const stackCount = s.entries.filter((e) => e.entryType === 'STACK').length
-                  return (
-                    <div
-                      key={s.id}
-                      className="flex items-center px-4 py-3.5 bg-card border rounded-md gap-3.5 hover:bg-muted/20 hover:border-muted-foreground/20 transition-colors"
-                    >
-                      <span className="flex-1 text-[15px] font-semibold text-muted-foreground/60">
-                        {s.name}
-                      </span>
-                      <span className="text-[11px] text-muted-foreground/30 shrink-0">
-                        {stackCount} stack{stackCount !== 1 ? 's' : ''}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="font-bold tracking-wider text-green-400 border-green-500/30 bg-green-950/40 hover:bg-green-900/50 hover:text-green-300 shrink-0"
-                        onClick={() => handleActivateSession(s.id)}
-                      >
-                        Activate
-                      </Button>
-                    </div>
-                  )
-                })}
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* ═══ Program tab ═══ */}
-      {activeSession && activeTab === 'program' && (
+      {/* ═══ Program mode ═══ */}
+      {mode === 'program' && (
         <ProgramView
           projectId={projectIdNum}
           stacks={stacks ?? []}
           drillStackId={drillStackId}
           onDrillStack={handleDrillStack}
-          onSwitchToShow={() => setActiveTab('show')}
+          onSwitchToShow={() => handleSwitchMode('run')}
           onOpenCueForm={openCueForm}
           activeSession={activeSession}
         />
       )}
 
-      {/* ═══ Show tab ═══ */}
-      {activeSession && activeTab === 'show' && (
+      {/* ═══ Run mode ═══ */}
+      {mode === 'run' && (
         <>
           {/* Show bar */}
           <ShowBar
@@ -805,7 +810,7 @@ export function ProjectCueStackRunner() {
         </>
       )}
 
-      {/* CueForm sheet (shared across both tabs) */}
+      {/* CueForm sheet (shared across both modes) */}
       <CueForm
         open={cueFormOpen}
         onOpenChange={handleCueFormClose}

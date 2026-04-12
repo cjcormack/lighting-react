@@ -99,9 +99,9 @@ export const navItems: NavItem[] = [
     id: "show",
     label: "Show",
     icon: Theater,
-    path: (p) => `/projects/${p}/cue-stacks`,
+    path: (p) => `/projects/${p}/show`,
     visibility: "active-only",
-    pathMatch: "/cue-stacks",
+    pathMatch: "/show",
   },
 ]
 

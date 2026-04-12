@@ -14,7 +14,7 @@ import { PresetsRedirect, ProjectFxPresets } from "./routes/FxPresets";
 import { CuesRedirect, CuesBaseRedirect, ProjectCues } from "./routes/Cues";
 import ProjectOverview, { ProjectOverviewRedirect } from "./routes/ProjectOverview";
 import { ProjectPatches, PatchesRedirect } from "./routes/Patches";
-import { CueStackRunnerRedirect, ProjectCueStackRunner } from "./routes/CueStackRunner";
+import { ShowPage, ShowRedirect, LegacyCueStackRedirect } from "./routes/ShowPage";
 
 function App() {
   const router = createBrowserRouter([
@@ -116,12 +116,29 @@ function App() {
         },
 
         {
+          path: "projects/:projectId/show",
+          element: <ShowPage />,
+        },
+        {
+          path: "projects/:projectId/show/sessions/:sessionId/program",
+          element: <ShowPage />,
+        },
+        {
+          path: "projects/:projectId/show/sessions/:sessionId/run",
+          element: <ShowPage />,
+        },
+        {
+          path: "show",
+          element: <ShowRedirect />,
+        },
+        // Legacy redirects
+        {
           path: "projects/:projectId/cue-stacks",
-          element: <ProjectCueStackRunner />,
+          element: <LegacyCueStackRedirect />,
         },
         {
           path: "cue-stacks",
-          element: <CueStackRunnerRedirect />,
+          element: <ShowRedirect />,
         },
         {
           path: "fixtures",

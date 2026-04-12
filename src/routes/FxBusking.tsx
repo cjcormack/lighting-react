@@ -50,7 +50,7 @@ export function ProjectFxBusking() {
     controlsRef.current?.clearSelection()
   }, [])
 
-  const handleExtraClick = useCallback(() => {
+  const handleExtraClick = useCallback((_index: number) => {
     controlsRef.current?.openTargetPicker()
   }, [])
 
