@@ -97,14 +97,25 @@ const INIT_STACKS = {
   }
 };
 
-const INIT_SESSION = {
-  id: 'sess1', name: 'Spring Production 2026',
-  entries: [
-    { id: 'e1', type: 'STACK', stackId: 1, stackName: 'Act 1' },
-    { id: 'e2', type: 'MARKER', label: '— Interval —' },
-    { id: 'e3', type: 'STACK', stackId: 2, stackName: 'Electric Feel' },
-  ],
-};
+const SESSIONS = [
+  {
+    id: 'sess1', name: 'Spring Production 2026',
+    entries: [
+      { id: 'e1', type: 'STACK', stackId: 1, stackName: 'Act 1' },
+      { id: 'e2', type: 'MARKER', label: '— Interval —' },
+      { id: 'e3', type: 'STACK', stackId: 2, stackName: 'Electric Feel' },
+    ],
+  },
+  {
+    id: 'sess2', name: 'Dress Rehearsal',
+    entries: [
+      { id: 'e4', type: 'STACK', stackId: 1, stackName: 'Act 1' },
+      { id: 'e5', type: 'STACK', stackId: 2, stackName: 'Electric Feel' },
+    ],
+  },
+];
+const INIT_SESSION = SESSIONS[0];
+let nextEntryId = 10;
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 const firstStd = cues => cues.find(c => c.cueType === 'STANDARD')?.id ?? null;
@@ -294,6 +305,44 @@ const CSS = `
 .top-nav-spacer{flex:1}
 .top-nav-session{display:flex;align-items:center;padding:0 18px;font-size:11px;color:#253a4a;gap:6px}
 .top-nav-session-dot{width:6px;height:6px;border-radius:50%;background:#3aca70}
+.top-nav-deactivate{display:flex;align-items:center;padding:0 14px;background:none;border:none;border-left:1px solid #111820;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#3a4050;transition:color .1s;flex-shrink:0}
+.top-nav-deactivate:hover{color:#905050}
+.cr-tab-mkr{display:flex;align-items:center;height:100%;padding:0 8px;gap:5px;flex-shrink:0;pointer-events:none}
+.cr-tab-mkr-line{width:1px;height:16px;background:#141c28;flex-shrink:0}
+.cr-tab-mkr-label{font-size:9px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#1c2a38;white-space:nowrap}
+.sess-picker{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;gap:16px}
+.sess-picker-hdr{width:100%;max-width:480px;display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.sess-picker-title{font-size:18px;font-weight:700;color:#4a6a80;letter-spacing:.06em;text-transform:uppercase}
+.sess-picker-new{background:#0c1520;border:1px dashed #1c2a3a;border-radius:3px;color:#3a5060;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:6px 16px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;transition:all .1s}
+.sess-picker-new:hover{color:#5a8090;border-color:#2a4060}
+.sess-picker-list{width:100%;max-width:480px;display:flex;flex-direction:column;gap:8px}
+.sess-picker-item{display:flex;align-items:center;padding:14px 18px;background:#0c1018;border:1px solid #151c28;border-radius:6px;gap:14px;transition:all .12s}
+.sess-picker-item:hover{background:#0f1520;border-color:#1c2a3a}
+.sess-picker-item-name{font-size:15px;font-weight:600;color:#5a7a90;flex:1}
+.sess-picker-item-meta{font-size:11px;color:#253a4a;flex-shrink:0}
+.sess-picker-activate{background:#0a2e1a;border:1px solid #1a4a30;border-radius:3px;color:#3aca70;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:6px 16px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;transition:all .1s;flex-shrink:0}
+.sess-picker-new-row{display:flex;gap:8px;width:100%;max-width:480px}
+.sess-picker-inp{flex:1;background:#080a0d;border:1px solid #1a2433;border-radius:3px;padding:8px 12px;color:#7a9ab8;font-size:14px;font-family:'Barlow Condensed',sans-serif;outline:none;transition:border-color .12s}
+.sess-picker-inp:focus{border-color:#284878}
+.sess-picker-inp::placeholder{color:#253545;font-style:italic}
+.sess-picker-create{background:#0a2e1a;border:1px solid #1a4a30;border-radius:3px;color:#3aca70;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:0 18px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;transition:all .1s;flex-shrink:0}
+.sess-picker-create:hover{background:#0f3d22}
+.sess-picker-create:disabled{opacity:.35;cursor:default}
+.sess-picker-divider{width:100%;max-width:480px;display:flex;align-items:center;gap:10px;margin:4px 0}
+.sess-picker-divider-line{flex:1;height:1px;background:#141c28}
+.sess-picker-divider-label{font-size:9px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#1e2e3e}
+.sess-entry-drag{width:16px;color:#1c2433;font-size:12px;cursor:grab;flex-shrink:0;display:flex;align-items:center;justify-content:center;user-select:none}
+.sess-entry-drag:hover{color:#3a5060}
+.sess-entry-remove{background:none;border:none;color:#253545;font-size:11px;cursor:pointer;padding:2px 6px;flex-shrink:0;transition:color .1s}
+.sess-entry-remove:hover{color:#904040}
+.sess-entry-mkr-drag{color:#1c2433;font-size:12px;cursor:grab;flex-shrink:0;user-select:none}
+.sess-entry-mkr-drag:hover{color:#3a5060}
+.prog-title-inp{background:none;border:none;border-bottom:1px solid transparent;color:#7a9ab8;font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:600;letter-spacing:.04em;outline:none;min-width:100px;max-width:260px;transition:border-color .15s;padding:0}
+.prog-title-inp:focus{border-bottom-color:#284878}
+.prog-add-marker{background:#0c1520;border:1px solid #192c40;border-radius:3px;color:#254060;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:5px 14px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;transition:all .1s}
+.prog-add-marker:hover{color:#4080b0;border-color:#2a4a60;background:#101828}
+.prog-add-stack{background:#111828;border:1px solid #1c2a3a;border-radius:3px;color:#3a4a60;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:5px 14px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;transition:all .1s}
+.prog-add-stack:hover{color:#5a7090;border-color:#2a4060;background:#151e2c}
 `;
 
 
@@ -395,17 +444,103 @@ function CueEditSheet({ cue, onClose, onChange, onDelete, onDuplicate, isActiveC
 
 // (Library Drawer removed — Add Cue creates a blank cue directly)
 
+// ─── SORTABLE SESSION ENTRY ROW (native HTML5 drag-and-drop) ─────────────────
+function SessEntryRow({ entry, idx, stacks, onDrill, onRemove, onDragStart, onDragOver, onDrop, dragging }) {
+  const isDragging = dragging === entry.id;
+
+  if (entry.type === 'MARKER') {
+    return (
+      <div
+        className="sess-entry-mkr"
+        style={{ cursor: 'default', opacity: isDragging ? 0.4 : 1 }}
+        draggable
+        onDragStart={() => onDragStart(entry.id)}
+        onDragOver={e => { e.preventDefault(); onDragOver(entry.id); }}
+        onDrop={e => { e.preventDefault(); onDrop(entry.id); }}
+      >
+        <div className="sess-entry-mkr-drag">⠿</div>
+        <div className="sess-entry-mkr-line" />
+        <span className="sess-entry-mkr-label">{entry.label}</span>
+        <div className="sess-entry-mkr-line" />
+        <button className="sess-entry-remove" onClick={() => onRemove(entry.id)}>✕</button>
+      </div>
+    );
+  }
+
+  const s = stacks[entry.stackId];
+  const cc = s ? s.cues.filter(c => c.cueType === 'STANDARD').length : 0;
+  return (
+    <div
+      className="sess-entry"
+      style={{ opacity: isDragging ? 0.4 : 1 }}
+      draggable
+      onDragStart={() => onDragStart(entry.id)}
+      onDragOver={e => { e.preventDefault(); onDragOver(entry.id); }}
+      onDrop={e => { e.preventDefault(); onDrop(entry.id); }}
+      onClick={() => onDrill(entry.stackId)}
+    >
+      <div className="sess-entry-drag" onClick={e => e.stopPropagation()}>⠿</div>
+      <span className="sess-entry-num">{idx + 1}</span>
+      <span className="sess-entry-name">{entry.stackName}</span>
+      <span className="sess-entry-meta">{cc} cues · {s?.loop ? 'Loop' : 'Sequential'}</span>
+      <button className="sess-entry-remove" onClick={e => { e.stopPropagation(); onRemove(entry.id); }}>✕</button>
+      <span style={{ color: '#253a50', fontSize: 16 }}>→</span>
+    </div>
+  );
+}
+
+// ─── STACK PICKER OVERLAY ─────────────────────────────────────────────────────
+function StackPickerOverlay({ stacks, session, onAdd, onClose }) {
+  const addedIds = new Set(session.entries.filter(e => e.type === 'STACK').map(e => e.stackId));
+  return (
+    <div className="lib-overlay" onClick={onClose}>
+      <div className="lib-drawer" onClick={e => e.stopPropagation()}>
+        <div className="lib-hdr">
+          <span className="lib-title">Add Stack to Session</span>
+          <button className="lib-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="lib-list">
+          {Object.values(stacks).map(s => {
+            const cc = s.cues.filter(c => c.cueType === 'STANDARD').length;
+            const added = addedIds.has(s.id);
+            return (
+              <div key={s.id} className="lib-item">
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="lib-item-name">{s.name}</div>
+                  <div className="lib-item-presets">{cc} cues · {s.loop ? 'Loop' : 'Sequential'} · {s.context}</div>
+                </div>
+                <button
+                  className="lib-item-add"
+                  style={added ? { opacity: 0.4, cursor: 'default' } : {}}
+                  onClick={() => { if (!added) onAdd(s); }}
+                >{added ? 'Added' : '+ Add'}</button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function ShowModeV2() {
   const [view, setView] = useState('program');
   const [stacks, setStacks] = useState(INIT_STACKS);
-  const [session] = useState(INIT_SESSION);
+  const [sessions, setSessions] = useState(SESSIONS);
+  const [activeSessionId, setActiveSessionId] = useState(INIT_SESSION.id);
+  const [session, setSession] = useState(INIT_SESSION);
+  const [activeEntryId, setActiveEntryId] = useState(() => INIT_SESSION.entries.find(e => e.type === 'STACK')?.id ?? null);
+  // stackId derived — null when session has no active entry (blank session)
+  const activeEntry = useMemo(() => session.entries.find(e => e.id === activeEntryId), [session, activeEntryId]);
+  const stackId = activeEntry?.stackId ?? null;
+  const [showStackPicker, setShowStackPicker] = useState(false);
+  const [newSessionName, setNewSessionName] = useState('');
   const [editMode, setEditMode] = useState(false);
   const [progDrillStackId, setProgDrillStackId] = useState(null);
   const [progEditSheetCueId, setProgEditSheetCueId] = useState(null);
-  const [stackId, setStackId] = useState(1);
   const [completedIds, setCompleted] = useState(new Set());
   const [activeCueId, setActive] = useState(null);
   const [standbyCueId, setStandby] = useState(() => firstStd(INIT_STACKS[1].cues));
@@ -422,10 +557,13 @@ export default function ShowModeV2() {
   const animR = useRef(null); const autoR = useRef(null); const goFn = useRef(null);
   const activeR = useRef(null); const standbyR = useRef(null);
   const stackIdR = useRef(stackId); const stacksR = useRef(stacks);
+  const activeEntryIdR = useRef(activeEntryId); const sessionR = useRef(session);
   useEffect(() => { activeR.current = activeCueId; }, [activeCueId]);
   useEffect(() => { standbyR.current = standbyCueId; }, [standbyCueId]);
   useEffect(() => { stackIdR.current = stackId; }, [stackId]);
   useEffect(() => { stacksR.current = stacks; }, [stacks]);
+  useEffect(() => { activeEntryIdR.current = activeEntryId; }, [activeEntryId]);
+  useEffect(() => { sessionR.current = session; }, [session]);
   const cancelAll = useCallback(() => { if (animR.current) { cancelAnimationFrame(animR.current); animR.current = null; } if (autoR.current) { cancelAnimationFrame(autoR.current); autoR.current = null; } }, []);
   const markDone = useCallback(id => setCompleted(p => new Set([...p, id])), []);
   const getCue = useCallback(id => stacksR.current[stackIdR.current]?.cues.find(c => c.id === id) ?? null, []);
@@ -438,7 +576,21 @@ export default function ShowModeV2() {
     autoR.current = requestAnimationFrame(tick);
   }, [markDone]);
   const go = useCallback(() => {
-    const sid = standbyR.current; if (!sid) return;
+    const sid = standbyR.current;
+    if (!sid) {
+      // Boundary: find the next STACK entry after the current one and advance
+      const curIdx = sessionR.current.entries.findIndex(e => e.id === activeEntryIdR.current);
+      const nextEntry = sessionR.current.entries.slice(curIdx + 1).find(e => e.type === 'STACK');
+      if (nextEntry) {
+        cancelAll();
+        setActiveEntryId(nextEntry.id);
+        setCompleted(new Set());
+        setActive(null); setFadeP(0); setAutoP(null);
+        setStandby(firstStd(stacksR.current[nextEntry.stackId]?.cues || []));
+        setOooDismiss(false);
+      }
+      return;
+    }
     const cue = getCue(sid); if (!cue) return;
     cancelAll(); if (activeR.current) markDone(activeR.current);
     setActive(sid); setFadeP(0); setAutoP(null);
@@ -458,7 +610,14 @@ export default function ShowModeV2() {
     if (prev) { setStandby(prev); setCompleted(p => { const n = new Set(p); n.delete(prev); return n; }); }
     else { const p = prevStd(s.cues, curSB); if (p) { setStandby(p); setCompleted(prev => { const n = new Set(prev); n.delete(p); return n; }); } }
   }, [cancelAll]);
-  const switchStack = useCallback(id => { cancelAll(); setStackId(id); setCompleted(new Set()); setActive(null); setFadeP(0); setAutoP(null); setStandby(firstStd(stacks[id]?.cues || [])); setOooDismiss(false); }, [cancelAll, stacks]);
+  const switchToEntry = useCallback((entry) => {
+    cancelAll(); setActiveEntryId(entry.id); setCompleted(new Set()); setActive(null); setFadeP(0); setAutoP(null);
+    setStandby(firstStd(stacks[entry.stackId]?.cues || [])); setOooDismiss(false);
+  }, [cancelAll, stacks]);
+  const switchStack = useCallback(id => {
+    const entry = sessionR.current.entries.find(e => e.type === 'STACK' && e.stackId === id);
+    if (entry) { cancelAll(); setActiveEntryId(entry.id); setCompleted(new Set()); setActive(null); setFadeP(0); setAutoP(null); setStandby(firstStd(stacks[id]?.cues || [])); setOooDismiss(false); }
+  }, [cancelAll, stacks]);
   useEffect(() => {
     const onKey = e => { if (['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return; if (view !== 'run') return; if (e.code === 'Space') { e.preventDefault(); go(); } if (e.code === 'ArrowLeft') { e.preventDefault(); handleBack(); } };
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
@@ -472,6 +631,68 @@ export default function ShowModeV2() {
   const duplicateCue = useCallback((sourceCue, targetStackId) => { const sid = targetStackId || progDrillStackId || stackIdR.current; if (!sid) return; const newId = ++nextCueId; setStacks(p => { const s = p[sid]; const mx = Math.max(0, ...s.cues.map(c => c.sortOrder)); return { ...p, [sid]: { ...s, cues: [...s.cues, { ...sourceCue, id: newId, sortOrder: mx+1, cueNumber: null, name: sourceCue.name + ' (copy)' }] } }; }); setProgEditSheetCueId(newId); setRunEditSheetCueId(null); }, [progDrillStackId]);
   const openRunEditSheet = useCallback(cue => { if (listScrollRef.current) savedScrollPos.current = listScrollRef.current.scrollTop; setRunEditSheetCueId(cue.id); }, []);
   const closeRunEditSheet = useCallback(() => { setRunEditSheetCueId(null); requestAnimationFrame(() => { if (listScrollRef.current) listScrollRef.current.scrollTop = savedScrollPos.current; }); }, []);
+  // Session management (Program tab)
+  const removeEntry = useCallback(id => setSession(s => ({ ...s, entries: s.entries.filter(e => e.id !== id) })), []);
+  const addSessionMarker = useCallback(() => setSession(s => ({ ...s, entries: [...s.entries, { id: `e${++nextEntryId}`, type: 'MARKER', label: 'New Marker' }] })), []);
+  // Native HTML5 drag-and-drop for session entry reorder
+  const [draggingEntryId, setDraggingEntryId] = useState(null);
+  const dragOverId = useRef(null);
+  const handleEntryDragStart = useCallback(id => { setDraggingEntryId(id); dragOverId.current = id; }, []);
+  const handleEntryDragOver = useCallback(id => { dragOverId.current = id; }, []);
+  const handleEntryDrop = useCallback(targetId => {
+    setDraggingEntryId(null);
+    const sourceId = draggingEntryId;
+    if (!sourceId || sourceId === targetId) return;
+    setSession(s => {
+      const entries = [...s.entries];
+      const fi = entries.findIndex(e => e.id === sourceId);
+      const ti = entries.findIndex(e => e.id === targetId);
+      const [moved] = entries.splice(fi, 1);
+      entries.splice(ti, 0, moved);
+      return { ...s, entries };
+    });
+  }, [draggingEntryId]);
+  const activateSession = useCallback(id => {
+    const sess = SESSIONS.find(s => s.id === id); if (!sess) return;
+    const firstEntry = sess.entries.find(e => e.type === 'STACK');
+    setActiveSessionId(id); setSession(sess);
+    if (firstEntry) {
+      cancelAll(); setActiveEntryId(firstEntry.id); setCompleted(new Set()); setActive(null); setFadeP(0); setAutoP(null);
+      setStandby(firstStd(stacks[firstEntry.stackId]?.cues || [])); setOooDismiss(false);
+    }
+  }, [cancelAll, stacks]);
+  // New session: prompt for name, create blank, activate
+  const handleNewSession = useCallback(() => {
+    const name = newSessionName.trim();
+    if (!name) return;
+    const newSess = { id: `sess_${Date.now()}`, name, entries: [] };
+    setSessions(prev => [...prev, newSess]);
+    setActiveSessionId(newSess.id);
+    setSession(newSess);
+    cancelAll();
+    setActiveEntryId(null);
+    setCompleted(new Set());
+    setActive(null); setFadeP(0); setAutoP(null); setStandby(null);
+    setOooDismiss(false);
+    setNewSessionName('');
+    setView('program');
+  }, [cancelAll, newSessionName]);
+  // Add a stack to the current session; auto-activates if it's the first
+  const addStackToSession = useCallback(s => {
+    const entry = { id: `e${++nextEntryId}`, type: 'STACK', stackId: s.id, stackName: s.name };
+    setSession(prev => ({ ...prev, entries: [...prev.entries, entry] }));
+    // If no active entry yet, make this the active one and seed standby
+    setActiveEntryId(prev => prev !== null ? prev : entry.id);
+    setStandby(prev => prev !== null ? prev : (firstStd(stacks[s.id]?.cues || [])));
+  }, [stacks]);
+  // Safety: if the active entry was removed from the session, reset to the next available stack
+  useEffect(() => {
+    if (activeEntryId && !session.entries.find(e => e.id === activeEntryId)) {
+      const fallback = session.entries.find(e => e.type === 'STACK');
+      setActiveEntryId(fallback?.id ?? null);
+      setStandby(fallback ? firstStd(stacks[fallback.stackId]?.cues || []) : null);
+    }
+  }, [session.entries, activeEntryId, stacks]);
   useEffect(() => () => cancelAll(), [cancelAll]);
 
   const stack = stacks[stackId]; const baseCtx = stack?.context || 'theatre';
@@ -479,6 +700,12 @@ export default function ShowModeV2() {
   const ooo = isTheatre && !oooDismissed && stack && detectOOO(stack.cues);
   const activeName = activeCueId ? stack?.cues.find(c => c.id === activeCueId)?.name : null;
   const standbyName = standbyCueId ? stack?.cues.find(c => c.id === standbyCueId)?.name : null;
+  // Next STACK entry after current (for boundary hint and GO advance)
+  const nextEntry = useMemo(() => {
+    if (standbyCueId) return null;
+    const curIdx = session.entries.findIndex(e => e.id === activeEntryId);
+    return session.entries.slice(curIdx + 1).find(e => e.type === 'STACK') ?? null;
+  }, [standbyCueId, session, activeEntryId]);
   const progStack = progDrillStackId ? stacks[progDrillStackId] : null;
   const progEditSheetCue = progEditSheetCueId && progStack ? progStack.cues.find(c => c.id === progEditSheetCueId) : null;
   const runEditSheetCue = runEditSheetCueId && stack ? stack.cues.find(c => c.id === runEditSheetCueId) : null;
@@ -492,76 +719,172 @@ export default function ShowModeV2() {
         <button className={`top-nav-item${view === 'program' ? ' on' : ''}`} onClick={() => setView('program')}>Program</button>
         <button className={`top-nav-item${view === 'run' ? ' on' : ''}`} onClick={() => setView('run')}>Show</button>
         <div className="top-nav-spacer" />
-        <div className="top-nav-session"><div className="top-nav-session-dot" />{session.name}</div>
+        {activeSessionId && <button className="top-nav-deactivate" onClick={() => setActiveSessionId(null)}>Deactivate</button>}
+        <div className="top-nav-session"><div className="top-nav-session-dot" style={{ background: activeSessionId ? '#3aca70' : '#905050' }} />{session.name}</div>
       </div>
 
-      {view === 'program' && (
-        <div className="prog">
-          <div className="prog-topbar">
-            <span className="prog-title">{session.name}</span>
-            <span className="prog-subtitle">{session.entries.filter(e => e.type === 'STACK').length} stacks · {totalCues} cues</span>
-            <button className="prog-ready" onClick={() => setView('run')}>Ready to run →</button>
+      {!activeSessionId ? (
+        <div className="sess-picker">
+          <div className="sess-picker-hdr">
+            <span className="sess-picker-title">Choose Session</span>
           </div>
-          {!progDrillStackId ? (
-            <div className="sess-list">
-              {session.entries.map((entry, idx) => {
-                if (entry.type === 'MARKER') return (<div key={entry.id} className="sess-entry-mkr"><div className="sess-entry-mkr-line" /><span className="sess-entry-mkr-label">{entry.label}</span><div className="sess-entry-mkr-line" /></div>);
-                const s = stacks[entry.stackId]; const cc = s ? s.cues.filter(c => c.cueType === 'STANDARD').length : 0;
-                return (<div key={entry.id} className="sess-entry" onClick={() => setProgDrillStackId(entry.stackId)}><span className="sess-entry-num">{idx+1}</span><span className="sess-entry-name">{entry.stackName}</span><span className="sess-entry-meta">{cc} cues · {s?.loop ? 'Loop' : 'Sequential'}</span><span style={{color:'#253a50',fontSize:16}}>→</span></div>);
+          <div className="sess-picker-new-row">
+            <input
+              className="sess-picker-inp"
+              placeholder="New session name…"
+              value={newSessionName}
+              onChange={e => setNewSessionName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleNewSession()}
+              autoFocus
+            />
+            <button
+              className="sess-picker-create"
+              onClick={handleNewSession}
+              disabled={!newSessionName.trim()}
+            >Create</button>
+          </div>
+          {sessions.length > 0 && <>
+            <div className="sess-picker-divider">
+              <div className="sess-picker-divider-line" />
+              <span className="sess-picker-divider-label">or resume existing</span>
+              <div className="sess-picker-divider-line" />
+            </div>
+            <div className="sess-picker-list">
+              {sessions.map(s => {
+                const stackCount = s.entries.filter(e => e.type === 'STACK').length;
+                return (
+                  <div key={s.id} className="sess-picker-item">
+                    <span className="sess-picker-item-name">{s.name}</span>
+                    <span className="sess-picker-item-meta">{stackCount} stack{stackCount !== 1 ? 's' : ''}</span>
+                    <button className="sess-picker-activate" onClick={() => activateSession(s.id)}>Activate</button>
+                  </div>
+                );
               })}
             </div>
-          ) : (
-            <div className="prog-stack">
-              <div className="prog-stack-hdr">
-                <button className="prog-back" onClick={() => { setProgDrillStackId(null); setProgEditSheetCueId(null); }}>← Session</button>
-                <span className="prog-stack-name">{progStack?.name}</span>
-                <span className="prog-stack-cues">{progStack?.cues.filter(c => c.cueType === 'STANDARD').length} cues</span>
-                <button className="prog-add-btn" onClick={() => createBlankCue(progDrillStackId)}>+ Add Cue</button>
-                <button className="prog-add-sep" onClick={() => addMarker(progDrillStackId)}>+ Separator</button>
-              </div>
-              <div className="cr-hdr"><div style={{width:16}}></div><div style={{width:44,paddingLeft:8}}>Q</div><div style={{flex:1}}>Name</div><div style={{width:80,textAlign:'right',paddingRight:8}}>Fade</div><div style={{width:24}}></div></div>
-              <div className="cr-list">
-                {progStack?.cues.map(cue => {
-                  if (cue.cueType === 'MARKER') return (<div key={cue.id} className="prog-mkr"><div className="cr-mkr-line" /><input className="prog-mkr-inp" value={cue.name} onChange={e => updateCueIn(cue.id, 'name', e.target.value, progDrillStackId)} onClick={e => e.stopPropagation()} /><div className="cr-mkr-line" /><button className="prog-mkr-del" onClick={() => removeCue(cue.id, progDrillStackId)}>✕</button></div>);
-                  return (<div key={cue.id} className="prog-cue-row" onClick={() => setProgEditSheetCueId(cue.id)}><div className="prog-cue-drag" title="Drag to reorder (not wired in prototype)">⠿</div><div className="prog-cue-num">{cue.cueNumber ? `Q${cue.cueNumber}` : '—'}</div><div className="prog-cue-name">{cue.name}</div><div className="prog-cue-fade">{cue.fadeDurationMs > 0 ? `${fmtMs(cue.fadeDurationMs)} ${fmtCurve(cue.fadeCurve)}` : 'SNAP'}</div><div className="prog-cue-edit-icon">✏</div></div>);
-                })}
-              </div>
+          </>}
+        </div>
+      ) : (<>
+
+        {view === 'program' && (
+          <div className="prog">
+            <div className="prog-topbar">
+              <input
+                className="prog-title-inp"
+                value={session.name}
+                onChange={e => setSession(s => ({ ...s, name: e.target.value }))}
+                onClick={e => e.stopPropagation()}
+              />
+              <span className="prog-subtitle">{session.entries.filter(e => e.type === 'STACK').length} stacks · {totalCues} cues</span>
+              <button className="prog-add-marker" onClick={addSessionMarker}>+ Add Marker</button>
+              <button className="prog-add-stack" onClick={() => setShowStackPicker(true)}>+ Add Stack</button>
+              <button className="prog-ready" onClick={() => setView('run')}>Ready to run →</button>
             </div>
-          )}
-        </div>
-      )}
+            {!progDrillStackId ? (
+              <div className="sess-list" onDragEnd={() => setDraggingEntryId(null)}>
+                {session.entries.map((entry, idx) => (
+                  <SessEntryRow
+                    key={entry.id}
+                    entry={entry}
+                    idx={idx}
+                    stacks={stacks}
+                    onDrill={id => setProgDrillStackId(id)}
+                    onRemove={removeEntry}
+                    onDragStart={handleEntryDragStart}
+                    onDragOver={handleEntryDragOver}
+                    onDrop={handleEntryDrop}
+                    dragging={draggingEntryId}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="prog-stack">
+                <div className="prog-stack-hdr">
+                  <button className="prog-back" onClick={() => { setProgDrillStackId(null); setProgEditSheetCueId(null); }}>← Session</button>
+                  <span className="prog-stack-name">{progStack?.name}</span>
+                  <span className="prog-stack-cues">{progStack?.cues.filter(c => c.cueType === 'STANDARD').length} cues</span>
+                  <button className="prog-add-btn" onClick={() => createBlankCue(progDrillStackId)}>+ Add Cue</button>
+                  <button className="prog-add-sep" onClick={() => addMarker(progDrillStackId)}>+ Separator</button>
+                </div>
+                <div className="cr-hdr"><div style={{width:16}}></div><div style={{width:44,paddingLeft:8}}>Q</div><div style={{flex:1}}>Name</div><div style={{width:80,textAlign:'right',paddingRight:8}}>Fade</div><div style={{width:24}}></div></div>
+                <div className="cr-list">
+                  {progStack?.cues.map(cue => {
+                    if (cue.cueType === 'MARKER') return (<div key={cue.id} className="prog-mkr"><div className="cr-mkr-line" /><input className="prog-mkr-inp" value={cue.name} onChange={e => updateCueIn(cue.id, 'name', e.target.value, progDrillStackId)} onClick={e => e.stopPropagation()} /><div className="cr-mkr-line" /><button className="prog-mkr-del" onClick={() => removeCue(cue.id, progDrillStackId)}>✕</button></div>);
+                    return (<div key={cue.id} className="prog-cue-row" onClick={() => setProgEditSheetCueId(cue.id)}><div className="prog-cue-drag" title="Drag to reorder (not wired in prototype)">⠿</div><div className="prog-cue-num">{cue.cueNumber ? `Q${cue.cueNumber}` : '—'}</div><div className="prog-cue-name">{cue.name}</div><div className="prog-cue-fade">{cue.fadeDurationMs > 0 ? `${fmtMs(cue.fadeDurationMs)} ${fmtCurve(cue.fadeCurve)}` : 'SNAP'}</div><div className="prog-cue-edit-icon">✏</div></div>);
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
-      {view === 'run' && stack && (<>
-        <div className="cr-bar">
-          <div className="cr-bar-sec"><div><div className="cr-lbl" style={{marginBottom:4}}>Blackout</div><button className={`cr-btn btn-dbo${dbo?' on':''}`} onClick={() => { cancelAll(); setDbo(d => !d); setActive(null); setFadeP(0); setAutoP(null); }}>DBO</button></div></div>
-          <div className="cr-bar-sec"><div><div className="cr-lbl">BPM</div><div className="cr-bpm">{bpm ?? '—'}</div></div><button className="cr-btn btn-tap" onClick={handleTap}>TAP</button></div>
-          <div className="cr-bar-sec"><div><div className="cr-lbl" style={{marginBottom:4}}>Edit</div><button className={`cr-btn btn-edit-mode${editMode?' on':''}`} onClick={() => setEditMode(e => !e)}>{editMode ? 'EDIT ON' : 'EDIT'}</button></div></div>
-          <div className="cr-bar-sec grow">
-            {activeName ? (<div className="cr-cuinfo"><div className="cr-cuinfo-active">▶ {activeName}</div>{standbyName && <div className="cr-cuinfo-standby">◉ next — {standbyName}</div>}</div>) : (<div className="cr-cuinfo"><div className="cr-cuinfo-idle">{standbyName ? `${stack.name} · ◉ ${standbyName}` : `${stack.name} · end of stack`}</div></div>)}
+        {view === 'run' && stack && (<>
+          <div className="cr-bar">
+            <div className="cr-bar-sec"><div><div className="cr-lbl" style={{marginBottom:4}}>Blackout</div><button className={`cr-btn btn-dbo${dbo?' on':''}`} onClick={() => { cancelAll(); setDbo(d => !d); setActive(null); setFadeP(0); setAutoP(null); }}>DBO</button></div></div>
+            <div className="cr-bar-sec"><div><div className="cr-lbl">BPM</div><div className="cr-bpm">{bpm ?? '—'}</div></div><button className="cr-btn btn-tap" onClick={handleTap}>TAP</button></div>
+            <div className="cr-bar-sec"><div><div className="cr-lbl" style={{marginBottom:4}}>Edit</div><button className={`cr-btn btn-edit-mode${editMode?' on':''}`} onClick={() => setEditMode(e => !e)}>{editMode ? 'EDIT ON' : 'EDIT'}</button></div></div>
+            <div className="cr-bar-sec grow">
+              {activeName ? (
+                <div className="cr-cuinfo">
+                  <div className="cr-cuinfo-active">▶ {activeName}</div>
+                  {standbyName
+                    ? <div className="cr-cuinfo-standby">◉ next — {standbyName}</div>
+                    : nextEntry && <div className="cr-cuinfo-standby">→ {nextEntry.stackName}</div>
+                  }
+                </div>
+              ) : (
+                <div className="cr-cuinfo">
+                  <div className="cr-cuinfo-idle">
+                    {standbyName
+                      ? `${stack.name} · ◉ ${standbyName}`
+                      : nextEntry
+                        ? `${stack.name} · → ${nextEntry.stackName}`
+                        : `${stack.name} · end of stack`
+                    }
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="cr-kbhints"><span className="cr-kbhint">← back</span><span className="cr-kbhint">space: go</span></div>
+            <button className="cr-btn btn-back" onClick={handleBack} style={{height:'100%',borderRadius:0,borderRight:'1px solid #1c2433'}}>◀ BACK</button>
+            <button className="cr-btn btn-go" onClick={go}>GO</button>
           </div>
-          <div className="cr-kbhints"><span className="cr-kbhint">← back</span><span className="cr-kbhint">space: go</span></div>
-          <button className="cr-btn btn-back" onClick={handleBack} style={{height:'100%',borderRadius:0,borderRight:'1px solid #1c2433'}}>◀ BACK</button>
-          <button className="cr-btn btn-go" onClick={go}>GO</button>
-        </div>
-        <div className="cr-body"><div className="cr-runner">
-          <div className="cr-tabs">
-            {Object.values(stacks).map(s => (<button key={s.id} className={`cr-tab${s.id===stackId?' on':''}`} onClick={() => switchStack(s.id)}>{s.name}{s.loop && <span className="cr-loop">↻</span>}</button>))}
-            <div className="cr-tabs-spacer" />
-            <div className="cr-ctx-wrap"><button className={`cr-ctx-btn${isTheatre?' on':''}`} onClick={() => toggleCtx('theatre')}>Theatre</button><button className={`cr-ctx-btn${!isTheatre?' on':''}`} onClick={() => toggleCtx('band')}>Band</button></div>
-          </div>
-          {editMode && ooo && (<div className="cr-ooo"><span>⚠</span><span>Cue numbers are out of order.</span><button className="cr-ooo-btn" onClick={fixOrder}>Fix Order</button><button className="cr-ooo-btn" onClick={() => setOooDismiss(true)}>Dismiss</button></div>)}
-          <div className="cr-hdr"><div style={{width:20}}></div>{isTheatre && <div style={{width:48}}>Q</div>}<div style={{flex:1}}>Name</div><div style={{width:86,textAlign:'right',paddingRight:8}}>Fade</div><div style={{width:36}}></div>{isTheatre && <div style={{width:200,paddingLeft:12}}>Note</div>}{editMode && <div style={{width:60}}></div>}</div>
-          <div className="cr-list" ref={listScrollRef}>
-            {stack.cues.map(cue => {
-              if (cue.cueType === 'MARKER') return <MarkerRow key={cue.id} name={cue.name} />;
-              return (<CueRow key={cue.id} cue={cue} isActive={cue.id===activeCueId} isStandby={cue.id===standbyCueId} isDone={completedIds.has(cue.id)} isTheatre={isTheatre} fadeP={cue.id===activeCueId?fadeP:0} autoP={cue.id===activeCueId?autoP:null} onClick={() => {}} editMode={editMode} onProgram={openRunEditSheet} />);
-            })}
-          </div>
-        </div></div>
+          <div className="cr-body"><div className="cr-runner">
+            <div className="cr-tabs">
+              {session.entries.map(entry => {
+                if (entry.type === 'MARKER') {
+                  return (
+                    <div key={entry.id} className="cr-tab-mkr">
+                      <div className="cr-tab-mkr-line" />
+                      <span className="cr-tab-mkr-label">{entry.label}</span>
+                      <div className="cr-tab-mkr-line" />
+                    </div>
+                  );
+                }
+                const s = stacks[entry.stackId];
+                return (
+                  <button key={entry.id} className={`cr-tab${entry.id === activeEntryId ? ' on' : ''}`} onClick={() => switchToEntry(entry)}>
+                    {entry.stackName}{s?.loop && <span className="cr-loop">↻</span>}
+                  </button>
+                );
+              })}
+              <div className="cr-tabs-spacer" />
+              <div className="cr-ctx-wrap"><button className={`cr-ctx-btn${isTheatre?' on':''}`} onClick={() => toggleCtx('theatre')}>Theatre</button><button className={`cr-ctx-btn${!isTheatre?' on':''}`} onClick={() => toggleCtx('band')}>Band</button></div>
+            </div>
+            {editMode && ooo && (<div className="cr-ooo"><span>⚠</span><span>Cue numbers are out of order.</span><button className="cr-ooo-btn" onClick={fixOrder}>Fix Order</button><button className="cr-ooo-btn" onClick={() => setOooDismiss(true)}>Dismiss</button></div>)}
+            <div className="cr-hdr"><div style={{width:20}}></div>{isTheatre && <div style={{width:48}}>Q</div>}<div style={{flex:1}}>Name</div><div style={{width:86,textAlign:'right',paddingRight:8}}>Fade</div><div style={{width:36}}></div>{isTheatre && <div style={{width:200,paddingLeft:12}}>Note</div>}{editMode && <div style={{width:60}}></div>}</div>
+            <div className="cr-list" ref={listScrollRef}>
+              {stack.cues.map(cue => {
+                if (cue.cueType === 'MARKER') return <MarkerRow key={cue.id} name={cue.name} />;
+                return (<CueRow key={cue.id} cue={cue} isActive={cue.id===activeCueId} isStandby={cue.id===standbyCueId} isDone={completedIds.has(cue.id)} isTheatre={isTheatre} fadeP={cue.id===activeCueId?fadeP:0} autoP={cue.id===activeCueId?autoP:null} onClick={() => {}} editMode={editMode} onProgram={openRunEditSheet} />);
+              })}
+            </div>
+          </div></div>
+        </>)}
+
+        {progEditSheetCue && <CueEditSheet cue={progEditSheetCue} onClose={() => setProgEditSheetCueId(null)} onChange={(id,f,v) => updateCueIn(id,f,v,progDrillStackId)} onDelete={id => removeCue(id, progDrillStackId)} onDuplicate={cue => duplicateCue(cue, progDrillStackId)} isActiveCue={false} />}
+        {runEditSheetCue && <CueEditSheet cue={runEditSheetCue} onClose={closeRunEditSheet} onChange={(id,f,v) => updateCueIn(id,f,v)} onDelete={id => removeCue(id)} onDuplicate={cue => duplicateCue(cue)} isActiveCue={runEditSheetCueId === activeCueId} />}
+        {showStackPicker && <StackPickerOverlay stacks={stacks} session={session} onAdd={s => addStackToSession(s)} onClose={() => setShowStackPicker(false)} />}
       </>)}
-
-      {progEditSheetCue && <CueEditSheet cue={progEditSheetCue} onClose={() => setProgEditSheetCueId(null)} onChange={(id,f,v) => updateCueIn(id,f,v,progDrillStackId)} onDelete={id => removeCue(id, progDrillStackId)} onDuplicate={cue => duplicateCue(cue, progDrillStackId)} isActiveCue={false} />}
-      {runEditSheetCue && <CueEditSheet cue={runEditSheetCue} onClose={closeRunEditSheet} onChange={(id,f,v) => updateCueIn(id,f,v)} onDelete={id => removeCue(id)} onDuplicate={cue => duplicateCue(cue)} isActiveCue={runEditSheetCueId === activeCueId} />}
     </div>
   );
 }
