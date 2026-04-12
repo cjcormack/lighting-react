@@ -1,0 +1,319 @@
+import { useState, useEffect, useRef, useCallback } from 'react'
+import {
+  GripVertical,
+  ChevronDown,
+  ChevronRight,
+  Pencil,
+  Palette,
+  Bookmark,
+  AudioWaveform,
+  Zap,
+} from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
+import { formatMs } from '@/lib/formatMs'
+import { useSortable } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { CueFxTable } from '@/components/cues/CueFxTable'
+import { buildCueInput } from '@/lib/cueUtils'
+import { useSaveProjectCueMutation } from '@/store/cues'
+import type { Cue, CueInput } from '@/api/cuesApi'
+import type { CueStackCueEntry } from '@/api/cueStacksApi'
+import type { FxPreset } from '@/api/fxPresetsApi'
+import type { EffectLibraryEntry } from '@/store/fixtureFx'
+
+const CURVE_LABELS: Record<string, string> = {
+  LINEAR: 'LIN',
+  EASE_IN_OUT: 'SINE',
+  SINE_IN_OUT: 'SINE',
+  CUBIC_IN_OUT: 'CUB',
+  EASE_IN: '\u2191',
+  EASE_OUT: '\u2193',
+}
+
+interface ProgramCueRowProps {
+  cue: CueStackCueEntry
+  fullCue?: Cue
+  projectId: number
+  presets?: FxPreset[]
+  library?: EffectLibraryEntry[]
+  onOpenCueForm: () => void
+}
+
+export function ProgramCueRow({
+  cue,
+  fullCue,
+  projectId,
+  presets,
+  library,
+  onOpenCueForm,
+}: ProgramCueRowProps) {
+  const [expanded, setExpanded] = useState(false)
+  const [editMode, setEditMode] = useState(false)
+
+  // Reset edit mode when collapsed
+  useEffect(() => {
+    if (!expanded) setEditMode(false)
+  }, [expanded])
+
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: cue.id })
+
+  const sortableStyle = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+    opacity: isDragging ? 0.5 : undefined,
+  }
+
+  const presetCount = cue.presetCount ?? 0
+  const adHocCount = cue.adHocEffectCount ?? 0
+  const triggerCount = fullCue?.triggers.length ?? 0
+  const paletteSize = cue.paletteSize ?? 0
+  const hasExpandableContent = fullCue && (
+    fullCue.presetApplications.length > 0 ||
+    fullCue.adHocEffects.length > 0 ||
+    fullCue.triggers.length > 0
+  )
+
+  const fadeText =
+    cue.fadeDurationMs != null && cue.fadeDurationMs > 0
+      ? `${formatMs(cue.fadeDurationMs)} ${CURVE_LABELS[cue.fadeCurve] ?? ''}`
+      : 'SNAP'
+
+  // ── Inline timing editing ──
+  const [saveCue] = useSaveProjectCueMutation()
+  const pendingInputs = useRef<Map<number, CueInput>>(new Map())
+  const saveTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map())
+
+  const handleInlineTimingChange = useCallback(
+    (variant: 'presets' | 'effects' | 'triggers', itemIndex: number, field: string, value: number | null) => {
+      if (!fullCue) return
+
+      let input = pendingInputs.current.get(cue.id)
+      if (!input) {
+        input = buildCueInput(fullCue)
+        pendingInputs.current.set(cue.id, input)
+      }
+
+      if (variant === 'presets' && input.presetApplications[itemIndex]) {
+        const pa = input.presetApplications[itemIndex]
+        if (field === 'delayMs') pa.delayMs = value
+        else if (field === 'intervalMs') pa.intervalMs = value
+        else if (field === 'randomWindowMs') pa.randomWindowMs = value
+      } else if (variant === 'effects' && input.adHocEffects[itemIndex]) {
+        const eff = input.adHocEffects[itemIndex]
+        if (field === 'delayMs') eff.delayMs = value
+        else if (field === 'intervalMs') eff.intervalMs = value
+        else if (field === 'randomWindowMs') eff.randomWindowMs = value
+        else if (field === 'beatDivision' && value != null) eff.beatDivision = value
+      } else if (variant === 'triggers' && input.triggers?.[itemIndex]) {
+        const t = input.triggers[itemIndex]
+        if (field === 'delayMs') t.delayMs = value
+        else if (field === 'intervalMs') t.intervalMs = value
+        else if (field === 'randomWindowMs') t.randomWindowMs = value
+      }
+
+      const existing = saveTimers.current.get(cue.id)
+      if (existing) clearTimeout(existing)
+      saveTimers.current.set(
+        cue.id,
+        setTimeout(() => {
+          saveTimers.current.delete(cue.id)
+          const pending = pendingInputs.current.get(cue.id)
+          if (pending) {
+            pendingInputs.current.delete(cue.id)
+            saveCue({ projectId, cueId: cue.id, ...pending })
+          }
+        }, 300),
+      )
+    },
+    [fullCue, cue.id, projectId, saveCue],
+  )
+
+  const handleInlineRemove = useCallback(
+    async (variant: 'presets' | 'effects' | 'triggers', itemIndex: number) => {
+      if (!fullCue) return
+
+      const input = pendingInputs.current.get(cue.id) ?? buildCueInput(fullCue)
+      pendingInputs.current.delete(cue.id)
+
+      if (variant === 'presets') input.presetApplications.splice(itemIndex, 1)
+      else if (variant === 'effects') input.adHocEffects.splice(itemIndex, 1)
+      else if (variant === 'triggers') input.triggers?.splice(itemIndex, 1)
+
+      saveCue({ projectId, cueId: cue.id, ...input })
+    },
+    [fullCue, cue.id, projectId, saveCue],
+  )
+
+  return (
+    <div ref={setNodeRef} style={sortableStyle} {...attributes}>
+      <div
+        className={cn(
+          'flex items-center h-10 px-4 border-b border-border/30 cursor-pointer transition-colors hover:bg-muted/20 gap-2',
+          expanded && 'bg-muted/10',
+        )}
+        onClick={onOpenCueForm}
+      >
+        {/* Drag handle */}
+        <div
+          className="w-4 shrink-0 text-muted-foreground/15 hover:text-muted-foreground/40 cursor-grab"
+          {...listeners}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <GripVertical className="size-4" />
+        </div>
+
+        {/* Q number */}
+        <div className="w-11 shrink-0 font-mono text-[11px] font-semibold text-muted-foreground/30">
+          {cue.cueNumber ? `Q${cue.cueNumber}` : '\u2014'}
+        </div>
+
+        {/* Name */}
+        <div className="flex-1 text-sm font-medium text-muted-foreground/60 truncate min-w-0">
+          {cue.name}
+        </div>
+
+        {/* Fade */}
+        <div className="w-20 shrink-0 text-right font-mono text-[11px] text-muted-foreground/25">
+          {fadeText}
+        </div>
+
+        {/* Auto pill */}
+        <div className="w-9 shrink-0 text-center">
+          {cue.autoAdvance && (
+            <Badge
+              variant="outline"
+              className="text-[9px] font-bold tracking-wider border-blue-500/20 text-blue-500/70 bg-blue-500/10 rounded-sm px-1.5 py-0"
+            >
+              AUTO
+            </Badge>
+          )}
+        </div>
+
+        {/* Count badges */}
+        <div className="flex items-center gap-1 shrink-0">
+          {paletteSize > 0 && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1">
+              <Palette className="size-3" />
+              {paletteSize}
+            </Badge>
+          )}
+          {presetCount > 0 && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1">
+              <Bookmark className="size-3" />
+              {presetCount}
+            </Badge>
+          )}
+          {adHocCount > 0 && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1">
+              <AudioWaveform className="size-3" />
+              {adHocCount}
+            </Badge>
+          )}
+          {triggerCount > 0 && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1">
+              <Zap className="size-3" />
+              {triggerCount}
+            </Badge>
+          )}
+        </div>
+
+        {/* Expand/collapse toggle */}
+        {hasExpandableContent ? (
+          <button
+            className="size-5 flex items-center justify-center shrink-0 text-muted-foreground/30 hover:text-muted-foreground/60"
+            onClick={(e) => {
+              e.stopPropagation()
+              setExpanded(!expanded)
+            }}
+          >
+            {expanded ? (
+              <ChevronDown className="size-4" />
+            ) : (
+              <ChevronRight className="size-4" />
+            )}
+          </button>
+        ) : (
+          <div className="size-5 shrink-0" />
+        )}
+      </div>
+
+      {/* Expanded FX detail */}
+      {expanded && hasExpandableContent && fullCue && (
+        <div className="px-3 pb-3 pt-1 space-y-2 ml-5 bg-accent/30 border-b border-border/30">
+          {/* Edit mode toggle */}
+          <div className="flex justify-end">
+            <button
+              className={cn(
+                'size-6 flex items-center justify-center rounded transition-colors',
+                editMode
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent',
+              )}
+              onClick={(e) => {
+                e.stopPropagation()
+                setEditMode(!editMode)
+              }}
+              title={editMode ? 'Exit edit mode' : 'Edit inline'}
+            >
+              <Pencil className="size-3.5" />
+            </button>
+          </div>
+
+          <CueFxTable
+            variant="presets"
+            items={fullCue.presetApplications}
+            onTimingChange={
+              editMode
+                ? (idx, field, val) => handleInlineTimingChange('presets', idx, field, val)
+                : undefined
+            }
+            onRemove={
+              editMode
+                ? (idx) => handleInlineRemove('presets', idx)
+                : undefined
+            }
+            presets={presets}
+          />
+          <CueFxTable
+            variant="effects"
+            items={fullCue.adHocEffects}
+            onTimingChange={
+              editMode
+                ? (idx, field, val) => handleInlineTimingChange('effects', idx, field, val)
+                : undefined
+            }
+            onRemove={
+              editMode
+                ? (idx) => handleInlineRemove('effects', idx)
+                : undefined
+            }
+            library={library}
+          />
+          <CueFxTable
+            variant="triggers"
+            items={fullCue.triggers}
+            onTimingChange={
+              editMode
+                ? (idx, field, val) => handleInlineTimingChange('triggers', idx, field, val)
+                : undefined
+            }
+            onRemove={
+              editMode
+                ? (idx) => handleInlineRemove('triggers', idx)
+                : undefined
+            }
+          />
+        </div>
+      )}
+    </div>
+  )
+}

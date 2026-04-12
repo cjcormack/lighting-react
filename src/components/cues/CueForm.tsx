@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Plus,
   Loader2,
@@ -30,6 +31,8 @@ import {
   Globe,
   Check,
   Zap,
+  Copy,
+  Trash2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useEffectLibraryQuery } from '@/store/fixtureFx'
@@ -82,6 +85,10 @@ interface CueFormProps {
   initialView?: CueFormView
   /** Deep-link: index of the item to edit (for edit-preset, edit-effect, edit-trigger views) */
   initialEditIndex?: number
+  /** Called when user clicks Duplicate (only shown when isInStack && editing) */
+  onDuplicate?: () => void
+  /** Called when user clicks Remove from Stack (only shown when isInStack && editing) */
+  onRemoveFromStack?: () => void
 }
 
 export function CueForm({
@@ -96,6 +103,8 @@ export function CueForm({
   inheritedPalette,
   initialView: initialViewProp,
   initialEditIndex,
+  onDuplicate,
+  onRemoveFromStack,
 }: CueFormProps) {
   const { data: library } = useEffectLibraryQuery()
   const { data: presets } = useProjectPresetListQuery(projectId)
@@ -111,6 +120,8 @@ export function CueForm({
   const [autoAdvanceDelayMs, setAutoAdvanceDelayMs] = useState<string>('')
   const [fadeDurationMs, setFadeDurationMs] = useState<string>('')
   const [fadeCurve, setFadeCurve] = useState('LINEAR')
+  const [cueNumber, setCueNumber] = useState('')
+  const [notes, setNotes] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   // Current view inside the sheet
@@ -155,6 +166,8 @@ export function CueForm({
       setAutoAdvanceDelayMs(cue?.autoAdvanceDelayMs != null ? String(cue.autoAdvanceDelayMs) : '')
       setFadeDurationMs(cue?.fadeDurationMs != null ? String(cue.fadeDurationMs) : '')
       setFadeCurve(cue?.fadeCurve ?? 'LINEAR')
+      setCueNumber(cue?.cueNumber ?? '')
+      setNotes(cue?.notes ?? '')
       setError(null)
 
       // Deep-link: jump to a specific sub-view if requested
@@ -204,6 +217,8 @@ export function CueForm({
         autoAdvanceDelayMs: autoAdvanceDelayMs ? Number(autoAdvanceDelayMs) : null,
         fadeDurationMs: fadeDurationMs ? Number(fadeDurationMs) : null,
         fadeCurve,
+        cueNumber: cueNumber.trim() || null,
+        notes: notes.trim() || null,
       })
       onOpenChange(false)
     } catch (e) {
@@ -544,6 +559,37 @@ export function CueForm({
                 ))}
               </div>
 
+              {/* ── Cue Stack Properties (only for cues in a stack) ── */}
+              {isInStack && (
+                <div className="space-y-3 pt-2 border-t">
+                  <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Cue Properties
+                  </Label>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cue-number">Cue Number</Label>
+                    <Input
+                      id="cue-number"
+                      value={cueNumber}
+                      onChange={(e) => setCueNumber(e.target.value)}
+                      placeholder="e.g. 14A"
+                      className="h-9"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cue-notes">Notes</Label>
+                    <Textarea
+                      id="cue-notes"
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder="Script note or reference..."
+                      className="min-h-[60px] resize-y"
+                    />
+                  </div>
+                </div>
+              )}
+
               {/* ── Stack Transition Settings (only for cues in a stack) ── */}
               {isInStack && (
                 <div className="space-y-3 pt-2 border-t">
@@ -633,14 +679,44 @@ export function CueForm({
               )}
             </SheetBody>
 
-            <SheetFooter className="flex-row justify-end gap-2">
-              <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
-                Cancel
-              </Button>
-              <Button onClick={handleSave} disabled={!isValid || isSaving}>
-                {isSaving && <Loader2 className="size-4 mr-2 animate-spin" />}
-                {isEditing ? 'Save' : 'Create'}
-              </Button>
+            <SheetFooter className={isInStack && isEditing ? 'flex-row justify-between' : 'flex-row justify-end gap-2'}>
+              {isInStack && isEditing ? (
+                <>
+                  <div className="flex gap-2">
+                    {onRemoveFromStack && (
+                      <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={onRemoveFromStack} disabled={isSaving}>
+                        <Trash2 className="size-3.5 mr-1.5" />
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    {onDuplicate && (
+                      <Button variant="outline" onClick={onDuplicate} disabled={isSaving}>
+                        <Copy className="size-3.5 mr-1.5" />
+                        Duplicate
+                      </Button>
+                    )}
+                    <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleSave} disabled={!isValid || isSaving}>
+                      {isSaving && <Loader2 className="size-4 mr-2 animate-spin" />}
+                      Save
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleSave} disabled={!isValid || isSaving}>
+                    {isSaving && <Loader2 className="size-4 mr-2 animate-spin" />}
+                    {isEditing ? 'Save' : 'Create'}
+                  </Button>
+                </>
+              )}
             </SheetFooter>
           </>
         )}

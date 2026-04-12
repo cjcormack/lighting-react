@@ -112,38 +112,7 @@ import type { Cue, CueInput, CueCurrentState } from '../api/cuesApi'
 import type { CueStack, CueStackInput } from '../api/cueStacksApi'
 import { useEffectLibraryQuery } from '../store/fixtureFx'
 import { CueFxTable } from '../components/cues/CueFxTable'
-
-/** Build a CueInput snapshot from a Cue (for inline editing mutations). */
-function buildCueInput(cue: Cue): CueInput {
-  return {
-    name: cue.name,
-    palette: cue.palette,
-    updateGlobalPalette: cue.updateGlobalPalette,
-    presetApplications: cue.presetApplications.map((pa) => ({
-      presetId: pa.presetId,
-      targets: pa.targets,
-      delayMs: pa.delayMs,
-      intervalMs: pa.intervalMs,
-      randomWindowMs: pa.randomWindowMs,
-      sortOrder: pa.sortOrder,
-    })),
-    adHocEffects: cue.adHocEffects.map((e) => ({ ...e })),
-    triggers: cue.triggers.map((t) => ({
-      triggerType: t.triggerType,
-      delayMs: t.delayMs,
-      intervalMs: t.intervalMs,
-      randomWindowMs: t.randomWindowMs,
-      scriptId: t.scriptId,
-      sortOrder: t.sortOrder,
-    })),
-    cueStackId: cue.cueStackId,
-    sortOrder: cue.sortOrder,
-    autoAdvance: cue.autoAdvance,
-    autoAdvanceDelayMs: cue.autoAdvanceDelayMs,
-    fadeDurationMs: cue.fadeDurationMs,
-    fadeCurve: cue.fadeCurve,
-  }
-}
+import { buildCueInput } from '../lib/cueUtils'
 
 // Redirect /cues → /projects/:projectId/cues/all
 export function CuesRedirect() {
