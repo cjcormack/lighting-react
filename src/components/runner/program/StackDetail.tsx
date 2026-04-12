@@ -86,15 +86,15 @@ export function StackDetail({
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex items-center h-[42px] px-4 border-b bg-card gap-3 shrink-0">
+      <div className="flex items-center h-12 px-4 border-b gap-3 shrink-0">
         <Button variant="outline" size="sm" onClick={onBack} className="font-bold tracking-wider">
           <ArrowLeft className="size-3.5 mr-1.5" />
           Stacks
         </Button>
-        <span className="text-[15px] font-semibold text-muted-foreground/60 tracking-wide">
+        <span className="text-sm font-semibold text-foreground">
           {stack.name}
         </span>
-        <span className="text-[11px] text-muted-foreground/30">
+        <span className="text-xs text-muted-foreground">
           {standardCount} cues
         </span>
         <div className="flex-1" />
@@ -109,20 +109,20 @@ export function StackDetail({
       </div>
 
       {/* Column headers */}
-      <div className="flex items-center h-6 px-4 border-b bg-card shrink-0">
-        <div className="w-4" />
-        <div className="w-11 text-[9px] font-bold tracking-[0.13em] uppercase text-muted-foreground/20 pl-2">
+      <div className="flex items-center h-10 px-4 border-b shrink-0">
+        <div className="w-8 px-2" />
+        <div className="w-14 px-2 text-sm font-medium text-foreground">
           Q
         </div>
-        <div className="flex-1 text-[9px] font-bold tracking-[0.13em] uppercase text-muted-foreground/20">
+        <div className="flex-1 px-2 text-sm font-medium text-foreground">
           Name
         </div>
-        <div className="w-20 text-right pr-2 text-[9px] font-bold tracking-[0.13em] uppercase text-muted-foreground/20">
+        <div className="w-24 text-right px-2 text-sm font-medium text-foreground">
           Fade
         </div>
-        <div className="w-9" />
-        <div className="w-[120px]" />
-        <div className="size-5" />
+        <div className="w-12 px-2" />
+        <div className="w-[120px] px-2" />
+        <div className="w-8" />
       </div>
 
       {/* Cue list */}

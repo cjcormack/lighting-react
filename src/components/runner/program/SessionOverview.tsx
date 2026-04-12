@@ -3,6 +3,7 @@ import { ArrowRight, GripVertical, RotateCcw, X, Plus, SeparatorHorizontal } fro
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody } from '@/components/ui/sheet'
 import {
   DndContext,
   closestCenter,
@@ -64,36 +65,38 @@ function SortableStackEntry({ entry, index, stack, onDrill, onRemove }: Sortable
     >
       <div
         {...listeners}
-        className="flex items-center justify-center text-muted-foreground/20 hover:text-muted-foreground/50 cursor-grab"
+        className="flex items-center justify-center text-muted-foreground hover:text-foreground cursor-grab"
         onClick={(e) => e.stopPropagation()}
       >
         <GripVertical className="size-4" />
       </div>
-      <span className="w-6 text-center font-mono text-[11px] text-muted-foreground/30 shrink-0">
+      <span className="w-6 text-center font-mono text-xs text-muted-foreground shrink-0">
         {index + 1}
       </span>
-      <span className="flex-1 text-sm font-semibold text-muted-foreground/60">
+      <span className="flex-1 text-sm font-medium text-foreground">
         {entry.cueStackName ?? entry.label ?? 'Unknown'}
       </span>
-      <span className="text-[11px] text-muted-foreground/30 shrink-0">
+      <span className="text-xs text-muted-foreground shrink-0">
         {cueCount} cues &middot; {stack?.loop ? 'Loop' : 'Sequential'}
       </span>
       {stack?.loop && (
-        <Badge variant="outline" className="text-[9px] px-1.5 py-0 gap-1">
+        <Badge variant="outline" className="text-xs px-1.5 py-0 gap-1">
           <RotateCcw className="size-2.5" />
           Loop
         </Badge>
       )}
-      <button
-        className="size-5 flex items-center justify-center text-muted-foreground/20 hover:text-destructive transition-colors shrink-0"
+      <Button
+        variant="ghost"
+        size="icon"
+        className="size-5 text-muted-foreground hover:text-destructive shrink-0"
         onClick={(e) => {
           e.stopPropagation()
           onRemove(entry.id)
         }}
       >
         <X className="size-3.5" />
-      </button>
-      <ArrowRight className="size-4 text-muted-foreground/30 shrink-0" />
+      </Button>
+      <ArrowRight className="size-4 text-muted-foreground shrink-0" />
     </div>
   )
 }
@@ -152,111 +155,31 @@ function SortableMarkerEntry({ entry, projectId, sessionId, onRemove }: Sortable
     >
       <div
         {...listeners}
-        className="flex items-center justify-center text-muted-foreground/20 hover:text-muted-foreground/50 cursor-grab"
+        className="flex items-center justify-center text-muted-foreground hover:text-foreground cursor-grab"
       >
         <GripVertical className="size-4" />
       </div>
-      <div className="flex-1 h-px bg-border/50" />
+      <div className="flex-1 h-px bg-border" />
       <Input
         value={localLabel}
         onChange={(e) => handleChange(e.target.value)}
         onClick={(e) => e.stopPropagation()}
-        className="h-7 w-auto min-w-[120px] max-w-[200px] text-center text-[11px] font-bold tracking-[0.1em] uppercase text-muted-foreground/50 bg-card border-border/50"
+        className="h-7 w-auto min-w-[120px] max-w-[200px] text-center text-xs font-medium text-muted-foreground bg-card border-border"
       />
-      <div className="flex-1 h-px bg-border/50" />
-      <button
-        className="size-5 flex items-center justify-center text-muted-foreground/20 hover:text-destructive transition-colors shrink-0"
+      <div className="flex-1 h-px bg-border" />
+      <Button
+        variant="ghost"
+        size="icon"
+        className="size-5 text-muted-foreground hover:text-destructive shrink-0"
         onClick={() => onRemove(entry.id)}
       >
         <X className="size-3.5" />
-      </button>
+      </Button>
     </div>
   )
 }
 
-// ── Stack picker overlay ────────────────────────────────────────────────────
-
-interface StackPickerOverlayProps {
-  stacks: CueStack[]
-  addedStackIds: Set<number>
-  onAdd: (stackId: number) => void
-  onClose: () => void
-}
-
-function StackPickerOverlay({ stacks, addedStackIds, onAdd, onClose }: StackPickerOverlayProps) {
-  const [search, setSearch] = useState('')
-  const filtered = useMemo(() => {
-    if (!search.trim()) return stacks
-    const q = search.toLowerCase()
-    return stacks.filter((s) => s.name.toLowerCase().includes(q))
-  }, [stacks, search])
-
-  return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex justify-end" onClick={onClose}>
-      <div
-        className="w-[380px] bg-card border-l flex flex-col animate-in slide-in-from-right duration-200"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center h-12 px-4 border-b gap-3 shrink-0">
-          <span className="text-sm font-bold text-muted-foreground/60 tracking-[0.06em] uppercase">
-            Add Stack to Session
-          </span>
-          <div className="flex-1" />
-          <button
-            className="text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors"
-            onClick={onClose}
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-        <div className="p-2 shrink-0">
-          <Input
-            placeholder="Search stacks..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            autoFocus
-          />
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {filtered.map((s) => {
-            const cueCount = s.cues.filter((c) => c.cueType === 'STANDARD').length
-            const added = addedStackIds.has(s.id)
-            return (
-              <div
-                key={s.id}
-                className="flex items-center px-4 py-2.5 gap-3 border-b border-border/30 hover:bg-muted/20 transition-colors"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-muted-foreground/60 truncate">
-                    {s.name}
-                  </div>
-                  <div className="text-[10px] text-muted-foreground/30">
-                    {cueCount} cues &middot; {s.loop ? 'Loop' : 'Sequential'}
-                  </div>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className={
-                    added
-                      ? 'opacity-40 cursor-default text-[10px] font-bold tracking-wider'
-                      : 'text-[10px] font-bold tracking-wider text-green-400 border-green-500/30 bg-green-950/40 hover:bg-green-900/50 hover:text-green-300'
-                  }
-                  onClick={() => {
-                    if (!added) onAdd(s.id)
-                  }}
-                  disabled={added}
-                >
-                  {added ? 'Added' : '+ Add'}
-                </Button>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    </div>
-  )
-}
+// (StackPickerOverlay replaced by Sheet below)
 
 // ── Main SessionOverview ────────────────────────────────────────────────────
 
@@ -318,8 +241,15 @@ export function SessionOverview({
   const [deleteEntry] = useDeleteShowSessionEntryMutation()
   const [reorderEntries] = useReorderShowSessionEntriesMutation()
 
-  // Stack picker overlay
+  // Stack picker sheet
   const [showStackPicker, setShowStackPicker] = useState(false)
+  const [pickerSearch, setPickerSearch] = useState('')
+
+  const filteredStacks = useMemo(() => {
+    if (!pickerSearch.trim()) return stacks
+    const q = pickerSearch.toLowerCase()
+    return stacks.filter((s) => s.name.toLowerCase().includes(q))
+  }, [stacks, pickerSearch])
 
   const handleAddStack = useCallback(
     (stackId: number) => {
@@ -367,14 +297,14 @@ export function SessionOverview({
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Top bar */}
-      <div className="flex items-center h-12 px-5 border-b bg-card gap-4 shrink-0">
+      <div className="flex items-center h-12 px-4 border-b gap-4 shrink-0">
         <input
-          className="bg-transparent border-b border-transparent focus:border-primary/50 text-lg font-semibold text-muted-foreground/70 tracking-wide outline-none min-w-[100px] max-w-[260px] transition-colors"
+          className="bg-transparent border-b border-transparent focus:border-primary/50 text-lg font-semibold text-foreground outline-none min-w-[100px] max-w-[260px] transition-colors"
           value={localName}
           onChange={(e) => handleNameChange(e.target.value)}
           onClick={(e) => e.stopPropagation()}
         />
-        <span className="text-xs text-muted-foreground/40 tracking-wider">
+        <span className="text-sm text-muted-foreground">
           {stackEntries.length} stacks &middot; {totalCues} cues
         </span>
         <div className="flex-1" />
@@ -387,9 +317,7 @@ export function SessionOverview({
           Add Stack
         </Button>
         <Button
-          variant="outline"
           size="sm"
-          className="font-bold tracking-wider text-green-400 border-green-500/30 bg-green-950/40 hover:bg-green-900/50 hover:text-green-300"
           onClick={onSwitchToShow}
         >
           Ready to run <ArrowRight className="size-3.5 ml-1.5" />
@@ -433,7 +361,7 @@ export function SessionOverview({
         </DndContext>
 
         {session.entries.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground/30 gap-2">
+          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
             <p className="text-sm">No stacks in this session yet.</p>
             <Button variant="outline" size="sm" onClick={() => setShowStackPicker(true)}>
               <Plus className="size-3.5 mr-1.5" />
@@ -443,15 +371,56 @@ export function SessionOverview({
         )}
       </div>
 
-      {/* Stack picker overlay */}
-      {showStackPicker && (
-        <StackPickerOverlay
-          stacks={stacks}
-          addedStackIds={addedStackIds}
-          onAdd={handleAddStack}
-          onClose={() => setShowStackPicker(false)}
-        />
-      )}
+      {/* Stack picker sheet */}
+      <Sheet open={showStackPicker} onOpenChange={(open) => {
+        setShowStackPicker(open)
+        if (!open) setPickerSearch('')
+      }}>
+        <SheetContent className="flex flex-col sm:max-w-[380px]">
+          <SheetHeader>
+            <SheetTitle>Add Stack to Session</SheetTitle>
+          </SheetHeader>
+          <div className="px-4 shrink-0">
+            <Input
+              placeholder="Search stacks..."
+              value={pickerSearch}
+              onChange={(e) => setPickerSearch(e.target.value)}
+              autoFocus
+            />
+          </div>
+          <SheetBody className="space-y-0 p-0">
+            {filteredStacks.map((s) => {
+              const cueCount = s.cues.filter((c) => c.cueType === 'STANDARD').length
+              const added = addedStackIds.has(s.id)
+              return (
+                <div
+                  key={s.id}
+                  className="flex items-center px-4 py-2.5 gap-3 border-b border-border/30 hover:bg-muted/20 transition-colors"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-foreground truncate">
+                      {s.name}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {cueCount} cues &middot; {s.loop ? 'Loop' : 'Sequential'}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant={added ? 'outline' : 'default'}
+                    onClick={() => {
+                      if (!added) handleAddStack(s.id)
+                    }}
+                    disabled={added}
+                  >
+                    {added ? 'Added' : '+ Add'}
+                  </Button>
+                </div>
+              )
+            })}
+          </SheetBody>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

@@ -139,18 +139,16 @@ export function ProgramView({
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Top bar */}
-      <div className="flex items-center h-12 px-5 border-b bg-card gap-4 shrink-0">
-        <span className="text-lg font-semibold text-muted-foreground/70 tracking-wide">
+      <div className="flex items-center h-12 px-4 border-b gap-4 shrink-0">
+        <span className="text-lg font-semibold">
           Cue Stacks
         </span>
-        <span className="text-xs text-muted-foreground/40 tracking-wider">
+        <span className="text-sm text-muted-foreground">
           {stacks.length} stacks &middot; {totalCues} cues
         </span>
         <div className="flex-1" />
         <Button
-          variant="outline"
           size="sm"
-          className="font-bold tracking-wider text-green-400 border-green-500/30 bg-green-950/40 hover:bg-green-900/50 hover:text-green-300"
           onClick={onSwitchToShow}
         >
           Ready to run <ArrowRight className="size-3.5 ml-1.5" />
@@ -167,22 +165,22 @@ export function ProgramView({
               className="flex items-center w-full gap-3 px-4 py-2.5 bg-card border rounded transition-colors hover:bg-muted/30 hover:border-muted-foreground/20 text-left"
               onClick={() => onDrillStack(stack.id)}
             >
-              <span className="w-6 text-center font-mono text-[11px] text-muted-foreground/30 shrink-0">
+              <span className="w-6 text-center font-mono text-xs text-muted-foreground shrink-0">
                 {idx + 1}
               </span>
-              <span className="flex-1 text-sm font-semibold text-muted-foreground/60">
+              <span className="flex-1 text-sm font-medium text-foreground">
                 {stack.name}
               </span>
-              <span className="text-[11px] text-muted-foreground/30 shrink-0">
+              <span className="text-xs text-muted-foreground shrink-0">
                 {cueCount} cues
               </span>
               {stack.loop && (
-                <Badge variant="outline" className="text-[9px] px-1.5 py-0 gap-1">
+                <Badge variant="outline" className="text-xs px-1.5 py-0 gap-1">
                   <RotateCcw className="size-2.5" />
                   Loop
                 </Badge>
               )}
-              <ArrowRight className="size-4 text-muted-foreground/30 shrink-0" />
+              <ArrowRight className="size-4 text-muted-foreground shrink-0" />
             </button>
           )
         })}

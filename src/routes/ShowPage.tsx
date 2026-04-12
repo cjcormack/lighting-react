@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useParams, useNavigate, Navigate, useLocation } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Loader2, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
@@ -605,7 +607,7 @@ export function ShowPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Header row: breadcrumbs + mode toggle + session status */}
-      <div className="flex items-center px-4 pt-3 pb-2 gap-3">
+      <div className="flex items-center p-4 gap-3">
         <Breadcrumbs
           projectName={project.name}
           currentPage="Show"
@@ -616,36 +618,24 @@ export function ShowPage() {
         <div className="flex-1" />
 
         {/* Mode toggle */}
-        <div className="flex items-center">
-          <button
-            onClick={() => handleSwitchMode('program')}
-            className={cn(
-              'h-[26px] px-3 text-[10px] font-bold tracking-wider uppercase border border-border bg-card text-muted-foreground/25 transition-colors rounded-l-sm',
-              mode === 'program' && 'bg-muted/30 text-muted-foreground/60 border-muted-foreground/20',
-            )}
-          >
-            Program
-          </button>
-          <button
-            onClick={() => handleSwitchMode('run')}
-            className={cn(
-              'h-[26px] px-3 text-[10px] font-bold tracking-wider uppercase border border-l-0 border-border bg-card text-muted-foreground/25 transition-colors rounded-r-sm',
-              mode === 'run' && 'bg-muted/30 text-muted-foreground/60 border-muted-foreground/20',
-            )}
-          >
-            Run
-          </button>
-        </div>
+        <Tabs value={mode} onValueChange={(v) => handleSwitchMode(v as ShowMode)} className="w-auto">
+          <TabsList>
+            <TabsTrigger value="program">Program</TabsTrigger>
+            <TabsTrigger value="run">Run</TabsTrigger>
+          </TabsList>
+        </Tabs>
 
         {/* Session status */}
         <div className="flex items-center gap-1.5">
           <div className="size-1.5 rounded-full bg-green-500" />
-          <button
-            className="text-[10px] font-bold tracking-[0.1em] uppercase text-muted-foreground/25 hover:text-destructive/60 transition-colors"
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-xs text-muted-foreground hover:text-destructive"
             onClick={handleDeactivateSession}
           >
             Deactivate
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -682,7 +672,7 @@ export function ShowPage() {
           {/* Runner body */}
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
             {/* Stack tabs + context toggle */}
-            <div className="flex h-[38px] shrink-0 items-center border-b bg-card">
+            <div className="flex h-12 shrink-0 items-center border-b">
               {activeSession.entries.map((entry) => {
                 if (entry.entryType === 'MARKER') {
                   return (
@@ -690,59 +680,42 @@ export function ShowPage() {
                       key={entry.id}
                       className="flex items-center h-full px-2 gap-1.5 shrink-0 pointer-events-none"
                     >
-                      <div className="w-px h-4 bg-border/30" />
-                      <span className="text-[9px] font-bold tracking-[0.13em] uppercase text-muted-foreground/15 whitespace-nowrap">
+                      <div className="w-px h-4 bg-border" />
+                      <span className="text-xs font-medium uppercase text-muted-foreground whitespace-nowrap">
                         {entry.label}
                       </span>
-                      <div className="w-px h-4 bg-border/30" />
+                      <div className="w-px h-4 bg-border" />
                     </div>
                   )
                 }
                 const entryStack = entry.cueStackId != null ? stackMap.get(entry.cueStackId) : undefined
                 return (
-                  <button
+                  <Button
                     key={entry.id}
+                    variant="ghost"
                     onClick={() => handleSwitchToEntry(entry)}
                     className={cn(
-                      'flex items-center gap-2 px-5 h-full border-r text-[12px] font-bold tracking-[0.12em] uppercase text-muted-foreground/25 transition-colors relative shrink-0',
-                      'hover:text-muted-foreground/50 hover:bg-muted/10',
+                      'flex items-center gap-2 px-5 h-full rounded-none border-r text-xs font-medium text-muted-foreground relative shrink-0',
+                      'hover:text-foreground hover:bg-muted/10',
                       entry.id === activeEntryId &&
-                        'text-muted-foreground/70 bg-muted/20 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary',
+                        'text-foreground bg-muted/20 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary',
                     )}
                   >
                     {entry.cueStackName}
                     {entryStack?.loop && (
-                      <span className="text-base text-muted-foreground/25">
-                        {entry.id === activeEntryId ? (
-                          <RotateCcw className="size-3 text-muted-foreground/50" />
-                        ) : (
-                          <RotateCcw className="size-3" />
-                        )}
-                      </span>
+                      <RotateCcw className="size-3 text-muted-foreground" />
                     )}
-                  </button>
+                  </Button>
                 )
               })}
               <div className="flex-1" />
-              <div className="flex items-center mr-3.5">
-                <button
-                  onClick={() => toggleCtx('theatre')}
-                  className={cn(
-                    'h-[26px] px-3 text-[10px] font-bold tracking-wider uppercase border border-border bg-card text-muted-foreground/25 transition-colors rounded-l-sm',
-                    isTheatre && 'bg-muted/30 text-muted-foreground/60 border-muted-foreground/20',
-                  )}
-                >
-                  Theatre
-                </button>
-                <button
-                  onClick={() => toggleCtx('band')}
-                  className={cn(
-                    'h-[26px] px-3 text-[10px] font-bold tracking-wider uppercase border border-l-0 border-border bg-card text-muted-foreground/25 transition-colors rounded-r-sm',
-                    !isTheatre && 'bg-muted/30 text-muted-foreground/60 border-muted-foreground/20',
-                  )}
-                >
-                  Band
-                </button>
+              <div className="px-4">
+                <Tabs value={isTheatre ? 'theatre' : 'band'} onValueChange={(v) => toggleCtx(v as 'theatre' | 'band')} className="w-auto">
+                  <TabsList>
+                    <TabsTrigger value="theatre">Theatre</TabsTrigger>
+                    <TabsTrigger value="band">Band</TabsTrigger>
+                  </TabsList>
+                </Tabs>
               </div>
             </div>
 
@@ -755,25 +728,26 @@ export function ShowPage() {
             )}
 
             {/* Column headers */}
-            <div className="flex items-center h-6 pl-4 border-b bg-card shrink-0">
-              <div className="w-5" />
+            <div className="flex items-center h-10 px-4 border-b shrink-0">
+              <div className="w-8 px-2" />
               {isTheatre && (
-                <div className="w-12 text-[9px] font-bold tracking-[0.13em] uppercase text-muted-foreground/20">
+                <div className="w-14 px-2 text-sm font-medium text-foreground">
                   Q
                 </div>
               )}
-              <div className="flex-1 text-[9px] font-bold tracking-[0.13em] uppercase text-muted-foreground/20">
+              <div className="flex-1 px-2 text-sm font-medium text-foreground">
                 Name
               </div>
-              <div className="w-[86px] text-right pr-2 text-[9px] font-bold tracking-[0.13em] uppercase text-muted-foreground/20">
+              <div className="w-24 text-right px-2 text-sm font-medium text-foreground">
                 Fade
               </div>
-              <div className="w-9" />
+              <div className="w-12 px-2" />
               {isTheatre && (
-                <div className="w-[200px] pl-3 text-[9px] font-bold tracking-[0.13em] uppercase text-muted-foreground/20">
+                <div className="w-[200px] px-2 text-sm font-medium text-foreground border-l">
                   Note
                 </div>
               )}
+              <div className="w-10" />
             </div>
 
             {/* Cue list */}

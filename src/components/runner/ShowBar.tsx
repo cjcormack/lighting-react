@@ -30,8 +30,8 @@ export function ShowBar({
     <div className="flex h-14 shrink-0 items-stretch border-b bg-card shadow-md">
       {/* DBO */}
       <div className="flex items-center gap-2.5 border-r px-4">
-        <div>
-          <div className="text-[9px] font-bold tracking-widest text-muted-foreground/40 uppercase mb-1">
+        <div className="flex flex-col gap-1">
+          <div className="text-xs font-medium text-muted-foreground uppercase">
             Blackout
           </div>
           <Button
@@ -50,11 +50,11 @@ export function ShowBar({
 
       {/* BPM + Tap */}
       <div className="flex items-center gap-2.5 border-r px-4">
-        <div>
-          <div className="text-[9px] font-bold tracking-widest text-muted-foreground/40 uppercase">
+        <div className="flex flex-col gap-1">
+          <div className="text-xs font-medium text-muted-foreground uppercase">
             BPM
           </div>
-          <div className="font-mono text-xl font-semibold text-muted-foreground/50 min-w-14 text-center">
+          <div className="font-mono text-xl font-semibold text-foreground min-w-14 text-center h-8 flex items-center justify-center">
             {bpm ?? '\u2014'}
           </div>
         </div>
@@ -67,22 +67,22 @@ export function ShowBar({
       <div className="flex flex-1 items-center gap-2.5 px-4 min-w-0 overflow-hidden">
         {activeName ? (
           <div className="flex flex-col justify-center gap-0.5 flex-1 min-w-0">
-            <div className="text-[15px] font-semibold text-amber-400 truncate">
+            <div className="text-sm font-semibold text-amber-400 truncate">
               {'\u25B6'} {activeName}
             </div>
             {standbyName ? (
-              <div className="text-[11px] text-green-500 truncate">
+              <div className="text-xs text-green-500 truncate">
                 {'\u25C9'}&ensp;{'next \u2014'} {standbyName}
               </div>
             ) : nextStackName ? (
-              <div className="text-[11px] text-green-500 truncate">
+              <div className="text-xs text-green-500 truncate">
                 {'\u2192'} {nextStackName}
               </div>
             ) : null}
           </div>
         ) : (
           <div className="flex flex-col justify-center flex-1 min-w-0">
-            <div className="text-[13px] text-muted-foreground/40 truncate">
+            <div className="text-sm text-muted-foreground truncate">
               {standbyName
                 ? `${stackName}  \u00B7  \u25C9 ${standbyName}`
                 : nextStackName
@@ -95,29 +95,30 @@ export function ShowBar({
 
       {/* Keyboard hints */}
       <div className="flex flex-col items-center justify-center gap-0.5 border-r px-3.5">
-        <span className="text-[9px] font-semibold tracking-wider text-muted-foreground/20 uppercase whitespace-nowrap">
+        <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
           {'\u2190'} back
         </span>
-        <span className="text-[9px] font-semibold tracking-wider text-muted-foreground/20 uppercase whitespace-nowrap">
+        <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
           space: go
         </span>
       </div>
 
       {/* BACK */}
-      <button
+      <Button
+        variant="ghost"
         onClick={onBack}
-        className="h-full px-5 font-bold tracking-wider text-[13px] text-muted-foreground/30 border-r transition-colors hover:bg-muted/30 hover:text-muted-foreground/60 uppercase"
+        className="h-full rounded-none px-5 font-bold text-sm text-muted-foreground border-r hover:bg-muted/30 hover:text-foreground uppercase"
       >
         {'\u25C0'} BACK
-      </button>
+      </Button>
 
       {/* GO */}
-      <button
+      <Button
         onClick={onGo}
-        className="h-full px-10 text-2xl font-bold tracking-[0.16em] text-green-400 bg-green-950/40 transition-all hover:bg-green-900/50 hover:shadow-[inset_0_0_24px_rgba(74,222,128,0.12)] active:bg-green-800/50 uppercase"
+        className="h-full rounded-none px-10 text-2xl font-bold tracking-[0.16em] uppercase"
       >
         GO
-      </button>
+      </Button>
     </div>
   )
 }

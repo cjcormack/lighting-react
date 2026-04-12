@@ -157,14 +157,14 @@ export function ProgramCueRow({
     <div ref={setNodeRef} style={sortableStyle} {...attributes}>
       <div
         className={cn(
-          'flex items-center h-10 px-4 border-b border-border/30 cursor-pointer transition-colors hover:bg-muted/20 gap-2',
+          'flex items-center h-10 px-4 border-b cursor-pointer transition-colors hover:bg-muted/50',
           expanded && 'bg-muted/10',
         )}
         onClick={onOpenCueForm}
       >
         {/* Drag handle */}
         <div
-          className="w-4 shrink-0 text-muted-foreground/15 hover:text-muted-foreground/40 cursor-grab"
+          className="w-8 px-2 shrink-0 text-muted-foreground hover:text-foreground cursor-grab"
           {...listeners}
           onClick={(e) => e.stopPropagation()}
         >
@@ -172,54 +172,54 @@ export function ProgramCueRow({
         </div>
 
         {/* Q number */}
-        <div className="w-11 shrink-0 font-mono text-[11px] font-semibold text-muted-foreground/30">
+        <div className="w-14 px-2 shrink-0 font-mono text-xs text-muted-foreground">
           {cue.cueNumber ? `Q${cue.cueNumber}` : '\u2014'}
         </div>
 
         {/* Name */}
-        <div className="flex-1 text-sm font-medium text-muted-foreground/60 truncate min-w-0">
+        <div className="flex-1 px-2 text-sm font-medium text-foreground truncate min-w-0">
           {cue.name}
         </div>
 
         {/* Fade */}
-        <div className="w-20 shrink-0 text-right font-mono text-[11px] text-muted-foreground/25">
+        <div className="w-24 px-2 shrink-0 text-right font-mono text-xs text-muted-foreground">
           {fadeText}
         </div>
 
         {/* Auto pill */}
-        <div className="w-9 shrink-0 text-center">
+        <div className="w-12 px-2 shrink-0 text-center">
           {cue.autoAdvance && (
             <Badge
               variant="outline"
-              className="text-[9px] font-bold tracking-wider border-blue-500/20 text-blue-500/70 bg-blue-500/10 rounded-sm px-1.5 py-0"
+              className="text-xs border-blue-500/30 text-blue-500 bg-blue-500/10 rounded-sm px-1.5 py-0"
             >
-              AUTO
+              Auto
             </Badge>
           )}
         </div>
 
         {/* Count badges */}
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1 px-2 shrink-0">
           {paletteSize > 0 && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1">
+            <Badge variant="outline" className="text-xs px-1.5 py-0 gap-1">
               <Palette className="size-3" />
               {paletteSize}
             </Badge>
           )}
           {presetCount > 0 && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1">
+            <Badge variant="outline" className="text-xs px-1.5 py-0 gap-1">
               <Bookmark className="size-3" />
               {presetCount}
             </Badge>
           )}
           {adHocCount > 0 && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1">
+            <Badge variant="outline" className="text-xs px-1.5 py-0 gap-1">
               <AudioWaveform className="size-3" />
               {adHocCount}
             </Badge>
           )}
           {triggerCount > 0 && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1">
+            <Badge variant="outline" className="text-xs px-1.5 py-0 gap-1">
               <Zap className="size-3" />
               {triggerCount}
             </Badge>
@@ -229,7 +229,7 @@ export function ProgramCueRow({
         {/* Expand/collapse toggle */}
         {hasExpandableContent ? (
           <button
-            className="size-5 flex items-center justify-center shrink-0 text-muted-foreground/30 hover:text-muted-foreground/60"
+            className="size-8 flex items-center justify-center shrink-0 text-muted-foreground hover:text-foreground"
             onClick={(e) => {
               e.stopPropagation()
               setExpanded(!expanded)
@@ -242,13 +242,13 @@ export function ProgramCueRow({
             )}
           </button>
         ) : (
-          <div className="size-5 shrink-0" />
+          <div className="size-8 shrink-0" />
         )}
       </div>
 
       {/* Expanded FX detail */}
       {expanded && hasExpandableContent && fullCue && (
-        <div className="px-3 pb-3 pt-1 space-y-2 ml-5 bg-accent/30 border-b border-border/30">
+        <div className="px-3 pb-3 pt-1 space-y-2 ml-8 bg-accent/30 border-b">
           {/* Edit mode toggle */}
           <div className="flex justify-end">
             <button

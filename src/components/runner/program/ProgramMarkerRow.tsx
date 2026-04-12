@@ -34,7 +34,7 @@ export function ProgramMarkerRow({ name, onRename, onDelete }: ProgramMarkerRowP
 
   return (
     <div className="flex items-center gap-2.5 py-2 px-4 hover:bg-muted/10 transition-colors">
-      <div className="flex-1 h-px bg-border/30" />
+      <div className="flex-1 h-px bg-border" />
       <Input
         value={localName}
         onChange={(e) => {
@@ -42,11 +42,11 @@ export function ProgramMarkerRow({ name, onRename, onDelete }: ProgramMarkerRowP
           debouncedRename(e.target.value)
         }}
         onClick={(e) => e.stopPropagation()}
-        className="h-7 w-auto min-w-[120px] max-w-[200px] text-center text-[11px] font-bold tracking-[0.1em] uppercase text-muted-foreground/50 bg-card border-border/50"
+        className="h-7 w-auto min-w-[120px] max-w-[200px] text-center text-xs font-medium text-muted-foreground bg-card border-border"
       />
-      <div className="flex-1 h-px bg-border/30" />
+      <div className="flex-1 h-px bg-border" />
       <button
-        className="size-5 flex items-center justify-center text-muted-foreground/20 hover:text-destructive transition-colors"
+        className="size-5 flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors"
         onClick={(e) => {
           e.stopPropagation()
           onDelete()
