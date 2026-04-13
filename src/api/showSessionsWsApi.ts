@@ -9,7 +9,7 @@ export interface ShowSessionsWsApi {
 
 type ShowSessionInMessage =
   | { type: 'showSessionListChanged' }
-  | { type: 'showSessionChanged'; sessionId: number; activeEntryId: number | null; activatedStackId: number | null; activatedStackName: string | null }
+  | { type: 'showSessionChanged'; sessionId: number; activeEntryId: number | null; activatedStackId: number | null; activatedStackName: string | null; isActive: boolean }
 
 export function createShowSessionsWsApi(conn: InternalApiConnection): ShowSessionsWsApi {
   let nextSubscriptionId = 1
@@ -40,6 +40,7 @@ export function createShowSessionsWsApi(conn: InternalApiConnection): ShowSessio
         activeEntryId: message.activeEntryId,
         activatedStackId: message.activatedStackId,
         activatedStackName: message.activatedStackName,
+        isActive: message.isActive,
       })
     }
   }

@@ -16,6 +16,7 @@ export interface ShowSessionDetails {
   name: string
   sessionType: string
   activeEntryId: number | null
+  isActive: boolean
   entries: ShowSessionEntryDto[]
   canEdit: boolean
   canDelete: boolean
@@ -62,9 +63,10 @@ export interface GoToSessionEntryRequest {
 
 export interface ShowSessionActivateResponse {
   sessionId: number
-  activeEntryId: number
-  activatedStackId: number
-  activatedStackName: string
+  // Null when activating an empty session.
+  activeEntryId: number | null
+  activatedStackId: number | null
+  activatedStackName: string | null
 }
 
 export interface ShowSessionChangedEvent {
@@ -72,4 +74,5 @@ export interface ShowSessionChangedEvent {
   activeEntryId: number | null
   activatedStackId: number | null
   activatedStackName: string | null
+  isActive: boolean
 }

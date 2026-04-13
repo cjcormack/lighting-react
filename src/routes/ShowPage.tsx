@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
-import { useParams, useNavigate, Navigate, useLocation } from 'react-router-dom'
+import { useParams, useNavigate, Navigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -81,19 +81,26 @@ export function LegacyCueStackRedirect() {
   return <Navigate to={`/projects/${projectId}/show`} replace />
 }
 
+// Redirect: /projects/:id/show/sessions/:sessionId/(program|run) → /projects/:id/show?mode=(program|run)
+// The active session is server-tracked now, so old bookmarked session ids are dropped.
+export function LegacyShowSessionRedirect() {
+  const { projectId } = useParams()
+  const location = useLocation()
+  const mode = location.pathname.endsWith('/run') ? 'run' : 'program'
+  return <Navigate to={`/projects/${projectId}/show?mode=${mode}`} replace />
+}
+
 type ShowMode = 'program' | 'run'
 
-// Main route component — reads session + mode from URL
+// Main route component — active session is server-tracked, mode is a query param
 export function ShowPage() {
-  const { projectId, sessionId } = useParams()
+  const { projectId } = useParams()
   const projectIdNum = Number(projectId)
-  const sessionIdNum = sessionId ? Number(sessionId) : null
-  const location = useLocation()
-  const navigate = useNavigate()
   const dispatch = useDispatch()
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  // Derive mode from URL path
-  const mode: ShowMode = location.pathname.endsWith('/run') ? 'run' : 'program'
+  // Derive mode from query param (default program)
+  const mode: ShowMode = searchParams.get('mode') === 'run' ? 'run' : 'program'
 
   const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
@@ -101,40 +108,15 @@ export function ShowPage() {
   const { data: fxState } = useFxStateQuery()
   const { data: sessions } = useProjectShowSessionListQuery(projectIdNum)
 
-  // URL helpers
-  const showBase = `/projects/${projectId}/show`
-  const sessionBase = sessionIdNum != null ? `${showBase}/sessions/${sessionIdNum}` : null
-
   // Session-driven active stack — activeEntryId drives which stack is active
   const [activeEntryId, setActiveEntryId] = useState<number | null>(null)
   const [drillStackId, setDrillStackId] = useState<number | null>(null)
 
-  // Tracks whether we've already attempted the initial auto-redirect
-  const didAutoRedirect = useRef(false)
-
-  // Derive active session from URL
+  // Derive active session from server state (isActive flag)
   const activeSession = useMemo(
-    () => (sessionIdNum != null ? sessions?.find((s) => s.id === sessionIdNum) : undefined) ?? undefined,
-    [sessions, sessionIdNum],
+    () => sessions?.find((s) => s.isActive),
+    [sessions],
   )
-
-  // Auto-redirect to previously-active session on initial page load only
-  useEffect(() => {
-    if (didAutoRedirect.current) return
-    if (sessionIdNum != null || !sessions || sessions.length === 0) return
-    didAutoRedirect.current = true
-    const prev = sessions.find((s) => s.activeEntryId != null)
-    if (prev) {
-      navigate(`${showBase}/sessions/${prev.id}/run`, { replace: true })
-    }
-  }, [sessions, sessionIdNum, showBase, navigate])
-
-  // Redirect away if session not found (deleted, invalid URL)
-  useEffect(() => {
-    if (sessionIdNum != null && sessions && !sessions.find((s) => s.id === sessionIdNum)) {
-      navigate(showBase, { replace: true })
-    }
-  }, [sessionIdNum, sessions, showBase, navigate])
 
   const activeEntry: ShowSessionEntryDto | undefined = useMemo(
     () => activeSession?.entries.find((e) => e.id === activeEntryId),
@@ -190,10 +172,13 @@ export function ShowPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSession?.id])
 
-  // Subscribe to showSessionChanged WS events for real-time activeEntryId updates
+  // Subscribe to showSessionChanged WS events for real-time activeEntryId updates.
+  // Active-session flips (isActive true/false on a different session) are handled via the
+  // accompanying showSessionListChanged invalidation — the list refetch re-derives
+  // activeSession from the server-authoritative isActive flag.
   useEffect(() => {
     const sub = lightingApi.showSessions.subscribeToChanged((event) => {
-      if (activeSession && event.sessionId === activeSession.id) {
+      if (activeSession && event.sessionId === activeSession.id && event.isActive) {
         setActiveEntryId(event.activeEntryId)
       }
     })
@@ -382,50 +367,49 @@ export function ShowPage() {
     setOooDismissed(false)
   }, [activeStackId, projectIdNum, sortByCueNumber])
 
-  // ── Session management handlers (now navigate via URL) ──
+  // ── Session management handlers — backend is authoritative for isActive ──
 
   const handleCreateSession = useCallback(async (name: string) => {
     try {
-      const result = await createSession({ projectId: projectIdNum, name }).unwrap()
-      navigate(`${showBase}/sessions/${result.id}/program`)
+      await createSession({ projectId: projectIdNum, name }).unwrap()
+      // Creation does not auto-activate — the user stays on the picker and clicks Activate next.
     } catch {
       // Silently fail
     }
-  }, [createSession, projectIdNum, showBase, navigate])
+  }, [createSession, projectIdNum])
 
   const handleActivateSession = useCallback(
     (sid: number) => {
       const session = sessions?.find((s) => s.id === sid)
       setDrillStackId(null)
-      const hasEntries = session && session.entries.length > 0
-      // Sessions with entries → run mode; empty sessions → program mode to add stacks
-      navigate(`${showBase}/sessions/${sid}/${hasEntries ? 'run' : 'program'}`)
-      if (hasEntries) {
-        activateSessionMut({ projectId: projectIdNum, sessionId: sid })
-          .unwrap()
-          .then((result) => setActiveEntryId(result.activeEntryId))
-          .catch(() => {
-            const firstStack = session!.entries.find((e) => e.entryType === 'STACK')
-            setActiveEntryId(firstStack?.id ?? null)
-          })
-      } else {
-        setActiveEntryId(session?.activeEntryId ?? null)
-      }
+      const hasEntries = !!session && session.entries.length > 0
+      // Sessions with entries → run mode; empty sessions → program mode to add stacks.
+      setSearchParams({ mode: hasEntries ? 'run' : 'program' })
+      // If the user clicked the already-active session (picker "Open" button), skip the
+      // mutation — the backend would short-circuit anyway, and avoiding the round-trip
+      // makes the mode switch feel instant.
+      if (session?.isActive) return
+      activateSessionMut({ projectId: projectIdNum, sessionId: sid })
+        .unwrap()
+        .then((result) => setActiveEntryId(result.activeEntryId))
+        .catch(() => {
+          // Fall back to the first STACK entry if the backend round-trip fails.
+          const firstStack = session?.entries.find((e) => e.entryType === 'STACK')
+          setActiveEntryId(firstStack?.id ?? null)
+        })
     },
-    [sessions, activateSessionMut, projectIdNum, showBase, navigate],
+    [sessions, activateSessionMut, projectIdNum, setSearchParams],
   )
 
   const handleDeactivateSession = useCallback(async () => {
     if (!activeSession) return
-    if (activeSession.activeEntryId != null) {
-      try {
-        await deactivateSessionMut({ projectId: projectIdNum, sessionId: activeSession.id }).unwrap()
-      } catch {
-        // Silently fail
-      }
+    try {
+      await deactivateSessionMut({ projectId: projectIdNum, sessionId: activeSession.id }).unwrap()
+    } catch {
+      // Silently fail
     }
-    navigate(showBase)
-  }, [activeSession, deactivateSessionMut, projectIdNum, showBase, navigate])
+    setSearchParams({})
+  }, [activeSession, deactivateSessionMut, projectIdNum, setSearchParams])
 
   // ── CueForm sheet handlers ──
 
@@ -519,35 +503,34 @@ export function ShowPage() {
   }, [activeSession, mode, drillStack])
 
   const handleBreadcrumbCurrentPageClick = useCallback(() => {
-    navigate(showBase)
-  }, [showBase, navigate])
+    // Clicking "Show" in the breadcrumb clears the mode (lands on program by default).
+    setSearchParams({})
+  }, [setSearchParams])
 
   const handleBreadcrumbExtraClick = useCallback(
     (index: number) => {
-      if (!sessionBase) return
       if (index === 0) {
-        // Clicked session name — go to program view for this session
-        navigate(`${sessionBase}/program`)
+        // Clicked session name — drop the drill and show program overview.
+        setSearchParams({ mode: 'program' })
         setDrillStackId(null)
       } else if (index === 1) {
-        // Clicked mode name — already here (could toggle, but clicking the active mode is a no-op)
-        // If in program mode with drill, go back to session overview
+        // Clicked mode name — already here. In program mode with a stack drilled, step back.
         if (mode === 'program' && drillStackId != null) {
           setDrillStackId(null)
         }
       }
     },
-    [sessionBase, navigate, mode, drillStackId],
+    [setSearchParams, mode, drillStackId],
   )
 
   // ── Mode toggle navigation ──
 
   const handleSwitchMode = useCallback(
     (targetMode: ShowMode) => {
-      if (!sessionBase || targetMode === mode) return
-      navigate(`${sessionBase}/${targetMode}`)
+      if (targetMode === mode) return
+      setSearchParams({ mode: targetMode })
     },
-    [sessionBase, mode, navigate],
+    [mode, setSearchParams],
   )
 
   // Loading / redirect guards

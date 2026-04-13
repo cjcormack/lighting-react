@@ -1,6 +1,8 @@
 # Show Mode: Programming & Running
 
-Show Mode is the production show programming and playback system. It lives at the `/cue-stacks` route under a single **Program / Show** tabbed layout, providing both a show assembly surface and a keyboard-driven cue runner.
+Show Mode is the production show programming and playback system. It lives at `/projects/:projectId/show` with a `?mode=program|run` query param, providing both a show assembly surface and a keyboard-driven cue runner.
+
+The **active show session is server-tracked** (`isActive` flag on the backend) and broadcast via WebSocket, so reloads and other browser tabs see the same session automatically — the session id is not encoded in the URL.
 
 ## Design Model: Four Phases of Show Programming
 
@@ -69,7 +71,7 @@ API Layer          Type definitions + WebSocket subscription factories
 #### Component Layer (UI)
 | File | Purpose |
 |------|---------|
-| `src/routes/CueStackRunner.tsx` | Main route: session picker, tab bar, Show tab runner, keyboard handler |
+| `src/routes/ShowPage.tsx` | Main route: session picker, mode switcher (?mode=program\|run query param), Show tab runner, keyboard handler. `activeSession` is derived from the server `isActive` flag, never from the URL. |
 | `src/components/runner/ShowBar.tsx` | Top control bar: DBO, BPM/TAP, cue info, GO/BACK buttons |
 | `src/components/runner/CueRow.tsx` | Cue list row with status icons and fade progress bars |
 | `src/components/runner/MarkerRow.tsx` | Marker separator row |
@@ -96,6 +98,7 @@ interface ShowSessionDetails {
   name: string
   sessionType: string
   activeEntryId: number | null    // Currently playing entry
+  isActive: boolean               // Server-authoritative: is this the project's active session?
   entries: ShowSessionEntryDto[]
   canEdit: boolean
   canDelete: boolean
@@ -320,14 +323,15 @@ When a cue has `autoAdvance: true`:
 ## Session Management
 
 ### Session Lifecycle
-1. **No active session**: session picker is shown (centered UI)
-   - Create: inline name input + Create button (autofocused, Enter submits)
-   - Resume: existing sessions listed with Activate buttons
-2. **Active session**: tab bar shows Deactivate button + green dot + session name
-3. **Deactivate**: clears local state, calls backend `deactivate` if session was running
+1. **No active session** (`sessions.find(s => s.isActive)` returns nothing): session picker is shown.
+   - Create: inline name input + Create button (autofocused, Enter submits). Creating does not activate — the user then clicks Activate.
+   - Resume: existing sessions listed. Rows with `isActive=true` show an "Active" badge and an "Open" button (just sets `?mode=run`, no server round-trip); other rows show "Activate" (calls `/activate`).
+2. **Active session**: header shows Deactivate button + green dot. Mode switcher toggles `?mode=program|run`.
+3. **Deactivate**: calls backend `/deactivate`. The server clears `isActive` and broadcasts; the list refetch flips `activeSession` to undefined and the picker reappears.
+4. **Activate**: backend transactionally deactivates any sibling sessions in the same project (stopping their cue stacks) before activating the target. A repeat `/activate` on the already-active session is a no-op (no cue stack reset).
 
 ### Initial Load Sync
-On mount, auto-picks the previously-active session using heuristic: `sessions.find(s => s.activeEntryId != null)`. Active session state is tracked locally via `activeSessionId` -- the backend does not have an `isActive` field.
+The backend is the source of truth. On mount the client fetches the session list; `activeSession = sessions.find(s => s.isActive)`. There is no URL-based session id and no client-side "last active" heuristic. A reload lands the user on the same active session + mode as before (both persisted — session server-side, mode in the query param).
 
 ## REST API Endpoints
 
@@ -386,8 +390,8 @@ All messages are JSON with a `type` field, received on the shared WebSocket conn
 
 | Message Type | Payload | Effect |
 |-------------|---------|--------|
-| `showSessionListChanged` | (none) | Invalidates `ShowSessionList` RTK Query tag |
-| `showSessionChanged` | `sessionId`, `activeEntryId`, `activatedStackId`, `activatedStackName` | Updates `activeEntryId` in real-time via subscription callback |
+| `showSessionListChanged` | (none) | Invalidates `ShowSessionList` RTK Query tag. Fired alongside `showSessionChanged` on every activation/deactivation so `isActive` flips propagate across clients via refetch. |
+| `showSessionChanged` | `sessionId`, `activeEntryId`, `activatedStackId`, `activatedStackName`, `isActive` | Updates `activeEntryId` in real-time via subscription callback. Activating session B while A was active emits one event for A (`isActive: false`) then one for B (`isActive: true`). |
 | `cueStackListChanged` | (none) | Invalidates `CueStackList` RTK Query tag |
 | `cueListChanged` | (none) | Invalidates `CueList` RTK Query tag |
 
@@ -435,5 +439,4 @@ The `runnerSlice` manages per-stack playback state entirely on the frontend:
 ## Known Gaps
 
 1. **No script quick-fire panel** -- no way to fire scripts ad-hoc during a show without attaching them to a cue trigger.
-2. **Backend `isActive` field** -- active session is tracked locally via `activeSessionId` state. Adding a server-side `isActive` boolean on `ShowSessionDetails` would allow session state to persist across page reloads and sync across tabs/clients. Current workaround: `sessions.find(s => s.activeEntryId != null)` heuristic on mount.
-3. **Boundary GO end-to-end** -- `advanceShowSession` has only been tested locally; needs full lifecycle verification with the backend.
+2. **Boundary GO end-to-end** -- `advanceShowSession` has only been tested locally; needs full lifecycle verification with the backend.

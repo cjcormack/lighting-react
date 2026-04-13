@@ -63,15 +63,22 @@ export function SessionPicker({ sessions, onCreateSession, onActivateSession }: 
                   <span className="flex-1 text-sm font-semibold text-foreground">
                     {s.name}
                   </span>
+                  {s.isActive && (
+                    <span className="flex items-center gap-1.5 text-xs font-medium text-green-500 shrink-0">
+                      <span className="size-1.5 rounded-full bg-green-500" />
+                      Active
+                    </span>
+                  )}
                   <span className="text-xs text-muted-foreground shrink-0">
                     {stackCount} stack{stackCount !== 1 ? 's' : ''}
                   </span>
                   <Button
                     size="sm"
+                    variant={s.isActive ? 'outline' : 'default'}
                     className="shrink-0"
                     onClick={() => onActivateSession(s.id)}
                   >
-                    Activate
+                    {s.isActive ? 'Open' : 'Activate'}
                   </Button>
                 </div>
               )
