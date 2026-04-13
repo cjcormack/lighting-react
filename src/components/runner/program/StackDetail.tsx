@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { ArrowLeft, Plus, SeparatorHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -27,6 +27,7 @@ import { ProgramMarkerRow } from './ProgramMarkerRow'
 interface StackDetailProps {
   stack: CueStack
   projectId: number
+  activeCueId: number | null
   onBack: () => void
   onOpenCueForm: (cueId: number) => void
   onAddCue: () => void
@@ -38,6 +39,7 @@ interface StackDetailProps {
 export function StackDetail({
   stack,
   projectId,
+  activeCueId,
   onBack,
   onOpenCueForm,
   onAddCue,
@@ -49,6 +51,18 @@ export function StackDetail({
   const { data: library } = useEffectLibraryQuery()
   const { data: allCues } = useProjectCueListQuery(projectId)
   const [reorderCues] = useReorderCueStackCuesMutation()
+
+  // Scroll the active cue into view when drilling in or when the active cue
+  // changes for this stack — saves the operator from scrolling to find
+  // what's currently on stage. Uses 'nearest' to avoid unnecessary motion.
+  const listRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (activeCueId == null || !listRef.current) return
+    const row = listRef.current.querySelector(`[data-cue-row="${activeCueId}"]`)
+    if (row instanceof HTMLElement) {
+      row.scrollIntoView({ block: 'nearest' })
+    }
+  }, [stack.id, activeCueId])
 
   // Build a map of full cue data for expandable rows
   const cueMap = useMemo(() => {
@@ -126,7 +140,7 @@ export function StackDetail({
       </div>
 
       {/* Cue list */}
-      <div className="flex-1 overflow-y-auto">
+      <div ref={listRef} className="flex-1 overflow-y-auto">
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -155,6 +169,7 @@ export function StackDetail({
                   projectId={projectId}
                   presets={presets}
                   library={library}
+                  isActive={cue.id === activeCueId}
                   onOpenCueForm={() => onOpenCueForm(cue.id)}
                 />
               )

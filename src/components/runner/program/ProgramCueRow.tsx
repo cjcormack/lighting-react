@@ -8,6 +8,7 @@ import {
   Bookmark,
   AudioWaveform,
   Zap,
+  Play,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -37,6 +38,7 @@ interface ProgramCueRowProps {
   projectId: number
   presets?: FxPreset[]
   library?: EffectLibraryEntry[]
+  isActive?: boolean
   onOpenCueForm: () => void
 }
 
@@ -46,6 +48,7 @@ export function ProgramCueRow({
   projectId,
   presets,
   library,
+  isActive = false,
   onOpenCueForm,
 }: ProgramCueRowProps) {
   const [expanded, setExpanded] = useState(false)
@@ -154,17 +157,18 @@ export function ProgramCueRow({
   )
 
   return (
-    <div ref={setNodeRef} style={sortableStyle} {...attributes}>
+    <div ref={setNodeRef} style={sortableStyle} {...attributes} data-cue-row={cue.id}>
       <div
         className={cn(
-          'flex items-center h-10 px-4 border-b cursor-pointer transition-colors hover:bg-muted/50',
+          'flex items-center h-10 px-4 border-b border-l-[3px] border-l-transparent cursor-pointer transition-colors hover:bg-muted/50',
           expanded && 'bg-muted/10',
+          isActive && 'border-l-amber-500 bg-amber-500/[0.055]',
         )}
         onClick={onOpenCueForm}
       >
         {/* Drag handle */}
         <div
-          className="w-8 px-2 shrink-0 text-muted-foreground hover:text-foreground cursor-grab"
+          className="w-8 px-2 shrink-0 flex items-center text-muted-foreground hover:text-foreground cursor-grab"
           {...listeners}
           onClick={(e) => e.stopPropagation()}
         >
@@ -176,9 +180,19 @@ export function ProgramCueRow({
           {cue.cueNumber ? `Q${cue.cueNumber}` : '\u2014'}
         </div>
 
-        {/* Name */}
-        <div className="flex-1 px-2 text-sm font-medium text-foreground truncate min-w-0">
-          {cue.name}
+        {/* Name (with live indicator when this cue is on stage) */}
+        <div className="flex-1 px-2 min-w-0 flex items-center gap-1.5">
+          {isActive && (
+            <Play className="size-3 fill-amber-400 text-amber-400 shrink-0" />
+          )}
+          <span
+            className={cn(
+              'text-sm font-medium truncate',
+              isActive ? 'text-amber-300 font-semibold' : 'text-foreground',
+            )}
+          >
+            {cue.name}
+          </span>
         </div>
 
         {/* Fade */}

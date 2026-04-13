@@ -3,6 +3,7 @@ import { ArrowRight, GripVertical, RotateCcw, X, Plus, SeparatorHorizontal } fro
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { cn } from '@/lib/utils'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody } from '@/components/ui/sheet'
 import {
   DndContext,
@@ -37,11 +38,12 @@ interface SortableStackEntryProps {
   entry: ShowSessionEntryDto
   index: number
   stack: CueStack | undefined
+  isActive: boolean
   onDrill: (stackId: number) => void
   onRemove: (entryId: number) => void
 }
 
-function SortableStackEntry({ entry, index, stack, onDrill, onRemove }: SortableStackEntryProps) {
+function SortableStackEntry({ entry, index, stack, isActive, onDrill, onRemove }: SortableStackEntryProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: entry.id,
   })
@@ -60,7 +62,10 @@ function SortableStackEntry({ entry, index, stack, onDrill, onRemove }: Sortable
       ref={setNodeRef}
       style={style}
       {...attributes}
-      className="flex items-center w-full gap-3 px-4 py-2.5 bg-card border rounded transition-colors hover:bg-muted/30 hover:border-muted-foreground/20 text-left cursor-pointer"
+      className={cn(
+        'flex items-center w-full gap-3 px-4 py-2.5 bg-card border rounded border-l-[3px] border-l-transparent transition-colors hover:bg-muted/30 hover:border-muted-foreground/20 text-left cursor-pointer',
+        isActive && 'border-l-amber-500 bg-amber-500/[0.055]',
+      )}
       onClick={() => entry.cueStackId != null && onDrill(entry.cueStackId)}
     >
       <div
@@ -73,9 +78,23 @@ function SortableStackEntry({ entry, index, stack, onDrill, onRemove }: Sortable
       <span className="w-6 text-center font-mono text-xs text-muted-foreground shrink-0">
         {index + 1}
       </span>
-      <span className="flex-1 text-sm font-medium text-foreground">
+      <span
+        className={cn(
+          'flex-1 text-sm font-medium text-foreground',
+          isActive && 'text-amber-300 font-semibold',
+        )}
+      >
         {entry.cueStackName ?? entry.label ?? 'Unknown'}
       </span>
+      {isActive && (
+        <Badge
+          variant="outline"
+          className="text-xs px-1.5 py-0 gap-1 border-amber-500/40 text-amber-400 bg-amber-500/10"
+        >
+          <span className="size-1.5 rounded-full bg-amber-400 animate-pulse" />
+          Live
+        </Badge>
+      )}
       <span className="text-xs text-muted-foreground shrink-0">
         {cueCount} cues &middot; {stack?.loop ? 'Loop' : 'Sequential'}
       </span>
@@ -187,6 +206,7 @@ interface SessionOverviewProps {
   projectId: number
   session: ShowSessionDetails
   stacks: CueStack[]
+  activeStackId: number | null
   onDrillStack: (stackId: number) => void
   onSwitchToShow: () => void
 }
@@ -195,6 +215,7 @@ export function SessionOverview({
   projectId,
   session,
   stacks,
+  activeStackId,
   onDrillStack,
   onSwitchToShow,
 }: SessionOverviewProps) {
@@ -352,6 +373,7 @@ export function SessionOverview({
                   entry={entry}
                   index={idx}
                   stack={stack}
+                  isActive={activeStackId !== null && entry.cueStackId === activeStackId}
                   onDrill={onDrillStack}
                   onRemove={handleRemoveEntry}
                 />

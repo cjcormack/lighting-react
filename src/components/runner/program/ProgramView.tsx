@@ -23,6 +23,8 @@ interface ProgramViewProps {
   onSwitchToShow: () => void
   onOpenCueForm: (stackId: number, cueId: number) => void
   activeSession?: ShowSessionDetails
+  activeStackId: number | null
+  activeCueId: number | null
 }
 
 export function ProgramView({
@@ -33,6 +35,8 @@ export function ProgramView({
   onSwitchToShow,
   onOpenCueForm,
   activeSession,
+  activeStackId,
+  activeCueId,
 }: ProgramViewProps) {
   const [createCue] = useCreateProjectCueMutation()
   const [removeCueFromStack] = useRemoveCueFromCueStackMutation()
@@ -107,6 +111,7 @@ export function ProgramView({
       <StackDetail
         stack={drillStack}
         projectId={projectId}
+        activeCueId={drillStackId === activeStackId ? activeCueId : null}
         onBack={() => onDrillStack(null)}
         onOpenCueForm={(cueId) => onOpenCueForm(drillStackId!, cueId)}
         onAddCue={handleAddCue}
@@ -124,6 +129,7 @@ export function ProgramView({
         projectId={projectId}
         session={activeSession}
         stacks={stacks}
+        activeStackId={activeStackId}
         onDrillStack={(id) => onDrillStack(id)}
         onSwitchToShow={onSwitchToShow}
       />

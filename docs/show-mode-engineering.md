@@ -254,6 +254,16 @@ The Program tab is the show assembly surface. It has two levels:
 - "+ Add Separator" creates a MARKER cue
 - Back arrow returns to session overview
 
+### Sync with Run state
+
+Program mode mirrors the runner so the operator can dive in to edit during a tech run without re-navigating:
+
+- **Auto-drill on Run → Program switch.** When the user toggles from Run mode to Program mode via the mode Tabs, `drillStackId` is set to the currently `activeStackId` (the running stack). They land directly in StackDetail rather than on Session Overview. The auto-drill always overrides the previous drill — the running stack is what the operator most likely wants to edit.
+- **"Live" badge on the active stack** in Session Overview — an amber pill with a pulsing dot, plus a left border accent and amber-toned name. Makes the running stack instantly findable when the user explicitly drops back to the overview.
+- **Active-cue marker** in StackDetail — the live cue's row gets the same amber left-border accent used in the runner's `CueRow`, the drag-handle is replaced with the amber `Play` glyph, and the name turns amber-bold. Only the cue currently on stage in the *active* stack is marked; other stacks show no marker even when drilled into.
+- **Escape hatch preserved.** Auto-drill triggers only on the explicit Tabs mode toggle (`handleSwitchMode`). Breadcrumb navigation — clicking "Show" or the session-name crumb — still drops the drill back to Session Overview, giving users a deterministic way out.
+- **Active state derivation.** No new server fields, no new URL params. ShowPage already tracks `activeStackId` (derived from `activeSession.activeEntryId`) and `runner.activeCueId` (per-stack Redux state). Both are passed down through `ProgramView` → `SessionOverview` / `StackDetail` → `SortableStackEntry` / `ProgramCueRow`. The cue marker is gated on `drillStackId === activeStackId` in ProgramView so it never lights up on a non-running stack.
+
 ## Show Tab (Runner)
 
 The Show tab is the production playback surface. Layout from top to bottom:
@@ -435,6 +445,7 @@ The `runnerSlice` manages per-stack playback state entirely on the frontend:
 | BACK never crosses stack boundaries | Intentional safety constraint -- only GO advances between stacks |
 | Local `activeSessionId` state | Backend doesn't have an `isActive` field; tracked locally with `activeEntryId != null` heuristic on reload |
 | `stackMap` for O(1) lookups | UseMemo'd `Map<number, CueStack>` avoids repeated `.find()` in entry strip and session overview |
+| Auto-drill into active stack on Run → Program | Tech-run ergonomics — operator should not have to re-navigate to the running stack to make a quick edit. Keyed on the explicit Tabs toggle so breadcrumb navigation remains a deliberate "go to top" gesture. |
 
 ## Known Gaps
 

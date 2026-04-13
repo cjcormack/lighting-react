@@ -503,8 +503,11 @@ export function ShowPage() {
   }, [activeSession, mode, drillStack])
 
   const handleBreadcrumbCurrentPageClick = useCallback(() => {
-    // Clicking "Show" in the breadcrumb clears the mode (lands on program by default).
+    // Clicking "Show" in the breadcrumb resets to top-level program view —
+    // clear both the mode (defaults to program) and any auto-drilled stack
+    // so the user lands on Session Overview, not whatever they were last viewing.
     setSearchParams({})
+    setDrillStackId(null)
   }, [setSearchParams])
 
   const handleBreadcrumbExtraClick = useCallback(
@@ -528,9 +531,14 @@ export function ShowPage() {
   const handleSwitchMode = useCallback(
     (targetMode: ShowMode) => {
       if (targetMode === mode) return
+      // On Run → Program switch, drill into the active stack so the operator
+      // lands on what's running rather than the session overview.
+      if (targetMode === 'program' && activeStackId != null) {
+        setDrillStackId(activeStackId)
+      }
       setSearchParams({ mode: targetMode })
     },
-    [mode, setSearchParams],
+    [mode, setSearchParams, activeStackId],
   )
 
   // Loading / redirect guards
@@ -632,6 +640,11 @@ export function ShowPage() {
           onSwitchToShow={() => handleSwitchMode('run')}
           onOpenCueForm={openCueForm}
           activeSession={activeSession}
+          activeStackId={activeStackId}
+          // Use server-tracked activeCueId so the marker reflects what's
+          // currently on stage rather than the transient fade cursor —
+          // runner.activeCueId clears after markDone (e.g. SNAP fades).
+          activeCueId={stack?.activeCueId ?? null}
         />
       )}
 
