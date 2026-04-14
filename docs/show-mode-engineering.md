@@ -71,12 +71,16 @@ API Layer          Type definitions + WebSocket subscription factories
 #### Component Layer (UI)
 | File | Purpose |
 |------|---------|
-| `src/routes/ShowPage.tsx` | Main route: session picker, mode switcher (?mode=program\|run query param), Show tab runner, keyboard handler. `activeSession` is derived from the server `isActive` flag, never from the URL. |
-| `src/components/runner/ShowBar.tsx` | Top control bar: DBO, BPM/TAP, cue info, GO/BACK buttons |
-| `src/components/runner/CueRow.tsx` | Cue list row with status icons and fade progress bars |
-| `src/components/runner/MarkerRow.tsx` | Marker separator row |
+| `src/routes/ShowPage.tsx` | Main route: session picker, mode switcher (?mode=program\|run query param), Show tab runner, keyboard handler. `activeSession` is derived from the server `isActive` flag, never from the URL. Run mode swaps to `ShowRunnerMobile` when the runner container width drops below 600px. |
+| `src/components/runner/ShowBar.tsx` | Top control bar: DBO, BPM/TAP, cue info, GO/BACK buttons (desktop Run mode) |
+| `src/components/runner/CueRow.tsx` | Cue list row with status icons and fade progress bars (desktop Run mode) |
+| `src/components/runner/MarkerRow.tsx` | Marker separator row (shared desktop + mobile) |
 | `src/components/runner/OutOfOrderBanner.tsx` | Warning when cue numbers are not ascending |
 | `src/components/runner/EditorPanel.tsx` | Inline edit mode UI |
+| `src/components/runner/ShowRunnerMobile.tsx` | Remote-control layout for narrow containers: top strip, active-cue hero, standby card, GO/BACK footer with safe-area padding |
+| `src/components/runner/StackPickerSheet.tsx` | Bottom sheet listing session entries for mobile stack switching |
+| `src/components/runner/MobileCueListSheet.tsx` | Bottom sheet exposing the full cue list on mobile; tapping a cue opens CueForm |
+| `src/components/runner/MobileCueRow.tsx` | Lean cue row used inside `MobileCueListSheet` (no fixed notes/auto-pill columns) |
 | `src/components/runner/program/ProgramView.tsx` | Program tab: routes between SessionOverview and StackDetail |
 | `src/components/runner/program/SessionOverview.tsx` | Session entry list with drag reorder, stack picker, marker edit |
 | `src/components/runner/program/StackDetail.tsx` | Cue list within a stack, dnd-kit reorder, add cue/marker |
@@ -84,6 +88,7 @@ API Layer          Type definitions + WebSocket subscription factories
 | `src/components/runner/program/ProgramMarkerRow.tsx` | Interactive marker with inline rename/delete |
 | `src/components/cues/CueForm.tsx` | Cue edit sheet (properties, presets, effects, triggers) |
 | `src/hooks/useRunnerAnimation.ts` | requestAnimationFrame hook for fade/auto-advance progress |
+| `src/hooks/useNarrowContainer.ts` | ResizeObserver hook that returns `true` while a container's width is below a threshold. Used by ShowPage to switch between desktop and mobile Run-mode layouts. |
 | `src/lib/cueUtils.ts` | `buildCueInput()` -- converts a Cue to CueInput for mutations |
 
 #### Navigation
@@ -295,6 +300,33 @@ A per-stack toggle on the entry strip controls the display density:
 - **Theatre**: shows Q number column, notes column, detailed fade info -- designed for scripted shows with numbered cues
 - **Band**: minimal display, hides Q numbers and notes -- designed for live performance where cue names and effect counts are sufficient
 
+### Mobile Remote Control
+
+When the Run tab's container width drops below **600 px**, the runner swaps from the desktop ShowBar + cue-list layout to a dedicated remote-control surface (`ShowRunnerMobile`). The switch is **container-width based, not viewport-based** — side panels opened on desktop (effects overview, AI chat, cue slot overview) that squeeze the runner below the threshold also flip the view. The `useNarrowContainer` hook observes the runner container and ShowPage conditionally renders the mobile or desktop subtree; only one tree is mounted at a time.
+
+**Layout (top → bottom):**
+
+- **Top strip** (`h-12`): stack-name button (opens `StackPickerSheet`) · cue-list icon (opens `MobileCueListSheet`) · spacer · BPM value + TAP · DBO toggle · Theatre/Band pill (`T`/`B`). The T/B toggle is preserved on mobile so operators retain the same context control they have on desktop.
+- **Active-cue hero** (`flex-1`): centred Q number (theatre only) + cue name (amber, large) + fade-progress bar + fade info badge + auto-advance countdown bar + optional notes.
+- **Standby card**: Q + name in green when a standby cue exists, "→ NextStackName" (with arrow) at a stack boundary, "End of show" when neither is available.
+- **GO/BACK footer**: `grid grid-cols-[1fr_2fr]`, `h-14` buttons. Padding uses `calc(0.75rem + env(safe-area-inset-bottom, 0px))` so the GO button clears the iOS home indicator. The label changes to "END" (disabled) when both standby and next-stack are null.
+
+**Hero states** — the `activeCueId` transient clears on `markDone` (e.g. SNAP fades), so the hero has three states:
+
+1. `activeCue` set → name + Q + fade progress + auto countdown.
+2. `activeCue` null, `standbyCue` set → "Ready — Press GO to fire" placeholder.
+3. Both null → "Idle — End of stack".
+
+**Bottom sheets** use `Sheet side="bottom"` from `src/components/ui/sheet.tsx`. Both are controlled (stay mounted) so scroll position survives reopen. `MobileCueListSheet` caps at `max-h-[70dvh]` with its own overflow.
+
+**Cue edit transition** — tapping a cue in `MobileCueListSheet` closes the sheet, then calls `openCueForm` on a 320 ms timeout (matching the Sheet's 300 ms close animation). This avoids two Dialogs trapping focus simultaneously.
+
+**Keyboard listener** stays registered unconditionally so tablets with Bluetooth keyboards still respond to Space/ArrowLeft regardless of container width.
+
+**Prerequisite**: `viewport-fit=cover` is set in `index.html` so `env(safe-area-inset-bottom)` resolves correctly on iOS; without it the footer would not clear the home indicator.
+
+**Not migrated to mobile**: the OOO (out-of-order) banner, the 7-column cue list (use `MobileCueListSheet` instead), the horizontal session entry strip (use `StackPickerSheet`). Program tab has no mobile treatment yet — editing flows remain desktop-first.
+
 ## Playback Flow
 
 ### GO Command
@@ -446,8 +478,10 @@ The `runnerSlice` manages per-stack playback state entirely on the frontend:
 | Local `activeSessionId` state | Backend doesn't have an `isActive` field; tracked locally with `activeEntryId != null` heuristic on reload |
 | `stackMap` for O(1) lookups | UseMemo'd `Map<number, CueStack>` avoids repeated `.find()` in entry strip and session overview |
 | Auto-drill into active stack on Run → Program | Tech-run ergonomics — operator should not have to re-navigate to the running stack to make a quick edit. Keyed on the explicit Tabs toggle so breadcrumb navigation remains a deliberate "go to top" gesture. |
+| Container-width switch to remote-control view | Responds to the runner's actual available space, not just viewport — side panels on desktop can also trigger the compact layout. Single-tree mount via `useNarrowContainer` rather than CSS `@container` hide/show keeps the DOM lean. |
 
 ## Known Gaps
 
 1. **No script quick-fire panel** -- no way to fire scripts ad-hoc during a show without attaching them to a cue trigger.
 2. **Boundary GO end-to-end** -- `advanceShowSession` has only been tested locally; needs full lifecycle verification with the backend.
+3. **Program tab on narrow viewports** -- Session Overview and Stack Detail still use the desktop layout on phone-sized containers; phone-first authoring is a separate effort.

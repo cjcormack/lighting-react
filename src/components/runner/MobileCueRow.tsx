@@ -1,47 +1,42 @@
-import { Check, Play, Circle, Pencil } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
+import { Check, Play, Circle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatFadeText } from '@/lib/cueUtils'
 
-interface CueRowProps {
+interface MobileCueRowProps {
   cueNumber: string | null
   name: string
   fadeDurationMs: number | null
   fadeCurve: string
   autoAdvance: boolean
-  notes: string | null
   isActive: boolean
   isStandby: boolean
   isDone: boolean
-  isEditing: boolean
   isTheatre: boolean
   fadeProgress: number
   autoProgress: number | null
   onClick: () => void
 }
 
-export function CueRow({
+export function MobileCueRow({
   cueNumber,
   name,
   fadeDurationMs,
   fadeCurve,
   autoAdvance,
-  notes,
   isActive,
   isStandby,
   isDone,
-  isEditing,
   isTheatre,
   fadeProgress,
   autoProgress,
   onClick,
-}: CueRowProps) {
+}: MobileCueRowProps) {
   const showFadeBar = isActive && fadeProgress > 0 && autoProgress == null
   const showAutoBar = isActive && autoProgress != null
 
   let statusIcon = null
   if (isDone) {
-    statusIcon = <Check className="size-3 text-muted-foreground" />
+    statusIcon = <Check className="size-3.5 text-muted-foreground" />
   } else if (isActive && autoProgress != null) {
     statusIcon = <Circle className="size-2.5 fill-blue-500 text-blue-500 animate-pulse" />
   } else if (isActive) {
@@ -53,15 +48,15 @@ export function CueRow({
   const fadeText = formatFadeText(fadeDurationMs, fadeCurve)
 
   return (
-    <div
+    <button
+      type="button"
+      onClick={onClick}
       className={cn(
-        'relative flex items-center h-10 px-4 border-b border-l-[3px] border-l-transparent cursor-pointer transition-colors overflow-hidden hover:bg-muted/50',
+        'relative flex w-full items-center gap-2 h-12 px-4 border-b border-l-[3px] border-l-transparent text-left transition-colors hover:bg-muted/50',
         isDone && 'opacity-40',
         isActive && 'border-l-amber-500 bg-amber-500/[0.055]',
         isStandby && !isActive && 'border-l-green-500 bg-green-500/[0.04]',
-        isEditing && !isActive && 'border-l-blue-500 bg-blue-500/[0.05]',
       )}
-      onClick={onClick}
     >
       {/* Fade progress bar */}
       {showFadeBar && (
@@ -79,11 +74,11 @@ export function CueRow({
       )}
 
       {/* Status */}
-      <div className="w-8 px-2 shrink-0 flex items-center justify-center">{statusIcon}</div>
+      <div className="w-5 shrink-0 flex items-center justify-center">{statusIcon}</div>
 
       {/* Q-number (theatre only) */}
       {isTheatre && (
-        <div className="w-14 px-2 shrink-0 font-mono text-xs text-muted-foreground">
+        <div className="w-10 shrink-0 font-mono text-xs text-muted-foreground">
           {cueNumber ? `Q${cueNumber}` : ''}
         </div>
       )}
@@ -91,7 +86,7 @@ export function CueRow({
       {/* Name */}
       <div
         className={cn(
-          'flex-1 px-2 text-sm font-medium text-foreground truncate min-w-0',
+          'flex-1 text-sm font-medium text-foreground truncate min-w-0',
           isActive && 'text-amber-300 font-semibold',
           isStandby && !isActive && 'text-green-400 font-semibold',
         )}
@@ -100,39 +95,17 @@ export function CueRow({
       </div>
 
       {/* Fade */}
-      <div className="w-24 shrink-0 text-right font-mono text-xs text-muted-foreground px-2">
+      <div className="shrink-0 font-mono text-[11px] text-muted-foreground">
         {fadeText}
       </div>
 
-      {/* Auto pill */}
-      <div className="w-12 shrink-0 text-center px-2">
-        {autoAdvance && (
-          <Badge
-            variant="outline"
-            className="text-xs border-blue-500/30 text-blue-500 bg-blue-500/10 rounded-sm px-1.5 py-0"
-          >
-            Auto
-          </Badge>
-        )}
-      </div>
-
-      {/* Notes (theatre only) */}
-      {isTheatre && (
-        <div className="w-[200px] shrink-0 text-xs text-muted-foreground truncate border-l border-border px-2 italic">
-          {notes ?? ''}
-        </div>
-      )}
-
-      {/* Edit icon */}
-      <div className="w-10 shrink-0 flex items-center justify-center">
-        <Pencil
-          className={cn(
-            'size-3.5 text-muted-foreground/50 transition-colors',
-            'group-hover:text-muted-foreground',
-            isEditing && 'text-blue-500',
-          )}
+      {/* Auto indicator */}
+      {autoAdvance && (
+        <div
+          className="size-1.5 rounded-full bg-blue-500 shrink-0"
+          aria-label="auto-advance"
         />
-      </div>
-    </div>
+      )}
+    </button>
   )
 }

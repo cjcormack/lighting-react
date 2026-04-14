@@ -51,7 +51,17 @@ import {
 import { CueForm } from '../components/cues/CueForm'
 import { ProgramView } from '../components/runner/program/ProgramView'
 import { SessionPicker } from '../components/runner/SessionPicker'
+import {
+  ShowRunnerMobile,
+  type RunnerDisplayState,
+} from '../components/runner/ShowRunnerMobile'
+import { useNarrowContainer } from '../hooks/useNarrowContainer'
 import type { CueStack } from '../api/cueStacksApi'
+
+// Below this container width, the Run tab swaps to the remote-control layout.
+// Threshold reacts to the runner body's own width, so side panels squeezing the
+// runner on desktop flip to the compact layout too.
+const MOBILE_RUNNER_THRESHOLD = 600
 
 // Redirect: /show or /cue-stacks (no project) → active project's /show
 export function ShowRedirect() {
@@ -139,6 +149,8 @@ export function ShowPage() {
   // Scroll save/restore for Show tab edit mode
   const listScrollRef = useRef<HTMLDivElement>(null)
   const savedScrollPos = useRef(0)
+
+  const [runnerContainerRef, isNarrowRunner] = useNarrowContainer(MOBILE_RUNNER_THRESHOLD)
 
   const [advanceCueStack] = useAdvanceCueStackMutation()
   const [activateCueStack] = useActivateCueStackMutation()
@@ -258,6 +270,17 @@ export function ShowPage() {
     const curIdx = activeSession.entries.findIndex((e) => e.id === activeEntryId)
     return activeSession.entries.slice(curIdx + 1).find((e) => e.entryType === 'STACK') ?? null
   }, [runner.standbyCueId, activeSession, activeEntryId])
+
+  const runnerDisplay: RunnerDisplayState = {
+    activeCue,
+    standbyCue,
+    nextStackEntry,
+    fadeProgress: runner.fadeProgress,
+    autoProgress: runner.autoProgress,
+    activeCueId: runner.activeCueId,
+    standbyCueId: runner.standbyCueId,
+    completedCueIds: runner.completedCueIds,
+  }
 
   // GO handler
   const handleGo = useCallback(() => {
@@ -598,35 +621,38 @@ export function ShowPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Header row: breadcrumbs + mode toggle + session status */}
-      <div className="flex items-center p-4 gap-3">
-        <Breadcrumbs
-          projectName={project.name}
-          currentPage="Show"
-          extra={breadcrumbExtra}
-          onCurrentPageClick={handleBreadcrumbCurrentPageClick}
-          onExtraClick={handleBreadcrumbExtraClick}
-        />
-        <div className="flex-1" />
+      <div className="flex flex-col sm:flex-row sm:items-center p-4 gap-3">
+        <div className="flex-1 min-w-0">
+          <Breadcrumbs
+            projectName={project.name}
+            currentPage="Show"
+            extra={breadcrumbExtra}
+            onCurrentPageClick={handleBreadcrumbCurrentPageClick}
+            onExtraClick={handleBreadcrumbExtraClick}
+          />
+        </div>
 
-        {/* Mode toggle */}
-        <Tabs value={mode} onValueChange={(v) => handleSwitchMode(v as ShowMode)} className="w-auto">
-          <TabsList>
-            <TabsTrigger value="program">Program</TabsTrigger>
-            <TabsTrigger value="run">Run</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="flex items-center gap-3 shrink-0">
+          {/* Mode toggle */}
+          <Tabs value={mode} onValueChange={(v) => handleSwitchMode(v as ShowMode)} className="w-auto">
+            <TabsList>
+              <TabsTrigger value="program">Program</TabsTrigger>
+              <TabsTrigger value="run">Run</TabsTrigger>
+            </TabsList>
+          </Tabs>
 
-        {/* Session status */}
-        <div className="flex items-center gap-1.5">
-          <div className="size-1.5 rounded-full bg-green-500" />
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-xs text-muted-foreground hover:text-destructive"
-            onClick={handleDeactivateSession}
-          >
-            Deactivate
-          </Button>
+          {/* Session status */}
+          <div className="flex items-center gap-1.5">
+            <div className="size-1.5 rounded-full bg-green-500" />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground hover:text-destructive"
+              onClick={handleDeactivateSession}
+            >
+              Deactivate
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -650,134 +676,159 @@ export function ShowPage() {
 
       {/* ═══ Run mode ═══ */}
       {mode === 'run' && (
-        <>
-          {/* Show bar */}
-          <ShowBar
-            dbo={dbo}
-            onDbo={handleDbo}
-            bpm={fxState?.bpm ?? null}
-            onTap={handleTap}
-            stackName={stack?.name ?? ''}
-            activeName={activeCue?.name ?? null}
-            standbyName={standbyCue?.name ?? null}
-            nextStackName={nextStackEntry?.cueStackName ?? undefined}
-            onGo={handleGo}
-            onBack={handleBack}
-          />
-
-          {/* Runner body */}
-          <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-            {/* Stack tabs + context toggle */}
-            <div className="flex h-12 shrink-0 items-center border-b">
-              {activeSession.entries.map((entry) => {
-                if (entry.entryType === 'MARKER') {
-                  return (
-                    <div
-                      key={entry.id}
-                      className="flex items-center h-full px-2 gap-1.5 shrink-0 pointer-events-none"
-                    >
-                      <div className="w-px h-4 bg-border" />
-                      <span className="text-xs font-medium uppercase text-muted-foreground whitespace-nowrap">
-                        {entry.label}
-                      </span>
-                      <div className="w-px h-4 bg-border" />
-                    </div>
-                  )
-                }
-                const entryStack = entry.cueStackId != null ? stackMap.get(entry.cueStackId) : undefined
-                return (
-                  <Button
-                    key={entry.id}
-                    variant="ghost"
-                    onClick={() => handleSwitchToEntry(entry)}
-                    className={cn(
-                      'flex items-center gap-2 px-5 h-full rounded-none border-r text-xs font-medium text-muted-foreground relative shrink-0',
-                      'hover:text-foreground hover:bg-muted/10',
-                      entry.id === activeEntryId &&
-                        'text-foreground bg-muted/20 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary',
-                    )}
-                  >
-                    {entry.cueStackName}
-                    {entryStack?.loop && (
-                      <RotateCcw className="size-3 text-muted-foreground" />
-                    )}
-                  </Button>
-                )
-              })}
-              <div className="flex-1" />
-              <div className="px-4">
-                <Tabs value={isTheatre ? 'theatre' : 'band'} onValueChange={(v) => toggleCtx(v as 'theatre' | 'band')} className="w-auto">
-                  <TabsList>
-                    <TabsTrigger value="theatre">Theatre</TabsTrigger>
-                    <TabsTrigger value="band">Band</TabsTrigger>
-                  </TabsList>
-                </Tabs>
-              </div>
-            </div>
-
-            {/* OOO banner */}
-            {ooo && (
-              <OutOfOrderBanner
-                onFixOrder={handleFixOrder}
-                onDismiss={() => setOooDismissed(true)}
+        <div
+          ref={runnerContainerRef}
+          className="flex-1 flex flex-col min-w-0 overflow-hidden"
+        >
+          {isNarrowRunner ? (
+            <ShowRunnerMobile
+              activeSession={activeSession}
+              activeEntryId={activeEntryId}
+              stack={stack}
+              stackMap={stackMap}
+              display={runnerDisplay}
+              bpm={fxState?.bpm ?? null}
+              dbo={dbo}
+              isTheatre={isTheatre}
+              onGo={handleGo}
+              onBack={handleBack}
+              onDbo={handleDbo}
+              onTap={handleTap}
+              onSwitchToEntry={handleSwitchToEntry}
+              onToggleCtx={toggleCtx}
+              onOpenCueForm={openCueForm}
+            />
+          ) : (
+            <>
+              {/* Show bar */}
+              <ShowBar
+                dbo={dbo}
+                onDbo={handleDbo}
+                bpm={fxState?.bpm ?? null}
+                onTap={handleTap}
+                stackName={stack?.name ?? ''}
+                activeName={activeCue?.name ?? null}
+                standbyName={standbyCue?.name ?? null}
+                nextStackName={nextStackEntry?.cueStackName ?? undefined}
+                onGo={handleGo}
+                onBack={handleBack}
               />
-            )}
 
-            {/* Column headers */}
-            <div className="flex items-center h-10 px-4 border-b shrink-0">
-              <div className="w-8 px-2" />
-              {isTheatre && (
-                <div className="w-14 px-2 text-sm font-medium text-foreground">
-                  Q
+              {/* Runner body */}
+              <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                {/* Stack tabs + context toggle */}
+                <div className="flex h-12 shrink-0 items-center border-b">
+                  {activeSession.entries.map((entry) => {
+                    if (entry.entryType === 'MARKER') {
+                      return (
+                        <div
+                          key={entry.id}
+                          className="flex items-center h-full px-2 gap-1.5 shrink-0 pointer-events-none"
+                        >
+                          <div className="w-px h-4 bg-border" />
+                          <span className="text-xs font-medium uppercase text-muted-foreground whitespace-nowrap">
+                            {entry.label}
+                          </span>
+                          <div className="w-px h-4 bg-border" />
+                        </div>
+                      )
+                    }
+                    const entryStack = entry.cueStackId != null ? stackMap.get(entry.cueStackId) : undefined
+                    return (
+                      <Button
+                        key={entry.id}
+                        variant="ghost"
+                        onClick={() => handleSwitchToEntry(entry)}
+                        className={cn(
+                          'flex items-center gap-2 px-5 h-full rounded-none border-r text-xs font-medium text-muted-foreground relative shrink-0',
+                          'hover:text-foreground hover:bg-muted/10',
+                          entry.id === activeEntryId &&
+                            'text-foreground bg-muted/20 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary',
+                        )}
+                      >
+                        {entry.cueStackName}
+                        {entryStack?.loop && (
+                          <RotateCcw className="size-3 text-muted-foreground" />
+                        )}
+                      </Button>
+                    )
+                  })}
+                  <div className="flex-1" />
+                  <div className="px-4">
+                    <Tabs value={isTheatre ? 'theatre' : 'band'} onValueChange={(v) => toggleCtx(v as 'theatre' | 'band')} className="w-auto">
+                      <TabsList>
+                        <TabsTrigger value="theatre">Theatre</TabsTrigger>
+                        <TabsTrigger value="band">Band</TabsTrigger>
+                      </TabsList>
+                    </Tabs>
+                  </div>
                 </div>
-              )}
-              <div className="flex-1 px-2 text-sm font-medium text-foreground">
-                Name
-              </div>
-              <div className="w-24 text-right px-2 text-sm font-medium text-foreground">
-                Fade
-              </div>
-              <div className="w-12 px-2" />
-              {isTheatre && (
-                <div className="w-[200px] px-2 text-sm font-medium text-foreground border-l">
-                  Note
-                </div>
-              )}
-              <div className="w-10" />
-            </div>
 
-            {/* Cue list */}
-            <div className="flex-1 overflow-y-auto py-0.5" ref={listScrollRef}>
-              {cues.map((cue) => {
-                if (cue.cueType === 'MARKER') {
-                  return <MarkerRow key={cue.id} name={cue.name} />
-                }
-                const isActive = cue.id === runner.activeCueId
-                const isStandby = cue.id === runner.standbyCueId
-                const isDone = runner.completedCueIds.includes(cue.id)
-                return (
-                  <CueRow
-                    key={cue.id}
-                    cueNumber={cue.cueNumber}
-                    name={cue.name}
-                    fadeDurationMs={cue.fadeDurationMs}
-                    fadeCurve={cue.fadeCurve}
-                    autoAdvance={cue.autoAdvance}
-                    notes={cue.notes}
-                    isActive={isActive}
-                    isStandby={isStandby}
-                    isDone={isDone}
-                    isEditing={false}
-                    isTheatre={isTheatre}
-                    fadeProgress={isActive ? runner.fadeProgress : 0}
-                    autoProgress={isActive ? runner.autoProgress : null}
-                    onClick={() => {}}
+                {/* OOO banner */}
+                {ooo && (
+                  <OutOfOrderBanner
+                    onFixOrder={handleFixOrder}
+                    onDismiss={() => setOooDismissed(true)}
                   />
-                )
-              })}
-            </div>
-          </div>
-        </>
+                )}
+
+                {/* Column headers */}
+                <div className="flex items-center h-10 px-4 border-b shrink-0">
+                  <div className="w-8 px-2" />
+                  {isTheatre && (
+                    <div className="w-14 px-2 text-sm font-medium text-foreground">
+                      Q
+                    </div>
+                  )}
+                  <div className="flex-1 px-2 text-sm font-medium text-foreground">
+                    Name
+                  </div>
+                  <div className="w-24 text-right px-2 text-sm font-medium text-foreground">
+                    Fade
+                  </div>
+                  <div className="w-12 px-2" />
+                  {isTheatre && (
+                    <div className="w-[200px] px-2 text-sm font-medium text-foreground border-l">
+                      Note
+                    </div>
+                  )}
+                  <div className="w-10" />
+                </div>
+
+                {/* Cue list */}
+                <div className="flex-1 overflow-y-auto py-0.5" ref={listScrollRef}>
+                  {cues.map((cue) => {
+                    if (cue.cueType === 'MARKER') {
+                      return <MarkerRow key={cue.id} name={cue.name} />
+                    }
+                    const isActive = cue.id === runner.activeCueId
+                    const isStandby = cue.id === runner.standbyCueId
+                    const isDone = runner.completedCueIds.includes(cue.id)
+                    return (
+                      <CueRow
+                        key={cue.id}
+                        cueNumber={cue.cueNumber}
+                        name={cue.name}
+                        fadeDurationMs={cue.fadeDurationMs}
+                        fadeCurve={cue.fadeCurve}
+                        autoAdvance={cue.autoAdvance}
+                        notes={cue.notes}
+                        isActive={isActive}
+                        isStandby={isStandby}
+                        isDone={isDone}
+                        isEditing={false}
+                        isTheatre={isTheatre}
+                        fadeProgress={isActive ? runner.fadeProgress : 0}
+                        autoProgress={isActive ? runner.autoProgress : null}
+                        onClick={() => {}}
+                      />
+                    )
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       )}
 
       {/* CueForm sheet (shared across both modes) */}

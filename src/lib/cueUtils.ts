@@ -1,4 +1,22 @@
 import type { Cue, CueInput } from '@/api/cuesApi'
+import { formatMs } from './formatMs'
+
+const CURVE_LABELS: Record<string, string> = {
+  LINEAR: 'LIN',
+  EASE_IN_OUT: 'SINE',
+  SINE_IN_OUT: 'SINE',
+  CUBIC_IN_OUT: 'CUB',
+  EASE_IN: '\u2191',
+  EASE_OUT: '\u2193',
+}
+
+/** Format fade duration + curve into a compact label like "2.0s SINE" or "SNAP". */
+export function formatFadeText(fadeDurationMs: number | null, fadeCurve: string): string {
+  if (fadeDurationMs != null && fadeDurationMs > 0) {
+    return `${formatMs(fadeDurationMs)} ${CURVE_LABELS[fadeCurve] ?? ''}`.trim()
+  }
+  return 'SNAP'
+}
 
 /** Build a CueInput snapshot from a Cue (for inline editing mutations). */
 export function buildCueInput(cue: Cue): CueInput {
