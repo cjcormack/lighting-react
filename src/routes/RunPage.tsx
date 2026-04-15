@@ -1,10 +1,19 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
-import { useParams, useNavigate, Navigate, useLocation, useSearchParams } from 'react-router-dom'
+import { useParams, useNavigate, Navigate, Link } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Loader2, RotateCcw } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Loader2, RotateCcw, Play, Pencil, Square } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import {
@@ -13,12 +22,10 @@ import {
   useActivateCueStackMutation,
   useDeactivateCueStackMutation,
   useSortCueStackByCueNumberMutation,
-  useRemoveCueFromCueStackMutation,
 } from '../store/cueStacks'
 import {
   useSaveProjectCueMutation,
   useLazyProjectCueQuery,
-  useCreateProjectCueMutation,
 } from '../store/cues'
 import {
   useProjectShowQuery,
@@ -38,7 +45,6 @@ import {
   selectStackRunner,
 } from '../store/runnerSlice'
 import { useRunnerAnimation } from '../hooks/useRunnerAnimation'
-import { buildCueInput } from '../lib/cueUtils'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { ShowBar } from '../components/runner/ShowBar'
 import { CueRow } from '../components/runner/CueRow'
@@ -48,7 +54,6 @@ import {
   detectOutOfOrder,
 } from '../components/runner/OutOfOrderBanner'
 import { CueForm } from '../components/cues/CueForm'
-import { ProgramView } from '../components/runner/program/ProgramView'
 import {
   ShowRunnerMobile,
   type RunnerDisplayState,
@@ -56,19 +61,18 @@ import {
 import { useNarrowContainer } from '../hooks/useNarrowContainer'
 import type { CueStack } from '../api/cueStacksApi'
 
-// Below this container width, the Run tab swaps to the remote-control layout.
+// Below this container width, the runner swaps to the remote-control layout.
 // Threshold reacts to the runner body's own width, so side panels squeezing the
 // runner on desktop flip to the compact layout too.
 const MOBILE_RUNNER_THRESHOLD = 600
 
-// Redirect: /show or /cue-stacks (no project) → active project's /show
-export function ShowRedirect() {
+export function RunRedirect() {
   const { data: currentProject, isLoading } = useCurrentProjectQuery()
   const navigate = useNavigate()
 
   useEffect(() => {
     if (!isLoading && currentProject) {
-      navigate(`/projects/${currentProject.id}/show`, { replace: true })
+      navigate(`/projects/${currentProject.id}/run`, { replace: true })
     }
   }, [currentProject, isLoading, navigate])
 
@@ -83,23 +87,21 @@ export function ShowRedirect() {
   return null
 }
 
-// Redirect: /projects/:id/cue-stacks → /projects/:id/show
-export function LegacyCueStackRedirect() {
+// Legacy redirects (/show, /projects/:id/show, /cue-stacks, /projects/:id/cue-stacks)
+// all land on /run — Run is the default landing whether or not the show is active.
+export function LegacyShowRedirect() {
   const { projectId } = useParams()
-  return <Navigate to={`/projects/${projectId}/show`} replace />
+  if (projectId) {
+    return <Navigate to={`/projects/${projectId}/run`} replace />
+  }
+  return <RunRedirect />
 }
 
-type ShowMode = 'program' | 'run'
-
-// Main route component — show entries belong to the project directly; mode is a query param
-export function ShowPage() {
+export function RunPage() {
   const { projectId } = useParams()
   const projectIdNum = Number(projectId)
   const dispatch = useDispatch()
-  const [searchParams, setSearchParams] = useSearchParams()
-
-  // Derive mode from query param (default program)
-  const mode: ShowMode = searchParams.get('mode') === 'run' ? 'run' : 'program'
+  const navigate = useNavigate()
 
   const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
@@ -107,12 +109,11 @@ export function ShowPage() {
   const { data: fxState } = useFxStateQuery()
   const { data: show } = useProjectShowQuery(projectIdNum)
 
-  // Show is active when the project has an activeEntryId set
   const isShowActive = show?.activeEntryId != null
 
-  // Active entry drives which stack is active
+  // Active entry drives which stack is shown. When the show isn't active, default
+  // to the first STACK so the stack tabs still have a useful selection.
   const [activeEntryId, setActiveEntryId] = useState<number | null>(null)
-  const [drillStackId, setDrillStackId] = useState<number | null>(null)
 
   const activeEntry: ShowEntryDto | undefined = useMemo(
     () => show?.entries.find((e) => e.id === activeEntryId),
@@ -120,19 +121,18 @@ export function ShowPage() {
   )
   const activeStackId = activeEntry?.cueStackId ?? null
 
-  // Show tab state
   const [dbo, setDbo] = useState(false)
   const [oooDismissed, setOooDismissed] = useState(false)
   const [ctxOverride, setCtxOverride] = useState<Record<number, 'theatre' | 'band'>>({})
+  const [stopConfirmOpen, setStopConfirmOpen] = useState(false)
 
-  // CueForm sheet state (shared by both tabs)
+  // CueForm sheet state — used only for mobile cue-list edits
   const [cueFormOpen, setCueFormOpen] = useState(false)
   const [cueFormCueId, setCueFormCueId] = useState<number | null>(null)
-  const [cueFormStackId, setCueFormStackId] = useState<number | null>(null)
   const [cueFormCue, setCueFormCue] = useState<Cue | null>(null)
   const [cueFormSaving, setCueFormSaving] = useState(false)
 
-  // Scroll save/restore for Show tab edit mode
+  // Scroll save/restore around the CueForm sheet
   const listScrollRef = useRef<HTMLDivElement>(null)
   const savedScrollPos = useRef(0)
 
@@ -142,22 +142,15 @@ export function ShowPage() {
   const [activateCueStack] = useActivateCueStackMutation()
   const [deactivateCueStack] = useDeactivateCueStackMutation()
   const [sortByCueNumber] = useSortCueStackByCueNumberMutation()
-  const [removeCueFromStack] = useRemoveCueFromCueStackMutation()
   const [saveCue] = useSaveProjectCueMutation()
-  const [createCue] = useCreateProjectCueMutation()
   const [fetchCue] = useLazyProjectCueQuery()
 
-  // Show mutations
   const [activateShow] = useActivateShowMutation()
   const [deactivateShow] = useDeactivateShowMutation()
   const [advanceShow] = useAdvanceShowMutation()
   const [goToEntry] = useGoToShowEntryMutation()
 
   // Bootstrap activeEntryId from server show state on mount / project switch / refetch.
-  // The WS subscription below provides lower-latency updates between refetches; this
-  // effect handles initial load and ensures we re-sync if the refetched data disagrees.
-  // When the show isn't running yet, default to the first STACK so the user can still
-  // drill into a stack via the tab strip in run mode.
   useEffect(() => {
     if (!show) {
       setActiveEntryId(null)
@@ -188,7 +181,7 @@ export function ShowPage() {
 
   const cues = stack?.cues ?? []
 
-  // Initialize runner state when stack changes
+  // Initialise runner state when the stack changes
   useEffect(() => {
     if (activeStackId != null && cues.length > 0) {
       dispatch(resetStack({
@@ -215,7 +208,6 @@ export function ShowPage() {
     [cues, runner.standbyCueId],
   )
 
-  // Sends the right backend call: activate (first GO) vs advance (subsequent)
   const fireGo = useCallback(() => {
     if (activeStackId == null || !stack) return
     if (stack.activeCueId == null) {
@@ -229,7 +221,6 @@ export function ShowPage() {
     }
   }, [activeStackId, stack, runner.standbyCueId, activateCueStack, advanceCueStack, projectIdNum])
 
-  // Animation hook
   const handleAutoAdvanceComplete = useCallback(() => {
     if (activeStackId == null || !stack) return
     dispatch(go({ stackId: activeStackId, cues, loop: stack.loop }))
@@ -245,7 +236,6 @@ export function ShowPage() {
     onAutoAdvanceComplete: handleAutoAdvanceComplete,
   })
 
-  // Next STACK entry after current (for boundary hint and GO advance)
   const nextStackEntry = useMemo(() => {
     if (runner.standbyCueId != null || !show || activeEntryId == null) return null
     const curIdx = show.entries.findIndex((e) => e.id === activeEntryId)
@@ -263,7 +253,6 @@ export function ShowPage() {
     completedCueIds: runner.completedCueIds,
   }
 
-  // GO handler
   const handleGo = useCallback(() => {
     if (runner.standbyCueId == null) {
       // Boundary GO: advance to next STACK entry in show
@@ -286,7 +275,6 @@ export function ShowPage() {
     fireGo()
   }, [activeStackId, stack, cues, runner.standbyCueId, dispatch, fireGo, show, activeEntryId, advanceShow, projectIdNum, cancelAnimations])
 
-  // BACK handler
   const handleBack = useCallback(() => {
     if (activeStackId == null) return
     cancelAnimations()
@@ -296,20 +284,18 @@ export function ShowPage() {
     }
   }, [activeStackId, stack, cues, dispatch, cancelAnimations, advanceCueStack, projectIdNum])
 
-  // DBO handler
   const handleDbo = useCallback(() => {
     setDbo((d) => !d)
   }, [])
 
-  // TAP handler
   const handleTap = useCallback(() => {
     lightingApi.fx.tap()
   }, [])
 
-  // Keyboard handler — only when in Run mode
+  // Keyboard handler — Space/ArrowLeft. Only mounted on Run so no mode guard needed.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (mode !== 'run') return
+      if (!isShowActive) return
       const tag = (e.target as HTMLElement).tagName
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return
       if (e.code === 'Space') {
@@ -323,9 +309,8 @@ export function ShowPage() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [handleGo, handleBack, mode])
+  }, [handleGo, handleBack, isShowActive])
 
-  // Switch to a show entry (Show tab strip click)
   const handleSwitchToEntry = useCallback(
     (entry: ShowEntryDto) => {
       if (entry.entryType !== 'STACK' || entry.cueStackId == null) return
@@ -343,14 +328,6 @@ export function ShowPage() {
     [activeStackId, stack, projectIdNum, deactivateCueStack, goToEntry, cancelAnimations],
   )
 
-  const handleDrillStack = useCallback(
-    (id: number | null) => {
-      setDrillStackId(id)
-    },
-    [],
-  )
-
-  // Context toggle
   const isTheatre = ctxOverride[activeStackId ?? 0] !== 'band'
   const toggleCtx = (val: 'theatre' | 'band') => {
     if (activeStackId != null) {
@@ -358,7 +335,6 @@ export function ShowPage() {
     }
   }
 
-  // OOO detection
   const ooo = isTheatre && !oooDismissed && detectOutOfOrder(cues)
 
   const handleFixOrder = useCallback(() => {
@@ -367,34 +343,48 @@ export function ShowPage() {
     setOooDismissed(false)
   }, [activeStackId, projectIdNum, sortByCueNumber])
 
-  // ── Show activation handlers — project is the show ──
+  // ── Activation handlers ──
+
+  const stackEntryCount = show?.entries.filter((e) => e.entryType === 'STACK').length ?? 0
+  const canStart = !isShowActive && stackEntryCount > 0
 
   const handleActivateShow = useCallback(() => {
     activateShow({ projectId: projectIdNum })
       .unwrap()
       .then((result) => {
         setActiveEntryId(result.activeEntryId)
-        // After activating, jump to run mode so the operator can hit GO.
-        setSearchParams({ mode: 'run' })
       })
       .catch(() => {
         // Silently fail
       })
-  }, [activateShow, projectIdNum, setSearchParams])
+  }, [activateShow, projectIdNum])
 
-  const handleDeactivateShow = useCallback(async () => {
+  const handleConfirmDeactivate = useCallback(async () => {
     try {
       await deactivateShow({ projectId: projectIdNum }).unwrap()
     } catch {
       // Silently fail
+    } finally {
+      setStopConfirmOpen(false)
     }
   }, [deactivateShow, projectIdNum])
 
-  // ── CueForm sheet handlers ──
+  // Jump into Program with the live cue pre-loaded for editing. Used by the
+  // header "Edit Cue" button — operator hits a problem mid-show and wants to
+  // tweak the running cue without re-navigating to find it.
+  const handleEditActiveCueInProgram = useCallback(() => {
+    if (activeStackId == null) return
+    const cueId = stack?.activeCueId ?? runner.activeCueId
+    const params = new URLSearchParams({ stack: String(activeStackId) })
+    if (cueId != null) params.set('cue', String(cueId))
+    navigate(`/projects/${projectIdNum}/program?${params.toString()}`)
+  }, [activeStackId, stack, runner.activeCueId, navigate, projectIdNum])
+
+  // ── CueForm handlers (mobile cue-list) ──
 
   const openCueForm = useCallback(
-    async (stackId: number, cueId: number) => {
-      if (mode === 'run' && listScrollRef.current) {
+    async (_stackId: number, cueId: number) => {
+      if (listScrollRef.current) {
         savedScrollPos.current = listScrollRef.current.scrollTop
       }
       try {
@@ -402,14 +392,13 @@ export function ShowPage() {
         if (fullCue) {
           setCueFormCue(fullCue)
           setCueFormCueId(cueId)
-          setCueFormStackId(stackId)
           setCueFormOpen(true)
         }
       } catch {
         // Silently fail
       }
     },
-    [mode, fetchCue, projectIdNum],
+    [fetchCue, projectIdNum],
   )
 
   const handleCueFormSave = useCallback(
@@ -425,99 +414,21 @@ export function ShowPage() {
     [cueFormCueId, saveCue, projectIdNum],
   )
 
-  const handleCueFormClose = useCallback(
-    (open: boolean) => {
-      setCueFormOpen(open)
-      if (!open) {
-        if (mode === 'run') {
-          requestAnimationFrame(() => {
-            if (listScrollRef.current) {
-              listScrollRef.current.scrollTop = savedScrollPos.current
-            }
-          })
+  const handleCueFormClose = useCallback((open: boolean) => {
+    setCueFormOpen(open)
+    if (!open) {
+      requestAnimationFrame(() => {
+        if (listScrollRef.current) {
+          listScrollRef.current.scrollTop = savedScrollPos.current
         }
-      }
-    },
-    [mode],
-  )
-
-  const handleDuplicate = useCallback(async () => {
-    if (!cueFormCue || cueFormStackId == null) return
-    setCueFormSaving(true)
-    try {
-      const input = buildCueInput(cueFormCue)
-      input.name = cueFormCue.name + ' (copy)'
-      input.cueNumber = null
-      input.cueStackId = cueFormStackId
-      const result = await createCue({ projectId: projectIdNum, ...input }).unwrap()
-      setCueFormOpen(false)
-      setTimeout(() => openCueForm(cueFormStackId!, result.id), 200)
-    } catch {
-      // Silently fail
-    } finally {
-      setCueFormSaving(false)
+      })
     }
-  }, [cueFormCue, cueFormStackId, projectIdNum, createCue, openCueForm])
+  }, [])
 
-  const handleRemoveFromStack = useCallback(() => {
-    if (cueFormCueId == null || cueFormStackId == null) return
-    removeCueFromStack({ projectId: projectIdNum, stackId: cueFormStackId, cueId: cueFormCueId })
-    setCueFormOpen(false)
-  }, [cueFormCueId, cueFormStackId, projectIdNum, removeCueFromStack])
+  // ── Loading / redirect guards ──
 
-  // ── Breadcrumb helpers ──
-
-  const drillStack = drillStackId != null ? stackMap.get(drillStackId) : undefined
-
-  const breadcrumbExtra = useMemo(() => {
-    const segments: string[] = []
-    if (mode === 'program') {
-      segments.push('Program')
-      if (drillStack) segments.push(drillStack.name)
-    } else {
-      segments.push('Run')
-    }
-    return segments
-  }, [mode, drillStack])
-
-  const handleBreadcrumbCurrentPageClick = useCallback(() => {
-    // Clicking "Show" in the breadcrumb resets to top-level program view —
-    // clear both the mode (defaults to program) and any auto-drilled stack
-    // so the user lands on the show overview, not whatever they were last viewing.
-    setSearchParams({})
-    setDrillStackId(null)
-  }, [setSearchParams])
-
-  const handleBreadcrumbExtraClick = useCallback(
-    (index: number) => {
-      if (index === 0) {
-        // Clicked mode name — in program mode with a stack drilled, step back.
-        if (mode === 'program' && drillStackId != null) {
-          setDrillStackId(null)
-        }
-      }
-    },
-    [mode, drillStackId],
-  )
-
-  // ── Mode toggle navigation ──
-
-  const handleSwitchMode = useCallback(
-    (targetMode: ShowMode) => {
-      if (targetMode === mode) return
-      // On Run → Program switch, drill into the active stack so the operator
-      // lands on what's running rather than the show overview.
-      if (targetMode === 'program' && activeStackId != null) {
-        setDrillStackId(activeStackId)
-      }
-      setSearchParams({ mode: targetMode })
-    },
-    [mode, setSearchParams, activeStackId],
-  )
-
-  // Loading / redirect guards
   if (!currentLoading && currentProject && projectIdNum !== currentProject.id) {
-    return <Navigate to={`/projects/${currentProject.id}/show`} replace />
+    return <Navigate to={`/projects/${currentProject.id}/run`} replace />
   }
 
   if (projectLoading || currentLoading || stacksLoading) {
@@ -536,90 +447,105 @@ export function ShowPage() {
     )
   }
 
-  if (!stacks || stacks.length === 0) {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="px-4 pt-3 pb-2">
-          <Breadcrumbs projectName={project.name} currentPage="Show" />
-        </div>
-        <Card className="m-4 p-8 flex flex-col items-center gap-2 text-muted-foreground">
-          <p>No cue stacks found.</p>
-          <p className="text-sm">Create a cue stack in the FX Cues view first.</p>
-        </Card>
-      </div>
-    )
-  }
-
-  // ── Show view (always rendered; the show is the project) ──
-
   return (
     <div className="flex flex-col h-full">
-      {/* Header row: breadcrumbs + mode toggle + show status */}
-      <div className="flex flex-col sm:flex-row sm:items-center p-4 gap-3">
+      {/* Header row — always one line; button labels hide at narrow widths
+          so the row never has to wrap. Tooltip provides the affordance when
+          the label is hidden. */}
+      <div className="flex items-center p-4 gap-3">
         <div className="flex-1 min-w-0">
-          <Breadcrumbs
-            projectName={project.name}
-            currentPage="Show"
-            extra={breadcrumbExtra}
-            onCurrentPageClick={handleBreadcrumbCurrentPageClick}
-            onExtraClick={handleBreadcrumbExtraClick}
-          />
+          <Breadcrumbs projectName={project.name} currentPage="Run" />
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
-          {/* Mode toggle */}
-          <Tabs value={mode} onValueChange={(v) => handleSwitchMode(v as ShowMode)} className="w-auto">
-            <TabsList>
-              <TabsTrigger value="program">Program</TabsTrigger>
-              <TabsTrigger value="run">Run</TabsTrigger>
-            </TabsList>
-          </Tabs>
-
-          {/* Show status */}
+        <div className="flex items-center gap-2 shrink-0">
           {isShowActive && (
-            <div className="flex items-center gap-1.5">
-              <div className="size-1.5 rounded-full bg-green-500" />
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs text-muted-foreground hover:text-destructive"
-                onClick={handleDeactivateShow}
-              >
-                Stop
-              </Button>
-            </div>
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleEditActiveCueInProgram}
+                    disabled={activeStackId == null}
+                    aria-label="Edit live cue in Program"
+                  >
+                    <Pencil className="size-3.5" />
+                    <span className="hidden min-[420px]:inline">Edit Cue</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Edit live cue</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setStopConfirmOpen(true)}
+                    aria-label="Stop show"
+                  >
+                    <Square className="size-3.5" />
+                    <span className="hidden min-[420px]:inline">Stop</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Stop show</TooltipContent>
+              </Tooltip>
+              <span
+                className="size-3 rounded-full bg-green-500 ml-1"
+                aria-label="Show is running"
+                title="Show is running"
+              />
+            </>
           )}
         </div>
       </div>
 
-      {/* ═══ Program mode ═══ */}
-      {mode === 'program' && (
-        <ProgramView
-          projectId={projectIdNum}
-          stacks={stacks ?? []}
-          drillStackId={drillStackId}
-          onDrillStack={handleDrillStack}
-          onSwitchToShow={() => handleSwitchMode('run')}
-          onOpenCueForm={openCueForm}
-          show={show}
-          activeStackId={activeStackId}
-          // Use server-tracked activeCueId so the marker reflects what's
-          // currently on stage rather than the transient fade cursor —
-          // runner.activeCueId clears after markDone (e.g. SNAP fades).
-          activeCueId={stack?.activeCueId ?? null}
-          onActivate={handleActivateShow}
-        />
-      )}
-
-      {/* ═══ Run mode ═══ */}
-      {mode === 'run' && show && (
+      {!stacks || stacks.length === 0 ? (
+        <Card className="m-4 p-8 flex flex-col items-center gap-2 text-muted-foreground">
+          <p>No cue stacks found.</p>
+          <p className="text-sm">Create a cue stack in the FX Cues view first.</p>
+        </Card>
+      ) : !isShowActive ? (
+        // ── Start CTA hero ──
+        <div className="flex-1 flex items-center justify-center p-8">
+          <div className="flex flex-col items-center gap-4 max-w-md text-center">
+            <h2 className="text-2xl font-semibold">Show is not running</h2>
+            {stackEntryCount === 0 ? (
+              <>
+                <p className="text-muted-foreground text-sm">
+                  Add at least one stack to the show before starting.
+                </p>
+                <Button asChild variant="outline">
+                  <Link to={`/projects/${projectIdNum}/program`}>Go to Program</Link>
+                </Button>
+              </>
+            ) : (
+              <>
+                <p className="text-muted-foreground text-sm">
+                  The show will start from the first stack. Press GO to fire the
+                  first cue once it's running.
+                </p>
+                <Button
+                  size="lg"
+                  onClick={handleActivateShow}
+                  disabled={!canStart}
+                  className="h-12 px-8 text-base"
+                >
+                  <Play className="size-5 mr-2" />
+                  Start Show
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      ) : (
+        // ── Runner body ──
         <div
           ref={runnerContainerRef}
           className="flex-1 flex flex-col min-w-0 overflow-hidden"
         >
           {isNarrowRunner ? (
             <ShowRunnerMobile
-              show={show}
+              show={show!}
               activeEntryId={activeEntryId}
               stack={stack}
               stackMap={stackMap}
@@ -655,7 +581,7 @@ export function ShowPage() {
               <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
                 {/* Stack tabs + context toggle */}
                 <div className="flex h-12 shrink-0 items-center border-b">
-                  {show.entries.map((entry) => {
+                  {show!.entries.map((entry) => {
                     if (entry.entryType === 'MARKER') {
                       return (
                         <div
@@ -768,7 +694,7 @@ export function ShowPage() {
         </div>
       )}
 
-      {/* CueForm sheet (shared across both modes) */}
+      {/* CueForm sheet (opened from MobileCueListSheet) */}
       <CueForm
         open={cueFormOpen}
         onOpenChange={handleCueFormClose}
@@ -777,9 +703,28 @@ export function ShowPage() {
         onSave={handleCueFormSave}
         isSaving={cueFormSaving}
         isInStack
-        onDuplicate={handleDuplicate}
-        onRemoveFromStack={handleRemoveFromStack}
       />
+
+      {/* Stop-show confirmation */}
+      <Dialog open={stopConfirmOpen} onOpenChange={setStopConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Stop the show?</DialogTitle>
+          </DialogHeader>
+          <DialogDescription>
+            This will deactivate the show and clear the active cue. You can
+            start it again from this view at any time.
+          </DialogDescription>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setStopConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmDeactivate}>
+              Stop Show
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -17,12 +17,10 @@ interface ProgramViewProps {
   stacks: CueStack[]
   drillStackId: number | null
   onDrillStack: (id: number | null) => void
-  onSwitchToShow: () => void
   onOpenCueForm: (stackId: number, cueId: number) => void
   show?: ShowDetails
   activeStackId: number | null
   activeCueId: number | null
-  onActivate: () => void
 }
 
 export function ProgramView({
@@ -30,12 +28,10 @@ export function ProgramView({
   stacks,
   drillStackId,
   onDrillStack,
-  onSwitchToShow,
   onOpenCueForm,
   show,
   activeStackId,
   activeCueId,
-  onActivate,
 }: ProgramViewProps) {
   const [createCue] = useCreateProjectCueMutation()
   const [removeCueFromStack] = useRemoveCueFromCueStackMutation()
@@ -130,8 +126,6 @@ export function ProgramView({
         stacks={stacks}
         activeStackId={activeStackId}
         onDrillStack={(id) => onDrillStack(id)}
-        onSwitchToShow={onSwitchToShow}
-        onActivate={onActivate}
       />
     )
   }

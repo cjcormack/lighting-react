@@ -1,6 +1,11 @@
 # Show Mode: Programming & Running
 
-Show Mode is the production show programming and playback system. It lives at `/projects/:projectId/show` with a `?mode=program|run` query param, providing both a show assembly surface and a keyboard-driven cue runner.
+Show Mode is the production show programming and playback system. It's split across two sibling routes, each with its own sidebar entry:
+
+- `/projects/:projectId/program` — the **Program view**: show assembly (ordering stacks, editing cues, tech-run detours). Start the show from the header Start button.
+- `/projects/:projectId/run` — the **Run view**: keyboard-driven cue runner. When the show isn't running, this view shows a large Start CTA hero instead of the runner; when it is running, it shows the runner with a Stop button in the header.
+
+Splitting the two surfaces (rather than toggling between them via tabs on a single `/show` route) makes the running/stopped state obvious at a glance, puts the Start control where it's easy to find, and lets each view have its own primary action without conditional UI in the header.
 
 **A project IS a show.** There is no separate ShowSession concept — show entries belong directly to the project. The show is "running" when the project's `activeEntryId` is non-null, broadcast via WebSocket so reloads and other browser tabs see the same state automatically.
 
@@ -11,13 +16,13 @@ The UI is structured around four distinct phases a lighting operator works throu
 | Phase | Description | Primary Surface |
 |-------|-------------|-----------------|
 | Initial programming | Creating core looks (presets) for scenes | Presets view |
-| Show assembly | Building cues in stacks from presets, adding FX and triggers | Program tab |
-| Tech runs | Fine-tuning cues and sequence while running the show | Show tab |
-| Production run | Stepping through cues live, no editing | Show tab |
+| Show assembly | Building cues in stacks from presets, adding FX and triggers | Program view |
+| Tech runs | Fine-tuning cues and sequence while running the show | Run view (with occasional jumps to Program) |
+| Production run | Stepping through cues live, no editing | Run view |
 
-A key insight: **tech runs live in the Show tab, not the Program tab**. A tech run is a running phase that occasionally requires a programming detour (via the CueForm sheet), not a programming phase that happens to involve running.
+A key insight: **tech runs live on the Run view, not the Program view**. A tech run is a running phase that occasionally requires a programming detour (switch to Program via the sidebar, edit in the CueForm sheet, come back), not a programming phase that happens to involve running.
 
-The **FX Cues view** (separate from Show Mode) remains as "back-of-house authoring" -- building and managing individual cues by combining presets into named, deployable looks. The **Program tab** is for assembling those cues into show order. Over time, the Program tab may absorb the FX Cues view's capabilities entirely.
+The **FX Cues view** (separate from Show Mode) remains as "back-of-house authoring" -- building and managing individual cues by combining presets into named, deployable looks. The **Program view** is for assembling those cues into show order. Over time, the Program view may absorb the FX Cues view's capabilities entirely.
 
 ## Concepts
 
@@ -71,9 +76,10 @@ API Layer          Type definitions + WebSocket subscription factories
 #### Component Layer (UI)
 | File | Purpose |
 |------|---------|
-| `src/routes/ShowPage.tsx` | Main route: mode switcher (?mode=program\|run query param), Show tab runner, keyboard handler. The show data is fetched via `useProjectShowQuery`; "show is active" is derived from `show.activeEntryId != null`. Run mode swaps to `ShowRunnerMobile` when the runner container width drops below 600px. |
-| `src/components/runner/ShowBar.tsx` | Top control bar: DBO, BPM/TAP, cue info, GO/BACK buttons (desktop Run mode) |
-| `src/components/runner/CueRow.tsx` | Cue list row with status icons and fade progress bars (desktop Run mode) |
+| `src/routes/ProgramPage.tsx` | Route for `/projects/:projectId/program`. Hosts the show assembly surface: breadcrumb (`Program`), header Start Show button (or muted "Show running" chip when active), body = `ProgramView` (ShowOverview / StackDetail) with drill state, shared CueForm sheet. Start Show navigates to `/run` on success. |
+| `src/routes/RunPage.tsx` | Route for `/projects/:projectId/run`. Breadcrumb (`Run`), header Stop button (when active), body = a Start CTA hero when inactive, or the runner when active. The runner swaps to `ShowRunnerMobile` when the runner container width drops below 600px. Owns keyboard handler, runner animation, entry switching, and a CueForm sheet used by the mobile cue-list edit flow. |
+| `src/components/runner/ShowBar.tsx` | Top control bar: DBO, BPM/TAP, cue info, GO/BACK buttons (desktop runner) |
+| `src/components/runner/CueRow.tsx` | Cue list row with status icons and fade progress bars (desktop runner) |
 | `src/components/runner/MarkerRow.tsx` | Marker separator row (shared desktop + mobile) |
 | `src/components/runner/OutOfOrderBanner.tsx` | Warning when cue numbers are not ascending |
 | `src/components/runner/EditorPanel.tsx` | Inline edit mode UI |
@@ -81,18 +87,22 @@ API Layer          Type definitions + WebSocket subscription factories
 | `src/components/runner/StackPickerSheet.tsx` | Bottom sheet listing show entries for mobile stack switching |
 | `src/components/runner/MobileCueListSheet.tsx` | Bottom sheet exposing the full cue list on mobile; tapping a cue opens CueForm |
 | `src/components/runner/MobileCueRow.tsx` | Lean cue row used inside `MobileCueListSheet` (no fixed notes/auto-pill columns) |
-| `src/components/runner/program/ProgramView.tsx` | Program tab: routes between ShowOverview and StackDetail |
-| `src/components/runner/program/ShowOverview.tsx` | Show entry list with drag reorder, stack picker, marker edit, Start/Stop button |
-| `src/components/runner/program/StackDetail.tsx` | Cue list within a stack, dnd-kit reorder, add cue/marker |
+| `src/components/runner/program/ProgramView.tsx` | Program body: routes between ShowOverview and StackDetail based on `drillStackId` |
+| `src/components/runner/program/ShowOverview.tsx` | Show entry list with drag reorder, stack picker, marker edit. Activation controls live in `ProgramPage`'s header, not here. |
+| `src/components/runner/program/StackDetail.tsx` | Cue list within a stack, dnd-kit reorder, add cue/marker, "Stacks" back button |
 | `src/components/runner/program/ProgramCueRow.tsx` | Expandable cue row with CueFxTable, count badges |
 | `src/components/runner/program/ProgramMarkerRow.tsx` | Interactive marker with inline rename/delete |
 | `src/components/cues/CueForm.tsx` | Cue edit sheet (properties, presets, effects, triggers) |
 | `src/hooks/useRunnerAnimation.ts` | requestAnimationFrame hook for fade/auto-advance progress |
-| `src/hooks/useNarrowContainer.ts` | ResizeObserver hook that returns `true` while a container's width is below a threshold. Used by ShowPage to switch between desktop and mobile Run-mode layouts. |
+| `src/hooks/useNarrowContainer.ts` | ResizeObserver hook that returns `true` while a container's width is below a threshold. Used by `RunPage` to switch between desktop and mobile runner layouts. |
 | `src/lib/cueUtils.ts` | `buildCueInput()` -- converts a Cue to CueInput for mutations |
 
 #### Navigation
-Show is registered in `src/navigation.ts` with `path: /projects/${p}/show` and `visibility: "active-only"`.
+Both views are registered in `src/navigation.ts` with `visibility: "active-only"` and `group: "live"`:
+- `program` → `/projects/${p}/program`
+- `run` → `/projects/${p}/run`
+
+Legacy routes (`/show`, `/cue-stacks`, `/projects/:id/show`, `/projects/:id/cue-stacks`) redirect to `/run` so bookmarks still resolve.
 
 ## Data Model
 
@@ -233,9 +243,9 @@ interface StackRunnerState {
 }
 ```
 
-## Program Tab
+## Program View
 
-The Program tab is the show assembly surface. It has two levels:
+The Program view is the show assembly surface. It has two levels:
 
 **Show Overview** (`ShowOverview.tsx`) -- shown when no stack is drilled into:
 - Ordered entry list with drag-to-reorder (dnd-kit)
@@ -243,7 +253,7 @@ The Program tab is the show assembly surface. It has two levels:
 - MARKER entries: inline-editable label, remove button
 - "Add Stack" opens a slide-in stack picker overlay with search filtering
 - "Add Marker" appends a new marker entry
-- "Start Show" / "Stop" button toggles `activeEntryId` on the project; "Run →" switches to Show tab while the show is running
+- Activation controls live in `ProgramPage`'s page header (see next section), not in ShowOverview
 
 **Stack Detail** (`StackDetail.tsx`) -- shown when drilling into a specific stack:
 - Full cue list with drag-to-reorder
@@ -252,21 +262,43 @@ The Program tab is the show assembly surface. It has two levels:
 - Click the row itself to open CueForm sheet for full editing
 - "+ Add Cue" creates a blank cue and opens CueForm
 - "+ Add Separator" creates a MARKER cue
-- Back arrow returns to show overview
+- "Stacks" back button returns to show overview
 
-### Sync with Run state
+### Page header
 
-Program mode mirrors the runner so the operator can dive in to edit during a tech run without re-navigating:
+`ProgramPage` renders a breadcrumb (`Projects > Project > Program`, plus the drilled stack name when one is open) and one of:
 
-- **Auto-drill on Run → Program switch.** When the user toggles from Run mode to Program mode via the mode Tabs, `drillStackId` is set to the currently `activeStackId` (the running stack). They land directly in StackDetail rather than on Show Overview. The auto-drill always overrides the previous drill — the running stack is what the operator most likely wants to edit.
-- **"Live" badge on the active stack** in Show Overview — an amber pill with a pulsing dot, plus a left border accent and amber-toned name. Makes the running stack instantly findable when the user explicitly drops back to the overview.
+- **Start Show button** when the show isn't running. Disabled when the show has no STACK entries. Clicking activates the show and then navigates to `/projects/:id/run` so the operator lands on the runner. The activate mutation patches the `projectShow` cache as soon as the server responds (`onQueryStarted` in `store/show.ts`), so Run mounts already seeing `isShowActive: true` and the Start CTA hero never flashes during the transition.
+- **Go to Run button** when the show is active. Clicking jumps to `/projects/:id/run`. Symmetric placement to Start Show — same visual weight in the same slot — so re-finding the runner from Program is a single deliberate click.
+
+Stopping the show happens from Run, not here.
+
+### Auto-drill and deep links
+
+`ProgramPage` mounts with one of three drill states:
+
+1. **`?stack=<id>&cue=<id>` query params present** — drill into that stack and open `CueForm` for that cue. Used by Run's "Edit Cue" header button so the operator can detour into editing the live cue without manually navigating. The params are stripped from the URL after the first read so a refresh doesn't re-open the sheet.
+2. **Show is running, no params** — drill into the active stack on first mount. The operator lands where the action is. Tracked via `initialDrillDoneRef` so the drill fires once per mount; clicking "Stacks" or the breadcrumb afterwards reverts to Show Overview without us re-drilling them.
+3. **Show is stopped, no params** — start at Show Overview. Standard pre-show prep flow.
+
+### Sync with runner state
+
+The Program view mirrors the runner so the operator can edit during a tech run at a glance:
+
+- **"Live" badge on the active stack** in Show Overview — an amber pill with a pulsing dot, plus a left border accent and amber-toned name. Makes the running stack instantly findable.
 - **Active-cue marker** in StackDetail — the live cue's row gets the same amber left-border accent used in the runner's `CueRow`, the drag-handle is replaced with the amber `Play` glyph, and the name turns amber-bold. Only the cue currently on stage in the *active* stack is marked; other stacks show no marker even when drilled into.
-- **Escape hatch preserved.** Auto-drill triggers only on the explicit Tabs mode toggle (`handleSwitchMode`). Breadcrumb navigation — clicking "Show" still drops the drill back to Show Overview, giving users a deterministic way out.
-- **Active state derivation.** No new server fields, no new URL params. ShowPage already tracks `activeStackId` (derived from `show.activeEntryId`) and `runner.activeCueId` (per-stack Redux state). Both are passed down through `ProgramView` → `ShowOverview` / `StackDetail` → `SortableStackEntry` / `ProgramCueRow`. The cue marker is gated on `drillStackId === activeStackId` in ProgramView so it never lights up on a non-running stack.
+- **Active state derivation.** No new server fields. `ProgramPage` derives `activeStackId` from `show.activeEntryId` (read via `useProjectShowQuery`). The active-cue marker is gated on `drillStackId === activeStackId` so it never lights up on a non-running stack.
 
-## Show Tab (Runner)
+## Run View
 
-The Show tab is the production playback surface. Layout from top to bottom:
+The Run view is the production playback surface. When the show isn't running, `RunPage` renders a centred Start CTA hero — a "Show is not running" heading, brief sub-copy, and a `size="lg"` Start Show button. If the show has no STACK entries, the CTA is replaced with a link to Program so the operator can add one.
+
+When the show is running, the header carries:
+
+- An **Edit Cue** button that navigates to `/projects/:id/program?stack=<activeStackId>&cue=<activeCueId>`. ProgramPage drills into the active stack and opens `CueForm` for the live cue (see "Auto-drill and deep links" above). Disabled when no stack is selected.
+- A green-dot indicator + **Stop** button. Stop opens a confirmation Dialog ("Stop the show?") to guard against accidental clicks during a live performance — accidental cancellation of cue state mid-show is more disruptive than the extra click costs. Confirm fires `/deactivate`; the page stays on `/run` and flips to the Start CTA. The deactivate mutation, like activate, patches the `projectShow` cache on success so the transition is flicker-free.
+
+Below the header, the runner body. Layout from top to bottom:
 
 ### ShowBar
 Top control surface with:
@@ -297,7 +329,7 @@ A per-stack toggle on the entry strip controls the display density:
 
 ### Mobile Remote Control
 
-When the Run tab's container width drops below **600 px**, the runner swaps from the desktop ShowBar + cue-list layout to a dedicated remote-control surface (`ShowRunnerMobile`). The switch is **container-width based, not viewport-based** — side panels opened on desktop (effects overview, AI chat, cue slot overview) that squeeze the runner below the threshold also flip the view. The `useNarrowContainer` hook observes the runner container and ShowPage conditionally renders the mobile or desktop subtree; only one tree is mounted at a time.
+When the Run view's container width drops below **600 px**, the runner swaps from the desktop ShowBar + cue-list layout to a dedicated remote-control surface (`ShowRunnerMobile`). The switch is **container-width based, not viewport-based** — side panels opened on desktop (effects overview, AI chat, cue slot overview) that squeeze the runner below the threshold also flip the view. The `useNarrowContainer` hook observes the runner container and `RunPage` conditionally renders the mobile or desktop subtree; only one tree is mounted at a time.
 
 **Layout (top → bottom):**
 
@@ -320,7 +352,7 @@ When the Run tab's container width drops below **600 px**, the runner swaps from
 
 **Prerequisite**: `viewport-fit=cover` is set in `index.html` so `env(safe-area-inset-bottom)` resolves correctly on iOS; without it the footer would not clear the home indicator.
 
-**Not migrated to mobile**: the OOO (out-of-order) banner, the 7-column cue list (use `MobileCueListSheet` instead), the horizontal show entry strip (use `StackPickerSheet`). Program tab has no mobile treatment yet — editing flows remain desktop-first.
+**Not migrated to mobile**: the OOO (out-of-order) banner, the 7-column cue list (use `MobileCueListSheet` instead), the horizontal show entry strip (use `StackPickerSheet`). The Program view has no mobile treatment yet — editing flows remain desktop-first.
 
 ## Playback Flow
 
@@ -360,13 +392,23 @@ When a cue has `autoAdvance: true`:
 ## Show Activation
 
 ### Lifecycle
-1. **Show not active** (`show.activeEntryId == null`): the user lands on the Program tab with the show overview visible. The "Start Show" button (in `ShowOverview`) calls `/activate`, which jumps the UI to Run mode.
-2. **Show active**: header shows green dot + "Stop" button. Mode switcher toggles `?mode=program|run`.
-3. **Stop / Deactivate**: calls backend `/deactivate`. The server clears `activeEntryId` and broadcasts; the show data refetch updates `isShowActive`.
-4. **Activate**: backend short-circuits if already active (no cue stack reset on repeat activates). On first activate, picks the first STACK entry and starts its cue stack at the first STANDARD cue.
+1. **Show not active** (`show.activeEntryId == null`):
+   - Program header shows a Start Show button (disabled when no stacks), body shows the editable overview / drill-in detail.
+   - Run header shows only the breadcrumb; body shows the Start CTA hero.
+   - Clicking Start from either surface calls `POST /project/:id/show/activate`. From Program we additionally navigate to `/run` on success so the operator lands on the runner. From Run we stay on `/run` — the body flips from the CTA to the runner.
+2. **Show active**:
+   - Program header shows a "Go to Run" button (green dot + arrow). Auto-drills into the active stack on mount so editing detours land where the live cue is.
+   - Run header shows the Edit Cue button + green dot + Stop. Body is the runner.
+3. **Stop / Deactivate**: clicking Stop on Run opens a "Stop the show?" confirmation Dialog. On confirm, backend `/deactivate` runs; the server clears `activeEntryId` and broadcasts; the show data refetch updates `isShowActive`. The Run body flips back to the Start CTA hero; the user stays on `/run` and can re-start with one click.
+4. **Activate details**: backend short-circuits if already active (no cue stack reset on repeat activates). On first activate, picks the first STACK entry and starts its cue stack at the first STANDARD cue.
+
+### No-flicker activate / deactivate
+Both `activateShow` and `deactivateShow` mutations use `onQueryStarted` to patch `projectShow` cache (`activeEntryId`) the moment the server responds, before the `invalidatesTags`-triggered refetch completes. This means:
+- Start on Program → navigate to `/run` → RunPage mounts already seeing `isShowActive: true`. The Start CTA never flashes.
+- Stop on Run → body flips to the Start CTA without a transient re-render of the runner with stale state.
 
 ### Initial Load Sync
-The backend is the source of truth. On mount the client fetches the show via `useProjectShowQuery(projectId)`; `isShowActive = show.activeEntryId != null`. A reload lands the user on the same `activeEntryId` and mode as before (entry persisted server-side, mode in the query param).
+The backend is the source of truth. On mount each page fetches the show via `useProjectShowQuery(projectId)`; `isShowActive = show.activeEntryId != null`. A reload on `/run` lands the user on the same `activeEntryId` as before (entry persisted server-side). A reload on `/program` preserves drill state only as component-local state — reloading re-opens the Show Overview, which is fine since drilling is a one-click action.
 
 ## REST API Endpoints
 
@@ -427,7 +469,7 @@ All messages are JSON with a `type` field, received on the shared WebSocket conn
 | `cueListChanged` | (none) | Invalidates `CueList` RTK Query tag |
 
 ### Subscription Pattern
-Each WS API module exposes subscribe methods returning a `{ unsubscribe }` handle. The store layer subscribes globally to invalidate RTK Query tags (e.g. `show.subscribeToEntriesChanged` → invalidate `ShowEntries`). Components subscribe locally for real-time state updates (e.g., `ShowPage` subscribes to `show.subscribeToChanged` to track `activeEntryId`).
+Each WS API module exposes subscribe methods returning a `{ unsubscribe }` handle. The store layer subscribes globally to invalidate RTK Query tags (e.g. `show.subscribeToEntriesChanged` → invalidate `ShowEntries`). Components subscribe locally for real-time state updates (e.g., `RunPage` subscribes to `show.subscribeToChanged` to track `activeEntryId`).
 
 ## State Management
 
@@ -460,18 +502,23 @@ The `runnerSlice` manages per-stack playback state entirely on the frontend:
 | Decision | Rationale |
 |----------|-----------|
 | Project IS the show (no ShowSession layer) | The 1:N relationship between project and sessions added complexity without practical value — operators treat a project as a show. Entries live directly on the project. |
-| Tabs within `/show`, not separate routes | Shared state (show, stacks, cues) avoids redundant loading; quick context switching during tech runs |
-| Show-driven stack strip (not all-stacks) | Show tab only displays stacks in the show, in order, with marker dividers |
+| Split Program and Run into separate routes | Each surface has a different primary action (Start vs GO). Collapsing them under a single `/show?mode=` route made the running/stopped state hard to read and buried the Start button. Separate sidebar entries make the split obvious and let each view own its own header. |
+| Start on Program and on Run; Stop on Run only | You can kick off from either surface — Program's Start navigates to Run post-activate; Run shows a big Start CTA when inactive so re-starting after a Stop is one click. Stop belongs with the live controls on Run. |
+| Breadcrumb shows drilled stack on Program but not Run | Program's drill state isn't otherwise visible above the StackDetail header — the breadcrumb segment makes it scannable and clickable. Run is always at one stack and the strip / picker already names it, so a breadcrumb segment would just duplicate. |
+| Confirmation Dialog on Stop, immediate Start | Stopping mid-show is destructive (clears active cue, breaks the live performance) — worth a click to guard against fat-finger. Starting is recoverable (Stop is one click away on the same view), so no confirmation. |
+| Edit Cue deep-link from Run | An operator who notices a problem with the live cue should be one click from editing it, not asked to navigate via Program → drill into the active stack → click the cue. Query params (`?stack=&cue=`) keep the link stateless and shareable, then strip on first read. |
+| Auto-drill on Program mount when running | Brings back the tech-run ergonomic from the old mode-toggle world without coupling to any URL state — `initialDrillDoneRef` ensures it fires once per mount so the operator can still escape to Show Overview without being snapped back. |
+| Optimistic patch on activate / deactivate via `onQueryStarted` | `invalidatesTags` triggers a refetch but doesn't update the cache until the refetch completes, leaving a brief window where the page could render the wrong state (e.g. Start CTA after Start click). Patching `activeEntryId` directly on success closes that window. |
+| Show-driven stack strip (not all-stacks) | Run only displays stacks in the show, in order, with marker dividers |
 | Right-side Sheet for cue editing | Matches existing Sheet pattern used throughout the app |
-| Expandable rows in Program tab | Allows the Program tab to eventually replace the FX Cues view |
+| Expandable rows in Program view | Allows the Program view to eventually replace the FX Cues view |
 | BACK never crosses stack boundaries | Intentional safety constraint -- only GO advances between stacks |
 | Show "active" = `activeEntryId != null` | Single source of truth on the project; no separate `isActive` flag to keep in sync |
 | `stackMap` for O(1) lookups | UseMemo'd `Map<number, CueStack>` avoids repeated `.find()` in entry strip and show overview |
-| Auto-drill into active stack on Run → Program | Tech-run ergonomics — operator should not have to re-navigate to the running stack to make a quick edit. Keyed on the explicit Tabs toggle so breadcrumb navigation remains a deliberate "go to top" gesture. |
 | Container-width switch to remote-control view | Responds to the runner's actual available space, not just viewport — side panels on desktop can also trigger the compact layout. Single-tree mount via `useNarrowContainer` rather than CSS `@container` hide/show keeps the DOM lean. |
 
 ## Known Gaps
 
 1. **No script quick-fire panel** -- no way to fire scripts ad-hoc during a show without attaching them to a cue trigger.
 2. **Boundary GO end-to-end** -- `advanceShow` has only been tested locally; needs full lifecycle verification with the backend.
-3. **Program tab on narrow viewports** -- Show Overview and Stack Detail still use the desktop layout on phone-sized containers; phone-first authoring is a separate effort.
+3. **Program view on narrow viewports** -- Show Overview and Stack Detail still use the desktop layout on phone-sized containers; phone-first authoring is a separate effort.

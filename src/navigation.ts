@@ -10,6 +10,7 @@ import {
   Clapperboard,
   SlidersHorizontal,
   Theater,
+  Play,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { useGetUniverseQuery } from "./store/universes"
@@ -117,12 +118,21 @@ export const navItems: NavItem[] = [
     group: "live",
   },
   {
-    id: "show",
-    label: "Show",
+    id: "program",
+    label: "Program",
     icon: Theater,
-    path: (p) => `/projects/${p}/show`,
+    path: (p) => `/projects/${p}/program`,
     visibility: "active-only",
-    pathMatch: "/show",
+    pathMatch: "/program",
+    group: "live",
+  },
+  {
+    id: "run",
+    label: "Run",
+    icon: Play,
+    path: (p) => `/projects/${p}/run`,
+    visibility: "active-only",
+    pathMatch: "/run",
     group: "live",
   },
   {

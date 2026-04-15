@@ -88,6 +88,22 @@ export const showApi = restApi.injectEndpoints({
         url: `project/${projectId}/show/activate`,
         method: 'POST',
       }),
+      // Patch the show cache as soon as the server confirms activation so that
+      // `isShowActive` flips before the refetch triggered by `invalidatesTags`
+      // completes. Avoids a flicker of the Start CTA when navigating from
+      // Program → Run after Start.
+      async onQueryStarted({ projectId }, { dispatch, queryFulfilled }) {
+        try {
+          const { data } = await queryFulfilled
+          dispatch(
+            showApi.util.updateQueryData('projectShow', projectId, (draft) => {
+              draft.activeEntryId = data.activeEntryId
+            }),
+          )
+        } catch {
+          // Mutation failed — nothing to patch
+        }
+      },
       invalidatesTags: (_result, _error, { projectId }) => [
         { type: 'ShowEntries', id: projectId },
         'CueStackList',
@@ -101,6 +117,20 @@ export const showApi = restApi.injectEndpoints({
         url: `project/${projectId}/show/deactivate`,
         method: 'POST',
       }),
+      // Symmetric to activateShow — clear `activeEntryId` immediately on
+      // confirmation so the Start CTA appears without waiting for the refetch.
+      async onQueryStarted({ projectId }, { dispatch, queryFulfilled }) {
+        try {
+          await queryFulfilled
+          dispatch(
+            showApi.util.updateQueryData('projectShow', projectId, (draft) => {
+              draft.activeEntryId = null
+            }),
+          )
+        } catch {
+          // Mutation failed — nothing to patch
+        }
+      },
       invalidatesTags: (_result, _error, { projectId }) => [
         { type: 'ShowEntries', id: projectId },
         'CueStackList',

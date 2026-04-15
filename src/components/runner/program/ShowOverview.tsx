@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { ArrowRight, GripVertical, RotateCcw, X, Plus, SeparatorHorizontal, Play } from 'lucide-react'
+import { ArrowRight, GripVertical, RotateCcw, X, Plus, SeparatorHorizontal } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -204,8 +204,6 @@ interface ShowOverviewProps {
   stacks: CueStack[]
   activeStackId: number | null
   onDrillStack: (stackId: number) => void
-  onSwitchToShow: () => void
-  onActivate: () => void
 }
 
 export function ShowOverview({
@@ -214,8 +212,6 @@ export function ShowOverview({
   stacks,
   activeStackId,
   onDrillStack,
-  onSwitchToShow,
-  onActivate,
 }: ShowOverviewProps) {
   const stackMap = useMemo(() => new Map(stacks.map((s) => [s.id, s])), [stacks])
   const addedStackIds = useMemo(
@@ -228,8 +224,6 @@ export function ShowOverview({
     const s = e.cueStackId != null ? stackMap.get(e.cueStackId) : null
     return n + (s?.cues.filter((c) => c.cueType === 'STANDARD').length ?? 0)
   }, 0)
-
-  const isShowActive = show.activeEntryId != null
 
   // Mutations
   const [addStack] = useAddStackToShowMutation()
@@ -306,20 +300,6 @@ export function ShowOverview({
           <Plus className="size-3.5 mr-1.5" />
           Add Stack
         </Button>
-        {isShowActive ? (
-          <Button size="sm" onClick={onSwitchToShow}>
-            Run <ArrowRight className="size-3.5 ml-1.5" />
-          </Button>
-        ) : (
-          <Button
-            size="sm"
-            onClick={onActivate}
-            disabled={stackEntries.length === 0}
-          >
-            <Play className="size-3.5 mr-1.5" />
-            Start Show
-          </Button>
-        )}
       </div>
 
       {/* Entry list */}
