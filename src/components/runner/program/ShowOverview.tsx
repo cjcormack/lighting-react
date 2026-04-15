@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { ArrowRight, GripVertical, RotateCcw, X, Plus, SeparatorHorizontal } from 'lucide-react'
+import { ArrowRight, GripVertical, RotateCcw, X, Plus, SeparatorHorizontal, Play } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,20 +22,19 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
-  useUpdateShowSessionMutation,
-  useAddStackToSessionMutation,
-  useAddMarkerToSessionMutation,
-  useDeleteShowSessionEntryMutation,
-  useReorderShowSessionEntriesMutation,
-  useUpdateShowSessionEntryMutation,
-} from '@/store/showSessions'
-import type { ShowSessionDetails, ShowSessionEntryDto } from '@/api/showSessionsApi'
+  useAddStackToShowMutation,
+  useAddMarkerToShowMutation,
+  useDeleteShowEntryMutation,
+  useReorderShowEntriesMutation,
+  useUpdateShowEntryMutation,
+} from '@/store/show'
+import type { ShowDetails, ShowEntryDto } from '@/api/showApi'
 import type { CueStack } from '@/api/cueStacksApi'
 
 // ── Sortable STACK entry row ────────────────────────────────────────────────
 
 interface SortableStackEntryProps {
-  entry: ShowSessionEntryDto
+  entry: ShowEntryDto
   index: number
   stack: CueStack | undefined
   isActive: boolean
@@ -123,17 +122,16 @@ function SortableStackEntry({ entry, index, stack, isActive, onDrill, onRemove }
 // ── Sortable MARKER entry row ───────────────────────────────────────────────
 
 interface SortableMarkerEntryProps {
-  entry: ShowSessionEntryDto
+  entry: ShowEntryDto
   projectId: number
-  sessionId: number
   onRemove: (entryId: number) => void
 }
 
-function SortableMarkerEntry({ entry, projectId, sessionId, onRemove }: SortableMarkerEntryProps) {
+function SortableMarkerEntry({ entry, projectId, onRemove }: SortableMarkerEntryProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: entry.id,
   })
-  const [updateEntry] = useUpdateShowSessionEntryMutation()
+  const [updateEntry] = useUpdateShowEntryMutation()
 
   const [localLabel, setLocalLabel] = useState(entry.label ?? '')
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -153,7 +151,7 @@ function SortableMarkerEntry({ entry, projectId, sessionId, onRemove }: Sortable
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
       if (value.trim()) {
-        updateEntry({ projectId, sessionId, entryId: entry.id, label: value.trim() })
+        updateEntry({ projectId, entryId: entry.id, label: value.trim() })
       }
     }, 400)
   }
@@ -198,69 +196,46 @@ function SortableMarkerEntry({ entry, projectId, sessionId, onRemove }: Sortable
   )
 }
 
-// (StackPickerOverlay replaced by Sheet below)
+// ── Main ShowOverview ────────────────────────────────────────────────────────
 
-// ── Main SessionOverview ────────────────────────────────────────────────────
-
-interface SessionOverviewProps {
+interface ShowOverviewProps {
   projectId: number
-  session: ShowSessionDetails
+  show: ShowDetails
   stacks: CueStack[]
   activeStackId: number | null
   onDrillStack: (stackId: number) => void
   onSwitchToShow: () => void
+  onActivate: () => void
 }
 
-export function SessionOverview({
+export function ShowOverview({
   projectId,
-  session,
+  show,
   stacks,
   activeStackId,
   onDrillStack,
   onSwitchToShow,
-}: SessionOverviewProps) {
+  onActivate,
+}: ShowOverviewProps) {
   const stackMap = useMemo(() => new Map(stacks.map((s) => [s.id, s])), [stacks])
   const addedStackIds = useMemo(
-    () => new Set(session.entries.filter((e) => e.entryType === 'STACK' && e.cueStackId != null).map((e) => e.cueStackId!)),
-    [session.entries],
+    () => new Set(show.entries.filter((e) => e.entryType === 'STACK' && e.cueStackId != null).map((e) => e.cueStackId!)),
+    [show.entries],
   )
 
-  const stackEntries = session.entries.filter((e) => e.entryType === 'STACK')
+  const stackEntries = show.entries.filter((e) => e.entryType === 'STACK')
   const totalCues = stackEntries.reduce((n, e) => {
     const s = e.cueStackId != null ? stackMap.get(e.cueStackId) : null
     return n + (s?.cues.filter((c) => c.cueType === 'STANDARD').length ?? 0)
   }, 0)
 
-  // Session name — debounced inline edit
-  const [localName, setLocalName] = useState(session.name)
-  const nameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [updateSession] = useUpdateShowSessionMutation()
-
-  useEffect(() => {
-    setLocalName(session.name)
-  }, [session.name])
-
-  useEffect(() => {
-    return () => {
-      if (nameTimerRef.current) clearTimeout(nameTimerRef.current)
-    }
-  }, [])
-
-  const handleNameChange = (value: string) => {
-    setLocalName(value)
-    if (nameTimerRef.current) clearTimeout(nameTimerRef.current)
-    nameTimerRef.current = setTimeout(() => {
-      if (value.trim()) {
-        updateSession({ projectId, sessionId: session.id, name: value.trim() })
-      }
-    }, 400)
-  }
+  const isShowActive = show.activeEntryId != null
 
   // Mutations
-  const [addStack] = useAddStackToSessionMutation()
-  const [addMarker] = useAddMarkerToSessionMutation()
-  const [deleteEntry] = useDeleteShowSessionEntryMutation()
-  const [reorderEntries] = useReorderShowSessionEntriesMutation()
+  const [addStack] = useAddStackToShowMutation()
+  const [addMarker] = useAddMarkerToShowMutation()
+  const [deleteEntry] = useDeleteShowEntryMutation()
+  const [reorderEntries] = useReorderShowEntriesMutation()
 
   // Stack picker sheet
   const [showStackPicker, setShowStackPicker] = useState(false)
@@ -274,20 +249,20 @@ export function SessionOverview({
 
   const handleAddStack = useCallback(
     (stackId: number) => {
-      addStack({ projectId, sessionId: session.id, cueStackId: stackId })
+      addStack({ projectId, cueStackId: stackId })
     },
-    [addStack, projectId, session.id],
+    [addStack, projectId],
   )
 
   const handleAddMarker = useCallback(() => {
-    addMarker({ projectId, sessionId: session.id, label: 'New Marker' })
-  }, [addMarker, projectId, session.id])
+    addMarker({ projectId, label: 'New Marker' })
+  }, [addMarker, projectId])
 
   const handleRemoveEntry = useCallback(
     (entryId: number) => {
-      deleteEntry({ projectId, sessionId: session.id, entryId })
+      deleteEntry({ projectId, entryId })
     },
-    [deleteEntry, projectId, session.id],
+    [deleteEntry, projectId],
   )
 
   // dnd-kit
@@ -301,30 +276,24 @@ export function SessionOverview({
       const { active, over } = event
       if (!over || active.id === over.id) return
 
-      const oldIndex = session.entries.findIndex((e) => e.id === active.id)
-      const newIndex = session.entries.findIndex((e) => e.id === over.id)
+      const oldIndex = show.entries.findIndex((e) => e.id === active.id)
+      const newIndex = show.entries.findIndex((e) => e.id === over.id)
       if (oldIndex === -1 || newIndex === -1) return
 
-      const reordered = arrayMove(session.entries, oldIndex, newIndex)
+      const reordered = arrayMove(show.entries, oldIndex, newIndex)
       reorderEntries({
         projectId,
-        sessionId: session.id,
         entryIds: reordered.map((e) => e.id),
       })
     },
-    [session, projectId, reorderEntries],
+    [show, projectId, reorderEntries],
   )
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Top bar */}
       <div className="flex items-center h-12 px-4 border-b gap-4 shrink-0">
-        <input
-          className="bg-transparent border-b border-transparent focus:border-primary/50 text-lg font-semibold text-foreground outline-none min-w-[100px] max-w-[260px] transition-colors"
-          value={localName}
-          onChange={(e) => handleNameChange(e.target.value)}
-          onClick={(e) => e.stopPropagation()}
-        />
+        <span className="text-lg font-semibold">Show</span>
         <span className="text-sm text-muted-foreground">
           {stackEntries.length} stacks &middot; {totalCues} cues
         </span>
@@ -337,29 +306,36 @@ export function SessionOverview({
           <Plus className="size-3.5 mr-1.5" />
           Add Stack
         </Button>
-        <Button
-          size="sm"
-          onClick={onSwitchToShow}
-        >
-          Ready to run <ArrowRight className="size-3.5 ml-1.5" />
-        </Button>
+        {isShowActive ? (
+          <Button size="sm" onClick={onSwitchToShow}>
+            Run <ArrowRight className="size-3.5 ml-1.5" />
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            onClick={onActivate}
+            disabled={stackEntries.length === 0}
+          >
+            <Play className="size-3.5 mr-1.5" />
+            Start Show
+          </Button>
+        )}
       </div>
 
       {/* Entry list */}
       <div className="flex-1 overflow-y-auto p-4 space-y-1.5">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext
-            items={session.entries.map((e) => e.id)}
+            items={show.entries.map((e) => e.id)}
             strategy={verticalListSortingStrategy}
           >
-            {session.entries.map((entry, idx) => {
+            {show.entries.map((entry, idx) => {
               if (entry.entryType === 'MARKER') {
                 return (
                   <SortableMarkerEntry
                     key={entry.id}
                     entry={entry}
                     projectId={projectId}
-                    sessionId={session.id}
                     onRemove={handleRemoveEntry}
                   />
                 )
@@ -382,9 +358,9 @@ export function SessionOverview({
           </SortableContext>
         </DndContext>
 
-        {session.entries.length === 0 && (
+        {show.entries.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
-            <p className="text-sm">No stacks in this session yet.</p>
+            <p className="text-sm">No stacks in this show yet.</p>
             <Button variant="outline" size="sm" onClick={() => setShowStackPicker(true)}>
               <Plus className="size-3.5 mr-1.5" />
               Add a Stack
@@ -400,7 +376,7 @@ export function SessionOverview({
       }}>
         <SheetContent className="flex flex-col sm:max-w-[380px]">
           <SheetHeader>
-            <SheetTitle>Add Stack to Session</SheetTitle>
+            <SheetTitle>Add Stack to Show</SheetTitle>
           </SheetHeader>
           <div className="px-4 shrink-0">
             <Input

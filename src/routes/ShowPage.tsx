@@ -21,15 +21,14 @@ import {
   useCreateProjectCueMutation,
 } from '../store/cues'
 import {
-  useProjectShowSessionListQuery,
-  useCreateShowSessionMutation,
-  useActivateShowSessionMutation,
-  useDeactivateShowSessionMutation,
-  useAdvanceShowSessionMutation,
-  useGoToShowSessionEntryMutation,
-} from '../store/showSessions'
+  useProjectShowQuery,
+  useActivateShowMutation,
+  useDeactivateShowMutation,
+  useAdvanceShowMutation,
+  useGoToShowEntryMutation,
+} from '../store/show'
 import type { CueInput, Cue } from '../api/cuesApi'
-import type { ShowSessionEntryDto } from '../api/showSessionsApi'
+import type { ShowEntryDto } from '../api/showApi'
 import { useFxStateQuery } from '../store/fx'
 import { lightingApi } from '../api/lightingApi'
 import {
@@ -50,7 +49,6 @@ import {
 } from '../components/runner/OutOfOrderBanner'
 import { CueForm } from '../components/cues/CueForm'
 import { ProgramView } from '../components/runner/program/ProgramView'
-import { SessionPicker } from '../components/runner/SessionPicker'
 import {
   ShowRunnerMobile,
   type RunnerDisplayState,
@@ -91,18 +89,9 @@ export function LegacyCueStackRedirect() {
   return <Navigate to={`/projects/${projectId}/show`} replace />
 }
 
-// Redirect: /projects/:id/show/sessions/:sessionId/(program|run) → /projects/:id/show?mode=(program|run)
-// The active session is server-tracked now, so old bookmarked session ids are dropped.
-export function LegacyShowSessionRedirect() {
-  const { projectId } = useParams()
-  const location = useLocation()
-  const mode = location.pathname.endsWith('/run') ? 'run' : 'program'
-  return <Navigate to={`/projects/${projectId}/show?mode=${mode}`} replace />
-}
-
 type ShowMode = 'program' | 'run'
 
-// Main route component — active session is server-tracked, mode is a query param
+// Main route component — show entries belong to the project directly; mode is a query param
 export function ShowPage() {
   const { projectId } = useParams()
   const projectIdNum = Number(projectId)
@@ -116,21 +105,18 @@ export function ShowPage() {
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
   const { data: stacks, isLoading: stacksLoading } = useProjectCueStackListQuery(projectIdNum)
   const { data: fxState } = useFxStateQuery()
-  const { data: sessions } = useProjectShowSessionListQuery(projectIdNum)
+  const { data: show } = useProjectShowQuery(projectIdNum)
 
-  // Session-driven active stack — activeEntryId drives which stack is active
+  // Show is active when the project has an activeEntryId set
+  const isShowActive = show?.activeEntryId != null
+
+  // Active entry drives which stack is active
   const [activeEntryId, setActiveEntryId] = useState<number | null>(null)
   const [drillStackId, setDrillStackId] = useState<number | null>(null)
 
-  // Derive active session from server state (isActive flag)
-  const activeSession = useMemo(
-    () => sessions?.find((s) => s.isActive),
-    [sessions],
-  )
-
-  const activeEntry: ShowSessionEntryDto | undefined = useMemo(
-    () => activeSession?.entries.find((e) => e.id === activeEntryId),
-    [activeSession, activeEntryId],
+  const activeEntry: ShowEntryDto | undefined = useMemo(
+    () => show?.entries.find((e) => e.id === activeEntryId),
+    [show, activeEntryId],
   )
   const activeStackId = activeEntry?.cueStackId ?? null
 
@@ -161,42 +147,37 @@ export function ShowPage() {
   const [createCue] = useCreateProjectCueMutation()
   const [fetchCue] = useLazyProjectCueQuery()
 
-  // Session mutations
-  const [createSession] = useCreateShowSessionMutation()
-  const [activateSessionMut] = useActivateShowSessionMutation()
-  const [deactivateSessionMut] = useDeactivateShowSessionMutation()
-  const [advanceSession] = useAdvanceShowSessionMutation()
-  const [goToEntry] = useGoToShowSessionEntryMutation()
+  // Show mutations
+  const [activateShow] = useActivateShowMutation()
+  const [deactivateShow] = useDeactivateShowMutation()
+  const [advanceShow] = useAdvanceShowMutation()
+  const [goToEntry] = useGoToShowEntryMutation()
 
-  // Sync activeEntryId from session state on initial load / session change
+  // Bootstrap activeEntryId from server show state on mount / project switch / refetch.
+  // The WS subscription below provides lower-latency updates between refetches; this
+  // effect handles initial load and ensures we re-sync if the refetched data disagrees.
+  // When the show isn't running yet, default to the first STACK so the user can still
+  // drill into a stack via the tab strip in run mode.
   useEffect(() => {
-    if (!activeSession) {
+    if (!show) {
       setActiveEntryId(null)
       return
     }
-    if (activeSession.activeEntryId != null) {
-      setActiveEntryId(activeSession.activeEntryId)
-    } else {
-      const first = activeSession.entries.find((e) => e.entryType === 'STACK')
-      setActiveEntryId(first?.id ?? null)
-    }
-    // Only re-run when the active session identity changes
+    const next = show.activeEntryId
+      ?? show.entries.find((e) => e.entryType === 'STACK')?.id
+      ?? null
+    setActiveEntryId((prev) => (prev === next ? prev : next))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSession?.id])
+  }, [show?.projectId, show?.activeEntryId])
 
-  // Subscribe to showSessionChanged WS events for real-time activeEntryId updates.
-  // Active-session flips (isActive true/false on a different session) are handled via the
-  // accompanying showSessionListChanged invalidation — the list refetch re-derives
-  // activeSession from the server-authoritative isActive flag.
+  // Live updates between refetches.
   useEffect(() => {
-    const sub = lightingApi.showSessions.subscribeToChanged((event) => {
-      if (activeSession && event.sessionId === activeSession.id && event.isActive) {
-        setActiveEntryId(event.activeEntryId)
-      }
+    const sub = lightingApi.show.subscribeToChanged((event) => {
+      if (event.projectId !== projectIdNum) return
+      setActiveEntryId((prev) => (prev === event.activeEntryId ? prev : event.activeEntryId))
     })
     return () => sub.unsubscribe()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSession?.id])
+  }, [projectIdNum])
 
   const stackMap = useMemo(
     () => new Map(stacks?.map((s) => [s.id, s]) ?? []),
@@ -266,10 +247,10 @@ export function ShowPage() {
 
   // Next STACK entry after current (for boundary hint and GO advance)
   const nextStackEntry = useMemo(() => {
-    if (runner.standbyCueId != null || !activeSession || activeEntryId == null) return null
-    const curIdx = activeSession.entries.findIndex((e) => e.id === activeEntryId)
-    return activeSession.entries.slice(curIdx + 1).find((e) => e.entryType === 'STACK') ?? null
-  }, [runner.standbyCueId, activeSession, activeEntryId])
+    if (runner.standbyCueId != null || !show || activeEntryId == null) return null
+    const curIdx = show.entries.findIndex((e) => e.id === activeEntryId)
+    return show.entries.slice(curIdx + 1).find((e) => e.entryType === 'STACK') ?? null
+  }, [runner.standbyCueId, show, activeEntryId])
 
   const runnerDisplay: RunnerDisplayState = {
     activeCue,
@@ -285,14 +266,13 @@ export function ShowPage() {
   // GO handler
   const handleGo = useCallback(() => {
     if (runner.standbyCueId == null) {
-      // Boundary GO: advance to next STACK entry in session
-      if (!activeSession || activeEntryId == null) return
-      const curIdx = activeSession.entries.findIndex((e) => e.id === activeEntryId)
-      const nextStack = activeSession.entries.slice(curIdx + 1).find((e) => e.entryType === 'STACK')
+      // Boundary GO: advance to next STACK entry in show
+      if (!show || activeEntryId == null) return
+      const curIdx = show.entries.findIndex((e) => e.id === activeEntryId)
+      const nextStack = show.entries.slice(curIdx + 1).find((e) => e.entryType === 'STACK')
       if (nextStack) {
-        advanceSession({
+        advanceShow({
           projectId: projectIdNum,
-          sessionId: activeSession.id,
           direction: 'FORWARD',
         })
         setActiveEntryId(nextStack.id)
@@ -304,7 +284,7 @@ export function ShowPage() {
     if (activeStackId == null || !stack) return
     dispatch(go({ stackId: activeStackId, cues, loop: stack.loop }))
     fireGo()
-  }, [activeStackId, stack, cues, runner.standbyCueId, dispatch, fireGo, activeSession, activeEntryId, advanceSession, projectIdNum, cancelAnimations])
+  }, [activeStackId, stack, cues, runner.standbyCueId, dispatch, fireGo, show, activeEntryId, advanceShow, projectIdNum, cancelAnimations])
 
   // BACK handler
   const handleBack = useCallback(() => {
@@ -345,25 +325,22 @@ export function ShowPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [handleGo, handleBack, mode])
 
-  // Switch to a session entry (Show tab strip click)
+  // Switch to a show entry (Show tab strip click)
   const handleSwitchToEntry = useCallback(
-    (entry: ShowSessionEntryDto) => {
+    (entry: ShowEntryDto) => {
       if (entry.entryType !== 'STACK' || entry.cueStackId == null) return
       if (activeStackId != null && stack?.activeCueId != null) {
         deactivateCueStack({ projectId: projectIdNum, stackId: activeStackId })
       }
-      if (activeSession) {
-        goToEntry({
-          projectId: projectIdNum,
-          sessionId: activeSession.id,
-          entryId: entry.id,
-        })
-      }
+      goToEntry({
+        projectId: projectIdNum,
+        entryId: entry.id,
+      })
       setActiveEntryId(entry.id)
       setOooDismissed(false)
       cancelAnimations()
     },
-    [activeStackId, stack, activeSession, projectIdNum, deactivateCueStack, goToEntry, cancelAnimations],
+    [activeStackId, stack, projectIdNum, deactivateCueStack, goToEntry, cancelAnimations],
   )
 
   const handleDrillStack = useCallback(
@@ -390,49 +367,28 @@ export function ShowPage() {
     setOooDismissed(false)
   }, [activeStackId, projectIdNum, sortByCueNumber])
 
-  // ── Session management handlers — backend is authoritative for isActive ──
+  // ── Show activation handlers — project is the show ──
 
-  const handleCreateSession = useCallback(async (name: string) => {
+  const handleActivateShow = useCallback(() => {
+    activateShow({ projectId: projectIdNum })
+      .unwrap()
+      .then((result) => {
+        setActiveEntryId(result.activeEntryId)
+        // After activating, jump to run mode so the operator can hit GO.
+        setSearchParams({ mode: 'run' })
+      })
+      .catch(() => {
+        // Silently fail
+      })
+  }, [activateShow, projectIdNum, setSearchParams])
+
+  const handleDeactivateShow = useCallback(async () => {
     try {
-      await createSession({ projectId: projectIdNum, name }).unwrap()
-      // Creation does not auto-activate — the user stays on the picker and clicks Activate next.
+      await deactivateShow({ projectId: projectIdNum }).unwrap()
     } catch {
       // Silently fail
     }
-  }, [createSession, projectIdNum])
-
-  const handleActivateSession = useCallback(
-    (sid: number) => {
-      const session = sessions?.find((s) => s.id === sid)
-      setDrillStackId(null)
-      const hasEntries = !!session && session.entries.length > 0
-      // Sessions with entries → run mode; empty sessions → program mode to add stacks.
-      setSearchParams({ mode: hasEntries ? 'run' : 'program' })
-      // If the user clicked the already-active session (picker "Open" button), skip the
-      // mutation — the backend would short-circuit anyway, and avoiding the round-trip
-      // makes the mode switch feel instant.
-      if (session?.isActive) return
-      activateSessionMut({ projectId: projectIdNum, sessionId: sid })
-        .unwrap()
-        .then((result) => setActiveEntryId(result.activeEntryId))
-        .catch(() => {
-          // Fall back to the first STACK entry if the backend round-trip fails.
-          const firstStack = session?.entries.find((e) => e.entryType === 'STACK')
-          setActiveEntryId(firstStack?.id ?? null)
-        })
-    },
-    [sessions, activateSessionMut, projectIdNum, setSearchParams],
-  )
-
-  const handleDeactivateSession = useCallback(async () => {
-    if (!activeSession) return
-    try {
-      await deactivateSessionMut({ projectId: projectIdNum, sessionId: activeSession.id }).unwrap()
-    } catch {
-      // Silently fail
-    }
-    setSearchParams({})
-  }, [activeSession, deactivateSessionMut, projectIdNum, setSearchParams])
+  }, [deactivateShow, projectIdNum])
 
   // ── CueForm sheet handlers ──
 
@@ -514,8 +470,7 @@ export function ShowPage() {
   const drillStack = drillStackId != null ? stackMap.get(drillStackId) : undefined
 
   const breadcrumbExtra = useMemo(() => {
-    if (!activeSession) return undefined
-    const segments = [activeSession.name]
+    const segments: string[] = []
     if (mode === 'program') {
       segments.push('Program')
       if (drillStack) segments.push(drillStack.name)
@@ -523,12 +478,12 @@ export function ShowPage() {
       segments.push('Run')
     }
     return segments
-  }, [activeSession, mode, drillStack])
+  }, [mode, drillStack])
 
   const handleBreadcrumbCurrentPageClick = useCallback(() => {
     // Clicking "Show" in the breadcrumb resets to top-level program view —
     // clear both the mode (defaults to program) and any auto-drilled stack
-    // so the user lands on Session Overview, not whatever they were last viewing.
+    // so the user lands on the show overview, not whatever they were last viewing.
     setSearchParams({})
     setDrillStackId(null)
   }, [setSearchParams])
@@ -536,17 +491,13 @@ export function ShowPage() {
   const handleBreadcrumbExtraClick = useCallback(
     (index: number) => {
       if (index === 0) {
-        // Clicked session name — drop the drill and show program overview.
-        setSearchParams({ mode: 'program' })
-        setDrillStackId(null)
-      } else if (index === 1) {
-        // Clicked mode name — already here. In program mode with a stack drilled, step back.
+        // Clicked mode name — in program mode with a stack drilled, step back.
         if (mode === 'program' && drillStackId != null) {
           setDrillStackId(null)
         }
       }
     },
-    [setSearchParams, mode, drillStackId],
+    [mode, drillStackId],
   )
 
   // ── Mode toggle navigation ──
@@ -555,7 +506,7 @@ export function ShowPage() {
     (targetMode: ShowMode) => {
       if (targetMode === mode) return
       // On Run → Program switch, drill into the active stack so the operator
-      // lands on what's running rather than the session overview.
+      // lands on what's running rather than the show overview.
       if (targetMode === 'program' && activeStackId != null) {
         setDrillStackId(activeStackId)
       }
@@ -599,28 +550,11 @@ export function ShowPage() {
     )
   }
 
-  // ── Session picker (no session in URL) ──
-
-  if (!activeSession) {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="px-4 pt-3 pb-2">
-          <Breadcrumbs projectName={project.name} currentPage="Show" />
-        </div>
-        <SessionPicker
-          sessions={sessions}
-          onCreateSession={handleCreateSession}
-          onActivateSession={handleActivateSession}
-        />
-      </div>
-    )
-  }
-
-  // ── Active session view ──
+  // ── Show view (always rendered; the show is the project) ──
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header row: breadcrumbs + mode toggle + session status */}
+      {/* Header row: breadcrumbs + mode toggle + show status */}
       <div className="flex flex-col sm:flex-row sm:items-center p-4 gap-3">
         <div className="flex-1 min-w-0">
           <Breadcrumbs
@@ -641,18 +575,20 @@ export function ShowPage() {
             </TabsList>
           </Tabs>
 
-          {/* Session status */}
-          <div className="flex items-center gap-1.5">
-            <div className="size-1.5 rounded-full bg-green-500" />
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-xs text-muted-foreground hover:text-destructive"
-              onClick={handleDeactivateSession}
-            >
-              Deactivate
-            </Button>
-          </div>
+          {/* Show status */}
+          {isShowActive && (
+            <div className="flex items-center gap-1.5">
+              <div className="size-1.5 rounded-full bg-green-500" />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-muted-foreground hover:text-destructive"
+                onClick={handleDeactivateShow}
+              >
+                Stop
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -665,24 +601,25 @@ export function ShowPage() {
           onDrillStack={handleDrillStack}
           onSwitchToShow={() => handleSwitchMode('run')}
           onOpenCueForm={openCueForm}
-          activeSession={activeSession}
+          show={show}
           activeStackId={activeStackId}
           // Use server-tracked activeCueId so the marker reflects what's
           // currently on stage rather than the transient fade cursor —
           // runner.activeCueId clears after markDone (e.g. SNAP fades).
           activeCueId={stack?.activeCueId ?? null}
+          onActivate={handleActivateShow}
         />
       )}
 
       {/* ═══ Run mode ═══ */}
-      {mode === 'run' && (
+      {mode === 'run' && show && (
         <div
           ref={runnerContainerRef}
           className="flex-1 flex flex-col min-w-0 overflow-hidden"
         >
           {isNarrowRunner ? (
             <ShowRunnerMobile
-              activeSession={activeSession}
+              show={show}
               activeEntryId={activeEntryId}
               stack={stack}
               stackMap={stackMap}
@@ -718,7 +655,7 @@ export function ShowPage() {
               <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
                 {/* Stack tabs + context toggle */}
                 <div className="flex h-12 shrink-0 items-center border-b">
-                  {activeSession.entries.map((entry) => {
+                  {show.entries.map((entry) => {
                     if (entry.entryType === 'MARKER') {
                       return (
                         <div

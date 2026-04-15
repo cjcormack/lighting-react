@@ -14,7 +14,7 @@ import { PresetsRedirect, ProjectFxPresets } from "./routes/FxPresets";
 import { CuesRedirect, CuesBaseRedirect, ProjectCues } from "./routes/Cues";
 import ProjectOverview, { ProjectOverviewRedirect } from "./routes/ProjectOverview";
 import { ProjectPatches, PatchesRedirect } from "./routes/Patches";
-import { ShowPage, ShowRedirect, LegacyCueStackRedirect, LegacyShowSessionRedirect } from "./routes/ShowPage";
+import { ShowPage, ShowRedirect, LegacyCueStackRedirect } from "./routes/ShowPage";
 
 function App() {
   const router = createBrowserRouter([
@@ -118,15 +118,6 @@ function App() {
         {
           path: "projects/:projectId/show",
           element: <ShowPage />,
-        },
-        // Legacy: drop session id and turn the mode segment into ?mode=… so old bookmarks still land somewhere.
-        {
-          path: "projects/:projectId/show/sessions/:sessionId/program",
-          element: <LegacyShowSessionRedirect />,
-        },
-        {
-          path: "projects/:projectId/show/sessions/:sessionId/run",
-          element: <LegacyShowSessionRedirect />,
         },
         {
           path: "show",

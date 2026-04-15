@@ -6,16 +6,16 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
-import type { ShowSessionEntryDto } from '@/api/showSessionsApi'
+import type { ShowEntryDto } from '@/api/showApi'
 import type { CueStack } from '@/api/cueStacksApi'
 
 interface StackPickerSheetProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  entries: ShowSessionEntryDto[]
+  entries: ShowEntryDto[]
   activeEntryId: number | null
   stackMap: Map<number, CueStack>
-  onSwitchToEntry: (entry: ShowSessionEntryDto) => void
+  onSwitchToEntry: (entry: ShowEntryDto) => void
 }
 
 export function StackPickerSheet({
@@ -38,7 +38,7 @@ export function StackPickerSheet({
         <div className="overflow-y-auto">
           {entries.length === 0 ? (
             <div className="p-6 text-center text-sm text-muted-foreground">
-              This session has no stacks yet.
+              This show has no stacks yet.
             </div>
           ) : (
             entries.map((entry) => {

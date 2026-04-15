@@ -2,7 +2,7 @@
 
 Show Mode is the production show programming and playback system. It lives at `/projects/:projectId/show` with a `?mode=program|run` query param, providing both a show assembly surface and a keyboard-driven cue runner.
 
-The **active show session is server-tracked** (`isActive` flag on the backend) and broadcast via WebSocket, so reloads and other browser tabs see the same session automatically — the session id is not encoded in the URL.
+**A project IS a show.** There is no separate ShowSession concept — show entries belong directly to the project. The show is "running" when the project's `activeEntryId` is non-null, broadcast via WebSocket so reloads and other browser tabs see the same state automatically.
 
 ## Design Model: Four Phases of Show Programming
 
@@ -21,7 +21,7 @@ The **FX Cues view** (separate from Show Mode) remains as "back-of-house authori
 
 ## Concepts
 
-**Show Session** -- a named container representing a single show or rehearsal. Contains an ordered list of **entries**, each being either a **STACK** reference (pointing to a cue stack) or a **MARKER** (a visual separator with a label). Only one session is active at a time.
+**Show** -- the project's ordered list of **entries**, each being either a **STACK** reference (pointing to a cue stack) or a **MARKER** (a visual separator with a label). The show is active when the project has an `activeEntryId` set.
 
 **Cue Stack** -- an ordered sequence of cues. Has a `loop` flag (repeat after last cue) and a `palette` (inherited by all cues). Stacks are the playable unit -- the runner steps through one stack at a time.
 
@@ -52,8 +52,8 @@ API Layer          Type definitions + WebSocket subscription factories
 #### API Layer (types + WebSocket)
 | File | Purpose |
 |------|---------|
-| `src/api/showSessionsApi.ts` | Show session types, request/response interfaces |
-| `src/api/showSessionsWsApi.ts` | WebSocket: `showSessionListChanged`, `showSessionChanged` |
+| `src/api/showApi.ts` | Show types, request/response interfaces |
+| `src/api/showWsApi.ts` | WebSocket: `showEntriesChanged`, `showChanged` |
 | `src/api/cueStacksApi.ts` | Cue stack and cue entry types |
 | `src/api/cueStacksWsApi.ts` | WebSocket: `cueStackListChanged` |
 | `src/api/cuesApi.ts` | Full cue types, input types, trigger types |
@@ -63,7 +63,7 @@ API Layer          Type definitions + WebSocket subscription factories
 #### Store Layer (state management)
 | File | Purpose |
 |------|---------|
-| `src/store/showSessions.ts` | RTK Query: session CRUD, entry management, playback control |
+| `src/store/show.ts` | RTK Query: show entry management, activate/deactivate/advance/go-to |
 | `src/store/cueStacks.ts` | RTK Query: stack CRUD, cue reorder, activate/deactivate/advance |
 | `src/store/cues.ts` | RTK Query: cue CRUD |
 | `src/store/runnerSlice.ts` | Redux slice: per-stack runner state (active, standby, progress) |
@@ -71,18 +71,18 @@ API Layer          Type definitions + WebSocket subscription factories
 #### Component Layer (UI)
 | File | Purpose |
 |------|---------|
-| `src/routes/ShowPage.tsx` | Main route: session picker, mode switcher (?mode=program\|run query param), Show tab runner, keyboard handler. `activeSession` is derived from the server `isActive` flag, never from the URL. Run mode swaps to `ShowRunnerMobile` when the runner container width drops below 600px. |
+| `src/routes/ShowPage.tsx` | Main route: mode switcher (?mode=program\|run query param), Show tab runner, keyboard handler. The show data is fetched via `useProjectShowQuery`; "show is active" is derived from `show.activeEntryId != null`. Run mode swaps to `ShowRunnerMobile` when the runner container width drops below 600px. |
 | `src/components/runner/ShowBar.tsx` | Top control bar: DBO, BPM/TAP, cue info, GO/BACK buttons (desktop Run mode) |
 | `src/components/runner/CueRow.tsx` | Cue list row with status icons and fade progress bars (desktop Run mode) |
 | `src/components/runner/MarkerRow.tsx` | Marker separator row (shared desktop + mobile) |
 | `src/components/runner/OutOfOrderBanner.tsx` | Warning when cue numbers are not ascending |
 | `src/components/runner/EditorPanel.tsx` | Inline edit mode UI |
 | `src/components/runner/ShowRunnerMobile.tsx` | Remote-control layout for narrow containers: top strip, active-cue hero, standby card, GO/BACK footer with safe-area padding |
-| `src/components/runner/StackPickerSheet.tsx` | Bottom sheet listing session entries for mobile stack switching |
+| `src/components/runner/StackPickerSheet.tsx` | Bottom sheet listing show entries for mobile stack switching |
 | `src/components/runner/MobileCueListSheet.tsx` | Bottom sheet exposing the full cue list on mobile; tapping a cue opens CueForm |
 | `src/components/runner/MobileCueRow.tsx` | Lean cue row used inside `MobileCueListSheet` (no fixed notes/auto-pill columns) |
-| `src/components/runner/program/ProgramView.tsx` | Program tab: routes between SessionOverview and StackDetail |
-| `src/components/runner/program/SessionOverview.tsx` | Session entry list with drag reorder, stack picker, marker edit |
+| `src/components/runner/program/ProgramView.tsx` | Program tab: routes between ShowOverview and StackDetail |
+| `src/components/runner/program/ShowOverview.tsx` | Show entry list with drag reorder, stack picker, marker edit, Start/Stop button |
 | `src/components/runner/program/StackDetail.tsx` | Cue list within a stack, dnd-kit reorder, add cue/marker |
 | `src/components/runner/program/ProgramCueRow.tsx` | Expandable cue row with CueFxTable, count badges |
 | `src/components/runner/program/ProgramMarkerRow.tsx` | Interactive marker with inline rename/delete |
@@ -92,24 +92,20 @@ API Layer          Type definitions + WebSocket subscription factories
 | `src/lib/cueUtils.ts` | `buildCueInput()` -- converts a Cue to CueInput for mutations |
 
 #### Navigation
-Show is registered in `src/navigation.ts` with `path: /projects/${p}/cue-stacks` and `visibility: "active-only"`.
+Show is registered in `src/navigation.ts` with `path: /projects/${p}/show` and `visibility: "active-only"`.
 
 ## Data Model
 
-### ShowSessionDetails
+### ShowDetails
 ```typescript
-interface ShowSessionDetails {
-  id: number
-  name: string
-  sessionType: string
-  activeEntryId: number | null    // Currently playing entry
-  isActive: boolean               // Server-authoritative: is this the project's active session?
-  entries: ShowSessionEntryDto[]
+interface ShowDetails {
+  projectId: number
+  activeEntryId: number | null    // Currently playing entry; null = show not running
+  entries: ShowEntryDto[]
   canEdit: boolean
-  canDelete: boolean
 }
 
-interface ShowSessionEntryDto {
+interface ShowEntryDto {
   id: number
   entryType: 'STACK' | 'MARKER'
   sortOrder: number
@@ -241,14 +237,13 @@ interface StackRunnerState {
 
 The Program tab is the show assembly surface. It has two levels:
 
-**Session Overview** (`SessionOverview.tsx`) -- shown when a session is active and no stack is drilled into:
-- Inline-editable session name (debounced 400ms)
+**Show Overview** (`ShowOverview.tsx`) -- shown when no stack is drilled into:
 - Ordered entry list with drag-to-reorder (dnd-kit)
 - STACK entries: show cue count, loop/sequential badge, drill chevron, remove button
 - MARKER entries: inline-editable label, remove button
 - "Add Stack" opens a slide-in stack picker overlay with search filtering
 - "Add Marker" appends a new marker entry
-- "Ready to run" button switches to Show tab
+- "Start Show" / "Stop" button toggles `activeEntryId` on the project; "Run →" switches to Show tab while the show is running
 
 **Stack Detail** (`StackDetail.tsx`) -- shown when drilling into a specific stack:
 - Full cue list with drag-to-reorder
@@ -257,17 +252,17 @@ The Program tab is the show assembly surface. It has two levels:
 - Click the row itself to open CueForm sheet for full editing
 - "+ Add Cue" creates a blank cue and opens CueForm
 - "+ Add Separator" creates a MARKER cue
-- Back arrow returns to session overview
+- Back arrow returns to show overview
 
 ### Sync with Run state
 
 Program mode mirrors the runner so the operator can dive in to edit during a tech run without re-navigating:
 
-- **Auto-drill on Run → Program switch.** When the user toggles from Run mode to Program mode via the mode Tabs, `drillStackId` is set to the currently `activeStackId` (the running stack). They land directly in StackDetail rather than on Session Overview. The auto-drill always overrides the previous drill — the running stack is what the operator most likely wants to edit.
-- **"Live" badge on the active stack** in Session Overview — an amber pill with a pulsing dot, plus a left border accent and amber-toned name. Makes the running stack instantly findable when the user explicitly drops back to the overview.
+- **Auto-drill on Run → Program switch.** When the user toggles from Run mode to Program mode via the mode Tabs, `drillStackId` is set to the currently `activeStackId` (the running stack). They land directly in StackDetail rather than on Show Overview. The auto-drill always overrides the previous drill — the running stack is what the operator most likely wants to edit.
+- **"Live" badge on the active stack** in Show Overview — an amber pill with a pulsing dot, plus a left border accent and amber-toned name. Makes the running stack instantly findable when the user explicitly drops back to the overview.
 - **Active-cue marker** in StackDetail — the live cue's row gets the same amber left-border accent used in the runner's `CueRow`, the drag-handle is replaced with the amber `Play` glyph, and the name turns amber-bold. Only the cue currently on stage in the *active* stack is marked; other stacks show no marker even when drilled into.
-- **Escape hatch preserved.** Auto-drill triggers only on the explicit Tabs mode toggle (`handleSwitchMode`). Breadcrumb navigation — clicking "Show" or the session-name crumb — still drops the drill back to Session Overview, giving users a deterministic way out.
-- **Active state derivation.** No new server fields, no new URL params. ShowPage already tracks `activeStackId` (derived from `activeSession.activeEntryId`) and `runner.activeCueId` (per-stack Redux state). Both are passed down through `ProgramView` → `SessionOverview` / `StackDetail` → `SortableStackEntry` / `ProgramCueRow`. The cue marker is gated on `drillStackId === activeStackId` in ProgramView so it never lights up on a non-running stack.
+- **Escape hatch preserved.** Auto-drill triggers only on the explicit Tabs mode toggle (`handleSwitchMode`). Breadcrumb navigation — clicking "Show" still drops the drill back to Show Overview, giving users a deterministic way out.
+- **Active state derivation.** No new server fields, no new URL params. ShowPage already tracks `activeStackId` (derived from `show.activeEntryId`) and `runner.activeCueId` (per-stack Redux state). Both are passed down through `ProgramView` → `ShowOverview` / `StackDetail` → `SortableStackEntry` / `ProgramCueRow`. The cue marker is gated on `drillStackId === activeStackId` in ProgramView so it never lights up on a non-running stack.
 
 ## Show Tab (Runner)
 
@@ -282,8 +277,8 @@ Top control surface with:
 - **BACK** button
 - **GO** button (large, green)
 
-### Session Entry Strip
-Horizontal tab bar mapping `activeSession.entries`:
+### Show Entry Strip
+Horizontal tab bar mapping `show.entries`:
 - STACK entries render as clickable tabs (active state from `activeEntryId`)
 - MARKER entries render as non-interactive dividers (vertical lines + label)
 - Loop indicator icon on looping stacks
@@ -325,7 +320,7 @@ When the Run tab's container width drops below **600 px**, the runner swaps from
 
 **Prerequisite**: `viewport-fit=cover` is set in `index.html` so `env(safe-area-inset-bottom)` resolves correctly on iOS; without it the footer would not clear the home indicator.
 
-**Not migrated to mobile**: the OOO (out-of-order) banner, the 7-column cue list (use `MobileCueListSheet` instead), the horizontal session entry strip (use `StackPickerSheet`). Program tab has no mobile treatment yet — editing flows remain desktop-first.
+**Not migrated to mobile**: the OOO (out-of-order) banner, the 7-column cue list (use `MobileCueListSheet` instead), the horizontal show entry strip (use `StackPickerSheet`). Program tab has no mobile treatment yet — editing flows remain desktop-first.
 
 ## Playback Flow
 
@@ -340,7 +335,7 @@ Keyboard: `Space` | Button: `GO`
 2. **Boundary GO** (standbyCueId is null, end of stack):
    - ShowBar shows `-> {nextStackName}` hint in green
    - Redux: cancels animations, sets `activeEntryId` to next STACK entry
-   - Backend: `POST /show-sessions/{id}/advance` (direction: FORWARD)
+   - Backend: `POST /project/{id}/show/advance` (direction: FORWARD)
    - WS event confirms the entry switch
 
 ### BACK Command
@@ -359,42 +354,36 @@ When a cue has `autoAdvance: true`:
 
 ### Stack Switching (entry strip click)
 1. Deactivates current stack on backend if active
-2. Calls `POST /show-sessions/{id}/go-to` with target entry ID
+2. Calls `POST /project/{id}/show/go-to` with target entry ID
 3. Runner state resets: standby = first cue, completed = empty
 
-## Session Management
+## Show Activation
 
-### Session Lifecycle
-1. **No active session** (`sessions.find(s => s.isActive)` returns nothing): session picker is shown.
-   - Create: inline name input + Create button (autofocused, Enter submits). Creating does not activate — the user then clicks Activate.
-   - Resume: existing sessions listed. Rows with `isActive=true` show an "Active" badge and an "Open" button (just sets `?mode=run`, no server round-trip); other rows show "Activate" (calls `/activate`).
-2. **Active session**: header shows Deactivate button + green dot. Mode switcher toggles `?mode=program|run`.
-3. **Deactivate**: calls backend `/deactivate`. The server clears `isActive` and broadcasts; the list refetch flips `activeSession` to undefined and the picker reappears.
-4. **Activate**: backend transactionally deactivates any sibling sessions in the same project (stopping their cue stacks) before activating the target. A repeat `/activate` on the already-active session is a no-op (no cue stack reset).
+### Lifecycle
+1. **Show not active** (`show.activeEntryId == null`): the user lands on the Program tab with the show overview visible. The "Start Show" button (in `ShowOverview`) calls `/activate`, which jumps the UI to Run mode.
+2. **Show active**: header shows green dot + "Stop" button. Mode switcher toggles `?mode=program|run`.
+3. **Stop / Deactivate**: calls backend `/deactivate`. The server clears `activeEntryId` and broadcasts; the show data refetch updates `isShowActive`.
+4. **Activate**: backend short-circuits if already active (no cue stack reset on repeat activates). On first activate, picks the first STACK entry and starts its cue stack at the first STANDARD cue.
 
 ### Initial Load Sync
-The backend is the source of truth. On mount the client fetches the session list; `activeSession = sessions.find(s => s.isActive)`. There is no URL-based session id and no client-side "last active" heuristic. A reload lands the user on the same active session + mode as before (both persisted — session server-side, mode in the query param).
+The backend is the source of truth. On mount the client fetches the show via `useProjectShowQuery(projectId)`; `isShowActive = show.activeEntryId != null`. A reload lands the user on the same `activeEntryId` and mode as before (entry persisted server-side, mode in the query param).
 
 ## REST API Endpoints
 
-### Show Sessions
+### Show
 ```
-GET    /project/{id}/show-sessions                          List all sessions
-GET    /project/{id}/show-sessions/{sessionId}              Get session details
-POST   /project/{id}/show-sessions                          Create session
-PUT    /project/{id}/show-sessions/{sessionId}              Update name/type
-DELETE /project/{id}/show-sessions/{sessionId}              Delete session
+GET    /project/{id}/show                       Get show state (entries + activeEntryId)
 
-POST   /project/{id}/show-sessions/{sid}/add-stack          Add stack entry
-POST   /project/{id}/show-sessions/{sid}/add-marker         Add marker entry
-PUT    /project/{id}/show-sessions/{sid}/entries/{eid}      Update entry label/order
-DELETE /project/{id}/show-sessions/{sid}/entries/{eid}      Remove entry
-POST   /project/{id}/show-sessions/{sid}/reorder            Reorder entries
+POST   /project/{id}/show/add-stack             Add stack entry
+POST   /project/{id}/show/add-marker            Add marker entry
+PUT    /project/{id}/show/entries/{eid}         Update entry label/order
+DELETE /project/{id}/show/entries/{eid}         Remove entry
+POST   /project/{id}/show/reorder               Reorder entries
 
-POST   /project/{id}/show-sessions/{sid}/activate           Start session playback
-POST   /project/{id}/show-sessions/{sid}/deactivate         Stop session playback
-POST   /project/{id}/show-sessions/{sid}/advance            GO to next/prev stack entry
-POST   /project/{id}/show-sessions/{sid}/go-to              Jump to specific entry
+POST   /project/{id}/show/activate              Start show playback
+POST   /project/{id}/show/deactivate            Stop show playback
+POST   /project/{id}/show/advance               GO to next/prev stack entry
+POST   /project/{id}/show/go-to                 Jump to specific entry
 ```
 
 ### Cue Stacks
@@ -432,19 +421,19 @@ All messages are JSON with a `type` field, received on the shared WebSocket conn
 
 | Message Type | Payload | Effect |
 |-------------|---------|--------|
-| `showSessionListChanged` | (none) | Invalidates `ShowSessionList` RTK Query tag. Fired alongside `showSessionChanged` on every activation/deactivation so `isActive` flips propagate across clients via refetch. |
-| `showSessionChanged` | `sessionId`, `activeEntryId`, `activatedStackId`, `activatedStackName`, `isActive` | Updates `activeEntryId` in real-time via subscription callback. Activating session B while A was active emits one event for A (`isActive: false`) then one for B (`isActive: true`). |
+| `showEntriesChanged` | (none) | Invalidates `ShowEntries` RTK Query tag. Fired on entry CRUD operations (add, remove, reorder, update). |
+| `showChanged` | `projectId`, `activeEntryId`, `activatedStackId`, `activatedStackName` | Fired on any change to `activeEntryId` — activate, deactivate, advance, go-to. When deactivating, entry/stack fields are `null`. |
 | `cueStackListChanged` | (none) | Invalidates `CueStackList` RTK Query tag |
 | `cueListChanged` | (none) | Invalidates `CueList` RTK Query tag |
 
 ### Subscription Pattern
-Each WS API module exposes `subscribe(fn)` which returns a `{ unsubscribe }` handle. The store layer subscribes globally to invalidate RTK Query tags. Components subscribe locally for real-time state updates (e.g., `CueStackRunner` subscribes to `showSessionChanged` to track `activeEntryId`).
+Each WS API module exposes subscribe methods returning a `{ unsubscribe }` handle. The store layer subscribes globally to invalidate RTK Query tags (e.g. `show.subscribeToEntriesChanged` → invalidate `ShowEntries`). Components subscribe locally for real-time state updates (e.g., `ShowPage` subscribes to `show.subscribeToChanged` to track `activeEntryId`).
 
 ## State Management
 
 ### RTK Query Cache
 All CRUD operations go through RTK Query with tag-based cache invalidation:
-- `ShowSessionList` -- invalidated by any session mutation or WS `showSessionListChanged`
+- `ShowEntries` -- invalidated by any show mutation or WS `showEntriesChanged`
 - `CueStackList` -- invalidated by stack mutations or WS `cueStackListChanged`
 - `CueList` -- invalidated by cue mutations or WS `cueListChanged`
 - `FixtureEffects`, `GroupActiveEffects` -- invalidated by playback mutations (activate, advance, deactivate)
@@ -470,18 +459,19 @@ The `runnerSlice` manages per-stack playback state entirely on the frontend:
 
 | Decision | Rationale |
 |----------|-----------|
-| Tabs within `/cue-stacks`, not separate routes | Shared state (session, stacks, cues) avoids redundant loading; quick context switching during tech runs |
-| Session-driven stack strip (not all-stacks) | Show tab only displays stacks in the active session, in session order, with marker dividers |
+| Project IS the show (no ShowSession layer) | The 1:N relationship between project and sessions added complexity without practical value — operators treat a project as a show. Entries live directly on the project. |
+| Tabs within `/show`, not separate routes | Shared state (show, stacks, cues) avoids redundant loading; quick context switching during tech runs |
+| Show-driven stack strip (not all-stacks) | Show tab only displays stacks in the show, in order, with marker dividers |
 | Right-side Sheet for cue editing | Matches existing Sheet pattern used throughout the app |
 | Expandable rows in Program tab | Allows the Program tab to eventually replace the FX Cues view |
 | BACK never crosses stack boundaries | Intentional safety constraint -- only GO advances between stacks |
-| Local `activeSessionId` state | Backend doesn't have an `isActive` field; tracked locally with `activeEntryId != null` heuristic on reload |
-| `stackMap` for O(1) lookups | UseMemo'd `Map<number, CueStack>` avoids repeated `.find()` in entry strip and session overview |
+| Show "active" = `activeEntryId != null` | Single source of truth on the project; no separate `isActive` flag to keep in sync |
+| `stackMap` for O(1) lookups | UseMemo'd `Map<number, CueStack>` avoids repeated `.find()` in entry strip and show overview |
 | Auto-drill into active stack on Run → Program | Tech-run ergonomics — operator should not have to re-navigate to the running stack to make a quick edit. Keyed on the explicit Tabs toggle so breadcrumb navigation remains a deliberate "go to top" gesture. |
 | Container-width switch to remote-control view | Responds to the runner's actual available space, not just viewport — side panels on desktop can also trigger the compact layout. Single-tree mount via `useNarrowContainer` rather than CSS `@container` hide/show keeps the DOM lean. |
 
 ## Known Gaps
 
 1. **No script quick-fire panel** -- no way to fire scripts ad-hoc during a show without attaching them to a cue trigger.
-2. **Boundary GO end-to-end** -- `advanceShowSession` has only been tested locally; needs full lifecycle verification with the backend.
-3. **Program tab on narrow viewports** -- Session Overview and Stack Detail still use the desktop layout on phone-sized containers; phone-first authoring is a separate effort.
+2. **Boundary GO end-to-end** -- `advanceShow` has only been tested locally; needs full lifecycle verification with the backend.
+3. **Program tab on narrow viewports** -- Show Overview and Stack Detail still use the desktop layout on phone-sized containers; phone-first authoring is a separate effort.

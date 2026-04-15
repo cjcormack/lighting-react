@@ -15,13 +15,13 @@ import { cn } from '@/lib/utils'
 import { formatFadeText } from '@/lib/cueUtils'
 import { StackPickerSheet } from './StackPickerSheet'
 import { MobileCueListSheet } from './MobileCueListSheet'
-import type { ShowSessionDetails, ShowSessionEntryDto } from '@/api/showSessionsApi'
+import type { ShowDetails, ShowEntryDto } from '@/api/showApi'
 import type { CueStack, CueStackCueEntry } from '@/api/cueStacksApi'
 
 export interface RunnerDisplayState {
   activeCue: CueStackCueEntry | null
   standbyCue: CueStackCueEntry | null
-  nextStackEntry: ShowSessionEntryDto | null
+  nextStackEntry: ShowEntryDto | null
   fadeProgress: number
   autoProgress: number | null
   activeCueId: number | null
@@ -30,7 +30,7 @@ export interface RunnerDisplayState {
 }
 
 interface ShowRunnerMobileProps {
-  activeSession: ShowSessionDetails
+  show: ShowDetails
   activeEntryId: number | null
   stack: CueStack | undefined
   stackMap: Map<number, CueStack>
@@ -42,13 +42,13 @@ interface ShowRunnerMobileProps {
   onBack: () => void
   onDbo: () => void
   onTap: () => void
-  onSwitchToEntry: (entry: ShowSessionEntryDto) => void
+  onSwitchToEntry: (entry: ShowEntryDto) => void
   onToggleCtx: (val: 'theatre' | 'band') => void
   onOpenCueForm: (stackId: number, cueId: number) => void
 }
 
 export function ShowRunnerMobile({
-  activeSession,
+  show,
   activeEntryId,
   stack,
   stackMap,
@@ -311,7 +311,7 @@ export function ShowRunnerMobile({
       <StackPickerSheet
         open={stackPickerOpen}
         onOpenChange={setStackPickerOpen}
-        entries={activeSession.entries}
+        entries={show.entries}
         activeEntryId={activeEntryId}
         stackMap={stackMap}
         onSwitchToEntry={onSwitchToEntry}

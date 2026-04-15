@@ -2,6 +2,6 @@ import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react"
 
 export const restApi = createApi({
   baseQuery: fetchBaseQuery({ baseUrl: '/api/rest' }),
-  tagTypes: ['Channel', 'Fixture', 'Script', 'Project', 'ProjectList', 'GroupList', 'GroupActiveEffects', 'FixtureEffects', 'FxLibrary', 'FxPreset', 'CueList', 'CueStackList', 'CueSlotList', 'AiConversation', 'Patch', 'UniverseConfig', 'ShowSessionList'],
+  tagTypes: ['Channel', 'Fixture', 'Script', 'Project', 'ProjectList', 'GroupList', 'GroupActiveEffects', 'FixtureEffects', 'FxLibrary', 'FxPreset', 'CueList', 'CueStackList', 'CueSlotList', 'AiConversation', 'Patch', 'UniverseConfig', 'ShowEntries'],
   endpoints: () => ({}),
 })

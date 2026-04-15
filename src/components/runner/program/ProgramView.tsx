@@ -1,8 +1,5 @@
 import { useCallback } from 'react'
-import { ArrowRight, RotateCcw } from 'lucide-react'
 import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import {
   useCreateProjectCueMutation,
   useSaveProjectCueMutation,
@@ -11,9 +8,9 @@ import {
   useRemoveCueFromCueStackMutation,
 } from '@/store/cueStacks'
 import type { CueStack } from '@/api/cueStacksApi'
-import type { ShowSessionDetails } from '@/api/showSessionsApi'
+import type { ShowDetails } from '@/api/showApi'
 import { StackDetail } from './StackDetail'
-import { SessionOverview } from './SessionOverview'
+import { ShowOverview } from './ShowOverview'
 
 interface ProgramViewProps {
   projectId: number
@@ -22,9 +19,10 @@ interface ProgramViewProps {
   onDrillStack: (id: number | null) => void
   onSwitchToShow: () => void
   onOpenCueForm: (stackId: number, cueId: number) => void
-  activeSession?: ShowSessionDetails
+  show?: ShowDetails
   activeStackId: number | null
   activeCueId: number | null
+  onActivate: () => void
 }
 
 export function ProgramView({
@@ -34,9 +32,10 @@ export function ProgramView({
   onDrillStack,
   onSwitchToShow,
   onOpenCueForm,
-  activeSession,
+  show,
   activeStackId,
   activeCueId,
+  onActivate,
 }: ProgramViewProps) {
   const [createCue] = useCreateProjectCueMutation()
   const [removeCueFromStack] = useRemoveCueFromCueStackMutation()
@@ -122,75 +121,24 @@ export function ProgramView({
     )
   }
 
-  // Session overview (replaces stack list when a session is active)
-  if (activeSession) {
+  // Show overview — always visible; the show is always present on a project.
+  if (show) {
     return (
-      <SessionOverview
+      <ShowOverview
         projectId={projectId}
-        session={activeSession}
+        show={show}
         stacks={stacks}
         activeStackId={activeStackId}
         onDrillStack={(id) => onDrillStack(id)}
         onSwitchToShow={onSwitchToShow}
+        onActivate={onActivate}
       />
     )
   }
 
-  // Stack list overview (fallback when no session)
-  const totalCues = stacks.reduce(
-    (n, s) => n + s.cues.filter((c) => c.cueType === 'STANDARD').length,
-    0,
-  )
-
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Top bar */}
-      <div className="flex items-center h-12 px-4 border-b gap-4 shrink-0">
-        <span className="text-lg font-semibold">
-          Cue Stacks
-        </span>
-        <span className="text-sm text-muted-foreground">
-          {stacks.length} stacks &middot; {totalCues} cues
-        </span>
-        <div className="flex-1" />
-        <Button
-          size="sm"
-          onClick={onSwitchToShow}
-        >
-          Ready to run <ArrowRight className="size-3.5 ml-1.5" />
-        </Button>
-      </div>
-
-      {/* Stack list */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-1.5">
-        {stacks.map((stack, idx) => {
-          const cueCount = stack.cues.filter((c) => c.cueType === 'STANDARD').length
-          return (
-            <button
-              key={stack.id}
-              className="flex items-center w-full gap-3 px-4 py-2.5 bg-card border rounded transition-colors hover:bg-muted/30 hover:border-muted-foreground/20 text-left"
-              onClick={() => onDrillStack(stack.id)}
-            >
-              <span className="w-6 text-center font-mono text-xs text-muted-foreground shrink-0">
-                {idx + 1}
-              </span>
-              <span className="flex-1 text-sm font-medium text-foreground">
-                {stack.name}
-              </span>
-              <span className="text-xs text-muted-foreground shrink-0">
-                {cueCount} cues
-              </span>
-              {stack.loop && (
-                <Badge variant="outline" className="text-xs px-1.5 py-0 gap-1">
-                  <RotateCcw className="size-2.5" />
-                  Loop
-                </Badge>
-              )}
-              <ArrowRight className="size-4 text-muted-foreground shrink-0" />
-            </button>
-          )
-        })}
-      </div>
-    </div>
+    <Card className="m-4 p-4 flex items-center justify-center text-muted-foreground">
+      Loading show…
+    </Card>
   )
 }
