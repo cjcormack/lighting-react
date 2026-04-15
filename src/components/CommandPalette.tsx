@@ -12,7 +12,7 @@ import { useProjectListQuery, useCurrentProjectQuery } from "@/store/projects"
 import { useFixtureListQuery, type Fixture } from "@/store/fixtures"
 import { useGroupListQuery } from "@/store/groups"
 import type { GroupSummary } from "@/api/groupsApi"
-import { useNavItems, filterNavItems } from "@/navigation"
+import { useNavItems, useUniverseNavItems, filterNavItems } from "@/navigation"
 import { useViewedProject } from "@/ProjectSwitcher"
 import type { FxTarget } from "@/components/fx/AddEditFxSheet"
 import { useGetParkStateListQuery, useUnparkAllMutation, useUnparkChannelMutation } from "@/store/park"
@@ -134,6 +134,7 @@ export default function CommandPalette({ onConfigureProject, onApplyFx, onParkCh
   const { data: fixtures } = useFixtureListQuery()
   const { data: groups } = useGroupListQuery()
   const allNavItems = useNavItems()
+  const universeNavItems = useUniverseNavItems()
 
   const { data: parkStateList } = useGetParkStateListQuery()
   const [runUnparkAll] = useUnparkAllMutation()
@@ -144,6 +145,7 @@ export default function CommandPalette({ onConfigureProject, onApplyFx, onParkCh
   const viewedProject = useViewedProject()
   const isViewingActiveProject = viewedProject?.id === currentProject?.id
   const visibleItems = filterNavItems(allNavItems, isViewingActiveProject)
+  const visibleUniverseItems = filterNavItems(universeNavItems, isViewingActiveProject)
 
   const activePage = pages[pages.length - 1] ?? "root"
 
@@ -229,7 +231,7 @@ export default function CommandPalette({ onConfigureProject, onApplyFx, onParkCh
             {/* Navigation */}
             {viewedProject && (
               <Command.Group heading="Navigation" className={groupClassName}>
-                {visibleItems.map((item) => (
+                {[...visibleItems, ...visibleUniverseItems].map((item) => (
                   <Command.Item
                     key={item.id}
                     value={item.label}

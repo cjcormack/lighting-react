@@ -1,3 +1,4 @@
+import { useMemo } from "react"
 import {
   TableProperties,
   Braces,
@@ -13,6 +14,8 @@ import {
 import type { LucideIcon } from "lucide-react"
 import { useGetUniverseQuery } from "./store/universes"
 
+export type NavGroup = "setup" | "program" | "live"
+
 export interface NavItem {
   id: string
   label: string
@@ -22,39 +25,21 @@ export interface NavItem {
   visibility: "always" | "active-only" | "inactive-only"
   /** Used to match active state against the current pathname */
   pathMatch: string
+  /** Workflow group this item belongs to; used by the sidebar to insert separators. */
+  group: NavGroup
 }
 
 /**
  * Shared navigation registry consumed by both the sidebar and command palette.
  * When adding a new page/route, add an entry here and it will automatically
  * appear in both the sidebar navigation and the Cmd+K command palette.
+ *
+ * Items are grouped by workflow phase (setup → program → live). The sidebar
+ * renders a thin separator between groups; the order within each group is
+ * preserved as declared below.
  */
 export const navItems: NavItem[] = [
-  {
-    id: "patches",
-    label: "Patch List",
-    icon: TableProperties,
-    path: (p) => `/projects/${p}/patches`,
-    visibility: "always",
-    pathMatch: "/patches",
-  },
-  {
-    id: "scripts",
-    label: "Scripts",
-    icon: Braces,
-    path: (p) => `/projects/${p}/scripts`,
-    visibility: "always",
-    pathMatch: "/scripts",
-  },
-  {
-    id: "fx-library",
-    label: "FX Library",
-    icon: Sparkles,
-    path: (p) => `/projects/${p}/fx-library`,
-    visibility: "always",
-    pathMatch: "/fx-library",
-  },
-
+  // ── Setup ───────────────────────────────────────────────────────────
   {
     id: "fixtures",
     label: "Fixtures",
@@ -62,6 +47,16 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/fixtures`,
     visibility: "active-only",
     pathMatch: "/fixtures",
+    group: "setup",
+  },
+  {
+    id: "patches",
+    label: "Patch List",
+    icon: TableProperties,
+    path: (p) => `/projects/${p}/patches`,
+    visibility: "always",
+    pathMatch: "/patches",
+    group: "setup",
   },
   {
     id: "groups",
@@ -70,22 +65,27 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/groups`,
     visibility: "active-only",
     pathMatch: "/groups",
+    group: "setup",
   },
+
+  // ── Program ─────────────────────────────────────────────────────────
   {
-    id: "fx",
-    label: "FX",
-    icon: AudioWaveform,
-    path: (p) => `/projects/${p}/fx`,
-    visibility: "active-only",
-    pathMatch: "/fx",
-  },
-  {
-    id: "cues",
-    label: "FX Cues",
-    icon: Clapperboard,
-    path: (p) => `/projects/${p}/cues`,
+    id: "scripts",
+    label: "Scripts",
+    icon: Braces,
+    path: (p) => `/projects/${p}/scripts`,
     visibility: "always",
-    pathMatch: "/cues",
+    pathMatch: "/scripts",
+    group: "program",
+  },
+  {
+    id: "fx-library",
+    label: "FX Library",
+    icon: Sparkles,
+    path: (p) => `/projects/${p}/fx-library`,
+    visibility: "always",
+    pathMatch: "/fx-library",
+    group: "program",
   },
   {
     id: "presets",
@@ -94,6 +94,27 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/presets`,
     visibility: "always",
     pathMatch: "/presets",
+    group: "program",
+  },
+  {
+    id: "cues",
+    label: "FX Cues",
+    icon: Clapperboard,
+    path: (p) => `/projects/${p}/cues`,
+    visibility: "always",
+    pathMatch: "/cues",
+    group: "program",
+  },
+
+  // ── Live ────────────────────────────────────────────────────────────
+  {
+    id: "fx",
+    label: "FX",
+    icon: AudioWaveform,
+    path: (p) => `/projects/${p}/fx`,
+    visibility: "active-only",
+    pathMatch: "/fx",
+    group: "live",
   },
   {
     id: "show",
@@ -102,23 +123,46 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/show`,
     visibility: "active-only",
     pathMatch: "/show",
+    group: "live",
+  },
+  {
+    id: "channels",
+    label: "Channels",
+    icon: SlidersHorizontal,
+    path: (p) => `/projects/${p}/channels/0`,
+    visibility: "active-only",
+    pathMatch: "/channels",
+    group: "live",
   },
 ]
 
-/** Returns the full list of nav items including dynamically-discovered universes. */
+/** Returns the static navigation items. Used by the sidebar. */
 export function useNavItems(): NavItem[] {
+  return navItems
+}
+
+/**
+ * Returns per-universe navigation items ("Universe 0", "Universe 1", …).
+ * Only consumed by the Cmd+K command palette so power users can jump
+ * directly to a specific universe; the sidebar shows a single "Channels"
+ * entry instead.
+ */
+export function useUniverseNavItems(): NavItem[] {
   const { data: universes } = useGetUniverseQuery()
 
-  const universeItems: NavItem[] = (universes ?? []).map((universe) => ({
-    id: `universe-${universe}`,
-    label: `Universe ${universe}`,
-    icon: SlidersHorizontal,
-    path: (p: number) => `/projects/${p}/channels/${universe}`,
-    visibility: "active-only" as const,
-    pathMatch: `/channels/${universe}`,
-  }))
-
-  return [...navItems, ...universeItems]
+  return useMemo(
+    () =>
+      (universes ?? []).map((universe) => ({
+        id: `universe-${universe}`,
+        label: `Universe ${universe}`,
+        icon: SlidersHorizontal,
+        path: (p: number) => `/projects/${p}/channels/${universe}`,
+        visibility: "active-only" as const,
+        pathMatch: `/channels/${universe}`,
+        group: "live" as const,
+      })),
+    [universes],
+  )
 }
 
 /** Filter nav items based on whether the viewed project is the active one. */

@@ -28,6 +28,8 @@ import {
   useUnparkChannelMutation,
 } from "../store/park"
 import { useCurrentProjectQuery, useProjectQuery } from "../store/projects"
+import { useGetUniverseQuery } from "../store/universes"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { EditModeProvider, useEditMode } from "@/components/fixtures/EditModeContext"
 import { FixtureDetailModal } from "@/components/groups/FixtureDetailModal"
 import { ChannelValueDialog } from "@/components/ChannelValueDialog"
@@ -287,7 +289,7 @@ export function ProjectChannels() {
 
   return (
     <EditModeProvider>
-      <ProjectChannelsContent projectName={project.name} universe={universeNum} />
+      <ProjectChannelsContent projectId={projectIdNum} projectName={project.name} universe={universeNum} />
     </EditModeProvider>
   )
 }
@@ -317,7 +319,8 @@ function useGridColumns(ref: React.RefObject<HTMLDivElement | null>) {
   return columns
 }
 
-function ProjectChannelsContent({ projectName, universe }: { projectName: string; universe: number }) {
+function ProjectChannelsContent({ projectId, projectName, universe }: { projectId: number; projectName: string; universe: number }) {
+  const navigate = useNavigate()
   const { isEditing, toggleEditing } = useEditMode()
   const [selectedFixtureKey, setSelectedFixtureKey] = useState<string | null>(null)
   const [searchParams] = useSearchParams()
@@ -327,6 +330,7 @@ function ProjectChannelsContent({ projectName, universe }: { projectName: string
   // Lifted queries — single subscription for all mappings and park states
   const { data: parkStateList } = useGetParkStateListQuery()
   const { data: mappingRecord } = useGetChannelMappingListQuery()
+  const { data: universes } = useGetUniverseQuery()
   const [runUnparkChannel] = useUnparkChannelMutation()
 
   const parkedChannelSet = useMemo(
@@ -357,7 +361,7 @@ function ProjectChannelsContent({ projectName, universe }: { projectName: string
     <>
       <Card className="m-4 p-4">
         <div className="flex items-start justify-between gap-2 mb-4">
-          <Breadcrumbs projectName={projectName} universe={universe} />
+          <Breadcrumbs projectName={projectName} />
           <div className="flex items-center gap-2">
             {/* Inline buttons — hidden on narrow viewports */}
             {parkedCount > 0 && (
@@ -459,6 +463,21 @@ function ProjectChannelsContent({ projectName, universe }: { projectName: string
             </DropdownMenu>
           </div>
         </div>
+        {universes && universes.length > 1 && (
+          <Tabs
+            value={String(universe)}
+            onValueChange={(v) => navigate(`/projects/${projectId}/channels/${v}`)}
+            className="mb-4"
+          >
+            <TabsList>
+              {universes.map((u) => (
+                <TabsTrigger key={u} value={String(u)}>
+                  Universe {u}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        )}
         <ChannelGroups
           universe={universe}
           isEditing={isEditing}
@@ -483,7 +502,7 @@ function ProjectChannelsContent({ projectName, universe }: { projectName: string
 }
 
 // Breadcrumbs component
-function Breadcrumbs({ projectName, universe }: { projectName: string; universe: number }) {
+function Breadcrumbs({ projectName }: { projectName: string }) {
   const navigate = useNavigate()
 
   return (
@@ -505,7 +524,7 @@ function Breadcrumbs({ projectName, universe }: { projectName: string; universe:
         </Badge>
       </button>
       <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" />
-      <span className="font-medium">Channels (Universe {universe})</span>
+      <span className="font-medium">Channels</span>
     </nav>
   )
 }
