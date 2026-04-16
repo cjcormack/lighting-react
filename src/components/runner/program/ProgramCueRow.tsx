@@ -11,6 +11,7 @@ import {
   Play,
   Circle,
 } from 'lucide-react'
+import { useMediaQuery, SM_BREAKPOINT } from '@/hooks/useMediaQuery'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { useSortable } from '@dnd-kit/sortable'
@@ -48,6 +49,8 @@ export function ProgramCueRow({
   isStandby = false,
   onOpenCueForm,
 }: ProgramCueRowProps) {
+  const isWide = useMediaQuery(SM_BREAKPOINT)
+  const stopProp = isWide ? (e: React.MouseEvent) => e.stopPropagation() : undefined
   const [expanded, setExpanded] = useState(false)
   const [editMode, setEditMode] = useState(false)
 
@@ -183,7 +186,7 @@ export function ProgramCueRow({
           isActive && 'border-l-green-500 bg-green-500/[0.08]',
           isStandby && !isActive && 'border-l-blue-500 bg-blue-500/[0.06]',
         )}
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => isWide ? setExpanded(!expanded) : onOpenCueForm()}
       >
         {/* Drag handle */}
         <div
@@ -195,17 +198,19 @@ export function ProgramCueRow({
         </div>
 
         {/* Expand/collapse chevron */}
-        <div className="w-8 shrink-0 flex items-center justify-center">
-          {expanded ? (
-            <ChevronDown className="size-4 text-muted-foreground" />
-          ) : (
-            <ChevronRight className="size-4 text-muted-foreground" />
-          )}
-        </div>
+        {isWide && (
+          <div className="w-8 shrink-0 flex items-center justify-center">
+            {expanded ? (
+              <ChevronDown className="size-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="size-4 text-muted-foreground" />
+            )}
+          </div>
+        )}
 
         {/* Q number */}
-        <div className="w-14 px-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-          {fullCue ? (
+        <div className="w-14 px-2 shrink-0" onClick={stopProp}>
+          {fullCue && isWide ? (
             <InlineTextCell
               value={cue.cueNumber}
               onChange={handleCueNumberChange}
@@ -227,8 +232,8 @@ export function ProgramCueRow({
           ) : isStandby ? (
             <Circle className="size-3 fill-blue-500 text-blue-500 shrink-0" />
           ) : null}
-          <div className="min-w-0 flex-1" onClick={(e) => e.stopPropagation()}>
-            {fullCue ? (
+          <div className="min-w-0 flex-1" onClick={stopProp}>
+            {fullCue && isWide ? (
               <InlineTextCell
                 value={cue.name}
                 onChange={handleNameChange}
@@ -244,21 +249,23 @@ export function ProgramCueRow({
         </div>
 
         {/* Fade */}
-        <div className="w-24 px-2 shrink-0 text-right" onClick={(e) => e.stopPropagation()}>
-          {fullCue ? (
-            <InlineEditCell
-              value={cue.fadeDurationMs}
-              onChange={handleFadeChange}
-              format={(ms) => formatFadeText(ms, cue.fadeCurve)}
-              parse={parseMs}
-              placeholder="SNAP"
-              inputPlaceholder="3s, 500ms"
-              className="w-full text-right font-mono text-xs text-muted-foreground"
-            />
-          ) : (
-            <span className="font-mono text-xs text-muted-foreground">{fadeText}</span>
-          )}
-        </div>
+        {isWide && (
+          <div className="w-24 px-2 shrink-0 text-right" onClick={(e) => e.stopPropagation()}>
+            {fullCue ? (
+              <InlineEditCell
+                value={cue.fadeDurationMs}
+                onChange={handleFadeChange}
+                format={(ms) => formatFadeText(ms, cue.fadeCurve)}
+                parse={parseMs}
+                placeholder="SNAP"
+                inputPlaceholder="3s, 500ms"
+                className="w-full text-right font-mono text-xs text-muted-foreground"
+              />
+            ) : (
+              <span className="font-mono text-xs text-muted-foreground">{fadeText}</span>
+            )}
+          </div>
+        )}
 
         {/* Auto pill */}
         <div className="w-12 px-2 shrink-0 text-center">
@@ -273,48 +280,52 @@ export function ProgramCueRow({
         </div>
 
         {/* Count badges */}
-        <div className="flex items-center gap-1 px-2 shrink-0">
-          {paletteSize > 0 && (
-            <Badge variant="outline" className="text-xs px-1.5 py-0 gap-1">
-              <Palette className="size-3" />
-              {paletteSize}
-            </Badge>
-          )}
-          {presetCount > 0 && (
-            <Badge variant="outline" className="text-xs px-1.5 py-0 gap-1">
-              <Bookmark className="size-3" />
-              {presetCount}
-            </Badge>
-          )}
-          {adHocCount > 0 && (
-            <Badge variant="outline" className="text-xs px-1.5 py-0 gap-1">
-              <AudioWaveform className="size-3" />
-              {adHocCount}
-            </Badge>
-          )}
-          {triggerCount > 0 && (
-            <Badge variant="outline" className="text-xs px-1.5 py-0 gap-1">
-              <Zap className="size-3" />
-              {triggerCount}
-            </Badge>
-          )}
-        </div>
+        {isWide && (
+          <div className="flex items-center gap-1 px-2 shrink-0">
+            {paletteSize > 0 && (
+              <Badge variant="outline" className="text-xs px-1.5 py-0 gap-1">
+                <Palette className="size-3" />
+                {paletteSize}
+              </Badge>
+            )}
+            {presetCount > 0 && (
+              <Badge variant="outline" className="text-xs px-1.5 py-0 gap-1">
+                <Bookmark className="size-3" />
+                {presetCount}
+              </Badge>
+            )}
+            {adHocCount > 0 && (
+              <Badge variant="outline" className="text-xs px-1.5 py-0 gap-1">
+                <AudioWaveform className="size-3" />
+                {adHocCount}
+              </Badge>
+            )}
+            {triggerCount > 0 && (
+              <Badge variant="outline" className="text-xs px-1.5 py-0 gap-1">
+                <Zap className="size-3" />
+                {triggerCount}
+              </Badge>
+            )}
+          </div>
+        )}
 
         {/* Edit sheet button */}
-        <button
-          className="size-8 flex items-center justify-center shrink-0 text-muted-foreground hover:text-foreground"
-          onClick={(e) => {
-            e.stopPropagation()
-            onOpenCueForm()
-          }}
-          title="Edit cue"
-        >
-          <Pencil className="size-3.5" />
-        </button>
+        {isWide && (
+          <button
+            className="size-8 flex items-center justify-center shrink-0 text-muted-foreground hover:text-foreground"
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpenCueForm()
+            }}
+            title="Edit cue"
+          >
+            <Pencil className="size-3.5" />
+          </button>
+        )}
       </div>
 
       {/* Expanded FX detail */}
-      {expanded && hasExpandableContent && fullCue && (
+      {isWide && expanded && hasExpandableContent && fullCue && (
         <div className="px-3 pb-3 pt-1 space-y-2 ml-8 bg-accent/30 border-b">
           {/* Edit mode toggle */}
           <div className="flex justify-end">

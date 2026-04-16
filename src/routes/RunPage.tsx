@@ -503,6 +503,16 @@ export function RunPage() {
     [activeStackId, effectiveActiveCueId, runner.standbyCueId, dispatch, openCueDetail],
   )
 
+  /** Mobile cue-list tap: re-queue the cue without opening a detail sheet. */
+  const handleRequeueCue = useCallback(
+    (cueId: number) => {
+      if (activeStackId == null) return
+      if (cueId === effectiveActiveCueId || cueId === runner.standbyCueId) return
+      dispatch(setStandby({ stackId: activeStackId, cueId }))
+    },
+    [activeStackId, effectiveActiveCueId, runner.standbyCueId, dispatch],
+  )
+
   // ── CueForm handlers (mobile cue-list) ──
 
   const openCueForm = useCallback(
@@ -682,7 +692,7 @@ export function RunPage() {
               onTap={handleTap}
               onSwitchToEntry={handleSwitchToEntry}
               onToggleCtx={toggleCtx}
-              onOpenCueForm={openCueForm}
+              onRequeueCue={handleRequeueCue}
             />
           ) : (
             <>
@@ -790,10 +800,11 @@ export function RunPage() {
                     const isActive = cue.id === effectiveActiveCueId
                     const isStandby = cue.id === runner.standbyCueId
                     const isDone = completedSet.has(cue.id)
-                    // During a fade, runner.activeCueId is set (use its progress);
-                    // after markDone it's null and effectiveActiveCueId falls back
-                    // to stack.activeCueId — no progress bars in that case.
-                    const isFading = cue.id === runner.activeCueId
+                    // Show progress bar while fading (runner.activeCueId set) or
+                    // after fade completes (markDone clears activeCueId but
+                    // fadeProgress stays at 1.0 until the next go()).
+                    const isFading = cue.id === runner.activeCueId ||
+                      (cue.id === effectiveActiveCueId && runner.fadeProgress > 0)
                     return (
                       <CueRow
                         key={cue.id}

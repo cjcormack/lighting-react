@@ -122,7 +122,8 @@ export const runnerSlice = createSlice({
         s.completedCueIds.push(action.payload.cueId)
       }
       s.activeCueId = null
-      s.fadeProgress = 0
+      // Keep fadeProgress at its current value (1.0) so the progress bar stays
+      // at 100% until the next go() resets it.
       s.autoProgress = null
     },
 

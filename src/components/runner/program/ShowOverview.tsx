@@ -3,7 +3,14 @@ import { ArrowRight, GripVertical, RotateCcw, X, Plus, SeparatorHorizontal } fro
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
+import { useMediaQuery, SM_BREAKPOINT } from '@/hooks/useMediaQuery'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody } from '@/components/ui/sheet'
 import {
   DndContext,
@@ -38,11 +45,12 @@ interface SortableStackEntryProps {
   index: number
   stack: CueStack | undefined
   isActive: boolean
+  isWide: boolean
   onDrill: (stackId: number) => void
   onRemove: (entryId: number) => void
 }
 
-function SortableStackEntry({ entry, index, stack, isActive, onDrill, onRemove }: SortableStackEntryProps) {
+function SortableStackEntry({ entry, index, stack, isActive, isWide, onDrill, onRemove }: SortableStackEntryProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: entry.id,
   })
@@ -74,12 +82,14 @@ function SortableStackEntry({ entry, index, stack, isActive, onDrill, onRemove }
       >
         <GripVertical className="size-4" />
       </div>
-      <span className="w-6 text-center font-mono text-xs text-muted-foreground shrink-0">
-        {index + 1}
-      </span>
+      {isWide && (
+        <span className="w-6 text-center font-mono text-xs text-muted-foreground shrink-0">
+          {index + 1}
+        </span>
+      )}
       <span
         className={cn(
-          'flex-1 text-sm font-medium text-foreground',
+          'flex-1 text-sm font-medium text-foreground truncate min-w-0',
           isActive && 'text-green-300 font-semibold',
         )}
       >
@@ -88,16 +98,18 @@ function SortableStackEntry({ entry, index, stack, isActive, onDrill, onRemove }
       {isActive && (
         <Badge
           variant="outline"
-          className="text-xs px-1.5 py-0 gap-1 border-green-500/40 text-green-400 bg-green-500/10"
+          className="text-xs px-1.5 py-0 gap-1 border-green-500/40 text-green-400 bg-green-500/10 shrink-0"
         >
           <span className="size-1.5 rounded-full bg-green-400 animate-pulse" />
           Live
         </Badge>
       )}
-      <span className="text-xs text-muted-foreground shrink-0">
-        {cueCount} cues &middot; {stack?.loop ? 'Loop' : 'Sequential'}
-      </span>
-      {stack?.loop && (
+      {isWide && (
+        <span className="text-xs text-muted-foreground shrink-0">
+          {cueCount} cues &middot; {stack?.loop ? 'Loop' : 'Sequential'}
+        </span>
+      )}
+      {isWide && stack?.loop && (
         <Badge variant="outline" className="text-xs px-1.5 py-0 gap-1">
           <RotateCcw className="size-2.5" />
           Loop
@@ -213,6 +225,7 @@ export function ShowOverview({
   activeStackId,
   onDrillStack,
 }: ShowOverviewProps) {
+  const isWide = useMediaQuery(SM_BREAKPOINT)
   const stackMap = useMemo(() => new Map(stacks.map((s) => [s.id, s])), [stacks])
   const addedStackIds = useMemo(
     () => new Set(show.entries.filter((e) => e.entryType === 'STACK' && e.cueStackId != null).map((e) => e.cueStackId!)),
@@ -292,14 +305,30 @@ export function ShowOverview({
           {stackEntries.length} stacks &middot; {totalCues} cues
         </span>
         <div className="flex-1" />
-        <Button variant="outline" size="sm" onClick={handleAddMarker}>
-          <SeparatorHorizontal className="size-3.5 mr-1.5" />
-          Add Marker
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => setShowStackPicker(true)}>
-          <Plus className="size-3.5 mr-1.5" />
-          Add Stack
-        </Button>
+        {isWide ? (
+          <>
+            <Button variant="outline" size="sm" onClick={handleAddMarker}>
+              <SeparatorHorizontal className="size-3.5 mr-1.5" />
+              Add Marker
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setShowStackPicker(true)}>
+              <Plus className="size-3.5 mr-1.5" />
+              Add Stack
+            </Button>
+          </>
+        ) : (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon-sm" aria-label="Add">
+                <Plus className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setShowStackPicker(true)}>Add Stack</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleAddMarker}>Add Marker</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       {/* Entry list */}
@@ -330,6 +359,7 @@ export function ShowOverview({
                   index={idx}
                   stack={stack}
                   isActive={activeStackId !== null && entry.cueStackId === activeStackId}
+                  isWide={isWide}
                   onDrill={onDrillStack}
                   onRemove={handleRemoveEntry}
                 />

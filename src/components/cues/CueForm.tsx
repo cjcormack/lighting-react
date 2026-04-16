@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useMediaQuery, SM_BREAKPOINT } from '@/hooks/useMediaQuery'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -106,6 +107,7 @@ export function CueForm({
   onDuplicate,
   onRemoveFromStack,
 }: CueFormProps) {
+  const isWide = useMediaQuery(SM_BREAKPOINT)
   const { data: library } = useEffectLibraryQuery()
   const { data: presets } = useProjectPresetListQuery(projectId)
 
@@ -691,7 +693,7 @@ export function CueForm({
                     )}
                   </div>
                   <div className="flex gap-2">
-                    {onDuplicate && (
+                    {isWide && onDuplicate && (
                       <Button variant="outline" onClick={onDuplicate} disabled={isSaving}>
                         <Copy className="size-3.5 mr-1.5" />
                         Duplicate

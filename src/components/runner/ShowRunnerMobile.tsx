@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import {
   ArrowLeft,
   ArrowRight,
@@ -44,7 +44,7 @@ interface ShowRunnerMobileProps {
   onTap: () => void
   onSwitchToEntry: (entry: ShowEntryDto) => void
   onToggleCtx: (val: 'theatre' | 'band') => void
-  onOpenCueForm: (stackId: number, cueId: number) => void
+  onRequeueCue: (cueId: number) => void
 }
 
 export function ShowRunnerMobile({
@@ -62,32 +62,20 @@ export function ShowRunnerMobile({
   onTap,
   onSwitchToEntry,
   onToggleCtx,
-  onOpenCueForm,
+  onRequeueCue,
 }: ShowRunnerMobileProps) {
   const cues = stack?.cues ?? []
   const [stackPickerOpen, setStackPickerOpen] = useState(false)
   const [cueListOpen, setCueListOpen] = useState(false)
-  const pendingCueFormTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
-
-  useEffect(() => {
-    return () => clearTimeout(pendingCueFormTimer.current)
-  }, [])
 
   const { activeCue, standbyCue, nextStackEntry, fadeProgress, autoProgress } = display
 
-  // Delay opening CueForm until the cue-list sheet finishes its 300ms close animation
-  // so two Dialogs don't trap focus simultaneously.
   const handleSelectCueFromList = useCallback(
     (cueId: number) => {
-      if (stack == null) return
-      const stackId = stack.id
+      onRequeueCue(cueId)
       setCueListOpen(false)
-      clearTimeout(pendingCueFormTimer.current)
-      pendingCueFormTimer.current = setTimeout(() => {
-        onOpenCueForm(stackId, cueId)
-      }, 320)
     },
-    [stack, onOpenCueForm],
+    [onRequeueCue],
   )
 
   const heroFadeText = activeCue

@@ -99,7 +99,6 @@ export function useRunnerAnimation({
           fadeFrameRef.current = requestAnimationFrame(tick)
         } else {
           fadeFrameRef.current = null
-          dispatch(setFadeProgress({ stackId: sid, progress: 0 }))
           if (autoAdvanceRef.current) {
             startAutoAdvance()
           } else {

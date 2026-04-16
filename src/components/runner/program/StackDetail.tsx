@@ -2,6 +2,13 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { ArrowLeft, Plus, SeparatorHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { useMediaQuery, SM_BREAKPOINT } from '@/hooks/useMediaQuery'
+import {
   DndContext,
   closestCenter,
   KeyboardSensor,
@@ -50,6 +57,7 @@ export function StackDetail({
   onMarkerRename,
   onMarkerDelete,
 }: StackDetailProps) {
+  const isWide = useMediaQuery(SM_BREAKPOINT)
   const { data: presets } = useProjectPresetListQuery(projectId)
   const { data: library } = useEffectLibraryQuery()
   const { data: allCues } = useProjectCueListQuery(projectId)
@@ -104,43 +112,69 @@ export function StackDetail({
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
       <div className="flex items-center h-12 px-4 border-b gap-3 shrink-0">
-        <Button variant="outline" size="sm" onClick={onBack} className="font-bold tracking-wider">
-          <ArrowLeft className="size-3.5 mr-1.5" />
-          Stacks
+        <Button
+          variant="outline"
+          size={isWide ? 'sm' : 'icon-sm'}
+          onClick={onBack}
+          className={isWide ? 'font-bold tracking-wider' : ''}
+          aria-label="Back to stacks"
+        >
+          <ArrowLeft className="size-3.5" />
+          {isWide && <span className="ml-1.5">Stacks</span>}
         </Button>
-        <span className="text-sm font-semibold text-foreground">
+        <span className="text-sm font-semibold text-foreground truncate min-w-0">
           {stack.name}
         </span>
-        <span className="text-xs text-muted-foreground">
+        <span className="text-xs text-muted-foreground shrink-0">
           {standardCount} cues
         </span>
         <div className="flex-1" />
-        <Button variant="outline" size="sm" onClick={onAddCue}>
-          <Plus className="size-3.5 mr-1.5" />
-          Add Cue
-        </Button>
-        <Button variant="outline" size="sm" onClick={onAddMarker}>
-          <SeparatorHorizontal className="size-3.5 mr-1.5" />
-          Separator
-        </Button>
+        {isWide ? (
+          <>
+            <Button variant="outline" size="sm" onClick={onAddCue}>
+              <Plus className="size-3.5 mr-1.5" />
+              Add Cue
+            </Button>
+            <Button variant="outline" size="sm" onClick={onAddMarker}>
+              <SeparatorHorizontal className="size-3.5 mr-1.5" />
+              Separator
+            </Button>
+          </>
+        ) : (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon-sm" aria-label="Add">
+                <Plus className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={onAddCue}>Add Cue</DropdownMenuItem>
+              <DropdownMenuItem onClick={onAddMarker}>Add Separator</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       {/* Column headers */}
       <div className="flex items-center h-10 px-4 border-b shrink-0">
         <div className="w-8 px-2" />
-        <div className="w-8" />
+        {isWide && <div className="w-8" />}
         <div className="w-14 px-2 text-sm font-medium text-foreground">
           Q
         </div>
         <div className="flex-1 px-2 text-sm font-medium text-foreground">
           Name
         </div>
-        <div className="w-24 text-right px-2 text-sm font-medium text-foreground">
-          Fade
-        </div>
-        <div className="w-12 px-2" />
-        <div className="px-2" />
-        <div className="w-8" />
+        {isWide && (
+          <>
+            <div className="w-24 text-right px-2 text-sm font-medium text-foreground">
+              Fade
+            </div>
+            <div className="w-12 px-2" />
+            <div className="px-2" />
+            <div className="w-8" />
+          </>
+        )}
       </div>
 
       {/* Cue list */}

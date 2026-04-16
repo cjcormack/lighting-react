@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react"
 
+export const SM_BREAKPOINT = "(min-width: 640px)"
+
 export function useMediaQuery(query: string): boolean {
   const [matches, setMatches] = useState(() => {
     if (typeof window !== "undefined") {
