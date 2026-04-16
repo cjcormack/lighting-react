@@ -144,6 +144,12 @@ export function RunPage() {
   const listScrollRef = useRef<HTMLDivElement>(null)
   const savedScrollPos = useRef(0)
 
+  // When the user manually switches stacks via the tab strip, we want the
+  // first cue to appear as standby (blue) — not activate it. This ref tells
+  // the resetStack effect to ignore the server's activeCueId on the next
+  // stack change so it starts fresh with standby = first cue.
+  const manualSwitchRef = useRef(false)
+
   const [runnerContainerRef, isNarrowRunner] = useNarrowContainer(MOBILE_RUNNER_THRESHOLD)
 
   const [advanceCueStack] = useAdvanceCueStackMutation()
@@ -181,13 +187,17 @@ export function RunPage() {
 
   const cues = stack?.cues ?? EMPTY_CUES
 
-  // Initialise runner state when the stack changes
+  // Initialise runner state when the stack changes.
+  // On a manual tab switch (manualSwitchRef), skip serverActiveCueId so the
+  // first cue lands as standby rather than being treated as already-active.
   useEffect(() => {
     if (activeStackId != null && cues.length > 0) {
+      const isManualSwitch = manualSwitchRef.current
+      manualSwitchRef.current = false
       dispatch(resetStack({
         stackId: activeStackId,
         cues,
-        serverActiveCueId: stack?.activeCueId,
+        serverActiveCueId: isManualSwitch ? undefined : stack?.activeCueId,
         loop: stack?.loop,
       }))
     }
@@ -374,18 +384,31 @@ export function RunPage() {
   const handleSwitchToEntry = useCallback(
     (entry: ShowEntryDto) => {
       if (entry.entryType !== 'STACK' || entry.cueStackId == null) return
+      if (entry.id === activeEntryId) return // already on this tab
+      manualSwitchRef.current = true
       if (activeStackId != null && stack?.activeCueId != null) {
         deactivateCueStack({ projectId: projectIdNum, stackId: activeStackId })
       }
+      // go-to updates activeEntryId on the server (cross-browser sync) but also
+      // activates the new stack's first cue. Deactivate the new stack afterward
+      // so the cue isn't fired until the operator presses GO.
       goToEntry({
         projectId: projectIdNum,
         entryId: entry.id,
       })
+        .unwrap()
+        .then(() => {
+          deactivateCueStack({ projectId: projectIdNum, stackId: entry.cueStackId! })
+        })
+        .catch(() => {
+          // Silently fail — clear the ref so a stale flag can't leak
+          manualSwitchRef.current = false
+        })
       setActiveEntryId(entry.id)
       setOooDismissed(false)
       cancelAnimations()
     },
-    [activeStackId, stack, projectIdNum, deactivateCueStack, goToEntry, cancelAnimations],
+    [activeEntryId, activeStackId, stack, projectIdNum, deactivateCueStack, goToEntry, cancelAnimations],
   )
 
   const isTheatre = ctxOverride[activeStackId ?? 0] !== 'band'
