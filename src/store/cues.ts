@@ -6,6 +6,7 @@ import { useFxStateQuery } from './fx'
 import type {
   Cue,
   CueInput,
+  CuePatchInput,
   CopyCueRequest,
   CopyCueResponse,
   ApplyCueResponse,
@@ -55,7 +56,22 @@ export const cuesApi = restApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { projectId }) => [
         { type: 'CueList', id: projectId },
-        'CueList',
+        { type: 'CueStackList', id: projectId },
+      ],
+    }),
+
+    patchProjectCue: build.mutation<
+      Cue,
+      { projectId: number; cueId: number } & CuePatchInput
+    >({
+      query: ({ projectId, cueId, ...body }) => ({
+        url: `project/${projectId}/cues/${cueId}`,
+        method: 'PATCH',
+        body,
+      }),
+      invalidatesTags: (_result, _error, { projectId }) => [
+        { type: 'CueList', id: projectId },
+        { type: 'CueStackList', id: projectId },
       ],
     }),
 
@@ -125,6 +141,7 @@ export const {
   useLazyProjectCueQuery,
   useCreateProjectCueMutation,
   useSaveProjectCueMutation,
+  usePatchProjectCueMutation,
   useDeleteProjectCueMutation,
   useCopyCueMutation,
   useApplyCueMutation,

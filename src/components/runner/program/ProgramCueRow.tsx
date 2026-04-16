@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   GripVertical,
   ChevronDown,
@@ -19,13 +19,11 @@ import { CueFxTable } from '@/components/cues/CueFxTable'
 import { InlineTextCell } from '@/components/cues/InlineTextCell'
 import { InlineEditCell, parseMs } from '@/components/cues/InlineEditCell'
 import { buildCueInput, formatFadeText } from '@/lib/cueUtils'
-import { useSaveProjectCueMutation } from '@/store/cues'
-import type { Cue, CueInput } from '@/api/cuesApi'
+import { usePatchProjectCueMutation } from '@/store/cues'
+import type { Cue } from '@/api/cuesApi'
 import type { CueStackCueEntry } from '@/api/cueStacksApi'
 import type { FxPreset } from '@/api/fxPresetsApi'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
-
-const SAVE_DEBOUNCE_MS = 300
 
 interface ProgramCueRowProps {
   cue: CueStackCueEntry
@@ -96,107 +94,84 @@ export function ProgramCueRow({
   )
 
   // ── Inline editing ──
-  const [saveCue] = useSaveProjectCueMutation()
-  const pendingInputs = useRef<Map<number, CueInput>>(new Map())
-  const saveTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map())
-
-  // Clean up pending debounce timers on unmount
-  useEffect(() => {
-    return () => {
-      saveTimers.current.forEach((t) => clearTimeout(t))
-    }
-  }, [])
-
-  /** Get or create a pending CueInput snapshot, then schedule a debounced save. */
-  const mutatePendingAndSave = useCallback(
-    (mutate: (input: CueInput) => void) => {
-      if (!fullCue) return
-
-      let input = pendingInputs.current.get(cue.id)
-      if (!input) {
-        input = buildCueInput(fullCue)
-        pendingInputs.current.set(cue.id, input)
-      }
-
-      mutate(input)
-
-      const existing = saveTimers.current.get(cue.id)
-      if (existing) clearTimeout(existing)
-      saveTimers.current.set(
-        cue.id,
-        setTimeout(() => {
-          saveTimers.current.delete(cue.id)
-          const pending = pendingInputs.current.get(cue.id)
-          if (pending) {
-            pendingInputs.current.delete(cue.id)
-            saveCue({ projectId, cueId: cue.id, ...pending })
-          }
-        }, SAVE_DEBOUNCE_MS),
-      )
-    },
-    [fullCue, cue.id, projectId, saveCue],
-  )
+  // All inline edits use PATCH — only the changed fields are sent, avoiding race
+  // conditions where a stale snapshot overwrites a concurrent edit.
+  const [patchCue] = usePatchProjectCueMutation()
 
   const handleInlineTimingChange = useCallback(
     (variant: 'presets' | 'effects' | 'triggers', itemIndex: number, field: string, value: number | null) => {
-      mutatePendingAndSave((input) => {
-        if (variant === 'presets' && input.presetApplications[itemIndex]) {
-          const pa = input.presetApplications[itemIndex]
-          if (field === 'delayMs') pa.delayMs = value
-          else if (field === 'intervalMs') pa.intervalMs = value
-          else if (field === 'randomWindowMs') pa.randomWindowMs = value
-        } else if (variant === 'effects' && input.adHocEffects[itemIndex]) {
-          const eff = input.adHocEffects[itemIndex]
-          if (field === 'delayMs') eff.delayMs = value
-          else if (field === 'intervalMs') eff.intervalMs = value
-          else if (field === 'randomWindowMs') eff.randomWindowMs = value
-          else if (field === 'beatDivision' && value != null) eff.beatDivision = value
-        } else if (variant === 'triggers' && input.triggers?.[itemIndex]) {
-          const t = input.triggers[itemIndex]
-          if (field === 'delayMs') t.delayMs = value
-          else if (field === 'intervalMs') t.intervalMs = value
-          else if (field === 'randomWindowMs') t.randomWindowMs = value
-        }
-      })
+      if (!fullCue) return
+
+      if (variant === 'presets') {
+        const arr = buildCueInput(fullCue).presetApplications
+        if (!arr[itemIndex]) return
+        const pa = arr[itemIndex]
+        if (field === 'delayMs') pa.delayMs = value
+        else if (field === 'intervalMs') pa.intervalMs = value
+        else if (field === 'randomWindowMs') pa.randomWindowMs = value
+        patchCue({ projectId, cueId: cue.id, presetApplications: arr })
+      } else if (variant === 'effects') {
+        const arr = buildCueInput(fullCue).adHocEffects
+        if (!arr[itemIndex]) return
+        const eff = arr[itemIndex]
+        if (field === 'delayMs') eff.delayMs = value
+        else if (field === 'intervalMs') eff.intervalMs = value
+        else if (field === 'randomWindowMs') eff.randomWindowMs = value
+        else if (field === 'beatDivision' && value != null) eff.beatDivision = value
+        patchCue({ projectId, cueId: cue.id, adHocEffects: arr })
+      } else if (variant === 'triggers') {
+        const arr = buildCueInput(fullCue).triggers
+        if (!arr?.[itemIndex]) return
+        const t = arr[itemIndex]
+        if (field === 'delayMs') t.delayMs = value
+        else if (field === 'intervalMs') t.intervalMs = value
+        else if (field === 'randomWindowMs') t.randomWindowMs = value
+        patchCue({ projectId, cueId: cue.id, triggers: arr })
+      }
     },
-    [mutatePendingAndSave],
+    [fullCue, cue.id, projectId, patchCue],
   )
 
   const handleInlineRemove = useCallback(
-    async (variant: 'presets' | 'effects' | 'triggers', itemIndex: number) => {
+    (variant: 'presets' | 'effects' | 'triggers', itemIndex: number) => {
       if (!fullCue) return
 
-      const input = pendingInputs.current.get(cue.id) ?? buildCueInput(fullCue)
-      pendingInputs.current.delete(cue.id)
-
-      if (variant === 'presets') input.presetApplications.splice(itemIndex, 1)
-      else if (variant === 'effects') input.adHocEffects.splice(itemIndex, 1)
-      else if (variant === 'triggers') input.triggers?.splice(itemIndex, 1)
-
-      saveCue({ projectId, cueId: cue.id, ...input })
+      if (variant === 'presets') {
+        const arr = buildCueInput(fullCue).presetApplications
+        arr.splice(itemIndex, 1)
+        patchCue({ projectId, cueId: cue.id, presetApplications: arr })
+      } else if (variant === 'effects') {
+        const arr = buildCueInput(fullCue).adHocEffects
+        arr.splice(itemIndex, 1)
+        patchCue({ projectId, cueId: cue.id, adHocEffects: arr })
+      } else if (variant === 'triggers') {
+        const arr = buildCueInput(fullCue).triggers
+        arr?.splice(itemIndex, 1)
+        patchCue({ projectId, cueId: cue.id, triggers: arr })
+      }
     },
-    [fullCue, cue.id, projectId, saveCue],
+    [fullCue, cue.id, projectId, patchCue],
   )
 
   const handleCueNumberChange = useCallback(
     (value: string | null) => {
-      mutatePendingAndSave((input) => { input.cueNumber = value })
+      patchCue({ projectId, cueId: cue.id, cueNumber: value })
     },
-    [mutatePendingAndSave],
+    [patchCue, projectId, cue.id],
   )
 
   const handleNameChange = useCallback(
     (value: string | null) => {
-      mutatePendingAndSave((input) => { input.name = value || fullCue?.name || '' })
+      patchCue({ projectId, cueId: cue.id, name: value || fullCue?.name || '' })
     },
-    [mutatePendingAndSave, fullCue?.name],
+    [patchCue, projectId, cue.id, fullCue?.name],
   )
 
   const handleFadeChange = useCallback(
     (value: number | null) => {
-      mutatePendingAndSave((input) => { input.fadeDurationMs = value })
+      patchCue({ projectId, cueId: cue.id, fadeDurationMs: value })
     },
-    [mutatePendingAndSave],
+    [patchCue, projectId, cue.id],
   )
 
   return (

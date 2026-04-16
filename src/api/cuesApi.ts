@@ -111,6 +111,12 @@ export interface CueInput {
   notes?: string | null
 }
 
+// Partial input for PATCH (inline edits — only send changed fields).
+// Excludes palette/updateGlobalPalette/cueStackId/sortOrder which should only change via full PUT.
+export type CuePatchInput = Partial<
+  Omit<CueInput, 'palette' | 'updateGlobalPalette' | 'cueStackId' | 'sortOrder'>
+>
+
 // Copy request/response
 export interface CopyCueRequest {
   targetProjectId: number
