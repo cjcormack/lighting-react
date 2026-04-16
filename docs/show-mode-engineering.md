@@ -89,10 +89,12 @@ API Layer          Type definitions + WebSocket subscription factories
 | `src/components/runner/program/ProgramView.tsx` | Program body: routes between ShowOverview and StackDetail based on `drillStackId` |
 | `src/components/runner/program/ShowOverview.tsx` | Show entry list with drag reorder, stack picker, marker edit. Activation controls live in `ProgramPage`'s header, not here. |
 | `src/components/runner/program/StackDetail.tsx` | Cue list within a stack, dnd-kit reorder, add cue/marker, "Stacks" back button |
-| `src/components/runner/program/ProgramCueRow.tsx` | Expandable cue row with CueFxTable, count badges |
+| `src/components/runner/program/ProgramCueRow.tsx` | Expandable cue row with inline-editable Q/Name/Fade cells, CueFxTable, count badges |
 | `src/components/runner/program/ProgramMarkerRow.tsx` | Interactive marker with inline rename/delete |
 | `src/components/cues/CueForm.tsx` | Cue edit sheet (properties, presets, effects, triggers) |
 | `src/components/cues/CueDetailSheet.tsx` | Read-only cue detail sheet (Run view eye-icon) — lighter companion to CueForm for inspecting a cue's composition without risk of accidental edits |
+| `src/components/cues/InlineEditCell.tsx` | Click-to-edit cell for inline number editing (timing fields, fade duration) |
+| `src/components/cues/InlineTextCell.tsx` | Click-to-edit cell for inline string editing (cue number, cue name) |
 | `src/hooks/useRunnerAnimation.ts` | requestAnimationFrame hook for fade/auto-advance progress |
 | `src/hooks/useNarrowContainer.ts` | ResizeObserver hook that returns `true` while a container's width is below a threshold. Used by `RunPage` to switch between desktop and mobile runner layouts. |
 | `src/lib/cueUtils.ts` | `buildCueInput()` -- converts a Cue to CueInput for mutations |
@@ -258,8 +260,9 @@ The Program view is the show assembly surface. It has two levels:
 **Stack Detail** (`StackDetail.tsx`) -- shown when drilling into a specific stack:
 - Full cue list with drag-to-reorder
 - Each row shows cue number, name, fade info, count badges (presets, effects, triggers)
-- ProgramCueRow expands on chevron click to show CueFxTable inline
-- Click the row itself to open CueForm sheet for full editing
+- **Inline editing**: Q number, Name, and Fade/Snap columns are click-to-edit. Clicking them enters an inline text input; the edit is debounced (300ms) and saved via the full-cue `saveCue` mutation. Active (green) and standby (blue) styling is preserved on the Name cell. The Fade input shows a placeholder hint ("e.g. 3s, 500ms") for supported formats.
+- **Row click expands** the cue to show CueFxTable inline (with optional inline timing editing via pencil toggle). An expand/collapse chevron sits to the left of the Q column (after the drag handle) as a visual affordance.
+- A **pencil icon** on the right side of each row opens the CueForm sheet for full editing
 - "+ Add Cue" creates a blank cue and opens CueForm
 - "+ Add Separator" creates a MARKER cue
 - "Stacks" back button returns to show overview

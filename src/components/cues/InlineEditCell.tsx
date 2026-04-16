@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Input } from '@/components/ui/input'
+import { cn } from '@/lib/utils'
 
 interface InlineEditCellProps {
   value: number | null | undefined
@@ -14,6 +15,10 @@ interface InlineEditCellProps {
   min?: number
   /** Step increment */
   step?: number
+  /** Custom className for the wrapper (default: 'w-[5rem]') */
+  className?: string
+  /** Placeholder shown inside the input when editing (e.g. "3s, 500ms") */
+  inputPlaceholder?: string
 }
 
 /**
@@ -27,6 +32,8 @@ export function InlineEditCell({
   format,
   parse,
   placeholder = '—',
+  className,
+  inputPlaceholder,
 }: InlineEditCellProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
@@ -61,7 +68,7 @@ export function InlineEditCell({
 
   if (editing) {
     return (
-      <div className="w-[5rem]">
+      <div className={cn(className ?? 'w-[5rem]')}>
         <Input
           ref={inputRef}
           type="text"
@@ -69,6 +76,7 @@ export function InlineEditCell({
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commit}
           onKeyDown={handleKeyDown}
+          placeholder={inputPlaceholder}
           className="h-6 text-xs tabular-nums px-1 w-full"
         />
       </div>
@@ -82,7 +90,7 @@ export function InlineEditCell({
   return (
     <button
       type="button"
-      className="w-[5rem] text-xs tabular-nums text-left hover:bg-accent rounded px-1 py-0.5 transition-colors"
+      className={cn(className ?? 'w-[5rem]', 'text-xs tabular-nums text-left hover:bg-accent rounded px-1 py-0.5 transition-colors')}
       onClick={() => {
         setDraft(value != null ? (format ? format(value) : String(value)) : '')
         setEditing(true)

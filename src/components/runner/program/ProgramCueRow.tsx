@@ -13,25 +13,19 @@ import {
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { formatMs } from '@/lib/formatMs'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { CueFxTable } from '@/components/cues/CueFxTable'
-import { buildCueInput } from '@/lib/cueUtils'
+import { InlineTextCell } from '@/components/cues/InlineTextCell'
+import { InlineEditCell, parseMs } from '@/components/cues/InlineEditCell'
+import { buildCueInput, formatFadeText } from '@/lib/cueUtils'
 import { useSaveProjectCueMutation } from '@/store/cues'
 import type { Cue, CueInput } from '@/api/cuesApi'
 import type { CueStackCueEntry } from '@/api/cueStacksApi'
 import type { FxPreset } from '@/api/fxPresetsApi'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
 
-const CURVE_LABELS: Record<string, string> = {
-  LINEAR: 'LIN',
-  EASE_IN_OUT: 'SINE',
-  SINE_IN_OUT: 'SINE',
-  CUBIC_IN_OUT: 'CUB',
-  EASE_IN: '\u2191',
-  EASE_OUT: '\u2193',
-}
+const SAVE_DEBOUNCE_MS = 300
 
 interface ProgramCueRowProps {
   cue: CueStackCueEntry
@@ -90,18 +84,32 @@ export function ProgramCueRow({
     fullCue.triggers.length > 0
   )
 
-  const fadeText =
-    cue.fadeDurationMs != null && cue.fadeDurationMs > 0
-      ? `${formatMs(cue.fadeDurationMs)} ${CURVE_LABELS[cue.fadeCurve] ?? ''}`
-      : 'SNAP'
+  const fadeText = formatFadeText(cue.fadeDurationMs, cue.fadeCurve)
 
-  // ── Inline timing editing ──
+  const nameColorClass = cn(
+    'text-sm font-medium',
+    isActive
+      ? 'text-green-300 font-semibold'
+      : isStandby
+        ? 'text-blue-300 font-semibold'
+        : 'text-foreground',
+  )
+
+  // ── Inline editing ──
   const [saveCue] = useSaveProjectCueMutation()
   const pendingInputs = useRef<Map<number, CueInput>>(new Map())
   const saveTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map())
 
-  const handleInlineTimingChange = useCallback(
-    (variant: 'presets' | 'effects' | 'triggers', itemIndex: number, field: string, value: number | null) => {
+  // Clean up pending debounce timers on unmount
+  useEffect(() => {
+    return () => {
+      saveTimers.current.forEach((t) => clearTimeout(t))
+    }
+  }, [])
+
+  /** Get or create a pending CueInput snapshot, then schedule a debounced save. */
+  const mutatePendingAndSave = useCallback(
+    (mutate: (input: CueInput) => void) => {
       if (!fullCue) return
 
       let input = pendingInputs.current.get(cue.id)
@@ -110,23 +118,7 @@ export function ProgramCueRow({
         pendingInputs.current.set(cue.id, input)
       }
 
-      if (variant === 'presets' && input.presetApplications[itemIndex]) {
-        const pa = input.presetApplications[itemIndex]
-        if (field === 'delayMs') pa.delayMs = value
-        else if (field === 'intervalMs') pa.intervalMs = value
-        else if (field === 'randomWindowMs') pa.randomWindowMs = value
-      } else if (variant === 'effects' && input.adHocEffects[itemIndex]) {
-        const eff = input.adHocEffects[itemIndex]
-        if (field === 'delayMs') eff.delayMs = value
-        else if (field === 'intervalMs') eff.intervalMs = value
-        else if (field === 'randomWindowMs') eff.randomWindowMs = value
-        else if (field === 'beatDivision' && value != null) eff.beatDivision = value
-      } else if (variant === 'triggers' && input.triggers?.[itemIndex]) {
-        const t = input.triggers[itemIndex]
-        if (field === 'delayMs') t.delayMs = value
-        else if (field === 'intervalMs') t.intervalMs = value
-        else if (field === 'randomWindowMs') t.randomWindowMs = value
-      }
+      mutate(input)
 
       const existing = saveTimers.current.get(cue.id)
       if (existing) clearTimeout(existing)
@@ -139,10 +131,35 @@ export function ProgramCueRow({
             pendingInputs.current.delete(cue.id)
             saveCue({ projectId, cueId: cue.id, ...pending })
           }
-        }, 300),
+        }, SAVE_DEBOUNCE_MS),
       )
     },
     [fullCue, cue.id, projectId, saveCue],
+  )
+
+  const handleInlineTimingChange = useCallback(
+    (variant: 'presets' | 'effects' | 'triggers', itemIndex: number, field: string, value: number | null) => {
+      mutatePendingAndSave((input) => {
+        if (variant === 'presets' && input.presetApplications[itemIndex]) {
+          const pa = input.presetApplications[itemIndex]
+          if (field === 'delayMs') pa.delayMs = value
+          else if (field === 'intervalMs') pa.intervalMs = value
+          else if (field === 'randomWindowMs') pa.randomWindowMs = value
+        } else if (variant === 'effects' && input.adHocEffects[itemIndex]) {
+          const eff = input.adHocEffects[itemIndex]
+          if (field === 'delayMs') eff.delayMs = value
+          else if (field === 'intervalMs') eff.intervalMs = value
+          else if (field === 'randomWindowMs') eff.randomWindowMs = value
+          else if (field === 'beatDivision' && value != null) eff.beatDivision = value
+        } else if (variant === 'triggers' && input.triggers?.[itemIndex]) {
+          const t = input.triggers[itemIndex]
+          if (field === 'delayMs') t.delayMs = value
+          else if (field === 'intervalMs') t.intervalMs = value
+          else if (field === 'randomWindowMs') t.randomWindowMs = value
+        }
+      })
+    },
+    [mutatePendingAndSave],
   )
 
   const handleInlineRemove = useCallback(
@@ -161,6 +178,27 @@ export function ProgramCueRow({
     [fullCue, cue.id, projectId, saveCue],
   )
 
+  const handleCueNumberChange = useCallback(
+    (value: string | null) => {
+      mutatePendingAndSave((input) => { input.cueNumber = value })
+    },
+    [mutatePendingAndSave],
+  )
+
+  const handleNameChange = useCallback(
+    (value: string | null) => {
+      mutatePendingAndSave((input) => { input.name = value || fullCue?.name || '' })
+    },
+    [mutatePendingAndSave, fullCue?.name],
+  )
+
+  const handleFadeChange = useCallback(
+    (value: number | null) => {
+      mutatePendingAndSave((input) => { input.fadeDurationMs = value })
+    },
+    [mutatePendingAndSave],
+  )
+
   return (
     <div ref={setNodeRef} style={sortableStyle} {...attributes} data-cue-row={cue.id}>
       <div
@@ -170,7 +208,7 @@ export function ProgramCueRow({
           isActive && 'border-l-green-500 bg-green-500/[0.08]',
           isStandby && !isActive && 'border-l-blue-500 bg-blue-500/[0.06]',
         )}
-        onClick={onOpenCueForm}
+        onClick={() => setExpanded(!expanded)}
       >
         {/* Drag handle */}
         <div
@@ -181,9 +219,30 @@ export function ProgramCueRow({
           <GripVertical className="size-4" />
         </div>
 
+        {/* Expand/collapse chevron */}
+        <div className="w-8 shrink-0 flex items-center justify-center">
+          {expanded ? (
+            <ChevronDown className="size-4 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="size-4 text-muted-foreground" />
+          )}
+        </div>
+
         {/* Q number */}
-        <div className="w-14 px-2 shrink-0 font-mono text-xs text-muted-foreground">
-          {cue.cueNumber ? `Q${cue.cueNumber}` : '\u2014'}
+        <div className="w-14 px-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+          {fullCue ? (
+            <InlineTextCell
+              value={cue.cueNumber}
+              onChange={handleCueNumberChange}
+              prefix="Q"
+              placeholder="—"
+              className="font-mono text-xs text-muted-foreground"
+            />
+          ) : (
+            <span className="font-mono text-xs text-muted-foreground">
+              {cue.cueNumber ? `Q${cue.cueNumber}` : '\u2014'}
+            </span>
+          )}
         </div>
 
         {/* Name (with live/next indicator) */}
@@ -193,23 +252,37 @@ export function ProgramCueRow({
           ) : isStandby ? (
             <Circle className="size-3 fill-blue-500 text-blue-500 shrink-0" />
           ) : null}
-          <span
-            className={cn(
-              'text-sm font-medium truncate',
-              isActive
-                ? 'text-green-300 font-semibold'
-                : isStandby
-                  ? 'text-blue-300 font-semibold'
-                  : 'text-foreground',
+          <div className="min-w-0 flex-1" onClick={(e) => e.stopPropagation()}>
+            {fullCue ? (
+              <InlineTextCell
+                value={cue.name}
+                onChange={handleNameChange}
+                placeholder="Untitled"
+                className={nameColorClass}
+              />
+            ) : (
+              <span className={cn(nameColorClass, 'truncate')}>
+                {cue.name}
+              </span>
             )}
-          >
-            {cue.name}
-          </span>
+          </div>
         </div>
 
         {/* Fade */}
-        <div className="w-24 px-2 shrink-0 text-right font-mono text-xs text-muted-foreground">
-          {fadeText}
+        <div className="w-24 px-2 shrink-0 text-right" onClick={(e) => e.stopPropagation()}>
+          {fullCue ? (
+            <InlineEditCell
+              value={cue.fadeDurationMs}
+              onChange={handleFadeChange}
+              format={(ms) => formatFadeText(ms, cue.fadeCurve)}
+              parse={parseMs}
+              placeholder="SNAP"
+              inputPlaceholder="3s, 500ms"
+              className="w-full text-right font-mono text-xs text-muted-foreground"
+            />
+          ) : (
+            <span className="font-mono text-xs text-muted-foreground">{fadeText}</span>
+          )}
         </div>
 
         {/* Auto pill */}
@@ -252,24 +325,17 @@ export function ProgramCueRow({
           )}
         </div>
 
-        {/* Expand/collapse toggle */}
-        {hasExpandableContent ? (
-          <button
-            className="size-8 flex items-center justify-center shrink-0 text-muted-foreground hover:text-foreground"
-            onClick={(e) => {
-              e.stopPropagation()
-              setExpanded(!expanded)
-            }}
-          >
-            {expanded ? (
-              <ChevronDown className="size-4" />
-            ) : (
-              <ChevronRight className="size-4" />
-            )}
-          </button>
-        ) : (
-          <div className="size-8 shrink-0" />
-        )}
+        {/* Edit sheet button */}
+        <button
+          className="size-8 flex items-center justify-center shrink-0 text-muted-foreground hover:text-foreground"
+          onClick={(e) => {
+            e.stopPropagation()
+            onOpenCueForm()
+          }}
+          title="Edit cue"
+        >
+          <Pencil className="size-3.5" />
+        </button>
       </div>
 
       {/* Expanded FX detail */}

@@ -128,6 +128,7 @@ export function StackDetail({
       {/* Column headers */}
       <div className="flex items-center h-10 px-4 border-b shrink-0">
         <div className="w-8 px-2" />
+        <div className="w-8" />
         <div className="w-14 px-2 text-sm font-medium text-foreground">
           Q
         </div>
@@ -138,7 +139,7 @@ export function StackDetail({
           Fade
         </div>
         <div className="w-12 px-2" />
-        <div className="w-[120px] px-2" />
+        <div className="px-2" />
         <div className="w-8" />
       </div>
 
