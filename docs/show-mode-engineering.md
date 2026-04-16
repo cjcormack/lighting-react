@@ -79,10 +79,9 @@ API Layer          Type definitions + WebSocket subscription factories
 | `src/routes/ProgramPage.tsx` | Route for `/projects/:projectId/program`. Hosts the show assembly surface: breadcrumb (`Program`), header Start Show button (or muted "Show running" chip when active), body = `ProgramView` (ShowOverview / StackDetail) with drill state, shared CueForm sheet. Start Show navigates to `/run` on success. |
 | `src/routes/RunPage.tsx` | Route for `/projects/:projectId/run`. Breadcrumb (`Run`), header Stop button (when active), body = a Start CTA hero when inactive, or the runner when active. The runner swaps to `ShowRunnerMobile` when the runner container width drops below 600px. Owns keyboard handler, runner animation, entry switching, and a CueForm sheet used by the mobile cue-list edit flow. |
 | `src/components/runner/ShowBar.tsx` | Top control bar: DBO, BPM/TAP, cue info, GO/BACK buttons (desktop runner) |
-| `src/components/runner/CueRow.tsx` | Cue list row with status icons and fade progress bars (desktop runner) |
+| `src/components/runner/CueRow.tsx` | Cue list row with status icons, fade progress bars, click-to-requeue, and eye-icon detail view (desktop runner) |
 | `src/components/runner/MarkerRow.tsx` | Marker separator row (shared desktop + mobile) |
 | `src/components/runner/OutOfOrderBanner.tsx` | Warning when cue numbers are not ascending |
-| `src/components/runner/EditorPanel.tsx` | Inline edit mode UI |
 | `src/components/runner/ShowRunnerMobile.tsx` | Remote-control layout for narrow containers: top strip, active-cue hero, standby card, GO/BACK footer with safe-area padding |
 | `src/components/runner/StackPickerSheet.tsx` | Bottom sheet listing show entries for mobile stack switching |
 | `src/components/runner/MobileCueListSheet.tsx` | Bottom sheet exposing the full cue list on mobile; tapping a cue opens CueForm |
@@ -93,6 +92,7 @@ API Layer          Type definitions + WebSocket subscription factories
 | `src/components/runner/program/ProgramCueRow.tsx` | Expandable cue row with CueFxTable, count badges |
 | `src/components/runner/program/ProgramMarkerRow.tsx` | Interactive marker with inline rename/delete |
 | `src/components/cues/CueForm.tsx` | Cue edit sheet (properties, presets, effects, triggers) |
+| `src/components/cues/CueDetailSheet.tsx` | Read-only cue detail sheet (Run view eye-icon) — lighter companion to CueForm for inspecting a cue's composition without risk of accidental edits |
 | `src/hooks/useRunnerAnimation.ts` | requestAnimationFrame hook for fade/auto-advance progress |
 | `src/hooks/useNarrowContainer.ts` | ResizeObserver hook that returns `true` while a container's width is below a threshold. Used by `RunPage` to switch between desktop and mobile runner layouts. |
 | `src/lib/cueUtils.ts` | `buildCueInput()` -- converts a Cue to CueInput for mutations |
@@ -285,8 +285,8 @@ Stopping the show happens from Run, not here.
 
 The Program view mirrors the runner so the operator can edit during a tech run at a glance:
 
-- **"Live" badge on the active stack** in Show Overview — an amber pill with a pulsing dot, plus a left border accent and amber-toned name. Makes the running stack instantly findable.
-- **Active-cue marker** in StackDetail — the live cue's row gets the same amber left-border accent used in the runner's `CueRow`, the drag-handle is replaced with the amber `Play` glyph, and the name turns amber-bold. Only the cue currently on stage in the *active* stack is marked; other stacks show no marker even when drilled into.
+- **"Live" badge on the active stack** in Show Overview — a green pill with a pulsing dot, plus a green left border accent and green-toned name. Makes the running stack instantly findable.
+- **Active-cue marker** in StackDetail — the live cue's row gets a green left-border accent, the drag-handle is replaced with the green `Play` glyph, and the name turns green-bold. Only the cue currently on stage in the *active* stack is marked; other stacks show no marker even when drilled into. Program intentionally does **not** show the standby/next marker — the operator is focused on editing here, not on playback sequencing.
 - **Active state derivation.** No new server fields. `ProgramPage` derives `activeStackId` from `show.activeEntryId` (read via `useProjectShowQuery`). The active-cue marker is gated on `drillStackId === activeStackId` so it never lights up on a non-running stack.
 
 ## Run View
@@ -304,7 +304,7 @@ Below the header, the runner body. Layout from top to bottom:
 Top control surface with:
 - **DBO** (Dead Blackout) toggle
 - **BPM display** + **TAP** button for tempo
-- **Cue info**: active cue name (amber), standby cue (green), next stack hint
+- **Cue info**: active cue name (green), standby cue (blue), next stack hint
 - **Keyboard hints**: `<- back`, `space: go`
 - **BACK** button
 - **GO** button (large, green)
@@ -318,8 +318,11 @@ Horizontal tab bar mapping `show.entries`:
 
 ### Cue List
 Scrollable list of cues in the active stack:
-- Status icons: play (active/amber), diamond (standby/green), check (done/greyed)
-- Fade progress bar (amber) on active cue
+- Status icons: play (active/green), circle (standby/blue), check (done/greyed)
+- **Click-to-requeue**: clicking a non-active cue dispatches `setStandby`, making it the next target for GO. The standby moves immediately; no backend call until the next GO fires.
+- **Click active cue**: opens the read-only CueDetailSheet (since re-queuing the active cue is a no-op)
+- **Eye icon**: every row has an eye button that opens `CueDetailSheet` — a read-only view of the cue's composition (palette, presets, effects, triggers, timing). The sheet has an Edit button that deep-links into Program's CueForm.
+- Fade progress bar (green) on active cue
 - Auto-advance countdown bar (blue) on active cue
 
 ### Theatre vs Band Mode
@@ -334,8 +337,8 @@ When the Run view's container width drops below **600 px**, the runner swaps fro
 **Layout (top → bottom):**
 
 - **Top strip** (`h-12`): stack-name button (opens `StackPickerSheet`) · cue-list icon (opens `MobileCueListSheet`) · spacer · BPM value + TAP · DBO toggle · Theatre/Band pill (`T`/`B`). The T/B toggle is preserved on mobile so operators retain the same context control they have on desktop.
-- **Active-cue hero** (`flex-1`): centred Q number (theatre only) + cue name (amber, large) + fade-progress bar + fade info badge + auto-advance countdown bar + optional notes.
-- **Standby card**: Q + name in green when a standby cue exists, "→ NextStackName" (with arrow) at a stack boundary, "End of show" when neither is available.
+- **Active-cue hero** (`flex-1`): centred Q number (theatre only) + cue name (green, large) + fade-progress bar + fade info badge + auto-advance countdown bar + optional notes.
+- **Standby card**: Q + name in blue when a standby cue exists, "→ NextStackName" (with arrow) at a stack boundary, "End of show" when neither is available.
 - **GO/BACK footer**: `grid grid-cols-[1fr_2fr]`, `h-14` buttons. Padding uses `calc(0.75rem + env(safe-area-inset-bottom, 0px))` so the GO button clears the iOS home indicator. The label changes to "END" (disabled) when both standby and next-stack are null.
 
 **Hero states** — the `activeCueId` transient clears on `markDone` (e.g. SNAP fades), so the hero has three states:
@@ -361,11 +364,11 @@ Keyboard: `Space` | Button: `GO`
 
 1. **Normal GO** (standbyCueId exists):
    - Redux: `go()` -- moves standby to active, computes next standby
-   - Backend: `POST /cue-stacks/{id}/activate` (first GO) or `POST /cue-stacks/{id}/advance` (subsequent)
+   - Backend: `POST /cue-stacks/{id}/activate` (first GO) or `POST /cue-stacks/{id}/go-to` with the explicit standby cue id (subsequent). Using `go-to` instead of `advance` ensures that a cue re-queued via click-to-requeue fires correctly — the backend jumps to that exact cue rather than computing "next" itself.
    - Animation starts fade progress from 0
 
 2. **Boundary GO** (standbyCueId is null, end of stack):
-   - ShowBar shows `-> {nextStackName}` hint in green
+   - ShowBar shows `-> {nextStackName}` hint in blue
    - Redux: cancels animations, sets `activeEntryId` to next STACK entry
    - Backend: `POST /project/{id}/show/advance` (direction: FORWARD)
    - WS event confirms the entry switch
@@ -493,9 +496,20 @@ All optimistic updates are rolled back on server error.
 The `runnerSlice` manages per-stack playback state entirely on the frontend:
 - `go`: moves standby -> active, computes next standby (respects loop flag, skips MARKERs)
 - `back`: reverses cursor (mid-fade: active -> standby; idle: standby -> previous)
+- `setStandby`: re-queues a specific cue as the next GO target (click-to-requeue). Purely local — the backend is told on the next GO via `goToCueInStack`. Clears the cue from `completedCueIds` so the "done" tick doesn't linger.
 - `resetStack`: initializes runner for a stack, optionally restoring from server `activeCueId`
 - `markDone`: marks fade complete, clears active
 - `reconcileActiveCue`: syncs with server-reported active cue if it differs from local state
+
+### Effective Active Cue (`effectiveActiveCueId`)
+
+SNAP cues (no fade) complete in a single frame: `go` sets `runner.activeCueId`, then `markDone` immediately clears it. The server's `stack.activeCueId` still points to the cue on stage. `RunPage` therefore derives:
+
+```typescript
+const effectiveActiveCueId = runner.activeCueId ?? stack?.activeCueId ?? null
+```
+
+This composite id drives the green active highlight in the cue list, the ShowBar's active-cue label, and click-to-requeue's "already active" guard. During a fade `runner.activeCueId` is authoritative (it drives progress bars); after `markDone` the server-tracked value takes over so the cue stays visibly active. Program view uses `activeStack.activeCueId` directly since it never runs fades.
 
 ## Design Decisions
 
@@ -516,6 +530,10 @@ The `runnerSlice` manages per-stack playback state entirely on the frontend:
 | Show "active" = `activeEntryId != null` | Single source of truth on the project; no separate `isActive` flag to keep in sync |
 | `stackMap` for O(1) lookups | UseMemo'd `Map<number, CueStack>` avoids repeated `.find()` in entry strip and show overview |
 | Container-width switch to remote-control view | Responds to the runner's actual available space, not just viewport — side panels on desktop can also trigger the compact layout. Single-tree mount via `useNarrowContainer` rather than CSS `@container` hide/show keeps the DOM lean. |
+| Green = active, blue = standby (not amber/green) | Green reads as "on / go" and has higher contrast against the dark runner background than amber. Blue for standby (next) avoids confusion with the "show is running" green dot in the header — the standby colour is a cooler tone that implies "queued, not yet firing". |
+| Click-to-requeue in Run view (not Program) | Run is the playback surface; the operator's main action is controlling cue order. Program is for editing — a click-to-edit there (opening CueForm) is more valuable than re-queueing. In Run, the eye icon provides the detail-view affordance so the row click is freed for re-queue. |
+| `goToCueInStack` instead of `advance` on GO | `advance` asks the backend to compute the next cue, which doesn't account for a frontend re-queue. `goToCueInStack` sends the explicit standby cue id, keeping the backend and frontend in sync after a re-queue. |
+| `CueDetailSheet` read-only view | A lighter alternative to opening the full CueForm in Run view. Operators want to inspect cue composition (presets, effects, triggers) at a glance without the risk or overhead of the edit form. The sheet has an Edit button that deep-links to Program's CueForm if the operator decides to make changes. |
 
 ## Known Gaps
 

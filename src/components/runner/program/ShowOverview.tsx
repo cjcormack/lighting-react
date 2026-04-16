@@ -63,7 +63,7 @@ function SortableStackEntry({ entry, index, stack, isActive, onDrill, onRemove }
       {...attributes}
       className={cn(
         'flex items-center w-full gap-3 px-4 py-2.5 bg-card border rounded border-l-[3px] border-l-transparent transition-colors hover:bg-muted/30 hover:border-muted-foreground/20 text-left cursor-pointer',
-        isActive && 'border-l-amber-500 bg-amber-500/[0.055]',
+        isActive && 'border-l-green-500 bg-green-500/[0.08]',
       )}
       onClick={() => entry.cueStackId != null && onDrill(entry.cueStackId)}
     >
@@ -80,7 +80,7 @@ function SortableStackEntry({ entry, index, stack, isActive, onDrill, onRemove }
       <span
         className={cn(
           'flex-1 text-sm font-medium text-foreground',
-          isActive && 'text-amber-300 font-semibold',
+          isActive && 'text-green-300 font-semibold',
         )}
       >
         {entry.cueStackName ?? entry.label ?? 'Unknown'}
@@ -88,9 +88,9 @@ function SortableStackEntry({ entry, index, stack, isActive, onDrill, onRemove }
       {isActive && (
         <Badge
           variant="outline"
-          className="text-xs px-1.5 py-0 gap-1 border-amber-500/40 text-amber-400 bg-amber-500/10"
+          className="text-xs px-1.5 py-0 gap-1 border-green-500/40 text-green-400 bg-green-500/10"
         >
-          <span className="size-1.5 rounded-full bg-amber-400 animate-pulse" />
+          <span className="size-1.5 rounded-full bg-green-400 animate-pulse" />
           Live
         </Badge>
       )}

@@ -172,11 +172,32 @@ export const runnerSlice = createSlice({
         s.activeCueId = action.payload.cueId
       }
     },
+
+    setStandby(
+      state,
+      action: PayloadAction<{ stackId: number; cueId: number }>,
+    ) {
+      // Re-queue: user clicked a cue to set it as the next GO target.
+      // Purely local — the backend is told on the next GO (handleGo calls
+      // goToCueInStack with this id). Clearing the target from completedCueIds
+      // so the "done" tick doesn't stick around for a cue we just cued up again.
+      const s = getOrCreate(state, action.payload.stackId)
+      s.standbyCueId = action.payload.cueId
+      s.completedCueIds = s.completedCueIds.filter((id) => id !== action.payload.cueId)
+    },
   },
 })
 
-export const { go, back, setFadeProgress, setAutoProgress, markDone, resetStack, reconcileActiveCue } =
-  runnerSlice.actions
+export const {
+  go,
+  back,
+  setFadeProgress,
+  setAutoProgress,
+  markDone,
+  resetStack,
+  reconcileActiveCue,
+  setStandby,
+} = runnerSlice.actions
 
 // Selectors
 export function selectStackRunner(state: { runner: RunnerState }, stackId: number): StackRunnerState {

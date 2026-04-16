@@ -28,6 +28,8 @@ interface StackDetailProps {
   stack: CueStack
   projectId: number
   activeCueId: number | null
+  /** Cue queued to fire on the next GO. Only meaningful when drilled into the active stack. */
+  standbyCueId?: number | null
   onBack: () => void
   onOpenCueForm: (cueId: number) => void
   onAddCue: () => void
@@ -40,6 +42,7 @@ export function StackDetail({
   stack,
   projectId,
   activeCueId,
+  standbyCueId,
   onBack,
   onOpenCueForm,
   onAddCue,
@@ -170,6 +173,7 @@ export function StackDetail({
                   presets={presets}
                   library={library}
                   isActive={cue.id === activeCueId}
+                  isStandby={cue.id === standbyCueId}
                   onOpenCueForm={() => onOpenCueForm(cue.id)}
                 />
               )

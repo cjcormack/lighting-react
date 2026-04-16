@@ -67,15 +67,15 @@ export function ShowBar({
       <div className="flex flex-1 items-center gap-2.5 px-4 min-w-0 overflow-hidden">
         {activeName ? (
           <div className="flex flex-col justify-center gap-0.5 flex-1 min-w-0">
-            <div className="text-sm font-semibold text-amber-400 truncate">
+            <div className="text-sm font-semibold text-green-400 truncate">
               {'\u25B6'} {activeName}
             </div>
             {standbyName ? (
-              <div className="text-xs text-green-500 truncate">
+              <div className="text-xs text-blue-400 truncate">
                 {'\u25C9'}&ensp;{'next \u2014'} {standbyName}
               </div>
             ) : nextStackName ? (
-              <div className="text-xs text-green-500 truncate">
+              <div className="text-xs text-blue-400 truncate">
                 {'\u2192'} {nextStackName}
               </div>
             ) : null}

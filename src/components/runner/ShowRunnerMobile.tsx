@@ -190,13 +190,13 @@ export function ShowRunnerMobile({
                 Q{activeCue.cueNumber}
               </div>
             )}
-            <div className="text-center text-3xl font-semibold text-amber-400 break-words leading-tight">
+            <div className="text-center text-3xl font-semibold text-green-400 break-words leading-tight">
               {activeCue.name}
             </div>
             <div className="space-y-1.5">
               <div className="relative h-2 rounded overflow-hidden bg-muted">
                 <div
-                  className="absolute inset-y-0 left-0 bg-gradient-to-r from-amber-700 to-amber-400 shadow-[0_0_10px_rgba(240,160,48,0.55)] transition-[width]"
+                  className="absolute inset-y-0 left-0 bg-gradient-to-r from-green-700 to-green-400 shadow-[0_0_10px_rgba(72,200,96,0.55)] transition-[width]"
                   style={{ width: `${(fadeProgress * 100).toFixed(2)}%` }}
                 />
               </div>
@@ -255,11 +255,11 @@ export function ShowRunnerMobile({
         {standbyCue ? (
           <div className="flex items-baseline gap-2">
             {isTheatre && standbyCue.cueNumber && (
-              <span className="font-mono text-xs text-green-600 shrink-0">
+              <span className="font-mono text-xs text-blue-400 shrink-0">
                 Q{standbyCue.cueNumber}
               </span>
             )}
-            <span className="flex-1 text-base font-semibold text-green-500 truncate">
+            <span className="flex-1 text-base font-semibold text-blue-400 truncate">
               {standbyCue.name}
             </span>
             {standbyCue.autoAdvance && (
@@ -273,8 +273,8 @@ export function ShowRunnerMobile({
           </div>
         ) : nextStackEntry ? (
           <div className="flex items-center gap-2">
-            <ArrowRight className="size-4 shrink-0 text-green-500" />
-            <span className="flex-1 text-base font-semibold text-green-500 truncate">
+            <ArrowRight className="size-4 shrink-0 text-blue-400" />
+            <span className="flex-1 text-base font-semibold text-blue-400 truncate">
               {nextStackEntry.cueStackName}
             </span>
           </div>

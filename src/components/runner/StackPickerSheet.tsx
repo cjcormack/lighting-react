@@ -85,7 +85,7 @@ export function StackPickerSheet({
                     <RotateCcw className="size-3.5 text-muted-foreground shrink-0" />
                   )}
                   {entryStack?.activeCueId != null && !isActive && (
-                    <span className="text-[10px] font-medium uppercase tracking-wide text-amber-500 shrink-0">
+                    <span className="text-[10px] font-medium uppercase tracking-wide text-green-500 shrink-0">
                       Live
                     </span>
                   )}

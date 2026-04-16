@@ -9,6 +9,7 @@ import {
   AudioWaveform,
   Zap,
   Play,
+  Circle,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -38,7 +39,10 @@ interface ProgramCueRowProps {
   projectId: number
   presets?: FxPreset[]
   library?: EffectLibraryEntry[]
+  /** Cue is currently on stage — rendered with the green "live" accent. */
   isActive?: boolean
+  /** Cue will fire on the next GO — rendered with the blue "next" accent. */
+  isStandby?: boolean
   onOpenCueForm: () => void
 }
 
@@ -49,6 +53,7 @@ export function ProgramCueRow({
   presets,
   library,
   isActive = false,
+  isStandby = false,
   onOpenCueForm,
 }: ProgramCueRowProps) {
   const [expanded, setExpanded] = useState(false)
@@ -162,7 +167,8 @@ export function ProgramCueRow({
         className={cn(
           'flex items-center h-10 px-4 border-b border-l-[3px] border-l-transparent cursor-pointer transition-colors hover:bg-muted/50',
           expanded && 'bg-muted/10',
-          isActive && 'border-l-amber-500 bg-amber-500/[0.055]',
+          isActive && 'border-l-green-500 bg-green-500/[0.08]',
+          isStandby && !isActive && 'border-l-blue-500 bg-blue-500/[0.06]',
         )}
         onClick={onOpenCueForm}
       >
@@ -180,15 +186,21 @@ export function ProgramCueRow({
           {cue.cueNumber ? `Q${cue.cueNumber}` : '\u2014'}
         </div>
 
-        {/* Name (with live indicator when this cue is on stage) */}
+        {/* Name (with live/next indicator) */}
         <div className="flex-1 px-2 min-w-0 flex items-center gap-1.5">
-          {isActive && (
-            <Play className="size-3 fill-amber-400 text-amber-400 shrink-0" />
-          )}
+          {isActive ? (
+            <Play className="size-3 fill-green-400 text-green-400 shrink-0" />
+          ) : isStandby ? (
+            <Circle className="size-3 fill-blue-500 text-blue-500 shrink-0" />
+          ) : null}
           <span
             className={cn(
               'text-sm font-medium truncate',
-              isActive ? 'text-amber-300 font-semibold' : 'text-foreground',
+              isActive
+                ? 'text-green-300 font-semibold'
+                : isStandby
+                  ? 'text-blue-300 font-semibold'
+                  : 'text-foreground',
             )}
           >
             {cue.name}

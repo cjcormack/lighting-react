@@ -22,6 +22,7 @@ import {
   useActivateCueStackMutation,
   useDeactivateCueStackMutation,
   useSortCueStackByCueNumberMutation,
+  useGoToCueInStackMutation,
 } from '../store/cueStacks'
 import {
   useSaveProjectCueMutation,
@@ -42,6 +43,7 @@ import {
   go,
   back,
   resetStack,
+  setStandby,
   selectStackRunner,
 } from '../store/runnerSlice'
 import { useRunnerAnimation } from '../hooks/useRunnerAnimation'
@@ -54,6 +56,7 @@ import {
   detectOutOfOrder,
 } from '../components/runner/OutOfOrderBanner'
 import { CueForm } from '../components/cues/CueForm'
+import { CueDetailSheet } from '../components/cues/CueDetailSheet'
 import {
   ShowRunnerMobile,
   type RunnerDisplayState,
@@ -132,6 +135,9 @@ export function RunPage() {
   const [cueFormCue, setCueFormCue] = useState<Cue | null>(null)
   const [cueFormSaving, setCueFormSaving] = useState(false)
 
+  // Read-only CueDetailSheet — non-null cue = sheet is open
+  const [detailCue, setDetailCue] = useState<Cue | null>(null)
+
   // Scroll save/restore around the CueForm sheet
   const listScrollRef = useRef<HTMLDivElement>(null)
   const savedScrollPos = useRef(0)
@@ -141,6 +147,7 @@ export function RunPage() {
   const [advanceCueStack] = useAdvanceCueStackMutation()
   const [activateCueStack] = useActivateCueStackMutation()
   const [deactivateCueStack] = useDeactivateCueStackMutation()
+  const [goToCueInStack] = useGoToCueInStackMutation()
   const [sortByCueNumber] = useSortCueStackByCueNumberMutation()
   const [saveCue] = useSaveProjectCueMutation()
   const [fetchCue] = useLazyProjectCueQuery()
@@ -198,9 +205,19 @@ export function RunPage() {
     selectStackRunner(state, activeStackId ?? 0),
   )
 
+  // The "active" cue comes from two sources:
+  // 1. runner.activeCueId — the transient fade cursor (set during GO, cleared by markDone)
+  // 2. stack.activeCueId — the server-tracked cue currently on stage
+  // For SNAP cues (no fade), (1) clears within a single frame, so (2) is the
+  // only reliable indicator of what's on stage. Combining both ensures the
+  // green active highlight persists after a SNAP completes.
+  const effectiveActiveCueId = runner.activeCueId ?? stack?.activeCueId ?? null
+
+  const completedSet = useMemo(() => new Set(runner.completedCueIds), [runner.completedCueIds])
+
   const activeCue = useMemo(
-    () => cues.find((c) => c.id === runner.activeCueId) ?? null,
-    [cues, runner.activeCueId],
+    () => cues.find((c) => c.id === effectiveActiveCueId) ?? null,
+    [cues, effectiveActiveCueId],
   )
 
   const standbyCue = useMemo(
@@ -216,10 +233,22 @@ export function RunPage() {
         stackId: activeStackId,
         cueId: runner.standbyCueId ?? undefined,
       })
+    } else if (runner.standbyCueId != null) {
+      // Use go-to with the explicit standby cue id so a re-queued cue (set by
+      // clicking a cue row) fires the right target. When standby is the
+      // "natural next", this still works the same — it's just more explicit
+      // than advance().
+      goToCueInStack({
+        projectId: projectIdNum,
+        stackId: activeStackId,
+        cueId: runner.standbyCueId,
+      })
     } else {
+      // Fallback: no standby (shouldn't happen when an active cue exists in a
+      // non-empty stack) — defer to backend advance.
       advanceCueStack({ projectId: projectIdNum, stackId: activeStackId, direction: 'FORWARD' })
     }
-  }, [activeStackId, stack, runner.standbyCueId, activateCueStack, advanceCueStack, projectIdNum])
+  }, [activeStackId, stack, runner.standbyCueId, activateCueStack, advanceCueStack, goToCueInStack, projectIdNum])
 
   const handleAutoAdvanceComplete = useCallback(() => {
     if (activeStackId == null || !stack) return
@@ -248,7 +277,7 @@ export function RunPage() {
     nextStackEntry,
     fadeProgress: runner.fadeProgress,
     autoProgress: runner.autoProgress,
-    activeCueId: runner.activeCueId,
+    activeCueId: effectiveActiveCueId,
     standbyCueId: runner.standbyCueId,
     completedCueIds: runner.completedCueIds,
   }
@@ -379,6 +408,46 @@ export function RunPage() {
     if (cueId != null) params.set('cue', String(cueId))
     navigate(`/projects/${projectIdNum}/program?${params.toString()}`)
   }, [activeStackId, stack, runner.activeCueId, navigate, projectIdNum])
+
+  // ── Cue row interaction handlers ──
+
+  /** From the detail sheet's Edit button — route to Program's CueForm. */
+  const handleDetailEdit = useCallback(() => {
+    if (detailCue == null || activeStackId == null) return
+    setDetailCue(null)
+    const params = new URLSearchParams({
+      stack: String(activeStackId),
+      cue: String(detailCue.id),
+    })
+    navigate(`/projects/${projectIdNum}/program?${params.toString()}`)
+  }, [detailCue, activeStackId, navigate, projectIdNum])
+
+  /** Eye-icon click: open the read-only detail sheet for any cue. */
+  const openCueDetail = useCallback(
+    async (cueId: number) => {
+      try {
+        const { data: fullCue } = await fetchCue({ projectId: projectIdNum, cueId }, true)
+        if (fullCue) setDetailCue(fullCue)
+      } catch {
+        // Silently fail
+      }
+    },
+    [fetchCue, projectIdNum],
+  )
+
+  /** Click on a cue row: re-queue it as the next GO target (or open detail if it's already active). */
+  const handleCueClick = useCallback(
+    (cueId: number) => {
+      if (activeStackId == null) return
+      if (cueId === effectiveActiveCueId) {
+        void openCueDetail(cueId)
+        return
+      }
+      if (cueId === runner.standbyCueId) return // already queued
+      dispatch(setStandby({ stackId: activeStackId, cueId }))
+    },
+    [activeStackId, effectiveActiveCueId, runner.standbyCueId, dispatch, openCueDetail],
+  )
 
   // ── CueForm handlers (mobile cue-list) ──
 
@@ -664,9 +733,13 @@ export function RunPage() {
                     if (cue.cueType === 'MARKER') {
                       return <MarkerRow key={cue.id} name={cue.name} />
                     }
-                    const isActive = cue.id === runner.activeCueId
+                    const isActive = cue.id === effectiveActiveCueId
                     const isStandby = cue.id === runner.standbyCueId
-                    const isDone = runner.completedCueIds.includes(cue.id)
+                    const isDone = completedSet.has(cue.id)
+                    // During a fade, runner.activeCueId is set (use its progress);
+                    // after markDone it's null and effectiveActiveCueId falls back
+                    // to stack.activeCueId — no progress bars in that case.
+                    const isFading = cue.id === runner.activeCueId
                     return (
                       <CueRow
                         key={cue.id}
@@ -679,11 +752,11 @@ export function RunPage() {
                         isActive={isActive}
                         isStandby={isStandby}
                         isDone={isDone}
-                        isEditing={false}
                         isTheatre={isTheatre}
-                        fadeProgress={isActive ? runner.fadeProgress : 0}
-                        autoProgress={isActive ? runner.autoProgress : null}
-                        onClick={() => {}}
+                        fadeProgress={isFading ? runner.fadeProgress : 0}
+                        autoProgress={isFading ? runner.autoProgress : null}
+                        onClick={() => handleCueClick(cue.id)}
+                        onView={() => openCueDetail(cue.id)}
                       />
                     )
                   })}
@@ -703,6 +776,15 @@ export function RunPage() {
         onSave={handleCueFormSave}
         isSaving={cueFormSaving}
         isInStack
+      />
+
+      {/* Read-only cue detail sheet (eye-icon on cue rows) */}
+      <CueDetailSheet
+        open={detailCue != null}
+        onOpenChange={(open) => { if (!open) setDetailCue(null) }}
+        cue={detailCue}
+        projectId={projectIdNum}
+        onEdit={handleDetailEdit}
       />
 
       {/* Stop-show confirmation */}
