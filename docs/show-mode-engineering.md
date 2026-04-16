@@ -502,7 +502,6 @@ The `runnerSlice` manages per-stack playback state entirely on the frontend:
 - `setStandby`: re-queues a specific cue as the next GO target (click-to-requeue). Purely local — the backend is told on the next GO via `goToCueInStack`. Clears the cue from `completedCueIds` so the "done" tick doesn't linger.
 - `resetStack`: initializes runner for a stack, optionally restoring from server `activeCueId`
 - `markDone`: marks fade complete, clears active
-- `reconcileActiveCue`: syncs with server-reported active cue if it differs from local state
 
 ### Effective Active Cue (`effectiveActiveCueId`)
 

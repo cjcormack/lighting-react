@@ -176,6 +176,17 @@ export const showApi = restApi.injectEndpoints({
   overrideExisting: false,
 })
 
+// Subscribe to WebSocket show state changes (activate/deactivate/advance/go-to).
+// Patches activeEntryId directly so isShowActive updates immediately in other
+// browsers without waiting for a full refetch.
+lightingApi.show.subscribeToChanged(function (event) {
+  store.dispatch(
+    showApi.util.updateQueryData('projectShow', event.projectId, (draft) => {
+      draft.activeEntryId = event.activeEntryId
+    }),
+  )
+})
+
 export const {
   useProjectShowQuery,
   useAddStackToShowMutation,

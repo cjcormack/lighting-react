@@ -62,7 +62,9 @@ import {
   type RunnerDisplayState,
 } from '../components/runner/ShowRunnerMobile'
 import { useNarrowContainer } from '../hooks/useNarrowContainer'
-import type { CueStack } from '../api/cueStacksApi'
+import type { CueStack, CueStackCueEntry } from '../api/cueStacksApi'
+
+const EMPTY_CUES: CueStackCueEntry[] = []
 
 // Below this container width, the runner swaps to the remote-control layout.
 // Threshold reacts to the runner body's own width, so side panels squeezing the
@@ -170,15 +172,6 @@ export function RunPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [show?.projectId, show?.activeEntryId])
 
-  // Live updates between refetches.
-  useEffect(() => {
-    const sub = lightingApi.show.subscribeToChanged((event) => {
-      if (event.projectId !== projectIdNum) return
-      setActiveEntryId((prev) => (prev === event.activeEntryId ? prev : event.activeEntryId))
-    })
-    return () => sub.unsubscribe()
-  }, [projectIdNum])
-
   const stackMap = useMemo(
     () => new Map(stacks?.map((s) => [s.id, s]) ?? []),
     [stacks],
@@ -186,7 +179,7 @@ export function RunPage() {
 
   const stack: CueStack | undefined = activeStackId != null ? stackMap.get(activeStackId) : undefined
 
-  const cues = stack?.cues ?? []
+  const cues = stack?.cues ?? EMPTY_CUES
 
   // Initialise runner state when the stack changes
   useEffect(() => {
@@ -204,6 +197,44 @@ export function RunPage() {
   const runner = useSelector((state: { runner: ReturnType<typeof import('../store/runnerSlice').runnerSlice.getInitialState> }) =>
     selectStackRunner(state, activeStackId ?? 0),
   )
+
+  // ── Reconcile runner with remote cue changes ──
+  // When another browser presses GO, the WS-triggered cue stack refetch
+  // updates stack.activeCueId in the RTK Query cache. This effect syncs
+  // the runner slice to match. Skips reconciliation while mid-fade
+  // (runner.activeCueId is set) to avoid killing local animations.
+  const prevServerActiveCueRef = useRef<number | null | undefined>(undefined)
+
+  useEffect(() => {
+    prevServerActiveCueRef.current = undefined
+  }, [activeStackId])
+
+  useEffect(() => {
+    if (activeStackId == null || !stack) return
+
+    const serverActive = stack.activeCueId
+    const prev = prevServerActiveCueRef.current
+    prevServerActiveCueRef.current = serverActive
+
+    // First render after mount or stack switch — initial resetStack handles it
+    if (prev === undefined) return
+
+    // No change
+    if (serverActive === prev) return
+
+    // Don't reset while mid-fade — we're the browser driving the change
+    if (runner.activeCueId != null) return
+
+    // Server active cue changed while we're idle — another browser pressed GO
+    if (cues.length > 0) {
+      dispatch(resetStack({
+        stackId: activeStackId,
+        cues,
+        serverActiveCueId: serverActive,
+        loop: stack.loop,
+      }))
+    }
+  }, [activeStackId, stack?.activeCueId, runner.activeCueId, cues, dispatch, stack?.loop])
 
   // The "active" cue comes from two sources:
   // 1. runner.activeCueId — the transient fade cursor (set during GO, cleared by markDone)

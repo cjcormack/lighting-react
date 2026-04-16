@@ -162,17 +162,6 @@ export const runnerSlice = createSlice({
       }
     },
 
-    reconcileActiveCue(
-      state,
-      action: PayloadAction<{ stackId: number; cueId: number | null }>,
-    ) {
-      const s = getOrCreate(state, action.payload.stackId)
-      // Only reconcile if the server-reported active cue differs from our optimistic state
-      if (action.payload.cueId != null && s.activeCueId !== action.payload.cueId) {
-        s.activeCueId = action.payload.cueId
-      }
-    },
-
     setStandby(
       state,
       action: PayloadAction<{ stackId: number; cueId: number }>,
@@ -195,7 +184,6 @@ export const {
   setAutoProgress,
   markDone,
   resetStack,
-  reconcileActiveCue,
   setStandby,
 } = runnerSlice.actions
 
