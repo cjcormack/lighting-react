@@ -90,6 +90,8 @@ interface CueFormProps {
   onDuplicate?: () => void
   /** Called when user clicks Remove from Stack (only shown when isInStack && editing) */
   onRemoveFromStack?: () => void
+  /** 'sheet' (default) renders inside a Radix Sheet; 'inline' renders without the sheet wrapper. */
+  mode?: 'sheet' | 'inline'
 }
 
 export function CueForm({
@@ -106,6 +108,7 @@ export function CueForm({
   initialEditIndex,
   onDuplicate,
   onRemoveFromStack,
+  mode = 'sheet',
 }: CueFormProps) {
   const isWide = useMediaQuery(SM_BREAKPOINT)
   const { data: library } = useEffectLibraryQuery()
@@ -323,18 +326,18 @@ export function CueForm({
 
   const isValid = name.trim().length > 0
 
-  return (
-    <Sheet open={open} onOpenChange={handleSheetOpenChange}>
-      <SheetContent
-        side="right"
-        className="flex flex-col sm:max-w-lg"
-      >
+  const formContent = (
+    <>
         {/* ═══════ Main form view ═══════ */}
         {view === 'main' && (
           <>
-            <SheetHeader className="pr-10">
+            <SheetHeader className={mode === 'inline' ? '' : 'pr-10'}>
               <div className="flex items-center justify-between">
-                <SheetTitle>{isEditing ? 'Edit FX Cue' : 'New FX Cue'}</SheetTitle>
+                {mode === 'inline' ? (
+                  <h3 className="text-foreground font-semibold">{isEditing ? 'Edit FX Cue' : 'New FX Cue'}</h3>
+                ) : (
+                  <SheetTitle>{isEditing ? 'Edit FX Cue' : 'New FX Cue'}</SheetTitle>
+                )}
                 {!isEditing && (
                   <Button
                     variant="ghost"
@@ -356,11 +359,19 @@ export function CueForm({
                   </Button>
                 )}
               </div>
-              <SheetDescription>
-                {isEditing
-                  ? 'Update the FX cue name, palette, presets, and effects.'
-                  : 'Create a new FX cue with a palette, presets, and ad-hoc effects.'}
-              </SheetDescription>
+              {mode === 'inline' ? (
+                <p className="text-muted-foreground text-sm">
+                  {isEditing
+                    ? 'Update the FX cue name, palette, presets, and effects.'
+                    : 'Create a new FX cue with a palette, presets, and ad-hoc effects.'}
+                </p>
+              ) : (
+                <SheetDescription>
+                  {isEditing
+                    ? 'Update the FX cue name, palette, presets, and effects.'
+                    : 'Create a new FX cue with a palette, presets, and ad-hoc effects.'}
+                </SheetDescription>
+              )}
             </SheetHeader>
 
             <SheetBody>
@@ -801,6 +812,21 @@ export function CueForm({
           />
         )}
 
+    </>
+  )
+
+  if (mode === 'inline') {
+    return (
+      <div className="flex flex-col h-full">
+        {formContent}
+      </div>
+    )
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={handleSheetOpenChange}>
+      <SheetContent side="right" className="flex flex-col sm:max-w-lg">
+        {formContent}
       </SheetContent>
     </Sheet>
   )

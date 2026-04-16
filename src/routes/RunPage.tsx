@@ -3,6 +3,7 @@ import { useParams, useNavigate, Navigate, Link } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Dialog,
@@ -57,11 +58,13 @@ import {
 } from '../components/runner/OutOfOrderBanner'
 import { CueForm } from '../components/cues/CueForm'
 import { CueDetailSheet } from '../components/cues/CueDetailSheet'
+import { CueDetailContent } from '../components/cues/CueDetailContent'
 import {
   ShowRunnerMobile,
   type RunnerDisplayState,
 } from '../components/runner/ShowRunnerMobile'
 import { useNarrowContainer } from '../hooks/useNarrowContainer'
+import { useMediaQuery, XL_BREAKPOINT } from '../hooks/useMediaQuery'
 import type { CueStack, CueStackCueEntry } from '../api/cueStacksApi'
 
 const EMPTY_CUES: CueStackCueEntry[] = []
@@ -137,8 +140,10 @@ export function RunPage() {
   const [cueFormCue, setCueFormCue] = useState<Cue | null>(null)
   const [cueFormSaving, setCueFormSaving] = useState(false)
 
-  // Read-only CueDetailSheet — non-null cue = sheet is open
+  // Read-only cue detail panel. 'active' = follow active cue (default),
+  // 'standby' = follow next cue, number = pinned to a specific cue.
   const [detailCue, setDetailCue] = useState<Cue | null>(null)
+  const [detailMode, setDetailMode] = useState<'active' | 'standby' | number>('active')
 
   // Scroll save/restore around the CueForm sheet
   const listScrollRef = useRef<HTMLDivElement>(null)
@@ -151,6 +156,8 @@ export function RunPage() {
   const manualSwitchRef = useRef(false)
 
   const [runnerContainerRef, isNarrowRunner] = useNarrowContainer(MOBILE_RUNNER_THRESHOLD)
+  const isWideViewport = useMediaQuery(XL_BREAKPOINT)
+  const showInlineDetail = isWideViewport && !isNarrowRunner
 
   const [advanceCueStack] = useAdvanceCueStackMutation()
   const [activateCueStack] = useActivateCueStackMutation()
@@ -463,12 +470,52 @@ export function RunPage() {
     navigate(`/projects/${projectIdNum}/program?${params.toString()}`)
   }, [activeStackId, stack, runner.activeCueId, navigate, projectIdNum])
 
+  // ── Cue detail panel helpers ──
+
+  // The detail cue ID to display, derived from detailMode.
+  const detailTargetCueId =
+    detailMode === 'active' ? (effectiveActiveCueId ?? null) :
+    detailMode === 'standby' ? (runner.standbyCueId ?? null) :
+    detailMode // numeric pinned ID
+  const lastDetailFetchRef = useRef<number | null>(null)
+
+  // Auto-fetch the detail cue when the inline panel is visible and the target changes.
+  useEffect(() => {
+    if (!showInlineDetail) return
+    if (detailTargetCueId == null || detailTargetCueId === lastDetailFetchRef.current) return
+    lastDetailFetchRef.current = detailTargetCueId
+    fetchCue({ projectId: projectIdNum, cueId: detailTargetCueId }, true)
+      .then(({ data }) => {
+        if (data && lastDetailFetchRef.current === detailTargetCueId) setDetailCue(data)
+      })
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showInlineDetail, detailTargetCueId])
+
+  /** Eye-icon click: switch detail mode based on which cue was clicked. */
+  const openCueDetail = useCallback(
+    (cueId: number) => {
+      if (cueId === effectiveActiveCueId) {
+        setDetailMode('active')
+      } else if (cueId === runner.standbyCueId) {
+        setDetailMode('standby')
+      } else {
+        setDetailMode(cueId)
+      }
+    },
+    [effectiveActiveCueId, runner.standbyCueId],
+  )
+
+  // Reset to follow-active when the stack changes.
+  useEffect(() => {
+    setDetailMode('active')
+  }, [activeStackId])
+
   // ── Cue row interaction handlers ──
 
-  /** From the detail sheet's Edit button — route to Program's CueForm. */
+  /** From the detail sheet/panel's Edit button — route to Program's CueForm. */
   const handleDetailEdit = useCallback(() => {
     if (detailCue == null || activeStackId == null) return
-    setDetailCue(null)
     const params = new URLSearchParams({
       stack: String(activeStackId),
       cue: String(detailCue.id),
@@ -476,31 +523,15 @@ export function RunPage() {
     navigate(`/projects/${projectIdNum}/program?${params.toString()}`)
   }, [detailCue, activeStackId, navigate, projectIdNum])
 
-  /** Eye-icon click: open the read-only detail sheet for any cue. */
-  const openCueDetail = useCallback(
-    async (cueId: number) => {
-      try {
-        const { data: fullCue } = await fetchCue({ projectId: projectIdNum, cueId }, true)
-        if (fullCue) setDetailCue(fullCue)
-      } catch {
-        // Silently fail
-      }
-    },
-    [fetchCue, projectIdNum],
-  )
-
-  /** Click on a cue row: re-queue it as the next GO target (or open detail if it's already active). */
+  /** Click on a cue row: re-queue it as the next GO target. */
   const handleCueClick = useCallback(
     (cueId: number) => {
       if (activeStackId == null) return
-      if (cueId === effectiveActiveCueId) {
-        void openCueDetail(cueId)
-        return
-      }
+      if (cueId === effectiveActiveCueId) return // active — use eye icon for detail
       if (cueId === runner.standbyCueId) return // already queued
       dispatch(setStandby({ stackId: activeStackId, cueId }))
     },
-    [activeStackId, effectiveActiveCueId, runner.standbyCueId, dispatch, openCueDetail],
+    [activeStackId, effectiveActiveCueId, runner.standbyCueId, dispatch],
   )
 
   /** Mobile cue-list tap: re-queue the cue without opening a detail sheet. */
@@ -768,63 +799,116 @@ export function RunPage() {
                   />
                 )}
 
-                {/* Column headers */}
-                <div className="flex items-center h-10 px-4 border-b shrink-0">
-                  <div className="w-8 px-2" />
-                  {isTheatre && (
-                    <div className="w-14 px-2 text-sm font-medium text-foreground">
-                      Q
+                {/* Cue list + optional inline detail panel */}
+                <div className="flex-1 flex min-h-0">
+                  {/* Cue list column */}
+                  <div className="flex-1 flex flex-col min-w-0">
+                    {/* Column headers */}
+                    <div className="flex items-center h-10 px-4 border-b shrink-0">
+                      <div className="w-8 px-2" />
+                      {isTheatre && (
+                        <div className="w-14 px-2 text-sm font-medium text-foreground">
+                          Q
+                        </div>
+                      )}
+                      <div className="flex-1 px-2 text-sm font-medium text-foreground">
+                        Name
+                      </div>
+                      <div className="w-24 text-right px-2 text-sm font-medium text-foreground">
+                        Fade
+                      </div>
+                      <div className="w-12 px-2" />
+                      {isTheatre && (
+                        <div className="w-[200px] px-2 text-sm font-medium text-foreground border-l">
+                          Note
+                        </div>
+                      )}
+                      <div className="w-10" />
                     </div>
-                  )}
-                  <div className="flex-1 px-2 text-sm font-medium text-foreground">
-                    Name
-                  </div>
-                  <div className="w-24 text-right px-2 text-sm font-medium text-foreground">
-                    Fade
-                  </div>
-                  <div className="w-12 px-2" />
-                  {isTheatre && (
-                    <div className="w-[200px] px-2 text-sm font-medium text-foreground border-l">
-                      Note
-                    </div>
-                  )}
-                  <div className="w-10" />
-                </div>
 
-                {/* Cue list */}
-                <div className="flex-1 overflow-y-auto py-0.5" ref={listScrollRef}>
-                  {cues.map((cue) => {
-                    if (cue.cueType === 'MARKER') {
-                      return <MarkerRow key={cue.id} name={cue.name} />
-                    }
-                    const isActive = cue.id === effectiveActiveCueId
-                    const isStandby = cue.id === runner.standbyCueId
-                    const isDone = completedSet.has(cue.id)
-                    // Show progress bar while fading (runner.activeCueId set) or
-                    // after fade completes (markDone clears activeCueId but
-                    // fadeProgress stays at 1.0 until the next go()).
-                    const isFading = cue.id === runner.activeCueId ||
-                      (cue.id === effectiveActiveCueId && runner.fadeProgress > 0)
-                    return (
-                      <CueRow
-                        key={cue.id}
-                        cueNumber={cue.cueNumber}
-                        name={cue.name}
-                        fadeDurationMs={cue.fadeDurationMs}
-                        fadeCurve={cue.fadeCurve}
-                        autoAdvance={cue.autoAdvance}
-                        notes={cue.notes}
-                        isActive={isActive}
-                        isStandby={isStandby}
-                        isDone={isDone}
-                        isTheatre={isTheatre}
-                        fadeProgress={isFading ? runner.fadeProgress : 0}
-                        autoProgress={isFading ? runner.autoProgress : null}
-                        onClick={() => handleCueClick(cue.id)}
-                        onView={() => openCueDetail(cue.id)}
-                      />
-                    )
-                  })}
+                    {/* Scrollable cue rows */}
+                    <div className="flex-1 overflow-y-auto py-0.5" ref={listScrollRef}>
+                      {cues.map((cue) => {
+                        if (cue.cueType === 'MARKER') {
+                          return <MarkerRow key={cue.id} name={cue.name} />
+                        }
+                        const isActive = cue.id === effectiveActiveCueId
+                        const isStandby = cue.id === runner.standbyCueId
+                        const isDone = completedSet.has(cue.id)
+                        const isFading = cue.id === runner.activeCueId ||
+                          (cue.id === effectiveActiveCueId && runner.fadeProgress > 0)
+                        return (
+                          <CueRow
+                            key={cue.id}
+                            cueNumber={cue.cueNumber}
+                            name={cue.name}
+                            fadeDurationMs={cue.fadeDurationMs}
+                            fadeCurve={cue.fadeCurve}
+                            autoAdvance={cue.autoAdvance}
+                            notes={cue.notes}
+                            isActive={isActive}
+                            isStandby={isStandby}
+                            isDone={isDone}
+                            isTheatre={isTheatre}
+                            fadeProgress={isFading ? runner.fadeProgress : 0}
+                            autoProgress={isFading ? runner.autoProgress : null}
+                            onClick={() => handleCueClick(cue.id)}
+                            onView={() => openCueDetail(cue.id)}
+                            isViewing={detailCue?.id === cue.id}
+                          />
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Inline detail panel (wide viewports only, always visible) */}
+                  {showInlineDetail && (
+                    <div className="w-80 shrink-0 border-l flex flex-col overflow-hidden bg-background">
+                      {detailCue ? (
+                        <>
+                          <div className="flex items-center justify-between px-3 py-2 border-b shrink-0 gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-sm font-medium truncate">{detailCue.name}</span>
+                              {detailCue.cueNumber && (
+                                <Badge variant="outline" className="font-mono text-[10px] shrink-0">
+                                  Q{detailCue.cueNumber}
+                                </Badge>
+                              )}
+                              {detailMode === 'active' && (
+                                <Badge variant="secondary" className="text-[10px] shrink-0">
+                                  Active
+                                </Badge>
+                              )}
+                              {detailMode === 'standby' && (
+                                <Badge variant="secondary" className="text-[10px] shrink-0 border-blue-500/30 text-blue-400 bg-blue-500/10">
+                                  Next
+                                </Badge>
+                              )}
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-6 shrink-0"
+                              onClick={handleDetailEdit}
+                              title="Edit in Program"
+                            >
+                              <Pencil className="size-3" />
+                            </Button>
+                          </div>
+                          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
+                            <CueDetailContent
+                              cue={detailCue}
+                              projectId={projectIdNum}
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex-1 flex items-center justify-center p-4">
+                          <p className="text-sm text-muted-foreground">No cue selected</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </>
@@ -843,10 +927,10 @@ export function RunPage() {
         isInStack
       />
 
-      {/* Read-only cue detail sheet (eye-icon on cue rows) */}
+      {/* Read-only cue detail sheet (narrow viewports only — inline panel used on wide) */}
       <CueDetailSheet
-        open={detailCue != null}
-        onOpenChange={(open) => { if (!open) setDetailCue(null) }}
+        open={detailCue != null && !showInlineDetail}
+        onOpenChange={(open) => { if (!open) { setDetailCue(null); setDetailMode('active') } }}
         cue={detailCue}
         projectId={projectIdNum}
         onEdit={handleDetailEdit}

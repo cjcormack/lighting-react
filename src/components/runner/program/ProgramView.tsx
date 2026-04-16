@@ -21,6 +21,8 @@ interface ProgramViewProps {
   show?: ShowDetails
   activeStackId: number | null
   activeCueId: number | null
+  /** Cue currently loaded in the inline edit panel (for highlight). */
+  editingCueId?: number | null
 }
 
 export function ProgramView({
@@ -32,6 +34,7 @@ export function ProgramView({
   show,
   activeStackId,
   activeCueId,
+  editingCueId,
 }: ProgramViewProps) {
   const [createCue] = useCreateProjectCueMutation()
   const [removeCueFromStack] = useRemoveCueFromCueStackMutation()
@@ -107,6 +110,7 @@ export function ProgramView({
         stack={drillStack}
         projectId={projectId}
         activeCueId={drillStackId === activeStackId ? activeCueId : null}
+        editingCueId={editingCueId}
         onBack={() => onDrillStack(null)}
         onOpenCueForm={(cueId) => onOpenCueForm(drillStackId!, cueId)}
         onAddCue={handleAddCue}

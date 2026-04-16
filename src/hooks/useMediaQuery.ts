@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react"
 
 export const SM_BREAKPOINT = "(min-width: 640px)"
+export const XL_BREAKPOINT = "(min-width: 1280px)"
 
 export function useMediaQuery(query: string): boolean {
   const [matches, setMatches] = useState(() => {

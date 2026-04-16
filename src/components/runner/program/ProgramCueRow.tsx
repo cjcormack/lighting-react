@@ -37,6 +37,8 @@ interface ProgramCueRowProps {
   /** Cue will fire on the next GO — rendered with the blue "next" accent. */
   isStandby?: boolean
   onOpenCueForm: () => void
+  /** Whether this cue is currently shown in the inline edit panel. */
+  isEditing?: boolean
 }
 
 export function ProgramCueRow({
@@ -48,6 +50,7 @@ export function ProgramCueRow({
   isActive = false,
   isStandby = false,
   onOpenCueForm,
+  isEditing = false,
 }: ProgramCueRowProps) {
   const isWide = useMediaQuery(SM_BREAKPOINT)
   const stopProp = isWide ? (e: React.MouseEvent) => e.stopPropagation() : undefined
@@ -312,7 +315,12 @@ export function ProgramCueRow({
         {/* Edit sheet button */}
         {isWide && (
           <button
-            className="size-8 flex items-center justify-center shrink-0 text-muted-foreground hover:text-foreground"
+            className={cn(
+              'size-8 flex items-center justify-center shrink-0 rounded transition-colors',
+              isEditing
+                ? 'text-primary bg-primary/15'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
             onClick={(e) => {
               e.stopPropagation()
               onOpenCueForm()

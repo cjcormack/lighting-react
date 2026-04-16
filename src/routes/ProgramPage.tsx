@@ -21,6 +21,7 @@ import { buildCueInput } from '../lib/cueUtils'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { CueForm } from '../components/cues/CueForm'
 import { ProgramView } from '../components/runner/program/ProgramView'
+import { useMediaQuery, XL_BREAKPOINT } from '../hooks/useMediaQuery'
 
 export function ProgramRedirect() {
   const { data: currentProject, isLoading } = useCurrentProjectQuery()
@@ -75,6 +76,9 @@ export function ProgramPage() {
     [stacks, drillStackId],
   )
 
+  const isWideViewport = useMediaQuery(XL_BREAKPOINT)
+  const showInlineCueForm = isWideViewport && drillStackId != null
+
   const [cueFormOpen, setCueFormOpen] = useState(false)
   const [cueFormCueId, setCueFormCueId] = useState<number | null>(null)
   const [cueFormStackId, setCueFormStackId] = useState<number | null>(null)
@@ -89,10 +93,12 @@ export function ProgramPage() {
 
   const handleDrillStack = useCallback((id: number | null) => {
     setDrillStackId(id)
+    if (id == null) setCueFormOpen(false)
   }, [])
 
   const handleBreadcrumbCurrentPageClick = useCallback(() => {
     setDrillStackId(null)
+    setCueFormOpen(false)
   }, [])
 
   const initialDrillDoneRef = useRef(false)
@@ -128,6 +134,20 @@ export function ProgramPage() {
     },
     [fetchCue, projectIdNum],
   )
+
+  // Auto-open the first (or active) cue when drilling into a stack on wide viewports.
+  // Skips when the deep-link effect already initiated a cue load for this stack.
+  useEffect(() => {
+    if (!showInlineCueForm || drillStackId == null) return
+    if (cueFormStackId === drillStackId) return
+    const stack = stacks?.find((s) => s.id === drillStackId)
+    if (!stack || stack.cues.length === 0) return
+    const targetCueId = stack.activeCueId ?? stack.cues[0]?.id
+    if (targetCueId != null) {
+      openCueForm(drillStackId, targetCueId)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showInlineCueForm, drillStackId])
 
   const handleCueFormSave = useCallback(
     async (input: CueInput) => {
@@ -194,6 +214,9 @@ export function ProgramPage() {
         if (cueParam) {
           const cueId = Number(cueParam)
           if (Number.isFinite(cueId)) {
+            // Set stackId synchronously so the auto-open effect's guard
+            // sees it and skips — otherwise it races with this async fetch.
+            setCueFormStackId(stackId)
             openCueForm(stackId, cueId)
           }
         }
@@ -209,6 +232,18 @@ export function ProgramPage() {
       initialDrillDoneRef.current = true
     }
   }, [stacks, isShowActive, activeStackId, searchParams, setSearchParams, openCueForm])
+
+  const cueFormProps = {
+    open: cueFormOpen,
+    onOpenChange: handleCueFormClose,
+    cue: cueFormCue,
+    projectId: projectIdNum,
+    onSave: handleCueFormSave,
+    isSaving: cueFormSaving,
+    isInStack: true as const,
+    onDuplicate: handleDuplicate,
+    onRemoveFromStack: handleRemoveFromStack,
+  }
 
   // Loading / redirect guards
   if (!currentLoading && currentProject && projectIdNum !== currentProject.id) {
@@ -289,32 +324,40 @@ export function ProgramPage() {
           <p className="text-sm">Create a cue stack in the FX Cues view first.</p>
         </Card>
       ) : (
-        <ProgramView
-          projectId={projectIdNum}
-          stacks={stacks}
-          drillStackId={drillStackId}
-          onDrillStack={handleDrillStack}
-          onOpenCueForm={openCueForm}
-          show={show}
-          activeStackId={activeStackId}
-          // Use server-tracked activeCueId so the marker reflects what's
-          // currently on stage rather than the transient fade cursor.
-          activeCueId={activeStack?.activeCueId ?? null}
-        />
+        <div className="flex-1 flex min-h-0">
+          <div className="flex-1 min-w-0">
+            <ProgramView
+              projectId={projectIdNum}
+              stacks={stacks}
+              drillStackId={drillStackId}
+              onDrillStack={handleDrillStack}
+              onOpenCueForm={openCueForm}
+              show={show}
+              activeStackId={activeStackId}
+              // Server-tracked activeCueId reflects what's on stage, not the
+              // transient fade cursor — so the marker stays stable during fades.
+              activeCueId={activeStack?.activeCueId ?? null}
+              editingCueId={showInlineCueForm ? cueFormCueId : null}
+            />
+          </div>
+
+          {/* Inline CueForm panel (wide viewports + drilled into a stack) */}
+          {showInlineCueForm && (
+            <div className="w-[400px] shrink-0 border-l flex flex-col overflow-hidden bg-background">
+              {cueFormCue ? (
+                <CueForm {...cueFormProps} mode="inline" />
+              ) : (
+                <div className="flex-1 flex items-center justify-center p-4">
+                  <p className="text-sm text-muted-foreground">Select a cue to edit</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
-      {/* CueForm sheet */}
-      <CueForm
-        open={cueFormOpen}
-        onOpenChange={handleCueFormClose}
-        cue={cueFormCue}
-        projectId={projectIdNum}
-        onSave={handleCueFormSave}
-        isSaving={cueFormSaving}
-        isInStack
-        onDuplicate={handleDuplicate}
-        onRemoveFromStack={handleRemoveFromStack}
-      />
+      {/* CueForm sheet (narrow viewports only) */}
+      {!showInlineCueForm && <CueForm {...cueFormProps} />}
     </div>
   )
 }

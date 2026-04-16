@@ -21,6 +21,8 @@ interface CueRowProps {
   onClick: () => void
   /** Eye-icon click — always opens the read-only detail sheet. */
   onView: () => void
+  /** Whether this cue is currently shown in the inline detail panel. */
+  isViewing?: boolean
 }
 
 export function CueRow({
@@ -38,6 +40,7 @@ export function CueRow({
   autoProgress,
   onClick,
   onView,
+  isViewing = false,
 }: CueRowProps) {
   const showFadeBar = isActive && fadeProgress > 0 && autoProgress == null
   const showAutoBar = isActive && autoProgress != null
@@ -125,7 +128,12 @@ export function CueRow({
           }}
           aria-label="View cue details"
           title="View cue details"
-          className="size-6 inline-flex items-center justify-center rounded text-muted-foreground/50 hover:text-foreground hover:bg-muted transition-colors"
+          className={cn(
+            'size-6 inline-flex items-center justify-center rounded transition-colors',
+            isViewing
+              ? 'text-primary bg-primary/15'
+              : 'text-muted-foreground/50 hover:text-foreground hover:bg-muted',
+          )}
         >
           <Eye className="size-3.5" />
         </button>

@@ -35,6 +35,8 @@ interface StackDetailProps {
   stack: CueStack
   projectId: number
   activeCueId: number | null
+  /** Cue currently loaded in the inline edit panel (for highlight). */
+  editingCueId?: number | null
   /** Cue queued to fire on the next GO. Only meaningful when drilled into the active stack. */
   standbyCueId?: number | null
   onBack: () => void
@@ -49,6 +51,7 @@ export function StackDetail({
   stack,
   projectId,
   activeCueId,
+  editingCueId,
   standbyCueId,
   onBack,
   onOpenCueForm,
@@ -209,6 +212,7 @@ export function StackDetail({
                   library={library}
                   isActive={cue.id === activeCueId}
                   isStandby={cue.id === standbyCueId}
+                  isEditing={cue.id === editingCueId}
                   onOpenCueForm={() => onOpenCueForm(cue.id)}
                 />
               )
