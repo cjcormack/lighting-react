@@ -65,7 +65,10 @@ export type PropertyDescriptor =
 export type PropertyCategory =
   | 'dimmer'
   | 'colour'
-  | 'position'
+  | 'pan'
+  | 'tilt'
+  | 'pan_fine'
+  | 'tilt_fine'
   | 'uv'
   | 'strobe'
   | 'amber'
