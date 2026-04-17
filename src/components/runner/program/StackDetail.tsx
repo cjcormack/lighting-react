@@ -196,6 +196,7 @@ export function StackDetail({
                 return (
                   <ProgramMarkerRow
                     key={cue.id}
+                    id={cue.id}
                     name={cue.name}
                     onRename={(name) => onMarkerRename(cue.id, name)}
                     onDelete={() => onMarkerDelete(cue.id)}

@@ -1,16 +1,30 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { X } from 'lucide-react'
+import { GripVertical, X } from 'lucide-react'
+import { useSortable } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { Input } from '@/components/ui/input'
 
 interface ProgramMarkerRowProps {
+  id: number
   name: string
   onRename: (name: string) => void
   onDelete: () => void
 }
 
-export function ProgramMarkerRow({ name, onRename, onDelete }: ProgramMarkerRowProps) {
+export function ProgramMarkerRow({ id, name, onRename, onDelete }: ProgramMarkerRowProps) {
   const [localName, setLocalName] = useState(name)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+  })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+    opacity: isDragging ? 0.5 : undefined,
+  }
 
   useEffect(() => {
     setLocalName(name)
@@ -33,7 +47,18 @@ export function ProgramMarkerRow({ name, onRename, onDelete }: ProgramMarkerRowP
   )
 
   return (
-    <div className="flex items-center gap-2.5 py-2 px-4 hover:bg-muted/10 transition-colors">
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      className="flex items-center gap-2.5 py-2 px-4 hover:bg-muted/10 transition-colors"
+    >
+      <div
+        {...listeners}
+        className="flex items-center justify-center text-muted-foreground hover:text-foreground cursor-grab"
+      >
+        <GripVertical className="size-4" />
+      </div>
       <div className="flex-1 h-px bg-border" />
       <Input
         value={localName}

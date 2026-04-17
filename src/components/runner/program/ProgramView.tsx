@@ -1,8 +1,9 @@
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { Card } from '@/components/ui/card'
 import {
   useCreateProjectCueMutation,
-  useSaveProjectCueMutation,
+  usePatchProjectCueMutation,
+  useProjectCueListQuery,
 } from '@/store/cues'
 import {
   useRemoveCueFromCueStackMutation,
@@ -11,6 +12,16 @@ import type { CueStack } from '@/api/cueStacksApi'
 import type { ShowDetails } from '@/api/showApi'
 import { StackDetail } from './StackDetail'
 import { ShowOverview } from './ShowOverview'
+
+/** Find the next available name of the form "{base}", "{base} 2", "{base} 3"… */
+function nextAvailableName(base: string, taken: Set<string>): string {
+  if (!taken.has(base)) return base
+  for (let i = 2; i < 10_000; i++) {
+    const candidate = `${base} ${i}`
+    if (!taken.has(candidate)) return candidate
+  }
+  return `${base} ${Date.now()}`
+}
 
 interface ProgramViewProps {
   projectId: number
@@ -38,16 +49,22 @@ export function ProgramView({
 }: ProgramViewProps) {
   const [createCue] = useCreateProjectCueMutation()
   const [removeCueFromStack] = useRemoveCueFromCueStackMutation()
-  const [saveCue] = useSaveProjectCueMutation()
+  const [patchCue] = usePatchProjectCueMutation()
+  const { data: allCues } = useProjectCueListQuery(projectId)
 
   const drillStack = drillStackId != null ? stacks.find((s) => s.id === drillStackId) : null
+
+  const existingCueNames = useMemo(
+    () => new Set((allCues ?? []).map((c) => c.name)),
+    [allCues],
+  )
 
   const handleAddCue = useCallback(async () => {
     if (drillStackId == null) return
     try {
       const result = await createCue({
         projectId,
-        name: 'New Cue',
+        name: nextAvailableName('New Cue', existingCueNames),
         palette: [],
         updateGlobalPalette: false,
         presetApplications: [],
@@ -61,30 +78,33 @@ export function ProgramView({
     } catch {
       // Silently fail
     }
-  }, [drillStackId, projectId, createCue, onOpenCueForm])
+  }, [drillStackId, projectId, createCue, onOpenCueForm, existingCueNames])
 
   const handleAddMarker = useCallback(async () => {
     if (drillStackId == null) return
     try {
       await createCue({
         projectId,
-        name: 'New Section',
+        name: nextAvailableName('New Separator', existingCueNames),
         palette: [],
         updateGlobalPalette: false,
         presetApplications: [],
         adHocEffects: [],
         cueStackId: drillStackId,
+        cueType: 'MARKER',
       }).unwrap()
     } catch {
       // Silently fail
     }
-  }, [drillStackId, projectId, createCue])
+  }, [drillStackId, projectId, createCue, existingCueNames])
 
   const handleMarkerRename = useCallback(
     (cueId: number, name: string) => {
-      saveCue({ projectId, cueId, name, palette: [], updateGlobalPalette: false, presetApplications: [], adHocEffects: [] })
+      // PATCH so we only touch the name; PUT would wipe children and risk
+      // reverting the cueType to the NewCue default.
+      patchCue({ projectId, cueId, name })
     },
-    [projectId, saveCue],
+    [projectId, patchCue],
   )
 
   const handleMarkerDelete = useCallback(

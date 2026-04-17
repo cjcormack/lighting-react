@@ -1,3 +1,5 @@
+import type { CueType } from './cueStacksApi'
+
 // Cue target (fixture or group)
 export interface CueTarget {
   type: 'group' | 'fixture'
@@ -109,12 +111,14 @@ export interface CueInput {
   fadeCurve?: string
   cueNumber?: string | null
   notes?: string | null
+  /** Only honoured on POST; PUT/PATCH ignore it so markers cannot be turned into standard cues. */
+  cueType?: CueType
 }
 
 // Partial input for PATCH (inline edits — only send changed fields).
 // Excludes palette/updateGlobalPalette/cueStackId/sortOrder which should only change via full PUT.
 export type CuePatchInput = Partial<
-  Omit<CueInput, 'palette' | 'updateGlobalPalette' | 'cueStackId' | 'sortOrder'>
+  Omit<CueInput, 'palette' | 'updateGlobalPalette' | 'cueStackId' | 'sortOrder' | 'cueType'>
 >
 
 // Copy request/response

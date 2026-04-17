@@ -262,7 +262,7 @@ export function ShowOverview({
   )
 
   const handleAddMarker = useCallback(() => {
-    addMarker({ projectId, label: 'New Marker' })
+    addMarker({ projectId, label: 'New Separator' })
   }, [addMarker, projectId])
 
   const handleRemoveEntry = useCallback(
@@ -309,7 +309,7 @@ export function ShowOverview({
           <>
             <Button variant="outline" size="sm" onClick={handleAddMarker}>
               <SeparatorHorizontal className="size-3.5 mr-1.5" />
-              Add Marker
+              Add Separator
             </Button>
             <Button variant="outline" size="sm" onClick={() => setShowStackPicker(true)}>
               <Plus className="size-3.5 mr-1.5" />
@@ -325,7 +325,7 @@ export function ShowOverview({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => setShowStackPicker(true)}>Add Stack</DropdownMenuItem>
-              <DropdownMenuItem onClick={handleAddMarker}>Add Marker</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleAddMarker}>Add Separator</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         )}
