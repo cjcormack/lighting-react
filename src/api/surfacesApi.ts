@@ -116,7 +116,7 @@ export type EncoderRingStyle = "NONE" | "SINGLE_DOT" | "FAN" | "PAN"
 export type LedFeedback = "NONE" | "ON_OFF" | "BRIGHTNESS" | "COLOUR"
 
 export interface FaderControl {
-  kind: "fader"
+  type: "fader"
   controlId: string
   label: string
   cc: number
@@ -128,7 +128,7 @@ export interface FaderControl {
 }
 
 export interface EncoderControl {
-  kind: "encoder"
+  type: "encoder"
   controlId: string
   label: string
   cc: number
@@ -140,7 +140,7 @@ export interface EncoderControl {
 }
 
 export interface ButtonControl {
-  kind: "button"
+  type: "button"
   controlId: string
   label: string
   note: number
@@ -149,7 +149,7 @@ export interface ButtonControl {
 }
 
 export interface BankButtonControl {
-  kind: "bankButton"
+  type: "bankButton"
   controlId: string
   label: string
   note: number

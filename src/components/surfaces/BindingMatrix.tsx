@@ -103,7 +103,7 @@ export function BindingMatrix({
                 const list = bindingsByControl.get(control.controlId) ?? []
                 const active = resolveActive(list, activeBank)
                 const pickup = pickupStates.get(`${device.displayKey}|${control.controlId}`)
-                const isContinuous = control.kind === "fader" || control.kind === "encoder"
+                const isContinuous = control.type === "fader" || control.type === "encoder"
                 const highlight = active?.id === highlightBindingId
                 return (
                   <TableRow
@@ -113,7 +113,7 @@ export function BindingMatrix({
                     <TableCell className="font-mono text-xs">{control.label}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-[10px]">
-                        <ControlKindIcon control={control} /> {control.kind}
+                        <ControlKindIcon control={control} /> {control.type}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -157,7 +157,7 @@ export function BindingMatrix({
                               <Trash2 className="size-3.5" />
                             </Button>
                           </>
-                        ) : control.kind === "bankButton" ? (
+                        ) : control.type === "bankButton" ? (
                           <span className="text-[10px] text-muted-foreground">auto</span>
                         ) : (
                           <Button
@@ -261,9 +261,9 @@ function resolveActive(
 }
 
 function ControlKindIcon({ control }: { control: ControlDescriptor }) {
-  if (control.kind === "fader") return <Sliders className="size-3" />
-  if (control.kind === "encoder") return <Circle className="size-3" />
-  if (control.kind === "bankButton") return <Layers className="size-3" />
+  if (control.type === "fader") return <Sliders className="size-3" />
+  if (control.type === "encoder") return <Circle className="size-3" />
+  if (control.type === "bankButton") return <Layers className="size-3" />
   return <Square className="size-3" />
 }
 
@@ -280,10 +280,10 @@ function BindingSummary({ binding }: { binding: ControlSurfaceBinding }) {
 }
 
 function groupControls(controls: ControlDescriptor[]): { title: string; controls: ControlDescriptor[] }[] {
-  const faders = controls.filter((c) => c.kind === "fader")
-  const encoders = controls.filter((c) => c.kind === "encoder")
-  const buttons = controls.filter((c) => c.kind === "button")
-  const bankButtons = controls.filter((c) => c.kind === "bankButton")
+  const faders = controls.filter((c) => c.type === "fader")
+  const encoders = controls.filter((c) => c.type === "encoder")
+  const buttons = controls.filter((c) => c.type === "button")
+  const bankButtons = controls.filter((c) => c.type === "bankButton")
   const sections: { title: string; controls: ControlDescriptor[] }[] = []
   if (faders.length) sections.push({ title: "Faders", controls: faders })
   if (encoders.length) sections.push({ title: "Encoders", controls: encoders })
@@ -311,7 +311,7 @@ function CreateBindingSheet({
   onLearn: (t: BindingTarget, bank: string | null, policy: TakeoverPolicy | null) => void
   onDirectCreate: (t: BindingTarget, bank: string | null, policy: TakeoverPolicy | null) => Promise<void>
 }) {
-  const continuous = control.kind === "fader" || control.kind === "encoder"
+  const continuous = control.type === "fader" || control.type === "encoder"
   const [target, setTarget] = useState<BindingTarget>(
     continuous
       ? { type: "groupProperty", groupName: "", propertyName: "dimmer" }
@@ -382,7 +382,7 @@ function EditBindingSheet({
   onSave: (target: BindingTarget, bank: string | null, policy: TakeoverPolicy | null) => Promise<void>
 }) {
   const control = profile.controls.find((c) => c.controlId === binding.controlId)
-  const continuous = control?.kind === "fader" || control?.kind === "encoder"
+  const continuous = control?.type === "fader" || control?.type === "encoder"
   const [target, setTarget] = useState<BindingTarget>(binding.target)
   const [bank, setBank] = useState<string | null>(binding.bank)
   const [policy, setPolicy] = useState<TakeoverPolicy | null>(binding.takeoverPolicy)
