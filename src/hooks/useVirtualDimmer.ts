@@ -84,6 +84,9 @@ export function useVirtualDimmer(
 
   const { value, percentage } = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 
+  // Not routed for cue-edit: ColourPropertyDescriptor has no fixtureKey, so we can't form
+  // a setProperty call. R/G/B direct writes will be rejected by the backend in cue mode.
+
   const setValue = useCallback(
     (newValue: number) => {
       const clamped = Math.max(0, Math.min(255, Math.round(newValue)))

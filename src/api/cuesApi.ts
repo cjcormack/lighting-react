@@ -48,6 +48,17 @@ export interface CueAdHocEffect {
   sortOrder?: number
 }
 
+// Layer 3 property assignment on a cue.
+export interface CuePropertyAssignment {
+  targetType: 'fixture' | 'group'
+  targetKey: string
+  propertyName: string
+  /** Canonical property-level form: "0".."255" for sliders/settings, extended-colour, "pan,tilt". */
+  value: string
+  fadeDurationMs?: number | null
+  sortOrder?: number
+}
+
 // ─── Script trigger types ──────────────────────────────────────────
 
 export type TriggerType = 'ACTIVATION' | 'DEACTIVATION'
@@ -81,6 +92,7 @@ export interface Cue {
   updateGlobalPalette: boolean
   presetApplications: CuePresetApplicationDetail[]
   adHocEffects: CueAdHocEffect[]
+  propertyAssignments: CuePropertyAssignment[]
   triggers: CueTriggerDetail[]
   cueStackId: number | null
   cueStackName: string | null
@@ -102,6 +114,7 @@ export interface CueInput {
   updateGlobalPalette: boolean
   presetApplications: CuePresetApplication[]
   adHocEffects: CueAdHocEffect[]
+  propertyAssignments?: CuePropertyAssignment[]
   triggers?: CueTrigger[]
   cueStackId?: number | null
   sortOrder?: number

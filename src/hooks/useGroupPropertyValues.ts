@@ -1,5 +1,6 @@
 import { useRef, useMemo, useSyncExternalStore, useCallback } from 'react'
 import { lightingApi } from '../api/lightingApi'
+import { useEditorContext } from '../components/lighting-editor/EditorContext'
 import type { ChannelRef } from '../store/fixtures'
 import type {
   GroupSliderPropertyDescriptor,
@@ -8,6 +9,18 @@ import type {
   GroupSettingPropertyDescriptor,
   GroupPropertyDescriptor,
 } from '../api/groupsApi'
+
+// Group writes persist as per-fixture rows in cue mode — GroupPropertyDescriptor doesn't
+// carry the group name, so we can't emit a group-level setProperty from here.
+function cueEditWriteChannel(cueId: number, universe: number, channelNo: number, value: number) {
+  lightingApi.cueEdit.send({
+    type: 'cueEdit.setChannel',
+    cueId,
+    universe,
+    channel: channelNo,
+    level: value,
+  })
+}
 
 // Helper to create channel key
 function channelKey(ref: ChannelRef): string {
@@ -95,13 +108,20 @@ export function useGroupSliderValues(
  * Hook to update all slider channels in a group to the same value.
  */
 export function useUpdateGroupSlider(property: GroupSliderPropertyDescriptor) {
+  const ctx = useEditorContext()
   return useCallback(
     (value: number) => {
+      if (ctx.kind === 'cue') {
+        for (const ch of property.memberChannels) {
+          cueEditWriteChannel(ctx.id, ch.universe, ch.channelNo, value)
+        }
+        return
+      }
       property.memberChannels.forEach((channel) => {
         lightingApi.channels.update(channel.universe, channel.channelNo, value)
       })
     },
-    [property.memberChannels]
+    [ctx, property.memberChannels]
   )
 }
 
@@ -247,10 +267,38 @@ export function useGroupColourValues(
 
 /**
  * Hook to update all colour channels in a group to the same values.
+ *
+ * In cue mode the backend rejects setChannel on R/G/B (they're sub-channels of rgbColour), so
+ * we send one setProperty per fixture for RGB and fall through to setChannel for W/A/UV.
  */
 export function useUpdateGroupColour(property: GroupColourPropertyDescriptor) {
+  const ctx = useEditorContext()
   return useCallback(
     (r: number, g: number, b: number, w?: number, a?: number, uv?: number) => {
+      if (ctx.kind === 'cue') {
+        const hex = '#' +
+          [r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('').toUpperCase()
+        for (const m of property.memberColourChannels) {
+          lightingApi.cueEdit.send({
+            type: 'cueEdit.setProperty',
+            cueId: ctx.id,
+            targetType: 'fixture',
+            targetKey: m.fixtureKey,
+            propertyName: 'rgbColour',
+            value: hex,
+          })
+          if (m.whiteChannel && w !== undefined) {
+            cueEditWriteChannel(ctx.id, m.whiteChannel.universe, m.whiteChannel.channelNo, w)
+          }
+          if (m.amberChannel && a !== undefined) {
+            cueEditWriteChannel(ctx.id, m.amberChannel.universe, m.amberChannel.channelNo, a)
+          }
+          if (m.uvChannel && uv !== undefined) {
+            cueEditWriteChannel(ctx.id, m.uvChannel.universe, m.uvChannel.channelNo, uv)
+          }
+        }
+        return
+      }
       property.memberColourChannels.forEach((m) => {
         lightingApi.channels.update(m.redChannel.universe, m.redChannel.channelNo, r)
         lightingApi.channels.update(m.greenChannel.universe, m.greenChannel.channelNo, g)
@@ -266,7 +314,7 @@ export function useUpdateGroupColour(property: GroupColourPropertyDescriptor) {
         }
       })
     },
-    [property.memberColourChannels]
+    [ctx, property.memberColourChannels]
   )
 }
 
@@ -375,14 +423,29 @@ export function useGroupPositionValues(
  * Hook to update all position channels in a group to the same values.
  */
 export function useUpdateGroupPosition(property: GroupPositionPropertyDescriptor) {
+  const ctx = useEditorContext()
   return useCallback(
     (pan: number, tilt: number) => {
+      if (ctx.kind === 'cue') {
+        const value = `${pan},${tilt}`
+        for (const m of property.memberPositionChannels) {
+          lightingApi.cueEdit.send({
+            type: 'cueEdit.setProperty',
+            cueId: ctx.id,
+            targetType: 'fixture',
+            targetKey: m.fixtureKey,
+            propertyName: 'position',
+            value,
+          })
+        }
+        return
+      }
       property.memberPositionChannels.forEach((m) => {
         lightingApi.channels.update(m.panChannel.universe, m.panChannel.channelNo, pan)
         lightingApi.channels.update(m.tiltChannel.universe, m.tiltChannel.channelNo, tilt)
       })
     },
-    [property.memberPositionChannels]
+    [ctx, property.memberPositionChannels]
   )
 }
 
@@ -469,13 +532,20 @@ export function useGroupSettingValues(
  * Hook to update all setting channels in a group to the same value.
  */
 export function useUpdateGroupSetting(property: GroupSettingPropertyDescriptor) {
+  const ctx = useEditorContext()
   return useCallback(
     (level: number) => {
+      if (ctx.kind === 'cue') {
+        for (const m of property.memberChannels) {
+          cueEditWriteChannel(ctx.id, m.channel.universe, m.channel.channelNo, level)
+        }
+        return
+      }
       property.memberChannels.forEach((m) => {
         lightingApi.channels.update(m.channel.universe, m.channel.channelNo, level)
       })
     },
-    [property.memberChannels]
+    [ctx, property.memberChannels]
   )
 }
 

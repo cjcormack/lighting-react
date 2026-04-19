@@ -1,5 +1,6 @@
 import { useRef, useMemo, useSyncExternalStore, useCallback } from 'react'
 import { lightingApi } from '../api/lightingApi'
+import { useEditorContext } from '../components/lighting-editor/EditorContext'
 import type {
   ChannelRef,
   PropertyDescriptor,
@@ -254,12 +255,27 @@ export function usePropertyValue(property: PropertyDescriptor) {
 }
 
 /**
- * Hook to update a channel value
+ * Hook to update a channel value. Routes through `cueEdit.setChannel` when the surrounding
+ * [EditorContext] is `kind: 'cue'`, else writes direct to Layer 4.
  */
 export function useUpdateChannel() {
-  return useCallback((channel: ChannelRef, value: number) => {
-    lightingApi.channels.update(channel.universe, channel.channelNo, value)
-  }, [])
+  const ctx = useEditorContext()
+  return useCallback(
+    (channel: ChannelRef, value: number) => {
+      if (ctx.kind === 'cue') {
+        lightingApi.cueEdit.send({
+          type: 'cueEdit.setChannel',
+          cueId: ctx.id,
+          universe: channel.universe,
+          channel: channel.channelNo,
+          level: value,
+        })
+        return
+      }
+      lightingApi.channels.update(channel.universe, channel.channelNo, value)
+    },
+    [ctx]
+  )
 }
 
 /**

@@ -131,6 +131,17 @@ export const cuesApi = restApi.injectEndpoints({
     currentCueState: build.query<CueCurrentState, number>({
       query: (projectId) => `project/${projectId}/cues/current-state`,
     }),
+
+    snapshotCueFromLive: build.mutation<Cue, { projectId: number; cueId: number }>({
+      query: ({ projectId, cueId }) => ({
+        url: `project/${projectId}/cues/${cueId}/snapshot-from-live`,
+        method: 'POST',
+      }),
+      invalidatesTags: (_result, _error, { projectId }) => [
+        { type: 'CueList', id: projectId },
+        'CueList',
+      ],
+    }),
   }),
   overrideExisting: false,
 })
@@ -147,6 +158,7 @@ export const {
   useApplyCueMutation,
   useStopCueMutation,
   useLazyCurrentCueStateQuery,
+  useSnapshotCueFromLiveMutation,
 } = cuesApi
 
 /** Derive active cue IDs from the real-time FxState WebSocket stream. */

@@ -5,7 +5,8 @@ import { Badge } from '@/components/ui/badge'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Fixture, ElementDescriptor, ColourPropertyDescriptor, SettingPropertyDescriptor, findColourSource } from '../../store/fixtures'
 import type { GroupPropertyDescriptor, GroupColourPropertyDescriptor } from '../../api/groupsApi'
-import { useGetChannelQuery, useUpdateChannelMutation } from '../../store/channels'
+import { useGetChannelQuery } from '../../store/channels'
+import { useUpdateChannel } from '../../hooks/usePropertyValues'
 import { useColourValue, useSettingColourPreview } from '../../hooks/usePropertyValues'
 import { PropertyVisualizer, VirtualDimmerSlider } from './PropertyVisualizers'
 import { GroupPropertyVisualizer, GroupVirtualDimmerSlider } from './GroupPropertyVisualizers'
@@ -516,24 +517,24 @@ const ChannelSlider = React.memo(function ChannelSlider({
   const value = maybeValue || 0
   const percentage = Math.round((value / 255) * 100)
 
-  const [runUpdateChannelMutation] = useUpdateChannelMutation()
+  const updateChannel = useUpdateChannel()
 
   const handleSliderChange = useCallback((values: number[]) => {
     if (values[0] !== undefined) {
-      runUpdateChannelMutation({ universe, channelNo: id, value: values[0] })
+      updateChannel({ universe, channelNo: id }, values[0])
     }
-  }, [runUpdateChannelMutation, universe, id])
+  }, [updateChannel, universe, id])
 
   const handleInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.value === '') {
-      runUpdateChannelMutation({ universe, channelNo: id, value: 0 })
+      updateChannel({ universe, channelNo: id }, 0)
       return
     }
     const valueNumber = Number(event.target.value)
     if (isNaN(valueNumber)) return
     const clamped = Math.max(0, Math.min(255, valueNumber))
-    runUpdateChannelMutation({ universe, channelNo: id, value: clamped })
-  }, [runUpdateChannelMutation, universe, id])
+    updateChannel({ universe, channelNo: id }, clamped)
+  }, [updateChannel, universe, id])
 
   return (
     <div className="py-1.5">
