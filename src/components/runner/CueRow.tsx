@@ -3,8 +3,10 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { formatFadeText } from '@/lib/cueUtils'
 import { cueStatusIcon } from './cueStatusIcon'
+import { BoundControlBadge } from '../surfaces/BoundControlBadge'
 
 interface CueRowProps {
+  cueId?: number
   cueNumber: string | null
   name: string
   fadeDurationMs: number | null
@@ -26,6 +28,7 @@ interface CueRowProps {
 }
 
 export function CueRow({
+  cueId,
   cueNumber,
   name,
   fadeDurationMs,
@@ -85,12 +88,18 @@ export function CueRow({
       {/* Name */}
       <div
         className={cn(
-          'flex-1 px-2 text-sm font-medium text-foreground truncate min-w-0',
+          'flex-1 px-2 text-sm font-medium text-foreground truncate min-w-0 flex items-center gap-2',
           isActive && 'text-green-300 font-semibold',
           isStandby && !isActive && 'text-blue-300 font-semibold',
         )}
       >
-        {name}
+        <span className="truncate min-w-0">{name}</span>
+        {cueId != null && (
+          <BoundControlBadge
+            className="inline-flex shrink-0"
+            match={{ type: "fireCue", cueId }}
+          />
+        )}
       </div>
 
       {/* Fade */}

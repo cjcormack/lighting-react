@@ -11,6 +11,7 @@ import {
   SlidersHorizontal,
   Theater,
   Play,
+  Sliders,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { useGetUniverseQuery } from "./store/universes"
@@ -66,6 +67,15 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/groups`,
     visibility: "active-only",
     pathMatch: "/groups",
+    group: "setup",
+  },
+  {
+    id: "surfaces",
+    label: "Surfaces",
+    icon: Sliders,
+    path: (p) => `/projects/${p}/surfaces`,
+    visibility: "active-only",
+    pathMatch: "/surfaces",
     group: "setup",
   },
 

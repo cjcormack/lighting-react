@@ -16,6 +16,7 @@ import ProjectOverview, { ProjectOverviewRedirect } from "./routes/ProjectOvervi
 import { ProjectPatches, PatchesRedirect } from "./routes/Patches";
 import { ProgramPage, ProgramRedirect } from "./routes/ProgramPage";
 import { RunPage, RunRedirect, LegacyShowRedirect } from "./routes/RunPage";
+import { ProjectSurfaces, SurfacesRedirect } from "./routes/Surfaces";
 
 function App() {
   const router = createBrowserRouter([
@@ -86,6 +87,14 @@ function App() {
         {
           path: "patches",
           element: <PatchesRedirect />,
+        },
+        {
+          path: "projects/:projectId/surfaces",
+          element: <ProjectSurfaces />,
+        },
+        {
+          path: "surfaces",
+          element: <SurfacesRedirect />,
         },
         {
           path: "projects/:projectId/channels/:universe",

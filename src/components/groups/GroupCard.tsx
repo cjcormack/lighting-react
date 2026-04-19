@@ -8,6 +8,7 @@ import { GroupPropertyVisualizer, GroupVirtualDimmerSlider } from '../fixtures/G
 import { GroupMembersSection } from './GroupMembersSection'
 import { FxBadge } from '../fx/FxBadge'
 import { FxSection } from '../fx/FxSection'
+import { BoundControlBadge } from '../surfaces/BoundControlBadge'
 import type { GroupSummary, GroupPropertyDescriptor, GroupColourPropertyDescriptor } from '../../api/groupsApi'
 
 interface GroupCardProps {
@@ -30,6 +31,7 @@ function GroupCardInner({ group, onFixtureClick }: GroupCardProps) {
       <CardContent className="space-y-4">
         {/* Inline properties section */}
         <GroupPropertiesSection
+          groupName={group.name}
           properties={properties}
           isLoading={propertiesLoading}
           isEditing={isEditing}
@@ -91,10 +93,12 @@ function GroupCardHeader({
 }
 
 export function GroupPropertiesSection({
+  groupName,
   properties,
   isLoading,
   isEditing,
 }: {
+  groupName?: string
   properties: GroupPropertyDescriptor[] | undefined
   isLoading: boolean
   isEditing: boolean
@@ -128,21 +132,29 @@ export function GroupPropertiesSection({
     </Badge>
   ) : null
 
+  const badgeFor = (name: string) =>
+    groupName ? (
+      <BoundControlBadge
+        className="inline-flex ml-1 align-middle"
+        match={{ type: "groupProperty", groupName, propertyName: name }}
+      />
+    ) : null
+
   return (
     <div className="space-y-1">
       {/* Colour properties first (most visually prominent) */}
       {grouped.colour.map((prop) => (
-        <GroupPropertyVisualizer key={prop.name} property={prop} isEditing={isEditing} />
+        <GroupPropertyVisualizer key={prop.name} property={prop} isEditing={isEditing} nameExtra={badgeFor(prop.name)} />
       ))}
 
       {/* Position properties */}
       {grouped.position.map((prop) => (
-        <GroupPropertyVisualizer key={prop.name} property={prop} isEditing={isEditing} />
+        <GroupPropertyVisualizer key={prop.name} property={prop} isEditing={isEditing} nameExtra={badgeFor(prop.name)} />
       ))}
 
       {/* Dimmer properties */}
       {grouped.dimmer.map((prop) => (
-        <GroupPropertyVisualizer key={prop.name} property={prop} isEditing={isEditing} />
+        <GroupPropertyVisualizer key={prop.name} property={prop} isEditing={isEditing} nameExtra={badgeFor(prop.name)} />
       ))}
 
       {/* Virtual dimmer (colour but no real dimmer) */}
@@ -156,12 +168,12 @@ export function GroupPropertiesSection({
 
       {/* Other slider properties */}
       {grouped.slider.map((prop) => (
-        <GroupPropertyVisualizer key={prop.name} property={prop} isEditing={isEditing} />
+        <GroupPropertyVisualizer key={prop.name} property={prop} isEditing={isEditing} nameExtra={badgeFor(prop.name)} />
       ))}
 
       {/* Setting properties */}
       {grouped.setting.map((prop) => (
-        <GroupPropertyVisualizer key={prop.name} property={prop} isEditing={isEditing} />
+        <GroupPropertyVisualizer key={prop.name} property={prop} isEditing={isEditing} nameExtra={badgeFor(prop.name)} />
       ))}
     </div>
   )

@@ -11,6 +11,7 @@ import { PropertyVisualizer, VirtualDimmerSlider } from './PropertyVisualizers'
 import { GroupPropertyVisualizer, GroupVirtualDimmerSlider } from './GroupPropertyVisualizers'
 import { GroupMembershipSection } from './GroupMembershipSection'
 import { FxSection } from '../fx/FxSection'
+import { FixtureBoundControlsRow } from '../surfaces/FixtureBoundControlsRow'
 import { cn } from '@/lib/utils'
 
 export type FixtureViewMode = 'properties' | 'channels'
@@ -123,6 +124,9 @@ function PropertiesView({
 
   return (
     <div className="space-y-4">
+      {/* Surface bindings — small chip row for any controls mapped to this fixture */}
+      <FixtureBoundControlsRow fixtureKey={fixture.key} />
+
       {/* Properties - fixture-level and element-group interleaved by category */}
       {(hasAnyProperties || hasVirtualDimmer) && (
         <div className={cn('space-y-1', hasElements && 'max-w-sm')}>

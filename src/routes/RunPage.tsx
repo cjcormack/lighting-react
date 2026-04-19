@@ -840,6 +840,7 @@ export function RunPage() {
                         return (
                           <CueRow
                             key={cue.id}
+                            cueId={cue.id}
                             cueNumber={cue.cueNumber}
                             name={cue.name}
                             fadeDurationMs={cue.fadeDurationMs}

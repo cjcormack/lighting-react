@@ -17,6 +17,7 @@ import {
   Bookmark,
   Clapperboard,
   TableProperties,
+  Sliders,
 } from "lucide-react"
 import { Breadcrumbs } from "@/components/Breadcrumbs"
 import { useProjectQuery, useCurrentProjectQuery } from "../store/projects"
@@ -25,6 +26,7 @@ import { usePatchListQuery } from "../store/patches"
 import { useProjectPresetListQuery } from "../store/fxPresets"
 import { useGroupListQuery } from "../store/groups"
 import { useGetUniverseQuery } from "../store/universes"
+import { useSurfaceBindingsQuery, useSurfaceDevices } from "../store/surfaces"
 import { useState } from "react"
 import { cn } from "@/lib/utils"
 import EditProjectDialog from "../EditProjectDialog"
@@ -54,6 +56,11 @@ export default function ProjectOverview() {
   const { data: patches } = usePatchListQuery(Number(projectId), {
     skip: !project,
   })
+  const { data: surfaceBindings } = useSurfaceBindingsQuery(Number(projectId), {
+    skip: !project,
+  })
+  const surfaceDevices = useSurfaceDevices()
+  const connectedSurfaces = project?.isCurrent ? surfaceDevices.length : 0
 
   if (!projectId) {
     return <Navigate to="/projects" replace />
@@ -145,6 +152,17 @@ export default function ProjectOverview() {
                 icon={<Layers className="size-5" />}
                 description="Fixture groups for control"
                 onClick={() => navigate(`/projects/${project.id}/groups`)}
+              />
+              <QuickNavCard
+                title="Surfaces"
+                count={surfaceBindings?.length}
+                icon={<Sliders className="size-5" />}
+                description={
+                  connectedSurfaces > 0
+                    ? `${connectedSurfaces} device${connectedSurfaces !== 1 ? 's' : ''} connected`
+                    : "MIDI control surface bindings"
+                }
+                onClick={() => navigate(`/projects/${project.id}/surfaces`)}
               />
               <QuickNavCard
                 title="FX"
