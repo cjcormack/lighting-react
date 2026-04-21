@@ -114,6 +114,13 @@ export function isValidHexColour(hex: string): boolean {
   return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(hex)
 }
 
+/** Clamp-and-format an R/G/B triple as `#RRGGBB` (uppercase). */
+export function rgbToHex(r: number, g: number, b: number): string {
+  const byte = (n: number) =>
+    Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0')
+  return `#${byte(r)}${byte(g)}${byte(b)}`.toUpperCase()
+}
+
 /** Check if an extended colour has any non-zero extended channels */
 export function hasExtendedChannels(colour: ExtendedColour): boolean {
   return colour.white > 0 || colour.amber > 0 || colour.uv > 0

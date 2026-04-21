@@ -136,6 +136,7 @@ function PropertiesView({
             <PropertyVisualizer
               key={prop.name}
               property={prop}
+              fixtureKey={fixture.key}
               isEditing={isEditing}
             />
           ))}
@@ -148,6 +149,7 @@ function PropertiesView({
             <PropertyVisualizer
               key={prop.name}
               property={prop}
+              fixtureKey={fixture.key}
               isEditing={isEditing}
             />
           ))}
@@ -160,6 +162,7 @@ function PropertiesView({
             <PropertyVisualizer
               key={prop.name}
               property={prop}
+              fixtureKey={fixture.key}
               isEditing={isEditing}
             />
           ))}
@@ -171,6 +174,7 @@ function PropertiesView({
           {virtualDimmerColourProp && (
             <VirtualDimmerSlider
               colourProp={virtualDimmerColourProp}
+              fixtureKey={fixture.key}
               isEditing={isEditing}
               nameExtra={virtualBadge}
             />
@@ -188,6 +192,7 @@ function PropertiesView({
             <PropertyVisualizer
               key={prop.name}
               property={prop}
+              fixtureKey={fixture.key}
               isEditing={isEditing}
             />
           ))}
@@ -200,6 +205,7 @@ function PropertiesView({
             <PropertyVisualizer
               key={prop.name}
               property={prop}
+              fixtureKey={fixture.key}
               isEditing={isEditing}
             />
           ))}
@@ -300,7 +306,11 @@ function ElementsView({
 
           {expandedHead === element.key && (
             <div className="p-3 pt-0 border-t">
-              <PropertiesList properties={element.properties} isEditing={isEditing} />
+              <PropertiesList
+                properties={element.properties}
+                fixtureKey={element.key}
+                isEditing={isEditing}
+              />
             </div>
           )}
         </div>
@@ -396,9 +406,11 @@ function HeadSettingColourDot({
 /** Renders properties organized by category */
 function PropertiesList({
   properties,
+  fixtureKey,
   isEditing,
 }: {
   properties: ElementDescriptor['properties']
+  fixtureKey?: string
   isEditing: boolean
 }) {
   if (!properties || properties.length === 0) {
@@ -426,26 +438,27 @@ function PropertiesList({
   return (
     <div className="space-y-1">
       {colourProps.map((prop) => (
-        <PropertyVisualizer key={prop.name} property={prop} isEditing={isEditing} />
+        <PropertyVisualizer key={prop.name} property={prop} fixtureKey={fixtureKey} isEditing={isEditing} />
       ))}
       {positionProps.map((prop) => (
-        <PropertyVisualizer key={prop.name} property={prop} isEditing={isEditing} />
+        <PropertyVisualizer key={prop.name} property={prop} fixtureKey={fixtureKey} isEditing={isEditing} />
       ))}
       {dimmerProps.map((prop) => (
-        <PropertyVisualizer key={prop.name} property={prop} isEditing={isEditing} />
+        <PropertyVisualizer key={prop.name} property={prop} fixtureKey={fixtureKey} isEditing={isEditing} />
       ))}
       {elementColourProp && (
         <VirtualDimmerSlider
           colourProp={elementColourProp}
+          fixtureKey={fixtureKey}
           isEditing={isEditing}
           nameExtra={virtualBadge}
         />
       )}
       {otherSliders.map((prop) => (
-        <PropertyVisualizer key={prop.name} property={prop} isEditing={isEditing} />
+        <PropertyVisualizer key={prop.name} property={prop} fixtureKey={fixtureKey} isEditing={isEditing} />
       ))}
       {settingProps.map((prop) => (
-        <PropertyVisualizer key={prop.name} property={prop} isEditing={isEditing} />
+        <PropertyVisualizer key={prop.name} property={prop} fixtureKey={fixtureKey} isEditing={isEditing} />
       ))}
     </div>
   )

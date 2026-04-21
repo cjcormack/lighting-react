@@ -49,12 +49,33 @@ export interface CueEditAddPresetApplicationOutgoing {
   cueId: number
   presetId: number
   targets: Array<{ type: 'fixture' | 'group'; key: string }>
+  delayMs?: number | null
+  intervalMs?: number | null
+  randomWindowMs?: number | null
 }
 
 export interface CueEditAddAdHocEffectOutgoing {
   type: 'cueEdit.addAdHocEffect'
   cueId: number
-  effect: Record<string, unknown>
+  effect: {
+    targetType: 'fixture' | 'group'
+    targetKey: string
+    effectType: string
+    category: string
+    propertyName?: string | null
+    beatDivision: number
+    blendMode: string
+    distribution: string
+    phaseOffset?: number
+    elementMode?: string | null
+    elementFilter?: string | null
+    stepTiming?: boolean | null
+    parameters?: Record<string, string>
+    delayMs?: number | null
+    intervalMs?: number | null
+    randomWindowMs?: number | null
+    sortOrder?: number
+  }
 }
 
 export interface CueEditClearAssignmentOutgoing {
@@ -115,6 +136,25 @@ export interface CueEditChangesDiscarded {
   cueId: number
 }
 
+export interface CueEditPaletteChanged {
+  type: 'cueEdit.paletteChanged'
+  cueId: number
+  palette: string[]
+}
+
+export interface CueEditPresetApplicationAdded {
+  type: 'cueEdit.presetApplicationAdded'
+  cueId: number
+  presetId: number
+}
+
+export interface CueEditAdHocEffectAdded {
+  type: 'cueEdit.adHocEffectAdded'
+  cueId: number
+  effectType: string
+  targetKey: string
+}
+
 export interface CueEditError {
   type: 'cueEdit.error'
   cueId: number | null
@@ -127,6 +167,9 @@ export type CueEditIncomingMessage =
   | CueEditAssignmentChanged
   | CueEditAssignmentCleared
   | CueEditChangesDiscarded
+  | CueEditPaletteChanged
+  | CueEditPresetApplicationAdded
+  | CueEditAdHocEffectAdded
   | CueEditError
 
 export interface CueEditWsApi {

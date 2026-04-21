@@ -1,6 +1,7 @@
 import { useRef, useMemo, useSyncExternalStore, useCallback } from 'react'
 import { lightingApi } from '../api/lightingApi'
 import { useEditorContext } from '../components/lighting-editor/EditorContext'
+import { rgbToHex } from '../components/fx/colourUtils'
 import type { ChannelRef } from '../store/fixtures'
 import type {
   GroupSliderPropertyDescriptor,
@@ -276,8 +277,7 @@ export function useUpdateGroupColour(property: GroupColourPropertyDescriptor) {
   return useCallback(
     (r: number, g: number, b: number, w?: number, a?: number, uv?: number) => {
       if (ctx.kind === 'cue') {
-        const hex = '#' +
-          [r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('').toUpperCase()
+        const hex = rgbToHex(r, g, b)
         for (const m of property.memberColourChannels) {
           lightingApi.cueEdit.send({
             type: 'cueEdit.setProperty',

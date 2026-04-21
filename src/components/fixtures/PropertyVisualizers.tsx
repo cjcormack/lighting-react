@@ -23,6 +23,7 @@ import {
   usePositionValue,
   useSettingValue,
   useUpdateChannel,
+  useUpdateFixtureColour,
 } from '../../hooks/usePropertyValues'
 import { useVirtualDimmer } from '../../hooks/useVirtualDimmer'
 import { usePropertyParkStatus } from '../../hooks/usePropertyParkStatus'
@@ -43,6 +44,7 @@ function ParkedIndicator() {
 
 interface PropertyVisualizerProps {
   property: PropertyDescriptor
+  fixtureKey?: string
   isEditing?: boolean
 }
 
@@ -51,13 +53,16 @@ interface PropertyVisualizerProps {
  */
 export const ColourSwatch = memo(function ColourSwatch({
   property,
+  fixtureKey,
   isEditing = false,
 }: {
   property: ColourPropertyDescriptor
+  fixtureKey?: string
   isEditing?: boolean
 }) {
   const colour = useColourValue(property)
   const updateChannel = useUpdateChannel()
+  const updateColour = useUpdateFixtureColour(property, fixtureKey)
   const { isAnyParked } = usePropertyParkStatus(property)
 
   const canEdit = isEditing && !isAnyParked
@@ -65,22 +70,19 @@ export const ColourSwatch = memo(function ColourSwatch({
 
   const hasActiveUv = colour.uv !== undefined && colour.uv > 0
 
-  const handleColourChange = useCallback(
-    (r: number, g: number, b: number, w?: number, a?: number, uv?: number) => {
-      updateChannel(property.redChannel, r)
-      updateChannel(property.greenChannel, g)
-      updateChannel(property.blueChannel, b)
-      if (property.whiteChannel && w !== undefined) {
-        updateChannel(property.whiteChannel, w)
-      }
-      if (property.amberChannel && a !== undefined) {
-        updateChannel(property.amberChannel, a)
-      }
-      if (property.uvChannel && uv !== undefined) {
-        updateChannel(property.uvChannel, uv)
-      }
-    },
-    [updateChannel, property]
+  // Individual R/G/B sliders in cue mode must go via `updateColour` (one setProperty with
+  // `rgbColour`); the backend rejects per-channel setChannel on R/G/B sub-channels.
+  const setR = useCallback(
+    (v: number) => updateColour(v, colour.g, colour.b, colour.w, colour.a, colour.uv),
+    [updateColour, colour.g, colour.b, colour.w, colour.a, colour.uv],
+  )
+  const setG = useCallback(
+    (v: number) => updateColour(colour.r, v, colour.b, colour.w, colour.a, colour.uv),
+    [updateColour, colour.r, colour.b, colour.w, colour.a, colour.uv],
+  )
+  const setB = useCallback(
+    (v: number) => updateColour(colour.r, colour.g, v, colour.w, colour.a, colour.uv),
+    [updateColour, colour.r, colour.g, colour.w, colour.a, colour.uv],
   )
 
   const swatchElement = (
@@ -112,7 +114,7 @@ export const ColourSwatch = memo(function ColourSwatch({
               hasWhiteChannel={!!property.whiteChannel}
               hasAmberChannel={!!property.amberChannel}
               hasUvChannel={!!property.uvChannel}
-              onColourChange={handleColourChange}
+              onColourChange={updateColour}
             >
               {swatchElement}
             </ColourPickerPopover>
@@ -145,19 +147,19 @@ export const ColourSwatch = memo(function ColourSwatch({
           <ColourChannelSlider
             label="R"
             value={colour.r}
-            onChange={(v) => updateChannel(property.redChannel, v)}
+            onChange={setR}
             className="text-red-500"
           />
           <ColourChannelSlider
             label="G"
             value={colour.g}
-            onChange={(v) => updateChannel(property.greenChannel, v)}
+            onChange={setG}
             className="text-green-500"
           />
           <ColourChannelSlider
             label="B"
             value={colour.b}
-            onChange={(v) => updateChannel(property.blueChannel, v)}
+            onChange={setB}
             className="text-blue-500"
           />
           {property.whiteChannel && (
@@ -442,10 +444,10 @@ export const SettingProperty = memo(function SettingProperty({
 /**
  * Property visualizer router - renders appropriate component based on property type
  */
-export function PropertyVisualizer({ property, isEditing = false }: PropertyVisualizerProps) {
+export function PropertyVisualizer({ property, fixtureKey, isEditing = false }: PropertyVisualizerProps) {
   switch (property.type) {
     case 'colour':
-      return <ColourSwatch property={property} isEditing={isEditing} />
+      return <ColourSwatch property={property} fixtureKey={fixtureKey} isEditing={isEditing} />
     case 'position':
       return <PositionIndicator property={property} isEditing={isEditing} />
     case 'slider':
@@ -461,14 +463,16 @@ export function PropertyVisualizer({ property, isEditing = false }: PropertyVisu
  */
 export const VirtualDimmerSlider = memo(function VirtualDimmerSlider({
   colourProp,
+  fixtureKey,
   isEditing = false,
   nameExtra,
 }: {
   colourProp: ColourPropertyDescriptor
+  fixtureKey?: string
   isEditing?: boolean
   nameExtra?: React.ReactNode
 }) {
-  const { value, percentage, setValue } = useVirtualDimmer(colourProp)
+  const { value, percentage, setValue } = useVirtualDimmer(colourProp, fixtureKey)
   const { isAnyParked } = usePropertyParkStatus(colourProp)
 
   const canEdit = isEditing && !isAnyParked

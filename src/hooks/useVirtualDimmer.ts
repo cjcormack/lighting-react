@@ -1,5 +1,7 @@
 import { useRef, useMemo, useSyncExternalStore, useCallback } from 'react'
 import { lightingApi } from '../api/lightingApi'
+import { useEditorContext } from '../components/lighting-editor/EditorContext'
+import { rgbToHex } from '../components/fx/colourUtils'
 import type { ChannelRef, ColourPropertyDescriptor } from '../store/fixtures'
 import type { GroupColourPropertyDescriptor } from '../api/groupsApi'
 
@@ -40,8 +42,11 @@ export type VirtualDimmerResult = {
  * Stores last-known colour ratios so raising from 0 restores the hue.
  */
 export function useVirtualDimmer(
-  colourProp: ColourPropertyDescriptor
+  colourProp: ColourPropertyDescriptor,
+  fixtureKey?: string,
 ): VirtualDimmerResult {
+  const ctx = useEditorContext()
+
   // Store colour ratios for restoring hue when raising from zero
   const lastRatiosRef = useRef<{ r: number; g: number; b: number }>({
     r: 1 / 3,
@@ -84,9 +89,6 @@ export function useVirtualDimmer(
 
   const { value, percentage } = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 
-  // Not routed for cue-edit: ColourPropertyDescriptor has no fixtureKey, so we can't form
-  // a setProperty call. R/G/B direct writes will be rejected by the backend in cue mode.
-
   const setValue = useCallback(
     (newValue: number) => {
       const clamped = Math.max(0, Math.min(255, Math.round(newValue)))
@@ -113,11 +115,27 @@ export function useVirtualDimmer(
         newB = Math.round(ratios.b * clamped)
       }
 
-      lightingApi.channels.update(colourProp.redChannel.universe, colourProp.redChannel.channelNo, Math.min(255, newR))
-      lightingApi.channels.update(colourProp.greenChannel.universe, colourProp.greenChannel.channelNo, Math.min(255, newG))
-      lightingApi.channels.update(colourProp.blueChannel.universe, colourProp.blueChannel.channelNo, Math.min(255, newB))
+      newR = Math.min(255, newR)
+      newG = Math.min(255, newG)
+      newB = Math.min(255, newB)
+
+      if (ctx.kind === 'cue' && fixtureKey) {
+        lightingApi.cueEdit.send({
+          type: 'cueEdit.setProperty',
+          cueId: ctx.id,
+          targetType: 'fixture',
+          targetKey: fixtureKey,
+          propertyName: 'rgbColour',
+          value: rgbToHex(newR, newG, newB),
+        })
+        return
+      }
+
+      lightingApi.channels.update(colourProp.redChannel.universe, colourProp.redChannel.channelNo, newR)
+      lightingApi.channels.update(colourProp.greenChannel.universe, colourProp.greenChannel.channelNo, newG)
+      lightingApi.channels.update(colourProp.blueChannel.universe, colourProp.blueChannel.channelNo, newB)
     },
-    [colourProp.redChannel, colourProp.greenChannel, colourProp.blueChannel]
+    [ctx, fixtureKey, colourProp.redChannel, colourProp.greenChannel, colourProp.blueChannel]
   )
 
   return { value, percentage, setValue }

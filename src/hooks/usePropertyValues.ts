@@ -1,6 +1,7 @@
 import { useRef, useMemo, useSyncExternalStore, useCallback } from 'react'
 import { lightingApi } from '../api/lightingApi'
 import { useEditorContext } from '../components/lighting-editor/EditorContext'
+import { rgbToHex } from '../components/fx/colourUtils'
 import type {
   ChannelRef,
   PropertyDescriptor,
@@ -275,6 +276,73 @@ export function useUpdateChannel() {
       lightingApi.channels.update(channel.universe, channel.channelNo, value)
     },
     [ctx]
+  )
+}
+
+/**
+ * Update all colour channels of a fixture-level colour property. In cue mode RGB routes
+ * through one `cueEdit.setProperty { rgbColour }` (the backend rejects R/G/B sub-channels);
+ * W/A/UV stay on `setChannel`. Mirrors [useUpdateGroupColour].
+ */
+export function useUpdateFixtureColour(
+  property: ColourPropertyDescriptor,
+  fixtureKey: string | undefined,
+) {
+  const ctx = useEditorContext()
+  return useCallback(
+    (r: number, g: number, b: number, w?: number, a?: number, uv?: number) => {
+      if (ctx.kind === 'cue' && fixtureKey) {
+        lightingApi.cueEdit.send({
+          type: 'cueEdit.setProperty',
+          cueId: ctx.id,
+          targetType: 'fixture',
+          targetKey: fixtureKey,
+          propertyName: 'rgbColour',
+          value: rgbToHex(r, g, b),
+        })
+        if (property.whiteChannel && w !== undefined) {
+          lightingApi.cueEdit.send({
+            type: 'cueEdit.setChannel',
+            cueId: ctx.id,
+            universe: property.whiteChannel.universe,
+            channel: property.whiteChannel.channelNo,
+            level: w,
+          })
+        }
+        if (property.amberChannel && a !== undefined) {
+          lightingApi.cueEdit.send({
+            type: 'cueEdit.setChannel',
+            cueId: ctx.id,
+            universe: property.amberChannel.universe,
+            channel: property.amberChannel.channelNo,
+            level: a,
+          })
+        }
+        if (property.uvChannel && uv !== undefined) {
+          lightingApi.cueEdit.send({
+            type: 'cueEdit.setChannel',
+            cueId: ctx.id,
+            universe: property.uvChannel.universe,
+            channel: property.uvChannel.channelNo,
+            level: uv,
+          })
+        }
+        return
+      }
+      lightingApi.channels.update(property.redChannel.universe, property.redChannel.channelNo, r)
+      lightingApi.channels.update(property.greenChannel.universe, property.greenChannel.channelNo, g)
+      lightingApi.channels.update(property.blueChannel.universe, property.blueChannel.channelNo, b)
+      if (property.whiteChannel && w !== undefined) {
+        lightingApi.channels.update(property.whiteChannel.universe, property.whiteChannel.channelNo, w)
+      }
+      if (property.amberChannel && a !== undefined) {
+        lightingApi.channels.update(property.amberChannel.universe, property.amberChannel.channelNo, a)
+      }
+      if (property.uvChannel && uv !== undefined) {
+        lightingApi.channels.update(property.uvChannel.universe, property.uvChannel.channelNo, uv)
+      }
+    },
+    [ctx, fixtureKey, property]
   )
 }
 

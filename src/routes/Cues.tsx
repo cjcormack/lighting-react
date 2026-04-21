@@ -97,6 +97,7 @@ import {
 } from '../store/cueStacks'
 import { setPalette } from '../store/fx'
 import { CueForm, type CueFormView } from '../components/cues/CueForm'
+import { CueEditor } from '../components/cues/editor/CueEditor'
 import { CueStackForm } from '../components/cues/CueStackForm'
 import { CueStackHeader } from '../components/cues/CueStackHeader'
 import {
@@ -801,26 +802,40 @@ export function ProjectCues() {
         </div>
       </div>
 
-      {/* Create/Edit cue form (Sheet) */}
-      <CueForm
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        cue={editingCue}
-        projectId={projectIdNum}
-        onSave={handleSave}
-        isSaving={isCreating || isSaving}
-        initialState={!editingCue ? initialState : undefined}
-        isInStack={editingCue ? editingCue.cueStackId != null : typeof selectedView === 'number'}
-        inheritedPalette={
-          !editingCue && typeof selectedView === 'number'
-            ? computeInheritedPalette(selectedView)
-            : editingCue?.cueStackId != null
+      {/* New cues use CueForm — CueEditor needs a backend cueId to open a cue-edit session. */}
+      {editingCue ? (
+        <CueEditor
+          open={formOpen}
+          onOpenChange={setFormOpen}
+          cue={editingCue}
+          projectId={projectIdNum}
+          isInStack={editingCue.cueStackId != null}
+          inheritedPalette={
+            editingCue.cueStackId != null
               ? computeInheritedPalette(editingCue.cueStackId, editingCue.id)
               : undefined
-        }
-        initialView={formInitialView}
-        initialEditIndex={formEditIndex}
-      />
+          }
+          mode="sheet"
+          defaultEditMode="live"
+          onSave={handleSave}
+        />
+      ) : (
+        <CueForm
+          open={formOpen}
+          onOpenChange={setFormOpen}
+          cue={editingCue}
+          projectId={projectIdNum}
+          onSave={handleSave}
+          isSaving={isCreating || isSaving}
+          initialState={initialState}
+          isInStack={typeof selectedView === 'number'}
+          inheritedPalette={
+            typeof selectedView === 'number' ? computeInheritedPalette(selectedView) : undefined
+          }
+          initialView={formInitialView}
+          initialEditIndex={formEditIndex}
+        />
+      )}
 
       {/* Create/Edit stack form (Sheet) */}
       <CueStackForm
