@@ -77,12 +77,12 @@ export function ProgramPage() {
   )
 
   const isWideViewport = useMediaQuery(XL_BREAKPOINT)
-  const showInlineCueForm = isWideViewport && drillStackId != null
+  const showInlineCueEditor = isWideViewport && drillStackId != null
 
-  const [cueFormOpen, setCueFormOpen] = useState(false)
-  const [cueFormCueId, setCueFormCueId] = useState<number | null>(null)
-  const [cueFormStackId, setCueFormStackId] = useState<number | null>(null)
-  const [cueFormCue, setCueFormCue] = useState<Cue | null>(null)
+  const [cueEditorOpen, setCueEditorOpen] = useState(false)
+  const [cueEditorCueId, setCueEditorCueId] = useState<number | null>(null)
+  const [cueEditorStackId, setCueEditorStackId] = useState<number | null>(null)
+  const [cueEditorCue, setCueEditorCue] = useState<Cue | null>(null)
 
   const [removeCueFromStack] = useRemoveCueFromCueStackMutation()
   const [saveCue] = useSaveProjectCueMutation()
@@ -92,12 +92,12 @@ export function ProgramPage() {
 
   const handleDrillStack = useCallback((id: number | null) => {
     setDrillStackId(id)
-    if (id == null) setCueFormOpen(false)
+    if (id == null) setCueEditorOpen(false)
   }, [])
 
   const handleBreadcrumbCurrentPageClick = useCallback(() => {
     setDrillStackId(null)
-    setCueFormOpen(false)
+    setCueEditorOpen(false)
   }, [])
 
   const initialDrillDoneRef = useRef(false)
@@ -117,15 +117,15 @@ export function ProgramPage() {
       })
   }, [activateShow, projectIdNum, navigate])
 
-  const openCueForm = useCallback(
+  const openCueEditor = useCallback(
     async (stackId: number, cueId: number) => {
       try {
         const { data: fullCue } = await fetchCue({ projectId: projectIdNum, cueId }, true)
         if (fullCue) {
-          setCueFormCue(fullCue)
-          setCueFormCueId(cueId)
-          setCueFormStackId(stackId)
-          setCueFormOpen(true)
+          setCueEditorCue(fullCue)
+          setCueEditorCueId(cueId)
+          setCueEditorStackId(stackId)
+          setCueEditorOpen(true)
         }
       } catch {
         // Silently fail
@@ -137,49 +137,49 @@ export function ProgramPage() {
   // Auto-open the first (or active) cue when drilling into a stack on wide viewports.
   // Skips when the deep-link effect already initiated a cue load for this stack.
   useEffect(() => {
-    if (!showInlineCueForm || drillStackId == null) return
-    if (cueFormStackId === drillStackId) return
+    if (!showInlineCueEditor || drillStackId == null) return
+    if (cueEditorStackId === drillStackId) return
     const stack = stacks?.find((s) => s.id === drillStackId)
     if (!stack || stack.cues.length === 0) return
     const targetCueId = stack.activeCueId ?? stack.cues[0]?.id
     if (targetCueId != null) {
-      openCueForm(drillStackId, targetCueId)
+      openCueEditor(drillStackId, targetCueId)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showInlineCueForm, drillStackId])
+  }, [showInlineCueEditor, drillStackId])
 
-  const handleCueFormSave = useCallback(
+  const handleCueEditorSave = useCallback(
     async (input: CueInput) => {
-      if (cueFormCueId == null) return
-      await saveCue({ projectId: projectIdNum, cueId: cueFormCueId, ...input }).unwrap()
+      if (cueEditorCueId == null) return
+      await saveCue({ projectId: projectIdNum, cueId: cueEditorCueId, ...input }).unwrap()
     },
-    [cueFormCueId, saveCue, projectIdNum],
+    [cueEditorCueId, saveCue, projectIdNum],
   )
 
-  const handleCueFormClose = useCallback((open: boolean) => {
-    setCueFormOpen(open)
+  const handleCueEditorClose = useCallback((open: boolean) => {
+    setCueEditorOpen(open)
   }, [])
 
   const handleDuplicate = useCallback(async () => {
-    if (!cueFormCue || cueFormStackId == null) return
+    if (!cueEditorCue || cueEditorStackId == null) return
     try {
-      const input = buildCueInput(cueFormCue)
-      input.name = cueFormCue.name + ' (copy)'
+      const input = buildCueInput(cueEditorCue)
+      input.name = cueEditorCue.name + ' (copy)'
       input.cueNumber = null
-      input.cueStackId = cueFormStackId
+      input.cueStackId = cueEditorStackId
       const result = await createCue({ projectId: projectIdNum, ...input }).unwrap()
-      setCueFormOpen(false)
-      setTimeout(() => openCueForm(cueFormStackId!, result.id), 200)
+      setCueEditorOpen(false)
+      setTimeout(() => openCueEditor(cueEditorStackId!, result.id), 200)
     } catch {
       // Silently fail
     }
-  }, [cueFormCue, cueFormStackId, projectIdNum, createCue, openCueForm])
+  }, [cueEditorCue, cueEditorStackId, projectIdNum, createCue, openCueEditor])
 
   const handleRemoveFromStack = useCallback(() => {
-    if (cueFormCueId == null || cueFormStackId == null) return
-    removeCueFromStack({ projectId: projectIdNum, stackId: cueFormStackId, cueId: cueFormCueId })
-    setCueFormOpen(false)
-  }, [cueFormCueId, cueFormStackId, projectIdNum, removeCueFromStack])
+    if (cueEditorCueId == null || cueEditorStackId == null) return
+    removeCueFromStack({ projectId: projectIdNum, stackId: cueEditorStackId, cueId: cueEditorCueId })
+    setCueEditorOpen(false)
+  }, [cueEditorCueId, cueEditorStackId, projectIdNum, removeCueFromStack])
 
   const handleGoToRun = useCallback(() => {
     navigate(`/projects/${projectIdNum}/run`)
@@ -207,8 +207,8 @@ export function ProgramPage() {
           if (Number.isFinite(cueId)) {
             // Set stackId synchronously so the auto-open effect's guard
             // sees it and skips — otherwise it races with this async fetch.
-            setCueFormStackId(stackId)
-            openCueForm(stackId, cueId)
+            setCueEditorStackId(stackId)
+            openCueEditor(stackId, cueId)
           }
         }
       }
@@ -222,14 +222,14 @@ export function ProgramPage() {
       setDrillStackId(activeStackId)
       initialDrillDoneRef.current = true
     }
-  }, [stacks, isShowActive, activeStackId, searchParams, setSearchParams, openCueForm])
+  }, [stacks, isShowActive, activeStackId, searchParams, setSearchParams, openCueEditor])
 
   const cueEditorProps = {
-    open: cueFormOpen,
-    onOpenChange: handleCueFormClose,
-    cue: cueFormCue,
+    open: cueEditorOpen,
+    onOpenChange: handleCueEditorClose,
+    cue: cueEditorCue,
     projectId: projectIdNum,
-    onSave: handleCueFormSave,
+    onSave: handleCueEditorSave,
     isInStack: true as const,
     defaultEditMode: 'live' as const,
     onDuplicate: handleDuplicate,
@@ -322,20 +322,20 @@ export function ProgramPage() {
               stacks={stacks}
               drillStackId={drillStackId}
               onDrillStack={handleDrillStack}
-              onOpenCueForm={openCueForm}
+              onOpenCueEditor={openCueEditor}
               show={show}
               activeStackId={activeStackId}
               // Server-tracked activeCueId reflects what's on stage, not the
               // transient fade cursor — so the marker stays stable during fades.
               activeCueId={activeStack?.activeCueId ?? null}
-              editingCueId={showInlineCueForm ? cueFormCueId : null}
+              editingCueId={showInlineCueEditor ? cueEditorCueId : null}
             />
           </div>
 
           {/* Inline CueEditor panel (wide viewports + drilled into a stack) */}
-          {showInlineCueForm && (
+          {showInlineCueEditor && (
             <div className="w-[400px] shrink-0 border-l flex flex-col overflow-hidden bg-background">
-              {cueFormCue ? (
+              {cueEditorCue ? (
                 <CueEditor {...cueEditorProps} mode="inline" />
               ) : (
                 <div className="flex-1 flex items-center justify-center p-4">
@@ -348,7 +348,7 @@ export function ProgramPage() {
       )}
 
       {/* CueEditor sheet (narrow viewports only) */}
-      {!showInlineCueForm && <CueEditor {...cueEditorProps} mode="sheet" />}
+      {!showInlineCueEditor && <CueEditor {...cueEditorProps} mode="sheet" />}
     </div>
   )
 }

@@ -4,8 +4,8 @@ import { ChevronLeft, Trash2 } from 'lucide-react'
 import { useEffectLibraryQuery, type EffectLibraryEntry } from '@/store/fixtureFx'
 import { useGroupListQuery } from '@/store/groups'
 import { useFixtureListQuery } from '@/store/fixtures'
-import { CueTargetPicker } from './CueTargetPicker'
-import { TimingFields } from './TimingEditor'
+import { CueTargetPicker } from '../CueTargetPicker'
+import { TimingFields } from '../TimingEditor'
 import { EffectCategoryPicker } from '@/components/fx/EffectCategoryPicker'
 import { EffectTypePicker } from '@/components/fx/EffectTypePicker'
 import { EffectParameterForm } from '@/components/fx/EffectParameterForm'
@@ -23,7 +23,7 @@ const CATEGORY_TO_REQUIRED_CAPABILITY: Record<string, string | null> = {
 
 type AddStep = 'targets' | 'category' | 'effect' | 'configure'
 
-interface CueEffectFlowProps {
+interface EffectFlowProps {
   /** Add mode: called with one CueAdHocEffect per selected target */
   onConfirm: (effects: CueAdHocEffect[]) => void
   onCancel: () => void
@@ -38,14 +38,14 @@ interface CueEffectFlowProps {
   palette?: string[]
 }
 
-export function CueEffectFlow({
+export function EffectFlow({
   onConfirm,
   onCancel,
   existingEffect,
   onUpdate,
   onRemove,
   palette,
-}: CueEffectFlowProps) {
+}: EffectFlowProps) {
   const { data: library } = useEffectLibraryQuery()
   const { data: groups } = useGroupListQuery()
   const { data: fixtures } = useFixtureListQuery()

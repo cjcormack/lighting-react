@@ -14,8 +14,8 @@ import { useFixtureListQuery } from '@/store/fixtures'
 import { useGroupPropertiesQuery } from '@/store/groups'
 import { FixtureContent } from '@/components/fixtures/FixtureContent'
 import { GroupPropertiesSection } from '@/components/groups/GroupCard'
-import { CueEffectFlow } from '../CueEffectFlow'
-import { CuePresetPicker } from '../CuePresetPicker'
+import { EffectFlow } from './EffectFlow'
+import { PresetPicker } from './PresetPicker'
 import { EffectSummary } from '@/components/fx/EffectSummary'
 import { PresetApplicationSummary } from '@/components/fx/PresetApplicationSummary'
 import {
@@ -136,7 +136,7 @@ export function CueTargetDetail({
 
         <TabsContent value="effects" className="pt-3 space-y-2">
           {addingEffect || editingEffectIndex !== null ? (
-            <CueEffectFlow
+            <EffectFlow
               onConfirm={(effects) => {
                 for (const eff of effects) onAddEffect(eff)
                 setAddingEffect(false)
@@ -205,7 +205,7 @@ export function CueTargetDetail({
 
         <TabsContent value="presets" className="pt-3 space-y-2">
           {addingPreset || editingPresetIndex !== null ? (
-            <CuePresetPicker
+            <PresetPicker
               projectId={projectId}
               onConfirm={(app) => {
                 onAddPreset(app)

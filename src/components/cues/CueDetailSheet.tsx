@@ -25,7 +25,7 @@ interface CueDetailSheetProps {
 }
 
 /**
- * Read-only view of a cue — a lighter-weight companion to `CueForm` for
+ * Read-only view of a cue — a lighter-weight companion to `CueEditor` for
  * operators who want to inspect a cue without risking an accidental edit.
  * Shares the same summary components (PresetApplicationSummary, EffectSummary,
  * TriggerSummary) so the layout matches what the editor shows.

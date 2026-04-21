@@ -96,7 +96,6 @@ import {
   useReorderCueStackCuesMutation,
 } from '../store/cueStacks'
 import { setPalette } from '../store/fx'
-import { CueForm, type CueFormView } from '../components/cues/CueForm'
 import { CueEditor } from '../components/cues/editor/CueEditor'
 import { CueStackForm } from '../components/cues/CueStackForm'
 import { CueStackHeader } from '../components/cues/CueStackHeader'
@@ -109,11 +108,11 @@ import { CopyCueDialog } from '../components/cues/CopyCueDialog'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { useProjectPresetListQuery } from '../store/fxPresets'
 import type { FxPreset } from '../api/fxPresetsApi'
-import type { Cue, CueInput, CueCurrentState } from '../api/cuesApi'
+import type { Cue, CueInput } from '../api/cuesApi'
 import type { CueStack, CueStackInput } from '../api/cueStacksApi'
 import { useEffectLibraryQuery } from '../store/fixtureFx'
 import { CueFxTable } from '../components/cues/CueFxTable'
-import { buildCueInput } from '../lib/cueUtils'
+import { buildCueInput, nextAvailableName } from '../lib/cueUtils'
 
 // Redirect /cues → /projects/:projectId/cues/all
 export function CuesRedirect() {
@@ -164,7 +163,7 @@ export function ProjectCues() {
   const { data: library } = useEffectLibraryQuery()
 
   const [createCue, { isLoading: isCreating }] = useCreateProjectCueMutation()
-  const [saveCue, { isLoading: isSaving }] = useSaveProjectCueMutation()
+  const [saveCue] = useSaveProjectCueMutation()
   const [deleteCue, { isLoading: isDeleting }] = useDeleteProjectCueMutation()
   const [applyCue] = useApplyCueMutation()
   const [stopCue] = useStopCueMutation()
@@ -287,14 +286,11 @@ export function ProjectCues() {
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [editingCue, setEditingCue] = useState<Cue | null>(null)
-  const [formInitialView, setFormInitialView] = useState<CueFormView | undefined>()
-  const [formEditIndex, setFormEditIndex] = useState<number | undefined>()
   const [copyingCue, setCopyingCue] = useState<Cue | null>(null)
   const [deletingCue, setDeletingCue] = useState<Cue | null>(null)
   const [duplicatingCue, setDuplicatingCue] = useState<Cue | null>(null)
   const [duplicateName, setDuplicateName] = useState('')
   const [expandedCueIds, setExpandedCueIds] = useState<Set<number>>(new Set())
-  const [initialState, setInitialState] = useState<CueCurrentState | undefined>()
 
   // Stack form state
   const [stackFormOpen, setStackFormOpen] = useState(false)
@@ -312,11 +308,10 @@ export function ProjectCues() {
   // Open create form when navigated with ?action=new (e.g. from command palette)
   useEffect(() => {
     if (searchParams.get("action") === "new" && isCurrentProject) {
-      setEditingCue(null)
-      setInitialState(undefined)
-      setFormOpen(true)
+      void handleCreate()
       setSearchParams({}, { replace: true })
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, isCurrentProject, setSearchParams])
 
   // Derived data
@@ -433,29 +428,62 @@ export function ProjectCues() {
     [cues, stacks],
   )
 
+  // CueEditor opens a cueEdit WS session keyed by cueId, so the cue must
+  // exist before the editor mounts. Standalone cues snapshot live state as
+  // their starting point; stack cues start blank (stack palette inherits).
   const handleCreate = async () => {
-    setEditingCue(null)
-    setFormInitialView(undefined)
-    setFormEditIndex(undefined)
-    if (typeof selectedView === 'number') {
-      // Creating in a stack: start empty, use inherited palette for context
-      setInitialState(undefined)
-    } else {
-      // Standalone cue: pre-populate from current state
+    const stackId = typeof selectedView === 'number' ? selectedView : undefined
+    const existingNames = new Set((cues ?? []).map((c) => c.name))
+    const baseName = nextAvailableName('New Cue', existingNames)
+
+    let input: CueInput = {
+      name: baseName,
+      palette: [],
+      updateGlobalPalette: false,
+      presetApplications: [],
+      adHocEffects: [],
+      triggers: [],
+      fadeDurationMs: 3000,
+      fadeCurve: 'LINEAR',
+    }
+
+    // Standalone cue: snapshot current live state as a starting point.
+    if (stackId == null) {
       try {
-        const result = await fetchCurrentState(projectIdNum).unwrap()
-        setInitialState(result)
+        const snapshot = await fetchCurrentState(projectIdNum).unwrap()
+        input = {
+          ...input,
+          palette: snapshot.palette,
+          presetApplications: snapshot.presetApplications.map((pa) => ({
+            presetId: pa.presetId,
+            targets: pa.targets,
+            delayMs: pa.delayMs,
+            intervalMs: pa.intervalMs,
+            randomWindowMs: pa.randomWindowMs,
+            sortOrder: pa.sortOrder,
+          })),
+          adHocEffects: snapshot.adHocEffects,
+        }
       } catch {
-        setInitialState(undefined)
+        // snapshot failed; start blank
       }
     }
-    setFormOpen(true)
+
+    try {
+      const created = await createCue({
+        projectId: projectIdNum,
+        ...input,
+        ...(stackId ? { cueStackId: stackId } : {}),
+      }).unwrap()
+      setEditingCue(created)
+      setFormOpen(true)
+    } catch {
+      // swallow — matches ProgramView's create-cue error handling
+    }
   }
 
-  const handleEdit = (cue: Cue, deepLinkView?: CueFormView, deepLinkIndex?: number) => {
+  const handleEdit = (cue: Cue) => {
     setEditingCue(cue)
-    setFormInitialView(deepLinkView)
-    setFormEditIndex(deepLinkIndex)
     setFormOpen(true)
   }
 
@@ -537,22 +565,12 @@ export function ProjectCues() {
   }
 
   const handleSave = async (input: CueInput) => {
-    if (editingCue) {
-      await saveCue({
-        projectId: projectIdNum,
-        cueId: editingCue.id,
-        ...input,
-      }).unwrap()
-    } else {
-      // If creating from a stack view, auto-assign to that stack
-      const stackId =
-        typeof selectedView === 'number' ? selectedView : undefined
-      await createCue({
-        projectId: projectIdNum,
-        ...input,
-        ...(stackId ? { cueStackId: stackId } : {}),
-      }).unwrap()
-    }
+    if (!editingCue) return
+    await saveCue({
+      projectId: projectIdNum,
+      cueId: editingCue.id,
+      ...input,
+    }).unwrap()
   }
 
   const handleDeleteConfirmed = async () => {
@@ -802,8 +820,7 @@ export function ProjectCues() {
         </div>
       </div>
 
-      {/* New cues use CueForm — CueEditor needs a backend cueId to open a cue-edit session. */}
-      {editingCue ? (
+      {editingCue && (
         <CueEditor
           open={formOpen}
           onOpenChange={setFormOpen}
@@ -818,22 +835,6 @@ export function ProjectCues() {
           mode="sheet"
           defaultEditMode="live"
           onSave={handleSave}
-        />
-      ) : (
-        <CueForm
-          open={formOpen}
-          onOpenChange={setFormOpen}
-          cue={editingCue}
-          projectId={projectIdNum}
-          onSave={handleSave}
-          isSaving={isCreating || isSaving}
-          initialState={initialState}
-          isInStack={typeof selectedView === 'number'}
-          inheritedPalette={
-            typeof selectedView === 'number' ? computeInheritedPalette(selectedView) : undefined
-          }
-          initialView={formInitialView}
-          initialEditIndex={formEditIndex}
         />
       )}
 
@@ -1073,7 +1074,7 @@ function CueListRows({
   onApply: (cue: Cue, replaceAll?: boolean) => void
   onStop: (cue: Cue) => void
   onCopyPaletteToGlobal: (cue: Cue) => void
-  onEdit: (cue: Cue, deepLinkView?: CueFormView, deepLinkIndex?: number) => void
+  onEdit: (cue: Cue) => void
   onDelete: (cue: Cue) => void
   onDuplicate: (cue: Cue) => void
   onCopy: (cue: Cue) => void
@@ -1113,9 +1114,7 @@ function CueListRows({
           : undefined
       }
       onEdit={
-        isCurrentProject && cue.canEdit
-          ? (view, index) => onEdit(cue, view, index)
-          : undefined
+        isCurrentProject && cue.canEdit ? () => onEdit(cue) : undefined
       }
       onDelete={
         isCurrentProject && cue.canDelete
@@ -1230,7 +1229,7 @@ function CueListRow({
   onApplyReplace?: () => void
   onStop?: () => void
   onCopyPaletteToGlobal?: () => void
-  onEdit?: (deepLinkView?: CueFormView, deepLinkIndex?: number) => void
+  onEdit?: () => void
   onDelete?: () => void
   onCopy?: () => void
   onDuplicate?: () => void
@@ -1634,8 +1633,8 @@ function CueListRow({
             onTimingChange={editMode && onInlineTimingChange
               ? (idx, field, val) => onInlineTimingChange('presets', idx, field, val)
               : undefined}
-            onItemClick={onEdit ? (idx) => onEdit('edit-preset', idx) : undefined}
-            onAdd={onEdit ? () => onEdit('add-preset') : undefined}
+            onItemClick={onEdit}
+            onAdd={onEdit}
             onRemove={editMode && onInlineRemove
               ? (idx) => onInlineRemove('presets', idx)
               : undefined}
@@ -1649,8 +1648,8 @@ function CueListRow({
             onTimingChange={editMode && onInlineTimingChange
               ? (idx, field, val) => onInlineTimingChange('effects', idx, field, val)
               : undefined}
-            onItemClick={onEdit ? (idx) => onEdit('edit-effect', idx) : undefined}
-            onAdd={onEdit ? () => onEdit('add-effect') : undefined}
+            onItemClick={onEdit}
+            onAdd={onEdit}
             onRemove={editMode && onInlineRemove
               ? (idx) => onInlineRemove('effects', idx)
               : undefined}
@@ -1663,8 +1662,8 @@ function CueListRow({
             onTimingChange={editMode && onInlineTimingChange
               ? (idx, field, val) => onInlineTimingChange('triggers', idx, field, val)
               : undefined}
-            onItemClick={onEdit ? (idx) => onEdit('edit-trigger', idx) : undefined}
-            onAdd={onEdit ? () => onEdit('add-trigger') : undefined}
+            onItemClick={onEdit}
+            onAdd={onEdit}
             onRemove={editMode && onInlineRemove
               ? (idx) => onInlineRemove('triggers', idx)
               : undefined}

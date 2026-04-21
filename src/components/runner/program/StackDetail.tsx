@@ -40,7 +40,7 @@ interface StackDetailProps {
   /** Cue queued to fire on the next GO. Only meaningful when drilled into the active stack. */
   standbyCueId?: number | null
   onBack: () => void
-  onOpenCueForm: (cueId: number) => void
+  onOpenCueEditor: (cueId: number) => void
   onAddCue: () => void
   onAddMarker: () => void
   onMarkerRename: (cueId: number, name: string) => void
@@ -54,7 +54,7 @@ export function StackDetail({
   editingCueId,
   standbyCueId,
   onBack,
-  onOpenCueForm,
+  onOpenCueEditor,
   onAddCue,
   onAddMarker,
   onMarkerRename,
@@ -214,7 +214,7 @@ export function StackDetail({
                   isActive={cue.id === activeCueId}
                   isStandby={cue.id === standbyCueId}
                   isEditing={cue.id === editingCueId}
-                  onOpenCueForm={() => onOpenCueForm(cue.id)}
+                  onOpenCueEditor={() => onOpenCueEditor(cue.id)}
                 />
               )
             })}

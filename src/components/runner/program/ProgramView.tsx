@@ -12,23 +12,14 @@ import type { CueStack } from '@/api/cueStacksApi'
 import type { ShowDetails } from '@/api/showApi'
 import { StackDetail } from './StackDetail'
 import { ShowOverview } from './ShowOverview'
-
-/** Find the next available name of the form "{base}", "{base} 2", "{base} 3"… */
-function nextAvailableName(base: string, taken: Set<string>): string {
-  if (!taken.has(base)) return base
-  for (let i = 2; i < 10_000; i++) {
-    const candidate = `${base} ${i}`
-    if (!taken.has(candidate)) return candidate
-  }
-  return `${base} ${Date.now()}`
-}
+import { nextAvailableName } from '@/lib/cueUtils'
 
 interface ProgramViewProps {
   projectId: number
   stacks: CueStack[]
   drillStackId: number | null
   onDrillStack: (id: number | null) => void
-  onOpenCueForm: (stackId: number, cueId: number) => void
+  onOpenCueEditor: (stackId: number, cueId: number) => void
   show?: ShowDetails
   activeStackId: number | null
   activeCueId: number | null
@@ -41,7 +32,7 @@ export function ProgramView({
   stacks,
   drillStackId,
   onDrillStack,
-  onOpenCueForm,
+  onOpenCueEditor,
   show,
   activeStackId,
   activeCueId,
@@ -74,11 +65,11 @@ export function ProgramView({
         fadeCurve: 'LINEAR',
         cueStackId: drillStackId,
       }).unwrap()
-      onOpenCueForm(drillStackId, result.id)
+      onOpenCueEditor(drillStackId, result.id)
     } catch {
       // Silently fail
     }
-  }, [drillStackId, projectId, createCue, onOpenCueForm, existingCueNames])
+  }, [drillStackId, projectId, createCue, onOpenCueEditor, existingCueNames])
 
   const handleAddMarker = useCallback(async () => {
     if (drillStackId == null) return
@@ -132,7 +123,7 @@ export function ProgramView({
         activeCueId={drillStackId === activeStackId ? activeCueId : null}
         editingCueId={editingCueId}
         onBack={() => onDrillStack(null)}
-        onOpenCueForm={(cueId) => onOpenCueForm(drillStackId!, cueId)}
+        onOpenCueEditor={(cueId) => onOpenCueEditor(drillStackId!, cueId)}
         onAddCue={handleAddCue}
         onAddMarker={handleAddMarker}
         onMarkerRename={handleMarkerRename}

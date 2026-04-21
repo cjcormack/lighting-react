@@ -18,6 +18,16 @@ export function formatFadeText(fadeDurationMs: number | null, fadeCurve: string)
   return 'SNAP'
 }
 
+/** Find the next available name of the form "{base}", "{base} 2", "{base} 3"… */
+export function nextAvailableName(base: string, taken: Set<string>): string {
+  if (!taken.has(base)) return base
+  for (let i = 2; i < 10_000; i++) {
+    const candidate = `${base} ${i}`
+    if (!taken.has(candidate)) return candidate
+  }
+  return `${base} ${Date.now()}`
+}
+
 /** Build a CueInput snapshot from a Cue (for inline editing mutations). */
 export function buildCueInput(cue: Cue): CueInput {
   return {

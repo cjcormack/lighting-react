@@ -4,8 +4,8 @@ import { ChevronLeft, ChevronRight, Bookmark } from 'lucide-react'
 import { useProjectPresetListQuery } from '@/store/fxPresets'
 import { useGroupListQuery } from '@/store/groups'
 import { useFixtureListQuery } from '@/store/fixtures'
-import { CueTargetPicker } from './CueTargetPicker'
-import { TimingFields } from './TimingEditor'
+import { CueTargetPicker } from '../CueTargetPicker'
+import { TimingFields } from '../TimingEditor'
 import { EFFECT_CATEGORY_INFO } from '@/components/fx/fxConstants'
 import type { CueTarget } from '@/api/cuesApi'
 
@@ -15,7 +15,7 @@ interface TimingValues {
   randomWindowMs?: number | null
 }
 
-interface CuePresetPickerProps {
+interface PresetPickerProps {
   projectId: number
   onConfirm: (app: {
     presetId: number
@@ -36,14 +36,14 @@ interface CuePresetPickerProps {
 
 type Step = 'targets' | 'preset' | 'timing'
 
-export function CuePresetPicker({
+export function PresetPicker({
   projectId,
   onConfirm,
   onCancel,
   existingTargets,
   existingPresetId,
   existingTiming,
-}: CuePresetPickerProps) {
+}: PresetPickerProps) {
   const { data: presets } = useProjectPresetListQuery(projectId)
   const { data: groups } = useGroupListQuery()
   const { data: fixtures } = useFixtureListQuery()

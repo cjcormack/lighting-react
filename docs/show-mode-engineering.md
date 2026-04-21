@@ -20,7 +20,7 @@ The UI is structured around four distinct phases a lighting operator works throu
 | Tech runs | Fine-tuning cues and sequence while running the show | Run view (with occasional jumps to Program) |
 | Production run | Stepping through cues live, no editing | Run view |
 
-A key insight: **tech runs live on the Run view, not the Program view**. A tech run is a running phase that occasionally requires a programming detour (switch to Program via the sidebar, edit in the CueForm sheet, come back), not a programming phase that happens to involve running.
+A key insight: **tech runs live on the Run view, not the Program view**. A tech run is a running phase that occasionally requires a programming detour (switch to Program via the sidebar, edit in the CueEditor sheet, come back), not a programming phase that happens to involve running.
 
 The **FX Cues view** (separate from Show Mode) remains as "back-of-house authoring" -- building and managing individual cues by combining presets into named, deployable looks. The **Program view** is for assembling those cues into show order. Over time, the Program view may absorb the FX Cues view's capabilities entirely.
 
@@ -76,23 +76,23 @@ API Layer          Type definitions + WebSocket subscription factories
 #### Component Layer (UI)
 | File | Purpose |
 |------|---------|
-| `src/routes/ProgramPage.tsx` | Route for `/projects/:projectId/program`. Hosts the show assembly surface: breadcrumb (`Program`), header Start Show button (or muted "Show running" chip when active), body = `ProgramView` (ShowOverview / StackDetail) with drill state, shared CueForm sheet. Start Show navigates to `/run` on success. |
-| `src/routes/RunPage.tsx` | Route for `/projects/:projectId/run`. Breadcrumb (`Run`), header Stop button (when active), body = a Start CTA hero when inactive, or the runner when active. The runner swaps to `ShowRunnerMobile` when the runner container width drops below 600px. Owns keyboard handler, runner animation, entry switching, and a CueForm sheet used by the mobile cue-list edit flow. |
+| `src/routes/ProgramPage.tsx` | Route for `/projects/:projectId/program`. Hosts the show assembly surface: breadcrumb (`Program`), header Start Show button (or muted "Show running" chip when active), body = `ProgramView` (ShowOverview / StackDetail) with drill state, shared CueEditor sheet. Start Show navigates to `/run` on success. |
+| `src/routes/RunPage.tsx` | Route for `/projects/:projectId/run`. Breadcrumb (`Run`), header Stop button (when active), body = a Start CTA hero when inactive, or the runner when active. The runner swaps to `ShowRunnerMobile` when the runner container width drops below 600px. Owns keyboard handler, runner animation, entry switching, and a CueEditor sheet used by the mobile cue-list edit flow. |
 | `src/components/runner/ShowBar.tsx` | Top control bar: DBO, BPM/TAP, cue info, GO/BACK buttons (desktop runner) |
 | `src/components/runner/CueRow.tsx` | Cue list row with status icons, fade progress bars, click-to-requeue, and eye-icon detail view (desktop runner) |
 | `src/components/runner/MarkerRow.tsx` | Marker separator row (shared desktop + mobile) |
 | `src/components/runner/OutOfOrderBanner.tsx` | Warning when cue numbers are not ascending |
 | `src/components/runner/ShowRunnerMobile.tsx` | Remote-control layout for narrow containers: top strip, active-cue hero, standby card, GO/BACK footer with safe-area padding |
 | `src/components/runner/StackPickerSheet.tsx` | Bottom sheet listing show entries for mobile stack switching |
-| `src/components/runner/MobileCueListSheet.tsx` | Bottom sheet exposing the full cue list on mobile; tapping a cue opens CueForm |
+| `src/components/runner/MobileCueListSheet.tsx` | Bottom sheet exposing the full cue list on mobile; tapping a cue opens CueEditor |
 | `src/components/runner/MobileCueRow.tsx` | Lean cue row used inside `MobileCueListSheet` (no fixed notes/auto-pill columns) |
 | `src/components/runner/program/ProgramView.tsx` | Program body: routes between ShowOverview and StackDetail based on `drillStackId` |
 | `src/components/runner/program/ShowOverview.tsx` | Show entry list with drag reorder, stack picker, marker edit. Activation controls live in `ProgramPage`'s header, not here. |
 | `src/components/runner/program/StackDetail.tsx` | Cue list within a stack, dnd-kit reorder, add cue/marker, "Stacks" back button |
 | `src/components/runner/program/ProgramCueRow.tsx` | Expandable cue row with inline-editable Q/Name/Fade cells, CueFxTable, count badges |
 | `src/components/runner/program/ProgramMarkerRow.tsx` | Interactive marker with inline rename/delete |
-| `src/components/cues/CueForm.tsx` | Cue edit sheet (properties, presets, effects, triggers) |
-| `src/components/cues/CueDetailSheet.tsx` | Read-only cue detail sheet (Run view eye-icon) — lighter companion to CueForm for inspecting a cue's composition without risk of accidental edits |
+| `src/components/cues/CueEditor.tsx` | Cue edit sheet (properties, presets, effects, triggers) |
+| `src/components/cues/CueDetailSheet.tsx` | Read-only cue detail sheet (Run view eye-icon) — lighter companion to CueEditor for inspecting a cue's composition without risk of accidental edits |
 | `src/components/cues/InlineEditCell.tsx` | Click-to-edit cell for inline number editing (timing fields, fade duration) |
 | `src/components/cues/InlineTextCell.tsx` | Click-to-edit cell for inline string editing (cue number, cue name) |
 | `src/hooks/useRunnerAnimation.ts` | requestAnimationFrame hook for fade/auto-advance progress |
@@ -262,8 +262,8 @@ The Program view is the show assembly surface. It has two levels:
 - Each row shows cue number, name, fade info, count badges (presets, effects, triggers)
 - **Inline editing**: Q number, Name, and Fade/Snap columns are click-to-edit. Clicking them enters an inline text input; the edit is debounced (300ms) and saved via the full-cue `saveCue` mutation. Active (green) and standby (blue) styling is preserved on the Name cell. The Fade input shows a placeholder hint ("e.g. 3s, 500ms") for supported formats.
 - **Row click expands** the cue to show CueFxTable inline (with optional inline timing editing via pencil toggle). An expand/collapse chevron sits to the left of the Q column (after the drag handle) as a visual affordance.
-- A **pencil icon** on the right side of each row opens the CueForm sheet for full editing
-- "+ Add Cue" creates a blank cue and opens CueForm
+- A **pencil icon** on the right side of each row opens the CueEditor sheet for full editing
+- "+ Add Cue" creates a blank cue and opens CueEditor
 - "+ Add Separator" creates a MARKER cue
 - "Stacks" back button returns to show overview
 
@@ -280,7 +280,7 @@ Stopping the show happens from Run, not here.
 
 `ProgramPage` mounts with one of three drill states:
 
-1. **`?stack=<id>&cue=<id>` query params present** — drill into that stack and open `CueForm` for that cue. Used by Run's "Edit Cue" header button so the operator can detour into editing the live cue without manually navigating. The params are stripped from the URL after the first read so a refresh doesn't re-open the sheet.
+1. **`?stack=<id>&cue=<id>` query params present** — drill into that stack and open `CueEditor` for that cue. Used by Run's "Edit Cue" header button so the operator can detour into editing the live cue without manually navigating. The params are stripped from the URL after the first read so a refresh doesn't re-open the sheet.
 2. **Show is running, no params** — drill into the active stack on first mount. The operator lands where the action is. Tracked via `initialDrillDoneRef` so the drill fires once per mount; clicking "Stacks" or the breadcrumb afterwards reverts to Show Overview without us re-drilling them.
 3. **Show is stopped, no params** — start at Show Overview. Standard pre-show prep flow.
 
@@ -298,7 +298,7 @@ The Run view is the production playback surface. When the show isn't running, `R
 
 When the show is running, the header carries:
 
-- An **Edit Cue** button that navigates to `/projects/:id/program?stack=<activeStackId>&cue=<activeCueId>`. ProgramPage drills into the active stack and opens `CueForm` for the live cue (see "Auto-drill and deep links" above). Disabled when no stack is selected.
+- An **Edit Cue** button that navigates to `/projects/:id/program?stack=<activeStackId>&cue=<activeCueId>`. ProgramPage drills into the active stack and opens `CueEditor` for the live cue (see "Auto-drill and deep links" above). Disabled when no stack is selected.
 - A green-dot indicator + **Stop** button. Stop opens a confirmation Dialog ("Stop the show?") to guard against accidental clicks during a live performance — accidental cancellation of cue state mid-show is more disruptive than the extra click costs. Confirm fires `/deactivate`; the page stays on `/run` and flips to the Start CTA. The deactivate mutation, like activate, patches the `projectShow` cache on success so the transition is flicker-free.
 
 Below the header, the runner body. Layout from top to bottom:
@@ -324,7 +324,7 @@ Scrollable list of cues in the active stack:
 - Status icons: play (active/green), circle (standby/blue), check (done/greyed)
 - **Click-to-requeue**: clicking a non-active cue dispatches `setStandby`, making it the next target for GO. The standby moves immediately; no backend call until the next GO fires.
 - **Click active cue**: opens the read-only CueDetailSheet (since re-queuing the active cue is a no-op)
-- **Eye icon**: every row has an eye button that opens `CueDetailSheet` — a read-only view of the cue's composition (palette, presets, effects, triggers, timing). The sheet has an Edit button that deep-links into Program's CueForm.
+- **Eye icon**: every row has an eye button that opens `CueDetailSheet` — a read-only view of the cue's composition (palette, presets, effects, triggers, timing). The sheet has an Edit button that deep-links into Program's CueEditor.
 - Fade progress bar (green) on active cue
 - Auto-advance countdown bar (blue) on active cue
 
@@ -352,7 +352,7 @@ When the Run view's container width drops below **600 px**, the runner swaps fro
 
 **Bottom sheets** use `Sheet side="bottom"` from `src/components/ui/sheet.tsx`. Both are controlled (stay mounted) so scroll position survives reopen. `MobileCueListSheet` caps at `max-h-[70dvh]` with its own overflow.
 
-**Cue edit transition** — tapping a cue in `MobileCueListSheet` closes the sheet, then calls `openCueForm` on a 320 ms timeout (matching the Sheet's 300 ms close animation). This avoids two Dialogs trapping focus simultaneously.
+**Cue edit transition** — tapping a cue in `MobileCueListSheet` closes the sheet, then calls `openCueEditor` on a 320 ms timeout (matching the Sheet's 300 ms close animation). This avoids two Dialogs trapping focus simultaneously.
 
 **Keyboard listener** stays registered unconditionally so tablets with Bluetooth keyboards still respond to Space/ArrowLeft regardless of container width.
 
@@ -533,9 +533,9 @@ This composite id drives the green active highlight in the cue list, the ShowBar
 | `stackMap` for O(1) lookups | UseMemo'd `Map<number, CueStack>` avoids repeated `.find()` in entry strip and show overview |
 | Container-width switch to remote-control view | Responds to the runner's actual available space, not just viewport — side panels on desktop can also trigger the compact layout. Single-tree mount via `useNarrowContainer` rather than CSS `@container` hide/show keeps the DOM lean. |
 | Green = active, blue = standby (not amber/green) | Green reads as "on / go" and has higher contrast against the dark runner background than amber. Blue for standby (next) avoids confusion with the "show is running" green dot in the header — the standby colour is a cooler tone that implies "queued, not yet firing". |
-| Click-to-requeue in Run view (not Program) | Run is the playback surface; the operator's main action is controlling cue order. Program is for editing — a click-to-edit there (opening CueForm) is more valuable than re-queueing. In Run, the eye icon provides the detail-view affordance so the row click is freed for re-queue. |
+| Click-to-requeue in Run view (not Program) | Run is the playback surface; the operator's main action is controlling cue order. Program is for editing — a click-to-edit there (opening CueEditor) is more valuable than re-queueing. In Run, the eye icon provides the detail-view affordance so the row click is freed for re-queue. |
 | `goToCueInStack` instead of `advance` on GO | `advance` asks the backend to compute the next cue, which doesn't account for a frontend re-queue. `goToCueInStack` sends the explicit standby cue id, keeping the backend and frontend in sync after a re-queue. |
-| `CueDetailSheet` read-only view | A lighter alternative to opening the full CueForm in Run view. Operators want to inspect cue composition (presets, effects, triggers) at a glance without the risk or overhead of the edit form. The sheet has an Edit button that deep-links to Program's CueForm if the operator decides to make changes. |
+| `CueDetailSheet` read-only view | A lighter alternative to opening the full CueEditor in Run view. Operators want to inspect cue composition (presets, effects, triggers) at a glance without the risk or overhead of the edit form. The sheet has an Edit button that deep-links to Program's CueEditor if the operator decides to make changes. |
 
 ## Known Gaps
 

@@ -135,9 +135,9 @@ export function RunPage() {
   const [stopConfirmOpen, setStopConfirmOpen] = useState(false)
 
   // CueEditor sheet state — used only for mobile cue-list edits
-  const [cueFormOpen, setCueFormOpen] = useState(false)
-  const [cueFormCueId, setCueFormCueId] = useState<number | null>(null)
-  const [cueFormCue, setCueFormCue] = useState<Cue | null>(null)
+  const [cueEditorOpen, setCueEditorOpen] = useState(false)
+  const [cueEditorCueId, setCueEditorCueId] = useState<number | null>(null)
+  const [cueEditorCue, setCueEditorCue] = useState<Cue | null>(null)
 
   // Read-only cue detail panel. 'active' = follow active cue (default),
   // 'standby' = follow next cue, number = pinned to a specific cue.
@@ -545,7 +545,7 @@ export function RunPage() {
 
   // ── CueEditor handlers (mobile cue-list) ──
 
-  const openCueForm = useCallback(
+  const openCueEditor = useCallback(
     async (_stackId: number, cueId: number) => {
       if (listScrollRef.current) {
         savedScrollPos.current = listScrollRef.current.scrollTop
@@ -553,9 +553,9 @@ export function RunPage() {
       try {
         const { data: fullCue } = await fetchCue({ projectId: projectIdNum, cueId }, true)
         if (fullCue) {
-          setCueFormCue(fullCue)
-          setCueFormCueId(cueId)
-          setCueFormOpen(true)
+          setCueEditorCue(fullCue)
+          setCueEditorCueId(cueId)
+          setCueEditorOpen(true)
         }
       } catch {
         // Silently fail
@@ -564,16 +564,16 @@ export function RunPage() {
     [fetchCue, projectIdNum],
   )
 
-  const handleCueFormSave = useCallback(
+  const handleCueEditorSave = useCallback(
     async (input: CueInput) => {
-      if (cueFormCueId == null) return
-      await saveCue({ projectId: projectIdNum, cueId: cueFormCueId, ...input }).unwrap()
+      if (cueEditorCueId == null) return
+      await saveCue({ projectId: projectIdNum, cueId: cueEditorCueId, ...input }).unwrap()
     },
-    [cueFormCueId, saveCue, projectIdNum],
+    [cueEditorCueId, saveCue, projectIdNum],
   )
 
-  const handleCueFormClose = useCallback((open: boolean) => {
-    setCueFormOpen(open)
+  const handleCueEditorClose = useCallback((open: boolean) => {
+    setCueEditorOpen(open)
     if (!open) {
       requestAnimationFrame(() => {
         if (listScrollRef.current) {
@@ -913,11 +913,11 @@ export function RunPage() {
 
       {/* CueEditor sheet (opened from MobileCueListSheet) */}
       <CueEditor
-        open={cueFormOpen}
-        onOpenChange={handleCueFormClose}
-        cue={cueFormCue}
+        open={cueEditorOpen}
+        onOpenChange={handleCueEditorClose}
+        cue={cueEditorCue}
         projectId={projectIdNum}
-        onSave={handleCueFormSave}
+        onSave={handleCueEditorSave}
         isInStack
         mode="sheet"
         defaultEditMode="live"

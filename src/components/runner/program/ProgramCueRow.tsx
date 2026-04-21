@@ -36,7 +36,7 @@ interface ProgramCueRowProps {
   isActive?: boolean
   /** Cue will fire on the next GO — rendered with the blue "next" accent. */
   isStandby?: boolean
-  onOpenCueForm: () => void
+  onOpenCueEditor: () => void
   /** Whether this cue is currently shown in the inline edit panel. */
   isEditing?: boolean
 }
@@ -49,7 +49,7 @@ export function ProgramCueRow({
   library,
   isActive = false,
   isStandby = false,
-  onOpenCueForm,
+  onOpenCueEditor,
   isEditing = false,
 }: ProgramCueRowProps) {
   const isWide = useMediaQuery(SM_BREAKPOINT)
@@ -189,7 +189,7 @@ export function ProgramCueRow({
           isActive && 'border-l-green-500 bg-green-500/[0.08]',
           isStandby && !isActive && 'border-l-blue-500 bg-blue-500/[0.06]',
         )}
-        onClick={() => isWide ? setExpanded(!expanded) : onOpenCueForm()}
+        onClick={() => isWide ? setExpanded(!expanded) : onOpenCueEditor()}
       >
         {/* Drag handle */}
         <div
@@ -323,7 +323,7 @@ export function ProgramCueRow({
             )}
             onClick={(e) => {
               e.stopPropagation()
-              onOpenCueForm()
+              onOpenCueEditor()
             }}
             title="Edit cue"
           >
