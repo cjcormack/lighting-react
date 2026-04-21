@@ -19,7 +19,7 @@ import {
 import type { CueInput, Cue } from '../api/cuesApi'
 import { buildCueInput } from '../lib/cueUtils'
 import { Breadcrumbs } from '../components/Breadcrumbs'
-import { CueForm } from '../components/cues/CueForm'
+import { CueEditor } from '../components/cues/editor/CueEditor'
 import { ProgramView } from '../components/runner/program/ProgramView'
 import { useMediaQuery, XL_BREAKPOINT } from '../hooks/useMediaQuery'
 
@@ -83,7 +83,6 @@ export function ProgramPage() {
   const [cueFormCueId, setCueFormCueId] = useState<number | null>(null)
   const [cueFormStackId, setCueFormStackId] = useState<number | null>(null)
   const [cueFormCue, setCueFormCue] = useState<Cue | null>(null)
-  const [cueFormSaving, setCueFormSaving] = useState(false)
 
   const [removeCueFromStack] = useRemoveCueFromCueStackMutation()
   const [saveCue] = useSaveProjectCueMutation()
@@ -152,12 +151,7 @@ export function ProgramPage() {
   const handleCueFormSave = useCallback(
     async (input: CueInput) => {
       if (cueFormCueId == null) return
-      setCueFormSaving(true)
-      try {
-        await saveCue({ projectId: projectIdNum, cueId: cueFormCueId, ...input }).unwrap()
-      } finally {
-        setCueFormSaving(false)
-      }
+      await saveCue({ projectId: projectIdNum, cueId: cueFormCueId, ...input }).unwrap()
     },
     [cueFormCueId, saveCue, projectIdNum],
   )
@@ -168,7 +162,6 @@ export function ProgramPage() {
 
   const handleDuplicate = useCallback(async () => {
     if (!cueFormCue || cueFormStackId == null) return
-    setCueFormSaving(true)
     try {
       const input = buildCueInput(cueFormCue)
       input.name = cueFormCue.name + ' (copy)'
@@ -179,8 +172,6 @@ export function ProgramPage() {
       setTimeout(() => openCueForm(cueFormStackId!, result.id), 200)
     } catch {
       // Silently fail
-    } finally {
-      setCueFormSaving(false)
     }
   }, [cueFormCue, cueFormStackId, projectIdNum, createCue, openCueForm])
 
@@ -233,14 +224,14 @@ export function ProgramPage() {
     }
   }, [stacks, isShowActive, activeStackId, searchParams, setSearchParams, openCueForm])
 
-  const cueFormProps = {
+  const cueEditorProps = {
     open: cueFormOpen,
     onOpenChange: handleCueFormClose,
     cue: cueFormCue,
     projectId: projectIdNum,
     onSave: handleCueFormSave,
-    isSaving: cueFormSaving,
     isInStack: true as const,
+    defaultEditMode: 'live' as const,
     onDuplicate: handleDuplicate,
     onRemoveFromStack: handleRemoveFromStack,
   }
@@ -341,11 +332,11 @@ export function ProgramPage() {
             />
           </div>
 
-          {/* Inline CueForm panel (wide viewports + drilled into a stack) */}
+          {/* Inline CueEditor panel (wide viewports + drilled into a stack) */}
           {showInlineCueForm && (
             <div className="w-[400px] shrink-0 border-l flex flex-col overflow-hidden bg-background">
               {cueFormCue ? (
-                <CueForm {...cueFormProps} mode="inline" />
+                <CueEditor {...cueEditorProps} mode="inline" />
               ) : (
                 <div className="flex-1 flex items-center justify-center p-4">
                   <p className="text-sm text-muted-foreground">Select a cue to edit</p>
@@ -356,8 +347,8 @@ export function ProgramPage() {
         </div>
       )}
 
-      {/* CueForm sheet (narrow viewports only) */}
-      {!showInlineCueForm && <CueForm {...cueFormProps} />}
+      {/* CueEditor sheet (narrow viewports only) */}
+      {!showInlineCueForm && <CueEditor {...cueEditorProps} mode="sheet" />}
     </div>
   )
 }

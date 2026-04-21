@@ -56,7 +56,7 @@ import {
   OutOfOrderBanner,
   detectOutOfOrder,
 } from '../components/runner/OutOfOrderBanner'
-import { CueForm } from '../components/cues/CueForm'
+import { CueEditor } from '../components/cues/editor/CueEditor'
 import { CueDetailSheet } from '../components/cues/CueDetailSheet'
 import { CueDetailContent } from '../components/cues/CueDetailContent'
 import {
@@ -134,18 +134,17 @@ export function RunPage() {
   const [ctxOverride, setCtxOverride] = useState<Record<number, 'theatre' | 'band'>>({})
   const [stopConfirmOpen, setStopConfirmOpen] = useState(false)
 
-  // CueForm sheet state — used only for mobile cue-list edits
+  // CueEditor sheet state — used only for mobile cue-list edits
   const [cueFormOpen, setCueFormOpen] = useState(false)
   const [cueFormCueId, setCueFormCueId] = useState<number | null>(null)
   const [cueFormCue, setCueFormCue] = useState<Cue | null>(null)
-  const [cueFormSaving, setCueFormSaving] = useState(false)
 
   // Read-only cue detail panel. 'active' = follow active cue (default),
   // 'standby' = follow next cue, number = pinned to a specific cue.
   const [detailCue, setDetailCue] = useState<Cue | null>(null)
   const [detailMode, setDetailMode] = useState<'active' | 'standby' | number>('active')
 
-  // Scroll save/restore around the CueForm sheet
+  // Scroll save/restore around the CueEditor sheet
   const listScrollRef = useRef<HTMLDivElement>(null)
   const savedScrollPos = useRef(0)
 
@@ -513,7 +512,7 @@ export function RunPage() {
 
   // ── Cue row interaction handlers ──
 
-  /** From the detail sheet/panel's Edit button — route to Program's CueForm. */
+  /** From the detail sheet/panel's Edit button — route to the cue editor in Program view. */
   const handleDetailEdit = useCallback(() => {
     if (detailCue == null || activeStackId == null) return
     const params = new URLSearchParams({
@@ -544,7 +543,7 @@ export function RunPage() {
     [activeStackId, effectiveActiveCueId, runner.standbyCueId, dispatch],
   )
 
-  // ── CueForm handlers (mobile cue-list) ──
+  // ── CueEditor handlers (mobile cue-list) ──
 
   const openCueForm = useCallback(
     async (_stackId: number, cueId: number) => {
@@ -568,12 +567,7 @@ export function RunPage() {
   const handleCueFormSave = useCallback(
     async (input: CueInput) => {
       if (cueFormCueId == null) return
-      setCueFormSaving(true)
-      try {
-        await saveCue({ projectId: projectIdNum, cueId: cueFormCueId, ...input }).unwrap()
-      } finally {
-        setCueFormSaving(false)
-      }
+      await saveCue({ projectId: projectIdNum, cueId: cueFormCueId, ...input }).unwrap()
     },
     [cueFormCueId, saveCue, projectIdNum],
   )
@@ -917,15 +911,16 @@ export function RunPage() {
         </div>
       )}
 
-      {/* CueForm sheet (opened from MobileCueListSheet) */}
-      <CueForm
+      {/* CueEditor sheet (opened from MobileCueListSheet) */}
+      <CueEditor
         open={cueFormOpen}
         onOpenChange={handleCueFormClose}
         cue={cueFormCue}
         projectId={projectIdNum}
         onSave={handleCueFormSave}
-        isSaving={cueFormSaving}
         isInStack
+        mode="sheet"
+        defaultEditMode="live"
       />
 
       {/* Read-only cue detail sheet (narrow viewports only — inline panel used on wide) */}

@@ -198,6 +198,18 @@ export function CueEditor({
     onOpenChange?.(false)
   }
 
+  // Gate Duplicate via the same isSaving flag as Save so rapid clicks can't
+  // fire multiple create-cue requests while the network round-trip is in flight.
+  const handleDuplicateClick = useCallback(async () => {
+    if (!onDuplicate) return
+    setIsSaving(true)
+    try {
+      await onDuplicate()
+    } finally {
+      setIsSaving(false)
+    }
+  }, [onDuplicate])
+
   const inner = (
     <EditorContextProvider value={editorContextValue}>
       <SheetBody>
@@ -388,7 +400,7 @@ export function CueEditor({
             </div>
             <div className="flex gap-2">
               {onDuplicate && (
-                <Button variant="outline" onClick={onDuplicate} disabled={isSaving}>
+                <Button variant="outline" onClick={handleDuplicateClick} disabled={isSaving}>
                   Duplicate
                 </Button>
               )}
