@@ -15,13 +15,25 @@ export interface FxPresetEffect {
   parameters: Record<string, string>
 }
 
+// Unlike `CuePropertyAssignment` these have no target fields — targets come from the
+// cue's preset-application at apply time. `value` uses the cue-side canonical form:
+// hex for colour, "pan,tilt" for position, "0".."255" for slider/setting.
+export interface FxPresetPropertyAssignment {
+  propertyName: string
+  value: string
+  fadeDurationMs?: number | null
+  sortOrder?: number
+}
+
 // Full preset from API
 export interface FxPreset {
   id: number
   name: string
   description: string | null
   fixtureType: string | null
+  palette: string[]
   effects: FxPresetEffect[]
+  propertyAssignments: FxPresetPropertyAssignment[]
   canEdit: boolean
   canDelete: boolean
   cannotDeleteReason: string | null
@@ -33,7 +45,9 @@ export interface FxPresetInput {
   name: string
   description?: string | null
   fixtureType?: string | null
+  palette?: string[]
   effects: FxPresetEffect[]
+  propertyAssignments?: FxPresetPropertyAssignment[]
 }
 
 // Copy request/response

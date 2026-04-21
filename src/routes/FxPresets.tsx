@@ -2,14 +2,6 @@ import { useEffect, useState, useMemo } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Loader2, Plus, Bookmark, Sun, Palette, Move, ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -22,7 +14,7 @@ import {
 } from '../store/fxPresets'
 import { useFixtureListQuery } from '../store/fixtures'
 import { PresetListRow } from '../components/presets/PresetListRow'
-import { PresetForm } from '../components/presets/PresetForm'
+import { PresetEditor } from '../components/presets/PresetEditor'
 import { CopyPresetDialog } from '../components/presets/CopyPresetDialog'
 import {
   inferPresetCapabilities,
@@ -77,13 +69,11 @@ export function ProjectFxPresets() {
 
   const [createPreset, { isLoading: isCreating }] = useCreateProjectPresetMutation()
   const [savePreset, { isLoading: isSaving }] = useSaveProjectPresetMutation()
-  const [deletePreset] = useDeleteProjectPresetMutation()
+  const [deletePreset, { isLoading: isDeleting }] = useDeleteProjectPresetMutation()
 
   const [searchParams, setSearchParams] = useSearchParams()
   const [formOpen, setFormOpen] = useState(false)
   const [editingPreset, setEditingPreset] = useState<FxPreset | null>(null)
-  const [initialEditEffectIndex, setInitialEditEffectIndex] = useState<number | null>(null)
-  const [deletingPreset, setDeletingPreset] = useState<FxPreset | null>(null)
   const [copyingPreset, setCopyingPreset] = useState<FxPreset | null>(null)
 
   // Filter state
@@ -99,7 +89,6 @@ export function ProjectFxPresets() {
   useEffect(() => {
     if (searchParams.get("action") === "new" && isCurrentProject) {
       setEditingPreset(null)
-      setInitialEditEffectIndex(null)
       setFormOpen(true)
       setSearchParams({}, { replace: true })
     }
@@ -181,19 +170,11 @@ export function ProjectFxPresets() {
 
   const handleCreate = () => {
     setEditingPreset(null)
-    setInitialEditEffectIndex(null)
     setFormOpen(true)
   }
 
   const handleEdit = (preset: FxPreset) => {
     setEditingPreset(preset)
-    setInitialEditEffectIndex(null)
-    setFormOpen(true)
-  }
-
-  const handleEditEffect = (preset: FxPreset, effectIndex: number) => {
-    setEditingPreset(preset)
-    setInitialEditEffectIndex(effectIndex)
     setFormOpen(true)
   }
 
@@ -221,7 +202,9 @@ export function ProjectFxPresets() {
       name: newName,
       description: preset.description,
       fixtureType: preset.fixtureType,
+      palette: preset.palette,
       effects: preset.effects,
+      propertyAssignments: preset.propertyAssignments,
     }).unwrap()
   }
 
@@ -241,12 +224,12 @@ export function ProjectFxPresets() {
   }
 
   const handleDelete = async () => {
-    if (!deletingPreset) return
+    if (!editingPreset) return
     await deletePreset({
       projectId: projectIdNum,
-      presetId: deletingPreset.id,
+      presetId: editingPreset.id,
     }).unwrap()
-    setDeletingPreset(null)
+    setFormOpen(false)
   }
 
   if (projectLoading || currentLoading || presetsLoading) {
@@ -323,13 +306,13 @@ export function ProjectFxPresets() {
                     onClick={() => handleRowClick(preset)}
                     onEdit={isCurrentProject && preset.canEdit ? () => handleEdit(preset) : undefined}
                     onDelete={
-                      isCurrentProject && preset.canDelete ? () => setDeletingPreset(preset) : undefined
+                      isCurrentProject && preset.canDelete ? () => handleEdit(preset) : undefined
                     }
                     onDuplicate={isCurrentProject ? () => handleDuplicate(preset) : undefined}
                     onCopy={!isCurrentProject ? () => setCopyingPreset(preset) : undefined}
                     onEditEffect={
                       isCurrentProject && preset.canEdit
-                        ? (effectIndex) => handleEditEffect(preset, effectIndex)
+                        ? () => handleEdit(preset)
                         : undefined
                     }
                   />
@@ -392,35 +375,19 @@ export function ProjectFxPresets() {
         )}
       </div>
 
-      {/* Create/Edit form */}
-      <PresetForm
+      {/* Create/Edit editor */}
+      <PresetEditor
         open={formOpen}
         onOpenChange={setFormOpen}
         preset={editingPreset}
         onSave={handleSave}
         isSaving={isCreating || isSaving}
-        initialEditEffectIndex={initialEditEffectIndex}
+        onDelete={
+          editingPreset && editingPreset.canDelete ? handleDelete : undefined
+        }
+        isDeleting={isDeleting}
       />
 
-      {/* Delete confirmation */}
-      <Dialog
-        open={deletingPreset !== null}
-        onOpenChange={(open: boolean) => !open && setDeletingPreset(null)}
-      >
-        <DialogContent showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>Delete Preset</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete &quot;{deletingPreset?.name}&quot;? This action cannot
-              be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeletingPreset(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDelete}>Delete</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Copy dialog */}
       {copyingPreset && (

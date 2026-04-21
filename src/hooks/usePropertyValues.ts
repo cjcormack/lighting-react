@@ -1,7 +1,16 @@
 import { useRef, useMemo, useSyncExternalStore, useCallback } from 'react'
 import { lightingApi } from '../api/lightingApi'
 import { useEditorContext } from '../components/lighting-editor/EditorContext'
-import { rgbToHex } from '../components/fx/colourUtils'
+import {
+  usePresetDraft,
+  usePresetDraftValue,
+} from '../components/presets/PresetDraftContext'
+import {
+  rgbToHex,
+  hexToRgb,
+  parseExtendedColour,
+  serializeExtendedColour,
+} from '../components/fx/colourUtils'
 import type {
   ChannelRef,
   PropertyDescriptor,
@@ -34,10 +43,31 @@ function subscribeToChannels(
   return () => subscriptions.forEach((sub) => sub.unsubscribe())
 }
 
+function parseSliderCanonical(value: string | undefined): number {
+  if (value === undefined) return 0
+  const n = Number(value)
+  if (!Number.isFinite(n)) return 0
+  return Math.max(0, Math.min(255, Math.round(n)))
+}
+
+function parsePositionCanonical(value: string | undefined): { pan: number; tilt: number } {
+  if (!value) return { pan: 0, tilt: 0 }
+  const [panStr, tiltStr] = value.split(',')
+  const pan = Number(panStr)
+  const tilt = Number(tiltStr)
+  return {
+    pan: Number.isFinite(pan) ? pan : 0,
+    tilt: Number.isFinite(tilt) ? tilt : 0,
+  }
+}
+
 /**
  * Hook to get a slider property's current value
  */
 export function useSliderValue(property: SliderPropertyDescriptor): number {
+  const ctx = useEditorContext()
+  const draftValue = usePresetDraftValue(property.name)
+
   const subscribe = useCallback(
     (callback: () => void) => subscribeToChannels([property.channel], callback),
     [property.channel.universe, property.channel.channelNo]
@@ -48,7 +78,10 @@ export function useSliderValue(property: SliderPropertyDescriptor): number {
     [property.channel.universe, property.channel.channelNo]
   )
 
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  const liveValue = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+
+  if (ctx.kind === 'preset') return parseSliderCanonical(draftValue)
+  return liveValue
 }
 
 type ColourValueResult = {
@@ -62,10 +95,77 @@ type ColourValueResult = {
   combinedCss: string
 }
 
+function computeCombinedCss(
+  r: number,
+  g: number,
+  b: number,
+  w: number | undefined,
+  a: number | undefined,
+  uv: number | undefined,
+): string {
+  let combinedR = r
+  let combinedG = g
+  let combinedB = b
+  if (w !== undefined && w > 0) {
+    const whiteFactor = w / 255
+    combinedR = Math.min(255, combinedR + whiteFactor * (255 - combinedR))
+    combinedG = Math.min(255, combinedG + whiteFactor * (255 - combinedG))
+    combinedB = Math.min(255, combinedB + whiteFactor * (255 - combinedB))
+  }
+  if (a !== undefined && a > 0) {
+    const amberFactor = a / 255
+    combinedR = Math.min(255, combinedR + amberFactor * (255 - combinedR * 0.3))
+    combinedG = Math.min(255, combinedG + amberFactor * (191 - combinedG * 0.5))
+  }
+  if (uv !== undefined && uv > 0) {
+    const uvFactor = uv / 255
+    combinedR = Math.min(255, combinedR + uvFactor * (139 - combinedR * 0.5))
+    combinedG = Math.min(255, combinedG * (1 - uvFactor * 0.3))
+    combinedB = Math.min(255, combinedB + uvFactor * (255 - combinedB * 0.3))
+  }
+  return `rgb(${Math.round(combinedR)}, ${Math.round(combinedG)}, ${Math.round(combinedB)})`
+}
+
+function parseColourFromDraft(
+  property: ColourPropertyDescriptor,
+  draftValue: string | undefined,
+): ColourValueResult {
+  if (!draftValue) {
+    const zero: ColourValueResult = {
+      r: 0,
+      g: 0,
+      b: 0,
+      w: property.whiteChannel ? 0 : undefined,
+      a: property.amberChannel ? 0 : undefined,
+      uv: property.uvChannel ? 0 : undefined,
+      css: 'rgb(0, 0, 0)',
+      combinedCss: 'rgb(0, 0, 0)',
+    }
+    return zero
+  }
+  const ext = parseExtendedColour(draftValue)
+  const { r, g, b } = hexToRgb(ext.hex)
+  const w = property.whiteChannel ? ext.white : undefined
+  const a = property.amberChannel ? ext.amber : undefined
+  const uv = property.uvChannel ? ext.uv : undefined
+  return {
+    r,
+    g,
+    b,
+    w,
+    a,
+    uv,
+    css: `rgb(${r}, ${g}, ${b})`,
+    combinedCss: computeCombinedCss(r, g, b, w, a, uv),
+  }
+}
+
 /**
  * Hook to get a colour property's RGB values
  */
 export function useColourValue(property: ColourPropertyDescriptor): ColourValueResult {
+  const ctx = useEditorContext()
+  const draftValue = usePresetDraftValue(property.name)
   const cachedRef = useRef<ColourValueResult | null>(null)
 
   const channels = useMemo(() => {
@@ -108,46 +208,17 @@ export function useColourValue(property: ColourPropertyDescriptor): ColourValueR
     }
 
     const css = `rgb(${r}, ${g}, ${b})`
-
-    // Compute combined colour approximation for RGBWAUV
-    let combinedR = r
-    let combinedG = g
-    let combinedB = b
-
-    // Add white (brightens toward white)
-    if (w !== undefined && w > 0) {
-      const whiteFactor = w / 255
-      combinedR = Math.min(255, combinedR + whiteFactor * (255 - combinedR))
-      combinedG = Math.min(255, combinedG + whiteFactor * (255 - combinedG))
-      combinedB = Math.min(255, combinedB + whiteFactor * (255 - combinedB))
-    }
-
-    // Add amber (warm orange ~#FFBF00, blends additively)
-    if (a !== undefined && a > 0) {
-      const amberFactor = a / 255
-      // Amber LEDs are warm orange - blend with existing colour
-      combinedR = Math.min(255, combinedR + amberFactor * (255 - combinedR * 0.3))
-      combinedG = Math.min(255, combinedG + amberFactor * (191 - combinedG * 0.5))
-      // Amber has minimal blue contribution
-    }
-
-    // Add UV (represented as violet/purple ~#8B00FF since UV is invisible)
-    if (uv !== undefined && uv > 0) {
-      const uvFactor = uv / 255
-      // UV LEDs appear as deep violet/purple to cameras and in mixed light
-      combinedR = Math.min(255, combinedR + uvFactor * (139 - combinedR * 0.5))
-      combinedG = Math.min(255, combinedG * (1 - uvFactor * 0.3)) // UV suppresses green slightly
-      combinedB = Math.min(255, combinedB + uvFactor * (255 - combinedB * 0.3))
-    }
-
-    const combinedCss = `rgb(${Math.round(combinedR)}, ${Math.round(combinedG)}, ${Math.round(combinedB)})`
+    const combinedCss = computeCombinedCss(r, g, b, w, a, uv)
 
     const result = { r, g, b, w, a, uv, css, combinedCss }
     cachedRef.current = result
     return result
   }, [property])
 
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  const liveResult = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+
+  if (ctx.kind === 'preset') return parseColourFromDraft(property, draftValue)
+  return liveResult
 }
 
 type PositionValueResult = {
@@ -161,6 +232,8 @@ type PositionValueResult = {
  * Hook to get a position property's pan/tilt values
  */
 export function usePositionValue(property: PositionPropertyDescriptor): PositionValueResult {
+  const ctx = useEditorContext()
+  const draftValue = usePresetDraftValue(property.name)
   const cachedRef = useRef<PositionValueResult | null>(null)
 
   const channels = useMemo(
@@ -194,7 +267,17 @@ export function usePositionValue(property: PositionPropertyDescriptor): Position
     return result
   }, [property])
 
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  const liveResult = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+
+  if (ctx.kind === 'preset') {
+    const { pan, tilt } = parsePositionCanonical(draftValue)
+    const panRange = property.panMax - property.panMin
+    const tiltRange = property.tiltMax - property.tiltMin
+    const panNormalized = panRange > 0 ? (pan - property.panMin) / panRange : 0.5
+    const tiltNormalized = tiltRange > 0 ? (tilt - property.tiltMin) / tiltRange : 0.5
+    return { pan, tilt, panNormalized, tiltNormalized }
+  }
+  return liveResult
 }
 
 type SettingValueResult = {
@@ -203,9 +286,29 @@ type SettingValueResult = {
 }
 
 /**
+ * Match a DMX level to its display option — scans from the highest-level option down
+ * and picks the first one the level clears. Shared between fixture and group setting hooks.
+ */
+export function resolveSettingOption<O extends { level: number }>(
+  options: O[],
+  level: number,
+): O {
+  let matchedOption = options[0]
+  for (let i = options.length - 1; i >= 0; i--) {
+    if (level >= options[i].level) {
+      matchedOption = options[i]
+      break
+    }
+  }
+  return matchedOption
+}
+
+/**
  * Hook to get a setting property's current option
  */
 export function useSettingValue(property: SettingPropertyDescriptor): SettingValueResult {
+  const ctx = useEditorContext()
+  const draftValue = usePresetDraftValue(property.name)
   const cachedRef = useRef<SettingValueResult | null>(null)
 
   const subscribe = useCallback(
@@ -222,21 +325,18 @@ export function useSettingValue(property: SettingPropertyDescriptor): SettingVal
       return cached
     }
 
-    // Find the matching option (first option with level >= current level)
-    let matchedOption = property.options[0]
-    for (let i = property.options.length - 1; i >= 0; i--) {
-      if (level >= property.options[i].level) {
-        matchedOption = property.options[i]
-        break
-      }
-    }
-
-    const result = { level, option: matchedOption }
+    const result = { level, option: resolveSettingOption(property.options, level) }
     cachedRef.current = result
     return result
   }, [property])
 
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  const liveResult = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+
+  if (ctx.kind === 'preset') {
+    const level = parseSliderCanonical(draftValue)
+    return { level, option: resolveSettingOption(property.options, level) }
+  }
+  return liveResult
 }
 
 /**
@@ -257,7 +357,10 @@ export function usePropertyValue(property: PropertyDescriptor) {
 
 /**
  * Hook to update a channel value. Routes through `cueEdit.setChannel` when the surrounding
- * [EditorContext] is `kind: 'cue'`, else writes direct to Layer 4.
+ * [EditorContext] is `kind: 'cue'`, else writes direct to Layer 4. In `kind: 'preset'` mode
+ * channel-level writes are a no-op — preset assignments are property-keyed, not channel-
+ * keyed, and the synthetic fixture's channel refs don't map to real DMX anyway. Callers
+ * authoring preset properties should use the property-level write hooks instead.
  */
 export function useUpdateChannel() {
   const ctx = useEditorContext()
@@ -273,6 +376,7 @@ export function useUpdateChannel() {
         })
         return
       }
+      if (ctx.kind === 'preset') return
       lightingApi.channels.update(channel.universe, channel.channelNo, value)
     },
     [ctx]
@@ -282,13 +386,16 @@ export function useUpdateChannel() {
 /**
  * Update all colour channels of a fixture-level colour property. In cue mode RGB routes
  * through one `cueEdit.setProperty { rgbColour }` (the backend rejects R/G/B sub-channels);
- * W/A/UV stay on `setChannel`. Mirrors [useUpdateGroupColour].
+ * W/A/UV stay on `setChannel`. In preset mode writes go to the local draft keyed by
+ * `property.name`, with W/A/UV serialised into the extended-colour suffix. Mirrors
+ * [useUpdateGroupColour].
  */
 export function useUpdateFixtureColour(
   property: ColourPropertyDescriptor,
   fixtureKey: string | undefined,
 ) {
   const ctx = useEditorContext()
+  const draft = usePresetDraft()
   return useCallback(
     (r: number, g: number, b: number, w?: number, a?: number, uv?: number) => {
       if (ctx.kind === 'cue' && fixtureKey) {
@@ -329,6 +436,16 @@ export function useUpdateFixtureColour(
         }
         return
       }
+      if (ctx.kind === 'preset' && draft) {
+        const value = serializeExtendedColour({
+          hex: rgbToHex(r, g, b),
+          white: property.whiteChannel ? w ?? 0 : 0,
+          amber: property.amberChannel ? a ?? 0 : 0,
+          uv: property.uvChannel ? uv ?? 0 : 0,
+        })
+        draft.onSetProperty(property.name, value)
+        return
+      }
       lightingApi.channels.update(property.redChannel.universe, property.redChannel.channelNo, r)
       lightingApi.channels.update(property.greenChannel.universe, property.greenChannel.channelNo, g)
       lightingApi.channels.update(property.blueChannel.universe, property.blueChannel.channelNo, b)
@@ -342,7 +459,7 @@ export function useUpdateFixtureColour(
         lightingApi.channels.update(property.uvChannel.universe, property.uvChannel.channelNo, uv)
       }
     },
-    [ctx, fixtureKey, property]
+    [ctx, draft, fixtureKey, property]
   )
 }
 

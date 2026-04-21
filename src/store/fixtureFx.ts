@@ -69,6 +69,37 @@ export interface EffectLibraryEntry {
   script?: string | null
 }
 
+/** Normalise an effect type name for lookup: lowercase, strip whitespace + underscores. */
+function normaliseEffectName(name: string): string {
+  return name.toLowerCase().replace(/[\s_]/g, '')
+}
+
+/**
+ * Build a lookup that resolves `(effectType, category?)` → `EffectLibraryEntry`.
+ * Names in the library aren't guaranteed unique across categories, so category-qualified
+ * keys are preferred; falls back to the last entry wins if unqualified.
+ */
+export function buildEffectLibraryLookup(
+  library: EffectLibraryEntry[] | undefined,
+): (effectType: string, category?: string) => EffectLibraryEntry | undefined {
+  const map = new Map<string, EffectLibraryEntry>()
+  if (library) {
+    for (const entry of library) {
+      const n = normaliseEffectName(entry.name)
+      map.set(`${entry.category}:${n}`, entry)
+      map.set(n, entry)
+    }
+  }
+  return (effectType, category) => {
+    const n = normaliseEffectName(effectType)
+    if (category) {
+      const qualified = map.get(`${category}:${n}`)
+      if (qualified) return qualified
+    }
+    return map.get(n)
+  }
+}
+
 export interface AddFixtureFxRequest {
   effectType: string
   fixtureKey: string

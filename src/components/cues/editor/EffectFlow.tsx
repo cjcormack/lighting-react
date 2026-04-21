@@ -1,7 +1,7 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, Trash2 } from 'lucide-react'
-import { useEffectLibraryQuery, type EffectLibraryEntry } from '@/store/fixtureFx'
+import { useEffectLibraryQuery, buildEffectLibraryLookup, type EffectLibraryEntry } from '@/store/fixtureFx'
 import { useGroupListQuery } from '@/store/groups'
 import { useFixtureListQuery } from '@/store/fixtures'
 import { CueTargetPicker } from '../CueTargetPicker'
@@ -85,29 +85,7 @@ export function EffectFlow({
     randomWindowMs: existingEffect?.randomWindowMs ?? null,
   })
 
-  // ── Library lookup ──
-  const libraryMap = useMemo(() => {
-    if (!library) return new Map<string, EffectLibraryEntry>()
-    const map = new Map<string, EffectLibraryEntry>()
-    for (const entry of library) {
-      const normalized = entry.name.toLowerCase().replace(/[\s_]/g, '')
-      map.set(`${entry.category}:${normalized}`, entry)
-      map.set(normalized, entry)
-    }
-    return map
-  }, [library])
-
-  const findLibraryEntry = useCallback(
-    (effectType: string, category?: string): EffectLibraryEntry | undefined => {
-      const normalized = effectType.toLowerCase().replace(/[\s_]/g, '')
-      if (category) {
-        const qualified = libraryMap.get(`${category}:${normalized}`)
-        if (qualified) return qualified
-      }
-      return libraryMap.get(normalized)
-    },
-    [libraryMap],
-  )
+  const findLibraryEntry = useMemo(() => buildEffectLibraryLookup(library), [library])
 
   // Resolve the library entry for edit mode (on first render)
   const editEntry = useMemo(() => {

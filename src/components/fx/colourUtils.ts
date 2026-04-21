@@ -121,6 +121,16 @@ export function rgbToHex(r: number, g: number, b: number): string {
   return `#${byte(r)}${byte(g)}${byte(b)}`.toUpperCase()
 }
 
+/** Parse a `#RRGGBB` (or named/short) string into its R, G, B components. Invalid → zeros. */
+export function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const normalised = resolveColourToHex(hex).replace(/^#/, '')
+  return {
+    r: parseInt(normalised.slice(0, 2), 16) || 0,
+    g: parseInt(normalised.slice(2, 4), 16) || 0,
+    b: parseInt(normalised.slice(4, 6), 16) || 0,
+  }
+}
+
 /** Check if an extended colour has any non-zero extended channels */
 export function hasExtendedChannels(colour: ExtendedColour): boolean {
   return colour.white > 0 || colour.amber > 0 || colour.uv > 0

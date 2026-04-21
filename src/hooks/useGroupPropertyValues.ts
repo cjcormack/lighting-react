@@ -1,7 +1,9 @@
 import { useRef, useMemo, useSyncExternalStore, useCallback } from 'react'
 import { lightingApi } from '../api/lightingApi'
 import { useEditorContext } from '../components/lighting-editor/EditorContext'
-import { rgbToHex } from '../components/fx/colourUtils'
+import { usePresetDraft } from '../components/presets/PresetDraftContext'
+import { rgbToHex, serializeExtendedColour } from '../components/fx/colourUtils'
+import { resolveSettingOption } from './usePropertyValues'
 import type { ChannelRef } from '../store/fixtures'
 import type {
   GroupSliderPropertyDescriptor,
@@ -110,6 +112,7 @@ export function useGroupSliderValues(
  */
 export function useUpdateGroupSlider(property: GroupSliderPropertyDescriptor) {
   const ctx = useEditorContext()
+  const draft = usePresetDraft()
   return useCallback(
     (value: number) => {
       if (ctx.kind === 'cue') {
@@ -118,11 +121,15 @@ export function useUpdateGroupSlider(property: GroupSliderPropertyDescriptor) {
         }
         return
       }
+      if (ctx.kind === 'preset' && draft) {
+        draft.onSetProperty(property.name, String(value))
+        return
+      }
       property.memberChannels.forEach((channel) => {
         lightingApi.channels.update(channel.universe, channel.channelNo, value)
       })
     },
-    [ctx, property.memberChannels]
+    [ctx, draft, property.memberChannels, property.name]
   )
 }
 
@@ -274,6 +281,7 @@ export function useGroupColourValues(
  */
 export function useUpdateGroupColour(property: GroupColourPropertyDescriptor) {
   const ctx = useEditorContext()
+  const draft = usePresetDraft()
   return useCallback(
     (r: number, g: number, b: number, w?: number, a?: number, uv?: number) => {
       if (ctx.kind === 'cue') {
@@ -299,6 +307,19 @@ export function useUpdateGroupColour(property: GroupColourPropertyDescriptor) {
         }
         return
       }
+      if (ctx.kind === 'preset' && draft) {
+        const hasWhite = property.memberColourChannels.some((m) => m.whiteChannel)
+        const hasAmber = property.memberColourChannels.some((m) => m.amberChannel)
+        const hasUv = property.memberColourChannels.some((m) => m.uvChannel)
+        const value = serializeExtendedColour({
+          hex: rgbToHex(r, g, b),
+          white: hasWhite ? w ?? 0 : 0,
+          amber: hasAmber ? a ?? 0 : 0,
+          uv: hasUv ? uv ?? 0 : 0,
+        })
+        draft.onSetProperty(property.name, value)
+        return
+      }
       property.memberColourChannels.forEach((m) => {
         lightingApi.channels.update(m.redChannel.universe, m.redChannel.channelNo, r)
         lightingApi.channels.update(m.greenChannel.universe, m.greenChannel.channelNo, g)
@@ -314,7 +335,7 @@ export function useUpdateGroupColour(property: GroupColourPropertyDescriptor) {
         }
       })
     },
-    [ctx, property.memberColourChannels]
+    [ctx, draft, property.memberColourChannels, property.name]
   )
 }
 
@@ -424,6 +445,7 @@ export function useGroupPositionValues(
  */
 export function useUpdateGroupPosition(property: GroupPositionPropertyDescriptor) {
   const ctx = useEditorContext()
+  const draft = usePresetDraft()
   return useCallback(
     (pan: number, tilt: number) => {
       if (ctx.kind === 'cue') {
@@ -440,12 +462,16 @@ export function useUpdateGroupPosition(property: GroupPositionPropertyDescriptor
         }
         return
       }
+      if (ctx.kind === 'preset' && draft) {
+        draft.onSetProperty(property.name, `${pan},${tilt}`)
+        return
+      }
       property.memberPositionChannels.forEach((m) => {
         lightingApi.channels.update(m.panChannel.universe, m.panChannel.channelNo, pan)
         lightingApi.channels.update(m.tiltChannel.universe, m.tiltChannel.channelNo, tilt)
       })
     },
-    [ctx, property.memberPositionChannels]
+    [ctx, draft, property.memberPositionChannels, property.name]
   )
 }
 
@@ -489,17 +515,9 @@ export function useGroupSettingValues(
 
     const isUniform = values.every((v) => v === values[0])
 
-    // Find matching option for first value (if uniform, this applies to all)
-    let currentOption = property.options[0]
-    if (isUniform) {
-      const level = values[0]
-      for (let i = property.options.length - 1; i >= 0; i--) {
-        if (level >= property.options[i].level) {
-          currentOption = property.options[i]
-          break
-        }
-      }
-    }
+    const currentOption = isUniform
+      ? resolveSettingOption(property.options, values[0])
+      : property.options[0]
 
     const displayText = isUniform
       ? currentOption?.displayName ?? 'Unknown'
@@ -533,6 +551,7 @@ export function useGroupSettingValues(
  */
 export function useUpdateGroupSetting(property: GroupSettingPropertyDescriptor) {
   const ctx = useEditorContext()
+  const draft = usePresetDraft()
   return useCallback(
     (level: number) => {
       if (ctx.kind === 'cue') {
@@ -541,11 +560,15 @@ export function useUpdateGroupSetting(property: GroupSettingPropertyDescriptor) 
         }
         return
       }
+      if (ctx.kind === 'preset' && draft) {
+        draft.onSetProperty(property.name, String(level))
+        return
+      }
       property.memberChannels.forEach((m) => {
         lightingApi.channels.update(m.channel.universe, m.channel.channelNo, level)
       })
     },
-    [ctx, property.memberChannels]
+    [ctx, draft, property.memberChannels, property.name]
   )
 }
 

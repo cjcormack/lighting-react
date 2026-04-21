@@ -1,7 +1,16 @@
 import { useRef, useMemo, useSyncExternalStore, useCallback } from 'react'
 import { lightingApi } from '../api/lightingApi'
 import { useEditorContext } from '../components/lighting-editor/EditorContext'
-import { rgbToHex } from '../components/fx/colourUtils'
+import {
+  usePresetDraft,
+  usePresetDraftValue,
+} from '../components/presets/PresetDraftContext'
+import {
+  rgbToHex,
+  hexToRgb,
+  parseExtendedColour,
+  serializeExtendedColour,
+} from '../components/fx/colourUtils'
 import type { ChannelRef, ColourPropertyDescriptor } from '../store/fixtures'
 import type { GroupColourPropertyDescriptor } from '../api/groupsApi'
 
@@ -46,6 +55,8 @@ export function useVirtualDimmer(
   fixtureKey?: string,
 ): VirtualDimmerResult {
   const ctx = useEditorContext()
+  const draft = usePresetDraft()
+  const draftValue = usePresetDraftValue(colourProp.name)
 
   // Store colour ratios for restoring hue when raising from zero
   const lastRatiosRef = useRef<{ r: number; g: number; b: number }>({
@@ -87,16 +98,46 @@ export function useVirtualDimmer(
     return result
   }, [colourProp.redChannel, colourProp.greenChannel, colourProp.blueChannel])
 
-  const { value, percentage } = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  const live = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+
+  const presetLive = useMemo(() => {
+    if (ctx.kind !== 'preset') return null
+    if (!draftValue) return { value: 0, percentage: 0 }
+    const { r, g, b } = hexToRgb(parseExtendedColour(draftValue).hex)
+    const value = Math.max(r, g, b)
+    if (value > 0) {
+      lastRatiosRef.current = { r: r / value, g: g / value, b: b / value }
+    }
+    return { value, percentage: Math.round((value / 255) * 100) }
+  }, [ctx.kind, draftValue])
+
+  const { value, percentage } = presetLive ?? live
 
   const setValue = useCallback(
     (newValue: number) => {
       const clamped = Math.max(0, Math.min(255, Math.round(newValue)))
 
-      // Read current RGB to compute ratios
-      const r = getChannelValue(colourProp.redChannel)
-      const g = getChannelValue(colourProp.greenChannel)
-      const b = getChannelValue(colourProp.blueChannel)
+      let r: number, g: number, b: number
+      let existingWhite = 0
+      let existingAmber = 0
+      let existingUv = 0
+
+      if (ctx.kind === 'preset') {
+        // Read the current draft value directly so rapid drags scale against the latest
+        // canonical state, not a stale snapshot captured at hook-call time.
+        const current = draft?.getValue(colourProp.name)
+        const ext = current
+          ? parseExtendedColour(current)
+          : { hex: '#000000', white: 0, amber: 0, uv: 0 }
+        ;({ r, g, b } = hexToRgb(ext.hex))
+        existingWhite = ext.white
+        existingAmber = ext.amber
+        existingUv = ext.uv
+      } else {
+        r = getChannelValue(colourProp.redChannel)
+        g = getChannelValue(colourProp.greenChannel)
+        b = getChannelValue(colourProp.blueChannel)
+      }
       const oldMax = Math.max(r, g, b)
 
       let newR: number, newG: number, newB: number
@@ -131,11 +172,22 @@ export function useVirtualDimmer(
         return
       }
 
+      if (ctx.kind === 'preset' && draft) {
+        const value = serializeExtendedColour({
+          hex: rgbToHex(newR, newG, newB),
+          white: existingWhite,
+          amber: existingAmber,
+          uv: existingUv,
+        })
+        draft.onSetProperty(colourProp.name, value)
+        return
+      }
+
       lightingApi.channels.update(colourProp.redChannel.universe, colourProp.redChannel.channelNo, newR)
       lightingApi.channels.update(colourProp.greenChannel.universe, colourProp.greenChannel.channelNo, newG)
       lightingApi.channels.update(colourProp.blueChannel.universe, colourProp.blueChannel.channelNo, newB)
     },
-    [ctx, fixtureKey, colourProp.redChannel, colourProp.greenChannel, colourProp.blueChannel]
+    [ctx, draft, fixtureKey, colourProp.name, colourProp.redChannel, colourProp.greenChannel, colourProp.blueChannel]
   )
 
   return { value, percentage, setValue }

@@ -11,7 +11,7 @@ import { EffectPad } from './EffectPad'
 import { SelectedTargetSummary } from './SelectedTargetSummary'
 import { ActiveEffectSheet } from './ActiveEffectSheet'
 import { ConfigureEffectSheet } from './ConfigureEffectSheet'
-import { PresetForm } from '@/components/presets/PresetForm'
+import { PresetEditor } from '@/components/presets/PresetEditor'
 import { FixtureDetailModal } from '@/components/groups/FixtureDetailModal'
 import { useBuskingState, type TargetEffectsData } from './useBuskingState'
 import {
@@ -393,7 +393,7 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
         }}
         onClose={() => setConfiguringEffect(null)}
       />
-      <PresetForm
+      <PresetEditor
         open={presetFormOpen}
         onOpenChange={(open) => { setPresetFormOpen(open); if (!open) setEditingPreset(null) }}
         preset={editingPreset}
