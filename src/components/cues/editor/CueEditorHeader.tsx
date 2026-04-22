@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { SheetTitle } from '@/components/ui/sheet'
-import { Check, Eye, EyeOff, Globe, Palette } from 'lucide-react'
+import { Camera, Check, Eye, EyeOff, Globe, Loader2, Palette } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { CuePaletteEditor } from '../CuePaletteEditor'
 import type { CueEditMode } from '@/api/cueEditWsApi'
@@ -34,6 +34,9 @@ export interface CueEditorHeaderProps {
 
   editMode: CueEditMode
   onEditModeChange: (mode: CueEditMode) => void
+
+  onSnapshotFromLive?: () => void
+  snapshotPending?: boolean
 
   isInStack: boolean
   cueNumber: string
@@ -66,6 +69,8 @@ export function CueEditorHeader(props: CueEditorHeaderProps) {
     onUpdateGlobalPaletteChange,
     editMode,
     onEditModeChange,
+    onSnapshotFromLive,
+    snapshotPending = false,
     isInStack,
     cueNumber,
     onCueNumberChange,
@@ -98,7 +103,27 @@ export function CueEditorHeader(props: CueEditorHeaderProps) {
             <SheetTitle className="text-lg truncate">{title}</SheetTitle>
           )}
         </div>
-        <LiveBlindToggle mode={editMode} onToggle={toggleEditMode} />
+        <div className="flex items-center gap-2 shrink-0">
+          {onSnapshotFromLive && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onSnapshotFromLive}
+              disabled={snapshotPending || !isEditing}
+              className="gap-1.5"
+              title="Replace this cue's property assignments with the current stage state"
+            >
+              {snapshotPending ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Camera className="size-3.5" />
+              )}
+              <span className="hidden sm:inline">Grab live state</span>
+            </Button>
+          )}
+          <LiveBlindToggle mode={editMode} onToggle={toggleEditMode} />
+        </div>
       </div>
 
       {error && <div className="text-sm text-destructive">{error}</div>}

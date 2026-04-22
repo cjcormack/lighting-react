@@ -3,6 +3,14 @@ import { useParams, useNavigate, Navigate, useSearchParams } from 'react-router-
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { ArrowRight, Loader2, Play } from 'lucide-react'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import { useProjectCueStackListQuery } from '../store/cueStacks'
@@ -11,6 +19,7 @@ import {
   useSaveProjectCueMutation,
   useLazyProjectCueQuery,
   useCreateProjectCueMutation,
+  useSnapshotCueFromLiveMutation,
 } from '../store/cues'
 import {
   useProjectShowQuery,
@@ -88,7 +97,11 @@ export function ProgramPage() {
   const [saveCue] = useSaveProjectCueMutation()
   const [createCue] = useCreateProjectCueMutation()
   const [fetchCue] = useLazyProjectCueQuery()
+  const [snapshotCueFromLive, { isLoading: snapshotPending }] = useSnapshotCueFromLiveMutation()
   const [activateShow] = useActivateShowMutation()
+
+  const [snapshotConfirmOpen, setSnapshotConfirmOpen] = useState(false)
+  const [snapshotError, setSnapshotError] = useState<string | null>(null)
 
   const handleDrillStack = useCallback((id: number | null) => {
     setDrillStackId(id)
@@ -181,6 +194,28 @@ export function ProgramPage() {
     setCueEditorOpen(false)
   }, [cueEditorCueId, cueEditorStackId, projectIdNum, removeCueFromStack])
 
+  const handleSnapshotFromLiveRequest = useCallback(() => {
+    if (cueEditorCueId == null) return
+    setSnapshotError(null)
+    setSnapshotConfirmOpen(true)
+  }, [cueEditorCueId])
+
+  const handleSnapshotFromLiveConfirm = useCallback(async () => {
+    if (cueEditorCueId == null) return
+    try {
+      const updated = await snapshotCueFromLive({
+        projectId: projectIdNum,
+        cueId: cueEditorCueId,
+      }).unwrap()
+      setCueEditorCue(updated)
+      setSnapshotConfirmOpen(false)
+    } catch (err) {
+      setSnapshotError(
+        err instanceof Error ? err.message : 'Failed to capture live state',
+      )
+    }
+  }, [cueEditorCueId, projectIdNum, snapshotCueFromLive])
+
   const handleGoToRun = useCallback(() => {
     navigate(`/projects/${projectIdNum}/run`)
   }, [navigate, projectIdNum])
@@ -234,6 +269,8 @@ export function ProgramPage() {
     defaultEditMode: 'live' as const,
     onDuplicate: handleDuplicate,
     onRemoveFromStack: handleRemoveFromStack,
+    onSnapshotFromLive: handleSnapshotFromLiveRequest,
+    snapshotPending,
   }
 
   // Loading / redirect guards
@@ -349,6 +386,45 @@ export function ProgramPage() {
 
       {/* CueEditor sheet (narrow viewports only) */}
       {!showInlineCueEditor && <CueEditor {...cueEditorProps} mode="sheet" />}
+
+      <Dialog
+        open={snapshotConfirmOpen}
+        onOpenChange={(open) => {
+          if (!snapshotPending) setSnapshotConfirmOpen(open)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Grab live state?</DialogTitle>
+          </DialogHeader>
+          <DialogDescription>
+            Replace this cue&apos;s property assignments with the current stage
+            state. Existing fixture assignments on the cue will be overwritten.
+          </DialogDescription>
+          {snapshotError && (
+            <p className="text-sm text-destructive">{snapshotError}</p>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setSnapshotConfirmOpen(false)}
+              disabled={snapshotPending}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSnapshotFromLiveConfirm} disabled={snapshotPending}>
+              {snapshotPending ? (
+                <>
+                  <Loader2 className="size-3.5 animate-spin mr-1.5" />
+                  Capturing...
+                </>
+              ) : (
+                'Grab live state'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

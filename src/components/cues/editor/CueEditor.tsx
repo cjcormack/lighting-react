@@ -47,6 +47,8 @@ interface CueEditorProps {
   onSave: (input: CueInput) => Promise<void>
   onDuplicate?: () => void
   onRemoveFromStack?: () => void
+  onSnapshotFromLive?: () => void
+  snapshotPending?: boolean
 }
 
 /**
@@ -66,6 +68,8 @@ export function CueEditor({
   onSave,
   onDuplicate,
   onRemoveFromStack,
+  onSnapshotFromLive,
+  snapshotPending,
 }: CueEditorProps) {
   const cueId = cue?.id ?? null
   const isEditing = cue !== null
@@ -228,6 +232,8 @@ export function CueEditor({
           onUpdateGlobalPaletteChange={setUpdateGlobalPalette}
           editMode={editMode}
           onEditModeChange={handleEditModeChange}
+          onSnapshotFromLive={onSnapshotFromLive}
+          snapshotPending={snapshotPending}
           isInStack={isInStack}
           cueNumber={cueNumber}
           onCueNumberChange={setCueNumber}
