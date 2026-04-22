@@ -48,6 +48,18 @@ export interface CueAdHocEffect {
   sortOrder?: number
 }
 
+/**
+ * Validation status for a persisted fixture reference (cue property assignment, preset
+ * property assignment). `ok` is the happy path; the remaining variants indicate dead
+ * references where the fixture/group/property no longer exists on the current patch.
+ * Server-side only: clients never construct these.
+ */
+export type AssignmentHealth =
+  | { type: 'ok' }
+  | { type: 'missingFixture'; fixtureKey: string }
+  | { type: 'missingGroup'; groupName: string }
+  | { type: 'missingProperty'; targetKey: string; propertyName: string }
+
 // Layer 3 property assignment on a cue.
 export interface CuePropertyAssignment {
   targetType: 'fixture' | 'group'
@@ -57,6 +69,11 @@ export interface CuePropertyAssignment {
   value: string
   fadeDurationMs?: number | null
   sortOrder?: number
+  /**
+   * Phase 6 dead-reference diagnostic. Absent on client-side drafts / pre-Phase-6 payloads
+   * (treated as `{ type: 'ok' }`). Populated by the server when the cue is read back.
+   */
+  health?: AssignmentHealth
 }
 
 // ─── Script trigger types ──────────────────────────────────────────

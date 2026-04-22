@@ -1,4 +1,5 @@
 import type { PropertyDescriptor } from '@/store/fixtures'
+import type { AssignmentHealth } from './cuesApi'
 
 // A single effect within a preset
 export interface FxPresetEffect {
@@ -23,6 +24,11 @@ export interface FxPresetPropertyAssignment {
   value: string
   fadeDurationMs?: number | null
   sortOrder?: number
+  /**
+   * Phase 6 dead-reference diagnostic. Resolved server-side against the preset's declared
+   * `fixtureType`. Absent / `{ type: 'ok' }` means the row validates cleanly.
+   */
+  health?: AssignmentHealth
 }
 
 // Full preset from API

@@ -30,6 +30,7 @@ import { TriggerSummary } from '../TriggerSummary'
 import { CueEditorHeader } from './CueEditorHeader'
 import { CueTargetGrid, type TargetSelection } from './CueTargetGrid'
 import { CueTargetDetail } from './CueTargetDetail'
+import { DeadAssignmentsBanner } from './DeadAssignmentsBanner'
 
 interface CueEditorProps {
   /** When mounted in a sheet, the open flag is controlled by the caller. */
@@ -251,6 +252,13 @@ export function CueEditor({
         />
 
         <div className="space-y-3 border-t pt-3">
+          <DeadAssignmentsBanner
+            assignments={propertyAssignments}
+            onRemove={(index) =>
+              setPropertyAssignments((prev) => prev.filter((_, i) => i !== index))
+            }
+          />
+
           <CueTargetGrid
             cue={cue}
             tab={gridTab}

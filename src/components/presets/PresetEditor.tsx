@@ -65,6 +65,7 @@ import {
   PresetDraftProvider,
 } from './PresetDraftContext'
 import { buildSyntheticPresetFixture } from './syntheticFixture'
+import { DeadPresetAssignmentsBanner } from './DeadPresetAssignmentsBanner'
 
 const CATEGORY_ORDER = ['dimmer', 'colour', 'position', 'controls'] as const
 
@@ -442,6 +443,13 @@ export function PresetEditor({
             </Label>
             <CuePaletteEditor palette={palette} onChange={setPalette} />
           </div>
+
+          <DeadPresetAssignmentsBanner
+            assignments={propertyAssignments}
+            onRemove={(index) =>
+              setPropertyAssignments((prev) => prev.filter((_, i) => i !== index))
+            }
+          />
 
           <Tabs defaultValue="properties">
             <TabsList>
