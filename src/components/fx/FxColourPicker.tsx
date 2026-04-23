@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect } from 'react'
 import { HexColorPicker } from 'react-colorful'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
-import { Slider } from '@/components/ui/slider'
 import { Label } from '@/components/ui/label'
+import { ExtendedChannelSlider } from '../fixtures/ExtendedChannelSlider'
 import {
   resolveColourToHex,
   parseExtendedColour,
@@ -229,40 +229,6 @@ export function FxColourPicker({
           </div>
         </PopoverContent>
       </Popover>
-    </div>
-  )
-}
-
-function ExtendedChannelSlider({
-  label,
-  value,
-  onChange,
-  color,
-}: {
-  label: string
-  value: number
-  onChange: (v: number) => void
-  color: string
-}) {
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-0.5">
-        <span className="text-[11px] flex items-center gap-1">
-          <span
-            className="inline-block w-2 h-2 rounded-full border border-border"
-            style={{ backgroundColor: color }}
-          />
-          {label}
-        </span>
-        <span className="text-[11px] text-muted-foreground font-mono">{value}</span>
-      </div>
-      <Slider
-        value={[value]}
-        min={0}
-        max={255}
-        step={1}
-        onValueChange={([v]) => onChange(v)}
-      />
     </div>
   )
 }

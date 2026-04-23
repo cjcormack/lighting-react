@@ -1,12 +1,17 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { RgbColorPicker, type RgbColor } from 'react-colorful'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import { ExtendedChannelSlider } from './ExtendedChannelSlider'
 
 interface ColourPickerPopoverProps {
   /** Current RGB channel values */
   r: number
   g: number
   b: number
+  /** Current extended channel values (undefined when fixture lacks the channel) */
+  w?: number
+  a?: number
+  uv?: number
   /** Combined preview CSS colour (includes W/A/UV effect) */
   combinedCss: string
   /** Whether the fixture has extended channels */
@@ -42,6 +47,9 @@ export function ColourPickerPopover({
   r,
   g,
   b,
+  w,
+  a,
+  uv,
   combinedCss,
   hasWhiteChannel,
   hasAmberChannel,
@@ -93,6 +101,22 @@ export function ColourPickerPopover({
     [onColourChange, hasWhiteChannel, hasAmberChannel, hasUvChannel]
   )
 
+  const handleExtendedChange = useCallback(
+    (channel: 'w' | 'a' | 'uv', value: number) => {
+      onColourChange(
+        r,
+        g,
+        b,
+        hasWhiteChannel ? (channel === 'w' ? value : w ?? 0) : undefined,
+        hasAmberChannel ? (channel === 'a' ? value : a ?? 0) : undefined,
+        hasUvChannel ? (channel === 'uv' ? value : uv ?? 0) : undefined
+      )
+    },
+    [onColourChange, r, g, b, w, a, uv, hasWhiteChannel, hasAmberChannel, hasUvChannel]
+  )
+
+  const hasExtendedChannels = hasWhiteChannel || hasAmberChannel || hasUvChannel
+
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
@@ -107,8 +131,37 @@ export function ColourPickerPopover({
               <span className="text-muted-foreground/60">White = use white LED</span>
             )}
           </div>
+          {hasExtendedChannels && (
+            <div className="space-y-2 pt-2 border-t border-border">
+              {hasWhiteChannel && (
+                <ExtendedChannelSlider
+                  label="W"
+                  value={w ?? 0}
+                  onChange={(v) => handleExtendedChange('w', v)}
+                  color="#fffbe6"
+                />
+              )}
+              {hasAmberChannel && (
+                <ExtendedChannelSlider
+                  label="A"
+                  value={a ?? 0}
+                  onChange={(v) => handleExtendedChange('a', v)}
+                  color="#ffbf00"
+                />
+              )}
+              {hasUvChannel && (
+                <ExtendedChannelSlider
+                  label="UV"
+                  value={uv ?? 0}
+                  onChange={(v) => handleExtendedChange('uv', v)}
+                  color="#7f00ff"
+                />
+              )}
+            </div>
+          )}
         </div>
       </PopoverContent>
     </Popover>
   )
 }
+
