@@ -39,6 +39,7 @@ export type {
   BankDefinition,
   TakeoverPolicy,
   LearnEvent,
+  BindingHealth,
 } from "../api/surfacesApi"
 
 lightingApi.surfaces.subscribeBindingsChanged((event) => {

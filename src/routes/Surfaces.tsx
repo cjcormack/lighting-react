@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { Loader2, Sliders, Zap, ZapOff, Power } from "lucide-react"
+import { Loader2, Sliders, Zap, ZapOff, Power, AlertTriangle } from "lucide-react"
 import { useProjectQuery, useCurrentProjectQuery } from "@/store/projects"
 import {
   useSurfaceDevices,
@@ -110,6 +110,11 @@ function SurfacesContent({ projectId, projectName }: { projectId: number; projec
     ? (types ?? []).find((t) => t.typeKey === selectedDevice.typeKey) ?? null
     : null
 
+  const deadBindingCount = useMemo(
+    () => (bindings ?? []).filter((b) => b.health.type !== "ok").length,
+    [bindings],
+  )
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -118,10 +123,18 @@ function SurfacesContent({ projectId, projectName }: { projectId: number; projec
         <div className="flex items-center justify-between gap-2">
           <div>
             <h1 className="text-lg font-semibold">Control surfaces</h1>
-            <p className="text-sm text-muted-foreground">
-              {devices.length === 0
-                ? "No MIDI devices connected."
-                : `${devices.length} device${devices.length !== 1 ? "s" : ""} connected.`}
+            <p className="text-sm text-muted-foreground flex items-center gap-2">
+              <span>
+                {devices.length === 0
+                  ? "No MIDI devices connected."
+                  : `${devices.length} device${devices.length !== 1 ? "s" : ""} connected.`}
+              </span>
+              {deadBindingCount > 0 && (
+                <Badge variant="destructive" className="text-[10px] gap-1">
+                  <AlertTriangle className="size-3" />
+                  {deadBindingCount} dead binding{deadBindingCount === 1 ? "" : "s"}
+                </Badge>
+              )}
             </p>
           </div>
           <ScalerToolbar />

@@ -2,23 +2,10 @@ import { useMemo } from 'react'
 import { AlertTriangle, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import type { AssignmentHealth, CuePropertyAssignment } from '@/api/cuesApi'
+import { describeHealth } from '@/lib/healthDescriptor'
+import type { CuePropertyAssignment } from '@/api/cuesApi'
 
-/**
- * Explain a non-Ok [AssignmentHealth] in operator-facing prose. Kept separate from the
- * chip rendering so it can be reused in tooltips on `CueTargetGrid` cards.
- */
-export function describeHealth(health: AssignmentHealth | undefined): string | null {
-  if (!health || health.type === 'ok') return null
-  switch (health.type) {
-    case 'missingFixture':
-      return `Fixture '${health.fixtureKey}' no longer exists`
-    case 'missingGroup':
-      return `Group '${health.groupName}' no longer exists`
-    case 'missingProperty':
-      return `Property '${health.propertyName}' is not defined on '${health.targetKey}'`
-  }
-}
+export { describeHealth }
 
 interface DeadAssignmentsBannerProps {
   assignments: CuePropertyAssignment[]

@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react"
+import { cn } from "@/lib/utils"
+import { describeHealth } from "@/lib/healthDescriptor"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -9,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Sliders, Circle, Square, Layers, Plus, Trash2, Pencil, AlertCircle } from "lucide-react"
+import { Sliders, Circle, Square, Layers, Plus, Trash2, Pencil, AlertCircle, AlertTriangle } from "lucide-react"
 import {
   Sheet,
   SheetContent,
@@ -103,12 +105,16 @@ export function BindingMatrix({
                 const list = bindingsByControl.get(control.controlId) ?? []
                 const active = resolveActive(list, activeBank)
                 const pickup = pickupStates.get(`${device.displayKey}|${control.controlId}`)
-                const isContinuous = control.type === "fader" || control.type === "encoder"
                 const highlight = active?.id === highlightBindingId
+                const deadReason = active ? describeHealth(active.health) : null
+                const dead = deadReason != null
                 return (
                   <TableRow
                     key={control.controlId}
-                    className={highlight ? "bg-accent/50" : ""}
+                    className={cn(
+                      highlight && "bg-accent/50",
+                      dead && "outline outline-1 outline-destructive/60 bg-destructive/5",
+                    )}
                   >
                     <TableCell className="font-mono text-xs">{control.label}</TableCell>
                     <TableCell>
@@ -120,7 +126,17 @@ export function BindingMatrix({
                       {active ? (
                         <div className="flex items-center gap-2">
                           <BindingSummary binding={active} />
-                          {pickup && (
+                          {dead && (
+                            <Badge
+                              variant="destructive"
+                              className="text-[10px] gap-1"
+                              title={deadReason ?? undefined}
+                            >
+                              <AlertTriangle className="size-3" />
+                              dead
+                            </Badge>
+                          )}
+                          {pickup && !dead && (
                             <Badge variant="secondary" className="text-[10px] gap-1">
                               <AlertCircle className="size-3" />
                               pickup @ {pickup.target}
@@ -129,6 +145,11 @@ export function BindingMatrix({
                         </div>
                       ) : (
                         <span className="text-muted-foreground text-xs">unbound</span>
+                      )}
+                      {dead && deadReason && (
+                        <div className="mt-1 text-[10px] text-destructive">
+                          {deadReason}
+                        </div>
                       )}
                       {list.length > 1 && (
                         <div className="mt-1 text-[10px] text-muted-foreground">
@@ -140,6 +161,17 @@ export function BindingMatrix({
                       <div className="flex items-center justify-end gap-1">
                         {active ? (
                           <>
+                            {dead && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-[10px] px-2"
+                                onClick={() => setEditingBinding(active)}
+                                title="Rebind this control to a valid target"
+                              >
+                                Rebind
+                              </Button>
+                            )}
                             <Button
                               size="icon"
                               variant="ghost"

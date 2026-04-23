@@ -74,6 +74,25 @@ export type BindingTarget =
 
 export type TakeoverPolicy = "IMMEDIATE" | "PICKUP"
 
+/**
+ * Dead-reference diagnostics. `ok` is the happy path; every other variant means the
+ * binding's target no longer resolves against the current project (fixture renamed,
+ * stack / cue deleted, bank removed from the device profile, etc.) and the router
+ * drops inbound events rather than silently no-op.
+ *
+ * Mirrors `uk.me.cormack.lighting7.fx.AssignmentHealth` on the backend — the fixture /
+ * group / property variants are shared with cue-authoring; stack / cue / bank variants
+ * are surface-only.
+ */
+export type BindingHealth =
+  | { type: "ok" }
+  | { type: "missingFixture"; fixtureKey: string }
+  | { type: "missingGroup"; groupName: string }
+  | { type: "missingProperty"; targetKey: string; propertyName: string }
+  | { type: "missingStack"; stackId: number }
+  | { type: "missingCue"; cueId: number }
+  | { type: "unknownBank"; deviceTypeKey: string; bankId: string }
+
 /** A single persisted binding. */
 export interface ControlSurfaceBinding {
   id: number
@@ -85,6 +104,7 @@ export interface ControlSurfaceBinding {
   targetType: string
   takeoverPolicy: TakeoverPolicy | null
   sortOrder: number
+  health: BindingHealth
 }
 
 export interface CreateSurfaceBindingRequest {
