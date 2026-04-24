@@ -66,6 +66,7 @@ import {
 } from './PresetDraftContext'
 import { buildSyntheticPresetFixture } from './syntheticFixture'
 import { DeadPresetAssignmentsBanner } from './DeadPresetAssignmentsBanner'
+import { PresetLivePreview } from './PresetLivePreview'
 
 const CATEGORY_ORDER = ['dimmer', 'colour', 'position', 'controls'] as const
 
@@ -449,6 +450,12 @@ export function PresetEditor({
             onRemove={(index) =>
               setPropertyAssignments((prev) => prev.filter((_, i) => i !== index))
             }
+          />
+
+          <PresetLivePreview
+            fixtureType={fixtureType}
+            propertyAssignments={propertyAssignments}
+            palette={palette}
           />
 
           <Tabs defaultValue="properties">

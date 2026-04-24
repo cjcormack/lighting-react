@@ -8,6 +8,8 @@ import type {
   CopyPresetResponse,
   TogglePresetRequest,
   TogglePresetResponse,
+  PresetPreviewRequest,
+  PresetPreviewResponse,
 } from '../api/fxPresetsApi'
 
 // Subscribe to WebSocket preset list changes - invalidate all preset caches
@@ -127,6 +129,26 @@ export const fxPresetsApi = restApi.injectEndpoints({
         return tags
       },
     }),
+
+    // No cache invalidation — preview lands on Layer 4 and surfaces through the existing
+    // channel-state WS stream that other consumers already subscribe to.
+    previewPreset: build.mutation<
+      PresetPreviewResponse,
+      { projectId: number } & PresetPreviewRequest
+    >({
+      query: ({ projectId, ...body }) => ({
+        url: `project/${projectId}/fx-presets/preview`,
+        method: 'POST',
+        body,
+      }),
+    }),
+
+    clearPresetPreview: build.mutation<void, { projectId: number }>({
+      query: ({ projectId }) => ({
+        url: `project/${projectId}/fx-presets/preview`,
+        method: 'DELETE',
+      }),
+    }),
   }),
   overrideExisting: false,
 })
@@ -139,4 +161,6 @@ export const {
   useDeleteProjectPresetMutation,
   useCopyPresetMutation,
   useTogglePresetMutation,
+  usePreviewPresetMutation,
+  useClearPresetPreviewMutation,
 } = fxPresetsApi

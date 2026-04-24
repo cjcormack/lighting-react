@@ -86,6 +86,20 @@ export interface TogglePresetResponse {
   effectCount: number
 }
 
+/**
+ * Complete desired state for the project's preview slot — replaces any prior preview.
+ * Empty `targets` (or `propertyAssignments`) collapses to a clear.
+ */
+export interface PresetPreviewRequest {
+  propertyAssignments: FxPresetPropertyAssignment[]
+  palette: string[]
+  targets: TogglePresetTarget[]
+}
+
+export interface PresetPreviewResponse {
+  writeCount: number
+}
+
 // Maps effect category to the fixture capability it requires
 const CATEGORY_TO_CAPABILITY: Record<string, string> = {
   dimmer: 'dimmer',
