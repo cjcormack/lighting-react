@@ -32,6 +32,8 @@ interface PresetPickerProps {
   existingPresetId?: number
   /** For edit mode: pre-populate timing values */
   existingTiming?: TimingValues
+  /** Add mode: pre-selected target — skips the target-picker step. */
+  preselectedTarget?: CueTarget | null
 }
 
 type Step = 'targets' | 'preset' | 'timing'
@@ -43,15 +45,21 @@ export function PresetPicker({
   existingTargets,
   existingPresetId,
   existingTiming,
+  preselectedTarget,
 }: PresetPickerProps) {
   const { data: presets } = useProjectPresetListQuery(projectId)
   const { data: groups } = useGroupListQuery()
   const { data: fixtures } = useFixtureListQuery()
 
-  // If editing (existingPresetId set), start at timing step
-  const [step, setStep] = useState<Step>(existingPresetId != null ? 'timing' : 'targets')
+  const isEdit = existingPresetId != null
+  const hasPreselectedTarget = !isEdit && !!preselectedTarget
+
+  // Initial step: edit → timing, preselected target → preset, otherwise targets.
+  const [step, setStep] = useState<Step>(
+    isEdit ? 'timing' : hasPreselectedTarget ? 'preset' : 'targets',
+  )
   const [selectedTarget, setSelectedTarget] = useState<CueTarget | null>(
-    existingTargets?.[0] ?? null,
+    existingTargets?.[0] ?? preselectedTarget ?? null,
   )
   const [selectedPresetId, setSelectedPresetId] = useState<number | null>(existingPresetId ?? null)
   const [selectedPresetName, setSelectedPresetName] = useState<string | null>(null)
@@ -177,8 +185,12 @@ export function PresetPicker({
           <div className="flex items-center gap-2 px-4 pt-4 pb-2">
             <button
               onClick={() => {
-                setSelectedTarget(null)
-                setStep('targets')
+                if (hasPreselectedTarget) {
+                  onCancel()
+                } else {
+                  setSelectedTarget(null)
+                  setStep('targets')
+                }
               }}
               className="hover:bg-accent rounded p-0.5 -ml-1"
             >

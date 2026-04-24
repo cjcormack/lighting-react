@@ -36,6 +36,8 @@ interface EffectFlowProps {
   onRemove?: () => void
   /** Override palette for colour pickers (e.g. cue palette). */
   palette?: string[]
+  /** Add mode: pre-selected target — skips the target-picker step. */
+  preselectedTarget?: CueTarget | null
 }
 
 export function EffectFlow({
@@ -45,18 +47,24 @@ export function EffectFlow({
   onUpdate,
   onRemove,
   palette,
+  preselectedTarget,
 }: EffectFlowProps) {
   const { data: library } = useEffectLibraryQuery()
   const { data: groups } = useGroupListQuery()
   const { data: fixtures } = useFixtureListQuery()
 
   const isEdit = !!existingEffect
+  const hasPreselectedTarget = !isEdit && !!preselectedTarget
 
   // ── Target selection state (add mode only) ──
-  const [selectedTarget, setSelectedTarget] = useState<CueTarget | null>(null)
+  const [selectedTarget, setSelectedTarget] = useState<CueTarget | null>(
+    preselectedTarget ?? null,
+  )
 
   // ── Flow step state ──
-  const [step, setStep] = useState<AddStep>(isEdit ? 'configure' : 'targets')
+  const [step, setStep] = useState<AddStep>(
+    isEdit ? 'configure' : hasPreselectedTarget ? 'category' : 'targets',
+  )
   const [selectedCategory, setSelectedCategory] = useState<string | null>(
     existingEffect?.category ?? null,
   )
@@ -299,8 +307,12 @@ export function EffectFlow({
         onCancel()
         break
       case 'category':
-        setSelectedTarget(null)
-        setStep('targets')
+        if (hasPreselectedTarget) {
+          onCancel()
+        } else {
+          setSelectedTarget(null)
+          setStep('targets')
+        }
         break
       case 'effect':
         setStep('category')

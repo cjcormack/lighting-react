@@ -157,6 +157,7 @@ export function CueTargetDetail({
                 setEditingEffectIndex(null)
               }}
               palette={palette}
+              preselectedTarget={selection}
             />
           ) : (
             <>
@@ -231,6 +232,7 @@ export function CueTargetDetail({
                     }
                   : undefined
               }
+              preselectedTarget={selection}
             />
           ) : (
             <>
