@@ -5,6 +5,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import {
   AudioWaveform,
   Bookmark,
+  ListChecks,
   Loader2,
   Plus,
   Sliders,
@@ -16,6 +17,7 @@ import { FixtureContent } from '@/components/fixtures/FixtureContent'
 import { GroupPropertiesSection } from '@/components/groups/GroupCard'
 import { EffectFlow } from './EffectFlow'
 import { PresetPicker } from './PresetPicker'
+import { PropertyAssignmentsList } from './PropertyAssignmentsList'
 import { EffectSummary } from '@/components/fx/EffectSummary'
 import { PresetApplicationSummary } from '@/components/fx/PresetApplicationSummary'
 import {
@@ -25,7 +27,7 @@ import {
 import { useEffectLibraryQuery } from '@/store/fixtureFx'
 import { useProjectPresetListQuery } from '@/store/fxPresets'
 import { TimingBadge } from '../TimingBadge'
-import type { Cue, CueAdHocEffect } from '@/api/cuesApi'
+import type { Cue, CueAdHocEffect, CuePropertyAssignment } from '@/api/cuesApi'
 import type { TargetSelection } from './CueTargetGrid'
 
 export interface CueTargetDetailProps {
@@ -34,6 +36,7 @@ export interface CueTargetDetailProps {
 
   presetApps: Cue['presetApplications']
   adHocEffects: CueAdHocEffect[]
+  propertyAssignments: CuePropertyAssignment[]
   palette: string[]
 
   onAddPreset: (app: {
@@ -49,22 +52,30 @@ export interface CueTargetDetailProps {
   onAddEffect: (effect: CueAdHocEffect) => void
   onUpdateEffect: (index: number, effect: CueAdHocEffect) => void
   onRemoveEffect: (index: number) => void
+
+  onAddPropertyAssignment: (assignment: CuePropertyAssignment) => void
+  onUpdatePropertyAssignment: (index: number, assignment: CuePropertyAssignment) => void
+  onRemovePropertyAssignment: (index: number) => void
 }
 
-type DetailTab = 'properties' | 'effects' | 'presets'
+type DetailTab = 'properties' | 'effects' | 'presets' | 'assignments'
 
-/** Detail pane for the selected target. Properties/Effects/Presets tabs. */
+/** Detail pane for the selected target. Properties/Effects/Presets/Assignments tabs. */
 export function CueTargetDetail({
   selection,
   projectId,
   presetApps,
   adHocEffects,
+  propertyAssignments,
   palette,
   onAddPreset,
   onRemovePreset,
   onAddEffect,
   onUpdateEffect,
   onRemoveEffect,
+  onAddPropertyAssignment,
+  onUpdatePropertyAssignment,
+  onRemovePropertyAssignment,
 }: CueTargetDetailProps) {
   const [tab, setTab] = useState<DetailTab>('properties')
   const [editingEffectIndex, setEditingEffectIndex] = useState<number | null>(null)
@@ -98,6 +109,17 @@ export function CueTargetDetail({
     [adHocEffects, selection.type, selection.key],
   )
 
+  const relevantAssignments = useMemo(
+    () =>
+      propertyAssignments
+        .map((assignment, index) => ({ assignment, index }))
+        .filter(
+          ({ assignment }) =>
+            assignment.targetType === selection.type && assignment.targetKey === selection.key,
+        ),
+    [propertyAssignments, selection.type, selection.key],
+  )
+
   return (
     <div className="border-t mt-4 pt-3 space-y-3">
       <Tabs value={tab} onValueChange={(v) => setTab(v as DetailTab)}>
@@ -121,6 +143,15 @@ export function CueTargetDetail({
             {relevantPresetApps.length > 0 && (
               <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">
                 {relevantPresetApps.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="assignments">
+            <ListChecks className="size-3.5 mr-1.5" />
+            Assignments
+            {relevantAssignments.length > 0 && (
+              <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">
+                {relevantAssignments.length}
               </Badge>
             )}
           </TabsTrigger>
@@ -283,6 +314,16 @@ export function CueTargetDetail({
               })}
             </>
           )}
+        </TabsContent>
+
+        <TabsContent value="assignments" className="pt-3 space-y-2">
+          <PropertyAssignmentsList
+            selection={selection}
+            assignments={relevantAssignments}
+            onAdd={onAddPropertyAssignment}
+            onUpdate={onUpdatePropertyAssignment}
+            onRemove={onRemovePropertyAssignment}
+          />
         </TabsContent>
       </Tabs>
     </div>

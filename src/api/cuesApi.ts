@@ -70,6 +70,13 @@ export interface CuePropertyAssignment {
   fadeDurationMs?: number | null
   sortOrder?: number
   /**
+   * Move-in-dark: only meaningful on `propertyName === 'position'`. When true and the
+   * outgoing cue ends with intensity 0 on the same fixture, the resolver pre-applies the
+   * incoming pan/tilt across the whole crossfade rather than blending — the head moves
+   * while dark and is already aimed when the dimmer comes up. Defaults to false.
+   */
+  moveInDark?: boolean
+  /**
    * Phase 6 dead-reference diagnostic. Absent on client-side drafts / pre-Phase-6 payloads
    * (treated as `{ type: 'ok' }`). Populated by the server when the cue is read back.
    */

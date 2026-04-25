@@ -302,6 +302,23 @@ export function CueEditor({
               onRemoveEffect={(index) =>
                 setAdHocEffects((prev) => prev.filter((_, i) => i !== index))
               }
+              propertyAssignments={propertyAssignments}
+              onAddPropertyAssignment={(assignment) =>
+                setPropertyAssignments((prev) => [
+                  ...prev,
+                  { ...assignment, sortOrder: assignment.sortOrder ?? prev.length },
+                ])
+              }
+              onUpdatePropertyAssignment={(index, assignment) =>
+                setPropertyAssignments((prev) => {
+                  const next = [...prev]
+                  next[index] = assignment
+                  return next
+                })
+              }
+              onRemovePropertyAssignment={(index) =>
+                setPropertyAssignments((prev) => prev.filter((_, i) => i !== index))
+              }
             />
           )}
         </div>
