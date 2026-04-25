@@ -12,6 +12,7 @@ import {
   Theater,
   Play,
   Sliders,
+  Activity,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { useGetUniverseQuery } from "./store/universes"
@@ -152,6 +153,15 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/channels/0`,
     visibility: "active-only",
     pathMatch: "/channels",
+    group: "live",
+  },
+  {
+    id: "diagnostics",
+    label: "Diagnostics",
+    icon: Activity,
+    path: (p) => `/projects/${p}/diagnostics`,
+    visibility: "always",
+    pathMatch: "/diagnostics",
     group: "live",
   },
 ]

@@ -17,6 +17,7 @@ import { ProjectPatches, PatchesRedirect } from "./routes/Patches";
 import { ProgramPage, ProgramRedirect } from "./routes/ProgramPage";
 import { RunPage, RunRedirect, LegacyShowRedirect } from "./routes/RunPage";
 import { ProjectSurfaces, SurfacesRedirect } from "./routes/Surfaces";
+import { ProjectDiagnostics, DiagnosticsRedirect } from "./routes/Diagnostics";
 
 function App() {
   const router = createBrowserRouter([
@@ -95,6 +96,14 @@ function App() {
         {
           path: "surfaces",
           element: <SurfacesRedirect />,
+        },
+        {
+          path: "projects/:projectId/diagnostics",
+          element: <ProjectDiagnostics />,
+        },
+        {
+          path: "diagnostics",
+          element: <DiagnosticsRedirect />,
         },
         {
           path: "projects/:projectId/channels/:universe",
