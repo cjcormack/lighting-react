@@ -32,6 +32,11 @@ const INLINE_TEMPLATE = `// FX Application script
 interface CueTriggerEditorProps {
   projectId: number
   trigger?: CueTriggerDetail | null
+  /**
+   * 'sheet' uses `SheetTitle` (required for Radix Dialog a11y); 'inline' uses a plain `h3`
+   * because there is no Dialog ancestor when this editor is embedded in a non-sheet surface.
+   */
+  mode?: 'sheet' | 'inline'
   onConfirm: (trigger: CueTrigger) => void
   onCancel: () => void
   onRemove?: () => void
@@ -45,6 +50,7 @@ interface CueTriggerEditorProps {
 export function CueTriggerEditor({
   projectId,
   trigger,
+  mode = 'sheet',
   onConfirm,
   onCancel,
   onRemove,
@@ -124,7 +130,13 @@ export function CueTriggerEditor({
           <Button variant="ghost" size="icon" className="size-8" onClick={onCancel}>
             <ChevronLeft className="size-4" />
           </Button>
-          <SheetTitle>{isEditing ? 'Edit Script Hook' : 'Add Script Hook'}</SheetTitle>
+          {mode === 'inline' ? (
+            <h3 className="text-foreground font-semibold">
+              {isEditing ? 'Edit Script Hook' : 'Add Script Hook'}
+            </h3>
+          ) : (
+            <SheetTitle>{isEditing ? 'Edit Script Hook' : 'Add Script Hook'}</SheetTitle>
+          )}
         </div>
       </SheetHeader>
 

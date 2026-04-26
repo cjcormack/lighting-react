@@ -363,6 +363,7 @@ export function CueEditor({
               {editingTrigger ? (
                 <CueTriggerEditor
                   projectId={projectId}
+                  mode={mode}
                   trigger={
                     editingTrigger.kind === 'edit' ? triggers[editingTrigger.index] : undefined
                   }
