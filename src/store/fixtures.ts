@@ -47,6 +47,8 @@ export type FixtureTypeInfo = {
   capabilities: string[]
   properties: PropertyDescriptor[]
   elementGroupProperties: GroupPropertyDescriptor[] | null
+  acceptsBeamAngle?: boolean
+  acceptsGel?: boolean
 }
 
 // Channel reference for property descriptors

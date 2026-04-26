@@ -27,3 +27,7 @@ export function arraysEqual<T>(a: readonly T[], b: readonly T[]): boolean {
   if (a.length !== b.length) return false
   return a.every((item, index) => deepEqual(item, b[index]))
 }
+
+export function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
+}

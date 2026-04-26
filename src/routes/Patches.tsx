@@ -254,6 +254,7 @@ interface PatchRow {
   address: string
   channelCount: number
   fixtureType: string
+  riggingPosition: string | null
   groups: { id: number; name: string }[]
   sortKey: number
 }
@@ -274,6 +275,7 @@ function PatchTable({
           <TableHead className="w-[5rem]">Address</TableHead>
           <TableHead className="hidden sm:table-cell">Type</TableHead>
           <TableHead className="hidden md:table-cell">Key</TableHead>
+          <TableHead className="hidden md:table-cell">Position</TableHead>
           <TableHead>Name</TableHead>
           <TableHead className="hidden lg:table-cell">Groups</TableHead>
         </TableRow>
@@ -300,6 +302,13 @@ function PatchTable({
             </TableCell>
             <TableCell className="hidden md:table-cell">
               <code className="text-xs text-muted-foreground">{row.key}</code>
+            </TableCell>
+            <TableCell className="hidden md:table-cell">
+              {row.riggingPosition ? (
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono">
+                  {row.riggingPosition}
+                </Badge>
+              ) : null}
             </TableCell>
             <TableCell>
               <div className="font-medium text-sm">{row.displayName}</div>
@@ -358,6 +367,7 @@ function buildPatchRows(
       address: formatAddress(p.universe, p.startChannel),
       channelCount,
       fixtureType: buildTypeLabel(p.manufacturer, p.model, p.modeName),
+      riggingPosition: p.riggingPosition,
       groups: p.groups,
       sortKey: p.universe * 1000 + p.startChannel,
     }

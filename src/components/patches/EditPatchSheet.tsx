@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Sheet,
   SheetContent,
@@ -13,7 +13,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Trash2, X } from 'lucide-react'
 import { useUpdatePatchMutation, useDeletePatchMutation, usePatchGroupListQuery } from '@/store/patches'
+import { useFixtureTypeListQuery } from '@/store/fixtures'
 import { GroupComboInput } from './GroupComboInput'
+import { StageMapField } from './StageMapField'
+import { RiggingPositionInput } from './RiggingPositionInput'
+import { BeamAngleField } from './BeamAngleField'
+import { GelPickerField } from './GelPickerField'
+import { RIGGING_POSITION_FALLBACK } from '@/data/patchPresets'
 import type { FixturePatch } from '@/api/patchApi'
 
 interface EditPatchSheetProps {
@@ -30,9 +36,26 @@ export function EditPatchSheet({ open, onOpenChange, patch, projectId, existingP
   const [startChannel, setStartChannel] = useState(1)
   const [addGroupValue, setAddGroupValue] = useState('')
 
+  const [stage, setStage] = useState<{ stageX: number | null; stageY: number | null }>({
+    stageX: null,
+    stageY: null,
+  })
+  const [riggingPosition, setRiggingPosition] = useState<string | null>(null)
+  const [beamAngleDeg, setBeamAngleDeg] = useState<number | null>(null)
+  const [gelCode, setGelCode] = useState<string | null>(null)
+
   const [updatePatch, { isLoading: isUpdating }] = useUpdatePatchMutation()
   const [deletePatch, { isLoading: isDeleting }] = useDeletePatchMutation()
   const { data: patchGroups } = usePatchGroupListQuery(projectId)
+  const { data: fixtureTypes } = useFixtureTypeListQuery()
+
+  const dragTimerRef = useRef<number | null>(null)
+  const cancelDragTimer = () => {
+    if (dragTimerRef.current != null) {
+      window.clearTimeout(dragTimerRef.current)
+      dragTimerRef.current = null
+    }
+  }
 
   // Populate form when patch changes
   useEffect(() => {
@@ -40,9 +63,59 @@ export function EditPatchSheet({ open, onOpenChange, patch, projectId, existingP
       setDisplayName(patch.displayName)
       setKey(patch.key)
       setStartChannel(patch.startChannel)
+      setStage({ stageX: patch.stageX, stageY: patch.stageY })
+      setRiggingPosition(patch.riggingPosition)
+      setBeamAngleDeg(patch.beamAngleDeg)
+      setGelCode(patch.gelCode)
       setAddGroupValue('')
     }
   }, [patch])
+
+  // Debounced PUT for stage coords. Mid-drag mousemove updates local state
+  // many times per second; we only flush to the backend after the user
+  // pauses for ~300 ms (or releases, since mousemove stops firing).
+  useEffect(() => {
+    if (!patch || !open) return
+    if (stage.stageX === patch.stageX && stage.stageY === patch.stageY) return
+    cancelDragTimer()
+    dragTimerRef.current = window.setTimeout(() => {
+      dragTimerRef.current = null
+      updatePatch({ projectId, patchId: patch.id, stageX: stage.stageX, stageY: stage.stageY })
+    }, 300)
+    return cancelDragTimer
+  }, [stage, patch, open, projectId, updatePatch])
+
+  useEffect(() => {
+    if (!open) cancelDragTimer()
+  }, [open])
+
+  // Build rigging-position chip list: distinct in-project values + fallbacks,
+  // de-duped, in-use first so frequently-used labels surface to the top.
+  const riggingPresets = useMemo(() => {
+    const used = new Set<string>()
+    for (const p of existingPatches) {
+      const v = p.riggingPosition?.trim()
+      if (v) used.add(v.toUpperCase())
+    }
+    const ordered = [...Array.from(used)]
+    for (const p of RIGGING_POSITION_FALLBACK) {
+      if (!used.has(p)) ordered.push(p)
+    }
+    return ordered
+  }, [existingPatches])
+
+  const otherFixtures = useMemo(
+    () =>
+      existingPatches
+        .filter((p) => p.id !== patch?.id && p.stageX != null && p.stageY != null)
+        .map((p) => ({
+          id: p.id,
+          stageX: p.stageX as number,
+          stageY: p.stageY as number,
+          name: p.displayName,
+        })),
+    [existingPatches, patch?.id],
+  )
 
   if (!patch) return null
 
@@ -52,14 +125,34 @@ export function EditPatchSheet({ open, onOpenChange, patch, projectId, existingP
 
   const keyConflict = existingPatches.some(p => p.key === key && p.id !== patch.id)
 
+  const fixtureType = fixtureTypes?.find((t) => t.typeKey === patch.fixtureTypeKey)
+  const acceptsBeamAngle = fixtureType?.acceptsBeamAngle ?? false
+  const acceptsGel = fixtureType?.acceptsGel ?? false
+  const beamGelTitle =
+    acceptsBeamAngle && acceptsGel ? 'Beam & Gel' : acceptsBeamAngle ? 'Beam' : 'Gel'
+
   const isValid = displayName.trim().length > 0 && key.trim().length > 0 && !channelOverflow && !keyConflict && startChannel >= 1
-  const hasChanges = displayName !== patch.displayName || key !== patch.key || startChannel !== patch.startChannel
+  const hasChanges =
+    displayName !== patch.displayName ||
+    key !== patch.key ||
+    startChannel !== patch.startChannel ||
+    stage.stageX !== patch.stageX ||
+    stage.stageY !== patch.stageY ||
+    riggingPosition !== patch.riggingPosition ||
+    beamAngleDeg !== patch.beamAngleDeg ||
+    gelCode !== patch.gelCode
 
   const handleSave = async () => {
+    cancelDragTimer()
     const body: Record<string, unknown> = {}
     if (displayName !== patch.displayName) body.displayName = displayName
     if (key !== patch.key) body.key = key
     if (startChannel !== patch.startChannel) body.startChannel = startChannel
+    if (stage.stageX !== patch.stageX) body.stageX = stage.stageX
+    if (stage.stageY !== patch.stageY) body.stageY = stage.stageY
+    if (riggingPosition !== patch.riggingPosition) body.riggingPosition = riggingPosition
+    if (beamAngleDeg !== patch.beamAngleDeg) body.beamAngleDeg = beamAngleDeg
+    if (gelCode !== patch.gelCode) body.gelCode = gelCode
     await updatePatch({ projectId, patchId: patch.id, ...body }).unwrap()
     onOpenChange(false)
   }
@@ -74,6 +167,7 @@ export function EditPatchSheet({ open, onOpenChange, patch, projectId, existingP
   }
 
   const handleDelete = async () => {
+    cancelDragTimer()
     await deletePatch({ projectId, patchId: patch.id }).unwrap()
     onOpenChange(false)
   }
@@ -81,7 +175,6 @@ export function EditPatchSheet({ open, onOpenChange, patch, projectId, existingP
   const typeLabel = [patch.manufacturer, patch.model, patch.modeName ? `(${patch.modeName})` : null]
     .filter(Boolean).join(' ')
 
-  // Filter out groups this fixture already belongs to
   const currentGroupNames = new Set(patch.groups.map(g => g.name))
   const availableGroups = (patchGroups ?? []).filter(g => !currentGroupNames.has(g.name))
 
@@ -136,6 +229,47 @@ export function EditPatchSheet({ open, onOpenChange, patch, projectId, existingP
               </p>
             )}
           </div>
+
+          <div className="space-y-1.5">
+            <Label>Stage</Label>
+            <StageMapField
+              value={stage}
+              onChange={setStage}
+              otherFixtures={otherFixtures}
+              selfLabel={displayName || patch.displayName}
+              selfRiggingPosition={riggingPosition}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-rigging">Position</Label>
+            <RiggingPositionInput
+              id="edit-rigging"
+              value={riggingPosition}
+              onChange={setRiggingPosition}
+              presets={riggingPresets}
+            />
+          </div>
+
+          {(acceptsBeamAngle || acceptsGel) && (
+            <div className="space-y-2.5 rounded-md border border-border p-3">
+              <p className="text-xs font-medium text-muted-foreground">{beamGelTitle}</p>
+              {acceptsBeamAngle && (
+                <BeamAngleField
+                  id="edit-beam"
+                  value={beamAngleDeg}
+                  onChange={setBeamAngleDeg}
+                />
+              )}
+              {acceptsGel && (
+                <GelPickerField
+                  id="edit-gel"
+                  value={gelCode}
+                  onChange={setGelCode}
+                />
+              )}
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label>Groups</Label>

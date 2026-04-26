@@ -15,6 +15,11 @@ export interface FixturePatch {
   subnet: number;
   sortOrder: number;
   groups: { id: number; name: string }[];
+  stageX: number | null;
+  stageY: number | null;
+  riggingPosition: string | null;
+  beamAngleDeg: number | null;
+  gelCode: string | null;
 }
 
 export interface UniverseConfig {
@@ -34,6 +39,11 @@ export interface CreatePatchRequest {
   startChannel: number;
   address?: string;
   groupName?: string;
+  stageX?: number | null;
+  stageY?: number | null;
+  riggingPosition?: string | null;
+  beamAngleDeg?: number | null;
+  gelCode?: string | null;
 }
 
 export interface UpdatePatchRequest {
@@ -42,6 +52,11 @@ export interface UpdatePatchRequest {
   startChannel?: number;
   addToGroup?: string;
   removeFromGroupId?: number;
+  stageX?: number | null;
+  stageY?: number | null;
+  riggingPosition?: string | null;
+  beamAngleDeg?: number | null;
+  gelCode?: string | null;
 }
 
 export interface PatchGroup {
