@@ -3,8 +3,6 @@ import { useParams, useNavigate, Navigate, Link } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Dialog,
   DialogContent,
@@ -26,17 +24,12 @@ import {
   useGoToCueInStackMutation,
 } from '../store/cueStacks'
 import {
-  useSaveProjectCueMutation,
-  useLazyProjectCueQuery,
-} from '../store/cues'
-import {
   useProjectShowQuery,
   useActivateShowMutation,
   useDeactivateShowMutation,
   useAdvanceShowMutation,
   useGoToShowEntryMutation,
 } from '../store/show'
-import type { CueInput, Cue } from '../api/cuesApi'
 import type { ShowEntryDto } from '../api/showApi'
 import { useFxStateQuery } from '../store/fx'
 import { lightingApi } from '../api/lightingApi'
@@ -49,29 +42,23 @@ import {
 } from '../store/runnerSlice'
 import { useRunnerAnimation } from '../hooks/useRunnerAnimation'
 import { Breadcrumbs } from '../components/Breadcrumbs'
-import { ShowBar } from '../components/runner/ShowBar'
-import { CueRow } from '../components/runner/CueRow'
 import { MarkerRow } from '../components/runner/MarkerRow'
 import {
   OutOfOrderBanner,
   detectOutOfOrder,
 } from '../components/runner/OutOfOrderBanner'
-import { CueEditor } from '../components/cues/editor/CueEditor'
-import { CueDetailSheet } from '../components/cues/CueDetailSheet'
-import { CueDetailContent } from '../components/cues/CueDetailContent'
+import { RunToolbar } from '../components/runner/run/RunToolbar'
+import { RunCueCard } from '../components/runner/run/RunCueCard'
 import {
-  ShowRunnerMobile,
+  RunMobile,
   type RunnerDisplayState,
-} from '../components/runner/ShowRunnerMobile'
+} from '../components/runner/run/RunMobile'
 import { useNarrowContainer } from '../hooks/useNarrowContainer'
-import { useMediaQuery, XL_BREAKPOINT } from '../hooks/useMediaQuery'
 import type { CueStack, CueStackCueEntry } from '../api/cueStacksApi'
 
 const EMPTY_CUES: CueStackCueEntry[] = []
 
-// Below this container width, the runner swaps to the remote-control layout.
-// Threshold reacts to the runner body's own width, so side panels squeezing the
-// runner on desktop flip to the compact layout too.
+// Below this container width, the runner swaps to the mobile takeover layout.
 const MOBILE_RUNNER_THRESHOLD = 600
 
 export function RunRedirect() {
@@ -119,8 +106,6 @@ export function RunPage() {
 
   const isShowActive = show?.activeEntryId != null
 
-  // Active entry drives which stack is shown. When the show isn't active, default
-  // to the first STACK so the stack tabs still have a useful selection.
   const [activeEntryId, setActiveEntryId] = useState<number | null>(null)
 
   const activeEntry: ShowEntryDto | undefined = useMemo(
@@ -131,40 +116,21 @@ export function RunPage() {
 
   const [dbo, setDbo] = useState(false)
   const [oooDismissed, setOooDismissed] = useState(false)
-  const [ctxOverride, setCtxOverride] = useState<Record<number, 'theatre' | 'band'>>({})
   const [stopConfirmOpen, setStopConfirmOpen] = useState(false)
-
-  // CueEditor sheet state — used only for mobile cue-list edits
-  const [cueEditorOpen, setCueEditorOpen] = useState(false)
-  const [cueEditorCueId, setCueEditorCueId] = useState<number | null>(null)
-  const [cueEditorCue, setCueEditorCue] = useState<Cue | null>(null)
-
-  // Read-only cue detail panel. 'active' = follow active cue (default),
-  // 'standby' = follow next cue, number = pinned to a specific cue.
-  const [detailCue, setDetailCue] = useState<Cue | null>(null)
-  const [detailMode, setDetailMode] = useState<'active' | 'standby' | number>('active')
-
-  // Scroll save/restore around the CueEditor sheet
-  const listScrollRef = useRef<HTMLDivElement>(null)
-  const savedScrollPos = useRef(0)
-
-  // When the user manually switches stacks via the tab strip, we want the
-  // first cue to appear as standby (blue) — not activate it. This ref tells
-  // the resetStack effect to ignore the server's activeCueId on the next
-  // stack change so it starts fresh with standby = first cue.
-  const manualSwitchRef = useRef(false)
+  /** Set of expanded cue ids in the desktop list. */
+  const [expanded, setExpanded] = useState<Set<number>>(new Set())
 
   const [runnerContainerRef, isNarrowRunner] = useNarrowContainer(MOBILE_RUNNER_THRESHOLD)
-  const isWideViewport = useMediaQuery(XL_BREAKPOINT)
-  const showInlineDetail = isWideViewport && !isNarrowRunner
+
+  // Track when stack switches happen via the user clicking a tab vs the server
+  // refetch. See the resetStack effect below.
+  const manualSwitchRef = useRef(false)
 
   const [advanceCueStack] = useAdvanceCueStackMutation()
   const [activateCueStack] = useActivateCueStackMutation()
   const [deactivateCueStack] = useDeactivateCueStackMutation()
   const [goToCueInStack] = useGoToCueInStackMutation()
   const [sortByCueNumber] = useSortCueStackByCueNumberMutation()
-  const [saveCue] = useSaveProjectCueMutation()
-  const [fetchCue] = useLazyProjectCueQuery()
 
   const [activateShow] = useActivateShowMutation()
   const [deactivateShow] = useDeactivateShowMutation()
@@ -194,8 +160,6 @@ export function RunPage() {
   const cues = stack?.cues ?? EMPTY_CUES
 
   // Initialise runner state when the stack changes.
-  // On a manual tab switch (manualSwitchRef), skip serverActiveCueId so the
-  // first cue lands as standby rather than being treated as already-active.
   useEffect(() => {
     if (activeStackId != null && cues.length > 0) {
       const isManualSwitch = manualSwitchRef.current
@@ -215,10 +179,6 @@ export function RunPage() {
   )
 
   // ── Reconcile runner with remote cue changes ──
-  // When another browser presses GO, the WS-triggered cue stack refetch
-  // updates stack.activeCueId in the RTK Query cache. This effect syncs
-  // the runner slice to match. Skips reconciliation while mid-fade
-  // (runner.activeCueId is set) to avoid killing local animations.
   const prevServerActiveCueRef = useRef<number | null | undefined>(undefined)
 
   useEffect(() => {
@@ -227,21 +187,12 @@ export function RunPage() {
 
   useEffect(() => {
     if (activeStackId == null || !stack) return
-
     const serverActive = stack.activeCueId
     const prev = prevServerActiveCueRef.current
     prevServerActiveCueRef.current = serverActive
-
-    // First render after mount or stack switch — initial resetStack handles it
     if (prev === undefined) return
-
-    // No change
     if (serverActive === prev) return
-
-    // Don't reset while mid-fade — we're the browser driving the change
     if (runner.activeCueId != null) return
-
-    // Server active cue changed while we're idle — another browser pressed GO
     if (cues.length > 0) {
       dispatch(resetStack({
         stackId: activeStackId,
@@ -252,12 +203,6 @@ export function RunPage() {
     }
   }, [activeStackId, stack?.activeCueId, runner.activeCueId, cues, dispatch, stack?.loop])
 
-  // The "active" cue comes from two sources:
-  // 1. runner.activeCueId — the transient fade cursor (set during GO, cleared by markDone)
-  // 2. stack.activeCueId — the server-tracked cue currently on stage
-  // For SNAP cues (no fade), (1) clears within a single frame, so (2) is the
-  // only reliable indicator of what's on stage. Combining both ensures the
-  // green active highlight persists after a SNAP completes.
   const effectiveActiveCueId = runner.activeCueId ?? stack?.activeCueId ?? null
 
   const completedSet = useMemo(() => new Set(runner.completedCueIds), [runner.completedCueIds])
@@ -281,18 +226,12 @@ export function RunPage() {
         cueId: runner.standbyCueId ?? undefined,
       })
     } else if (runner.standbyCueId != null) {
-      // Use go-to with the explicit standby cue id so a re-queued cue (set by
-      // clicking a cue row) fires the right target. When standby is the
-      // "natural next", this still works the same — it's just more explicit
-      // than advance().
       goToCueInStack({
         projectId: projectIdNum,
         stackId: activeStackId,
         cueId: runner.standbyCueId,
       })
     } else {
-      // Fallback: no standby (shouldn't happen when an active cue exists in a
-      // non-empty stack) — defer to backend advance.
       advanceCueStack({ projectId: projectIdNum, stackId: activeStackId, direction: 'FORWARD' })
     }
   }, [activeStackId, stack, runner.standbyCueId, activateCueStack, advanceCueStack, goToCueInStack, projectIdNum])
@@ -318,11 +257,27 @@ export function RunPage() {
     return show.entries.slice(curIdx + 1).find((e) => e.entryType === 'STACK') ?? null
   }, [runner.standbyCueId, show, activeEntryId])
 
+  // True only while a fade is in progress. `runner.activeCueId` is set by
+  // go() and cleared by markDone(); the stack's server activeCueId persists
+  // after the fade completes, so we can't use that. fadeProgress is 0 on
+  // initial mount, hence the explicit gate here rather than `progress < 1`.
+  const isFadingActive =
+    runner.activeCueId != null && runner.fadeProgress < 1
+
+  // Fade-remaining ms for the toolbar / cue card amber FADING badge. Null
+  // unless the live cue is actively crossfading in.
+  const fadeRemainMs = useMemo(() => {
+    if (!isFadingActive || !activeCue) return null
+    const dur = activeCue.fadeDurationMs ?? 0
+    if (dur <= 0) return null
+    return Math.max(0, dur * (1 - runner.fadeProgress))
+  }, [isFadingActive, activeCue, runner.fadeProgress])
+
   const runnerDisplay: RunnerDisplayState = {
     activeCue,
     standbyCue,
     nextStackEntry,
-    fadeProgress: runner.fadeProgress,
+    fadeProgress: isFadingActive ? runner.fadeProgress : null,
     autoProgress: runner.autoProgress,
     activeCueId: effectiveActiveCueId,
     standbyCueId: runner.standbyCueId,
@@ -336,10 +291,7 @@ export function RunPage() {
       const curIdx = show.entries.findIndex((e) => e.id === activeEntryId)
       const nextStack = show.entries.slice(curIdx + 1).find((e) => e.entryType === 'STACK')
       if (nextStack) {
-        advanceShow({
-          projectId: projectIdNum,
-          direction: 'FORWARD',
-        })
+        advanceShow({ projectId: projectIdNum, direction: 'FORWARD' })
         setActiveEntryId(nextStack.id)
         cancelAnimations()
         setOooDismissed(false)
@@ -368,7 +320,7 @@ export function RunPage() {
     lightingApi.fx.tap()
   }, [])
 
-  // Keyboard handler — Space/ArrowLeft. Only mounted on Run so no mode guard needed.
+  // Keyboard handler — Space=GO, Backspace=BACK. Only mounted on Run so no mode guard needed.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!isShowActive) return
@@ -378,7 +330,7 @@ export function RunPage() {
         e.preventDefault()
         handleGo()
       }
-      if (e.code === 'ArrowLeft') {
+      if (e.code === 'Backspace') {
         e.preventDefault()
         handleBack()
       }
@@ -390,24 +342,17 @@ export function RunPage() {
   const handleSwitchToEntry = useCallback(
     (entry: ShowEntryDto) => {
       if (entry.entryType !== 'STACK' || entry.cueStackId == null) return
-      if (entry.id === activeEntryId) return // already on this tab
+      if (entry.id === activeEntryId) return
       manualSwitchRef.current = true
       if (activeStackId != null && stack?.activeCueId != null) {
         deactivateCueStack({ projectId: projectIdNum, stackId: activeStackId })
       }
-      // go-to updates activeEntryId on the server (cross-browser sync) but also
-      // activates the new stack's first cue. Deactivate the new stack afterward
-      // so the cue isn't fired until the operator presses GO.
-      goToEntry({
-        projectId: projectIdNum,
-        entryId: entry.id,
-      })
+      goToEntry({ projectId: projectIdNum, entryId: entry.id })
         .unwrap()
         .then(() => {
           deactivateCueStack({ projectId: projectIdNum, stackId: entry.cueStackId! })
         })
         .catch(() => {
-          // Silently fail — clear the ref so a stale flag can't leak
           manualSwitchRef.current = false
         })
       setActiveEntryId(entry.id)
@@ -417,14 +362,7 @@ export function RunPage() {
     [activeEntryId, activeStackId, stack, projectIdNum, deactivateCueStack, goToEntry, cancelAnimations],
   )
 
-  const isTheatre = ctxOverride[activeStackId ?? 0] !== 'band'
-  const toggleCtx = (val: 'theatre' | 'band') => {
-    if (activeStackId != null) {
-      setCtxOverride((p) => ({ ...p, [activeStackId]: val }))
-    }
-  }
-
-  const ooo = isTheatre && !oooDismissed && detectOutOfOrder(cues)
+  const ooo = !oooDismissed && detectOutOfOrder(cues)
 
   const handleFixOrder = useCallback(() => {
     if (activeStackId == null) return
@@ -443,9 +381,7 @@ export function RunPage() {
       .then((result) => {
         setActiveEntryId(result.activeEntryId)
       })
-      .catch(() => {
-        // Silently fail
-      })
+      .catch(() => {})
   }, [activateShow, projectIdNum])
 
   const handleConfirmDeactivate = useCallback(async () => {
@@ -458,9 +394,6 @@ export function RunPage() {
     }
   }, [deactivateShow, projectIdNum])
 
-  // Jump into Program with the live cue pre-loaded for editing. Used by the
-  // header "Edit Cue" button — operator hits a problem mid-show and wants to
-  // tweak the running cue without re-navigating to find it.
   const handleEditActiveCueInProgram = useCallback(() => {
     if (activeStackId == null) return
     const cueId = stack?.activeCueId ?? runner.activeCueId
@@ -469,72 +402,9 @@ export function RunPage() {
     navigate(`/projects/${projectIdNum}/program?${params.toString()}`)
   }, [activeStackId, stack, runner.activeCueId, navigate, projectIdNum])
 
-  // ── Cue detail panel helpers ──
+  // ── Cue card interactions ──
 
-  // The detail cue ID to display, derived from detailMode.
-  const detailTargetCueId =
-    detailMode === 'active' ? (effectiveActiveCueId ?? null) :
-    detailMode === 'standby' ? (runner.standbyCueId ?? null) :
-    detailMode // numeric pinned ID
-  const lastDetailFetchRef = useRef<number | null>(null)
-
-  // Auto-fetch the detail cue when the inline panel is visible and the target changes.
-  useEffect(() => {
-    if (!showInlineDetail) return
-    if (detailTargetCueId == null || detailTargetCueId === lastDetailFetchRef.current) return
-    lastDetailFetchRef.current = detailTargetCueId
-    fetchCue({ projectId: projectIdNum, cueId: detailTargetCueId }, true)
-      .then(({ data }) => {
-        if (data && lastDetailFetchRef.current === detailTargetCueId) setDetailCue(data)
-      })
-      .catch(() => {})
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showInlineDetail, detailTargetCueId])
-
-  /** Eye-icon click: switch detail mode based on which cue was clicked. */
-  const openCueDetail = useCallback(
-    (cueId: number) => {
-      if (cueId === effectiveActiveCueId) {
-        setDetailMode('active')
-      } else if (cueId === runner.standbyCueId) {
-        setDetailMode('standby')
-      } else {
-        setDetailMode(cueId)
-      }
-    },
-    [effectiveActiveCueId, runner.standbyCueId],
-  )
-
-  // Reset to follow-active when the stack changes.
-  useEffect(() => {
-    setDetailMode('active')
-  }, [activeStackId])
-
-  // ── Cue row interaction handlers ──
-
-  /** From the detail sheet/panel's Edit button — route to the cue editor in Program view. */
-  const handleDetailEdit = useCallback(() => {
-    if (detailCue == null || activeStackId == null) return
-    const params = new URLSearchParams({
-      stack: String(activeStackId),
-      cue: String(detailCue.id),
-    })
-    navigate(`/projects/${projectIdNum}/program?${params.toString()}`)
-  }, [detailCue, activeStackId, navigate, projectIdNum])
-
-  /** Click on a cue row: re-queue it as the next GO target. */
-  const handleCueClick = useCallback(
-    (cueId: number) => {
-      if (activeStackId == null) return
-      if (cueId === effectiveActiveCueId) return // active — use eye icon for detail
-      if (cueId === runner.standbyCueId) return // already queued
-      dispatch(setStandby({ stackId: activeStackId, cueId }))
-    },
-    [activeStackId, effectiveActiveCueId, runner.standbyCueId, dispatch],
-  )
-
-  /** Mobile cue-list tap: re-queue the cue without opening a detail sheet. */
-  const handleRequeueCue = useCallback(
+  const handleCueRequeue = useCallback(
     (cueId: number) => {
       if (activeStackId == null) return
       if (cueId === effectiveActiveCueId || cueId === runner.standbyCueId) return
@@ -543,45 +413,34 @@ export function RunPage() {
     [activeStackId, effectiveActiveCueId, runner.standbyCueId, dispatch],
   )
 
-  // ── CueEditor handlers (mobile cue-list) ──
-
-  const openCueEditor = useCallback(
-    async (_stackId: number, cueId: number) => {
-      if (listScrollRef.current) {
-        savedScrollPos.current = listScrollRef.current.scrollTop
-      }
-      try {
-        const { data: fullCue } = await fetchCue({ projectId: projectIdNum, cueId }, true)
-        if (fullCue) {
-          setCueEditorCue(fullCue)
-          setCueEditorCueId(cueId)
-          setCueEditorOpen(true)
-        }
-      } catch {
-        // Silently fail
-      }
-    },
-    [fetchCue, projectIdNum],
-  )
-
-  const handleCueEditorSave = useCallback(
-    async (input: CueInput) => {
-      if (cueEditorCueId == null) return
-      await saveCue({ projectId: projectIdNum, cueId: cueEditorCueId, ...input }).unwrap()
-    },
-    [cueEditorCueId, saveCue, projectIdNum],
-  )
-
-  const handleCueEditorClose = useCallback((open: boolean) => {
-    setCueEditorOpen(open)
-    if (!open) {
-      requestAnimationFrame(() => {
-        if (listScrollRef.current) {
-          listScrollRef.current.scrollTop = savedScrollPos.current
-        }
-      })
-    }
+  const toggleExpanded = useCallback((cueId: number) => {
+    setExpanded((s) => {
+      const n = new Set(s)
+      if (n.has(cueId)) n.delete(cueId)
+      else n.add(cueId)
+      return n
+    })
   }, [])
+
+  // Reset expansion when the stack switches. Declared BEFORE the auto-expand
+  // effect so that on initial mount + first stack load the reset clears state
+  // first, then auto-expand re-adds the live cue (effect order matters: a
+  // later useEffect's setState supersedes an earlier one in the same commit
+  // when the earlier passes a literal value).
+  useEffect(() => {
+    setExpanded(new Set())
+  }, [activeStackId])
+
+  // Auto-expand the live cue so the operator always sees what's outputting.
+  useEffect(() => {
+    if (effectiveActiveCueId == null) return
+    setExpanded((s) => {
+      if (s.has(effectiveActiveCueId)) return s
+      const n = new Set(s)
+      n.add(effectiveActiveCueId)
+      return n
+    })
+  }, [effectiveActiveCueId])
 
   // ── Loading / redirect guards ──
 
@@ -607,9 +466,7 @@ export function RunPage() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header row — always one line; button labels hide at narrow widths
-          so the row never has to wrap. Tooltip provides the affordance when
-          the label is hidden. */}
+      {/* Breadcrumb row + Edit Cue / Stop / connection-dot cluster */}
       <div className="flex items-center p-4 gap-3">
         <div className="flex-1 min-w-0">
           <Breadcrumbs projectName={project.name} currentPage="Run" />
@@ -702,7 +559,7 @@ export function RunPage() {
           className="flex-1 flex flex-col min-w-0 overflow-hidden"
         >
           {isNarrowRunner ? (
-            <ShowRunnerMobile
+            <RunMobile
               show={show!}
               activeEntryId={activeEntryId}
               stack={stack}
@@ -710,227 +567,124 @@ export function RunPage() {
               display={runnerDisplay}
               bpm={fxState?.bpm ?? null}
               dbo={dbo}
-              isTheatre={isTheatre}
               onGo={handleGo}
               onBack={handleBack}
               onDbo={handleDbo}
               onTap={handleTap}
               onSwitchToEntry={handleSwitchToEntry}
-              onToggleCtx={toggleCtx}
-              onRequeueCue={handleRequeueCue}
+              onRequeueCue={handleCueRequeue}
+              projectId={projectIdNum}
+              fadeRemainMs={fadeRemainMs}
             />
           ) : (
             <>
-              {/* Show bar */}
-              <ShowBar
+              {/* Top toolbar */}
+              <RunToolbar
                 dbo={dbo}
                 onDbo={handleDbo}
                 bpm={fxState?.bpm ?? null}
                 onTap={handleTap}
-                stackName={stack?.name ?? ''}
+                activeNumber={activeCue?.cueNumber ? `Q${activeCue.cueNumber}` : null}
                 activeName={activeCue?.name ?? null}
-                standbyName={standbyCue?.name ?? null}
-                nextStackName={nextStackEntry?.cueStackName ?? undefined}
+                standbyNumber={standbyCue?.cueNumber ? `Q${standbyCue.cueNumber}` : null}
+                standbyName={
+                  standbyCue?.name
+                    ?? (nextStackEntry ? `→ ${nextStackEntry.cueStackName}` : null)
+                }
+                fadeRemainMs={fadeRemainMs}
                 onGo={handleGo}
                 onBack={handleBack}
               />
 
-              {/* Runner body */}
-              <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                {/* Stack tabs + context toggle */}
-                <div className="flex h-12 shrink-0 items-center border-b">
-                  {show!.entries.map((entry) => {
-                    if (entry.entryType === 'MARKER') {
-                      return (
-                        <div
-                          key={entry.id}
-                          className="flex items-center h-full px-2 gap-1.5 shrink-0 pointer-events-none"
-                        >
-                          <div className="w-px h-4 bg-border" />
-                          <span className="text-xs font-medium uppercase text-muted-foreground whitespace-nowrap">
-                            {entry.label}
-                          </span>
-                          <div className="w-px h-4 bg-border" />
-                        </div>
-                      )
-                    }
-                    const entryStack = entry.cueStackId != null ? stackMap.get(entry.cueStackId) : undefined
+              {/* Stack tabs */}
+              <div className="flex h-12 shrink-0 items-stretch border-b overflow-x-auto">
+                {show!.entries.map((entry) => {
+                  if (entry.entryType === 'MARKER') {
                     return (
-                      <Button
+                      <div
                         key={entry.id}
-                        variant="ghost"
-                        onClick={() => handleSwitchToEntry(entry)}
-                        className={cn(
-                          'flex items-center gap-2 px-5 h-full rounded-none border-r text-xs font-medium text-muted-foreground relative shrink-0',
-                          'hover:text-foreground hover:bg-muted/10',
-                          entry.id === activeEntryId &&
-                            'text-foreground bg-muted/20 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary',
-                        )}
+                        className="flex items-center h-full px-2 gap-1.5 shrink-0 pointer-events-none"
                       >
-                        {entry.cueStackName}
-                        {entryStack?.loop && (
-                          <RotateCcw className="size-3 text-muted-foreground" />
-                        )}
-                      </Button>
+                        <div className="w-px h-4 bg-border" />
+                        <span className="text-xs font-medium uppercase text-muted-foreground whitespace-nowrap">
+                          {entry.label}
+                        </span>
+                        <div className="w-px h-4 bg-border" />
+                      </div>
                     )
-                  })}
-                  <div className="flex-1" />
-                  <div className="px-4">
-                    <Tabs value={isTheatre ? 'theatre' : 'band'} onValueChange={(v) => toggleCtx(v as 'theatre' | 'band')} className="w-auto">
-                      <TabsList>
-                        <TabsTrigger value="theatre">Theatre</TabsTrigger>
-                        <TabsTrigger value="band">Band</TabsTrigger>
-                      </TabsList>
-                    </Tabs>
-                  </div>
-                </div>
-
-                {/* OOO banner */}
-                {ooo && (
-                  <OutOfOrderBanner
-                    onFixOrder={handleFixOrder}
-                    onDismiss={() => setOooDismissed(true)}
-                  />
-                )}
-
-                {/* Cue list + optional inline detail panel */}
-                <div className="flex-1 flex min-h-0">
-                  {/* Cue list column */}
-                  <div className="flex-1 flex flex-col min-w-0">
-                    {/* Column headers */}
-                    <div className="flex items-center h-10 px-4 border-b shrink-0">
-                      <div className="w-8 px-2" />
-                      {isTheatre && (
-                        <div className="w-14 px-2 text-sm font-medium text-foreground">
-                          Q
-                        </div>
+                  }
+                  const entryStack = entry.cueStackId != null ? stackMap.get(entry.cueStackId) : undefined
+                  const entryStandardCount =
+                    entryStack?.cues.filter((c) => c.cueType === 'STANDARD').length ?? 0
+                  return (
+                    <Button
+                      key={entry.id}
+                      variant="ghost"
+                      onClick={() => handleSwitchToEntry(entry)}
+                      className={cn(
+                        'flex items-center gap-2 px-5 h-full rounded-none border-r text-xs font-medium text-muted-foreground relative shrink-0',
+                        'hover:text-foreground hover:bg-muted/10',
+                        entry.id === activeEntryId &&
+                          'text-foreground bg-muted/20 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary',
                       )}
-                      <div className="flex-1 px-2 text-sm font-medium text-foreground">
-                        Name
-                      </div>
-                      <div className="w-24 text-right px-2 text-sm font-medium text-foreground">
-                        Fade
-                      </div>
-                      <div className="w-12 px-2" />
-                      {isTheatre && (
-                        <div className="w-[200px] px-2 text-sm font-medium text-foreground border-l">
-                          Note
-                        </div>
+                    >
+                      {entry.cueStackId === stack?.activeCueId
+                        ? null
+                        : entryStack?.activeCueId != null && (
+                          <span className="size-1.5 rounded-full bg-green-500 shadow-[0_0_6px_currentColor]" />
+                        )}
+                      {entry.cueStackName}
+                      {entryStack?.loop && (
+                        <RotateCcw className="size-3 text-muted-foreground" />
                       )}
-                      <div className="w-10" />
-                    </div>
+                      <span className="font-mono text-[9.5px] rounded-full border bg-muted/40 px-1.5 text-muted-foreground/80 ml-0.5">
+                        {entryStandardCount}
+                      </span>
+                    </Button>
+                  )
+                })}
+              </div>
 
-                    {/* Scrollable cue rows */}
-                    <div className="flex-1 overflow-y-auto py-0.5" ref={listScrollRef}>
-                      {cues.map((cue) => {
-                        if (cue.cueType === 'MARKER') {
-                          return <MarkerRow key={cue.id} name={cue.name} />
-                        }
-                        const isActive = cue.id === effectiveActiveCueId
-                        const isStandby = cue.id === runner.standbyCueId
-                        const isDone = completedSet.has(cue.id)
-                        const isFading = cue.id === runner.activeCueId ||
-                          (cue.id === effectiveActiveCueId && runner.fadeProgress > 0)
-                        return (
-                          <CueRow
-                            key={cue.id}
-                            cueId={cue.id}
-                            cueNumber={cue.cueNumber}
-                            name={cue.name}
-                            fadeDurationMs={cue.fadeDurationMs}
-                            fadeCurve={cue.fadeCurve}
-                            autoAdvance={cue.autoAdvance}
-                            notes={cue.notes}
-                            isActive={isActive}
-                            isStandby={isStandby}
-                            isDone={isDone}
-                            isTheatre={isTheatre}
-                            fadeProgress={isFading ? runner.fadeProgress : 0}
-                            autoProgress={isFading ? runner.autoProgress : null}
-                            onClick={() => handleCueClick(cue.id)}
-                            onView={() => openCueDetail(cue.id)}
-                            isViewing={detailCue?.id === cue.id}
-                          />
-                        )
-                      })}
-                    </div>
-                  </div>
+              {/* OOO banner */}
+              {ooo && (
+                <OutOfOrderBanner
+                  onFixOrder={handleFixOrder}
+                  onDismiss={() => setOooDismissed(true)}
+                />
+              )}
 
-                  {/* Inline detail panel (wide viewports only, always visible) */}
-                  {showInlineDetail && (
-                    <div className="w-80 shrink-0 border-l flex flex-col overflow-hidden bg-background">
-                      {detailCue ? (
-                        <>
-                          <div className="flex items-center justify-between px-3 py-2 border-b shrink-0 gap-2">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="text-sm font-medium truncate">{detailCue.name}</span>
-                              {detailCue.cueNumber && (
-                                <Badge variant="outline" className="font-mono text-[10px] shrink-0">
-                                  Q{detailCue.cueNumber}
-                                </Badge>
-                              )}
-                              {detailMode === 'active' && (
-                                <Badge variant="secondary" className="text-[10px] shrink-0">
-                                  Active
-                                </Badge>
-                              )}
-                              {detailMode === 'standby' && (
-                                <Badge variant="secondary" className="text-[10px] shrink-0 border-blue-500/30 text-blue-400 bg-blue-500/10">
-                                  Next
-                                </Badge>
-                              )}
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-6 shrink-0"
-                              onClick={handleDetailEdit}
-                              title="Edit in Program"
-                            >
-                              <Pencil className="size-3" />
-                            </Button>
-                          </div>
-                          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
-                            <CueDetailContent
-                              cue={detailCue}
-                              projectId={projectIdNum}
-                            />
-                          </div>
-                        </>
-                      ) : (
-                        <div className="flex-1 flex items-center justify-center p-4">
-                          <p className="text-sm text-muted-foreground">No cue selected</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+              {/* Cue list — inline expanding read-only cards */}
+              <div className="flex-1 overflow-y-auto min-h-0 py-1">
+                {cues.map((cue) => {
+                  if (cue.cueType === 'MARKER') {
+                    return <MarkerRow key={cue.id} name={cue.name} />
+                  }
+                  const isActive = cue.id === effectiveActiveCueId
+                  const isStandby = cue.id === runner.standbyCueId
+                  const isDone = completedSet.has(cue.id)
+                  const isFading =
+                    isActive && runner.activeCueId != null && runner.fadeProgress < 1
+                  return (
+                    <RunCueCard
+                      key={cue.id}
+                      cue={cue}
+                      projectId={projectIdNum}
+                      isActive={isActive}
+                      isStandby={isStandby}
+                      isDone={isDone}
+                      expanded={expanded.has(cue.id)}
+                      onSetStandby={() => handleCueRequeue(cue.id)}
+                      onToggleExpanded={() => toggleExpanded(cue.id)}
+                      fadeProgress={isFading ? runner.fadeProgress : null}
+                      fadeRemainMs={isFading ? fadeRemainMs : null}
+                    />
+                  )
+                })}
               </div>
             </>
           )}
         </div>
       )}
-
-      {/* CueEditor sheet (opened from MobileCueListSheet) */}
-      <CueEditor
-        open={cueEditorOpen}
-        onOpenChange={handleCueEditorClose}
-        cue={cueEditorCue}
-        projectId={projectIdNum}
-        onSave={handleCueEditorSave}
-        isInStack
-        mode="sheet"
-        defaultEditMode="live"
-      />
-
-      {/* Read-only cue detail sheet (narrow viewports only — inline panel used on wide) */}
-      <CueDetailSheet
-        open={detailCue != null && !showInlineDetail}
-        onOpenChange={(open) => { if (!open) { setDetailCue(null); setDetailMode('active') } }}
-        cue={detailCue}
-        projectId={projectIdNum}
-        onEdit={handleDetailEdit}
-      />
 
       {/* Stop-show confirmation */}
       <Dialog open={stopConfirmOpen} onOpenChange={setStopConfirmOpen}>

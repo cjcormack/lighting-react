@@ -172,3 +172,15 @@
   25% { transform: rotate(-1.5deg); }
   75% { transform: rotate(1.5deg); }
 }
+
+/* Run view live-cue pulse — matches the green ring around the play indicator */
+@keyframes r-live-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.4); }
+  50%      { box-shadow: 0 0 0 6px rgba(74, 222, 128, 0); }
+}
+
+/* Run view fade-pulse — amber dot shimmer on the FADING badge */
+@keyframes r-fade-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.35; transform: scale(0.7); }
+}
