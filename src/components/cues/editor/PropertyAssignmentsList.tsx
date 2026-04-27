@@ -4,20 +4,15 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { useFixtureListQuery } from '@/store/fixtures'
-import { useGroupPropertiesQuery } from '@/store/groups'
 import { describeHealth } from '@/lib/healthDescriptor'
-import type { PropertyDescriptor } from '@/store/fixtures'
-import type { GroupPropertyDescriptor } from '@/api/groupsApi'
+import {
+  useTargetProperties,
+  defaultValueFor,
+  placeholderFor,
+  type AvailableProperty,
+} from './targetProperties'
 import type { CuePropertyAssignment } from '@/api/cuesApi'
 import type { TargetSelection } from './CueTargetGrid'
-
-interface AvailableProperty {
-  name: string
-  displayName: string
-  type: 'slider' | 'colour' | 'position' | 'setting'
-  category: string
-}
 
 interface PropertyAssignmentsListProps {
   selection: TargetSelection
@@ -252,52 +247,3 @@ function AddAssignmentForm({
   )
 }
 
-function defaultValueFor(prop: AvailableProperty | undefined): string {
-  if (!prop) return ''
-  switch (prop.type) {
-    case 'slider':
-    case 'setting':
-      return '0'
-    case 'colour':
-      return '#000000'
-    case 'position':
-      return '127,127'
-  }
-}
-
-function placeholderFor(prop: AvailableProperty): string {
-  switch (prop.type) {
-    case 'slider':
-    case 'setting':
-      return '0..255'
-    case 'colour':
-      return '#rrggbb or P1'
-    case 'position':
-      return 'pan,tilt'
-  }
-}
-
-function useTargetProperties(selection: TargetSelection): AvailableProperty[] {
-  const { data: fixtures } = useFixtureListQuery()
-  const { data: groupProps } = useGroupPropertiesQuery(selection.key, {
-    skip: selection.type !== 'group',
-  })
-
-  return useMemo(() => {
-    if (selection.type === 'fixture') {
-      const fixture = fixtures?.find((f) => f.key === selection.key)
-      if (!fixture) return []
-      return fixture.properties.map(toAvailable)
-    }
-    if (!groupProps) return []
-    return groupProps.map(toAvailableGroup)
-  }, [selection.type, selection.key, fixtures, groupProps])
-}
-
-function toAvailable(p: PropertyDescriptor): AvailableProperty {
-  return { name: p.name, displayName: p.displayName, type: p.type, category: p.category }
-}
-
-function toAvailableGroup(p: GroupPropertyDescriptor): AvailableProperty {
-  return { name: p.name, displayName: p.displayName, type: p.type, category: p.category }
-}

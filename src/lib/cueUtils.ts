@@ -43,6 +43,7 @@ export function buildCueInput(cue: Cue): CueInput {
       sortOrder: pa.sortOrder,
     })),
     adHocEffects: cue.adHocEffects.map((e) => ({ ...e })),
+    propertyAssignments: cue.propertyAssignments.map((a) => ({ ...a })),
     triggers: cue.triggers.map((t) => ({
       triggerType: t.triggerType,
       delayMs: t.delayMs,

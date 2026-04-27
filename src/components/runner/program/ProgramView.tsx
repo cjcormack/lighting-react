@@ -10,6 +10,7 @@ import {
 } from '@/store/cueStacks'
 import type { CueStack } from '@/api/cueStacksApi'
 import type { ShowDetails } from '@/api/showApi'
+import type { Cue } from '@/api/cuesApi'
 import { StackDetail } from './StackDetail'
 import { ShowOverview } from './ShowOverview'
 import { nextAvailableName } from '@/lib/cueUtils'
@@ -19,12 +20,15 @@ interface ProgramViewProps {
   stacks: CueStack[]
   drillStackId: number | null
   onDrillStack: (id: number | null) => void
-  onOpenCueEditor: (stackId: number, cueId: number) => void
   show?: ShowDetails
   activeStackId: number | null
   activeCueId: number | null
-  /** Cue currently loaded in the inline edit panel (for highlight). */
-  editingCueId?: number | null
+  /** Cue id whose card is currently expanded inline. */
+  expandedCueId: number | null
+  onExpandedCueChange: (cueId: number | null) => void
+  onDuplicate?: (cue: Cue) => void
+  onSnapshotFromLive?: (cueId: number) => Promise<void> | void
+  snapshotPending?: boolean
 }
 
 export function ProgramView({
@@ -32,11 +36,14 @@ export function ProgramView({
   stacks,
   drillStackId,
   onDrillStack,
-  onOpenCueEditor,
   show,
   activeStackId,
   activeCueId,
-  editingCueId,
+  expandedCueId,
+  onExpandedCueChange,
+  onDuplicate,
+  onSnapshotFromLive,
+  snapshotPending,
 }: ProgramViewProps) {
   const [createCue] = useCreateProjectCueMutation()
   const [removeCueFromStack] = useRemoveCueFromCueStackMutation()
@@ -65,11 +72,11 @@ export function ProgramView({
         fadeCurve: 'LINEAR',
         cueStackId: drillStackId,
       }).unwrap()
-      onOpenCueEditor(drillStackId, result.id)
+      onExpandedCueChange(result.id)
     } catch {
       // Silently fail
     }
-  }, [drillStackId, projectId, createCue, onOpenCueEditor, existingCueNames])
+  }, [drillStackId, projectId, createCue, existingCueNames, onExpandedCueChange])
 
   const handleAddMarker = useCallback(async () => {
     if (drillStackId == null) return
@@ -121,13 +128,16 @@ export function ProgramView({
         stack={drillStack}
         projectId={projectId}
         activeCueId={drillStackId === activeStackId ? activeCueId : null}
-        editingCueId={editingCueId}
+        expandedCueId={expandedCueId}
+        onExpandedCueChange={onExpandedCueChange}
         onBack={() => onDrillStack(null)}
-        onOpenCueEditor={(cueId) => onOpenCueEditor(drillStackId!, cueId)}
         onAddCue={handleAddCue}
         onAddMarker={handleAddMarker}
         onMarkerRename={handleMarkerRename}
         onMarkerDelete={handleMarkerDelete}
+        onDuplicate={onDuplicate}
+        onSnapshotFromLive={onSnapshotFromLive}
+        snapshotPending={snapshotPending}
       />
     )
   }

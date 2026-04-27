@@ -31,6 +31,7 @@ export const cuesApi = restApi.injectEndpoints({
 
     projectCue: build.query<Cue, { projectId: number; cueId: number }>({
       query: ({ projectId, cueId }) => `project/${projectId}/cues/${cueId}`,
+      providesTags: (_result, _error, { cueId }) => [{ type: 'Cue', id: cueId }],
     }),
 
     createProjectCue: build.mutation<Cue, { projectId: number } & CueInput>({
@@ -54,8 +55,9 @@ export const cuesApi = restApi.injectEndpoints({
         method: 'PUT',
         body,
       }),
-      invalidatesTags: (_result, _error, { projectId }) => [
+      invalidatesTags: (_result, _error, { projectId, cueId }) => [
         { type: 'CueList', id: projectId },
+        { type: 'Cue', id: cueId },
         { type: 'CueStackList', id: projectId },
       ],
     }),
@@ -69,10 +71,10 @@ export const cuesApi = restApi.injectEndpoints({
         method: 'PATCH',
         body,
       }),
-      invalidatesTags: (_result, _error, { projectId }) => [
-        { type: 'CueList', id: projectId },
-        { type: 'CueStackList', id: projectId },
-      ],
+      // Don't invalidate the project-wide list on PATCH — keystroke-driven
+      // edits would refetch every cue. The WS `cues.subscribe` invalidates
+      // CueList for changes that affect list-level fields.
+      invalidatesTags: (_result, _error, { cueId }) => [{ type: 'Cue', id: cueId }],
     }),
 
     deleteProjectCue: build.mutation<void, { projectId: number; cueId: number }>({
@@ -137,8 +139,9 @@ export const cuesApi = restApi.injectEndpoints({
         url: `project/${projectId}/cues/${cueId}/snapshot-from-live`,
         method: 'POST',
       }),
-      invalidatesTags: (_result, _error, { projectId }) => [
+      invalidatesTags: (_result, _error, { projectId, cueId }) => [
         { type: 'CueList', id: projectId },
+        { type: 'Cue', id: cueId },
         'CueList',
       ],
     }),

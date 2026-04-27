@@ -1,5 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
-import { ArrowLeft, Plus, SeparatorHorizontal } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  ArrowLeft,
+  Layers,
+  ListChecks,
+  Plus,
+  SeparatorHorizontal,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -7,6 +13,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { useMediaQuery, SM_BREAKPOINT } from '@/hooks/useMediaQuery'
 import {
   DndContext,
@@ -23,52 +34,54 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable'
 import { useReorderCueStackCuesMutation } from '@/store/cueStacks'
-import { useProjectPresetListQuery } from '@/store/fxPresets'
-import { useEffectLibraryQuery } from '@/store/fixtureFx'
-import { useProjectCueListQuery } from '@/store/cues'
 import type { CueStack } from '@/api/cueStacksApi'
 import type { Cue } from '@/api/cuesApi'
 import { ProgramCueRow } from './ProgramCueRow'
 import { ProgramMarkerRow } from './ProgramMarkerRow'
+import { cn } from '@/lib/utils'
+import type { LayersMode } from './CueCardEditor/CueCardEditor'
 
 interface StackDetailProps {
   stack: CueStack
   projectId: number
   activeCueId: number | null
-  /** Cue currently loaded in the inline edit panel (for highlight). */
-  editingCueId?: number | null
   /** Cue queued to fire on the next GO. Only meaningful when drilled into the active stack. */
   standbyCueId?: number | null
+  /** Cue id whose card is currently expanded inline. */
+  expandedCueId: number | null
+  onExpandedCueChange: (cueId: number | null) => void
   onBack: () => void
-  onOpenCueEditor: (cueId: number) => void
   onAddCue: () => void
   onAddMarker: () => void
   onMarkerRename: (cueId: number, name: string) => void
   onMarkerDelete: (cueId: number) => void
+  onDuplicate?: (cue: Cue) => void
+  onSnapshotFromLive?: (cueId: number) => Promise<void> | void
+  snapshotPending?: boolean
 }
 
 export function StackDetail({
   stack,
   projectId,
   activeCueId,
-  editingCueId,
   standbyCueId,
+  expandedCueId,
+  onExpandedCueChange,
   onBack,
-  onOpenCueEditor,
   onAddCue,
   onAddMarker,
   onMarkerRename,
   onMarkerDelete,
+  onDuplicate,
+  onSnapshotFromLive,
+  snapshotPending,
 }: StackDetailProps) {
   const isWide = useMediaQuery(SM_BREAKPOINT)
-  const { data: presets } = useProjectPresetListQuery(projectId)
-  const { data: library } = useEffectLibraryQuery()
-  const { data: allCues } = useProjectCueListQuery(projectId)
   const [reorderCues] = useReorderCueStackCuesMutation()
+  const [layersMode, setLayersMode] = useState<LayersMode>('by-target')
 
   // Scroll the active cue into view when drilling in or when the active cue
-  // changes for this stack — saves the operator from scrolling to find
-  // what's currently on stage. Uses 'nearest' to avoid unnecessary motion.
+  // changes for this stack.
   const listRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (activeCueId == null || !listRef.current) return
@@ -78,13 +91,19 @@ export function StackDetail({
     }
   }, [stack.id, activeCueId])
 
-  // Build a map of full cue data for expandable rows
-  const cueMap = useMemo(() => {
-    if (!allCues) return new Map<number, Cue>()
-    return new Map(allCues.filter((c) => c.cueStackId === stack.id).map((c) => [c.id, c]))
-  }, [allCues, stack.id])
+  // Scroll an expanded card into view so the operator sees the editor body.
+  useEffect(() => {
+    if (expandedCueId == null || !listRef.current) return
+    const row = listRef.current.querySelector(`[data-cue-row="${expandedCueId}"]`)
+    if (row instanceof HTMLElement) {
+      row.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }
+  }, [expandedCueId])
 
-  const standardCount = stack.cues.filter((c) => c.cueType === 'STANDARD').length
+  const standardCount = useMemo(
+    () => stack.cues.filter((c) => c.cueType === 'STANDARD').length,
+    [stack.cues],
+  )
 
   // dnd-kit sensors
   const sensors = useSensors(
@@ -132,6 +151,55 @@ export function StackDetail({
           {standardCount} cues
         </span>
         <div className="flex-1" />
+
+        {/* By-target / By-layer toggle */}
+        <div
+          className="hidden sm:inline-flex items-center rounded-md border bg-muted/30 p-0.5 mr-1"
+          role="group"
+          aria-label="Layers arrangement"
+        >
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => setLayersMode('by-target')}
+                className={cn(
+                  'inline-flex items-center gap-1.5 h-7 px-2 rounded text-xs transition-colors',
+                  layersMode === 'by-target'
+                    ? 'bg-background shadow-sm text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <Layers className="size-3.5" />
+                By target
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              Group every assignment / effect / preset by its target.
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => setLayersMode('by-layer')}
+                className={cn(
+                  'inline-flex items-center gap-1.5 h-7 px-2 rounded text-xs transition-colors',
+                  layersMode === 'by-layer'
+                    ? 'bg-background shadow-sm text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <ListChecks className="size-3.5" />
+                By layer
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              Top-level Presets · Assignments · Effects sections.
+            </TooltipContent>
+          </Tooltip>
+        </div>
+
         {isWide ? (
           <>
             <Button variant="outline" size="sm" onClick={onAddCue}>
@@ -158,30 +226,8 @@ export function StackDetail({
         )}
       </div>
 
-      {/* Column headers */}
-      <div className="flex items-center h-10 px-4 border-b shrink-0">
-        <div className="w-8 px-2" />
-        {isWide && <div className="w-8" />}
-        <div className="w-14 px-2 text-sm font-medium text-foreground">
-          Q
-        </div>
-        <div className="flex-1 px-2 text-sm font-medium text-foreground">
-          Name
-        </div>
-        {isWide && (
-          <>
-            <div className="w-24 text-right px-2 text-sm font-medium text-foreground">
-              Fade
-            </div>
-            <div className="w-12 px-2" />
-            <div className="px-2" />
-            <div className="w-8" />
-          </>
-        )}
-      </div>
-
       {/* Cue list */}
-      <div ref={listRef} className="flex-1 overflow-y-auto">
+      <div ref={listRef} className="flex-1 overflow-y-auto py-1">
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -207,14 +253,17 @@ export function StackDetail({
                 <ProgramCueRow
                   key={cue.id}
                   cue={cue}
-                  fullCue={cueMap.get(cue.id)}
                   projectId={projectId}
-                  presets={presets}
-                  library={library}
+                  expanded={expandedCueId === cue.id}
+                  onToggleExpanded={() =>
+                    onExpandedCueChange(expandedCueId === cue.id ? null : cue.id)
+                  }
                   isActive={cue.id === activeCueId}
                   isStandby={cue.id === standbyCueId}
-                  isEditing={cue.id === editingCueId}
-                  onOpenCueEditor={() => onOpenCueEditor(cue.id)}
+                  layersMode={layersMode}
+                  onDuplicate={onDuplicate}
+                  onSnapshotFromLive={onSnapshotFromLive}
+                  snapshotPending={snapshotPending}
                 />
               )
             })}
