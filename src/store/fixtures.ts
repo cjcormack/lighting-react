@@ -217,3 +217,15 @@ export function findColourSource(properties: PropertyDescriptor[]): ColourSource
 
   return undefined
 }
+
+/**
+ * Find the dimmer slider on a fixture or element. Used widely for
+ * brightness-derived UI (compact cards, stage markers, gel swatches).
+ */
+export function findDimmerProperty(
+  properties: PropertyDescriptor[] | undefined,
+): SliderPropertyDescriptor | undefined {
+  return properties?.find(
+    (p): p is SliderPropertyDescriptor => p.type === 'slider' && p.category === 'dimmer',
+  )
+}

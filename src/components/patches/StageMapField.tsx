@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { clamp } from '@/lib/utils'
+import { StageBackdrop } from '../stage/StageBackdrop'
 
 const X_MIN = 2
 const X_MAX = 98
@@ -87,27 +88,14 @@ export function StageMapField({
           Unplace
         </Button>
       </div>
-      <div
+      <StageBackdrop
         ref={stageRef}
-        className="relative w-full aspect-[16/10] border border-border rounded-md overflow-hidden cursor-crosshair select-none bg-muted/40"
-        style={{
-          backgroundImage:
-            'repeating-linear-gradient(0deg, rgba(127,127,127,0.06) 0 1px, transparent 1px 24px), repeating-linear-gradient(90deg, rgba(127,127,127,0.06) 0 1px, transparent 1px 24px)',
-        }}
+        className="aspect-[16/10] cursor-crosshair select-none"
         onMouseDown={(e) => {
           setPosFromEvent(e.clientX, e.clientY)
           setDragging(true)
         }}
       >
-        <div className="absolute top-1.5 left-0 right-0 text-center text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50 pointer-events-none">
-          Upstage
-        </div>
-        <div className="absolute bottom-1.5 left-0 right-0 text-center text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50 pointer-events-none">
-          Downstage
-        </div>
-        <div className="absolute inset-x-0 top-1/2 h-px bg-foreground/10 pointer-events-none" />
-        <div className="absolute inset-y-0 left-1/2 w-px bg-foreground/10 pointer-events-none" />
-
         {otherFixtures.map((o) => (
           <div
             key={o.id}
@@ -144,7 +132,7 @@ export function StageMapField({
             x {Math.round(value.stageX!)} · y {Math.round(value.stageY!)}
           </div>
         )}
-      </div>
+      </StageBackdrop>
     </div>
   )
 }

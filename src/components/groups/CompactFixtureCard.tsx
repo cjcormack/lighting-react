@@ -5,6 +5,7 @@ import {
   findColourSource,
   findCompactPrimary,
   findCompactSecondary,
+  findDimmerProperty,
   type Fixture,
   type PropertyDescriptor,
   type ColourPropertyDescriptor,
@@ -55,17 +56,6 @@ interface CompactFixtureCardProps {
   onClick: () => void
   /** Pass a pre-resolved fixture to avoid an internal useFixtureListQuery + .find() */
   fixture?: Fixture
-}
-
-/**
- * Get the dimmer property from a fixture or element
- */
-function findDimmerProperty(
-  properties: Fixture['properties'] | ElementDescriptor['properties']
-): SliderPropertyDescriptor | undefined {
-  return properties?.find(
-    (p) => p.type === 'slider' && p.category === 'dimmer'
-  ) as SliderPropertyDescriptor | undefined
 }
 
 /**

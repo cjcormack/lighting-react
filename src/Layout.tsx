@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react"
 import { Outlet, useLocation } from "react-router-dom"
-import { ChevronLeft, Menu, Settings, LayoutGrid, Grid3X3, AudioWaveform, Sparkles } from "lucide-react"
+import { ChevronLeft, Menu, Settings, LayoutGrid, Grid3X3, AudioWaveform, Sparkles, Theater } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -12,10 +12,13 @@ import ProjectSwitcher, { useViewedProject, NavItem } from "./ProjectSwitcher"
 import ThemeToggle from "./ThemeToggle"
 import { FixtureOverviewToggle } from "./components/FixtureOverviewToggle"
 import { FixtureOverviewPanel } from "./components/FixtureOverviewPanel"
+import { StageOverviewToggle } from "./components/StageOverviewToggle"
+import { StageOverviewPanel } from "./components/StageOverviewPanel"
 import { EffectsOverviewToggle } from "./components/EffectsOverviewToggle"
 import { EffectsOverviewPanel } from "./components/EffectsOverviewPanel"
 import { FixtureDetailModal } from "./components/groups/FixtureDetailModal"
 import { useFixtureOverview } from "./hooks/useFixtureOverview"
+import { useStageOverview } from "./hooks/useStageOverview"
 import { useEffectsOverview } from "./hooks/useEffectsOverview"
 import { AiChatToggle } from "./components/ai/AiChatToggle"
 import { AiChatPanel } from "./components/ai/AiChatPanel"
@@ -39,6 +42,7 @@ export default function Layout() {
   const [applyFxTarget, setApplyFxTarget] = useState<FxTarget | null>(null)
   const [channelDialogMode, setChannelDialogMode] = useState<"park" | "set" | null>(null)
   const { isVisible: isOverviewVisible, toggle: toggleOverview } = useFixtureOverview()
+  const { isVisible: isStageVisible, toggle: toggleStage } = useStageOverview()
   const { isVisible: isEffectsVisible, isLocked: isEffectsLocked, toggle: toggleEffects, lock: lockEffects, unlock: unlockEffects } = useEffectsOverview()
   const { isVisible: isCueSlotsVisible, toggle: toggleCueSlots } = useCueSlotOverview()
   const location = useLocation()
@@ -175,6 +179,7 @@ export default function Layout() {
               <div className="flex-1" />
               <div className="flex flex-wrap items-center gap-2">
                 <ConnectionStatus />
+                <StageOverviewToggle isVisible={isStageVisible} onToggle={toggleStage} />
                 <FixtureOverviewToggle isVisible={isOverviewVisible} onToggle={toggleOverview} />
                 <CueSlotOverviewToggle isVisible={isCueSlotsVisible} onToggle={toggleCueSlots} />
                 <EffectsOverviewToggle isVisible={isEffectsVisible} isLocked={isEffectsLocked} onToggle={toggleEffects} />
@@ -183,6 +188,13 @@ export default function Layout() {
               </div>
             </div>
           </header>
+
+          {/* Stage Overview Panel - always rendered for animation */}
+          <StageOverviewPanel
+            isVisible={isStageVisible}
+            selectedFixtureKey={selectedFixture}
+            onFixtureClick={setSelectedFixture}
+          />
 
           {/* Fixture Overview Panel - always rendered for animation */}
           <FixtureOverviewPanel
@@ -225,6 +237,7 @@ export default function Layout() {
           onParkChannelAtValue={() => setChannelDialogMode("park")}
           onSetChannelValue={() => setChannelDialogMode("set")}
           toggles={[
+            { label: "Stage Overview", icon: Theater, isVisible: isStageVisible, onToggle: toggleStage },
             { label: "Fixture Overview", icon: LayoutGrid, isVisible: isOverviewVisible, onToggle: toggleOverview },
             { label: "Cue Slots", icon: Grid3X3, isVisible: isCueSlotsVisible, onToggle: toggleCueSlots },
             { label: "Effects Overview", icon: AudioWaveform, isVisible: isEffectsVisible, onToggle: toggleEffects },
