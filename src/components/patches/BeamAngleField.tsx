@@ -40,7 +40,7 @@ export function BeamAngleField({ id, value, onChange }: BeamAngleFieldProps) {
                 height: 0,
                 borderLeft: `calc(56px * tan(${halfDeg}deg)) solid transparent`,
                 borderRight: `calc(56px * tan(${halfDeg}deg)) solid transparent`,
-                borderTop: '56px solid rgba(255, 220, 140, 0.42)',
+                borderBottom: '56px solid rgba(255, 220, 140, 0.42)',
               }}
             />
           )}

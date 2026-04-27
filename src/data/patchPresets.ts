@@ -1,19 +1,3 @@
-export const RIGGING_POSITION_FALLBACK: readonly string[] = [
-  'FOH',
-  'LX1',
-  'LX2',
-  'LX3',
-  'ADV 1',
-  'ADV 2',
-  'USR',
-  'DSL',
-  'DSR',
-  'USL',
-  'MID',
-  'BOOM L',
-  'BOOM R',
-]
-
 export interface BeamPreset {
   name: string
   deg: number

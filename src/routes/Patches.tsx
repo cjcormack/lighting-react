@@ -21,6 +21,7 @@ import { AddFixtureSheet } from "@/components/patches/AddFixtureSheet"
 import { EditPatchSheet } from "@/components/patches/EditPatchSheet"
 import { EditGroupSheet } from "@/components/patches/EditGroupSheet"
 import type { FixturePatch, UniverseConfig } from "../api/patchApi"
+import { findGel } from "@/data/gels"
 
 // ─── Redirect ─────────────────────────────────────────────────────────
 
@@ -255,6 +256,8 @@ interface PatchRow {
   channelCount: number
   fixtureType: string
   riggingPosition: string | null
+  beamAngleDeg: number | null
+  gelCode: string | null
   groups: { id: number; name: string }[]
   sortKey: number
 }
@@ -276,6 +279,8 @@ function PatchTable({
           <TableHead className="hidden sm:table-cell">Type</TableHead>
           <TableHead className="hidden md:table-cell">Key</TableHead>
           <TableHead className="hidden md:table-cell">Position</TableHead>
+          <TableHead className="hidden lg:table-cell">Angle</TableHead>
+          <TableHead className="hidden lg:table-cell">Gel</TableHead>
           <TableHead>Name</TableHead>
           <TableHead className="hidden lg:table-cell">Groups</TableHead>
         </TableRow>
@@ -309,6 +314,12 @@ function PatchTable({
                   {row.riggingPosition}
                 </Badge>
               ) : null}
+            </TableCell>
+            <TableCell className="hidden lg:table-cell text-xs font-mono tabular-nums text-muted-foreground">
+              {row.beamAngleDeg != null ? `${row.beamAngleDeg}°` : null}
+            </TableCell>
+            <TableCell className="hidden lg:table-cell">
+              <GelCell code={row.gelCode} />
             </TableCell>
             <TableCell>
               <div className="font-medium text-sm">{row.displayName}</div>
@@ -345,6 +356,21 @@ function PatchTable({
   )
 }
 
+function GelCell({ code }: { code: string | null }) {
+  if (!code) return null
+  const gel = findGel(code)
+  return (
+    <div className="flex items-center gap-1.5">
+      <span
+        className="size-3 rounded-sm border border-border/60 shrink-0"
+        style={{ background: gel?.color ?? 'transparent' }}
+        aria-hidden
+      />
+      <span className="font-mono text-xs">{code}</span>
+    </div>
+  )
+}
+
 // ─── Address formatting ───────────────────────────────────────────────
 
 function formatAddress(universe: number, channel: number): string {
@@ -368,6 +394,8 @@ function buildPatchRows(
       channelCount,
       fixtureType: buildTypeLabel(p.manufacturer, p.model, p.modeName),
       riggingPosition: p.riggingPosition,
+      beamAngleDeg: p.beamAngleDeg,
+      gelCode: p.gelCode,
       groups: p.groups,
       sortKey: p.universe * 1000 + p.startChannel,
     }

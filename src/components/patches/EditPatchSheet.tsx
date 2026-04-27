@@ -19,7 +19,6 @@ import { StageMapField } from './StageMapField'
 import { RiggingPositionInput } from './RiggingPositionInput'
 import { BeamAngleField } from './BeamAngleField'
 import { GelPickerField } from './GelPickerField'
-import { RIGGING_POSITION_FALLBACK } from '@/data/patchPresets'
 import type { FixturePatch } from '@/api/patchApi'
 
 interface EditPatchSheetProps {
@@ -89,19 +88,13 @@ export function EditPatchSheet({ open, onOpenChange, patch, projectId, existingP
     if (!open) cancelDragTimer()
   }, [open])
 
-  // Build rigging-position chip list: distinct in-project values + fallbacks,
-  // de-duped, in-use first so frequently-used labels surface to the top.
   const riggingPresets = useMemo(() => {
     const used = new Set<string>()
     for (const p of existingPatches) {
       const v = p.riggingPosition?.trim()
       if (v) used.add(v.toUpperCase())
     }
-    const ordered = [...Array.from(used)]
-    for (const p of RIGGING_POSITION_FALLBACK) {
-      if (!used.has(p)) ordered.push(p)
-    }
-    return ordered
+    return Array.from(used).sort()
   }, [existingPatches])
 
   const otherFixtures = useMemo(
