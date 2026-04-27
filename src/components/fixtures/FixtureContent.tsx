@@ -3,7 +3,15 @@ import { Slider } from '@/components/ui/slider'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { Fixture, ElementDescriptor, ColourPropertyDescriptor, SettingPropertyDescriptor, findColourSource } from '../../store/fixtures'
+import {
+  Fixture,
+  ElementDescriptor,
+  ColourPropertyDescriptor,
+  SettingPropertyDescriptor,
+  SliderPropertyDescriptor,
+  findColourSource,
+  useFixtureTypeListQuery,
+} from '../../store/fixtures'
 import type { GroupPropertyDescriptor, GroupColourPropertyDescriptor } from '../../api/groupsApi'
 import { useGetChannelQuery } from '../../store/channels'
 import { useUpdateChannel } from '../../hooks/usePropertyValues'
@@ -13,6 +21,8 @@ import { GroupPropertyVisualizer, GroupVirtualDimmerSlider } from './GroupProper
 import { GroupMembershipSection } from './GroupMembershipSection'
 import { FxSection } from '../fx/FxSection'
 import { FixtureBoundControlsRow } from '../surfaces/FixtureBoundControlsRow'
+import { GelSwatch } from './GelSwatch'
+import { findGel } from '../../data/gels'
 import { cn } from '@/lib/utils'
 
 export type FixtureViewMode = 'properties' | 'channels'
@@ -123,6 +133,18 @@ function PropertiesView({
   const virtualDimmerGroupColourProp = !hasRealDimmer && !fixtureColourProp ? egpColourProp : undefined
   const hasVirtualDimmer = !!virtualDimmerColourProp || !!virtualDimmerGroupColourProp
 
+  // Gel only falls in when no real colour source exists — coloured fixtures already
+  // render their own swatches via PropertyVisualizer.
+  const { data: fixtureTypes } = useFixtureTypeListQuery()
+  const fixtureType = useMemo(
+    () => fixtureTypes?.find((t) => t.typeKey === fixture.typeKey),
+    [fixtureTypes, fixture.typeKey],
+  )
+  const dimmerSliderProp = dimmerProps[0] as SliderPropertyDescriptor | undefined
+  const gel = !fixtureColourProp && !egpColourProp && fixtureType?.gelCompactDisplay && fixture.gelCode
+    ? findGel(fixture.gelCode)
+    : null
+
   return (
     <div className="space-y-4">
       {/* Surface bindings — small chip row for any controls mapped to this fixture */}
@@ -156,6 +178,14 @@ function PropertiesView({
           {egp?.position.map((prop) => (
             <AllHeadsProperty key={`egp-${prop.name}`} property={prop} isEditing={isEditing} />
           ))}
+
+          {gel && (
+            <GelSwatch
+              gelHex={gel.color}
+              dimmerProp={dimmerSliderProp}
+              className="h-6 w-full"
+            />
+          )}
 
           {/* Dimmer properties */}
           {dimmerProps.map((prop) => (

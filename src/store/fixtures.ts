@@ -49,6 +49,7 @@ export type FixtureTypeInfo = {
   elementGroupProperties: GroupPropertyDescriptor[] | null
   acceptsBeamAngle?: boolean
   acceptsGel?: boolean
+  gelCompactDisplay?: CompactDisplayRole | null
 }
 
 // Channel reference for property descriptors
@@ -169,6 +170,7 @@ export type Fixture = {
   capabilities: string[]
   groups: string[]
   compatiblePresetIds: number[]
+  gelCode?: string | null
 }
 
 /**

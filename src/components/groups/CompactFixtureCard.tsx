@@ -1,6 +1,7 @@
 import { memo, useMemo } from 'react'
 import {
   useFixtureListQuery,
+  useFixtureTypeListQuery,
   findColourSource,
   findCompactPrimary,
   findCompactSecondary,
@@ -22,6 +23,8 @@ import {
 } from '../../hooks/usePropertyValues'
 import { useGroupSliderValues } from '../../hooks/useGroupPropertyValues'
 import { useVirtualDimmer, useGroupVirtualDimmer } from '../../hooks/useVirtualDimmer'
+import { findGel } from '../../data/gels'
+import { GelSwatch, useDimmerBrightness } from '../fixtures/GelSwatch'
 import { cn } from '@/lib/utils'
 
 // Fixed height for colour row to ensure consistent card heights
@@ -119,6 +122,11 @@ export const CompactFixtureCard = memo(function CompactFixtureCard({
 }: CompactFixtureCardProps) {
   const { data: fixtureList } = useFixtureListQuery(undefined, { skip: !!fixtureProp })
   const fixture = fixtureProp ?? fixtureList?.find((f) => f.key === fixtureKey)
+  const { data: fixtureTypes } = useFixtureTypeListQuery()
+  const fixtureType = useMemo(
+    () => (fixture && fixtureTypes ? fixtureTypes.find((t) => t.typeKey === fixture.typeKey) : undefined),
+    [fixture, fixtureTypes]
+  )
   const { data: effects } = useFixtureEffectsQuery(fixtureKey)
   const allEffects = [...(effects?.direct ?? []), ...(effects?.indirect ?? [])]
   const hasActiveFx = allEffects.length > 0
@@ -153,8 +161,14 @@ export const CompactFixtureCard = memo(function CompactFixtureCard({
 
   const hasDimmerRow = !!dimmerProp || !!groupDimmerProp || !!virtualDimmerColourProp || !!virtualDimmerGroupColourProp
 
+  // Gel falls back to the colour-row slot only when no real colour source is present —
+  // a coloured fixture's own swatch always wins.
+  const gel = !hasColour && fixtureType?.gelCompactDisplay && fixture.gelCode
+    ? findGel(fixture.gelCode)
+    : null
+
   // Compact display fallbacks for fixtures without colour/dimmer
-  const compactPrimary = !hasColour ? findCompactPrimary(fixture.properties) : undefined
+  const compactPrimary = !hasColour && !gel ? findCompactPrimary(fixture.properties) : undefined
   const compactSecondary = !hasDimmerRow ? findCompactSecondary(fixture.properties) : undefined
 
   return (
@@ -182,6 +196,8 @@ export const CompactFixtureCard = memo(function CompactFixtureCard({
           ) : (
             <SingleHeadIndicator fixture={fixture} />
           )
+        ) : gel ? (
+          <GelSwatch gelHex={gel.color} dimmerProp={dimmerProp} className="h-full w-full" />
         ) : compactPrimary ? (
           <CompactPropertyDisplay property={compactPrimary} />
         ) : null}
@@ -343,23 +359,6 @@ function SettingColourSquare({
       />
     </div>
   )
-}
-
-/**
- * Hook to get dimmer brightness value (0.15 to 1.0)
- * Returns 1.0 if no dimmer prop
- */
-function useDimmerBrightness(dimmerProp?: SliderPropertyDescriptor): number {
-  // Always call the hook, but with a dummy value if no prop
-  const value = useSliderValue(
-    dimmerProp ?? { type: 'slider', name: 'dummy', displayName: '', category: 'dimmer', channel: { universe: 0, channelNo: 0 }, min: 0, max: 255 }
-  )
-
-  if (!dimmerProp) return 1.0
-
-  // Map 0-255 to 0.15-1.0 (keep some visibility even at 0)
-  const normalized = value / 255
-  return 0.15 + normalized * 0.85
 }
 
 /**
