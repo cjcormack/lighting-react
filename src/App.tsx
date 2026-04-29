@@ -18,6 +18,7 @@ import { ProgramPage, ProgramRedirect } from "./routes/ProgramPage";
 import { RunPage, RunRedirect, LegacyShowRedirect } from "./routes/RunPage";
 import { ProjectSurfaces, SurfacesRedirect } from "./routes/Surfaces";
 import { ProjectDiagnostics, DiagnosticsRedirect } from "./routes/Diagnostics";
+import { ProjectCloudSync, CloudSyncRedirect } from "./routes/CloudSync";
 
 function App() {
   const router = createBrowserRouter([
@@ -104,6 +105,14 @@ function App() {
         {
           path: "diagnostics",
           element: <DiagnosticsRedirect />,
+        },
+        {
+          path: "projects/:projectId/sync",
+          element: <ProjectCloudSync />,
+        },
+        {
+          path: "sync",
+          element: <CloudSyncRedirect />,
         },
         {
           path: "projects/:projectId/channels/:universe",

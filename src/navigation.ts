@@ -13,6 +13,7 @@ import {
   Play,
   Sliders,
   Activity,
+  Cloud,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { useGetUniverseQuery } from "./store/universes"
@@ -77,6 +78,17 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/surfaces`,
     visibility: "active-only",
     pathMatch: "/surfaces",
+    group: "setup",
+  },
+  {
+    id: "sync",
+    label: "Sync",
+    icon: Cloud,
+    path: (p) => `/projects/${p}/sync`,
+    // Snapshot reads from the DB row, not the in-memory show, so it works on any
+    // project, active or not. Mirrors `patches`.
+    visibility: "always",
+    pathMatch: "/sync",
     group: "setup",
   },
 
