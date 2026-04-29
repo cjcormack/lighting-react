@@ -60,6 +60,30 @@ export interface CloneProjectRequest {
   description?: string;
 }
 
+// Request to export a project to a folder. `path` is server-side; null means use the
+// per-project default under appDataDir().
+export interface ExportProjectRequest {
+  path?: string | null;
+}
+
+export interface ExportProjectResponse {
+  path: string;
+  fileCount: number;
+}
+
+// Request to import a project from a folder. `nameOverride` resolves a name collision
+// with an existing project (the import otherwise refuses with 409).
+export interface ImportProjectRequest {
+  path: string;
+  nameOverride?: string | null;
+}
+
+export interface ImportProjectResponse {
+  projectId: number;
+  projectUuid: string;
+  name: string;
+}
+
 // Response from clone project endpoint
 export interface CloneProjectResponse {
   project: ProjectDetail;

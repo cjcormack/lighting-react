@@ -11,6 +11,10 @@ import {
   CloneProjectResponse,
   CopyScriptRequest,
   CopyScriptResponse,
+  ExportProjectRequest,
+  ExportProjectResponse,
+  ImportProjectRequest,
+  ImportProjectResponse,
 } from "../api/projectApi"
 import {
   Script,
@@ -146,6 +150,25 @@ export const projectsApi = restApi.injectEndpoints({
         invalidatesTags: ['ProjectList'],
       }),
 
+      // Export a project to a server-side folder
+      exportProject: build.mutation<ExportProjectResponse, { id: number } & ExportProjectRequest>({
+        query: ({ id, ...body }) => ({
+          url: `project/${id}/export`,
+          method: 'POST',
+          body,
+        }),
+      }),
+
+      // Import a project from a server-side folder
+      importProject: build.mutation<ImportProjectResponse, ImportProjectRequest>({
+        query: (body) => ({
+          url: 'project/import',
+          method: 'POST',
+          body,
+        }),
+        invalidatesTags: ['ProjectList'],
+      }),
+
       // Copy a script to another project
       copyScript: build.mutation<CopyScriptResponse, { projectId: number; scriptId: number } & CopyScriptRequest>({
         query: ({ projectId, scriptId, ...body }) => ({
@@ -222,6 +245,8 @@ export const {
   useProjectScriptsQuery,
   useProjectScriptQuery,
   useCloneProjectMutation,
+  useExportProjectMutation,
+  useImportProjectMutation,
   useCopyScriptMutation,
   useCompileProjectScriptMutation,
   useRunProjectScriptMutation,

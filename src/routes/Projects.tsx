@@ -11,7 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { MoreVertical, PlusCircle, XCircle } from "lucide-react"
+import { MoreVertical, PlusCircle, Upload, XCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   useProjectListQuery,
@@ -25,9 +25,12 @@ import EditProjectDialog from "../EditProjectDialog"
 import DeleteProjectConfirmDialog from "../DeleteProjectConfirmDialog"
 import ProjectSwitchConfirmDialog from "../ProjectSwitchConfirmDialog"
 import CloneProjectDialog from "../CloneProjectDialog"
+import ExportProjectDialog from "../ExportProjectDialog"
+import ImportProjectDialog from "../ImportProjectDialog"
 
 export default function Projects() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [importDialogOpen, setImportDialogOpen] = useState(false)
 
   return (
     <>
@@ -35,13 +38,23 @@ export default function Projects() {
         open={createDialogOpen}
         setOpen={setCreateDialogOpen}
       />
+      <ImportProjectDialog
+        open={importDialogOpen}
+        setOpen={setImportDialogOpen}
+      />
       <Card className="m-4 p-4">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold">Projects</h1>
-          <Button onClick={() => setCreateDialogOpen(true)}>
-            <PlusCircle className="size-4" />
-            Create Project
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+              <Upload className="size-4" />
+              Import
+            </Button>
+            <Button onClick={() => setCreateDialogOpen(true)}>
+              <PlusCircle className="size-4" />
+              Create Project
+            </Button>
+          </div>
         </div>
         <ProjectsContainer />
       </Card>
@@ -79,6 +92,7 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [switchOpen, setSwitchOpen] = useState(false)
   const [cloneOpen, setCloneOpen] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
   const navigate = useNavigate()
 
   const { data: currentProject } = useCurrentProjectQuery()
@@ -143,6 +157,12 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
         sourceProjectId={project.id}
         sourceProjectName={project.name}
       />
+      <ExportProjectDialog
+        open={exportOpen}
+        setOpen={setExportOpen}
+        sourceProjectId={project.id}
+        sourceProjectName={project.name}
+      />
       <Card
         className={cn(
           "flex flex-col gap-0 py-3 cursor-pointer hover:bg-accent/50 transition-colors",
@@ -178,6 +198,9 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setCloneOpen(true)}>
                   Clone
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setExportOpen(true)}>
+                  Export
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
