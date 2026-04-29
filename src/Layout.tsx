@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react"
 import { Outlet, useLocation } from "react-router-dom"
-import { ChevronLeft, Menu, Settings, LayoutGrid, Grid3X3, AudioWaveform, Sparkles, Theater } from "lucide-react"
+import { ChevronLeft, Menu, Settings, LayoutGrid, Grid3X3, AudioWaveform, Sparkles, Theater, Computer } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -26,6 +26,7 @@ import { CueSlotOverviewToggle } from "./components/CueSlotOverviewToggle"
 import { CueSlotOverviewPanel, CueSlotDndProvider } from "./components/CueSlotOverviewPanel"
 import { useCueSlotOverview } from "./hooks/useCueSlotOverview"
 import EditProjectDialog from "./EditProjectDialog"
+import EditInstallDialog from "./EditInstallDialog"
 import CommandPalette from "./components/CommandPalette"
 import { AddEditFxSheet, type FxTarget } from "./components/fx/AddEditFxSheet"
 import { ChannelValueDialog } from "./components/ChannelValueDialog"
@@ -39,6 +40,7 @@ export default function Layout() {
   const [selectedFixture, setSelectedFixture] = useState<string | null>(null)
   const [isAiChatVisible, setIsAiChatVisible] = useState(false)
   const [editProjectId, setEditProjectId] = useState<number | null>(null)
+  const [installDialogOpen, setInstallDialogOpen] = useState(false)
   const [applyFxTarget, setApplyFxTarget] = useState<FxTarget | null>(null)
   const [channelDialogMode, setChannelDialogMode] = useState<"park" | "set" | null>(null)
   const { isVisible: isOverviewVisible, toggle: toggleOverview } = useFixtureOverview()
@@ -78,8 +80,8 @@ export default function Layout() {
       </div>
 
       {/* Configure footer - outside scroll area so it's always visible */}
-      {viewedProject && (
-        <div className="border-t px-2 py-2">
+      <div className="border-t px-2 py-2 space-y-1">
+        {viewedProject && (
           <NavItem
             icon={<Settings className={collapsed ? "size-5" : "size-4"} />}
             label="Configure Project"
@@ -88,8 +90,16 @@ export default function Layout() {
             onClick={() => setEditProjectId(viewedProject.id)}
             muted
           />
-        </div>
-      )}
+        )}
+        <NavItem
+          icon={<Computer className={collapsed ? "size-5" : "size-4"} />}
+          label="Install Settings"
+          isActive={false}
+          collapsed={collapsed}
+          onClick={() => setInstallDialogOpen(true)}
+          muted
+        />
+      </div>
     </>
   )
 
@@ -260,6 +270,8 @@ export default function Layout() {
             projectId={editProjectId}
           />
         )}
+
+        <EditInstallDialog open={installDialogOpen} setOpen={setInstallDialogOpen} />
 
         {/* Apply FX Sheet (triggered by command palette) */}
         {applyFxTarget && (
