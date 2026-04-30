@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { toast } from "sonner"
+import { useDispatch } from "react-redux"
+import { lightingApi } from "@/api/lightingApi"
+import { restApi } from "@/store/restApi"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -15,7 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Loader2, CloudUpload, Check } from "lucide-react"
+import { Loader2, CloudUpload, Check, RefreshCw, AlertTriangle } from "lucide-react"
 import { useCurrentProjectQuery, useProjectQuery } from "@/store/projects"
 import {
   useCloudSyncConfigQuery,
@@ -23,6 +26,10 @@ import {
   useCloudSyncLogQuery,
   useUpdateCloudSyncConfigMutation,
   useCloudSyncSnapshotMutation,
+  useSetCloudSyncCredentialsMutation,
+  useClearCloudSyncCredentialsMutation,
+  useCloudSyncRunMutation,
+  type SyncConfig,
   type SyncStatus,
 } from "@/store/cloudSync"
 import { Breadcrumbs } from "@/components/Breadcrumbs"
@@ -55,6 +62,27 @@ export function ProjectCloudSync() {
   const { projectId } = useParams()
   const projectIdNum = Number(projectId)
   const { data: project, isLoading } = useProjectQuery(projectIdNum)
+  const dispatch = useDispatch()
+
+  // Refresh status / log / config when the backend broadcasts a sync completion. The
+  // mutation already invalidates these tags on success, but a sync triggered from a
+  // *different* tab arrives only via WebSocket — this listener catches that case.
+  useEffect(() => {
+    const onDone = () => {
+      dispatch(restApi.util.invalidateTags(['CloudSyncStatus', 'CloudSyncLog', 'CloudSyncConfig']))
+    }
+    const onFailed = () => {
+      // Refresh status/log on failure too — the snapshot step inside the pipeline may
+      // have committed before the network step failed.
+      dispatch(restApi.util.invalidateTags(['CloudSyncStatus', 'CloudSyncLog']))
+    }
+    const subDone = lightingApi.cloudSync.subscribeDone(onDone)
+    const subFailed = lightingApi.cloudSync.subscribeFailed(onFailed)
+    return () => {
+      subDone.unsubscribe()
+      subFailed.unsubscribe()
+    }
+  }, [dispatch])
 
   if (isLoading) {
     return (
@@ -92,15 +120,20 @@ export function ProjectCloudSync() {
 function ConfigPanel({ projectId }: { projectId: number }) {
   const { data: config, isLoading } = useCloudSyncConfigQuery(projectId)
   const [updateConfig, { isLoading: isSaving }] = useUpdateCloudSyncConfigMutation()
+  const [setCredentials, { isLoading: isSettingPat }] = useSetCloudSyncCredentialsMutation()
+  const [clearCredentials, { isLoading: isClearingPat }] = useClearCloudSyncCredentialsMutation()
 
   const [branch, setBranch] = useState("main")
   const [repoUrl, setRepoUrl] = useState("")
+  const [enabled, setEnabled] = useState(false)
+  const [pat, setPat] = useState("")
 
   // Hydrate local form state from server data when it lands.
   useEffect(() => {
     if (config) {
       setBranch(config.branch)
       setRepoUrl(config.repoUrl ?? "")
+      setEnabled(config.enabled)
     }
   }, [config])
 
@@ -112,9 +145,10 @@ function ConfigPanel({ projectId }: { projectId: number }) {
     )
   }
 
-  // Normalise both sides to "trimmed-or-null" so empty string and missing repoUrl compare equal.
   const trimmedRepoUrl = repoUrl.trim() || null
-  const dirty = branch !== config.branch || trimmedRepoUrl !== (config.repoUrl ?? null)
+  const dirty = branch !== config.branch
+    || trimmedRepoUrl !== (config.repoUrl ?? null)
+    || enabled !== config.enabled
   const branchValid = branch.trim().length > 0
 
   const handleSave = async () => {
@@ -122,11 +156,32 @@ function ConfigPanel({ projectId }: { projectId: number }) {
     try {
       await updateConfig({
         projectId,
-        body: { branch: branch.trim(), repoUrl: trimmedRepoUrl },
+        body: { branch: branch.trim(), repoUrl: trimmedRepoUrl, enabled },
       }).unwrap()
       toast.success("Sync configuration saved")
     } catch (err) {
       toast.error(`Failed to save sync configuration: ${formatError(err)}`)
+    }
+  }
+
+  const handleSetPat = async () => {
+    const trimmed = pat.trim()
+    if (!trimmed) return
+    try {
+      await setCredentials({ projectId, pat: trimmed }).unwrap()
+      setPat("")
+      toast.success("Personal Access Token stored")
+    } catch (err) {
+      toast.error(`Failed to store PAT: ${formatError(err)}`)
+    }
+  }
+
+  const handleClearPat = async () => {
+    try {
+      await clearCredentials(projectId).unwrap()
+      toast.success("Personal Access Token cleared")
+    } catch (err) {
+      toast.error(`Failed to clear PAT: ${formatError(err)}`)
     }
   }
 
@@ -135,9 +190,8 @@ function ConfigPanel({ projectId }: { projectId: number }) {
       <div>
         <h2 className="text-sm font-semibold">Configuration</h2>
         <p className="text-xs text-muted-foreground">
-          Branch defaults to <code className="text-xs">main</code>. Repo URL is
-          recorded for future remote sync; the local snapshot flow doesn&rsquo;t
-          use it.
+          Configure the GitHub remote for this project, store a Personal Access Token,
+          then use <strong>Sync now</strong> below to push and pull.
         </p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -160,6 +214,17 @@ function ConfigPanel({ projectId }: { projectId: number }) {
           />
         </div>
       </div>
+      <div className="flex items-center gap-2">
+        <input
+          id="sync-enabled"
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => setEnabled(e.target.checked)}
+        />
+        <Label htmlFor="sync-enabled" className="text-xs">
+          Enable cloud sync for this project
+        </Label>
+      </div>
       <div className="flex justify-end">
         <Button
           onClick={handleSave}
@@ -167,6 +232,54 @@ function ConfigPanel({ projectId }: { projectId: number }) {
         >
           {isSaving ? "Saving…" : "Save"}
         </Button>
+      </div>
+
+      <div className="border-t pt-4 space-y-2">
+        <div className="flex items-center gap-2">
+          <Label className="text-xs font-semibold">Personal Access Token</Label>
+          {config.tokenPresent ? (
+            <Badge variant="secondary">Stored</Badge>
+          ) : (
+            <Badge variant="outline">Not set</Badge>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Stored in the OS keychain (or an encrypted file fallback). Needs <code className="text-xs">repo</code> scope.
+          The token is never returned to the UI &mdash; clear and re-enter to rotate.
+        </p>
+        <div className="flex gap-2 items-end">
+          <div className="space-y-1 flex-1">
+            <Label htmlFor="sync-pat" className="sr-only">PAT</Label>
+            <Input
+              id="sync-pat"
+              type="password"
+              value={pat}
+              onChange={(e) => setPat(e.target.value)}
+              placeholder={config.tokenPresent ? "•••• stored — enter new to rotate" : "ghp_…"}
+              autoComplete="off"
+            />
+          </div>
+          <Button
+            onClick={handleSetPat}
+            disabled={!pat.trim() || isSettingPat || !config.repoUrl}
+          >
+            {isSettingPat ? "Storing…" : "Set token"}
+          </Button>
+          {config.tokenPresent && (
+            <Button
+              variant="outline"
+              onClick={handleClearPat}
+              disabled={isClearingPat}
+            >
+              {isClearingPat ? "Clearing…" : "Clear"}
+            </Button>
+          )}
+        </div>
+        {!config.repoUrl && (
+          <p className="text-xs text-amber-600">
+            Set a repository URL above before storing a token.
+          </p>
+        )}
       </div>
     </Card>
   )
@@ -176,7 +289,9 @@ function ConfigPanel({ projectId }: { projectId: number }) {
 
 function StatusPanel({ projectId }: { projectId: number }) {
   const { data: status, isLoading } = useCloudSyncStatusQuery(projectId)
+  const { data: config } = useCloudSyncConfigQuery(projectId)
   const [snapshot, { isLoading: isSnapshotting }] = useCloudSyncSnapshotMutation()
+  const [runSync, { isLoading: isSyncing }] = useCloudSyncRunMutation()
   const [snapshotPopoverOpen, setSnapshotPopoverOpen] = useState(false)
   const [message, setMessage] = useState("")
 
@@ -206,6 +321,40 @@ function StatusPanel({ projectId }: { projectId: number }) {
     }
   }
 
+  const handleSyncNow = async () => {
+    try {
+      const result = await runSync(projectId).unwrap()
+      switch (result.outcome) {
+        case "NO_OP":
+          toast("Already in sync — nothing to push or pull")
+          break
+        case "PUSHED":
+          toast.success(`Pushed ${result.pushed} commit(s) to remote`)
+          break
+        case "FAST_FORWARDED":
+          toast.success(`Pulled ${result.pulled} commit(s) from remote`)
+          break
+        case "FORCE_PUSHED":
+          toast.warning(
+            `Force-pushed ${result.pushed} commit(s); ${result.replaced} remote commit(s) replaced`,
+            { duration: 8000 },
+          )
+          break
+      }
+    } catch (err) {
+      toast.error(`Sync failed: ${formatError(err)}`)
+    }
+  }
+
+  // Sync-now needs all three prerequisites; the first failing one drives the tooltip text.
+  const syncDisabledReason = (() => {
+    if (!config?.enabled) return "Cloud sync disabled — enable it above"
+    if (!config.repoUrl) return "Repository URL not set"
+    if (!config.tokenPresent) return "No Personal Access Token stored"
+    return null
+  })()
+  const syncEnabled = !syncDisabledReason && !isSyncing
+
   return (
     <Card className="p-4 space-y-4">
       <div className="flex items-start justify-between gap-4">
@@ -216,41 +365,72 @@ function StatusPanel({ projectId }: { projectId: number }) {
             <div className="font-mono text-xs break-all">{status.workingTreePath}</div>
           </div>
           <RepoStatusBody status={status} />
+          <LastSyncedBody config={config} />
         </div>
-        <Popover open={snapshotPopoverOpen} onOpenChange={setSnapshotPopoverOpen}>
-          <PopoverTrigger asChild>
-            <Button disabled={isSnapshotting}>
-              <CloudUpload className="size-4 mr-1.5" />
-              Take snapshot
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-80 p-3" align="end">
-            <div className="space-y-2">
-              <Label htmlFor="snapshot-message" className="text-xs">
-                Message (optional)
-              </Label>
-              <Input
-                id="snapshot-message"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder="What changed?"
-                className="text-xs h-8"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleSnapshot()
-                }}
-                autoFocus
-              />
-              <div className="flex justify-end">
-                <Button size="sm" onClick={handleSnapshot} disabled={isSnapshotting}>
-                  <Check className="size-3.5 mr-1" />
-                  {isSnapshotting ? "Committing…" : "Commit"}
-                </Button>
+        <div className="flex gap-2 flex-wrap justify-end">
+          <Popover open={snapshotPopoverOpen} onOpenChange={setSnapshotPopoverOpen}>
+            <PopoverTrigger asChild>
+              <Button disabled={isSnapshotting} variant="outline">
+                <CloudUpload className="size-4 mr-1.5" />
+                Take snapshot
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-3" align="end">
+              <div className="space-y-2">
+                <Label htmlFor="snapshot-message" className="text-xs">
+                  Message (optional)
+                </Label>
+                <Input
+                  id="snapshot-message"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="What changed?"
+                  className="text-xs h-8"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSnapshot()
+                  }}
+                  autoFocus
+                />
+                <div className="flex justify-end">
+                  <Button size="sm" onClick={handleSnapshot} disabled={isSnapshotting}>
+                    <Check className="size-3.5 mr-1" />
+                    {isSnapshotting ? "Committing…" : "Commit"}
+                  </Button>
+                </div>
               </div>
-            </div>
-          </PopoverContent>
-        </Popover>
+            </PopoverContent>
+          </Popover>
+          <Button
+            onClick={handleSyncNow}
+            disabled={!syncEnabled}
+            title={syncDisabledReason ?? undefined}
+          >
+            <RefreshCw className={`size-4 mr-1.5 ${isSyncing ? "animate-spin" : ""}`} />
+            {isSyncing ? "Syncing…" : "Sync now"}
+          </Button>
+        </div>
       </div>
+      {syncDisabledReason && (
+        <div className="flex items-center gap-2 text-xs text-amber-600">
+          <AlertTriangle className="size-3.5" />
+          {syncDisabledReason}
+        </div>
+      )}
     </Card>
+  )
+}
+
+function LastSyncedBody({ config }: { config: SyncConfig | undefined }) {
+  if (!config?.lastSyncedSha) return null
+  const when = config.lastSyncedAtMs ? new Date(config.lastSyncedAtMs).toLocaleString() : "—"
+  return (
+    <div className="space-y-1">
+      <Label className="text-muted-foreground text-xs">Last synced</Label>
+      <div className="text-xs">
+        <span className="font-mono mr-2">{config.lastSyncedSha.slice(0, 7)}</span>
+        <span className="text-muted-foreground">{when}</span>
+      </div>
+    </div>
   )
 }
 

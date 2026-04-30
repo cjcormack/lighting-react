@@ -17,6 +17,7 @@ import {createPatchApi, PatchApi} from "./patchApi";
 import {createParkApi, ParkApi} from "./parkApi";
 import {createShowWsApi, ShowWsApi} from "./showWsApi";
 import {createSurfacesWsApi, SurfacesWsApi} from "./surfacesApi";
+import {createCloudSyncWsApi, CloudSyncWsApi} from "./cloudSyncWsApi";
 
 interface LightingApi {
   universes: UniversesApi
@@ -37,6 +38,7 @@ interface LightingApi {
   park: ParkApi
   show: ShowWsApi
   surfaces: SurfacesWsApi
+  cloudSync: CloudSyncWsApi
 }
 
 export const lightingApi = createLightingApi()
@@ -72,6 +74,7 @@ function createLightingApi(): LightingApi {
   const parkApi = createParkApi(connection)
   const showWsApi = createShowWsApi(connection)
   const surfacesWsApi = createSurfacesWsApi(connection)
+  const cloudSyncWsApi = createCloudSyncWsApi(connection)
 
   return {
     universes: universesApi,
@@ -92,5 +95,6 @@ function createLightingApi(): LightingApi {
     park: parkApi,
     show: showWsApi,
     surfaces: surfacesWsApi,
+    cloudSync: cloudSyncWsApi,
   }
 }
