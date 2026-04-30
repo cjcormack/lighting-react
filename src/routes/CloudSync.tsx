@@ -24,6 +24,7 @@ import {
   useCloudSyncConfigQuery,
   useCloudSyncStatusQuery,
   useCloudSyncLogQuery,
+  useCloudSyncConflictsQuery,
   useUpdateCloudSyncConfigMutation,
   useCloudSyncSnapshotMutation,
   useSetCloudSyncCredentialsMutation,
@@ -33,6 +34,8 @@ import {
   type SyncStatus,
 } from "@/store/cloudSync"
 import { Breadcrumbs } from "@/components/Breadcrumbs"
+import { ConflictPanel } from "@/components/cloudSync/ConflictPanel"
+import { formatError } from "@/lib/formatError"
 
 // ─── Redirect (handles bare /sync without a project) ──────────────────
 
@@ -110,6 +113,7 @@ export function ProjectCloudSync() {
       </div>
       <ConfigPanel projectId={projectIdNum} />
       <StatusPanel projectId={projectIdNum} />
+      <ConflictPanel projectId={projectIdNum} />
       <HistoryPanel projectId={projectIdNum} />
     </div>
   )
@@ -290,6 +294,7 @@ function ConfigPanel({ projectId }: { projectId: number }) {
 function StatusPanel({ projectId }: { projectId: number }) {
   const { data: status, isLoading } = useCloudSyncStatusQuery(projectId)
   const { data: config } = useCloudSyncConfigQuery(projectId)
+  const { data: conflictsData } = useCloudSyncConflictsQuery(projectId)
   const [snapshot, { isLoading: isSnapshotting }] = useCloudSyncSnapshotMutation()
   const [runSync, { isLoading: isSyncing }] = useCloudSyncRunMutation()
   const [snapshotPopoverOpen, setSnapshotPopoverOpen] = useState(false)
@@ -334,9 +339,16 @@ function StatusPanel({ projectId }: { projectId: number }) {
         case "FAST_FORWARDED":
           toast.success(`Pulled ${result.pulled} commit(s) from remote`)
           break
-        case "FORCE_PUSHED":
+        case "MERGED":
+          toast.success(
+            result.pushed + result.pulled > 0
+              ? `Merged ${result.pushed + result.pulled} commit(s) cleanly`
+              : "Merged with remote",
+          )
+          break
+        case "CONFLICTS_PENDING":
           toast.warning(
-            `Force-pushed ${result.pushed} commit(s); ${result.replaced} remote commit(s) replaced`,
+            `Found ${result.conflictCount ?? 0} conflict(s) — resolve them below to continue`,
             { duration: 8000 },
           )
           break
@@ -347,10 +359,14 @@ function StatusPanel({ projectId }: { projectId: number }) {
   }
 
   // Sync-now needs all three prerequisites; the first failing one drives the tooltip text.
+  // Phase 5: also blocked while a conflict session is open — the user has to resolve
+  // (or abort) the existing one first, otherwise the run would 409 SESSION_PENDING.
+  const sessionPending = conflictsData?.activeSession === true
   const syncDisabledReason = (() => {
     if (!config?.enabled) return "Cloud sync disabled — enable it above"
     if (!config.repoUrl) return "Repository URL not set"
     if (!config.tokenPresent) return "No Personal Access Token stored"
+    if (sessionPending) return "Resolve or abort the open conflict session first"
     return null
   })()
   const syncEnabled = !syncDisabledReason && !isSyncing
@@ -520,13 +536,3 @@ function RepoStatusBody({ status }: { status: SyncStatus }) {
   )
 }
 
-function formatError(err: unknown): string {
-  if (err && typeof err === "object" && "data" in err) {
-    const data = (err as { data?: { error?: string } }).data
-    if (data?.error) return data.error
-  }
-  if (err && typeof err === "object" && "status" in err) {
-    return `HTTP ${(err as { status: number }).status}`
-  }
-  return String(err)
-}
