@@ -18,7 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Loader2, CloudUpload, Check, RefreshCw, AlertTriangle } from "lucide-react"
+import { Loader2, CloudUpload, Check, RefreshCw, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react"
 import { useCurrentProjectQuery, useProjectQuery } from "@/store/projects"
 import {
   useCloudSyncConfigQuery,
@@ -33,8 +33,11 @@ import {
   type SyncConfig,
   type SyncStatus,
 } from "@/store/cloudSync"
+import { useOauthGithubIdentityQuery } from "@/store/oauthGithub"
 import { Breadcrumbs } from "@/components/Breadcrumbs"
 import { ConflictPanel } from "@/components/cloudSync/ConflictPanel"
+import { IdentityRow } from "@/components/cloudSync/IdentityRow"
+import { RepoPicker } from "@/components/cloudSync/RepoPicker"
 import { formatError } from "@/lib/formatError"
 
 // ─── Redirect (handles bare /sync without a project) ──────────────────
@@ -79,11 +82,24 @@ export function ProjectCloudSync() {
       // have committed before the network step failed.
       dispatch(restApi.util.invalidateTags(['CloudSyncStatus', 'CloudSyncLog']))
     }
+    let lastConnected: boolean | null = null
+    const onIdentityChanged = (event: { connected: boolean }) => {
+      // Always refresh the identity row (login + expiries change on refresh too);
+      // only bust the repo list when connect-state flips, since a token refresh
+      // doesn't change which repos the App can see.
+      dispatch(restApi.util.invalidateTags(['OAuthIdentity']))
+      if (lastConnected !== null && lastConnected !== event.connected) {
+        dispatch(restApi.util.invalidateTags(['OAuthRepos']))
+      }
+      lastConnected = event.connected
+    }
     const subDone = lightingApi.cloudSync.subscribeDone(onDone)
     const subFailed = lightingApi.cloudSync.subscribeFailed(onFailed)
+    const subIdentity = lightingApi.cloudSync.subscribeOAuthIdentityChanged(onIdentityChanged)
     return () => {
       subDone.unsubscribe()
       subFailed.unsubscribe()
+      subIdentity.unsubscribe()
     }
   }, [dispatch])
 
@@ -123,20 +139,19 @@ export function ProjectCloudSync() {
 
 function ConfigPanel({ projectId }: { projectId: number }) {
   const { data: config, isLoading } = useCloudSyncConfigQuery(projectId)
+  const { data: identity } = useOauthGithubIdentityQuery()
   const [updateConfig, { isLoading: isSaving }] = useUpdateCloudSyncConfigMutation()
-  const [setCredentials, { isLoading: isSettingPat }] = useSetCloudSyncCredentialsMutation()
-  const [clearCredentials, { isLoading: isClearingPat }] = useClearCloudSyncCredentialsMutation()
 
   const [branch, setBranch] = useState("main")
-  const [repoUrl, setRepoUrl] = useState("")
+  const [repoUrl, setRepoUrl] = useState<string | null>(null)
   const [enabled, setEnabled] = useState(false)
-  const [pat, setPat] = useState("")
+  const [advancedOpen, setAdvancedOpen] = useState(false)
 
   // Hydrate local form state from server data when it lands.
   useEffect(() => {
     if (config) {
       setBranch(config.branch)
-      setRepoUrl(config.repoUrl ?? "")
+      setRepoUrl(config.repoUrl ?? null)
       setEnabled(config.enabled)
     }
   }, [config])
@@ -149,9 +164,8 @@ function ConfigPanel({ projectId }: { projectId: number }) {
     )
   }
 
-  const trimmedRepoUrl = repoUrl.trim() || null
   const dirty = branch !== config.branch
-    || trimmedRepoUrl !== (config.repoUrl ?? null)
+    || repoUrl !== (config.repoUrl ?? null)
     || enabled !== config.enabled
   const branchValid = branch.trim().length > 0
 
@@ -160,13 +174,104 @@ function ConfigPanel({ projectId }: { projectId: number }) {
     try {
       await updateConfig({
         projectId,
-        body: { branch: branch.trim(), repoUrl: trimmedRepoUrl, enabled },
+        body: { branch: branch.trim(), repoUrl, enabled },
       }).unwrap()
       toast.success("Sync configuration saved")
     } catch (err) {
       toast.error(`Failed to save sync configuration: ${formatError(err)}`)
     }
   }
+
+  return (
+    <Card className="p-4 space-y-4">
+      <div>
+        <h2 className="text-sm font-semibold">Configuration</h2>
+        <p className="text-xs text-muted-foreground">
+          Connect to GitHub, pick a repository, then use <strong>Sync now</strong>{" "}
+          below to push and pull.
+        </p>
+      </div>
+
+      {/* Identity row at the top — primary "Connect GitHub" path. */}
+      <div className="border rounded-md p-3 bg-muted/20">
+        <IdentityRow projectId={projectId} />
+      </div>
+
+      <div className="space-y-3">
+        <div className="space-y-1">
+          <Label>Repository</Label>
+          <RepoPicker
+            value={repoUrl}
+            onChange={(repo) => setRepoUrl(repo.cloneUrl)}
+            oauthConnected={identity?.connected === true}
+          />
+          {repoUrl && (
+            <p className="text-[10px] text-muted-foreground font-mono break-all">
+              {repoUrl}
+            </p>
+          )}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-[160px_1fr] gap-4">
+          <div className="space-y-1">
+            <Label htmlFor="sync-branch">Branch *</Label>
+            <Input
+              id="sync-branch"
+              value={branch}
+              onChange={(e) => setBranch(e.target.value)}
+              placeholder="main"
+            />
+          </div>
+          <div className="flex items-end">
+            <div className="flex items-center gap-2">
+              <input
+                id="sync-enabled"
+                type="checkbox"
+                checked={enabled}
+                onChange={(e) => setEnabled(e.target.checked)}
+              />
+              <Label htmlFor="sync-enabled" className="text-xs">
+                Enable cloud sync for this project
+              </Label>
+            </div>
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <Button
+            onClick={handleSave}
+            disabled={!dirty || !branchValid || isSaving}
+          >
+            {isSaving ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      </div>
+
+      {/* Advanced/PAT path — collapsed by default. */}
+      <div className="border-t pt-3">
+        <button
+          type="button"
+          onClick={() => setAdvancedOpen((o) => !o)}
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        >
+          {advancedOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+          Advanced — Personal Access Token
+          {config.tokenPresent && (
+            <Badge variant="secondary" className="ml-2 text-[10px]">PAT stored</Badge>
+          )}
+        </button>
+        {advancedOpen && (
+          <div className="mt-3">
+            <PatPanel projectId={projectId} config={config} />
+          </div>
+        )}
+      </div>
+    </Card>
+  )
+}
+
+function PatPanel({ projectId, config }: { projectId: number; config: SyncConfig }) {
+  const [setCredentials, { isLoading: isSettingPat }] = useSetCloudSyncCredentialsMutation()
+  const [clearCredentials, { isLoading: isClearingPat }] = useClearCloudSyncCredentialsMutation()
+  const [pat, setPat] = useState("")
 
   const handleSetPat = async () => {
     const trimmed = pat.trim()
@@ -190,102 +295,47 @@ function ConfigPanel({ projectId }: { projectId: number }) {
   }
 
   return (
-    <Card className="p-4 space-y-4">
-      <div>
-        <h2 className="text-sm font-semibold">Configuration</h2>
-        <p className="text-xs text-muted-foreground">
-          Configure the GitHub remote for this project, store a Personal Access Token,
-          then use <strong>Sync now</strong> below to push and pull.
-        </p>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-1">
-          <Label htmlFor="sync-branch">Branch *</Label>
+    <div className="space-y-2">
+      <p className="text-xs text-muted-foreground">
+        For headless rigs, GitHub Enterprise, or as an override when OAuth isn&rsquo;t
+        configured. Stored in the OS keychain (or an encrypted file fallback). Needs{" "}
+        <code className="text-xs">repo</code> scope. The token is never returned to
+        the UI &mdash; clear and re-enter to rotate.
+      </p>
+      <div className="flex gap-2 items-end">
+        <div className="space-y-1 flex-1">
+          <Label htmlFor="sync-pat" className="sr-only">PAT</Label>
           <Input
-            id="sync-branch"
-            value={branch}
-            onChange={(e) => setBranch(e.target.value)}
-            placeholder="main"
+            id="sync-pat"
+            type="password"
+            value={pat}
+            onChange={(e) => setPat(e.target.value)}
+            placeholder={config.tokenPresent ? "•••• stored — enter new to rotate" : "ghp_…"}
+            autoComplete="off"
           />
         </div>
-        <div className="space-y-1">
-          <Label htmlFor="sync-repo-url">Repository URL</Label>
-          <Input
-            id="sync-repo-url"
-            value={repoUrl}
-            onChange={(e) => setRepoUrl(e.target.value)}
-            placeholder="https://github.com/you/lighting7-show.git"
-          />
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <input
-          id="sync-enabled"
-          type="checkbox"
-          checked={enabled}
-          onChange={(e) => setEnabled(e.target.checked)}
-        />
-        <Label htmlFor="sync-enabled" className="text-xs">
-          Enable cloud sync for this project
-        </Label>
-      </div>
-      <div className="flex justify-end">
         <Button
-          onClick={handleSave}
-          disabled={!dirty || !branchValid || isSaving}
+          onClick={handleSetPat}
+          disabled={!pat.trim() || isSettingPat || !config.repoUrl}
         >
-          {isSaving ? "Saving…" : "Save"}
+          {isSettingPat ? "Storing…" : "Set token"}
         </Button>
-      </div>
-
-      <div className="border-t pt-4 space-y-2">
-        <div className="flex items-center gap-2">
-          <Label className="text-xs font-semibold">Personal Access Token</Label>
-          {config.tokenPresent ? (
-            <Badge variant="secondary">Stored</Badge>
-          ) : (
-            <Badge variant="outline">Not set</Badge>
-          )}
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Stored in the OS keychain (or an encrypted file fallback). Needs <code className="text-xs">repo</code> scope.
-          The token is never returned to the UI &mdash; clear and re-enter to rotate.
-        </p>
-        <div className="flex gap-2 items-end">
-          <div className="space-y-1 flex-1">
-            <Label htmlFor="sync-pat" className="sr-only">PAT</Label>
-            <Input
-              id="sync-pat"
-              type="password"
-              value={pat}
-              onChange={(e) => setPat(e.target.value)}
-              placeholder={config.tokenPresent ? "•••• stored — enter new to rotate" : "ghp_…"}
-              autoComplete="off"
-            />
-          </div>
+        {config.tokenPresent && (
           <Button
-            onClick={handleSetPat}
-            disabled={!pat.trim() || isSettingPat || !config.repoUrl}
+            variant="outline"
+            onClick={handleClearPat}
+            disabled={isClearingPat}
           >
-            {isSettingPat ? "Storing…" : "Set token"}
+            {isClearingPat ? "Clearing…" : "Clear"}
           </Button>
-          {config.tokenPresent && (
-            <Button
-              variant="outline"
-              onClick={handleClearPat}
-              disabled={isClearingPat}
-            >
-              {isClearingPat ? "Clearing…" : "Clear"}
-            </Button>
-          )}
-        </div>
-        {!config.repoUrl && (
-          <p className="text-xs text-amber-600">
-            Set a repository URL above before storing a token.
-          </p>
         )}
       </div>
-    </Card>
+      {!config.repoUrl && (
+        <p className="text-xs text-amber-600">
+          Set a repository above before storing a token.
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -295,6 +345,7 @@ function StatusPanel({ projectId }: { projectId: number }) {
   const { data: status, isLoading } = useCloudSyncStatusQuery(projectId)
   const { data: config } = useCloudSyncConfigQuery(projectId)
   const { data: conflictsData } = useCloudSyncConflictsQuery(projectId)
+  const { data: identity } = useOauthGithubIdentityQuery()
   const [snapshot, { isLoading: isSnapshotting }] = useCloudSyncSnapshotMutation()
   const [runSync, { isLoading: isSyncing }] = useCloudSyncRunMutation()
   const [snapshotPopoverOpen, setSnapshotPopoverOpen] = useState(false)
@@ -362,10 +413,11 @@ function StatusPanel({ projectId }: { projectId: number }) {
   // Phase 5: also blocked while a conflict session is open — the user has to resolve
   // (or abort) the existing one first, otherwise the run would 409 SESSION_PENDING.
   const sessionPending = conflictsData?.activeSession === true
+  const hasCredentials = identity?.connected === true || config?.tokenPresent === true
   const syncDisabledReason = (() => {
     if (!config?.enabled) return "Cloud sync disabled — enable it above"
-    if (!config.repoUrl) return "Repository URL not set"
-    if (!config.tokenPresent) return "No Personal Access Token stored"
+    if (!config.repoUrl) return "Repository not selected"
+    if (!hasCredentials) return "Connect GitHub or store a Personal Access Token"
     if (sessionPending) return "Resolve or abort the open conflict session first"
     return null
   })()

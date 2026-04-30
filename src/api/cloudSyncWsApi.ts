@@ -21,6 +21,12 @@ export interface CloudSyncWsApi {
    * CONFLICTS_PENDING and waits for resolve+apply.
    */
   subscribeConflictsPending(fn: (event: CloudSyncConflictsPendingEvent) => void): Subscription
+  /**
+   * GitHub OAuth identity changed (connected, disconnected, or refreshed). The sync
+   * configuration page invalidates the identity cache so the "Connected as @login"
+   * row updates without polling.
+   */
+  subscribeOAuthIdentityChanged(fn: (event: OAuthIdentityChangedEvent) => void): Subscription
 }
 
 export interface CloudSyncStartedEvent {
@@ -49,17 +55,27 @@ export interface CloudSyncConflictsPendingEvent {
   conflictCount: number
 }
 
+export interface OAuthIdentityChangedEvent {
+  provider: string
+  connected: boolean
+  login?: string | null
+  accessExpiresAtMs?: number | null
+  refreshExpiresAtMs?: number | null
+}
+
 type CloudSyncInMessage =
   | { type: 'cloudSyncStarted' } & CloudSyncStartedEvent
   | { type: 'cloudSyncDone' } & CloudSyncDoneEvent
   | { type: 'cloudSyncFailed' } & CloudSyncFailedEvent
   | { type: 'cloudSyncConflictsPending' } & CloudSyncConflictsPendingEvent
+  | { type: 'oauthIdentityChanged' } & OAuthIdentityChangedEvent
 
 export function createCloudSyncWsApi(conn: InternalApiConnection): CloudSyncWsApi {
   const started = createWsSubscribable<CloudSyncStartedEvent>()
   const done = createWsSubscribable<CloudSyncDoneEvent>()
   const failed = createWsSubscribable<CloudSyncFailedEvent>()
   const conflictsPending = createWsSubscribable<CloudSyncConflictsPendingEvent>()
+  const oauthIdentityChanged = createWsSubscribable<OAuthIdentityChangedEvent>()
 
   conn.subscribe((evType, ev) => {
     if (evType !== 'message' || !(ev instanceof MessageEvent)) return
@@ -78,6 +94,9 @@ export function createCloudSyncWsApi(conn: InternalApiConnection): CloudSyncWsAp
       case 'cloudSyncConflictsPending':
         conflictsPending.notify(message)
         break
+      case 'oauthIdentityChanged':
+        oauthIdentityChanged.notify(message)
+        break
     }
   })
 
@@ -86,5 +105,6 @@ export function createCloudSyncWsApi(conn: InternalApiConnection): CloudSyncWsAp
     subscribeDone: done.api.subscribe,
     subscribeFailed: failed.api.subscribe,
     subscribeConflictsPending: conflictsPending.api.subscribe,
+    subscribeOAuthIdentityChanged: oauthIdentityChanged.api.subscribe,
   }
 }

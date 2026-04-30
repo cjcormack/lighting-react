@@ -59,7 +59,12 @@ export interface SyncRunResult {
 export type SyncErrorCode =
   | "REPO_URL_MISSING"
   | "SYNC_DISABLED"
+  /** No GitHub credentials of any kind (OAuth or PAT) configured for this repo. */
+  | "MISSING_CREDENTIALS"
+  /** Legacy alias retained for one release. */
   | "MISSING_PAT"
+  /** OAuth identity present but refresh token rejected — user must re-connect. */
+  | "OAUTH_REAUTH_REQUIRED"
   | "AUTH_FAILED"
   | "FORMAT_TOO_NEW"
   | "PUSH_REJECTED"
