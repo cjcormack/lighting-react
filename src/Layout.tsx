@@ -30,6 +30,7 @@ import EditInstallDialog from "./EditInstallDialog"
 import CommandPalette from "./components/CommandPalette"
 import { AddEditFxSheet, type FxTarget } from "./components/fx/AddEditFxSheet"
 import { ChannelValueDialog } from "./components/ChannelValueDialog"
+import { SyncNotifications } from "./components/cloudSync/SyncNotifications"
 
 const DRAWER_WIDTH = 240
 const DRAWER_COLLAPSED_WIDTH = 64
@@ -105,6 +106,7 @@ export default function Layout() {
 
   return (
     <TooltipProvider delayDuration={0}>
+      <SyncNotifications />
       <div className="flex h-dvh">
         {/* Desktop Sidebar */}
         {isDesktop && (

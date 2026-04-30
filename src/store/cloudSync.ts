@@ -96,23 +96,32 @@ export interface SnapshotResponse {
   commit: CommitInfo | null
 }
 
-// ─── Phase 5 conflict-session types ────────────────────────────────────
+// ─── Phase 5/6 conflict-session types ──────────────────────────────────
 
-export type ConflictResolution = "LOCAL" | "REMOTE"
+/**
+ * `MANUAL` (Phase 6) saves a user-edited replacement payload alongside the choice;
+ * apply substitutes the manual JSON for both sides at merge time.
+ */
+export type ConflictResolution = "LOCAL" | "REMOTE" | "MANUAL"
 
 export interface ConflictDto {
   tableName: string
   recordUuid: string
   conflictKind: "EDIT_EDIT" | "EDIT_DELETE" | "DELETE_EDIT"
-  /** `null` until the user clicks Use local / Use remote. */
+  /** `null` until the user picks LOCAL / REMOTE / MANUAL. */
   resolution: ConflictResolution | null
-  /** Phase 6 will use these for a three-pane diff; Phase 5 leaves them unrendered. */
+  /** Three-pane diff sources — mine / theirs / common ancestor. May be null on EDIT_DELETE / DELETE_EDIT sides. */
   localJson: string | null
   remoteJson: string | null
   baseJson: string | null
+  /** User-edited replacement payload when `resolution === "MANUAL"`. Null otherwise. */
+  manualValueJson?: string | null
+  /** False for multi-file records (e.g. scripts) — UI must hide the MANUAL option for those rows. */
+  manualEditAllowed?: boolean
 }
 
 export type SyncSessionState =
+  | "FETCHING"
   | "CONFLICTS_PENDING"
   | "APPLYING"
   | "DONE"
@@ -135,6 +144,8 @@ export interface ResolveEntry {
   recordUuid: string
   /** Pass `null` to clear an earlier choice. */
   resolution: ConflictResolution | null
+  /** Required when `resolution === "MANUAL"`; ignored otherwise. */
+  manualValueJson?: string | null
 }
 
 export interface AbortResult {
