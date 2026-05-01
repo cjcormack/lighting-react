@@ -4,6 +4,15 @@
 
 This is the React frontend for the DMX lighting controller system. The backend is located at `/Users/chris/Development/Personal/lighting7` (Kotlin/JVM).
 
+## Git workflow
+
+Solo personal repo — commit and push directly to `main`. Do **not** open pull
+requests, do **not** create feature branches. The standard "still don't commit
+or push without me asking" rule from the global CLAUDE.md still applies; this
+section only changes *how* a confirmed commit/push happens (straight to `main`,
+no PR). Pre-commit equivalent is `npm run type-check` + `npm run build`; ESLint
+is project-wide noisy and not a useful gate.
+
 ## Tech Stack
 
 - **React 18** with TypeScript
