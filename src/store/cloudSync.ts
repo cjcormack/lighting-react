@@ -23,7 +23,13 @@ export interface UpdateSyncConfigRequest {
   repoUrl?: string | null
   branch?: string
   enabled?: boolean
+  autoSyncEnabled?: boolean
+  /** Backend rejects values < 60000ms (`AutoSyncScheduler.MIN_INTERVAL_MS`). */
+  autoSyncIntervalMs?: number | null
 }
+
+/** Lower bound on `autoSyncIntervalMs` — kept in sync with `AutoSyncScheduler.MIN_INTERVAL_MS`. */
+export const AUTO_SYNC_MIN_INTERVAL_MS = 60_000
 
 /**
  * Outcomes of a successful sync run; matches the `SyncOutcome` Kotlin enum. Phase 5
@@ -80,6 +86,20 @@ export interface CommitInfo {
   authorName: string
   authorEmail: string
   whenMs: number
+  message: string
+  /** Short UUID parsed from the `[install:{shortUuid}]` marker; null on commits authored outside the engine. */
+  installShortUuid?: string | null
+  /** Friendly name from `installs.json` at HEAD; null when the short UUID isn't in the registry. */
+  installFriendlyName?: string | null
+}
+
+/** A single row from the per-project activity log; mirrors `SyncLogEntryDto`. */
+export interface SyncLogEntry {
+  id: number
+  tsMs: number
+  level: "INFO" | "WARN" | "ERROR"
+  /** Stable code from `SyncLogEvent` — e.g. `RUN_DONE`, `AUTO_SYNC_TICK`. */
+  event: string
   message: string
 }
 
@@ -180,12 +200,35 @@ export const cloudSyncApi = restApi.injectEndpoints({
       query: (projectId) => `project/${projectId}/sync/status`,
       providesTags: ['CloudSyncStatus'],
     }),
-    cloudSyncLog: build.query<CommitInfo[], { projectId: number; limit?: number }>({
-      query: ({ projectId, limit }) => ({
-        url: `project/${projectId}/sync/log`,
-        params: limit != null ? { limit } : undefined,
-      }),
+    cloudSyncLog: build.query<
+      CommitInfo[],
+      { projectId: number; limit?: number; before?: string }
+    >({
+      query: ({ projectId, limit, before }) => {
+        const params: Record<string, string | number> = {}
+        if (limit != null) params.limit = limit
+        if (before) params.before = before
+        return {
+          url: `project/${projectId}/sync/log`,
+          params: Object.keys(params).length ? params : undefined,
+        }
+      },
       providesTags: ['CloudSyncLog'],
+    }),
+    cloudSyncActivity: build.query<
+      SyncLogEntry[],
+      { projectId: number; limit?: number; beforeId?: number }
+    >({
+      query: ({ projectId, limit, beforeId }) => {
+        const params: Record<string, string | number> = {}
+        if (limit != null) params.limit = limit
+        if (beforeId != null) params.beforeId = beforeId
+        return {
+          url: `project/${projectId}/sync/activity`,
+          params: Object.keys(params).length ? params : undefined,
+        }
+      },
+      providesTags: ['CloudSyncActivity'],
     }),
     cloudSyncSnapshot: build.mutation<
       SnapshotResponse,
@@ -268,6 +311,8 @@ export const {
   useUpdateCloudSyncConfigMutation,
   useCloudSyncStatusQuery,
   useCloudSyncLogQuery,
+  useLazyCloudSyncActivityQuery,
+  useLazyCloudSyncLogQuery,
   useCloudSyncSnapshotMutation,
   useSetCloudSyncCredentialsMutation,
   useClearCloudSyncCredentialsMutation,

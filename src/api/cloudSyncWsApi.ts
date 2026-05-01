@@ -1,7 +1,7 @@
 import { InternalApiConnection } from './internalApi'
 import { Subscription } from './subscription'
 import { createWsSubscribable } from './wsSubscriptionFactory'
-import type { SyncErrorCode, SyncOutcome } from '../store/cloudSync'
+import type { SyncErrorCode, SyncLogEntry, SyncOutcome } from '../store/cloudSync'
 
 /**
  * Cloud-sync lifecycle messages. The backend emits exactly one Started → one
@@ -27,6 +27,11 @@ export interface CloudSyncWsApi {
    * row updates without polling.
    */
   subscribeOAuthIdentityChanged(fn: (event: OAuthIdentityChangedEvent) => void): Subscription
+  /**
+   * Phase 8: a single activity-log row was just persisted. The activity feed appends
+   * the entry without round-tripping `/sync/activity`.
+   */
+  subscribeLogAppended(fn: (event: CloudSyncLogAppendedEvent) => void): Subscription
 }
 
 export interface CloudSyncStartedEvent {
@@ -55,6 +60,11 @@ export interface CloudSyncConflictsPendingEvent {
   conflictCount: number
 }
 
+export interface CloudSyncLogAppendedEvent {
+  projectId: number
+  entry: SyncLogEntry
+}
+
 export interface OAuthIdentityChangedEvent {
   provider: string
   connected: boolean
@@ -68,6 +78,7 @@ type CloudSyncInMessage =
   | { type: 'cloudSyncDone' } & CloudSyncDoneEvent
   | { type: 'cloudSyncFailed' } & CloudSyncFailedEvent
   | { type: 'cloudSyncConflictsPending' } & CloudSyncConflictsPendingEvent
+  | { type: 'cloudSyncLogAppended' } & CloudSyncLogAppendedEvent
   | { type: 'oauthIdentityChanged' } & OAuthIdentityChangedEvent
 
 export function createCloudSyncWsApi(conn: InternalApiConnection): CloudSyncWsApi {
@@ -75,6 +86,7 @@ export function createCloudSyncWsApi(conn: InternalApiConnection): CloudSyncWsAp
   const done = createWsSubscribable<CloudSyncDoneEvent>()
   const failed = createWsSubscribable<CloudSyncFailedEvent>()
   const conflictsPending = createWsSubscribable<CloudSyncConflictsPendingEvent>()
+  const logAppended = createWsSubscribable<CloudSyncLogAppendedEvent>()
   const oauthIdentityChanged = createWsSubscribable<OAuthIdentityChangedEvent>()
 
   conn.subscribe((evType, ev) => {
@@ -94,6 +106,9 @@ export function createCloudSyncWsApi(conn: InternalApiConnection): CloudSyncWsAp
       case 'cloudSyncConflictsPending':
         conflictsPending.notify(message)
         break
+      case 'cloudSyncLogAppended':
+        logAppended.notify(message)
+        break
       case 'oauthIdentityChanged':
         oauthIdentityChanged.notify(message)
         break
@@ -105,6 +120,7 @@ export function createCloudSyncWsApi(conn: InternalApiConnection): CloudSyncWsAp
     subscribeDone: done.api.subscribe,
     subscribeFailed: failed.api.subscribe,
     subscribeConflictsPending: conflictsPending.api.subscribe,
+    subscribeLogAppended: logAppended.api.subscribe,
     subscribeOAuthIdentityChanged: oauthIdentityChanged.api.subscribe,
   }
 }

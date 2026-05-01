@@ -2,6 +2,6 @@ import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react"
 
 export const restApi = createApi({
   baseQuery: fetchBaseQuery({ baseUrl: '/api/rest' }),
-  tagTypes: ['Channel', 'Fixture', 'Script', 'Project', 'ProjectList', 'GroupList', 'GroupActiveEffects', 'FixtureEffects', 'FxLibrary', 'FxPreset', 'Cue', 'CueList', 'CueStackList', 'CueSlotList', 'AiConversation', 'Patch', 'UniverseConfig', 'ShowEntries', 'ControlSurfaceType', 'SurfaceBinding', 'PerfMidi', 'Install', 'CloudSyncConfig', 'CloudSyncStatus', 'CloudSyncLog', 'CloudSyncConflicts', 'OAuthIdentity', 'OAuthRepos'],
+  tagTypes: ['Channel', 'Fixture', 'Script', 'Project', 'ProjectList', 'GroupList', 'GroupActiveEffects', 'FixtureEffects', 'FxLibrary', 'FxPreset', 'Cue', 'CueList', 'CueStackList', 'CueSlotList', 'AiConversation', 'Patch', 'UniverseConfig', 'ShowEntries', 'ControlSurfaceType', 'SurfaceBinding', 'PerfMidi', 'Install', 'CloudSyncConfig', 'CloudSyncStatus', 'CloudSyncLog', 'CloudSyncActivity', 'CloudSyncConflicts', 'OAuthIdentity', 'OAuthRepos'],
   endpoints: () => ({}),
 })
