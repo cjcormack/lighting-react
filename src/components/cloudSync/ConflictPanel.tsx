@@ -193,11 +193,6 @@ export function ConflictPanel({ projectId }: { projectId: number }) {
         })}
       </div>
 
-      <p className="text-[11px] text-muted-foreground italic">
-        A record deleted on one machine while being edited on another may still resurrect
-        — Phase 7 will fix that with tombstones.
-      </p>
-
       {isApplying && (
         <div className="flex items-center justify-center py-2 text-xs text-muted-foreground">
           <Loader2 className="size-4 animate-spin mr-2" />
