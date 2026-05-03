@@ -17,6 +17,13 @@ export interface FixturePatch {
   groups: { id: number; name: string }[];
   stageX: number | null;
   stageY: number | null;
+  stageZ: number | null;
+  baseYawDeg: number | null;
+  basePitchDeg: number | null;
+  riggingUuid: string | null;
+  worldPositionX: number | null;
+  worldPositionY: number | null;
+  worldPositionZ: number | null;
   riggingPosition: string | null;
   beamAngleDeg: number | null;
   gelCode: string | null;
@@ -41,6 +48,10 @@ export interface CreatePatchRequest {
   groupName?: string;
   stageX?: number | null;
   stageY?: number | null;
+  stageZ?: number | null;
+  baseYawDeg?: number | null;
+  basePitchDeg?: number | null;
+  riggingUuid?: string | null;
   riggingPosition?: string | null;
   beamAngleDeg?: number | null;
   gelCode?: string | null;
@@ -54,6 +65,10 @@ export interface UpdatePatchRequest {
   removeFromGroupId?: number;
   stageX?: number | null;
   stageY?: number | null;
+  stageZ?: number | null;
+  baseYawDeg?: number | null;
+  basePitchDeg?: number | null;
+  riggingUuid?: string | null;
   riggingPosition?: string | null;
   beamAngleDeg?: number | null;
   gelCode?: string | null;

@@ -38,7 +38,7 @@ visualiser must:
 
 | Session | Title                              | Status      | Completed | Notes |
 |---------|------------------------------------|-------------|-----------|-------|
-| 1       | Foundation                         | Not started | —         |       |
+| 1       | Foundation                         | Done        | 2026-05-03 | Cross-repo: backend now broadcasts riggingListChanged/stageRegionListChanged. Data reset dropped (no meaningful legacy data). |
 | 2       | Stage Configuration                | Not started | —         |       |
 | 3       | Rigging Configuration              | Not started | —         |       |
 | 4       | Patching: Rigging-Mounted vs Free  | Not started | —         |       |
@@ -117,8 +117,49 @@ next one can be picked up cold:
 **Verify**: `npm run type-check`, `npm run build`. Confirm new query hooks
 return data in DevTools against a project with hand-seeded riggings + regions.
 
-**Status & handover**: _Not started._ (Fill on completion using the format
-above.)
+**Status & handover**:
+
+- _Status_: Done
+- _Completed_: 2026-05-03
+- _What landed_:
+  - Frontend deps: `three@^0.171`, `@react-three/fiber@^9.6`,
+    `@react-three/drei@^10.7`, `@react-three/postprocessing@^3.0`,
+    `@types/three@^0.171`.
+  - `src/api/patchApi.ts` — extended `FixturePatch`, `CreatePatchRequest`,
+    `UpdatePatchRequest` with `stageZ`, `baseYawDeg`, `basePitchDeg`,
+    `riggingUuid`, plus read-only `worldPositionX/Y/Z` on `FixturePatch`.
+  - `src/api/riggingApi.ts`, `src/api/stageRegionApi.ts` (new) — DTOs +
+    create/update request types + WebSocket subscribe modules listening
+    for `riggingListChanged` / `stageRegionListChanged`.
+  - `src/api/lightingApi.ts` — `riggings` and `stageRegions` wired in.
+  - `src/store/restApi.ts` — added `'Rigging'` and `'StageRegion'` tag types.
+  - `src/store/riggings.ts`, `src/store/stageRegions.ts` (new) — RTK Query
+    slices mirroring the patches.ts shape, with WS-driven tag invalidation.
+  - `src/lib/stageCoords.ts` (new) — `toThree` (Z-up→Y-up swizzle),
+    `panTiltToDir`, `worldPositionFor`, plus a `headQuaternionFor` helper
+    used by Session 5's `<FixtureModel>` head-rotation update.
+- _Open follow-ups_:
+  - `worldPositionFor` rigging-frame composition is a translate-only stub.
+    Real rotated-frame composition lands in Session 4 (or callers can rely
+    on the backend's pre-composed `worldPositionX/Y/Z` until then — that's
+    the preferred path anyway).
+  - Frontend still has `riggingPosition: string | null` on `FixturePatch`
+    and the form. Backend dropped it from `FixturePatchDto`; runtime value
+    is `undefined` and existing checks tolerate that. Cleanup happens in
+    Session 4 (per the existing plan).
+- _Surprises / decisions_:
+  - **Cross-repo addition**: lighting7 didn't yet broadcast
+    `riggingListChanged` / `stageRegionListChanged`. Added
+    `RiggingListChangedOutMessage` / `StageRegionListChangedOutMessage` in
+    `Sockets.kt`, extended `FixturesChangeListener` with
+    `riggingListChanged()` / `stageRegionListChanged()`, and called them
+    from the rigging and stage-region routes. Rigging PUT/DELETE also
+    broadcast `patchListChanged` so any rig-mounted patches' world
+    positions are re-fetched downstream.
+  - **Data reset dropped**: no meaningful legacy `stageX/Y` data exists in
+    practice, so the planned admin button on Patches.tsx wasn't built.
+  - **Three.js dep majors pinned** to versions known to work with React 19
+    (R3F 9.x, drei 10.x, postprocessing 3.x).
 
 ---
 

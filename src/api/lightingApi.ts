@@ -14,6 +14,8 @@ import {createCueEditWsApi, CueEditWsApi} from "./cueEditWsApi";
 import {createCueStacksWsApi, CueStacksWsApi} from "./cueStacksWsApi";
 import {createCueSlotsWsApi, CueSlotsWsApi} from "./cueSlotsWsApi";
 import {createPatchApi, PatchApi} from "./patchApi";
+import {createRiggingApi, RiggingApi} from "./riggingApi";
+import {createStageRegionApi, StageRegionApi} from "./stageRegionApi";
 import {createParkApi, ParkApi} from "./parkApi";
 import {createShowWsApi, ShowWsApi} from "./showWsApi";
 import {createSurfacesWsApi, SurfacesWsApi} from "./surfacesApi";
@@ -35,6 +37,8 @@ interface LightingApi {
   cueStacks: CueStacksWsApi
   cueSlots: CueSlotsWsApi
   patches: PatchApi
+  riggings: RiggingApi
+  stageRegions: StageRegionApi
   park: ParkApi
   show: ShowWsApi
   surfaces: SurfacesWsApi
@@ -71,6 +75,8 @@ function createLightingApi(): LightingApi {
   const cueStacksWsApi = createCueStacksWsApi(connection)
   const cueSlotsWsApi = createCueSlotsWsApi(connection)
   const patchApi = createPatchApi(connection)
+  const riggingApi = createRiggingApi(connection)
+  const stageRegionApi = createStageRegionApi(connection)
   const parkApi = createParkApi(connection)
   const showWsApi = createShowWsApi(connection)
   const surfacesWsApi = createSurfacesWsApi(connection)
@@ -92,6 +98,8 @@ function createLightingApi(): LightingApi {
     cueStacks: cueStacksWsApi,
     cueSlots: cueSlotsWsApi,
     patches: patchApi,
+    riggings: riggingApi,
+    stageRegions: stageRegionApi,
     park: parkApi,
     show: showWsApi,
     surfaces: surfacesWsApi,
