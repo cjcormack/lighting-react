@@ -42,6 +42,8 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
 
   if (!viewedProject) return null
 
+  const activeId = mostSpecificActiveId(visibleItems, location.pathname)
+
   // Collapsed view - icon-only buttons
   if (collapsed) {
     return (
@@ -73,9 +75,10 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
               <NavItem
                 icon={<item.icon className="size-5" />}
                 label={item.label}
-                isActive={isItemActive(item, location.pathname)}
+                isActive={activeId === item.id}
                 collapsed
                 onClick={() => navigate(item.path(viewedProject.id))}
+                muted={item.group === "install"}
               />
             </React.Fragment>
           ))}
@@ -113,9 +116,11 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
             <NavItem
               icon={<item.icon className="size-4" />}
               label={item.label}
-              isActive={isItemActive(item, location.pathname)}
+              isActive={activeId === item.id}
               collapsed={false}
               onClick={() => navigate(item.path(viewedProject.id))}
+              muted={item.group === "install"}
+              indent={item.parent != null}
             />
           </React.Fragment>
         ))}
@@ -124,11 +129,23 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
   )
 }
 
-function isItemActive(item: NavItemDef, pathname: string): boolean {
-  return new RegExp(item.pathMatch + '(/|$)').test(pathname)
+/**
+ * Among all visible nav items whose pathMatch prefixes the current pathname,
+ * return the id of the most specific one (longest pathMatch wins). This keeps
+ * a parent like "Project Settings" from staying active when the user is on
+ * one of its child tabs (e.g. "Patch List").
+ */
+function mostSpecificActiveId(items: NavItemDef[], pathname: string): string | null {
+  let winner: NavItemDef | null = null
+  for (const item of items) {
+    const m = item.pathMatch
+    if (!pathname.endsWith(m) && !pathname.includes(m + '/')) continue
+    if (!winner || m.length > winner.pathMatch.length) winner = item
+  }
+  return winner?.id ?? null
 }
 
-/** Hook to get the currently viewed project for use by Layout's configure footer and CommandPalette. */
+/** Hook to get the currently viewed project. */
 export function useViewedProject() {
   const params = useParams()
   const { data: projects } = useProjectListQuery()
@@ -146,17 +163,18 @@ interface NavItemProps {
   collapsed: boolean
   onClick: () => void
   muted?: boolean
+  indent?: boolean
 }
 
-export function NavItem({ icon, label, isActive, collapsed, onClick, muted }: NavItemProps) {
+export function NavItem({ icon, label, isActive, collapsed, onClick, muted, indent }: NavItemProps) {
   const button = (
     <button
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors",
+        "flex w-full items-center gap-2 rounded-md py-1.5 text-sm transition-colors",
         "hover:bg-accent hover:text-accent-foreground",
         isActive && "bg-accent text-accent-foreground",
-        collapsed && "justify-center px-2",
+        collapsed ? "justify-center px-2" : (indent ? "pl-7 pr-3" : "px-3"),
         muted && "text-muted-foreground"
       )}
     >

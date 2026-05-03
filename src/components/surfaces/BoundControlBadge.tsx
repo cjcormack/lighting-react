@@ -54,7 +54,7 @@ export function BoundControlBadge({ match, preFiltered, className }: BoundContro
                   onClick={(e) => {
                     e.stopPropagation()
                     e.preventDefault()
-                    navigate(`/projects/${projectIdNum}/surfaces?binding=${binding.id}`)
+                    navigate(`/projects/${projectIdNum}/settings/surfaces?binding=${binding.id}`)
                   }}
                   className="inline-flex"
                 >

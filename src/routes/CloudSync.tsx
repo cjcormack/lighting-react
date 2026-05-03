@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useNavigate, useParams } from "react-router-dom"
+import { Navigate, useNavigate, useParams, Link } from "react-router-dom"
 import { toast } from "sonner"
 import { useDispatch } from "react-redux"
 import { lightingApi } from "@/api/lightingApi"
 import { restApi } from "@/store/restApi"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -25,11 +30,13 @@ import {
   RefreshCw,
   AlertTriangle,
   AlertCircle,
+  ArrowLeft,
   ChevronDown,
   ChevronRight,
+  CloudDownload,
   Info,
 } from "lucide-react"
-import { useCurrentProjectQuery, useProjectQuery } from "@/store/projects"
+import { useProjectListQuery, useProjectQuery } from "@/store/projects"
 import {
   useCloudSyncConfigQuery,
   useCloudSyncStatusQuery,
@@ -49,7 +56,6 @@ import {
   type SyncStatus,
 } from "@/store/cloudSync"
 import { useOauthGithubIdentityQuery } from "@/store/oauthGithub"
-import { Breadcrumbs } from "@/components/Breadcrumbs"
 import { ConflictPanel } from "@/components/cloudSync/ConflictPanel"
 import { IdentityRow } from "@/components/cloudSync/IdentityRow"
 import { RepoPicker } from "@/components/cloudSync/RepoPicker"
@@ -69,29 +75,150 @@ function mergeUniqueById<T extends { id: number }>(prev: T[], next: T[]): T[] {
   return added.length === 0 ? prev : [...prev, ...added]
 }
 
-// ─── Redirect (handles bare /sync without a project) ──────────────────
+// ─── Hub body (rendered as the Sync tab inside Install Settings) ─────
 
-export function CloudSyncRedirect() {
-  const { data: currentProject, isLoading } = useCurrentProjectQuery()
-  const navigate = useNavigate()
+export function CloudSyncHubBody() {
+  const { data: projects, isLoading } = useProjectListQuery()
 
-  useEffect(() => {
-    if (!isLoading && currentProject) {
-      navigate(`/projects/${currentProject.id}/sync`, { replace: true })
-    }
-  }, [currentProject, isLoading, navigate])
-
-  if (isLoading) {
-    return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
+  return (
+    <div className="space-y-4 max-w-5xl">
+      <Card className="p-4 space-y-3">
+        <div>
+          <h2 className="text-sm font-semibold">GitHub</h2>
+          <p className="text-xs text-muted-foreground">
+            Connect once — the same identity is used by every project.
+          </p>
+        </div>
+        <IdentityRow projectId={null} />
       </Card>
-    )
-  }
-  return null
+
+      <Card className="p-4 space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold">Projects</h2>
+            <p className="text-xs text-muted-foreground">
+              Select a project to configure its remote, take snapshots, or resolve conflicts.
+            </p>
+          </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={0}>
+                <Button variant="outline" size="sm" disabled className="gap-1.5">
+                  <CloudDownload className="size-3.5" />
+                  Import from remote…
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="left">
+              Coming soon — clone a remote repo into a new local project.
+            </TooltipContent>
+          </Tooltip>
+        </div>
+        {isLoading ? (
+          <div className="flex justify-center py-6">
+            <Loader2 className="size-5 animate-spin" />
+          </div>
+        ) : !projects || projects.length === 0 ? (
+          <p className="text-xs text-muted-foreground italic">
+            No projects yet — create one from the Projects page.
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Project</TableHead>
+                <TableHead>Sync</TableHead>
+                <TableHead className="hidden md:table-cell">Repository</TableHead>
+                <TableHead className="hidden sm:table-cell">Branch</TableHead>
+                <TableHead className="hidden lg:table-cell">Last synced</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {projects.map((project) => (
+                <ProjectSyncRow
+                  key={project.id}
+                  projectId={project.id}
+                  projectName={project.name}
+                  isActive={project.isCurrent}
+                />
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </Card>
+    </div>
+  )
 }
 
-// ─── Main route ───────────────────────────────────────────────────────
+// ─── Hub redirect (legacy /sync paths land here) ──────────────────────
+
+export function CloudSyncHubRedirect() {
+  return <Navigate to="/install/sync" replace />
+}
+
+function ProjectSyncRow({
+  projectId,
+  projectName,
+  isActive,
+}: {
+  projectId: number
+  projectName: string
+  isActive: boolean
+}) {
+  const navigate = useNavigate()
+  const { data: config, isLoading } = useCloudSyncConfigQuery(projectId)
+  const repoLabel = formatRepoUrl(config?.repoUrl ?? null)
+  const onOpen = () => navigate(`/sync/projects/${projectId}`)
+
+  return (
+    <TableRow className="cursor-pointer hover:bg-accent/50" onClick={onOpen}>
+      <TableCell>
+        <div className="font-medium text-sm flex items-center gap-2">
+          {projectName}
+          {isActive && (
+            <Badge variant="default" className="text-[10px] px-1.5 py-0">active</Badge>
+          )}
+        </div>
+      </TableCell>
+      <TableCell>
+        {isLoading ? (
+          <Loader2 className="size-3.5 animate-spin" />
+        ) : config?.enabled ? (
+          <Badge variant="secondary" className="text-[10px]">enabled</Badge>
+        ) : (
+          <Badge variant="outline" className="text-[10px] text-muted-foreground">disabled</Badge>
+        )}
+      </TableCell>
+      <TableCell className="hidden md:table-cell text-xs text-muted-foreground font-mono truncate max-w-[260px]">
+        {repoLabel ?? <span className="italic">—</span>}
+      </TableCell>
+      <TableCell className="hidden sm:table-cell text-xs text-muted-foreground">
+        {config?.branch ?? "—"}
+      </TableCell>
+      <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">
+        {config?.lastSyncedAtMs
+          ? new Date(config.lastSyncedAtMs).toLocaleString()
+          : <span className="italic">never</span>}
+      </TableCell>
+      <TableCell className="text-right">
+        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onOpen() }}>
+          Open
+          <ChevronRight className="size-3.5 ml-1" />
+        </Button>
+      </TableCell>
+    </TableRow>
+  )
+}
+
+function formatRepoUrl(url: string | null): string | null {
+  if (!url) return null
+  // GitHub URLs are the dominant case; show just owner/repo for brevity.
+  const m = url.match(/github\.com[/:]([^/]+\/[^/.]+)/i)
+  return m ? m[1] : url
+}
+
+// ─── Per-project drill-in (/sync/projects/:projectId) ────────────────
 
 export function ProjectCloudSync() {
   const { projectId } = useParams()
@@ -149,9 +276,16 @@ export function ProjectCloudSync() {
 
   return (
     <div className="p-4 space-y-4 max-w-4xl">
-      <Breadcrumbs projectName={project.name} currentPage="Sync" />
+      <nav className="flex items-center gap-1 text-sm">
+        <Link to="/install/sync" className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
+          <ArrowLeft className="size-3.5" />
+          Cloud Sync
+        </Link>
+        <ChevronRight className="size-4 text-muted-foreground" />
+        <span className="font-medium">{project.name}</span>
+      </nav>
       <div>
-        <h1 className="text-lg font-semibold">Cloud Sync</h1>
+        <h1 className="text-lg font-semibold">Cloud Sync — {project.name}</h1>
         <p className="text-sm text-muted-foreground">
           Each snapshot is a git commit in this install&rsquo;s working tree.
         </p>

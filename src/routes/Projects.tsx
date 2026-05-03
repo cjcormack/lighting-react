@@ -21,7 +21,6 @@ import {
 } from "../store/projects"
 import { ProjectSummary } from "../api/projectApi"
 import CreateProjectDialog from "../CreateProjectDialog"
-import EditProjectDialog from "../EditProjectDialog"
 import DeleteProjectConfirmDialog from "../DeleteProjectConfirmDialog"
 import ProjectSwitchConfirmDialog from "../ProjectSwitchConfirmDialog"
 import CloneProjectDialog from "../CloneProjectDialog"
@@ -88,7 +87,6 @@ function ProjectsContainer() {
 }
 
 function ProjectCard({ project }: { project: ProjectSummary }) {
-  const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [switchOpen, setSwitchOpen] = useState(false)
   const [cloneOpen, setCloneOpen] = useState(false)
@@ -127,11 +125,6 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
 
   return (
     <>
-      <EditProjectDialog
-        open={editOpen}
-        setOpen={setEditOpen}
-        projectId={project.id}
-      />
       <DeleteProjectConfirmDialog
         open={deleteOpen}
         projectName={project.name}
@@ -193,7 +186,7 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
                 <DropdownMenuItem onClick={() => navigate(`/projects/${project.id}/scripts`)}>
                   Scripts
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setEditOpen(true)}>
+                <DropdownMenuItem onClick={() => navigate(`/projects/${project.id}/settings`)}>
                   Configure
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setCloneOpen(true)}>

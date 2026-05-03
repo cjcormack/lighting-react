@@ -1,5 +1,4 @@
-import { useEffect } from "react"
-import { useNavigate, useParams } from "react-router-dom"
+import { Navigate } from "react-router-dom"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -14,7 +13,6 @@ import { Loader2, Activity, Wifi, Music, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
-import { useCurrentProjectQuery, useProjectQuery } from "@/store/projects"
 import {
   useGetArtNetRatesQuery,
   useGetCueEditHistogramQuery,
@@ -24,54 +22,20 @@ import {
   type PortCcRates,
   type UniversePacketStats,
 } from "@/store/perf"
-import { Breadcrumbs } from "@/components/Breadcrumbs"
 
 const POLL_INTERVAL_MS = 2000
 
 // ─── Redirect ─────────────────────────────────────────────────────────
 
 export function DiagnosticsRedirect() {
-  const { data: currentProject, isLoading } = useCurrentProjectQuery()
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    if (!isLoading && currentProject) {
-      navigate(`/projects/${currentProject.id}/diagnostics`, { replace: true })
-    }
-  }, [currentProject, isLoading, navigate])
-
-  if (isLoading) {
-    return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
-    )
-  }
-  return null
+  return <Navigate to="/install/diagnostics" replace />
 }
 
-// ─── Main route ───────────────────────────────────────────────────────
+// ─── Content ──────────────────────────────────────────────────────────
 
-export function ProjectDiagnostics() {
-  const { projectId } = useParams()
-  const projectIdNum = Number(projectId)
-  const { data: project, isLoading } = useProjectQuery(projectIdNum)
-
-  if (isLoading) {
-    return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
-    )
-  }
-  if (!project) {
-    return <Card className="m-4 p-4"><p className="text-destructive">Project not found</p></Card>
-  }
-
+export function DiagnosticsContent() {
   return (
-    <div className="p-4 space-y-4 max-w-5xl">
-      <Breadcrumbs projectName={project.name} currentPage="Diagnostics" />
-      <h1 className="text-lg font-semibold">Diagnostics</h1>
+    <div className="space-y-4 max-w-5xl">
       <p className="text-sm text-muted-foreground">
         Live performance counters from <code className="text-xs">/api/rest/perf/*</code>. Polled every {POLL_INTERVAL_MS / 1000}s.
         Backend-global — counters do not reset on project switch.

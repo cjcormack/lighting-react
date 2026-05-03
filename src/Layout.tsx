@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react"
 import { Outlet, useLocation } from "react-router-dom"
-import { ChevronLeft, Menu, Settings, LayoutGrid, Grid3X3, AudioWaveform, Sparkles, Theater, Computer } from "lucide-react"
+import { ChevronLeft, Menu, LayoutGrid, Grid3X3, AudioWaveform, Sparkles, Theater } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 import { useMediaQuery } from "@/hooks/useMediaQuery"
 
 import { ConnectionStatus } from "./connection"
-import ProjectSwitcher, { useViewedProject, NavItem } from "./ProjectSwitcher"
+import ProjectSwitcher from "./ProjectSwitcher"
 import ThemeToggle from "./ThemeToggle"
 import { FixtureOverviewToggle } from "./components/FixtureOverviewToggle"
 import { FixtureOverviewPanel } from "./components/FixtureOverviewPanel"
@@ -25,8 +25,6 @@ import { AiChatPanel } from "./components/ai/AiChatPanel"
 import { CueSlotOverviewToggle } from "./components/CueSlotOverviewToggle"
 import { CueSlotOverviewPanel, CueSlotDndProvider } from "./components/CueSlotOverviewPanel"
 import { useCueSlotOverview } from "./hooks/useCueSlotOverview"
-import EditProjectDialog from "./EditProjectDialog"
-import EditInstallDialog from "./EditInstallDialog"
 import CommandPalette from "./components/CommandPalette"
 import { AddEditFxSheet, type FxTarget } from "./components/fx/AddEditFxSheet"
 import { ChannelValueDialog } from "./components/ChannelValueDialog"
@@ -40,8 +38,6 @@ export default function Layout() {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [selectedFixture, setSelectedFixture] = useState<string | null>(null)
   const [isAiChatVisible, setIsAiChatVisible] = useState(false)
-  const [editProjectId, setEditProjectId] = useState<number | null>(null)
-  const [installDialogOpen, setInstallDialogOpen] = useState(false)
   const [applyFxTarget, setApplyFxTarget] = useState<FxTarget | null>(null)
   const [channelDialogMode, setChannelDialogMode] = useState<"park" | "set" | null>(null)
   const { isVisible: isOverviewVisible, toggle: toggleOverview } = useFixtureOverview()
@@ -51,7 +47,6 @@ export default function Layout() {
   const location = useLocation()
   const isFxRoute = /\/projects\/\d+\/fx/.test(location.pathname)
   const isDesktop = useMediaQuery('(min-width: 768px)')
-  const viewedProject = useViewedProject()
 
   // Auto-show & lock effects overview when on the FX busking route
   useEffect(() => {
@@ -75,33 +70,9 @@ export default function Layout() {
 
   // Sidebar content (shared between desktop and mobile)
   const renderSidebarContent = (collapsed: boolean) => (
-    <>
-      <div className="flex-1 overflow-y-auto py-2">
-        <ProjectSwitcher collapsed={collapsed} />
-      </div>
-
-      {/* Configure footer - outside scroll area so it's always visible */}
-      <div className="border-t px-2 py-2 space-y-1">
-        {viewedProject && (
-          <NavItem
-            icon={<Settings className={collapsed ? "size-5" : "size-4"} />}
-            label="Configure Project"
-            isActive={false}
-            collapsed={collapsed}
-            onClick={() => setEditProjectId(viewedProject.id)}
-            muted
-          />
-        )}
-        <NavItem
-          icon={<Computer className={collapsed ? "size-5" : "size-4"} />}
-          label="Install Settings"
-          isActive={false}
-          collapsed={collapsed}
-          onClick={() => setInstallDialogOpen(true)}
-          muted
-        />
-      </div>
-    </>
+    <div className="flex-1 overflow-y-auto py-2">
+      <ProjectSwitcher collapsed={collapsed} />
+    </div>
   )
 
   return (
@@ -244,7 +215,6 @@ export default function Layout() {
 
         {/* Command Palette */}
         <CommandPalette
-          onConfigureProject={viewedProject ? () => setEditProjectId(viewedProject.id) : undefined}
           onApplyFx={setApplyFxTarget}
           onParkChannelAtValue={() => setChannelDialogMode("park")}
           onSetChannelValue={() => setChannelDialogMode("set")}
@@ -263,17 +233,6 @@ export default function Layout() {
           onOpenChange={(open) => { if (!open) setChannelDialogMode(null) }}
           mode={channelDialogMode ?? "set"}
         />
-
-        {/* Edit Project Dialog (shared - triggered by sidebar footer or command palette) */}
-        {editProjectId !== null && (
-          <EditProjectDialog
-            open={true}
-            setOpen={(o) => !o && setEditProjectId(null)}
-            projectId={editProjectId}
-          />
-        )}
-
-        <EditInstallDialog open={installDialogOpen} setOpen={setInstallDialogOpen} />
 
         {/* Apply FX Sheet (triggered by command palette) */}
         {applyFxTarget && (

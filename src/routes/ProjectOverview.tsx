@@ -27,14 +27,11 @@ import { useProjectPresetListQuery } from "../store/fxPresets"
 import { useGroupListQuery } from "../store/groups"
 import { useGetUniverseQuery } from "../store/universes"
 import { useSurfaceBindingsQuery, useSurfaceDevices } from "../store/surfaces"
-import { useState } from "react"
 import { cn } from "@/lib/utils"
-import EditProjectDialog from "../EditProjectDialog"
 
 export default function ProjectOverview() {
   const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
-  const [editOpen, setEditOpen] = useState(false)
 
   const { data: project, isLoading, error } = useProjectQuery(Number(projectId), {
     skip: !projectId,
@@ -87,11 +84,6 @@ export default function ProjectOverview() {
 
   return (
     <>
-      <EditProjectDialog
-        open={editOpen}
-        setOpen={setEditOpen}
-        projectId={project.id}
-      />
       <div className="p-4 space-y-6">
         {/* Breadcrumbs */}
         <Breadcrumbs projectName={project.name} isActive={project.isCurrent} />
@@ -109,7 +101,7 @@ export default function ProjectOverview() {
               <p className="text-muted-foreground mt-1">{project.description}</p>
             )}
           </div>
-          <Button variant="outline" onClick={() => setEditOpen(true)}>
+          <Button variant="outline" onClick={() => navigate(`/projects/${project.id}/settings`)}>
             <Settings className="size-4" />
             Configure
           </Button>
@@ -122,7 +114,7 @@ export default function ProjectOverview() {
             count={patches?.length}
             icon={<TableProperties className="size-5" />}
             description="Manage fixture patching"
-            onClick={() => navigate(`/projects/${project.id}/patches`)}
+            onClick={() => navigate(`/projects/${project.id}/settings/patches`)}
           />
           <QuickNavCard
             title="Scripts"
@@ -162,7 +154,7 @@ export default function ProjectOverview() {
                     ? `${connectedSurfaces} device${connectedSurfaces !== 1 ? 's' : ''} connected`
                     : "MIDI control surface bindings"
                 }
-                onClick={() => navigate(`/projects/${project.id}/surfaces`)}
+                onClick={() => navigate(`/projects/${project.id}/settings/surfaces`)}
               />
               <QuickNavCard
                 title="FX"

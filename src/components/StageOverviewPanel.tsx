@@ -197,7 +197,7 @@ function EmptyState({ projectId }: { projectId: number | undefined }) {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => navigate(`/projects/${projectId}/patches`)}
+          onClick={() => navigate(`/projects/${projectId}/settings/patches`)}
         >
           Open patches
         </Button>

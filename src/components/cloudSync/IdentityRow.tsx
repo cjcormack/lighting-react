@@ -22,7 +22,7 @@ import { DeviceFlowModal } from "./DeviceFlowModal"
 // so a sluggish refresh doesn't surprise the user.
 const REFRESH_SOON_THRESHOLD_MS = 5 * 60 * 1000
 
-export function IdentityRow({ projectId }: { projectId: number }) {
+export function IdentityRow({ projectId }: { projectId: number | null }) {
   const { data: identity, isLoading } = useOauthGithubIdentityQuery()
   const [disconnect, { isLoading: isDisconnecting }] = useDisconnectOAuthGithubMutation()
   const [deviceFlowOpen, setDeviceFlowOpen] = useState(false)
@@ -57,8 +57,11 @@ export function IdentityRow({ projectId }: { projectId: number }) {
 
   // Web flow: hand the browser straight to the backend, which sets the CSRF cookie
   // and redirects to GitHub. The `projectId` query param tells the callback where
-  // to bounce the user back to.
-  const startUrl = `/api/rest/oauth/github/start?projectId=${encodeURIComponent(String(projectId))}`
+  // to bounce the user back to; when called from the install-level Sync hub it's
+  // omitted and the backend falls back to its default landing page.
+  const startUrl = projectId != null
+    ? `/api/rest/oauth/github/start?projectId=${encodeURIComponent(String(projectId))}`
+    : `/api/rest/oauth/github/start`
 
   if (identity.connected) {
     const expiresIn = identity.accessExpiresAtMs

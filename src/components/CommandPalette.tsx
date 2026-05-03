@@ -26,7 +26,6 @@ export interface ToggleState {
 }
 
 interface CommandPaletteProps {
-  onConfigureProject?: () => void
   onApplyFx?: (target: FxTarget) => void
   onParkChannelAtValue?: () => void
   onSetChannelValue?: () => void
@@ -124,7 +123,7 @@ function GroupItem({ group, onSelect }: { group: GroupSummary; onSelect: () => v
 
 // ─── Main component ───────────────────────────────────────────────────────
 
-export default function CommandPalette({ onConfigureProject, onApplyFx, onParkChannelAtValue, onSetChannelValue, toggles }: CommandPaletteProps) {
+export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetChannelValue, toggles }: CommandPaletteProps) {
   const [open, setOpen] = useState(false)
   const [pages, setPages] = useState<string[]>([])
   const [search, setSearch] = useState("")
@@ -247,14 +246,15 @@ export default function CommandPalette({ onConfigureProject, onApplyFx, onParkCh
 
             {/* Actions */}
             <Command.Group heading="Actions" className={groupClassName}>
-              {onConfigureProject && (
+              {viewedProject && (
                 <Command.Item
-                  value="Configure Project"
-                  onSelect={() => runAction(onConfigureProject)}
+                  value="Project Settings"
+                  keywords={["configure", "project", "settings", "general", "metadata"]}
+                  onSelect={() => runAction(() => navigate(`/projects/${viewedProject.id}/settings`))}
                   className={itemClassName}
                 >
                   <Settings className="size-4 text-muted-foreground" />
-                  Configure Project
+                  Project Settings
                 </Command.Item>
               )}
               {viewedProject && isViewingActiveProject && (
@@ -262,7 +262,7 @@ export default function CommandPalette({ onConfigureProject, onApplyFx, onParkCh
                   <Command.Item
                     value="New Patch"
                     keywords={["patch", "fixture", "add"]}
-                    onSelect={() => runAction(() => navigate(`/projects/${viewedProject.id}/patches?action=new`))}
+                    onSelect={() => runAction(() => navigate(`/projects/${viewedProject.id}/settings/patches?action=new`))}
                     className={itemClassName}
                   >
                     <TableProperties className="size-4 text-muted-foreground" />

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react"
-import { useParams, useNavigate, useSearchParams } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Loader2, Sliders, Zap, ZapOff, Power, AlertTriangle } from "lucide-react"
-import { useProjectQuery, useCurrentProjectQuery } from "@/store/projects"
+import { useCurrentProjectQuery } from "@/store/projects"
 import {
   useSurfaceDevices,
   useActiveBanks,
@@ -14,7 +14,6 @@ import {
   useSurfaceBindingsQuery,
 } from "@/store/surfaces"
 import type { ControlSurfaceType, SurfaceDeviceInfo } from "@/store/surfaces"
-import { Breadcrumbs } from "@/components/Breadcrumbs"
 import { BankSwitcher } from "@/components/surfaces/BankSwitcher"
 import { BindingMatrix } from "@/components/surfaces/BindingMatrix"
 import { lightingApi } from "@/api/lightingApi"
@@ -28,7 +27,7 @@ export function SurfacesRedirect() {
 
   useEffect(() => {
     if (!isLoading && currentProject) {
-      navigate(`/projects/${currentProject.id}/surfaces`, { replace: true })
+      navigate(`/projects/${currentProject.id}/settings/surfaces`, { replace: true })
     }
   }, [currentProject, isLoading, navigate])
 
@@ -42,32 +41,13 @@ export function SurfacesRedirect() {
   return null
 }
 
-// ─── Main route ───────────────────────────────────────────────────────
-
-export function ProjectSurfaces() {
-  const { projectId } = useParams()
-  const projectIdNum = Number(projectId)
-  const { data: project, isLoading } = useProjectQuery(projectIdNum)
-
-  if (isLoading) {
-    return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
-    )
-  }
-  if (!project) {
-    return <Card className="m-4 p-4"><p className="text-destructive">Project not found</p></Card>
-  }
-
-  return (
-    <SurfacesContent projectId={projectIdNum} projectName={project.name} />
-  )
-}
-
 // ─── Content ──────────────────────────────────────────────────────────
 
-function SurfacesContent({ projectId, projectName }: { projectId: number; projectName: string }) {
+export function SurfacesContent({
+  projectId,
+}: {
+  projectId: number
+}) {
   const [searchParams, setSearchParams] = useSearchParams()
   const devices = useSurfaceDevices()
   const banks = useActiveBanks()
@@ -119,10 +99,8 @@ function SurfacesContent({ projectId, projectName }: { projectId: number; projec
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="p-4 space-y-3">
-        <Breadcrumbs projectName={projectName} currentPage="Surfaces" />
         <div className="flex items-center justify-between gap-2">
           <div>
-            <h1 className="text-lg font-semibold">Control surfaces</h1>
             <p className="text-sm text-muted-foreground flex items-center gap-2">
               <span>
                 {devices.length === 0

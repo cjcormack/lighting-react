@@ -1,7 +1,7 @@
 import React from "react"
 import { Toaster } from "sonner"
 import Layout from "./Layout"
-import {createBrowserRouter, RouterProvider} from "react-router-dom";
+import {createBrowserRouter, Navigate, RouterProvider, useParams} from "react-router-dom";
 import { ChannelsRedirect, ChannelsBaseRedirect, ProjectChannels } from "./routes/Channels";
 import { FixturesRedirect, ProjectFixtures } from "./routes/Fixtures";
 import { GroupsRedirect, ProjectGroups } from "./routes/Groups";
@@ -13,12 +13,27 @@ import { FxRedirect, ProjectFxBusking } from "./routes/FxBusking";
 import { PresetsRedirect, ProjectFxPresets } from "./routes/FxPresets";
 import { CuesRedirect, CuesBaseRedirect, ProjectCues } from "./routes/Cues";
 import ProjectOverview, { ProjectOverviewRedirect } from "./routes/ProjectOverview";
-import { ProjectPatches, PatchesRedirect } from "./routes/Patches";
+import { PatchesRedirect } from "./routes/Patches";
 import { ProgramPage, ProgramRedirect } from "./routes/ProgramPage";
 import { RunPage, RunRedirect, LegacyShowRedirect } from "./routes/RunPage";
-import { ProjectSurfaces, SurfacesRedirect } from "./routes/Surfaces";
-import { ProjectDiagnostics, DiagnosticsRedirect } from "./routes/Diagnostics";
-import { ProjectCloudSync, CloudSyncRedirect } from "./routes/CloudSync";
+import { SurfacesRedirect } from "./routes/Surfaces";
+import { DiagnosticsRedirect } from "./routes/Diagnostics";
+import { ProjectCloudSync, CloudSyncHubRedirect } from "./routes/CloudSync";
+import { ProjectSettings, ProjectSettingsRedirect } from "./routes/ProjectSettings";
+import { InstallSettings } from "./routes/InstallSettings";
+
+function PatchesToSettings() {
+  const { projectId } = useParams()
+  return <Navigate to={`/projects/${projectId}/settings/patches`} replace />
+}
+function SurfacesToSettings() {
+  const { projectId } = useParams()
+  return <Navigate to={`/projects/${projectId}/settings/surfaces`} replace />
+}
+function ProjectSyncToHub() {
+  const { projectId } = useParams()
+  return <Navigate to={`/sync/projects/${projectId}`} replace />
+}
 
 function App() {
   const router = createBrowserRouter([
@@ -83,36 +98,69 @@ function App() {
           element: <CuesRedirect />,
         },
         {
-          path: "projects/:projectId/patches",
-          element: <ProjectPatches />,
+          path: "projects/:projectId/settings",
+          element: <ProjectSettings />,
         },
         {
-          path: "patches",
-          element: <PatchesRedirect />,
+          path: "projects/:projectId/settings/:tab",
+          element: <ProjectSettings />,
+        },
+        {
+          path: "settings",
+          element: <ProjectSettingsRedirect />,
+        },
+
+        {
+          path: "install",
+          element: <InstallSettings />,
+        },
+        {
+          path: "install/:tab",
+          element: <InstallSettings />,
+        },
+
+        // Cloud sync hub now lives as the Sync tab inside Install Settings.
+        // /sync remains as a back-compat redirect; the per-project drill-in
+        // keeps its short URL since it's deep-linked from the hub.
+        {
+          path: "sync",
+          element: <CloudSyncHubRedirect />,
+        },
+        {
+          path: "sync/projects/:projectId",
+          element: <ProjectCloudSync />,
+        },
+
+        // Legacy per-project paths — keep working but redirect to the new location.
+        {
+          path: "projects/:projectId/patches",
+          element: <PatchesToSettings />,
         },
         {
           path: "projects/:projectId/surfaces",
-          element: <ProjectSurfaces />,
+          element: <SurfacesToSettings />,
+        },
+        {
+          path: "projects/:projectId/diagnostics",
+          element: <Navigate to="/install/diagnostics" replace />,
+        },
+        {
+          path: "projects/:projectId/sync",
+          element: <ProjectSyncToHub />,
+        },
+
+        // Legacy bare paths (no project context) — keep until Cmd+K migrates.
+        {
+          path: "patches",
+          element: <PatchesRedirect />,
         },
         {
           path: "surfaces",
           element: <SurfacesRedirect />,
         },
         {
-          path: "projects/:projectId/diagnostics",
-          element: <ProjectDiagnostics />,
-        },
-        {
           path: "diagnostics",
           element: <DiagnosticsRedirect />,
-        },
-        {
-          path: "projects/:projectId/sync",
-          element: <ProjectCloudSync />,
-        },
-        {
-          path: "sync",
-          element: <CloudSyncRedirect />,
         },
         {
           path: "projects/:projectId/channels/:universe",

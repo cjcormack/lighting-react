@@ -1,6 +1,5 @@
 import { useMemo } from "react"
 import {
-  TableProperties,
   Braces,
   Sparkles,
   LayoutGrid,
@@ -11,14 +10,17 @@ import {
   SlidersHorizontal,
   Theater,
   Play,
+  Cloud,
+  Settings,
+  Computer,
+  TableProperties,
   Sliders,
   Activity,
-  Cloud,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { useGetUniverseQuery } from "./store/universes"
 
-export type NavGroup = "setup" | "program" | "live"
+export type NavGroup = "setup" | "program" | "live" | "settings" | "install"
 
 export interface NavItem {
   id: string
@@ -31,6 +33,8 @@ export interface NavItem {
   pathMatch: string
   /** Workflow group this item belongs to; used by the sidebar to insert separators. */
   group: NavGroup
+  /** Optional parent item id; sub-items render indented beneath their parent. */
+  parent?: string
 }
 
 /**
@@ -54,41 +58,12 @@ export const navItems: NavItem[] = [
     group: "setup",
   },
   {
-    id: "patches",
-    label: "Patch List",
-    icon: TableProperties,
-    path: (p) => `/projects/${p}/patches`,
-    visibility: "always",
-    pathMatch: "/patches",
-    group: "setup",
-  },
-  {
     id: "groups",
     label: "Groups",
     icon: Layers,
     path: (p) => `/projects/${p}/groups`,
     visibility: "active-only",
     pathMatch: "/groups",
-    group: "setup",
-  },
-  {
-    id: "surfaces",
-    label: "Surfaces",
-    icon: Sliders,
-    path: (p) => `/projects/${p}/surfaces`,
-    visibility: "active-only",
-    pathMatch: "/surfaces",
-    group: "setup",
-  },
-  {
-    id: "sync",
-    label: "Sync",
-    icon: Cloud,
-    path: (p) => `/projects/${p}/sync`,
-    // Snapshot reads from the DB row, not the in-memory show, so it works on any
-    // project, active or not. Mirrors `patches`.
-    visibility: "always",
-    pathMatch: "/sync",
     group: "setup",
   },
 
@@ -167,14 +142,71 @@ export const navItems: NavItem[] = [
     pathMatch: "/channels",
     group: "live",
   },
+
+  // ── Settings (per-project) ──────────────────────────────────────────
+  // The parent lands on the General tab; the children deep-link to their
+  // sibling tabs so common destinations (Patch List in particular) are one
+  // click away from the sidebar.
+  {
+    id: "project-settings",
+    label: "Project Settings",
+    icon: Settings,
+    path: (p) => `/projects/${p}/settings`,
+    visibility: "always",
+    pathMatch: "/settings",
+    group: "settings",
+  },
+  {
+    id: "patches",
+    label: "Patch List",
+    icon: TableProperties,
+    path: (p) => `/projects/${p}/settings/patches`,
+    visibility: "always",
+    pathMatch: "/settings/patches",
+    group: "settings",
+    parent: "project-settings",
+  },
+  {
+    id: "surfaces",
+    label: "Surfaces",
+    icon: Sliders,
+    path: (p) => `/projects/${p}/settings/surfaces`,
+    visibility: "active-only",
+    pathMatch: "/settings/surfaces",
+    group: "settings",
+    parent: "project-settings",
+  },
+
+  // ── Install (no project context) ────────────────────────────────────
+  // Path resolvers ignore the projectId arg — these routes are install-scope.
+  {
+    id: "install-settings",
+    label: "Install Settings",
+    icon: Computer,
+    path: () => "/install",
+    visibility: "always",
+    pathMatch: "/install",
+    group: "install",
+  },
+  {
+    id: "sync",
+    label: "Sync",
+    icon: Cloud,
+    path: () => "/install/sync",
+    visibility: "always",
+    pathMatch: "/install/sync",
+    group: "install",
+    parent: "install-settings",
+  },
   {
     id: "diagnostics",
     label: "Diagnostics",
     icon: Activity,
-    path: (p) => `/projects/${p}/diagnostics`,
+    path: () => "/install/diagnostics",
     visibility: "always",
-    pathMatch: "/diagnostics",
-    group: "live",
+    pathMatch: "/install/diagnostics",
+    group: "install",
+    parent: "install-settings",
   },
 ]
 

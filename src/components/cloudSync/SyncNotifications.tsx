@@ -9,7 +9,7 @@ import { useProjectListQuery } from "@/store/projects"
  * cross-project sync events surface even when the user isn't on the sync page.
  *
  * The sync page already toasts on its own mutation results — this component skips
- * events for the project the user is currently viewing on `/projects/{id}/sync` to
+ * events for the project the user is currently viewing on `/sync/projects/{id}` to
  * avoid double-toasting in the common single-tab case.
  */
 export function SyncNotifications() {
@@ -27,7 +27,7 @@ export function SyncNotifications() {
       projectsRef.current?.find((p) => p.id === id)?.name ?? `project ${id}`
 
     const onSyncPageFor = (id: number) =>
-      pathnameRef.current === `/projects/${id}/sync`
+      pathnameRef.current === `/sync/projects/${id}`
 
     const subDone = lightingApi.cloudSync.subscribeDone((event) => {
       if (onSyncPageFor(event.projectId)) return

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { useParams, useNavigate, useSearchParams } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -14,9 +14,8 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Loader2, Plus, Pencil, Check } from "lucide-react"
-import { useCurrentProjectQuery, useProjectQuery } from "../store/projects"
+import { useCurrentProjectQuery } from "../store/projects"
 import { usePatchListQuery, useUniverseConfigListQuery, useUpdateUniverseConfigMutation, usePatchGroupListQuery } from "../store/patches"
-import { Breadcrumbs } from "@/components/Breadcrumbs"
 import { AddFixtureSheet } from "@/components/patches/AddFixtureSheet"
 import { EditPatchSheet } from "@/components/patches/EditPatchSheet"
 import { EditGroupSheet } from "@/components/patches/EditGroupSheet"
@@ -31,7 +30,7 @@ export function PatchesRedirect() {
 
   useEffect(() => {
     if (!isLoading && currentProject) {
-      navigate(`/projects/${currentProject.id}/patches`, { replace: true })
+      navigate(`/projects/${currentProject.id}/settings/patches`, { replace: true })
     }
   }, [currentProject, isLoading, navigate])
 
@@ -41,36 +40,12 @@ export function PatchesRedirect() {
   return null
 }
 
-// ─── Main route ───────────────────────────────────────────────────────
-
-export function ProjectPatches() {
-  const { projectId } = useParams()
-  const projectIdNum = Number(projectId)
-  const { data: project, isLoading } = useProjectQuery(projectIdNum)
-
-  if (isLoading) {
-    return <Card className="m-4 p-4 flex items-center justify-center"><Loader2 className="size-6 animate-spin" /></Card>
-  }
-  if (!project) {
-    return <Card className="m-4 p-4"><p className="text-destructive">Project not found</p></Card>
-  }
-
-  return (
-    <PatchListContent
-      projectId={projectIdNum}
-      projectName={project.name}
-    />
-  )
-}
-
 // ─── Content ──────────────────────────────────────────────────────────
 
-function PatchListContent({
+export function PatchListContent({
   projectId,
-  projectName,
 }: {
   projectId: number
-  projectName: string
 }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const [addFixtureOpen, setAddFixtureOpen] = useState(false)
@@ -103,10 +78,8 @@ function PatchListContent({
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="p-4 space-y-4">
-        <Breadcrumbs projectName={projectName} currentPage="Patch List" />
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold">Patch List</h1>
             <p className="text-sm text-muted-foreground">
               {`${totalPatches} fixture${totalPatches !== 1 ? 's' : ''} patched${totalGroups > 0 ? `, ${totalGroups} group${totalGroups !== 1 ? 's' : ''}` : ''}.`}
             </p>
