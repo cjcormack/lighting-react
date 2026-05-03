@@ -39,3 +39,24 @@ export function parseNullableNumber(raw: string): number | null {
   const n = Number(trimmed)
   return Number.isFinite(n) ? n : null
 }
+
+/** Format a 3-tuple of nullable numbers (e.g. metres on X/Y/Z). Nulls render as `—`. */
+export function formatTriple(
+  a: number | null,
+  b: number | null,
+  c: number | null,
+  sep = ", ",
+): string {
+  const fmt = (v: number | null) => (v == null ? "—" : v.toFixed(1))
+  return `${fmt(a)}${sep}${fmt(b)}${sep}${fmt(c)}`
+}
+
+/** Format a yaw/pitch/roll triple in degrees as `0°/0°/0°`. Nulls render as `—`. */
+export function formatRotation(
+  yaw: number | null,
+  pitch: number | null,
+  roll: number | null,
+): string {
+  const fmt = (v: number | null) => (v == null ? "—" : `${v.toFixed(0)}°`)
+  return `${fmt(yaw)}/${fmt(pitch)}/${fmt(roll)}`
+}

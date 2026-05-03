@@ -15,6 +15,7 @@ import { useCurrentProjectQuery } from "@/store/projects"
 import { useStageRegionListQuery } from "@/store/stageRegions"
 import { EditStageRegionSheet } from "@/components/stage/EditStageRegionSheet"
 import type { StageRegionDto } from "@/api/stageRegionApi"
+import { formatTriple } from "@/lib/utils"
 
 // ─── Redirect ─────────────────────────────────────────────────────────
 
@@ -128,14 +129,4 @@ export function StageRegionsContent({ projectId }: { projectId: number }) {
       />
     </Card>
   )
-}
-
-function formatTriple(
-  a: number | null,
-  b: number | null,
-  c: number | null,
-  sep = ", ",
-): string {
-  const fmt = (v: number | null) => (v == null ? "—" : v.toFixed(1))
-  return `${fmt(a)}${sep}${fmt(b)}${sep}${fmt(c)}`
 }

@@ -1,5 +1,6 @@
 import { useMemo } from "react"
 import {
+  Anchor,
   Braces,
   Sparkles,
   LayoutGrid,
@@ -184,6 +185,16 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/settings/stage`,
     visibility: "always",
     pathMatch: "/settings/stage",
+    group: "settings",
+    parent: "project-settings",
+  },
+  {
+    id: "rigging",
+    label: "Rigging",
+    icon: Anchor,
+    path: (p) => `/projects/${p}/settings/rigging`,
+    visibility: "always",
+    pathMatch: "/settings/rigging",
     group: "settings",
     parent: "project-settings",
   },

@@ -40,7 +40,7 @@ visualiser must:
 |---------|------------------------------------|-------------|-----------|-------|
 | 1       | Foundation                         | Done        | 2026-05-03 | Cross-repo: backend now broadcasts riggingListChanged/stageRegionListChanged. Data reset dropped (no meaningful legacy data). |
 | 2       | Stage Configuration                | Done        | 2026-05-03 | New "Stage" tab in Project Settings hosts stage dimensions + regions CRUD. |
-| 3       | Rigging Configuration              | Not started | —         |       |
+| 3       | Rigging Configuration              | Done        | 2026-05-03 | Riggings CRUD on new "Rigging" tab; flown-truss defaults on create. |
 | 4       | Patching: Rigging-Mounted vs Free  | Not started | —         |       |
 | 5       | Read-Only 3D Stage View            | Not started | —         |       |
 | 6       | 3D Editor Mode                     | Not started | —         |       |
@@ -245,7 +245,59 @@ a second tab refresh.
 **Verify**: round-trip create/edit/delete; confirm
 `GET /api/rest/project/{id}/riggings` returns the new entries.
 
-**Status & handover**: _Not started._
+**Status & handover**:
+
+- _Status_: Done
+- _Completed_: 2026-05-03
+- _What landed_:
+  - `src/routes/Riggings.tsx` (new) — exports `RiggingsContent({projectId})`
+    with table (Name / Kind / Position / Rotation / Sort columns, hidden at
+    sm/md/lg breakpoints), Add button, click-row-to-edit, edit sheet trigger.
+    Sorted by `sortOrder` then `id`.
+  - `src/components/rigging/EditRiggingSheet.tsx` (new) — single sheet for
+    create + edit with destructive Delete in edit mode. `EMPTY_FORM` ships
+    flown-truss defaults (`kind=TRUSS, positionZ=4.5, yaw/pitch/roll=0`)
+    so an untouched create posts those values verbatim. Dirty-diff PUT on
+    edit. Kind is a Select dropdown over the advisory list
+    (`TRUSS / BAR / BOOM / PIPE / FLOOR_STAND / OTHER`) — required, no
+    null/None option since there are no legacy entries to preserve.
+  - `src/lib/utils.ts` — added `formatTriple` and `formatRotation`
+    (extracted/shared between the regions and riggings list pages).
+  - `src/components/ui/form-fields.tsx` (new) — exports shared
+    `FieldGroup` and `NumberField`, replacing the duplicate copies that
+    had grown in both edit sheets.
+  - `src/routes/ProjectSettings.tsx` — added a fifth tab "Rigging" that
+    renders `RiggingsContent` inside the standard `p-4 space-y-4 max-w-3xl`
+    wrapper.
+  - `src/navigation.ts` — added `rigging` child entry under
+    `project-settings` (icon: `Anchor`).
+- _Open follow-ups_:
+  - Patch-side rig assignment (Mounting select tying `riggingUuid` to a
+    rigging) lands in Session 4, plus the `riggingPosition` legacy field
+    cleanup carried over from Session 1.
+  - `worldPositionFor` rigging-frame composition is still translate-only
+    (Session 1 carry-over); real rotated-frame composition or reliance on
+    the backend's pre-composed `worldPositionX/Y/Z` is the Session 4 path.
+- _Surprises / decisions_:
+  - **Kind is a required Select**, not free text. Form state narrows to a
+    `Kind` union (`TRUSS / BAR / BOOM / PIPE / FLOOR_STAND / OTHER`); no
+    `None` option because there are no legacy entries that could carry an
+    out-of-list value.
+  - **`EMPTY_FORM` defaults are non-null** (opposite of the StageRegions
+    sheet). The create call therefore sends `kind=TRUSS, z=4.5, yaw=pitch=roll=0`
+    even when the user touches nothing — exactly the plan's flown-truss
+    convention.
+  - **Position fields have no `min={0}`** — riggings can sit at negative
+    X/Y (downstage of zero). Only StageRegion size fields had a floor.
+  - **Skipped a `RiggingsRedirect` export** — Session 2's parallel
+    `StageRegionsRedirect` is currently unused, so building one for parity
+    would just be dead code.
+  - **`Anchor` icon** picked for the truss-hangs-from-structure metaphor.
+  - **simplify pass extracted shared helpers**: `formatTriple` to
+    `lib/utils.ts` (now used by both regions and riggings tables) and
+    `FieldGroup`/`NumberField` to `components/ui/form-fields.tsx` (now
+    used by both edit sheets). Dropped the duplicate copies that had been
+    pasted into Session 2's files.
 
 ---
 

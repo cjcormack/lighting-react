@@ -20,6 +20,7 @@ import {
 import type { StageRegionDto, UpdateStageRegionRequest } from '@/api/stageRegionApi'
 import { formatError } from '@/lib/formatError'
 import { parseNullableNumber } from '@/lib/utils'
+import { FieldGroup, NumberField } from '@/components/ui/form-fields'
 
 interface EditStageRegionSheetProps {
   open: boolean
@@ -253,43 +254,3 @@ export function EditStageRegionSheet({ open, onOpenChange, region, projectId }: 
     </Sheet>
   )
 }
-
-function FieldGroup({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <Label>{label}</Label>
-      <div className="grid grid-cols-3 gap-2">{children}</div>
-    </div>
-  )
-}
-
-function NumberField({
-  id,
-  label,
-  value,
-  onChange,
-  min,
-}: {
-  id: string
-  label: string
-  value: number | null
-  onChange: (v: number | null) => void
-  min?: number
-}) {
-  return (
-    <div className="space-y-1">
-      <Label htmlFor={id} className="text-xs text-muted-foreground font-normal">
-        {label}
-      </Label>
-      <Input
-        id={id}
-        type="number"
-        min={min}
-        value={value ?? ''}
-        onChange={(e) => onChange(parseNullableNumber(e.target.value))}
-        onFocus={(e) => e.target.select()}
-      />
-    </div>
-  )
-}
-

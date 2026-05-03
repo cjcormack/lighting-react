@@ -15,8 +15,9 @@ import { parseNullableNumber } from "@/lib/utils"
 import { PatchListContent } from "./Patches"
 import { SurfacesContent } from "./Surfaces"
 import { StageRegionsContent } from "./StageRegions"
+import { RiggingsContent } from "./Riggings"
 
-const TABS = ["general", "patches", "surfaces", "stage"] as const
+const TABS = ["general", "patches", "surfaces", "stage", "rigging"] as const
 type Tab = (typeof TABS)[number]
 
 function isTab(value: string | undefined): value is Tab {
@@ -86,6 +87,7 @@ export function ProjectSettings() {
             <TabsTrigger value="patches">Patch List</TabsTrigger>
             <TabsTrigger value="surfaces">Surfaces</TabsTrigger>
             <TabsTrigger value="stage">Stage</TabsTrigger>
+            <TabsTrigger value="rigging">Rigging</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
@@ -96,6 +98,7 @@ export function ProjectSettings() {
         {activeTab === "patches" && <PatchListContent projectId={projectIdNum} />}
         {activeTab === "surfaces" && <SurfacesContent projectId={projectIdNum} />}
         {activeTab === "stage" && <StageTab projectId={projectIdNum} />}
+        {activeTab === "rigging" && <RiggingTab projectId={projectIdNum} />}
       </div>
     </div>
   )
@@ -179,6 +182,14 @@ function StageTab({ projectId }: { projectId: number }) {
     <div className="p-4 space-y-4 max-w-3xl">
       <StageDimensionsCard projectId={projectId} />
       <StageRegionsContent projectId={projectId} />
+    </div>
+  )
+}
+
+function RiggingTab({ projectId }: { projectId: number }) {
+  return (
+    <div className="p-4 space-y-4 max-w-3xl">
+      <RiggingsContent projectId={projectId} />
     </div>
   )
 }
