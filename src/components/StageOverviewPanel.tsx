@@ -11,6 +11,9 @@ import {
   type Fixture,
   type FixtureTypeInfo,
 } from '../store/fixtures'
+import { useProjectQuery } from '../store/projects'
+import { useRiggingListQuery } from '../store/riggings'
+import { worldPositionLighting } from '../lib/stageCoords'
 import { StageMarker } from './stage/StageMarker'
 import { StageBackdrop } from './stage/StageBackdrop'
 import { chipButtonClassName } from './patches/chipButton'
@@ -39,13 +42,29 @@ export function StageOverviewPanel({
   const { data: groups } = usePatchGroupListQuery(projectId!, {
     skip: projectId == null,
   })
+  const { data: projectDetail } = useProjectQuery(projectId!, { skip: projectId == null })
+  const { data: riggings } = useRiggingListQuery(projectId!, { skip: projectId == null })
 
   const [groupFilter, setGroupFilter] = useState<number | null>(null)
 
-  const placedPatches = useMemo(
-    () => (patches ?? []).filter((p) => p.stageX != null && p.stageY != null),
-    [patches],
-  )
+  const stageWidthM = projectDetail?.stageWidthM ?? 10
+  const stageDepthM = projectDetail?.stageDepthM ?? 8
+
+  // Compose metric lighting coords (worldPosition* if backed in, else
+  // rig+offset, else raw stage*) and map to canvas %. Patches with no
+  // resolvable position are filtered out.
+  const placedPatches = useMemo(() => {
+    return (patches ?? [])
+      .map((patch) => {
+        const pos = worldPositionLighting(patch, riggings ?? [])
+        if (!pos) return null
+        const halfW = stageWidthM / 2
+        const xPct = ((pos.x + halfW) / stageWidthM) * 100
+        const yPct = (1 - pos.y / stageDepthM) * 100
+        return { patch, xPct, yPct }
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+  }, [patches, riggings, stageWidthM, stageDepthM])
 
   const fixtureByKey = useMemo(() => {
     const map = new Map<string, Fixture>()
@@ -125,7 +144,7 @@ export function StageOverviewPanel({
               <EmptyState projectId={projectId} />
             ) : (
               <StageBackdrop className={STAGE_CANVAS_HEIGHT}>
-                {placedPatches.map((patch) => {
+                {placedPatches.map(({ patch, xPct, yPct }) => {
                   const fixture = fixtureByKey.get(patch.key)
                   const fixtureType = fixture
                     ? typeByKey.get(fixture.typeKey)
@@ -140,8 +159,8 @@ export function StageOverviewPanel({
                       onClick={() => onFixtureClick(patch.key)}
                       className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer focus:outline-none"
                       style={{
-                        left: `${patch.stageX}%`,
-                        top: `${patch.stageY}%`,
+                        left: `${xPct}%`,
+                        top: `${yPct}%`,
                       }}
                     >
                       <StageMarker
@@ -191,7 +210,7 @@ function EmptyState({ projectId }: { projectId: number | undefined }) {
   return (
     <div className={cn('flex flex-col items-center justify-center gap-3 text-center', STAGE_CANVAS_HEIGHT)}>
       <p className="text-sm text-muted-foreground max-w-md">
-        No fixtures placed yet. Open a patch and drag the dot on the stage map to place it.
+        No fixtures placed yet. Open a patch and set its stage position.
       </p>
       {projectId != null && (
         <Button

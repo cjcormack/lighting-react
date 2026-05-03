@@ -10,9 +10,9 @@ import {
 } from '../../store/fixtures'
 import {
   useColourValue,
-  useSliderValue,
   useSettingColourPreview,
 } from '../../hooks/usePropertyValues'
+import { useNormalizedIntensity } from '../../hooks/useNormalizedIntensity'
 import { findGel } from '../../data/gels'
 import type { FixturePatch } from '../../api/patchApi'
 import { cn } from '@/lib/utils'
@@ -185,22 +185,6 @@ function DimmerOnlyMarker({
 
 function PlaceholderMarker(rest: LeafProps) {
   return <MarkerVisual {...rest} color="#666" intensity={0.2} />
-}
-
-function useNormalizedIntensity(dimmerProp: SliderPropertyDescriptor | undefined): number {
-  const value = useSliderValue(
-    dimmerProp ?? {
-      type: 'slider',
-      name: '__none__',
-      displayName: '',
-      category: 'dimmer',
-      channel: { universe: 0, channelNo: 0 },
-      min: 0,
-      max: 255,
-    },
-  )
-  if (!dimmerProp) return 1
-  return Math.max(0, Math.min(1, value / 255))
 }
 
 function MarkerVisual({

@@ -21,6 +21,7 @@ import { DiagnosticsRedirect } from "./routes/Diagnostics";
 import { ProjectCloudSync, CloudSyncHubRedirect } from "./routes/CloudSync";
 import { ProjectSettings, ProjectSettingsRedirect } from "./routes/ProjectSettings";
 import { InstallSettings } from "./routes/InstallSettings";
+import { Stage, StageRedirect } from "./routes/Stage";
 
 function PatchesToSettings() {
   const { projectId } = useParams()
@@ -52,6 +53,14 @@ function App() {
         {
           path: "projects/:projectId/fixtures",
           element: <ProjectFixtures />,
+        },
+        {
+          path: "projects/:projectId/stage",
+          element: <Stage />,
+        },
+        {
+          path: "stage",
+          element: <StageRedirect />,
         },
         {
           path: "projects/:projectId/groups",

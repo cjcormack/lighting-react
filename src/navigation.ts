@@ -8,6 +8,7 @@ import {
   AudioWaveform,
   Bookmark,
   Box,
+  Boxes,
   Clapperboard,
   SlidersHorizontal,
   Theater,
@@ -109,6 +110,15 @@ export const navItems: NavItem[] = [
 
   // ── Live ────────────────────────────────────────────────────────────
   {
+    id: "stage-view",
+    label: "Stage",
+    icon: Boxes,
+    path: (p) => `/projects/${p}/stage`,
+    visibility: "always",
+    pathMatch: "/stage",
+    group: "live",
+  },
+  {
     id: "fx",
     label: "FX",
     icon: AudioWaveform,
@@ -180,7 +190,7 @@ export const navItems: NavItem[] = [
   },
   {
     id: "stage",
-    label: "Stage",
+    label: "Regions",
     icon: Box,
     path: (p) => `/projects/${p}/settings/stage`,
     visibility: "always",

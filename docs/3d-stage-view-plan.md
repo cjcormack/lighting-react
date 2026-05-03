@@ -42,7 +42,7 @@ visualiser must:
 | 2       | Stage Configuration                | Done        | 2026-05-03 | New "Stage" tab in Project Settings hosts stage dimensions + regions CRUD. |
 | 3       | Rigging Configuration              | Done        | 2026-05-03 | Riggings CRUD on new "Rigging" tab; flown-truss defaults on create. |
 | 4       | Patching: Rigging-Mounted vs Free  | Done        | 2026-05-03 | Structured rigging assignment + metric stage coords on the patch sheet; legacy 2D map and free-text rigging label retired. |
-| 5       | Read-Only 3D Stage View            | Not started | —         |       |
+| 5       | Read-Only 3D Stage View            | Done        | 2026-05-03 | New /stage route with 2D ↔ 3D toggle. Backend pan/tilt metadata (axis + degree mapping) populated on every mover; 2D legacy panel re-fitted to metric coords. |
 | 6       | 3D Editor Mode                     | Not started | —         |       |
 | 7       | Polish (optional)                  | Not started | —         |       |
 
@@ -452,7 +452,196 @@ confirm meshes render at expected positions. Run a scene that pulses dimmer
 and a colour scene — confirm fixture lens + cone + pool change in real time
 without React re-renders (observe via React DevTools Profiler).
 
-**Status & handover**: _Not started._
+**Status & handover**:
+
+- _Status_: Done
+- _Completed_: 2026-05-03
+- _What landed_:
+  - **Backend (lighting7)**: extended `@FixtureProperty` with `axis`
+    (new `PanTiltAxis` enum: `PAN | TILT | NONE`), `degMin`, `degMax`,
+    `inverted` optional params (NaN as the unset sentinel for the doubles,
+    converted to `null` on reflect). Threaded through
+    `Fixture.Property` and both slider-creation paths in
+    `DmxFixture.kt` (top-level + element). `SliderPropertyDescriptor` in
+    `routes/lightFixtures.kt` gained 4 nullable wire fields. Every
+    moving-head fixture in the registry got `axis = PanTiltAxis.PAN/TILT`
+    and degree ranges from datasheet:
+    Martin Mac 250 (540°/257°), Varytec Easymove XL 60 Spot (630°/270°),
+    Robe ColorSpot 575 (540°/257°), Fusion 100 Spot MkII (540°/210° × 3
+    modes), Source 4 Revolution (540°/270°), Gear4Music Orbit-70
+    (540°/270°), IMG Stageline Wash-42LED (540°/180°), Shehds LED 19 RGBW
+    (540°/270° × 2 modes), Slender Beam Bar Quad (540°/270°), Scantastic 4
+    (180°/90°). Laserworld CS-1000 RGB Mk3 was deliberately skipped — its
+    "Pan/Tilt" channels are galvo offsets, not real head rotation; tagging
+    it would mislead the 3D view.
+  - **Frontend types**: `SliderPropertyDescriptor` in
+    `src/store/fixtures.ts` mirrors the new wire fields (`axis`,
+    `degMin`, `degMax`, `inverted`). Added `findPanProperty` and
+    `findTiltProperty` helpers alongside `findDimmerProperty`.
+  - **`src/lib/stageCoords.ts`**: added `dmxToDegrees(dmx, slider, base?)`
+    (returns `null` when the slider lacks both deg bounds — head stays
+    static; never invent a range), `headQuaternionFor(panDeg, tiltDeg)`
+    (allocation-free Euler→Quaternion variant of `panTiltToDir`), and
+    `worldPositionLighting(patch, riggings)` (lighting-coord twin of
+    `worldPositionFor`; needed by the 2D top-down panel which reasons in
+    metres rather than R3F space).
+  - **`src/hooks/useNormalizedIntensity.ts` (new)**: extracted from
+    `StageMarker.tsx:190–204` so 2D + 3D leaves share one
+    fallback-slider definition.
+  - **`src/components/StageOverviewPanel.tsx`**: re-fitted to metric
+    coords. Now reads `useProjectQuery` (for `stageWidthM`/`stageDepthM`,
+    defaults 10×8 m) and `useRiggingListQuery`; computes each placed
+    patch's stage position via `worldPositionLighting`, then maps to
+    canvas % with FOH at the bottom, upstage at the top, stage centre at
+    `x=0`. Patches with no resolvable position are filtered out. The
+    legacy "drag the dot…" empty-state copy now reads "Open a patch and
+    set its stage position."
+  - **`src/components/stage3d/` (new)**:
+    - `Bloom.tsx` — `<EffectComposer>` + `<Bloom luminanceThreshold=0.15
+      intensity=1.7 radius=0.5 />` per stage-vis-discovery.md L75–77.
+    - `StageRegionMeshes.tsx` — translucent boxes with edge outlines.
+    - `RiggingMeshes.tsx` — 3 m bar per rigging (no length field on the
+      DTO yet — Session 7 polish), Euler `'YXZ'` rotation matching the
+      stageCoords convention.
+    - `FixtureModel.tsx` — clamp + head group + lens + outer/inner cone
+      + outer/inner floor pool. Colour leaves (`ColourBeamSync`,
+      `SettingColourBeamSync`, `FixedColourBeamSync` for gel/dimmer-only)
+      mirror the dispatch in `StageMarker.tsx:36–46, 91–126`, but write
+      colour/opacity imperatively into the cone/pool/lens material refs
+      via `useEffect` — not via React-driven props (avoids one
+      re-render per channel push). `<BeamDirector>` reads pan/tilt via
+      `useSliderValue`, runs `useFrame` to compute beam direction with
+      `dmxToDegrees` + `panTiltToDir`, and updates head quaternion +
+      cone orientation + pool floor-intersection imperatively. Module-
+      scoped `SCRATCH_DIR / SCRATCH_NEG_DIR / SCRATCH_QUAT / SCRATCH_POOL`
+      keep the hot path allocation-free.
+    - `Stage3D.tsx` — `<Canvas flat>` with `OrbitControls`, ambient +
+      `gridHelper`, `<StageBoxOutline>` wireframe of the stage volume,
+      and Bloom. Camera framed against `stageWidthM × stageDepthM`.
+  - **Route + nav**:
+    - `src/routes/Stage.tsx` (new) — top-level route with 2D ↔ 3D
+      `<ToggleGroup size="sm">` persisted in `localStorage["stageViewMode"]`
+      (default 3D). `<StageRedirect>` mirrors `FixturesRedirect`.
+    - `src/App.tsx` — added `/projects/:projectId/stage` and bare
+      `/stage` redirect.
+    - `src/navigation.ts` — renamed the existing settings child label
+      from "Stage" to "Regions" (id/path unchanged); added a new
+      top-level `id: "stage-view"` entry in the `live` group with
+      `Boxes` icon, `visibility: "always"`.
+- _Open follow-ups_:
+  - **No R3F edit interactions yet** — `onClick` selects a fixture
+    (visible white ring on the lens) but no drag/sheet handling.
+    Session 6 covers click-to-edit + drag.
+  - **Rigging length is fixed at 3 m**. A future RiggingDto field
+    (`lengthM`?) would let `<RiggingMeshes>` render real proportions;
+    deferred to Session 7 polish.
+  - **Pan/tilt fine channels (PAN_FINE / TILT_FINE)** are not yet folded
+    into the degree calculation — the 3D view reads coarse-only, which
+    gives 256-step resolution over the head's full sweep (more than
+    enough for visual rendering).
+  - **`PositionPropertyDescriptor` was deliberately not extended.** Per
+    plan-strict scope the slider variant is the one the frontend reads
+    (via `findPanProperty/findTiltProperty` against `axis ===
+    'PAN'/'TILT'`). For fixtures that surface only a position descriptor
+    and no axis-tagged sliders, the head will render static — acceptable
+    for now because the existing reflection emits both descriptors for
+    `WithPosition` fixtures.
+  - **`worldPositionFor` rigging-frame composition** is still
+    translate-only (Session 1 carry-over). Session 5 prefers the
+    backend's pre-composed `worldPositionX/Y/Z`, so rotated rigging
+    frames work end-to-end via that path; the fallback only hits when
+    the backend hasn't re-composed (e.g. a freshly assigned rig before
+    the next list query).
+  - Legacy `riggingPosition: string | null` field still on
+    `FixturePatch` and read by `StageMarker.tsx:63–74` for the badge
+    label. Cleanup deferred until the 2D legacy view is fully retired.
+  - **Flagged by `/simplify` but skipped this session** (each spans
+    multiple unrelated files; pick up when the surface is touched
+    again):
+    1. **Unify the colour-source dispatch between
+       `StageMarker.tsx` and `FixtureModel.tsx`.** Both files run the
+       identical `findColourSource` / `findDimmerProperty` /
+       `acceptsGel + gelCode → findGel` discriminator and then split
+       into a leaf-per-source (Colour / Setting / Gel / Dimmer-only /
+       Placeholder). The leaves diverge in *what* they render (CSS vs
+       Three materials) but the *input* they need is identical: one
+       CSS colour string + a 0..1 intensity. Lift either a
+       `resolveColourSource(patch, fixture, fixtureType)` helper into
+       `src/store/fixtures.ts` (smaller, returns a tagged union both
+       sites switch on), or a full `useFixtureColour(...) → { css,
+       intensity }` hook (larger but lets each consumer collapse to a
+       single visualiser). Touching `StageMarker` is the risk — it's
+       the load-bearing 2D renderer used inside `StageOverviewPanel`
+       and `ProjectOverview`.
+    2. **Three small generic hooks each duplicated 3+ times
+       across the codebase.** All worth extracting on the next sweep
+       through their respective files:
+       - `useFixtureLookup()` — the `fixtureByKey` /
+         `typeByKey` `useMemo` Map-builder duplicated in
+         `Stage3D.tsx`, `StageOverviewPanel.tsx`, and
+         `runner/program/CueCardEditor/MiniStage.tsx`.
+       - `useLocalStorage<T>(key, default)` — `useStageViewMode`
+         is the 6th hand-rolled instance (alongside
+         `useStageOverview`, `useEffectsOverview`,
+         `useFixtureOverview`, `useCueSlotOverview`, plus inline
+         `localStorage` reads in `ThemeToggle` and
+         `CueSlotOverviewPanel`). Worth one shared hook so the
+         JSON-vs-string serialisation policy lives in exactly one
+         place.
+       - `normaliseSliderDmx(dmx, min, max)` — the `(value - min)
+         / span` clamp logic in `dmxToDegrees` is also in
+         `usePropertyValues.ts:260–263`,
+         `useGroupPropertyValues.ts:407–410`,
+         `PropertyVisualizers.tsx:247–251`, and
+         `GroupPropertyVisualizers.tsx:299–300`. Lift to a shared
+         helper (likely in `src/lib/stageCoords.ts` or
+         `src/lib/dmx.ts`).
+    3. **Backend pan/tilt description strings now duplicate
+       structured `degMin`/`degMax`.** Annotations like
+       `@FixtureProperty("Pan adjustment 0-540°", category = PAN,
+       degMin = 0.0, degMax = 540.0, ...)` carry the range in two
+       places. A future cleanup could either auto-suffix the
+       degree range when the structured fields are set
+       (centralising the format) or strip the redundant text from
+       the description so the structured fields are the only source
+       of truth. Do this when the next mover gets added — that's
+       the moment the inconsistency would otherwise silently
+       grow.
+- _Surprises / decisions_:
+  - **2D fallback was repaired, not dropped.** The plan body said "2D
+    branch renders existing `<StageOverviewPanel>` unchanged" but Session
+    4 had silently broken it (CSS `left: %` against metric metres). Per
+    user directive 2D is the phone view and stays — so this session
+    re-fitted `StageOverviewPanel` to metric coords using
+    `useProjectQuery` + `worldPositionLighting`. ProjectOverview's
+    embedded panel benefits for free.
+  - **Annotation populated for every mover, not just the common ones.**
+    Per user directive. Where the description string already encoded
+    the range (Varytec, Fusion, IMG, Shehds, Slender, Scantastic) the
+    numbers came verbatim; for fixtures with only "Pan (coarse)" the
+    datasheet was consulted (Martin, Robe, Source 4, Gear4Music). No
+    range was invented.
+  - **Two cone-orientation false starts in `<BeamDirector>`.** R3F
+    `coneGeometry` defaults to apex at +Y and base at -Y. To put the
+    apex at the fixture origin and base along `+dir` requires mapping
+    +Y → **-dir** then translating by +(length/2)*dir. Doing it the
+    "obvious" way (+Y → +dir) puts the base in the wrong direction.
+    Documented inline.
+  - **Colour applied via `useEffect`, not React props on materials.**
+    Cones/pool/lens use `MeshBasicMaterial` whose colour we mutate
+    imperatively from a leaf component that subscribes to the colour
+    hook. Setting colour via JSX would re-render `<FixtureModel>` on
+    every channel push; the imperative update keeps the geometry tree
+    stable. Lens opacity tracks `0.5 + 0.5*intensity` so the lamp body
+    is always visible when on, not just during full intensity.
+  - **`Boxes` icon for the new top-level entry.** `Box` was already
+    used by the (now renamed) "Regions" settings child; `Boxes` (lucide)
+    visually echoes the multi-mesh nature of the 3D view.
+  - **Cross-repo build passed clean** with two pre-existing
+    `Unchecked cast of KProperty1` warnings unchanged. No frontend
+    type-check or build regressions; the type-check was clean on the
+    second pass after fixing a `project` variable shadow in
+    `StageOverviewPanel`.
 
 ---
 

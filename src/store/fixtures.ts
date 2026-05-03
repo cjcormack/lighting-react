@@ -91,6 +91,15 @@ export type SliderPropertyDescriptor = {
   min: number
   max: number
   compactDisplay?: CompactDisplayRole
+  /** Movement axis for moving-head sliders (omitted ⇒ none). */
+  axis?: 'PAN' | 'TILT'
+  /** Slider min in degrees (mapped to DMX min). Both deg fields must be set
+   *  for the 3D view to convert raw values into degrees. */
+  degMin?: number
+  /** Slider max in degrees (mapped to DMX max). */
+  degMax?: number
+  /** Reverse the direction of the slider→degrees mapping. */
+  inverted?: boolean
 }
 
 export type ColourPropertyDescriptor = {
@@ -227,5 +236,23 @@ export function findDimmerProperty(
 ): SliderPropertyDescriptor | undefined {
   return properties?.find(
     (p): p is SliderPropertyDescriptor => p.type === 'slider' && p.category === 'dimmer',
+  )
+}
+
+/** Find the pan slider (axis === 'PAN') for moving-head head rotation. */
+export function findPanProperty(
+  properties: PropertyDescriptor[] | undefined,
+): SliderPropertyDescriptor | undefined {
+  return properties?.find(
+    (p): p is SliderPropertyDescriptor => p.type === 'slider' && p.axis === 'PAN',
+  )
+}
+
+/** Find the tilt slider (axis === 'TILT') for moving-head head rotation. */
+export function findTiltProperty(
+  properties: PropertyDescriptor[] | undefined,
+): SliderPropertyDescriptor | undefined {
+  return properties?.find(
+    (p): p is SliderPropertyDescriptor => p.type === 'slider' && p.axis === 'TILT',
   )
 }
