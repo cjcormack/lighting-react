@@ -39,6 +39,7 @@ import {
 import { useProjectListQuery, useProjectQuery } from "@/store/projects"
 import {
   useCloudSyncConfigQuery,
+  useCloudSyncConfigsQuery,
   useCloudSyncStatusQuery,
   useCloudSyncLogQuery,
   useLazyCloudSyncLogQuery,
@@ -59,6 +60,7 @@ import { useOauthGithubIdentityQuery } from "@/store/oauthGithub"
 import { ConflictPanel } from "@/components/cloudSync/ConflictPanel"
 import { IdentityRow } from "@/components/cloudSync/IdentityRow"
 import { RepoPicker } from "@/components/cloudSync/RepoPicker"
+import { ImportFromRemoteDialog } from "@/components/cloudSync/ImportFromRemoteDialog"
 import { formatError } from "@/lib/formatError"
 
 const AUTO_SYNC_MIN_INTERVAL_SECONDS = AUTO_SYNC_MIN_INTERVAL_MS / 1000
@@ -77,8 +79,58 @@ function mergeUniqueById<T extends { id: number }>(prev: T[], next: T[]): T[] {
 
 // ─── Hub body (rendered as the Sync tab inside Install Settings) ─────
 
+function ImportFromRemoteButton({
+  oauthConnected,
+  onClick,
+}: {
+  oauthConnected: boolean
+  onClick: () => void
+}) {
+  const button = (
+    <Button
+      variant="outline"
+      size="sm"
+      className="gap-1.5"
+      disabled={!oauthConnected}
+      onClick={oauthConnected ? onClick : undefined}
+    >
+      <CloudDownload className="size-3.5" />
+      Import from remote…
+    </Button>
+  )
+  if (oauthConnected) return button
+  // tabIndex on the wrapper is the documented Radix workaround for tooltips on disabled
+  // controls — disabled buttons don't dispatch the pointer events the tooltip listens for.
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span tabIndex={0}>{button}</span>
+      </TooltipTrigger>
+      <TooltipContent side="left">
+        Connect GitHub above to clone a remote repo as a new project.
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
 export function CloudSyncHubBody() {
-  const { data: projects, isLoading } = useProjectListQuery()
+  const { data: projects, isLoading: projectsLoading } = useProjectListQuery()
+  const { data: configs, isLoading: configsLoading } = useCloudSyncConfigsQuery()
+  const { data: identity } = useOauthGithubIdentityQuery()
+  const [importOpen, setImportOpen] = useState(false)
+  const dispatch = useDispatch()
+  const isLoading = projectsLoading || configsLoading
+  const oauthConnected = identity?.connected === true
+
+  // Pick up imports done from another tab — the importing tab itself relies on the
+  // mutation's invalidatesTags to refresh, but a WS-only listener catches the cross-tab
+  // case without polling.
+  useEffect(() => {
+    const sub = lightingApi.cloudSync.subscribeProjectImported(() => {
+      dispatch(restApi.util.invalidateTags(['ProjectList', 'CloudSyncConfig']))
+    })
+    return () => sub.unsubscribe()
+  }, [dispatch])
 
   return (
     <div className="space-y-4 max-w-5xl">
@@ -100,19 +152,10 @@ export function CloudSyncHubBody() {
               Select a project to configure its remote, take snapshots, or resolve conflicts.
             </p>
           </div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span tabIndex={0}>
-                <Button variant="outline" size="sm" disabled className="gap-1.5">
-                  <CloudDownload className="size-3.5" />
-                  Import from remote…
-                </Button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="left">
-              Coming soon — clone a remote repo into a new local project.
-            </TooltipContent>
-          </Tooltip>
+          <ImportFromRemoteButton
+            oauthConnected={oauthConnected}
+            onClick={() => setImportOpen(true)}
+          />
         </div>
         {isLoading ? (
           <div className="flex justify-center py-6">
@@ -141,12 +184,18 @@ export function CloudSyncHubBody() {
                   projectId={project.id}
                   projectName={project.name}
                   isActive={project.isCurrent}
+                  config={configs?.[String(project.id)]}
                 />
               ))}
             </TableBody>
           </Table>
         )}
       </Card>
+      <ImportFromRemoteDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        oauthConnected={oauthConnected}
+      />
     </div>
   )
 }
@@ -161,13 +210,15 @@ function ProjectSyncRow({
   projectId,
   projectName,
   isActive,
+  config,
 }: {
   projectId: number
   projectName: string
   isActive: boolean
+  /** Slice of the batch `useCloudSyncConfigsQuery()` map; undefined when this project has never had a sync_config row. */
+  config: SyncConfig | undefined
 }) {
   const navigate = useNavigate()
-  const { data: config, isLoading } = useCloudSyncConfigQuery(projectId)
   const repoLabel = formatRepoUrl(config?.repoUrl ?? null)
   const onOpen = () => navigate(`/sync/projects/${projectId}`)
 
@@ -182,9 +233,7 @@ function ProjectSyncRow({
         </div>
       </TableCell>
       <TableCell>
-        {isLoading ? (
-          <Loader2 className="size-3.5 animate-spin" />
-        ) : config?.enabled ? (
+        {config?.enabled ? (
           <Badge variant="secondary" className="text-[10px]">enabled</Badge>
         ) : (
           <Badge variant="outline" className="text-[10px] text-muted-foreground">disabled</Badge>

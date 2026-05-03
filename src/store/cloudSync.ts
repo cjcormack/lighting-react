@@ -172,6 +172,20 @@ export interface AbortResult {
   sessionId: number
 }
 
+export interface ImportFromRemoteRequest {
+  repoUrl: string
+  /** Defaults to `main` server-side when null/blank. */
+  branch?: string | null
+  /** Defaults server-side to whatever's in the imported `project.json`. */
+  projectName?: string | null
+}
+
+export interface ImportFromRemoteResult {
+  projectId: number
+  projectUuid: string
+  name: string
+}
+
 // ─── Endpoints ─────────────────────────────────────────────────────────
 
 /**
@@ -183,6 +197,20 @@ export const cloudSyncApi = restApi.injectEndpoints({
   endpoints: (build) => ({
     cloudSyncConfig: build.query<SyncConfig, number>({
       query: (projectId) => `project/${projectId}/sync/config`,
+      providesTags: ['CloudSyncConfig'],
+    }),
+    /**
+     * Batch fetch of every project's sync config keyed by stringified project id.
+     * Replaces the N+1 `useCloudSyncConfigQuery(id)` pattern in the hub list. The
+     * map is sparse — projects that have never had a sync_config row are absent
+     * (treated as "unconfigured" by the hub row).
+     *
+     * Shares the `CloudSyncConfig` tag with the per-project query so the existing
+     * mutation invalidations + WS-driven `restApi.util.invalidateTags(['CloudSyncConfig'])`
+     * busts both caches in one go.
+     */
+    cloudSyncConfigs: build.query<Record<string, SyncConfig>, void>({
+      query: () => `cloud-sync/configs`,
       providesTags: ['CloudSyncConfig'],
     }),
     updateCloudSyncConfig: build.mutation<
@@ -302,12 +330,30 @@ export const cloudSyncApi = restApi.injectEndpoints({
       }),
       invalidatesTags: ['CloudSyncConflicts', 'CloudSyncStatus'],
     }),
+    /**
+     * Clone a remote repo into a brand-new local project. Returns the new project's
+     * id so the caller can navigate straight to its sync drill-in. Invalidates
+     * `ProjectList` (a new project appeared) and `CloudSyncConfig` (its sync row
+     * is now in the batch query's response).
+     */
+    cloudSyncImport: build.mutation<
+      ImportFromRemoteResult,
+      ImportFromRemoteRequest
+    >({
+      query: (body) => ({
+        url: `cloud-sync/import`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['ProjectList', 'CloudSyncConfig'],
+    }),
   }),
   overrideExisting: false,
 })
 
 export const {
   useCloudSyncConfigQuery,
+  useCloudSyncConfigsQuery,
   useUpdateCloudSyncConfigMutation,
   useCloudSyncStatusQuery,
   useCloudSyncLogQuery,
@@ -321,4 +367,5 @@ export const {
   useCloudSyncResolveMutation,
   useCloudSyncApplyMutation,
   useCloudSyncAbortMutation,
+  useCloudSyncImportMutation,
 } = cloudSyncApi

@@ -32,6 +32,12 @@ export interface CloudSyncWsApi {
    * the entry without round-tripping `/sync/activity`.
    */
   subscribeLogAppended(fn: (event: CloudSyncLogAppendedEvent) => void): Subscription
+  /**
+   * A peer (or this same install in another tab) just imported a remote repo as a new
+   * local project. Subscribers refresh `ProjectList` + `CloudSyncConfig` so the hub
+   * picks up the new row without a full reload.
+   */
+  subscribeProjectImported(fn: (event: CloudSyncProjectImportedEvent) => void): Subscription
 }
 
 export interface CloudSyncStartedEvent {
@@ -65,6 +71,12 @@ export interface CloudSyncLogAppendedEvent {
   entry: SyncLogEntry
 }
 
+export interface CloudSyncProjectImportedEvent {
+  projectId: number
+  projectUuid: string
+  name: string
+}
+
 export interface OAuthIdentityChangedEvent {
   provider: string
   connected: boolean
@@ -79,6 +91,7 @@ type CloudSyncInMessage =
   | { type: 'cloudSyncFailed' } & CloudSyncFailedEvent
   | { type: 'cloudSyncConflictsPending' } & CloudSyncConflictsPendingEvent
   | { type: 'cloudSyncLogAppended' } & CloudSyncLogAppendedEvent
+  | { type: 'cloudSyncProjectImported' } & CloudSyncProjectImportedEvent
   | { type: 'oauthIdentityChanged' } & OAuthIdentityChangedEvent
 
 export function createCloudSyncWsApi(conn: InternalApiConnection): CloudSyncWsApi {
@@ -87,6 +100,7 @@ export function createCloudSyncWsApi(conn: InternalApiConnection): CloudSyncWsAp
   const failed = createWsSubscribable<CloudSyncFailedEvent>()
   const conflictsPending = createWsSubscribable<CloudSyncConflictsPendingEvent>()
   const logAppended = createWsSubscribable<CloudSyncLogAppendedEvent>()
+  const projectImported = createWsSubscribable<CloudSyncProjectImportedEvent>()
   const oauthIdentityChanged = createWsSubscribable<OAuthIdentityChangedEvent>()
 
   conn.subscribe((evType, ev) => {
@@ -109,6 +123,9 @@ export function createCloudSyncWsApi(conn: InternalApiConnection): CloudSyncWsAp
       case 'cloudSyncLogAppended':
         logAppended.notify(message)
         break
+      case 'cloudSyncProjectImported':
+        projectImported.notify(message)
+        break
       case 'oauthIdentityChanged':
         oauthIdentityChanged.notify(message)
         break
@@ -121,6 +138,7 @@ export function createCloudSyncWsApi(conn: InternalApiConnection): CloudSyncWsAp
     subscribeFailed: failed.api.subscribe,
     subscribeConflictsPending: conflictsPending.api.subscribe,
     subscribeLogAppended: logAppended.api.subscribe,
+    subscribeProjectImported: projectImported.api.subscribe,
     subscribeOAuthIdentityChanged: oauthIdentityChanged.api.subscribe,
   }
 }
