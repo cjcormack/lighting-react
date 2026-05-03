@@ -32,6 +32,11 @@ export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
 }
 
+/** Comparator for entities ordered by `sortOrder` with `id` as a stable tiebreaker. */
+export function bySortOrder<T extends { sortOrder: number; id: number }>(a: T, b: T): number {
+  return a.sortOrder - b.sortOrder || a.id - b.id
+}
+
 /** Parse a number input value where empty string means "leave unset" (null). */
 export function parseNullableNumber(raw: string): number | null {
   const trimmed = raw.trim()

@@ -15,7 +15,7 @@ import { useCurrentProjectQuery } from "@/store/projects"
 import { useStageRegionListQuery } from "@/store/stageRegions"
 import { EditStageRegionSheet } from "@/components/stage/EditStageRegionSheet"
 import type { StageRegionDto } from "@/api/stageRegionApi"
-import { formatTriple } from "@/lib/utils"
+import { bySortOrder, formatTriple } from "@/lib/utils"
 
 // ─── Redirect ─────────────────────────────────────────────────────────
 
@@ -47,13 +47,10 @@ export function StageRegionsContent({ projectId }: { projectId: number }) {
   const { data: regions, isLoading } = useStageRegionListQuery(projectId)
   const [editing, setEditing] = useState<Editing>(null)
 
-  const sortedRegions = useMemo(() => {
-    if (!regions) return []
-    return [...regions].sort((a, b) => {
-      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
-      return a.id - b.id
-    })
-  }, [regions])
+  const sortedRegions = useMemo(
+    () => (regions ? [...regions].sort(bySortOrder) : []),
+    [regions],
+  )
 
   const editingRegion: StageRegionDto | null =
     editing && editing !== "new" ? editing : null

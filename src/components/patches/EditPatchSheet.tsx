@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Sheet,
   SheetContent,
@@ -15,8 +15,7 @@ import { Trash2, X } from 'lucide-react'
 import { useUpdatePatchMutation, useDeletePatchMutation, usePatchGroupListQuery } from '@/store/patches'
 import { useFixtureTypeListQuery } from '@/store/fixtures'
 import { GroupComboInput } from './GroupComboInput'
-import { StageMapField } from './StageMapField'
-import { RiggingPositionInput } from './RiggingPositionInput'
+import { PatchPlacementFields, type PatchPlacementValue } from './PatchPlacementFields'
 import { BeamAngleField } from './BeamAngleField'
 import { GelPickerField } from './GelPickerField'
 import type { FixturePatch } from '@/api/patchApi'
@@ -35,11 +34,14 @@ export function EditPatchSheet({ open, onOpenChange, patch, projectId, existingP
   const [startChannel, setStartChannel] = useState(1)
   const [addGroupValue, setAddGroupValue] = useState('')
 
-  const [stage, setStage] = useState<{ stageX: number | null; stageY: number | null }>({
+  const [placement, setPlacement] = useState<PatchPlacementValue>({
+    riggingUuid: null,
     stageX: null,
     stageY: null,
+    stageZ: null,
+    baseYawDeg: null,
+    basePitchDeg: null,
   })
-  const [riggingPosition, setRiggingPosition] = useState<string | null>(null)
   const [beamAngleDeg, setBeamAngleDeg] = useState<number | null>(null)
   const [gelCode, setGelCode] = useState<string | null>(null)
 
@@ -48,67 +50,24 @@ export function EditPatchSheet({ open, onOpenChange, patch, projectId, existingP
   const { data: patchGroups } = usePatchGroupListQuery(projectId)
   const { data: fixtureTypes } = useFixtureTypeListQuery()
 
-  const dragTimerRef = useRef<number | null>(null)
-  const cancelDragTimer = () => {
-    if (dragTimerRef.current != null) {
-      window.clearTimeout(dragTimerRef.current)
-      dragTimerRef.current = null
-    }
-  }
-
-  // Populate form when patch changes
   useEffect(() => {
     if (patch) {
       setDisplayName(patch.displayName)
       setKey(patch.key)
       setStartChannel(patch.startChannel)
-      setStage({ stageX: patch.stageX, stageY: patch.stageY })
-      setRiggingPosition(patch.riggingPosition)
+      setPlacement({
+        riggingUuid: patch.riggingUuid,
+        stageX: patch.stageX,
+        stageY: patch.stageY,
+        stageZ: patch.stageZ,
+        baseYawDeg: patch.baseYawDeg,
+        basePitchDeg: patch.basePitchDeg,
+      })
       setBeamAngleDeg(patch.beamAngleDeg)
       setGelCode(patch.gelCode)
       setAddGroupValue('')
     }
   }, [patch])
-
-  // Debounced PUT for stage coords. Mid-drag mousemove updates local state
-  // many times per second; we only flush to the backend after the user
-  // pauses for ~300 ms (or releases, since mousemove stops firing).
-  useEffect(() => {
-    if (!patch || !open) return
-    if (stage.stageX === patch.stageX && stage.stageY === patch.stageY) return
-    cancelDragTimer()
-    dragTimerRef.current = window.setTimeout(() => {
-      dragTimerRef.current = null
-      updatePatch({ projectId, patchId: patch.id, stageX: stage.stageX, stageY: stage.stageY })
-    }, 300)
-    return cancelDragTimer
-  }, [stage, patch, open, projectId, updatePatch])
-
-  useEffect(() => {
-    if (!open) cancelDragTimer()
-  }, [open])
-
-  const riggingPresets = useMemo(() => {
-    const used = new Set<string>()
-    for (const p of existingPatches) {
-      const v = p.riggingPosition?.trim()
-      if (v) used.add(v.toUpperCase())
-    }
-    return Array.from(used).sort()
-  }, [existingPatches])
-
-  const otherFixtures = useMemo(
-    () =>
-      existingPatches
-        .filter((p) => p.id !== patch?.id && p.stageX != null && p.stageY != null)
-        .map((p) => ({
-          id: p.id,
-          stageX: p.stageX as number,
-          stageY: p.stageY as number,
-          name: p.displayName,
-        })),
-    [existingPatches, patch?.id],
-  )
 
   if (!patch) return null
 
@@ -129,21 +88,26 @@ export function EditPatchSheet({ open, onOpenChange, patch, projectId, existingP
     displayName !== patch.displayName ||
     key !== patch.key ||
     startChannel !== patch.startChannel ||
-    stage.stageX !== patch.stageX ||
-    stage.stageY !== patch.stageY ||
-    riggingPosition !== patch.riggingPosition ||
+    placement.riggingUuid !== patch.riggingUuid ||
+    placement.stageX !== patch.stageX ||
+    placement.stageY !== patch.stageY ||
+    placement.stageZ !== patch.stageZ ||
+    placement.baseYawDeg !== patch.baseYawDeg ||
+    placement.basePitchDeg !== patch.basePitchDeg ||
     beamAngleDeg !== patch.beamAngleDeg ||
     gelCode !== patch.gelCode
 
   const handleSave = async () => {
-    cancelDragTimer()
     const body: Record<string, unknown> = {}
     if (displayName !== patch.displayName) body.displayName = displayName
     if (key !== patch.key) body.key = key
     if (startChannel !== patch.startChannel) body.startChannel = startChannel
-    if (stage.stageX !== patch.stageX) body.stageX = stage.stageX
-    if (stage.stageY !== patch.stageY) body.stageY = stage.stageY
-    if (riggingPosition !== patch.riggingPosition) body.riggingPosition = riggingPosition
+    if (placement.riggingUuid !== patch.riggingUuid) body.riggingUuid = placement.riggingUuid
+    if (placement.stageX !== patch.stageX) body.stageX = placement.stageX
+    if (placement.stageY !== patch.stageY) body.stageY = placement.stageY
+    if (placement.stageZ !== patch.stageZ) body.stageZ = placement.stageZ
+    if (placement.baseYawDeg !== patch.baseYawDeg) body.baseYawDeg = placement.baseYawDeg
+    if (placement.basePitchDeg !== patch.basePitchDeg) body.basePitchDeg = placement.basePitchDeg
     if (beamAngleDeg !== patch.beamAngleDeg) body.beamAngleDeg = beamAngleDeg
     if (gelCode !== patch.gelCode) body.gelCode = gelCode
     await updatePatch({ projectId, patchId: patch.id, ...body }).unwrap()
@@ -160,7 +124,6 @@ export function EditPatchSheet({ open, onOpenChange, patch, projectId, existingP
   }
 
   const handleDelete = async () => {
-    cancelDragTimer()
     await deletePatch({ projectId, patchId: patch.id }).unwrap()
     onOpenChange(false)
   }
@@ -223,26 +186,11 @@ export function EditPatchSheet({ open, onOpenChange, patch, projectId, existingP
             )}
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Stage</Label>
-            <StageMapField
-              value={stage}
-              onChange={setStage}
-              otherFixtures={otherFixtures}
-              selfLabel={displayName || patch.displayName}
-              selfRiggingPosition={riggingPosition}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="edit-rigging">Position</Label>
-            <RiggingPositionInput
-              id="edit-rigging"
-              value={riggingPosition}
-              onChange={setRiggingPosition}
-              presets={riggingPresets}
-            />
-          </div>
+          <PatchPlacementFields
+            projectId={projectId}
+            value={placement}
+            onChange={setPlacement}
+          />
 
           {(acceptsBeamAngle || acceptsGel) && (
             <div className="space-y-2.5 rounded-md border border-border p-3">

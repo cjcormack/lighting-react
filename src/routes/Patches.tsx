@@ -16,6 +16,7 @@ import {
 import { Loader2, Plus, Pencil, Check } from "lucide-react"
 import { useCurrentProjectQuery } from "../store/projects"
 import { usePatchListQuery, useUniverseConfigListQuery, useUpdateUniverseConfigMutation, usePatchGroupListQuery } from "../store/patches"
+import { useRiggingListQuery } from "../store/riggings"
 import { AddFixtureSheet } from "@/components/patches/AddFixtureSheet"
 import { EditPatchSheet } from "@/components/patches/EditPatchSheet"
 import { EditGroupSheet } from "@/components/patches/EditGroupSheet"
@@ -63,10 +64,11 @@ export function PatchListContent({
   const { data: patches, isLoading: patchesLoading } = usePatchListQuery(projectId)
   const { data: universeConfigs } = useUniverseConfigListQuery(projectId)
   const { data: patchGroups } = usePatchGroupListQuery(projectId)
+  const { data: riggings } = useRiggingListQuery(projectId)
 
   const rows = useMemo(
-    () => buildPatchRows(patches),
-    [patches],
+    () => buildPatchRows(patches, riggings),
+    [patches, riggings],
   )
 
   const editingPatch = patches?.find(p => p.id === editingPatchId) ?? null
@@ -228,7 +230,7 @@ interface PatchRow {
   address: string
   channelCount: number
   fixtureType: string
-  riggingPosition: string | null
+  riggingName: string | null
   beamAngleDeg: number | null
   gelCode: string | null
   groups: { id: number; name: string }[]
@@ -251,7 +253,7 @@ function PatchTable({
           <TableHead className="w-[5rem]">Address</TableHead>
           <TableHead className="hidden sm:table-cell">Type</TableHead>
           <TableHead className="hidden md:table-cell">Key</TableHead>
-          <TableHead className="hidden md:table-cell">Position</TableHead>
+          <TableHead className="hidden md:table-cell">Mount</TableHead>
           <TableHead className="hidden lg:table-cell">Angle</TableHead>
           <TableHead className="hidden lg:table-cell">Gel</TableHead>
           <TableHead>Name</TableHead>
@@ -281,12 +283,12 @@ function PatchTable({
             <TableCell className="hidden md:table-cell">
               <code className="text-xs text-muted-foreground">{row.key}</code>
             </TableCell>
-            <TableCell className="hidden md:table-cell">
-              {row.riggingPosition ? (
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono">
-                  {row.riggingPosition}
-                </Badge>
-              ) : null}
+            <TableCell className="hidden md:table-cell text-xs">
+              {row.riggingName ? (
+                <span>{row.riggingName}</span>
+              ) : (
+                <span className="italic text-muted-foreground">Free</span>
+              )}
             </TableCell>
             <TableCell className="hidden lg:table-cell text-xs font-mono tabular-nums text-muted-foreground">
               {row.beamAngleDeg != null ? `${row.beamAngleDeg}°` : null}
@@ -354,8 +356,12 @@ function formatAddress(universe: number, channel: number): string {
 
 function buildPatchRows(
   patches: FixturePatch[] | undefined,
+  riggings: { uuid: string; name: string }[] | undefined,
 ): PatchRow[] {
   if (!patches) return []
+
+  const riggingNames = new Map<string, string>()
+  for (const r of riggings ?? []) riggingNames.set(r.uuid, r.name)
 
   const rows: PatchRow[] = patches.map((p) => {
     const channelCount = p.channelCount ?? 1
@@ -366,7 +372,7 @@ function buildPatchRows(
       address: formatAddress(p.universe, p.startChannel),
       channelCount,
       fixtureType: buildTypeLabel(p.manufacturer, p.model, p.modeName),
-      riggingPosition: p.riggingPosition,
+      riggingName: p.riggingUuid ? riggingNames.get(p.riggingUuid) ?? null : null,
       beamAngleDeg: p.beamAngleDeg,
       gelCode: p.gelCode,
       groups: p.groups,

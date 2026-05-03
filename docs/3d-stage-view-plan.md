@@ -41,7 +41,7 @@ visualiser must:
 | 1       | Foundation                         | Done        | 2026-05-03 | Cross-repo: backend now broadcasts riggingListChanged/stageRegionListChanged. Data reset dropped (no meaningful legacy data). |
 | 2       | Stage Configuration                | Done        | 2026-05-03 | New "Stage" tab in Project Settings hosts stage dimensions + regions CRUD. |
 | 3       | Rigging Configuration              | Done        | 2026-05-03 | Riggings CRUD on new "Rigging" tab; flown-truss defaults on create. |
-| 4       | Patching: Rigging-Mounted vs Free  | Not started | —         |       |
+| 4       | Patching: Rigging-Mounted vs Free  | Done        | 2026-05-03 | Structured rigging assignment + metric stage coords on the patch sheet; legacy 2D map and free-text rigging label retired. |
 | 5       | Read-Only 3D Stage View            | Not started | —         |       |
 | 6       | 3D Editor Mode                     | Not started | —         |       |
 | 7       | Polish (optional)                  | Not started | —         |       |
@@ -334,7 +334,61 @@ a second tab refresh.
 Reassign to "Free"; confirm `riggingUuid` clears and world position becomes
 the raw `stageX/Y/Z`.
 
-**Status & handover**: _Not started._
+**Status & handover**:
+
+- _Status_: Done
+- _Completed_: 2026-05-03
+- _What landed_:
+  - `src/components/patches/PatchPlacementFields.tsx` (new) — exports
+    `PatchPlacementValue` + the component. Mounting `<Select>` (Free + each
+    rigging from `useRiggingListQuery`), Position group (X/Y/Z metres) with
+    flipping help text ("offset from rigging origin" vs "world coordinates"),
+    and a native `<details>` "Base orientation (advanced)" wrapping
+    yaw/pitch number fields. Reuses `FieldGroup` + `NumberField` from
+    `components/ui/form-fields.tsx`.
+  - `src/components/patches/EditPatchSheet.tsx` — replaced `stage` +
+    `riggingPosition` state with one `placement: PatchPlacementValue`
+    atom; removed `useMemo`/`useRef` imports. Dropped the 300 ms drag-debounce
+    `useEffect` and `dragTimerRef` (Session 6 will reintroduce drag-debounce
+    inside the 3D editor's own handlers). Dropped the `riggingPresets`
+    memo and the `otherFixtures` memo with `StageMapField`. Dirty-diff PUT
+    + `hasChanges` now cover `riggingUuid`, `stageX/Y/Z`, `baseYawDeg`,
+    `basePitchDeg`. Stage section JSX collapsed from two blocks to a single
+    `<PatchPlacementFields>`.
+  - `src/routes/Patches.tsx` — added `useRiggingListQuery` and threaded a
+    `Map<uuid,name>` into `buildPatchRows`. `PatchRow.riggingPosition`
+    swapped for `riggingName`. The "Position" column became "Mount" at the
+    same `hidden md:table-cell` slot — rigging name plain, italic
+    muted "Free" otherwise.
+  - Deleted `src/components/patches/StageMapField.tsx` and
+    `src/components/patches/RiggingPositionInput.tsx` — both were only
+    referenced by `EditPatchSheet`.
+- _Open follow-ups_:
+  - `riggingPosition` field still on `FixturePatch` /
+    `CreatePatchRequest` / `UpdatePatchRequest` in `src/api/patchApi.ts`
+    and read by `src/components/stage/StageMarker.tsx` (legacy 2D marker
+    label). Per the Session 4 plan body it stays for now; full DTO removal
+    is a follow-up once nothing reads it (likely after the 2D view is
+    retired in/after Session 5).
+  - `worldPositionFor` rigging-frame composition (Session 1 carry-over) is
+    still translate-only. Session 5 callers should prefer the backend's
+    pre-composed `worldPositionX/Y/Z`.
+- _Surprises / decisions_:
+  - **Auto-save dropped, not preserved.** The 300 ms debounced PUT was a
+    StageMap-drag affordance; it doesn't belong on a structured form where
+    every other field waits for Save. Session 6 reintroduces drag-debounce
+    locally inside the 3D editor where it actually applies.
+  - **Mount column reuses the Position slot, not appended.** `riggingPosition`
+    now arrives as `undefined` from the backend, so the legacy column was
+    rendering empty for every row — replacing rather than adding keeps the
+    table from gaining a dead column.
+  - **Free is italic muted text, not a badge.** Visually quieter than the
+    rigging-name plain text, so the "no mount" state recedes while the
+    structured assignment reads clearly.
+  - **Native `<details>` for Base orientation.** Avoids pulling another
+    Radix primitive; `<summary>` styling is the only custom touch.
+  - **`useRiggingListQuery` takes a positional `number`**, not the
+    `{ projectId }` object I initially wrote — caught at type-check.
 
 ---
 

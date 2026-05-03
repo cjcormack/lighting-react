@@ -13,7 +13,7 @@ import { Loader2, Plus } from "lucide-react"
 import { useRiggingListQuery } from "@/store/riggings"
 import { EditRiggingSheet } from "@/components/rigging/EditRiggingSheet"
 import type { RiggingDto } from "@/api/riggingApi"
-import { formatTriple, formatRotation } from "@/lib/utils"
+import { bySortOrder, formatTriple, formatRotation } from "@/lib/utils"
 
 type Editing = RiggingDto | "new" | null
 
@@ -21,13 +21,10 @@ export function RiggingsContent({ projectId }: { projectId: number }) {
   const { data: riggings, isLoading } = useRiggingListQuery(projectId)
   const [editing, setEditing] = useState<Editing>(null)
 
-  const sortedRiggings = useMemo(() => {
-    if (!riggings) return []
-    return [...riggings].sort((a, b) => {
-      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
-      return a.id - b.id
-    })
-  }, [riggings])
+  const sortedRiggings = useMemo(
+    () => (riggings ? [...riggings].sort(bySortOrder) : []),
+    [riggings],
+  )
 
   const editingRigging: RiggingDto | null =
     editing && editing !== "new" ? editing : null
