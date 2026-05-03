@@ -31,3 +31,11 @@ export function arraysEqual<T>(a: readonly T[], b: readonly T[]): boolean {
 export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
 }
+
+/** Parse a number input value where empty string means "leave unset" (null). */
+export function parseNullableNumber(raw: string): number | null {
+  const trimmed = raw.trim()
+  if (trimmed === "") return null
+  const n = Number(trimmed)
+  return Number.isFinite(n) ? n : null
+}

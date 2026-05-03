@@ -6,15 +6,17 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Loader2 } from "lucide-react"
 import { useCurrentProjectQuery, useProjectQuery, useUpdateProjectMutation } from "@/store/projects"
 import { Breadcrumbs } from "@/components/Breadcrumbs"
 import { formatError } from "@/lib/formatError"
+import { parseNullableNumber } from "@/lib/utils"
 import { PatchListContent } from "./Patches"
 import { SurfacesContent } from "./Surfaces"
+import { StageRegionsContent } from "./StageRegions"
 
-const TABS = ["general", "patches", "surfaces"] as const
+const TABS = ["general", "patches", "surfaces", "stage"] as const
 type Tab = (typeof TABS)[number]
 
 function isTab(value: string | undefined): value is Tab {
@@ -83,6 +85,7 @@ export function ProjectSettings() {
             <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="patches">Patch List</TabsTrigger>
             <TabsTrigger value="surfaces">Surfaces</TabsTrigger>
+            <TabsTrigger value="stage">Stage</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
@@ -92,6 +95,7 @@ export function ProjectSettings() {
         )}
         {activeTab === "patches" && <PatchListContent projectId={projectIdNum} />}
         {activeTab === "surfaces" && <SurfacesContent projectId={projectIdNum} />}
+        {activeTab === "stage" && <StageTab projectId={projectIdNum} />}
       </div>
     </div>
   )
@@ -166,6 +170,122 @@ function GeneralTab({ projectId }: { projectId: number }) {
           </Button>
         </div>
       </Card>
+    </div>
+  )
+}
+
+function StageTab({ projectId }: { projectId: number }) {
+  return (
+    <div className="p-4 space-y-4 max-w-3xl">
+      <StageDimensionsCard projectId={projectId} />
+      <StageRegionsContent projectId={projectId} />
+    </div>
+  )
+}
+
+function StageDimensionsCard({ projectId }: { projectId: number }) {
+  const { data: project } = useProjectQuery(projectId)
+  const [updateProject, { isLoading: isUpdating }] = useUpdateProjectMutation()
+  const [widthM, setWidthM] = useState<number | null>(null)
+  const [depthM, setDepthM] = useState<number | null>(null)
+  const [heightM, setHeightM] = useState<number | null>(null)
+
+  // Seed once per project identity; refetches must not clobber edits in flight.
+  useEffect(() => {
+    if (project) {
+      setWidthM(project.stageWidthM)
+      setDepthM(project.stageDepthM)
+      setHeightM(project.stageHeightM)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id])
+
+  if (!project) {
+    return (
+      <Card className="p-4 flex justify-center">
+        <Loader2 className="size-5 animate-spin" />
+      </Card>
+    )
+  }
+
+  const dirty =
+    widthM !== project.stageWidthM ||
+    depthM !== project.stageDepthM ||
+    heightM !== project.stageHeightM
+
+  const handleSave = async () => {
+    try {
+      await updateProject({
+        id: projectId,
+        stageWidthM: widthM,
+        stageDepthM: depthM,
+        stageHeightM: heightM,
+      }).unwrap()
+      toast.success("Stage dimensions saved")
+    } catch (err) {
+      toast.error(`Failed to save stage dimensions: ${formatError(err)}`)
+    }
+  }
+
+  return (
+    <Card className="p-4 space-y-4">
+      <div>
+        <h2 className="text-sm font-semibold">Stage Dimensions</h2>
+        <p className="text-xs text-muted-foreground">
+          Bounding box (metres) used to frame the 3D view. Leave blank to fall back to defaults.
+        </p>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        <DimensionField
+          id="stage-width"
+          label="Width"
+          value={widthM}
+          onChange={setWidthM}
+        />
+        <DimensionField
+          id="stage-depth"
+          label="Depth"
+          value={depthM}
+          onChange={setDepthM}
+        />
+        <DimensionField
+          id="stage-height"
+          label="Height"
+          value={heightM}
+          onChange={setHeightM}
+        />
+      </div>
+      <div className="flex justify-end">
+        <Button onClick={handleSave} disabled={!dirty || isUpdating}>
+          {isUpdating ? "Saving…" : "Save"}
+        </Button>
+      </div>
+    </Card>
+  )
+}
+
+function DimensionField({
+  id,
+  label,
+  value,
+  onChange,
+}: {
+  id: string
+  label: string
+  value: number | null
+  onChange: (v: number | null) => void
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label} (m)</Label>
+      <Input
+        id={id}
+        type="number"
+        min={0}
+        value={value ?? ""}
+        onChange={(e) => onChange(parseNullableNumber(e.target.value))}
+        onFocus={(e) => e.target.select()}
+      />
     </div>
   )
 }

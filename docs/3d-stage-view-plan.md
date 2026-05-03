@@ -39,7 +39,7 @@ visualiser must:
 | Session | Title                              | Status      | Completed | Notes |
 |---------|------------------------------------|-------------|-----------|-------|
 | 1       | Foundation                         | Done        | 2026-05-03 | Cross-repo: backend now broadcasts riggingListChanged/stageRegionListChanged. Data reset dropped (no meaningful legacy data). |
-| 2       | Stage Configuration                | Not started | —         |       |
+| 2       | Stage Configuration                | Done        | 2026-05-03 | New "Stage" tab in Project Settings hosts stage dimensions + regions CRUD. |
 | 3       | Rigging Configuration              | Not started | —         |       |
 | 4       | Patching: Rigging-Mounted vs Free  | Not started | —         |       |
 | 5       | Read-Only 3D Stage View            | Not started | —         |       |
@@ -188,7 +188,41 @@ return data in DevTools against a project with hand-seeded riggings + regions.
 **Verify**: create a region, edit it, delete it. Confirm WS invalidation makes
 a second tab refresh.
 
-**Status & handover**: _Not started._
+**Status & handover**:
+
+- _Status_: Done
+- _Completed_: 2026-05-03
+- _What landed_:
+  - `src/api/projectApi.ts` — `ProjectDetail` and `UpdateProjectRequest`
+    extended with `stageWidthM/DepthM/HeightM: number | null`.
+  - `src/routes/StageRegions.tsx` (new) — exports `StageRegionsContent`
+    (table + "Add region" button + edit sheet) and a
+    `StageRegionsRedirect` for `/stage-regions` / current-project deep
+    links. Regions sort by `sortOrder` then `id`.
+  - `src/components/stage/EditStageRegionSheet.tsx` (new) — single sheet
+    for create + edit, with destructive Delete in edit mode. Numeric
+    fields treat empty string as `null`.
+  - `src/routes/ProjectSettings.tsx` — added a fourth tab "Stage" that
+    renders `StageDimensionsCard` (project-level w/d/h inputs hitting
+    `useUpdateProjectMutation`) above `StageRegionsContent`.
+  - `src/navigation.ts` — added "Stage" child entry under
+    `project-settings` (icon: `Box`) so the sidebar deep-links to the
+    new tab the same way `patches`/`surfaces` already do.
+- _Open follow-ups_:
+  - Riggings CRUD lands in Session 3 with the same shape (list page +
+    edit sheet, child of `project-settings`).
+  - Patch-placement field rework (Session 4) will start consuming
+    `useStageRegionListQuery` + the project's stage dims for snap/clamp
+    behaviour.
+- _Surprises / decisions_:
+  - Stage dimensions placed on the new Stage tab (above regions) rather
+    than the General tab — keeps spatial config grouped. Confirmed with
+    user in plan review.
+  - No backend changes needed — Session 1 already exposed the
+    stage-dimension fields on `Project`, and `StageRegion` REST + WS
+    hooks were already wired.
+  - Removed the unused `TabsContent` import from `ProjectSettings.tsx`
+    while editing — drive-by cleanup.
 
 ---
 

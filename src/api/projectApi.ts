@@ -20,6 +20,9 @@ export interface ProjectDetail {
   fxPresetCount: number;
   cueCount: number;
   cueStackCount: number;
+  stageWidthM: number | null;
+  stageDepthM: number | null;
+  stageHeightM: number | null;
 }
 
 // For creating a new project
@@ -32,6 +35,9 @@ export interface CreateProjectRequest {
 export interface UpdateProjectRequest {
   name?: string;
   description?: string | null;
+  stageWidthM?: number | null;
+  stageDepthM?: number | null;
+  stageHeightM?: number | null;
 }
 
 // Script summary for project config dropdowns
