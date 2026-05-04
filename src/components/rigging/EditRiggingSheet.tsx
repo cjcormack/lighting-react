@@ -48,6 +48,7 @@ interface FormState {
   yawDeg: number | null
   pitchDeg: number | null
   rollDeg: number | null
+  lengthM: number | null
   sortOrder: number | null
 }
 
@@ -60,6 +61,7 @@ const EMPTY_FORM: FormState = {
   yawDeg: 0,
   pitchDeg: 0,
   rollDeg: 0,
+  lengthM: 3,
   sortOrder: null,
 }
 
@@ -73,6 +75,7 @@ function fromRigging(rigging: RiggingDto): FormState {
     yawDeg: rigging.yawDeg,
     pitchDeg: rigging.pitchDeg,
     rollDeg: rigging.rollDeg,
+    lengthM: rigging.lengthM,
     sortOrder: rigging.sortOrder,
   }
 }
@@ -126,6 +129,7 @@ export const EditRiggingSheet = forwardRef<EditRiggingSheetHandle, EditRiggingSh
         if (form.yawDeg !== rigging.yawDeg) body.yawDeg = form.yawDeg
         if (form.pitchDeg !== rigging.pitchDeg) body.pitchDeg = form.pitchDeg
         if (form.rollDeg !== rigging.rollDeg) body.rollDeg = form.rollDeg
+        if (form.lengthM !== rigging.lengthM) body.lengthM = form.lengthM
         if (form.sortOrder != null && form.sortOrder !== rigging.sortOrder) {
           body.sortOrder = form.sortOrder
         }
@@ -142,6 +146,7 @@ export const EditRiggingSheet = forwardRef<EditRiggingSheetHandle, EditRiggingSh
           yawDeg: form.yawDeg,
           pitchDeg: form.pitchDeg,
           rollDeg: form.rollDeg,
+          lengthM: form.lengthM,
         }).unwrap()
         toast.success('Rigging created')
       }
@@ -241,6 +246,23 @@ export const EditRiggingSheet = forwardRef<EditRiggingSheetHandle, EditRiggingSh
               onChange={(v) => setForm({ ...form, rollDeg: v })}
             />
           </FieldGroup>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="rigging-length">Length (m)</Label>
+            <Input
+              id="rigging-length"
+              type="number"
+              step="0.1"
+              min={0}
+              value={form.lengthM ?? ''}
+              onChange={(e) => setForm({ ...form, lengthM: parseNullableNumber(e.target.value) })}
+              onFocus={(e) => e.target.select()}
+              placeholder="3.0"
+            />
+            <p className="text-xs text-muted-foreground">
+              Length along the rig's local X axis. Used for the 3D bar render.
+            </p>
+          </div>
 
           {isEdit && (
             <div className="space-y-1.5">

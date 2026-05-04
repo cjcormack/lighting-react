@@ -15,6 +15,7 @@ import type { FixturePatch } from '../../api/patchApi'
 import type { StageRegionDto } from '../../api/stageRegionApi'
 import { fromThree } from '../../lib/stageCoords'
 import { useFixtureLookup } from '../../hooks/useFixtureLookup'
+import { NO_RAYCAST } from './raycast'
 
 const EMPTY_RIGGINGS: RiggingDto[] = []
 
@@ -151,7 +152,7 @@ export function Stage3D({
               fixtureType={fixtureType}
               riggings={safeRiggings}
               selected={selection?.kind === 'patch' && selection.patchKey === patch.key}
-              onClick={(group) => handleFixtureClick(patch, group)}
+              onClick={editMode ? (group) => handleFixtureClick(patch, group) : undefined}
             />
           )
         })}
@@ -367,7 +368,7 @@ function StageBoxOutline({
   height: number
 }) {
   return (
-    <mesh position={[0, height / 2, -depth / 2]}>
+    <mesh position={[0, height / 2, -depth / 2]} raycast={NO_RAYCAST}>
       <boxGeometry args={[width, height, depth]} />
       <meshBasicMaterial visible={false} />
       <Edges color="#5a6a7a" />

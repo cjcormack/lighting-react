@@ -13,6 +13,7 @@ export interface RiggingDto {
   yawDeg: number | null;
   pitchDeg: number | null;
   rollDeg: number | null;
+  lengthM: number | null;
   sortOrder: number;
 }
 
@@ -25,6 +26,7 @@ export interface CreateRiggingRequest {
   yawDeg?: number | null;
   pitchDeg?: number | null;
   rollDeg?: number | null;
+  lengthM?: number | null;
 }
 
 export interface UpdateRiggingRequest {
@@ -36,6 +38,7 @@ export interface UpdateRiggingRequest {
   yawDeg?: number | null;
   pitchDeg?: number | null;
   rollDeg?: number | null;
+  lengthM?: number | null;
   sortOrder?: number;
 }
 

@@ -44,7 +44,7 @@ visualiser must:
 | 4       | Patching: Rigging-Mounted vs Free  | Done        | 2026-05-03 | Structured rigging assignment + metric stage coords on the patch sheet; legacy 2D map and free-text rigging label retired. |
 | 5       | Read-Only 3D Stage View            | Done        | 2026-05-03 | New /stage route with 2D ↔ 3D toggle. Backend pan/tilt metadata (axis + degree mapping) populated on every mover; 2D legacy panel re-fitted to metric coords. |
 | 6       | 3D Editor Mode                     | Done        | 2026-05-04 | drei `<TransformControls>` + click-to-edit + create affordances. Rig-axis constraint via post-projection. Drag→form sync via imperative refs; save-on-release replaced the planned 300ms debounce. |
-| 7       | Polish (optional)                  | Not started | —         |       |
+| 7       | Polish (optional)                  | Done        | 2026-05-04 | Rigging `lengthM` end-to-end; 16-bit pan/tilt via fine channels; optimistic drag-release; cone/pool meshes off the raycast tree. |
 
 Status values: `Not started` · `In progress` · `Done` · `Blocked` · `Skipped`.
 Update the row on session completion and fill in `Completed` with the
@@ -838,7 +838,150 @@ disabled with an explanatory tooltip.
 - **Gobo / strobe / fixture library**: out of scope per discovery doc lines
   381–387. Track separately.
 
-**Status & handover**: _Not started._
+**Status & handover**:
+
+- _Status_: Done
+- _Completed_: 2026-05-04
+- _What landed_:
+  - **Rigging `lengthM` end-to-end** (cross-repo). Backend: added nullable
+    `length_m` column on `riggings` (auto-applied via
+    `SchemaUtils.createMissingTablesAndColumns`; no historical migration
+    function needed because the column is nullable). DTO/wire field added to
+    `RiggingDto`, `CreateRiggingRequest`, `RiggingJson` (sync export/import),
+    plus PUT body handling and a `validateRiggingPose` range check (0 < x ≤
+    100 m + finite-number guard, mirroring `checkAngle`'s NaN handling).
+    Frontend: matching `lengthM: number | null` on `RiggingDto` /
+    `CreateRiggingRequest` / `UpdateRiggingRequest`; new "Length (m)" input
+    on `EditRiggingSheet` (default 3 m on create, helper text "Length along
+    the rig's local X axis"); `<RiggingMeshes>` uses
+    `rig.lengthM ?? DEFAULT_RIGGING_LENGTH_M (= 3)` so the box geometry
+    width matches the real bar. Thickness extracted into a named constant
+    (`RIGGING_THICKNESS_M = 0.18`).
+  - **16-bit pan/tilt via PAN_FINE / TILT_FINE channels.** Added
+    `findPanFineProperty` / `findTiltFineProperty` (matches sliders by
+    `category === 'pan_fine' / 'tilt_fine'`) in `src/store/fixtures.ts`.
+    `BeamDirector` in `FixtureModel.tsx` subscribes to coarse + fine via
+    parallel `useSliderValue` calls (using `makeFallbackSlider` for the
+    stable hook-call order when fine is absent), then combines as
+    `coarse + fine/256` before passing to `dmxToDegrees`. Fine slider
+    range stays implicit — slider min/max in `dmxToDegrees` are still the
+    coarse-channel 0–255, fine just contributes a sub-step inside one
+    coarse step. Effect: 65 536-step head positioning on the ten registered
+    movers that ship `PAN_FINE / TILT_FINE` (Martin Mac 250, Varytec, Robe
+    ColorSpot 575, Source 4 Revolution, Gear4Music Orbit-70, Fusion 100
+    Spot MkII, IMG Wash-42LED, Shehds LED 19 RGBW, Slender Beam Bar Quad).
+  - **Optimistic update on drag-release.** Each `onPatch/Region/Rigging
+    PositionChange` callback in `Stage.tsx` now dispatches
+    `restApi.util.updateQueryData` to pre-apply the dragged values to the
+    cached list before firing the PUT. For patches the optimistic write
+    also nulls `worldPositionX/Y/Z` so `worldPositionFor` falls through to
+    the just-written `stageX/Y/Z` instead of the stale composed value.
+    The mutation's `invalidatesTags` still triggers a refetch that
+    overwrites with authoritative server state — but the snap-back the
+    user used to see during the round-trip is gone. Uses the singleton
+    `store.dispatch` directly rather than `useDispatch` to side-step the
+    typed-AppDispatch dance (the project doesn't export an `AppDispatch`
+    type yet).
+  - **Performance: raycast off for visual-only meshes.** Cones, floor pool
+    discs, and the `StageBoxOutline` invisible box now have
+    `raycast={NO_RAYCAST}` (a const `() => {}` no-op) so pointer events
+    skip them entirely. Cones in particular are large transparent meshes
+    that R3F was triangle-testing on every pointer move; the click target
+    bubbles up via the small lens / yoke meshes to the outer fixture group
+    instead. Fixture click handler is also gated on `editMode` —
+    non-editing viewers get no fixture pointer listener at all.
+- _Open follow-ups_:
+  - **Zoom (beam-angle DMX channel → cone radius) deferred.** Implementing
+    cleanly needs a backend descriptor extension: a new
+    `PropertyCategory.ZOOM` (or an extension of the `axis` enum to cover
+    beam-angle sliders) plus `degMin`/`degMax` populated from the fixture
+    annotations, so `dmxToDegrees` can be reused for beam angle the way
+    Session 5 set it up for pan/tilt. None of the registered fixtures
+    currently expose a structured beam-angle slider — only `acceptsBeamAngle`
+    + the static `patch.beamAngleDeg` field. When a moving-head with real
+    zoom (e.g. Martin Mac Aura, Robe Pointe) gets registered, that's the
+    natural moment to land the descriptor + frontend wiring together.
+  - **`castShadow` capping not landed.** No mesh in `Stage3D` currently
+    casts a shadow (no light is set up to receive them either) so this is
+    a no-op until shadow casting is added. If/when that lands, restrict
+    `castShadow` to the head + cone meshes only and turn shadows off on
+    the floor pool / lens / yoke base.
+  - **Geometry instancing for truss segments not landed.** Worth doing
+    when a single rigging carries multiple truss segments (currently each
+    `RiggingDto` renders as one box). The right shape is probably a
+    `<TrussInstanced>` wrapper that takes `(rig, segments)` and renders a
+    drei `<Instances>` block. Skip until a multi-segment rigging design
+    is added.
+  - **Optimistic update is "fire and forget" — no rollback.** If the PUT
+    fails (network down, validation rejection) the cached list keeps the
+    dragged values until the next refetch. Acceptable for the home-show
+    use case but a `.catch()` could `dispatch(invalidateTags(...))` to
+    force a refetch and snap back. Left as-is.
+  - **Rig-mounted patch optimistic update doesn't compose rotated rig
+    frames.** Nulling `worldPosition*` makes `worldPositionFor` fall back
+    to its translate-only stub (Session 1 carry-over). For a rigging with
+    yaw/pitch the dragged patch will sit in the wrong place visually
+    until the backend's recomposed `worldPosition*` arrives ~50 ms later.
+    The clean fix is to compose using the rig pose locally in
+    `worldPositionFor`; that fix has been deferred since Session 1 and
+    still belongs there.
+  - **Length-aware rig-axis clamp not added.** Dragging a rig-mounted
+    patch projects to the rig's local X axis (Session 6) but doesn't
+    clamp `stageX` to ±lengthM/2. Cosmetic — patches can sit "off the end
+    of the bar" if the user drags far enough — but the visual stays at
+    the projected point. Wire up `Math.max(-len/2, Math.min(len/2, x))`
+    inside `patchPlacementFromWorld` if it becomes annoying.
+  - **`useLocalStorage<T>(key, default)` consolidation still pending**
+    (Session 5/6 carry-over). Same six hand-rolled siblings; no new
+    callers added this session.
+  - **Colour-source dispatch unification** (Session 5 carry-over). Same
+    duplication between `StageMarker.tsx` (2D) and `FixtureModel.tsx`
+    (3D); not touched here.
+- _Surprises / decisions_:
+  - **Backend `lengthM` skipped a migration function.** New nullable
+    columns are added by `SchemaUtils.createMissingTablesAndColumns` on
+    both PG and SQLite (State.kt:614), so the historical
+    `migrate*V*()` pattern is only for column drops / type changes /
+    data backfills. `lengthM` is purely additive.
+  - **Length validation chose 0 < x ≤ 100 m**, asymmetric vs the existing
+    `checkStageCoord` (±500 m). Length must be positive (a 0 m bar is
+    nonsense) and 100 m is generous for any real venue. Implementation
+    inlined into `validateRiggingPose` rather than added to
+    `RouteHelpers.kt` since it's the only call site.
+  - **`store.dispatch` over `useDispatch`.** The plain `useDispatch`
+    returns `Dispatch<UnknownAction>` which can't dispatch RTK Query
+    thunks like `updateQueryData`. The repo doesn't export an
+    `AppDispatch` type, so introducing a typed hook would add three
+    cross-cutting changes to fix one local need. Using the singleton
+    `store` directly is the smaller change.
+  - **Optimistic write nulls `worldPosition*`** rather than re-composing
+    the new world position locally. Re-composing requires knowing the
+    backend's exact composition rules (rig yaw/pitch/roll order, sign
+    conventions); nulling lets `worldPositionFor` fall through to the
+    `stage*` triple which the user just dragged. Hides the fact that
+    the helper's rig-frame composition stub is still translate-only —
+    correct enough for the dominant axis-aligned-rig case.
+  - **Pan-fine combined as `coarse + fine/256`** (not the more obvious
+    `(coarse << 8) | fine` 16-bit integer). The slider's min/max stay in
+    coarse units (typically 0–255) so `dmxToDegrees`' `(dmx - min) / span`
+    formula already works on the fractional value. Flipping to a 16-bit
+    integer would require re-scaling slider min/max to 0–65535 across
+    the codebase.
+  - **`raycast={NO_RAYCAST}` not `raycast={undefined}`.** R3F treats
+    undefined as "use Three.js default raycast", which IS active.
+    Assigning a no-op function is the documented opt-out.
+  - **Fixture click gated on edit mode.** Without edit mode, selecting
+    a fixture had no visible effect (the gizmo only attaches when
+    editing). Removing the listener entirely tightens the raycast hot
+    path further and matches the regions/riggings handling that was
+    already conditional on edit mode.
+  - **Backend `./gradlew build` fails with a Gradle 9 strict-mode
+    `:launcher:distZip → :launcher:shadowJar` implicit-dependency
+    warning** — pre-existing, unrelated to this session. Verified the
+    Kotlin changes via `./gradlew compileKotlin --rerun-tasks` and the
+    affected route tests via
+    `./gradlew test --tests "uk.me.cormack.lighting7.routes.RiggingsRoutesTest"`
+    (passes). The launcher packaging issue is for a separate cleanup.
 
 ---
 

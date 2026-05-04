@@ -74,6 +74,18 @@ export function dmxToDegrees(
   return slider.degMin + tt * (slider.degMax - slider.degMin) + base
 }
 
+// Discard the cached composed world position so callers (e.g. an optimistic
+// drag-release update) can fall back to the freshly-written stage* triple
+// without waiting for the backend recomposition. Operates on a partial so it
+// works against either FixturePatch or an Immer draft of one.
+export function clearComposedWorldPosition(
+  patch: { worldPositionX: number | null; worldPositionY: number | null; worldPositionZ: number | null },
+): void {
+  patch.worldPositionX = null
+  patch.worldPositionY = null
+  patch.worldPositionZ = null
+}
+
 // Resolve a patch's world position in R3F space.
 //
 // 1. If the backend has populated `worldPositionX/Y/Z`, trust it — that's the

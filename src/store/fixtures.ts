@@ -256,3 +256,25 @@ export function findTiltProperty(
     (p): p is SliderPropertyDescriptor => p.type === 'slider' && p.axis === 'TILT',
   )
 }
+
+/**
+ * Find the optional 8-bit fine pan slider (category === 'pan_fine') for
+ * 16-bit head positioning. Combined with `findPanProperty` to give 65536-step
+ * resolution; absent on fixtures without sub-step pan precision.
+ */
+export function findPanFineProperty(
+  properties: PropertyDescriptor[] | undefined,
+): SliderPropertyDescriptor | undefined {
+  return properties?.find(
+    (p): p is SliderPropertyDescriptor => p.type === 'slider' && p.category === 'pan_fine',
+  )
+}
+
+/** Fine tilt counterpart to {@link findPanFineProperty}. */
+export function findTiltFineProperty(
+  properties: PropertyDescriptor[] | undefined,
+): SliderPropertyDescriptor | undefined {
+  return properties?.find(
+    (p): p is SliderPropertyDescriptor => p.type === 'slider' && p.category === 'tilt_fine',
+  )
+}

@@ -8,15 +8,19 @@ interface RiggingMeshesProps {
   onClick?: (rig: RiggingDto, mesh: Object3D) => void
 }
 
-// Each rigging renders as a 3 m bar (no length field on the DTO yet — Session
-// 7 polish). Yaw/pitch/roll come from the DTO; rotation order 'YXZ' matches
+// Each rigging renders as a bar along its local X axis. lengthM defaults to 3 m
+// for un-set DTOs. Yaw/pitch/roll come from the DTO; rotation order 'YXZ' matches
 // the convention used by panTiltToDir in stageCoords.
+const DEFAULT_RIGGING_LENGTH_M = 3
+const RIGGING_THICKNESS_M = 0.18
+
 export function RiggingMeshes({ riggings, selectedUuid, onClick }: RiggingMeshesProps) {
   return (
     <>
       {riggings.map((rig) => {
         const pos = toThree(rig.positionX ?? 0, rig.positionY ?? 0, rig.positionZ ?? 0)
         const selected = rig.uuid === selectedUuid
+        const length = rig.lengthM ?? DEFAULT_RIGGING_LENGTH_M
         return (
           <mesh
             key={rig.uuid}
@@ -29,7 +33,7 @@ export function RiggingMeshes({ riggings, selectedUuid, onClick }: RiggingMeshes
             ]}
             onClick={onClick ? (e) => { e.stopPropagation(); onClick(rig, e.eventObject) } : undefined}
           >
-            <boxGeometry args={[3.0, 0.18, 0.18]} />
+            <boxGeometry args={[length, RIGGING_THICKNESS_M, RIGGING_THICKNESS_M]} />
             <meshStandardMaterial
               color={selected ? '#7a8aa0' : '#444'}
               metalness={0.4}

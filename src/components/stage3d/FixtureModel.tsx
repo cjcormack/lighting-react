@@ -24,6 +24,8 @@ import {
   type SliderPropertyDescriptor,
   findPanProperty,
   findTiltProperty,
+  findPanFineProperty,
+  findTiltFineProperty,
 } from '../../store/fixtures'
 import {
   useColourValue,
@@ -38,6 +40,7 @@ import {
   panTiltToDir,
   worldPositionFor,
 } from '../../lib/stageCoords'
+import { NO_RAYCAST } from './raycast'
 
 const DEFAULT_BEAM_DEG = 30
 const BEAM_LENGTH = 8 // metres — long enough to cross most stages
@@ -80,6 +83,14 @@ export function FixtureModel({
   )
   const tiltProp = useMemo(
     () => findTiltProperty(fixture?.properties),
+    [fixture?.properties],
+  )
+  const panFineProp = useMemo(
+    () => findPanFineProperty(fixture?.properties),
+    [fixture?.properties],
+  )
+  const tiltFineProp = useMemo(
+    () => findTiltFineProperty(fixture?.properties),
     [fixture?.properties],
   )
   const gel =
@@ -143,10 +154,13 @@ export function FixtureModel({
         )}
       </group>
 
-      {/* beam cones (outer wider/dim, inner core narrower/brighter) */}
+      {/* beam cones (outer wider/dim, inner core narrower/brighter). raycast
+          disabled — cones are large transparent meshes that would otherwise
+          occupy a lot of pointer-test work without ever being click targets;
+          fixture clicks bubble up through the lens/yoke to the outer group. */}
       {showCone && (
         <>
-          <mesh ref={outerConeRef}>
+          <mesh ref={outerConeRef} raycast={NO_RAYCAST}>
             <coneGeometry args={[beamRadius, BEAM_LENGTH, 48, 1, true]} />
             <meshBasicMaterial
               color="#fff8d5"
@@ -157,7 +171,7 @@ export function FixtureModel({
               side={DoubleSide}
             />
           </mesh>
-          <mesh ref={innerConeRef}>
+          <mesh ref={innerConeRef} raycast={NO_RAYCAST}>
             <coneGeometry args={[beamRadius * 0.4, BEAM_LENGTH, 48, 1, true]} />
             <meshBasicMaterial
               color="#fff8d5"
@@ -174,7 +188,7 @@ export function FixtureModel({
       {/* floor pool (outer coloured, inner white hot centre) */}
       {showCone && (
         <>
-          <mesh ref={poolOuterRef} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
+          <mesh ref={poolOuterRef} rotation={[-Math.PI / 2, 0, 0]} visible={false} raycast={NO_RAYCAST}>
             <circleGeometry args={[beamRadius * 1.2, 48]} />
             <meshBasicMaterial
               color="#fff8d5"
@@ -184,7 +198,7 @@ export function FixtureModel({
               depthWrite={false}
             />
           </mesh>
-          <mesh ref={poolInnerRef} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
+          <mesh ref={poolInnerRef} rotation={[-Math.PI / 2, 0, 0]} visible={false} raycast={NO_RAYCAST}>
             <circleGeometry args={[beamRadius * 0.5, 48]} />
             <meshBasicMaterial
               color="#ffffff"
@@ -200,6 +214,8 @@ export function FixtureModel({
       <BeamDirector
         panProp={panProp}
         tiltProp={tiltProp}
+        panFineProp={panFineProp}
+        tiltFineProp={tiltFineProp}
         baseYawDeg={patch.baseYawDeg ?? 0}
         basePitchDeg={patch.basePitchDeg ?? 0}
         fixturePos={fixturePos}
@@ -256,6 +272,8 @@ function ColourSync({
 interface BeamDirectorProps {
   panProp: SliderPropertyDescriptor | undefined
   tiltProp: SliderPropertyDescriptor | undefined
+  panFineProp: SliderPropertyDescriptor | undefined
+  tiltFineProp: SliderPropertyDescriptor | undefined
   baseYawDeg: number
   basePitchDeg: number
   fixturePos: readonly [number, number, number]
@@ -269,10 +287,29 @@ interface BeamDirectorProps {
 
 const FALLBACK_PAN = makeFallbackSlider('pan')
 const FALLBACK_TILT = makeFallbackSlider('tilt')
+const FALLBACK_PAN_FINE = makeFallbackSlider('pan_fine')
+const FALLBACK_TILT_FINE = makeFallbackSlider('tilt_fine')
+
+// Fine DMX channel resolution: an 8-bit fine channel divides one coarse step
+// into 256 sub-steps. Combined value stays in coarse units (0–255 typical) so
+// downstream `dmxToDegrees` works without re-scaling.
+const FINE_STEPS = 256
+
+function combineFine(
+  coarseProp: SliderPropertyDescriptor | undefined,
+  coarseRaw: number,
+  fineProp: SliderPropertyDescriptor | undefined,
+  fineRaw: number,
+): number {
+  if (!coarseProp) return 0
+  return fineProp ? coarseRaw + fineRaw / FINE_STEPS : coarseRaw
+}
 
 function BeamDirector({
   panProp,
   tiltProp,
+  panFineProp,
+  tiltFineProp,
   baseYawDeg,
   basePitchDeg,
   fixturePos,
@@ -285,6 +322,8 @@ function BeamDirector({
 }: BeamDirectorProps) {
   const panRaw = useSliderValue(panProp ?? FALLBACK_PAN)
   const tiltRaw = useSliderValue(tiltProp ?? FALLBACK_TILT)
+  const panFineRaw = useSliderValue(panFineProp ?? FALLBACK_PAN_FINE)
+  const tiltFineRaw = useSliderValue(tiltFineProp ?? FALLBACK_TILT_FINE)
 
   // Static fixtures (no pan/tilt sliders) need their head/cone/pool oriented
   // exactly once from the base angles — no per-frame work. We let useFrame
@@ -294,14 +333,16 @@ function BeamDirector({
   const staticAppliedRef = useRef(false)
   useEffect(() => {
     staticAppliedRef.current = false
-  }, [panProp, tiltProp, baseYawDeg, basePitchDeg, fixturePos, beamLength])
+  }, [panProp, tiltProp, panFineProp, tiltFineProp, baseYawDeg, basePitchDeg, fixturePos, beamLength])
 
   useFrame(() => {
     if (isStatic && staticAppliedRef.current) return
 
-    const panDeg = panProp ? dmxToDegrees(panRaw, panProp, baseYawDeg) : baseYawDeg
+    const panCombined = combineFine(panProp, panRaw, panFineProp, panFineRaw)
+    const tiltCombined = combineFine(tiltProp, tiltRaw, tiltFineProp, tiltFineRaw)
+    const panDeg = panProp ? dmxToDegrees(panCombined, panProp, baseYawDeg) : baseYawDeg
     const tiltDeg = tiltProp
-      ? dmxToDegrees(tiltRaw, tiltProp, basePitchDeg)
+      ? dmxToDegrees(tiltCombined, tiltProp, basePitchDeg)
       : basePitchDeg
 
     // Missing degree metadata → head static, beam straight down.

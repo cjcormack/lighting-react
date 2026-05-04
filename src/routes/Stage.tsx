@@ -7,10 +7,12 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Loader2, Pencil, Plus } from 'lucide-react'
 import { useViewedProject } from '../ProjectSwitcher'
 import { useCurrentProjectQuery } from '../store/projects'
-import { useUpdatePatchMutation, usePatchListQuery } from '../store/patches'
-import { useUpdateStageRegionMutation, useStageRegionListQuery } from '../store/stageRegions'
-import { useUpdateRiggingMutation, useRiggingListQuery } from '../store/riggings'
+import { store } from '../store'
+import { patchesApi, useUpdatePatchMutation, usePatchListQuery } from '../store/patches'
+import { stageRegionsApi, useUpdateStageRegionMutation, useStageRegionListQuery } from '../store/stageRegions'
+import { riggingsApi, useUpdateRiggingMutation, useRiggingListQuery } from '../store/riggings'
 import { Stage3D, type Selection } from '../components/stage3d/Stage3D'
+import { clearComposedWorldPosition } from '../lib/stageCoords'
 import { StageOverviewPanel } from '../components/StageOverviewPanel'
 import { EditPatchSheet, type EditPatchSheetHandle } from '../components/patches/EditPatchSheet'
 import { EditStageRegionSheet, type EditStageRegionSheetHandle } from '../components/stage/EditStageRegionSheet'
@@ -185,6 +187,27 @@ export function Stage() {
                   basePitchDeg: patch.basePitchDeg,
                 })
                 if (!settled) return
+                // TransformControls fires `dragging-changed: false` on every
+                // mouseup, including click-without-drag — guard against firing
+                // a no-op PUT (and the cache invalidation it would trigger).
+                if (
+                  next.riggingUuid === patch.riggingUuid &&
+                  next.stageX === patch.stageX &&
+                  next.stageY === patch.stageY &&
+                  next.stageZ === patch.stageZ
+                ) return
+                // Optimistic write so the mesh stays put through the PUT round-trip.
+                store.dispatch(
+                  patchesApi.util.updateQueryData('patchList', projectId, (draft) => {
+                    const p = draft.find((x) => x.id === patch.id)
+                    if (!p) return
+                    p.riggingUuid = next.riggingUuid
+                    p.stageX = next.stageX
+                    p.stageY = next.stageY
+                    p.stageZ = next.stageZ
+                    clearComposedWorldPosition(p)
+                  }),
+                )
                 updatePatch({
                   projectId,
                   patchId: patch.id,
@@ -202,6 +225,22 @@ export function Stage() {
                   yawDeg: next.yawDeg,
                 })
                 if (!settled) return
+                if (
+                  next.centerX === region.centerX &&
+                  next.centerY === region.centerY &&
+                  next.centerZ === region.centerZ &&
+                  next.yawDeg === region.yawDeg
+                ) return
+                store.dispatch(
+                  stageRegionsApi.util.updateQueryData('stageRegionList', projectId, (draft) => {
+                    const r = draft.find((x) => x.id === region.id)
+                    if (!r) return
+                    r.centerX = next.centerX
+                    r.centerY = next.centerY
+                    r.centerZ = next.centerZ
+                    r.yawDeg = next.yawDeg
+                  }),
+                )
                 updateRegion({
                   projectId,
                   regionId: region.id,
@@ -221,6 +260,26 @@ export function Stage() {
                   rollDeg: next.rollDeg,
                 })
                 if (!settled) return
+                if (
+                  next.positionX === rig.positionX &&
+                  next.positionY === rig.positionY &&
+                  next.positionZ === rig.positionZ &&
+                  next.yawDeg === rig.yawDeg &&
+                  next.pitchDeg === rig.pitchDeg &&
+                  next.rollDeg === rig.rollDeg
+                ) return
+                store.dispatch(
+                  riggingsApi.util.updateQueryData('riggingList', projectId, (draft) => {
+                    const r = draft.find((x) => x.id === rig.id)
+                    if (!r) return
+                    r.positionX = next.positionX
+                    r.positionY = next.positionY
+                    r.positionZ = next.positionZ
+                    r.yawDeg = next.yawDeg
+                    r.pitchDeg = next.pitchDeg
+                    r.rollDeg = next.rollDeg
+                  }),
+                )
                 updateRigging({
                   projectId,
                   riggingId: rig.id,
