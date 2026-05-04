@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useState } from 'react'
 import { toast } from 'sonner'
 import {
   Sheet,
@@ -67,7 +67,14 @@ function fromRegion(region: StageRegionDto): FormState {
   }
 }
 
-export function EditStageRegionSheet({ open, onOpenChange, region, projectId }: EditStageRegionSheetProps) {
+export interface EditStageRegionSheetHandle {
+  setPosition: (next: { centerX: number | null; centerY: number | null; centerZ: number | null; yawDeg: number | null }) => void
+}
+
+export const EditStageRegionSheet = forwardRef<EditStageRegionSheetHandle, EditStageRegionSheetProps>(function EditStageRegionSheet(
+  { open, onOpenChange, region, projectId },
+  ref,
+) {
   const isEdit = region != null
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
 
@@ -80,6 +87,10 @@ export function EditStageRegionSheet({ open, onOpenChange, region, projectId }: 
     if (!open) return
     setForm(region ? fromRegion(region) : EMPTY_FORM)
   }, [open, region?.uuid])
+
+  useImperativeHandle(ref, () => ({
+    setPosition: (next) => setForm((prev) => ({ ...prev, ...next })),
+  }), [])
 
   const isValid = form.name.trim().length > 0
   const isBusy = isCreating || isUpdating || isDeleting
@@ -253,4 +264,4 @@ export function EditStageRegionSheet({ open, onOpenChange, region, projectId }: 
       </SheetContent>
     </Sheet>
   )
-}
+})

@@ -15,6 +15,11 @@ export function toThree(stageX: number, stageY: number, stageZ: number, target =
   return target.set(stageX, stageZ, -stageY)
 }
 
+// Inverse of `toThree` — convert R3F (X, Y, Z) back to lighting (X, Y, Z).
+export function fromThree(v: Vector3): { x: number; y: number; z: number } {
+  return { x: v.x, y: -v.z, z: v.y }
+}
+
 // Build a unit beam direction (in R3F space) from DMX-decoded pan and tilt
 // degrees. Mirrors the prototype in stage-vis-discovery.md lines 109-116:
 // pan rotates around world Y, then tilt around the fixture's local X. Pan is

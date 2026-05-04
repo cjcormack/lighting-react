@@ -1,14 +1,9 @@
 import { useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import { usePatchListQuery } from '@/store/patches'
-import {
-  useFixtureListQuery,
-  useFixtureTypeListQuery,
-  type Fixture,
-  type FixtureTypeInfo,
-} from '@/store/fixtures'
 import { findGel } from '@/data/gels'
 import { StageBackdrop } from '@/components/stage/StageBackdrop'
+import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import type { CueTarget } from '@/api/cuesApi'
 
 interface MiniStageProps {
@@ -36,8 +31,7 @@ export function MiniStage({
   heightClass = 'h-32',
 }: MiniStageProps) {
   const { data: patches } = usePatchListQuery(projectId, { skip: !projectId })
-  const { data: fixtures } = useFixtureListQuery()
-  const { data: fixtureTypes } = useFixtureTypeListQuery()
+  const { fixtures, fixtureByKey, typeByKey } = useFixtureLookup()
 
   const groupTargetNames = useMemo(
     () => new Set(targets.filter((t) => t.type === 'group').map((t) => t.key)),
@@ -51,18 +45,6 @@ export function MiniStage({
   const isTargeted = (patch: { key: string; groups: { name: string }[] }) =>
     fixtureTargetKeys.has(patch.key) ||
     patch.groups.some((g) => groupTargetNames.has(g.name))
-
-  const fixtureByKey = useMemo(() => {
-    const map = new Map<string, Fixture>()
-    fixtures?.forEach((f) => map.set(f.key, f))
-    return map
-  }, [fixtures])
-
-  const typeByKey = useMemo(() => {
-    const map = new Map<string, FixtureTypeInfo>()
-    fixtureTypes?.forEach((t) => map.set(t.typeKey, t))
-    return map
-  }, [fixtureTypes])
 
   const placedPatches = useMemo(
     () => (patches ?? []).filter((p) => p.stageX != null && p.stageY != null),

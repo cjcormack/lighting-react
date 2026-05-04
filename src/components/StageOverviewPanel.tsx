@@ -5,14 +5,9 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useViewedProject } from '../ProjectSwitcher'
 import { usePatchListQuery, usePatchGroupListQuery } from '../store/patches'
-import {
-  useFixtureListQuery,
-  useFixtureTypeListQuery,
-  type Fixture,
-  type FixtureTypeInfo,
-} from '../store/fixtures'
 import { useProjectQuery } from '../store/projects'
 import { useRiggingListQuery } from '../store/riggings'
+import { useFixtureLookup } from '../hooks/useFixtureLookup'
 import { worldPositionLighting } from '../lib/stageCoords'
 import { StageMarker } from './stage/StageMarker'
 import { StageBackdrop } from './stage/StageBackdrop'
@@ -37,8 +32,7 @@ export function StageOverviewPanel({
   const { data: patches, isLoading: patchesLoading } = usePatchListQuery(projectId!, {
     skip: projectId == null,
   })
-  const { data: fixtures } = useFixtureListQuery()
-  const { data: fixtureTypes } = useFixtureTypeListQuery()
+  const { fixtureByKey, typeByKey } = useFixtureLookup()
   const { data: groups } = usePatchGroupListQuery(projectId!, {
     skip: projectId == null,
   })
@@ -65,18 +59,6 @@ export function StageOverviewPanel({
       })
       .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
   }, [patches, riggings, stageWidthM, stageDepthM])
-
-  const fixtureByKey = useMemo(() => {
-    const map = new Map<string, Fixture>()
-    fixtures?.forEach((f) => map.set(f.key, f))
-    return map
-  }, [fixtures])
-
-  const typeByKey = useMemo(() => {
-    const map = new Map<string, FixtureTypeInfo>()
-    fixtureTypes?.forEach((t) => map.set(t.typeKey, t))
-    return map
-  }, [fixtureTypes])
 
   const visibleGroups = (groups ?? []).filter((g) => g.memberCount > 0)
   const showChips = visibleGroups.length > 0

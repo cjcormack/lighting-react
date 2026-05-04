@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useState } from 'react'
 import {
   Sheet,
   SheetContent,
@@ -28,7 +28,14 @@ interface EditPatchSheetProps {
   existingPatches: FixturePatch[]
 }
 
-export function EditPatchSheet({ open, onOpenChange, patch, projectId, existingPatches }: EditPatchSheetProps) {
+export interface EditPatchSheetHandle {
+  setPlacement: (next: PatchPlacementValue) => void
+}
+
+export const EditPatchSheet = forwardRef<EditPatchSheetHandle, EditPatchSheetProps>(function EditPatchSheet(
+  { open, onOpenChange, patch, projectId, existingPatches },
+  ref,
+) {
   const [displayName, setDisplayName] = useState('')
   const [key, setKey] = useState('')
   const [startChannel, setStartChannel] = useState(1)
@@ -67,7 +74,12 @@ export function EditPatchSheet({ open, onOpenChange, patch, projectId, existingP
       setGelCode(patch.gelCode)
       setAddGroupValue('')
     }
-  }, [patch])
+    // Seed only on patch identity change — drag-debounced PUTs would otherwise reseed and clobber typing.
+  }, [patch?.id])
+
+  useImperativeHandle(ref, () => ({
+    setPlacement: (next: PatchPlacementValue) => setPlacement(next),
+  }), [])
 
   if (!patch) return null
 
@@ -265,4 +277,4 @@ export function EditPatchSheet({ open, onOpenChange, patch, projectId, existingP
       </SheetContent>
     </Sheet>
   )
-}
+})

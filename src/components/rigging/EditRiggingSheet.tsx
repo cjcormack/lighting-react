@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useState } from 'react'
 import { toast } from 'sonner'
 import {
   Sheet,
@@ -77,7 +77,21 @@ function fromRigging(rigging: RiggingDto): FormState {
   }
 }
 
-export function EditRiggingSheet({ open, onOpenChange, rigging, projectId }: EditRiggingSheetProps) {
+export interface EditRiggingSheetHandle {
+  setPosition: (next: {
+    positionX: number | null
+    positionY: number | null
+    positionZ: number | null
+    yawDeg: number | null
+    pitchDeg: number | null
+    rollDeg: number | null
+  }) => void
+}
+
+export const EditRiggingSheet = forwardRef<EditRiggingSheetHandle, EditRiggingSheetProps>(function EditRiggingSheet(
+  { open, onOpenChange, rigging, projectId },
+  ref,
+) {
   const isEdit = rigging != null
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
 
@@ -90,6 +104,10 @@ export function EditRiggingSheet({ open, onOpenChange, rigging, projectId }: Edi
     if (!open) return
     setForm(rigging ? fromRigging(rigging) : EMPTY_FORM)
   }, [open, rigging?.uuid])
+
+  useImperativeHandle(ref, () => ({
+    setPosition: (next) => setForm((prev) => ({ ...prev, ...next })),
+  }), [])
 
   const isValid = form.name.trim().length > 0
   const isBusy = isCreating || isUpdating || isDeleting
@@ -266,4 +284,4 @@ export function EditRiggingSheet({ open, onOpenChange, rigging, projectId }: Edi
       </SheetContent>
     </Sheet>
   )
-}
+})

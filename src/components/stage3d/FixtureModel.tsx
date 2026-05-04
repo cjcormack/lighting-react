@@ -55,7 +55,7 @@ interface FixtureModelProps {
   fixtureType: FixtureTypeInfo | undefined
   riggings: RiggingDto[]
   selected: boolean
-  onClick?: () => void
+  onClick?: (group: Group) => void
 }
 
 export function FixtureModel({
@@ -119,7 +119,10 @@ export function FixtureModel({
   // colour-source changes.
 
   return (
-    <group position={fixturePos} onClick={onClick}>
+    <group
+      position={fixturePos}
+      onClick={onClick ? (e) => { e.stopPropagation(); onClick(e.eventObject as Group) } : undefined}
+    >
       {/* yoke base — small dark cylinder */}
       <mesh position={[0, -0.05, 0]}>
         <cylinderGeometry args={[0.08, 0.1, 0.1, 16]} />

@@ -43,7 +43,7 @@ visualiser must:
 | 3       | Rigging Configuration              | Done        | 2026-05-03 | Riggings CRUD on new "Rigging" tab; flown-truss defaults on create. |
 | 4       | Patching: Rigging-Mounted vs Free  | Done        | 2026-05-03 | Structured rigging assignment + metric stage coords on the patch sheet; legacy 2D map and free-text rigging label retired. |
 | 5       | Read-Only 3D Stage View            | Done        | 2026-05-03 | New /stage route with 2D ↔ 3D toggle. Backend pan/tilt metadata (axis + degree mapping) populated on every mover; 2D legacy panel re-fitted to metric coords. |
-| 6       | 3D Editor Mode                     | Not started | —         |       |
+| 6       | 3D Editor Mode                     | Done        | 2026-05-04 | drei `<TransformControls>` + click-to-edit + create affordances. Rig-axis constraint via post-projection. Drag→form sync via imperative refs; save-on-release replaced the planned 300ms debounce. |
 | 7       | Polish (optional)                  | Not started | —         |       |
 
 Status values: `Not started` · `In progress` · `Done` · `Blocked` · `Skipped`.
@@ -683,7 +683,149 @@ sheet's `stageX/Y` numbers update live; release, then 300ms later see the
 PUT fire (Network tab). On mobile width, confirm the Edit toggle is
 disabled with an explanatory tooltip.
 
-**Status & handover**: _Not started._
+**Status & handover**:
+
+- _Status_: Done
+- _Completed_: 2026-05-04
+- _What landed_:
+  - `src/routes/Stage.tsx` — promoted to the editor host. Adds `editMode`,
+    `selection: { kind, id } | null`, and `sheetOpenFor: SheetState | null`
+    state. Header gained an Edit toggle (gated on `useMediaQuery(SM_BREAKPOINT)`,
+    visible in 3D mode only) and `+ Region` / `+ Rigging` buttons (visible
+    only when editing is active). Mounts all three edit sheets — `EditPatchSheet`,
+    `EditStageRegionSheet`, `EditRiggingSheet` — controlled by `sheetOpenFor`,
+    each with an imperative ref. Drag callbacks call `sheetRef.setPlacement(…)`
+    on every tick (live form sync) and the matching `useUpdate{Patch,
+    StageRegion,Rigging}Mutation` only on `settled=true` (single PUT per drag).
+    Auto-drops edit mode if the viewport shrinks below SM. New
+    `findByUuid<T extends { uuid: string }>` helper to flatten the sheet-entity
+    lookups.
+  - `src/components/stage3d/Stage3D.tsx` — major rewrite around an inner
+    `Controls` component. New props: `editMode`, `selection`,
+    `onSelectionChange`, plus three optional `on{Patch,Region,Rigging}…Change`
+    callbacks each carrying `(entity, next, settled)`. Manages a local
+    `target: Object3D | null` (set imperatively from click events via
+    `e.eventObject`) and a `gizmoMode: 'translate' | 'rotate'` state with a
+    derived `effectiveGizmoMode` that pins patches to translate. Renders
+    `<TransformControls>` from drei against the target whenever edit mode +
+    target are present; subscribes to the underlying THREE
+    `dragging-changed` event to disable `OrbitControls` during drag and to
+    fire the settled flush on release. The flush helper:
+    `target.getWorldPosition()` → `patchPlacementFromWorld` (with rig-local
+    projection for rig-mounted patches) / region floor-anchor math (backs
+    out the +h/2 lift) / direct rigging coords. Memoised
+    `selectedPatch/Region/Rigging` and `riggingByUuid: Map<string, RiggingDto>`
+    keep the per-tick flush off `Array.find`. A small Move/Rotate HTML
+    overlay sits absolute-positioned over the canvas, visible only when a
+    region or rigging is selected.
+  - `src/components/stage3d/StageRegionMeshes.tsx` &
+    `src/components/stage3d/RiggingMeshes.tsx` — added `selectedUuid` +
+    `onClick(entity, mesh: Object3D)` props. Click handlers
+    `e.stopPropagation()` and pass `e.eventObject` so the parent can attach
+    TransformControls to the actual Three.js node. Selected materials get a
+    brighter colour + edge tint (regions) / brighter base + emissive (riggings).
+  - `src/components/stage3d/FixtureModel.tsx` — `onClick` signature changed
+    from `() => void` to `(group: Group) => void`; the click handler
+    `stopPropagation`s and emits `e.eventObject`. White selection ring on
+    the lens unchanged.
+  - `src/components/patches/EditPatchSheet.tsx` — wrapped in `forwardRef`
+    exposing `EditPatchSheetHandle.setPlacement(p)`. Seeding `useEffect`
+    dep narrowed from `[patch]` to `[patch?.id]` so refetched patch data
+    after a drag-settled PUT doesn't clobber values the user just typed.
+  - `src/components/stage/EditStageRegionSheet.tsx` — same treatment.
+    Exposes `setPosition({ centerX, centerY, centerZ, yawDeg })`. Seeding
+    dep already keyed on `region?.uuid`.
+  - `src/components/rigging/EditRiggingSheet.tsx` — same. Exposes
+    `setPosition({ positionX, positionY, positionZ, yawDeg, pitchDeg, rollDeg })`.
+  - `src/lib/stageCoords.ts` — added `fromThree(v)` (R3F → lighting coords;
+    inverse of `toThree`).
+  - **Simplify-pass cleanups (folded in)**:
+    - `src/hooks/useFixtureLookup.ts` (new) — exports
+      `useFixtureLookup(): { fixtures, fixtureTypes, fixtureByKey, typeByKey }`.
+      Replaces the 3× duplicated `fixtureByKey/typeByKey` `useMemo` blocks
+      in `Stage3D`, `StageOverviewPanel`, and `runner/program/CueCardEditor/MiniStage`.
+    - All three sites migrated to the hook; `useFixtureListQuery` /
+      `useFixtureTypeListQuery` imports dropped where the hook now covers them.
+    - Inline `(r * 180) / Math.PI` and `(d * Math.PI) / 180` swapped for
+      `MathUtils.radToDeg` / `MathUtils.degToRad` (Three.js exports both).
+    - Free-fixture branch of `patchPlacementFromWorld` uses `fromThree(worldR3F)`
+      directly instead of inline `(x, -z, y)` swizzle.
+    - Removed an unused `useDebouncedCallback` helper that was created
+      during planning but obsoleted by the save-on-release pattern.
+    - Removed the `gizmoMode`-reset `useEffect` in favour of the derived
+      `effectiveGizmoMode`. Removed three dead `selected*` locals in
+      `Stage.tsx` (`sheetPatch` etc. now look up directly).
+- _Open follow-ups_:
+  - **No optimistic update on drag-release.** Between mutation fire and
+    refetch landing the moved object visibly snaps back to its prior
+    position for the round-trip duration (typically a few hundred ms on
+    localhost). To fix: dispatch `restApi.util.updateQueryData('patchList', …)`
+    inside the change handler before firing the PUT. Deferred — UX wart,
+    not a correctness bug.
+  - **Stale `target` reference if the selected entity is deleted while
+    selected.** Three.js operations on a detached `Object3D` are safe but
+    drag would no-op silently. Add a parent-presence check or clear
+    target on RTK Query refetch. Low risk.
+  - **`useLocalStorage<T>(key, default)` consolidation flagged but not
+    done** — still 6 hand-rolled siblings (`useStageOverview`,
+    `useEffectsOverview`, `useFixtureOverview`, `useCueSlotOverview`,
+    `useStageViewMode`, plus inline reads in `ThemeToggle` and
+    `CueSlotOverviewPanel`). Touches 7 files; pick up when one of them
+    needs a feature change.
+  - **Rig-axis constraint is yaw-only-correct in practice.** The rig
+    `worldToLocal` projection uses the full `YXZ` Euler so pitched/rolled
+    rigs would also constrain correctly — but the *visual* gizmo doesn't
+    snap to the rig axis during drag (only on release). A future polish
+    could constrain visually by attaching a hidden helper Object3D with
+    the rig's rotation and using `space="local" showY={false} showZ={false}`
+    on TC.
+  - **Region drag updates centerZ**: I back out the +h/2 lift so vertical
+    drag persists the floor anchor cleanly, BUT this means a region
+    can be dragged off the floor by accident. If floor-locking is wanted,
+    restrict TC translate to X/Z (drei `showY={false}`) for region targets.
+- _Surprises / decisions_:
+  - **Scene-graph parenting under rig groups was scoped out** (deviation
+    from the `--Recommended--` answer in the planning AskUserQuestion).
+    The parenting would put rigged fixtures inside a rotated parent so
+    `space="local"` X-only drag works on the gizmo — but the floor pool
+    is currently a child of the fixture group, and re-rendering the pool
+    on the world floor under a rotated parent requires either lifting
+    the pool out of the fixture tree (intrusive) or `worldToLocal` per
+    frame (subtle). The post-projection approach (free XYZ drag → rig
+    `worldToLocal` → take only X) achieves the same persisted state with
+    none of the rendering churn. Visual gizmo doesn't snap to rig axis
+    during drag, only on release; flagged above.
+  - **Save-on-release replaced the planned 300ms debounce.** Plan body
+    referenced an "EditPatchSheet.tsx:76-85 debounce pattern" that turned
+    out not to exist (Session 4 handover noted the auto-save was dropped
+    when the StageMap was retired). Save-on-release is functionally
+    equivalent for the "no mid-drag hammering" goal and avoids the
+    cross-entity race where switching selection inside a 300ms window
+    would discard the prior entity's pending PUT. The
+    `useDebouncedCallback` helper that I built for the originally-planned
+    flow ended up unused and was deleted in the simplify pass.
+  - **Imperative refs over lifted form state.** Considered making
+    `placement` (and the analogous region/rigging position triples) a
+    fully-controlled prop on each sheet, which would have been more
+    React-idiomatic. Imperative `setPlacement` / `setPosition` via
+    `forwardRef` won because it avoided rewriting all three sheets'
+    `hasChanges` / dirty-diff logic. The **id-only seeding effect** is
+    the load-bearing piece: without it, the post-PUT refetch would
+    clobber any value the user typed during the round trip.
+  - **Click via `e.eventObject` rather than callback refs.** The
+    cleanest way to get the Three.js `Object3D` of the clicked target
+    into TC. R3F's pointer events expose both `e.object` (closest hit
+    mesh) and `e.eventObject` (the listener-attached node); the listener
+    is on the outer fixture/region/rigging group/mesh, so
+    `e.eventObject` is exactly what TC needs.
+  - **OrbitControls disabled via THREE 'dragging-changed' event** rather
+    than relying on drei `makeDefault` to coordinate. drei does pass the
+    event through but doesn't auto-disable Orbit on Transform drag in
+    the version pinned here; manual wiring was simpler than upgrading.
+  - **`MathUtils` import** ended up the cleanest source for both
+    `radToDeg` and `degToRad` — Three's standard utility, no new dep,
+    consistent across Stage3D and the existing RiggingMeshes/StageRegionMeshes
+    callsites.
 
 ---
 
