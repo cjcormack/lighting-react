@@ -61,6 +61,8 @@ interface FixtureModelProps {
   riggings: RiggingDto[]
   selected: boolean
   editMode?: boolean
+  showLabel?: boolean
+  showBeamCones?: boolean
   onClick?: (group: Group) => void
 }
 
@@ -71,6 +73,8 @@ export function FixtureModel({
   riggings,
   selected,
   editMode,
+  showLabel,
+  showBeamCones = true,
   onClick,
 }: FixtureModelProps) {
   const [hovered, setHovered] = useState(false)
@@ -121,7 +125,7 @@ export function FixtureModel({
 
   const beamDeg = patch.beamAngleDeg ?? DEFAULT_BEAM_DEG
   const beamRadius = BEAM_LENGTH * Math.tan(MathUtils.degToRad(beamDeg / 2))
-  const showCone = !!fixtureType?.acceptsBeamAngle
+  const showCone = showBeamCones && !!fixtureType?.acceptsBeamAngle
 
   const headRef = useRef<Group>(null)
   const outerConeRef = useRef<Mesh>(null)
@@ -163,7 +167,7 @@ export function FixtureModel({
         )}
       </group>
 
-      {editMode && (
+      {showLabel && (
         <StageLabel position={[0, 0.18, 0]}>{patch.displayName}</StageLabel>
       )}
 
@@ -242,8 +246,12 @@ export function FixtureModel({
 
       {/* Colour/intensity is React-rate (channel hooks push at most 30Hz);
           the leaf mounts a single tiny null-renderer that imperatively
-          updates lens + cone + pool material colour/opacity via refs. */}
+          updates lens + cone + pool material colour/opacity via refs.
+          Keyed on showCone so when the user toggles beam cones back on the
+          freshly-mounted cone/pool meshes get the live intensity applied
+          immediately (the apply effect only re-runs on css/intensity change). */}
       <ColourSync
+        key={showCone ? 'cones' : 'lens'}
         colourSource={colourSource}
         gel={gel}
         dimmerProp={dimmerProp}

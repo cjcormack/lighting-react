@@ -25,6 +25,8 @@ import {
 import { formatError } from '../lib/formatError'
 import { Stage3D, type Selection } from '../components/stage3d/Stage3D'
 import { DEFAULT_RIGGING_LENGTH_M } from '../components/stage3d/RiggingMeshes'
+import { StageViewMenu } from '../components/stage3d/StageViewMenu'
+import { useStageView } from '../components/stage3d/useStageView'
 import { clearComposedWorldPosition } from '../lib/stageCoords'
 import { StageOverviewPanel } from '../components/StageOverviewPanel'
 import {
@@ -72,6 +74,12 @@ function findByUuid<T extends { uuid: string }>(list: T[] | undefined, uuid: str
   return list?.find((x) => x.uuid === uuid) ?? null
 }
 
+function isEditableTarget(el: Element | null): boolean {
+  if (!el) return false
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return true
+  return el instanceof HTMLElement && el.isContentEditable
+}
+
 function nextDefaultName(prefix: string, existing: { name: string }[] | undefined): string {
   // Pick (max trailing-number of "Prefix N" entries) + 1, or "Prefix 1" if none.
   const re = new RegExp(`^${prefix}\\s+(\\d+)$`)
@@ -91,6 +99,7 @@ export function Stage() {
   const [editMode, setEditMode] = useState(false)
   const [placing, setPlacing] = useState<'region' | 'rigging' | null>(null)
   const [panelCollapsed, setPanelCollapsed] = useState(false)
+  const { flags: viewFlags, setFlag: setViewFlag } = useStageView()
   const isTabletOrLarger = useMediaQuery(SM_BREAKPOINT)
 
   const patchFormRef = useRef<EditPatchFormHandle>(null)
@@ -132,6 +141,66 @@ export function Stage() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [placing])
+
+  // ⌘D / Ctrl+D duplicates the selected region or rigging, offset by 1m on X.
+  // Live data is read through refs so the listener doesn't re-bind on every
+  // optimistic store update (which would mean add/remove per drag frame).
+  const selectionRef = useRef(selection)
+  selectionRef.current = selection
+  const regionsRef = useRef(regions)
+  regionsRef.current = regions
+  const riggingsRef = useRef(riggings)
+  riggingsRef.current = riggings
+  useEffect(() => {
+    if (!editingActive || projectId == null) return
+    const onKey = async (e: KeyboardEvent) => {
+      const isDuplicateShortcut = e.key.toLowerCase() === 'd' && (e.metaKey || e.ctrlKey)
+      if (!isDuplicateShortcut) return
+      const sel = selectionRef.current
+      if (sel?.kind !== 'region' && sel?.kind !== 'rigging') return
+      // Don't hijack when the user is typing into a form field.
+      if (isEditableTarget(document.activeElement)) return
+      e.preventDefault()
+      try {
+        if (sel.kind === 'region') {
+          const source = regionsRef.current?.find((r) => r.uuid === sel.uuid)
+          if (!source) return
+          const created = await createRegion({
+            projectId,
+            name: `${source.name} copy`,
+            centerX: (source.centerX ?? 0) + 1,
+            centerY: source.centerY,
+            centerZ: source.centerZ,
+            widthM: source.widthM,
+            depthM: source.depthM,
+            heightM: source.heightM,
+            yawDeg: source.yawDeg,
+          }).unwrap()
+          setSelection({ kind: 'region', uuid: created.uuid })
+        } else {
+          const source = riggingsRef.current?.find((r) => r.uuid === sel.uuid)
+          if (!source) return
+          const created = await createRigging({
+            projectId,
+            name: `${source.name} copy`,
+            kind: source.kind,
+            positionX: (source.positionX ?? 0) + 1,
+            positionY: source.positionY,
+            positionZ: source.positionZ,
+            yawDeg: source.yawDeg,
+            pitchDeg: source.pitchDeg,
+            rollDeg: source.rollDeg,
+            lengthM: source.lengthM,
+          }).unwrap()
+          setSelection({ kind: 'rigging', uuid: created.uuid })
+        }
+      } catch (err) {
+        toast.error(`Failed to duplicate: ${formatError(err)}`)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [editingActive, projectId, createRegion, createRigging])
 
   if (projectId == null) {
     return (
@@ -242,6 +311,9 @@ export function Stage() {
               </Button>
             </>
           )}
+          {mode === '3d' && (
+            <StageViewMenu flags={viewFlags} setFlag={setViewFlag} />
+          )}
           {showEditToggle && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -281,6 +353,7 @@ export function Stage() {
                 selection={selection}
                 placing={placing}
                 placementZ={placementZ}
+                view={viewFlags}
                 onSelectionChange={handleSelectionChange}
                 onPlacementClick={handlePlacementClick}
                 onPatchPlacementChange={(patch, next, settled) => {

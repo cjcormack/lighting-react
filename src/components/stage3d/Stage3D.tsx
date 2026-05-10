@@ -12,10 +12,13 @@ import { RiggingMeshes } from './RiggingMeshes'
 import { FixtureModel } from './FixtureModel'
 import { RegionCornerHandles } from './RegionCornerHandles'
 import { RiggingEndpointHandles } from './RiggingEndpointHandles'
+import { useShiftHeld, SNAP_ANGLE_RAD, SNAP_DISTANCE_M } from './useShiftHeld'
+import { DEFAULT_VIEW_FLAGS, type StageViewFlags } from './useStageView'
 import type { RiggingDto } from '../../api/riggingApi'
 import type { FixturePatch } from '../../api/patchApi'
 import type { StageRegionDto } from '../../api/stageRegionApi'
 import { fromThree } from '../../lib/stageCoords'
+import { formatTriple } from '../../lib/utils'
 import { useFixtureLookup } from '../../hooks/useFixtureLookup'
 import { NO_RAYCAST } from './raycast'
 
@@ -60,6 +63,7 @@ interface Stage3DProps {
   editMode: boolean
   selection: Selection
   placing?: 'region' | 'rigging' | null
+  view?: StageViewFlags
   /** Lighting-Z (up) height of the plane the placement click should land on.
    *  Matches the new object's anchor height so the click projects WYSIWYG. */
   placementZ?: number
@@ -75,6 +79,7 @@ export function Stage3D({
   editMode,
   selection,
   placing,
+  view = DEFAULT_VIEW_FLAGS,
   placementZ,
   onSelectionChange,
   onPlacementClick,
@@ -131,8 +136,11 @@ export function Stage3D({
   // rather than stateful so the user's intended mode survives re-selection.
   const effectiveGizmoMode: GizmoMode = selection?.kind === 'patch' ? 'translate' : gizmoMode
   const showRotateToggle = editMode && (selection?.kind === 'region' || selection?.kind === 'rigging')
-  // Object click/hover is disabled during placement so the PlacementPlane catches the click.
-  const interactable = editMode && !placing
+  // Hover/click is disabled during placement so the PlacementPlane catches the
+  // click. Otherwise meshes are clickable in both edit and view modes — view
+  // mode uses the click for "select to inspect" (info overlay); edit mode also
+  // opens the side panel.
+  const interactable = !placing
 
   return (
     <div className={`relative h-full w-full ${placing ? 'cursor-crosshair' : ''}`}>
@@ -151,19 +159,25 @@ export function Stage3D({
         {placing && onPlacementClick && (
           <PlacementClickCatcher targetY={placementZ ?? 0} onClick={onPlacementClick} />
         )}
-        <StageRegionMeshes
-          regions={safeRegions}
-          selectedUuid={selection?.kind === 'region' ? selection.uuid : null}
-          editMode={interactable}
-          onClick={interactable ? handleRegionClick : undefined}
-        />
-        <RiggingMeshes
-          riggings={safeRiggings}
-          selectedUuid={selection?.kind === 'rigging' ? selection.uuid : null}
-          editMode={interactable}
-          onClick={interactable ? handleRiggingClick : undefined}
-        />
-        {(patches ?? []).map((patch) => {
+        {view.regions && (
+          <StageRegionMeshes
+            regions={safeRegions}
+            selectedUuid={selection?.kind === 'region' ? selection.uuid : null}
+            editMode={interactable}
+            showLabel={view.labels}
+            onClick={interactable ? handleRegionClick : undefined}
+          />
+        )}
+        {view.riggings && (
+          <RiggingMeshes
+            riggings={safeRiggings}
+            selectedUuid={selection?.kind === 'rigging' ? selection.uuid : null}
+            editMode={interactable}
+            showLabel={view.labels}
+            onClick={interactable ? handleRiggingClick : undefined}
+          />
+        )}
+        {view.fixtures && (patches ?? []).map((patch) => {
           const fixture = fixtureByKey.get(patch.key)
           const fixtureType = fixture ? typeByKey.get(fixture.typeKey) : undefined
           return (
@@ -175,6 +189,8 @@ export function Stage3D({
               riggings={safeRiggings}
               selected={selection?.kind === 'patch' && selection.patchKey === patch.key}
               editMode={interactable}
+              showLabel={view.labels}
+              showBeamCones={view.beamCones}
               onClick={interactable ? (group) => handleFixtureClick(patch, group) : undefined}
             />
           )
@@ -223,6 +239,48 @@ export function Stage3D({
           Click on the stage to place {placing === 'region' ? 'region' : 'rigging'} · Esc to cancel
         </div>
       )}
+      {!editMode && !placing && (
+        <SelectionInfo selection={selection} patches={patches} regions={safeRegions} riggings={safeRiggings} />
+      )}
+    </div>
+  )
+}
+
+function SelectionInfo({
+  selection,
+  patches,
+  regions,
+  riggings,
+}: {
+  selection: Selection
+  patches: FixturePatch[] | undefined
+  regions: StageRegionDto[]
+  riggings: RiggingDto[]
+}) {
+  if (!selection) return null
+  let label = ''
+  let detail = ''
+  if (selection.kind === 'patch') {
+    const p = patches?.find((x) => x.key === selection.patchKey)
+    if (!p) return null
+    label = p.displayName
+    const ch = p.channelCount ?? 1
+    detail = `${[p.manufacturer, p.model].filter(Boolean).join(' ') || 'Fixture'} · ${p.startChannel}–${p.startChannel + ch - 1} on U${p.universe}`
+  } else if (selection.kind === 'region') {
+    const r = regions.find((x) => x.uuid === selection.uuid)
+    if (!r) return null
+    label = r.name
+    detail = `Region · ${formatTriple(r.widthM, r.depthM, r.heightM, ' × ')} m`
+  } else {
+    const r = riggings.find((x) => x.uuid === selection.uuid)
+    if (!r) return null
+    label = r.name
+    detail = `${r.kind ?? 'Rigging'} · ${r.lengthM == null ? '—' : r.lengthM.toFixed(1)} m`
+  }
+  return (
+    <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-md bg-background/85 px-3 py-1.5 text-xs shadow-md backdrop-blur">
+      <span className="font-semibold">{label}</span>
+      <span className="ml-2 text-muted-foreground">{detail}</span>
     </div>
   )
 }
@@ -334,6 +392,7 @@ function Controls({
   }, [])
 
   const inPointsMode = gizmoMode === 'points'
+  const { held: shiftHeld, ref: shiftHeldRef } = useShiftHeld()
 
   return (
     <>
@@ -345,12 +404,15 @@ function Controls({
           ref={tcRef as never}
           object={target}
           mode={gizmoMode as 'translate' | 'rotate'}
+          translationSnap={shiftHeld ? SNAP_DISTANCE_M : null}
+          rotationSnap={shiftHeld ? SNAP_ANGLE_RAD : null}
           onObjectChange={() => flush(false)}
         />
       )}
       {inPointsMode && selectedRegion && (
         <RegionCornerHandles
           region={selectedRegion}
+          shiftHeldRef={shiftHeldRef}
           onChange={(next, settled) => onRegionPositionChange?.(selectedRegion, next, settled)}
           onDragStart={disableOrbit}
           onDragEnd={enableOrbit}
@@ -359,6 +421,7 @@ function Controls({
       {inPointsMode && selectedRigging && (
         <RiggingEndpointHandles
           rig={selectedRigging}
+          shiftHeldRef={shiftHeldRef}
           onChange={(next, settled) => onRiggingPositionChange?.(selectedRigging, next, settled)}
           onDragStart={disableOrbit}
           onDragEnd={enableOrbit}

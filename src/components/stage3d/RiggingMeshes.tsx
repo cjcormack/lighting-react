@@ -9,6 +9,7 @@ interface RiggingMeshesProps {
   riggings: RiggingDto[]
   selectedUuid?: string | null
   editMode?: boolean
+  showLabel?: boolean
   onClick?: (rig: RiggingDto, mesh: Object3D) => void
 }
 
@@ -18,7 +19,7 @@ interface RiggingMeshesProps {
 export const DEFAULT_RIGGING_LENGTH_M = 3
 const RIGGING_THICKNESS_M = 0.18
 
-export function RiggingMeshes({ riggings, selectedUuid, editMode, onClick }: RiggingMeshesProps) {
+export function RiggingMeshes({ riggings, selectedUuid, editMode, showLabel, onClick }: RiggingMeshesProps) {
   return (
     <>
       {riggings.map((rig) => (
@@ -27,6 +28,7 @@ export function RiggingMeshes({ riggings, selectedUuid, editMode, onClick }: Rig
           rig={rig}
           selected={rig.uuid === selectedUuid}
           editMode={editMode}
+          showLabel={showLabel}
           onClick={onClick}
         />
       ))}
@@ -38,10 +40,11 @@ interface RiggingMeshProps {
   rig: RiggingDto
   selected: boolean
   editMode?: boolean
+  showLabel?: boolean
   onClick?: (rig: RiggingDto, mesh: Object3D) => void
 }
 
-function RiggingMesh({ rig, selected, editMode, onClick }: RiggingMeshProps) {
+function RiggingMesh({ rig, selected, editMode, showLabel, onClick }: RiggingMeshProps) {
   const [hovered, setHovered] = useState(false)
   useCursor(!!editMode && hovered)
 
@@ -70,7 +73,7 @@ function RiggingMesh({ rig, selected, editMode, onClick }: RiggingMeshProps) {
         emissive={selected ? '#3a4a5a' : '#000'}
         emissiveIntensity={selected ? 0.4 : 0}
       />
-      {editMode && (
+      {showLabel && (
         <StageLabel position={[0, RIGGING_THICKNESS_M / 2 + 0.05, 0]}>
           {rig.name}
         </StageLabel>

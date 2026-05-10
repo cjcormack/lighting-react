@@ -9,12 +9,15 @@ import type { RiggingPositionUpdate } from './Stage3D'
 import { toThree, fromThree } from '../../lib/stageCoords'
 import { useHandleDrag } from './useHandleDrag'
 import { DEFAULT_RIGGING_LENGTH_M } from './RiggingMeshes'
+import { snap, SNAP_DISTANCE_M } from './useShiftHeld'
 
 type EndpointIndex = 0 | 1
 
 interface RiggingEndpointHandlesProps {
   rig: RiggingDto
   onChange: (next: RiggingPositionUpdate, settled: boolean) => void
+  /** When .current is true (Shift held), drag positions snap to the grid. */
+  shiftHeldRef?: React.RefObject<boolean>
   onDragStart?: () => void
   onDragEnd?: () => void
 }
@@ -75,7 +78,7 @@ function deriveFromEndpoints(
   }
 }
 
-export function RiggingEndpointHandles({ rig, onChange, onDragStart, onDragEnd }: RiggingEndpointHandlesProps) {
+export function RiggingEndpointHandles({ rig, onChange, shiftHeldRef, onDragStart, onDragEnd }: RiggingEndpointHandlesProps) {
   const startDrag = useHandleDrag()
   const [dragging, setDragging] = useState<EndpointIndex | null>(null)
 
@@ -99,12 +102,14 @@ export function RiggingEndpointHandles({ rig, onChange, onDragStart, onDragEnd }
 
     const updateFromHit = (p: Vector3, settled: boolean) => {
       const { x, y, z } = fromThree(p)
+      const dx = shiftHeldRef?.current ? snap(x, SNAP_DISTANCE_M) : x
+      const dy = shiftHeldRef?.current ? snap(y, SNAP_DISTANCE_M) : y
       // Pass endpoints in canonical (A=index-0, B=index-1) order so yaw/pitch
       // reflect the bar's "+X forward" direction consistently.
       const d =
         idx === 0
-          ? deriveFromEndpoints(x, y, z, pinnedX, pinnedY, pinnedZ)
-          : deriveFromEndpoints(pinnedX, pinnedY, pinnedZ, x, y, z)
+          ? deriveFromEndpoints(dx, dy, z, pinnedX, pinnedY, pinnedZ)
+          : deriveFromEndpoints(pinnedX, pinnedY, pinnedZ, dx, dy, z)
       onChange(
         {
           positionX: d.positionX,

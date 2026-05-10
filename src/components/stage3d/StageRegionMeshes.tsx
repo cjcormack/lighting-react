@@ -9,10 +9,11 @@ interface StageRegionMeshesProps {
   regions: StageRegionDto[]
   selectedUuid?: string | null
   editMode?: boolean
+  showLabel?: boolean
   onClick?: (region: StageRegionDto, mesh: Object3D) => void
 }
 
-export function StageRegionMeshes({ regions, selectedUuid, editMode, onClick }: StageRegionMeshesProps) {
+export function StageRegionMeshes({ regions, selectedUuid, editMode, showLabel, onClick }: StageRegionMeshesProps) {
   return (
     <>
       {regions.map((region) => (
@@ -21,6 +22,7 @@ export function StageRegionMeshes({ regions, selectedUuid, editMode, onClick }: 
           region={region}
           selected={region.uuid === selectedUuid}
           editMode={editMode}
+          showLabel={showLabel}
           onClick={onClick}
         />
       ))}
@@ -32,6 +34,7 @@ interface RegionMeshProps {
   region: StageRegionDto
   selected: boolean
   editMode?: boolean
+  showLabel?: boolean
   onClick?: (region: StageRegionDto, mesh: Object3D) => void
 }
 
@@ -56,7 +59,7 @@ function colorWithHueShift(base: { h: number; s: number; l: number }, shift: num
   return `#${TMP_COLOR.getHexString()}`
 }
 
-function RegionMesh({ region, selected, editMode, onClick }: RegionMeshProps) {
+function RegionMesh({ region, selected, editMode, showLabel, onClick }: RegionMeshProps) {
   const [hovered, setHovered] = useState(false)
   useCursor(!!editMode && hovered)
 
@@ -91,7 +94,7 @@ function RegionMesh({ region, selected, editMode, onClick }: RegionMeshProps) {
       <boxGeometry args={[w, h, d]} />
       <meshStandardMaterial color={fillColor} transparent opacity={active ? 0.38 : 0.28} />
       <Edges color={edgeColor} />
-      {editMode && (
+      {showLabel && (
         <StageLabel position={[0, h / 2 + 0.05, 0]}>{region.name}</StageLabel>
       )}
     </mesh>

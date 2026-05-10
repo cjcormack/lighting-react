@@ -10,11 +10,14 @@ import type { StageRegionDto } from '../../api/stageRegionApi'
 import type { RegionPositionUpdate } from './Stage3D'
 import { toThree, fromThree } from '../../lib/stageCoords'
 import { useHandleDrag } from './useHandleDrag'
+import { snap, SNAP_DISTANCE_M } from './useShiftHeld'
 
 interface RegionCornerHandlesProps {
   region: StageRegionDto
   /** Live update during drag; final settled call also fired on pointerup. */
   onChange: (next: RegionPositionUpdate, settled: boolean) => void
+  /** When .current is true (Shift held), drag positions snap to the grid. */
+  shiftHeldRef?: React.RefObject<boolean>
   onDragStart?: () => void
   onDragEnd?: () => void
 }
@@ -89,7 +92,7 @@ function deriveFromDraggedCorner(
   return { centerX: cx, centerY: cy, widthM, depthM }
 }
 
-export function RegionCornerHandles({ region, onChange, onDragStart, onDragEnd }: RegionCornerHandlesProps) {
+export function RegionCornerHandles({ region, onChange, shiftHeldRef, onDragStart, onDragEnd }: RegionCornerHandlesProps) {
   const startDrag = useHandleDrag()
   const [dragging, setDragging] = useState<number | null>(null)
 
@@ -114,7 +117,10 @@ export function RegionCornerHandles({ region, onChange, onDragStart, onDragEnd }
 
     const updateFromHit = (p: Vector3, settled: boolean) => {
       const { x, y } = fromThree(p)
-      const d = deriveFromDraggedCorner(x, y, pinnedX, pinnedY, yawDeg)
+      const snapped = shiftHeldRef?.current
+        ? { x: snap(x, SNAP_DISTANCE_M), y: snap(y, SNAP_DISTANCE_M) }
+        : { x, y }
+      const d = deriveFromDraggedCorner(snapped.x, snapped.y, pinnedX, pinnedY, yawDeg)
       onChange(
         {
           centerX: d.centerX,
