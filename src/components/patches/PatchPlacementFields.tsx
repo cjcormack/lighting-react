@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -27,9 +28,10 @@ interface Props {
   onChange: (next: PatchPlacementValue) => void
 }
 
-export function PatchPlacementFields({ projectId, value, onChange }: Props) {
+function PatchPlacementFieldsImpl({ projectId, value, onChange }: Props) {
   const { data: riggings } = useRiggingListQuery(projectId)
-  const sortedRiggings = (riggings ?? []).slice().sort(bySortOrder)
+  // Drag-driven onChange re-renders this on every frame; keep the sort off the hot path.
+  const sortedRiggings = useMemo(() => (riggings ?? []).slice().sort(bySortOrder), [riggings])
 
   const mountValue = value.riggingUuid ?? FREE
   const isMounted = value.riggingUuid != null
@@ -110,3 +112,5 @@ export function PatchPlacementFields({ projectId, value, onChange }: Props) {
     </div>
   )
 }
+
+export const PatchPlacementFields = memo(PatchPlacementFieldsImpl)

@@ -14,9 +14,17 @@ import { riggingsApi, useUpdateRiggingMutation, useRiggingListQuery } from '../s
 import { Stage3D, type Selection } from '../components/stage3d/Stage3D'
 import { clearComposedWorldPosition } from '../lib/stageCoords'
 import { StageOverviewPanel } from '../components/StageOverviewPanel'
-import { EditPatchSheet, type EditPatchSheetHandle } from '../components/patches/EditPatchSheet'
-import { EditStageRegionSheet, type EditStageRegionSheetHandle } from '../components/stage/EditStageRegionSheet'
-import { EditRiggingSheet, type EditRiggingSheetHandle } from '../components/rigging/EditRiggingSheet'
+import {
+  StageEditorPanel,
+  StageEditorPanelStub,
+  type StageEditorTarget,
+} from '../components/stage3d/StageEditorPanel'
+import type { EditPatchFormHandle } from '../components/patches/EditPatchForm'
+import type { EditStageRegionFormHandle } from '../components/stage/EditStageRegionForm'
+import type { EditRiggingFormHandle } from '../components/rigging/EditRiggingForm'
+import type { FixturePatch } from '../api/patchApi'
+import type { StageRegionDto } from '../api/stageRegionApi'
+import type { RiggingDto } from '../api/riggingApi'
 import { useMediaQuery, SM_BREAKPOINT } from '../hooks/useMediaQuery'
 
 type Mode = '2d' | '3d'
@@ -42,14 +50,8 @@ function useStageViewMode(): [Mode, (m: Mode) => void] {
   return [mode, setMode]
 }
 
-type SheetState =
-  | { kind: 'patch'; patchKey: string }
-  | { kind: 'region'; uuid: string | null }
-  | { kind: 'rigging'; uuid: string | null }
-  | null
+type CreateKind = 'region' | 'rigging' | null
 
-// Returns the entry whose uuid matches, or null if uuid is undefined/null/missing.
-// Lets callers skip an outer "did the user pick something?" guard.
 function findByUuid<T extends { uuid: string }>(list: T[] | undefined, uuid: string | null | undefined): T | null {
   if (uuid == null) return null
   return list?.find((x) => x.uuid === uuid) ?? null
@@ -61,12 +63,13 @@ export function Stage() {
   const [mode, setMode] = useStageViewMode()
   const [selection, setSelection] = useState<Selection>(null)
   const [editMode, setEditMode] = useState(false)
-  const [sheetOpenFor, setSheetOpenFor] = useState<SheetState>(null)
+  const [creating, setCreating] = useState<CreateKind>(null)
+  const [panelCollapsed, setPanelCollapsed] = useState(false)
   const isTabletOrLarger = useMediaQuery(SM_BREAKPOINT)
 
-  const patchSheetRef = useRef<EditPatchSheetHandle>(null)
-  const regionSheetRef = useRef<EditStageRegionSheetHandle>(null)
-  const riggingSheetRef = useRef<EditRiggingSheetHandle>(null)
+  const patchFormRef = useRef<EditPatchFormHandle>(null)
+  const regionFormRef = useRef<EditStageRegionFormHandle>(null)
+  const riggingFormRef = useRef<EditRiggingFormHandle>(null)
 
   const { data: patches } = usePatchListQuery(projectId ?? 0, { skip: projectId == null })
   const { data: regions } = useStageRegionListQuery(projectId ?? 0, { skip: projectId == null })
@@ -80,15 +83,13 @@ export function Stage() {
   const showEditToggle = mode === '3d' && isTabletOrLarger
   const editingActive = mode === '3d' && editMode && isTabletOrLarger
 
-  // Drop selection + close sheet when leaving 3D or edit mode.
   useEffect(() => {
     if (mode !== '3d' || !editMode) {
       setSelection(null)
-      setSheetOpenFor(null)
+      setCreating(null)
     }
   }, [mode, editMode])
 
-  // Drop edit mode if viewport shrinks below tablet.
   useEffect(() => {
     if (!isTabletOrLarger && editMode) setEditMode(false)
   }, [isTabletOrLarger, editMode])
@@ -101,17 +102,32 @@ export function Stage() {
     )
   }
 
-  const sheetPatch =
-    sheetOpenFor?.kind === 'patch' ? patches?.find((p) => p.key === sheetOpenFor.patchKey) ?? null : null
-  const sheetRegion = findByUuid(regions, sheetOpenFor?.kind === 'region' ? sheetOpenFor.uuid : undefined)
-  const sheetRigging = findByUuid(riggings, sheetOpenFor?.kind === 'rigging' ? sheetOpenFor.uuid : undefined)
+  // Resolve the panel target from current selection or create-intent. Patch
+  // key may point at a stale id during list refetches — drop the target until
+  // the new row arrives so the form doesn't render against missing data.
+  const panelTarget = resolvePanelTarget(selection, creating, patches, regions, riggings)
+
+  const showPanel = editingActive && panelTarget != null && !panelCollapsed
+  const showPanelStub = editingActive && panelTarget != null && panelCollapsed
 
   const handleSelectionChange = (s: Selection) => {
     setSelection(s)
+    if (s != null) setCreating(null)
     if (!editingActive || s == null) return
-    if (s.kind === 'patch') setSheetOpenFor({ kind: 'patch', patchKey: s.patchKey })
-    else if (s.kind === 'region') setSheetOpenFor({ kind: 'region', uuid: s.uuid })
-    else if (s.kind === 'rigging') setSheetOpenFor({ kind: 'rigging', uuid: s.uuid })
+    setPanelCollapsed(false)
+  }
+
+  const openCreate = (kind: 'region' | 'rigging') => {
+    setSelection(null)
+    setCreating(kind)
+    setPanelCollapsed(false)
+  }
+
+  // Form signalled it's done (Save/Cancel/Delete). Clear selection too, not
+  // just the panel, so the highlight clears in 3D.
+  const dismissPanel = () => {
+    setSelection(null)
+    setCreating(null)
   }
 
   return (
@@ -122,19 +138,11 @@ export function Stage() {
           <div className="flex-1" />
           {editingActive && (
             <>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setSheetOpenFor({ kind: 'region', uuid: null })}
-              >
+              <Button size="sm" variant="outline" onClick={() => openCreate('region')}>
                 <Plus className="size-3.5 mr-1" />
                 Region
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setSheetOpenFor({ kind: 'rigging', uuid: null })}
-              >
+              <Button size="sm" variant="outline" onClick={() => openCreate('rigging')}>
                 <Plus className="size-3.5 mr-1" />
                 Rigging
               </Button>
@@ -170,168 +178,176 @@ export function Stage() {
             <ToggleGroupItem value="2d">2D</ToggleGroupItem>
           </ToggleGroup>
         </header>
-        <main className="flex-1 min-h-0 overflow-hidden">
-          {mode === '3d' ? (
-            <Stage3D
+        <main className="flex flex-1 min-h-0 overflow-hidden">
+          <div className="flex-1 min-w-0">
+            {mode === '3d' ? (
+              <Stage3D
+                projectId={projectId}
+                editMode={editingActive}
+                selection={selection}
+                onSelectionChange={handleSelectionChange}
+                onPatchPlacementChange={(patch, next, settled) => {
+                  patchFormRef.current?.setPlacement({
+                    riggingUuid: next.riggingUuid,
+                    stageX: next.stageX,
+                    stageY: next.stageY,
+                    stageZ: next.stageZ,
+                    baseYawDeg: patch.baseYawDeg,
+                    basePitchDeg: patch.basePitchDeg,
+                  })
+                  if (!settled) return
+                  // TransformControls fires `dragging-changed: false` on every
+                  // mouseup, including click-without-drag — guard against firing
+                  // a no-op PUT (and the cache invalidation it would trigger).
+                  if (
+                    next.riggingUuid === patch.riggingUuid &&
+                    next.stageX === patch.stageX &&
+                    next.stageY === patch.stageY &&
+                    next.stageZ === patch.stageZ
+                  ) return
+                  // Optimistic write so the mesh stays put through the PUT round-trip.
+                  store.dispatch(
+                    patchesApi.util.updateQueryData('patchList', projectId, (draft) => {
+                      const p = draft.find((x) => x.id === patch.id)
+                      if (!p) return
+                      p.riggingUuid = next.riggingUuid
+                      p.stageX = next.stageX
+                      p.stageY = next.stageY
+                      p.stageZ = next.stageZ
+                      clearComposedWorldPosition(p)
+                    }),
+                  )
+                  updatePatch({
+                    projectId,
+                    patchId: patch.id,
+                    riggingUuid: next.riggingUuid,
+                    stageX: next.stageX,
+                    stageY: next.stageY,
+                    stageZ: next.stageZ,
+                  }).catch(() => {})
+                }}
+                onRegionPositionChange={(region, next, settled) => {
+                  regionFormRef.current?.setPosition({
+                    centerX: next.centerX,
+                    centerY: next.centerY,
+                    centerZ: next.centerZ,
+                    yawDeg: next.yawDeg,
+                  })
+                  if (!settled) return
+                  if (
+                    next.centerX === region.centerX &&
+                    next.centerY === region.centerY &&
+                    next.centerZ === region.centerZ &&
+                    next.yawDeg === region.yawDeg
+                  ) return
+                  store.dispatch(
+                    stageRegionsApi.util.updateQueryData('stageRegionList', projectId, (draft) => {
+                      const r = draft.find((x) => x.id === region.id)
+                      if (!r) return
+                      r.centerX = next.centerX
+                      r.centerY = next.centerY
+                      r.centerZ = next.centerZ
+                      r.yawDeg = next.yawDeg
+                    }),
+                  )
+                  updateRegion({
+                    projectId,
+                    regionId: region.id,
+                    centerX: next.centerX,
+                    centerY: next.centerY,
+                    centerZ: next.centerZ,
+                    yawDeg: next.yawDeg,
+                  }).catch(() => {})
+                }}
+                onRiggingPositionChange={(rig, next, settled) => {
+                  riggingFormRef.current?.setPosition({
+                    positionX: next.positionX,
+                    positionY: next.positionY,
+                    positionZ: next.positionZ,
+                    yawDeg: next.yawDeg,
+                    pitchDeg: next.pitchDeg,
+                    rollDeg: next.rollDeg,
+                  })
+                  if (!settled) return
+                  if (
+                    next.positionX === rig.positionX &&
+                    next.positionY === rig.positionY &&
+                    next.positionZ === rig.positionZ &&
+                    next.yawDeg === rig.yawDeg &&
+                    next.pitchDeg === rig.pitchDeg &&
+                    next.rollDeg === rig.rollDeg
+                  ) return
+                  store.dispatch(
+                    riggingsApi.util.updateQueryData('riggingList', projectId, (draft) => {
+                      const r = draft.find((x) => x.id === rig.id)
+                      if (!r) return
+                      r.positionX = next.positionX
+                      r.positionY = next.positionY
+                      r.positionZ = next.positionZ
+                      r.yawDeg = next.yawDeg
+                      r.pitchDeg = next.pitchDeg
+                      r.rollDeg = next.rollDeg
+                    }),
+                  )
+                  updateRigging({
+                    projectId,
+                    riggingId: rig.id,
+                    positionX: next.positionX,
+                    positionY: next.positionY,
+                    positionZ: next.positionZ,
+                    yawDeg: next.yawDeg,
+                    pitchDeg: next.pitchDeg,
+                    rollDeg: next.rollDeg,
+                  }).catch(() => {})
+                }}
+              />
+            ) : (
+              <StageOverviewPanel
+                isVisible
+                selectedFixtureKey={selection?.kind === 'patch' ? selection.patchKey : null}
+                onFixtureClick={(key) => setSelection({ kind: 'patch', patchKey: key })}
+              />
+            )}
+          </div>
+          {showPanel && panelTarget && (
+            <StageEditorPanel
+              target={panelTarget}
               projectId={projectId}
-              editMode={editingActive}
-              selection={selection}
-              onSelectionChange={handleSelectionChange}
-              onPatchPlacementChange={(patch, next, settled) => {
-                patchSheetRef.current?.setPlacement({
-                  riggingUuid: next.riggingUuid,
-                  stageX: next.stageX,
-                  stageY: next.stageY,
-                  stageZ: next.stageZ,
-                  baseYawDeg: patch.baseYawDeg,
-                  basePitchDeg: patch.basePitchDeg,
-                })
-                if (!settled) return
-                // TransformControls fires `dragging-changed: false` on every
-                // mouseup, including click-without-drag — guard against firing
-                // a no-op PUT (and the cache invalidation it would trigger).
-                if (
-                  next.riggingUuid === patch.riggingUuid &&
-                  next.stageX === patch.stageX &&
-                  next.stageY === patch.stageY &&
-                  next.stageZ === patch.stageZ
-                ) return
-                // Optimistic write so the mesh stays put through the PUT round-trip.
-                store.dispatch(
-                  patchesApi.util.updateQueryData('patchList', projectId, (draft) => {
-                    const p = draft.find((x) => x.id === patch.id)
-                    if (!p) return
-                    p.riggingUuid = next.riggingUuid
-                    p.stageX = next.stageX
-                    p.stageY = next.stageY
-                    p.stageZ = next.stageZ
-                    clearComposedWorldPosition(p)
-                  }),
-                )
-                updatePatch({
-                  projectId,
-                  patchId: patch.id,
-                  riggingUuid: next.riggingUuid,
-                  stageX: next.stageX,
-                  stageY: next.stageY,
-                  stageZ: next.stageZ,
-                }).catch(() => {})
-              }}
-              onRegionPositionChange={(region, next, settled) => {
-                regionSheetRef.current?.setPosition({
-                  centerX: next.centerX,
-                  centerY: next.centerY,
-                  centerZ: next.centerZ,
-                  yawDeg: next.yawDeg,
-                })
-                if (!settled) return
-                if (
-                  next.centerX === region.centerX &&
-                  next.centerY === region.centerY &&
-                  next.centerZ === region.centerZ &&
-                  next.yawDeg === region.yawDeg
-                ) return
-                store.dispatch(
-                  stageRegionsApi.util.updateQueryData('stageRegionList', projectId, (draft) => {
-                    const r = draft.find((x) => x.id === region.id)
-                    if (!r) return
-                    r.centerX = next.centerX
-                    r.centerY = next.centerY
-                    r.centerZ = next.centerZ
-                    r.yawDeg = next.yawDeg
-                  }),
-                )
-                updateRegion({
-                  projectId,
-                  regionId: region.id,
-                  centerX: next.centerX,
-                  centerY: next.centerY,
-                  centerZ: next.centerZ,
-                  yawDeg: next.yawDeg,
-                }).catch(() => {})
-              }}
-              onRiggingPositionChange={(rig, next, settled) => {
-                riggingSheetRef.current?.setPosition({
-                  positionX: next.positionX,
-                  positionY: next.positionY,
-                  positionZ: next.positionZ,
-                  yawDeg: next.yawDeg,
-                  pitchDeg: next.pitchDeg,
-                  rollDeg: next.rollDeg,
-                })
-                if (!settled) return
-                if (
-                  next.positionX === rig.positionX &&
-                  next.positionY === rig.positionY &&
-                  next.positionZ === rig.positionZ &&
-                  next.yawDeg === rig.yawDeg &&
-                  next.pitchDeg === rig.pitchDeg &&
-                  next.rollDeg === rig.rollDeg
-                ) return
-                store.dispatch(
-                  riggingsApi.util.updateQueryData('riggingList', projectId, (draft) => {
-                    const r = draft.find((x) => x.id === rig.id)
-                    if (!r) return
-                    r.positionX = next.positionX
-                    r.positionY = next.positionY
-                    r.positionZ = next.positionZ
-                    r.yawDeg = next.yawDeg
-                    r.pitchDeg = next.pitchDeg
-                    r.rollDeg = next.rollDeg
-                  }),
-                )
-                updateRigging({
-                  projectId,
-                  riggingId: rig.id,
-                  positionX: next.positionX,
-                  positionY: next.positionY,
-                  positionZ: next.positionZ,
-                  yawDeg: next.yawDeg,
-                  pitchDeg: next.pitchDeg,
-                  rollDeg: next.rollDeg,
-                }).catch(() => {})
-              }}
-            />
-          ) : (
-            <StageOverviewPanel
-              isVisible
-              selectedFixtureKey={selection?.kind === 'patch' ? selection.patchKey : null}
-              onFixtureClick={(key) => setSelection({ kind: 'patch', patchKey: key })}
+              existingPatches={patches ?? []}
+              onCollapse={() => setPanelCollapsed(true)}
+              onDismiss={dismissPanel}
+              patchRef={patchFormRef}
+              regionRef={regionFormRef}
+              riggingRef={riggingFormRef}
             />
           )}
+          {showPanelStub && <StageEditorPanelStub onExpand={() => setPanelCollapsed(false)} />}
         </main>
-
-        <EditPatchSheet
-          ref={patchSheetRef}
-          open={sheetOpenFor?.kind === 'patch' && sheetPatch != null}
-          onOpenChange={(open) => {
-            if (!open) setSheetOpenFor(null)
-          }}
-          patch={sheetPatch}
-          projectId={projectId}
-          existingPatches={patches ?? []}
-        />
-        <EditStageRegionSheet
-          ref={regionSheetRef}
-          open={sheetOpenFor?.kind === 'region'}
-          onOpenChange={(open) => {
-            if (!open) setSheetOpenFor(null)
-          }}
-          region={sheetRegion}
-          projectId={projectId}
-        />
-        <EditRiggingSheet
-          ref={riggingSheetRef}
-          open={sheetOpenFor?.kind === 'rigging'}
-          onOpenChange={(open) => {
-            if (!open) setSheetOpenFor(null)
-          }}
-          rigging={sheetRigging}
-          projectId={projectId}
-        />
       </div>
     </TooltipProvider>
   )
+}
+
+function resolvePanelTarget(
+  selection: Selection,
+  creating: CreateKind,
+  patches: FixturePatch[] | undefined,
+  regions: StageRegionDto[] | undefined,
+  riggings: RiggingDto[] | undefined,
+): StageEditorTarget | null {
+  if (selection?.kind === 'patch') {
+    const p = patches?.find((x) => x.key === selection.patchKey)
+    return p ? { kind: 'patch', patch: p } : null
+  }
+  if (selection?.kind === 'region') {
+    return { kind: 'region', region: findByUuid(regions, selection.uuid) }
+  }
+  if (selection?.kind === 'rigging') {
+    return { kind: 'rigging', rigging: findByUuid(riggings, selection.uuid) }
+  }
+  if (creating === 'region') return { kind: 'region', region: null }
+  if (creating === 'rigging') return { kind: 'rigging', rigging: null }
+  return null
 }
 
 // Bare /stage redirect — follow current project, mirror FixturesRedirect.
