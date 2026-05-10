@@ -10,6 +10,8 @@ import { Bloom } from './Bloom'
 import { StageRegionMeshes } from './StageRegionMeshes'
 import { RiggingMeshes } from './RiggingMeshes'
 import { FixtureModel } from './FixtureModel'
+import { RegionCornerHandles } from './RegionCornerHandles'
+import { RiggingEndpointHandles } from './RiggingEndpointHandles'
 import type { RiggingDto } from '../../api/riggingApi'
 import type { FixturePatch } from '../../api/patchApi'
 import type { StageRegionDto } from '../../api/stageRegionApi'
@@ -25,7 +27,7 @@ export type Selection =
   | { kind: 'rigging'; uuid: string }
   | null
 
-export type GizmoMode = 'translate' | 'rotate'
+export type GizmoMode = 'translate' | 'rotate' | 'points'
 
 export interface PatchPlacementUpdate {
   riggingUuid: string | null
@@ -39,6 +41,8 @@ export interface RegionPositionUpdate {
   centerY: number | null
   centerZ: number | null
   yawDeg: number | null
+  widthM?: number | null
+  depthM?: number | null
 }
 
 export interface RiggingPositionUpdate {
@@ -48,6 +52,7 @@ export interface RiggingPositionUpdate {
   yawDeg: number | null
   pitchDeg: number | null
   rollDeg: number | null
+  lengthM?: number | null
 }
 
 interface Stage3DProps {
@@ -199,6 +204,13 @@ export function Stage3D({
           </button>
           <button
             type="button"
+            onClick={() => setGizmoMode('points')}
+            className={`rounded px-2 py-1 ${gizmoMode === 'points' ? 'bg-accent' : 'hover:bg-muted'}`}
+          >
+            {selection?.kind === 'region' ? 'Corners' : 'Endpoints'}
+          </button>
+          <button
+            type="button"
             onClick={() => setGizmoMode('rotate')}
             className={`rounded px-2 py-1 ${gizmoMode === 'rotate' ? 'bg-accent' : 'hover:bg-muted'}`}
           >
@@ -314,15 +326,42 @@ function Controls({
     return () => tc.removeEventListener('dragging-changed', onDrag)
   }, [target, flush])
 
+  const disableOrbit = useCallback(() => {
+    if (orbitRef.current) orbitRef.current.enabled = false
+  }, [])
+  const enableOrbit = useCallback(() => {
+    if (orbitRef.current) orbitRef.current.enabled = true
+  }, [])
+
+  const inPointsMode = gizmoMode === 'points'
+
   return (
     <>
       <OrbitControls ref={orbitRef} makeDefault enableDamping target={[0, stageH / 4, 0]} />
-      {target && (
+      {target && !inPointsMode && (
+        // TransformControls only supports translate/rotate; points mode is
+        // gated above so this narrowing is safe.
         <TransformControls
           ref={tcRef as never}
           object={target}
-          mode={gizmoMode}
+          mode={gizmoMode as 'translate' | 'rotate'}
           onObjectChange={() => flush(false)}
+        />
+      )}
+      {inPointsMode && selectedRegion && (
+        <RegionCornerHandles
+          region={selectedRegion}
+          onChange={(next, settled) => onRegionPositionChange?.(selectedRegion, next, settled)}
+          onDragStart={disableOrbit}
+          onDragEnd={enableOrbit}
+        />
+      )}
+      {inPointsMode && selectedRigging && (
+        <RiggingEndpointHandles
+          rig={selectedRigging}
+          onChange={(next, settled) => onRiggingPositionChange?.(selectedRigging, next, settled)}
+          onDragStart={disableOrbit}
+          onDragEnd={enableOrbit}
         />
       )}
     </>

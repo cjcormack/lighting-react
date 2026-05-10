@@ -74,12 +74,13 @@ function fromRigging(rigging: RiggingDto): FormState {
 
 export interface EditRiggingFormHandle {
   setPosition: (next: {
-    positionX: number | null
-    positionY: number | null
-    positionZ: number | null
-    yawDeg: number | null
-    pitchDeg: number | null
-    rollDeg: number | null
+    positionX?: number | null
+    positionY?: number | null
+    positionZ?: number | null
+    yawDeg?: number | null
+    pitchDeg?: number | null
+    rollDeg?: number | null
+    lengthM?: number | null
   }) => void
 }
 

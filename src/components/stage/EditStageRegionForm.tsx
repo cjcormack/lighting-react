@@ -60,7 +60,14 @@ function fromRegion(region: StageRegionDto): FormState {
 }
 
 export interface EditStageRegionFormHandle {
-  setPosition: (next: { centerX: number | null; centerY: number | null; centerZ: number | null; yawDeg: number | null }) => void
+  setPosition: (next: {
+    centerX?: number | null
+    centerY?: number | null
+    centerZ?: number | null
+    yawDeg?: number | null
+    widthM?: number | null
+    depthM?: number | null
+  }) => void
 }
 
 export const EditStageRegionForm = forwardRef<EditStageRegionFormHandle, EditStageRegionFormProps>(function EditStageRegionForm(

@@ -329,14 +329,11 @@ export function Stage() {
                     centerY: next.centerY,
                     centerZ: next.centerZ,
                     yawDeg: next.yawDeg,
+                    widthM: next.widthM,
+                    depthM: next.depthM,
                   })
-                  if (!settled) return
-                  if (
-                    next.centerX === region.centerX &&
-                    next.centerY === region.centerY &&
-                    next.centerZ === region.centerZ &&
-                    next.yawDeg === region.yawDeg
-                  ) return
+                  // Optimistic write every drag frame so the box + handles
+                  // follow the cursor live. Network PUT is gated to settled.
                   store.dispatch(
                     stageRegionsApi.util.updateQueryData('stageRegionList', projectId, (draft) => {
                       const r = draft.find((x) => x.id === region.id)
@@ -345,8 +342,19 @@ export function Stage() {
                       r.centerY = next.centerY
                       r.centerZ = next.centerZ
                       r.yawDeg = next.yawDeg
+                      if (next.widthM !== undefined) r.widthM = next.widthM
+                      if (next.depthM !== undefined) r.depthM = next.depthM
                     }),
                   )
+                  if (!settled) return
+                  if (
+                    next.centerX === region.centerX &&
+                    next.centerY === region.centerY &&
+                    next.centerZ === region.centerZ &&
+                    next.yawDeg === region.yawDeg &&
+                    (next.widthM === undefined || next.widthM === region.widthM) &&
+                    (next.depthM === undefined || next.depthM === region.depthM)
+                  ) return
                   updateRegion({
                     projectId,
                     regionId: region.id,
@@ -354,6 +362,8 @@ export function Stage() {
                     centerY: next.centerY,
                     centerZ: next.centerZ,
                     yawDeg: next.yawDeg,
+                    ...(next.widthM !== undefined ? { widthM: next.widthM } : {}),
+                    ...(next.depthM !== undefined ? { depthM: next.depthM } : {}),
                   }).catch(() => {})
                 }}
                 onRiggingPositionChange={(rig, next, settled) => {
@@ -364,16 +374,10 @@ export function Stage() {
                     yawDeg: next.yawDeg,
                     pitchDeg: next.pitchDeg,
                     rollDeg: next.rollDeg,
+                    lengthM: next.lengthM,
                   })
-                  if (!settled) return
-                  if (
-                    next.positionX === rig.positionX &&
-                    next.positionY === rig.positionY &&
-                    next.positionZ === rig.positionZ &&
-                    next.yawDeg === rig.yawDeg &&
-                    next.pitchDeg === rig.pitchDeg &&
-                    next.rollDeg === rig.rollDeg
-                  ) return
+                  // Optimistic write every drag frame so the bar + handles
+                  // follow the cursor live. Network PUT is gated to settled.
                   store.dispatch(
                     riggingsApi.util.updateQueryData('riggingList', projectId, (draft) => {
                       const r = draft.find((x) => x.id === rig.id)
@@ -384,8 +388,19 @@ export function Stage() {
                       r.yawDeg = next.yawDeg
                       r.pitchDeg = next.pitchDeg
                       r.rollDeg = next.rollDeg
+                      if (next.lengthM !== undefined) r.lengthM = next.lengthM
                     }),
                   )
+                  if (!settled) return
+                  if (
+                    next.positionX === rig.positionX &&
+                    next.positionY === rig.positionY &&
+                    next.positionZ === rig.positionZ &&
+                    next.yawDeg === rig.yawDeg &&
+                    next.pitchDeg === rig.pitchDeg &&
+                    next.rollDeg === rig.rollDeg &&
+                    (next.lengthM === undefined || next.lengthM === rig.lengthM)
+                  ) return
                   updateRigging({
                     projectId,
                     riggingId: rig.id,
@@ -395,6 +410,7 @@ export function Stage() {
                     yawDeg: next.yawDeg,
                     pitchDeg: next.pitchDeg,
                     rollDeg: next.rollDeg,
+                    ...(next.lengthM !== undefined ? { lengthM: next.lengthM } : {}),
                   }).catch(() => {})
                 }}
               />
