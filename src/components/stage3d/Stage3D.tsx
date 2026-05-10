@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Canvas } from '@react-three/fiber'
+import { Canvas, useThree } from '@react-three/fiber'
 import { Edges, OrbitControls, Text, TransformControls } from '@react-three/drei'
-import { Euler, MathUtils, NoToneMapping, Object3D, Vector3 } from 'three'
+import { Euler, MathUtils, NoToneMapping, Object3D, Plane, Raycaster, Vector2, Vector3 } from 'three'
 import { usePatchListQuery } from '../../store/patches'
 import { useRiggingListQuery } from '../../store/riggings'
 import { useStageRegionListQuery } from '../../store/stageRegions'
@@ -54,7 +54,12 @@ interface Stage3DProps {
   projectId: number
   editMode: boolean
   selection: Selection
+  placing?: 'region' | 'rigging' | null
+  /** Lighting-Z (up) height of the plane the placement click should land on.
+   *  Matches the new object's anchor height so the click projects WYSIWYG. */
+  placementZ?: number
   onSelectionChange: (s: Selection) => void
+  onPlacementClick?: (worldX: number, worldY: number) => void
   onPatchPlacementChange?: (patch: FixturePatch, next: PatchPlacementUpdate, settled: boolean) => void
   onRegionPositionChange?: (region: StageRegionDto, next: RegionPositionUpdate, settled: boolean) => void
   onRiggingPositionChange?: (rig: RiggingDto, next: RiggingPositionUpdate, settled: boolean) => void
@@ -64,7 +69,10 @@ export function Stage3D({
   projectId,
   editMode,
   selection,
+  placing,
+  placementZ,
   onSelectionChange,
+  onPlacementClick,
   onPatchPlacementChange,
   onRegionPositionChange,
   onRiggingPositionChange,
@@ -118,9 +126,11 @@ export function Stage3D({
   // rather than stateful so the user's intended mode survives re-selection.
   const effectiveGizmoMode: GizmoMode = selection?.kind === 'patch' ? 'translate' : gizmoMode
   const showRotateToggle = editMode && (selection?.kind === 'region' || selection?.kind === 'rigging')
+  // Object click/hover is disabled during placement so the PlacementPlane catches the click.
+  const interactable = editMode && !placing
 
   return (
-    <div className="relative h-full w-full">
+    <div className={`relative h-full w-full ${placing ? 'cursor-crosshair' : ''}`}>
       <Canvas
         flat
         dpr={[1, 2]}
@@ -133,17 +143,20 @@ export function Stage3D({
         <StageFloor width={stageW} depth={stageD} />
         <StageBoxOutline width={stageW} depth={stageD} height={stageH} />
         <OriginMarkers depth={stageD} />
+        {placing && onPlacementClick && (
+          <PlacementClickCatcher targetY={placementZ ?? 0} onClick={onPlacementClick} />
+        )}
         <StageRegionMeshes
           regions={safeRegions}
           selectedUuid={selection?.kind === 'region' ? selection.uuid : null}
-          editMode={editMode}
-          onClick={editMode ? handleRegionClick : undefined}
+          editMode={interactable}
+          onClick={interactable ? handleRegionClick : undefined}
         />
         <RiggingMeshes
           riggings={safeRiggings}
           selectedUuid={selection?.kind === 'rigging' ? selection.uuid : null}
-          editMode={editMode}
-          onClick={editMode ? handleRiggingClick : undefined}
+          editMode={interactable}
+          onClick={interactable ? handleRiggingClick : undefined}
         />
         {(patches ?? []).map((patch) => {
           const fixture = fixtureByKey.get(patch.key)
@@ -156,8 +169,8 @@ export function Stage3D({
               fixtureType={fixtureType}
               riggings={safeRiggings}
               selected={selection?.kind === 'patch' && selection.patchKey === patch.key}
-              editMode={editMode}
-              onClick={editMode ? (group) => handleFixtureClick(patch, group) : undefined}
+              editMode={interactable}
+              onClick={interactable ? (group) => handleFixtureClick(patch, group) : undefined}
             />
           )
         })}
@@ -175,7 +188,7 @@ export function Stage3D({
         />
         <Bloom />
       </Canvas>
-      {showRotateToggle && (
+      {showRotateToggle && !placing && (
         <div className="pointer-events-auto absolute right-3 top-3 flex gap-1 rounded-md bg-background/85 p-1 text-xs shadow-md backdrop-blur">
           <button
             type="button"
@@ -191,6 +204,11 @@ export function Stage3D({
           >
             Rotate
           </button>
+        </div>
+      )}
+      {placing && (
+        <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-md bg-background/85 px-3 py-1.5 text-xs shadow-md backdrop-blur">
+          Click on the stage to place {placing === 'region' ? 'region' : 'rigging'} · Esc to cancel
         </div>
       )}
     </div>
@@ -379,6 +397,48 @@ function StageBoxOutline({
       <Edges color="#7a8a9e" />
     </mesh>
   )
+}
+
+// Captures any canvas click while placement mode is active. Raycasts from the
+// camera against the y=targetY plane so a click anywhere on screen projects
+// onto the height the new object will live at — WYSIWYG even for raised
+// objects like trusses. Skips clicks that turn into orbit drags.
+const PLACEMENT_NORMAL = new Vector3(0, 1, 0)
+const DRAG_PX_THRESHOLD = 4
+
+function PlacementClickCatcher({ targetY, onClick }: { targetY: number; onClick: (worldX: number, worldY: number) => void }) {
+  const { camera, gl } = useThree()
+  useEffect(() => {
+    const el = gl.domElement
+    const raycaster = new Raycaster()
+    const ndc = new Vector2()
+    const hit = new Vector3()
+    // Plane equation n·X + d = 0 with n=(0,1,0) means y + d = 0, so d=-targetY.
+    const plane = new Plane(PLACEMENT_NORMAL, -targetY)
+    let downX = 0
+    let downY = 0
+    const onDown = (e: PointerEvent) => { downX = e.clientX; downY = e.clientY }
+    const onUp = (e: PointerEvent) => {
+      if (e.button !== 0) return
+      if (Math.abs(e.clientX - downX) > DRAG_PX_THRESHOLD || Math.abs(e.clientY - downY) > DRAG_PX_THRESHOLD) return
+      const rect = el.getBoundingClientRect()
+      ndc.set(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1,
+      )
+      raycaster.setFromCamera(ndc, camera)
+      if (!raycaster.ray.intersectPlane(plane, hit)) return
+      const { x, y } = fromThree(hit)
+      onClick(x, y)
+    }
+    el.addEventListener('pointerdown', onDown)
+    el.addEventListener('pointerup', onUp)
+    return () => {
+      el.removeEventListener('pointerdown', onDown)
+      el.removeEventListener('pointerup', onUp)
+    }
+  }, [camera, gl, onClick, targetY])
+  return null
 }
 
 // Subtle filled floor across the stage footprint so the stage area reads as

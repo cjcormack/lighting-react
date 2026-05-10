@@ -15,7 +15,7 @@ interface RiggingMeshesProps {
 // Each rigging renders as a bar along its local X axis. lengthM defaults to 3 m
 // for un-set DTOs. Yaw/pitch/roll come from the DTO; rotation order 'YXZ' matches
 // the convention used by panTiltToDir in stageCoords.
-const DEFAULT_RIGGING_LENGTH_M = 3
+export const DEFAULT_RIGGING_LENGTH_M = 3
 const RIGGING_THICKNESS_M = 0.18
 
 export function RiggingMeshes({ riggings, selectedUuid, editMode, onClick }: RiggingMeshesProps) {

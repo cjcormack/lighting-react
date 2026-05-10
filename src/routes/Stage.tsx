@@ -1,17 +1,30 @@
 import { useEffect, useRef, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Loader2, Pencil, Plus } from 'lucide-react'
 import { useViewedProject } from '../ProjectSwitcher'
-import { useCurrentProjectQuery } from '../store/projects'
+import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import { store } from '../store'
 import { patchesApi, useUpdatePatchMutation, usePatchListQuery } from '../store/patches'
-import { stageRegionsApi, useUpdateStageRegionMutation, useStageRegionListQuery } from '../store/stageRegions'
-import { riggingsApi, useUpdateRiggingMutation, useRiggingListQuery } from '../store/riggings'
+import {
+  stageRegionsApi,
+  useUpdateStageRegionMutation,
+  useStageRegionListQuery,
+  useCreateStageRegionMutation,
+} from '../store/stageRegions'
+import {
+  riggingsApi,
+  useUpdateRiggingMutation,
+  useRiggingListQuery,
+  useCreateRiggingMutation,
+} from '../store/riggings'
+import { formatError } from '../lib/formatError'
 import { Stage3D, type Selection } from '../components/stage3d/Stage3D'
+import { DEFAULT_RIGGING_LENGTH_M } from '../components/stage3d/RiggingMeshes'
 import { clearComposedWorldPosition } from '../lib/stageCoords'
 import { StageOverviewPanel } from '../components/StageOverviewPanel'
 import {
@@ -50,11 +63,24 @@ function useStageViewMode(): [Mode, (m: Mode) => void] {
   return [mode, setMode]
 }
 
-type CreateKind = 'region' | 'rigging' | null
+const REGION_DEFAULT_SIZE_M = 2
+// Fallback truss height when the project doesn't declare a stage height.
+const FALLBACK_TRUSS_HEIGHT_M = 4.5
 
 function findByUuid<T extends { uuid: string }>(list: T[] | undefined, uuid: string | null | undefined): T | null {
   if (uuid == null) return null
   return list?.find((x) => x.uuid === uuid) ?? null
+}
+
+function nextDefaultName(prefix: string, existing: { name: string }[] | undefined): string {
+  // Pick (max trailing-number of "Prefix N" entries) + 1, or "Prefix 1" if none.
+  const re = new RegExp(`^${prefix}\\s+(\\d+)$`)
+  let max = 0
+  for (const item of existing ?? []) {
+    const m = re.exec(item.name)
+    if (m) max = Math.max(max, Number(m[1]))
+  }
+  return `${prefix} ${max + 1}`
 }
 
 export function Stage() {
@@ -63,7 +89,7 @@ export function Stage() {
   const [mode, setMode] = useStageViewMode()
   const [selection, setSelection] = useState<Selection>(null)
   const [editMode, setEditMode] = useState(false)
-  const [creating, setCreating] = useState<CreateKind>(null)
+  const [placing, setPlacing] = useState<'region' | 'rigging' | null>(null)
   const [panelCollapsed, setPanelCollapsed] = useState(false)
   const isTabletOrLarger = useMediaQuery(SM_BREAKPOINT)
 
@@ -71,6 +97,7 @@ export function Stage() {
   const regionFormRef = useRef<EditStageRegionFormHandle>(null)
   const riggingFormRef = useRef<EditRiggingFormHandle>(null)
 
+  const { data: projectData } = useProjectQuery(projectId ?? 0, { skip: projectId == null })
   const { data: patches } = usePatchListQuery(projectId ?? 0, { skip: projectId == null })
   const { data: regions } = useStageRegionListQuery(projectId ?? 0, { skip: projectId == null })
   const { data: riggings } = useRiggingListQuery(projectId ?? 0, { skip: projectId == null })
@@ -78,6 +105,8 @@ export function Stage() {
   const [updatePatch] = useUpdatePatchMutation()
   const [updateRegion] = useUpdateStageRegionMutation()
   const [updateRigging] = useUpdateRiggingMutation()
+  const [createRegion] = useCreateStageRegionMutation()
+  const [createRigging] = useCreateRiggingMutation()
 
   // 3D-mode-only affordances. Editing also requires tablet+ width.
   const showEditToggle = mode === '3d' && isTabletOrLarger
@@ -86,13 +115,23 @@ export function Stage() {
   useEffect(() => {
     if (mode !== '3d' || !editMode) {
       setSelection(null)
-      setCreating(null)
+      setPlacing(null)
     }
   }, [mode, editMode])
 
   useEffect(() => {
     if (!isTabletOrLarger && editMode) setEditMode(false)
   }, [isTabletOrLarger, editMode])
+
+  // Escape cancels placement mode.
+  useEffect(() => {
+    if (!placing) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPlacing(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [placing])
 
   if (projectId == null) {
     return (
@@ -102,32 +141,77 @@ export function Stage() {
     )
   }
 
-  // Resolve the panel target from current selection or create-intent. Patch
-  // key may point at a stale id during list refetches — drop the target until
-  // the new row arrives so the form doesn't render against missing data.
-  const panelTarget = resolvePanelTarget(selection, creating, patches, regions, riggings)
+  // Patch key may point at a stale id during list refetches — drop the target
+  // until the new row arrives so the form doesn't render against missing data.
+  const panelTarget = resolvePanelTarget(selection, patches, regions, riggings)
 
   const showPanel = editingActive && panelTarget != null && !panelCollapsed
   const showPanelStub = editingActive && panelTarget != null && panelCollapsed
 
   const handleSelectionChange = (s: Selection) => {
     setSelection(s)
-    if (s != null) setCreating(null)
     if (!editingActive || s == null) return
     setPanelCollapsed(false)
   }
 
-  const openCreate = (kind: 'region' | 'rigging') => {
+  const togglePlacing = (kind: 'region' | 'rigging') => {
+    setPlacing((prev) => (prev === kind ? null : kind))
     setSelection(null)
-    setCreating(kind)
-    setPanelCollapsed(false)
+  }
+
+  // Hang truss 1m below stage top (clamped to floor for very short stages),
+  // or a typical truss height if the project doesn't declare one.
+  const stageH = projectData?.stageHeightM
+  const trussZ = stageH != null ? Math.max(0, stageH - 1) : FALLBACK_TRUSS_HEIGHT_M
+
+  // Match the placement-click raycast plane to the height the new object lives
+  // at, so the user sees the new object exactly where they clicked.
+  const placementZ = placing === 'rigging' ? trussZ : 0
+
+  const handlePlacementClick = async (worldX: number, worldY: number) => {
+    if (placing == null || projectId == null) return
+    // Clear placing eagerly so a quick second click during the in-flight create
+    // doesn't fire a duplicate placement.
+    const kind = placing
+    setPlacing(null)
+    try {
+      if (kind === 'region') {
+        const created = await createRegion({
+          projectId,
+          name: nextDefaultName('Region', regions),
+          centerX: worldX,
+          centerY: worldY,
+          centerZ: 0,
+          widthM: REGION_DEFAULT_SIZE_M,
+          depthM: REGION_DEFAULT_SIZE_M,
+          heightM: REGION_DEFAULT_SIZE_M,
+          yawDeg: 0,
+        }).unwrap()
+        setSelection({ kind: 'region', uuid: created.uuid })
+      } else {
+        const created = await createRigging({
+          projectId,
+          name: nextDefaultName('Rigging', riggings),
+          kind: 'TRUSS',
+          positionX: worldX,
+          positionY: worldY,
+          positionZ: trussZ,
+          yawDeg: 0,
+          pitchDeg: 0,
+          rollDeg: 0,
+          lengthM: DEFAULT_RIGGING_LENGTH_M,
+        }).unwrap()
+        setSelection({ kind: 'rigging', uuid: created.uuid })
+      }
+    } catch (err) {
+      toast.error(`Failed to place: ${formatError(err)}`)
+    }
   }
 
   // Form signalled it's done (Save/Cancel/Delete). Clear selection too, not
   // just the panel, so the highlight clears in 3D.
   const dismissPanel = () => {
     setSelection(null)
-    setCreating(null)
   }
 
   return (
@@ -138,11 +222,21 @@ export function Stage() {
           <div className="flex-1" />
           {editingActive && (
             <>
-              <Button size="sm" variant="outline" onClick={() => openCreate('region')}>
+              <Button
+                size="sm"
+                variant={placing === 'region' ? 'default' : 'outline'}
+                onClick={() => togglePlacing('region')}
+                aria-pressed={placing === 'region'}
+              >
                 <Plus className="size-3.5 mr-1" />
                 Region
               </Button>
-              <Button size="sm" variant="outline" onClick={() => openCreate('rigging')}>
+              <Button
+                size="sm"
+                variant={placing === 'rigging' ? 'default' : 'outline'}
+                onClick={() => togglePlacing('rigging')}
+                aria-pressed={placing === 'rigging'}
+              >
                 <Plus className="size-3.5 mr-1" />
                 Rigging
               </Button>
@@ -185,7 +279,10 @@ export function Stage() {
                 projectId={projectId}
                 editMode={editingActive}
                 selection={selection}
+                placing={placing}
+                placementZ={placementZ}
                 onSelectionChange={handleSelectionChange}
+                onPlacementClick={handlePlacementClick}
                 onPatchPlacementChange={(patch, next, settled) => {
                   patchFormRef.current?.setPlacement({
                     riggingUuid: next.riggingUuid,
@@ -330,7 +427,6 @@ export function Stage() {
 
 function resolvePanelTarget(
   selection: Selection,
-  creating: CreateKind,
   patches: FixturePatch[] | undefined,
   regions: StageRegionDto[] | undefined,
   riggings: RiggingDto[] | undefined,
@@ -345,8 +441,6 @@ function resolvePanelTarget(
   if (selection?.kind === 'rigging') {
     return { kind: 'rigging', rigging: findByUuid(riggings, selection.uuid) }
   }
-  if (creating === 'region') return { kind: 'region', region: null }
-  if (creating === 'rigging') return { kind: 'rigging', rigging: null }
   return null
 }
 
