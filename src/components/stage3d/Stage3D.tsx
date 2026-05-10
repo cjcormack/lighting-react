@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { Edges, OrbitControls, TransformControls } from '@react-three/drei'
+import { Edges, OrbitControls, Text, TransformControls } from '@react-three/drei'
 import { Euler, MathUtils, NoToneMapping, Object3D, Vector3 } from 'three'
 import { usePatchListQuery } from '../../store/patches'
 import { useRiggingListQuery } from '../../store/riggings'
@@ -128,17 +128,21 @@ export function Stage3D({
         camera={{ position: [0, stageH * 0.7, cameraDistance], fov: 45 }}
         style={{ background: '#0b0e14' }}
       >
-        <ambientLight intensity={0.35} />
-        <gridHelper args={[gridSize, 20, '#3a3a3a', '#1f1f1f']} />
+        <ambientLight intensity={0.5} />
+        <gridHelper args={[gridSize, 20, '#4a5a6a', '#2a3540']} />
+        <StageFloor width={stageW} depth={stageD} />
         <StageBoxOutline width={stageW} depth={stageD} height={stageH} />
+        <OriginMarkers depth={stageD} />
         <StageRegionMeshes
           regions={safeRegions}
           selectedUuid={selection?.kind === 'region' ? selection.uuid : null}
+          editMode={editMode}
           onClick={editMode ? handleRegionClick : undefined}
         />
         <RiggingMeshes
           riggings={safeRiggings}
           selectedUuid={selection?.kind === 'rigging' ? selection.uuid : null}
+          editMode={editMode}
           onClick={editMode ? handleRiggingClick : undefined}
         />
         {(patches ?? []).map((patch) => {
@@ -152,6 +156,7 @@ export function Stage3D({
               fixtureType={fixtureType}
               riggings={safeRiggings}
               selected={selection?.kind === 'patch' && selection.patchKey === patch.key}
+              editMode={editMode}
               onClick={editMode ? (group) => handleFixtureClick(patch, group) : undefined}
             />
           )
@@ -371,7 +376,61 @@ function StageBoxOutline({
     <mesh position={[0, height / 2, -depth / 2]} raycast={NO_RAYCAST}>
       <boxGeometry args={[width, height, depth]} />
       <meshBasicMaterial visible={false} />
-      <Edges color="#5a6a7a" />
+      <Edges color="#7a8a9e" />
     </mesh>
   )
 }
+
+// Subtle filled floor across the stage footprint so the stage area reads as
+// a solid surface rather than just a grid. Sits just below the grid lines.
+function StageFloor({ width, depth }: { width: number; depth: number }) {
+  return (
+    <mesh
+      position={[0, -0.002, -depth / 2]}
+      rotation={[-Math.PI / 2, 0, 0]}
+      raycast={NO_RAYCAST}
+    >
+      <planeGeometry args={[width, depth]} />
+      <meshBasicMaterial color="#1c2330" transparent opacity={0.55} />
+    </mesh>
+  )
+}
+
+// Lighting → R3F: X right (R3F +X) red, Y upstage (R3F −Z) green, Z up (R3F +Y) blue.
+function OriginMarkers({ depth }: { depth: number }) {
+  const len = 0.6
+  return (
+    <group>
+      <arrowHelper args={[AXIS_X, ORIGIN, len, 0xd45757, 0.12, 0.08]} />
+      <arrowHelper args={[AXIS_UPSTAGE, ORIGIN, len, 0x6cc36c, 0.12, 0.08]} />
+      <arrowHelper args={[AXIS_UP, ORIGIN, len, 0x6ba8e8, 0.12, 0.08]} />
+      <Text
+        position={[0, 0.002, 0.3]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        fontSize={0.35}
+        color="#a3b6c9"
+        anchorX="center"
+        anchorY="middle"
+        raycast={NO_RAYCAST}
+      >
+        FOH
+      </Text>
+      <Text
+        position={[0, 0.002, -depth - 0.3]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        fontSize={0.28}
+        color="#6a7d92"
+        anchorX="center"
+        anchorY="middle"
+        raycast={NO_RAYCAST}
+      >
+        upstage
+      </Text>
+    </group>
+  )
+}
+
+const ORIGIN = new Vector3(0, 0, 0)
+const AXIS_X = new Vector3(1, 0, 0)
+const AXIS_UPSTAGE = new Vector3(0, 0, -1)
+const AXIS_UP = new Vector3(0, 1, 0)

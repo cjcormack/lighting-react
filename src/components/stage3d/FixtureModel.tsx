@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCursor } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
+import { StageLabel } from './StageLabel'
 import {
   AdditiveBlending,
   Color,
@@ -58,6 +60,7 @@ interface FixtureModelProps {
   fixtureType: FixtureTypeInfo | undefined
   riggings: RiggingDto[]
   selected: boolean
+  editMode?: boolean
   onClick?: (group: Group) => void
 }
 
@@ -67,8 +70,12 @@ export function FixtureModel({
   fixtureType,
   riggings,
   selected,
+  editMode,
   onClick,
 }: FixtureModelProps) {
+  const [hovered, setHovered] = useState(false)
+  useCursor(!!editMode && hovered)
+  const active = selected || (!!editMode && hovered)
   const colourSource = useMemo(
     () => (fixture?.properties ? findColourSource(fixture.properties) : undefined),
     [fixture?.properties],
@@ -133,11 +140,13 @@ export function FixtureModel({
     <group
       position={fixturePos}
       onClick={onClick ? (e) => { e.stopPropagation(); onClick(e.eventObject as Group) } : undefined}
+      onPointerOver={editMode ? (e) => { e.stopPropagation(); setHovered(true) } : undefined}
+      onPointerOut={editMode ? () => setHovered(false) : undefined}
     >
-      {/* yoke base — small dark cylinder */}
+      {/* yoke base — kept brighter than the canvas so the mount point reads against the floor. */}
       <mesh position={[0, -0.05, 0]}>
         <cylinderGeometry args={[0.08, 0.1, 0.1, 16]} />
-        <meshStandardMaterial color="#222" />
+        <meshStandardMaterial color={active ? '#9aa5b4' : '#6a7280'} />
       </mesh>
 
       {/* head group — rotated each frame to track beam direction */}
@@ -146,13 +155,17 @@ export function FixtureModel({
           <circleGeometry args={[0.08, 32]} />
           <meshBasicMaterial color="#fff8d5" side={DoubleSide} />
         </mesh>
-        {selected && (
+        {active && (
           <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, -0.001, 0]}>
             <ringGeometry args={[0.09, 0.11, 32]} />
             <meshBasicMaterial color="#ffffff" side={DoubleSide} />
           </mesh>
         )}
       </group>
+
+      {editMode && (
+        <StageLabel position={[0, 0.18, 0]}>{patch.displayName}</StageLabel>
+      )}
 
       {/* beam cones (outer wider/dim, inner core narrower/brighter). raycast
           disabled — cones are large transparent meshes that would otherwise
