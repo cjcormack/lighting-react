@@ -72,6 +72,9 @@ const MAX_BEAM_REGIONS = 16
 // at the edge of its reach.
 const REGION_CULL_SLACK_RAD = MathUtils.degToRad(3)
 
+// ~1% intensity, below one DMX step at the pool's 0.55x opacity scale.
+const LIGHT_OFF_OPACITY = 0.005
+
 // Shared GLSL: region uniform declarations + slab-test against a
 // yaw-rotated AABB. The slab test returns the entry distance from origin,
 // or a negative value if the box is behind the ray OR the origin is inside
@@ -638,6 +641,17 @@ function useBeamDirector({
       headRef.current.quaternion.copy(
         headQuaternionFor(finalPan, finalTilt, SCRATCH_QUAT, SCRATCH_QUAT_EULER),
       )
+    }
+
+    // Head/yoke/lens stay on; only emitting meshes (cone + cookies) hide.
+    const lightOn = poolMaterial.uniforms.uOpacity.value >= LIGHT_OFF_OPACITY
+    if (beamConeRef.current) beamConeRef.current.visible = lightOn
+    if (!lightOn) {
+      if (floorPoolRef.current) floorPoolRef.current.visible = false
+      for (const r of regionData) {
+        if (r.cookieGroup) r.cookieGroup.visible = false
+      }
+      return
     }
 
     SCRATCH_NEG_DIR.copy(dir).multiplyScalar(-1)
