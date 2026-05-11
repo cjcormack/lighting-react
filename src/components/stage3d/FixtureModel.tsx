@@ -62,7 +62,10 @@ const SCRATCH_QUAT_EULER = new Euler()
 // Hollow cone shell, additive, double-sided; alpha biased by abs(N·V) so
 // silhouette edges fade. Per-fragment ray-OBB shadow discards fragments
 // blocked by regions, which carves the same shape the floor pool projects.
-const MAX_BEAM_REGIONS = 8
+// Cap on regions pushed to shader uniforms; per-fragment shadow loop is
+// bounded by this at compile time but exits early on uNumRegions, so the
+// runtime cost is the actual region count. Bump as the design target grows.
+const MAX_BEAM_REGIONS = 16
 
 // Slack on the cone half-angle so cookies fade in before the shader's
 // cosAngle test would clip them — masks the boundary even on a wide spot
