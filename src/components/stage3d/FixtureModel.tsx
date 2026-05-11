@@ -49,10 +49,8 @@ import { NO_RAYCAST } from './raycast'
 
 const DEFAULT_BEAM_DEG = 30
 const BEAM_LENGTH = 8 // metres — long enough to cross most stages
-// Floor cookie quad size. Re-centred each frame on the fixture's XZ
-// projection so it covers the cone's reachable footprint with minimal
-// overdraw; 2× beam length catches any reasonable tilt.
-const FLOOR_COOKIE_SIZE = BEAM_LENGTH * 2
+// Lift to bias cookie quads above their underlying surface and avoid z-fight.
+const COOKIE_LIFT_M = 0.001
 const COLOR_TMP = new Color()
 const UNIT_Y = new Vector3(0, 1, 0)
 const SCRATCH_DIR = new Vector3()
@@ -376,7 +374,7 @@ export function FixtureModel({
       const h = r.heightM ?? 1
       const cz = r.centerZ ?? 0
       const obbCenter = toThree(r.centerX ?? 0, r.centerY ?? 0, cz + h / 2)
-      const topCenter = toThree(r.centerX ?? 0, r.centerY ?? 0, cz + h + 0.001)
+      const topCenter = toThree(r.centerX ?? 0, r.centerY ?? 0, cz + h + COOKIE_LIFT_M)
       return {
         uuid: r.uuid,
         widthM: w,
@@ -417,6 +415,7 @@ export function FixtureModel({
     beamLength: BEAM_LENGTH,
     cullCosCone: cullTrig.cosCone,
     cullSinCone: cullTrig.sinCone,
+    floorCookieSide: 2 * BEAM_LENGTH * cullTrig.sinCone,
     groupRef,
     headRef,
     beamConeRef,
@@ -490,7 +489,7 @@ export function FixtureModel({
             material={poolMaterial}
             raycast={NO_RAYCAST}
           >
-            <planeGeometry args={[FLOOR_COOKIE_SIZE, FLOOR_COOKIE_SIZE]} />
+            <planeGeometry args={[1, 1]} />
           </mesh>
           {regionData.map((r) => (
             // Outer group rotates the horizontal plane around +Y by the
@@ -563,6 +562,7 @@ interface BeamDirectorOpts {
   beamLength: number
   cullCosCone: number
   cullSinCone: number
+  floorCookieSide: number
   groupRef: React.RefObject<Group | null>
   headRef: React.RefObject<Group | null>
   beamConeRef: React.RefObject<Mesh | null>
@@ -605,6 +605,7 @@ function useBeamDirector({
   beamLength,
   cullCosCone,
   cullSinCone,
+  floorCookieSide,
   groupRef,
   headRef,
   beamConeRef,
@@ -651,14 +652,44 @@ function useBeamDirector({
       groupRef.current.getWorldPosition(SCRATCH_ORIGIN)
       ;(beamMaterial.uniforms.uBeamOrigin.value as Vector3).copy(SCRATCH_ORIGIN)
       ;(poolMaterial.uniforms.uBeamOrigin.value as Vector3).copy(SCRATCH_ORIGIN)
-      // Floor cookie quad follows the fixture's XZ so it stays small.
       if (floorPoolRef.current) {
-        floorPoolRef.current.position.set(SCRATCH_ORIGIN.x, 0.001, SCRATCH_ORIGIN.z)
+        updateFloorCookie(floorPoolRef.current, SCRATCH_ORIGIN, dir, beamLength, cullSinCone, floorCookieSide)
       }
       cullRegionCookies(SCRATCH_ORIGIN, dir, beamLength, cullCosCone, cullSinCone, regionData)
     }
     ;(poolMaterial.uniforms.uBeamDir.value as Vector3).copy(dir)
   })
+}
+
+// Resize + reposition the floor cookie to bound the cone's actual floor reach.
+// `sinCone` and `side` are precomputed against the same slacked half-angle as
+// the region cull so the horizon fade and bounding box share that padding.
+function updateFloorCookie(
+  pool: Mesh,
+  origin: Vector3,
+  dir: Vector3,
+  beamLength: number,
+  sinCone: number,
+  side: number,
+): void {
+  if (dir.y >= sinCone) {
+    pool.visible = false
+    return
+  }
+  pool.visible = true
+  // dir.y near zero would project the centerline to a huge distance; fall
+  // back to fixture XZ in that case (lit area starts at origin anyway).
+  let cx = origin.x
+  let cz = origin.z
+  if (dir.y < -1e-3) {
+    const t = Math.min(-origin.y / dir.y, beamLength)
+    if (t > 0) {
+      cx = origin.x + t * dir.x
+      cz = origin.z + t * dir.z
+    }
+  }
+  pool.position.set(cx, COOKIE_LIFT_M, cz)
+  pool.scale.set(side, side, 1)
 }
 
 // Toggle each region-top cookie's visibility via a conservative cone-vs-sphere
