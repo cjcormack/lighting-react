@@ -10,8 +10,8 @@ Solo personal repo — commit and push directly to `main`. Do **not** open pull
 requests, do **not** create feature branches. The standard "still don't commit
 or push without me asking" rule from the global CLAUDE.md still applies; this
 section only changes *how* a confirmed commit/push happens (straight to `main`,
-no PR). Pre-commit equivalent is `npm run type-check` + `npm run build`; ESLint
-is project-wide noisy and not a useful gate.
+no PR). Pre-commit equivalent is `npm run type-check` + `npm run build` +
+`npm test`; ESLint is project-wide noisy and not a useful gate.
 
 ## Tech Stack
 
@@ -62,6 +62,8 @@ npm run lint         # Run ESLint
 npm run lint:fix     # Fix ESLint issues
 npm run format       # Format code with Prettier
 npm run type-check   # Run TypeScript type checking
+npm test             # Run Vitest test suite
+npm run test:watch   # Run Vitest in watch mode
 ```
 
 ### Development Server
