@@ -1,13 +1,14 @@
-// Rigging endpoint handles drag on a horizontal plane through the dragged
-// endpoint's current Z, so free-XY drag preserves the endpoint height.
-// Pitched trusses need the numeric pitch/Z fields on the form to change Z.
+// Endpoint handles drag freely in 3D against a camera-facing vertical plane.
+// With pitchDeg pinned to 0, yawDeg is the bar's horizontal heading and
+// rollDeg is its elevation above the floor — see deriveFromEndpoints for the
+// YXZ Euler inverse.
 import { useMemo, useState } from 'react'
-import { type ThreeEvent } from '@react-three/fiber'
-import { Euler, MathUtils, Plane, Vector3 } from 'three'
+import { type ThreeEvent, useThree } from '@react-three/fiber'
+import { Euler, MathUtils, Vector3 } from 'three'
 import type { RiggingDto } from '../../api/riggingApi'
 import type { RiggingPositionUpdate } from './Stage3D'
 import { toThree, fromThree } from '../../lib/stageCoords'
-import { useHandleDrag } from './useHandleDrag'
+import { useHandleDrag, verticalPlaneThroughR3F } from './useHandleDrag'
 import { DEFAULT_RIGGING_LENGTH_M } from './RiggingMeshes'
 import { snap, SNAP_DISTANCE_M } from './useShiftHeld'
 
@@ -22,7 +23,6 @@ interface RiggingEndpointHandlesProps {
   onDragEnd?: () => void
 }
 
-const PLANE_NORMAL_UP = new Vector3(0, 1, 0)
 const HANDLE_SIZE = 0.16
 
 /**
@@ -52,13 +52,18 @@ function worldEndpointsFor(rig: RiggingDto): [Vector3, Vector3] {
 }
 
 /**
- * Yaw comes from the endpoint delta in the lighting XY plane. Pitch and roll
- * are reset to zero because, with RiggingMeshes' YXZ-applied-to-mesh
- * convention, "pitch" has no effect on a bar lying along local +X and "roll"
- * unexpectedly affects the bar's direction (not its own axis). Forcing both
- * to zero keeps the forward+inverse math exact for the horizontal-drag case
- * and means dragging the endpoint always produces a flat bar — users who want
- * a tilted truss can set pitch/roll explicitly in the form afterwards.
+ * Inverse of the forward kinematics R_y(yaw)·R_z(roll)·(L/2, 0, 0) with
+ * pitch=0, expressed in lighting space (three.js Euler 'YXZ' is intrinsic so
+ * the matrix is R_y · R_x · R_z applied to the column vector). Derivation:
+ *   dx = L·cos(roll)·cos(yaw)
+ *   dy = L·cos(roll)·sin(yaw)
+ *   dz = L·sin(roll)
+ * giving yaw = atan2(dy, dx) and roll = atan2(dz, hypot(dx, dy)). pitchDeg is
+ * forced to 0 — it's a twist along the bar's own axis with no derivable
+ * value from endpoint positions alone.
+ *
+ * Endpoints are passed in canonical (A=index-0, B=index-1) order so the
+ * (dx, dy, dz) vector points along the bar's +X (forward) direction.
  */
 function deriveFromEndpoints(
   aX: number, aY: number, aZ: number,
@@ -74,12 +79,13 @@ function deriveFromEndpoints(
     lengthM: Math.hypot(dx, dy, dz),
     yawDeg: MathUtils.radToDeg(Math.atan2(dy, dx)),
     pitchDeg: 0,
-    rollDeg: 0,
+    rollDeg: MathUtils.radToDeg(Math.atan2(dz, Math.hypot(dx, dy))),
   }
 }
 
 export function RiggingEndpointHandles({ rig, onChange, shiftHeldRef, onDragStart, onDragEnd }: RiggingEndpointHandlesProps) {
   const startDrag = useHandleDrag()
+  const { camera } = useThree()
   const [dragging, setDragging] = useState<EndpointIndex | null>(null)
 
   const endpoints = useMemo(() => worldEndpointsFor(rig), [rig])
@@ -97,19 +103,22 @@ export function RiggingEndpointHandles({ rig, onChange, shiftHeldRef, onDragStar
     const pinnedX = pinned.x
     const pinnedY = pinned.y
     const pinnedZ = pinned.z
-    const dragStartZ = endpoints[idx].z
-    const plane = new Plane(PLANE_NORMAL_UP, -dragStartZ)
+    // Camera-facing vertical plane through the endpoint — gives the user a
+    // stable "screen-aligned" plane to drag against, including vertical motion.
+    const handleR3F = r3fEnds[idx]
+    const plane = verticalPlaneThroughR3F(handleR3F, camera.position)
 
     const updateFromHit = (p: Vector3, settled: boolean) => {
       const { x, y, z } = fromThree(p)
       const dx = shiftHeldRef?.current ? snap(x, SNAP_DISTANCE_M) : x
       const dy = shiftHeldRef?.current ? snap(y, SNAP_DISTANCE_M) : y
-      // Pass endpoints in canonical (A=index-0, B=index-1) order so yaw/pitch
+      const dz = shiftHeldRef?.current ? snap(z, SNAP_DISTANCE_M) : z
+      // Pass endpoints in canonical (A=index-0, B=index-1) order so yaw/roll
       // reflect the bar's "+X forward" direction consistently.
       const d =
         idx === 0
-          ? deriveFromEndpoints(dx, dy, z, pinnedX, pinnedY, pinnedZ)
-          : deriveFromEndpoints(pinnedX, pinnedY, pinnedZ, dx, dy, z)
+          ? deriveFromEndpoints(dx, dy, dz, pinnedX, pinnedY, pinnedZ)
+          : deriveFromEndpoints(pinnedX, pinnedY, pinnedZ, dx, dy, dz)
       onChange(
         {
           positionX: d.positionX,
@@ -127,7 +136,7 @@ export function RiggingEndpointHandles({ rig, onChange, shiftHeldRef, onDragStar
     startDrag(
       {
         plane,
-        handleWorld: r3fEnds[idx],
+        handleWorld: handleR3F,
         onDrag: (p) => updateFromHit(p, false),
         onSettle: (lastPoint) => {
           setDragging(null)

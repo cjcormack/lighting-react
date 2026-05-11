@@ -14,10 +14,32 @@ export interface StartDragOptions {
    * off-centre on the handle — no jump on drag start.
    */
   handleWorld: Vector3
+  /**
+   * Constrain the drag output to a single axis. With `'vertical'`, the hook
+   * raycasts a camera-facing vertical plane through the handle but then
+   * clamps the hit's R3F X/Z back to `handleWorld.x/.z` so the drag point
+   * moves only along world Y. Useful for "drag this face up/down" handles
+   * where the user shouldn't be able to slide the handle sideways.
+   */
+  lockAxis?: 'vertical'
   /** Fires for each pointermove, with the new world point on the drag plane. */
   onDrag: (worldPoint: Vector3) => void
   /** Fires once on pointerup. Receives the last drag point (or null if none). */
   onSettle: (lastPoint: Vector3 | null) => void
+}
+
+/**
+ * Build a vertical plane through `handleR3F` whose normal is the horizontal
+ * component of the camera-to-handle direction. Used for vertical-drag handles
+ * so the user has a stable "screen-aligned" plane to drag against (looking
+ * straight down is the only degenerate case — we fall back to a +Z normal).
+ */
+export function verticalPlaneThroughR3F(handleR3F: Vector3, cameraR3F: Vector3): Plane {
+  const n = new Vector3().subVectors(cameraR3F, handleR3F)
+  n.y = 0
+  if (n.lengthSq() < 1e-6) n.set(0, 0, 1)
+  n.normalize()
+  return new Plane(n, -n.dot(handleR3F))
 }
 
 /**
@@ -62,6 +84,10 @@ export function useHandleDrag() {
         const p = project(ev.clientX, ev.clientY)
         if (p) {
           p.add(offset)
+          if (opts.lockAxis === 'vertical') {
+            p.x = opts.handleWorld.x
+            p.z = opts.handleWorld.z
+          }
           lastHit = p
           opts.onDrag(p)
         }

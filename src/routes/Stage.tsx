@@ -404,6 +404,7 @@ export function Stage() {
                     yawDeg: next.yawDeg,
                     widthM: next.widthM,
                     depthM: next.depthM,
+                    heightM: next.heightM,
                   })
                   // Optimistic write every drag frame so the box + handles
                   // follow the cursor live. Network PUT is gated to settled.
@@ -417,6 +418,7 @@ export function Stage() {
                       r.yawDeg = next.yawDeg
                       if (next.widthM !== undefined) r.widthM = next.widthM
                       if (next.depthM !== undefined) r.depthM = next.depthM
+                      if (next.heightM !== undefined) r.heightM = next.heightM
                     }),
                   )
                   if (!settled) return
@@ -426,7 +428,8 @@ export function Stage() {
                     next.centerZ === region.centerZ &&
                     next.yawDeg === region.yawDeg &&
                     (next.widthM === undefined || next.widthM === region.widthM) &&
-                    (next.depthM === undefined || next.depthM === region.depthM)
+                    (next.depthM === undefined || next.depthM === region.depthM) &&
+                    (next.heightM === undefined || next.heightM === region.heightM)
                   ) return
                   updateRegion({
                     projectId,
@@ -437,6 +440,7 @@ export function Stage() {
                     yawDeg: next.yawDeg,
                     ...(next.widthM !== undefined ? { widthM: next.widthM } : {}),
                     ...(next.depthM !== undefined ? { depthM: next.depthM } : {}),
+                    ...(next.heightM !== undefined ? { heightM: next.heightM } : {}),
                   }).catch(() => {})
                 }}
                 onRiggingPositionChange={(rig, next, settled) => {

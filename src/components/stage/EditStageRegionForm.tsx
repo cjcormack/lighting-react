@@ -67,6 +67,7 @@ export interface EditStageRegionFormHandle {
     yawDeg?: number | null
     widthM?: number | null
     depthM?: number | null
+    heightM?: number | null
   }) => void
 }
 

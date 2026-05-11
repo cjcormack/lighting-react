@@ -7,9 +7,9 @@ import { Bloom } from './Bloom'
 import { StageRegionMeshes } from './StageRegionMeshes'
 import { RiggingMeshes } from './RiggingMeshes'
 import { FixtureModel } from './FixtureModel'
-import { RegionCornerHandles } from './RegionCornerHandles'
+import { RegionEditHandles } from './RegionEditHandles'
 import { RiggingEndpointHandles } from './RiggingEndpointHandles'
-import { useShiftHeld, SNAP_ANGLE_RAD, SNAP_DISTANCE_M } from './useShiftHeld'
+import { useShiftHeld, SNAP_DISTANCE_M } from './useShiftHeld'
 import { DEFAULT_VIEW_FLAGS, type StageViewFlags } from './useStageView'
 import { useStageData } from './useStageData'
 import { StageEmitters, computeRegionGeometry } from './StageEmitters'
@@ -30,8 +30,6 @@ export type Selection =
   | { kind: 'rigging'; uuid: string }
   | null
 
-export type GizmoMode = 'translate' | 'rotate' | 'points'
-
 export interface PatchPlacementUpdate {
   riggingUuid: string | null
   stageX: number | null
@@ -46,6 +44,7 @@ export interface RegionPositionUpdate {
   yawDeg: number | null
   widthM?: number | null
   depthM?: number | null
+  heightM?: number | null
 }
 
 export interface RiggingPositionUpdate {
@@ -105,45 +104,59 @@ export function Stage3D({
   const safePatches = patches ?? EMPTY_PATCHES
   const regionGeometry = useMemo(() => computeRegionGeometry(safeRegions), [safeRegions])
 
-  const [target, setTarget] = useState<Object3D | null>(null)
-  const [gizmoMode, setGizmoMode] = useState<GizmoMode>('translate')
+  // patchTarget feeds TransformControls for the patch translate gizmo. Region
+  // and rigging never use this — their interactions are entirely handle-based.
+  const [patchTarget, setPatchTarget] = useState<Object3D | null>(null)
+  const orbitRef = useRef<React.ComponentRef<typeof OrbitControls>>(null!)
+  const { held: shiftHeld, ref: shiftHeldRef } = useShiftHeld()
+
+  const disableOrbit = useCallback(() => {
+    if (orbitRef.current) orbitRef.current.enabled = false
+  }, [])
+  const enableOrbit = useCallback(() => {
+    if (orbitRef.current) orbitRef.current.enabled = true
+  }, [])
 
   const handleRegionClick = useCallback(
-    (region: StageRegionDto, mesh: Object3D) => {
+    (region: StageRegionDto) => {
       onSelectionChange({ kind: 'region', uuid: region.uuid })
-      if (editMode) setTarget(mesh)
     },
-    [editMode, onSelectionChange],
+    [onSelectionChange],
   )
   const handleRiggingClick = useCallback(
-    (rig: RiggingDto, mesh: Object3D) => {
+    (rig: RiggingDto) => {
       onSelectionChange({ kind: 'rigging', uuid: rig.uuid })
-      if (editMode) setTarget(mesh)
     },
-    [editMode, onSelectionChange],
+    [onSelectionChange],
   )
   const handleFixtureClick = useCallback(
     (patch: FixturePatch, group: Object3D) => {
       onSelectionChange({ kind: 'patch', patchKey: patch.key })
-      if (editMode) setTarget(group)
+      if (editMode) setPatchTarget(group)
     },
     [editMode, onSelectionChange],
   )
 
-  // Drop the gizmo target whenever edit mode turns off or selection clears.
+  // Drop the patch gizmo target whenever edit mode turns off or selection
+  // clears (or moves away from a patch).
   useEffect(() => {
-    if (!editMode || !selection) setTarget(null)
+    if (!editMode || selection?.kind !== 'patch') setPatchTarget(null)
   }, [editMode, selection])
 
-  // Patches never rotate via gizmo — base orientation uses numeric fields. Derived
-  // rather than stateful so the user's intended mode survives re-selection.
-  const effectiveGizmoMode: GizmoMode = selection?.kind === 'patch' ? 'translate' : gizmoMode
-  const showRotateToggle = editMode && (selection?.kind === 'region' || selection?.kind === 'rigging')
   // Hover/click is disabled during placement so the PlacementPlane catches the
   // click. Otherwise meshes are clickable in both edit and view modes — view
   // mode uses the click for "select to inspect" (info overlay); edit mode also
   // opens the side panel.
   const interactable = !placing
+  const canEdit = editMode && interactable
+  const selectedRegion = useMemo(
+    () => (selection?.kind === 'region' ? safeRegions.find((r) => r.uuid === selection.uuid) ?? null : null),
+    [selection, safeRegions],
+  )
+  const selectedRigging = useMemo(
+    () => (selection?.kind === 'rigging' ? safeRiggings.find((r) => r.uuid === selection.uuid) ?? null : null),
+    [selection, safeRiggings],
+  )
 
   const fixtureNodes = safePatches.map((patch, slot) => {
     const fixture = fixtureByKey.get(patch.key)
@@ -189,6 +202,10 @@ export function Stage3D({
             editMode={interactable}
             showLabel={view.labels}
             onClick={interactable ? handleRegionClick : undefined}
+            onMove={canEdit && onRegionPositionChange ? onRegionPositionChange : undefined}
+            shiftHeldRef={shiftHeldRef}
+            onDragStart={disableOrbit}
+            onDragEnd={enableOrbit}
           />
         )}
         {view.riggings && (
@@ -198,6 +215,10 @@ export function Stage3D({
             editMode={interactable}
             showLabel={view.labels}
             onClick={interactable ? handleRiggingClick : undefined}
+            onMove={canEdit && onRiggingPositionChange ? onRiggingPositionChange : undefined}
+            shiftHeldRef={shiftHeldRef}
+            onDragStart={disableOrbit}
+            onDragEnd={enableOrbit}
           />
         )}
         {view.fixtures && (view.beamCones ? (
@@ -205,45 +226,36 @@ export function Stage3D({
             {fixtureNodes}
           </StageEmitters>
         ) : fixtureNodes)}
+        {canEdit && selectedRegion && onRegionPositionChange && (
+          <RegionEditHandles
+            region={selectedRegion}
+            shiftHeldRef={shiftHeldRef}
+            onChange={(next, settled) => onRegionPositionChange(selectedRegion, next, settled)}
+            onDragStart={disableOrbit}
+            onDragEnd={enableOrbit}
+          />
+        )}
+        {canEdit && selectedRigging && onRiggingPositionChange && (
+          <RiggingEndpointHandles
+            rig={selectedRigging}
+            shiftHeldRef={shiftHeldRef}
+            onChange={(next, settled) => onRiggingPositionChange(selectedRigging, next, settled)}
+            onDragStart={disableOrbit}
+            onDragEnd={enableOrbit}
+          />
+        )}
         <Controls
-          target={editMode ? target : null}
-          gizmoMode={effectiveGizmoMode}
+          orbitRef={orbitRef}
+          patchTarget={editMode ? patchTarget : null}
           selection={selection}
           patches={patches ?? null}
-          regions={safeRegions}
           riggings={safeRiggings}
           stageH={stageH}
+          shiftHeld={shiftHeld}
           onPatchPlacementChange={onPatchPlacementChange}
-          onRegionPositionChange={onRegionPositionChange}
-          onRiggingPositionChange={onRiggingPositionChange}
         />
         <Bloom />
       </Canvas>
-      {showRotateToggle && !placing && (
-        <div className="pointer-events-auto absolute right-3 top-3 flex gap-1 rounded-md bg-background/85 p-1 text-xs shadow-md backdrop-blur">
-          <button
-            type="button"
-            onClick={() => setGizmoMode('translate')}
-            className={`rounded px-2 py-1 ${gizmoMode === 'translate' ? 'bg-accent' : 'hover:bg-muted'}`}
-          >
-            Move
-          </button>
-          <button
-            type="button"
-            onClick={() => setGizmoMode('points')}
-            className={`rounded px-2 py-1 ${gizmoMode === 'points' ? 'bg-accent' : 'hover:bg-muted'}`}
-          >
-            {selection?.kind === 'region' ? 'Corners' : 'Endpoints'}
-          </button>
-          <button
-            type="button"
-            onClick={() => setGizmoMode('rotate')}
-            className={`rounded px-2 py-1 ${gizmoMode === 'rotate' ? 'bg-accent' : 'hover:bg-muted'}`}
-          >
-            Rotate
-          </button>
-        </div>
-      )}
       {placing && (
         <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-md bg-background/85 px-3 py-1.5 text-xs shadow-md backdrop-blur">
           Click on the stage to place {placing === 'region' ? 'region' : 'rigging'} · Esc to cancel
@@ -296,48 +308,34 @@ function SelectionInfo({
 }
 
 interface ControlsProps {
-  target: Object3D | null
-  gizmoMode: GizmoMode
+  orbitRef: React.RefObject<React.ComponentRef<typeof OrbitControls>>
+  patchTarget: Object3D | null
   selection: Selection
   patches: FixturePatch[] | null
-  regions: StageRegionDto[]
   riggings: RiggingDto[]
   stageH: number
+  shiftHeld: boolean
   onPatchPlacementChange?: (patch: FixturePatch, next: PatchPlacementUpdate, settled: boolean) => void
-  onRegionPositionChange?: (region: StageRegionDto, next: RegionPositionUpdate, settled: boolean) => void
-  onRiggingPositionChange?: (rig: RiggingDto, next: RiggingPositionUpdate, settled: boolean) => void
 }
 
-// OrbitControls + TransformControls live inside <Canvas> so they have access
-// to the R3F renderer/event system. drei's TransformControls auto-disables
-// OrbitControls during drag via its `makeDefault` hookup, but we ALSO listen
-// to dragging-changed to fire a single PUT on release.
+// OrbitControls + (patch-only) TransformControls live inside <Canvas> so they
+// have access to the R3F renderer/event system. Region/rigging interactions
+// use custom handles rendered at the Stage3D level, so they don't appear here.
 function Controls({
-  target,
-  gizmoMode,
+  orbitRef,
+  patchTarget,
   selection,
   patches,
-  regions,
   riggings,
   stageH,
+  shiftHeld,
   onPatchPlacementChange,
-  onRegionPositionChange,
-  onRiggingPositionChange,
 }: ControlsProps) {
-  const orbitRef = useRef<React.ComponentRef<typeof OrbitControls>>(null!)
   const tcRef = useRef<React.ComponentRef<typeof TransformControls>>(null!)
 
   const selectedPatch = useMemo(
     () => (selection?.kind === 'patch' ? patches?.find((p) => p.key === selection.patchKey) ?? null : null),
     [selection, patches],
-  )
-  const selectedRegion = useMemo(
-    () => (selection?.kind === 'region' ? regions.find((r) => r.uuid === selection.uuid) ?? null : null),
-    [selection, regions],
-  )
-  const selectedRigging = useMemo(
-    () => (selection?.kind === 'rigging' ? riggings.find((r) => r.uuid === selection.uuid) ?? null : null),
-    [selection, riggings],
   )
   const riggingByUuid = useMemo(() => {
     const map = new Map<string, RiggingDto>()
@@ -347,43 +345,20 @@ function Controls({
 
   const flush = useCallback(
     (settled: boolean) => {
-      if (!target) return
-      target.updateMatrixWorld(true)
-      target.getWorldPosition(SCRATCH_VEC1)
-      if (selectedPatch) {
-        const next = patchPlacementFromWorld(selectedPatch, SCRATCH_VEC1, riggingByUuid)
-        onPatchPlacementChange?.(selectedPatch, next, settled)
-      } else if (selectedRegion) {
-        // Region mesh is rendered at centerZ + height/2 (geometric centre);
-        // back the lift out so we persist the floor anchor.
-        const halfH = (selectedRegion.heightM ?? 1) / 2
-        const next: RegionPositionUpdate = {
-          centerX: SCRATCH_VEC1.x,
-          centerY: -SCRATCH_VEC1.z,
-          centerZ: SCRATCH_VEC1.y - halfH,
-          yawDeg: gizmoMode === 'rotate' ? MathUtils.radToDeg(target.rotation.y) : selectedRegion.yawDeg,
-        }
-        onRegionPositionChange?.(selectedRegion, next, settled)
-      } else if (selectedRigging) {
-        const next: RiggingPositionUpdate = {
-          positionX: SCRATCH_VEC1.x,
-          positionY: -SCRATCH_VEC1.z,
-          positionZ: SCRATCH_VEC1.y,
-          yawDeg: gizmoMode === 'rotate' ? MathUtils.radToDeg(target.rotation.y) : selectedRigging.yawDeg,
-          pitchDeg: gizmoMode === 'rotate' ? MathUtils.radToDeg(target.rotation.x) : selectedRigging.pitchDeg,
-          rollDeg: gizmoMode === 'rotate' ? MathUtils.radToDeg(target.rotation.z) : selectedRigging.rollDeg,
-        }
-        onRiggingPositionChange?.(selectedRigging, next, settled)
-      }
+      if (!patchTarget || !selectedPatch) return
+      patchTarget.updateMatrixWorld(true)
+      patchTarget.getWorldPosition(SCRATCH_VEC1)
+      const next = patchPlacementFromWorld(selectedPatch, SCRATCH_VEC1, riggingByUuid)
+      onPatchPlacementChange?.(selectedPatch, next, settled)
     },
-    [target, selectedPatch, selectedRegion, selectedRigging, riggingByUuid, gizmoMode, onPatchPlacementChange, onRegionPositionChange, onRiggingPositionChange],
+    [patchTarget, selectedPatch, riggingByUuid, onPatchPlacementChange],
   )
 
   // OrbitControls and TransformControls fight for pointer events; we listen to
   // TC's underlying THREE 'dragging-changed' event to disable Orbit during drag
   // and fire a single settled flush on release.
   useEffect(() => {
-    if (!target) return
+    if (!patchTarget) return
     const tc = tcRef.current as unknown as { addEventListener: (t: string, l: (e: { value: boolean }) => void) => void; removeEventListener: (t: string, l: (e: { value: boolean }) => void) => void } | null
     if (!tc) return
     const onDrag = (e: { value: boolean }) => {
@@ -392,49 +367,18 @@ function Controls({
     }
     tc.addEventListener('dragging-changed', onDrag)
     return () => tc.removeEventListener('dragging-changed', onDrag)
-  }, [target, flush])
-
-  const disableOrbit = useCallback(() => {
-    if (orbitRef.current) orbitRef.current.enabled = false
-  }, [])
-  const enableOrbit = useCallback(() => {
-    if (orbitRef.current) orbitRef.current.enabled = true
-  }, [])
-
-  const inPointsMode = gizmoMode === 'points'
-  const { held: shiftHeld, ref: shiftHeldRef } = useShiftHeld()
+  }, [patchTarget, flush, orbitRef])
 
   return (
     <>
       <OrbitControls ref={orbitRef} makeDefault enableDamping target={[0, stageH / 4, 0]} />
-      {target && !inPointsMode && (
-        // TransformControls only supports translate/rotate; points mode is
-        // gated above so this narrowing is safe.
+      {patchTarget && (
         <TransformControls
           ref={tcRef as never}
-          object={target}
-          mode={gizmoMode as 'translate' | 'rotate'}
+          object={patchTarget}
+          mode="translate"
           translationSnap={shiftHeld ? SNAP_DISTANCE_M : null}
-          rotationSnap={shiftHeld ? SNAP_ANGLE_RAD : null}
           onObjectChange={() => flush(false)}
-        />
-      )}
-      {inPointsMode && selectedRegion && (
-        <RegionCornerHandles
-          region={selectedRegion}
-          shiftHeldRef={shiftHeldRef}
-          onChange={(next, settled) => onRegionPositionChange?.(selectedRegion, next, settled)}
-          onDragStart={disableOrbit}
-          onDragEnd={enableOrbit}
-        />
-      )}
-      {inPointsMode && selectedRigging && (
-        <RiggingEndpointHandles
-          rig={selectedRigging}
-          shiftHeldRef={shiftHeldRef}
-          onChange={(next, settled) => onRiggingPositionChange?.(selectedRigging, next, settled)}
-          onDragStart={disableOrbit}
-          onDragEnd={enableOrbit}
         />
       )}
     </>
@@ -469,9 +413,9 @@ function patchPlacementFromWorld(
   }
 
   // Project the dragged world point into the rigging's local frame; constrain
-  // to the rig's local X axis (stageY=0, stageZ=0) so a free-XYZ gizmo still
-  // produces an on-bar position. Rig frame is rotated by yaw/pitch/roll around
-  // its origin per the Y/X/Z Euler order used in RiggingMeshes.
+  // to the rig's local X axis (stageY=0, stageZ=0) so the translate gizmo
+  // still produces an on-bar position. Rig frame is rotated by yaw/pitch/roll
+  // around its origin per the Y/X/Z Euler order used in RiggingMeshes.
   SCRATCH_OBJ.position.set(rig.positionX ?? 0, rig.positionZ ?? 0, -(rig.positionY ?? 0))
   SCRATCH_EULER.set(
     MathUtils.degToRad(rig.pitchDeg ?? 0),

@@ -1,8 +1,12 @@
 import { useMemo, useState } from 'react'
 import { Edges, useCursor } from '@react-three/drei'
-import { Color, MathUtils, type Object3D } from 'three'
+import { type ThreeEvent } from '@react-three/fiber'
+import { Color, MathUtils, Plane, Vector3, type Object3D } from 'three'
 import type { StageRegionDto } from '../../api/stageRegionApi'
-import { toThree } from '../../lib/stageCoords'
+import type { RegionPositionUpdate } from './Stage3D'
+import { toThree, fromThree } from '../../lib/stageCoords'
+import { useBodyDrag } from './useBodyDrag'
+import { snap, SNAP_DISTANCE_M } from './useShiftHeld'
 import { StageLabel } from './StageLabel'
 
 interface StageRegionMeshesProps {
@@ -11,9 +15,27 @@ interface StageRegionMeshesProps {
   editMode?: boolean
   showLabel?: boolean
   onClick?: (region: StageRegionDto, mesh: Object3D) => void
+  /** Body drag emits a horizontal move (centerX/Y change, everything else
+   *  unchanged). Only present in edit mode; absent disables body drag. */
+  onMove?: (region: StageRegionDto, next: RegionPositionUpdate, settled: boolean) => void
+  /** Read-only Shift-held ref shared with handle drags for grid-snap parity. */
+  shiftHeldRef?: React.RefObject<boolean>
+  /** Called on drag promotion / settle so the parent can toggle OrbitControls. */
+  onDragStart?: () => void
+  onDragEnd?: () => void
 }
 
-export function StageRegionMeshes({ regions, selectedUuid, editMode, showLabel, onClick }: StageRegionMeshesProps) {
+export function StageRegionMeshes({
+  regions,
+  selectedUuid,
+  editMode,
+  showLabel,
+  onClick,
+  onMove,
+  shiftHeldRef,
+  onDragStart,
+  onDragEnd,
+}: StageRegionMeshesProps) {
   return (
     <>
       {regions.map((region) => (
@@ -24,6 +46,10 @@ export function StageRegionMeshes({ regions, selectedUuid, editMode, showLabel, 
           editMode={editMode}
           showLabel={showLabel}
           onClick={onClick}
+          onMove={onMove}
+          shiftHeldRef={shiftHeldRef}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
         />
       ))}
     </>
@@ -36,6 +62,10 @@ interface RegionMeshProps {
   editMode?: boolean
   showLabel?: boolean
   onClick?: (region: StageRegionDto, mesh: Object3D) => void
+  onMove?: (region: StageRegionDto, next: RegionPositionUpdate, settled: boolean) => void
+  shiftHeldRef?: React.RefObject<boolean>
+  onDragStart?: () => void
+  onDragEnd?: () => void
 }
 
 // Base slate-blue rotated ±20° in hue by a stable hash of the uuid so multiple
@@ -46,6 +76,7 @@ const BASE_REGION_HSL_SELECTED = { h: 210 / 360, s: 0.30, l: 0.45 }
 const BASE_EDGE_HSL_SELECTED = { h: 205 / 360, s: 0.40, l: 0.78 }
 
 const TMP_COLOR = new Color()
+const PLANE_NORMAL_UP = new Vector3(0, 1, 0)
 
 function hueShiftForUuid(uuid: string): number {
   let h = 0
@@ -59,9 +90,20 @@ function colorWithHueShift(base: { h: number; s: number; l: number }, shift: num
   return `#${TMP_COLOR.getHexString()}`
 }
 
-function RegionMesh({ region, selected, editMode, showLabel, onClick }: RegionMeshProps) {
+function RegionMesh({
+  region,
+  selected,
+  editMode,
+  showLabel,
+  onClick,
+  onMove,
+  shiftHeldRef,
+  onDragStart,
+  onDragEnd,
+}: RegionMeshProps) {
   const [hovered, setHovered] = useState(false)
   useCursor(!!editMode && hovered)
+  const startBodyDrag = useBodyDrag()
 
   const cx = region.centerX ?? 0
   const cy = region.centerY ?? 0
@@ -69,6 +111,7 @@ function RegionMesh({ region, selected, editMode, showLabel, onClick }: RegionMe
   const w = region.widthM ?? 1
   const d = region.depthM ?? 1
   const h = region.heightM ?? 1
+  const yawDeg = region.yawDeg ?? 0
 
   // toThree swizzles lighting (X, Y, Z) → R3F (X, Z, -Y); region centre
   // is the floor of the box so we lift the box up by half its height.
@@ -83,11 +126,40 @@ function RegionMesh({ region, selected, editMode, showLabel, onClick }: RegionMe
     ? colorWithHueShift(BASE_EDGE_HSL_SELECTED, shift)
     : colorWithHueShift(BASE_EDGE_HSL, shift)
 
+  const onPointerDown = (e: ThreeEvent<PointerEvent>) => {
+    const mesh = e.eventObject
+    startBodyDrag(e, {
+      onClick: onClick ? () => onClick(region, mesh) : undefined,
+      onDragStart,
+      onDragEnd,
+      buildDrag: onMove
+        ? () => {
+            const handleWorld = toThree(cx, cy, cz)
+            const plane = new Plane(PLANE_NORMAL_UP, -handleWorld.y)
+            const emit = (p: Vector3, settled: boolean) => {
+              const { x, y } = fromThree(p)
+              const sx = shiftHeldRef?.current ? snap(x, SNAP_DISTANCE_M) : x
+              const sy = shiftHeldRef?.current ? snap(y, SNAP_DISTANCE_M) : y
+              onMove(region, { centerX: sx, centerY: sy, centerZ: cz, yawDeg }, settled)
+            }
+            return {
+              plane,
+              handleWorld,
+              onDrag: (p) => emit(p, false),
+              onSettle: (last) => {
+                if (last) emit(last, true)
+              },
+            }
+          }
+        : undefined,
+    })
+  }
+
   return (
     <mesh
       position={pos}
-      rotation={[0, MathUtils.degToRad(region.yawDeg ?? 0), 0]}
-      onClick={onClick ? (e) => { e.stopPropagation(); onClick(region, e.eventObject) } : undefined}
+      rotation={[0, MathUtils.degToRad(yawDeg), 0]}
+      onPointerDown={onClick || onMove ? onPointerDown : undefined}
       onPointerOver={editMode ? (e) => { e.stopPropagation(); setHovered(true) } : undefined}
       onPointerOut={editMode ? () => setHovered(false) : undefined}
     >
