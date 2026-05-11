@@ -22,3 +22,6 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-rror.log*
+
+# Spector.js captures from Stage 3D profileHarness runs
+capture*.json

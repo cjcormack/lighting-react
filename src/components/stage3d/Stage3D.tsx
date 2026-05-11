@@ -2,9 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
 import { Edges, OrbitControls, Text, TransformControls } from '@react-three/drei'
 import { Euler, MathUtils, NoToneMapping, Object3D, Plane, Raycaster, Vector2, Vector3 } from 'three'
-import { usePatchListQuery } from '../../store/patches'
-import { useRiggingListQuery } from '../../store/riggings'
-import { useStageRegionListQuery } from '../../store/stageRegions'
 import { useProjectQuery } from '../../store/projects'
 import { Bloom } from './Bloom'
 import { StageRegionMeshes } from './StageRegionMeshes'
@@ -14,12 +11,12 @@ import { RegionCornerHandles } from './RegionCornerHandles'
 import { RiggingEndpointHandles } from './RiggingEndpointHandles'
 import { useShiftHeld, SNAP_ANGLE_RAD, SNAP_DISTANCE_M } from './useShiftHeld'
 import { DEFAULT_VIEW_FLAGS, type StageViewFlags } from './useStageView'
+import { useStageData } from './useStageData'
 import type { RiggingDto } from '../../api/riggingApi'
 import type { FixturePatch } from '../../api/patchApi'
 import type { StageRegionDto } from '../../api/stageRegionApi'
 import { fromThree } from '../../lib/stageCoords'
 import { formatTriple } from '../../lib/utils'
-import { useFixtureLookup } from '../../hooks/useFixtureLookup'
 import { NO_RAYCAST } from './raycast'
 
 const EMPTY_RIGGINGS: RiggingDto[] = []
@@ -88,14 +85,15 @@ export function Stage3D({
   onRiggingPositionChange,
 }: Stage3DProps) {
   const { data: project } = useProjectQuery(projectId)
-  const { data: regions } = useStageRegionListQuery(projectId)
-  const { data: riggings } = useRiggingListQuery(projectId)
-  const { data: patches } = usePatchListQuery(projectId)
-  const { fixtureByKey, typeByKey } = useFixtureLookup()
-
   const stageW = project?.stageWidthM ?? 10
   const stageD = project?.stageDepthM ?? 8
   const stageH = project?.stageHeightM ?? 6
+  const { patches, regions, riggings, fixtureByKey, typeByKey } = useStageData(
+    projectId,
+    stageW,
+    stageD,
+    stageH,
+  )
 
   const cameraDistance = Math.max(stageW, stageD) * 1.4
   const gridSize = Math.max(stageW, stageD) * 1.6
