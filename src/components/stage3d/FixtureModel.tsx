@@ -3,20 +3,16 @@ import { useCursor } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
 import { StageLabel } from './StageLabel'
 import {
-  AdditiveBlending,
   Color,
-  DoubleSide,
   Euler,
   Group,
   MathUtils,
+  Matrix4,
   Mesh,
   MeshBasicMaterial,
   Quaternion,
-  ShaderMaterial,
-    Vector2,
   Vector3,
 } from 'three'
-import type { StageRegionDto } from '../../api/stageRegionApi'
 import type { FixturePatch } from '../../api/patchApi'
 import type { RiggingDto } from '../../api/riggingApi'
 import {
@@ -43,15 +39,11 @@ import {
   dmxToDegrees,
   headQuaternionFor,
   panTiltToDir,
-  toThree,
   worldPositionFor,
 } from '../../lib/stageCoords'
-import { NO_RAYCAST } from './raycast'
+import { BEAM_LENGTH, useEmitters, type EmittersHandle, type RegionGeometry } from './StageEmitters'
 
 const DEFAULT_BEAM_DEG = 30
-const BEAM_LENGTH = 8 // metres — long enough to cross most stages
-// Lift to bias cookie quads above their underlying surface and avoid z-fight.
-const COOKIE_LIFT_M = 0.001
 const COLOR_TMP = new Color()
 const UNIT_Y = new Vector3(0, 1, 0)
 const SCRATCH_DIR = new Vector3()
@@ -59,14 +51,9 @@ const SCRATCH_NEG_DIR = new Vector3()
 const SCRATCH_ORIGIN = new Vector3()
 const SCRATCH_QUAT = new Quaternion()
 const SCRATCH_QUAT_EULER = new Euler()
-
-// Hollow cone shell, additive, double-sided; alpha biased by abs(N·V) so
-// silhouette edges fade. Per-fragment ray-OBB shadow discards fragments
-// blocked by regions, which carves the same shape the floor pool projects.
-// Cap on regions pushed to shader uniforms; per-fragment shadow loop is
-// bounded by this at compile time but exits early on uNumRegions, so the
-// runtime cost is the actual region count. Bump as the design target grows.
-const MAX_BEAM_REGIONS = 16
+const SCRATCH_CONE_POS = new Vector3()
+const SCRATCH_CONE_SCALE = new Vector3()
+const SCRATCH_CONE_MAT = new Matrix4()
 
 // Slack on the cone half-angle so cookies fade in before the shader's
 // cosAngle test would clip them — masks the boundary even on a wide spot
@@ -76,211 +63,16 @@ const REGION_CULL_SLACK_RAD = MathUtils.degToRad(3)
 // ~1% intensity, below one DMX step at the pool's 0.55x opacity scale.
 const LIGHT_OFF_OPACITY = 0.005
 
-// Shared GLSL: region uniform declarations + slab-test against a
-// yaw-rotated AABB. The slab test returns the entry distance from origin,
-// or a negative value if the box is behind the ray OR the origin is inside
-// the box (so a fixture mounted on a region still emits).
-const REGION_UNIFORMS_GLSL = /* glsl */ `
-  uniform int uNumRegions;
-  uniform vec3 uRegionCenter[MAX_REGIONS];
-  uniform vec3 uRegionHalf[MAX_REGIONS];
-  uniform vec2 uRegionYawCs[MAX_REGIONS];
-`
-const RAY_OBB_T_GLSL = /* glsl */ `
-  float rayObbT(vec3 origin, vec3 dir, vec3 center, vec3 halfExt, vec2 yawCs) {
-    vec3 rel = origin - center;
-    float c = yawCs.x; float s = yawCs.y;
-    vec3 lo = vec3(c * rel.x - s * rel.z, rel.y, s * rel.x + c * rel.z);
-    vec3 ld = vec3(c * dir.x - s * dir.z, dir.y, s * dir.x + c * dir.z);
-    vec3 invD = 1.0 / ld;
-    vec3 t1 = (-halfExt - lo) * invD;
-    vec3 t2 = ( halfExt - lo) * invD;
-    vec3 tmin = min(t1, t2);
-    vec3 tmax = max(t1, t2);
-    float tNear = max(max(tmin.x, tmin.y), tmin.z);
-    float tFar  = min(min(tmax.x, tmax.y), tmax.z);
-    if (tNear > tFar || tFar < 0.0 || tNear < 0.0) return -1.0;
-    return tNear;
-  }
-`
-
-const BEAM_VERTEX_SHADER = /* glsl */ `
-  varying vec3 vViewNormal;
-  varying vec3 vViewPos;
-  varying vec3 vWorldPos;
-  varying float vAlong;
-  void main() {
-    vAlong = uv.y; // 1 at apex (fixture), 0 at far end
-    vec4 worldPos4 = modelMatrix * vec4(position, 1.0);
-    vWorldPos = worldPos4.xyz;
-    vec4 viewPos4 = viewMatrix * worldPos4;
-    vViewPos = viewPos4.xyz;
-    vViewNormal = normalize(normalMatrix * normal);
-    gl_Position = projectionMatrix * viewPos4;
-  }
-`
-const BEAM_FRAGMENT_SHADER = /* glsl */ `
-  #define MAX_REGIONS ${MAX_BEAM_REGIONS}
-  uniform vec3 uColor;
-  uniform float uOpacity;
-  uniform vec3 uBeamOrigin;
-  uniform float uFloorY;
-  ${REGION_UNIFORMS_GLSL}
-
-  varying vec3 vViewNormal;
-  varying vec3 vViewPos;
-  varying vec3 vWorldPos;
-  varying float vAlong;
-
-  ${RAY_OBB_T_GLSL}
-
-  void main() {
-    if (vWorldPos.y < uFloorY) discard;
-
-    vec3 toFrag = vWorldPos - uBeamOrigin;
-    float fragDist = length(toFrag);
-
-    // Discard if the ray from origin through this fragment hits an obstacle
-    // first. Rays going *through* an obstacle drop out (cone has a hole
-    // matching the obstacle's silhouette); rays that skirt it stay visible.
-    // Matches the floor pool's footprint so cone-in-air and surface pool
-    // agree on where light reaches.
-    if (uNumRegions > 0 && fragDist > 0.0001) {
-      vec3 rayDir = toFrag / fragDist;
-      for (int i = 0; i < MAX_REGIONS; i++) {
-        if (i >= uNumRegions) break;
-        float t = rayObbT(uBeamOrigin, rayDir, uRegionCenter[i], uRegionHalf[i], uRegionYawCs[i]);
-        // 1cm bias avoids self-occlusion on rays that graze a region face.
-        if (t > 0.0 && t < fragDist - 0.01) discard;
-      }
-    }
-
-    vec3 V = normalize(-vViewPos);
-    float ndotv = abs(dot(normalize(vViewNormal), V));
-    float radial = pow(ndotv, 0.7);
-    float lengthFade = mix(0.18, 0.9, vAlong);
-    float a = uOpacity * radial * lengthFade;
-    gl_FragColor = vec4(uColor, a);
-  }
-`
-
-function makeBeamMaterial(): ShaderMaterial {
-  const regionCenter = Array.from({ length: MAX_BEAM_REGIONS }, () => new Vector3())
-  const regionHalf = Array.from({ length: MAX_BEAM_REGIONS }, () => new Vector3())
-  const regionYawCs = Array.from({ length: MAX_BEAM_REGIONS }, () => new Vector2(1, 0))
-  return new ShaderMaterial({
-    uniforms: {
-      uColor: { value: new Color('#fff8d5') },
-      uOpacity: { value: 0.0 },
-      uBeamOrigin: { value: new Vector3() },
-      uFloorY: { value: 0.0 },
-      uNumRegions: { value: 0 },
-      uRegionCenter: { value: regionCenter },
-      uRegionHalf: { value: regionHalf },
-      uRegionYawCs: { value: regionYawCs },
-    },
-    vertexShader: BEAM_VERTEX_SHADER,
-    fragmentShader: BEAM_FRAGMENT_SHADER,
-    transparent: true,
-    blending: AdditiveBlending,
-    depthWrite: false,
-    side: DoubleSide,
-  })
-}
-
-// Cookie quad projected onto a surface (floor or region top). The fragment
-// shader keeps only fragments inside the cone's solid angle and not shadowed
-// by any region — so the pool naturally splits across surfaces and across
-// shadow boundaries.
-const POOL_VERTEX_SHADER = /* glsl */ `
-  varying vec3 vWorldPos;
-  void main() {
-    vec4 wp = modelMatrix * vec4(position, 1.0);
-    vWorldPos = wp.xyz;
-    gl_Position = projectionMatrix * viewMatrix * wp;
-  }
-`
-const POOL_FRAGMENT_SHADER = /* glsl */ `
-  #define MAX_REGIONS ${MAX_BEAM_REGIONS}
-  uniform vec3 uColor;
-  uniform float uOpacity;
-  uniform vec3 uBeamOrigin;
-  uniform vec3 uBeamDir;
-  uniform float uCosHalfAngle;
-  uniform float uMaxDist;
-  ${REGION_UNIFORMS_GLSL}
-
-  varying vec3 vWorldPos;
-
-  ${RAY_OBB_T_GLSL}
-
-  void main() {
-    vec3 toFrag = vWorldPos - uBeamOrigin;
-    float fragDist = length(toFrag);
-    if (fragDist > uMaxDist || fragDist < 0.001) discard;
-    vec3 rayDir = toFrag / fragDist;
-
-    float cosAngle = dot(rayDir, uBeamDir);
-    if (cosAngle < uCosHalfAngle) discard;
-
-    if (uNumRegions > 0) {
-      for (int i = 0; i < MAX_REGIONS; i++) {
-        if (i >= uNumRegions) break;
-        float t = rayObbT(uBeamOrigin, rayDir, uRegionCenter[i], uRegionHalf[i], uRegionYawCs[i]);
-        if (t > 0.0 && t < fragDist - 0.01) discard;
-      }
-    }
-
-    float radial = (cosAngle - uCosHalfAngle) / max(0.0001, 1.0 - uCosHalfAngle);
-    radial = pow(radial, 0.7);
-
-    // Mild distance fade — pools at full throw stay readable; never goes to 0.
-    float distFade = mix(1.0, 0.55, clamp(fragDist / uMaxDist, 0.0, 1.0));
-
-    // Hot white core blended over the gel colour at the centre.
-    float core = pow(radial, 4.0);
-    vec3 finalColor = mix(uColor, vec3(1.0), core * 0.5);
-
-    float a = uOpacity * radial * distFade;
-    gl_FragColor = vec4(finalColor, a);
-  }
-`
-
-function makePoolMaterial(): ShaderMaterial {
-  const regionCenter = Array.from({ length: MAX_BEAM_REGIONS }, () => new Vector3())
-  const regionHalf = Array.from({ length: MAX_BEAM_REGIONS }, () => new Vector3())
-  const regionYawCs = Array.from({ length: MAX_BEAM_REGIONS }, () => new Vector2(1, 0))
-  return new ShaderMaterial({
-    uniforms: {
-      uColor: { value: new Color('#fff8d5') },
-      uOpacity: { value: 0.0 },
-      uBeamOrigin: { value: new Vector3() },
-      uBeamDir: { value: new Vector3(0, -1, 0) },
-      uCosHalfAngle: { value: Math.cos(MathUtils.degToRad(15)) },
-      uMaxDist: { value: 8 },
-      uNumRegions: { value: 0 },
-      uRegionCenter: { value: regionCenter },
-      uRegionHalf: { value: regionHalf },
-      uRegionYawCs: { value: regionYawCs },
-    },
-    vertexShader: POOL_VERTEX_SHADER,
-    fragmentShader: POOL_FRAGMENT_SHADER,
-    transparent: true,
-    blending: AdditiveBlending,
-    depthWrite: false,
-  })
-}
-
 interface FixtureModelProps {
   patch: FixturePatch
   fixture: Fixture | undefined
   fixtureType: FixtureTypeInfo | undefined
   riggings: RiggingDto[]
-  regions: StageRegionDto[]
+  regionGeometry: ReadonlyArray<RegionGeometry>
+  slot: number
   selected: boolean
   editMode?: boolean
   showLabel?: boolean
-  showBeamCones?: boolean
   onClick?: (group: Group) => void
 }
 
@@ -289,16 +81,18 @@ export function FixtureModel({
   fixture,
   fixtureType,
   riggings,
-  regions,
+  regionGeometry,
+  slot,
   selected,
   editMode,
   showLabel,
-  showBeamCones = true,
   onClick,
 }: FixtureModelProps) {
   const [hovered, setHovered] = useState(false)
   useCursor(!!editMode && hovered)
   const active = selected || (!!editMode && hovered)
+  const emitters = useEmitters()
+
   const colourSource = useMemo(
     () => (fixture?.properties ? findColourSource(fixture.properties) : undefined),
     [fixture?.properties],
@@ -307,26 +101,12 @@ export function FixtureModel({
     () => findDimmerProperty(fixture?.properties),
     [fixture?.properties],
   )
-  const panProp = useMemo(
-    () => findPanProperty(fixture?.properties),
-    [fixture?.properties],
-  )
-  const tiltProp = useMemo(
-    () => findTiltProperty(fixture?.properties),
-    [fixture?.properties],
-  )
-  const panFineProp = useMemo(
-    () => findPanFineProperty(fixture?.properties),
-    [fixture?.properties],
-  )
-  const tiltFineProp = useMemo(
-    () => findTiltFineProperty(fixture?.properties),
-    [fixture?.properties],
-  )
+  const panProp = useMemo(() => findPanProperty(fixture?.properties), [fixture?.properties])
+  const tiltProp = useMemo(() => findTiltProperty(fixture?.properties), [fixture?.properties])
+  const panFineProp = useMemo(() => findPanFineProperty(fixture?.properties), [fixture?.properties])
+  const tiltFineProp = useMemo(() => findTiltFineProperty(fixture?.properties), [fixture?.properties])
   const gel =
-    !colourSource && fixtureType?.acceptsGel && patch.gelCode
-      ? findGel(patch.gelCode)
-      : null
+    !colourSource && fixtureType?.acceptsGel && patch.gelCode ? findGel(patch.gelCode) : null
 
   const fixturePos = useMemo(() => {
     const v = worldPositionFor(patch, riggings)
@@ -344,18 +124,11 @@ export function FixtureModel({
 
   const beamDeg = patch.beamAngleDeg ?? DEFAULT_BEAM_DEG
   const beamRadius = BEAM_LENGTH * Math.tan(MathUtils.degToRad(beamDeg / 2))
-  const showCone = showBeamCones && !!fixtureType?.acceptsBeamAngle
+  const showCone = !!fixtureType?.acceptsBeamAngle && !!emitters
 
   const groupRef = useRef<Group>(null)
   const headRef = useRef<Group>(null)
-  const beamConeRef = useRef<Mesh>(null)
-  const floorPoolRef = useRef<Mesh>(null)
   const lensRef = useRef<Mesh>(null)
-
-  const beamMaterial = useMemo(() => makeBeamMaterial(), [])
-  const poolMaterial = useMemo(() => makePoolMaterial(), [])
-  useEffect(() => () => beamMaterial.dispose(), [beamMaterial])
-  useEffect(() => () => poolMaterial.dispose(), [poolMaterial])
 
   const halfBeamRad = MathUtils.degToRad(beamDeg / 2)
   const coneHalfAngleRad = halfBeamRad + REGION_CULL_SLACK_RAD
@@ -364,54 +137,29 @@ export function FixtureModel({
     [coneHalfAngleRad],
   )
 
-  useEffect(() => {
-    poolMaterial.uniforms.uCosHalfAngle.value = Math.cos(halfBeamRad)
-    poolMaterial.uniforms.uMaxDist.value = BEAM_LENGTH
-  }, [halfBeamRad, poolMaterial])
+  // Shared per-fixture color state. ColourSync writes here (React-rate);
+  // useBeamDirector reads here (per-frame) and pushes to the emitter slot.
+  const colorStateRef = useRef<ColorState>({
+    color: new Color('#fff8d5'),
+    coneOpacity: 0,
+    poolOpacity: 0,
+  })
 
-  // One pass over `regions` produces both the shader-side OBB (footprint
-  // lifted to h/2, matches `StageRegionMeshes` box placement) and the
-  // CPU-side cull data (top-face centre + bounding-sphere radius). The
-  // `cookieGroup` slot is filled by the callback ref on each cookie
-  // `<group>` so the per-frame cull avoids a Map lookup.
-  const regionData = useMemo<RegionData[]>(() => {
-    return regions.map((r) => {
-      const w = r.widthM ?? 1
-      const d = r.depthM ?? 1
-      const h = r.heightM ?? 1
-      const cz = r.centerZ ?? 0
-      const obbCenter = toThree(r.centerX ?? 0, r.centerY ?? 0, cz + h / 2)
-      const topCenter = toThree(r.centerX ?? 0, r.centerY ?? 0, cz + h + COOKIE_LIFT_M)
-      return {
-        uuid: r.uuid,
-        widthM: w,
-        depthM: d,
-        yawRad: MathUtils.degToRad(r.yawDeg ?? 0),
-        obbCenter,
-        obbHalfX: w / 2,
-        obbHalfY: h / 2,
-        obbHalfZ: d / 2,
-        topCenter,
-        topBoundingRadius: Math.hypot(w / 2, d / 2),
-        cookieGroup: null,
-      }
-    })
-  }, [regions])
-
+  // Slot zeroing — emitter slots persist across renders. If a fixture loses
+  // its beam (or showCone otherwise turns off), the per-frame writes stop;
+  // hide the slot once so its last frame doesn't ghost on screen.
   useEffect(() => {
-    const count = Math.min(regionData.length, MAX_BEAM_REGIONS)
-    for (const mat of [beamMaterial, poolMaterial]) {
-      const u = mat.uniforms
-      for (let i = 0; i < count; i++) {
-        const r = regionData[i]
-        ;(u.uRegionCenter.value as Vector3[])[i].copy(r.obbCenter)
-        ;(u.uRegionHalf.value as Vector3[])[i].set(r.obbHalfX, r.obbHalfY, r.obbHalfZ)
-        // Bake the -yaw rotation matrix's c/s pair so the shader skips per-fragment trig.
-        ;(u.uRegionYawCs.value as Vector2[])[i].set(Math.cos(-r.yawRad), Math.sin(-r.yawRad))
-      }
-      u.uNumRegions.value = count
+    if (!emitters || showCone) return
+    emitters.hideSlot(slot)
+  }, [emitters, showCone, slot])
+
+  // Unmount cleanup — same reason. A slot belongs to whichever FixtureModel
+  // owns it; vacate before re-allocation can give it to a different fixture.
+  useEffect(() => {
+    return () => {
+      if (emitters) emitters.hideSlot(slot)
     }
-  }, [regionData, beamMaterial, poolMaterial])
+  }, [emitters, slot])
 
   useBeamDirector({
     panProp,
@@ -420,144 +168,65 @@ export function FixtureModel({
     tiltFineProp,
     baseYawDeg: patch.baseYawDeg ?? 0,
     basePitchDeg: patch.basePitchDeg ?? 0,
-    beamLength: BEAM_LENGTH,
+    beamRadius,
     cullCosCone: cullTrig.cosCone,
     cullSinCone: cullTrig.sinCone,
     floorCookieSide: 2 * BEAM_LENGTH * cullTrig.sinCone,
+    cosHalfBeam: Math.cos(halfBeamRad),
     groupRef,
     headRef,
-    beamConeRef,
-    floorPoolRef,
-    beamMaterial,
-    poolMaterial,
-    regionData,
+    slot,
+    emitters: showCone ? emitters : null,
+    regionGeometry,
+    colorStateRef,
   })
 
   return (
-    <>
-      <group
-        ref={groupRef}
-        position={fixturePos}
-        onClick={onClick ? (e) => { e.stopPropagation(); onClick(e.eventObject as Group) } : undefined}
-        onPointerOver={editMode ? (e) => { e.stopPropagation(); setHovered(true) } : undefined}
-        onPointerOut={editMode ? () => setHovered(false) : undefined}
-      >
-        {/* yoke base — kept brighter than the canvas so the mount point reads against the floor. */}
-        <mesh position={[0, -0.05, 0]}>
-          <cylinderGeometry args={[0.08, 0.1, 0.1, 16]} />
-          <meshStandardMaterial color={active ? '#9aa5b4' : '#6a7280'} />
+    <group
+      ref={groupRef}
+      position={fixturePos}
+      onClick={onClick ? (e) => { e.stopPropagation(); onClick(e.eventObject as Group) } : undefined}
+      onPointerOver={editMode ? (e) => { e.stopPropagation(); setHovered(true) } : undefined}
+      onPointerOut={editMode ? () => setHovered(false) : undefined}
+    >
+      {/* yoke base — kept brighter than the canvas so the mount point reads against the floor. */}
+      <mesh position={[0, -0.05, 0]}>
+        <cylinderGeometry args={[0.08, 0.1, 0.1, 16]} />
+        <meshStandardMaterial color={active ? '#9aa5b4' : '#6a7280'} />
+      </mesh>
+
+      {/* Lens is a sphere so it stays visible from any camera angle — a
+          flat disc went edge-on during orbit and bloom-flickered. */}
+      <group ref={headRef}>
+        <mesh ref={lensRef}>
+          <sphereGeometry args={[0.07, 16, 12]} />
+          <meshBasicMaterial color="#fff8d5" />
         </mesh>
-
-        {/* Lens is a sphere so it stays visible from any camera angle — a
-            flat disc went edge-on during orbit and bloom-flickered. */}
-        <group ref={headRef}>
-          <mesh ref={lensRef}>
-            <sphereGeometry args={[0.07, 16, 12]} />
-            <meshBasicMaterial color="#fff8d5" />
-          </mesh>
-          {active && (
-            <mesh rotation={[Math.PI / 2, 0, 0]}>
-              <torusGeometry args={[0.1, 0.012, 12, 32]} />
-              <meshBasicMaterial color="#ffffff" />
-            </mesh>
-          )}
-        </group>
-
-        {showLabel && (
-          <StageLabel position={[0, 0.18, 0]}>{patch.displayName}</StageLabel>
-        )}
-
-        {/* raycast disabled — large transparent mesh, never a click target;
-            clicks bubble through the lens/yoke to the outer group. */}
-        {showCone && (
-          <mesh ref={beamConeRef} material={beamMaterial} raycast={NO_RAYCAST}>
-            <coneGeometry args={[beamRadius, BEAM_LENGTH, 48, 1, true]} />
+        {active && (
+          <mesh rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.1, 0.012, 12, 32]} />
+            <meshBasicMaterial color="#ffffff" />
           </mesh>
         )}
-
-        <ColourSync
-          key={showCone ? 'cones' : 'lens'}
-          colourSource={colourSource}
-          gel={gel}
-          dimmerProp={dimmerProp}
-          lensRef={lensRef}
-          beamConeRef={beamConeRef}
-          poolMaterial={poolMaterial}
-        />
       </group>
 
-      {/* Pool cookies live in world coords (outside the fixture group). The
-          group's local positions can lag during a TransformControls drag —
-          TC mutates THREE state directly, bypassing React. */}
-      {showCone && (
-        <>
-          <mesh
-            ref={floorPoolRef}
-            rotation={[-Math.PI / 2, 0, 0]}
-            material={poolMaterial}
-            raycast={NO_RAYCAST}
-          >
-            <planeGeometry args={[1, 1]} />
-          </mesh>
-          {regionData.map((r) => (
-            // Outer group rotates the horizontal plane around +Y by the
-            // region's yaw; inner mesh flips the plane flat. Two stages
-            // because Euler order would otherwise apply the flip first.
-            <group
-              key={r.uuid}
-              ref={(g) => { r.cookieGroup = g }}
-              position={[r.topCenter.x, r.topCenter.y, r.topCenter.z]}
-              rotation={[0, r.yawRad, 0]}
-            >
-              <mesh rotation={[-Math.PI / 2, 0, 0]} material={poolMaterial} raycast={NO_RAYCAST}>
-                <planeGeometry args={[r.widthM, r.depthM]} />
-              </mesh>
-            </group>
-          ))}
-        </>
-      )}
-    </>
+      {showLabel && <StageLabel position={[0, 0.18, 0]}>{patch.displayName}</StageLabel>}
+
+      <ColourSync
+        colourSource={colourSource}
+        gel={gel}
+        dimmerProp={dimmerProp}
+        lensRef={lensRef}
+        colorStateRef={colorStateRef}
+      />
+    </group>
   )
 }
 
-// Discriminate the colour source and mount the matching subscriber. Each
-// branch keeps its own hook-call order stable. Callers always render
-// `<ColourSync>`; only the inner leaf differs.
-function ColourSync({
-  colourSource,
-  gel,
-  ...refs
-}: ColourSyncBaseProps & {
-  colourSource:
-    | { type: 'colour'; property: ColourPropertyDescriptor }
-    | { type: 'setting'; property: SettingPropertyDescriptor }
-    | undefined
-  gel: { color: string } | null
-}) {
-  if (colourSource?.type === 'colour') {
-    return <ColourBeamSync colourProp={colourSource.property} {...refs} />
-  }
-  if (colourSource?.type === 'setting') {
-    return <SettingColourBeamSync settingProp={colourSource.property} {...refs} />
-  }
-  return <FixedColourBeamSync hex={gel?.color ?? '#fff8d5'} {...refs} />
-}
-
-export interface RegionData {
-  uuid: string
-  widthM: number
-  depthM: number
-  yawRad: number
-  // OBB lifted to h/2 — feeds shader uRegion* uniforms for ray-OBB shadow tests.
-  obbCenter: Vector3
-  obbHalfX: number
-  obbHalfY: number
-  obbHalfZ: number
-  // Top-face centre + bounding-sphere radius — feeds the per-frame cookie cull.
-  topCenter: Vector3
-  topBoundingRadius: number
-  // Filled by the cookie <group>'s callback ref; toggled by the per-frame cull.
-  cookieGroup: Group | null
+interface ColorState {
+  color: Color
+  coneOpacity: number
+  poolOpacity: number
 }
 
 interface BeamDirectorOpts {
@@ -567,17 +236,17 @@ interface BeamDirectorOpts {
   tiltFineProp: SliderPropertyDescriptor | undefined
   baseYawDeg: number
   basePitchDeg: number
-  beamLength: number
+  beamRadius: number
   cullCosCone: number
   cullSinCone: number
   floorCookieSide: number
+  cosHalfBeam: number
   groupRef: React.RefObject<Group | null>
   headRef: React.RefObject<Group | null>
-  beamConeRef: React.RefObject<Mesh | null>
-  floorPoolRef: React.RefObject<Mesh | null>
-  beamMaterial: ShaderMaterial
-  poolMaterial: ShaderMaterial
-  regionData: ReadonlyArray<RegionData>
+  slot: number
+  emitters: EmittersHandle | null
+  regionGeometry: ReadonlyArray<RegionGeometry>
+  colorStateRef: React.RefObject<ColorState>
 }
 
 const FALLBACK_PAN = makeFallbackSlider('pan')
@@ -598,11 +267,10 @@ function combineFine(
   return fineProp ? coarseRaw + fineRaw / FINE_STEPS : coarseRaw
 }
 
-// Per-frame: decode pan/tilt to a beam direction, point the head + cone
-// along it, and feed the shaders the fixture's live world origin. Origin
-// has to come from the THREE group (not the React `fixturePos` prop) —
-// TransformControls mutates the group position directly during drag and
-// the React state lags by a tick.
+// Per-frame: decode pan/tilt to a beam direction, point the head, then push
+// the fixture's slot in the shared instanced emitters. Origin has to come
+// from the THREE group (not the React `fixturePos` prop) — TransformControls
+// mutates the group position directly during drag and React state lags.
 function useBeamDirector({
   panProp,
   tiltProp,
@@ -610,17 +278,17 @@ function useBeamDirector({
   tiltFineProp,
   baseYawDeg,
   basePitchDeg,
-  beamLength,
+  beamRadius,
   cullCosCone,
   cullSinCone,
   floorCookieSide,
+  cosHalfBeam,
   groupRef,
   headRef,
-  beamConeRef,
-  floorPoolRef,
-  beamMaterial,
-  poolMaterial,
-  regionData,
+  slot,
+  emitters,
+  regionGeometry,
+  colorStateRef,
 }: BeamDirectorOpts) {
   const panRaw = useSliderValue(panProp ?? FALLBACK_PAN)
   const tiltRaw = useSliderValue(tiltProp ?? FALLBACK_TILT)
@@ -645,38 +313,71 @@ function useBeamDirector({
       )
     }
 
-    // Head/yoke/lens stay on; only emitting meshes (cone + cookies) hide.
-    const lightOn = poolMaterial.uniforms.uOpacity.value >= LIGHT_OFF_OPACITY
-    if (beamConeRef.current) beamConeRef.current.visible = lightOn
-    if (!lightOn) {
-      if (floorPoolRef.current) floorPoolRef.current.visible = false
-      for (const r of regionData) {
-        if (r.cookieGroup) r.cookieGroup.visible = false
-      }
-      return
-    }
+    if (!emitters) return
 
-    SCRATCH_NEG_DIR.copy(dir).multiplyScalar(-1)
-    if (beamConeRef.current) {
-      beamConeRef.current.quaternion.setFromUnitVectors(UNIT_Y, SCRATCH_NEG_DIR)
-      beamConeRef.current.position.set(
-        (dir.x * beamLength) / 2,
-        (dir.y * beamLength) / 2,
-        (dir.z * beamLength) / 2,
-      )
+    const colorState = colorStateRef.current
+    const lightOn = colorState.poolOpacity >= LIGHT_OFF_OPACITY
+    if (!lightOn) {
+      emitters.hideSlot(slot)
+      return
     }
 
     if (groupRef.current) {
       groupRef.current.updateMatrixWorld()
       groupRef.current.getWorldPosition(SCRATCH_ORIGIN)
-      ;(beamMaterial.uniforms.uBeamOrigin.value as Vector3).copy(SCRATCH_ORIGIN)
-      ;(poolMaterial.uniforms.uBeamOrigin.value as Vector3).copy(SCRATCH_ORIGIN)
-      if (floorPoolRef.current) {
-        updateFloorCookie(floorPoolRef.current, SCRATCH_ORIGIN, dir, beamLength, cullSinCone, floorCookieSide)
-      }
-      cullRegionCookies(SCRATCH_ORIGIN, dir, beamLength, cullCosCone, cullSinCone, regionData)
     }
-    ;(poolMaterial.uniforms.uBeamDir.value as Vector3).copy(dir)
+
+    // Cone matrix: unit cone scaled to (beamRadius, BEAM_LENGTH, beamRadius),
+    // rotated so UNIT_Y → -dir (apex back toward fixture), translated to the
+    // midpoint along the beam. Apex ends up at fixture origin in world space.
+    SCRATCH_NEG_DIR.copy(dir).multiplyScalar(-1)
+    SCRATCH_QUAT.setFromUnitVectors(UNIT_Y, SCRATCH_NEG_DIR)
+    SCRATCH_CONE_POS.set(
+      SCRATCH_ORIGIN.x + (dir.x * BEAM_LENGTH) / 2,
+      SCRATCH_ORIGIN.y + (dir.y * BEAM_LENGTH) / 2,
+      SCRATCH_ORIGIN.z + (dir.z * BEAM_LENGTH) / 2,
+    )
+    SCRATCH_CONE_SCALE.set(beamRadius, BEAM_LENGTH, beamRadius)
+    SCRATCH_CONE_MAT.compose(SCRATCH_CONE_POS, SCRATCH_QUAT, SCRATCH_CONE_SCALE)
+    emitters.writeConeMatrix(slot, SCRATCH_CONE_MAT)
+    emitters.writeConeAttrs(slot, SCRATCH_ORIGIN, colorState.color, colorState.coneOpacity)
+
+    updateFloorCookie(
+      emitters,
+      slot,
+      SCRATCH_ORIGIN,
+      dir,
+      BEAM_LENGTH,
+      cullSinCone,
+      floorCookieSide,
+    )
+    emitters.writeFloorAttrs(
+      slot,
+      SCRATCH_ORIGIN,
+      dir,
+      colorState.color,
+      colorState.poolOpacity,
+      cosHalfBeam,
+    )
+
+    cullRegionCookies(
+      emitters,
+      slot,
+      SCRATCH_ORIGIN,
+      dir,
+      BEAM_LENGTH,
+      cullCosCone,
+      cullSinCone,
+      regionGeometry,
+    )
+    emitters.writeRegionAttrs(
+      slot,
+      SCRATCH_ORIGIN,
+      dir,
+      colorState.color,
+      colorState.poolOpacity,
+      cosHalfBeam,
+    )
   })
 }
 
@@ -684,7 +385,8 @@ function useBeamDirector({
 // `sinCone` and `side` are precomputed against the same slacked half-angle as
 // the region cull so the horizon fade and bounding box share that padding.
 export function updateFloorCookie(
-  pool: Mesh,
+  emitters: { writeFloorMatrix: (slot: number, visible: boolean, cx: number, cz: number, side: number) => void },
+  slot: number,
   origin: Vector3,
   dir: Vector3,
   beamLength: number,
@@ -692,10 +394,9 @@ export function updateFloorCookie(
   side: number,
 ): void {
   if (dir.y >= sinCone) {
-    pool.visible = false
+    emitters.writeFloorMatrix(slot, false, 0, 0, 0)
     return
   }
-  pool.visible = true
   // dir.y near zero would project the centerline to a huge distance; fall
   // back to fixture XZ in that case (lit area starts at origin anyway).
   let cx = origin.x
@@ -707,8 +408,7 @@ export function updateFloorCookie(
       cz = origin.z + t * dir.z
     }
   }
-  pool.position.set(cx, COOKIE_LIFT_M, cz)
-  pool.scale.set(side, side, 1)
+  emitters.writeFloorMatrix(slot, true, cx, cz, side)
 }
 
 // Toggle each region-top cookie's visibility via a conservative cone-vs-sphere
@@ -716,27 +416,28 @@ export function updateFloorCookie(
 // touching its bounding sphere — the shader's per-fragment shadow + cosAngle
 // tests handle the exact silhouette.
 export function cullRegionCookies(
+  emitters: { writeRegionVisibility: (slot: number, regionIdx: number, visible: boolean) => void },
+  slot: number,
   origin: Vector3,
   dir: Vector3,
   beamLength: number,
   cosCone: number,
   sinCone: number,
-  regions: ReadonlyArray<RegionData>,
+  regions: ReadonlyArray<{ topCenter: Vector3; topBoundingRadius: number }>,
 ): void {
-  for (const r of regions) {
-    const group = r.cookieGroup
-    if (!group) continue
+  for (let i = 0; i < regions.length; i++) {
+    const r = regions[i]
     const dx = r.topCenter.x - origin.x
     const dy = r.topCenter.y - origin.y
     const dz = r.topCenter.z - origin.z
     const dist2 = dx * dx + dy * dy + dz * dz
     const reach = beamLength + r.topBoundingRadius
     if (dist2 > reach * reach) {
-      group.visible = false
+      emitters.writeRegionVisibility(slot, i, false)
       continue
     }
     if (dist2 < r.topBoundingRadius * r.topBoundingRadius) {
-      group.visible = true
+      emitters.writeRegionVisibility(slot, i, true)
       continue
     }
     const dist = Math.sqrt(dist2)
@@ -744,7 +445,7 @@ export function cullRegionCookies(
     const cosAR = Math.sqrt(Math.max(0, 1 - sinAR * sinAR))
     const cosBoundary = cosCone * cosAR - sinCone * sinAR
     const cosAngle = (dir.x * dx + dir.y * dy + dir.z * dz) / dist
-    group.visible = cosAngle >= cosBoundary
+    emitters.writeRegionVisibility(slot, i, cosAngle >= cosBoundary)
   }
 }
 
@@ -754,15 +455,30 @@ export function cullRegionCookies(
 interface ColourSyncBaseProps {
   dimmerProp: SliderPropertyDescriptor | undefined
   lensRef: React.RefObject<Mesh | null>
-  beamConeRef: React.RefObject<Mesh | null>
-  poolMaterial: ShaderMaterial
+  colorStateRef: React.RefObject<ColorState>
 }
 
-function applyColour(
-  hex: string,
-  intensity: number,
-  refs: ColourSyncBaseProps,
-) {
+function ColourSync({
+  colourSource,
+  gel,
+  ...refs
+}: ColourSyncBaseProps & {
+  colourSource:
+    | { type: 'colour'; property: ColourPropertyDescriptor }
+    | { type: 'setting'; property: SettingPropertyDescriptor }
+    | undefined
+  gel: { color: string } | null
+}) {
+  if (colourSource?.type === 'colour') {
+    return <ColourBeamSync colourProp={colourSource.property} {...refs} />
+  }
+  if (colourSource?.type === 'setting') {
+    return <SettingColourBeamSync settingProp={colourSource.property} {...refs} />
+  }
+  return <FixedColourBeamSync hex={gel?.color ?? '#fff8d5'} {...refs} />
+}
+
+function applyColour(hex: string, intensity: number, refs: ColourSyncBaseProps) {
   COLOR_TMP.set(hex)
   // Lens stays partially visible at idle (it's the lamp body, not the beam).
   if (refs.lensRef.current) {
@@ -771,23 +487,17 @@ function applyColour(
     mat.opacity = 0.5 + 0.5 * intensity
     mat.transparent = true
   }
-  if (refs.beamConeRef.current) {
-    const mat = refs.beamConeRef.current.material as ShaderMaterial
-    mat.uniforms.uColor.value.copy(COLOR_TMP)
-    mat.uniforms.uOpacity.value = 0.32 * intensity
-  }
-  const u = refs.poolMaterial.uniforms
-  u.uColor.value.copy(COLOR_TMP)
-  u.uOpacity.value = 0.55 * intensity
+  const state = refs.colorStateRef.current
+  state.color.copy(COLOR_TMP)
+  state.coneOpacity = 0.32 * intensity
+  state.poolOpacity = 0.55 * intensity
 }
 
-// Inner null-renderer that all colour sources funnel through. Effect deps
-// limit work to actual visual changes — without them, the effect would re-run
-// for every parent re-render (e.g. when a sibling fixture is selected).
-function BeamColourSync({ css, intensity, ...refs }: ColourSyncBaseProps & {
-  css: string
-  intensity: number
-}) {
+function BeamColourSync({
+  css,
+  intensity,
+  ...refs
+}: ColourSyncBaseProps & { css: string; intensity: number }) {
   useEffect(() => {
     applyColour(css, intensity, refs)
     // refs object identity changes per render but its members are stable

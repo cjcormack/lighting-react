@@ -12,6 +12,7 @@ import { RiggingEndpointHandles } from './RiggingEndpointHandles'
 import { useShiftHeld, SNAP_ANGLE_RAD, SNAP_DISTANCE_M } from './useShiftHeld'
 import { DEFAULT_VIEW_FLAGS, type StageViewFlags } from './useStageView'
 import { useStageData } from './useStageData'
+import { StageEmitters, computeRegionGeometry } from './StageEmitters'
 import type { RiggingDto } from '../../api/riggingApi'
 import type { FixturePatch } from '../../api/patchApi'
 import type { StageRegionDto } from '../../api/stageRegionApi'
@@ -20,6 +21,8 @@ import { formatTriple } from '../../lib/utils'
 import { NO_RAYCAST } from './raycast'
 
 const EMPTY_RIGGINGS: RiggingDto[] = []
+const EMPTY_PATCHES: FixturePatch[] = []
+const EMPTY_REGIONS: StageRegionDto[] = []
 
 export type Selection =
   | { kind: 'patch'; patchKey: string }
@@ -98,7 +101,9 @@ export function Stage3D({
   const cameraDistance = Math.max(stageW, stageD) * 1.4
   const gridSize = Math.max(stageW, stageD) * 1.6
   const safeRiggings = riggings ?? EMPTY_RIGGINGS
-  const safeRegions = regions ?? []
+  const safeRegions = regions ?? EMPTY_REGIONS
+  const safePatches = patches ?? EMPTY_PATCHES
+  const regionGeometry = useMemo(() => computeRegionGeometry(safeRegions), [safeRegions])
 
   const [target, setTarget] = useState<Object3D | null>(null)
   const [gizmoMode, setGizmoMode] = useState<GizmoMode>('translate')
@@ -140,6 +145,26 @@ export function Stage3D({
   // opens the side panel.
   const interactable = !placing
 
+  const fixtureNodes = safePatches.map((patch, slot) => {
+    const fixture = fixtureByKey.get(patch.key)
+    const fixtureType = fixture ? typeByKey.get(fixture.typeKey) : undefined
+    return (
+      <FixtureModel
+        key={patch.id}
+        patch={patch}
+        fixture={fixture}
+        fixtureType={fixtureType}
+        riggings={safeRiggings}
+        regionGeometry={regionGeometry}
+        slot={slot}
+        selected={selection?.kind === 'patch' && selection.patchKey === patch.key}
+        editMode={interactable}
+        showLabel={view.labels}
+        onClick={interactable ? (group) => handleFixtureClick(patch, group) : undefined}
+      />
+    )
+  })
+
   return (
     <div className={`relative h-full w-full ${placing ? 'cursor-crosshair' : ''}`}>
       <Canvas
@@ -175,25 +200,11 @@ export function Stage3D({
             onClick={interactable ? handleRiggingClick : undefined}
           />
         )}
-        {view.fixtures && (patches ?? []).map((patch) => {
-          const fixture = fixtureByKey.get(patch.key)
-          const fixtureType = fixture ? typeByKey.get(fixture.typeKey) : undefined
-          return (
-            <FixtureModel
-              key={patch.id}
-              patch={patch}
-              fixture={fixture}
-              fixtureType={fixtureType}
-              riggings={safeRiggings}
-              regions={safeRegions}
-              selected={selection?.kind === 'patch' && selection.patchKey === patch.key}
-              editMode={interactable}
-              showLabel={view.labels}
-              showBeamCones={view.beamCones}
-              onClick={interactable ? (group) => handleFixtureClick(patch, group) : undefined}
-            />
-          )
-        })}
+        {view.fixtures && (view.beamCones ? (
+          <StageEmitters fixtureCount={safePatches.length} regionGeometry={regionGeometry}>
+            {fixtureNodes}
+          </StageEmitters>
+        ) : fixtureNodes)}
         <Controls
           target={editMode ? target : null}
           gizmoMode={effectiveGizmoMode}
