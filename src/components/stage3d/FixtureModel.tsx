@@ -66,6 +66,11 @@ const SCRATCH_QUAT_EULER = new Euler()
 // blocked by regions, which carves the same shape the floor pool projects.
 const MAX_BEAM_REGIONS = 8
 
+// Slack on the cone half-angle so cookies fade in before the shader's
+// cosAngle test would clip them — masks the boundary even on a wide spot
+// at the edge of its reach.
+const REGION_CULL_SLACK_RAD = MathUtils.degToRad(3)
+
 // Shared GLSL: region uniform declarations + slab-test against a
 // yaw-rotated AABB. The slab test returns the entry distance from origin,
 // or a negative value if the box is behind the ray OR the origin is inside
@@ -347,45 +352,60 @@ export function FixtureModel({
   useEffect(() => () => beamMaterial.dispose(), [beamMaterial])
   useEffect(() => () => poolMaterial.dispose(), [poolMaterial])
 
-  useEffect(() => {
-    poolMaterial.uniforms.uCosHalfAngle.value = Math.cos(MathUtils.degToRad(beamDeg / 2))
-    poolMaterial.uniforms.uMaxDist.value = BEAM_LENGTH
-  }, [beamDeg, poolMaterial])
+  const halfBeamRad = MathUtils.degToRad(beamDeg / 2)
+  const coneHalfAngleRad = halfBeamRad + REGION_CULL_SLACK_RAD
+  const cullTrig = useMemo(
+    () => ({ cosCone: Math.cos(coneHalfAngleRad), sinCone: Math.sin(coneHalfAngleRad) }),
+    [coneHalfAngleRad],
+  )
 
-  // Region OBBs for shader-side ray-OBB tests. Footprint is the floor
-  // anchor lifted by h/2 — matches `StageRegionMeshes` box placement.
-  const regionObbs = useMemo<RegionObb[]>(() => {
+  useEffect(() => {
+    poolMaterial.uniforms.uCosHalfAngle.value = Math.cos(halfBeamRad)
+    poolMaterial.uniforms.uMaxDist.value = BEAM_LENGTH
+  }, [halfBeamRad, poolMaterial])
+
+  // One pass over `regions` produces both the shader-side OBB (footprint
+  // lifted to h/2, matches `StageRegionMeshes` box placement) and the
+  // CPU-side cull data (top-face centre + bounding-sphere radius). The
+  // `cookieGroup` slot is filled by the callback ref on each cookie
+  // `<group>` so the per-frame cull avoids a Map lookup.
+  const regionData = useMemo<RegionData[]>(() => {
     return regions.map((r) => {
       const w = r.widthM ?? 1
       const d = r.depthM ?? 1
       const h = r.heightM ?? 1
-      const centre = toThree(r.centerX ?? 0, r.centerY ?? 0, (r.centerZ ?? 0) + h / 2)
+      const cz = r.centerZ ?? 0
+      const obbCenter = toThree(r.centerX ?? 0, r.centerY ?? 0, cz + h / 2)
+      const topCenter = toThree(r.centerX ?? 0, r.centerY ?? 0, cz + h + 0.001)
       return {
-        centerX: centre.x,
-        centerY: centre.y,
-        centerZ: centre.z,
-        halfX: w / 2,
-        halfY: h / 2,
-        halfZ: d / 2,
+        uuid: r.uuid,
+        widthM: w,
+        depthM: d,
         yawRad: MathUtils.degToRad(r.yawDeg ?? 0),
+        obbCenter,
+        obbHalfX: w / 2,
+        obbHalfY: h / 2,
+        obbHalfZ: d / 2,
+        topCenter,
+        topBoundingRadius: Math.hypot(w / 2, d / 2),
+        cookieGroup: null,
       }
     })
   }, [regions])
 
-  // Push region OBBs into both materials' uniforms.
   useEffect(() => {
-    const count = Math.min(regionObbs.length, MAX_BEAM_REGIONS)
+    const count = Math.min(regionData.length, MAX_BEAM_REGIONS)
     for (const mat of [beamMaterial, poolMaterial]) {
       const u = mat.uniforms
       for (let i = 0; i < count; i++) {
-        const o = regionObbs[i]
-        ;(u.uRegionCenter.value as Vector3[])[i].set(o.centerX, o.centerY, o.centerZ)
-        ;(u.uRegionHalf.value as Vector3[])[i].set(o.halfX, o.halfY, o.halfZ)
-        ;(u.uRegionYaw.value as number[])[i] = o.yawRad
+        const r = regionData[i]
+        ;(u.uRegionCenter.value as Vector3[])[i].copy(r.obbCenter)
+        ;(u.uRegionHalf.value as Vector3[])[i].set(r.obbHalfX, r.obbHalfY, r.obbHalfZ)
+        ;(u.uRegionYaw.value as number[])[i] = r.yawRad
       }
       u.uNumRegions.value = count
     }
-  }, [regionObbs, beamMaterial, poolMaterial])
+  }, [regionData, beamMaterial, poolMaterial])
 
   useBeamDirector({
     panProp,
@@ -395,12 +415,15 @@ export function FixtureModel({
     baseYawDeg: patch.baseYawDeg ?? 0,
     basePitchDeg: patch.basePitchDeg ?? 0,
     beamLength: BEAM_LENGTH,
+    cullCosCone: cullTrig.cosCone,
+    cullSinCone: cullTrig.sinCone,
     groupRef,
     headRef,
     beamConeRef,
     floorPoolRef,
     beamMaterial,
     poolMaterial,
+    regionData,
   })
 
   return (
@@ -469,26 +492,21 @@ export function FixtureModel({
           >
             <planeGeometry args={[FLOOR_COOKIE_SIZE, FLOOR_COOKIE_SIZE]} />
           </mesh>
-          {regions.map((r) => {
-            const w = r.widthM ?? 1
-            const d = r.depthM ?? 1
-            const h = r.heightM ?? 1
-            const top = toThree(r.centerX ?? 0, r.centerY ?? 0, (r.centerZ ?? 0) + h + 0.001)
+          {regionData.map((r) => (
             // Outer group rotates the horizontal plane around +Y by the
             // region's yaw; inner mesh flips the plane flat. Two stages
             // because Euler order would otherwise apply the flip first.
-            return (
-              <group
-                key={r.uuid}
-                position={[top.x, top.y, top.z]}
-                rotation={[0, MathUtils.degToRad(r.yawDeg ?? 0), 0]}
-              >
-                <mesh rotation={[-Math.PI / 2, 0, 0]} material={poolMaterial} raycast={NO_RAYCAST}>
-                  <planeGeometry args={[w, d]} />
-                </mesh>
-              </group>
-            )
-          })}
+            <group
+              key={r.uuid}
+              ref={(g) => { r.cookieGroup = g }}
+              position={[r.topCenter.x, r.topCenter.y, r.topCenter.z]}
+              rotation={[0, r.yawRad, 0]}
+            >
+              <mesh rotation={[-Math.PI / 2, 0, 0]} material={poolMaterial} raycast={NO_RAYCAST}>
+                <planeGeometry args={[r.widthM, r.depthM]} />
+              </mesh>
+            </group>
+          ))}
         </>
       )}
     </>
@@ -518,14 +536,21 @@ function ColourSync({
   return <FixedColourBeamSync hex={gel?.color ?? '#fff8d5'} {...refs} />
 }
 
-interface RegionObb {
-  centerX: number
-  centerY: number
-  centerZ: number
-  halfX: number
-  halfY: number
-  halfZ: number
+interface RegionData {
+  uuid: string
+  widthM: number
+  depthM: number
   yawRad: number
+  // OBB lifted to h/2 — feeds shader uRegion* uniforms for ray-OBB shadow tests.
+  obbCenter: Vector3
+  obbHalfX: number
+  obbHalfY: number
+  obbHalfZ: number
+  // Top-face centre + bounding-sphere radius — feeds the per-frame cookie cull.
+  topCenter: Vector3
+  topBoundingRadius: number
+  // Filled by the cookie <group>'s callback ref; toggled by the per-frame cull.
+  cookieGroup: Group | null
 }
 
 interface BeamDirectorOpts {
@@ -536,12 +561,15 @@ interface BeamDirectorOpts {
   baseYawDeg: number
   basePitchDeg: number
   beamLength: number
+  cullCosCone: number
+  cullSinCone: number
   groupRef: React.RefObject<Group | null>
   headRef: React.RefObject<Group | null>
   beamConeRef: React.RefObject<Mesh | null>
   floorPoolRef: React.RefObject<Mesh | null>
   beamMaterial: ShaderMaterial
   poolMaterial: ShaderMaterial
+  regionData: ReadonlyArray<RegionData>
 }
 
 const FALLBACK_PAN = makeFallbackSlider('pan')
@@ -575,12 +603,15 @@ function useBeamDirector({
   baseYawDeg,
   basePitchDeg,
   beamLength,
+  cullCosCone,
+  cullSinCone,
   groupRef,
   headRef,
   beamConeRef,
   floorPoolRef,
   beamMaterial,
   poolMaterial,
+  regionData,
 }: BeamDirectorOpts) {
   const panRaw = useSliderValue(panProp ?? FALLBACK_PAN)
   const tiltRaw = useSliderValue(tiltProp ?? FALLBACK_TILT)
@@ -624,9 +655,47 @@ function useBeamDirector({
       if (floorPoolRef.current) {
         floorPoolRef.current.position.set(SCRATCH_ORIGIN.x, 0.001, SCRATCH_ORIGIN.z)
       }
+      cullRegionCookies(SCRATCH_ORIGIN, dir, beamLength, cullCosCone, cullSinCone, regionData)
     }
     ;(poolMaterial.uniforms.uBeamDir.value as Vector3).copy(dir)
   })
+}
+
+// Toggle each region-top cookie's visibility via a conservative cone-vs-sphere
+// test. Conservative so we never pop a cookie out while the cone is still
+// touching its bounding sphere — the shader's per-fragment shadow + cosAngle
+// tests handle the exact silhouette.
+function cullRegionCookies(
+  origin: Vector3,
+  dir: Vector3,
+  beamLength: number,
+  cosCone: number,
+  sinCone: number,
+  regions: ReadonlyArray<RegionData>,
+): void {
+  for (const r of regions) {
+    const group = r.cookieGroup
+    if (!group) continue
+    const dx = r.topCenter.x - origin.x
+    const dy = r.topCenter.y - origin.y
+    const dz = r.topCenter.z - origin.z
+    const dist2 = dx * dx + dy * dy + dz * dz
+    const reach = beamLength + r.topBoundingRadius
+    if (dist2 > reach * reach) {
+      group.visible = false
+      continue
+    }
+    if (dist2 < r.topBoundingRadius * r.topBoundingRadius) {
+      group.visible = true
+      continue
+    }
+    const dist = Math.sqrt(dist2)
+    const sinAR = r.topBoundingRadius / dist
+    const cosAR = Math.sqrt(Math.max(0, 1 - sinAR * sinAR))
+    const cosBoundary = cosCone * cosAR - sinCone * sinAR
+    const cosAngle = (dir.x * dx + dir.y * dy + dir.z * dz) / dist
+    group.visible = cosAngle >= cosBoundary
+  }
 }
 
 
