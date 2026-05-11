@@ -13,6 +13,7 @@ import {
   MeshBasicMaterial,
   Quaternion,
   ShaderMaterial,
+    Vector2,
   Vector3,
 } from 'three'
 import type { StageRegionDto } from '../../api/stageRegionApi'
@@ -83,12 +84,12 @@ const REGION_UNIFORMS_GLSL = /* glsl */ `
   uniform int uNumRegions;
   uniform vec3 uRegionCenter[MAX_REGIONS];
   uniform vec3 uRegionHalf[MAX_REGIONS];
-  uniform float uRegionYaw[MAX_REGIONS];
+  uniform vec2 uRegionYawCs[MAX_REGIONS];
 `
 const RAY_OBB_T_GLSL = /* glsl */ `
-  float rayObbT(vec3 origin, vec3 dir, vec3 center, vec3 halfExt, float yaw) {
+  float rayObbT(vec3 origin, vec3 dir, vec3 center, vec3 halfExt, vec2 yawCs) {
     vec3 rel = origin - center;
-    float c = cos(-yaw); float s = sin(-yaw);
+    float c = yawCs.x; float s = yawCs.y;
     vec3 lo = vec3(c * rel.x - s * rel.z, rel.y, s * rel.x + c * rel.z);
     vec3 ld = vec3(c * dir.x - s * dir.z, dir.y, s * dir.x + c * dir.z);
     vec3 invD = 1.0 / ld;
@@ -148,7 +149,7 @@ const BEAM_FRAGMENT_SHADER = /* glsl */ `
       vec3 rayDir = toFrag / fragDist;
       for (int i = 0; i < MAX_REGIONS; i++) {
         if (i >= uNumRegions) break;
-        float t = rayObbT(uBeamOrigin, rayDir, uRegionCenter[i], uRegionHalf[i], uRegionYaw[i]);
+        float t = rayObbT(uBeamOrigin, rayDir, uRegionCenter[i], uRegionHalf[i], uRegionYawCs[i]);
         // 1cm bias avoids self-occlusion on rays that graze a region face.
         if (t > 0.0 && t < fragDist - 0.01) discard;
       }
@@ -166,7 +167,7 @@ const BEAM_FRAGMENT_SHADER = /* glsl */ `
 function makeBeamMaterial(): ShaderMaterial {
   const regionCenter = Array.from({ length: MAX_BEAM_REGIONS }, () => new Vector3())
   const regionHalf = Array.from({ length: MAX_BEAM_REGIONS }, () => new Vector3())
-  const regionYaw = new Array<number>(MAX_BEAM_REGIONS).fill(0)
+  const regionYawCs = Array.from({ length: MAX_BEAM_REGIONS }, () => new Vector2(1, 0))
   return new ShaderMaterial({
     uniforms: {
       uColor: { value: new Color('#fff8d5') },
@@ -176,7 +177,7 @@ function makeBeamMaterial(): ShaderMaterial {
       uNumRegions: { value: 0 },
       uRegionCenter: { value: regionCenter },
       uRegionHalf: { value: regionHalf },
-      uRegionYaw: { value: regionYaw },
+      uRegionYawCs: { value: regionYawCs },
     },
     vertexShader: BEAM_VERTEX_SHADER,
     fragmentShader: BEAM_FRAGMENT_SHADER,
@@ -225,7 +226,7 @@ const POOL_FRAGMENT_SHADER = /* glsl */ `
     if (uNumRegions > 0) {
       for (int i = 0; i < MAX_REGIONS; i++) {
         if (i >= uNumRegions) break;
-        float t = rayObbT(uBeamOrigin, rayDir, uRegionCenter[i], uRegionHalf[i], uRegionYaw[i]);
+        float t = rayObbT(uBeamOrigin, rayDir, uRegionCenter[i], uRegionHalf[i], uRegionYawCs[i]);
         if (t > 0.0 && t < fragDist - 0.01) discard;
       }
     }
@@ -248,7 +249,7 @@ const POOL_FRAGMENT_SHADER = /* glsl */ `
 function makePoolMaterial(): ShaderMaterial {
   const regionCenter = Array.from({ length: MAX_BEAM_REGIONS }, () => new Vector3())
   const regionHalf = Array.from({ length: MAX_BEAM_REGIONS }, () => new Vector3())
-  const regionYaw = new Array<number>(MAX_BEAM_REGIONS).fill(0)
+  const regionYawCs = Array.from({ length: MAX_BEAM_REGIONS }, () => new Vector2(1, 0))
   return new ShaderMaterial({
     uniforms: {
       uColor: { value: new Color('#fff8d5') },
@@ -260,7 +261,7 @@ function makePoolMaterial(): ShaderMaterial {
       uNumRegions: { value: 0 },
       uRegionCenter: { value: regionCenter },
       uRegionHalf: { value: regionHalf },
-      uRegionYaw: { value: regionYaw },
+      uRegionYawCs: { value: regionYawCs },
     },
     vertexShader: POOL_VERTEX_SHADER,
     fragmentShader: POOL_FRAGMENT_SHADER,
@@ -405,7 +406,8 @@ export function FixtureModel({
         const r = regionData[i]
         ;(u.uRegionCenter.value as Vector3[])[i].copy(r.obbCenter)
         ;(u.uRegionHalf.value as Vector3[])[i].set(r.obbHalfX, r.obbHalfY, r.obbHalfZ)
-        ;(u.uRegionYaw.value as number[])[i] = r.yawRad
+        // Bake the -yaw rotation matrix's c/s pair so the shader skips per-fragment trig.
+        ;(u.uRegionYawCs.value as Vector2[])[i].set(Math.cos(-r.yawRad), Math.sin(-r.yawRad))
       }
       u.uNumRegions.value = count
     }
