@@ -7,6 +7,7 @@ import { SheetHeader, SheetBody, SheetFooter } from '@/components/ui/sheet'
 import { Trash2, X } from 'lucide-react'
 import { useUpdatePatchMutation, useDeletePatchMutation, usePatchGroupListQuery } from '@/store/patches'
 import { useFixtureTypeListQuery } from '@/store/fixtures'
+import { KindOverrideField } from './KindOverrideField'
 import { GroupComboInput } from './GroupComboInput'
 import { PatchPlacementFields, type PatchPlacementValue } from './PatchPlacementFields'
 import { BeamAngleField } from './BeamAngleField'
@@ -45,6 +46,7 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
   })
   const [beamAngleDeg, setBeamAngleDeg] = useState<number | null>(patch.beamAngleDeg)
   const [gelCode, setGelCode] = useState<string | null>(patch.gelCode)
+  const [kindOverride, setKindOverride] = useState<string | null>(patch.kindOverride)
 
   const [updatePatch, { isLoading: isUpdating }] = useUpdatePatchMutation()
   const [deletePatch, { isLoading: isDeleting }] = useDeletePatchMutation()
@@ -64,6 +66,10 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
   const fixtureType = fixtureTypes?.find((t) => t.typeKey === patch.fixtureTypeKey)
   const acceptsBeamAngle = fixtureType?.acceptsBeamAngle ?? false
   const acceptsGel = fixtureType?.acceptsGel ?? false
+  // Only expose the override picker for fixture types whose declared kind is
+  // GENERIC — those are the ones (generic dimmers, UV) that ship without a
+  // shape hint. Other types already render distinctly per kind.
+  const allowsKindOverride = (fixtureType?.kind ?? 'GENERIC') === 'GENERIC'
   const beamGelTitle =
     acceptsBeamAngle && acceptsGel ? 'Beam & Gel' : acceptsBeamAngle ? 'Beam' : 'Gel'
 
@@ -79,7 +85,8 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
     placement.baseYawDeg !== patch.baseYawDeg ||
     placement.basePitchDeg !== patch.basePitchDeg ||
     beamAngleDeg !== patch.beamAngleDeg ||
-    gelCode !== patch.gelCode
+    gelCode !== patch.gelCode ||
+    kindOverride !== patch.kindOverride
 
   const handleSave = async () => {
     const body: Record<string, unknown> = {}
@@ -94,6 +101,7 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
     if (placement.basePitchDeg !== patch.basePitchDeg) body.basePitchDeg = placement.basePitchDeg
     if (beamAngleDeg !== patch.beamAngleDeg) body.beamAngleDeg = beamAngleDeg
     if (gelCode !== patch.gelCode) body.gelCode = gelCode
+    if (kindOverride !== patch.kindOverride) body.kindOverride = kindOverride
     await updatePatch({ projectId, patchId: patch.id, ...body }).unwrap()
     onClose()
   }
@@ -193,6 +201,14 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
               />
             )}
           </div>
+        )}
+
+        {allowsKindOverride && (
+          <KindOverrideField
+            id="edit-kind-override"
+            value={kindOverride}
+            onChange={setKindOverride}
+          />
         )}
 
         <div className="space-y-1.5">

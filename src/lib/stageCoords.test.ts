@@ -41,6 +41,7 @@ function basePatch(overrides: Partial<FixturePatch> = {}): FixturePatch {
     riggingPosition: null,
     beamAngleDeg: null,
     gelCode: null,
+    kindOverride: null,
     ...overrides,
   }
 }

@@ -27,6 +27,9 @@ export interface FixturePatch {
   riggingPosition: string | null;
   beamAngleDeg: number | null;
   gelCode: string | null;
+  /** Per-patch FixtureKind override for the 3D view — null means inherit
+   *  the kind declared on the fixture type. */
+  kindOverride: string | null;
 }
 
 export interface UniverseConfig {
@@ -55,6 +58,7 @@ export interface CreatePatchRequest {
   riggingPosition?: string | null;
   beamAngleDeg?: number | null;
   gelCode?: string | null;
+  kindOverride?: string | null;
 }
 
 export interface UpdatePatchRequest {
@@ -72,6 +76,7 @@ export interface UpdatePatchRequest {
   riggingPosition?: string | null;
   beamAngleDeg?: number | null;
   gelCode?: string | null;
+  kindOverride?: string | null;
 }
 
 export interface PatchGroup {

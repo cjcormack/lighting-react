@@ -198,6 +198,7 @@ function makePatches(
       riggingPosition: null,
       beamAngleDeg: 22 + (floorIdx % 4) * 6,
       gelCode: null,
+      kindOverride: null,
     })
     floorIdx++
   }
@@ -237,5 +238,6 @@ function makePatch(
     riggingPosition: null,
     beamAngleDeg: 18 + (id % 5) * 5,
     gelCode: null,
+    kindOverride: null,
   }
 }
