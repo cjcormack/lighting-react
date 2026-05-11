@@ -187,6 +187,7 @@ export function Stage3D({
               fixture={fixture}
               fixtureType={fixtureType}
               riggings={safeRiggings}
+              regions={safeRegions}
               selected={selection?.kind === 'patch' && selection.patchKey === patch.key}
               editMode={interactable}
               showLabel={view.labels}
