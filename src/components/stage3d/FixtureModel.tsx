@@ -541,7 +541,7 @@ function ColourSync({
   return <FixedColourBeamSync hex={gel?.color ?? '#fff8d5'} {...refs} />
 }
 
-interface RegionData {
+export interface RegionData {
   uuid: string
   widthM: number
   depthM: number
@@ -681,7 +681,7 @@ function useBeamDirector({
 // Resize + reposition the floor cookie to bound the cone's actual floor reach.
 // `sinCone` and `side` are precomputed against the same slacked half-angle as
 // the region cull so the horizon fade and bounding box share that padding.
-function updateFloorCookie(
+export function updateFloorCookie(
   pool: Mesh,
   origin: Vector3,
   dir: Vector3,
@@ -713,7 +713,7 @@ function updateFloorCookie(
 // test. Conservative so we never pop a cookie out while the cone is still
 // touching its bounding sphere — the shader's per-fragment shadow + cosAngle
 // tests handle the exact silhouette.
-function cullRegionCookies(
+export function cullRegionCookies(
   origin: Vector3,
   dir: Vector3,
   beamLength: number,
