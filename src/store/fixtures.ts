@@ -37,6 +37,60 @@ export const {
   useFixtureListQuery, useFixtureQuery, useFixtureTypeListQuery,
 } = fixturesApi
 
+export const FIXTURE_KINDS = [
+  'MOVING_HEAD',
+  'SCANNER',
+  'PROFILE',
+  'FRESNEL',
+  'PAR',
+  'WASH',
+  'STRIP',
+  'LASER',
+  'BLINDER',
+  'EFFECT',
+  'GENERIC',
+] as const
+
+export type FixtureKind = (typeof FIXTURE_KINDS)[number]
+
+/**
+ * Human-readable labels for each kind, kept next to the type so adding a new
+ * kind surfaces a TS error here (missing key) rather than at the UI consumer.
+ */
+export const FIXTURE_KIND_LABEL: Record<FixtureKind, string> = {
+  MOVING_HEAD: 'Moving head',
+  SCANNER: 'Scanner',
+  PROFILE: 'Profile',
+  FRESNEL: 'Fresnel',
+  PAR: 'PAR',
+  WASH: 'Wash',
+  STRIP: 'Strip / bar',
+  LASER: 'Laser',
+  BLINDER: 'Blinder',
+  EFFECT: 'Effect (fog, hazer, …)',
+  GENERIC: 'Generic',
+}
+
+const FIXTURE_KIND_SET = new Set<string>(FIXTURE_KINDS)
+
+export function isFixtureKind(value: unknown): value is FixtureKind {
+  return typeof value === 'string' && FIXTURE_KIND_SET.has(value)
+}
+
+/**
+ * Render-time kind selection: per-patch override wins, falling back to the
+ * fixture type's declared kind, then GENERIC. Unknown strings on either input
+ * (older backend, hand-edited JSON) fall through to GENERIC.
+ */
+export function resolveFixtureKind(
+  override: string | null | undefined,
+  typeKind: string | null | undefined,
+): FixtureKind {
+  if (isFixtureKind(override)) return override
+  if (isFixtureKind(typeKind)) return typeKind
+  return 'GENERIC'
+}
+
 export type FixtureTypeInfo = {
   typeKey: string
   manufacturer: string | null
@@ -50,6 +104,7 @@ export type FixtureTypeInfo = {
   acceptsBeamAngle?: boolean
   acceptsGel?: boolean
   gelCompactDisplay?: CompactDisplayRole | null
+  kind?: FixtureKind
 }
 
 // Channel reference for property descriptors

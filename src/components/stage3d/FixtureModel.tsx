@@ -27,6 +27,7 @@ import {
   findTiltProperty,
   findPanFineProperty,
   findTiltFineProperty,
+  resolveFixtureKind,
 } from '../../store/fixtures'
 import {
   useColourValue,
@@ -42,6 +43,7 @@ import {
   worldPositionFor,
 } from '../../lib/stageCoords'
 import { BEAM_LENGTH, useEmitters, type EmittersHandle, type RegionGeometry } from './StageEmitters'
+import { FixtureBody } from './fixtureBodies'
 
 const DEFAULT_BEAM_DEG = 30
 const COLOR_TMP = new Color()
@@ -189,26 +191,19 @@ export function FixtureModel({
       onPointerOver={editMode ? (e) => { e.stopPropagation(); setHovered(true) } : undefined}
       onPointerOut={editMode ? () => setHovered(false) : undefined}
     >
-      {/* yoke base — kept brighter than the canvas so the mount point reads against the floor. */}
-      <mesh position={[0, -0.05, 0]}>
-        <cylinderGeometry args={[0.08, 0.1, 0.1, 16]} />
-        <meshStandardMaterial color={active ? '#9aa5b4' : '#6a7280'} />
-      </mesh>
+      <FixtureBody
+        kind={resolveFixtureKind(patch.kindOverride, fixtureType?.kind)}
+        active={active}
+        headRef={headRef}
+        lensRef={lensRef}
+      />
 
-      {/* Lens is a sphere so it stays visible from any camera angle — a
-          flat disc went edge-on during orbit and bloom-flickered. */}
-      <group ref={headRef}>
-        <mesh ref={lensRef}>
-          <sphereGeometry args={[0.07, 16, 12]} />
-          <meshBasicMaterial color="#fff8d5" />
+      {active && (
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[0.1, 0.012, 12, 32]} />
+          <meshBasicMaterial color="#ffffff" />
         </mesh>
-        {active && (
-          <mesh rotation={[Math.PI / 2, 0, 0]}>
-            <torusGeometry args={[0.1, 0.012, 12, 32]} />
-            <meshBasicMaterial color="#ffffff" />
-          </mesh>
-        )}
-      </group>
+      )}
 
       {showLabel && <StageLabel position={[0, 0.18, 0]}>{patch.displayName}</StageLabel>}
 

@@ -46,6 +46,7 @@ export function buildHarness(stageW: number, stageD: number, stageH: number): Ha
     elementGroupProperties: null,
     acceptsBeamAngle: true,
     acceptsGel: false,
+    kind: 'MOVING_HEAD',
   }
   const syntheticFixture: Fixture = {
     key: HARNESS_TYPE_KEY + '__fx',
