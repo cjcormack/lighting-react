@@ -10,6 +10,7 @@ import { FixtureModel } from './FixtureModel'
 import { RegionEditHandles } from './RegionEditHandles'
 import { RiggingEndpointHandles } from './RiggingEndpointHandles'
 import { useShiftHeld, SNAP_DISTANCE_M } from './useShiftHeld'
+import { notifyTransformDragStart } from './useBodyDrag'
 import { DEFAULT_VIEW_FLAGS, type StageViewFlags } from './useStageView'
 import { useStageData } from './useStageData'
 import { StageEmitters, computeRegionGeometry } from './StageEmitters'
@@ -363,6 +364,10 @@ function Controls({
     if (!tc) return
     const onDrag = (e: { value: boolean }) => {
       if (orbitRef.current) orbitRef.current.enabled = !e.value
+      // TC's gizmo meshes have no R3F handlers, so R3F passes the pointerdown
+      // through to whichever body sits behind. Notify any pending body-drag
+      // discriminators so they bail before they can promote or fire onClick.
+      if (e.value) notifyTransformDragStart()
       if (!e.value) flush(true)
     }
     tc.addEventListener('dragging-changed', onDrag)

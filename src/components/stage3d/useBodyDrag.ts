@@ -1,8 +1,31 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { type ThreeEvent } from '@react-three/fiber'
+import { Object3D } from 'three'
 import { useHandleDrag, type StartDragOptions } from './useHandleDrag'
 
 const DRAG_PX_THRESHOLD = 4
+
+function isDescendantOf(node: Object3D | null, ancestor: Object3D): boolean {
+  let cur: Object3D | null = node
+  while (cur) {
+    if (cur === ancestor) return true
+    cur = cur.parent
+  }
+  return false
+}
+
+// Pending body-drag click-discriminators register a cancel callback here so
+// the fixture-translate TransformControls can abort them when it claims the
+// click for one of its gizmo handles. The gizmo meshes have no R3F event
+// handlers, so R3F's raycast passes through them and dispatches pointerdown
+// to whatever body sits behind — without this signal, the body would still
+// promote to a drag (or fire its click) once the user moves the gizmo.
+const pendingCancels = new Set<() => void>()
+
+export function notifyTransformDragStart(): void {
+  // Snapshot before iterating — each cancel removes itself from the Set.
+  for (const cancel of [...pendingCancels]) cancel()
+}
 
 export interface UseBodyDragOpts {
   /** Fired on pointerup if the pointer never crossed the click/drag threshold. */
@@ -42,6 +65,15 @@ export function useBodyDrag() {
     (e: ThreeEvent<PointerEvent>, opts: UseBodyDragOpts) => {
       if (e.button !== 0) return
       if (!opts.onClick && !opts.buildDrag) return
+
+      // R3F dispatches pointerdown to the closest handler-bearing object in
+      // the intersection chain — but a closer object without R3F handlers
+      // (a TransformControls gizmo arrow, a different fixture body) still
+      // visually occludes us. If the topmost hit isn't in our subtree the
+      // user clicked something in front; don't steal that click as a drag.
+      const firstHit = e.intersections[0]
+      if (firstHit && !isDescendantOf(firstHit.object, e.eventObject)) return
+
       e.stopPropagation()
 
       const pointerId = e.pointerId
@@ -52,10 +84,16 @@ export function useBodyDrag() {
 
       if (canDrag) opts.onDragStart?.()
 
+      // cleanup doubles as the transform-drag-start cancel callback —
+      // notifyTransformDragStart() invokes it when TC claims the click for
+      // a gizmo handle. We don't call onDragEnd in that path because TC
+      // keeps OrbitControls disabled for the duration of its own drag and
+      // re-enables it itself on dragging-changed:false.
       const cleanup = () => {
         window.removeEventListener('pointermove', onWindowMove)
         window.removeEventListener('pointerup', onWindowUp)
         window.removeEventListener('pointercancel', onWindowUp)
+        pendingCancels.delete(cleanup)
         activeCleanup.current = null
       }
 
@@ -89,6 +127,7 @@ export function useBodyDrag() {
       }
 
       activeCleanup.current = cleanup
+      pendingCancels.add(cleanup)
       window.addEventListener('pointermove', onWindowMove)
       window.addEventListener('pointerup', onWindowUp)
       window.addEventListener('pointercancel', onWindowUp)
