@@ -132,7 +132,7 @@ function RegionMesh({
       onClick: onClick ? () => onClick(region, mesh) : undefined,
       onDragStart,
       onDragEnd,
-      buildDrag: onMove
+      buildDrag: onMove && selected
         ? () => {
             const handleWorld = toThree(cx, cy, cz)
             const plane = new Plane(PLANE_NORMAL_UP, -handleWorld.y)

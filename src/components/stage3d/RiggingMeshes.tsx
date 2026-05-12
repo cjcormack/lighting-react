@@ -105,7 +105,7 @@ function RiggingMesh({
       onClick: onClick ? () => onClick(rig, mesh) : undefined,
       onDragStart,
       onDragEnd,
-      buildDrag: onMove
+      buildDrag: onMove && selected
         ? () => {
             const handleWorld = toThree(px, py, pz)
             const plane = new Plane(PLANE_NORMAL_UP, -handleWorld.y)

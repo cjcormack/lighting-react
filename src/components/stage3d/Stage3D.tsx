@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Canvas, useThree } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Edges, OrbitControls, Text, TransformControls } from '@react-three/drei'
 import { Euler, MathUtils, NoToneMapping, Object3D, Plane, Raycaster, Vector2, Vector3 } from 'three'
 import { useProjectQuery } from '../../store/projects'
@@ -9,7 +9,7 @@ import { RiggingMeshes } from './RiggingMeshes'
 import { FixtureModel } from './FixtureModel'
 import { RegionEditHandles } from './RegionEditHandles'
 import { RiggingEndpointHandles } from './RiggingEndpointHandles'
-import { useShiftHeld, SNAP_DISTANCE_M } from './useShiftHeld'
+import { useShiftHeld, SNAP_ANGLE_DEG, SNAP_DISTANCE_M } from './useShiftHeld'
 import { notifyTransformDragStart } from './useBodyDrag'
 import { DEFAULT_VIEW_FLAGS, type StageViewFlags } from './useStageView'
 import { useStageData } from './useStageData'
@@ -17,7 +17,7 @@ import { StageEmitters, computeRegionGeometry } from './StageEmitters'
 import type { RiggingDto } from '../../api/riggingApi'
 import type { FixturePatch } from '../../api/patchApi'
 import type { StageRegionDto } from '../../api/stageRegionApi'
-import { fromThree } from '../../lib/stageCoords'
+import { fromThree, rigEuler } from '../../lib/stageCoords'
 import { formatTriple } from '../../lib/utils'
 import { NO_RAYCAST } from './raycast'
 
@@ -36,7 +36,13 @@ export interface PatchPlacementUpdate {
   stageX: number | null
   stageY: number | null
   stageZ: number | null
+  /** Present only for rotate-mode drags; null for translate drags so the
+   *  caller doesn't overwrite the existing base orientation on a move. */
+  baseYawDeg?: number | null
+  basePitchDeg?: number | null
 }
+
+export type GizmoMode = 'translate' | 'rotate'
 
 export interface RegionPositionUpdate {
   centerX: number | null
@@ -67,6 +73,9 @@ interface Stage3DProps {
   /** Lighting-Z (up) height of the plane the placement click should land on.
    *  Matches the new object's anchor height so the click projects WYSIWYG. */
   placementZ?: number
+  /** Which TransformControls mode the fixture gizmo runs in. The parent owns
+   *  this so it can drive both a manual toggle button and a held-Alt key. */
+  gizmoMode?: GizmoMode
   onSelectionChange: (s: Selection) => void
   onPlacementClick?: (worldX: number, worldY: number) => void
   onPatchPlacementChange?: (patch: FixturePatch, next: PatchPlacementUpdate, settled: boolean) => void
@@ -81,6 +90,7 @@ export function Stage3D({
   placing,
   view = DEFAULT_VIEW_FLAGS,
   placementZ,
+  gizmoMode = 'translate',
   onSelectionChange,
   onPlacementClick,
   onPatchPlacementChange,
@@ -275,6 +285,7 @@ export function Stage3D({
           riggings={safeRiggings}
           stageH={stageH}
           shiftHeld={shiftHeld}
+          gizmoMode={gizmoMode}
           onPatchPlacementChange={onPatchPlacementChange}
         />
         <Bloom />
@@ -338,12 +349,13 @@ interface ControlsProps {
   riggings: RiggingDto[]
   stageH: number
   shiftHeld: boolean
+  gizmoMode: GizmoMode
   onPatchPlacementChange?: (patch: FixturePatch, next: PatchPlacementUpdate, settled: boolean) => void
 }
 
-// OrbitControls + (patch-only) TransformControls live inside <Canvas> so they
-// have access to the R3F renderer/event system. Region/rigging interactions
-// use custom handles rendered at the Stage3D level, so they don't appear here.
+// TC binds to a proxy Object3D rather than the fixture group itself so we can
+// set the gizmo's local frame independently — rig-aligned for translate-on-
+// bar, base-orientation-aligned for rotate.
 function Controls({
   orbitRef,
   patchTarget,
@@ -352,9 +364,12 @@ function Controls({
   riggings,
   stageH,
   shiftHeld,
+  gizmoMode,
   onPatchPlacementChange,
 }: ControlsProps) {
   const tcRef = useRef<React.ComponentRef<typeof TransformControls>>(null!)
+  const [proxy, setProxy] = useState<Object3D | null>(null)
+  const draggingRef = useRef(false)
 
   const selectedPatch = useMemo(
     () => (selection?.kind === 'patch' ? patches?.find((p) => p.key === selection.patchKey) ?? null : null),
@@ -366,16 +381,86 @@ function Controls({
     return map
   }, [riggings])
 
+  const rig =
+    selectedPatch?.riggingUuid != null ? riggingByUuid.get(selectedPatch.riggingUuid) ?? null : null
+  const rigMounted = rig != null
+  // In rotate mode the gizmo edits the patch's base orientation in world axes,
+  // independent of any rig pose. In translate mode the gizmo aligns with the
+  // rig (if mounted) so the visible X arrow matches the bar's direction.
+  const rotateMode = gizmoMode === 'rotate'
+  // Rotate uses space="local"; the proxy carries only yaw so the Y ring stays
+  // around the world up axis and the X ring is the horizontal "pitch axis"
+  // (alt-az mount). pitch is recovered as `dragStartPitch + Δx` at flush.
+  const useLocalSpace = rotateMode ? true : rigMounted
+  const dragStartPitchRef = useRef(0)
+
+  // Skipped mid-drag — TC's in-progress quaternion delta would be clobbered.
+  useEffect(() => {
+    if (!proxy || draggingRef.current) return
+    if (rotateMode) {
+      proxy.rotation.set(0, MathUtils.degToRad(selectedPatch?.baseYawDeg ?? 0), 0, 'YXZ')
+    } else if (rig) {
+      rigEuler(rig, proxy.rotation)
+    } else {
+      proxy.rotation.set(0, 0, 0)
+    }
+    proxy.updateMatrixWorld(true)
+  }, [
+    proxy,
+    rotateMode,
+    rig?.uuid,
+    rig?.yawDeg,
+    rig?.pitchDeg,
+    rig?.rollDeg,
+    selectedPatch?.id,
+    selectedPatch?.baseYawDeg,
+  ])
+
+  // Keep proxy.position glued to the fixture group while the user isn't
+  // dragging — mid-drag TC is authoritative and we mirror back in
+  // onObjectChange.
+  useFrame(() => {
+    if (!proxy || !patchTarget || draggingRef.current) return
+    patchTarget.updateMatrixWorld()
+    patchTarget.getWorldPosition(SCRATCH_VEC1)
+    if (proxy.position.equals(SCRATCH_VEC1)) return
+    proxy.position.copy(SCRATCH_VEC1)
+  })
+
   const flush = useCallback(
     (settled: boolean) => {
-      if (!patchTarget || !selectedPatch) return
-      patchTarget.updateMatrixWorld(true)
-      patchTarget.getWorldPosition(SCRATCH_VEC1)
+      if (!proxy || !selectedPatch) return
+      proxy.updateMatrixWorld(true)
+      if (rotateMode) {
+        SCRATCH_EULER.setFromQuaternion(proxy.quaternion, 'YXZ')
+        const next: PatchPlacementUpdate = {
+          riggingUuid: selectedPatch.riggingUuid,
+          stageX: selectedPatch.stageX,
+          stageY: selectedPatch.stageY,
+          stageZ: selectedPatch.stageZ,
+          baseYawDeg: MathUtils.radToDeg(SCRATCH_EULER.y),
+          basePitchDeg: dragStartPitchRef.current + MathUtils.radToDeg(SCRATCH_EULER.x),
+        }
+        onPatchPlacementChange?.(selectedPatch, next, settled)
+        return
+      }
+      proxy.getWorldPosition(SCRATCH_VEC1)
       const next = patchPlacementFromWorld(selectedPatch, SCRATCH_VEC1, riggingByUuid)
       onPatchPlacementChange?.(selectedPatch, next, settled)
     },
-    [patchTarget, selectedPatch, riggingByUuid, onPatchPlacementChange],
+    [proxy, selectedPatch, riggingByUuid, onPatchPlacementChange, rotateMode],
   )
+
+  // Rotate-mode skips the mirror — base orientation drives the head via
+  // DMX-decoded pan/tilt, not the body group's transform.
+  const handleObjectChange = useCallback(() => {
+    if (!rotateMode && patchTarget && proxy) {
+      proxy.getWorldPosition(SCRATCH_VEC1)
+      patchTarget.position.copy(SCRATCH_VEC1)
+      patchTarget.updateMatrixWorld()
+    }
+    flush(false)
+  }, [patchTarget, proxy, flush, rotateMode])
 
   // OrbitControls and TransformControls fight for pointer events; we listen to
   // TC's underlying THREE 'dragging-changed' event to disable Orbit during drag
@@ -386,10 +471,16 @@ function Controls({
     if (!tc) return
     const onDrag = (e: { value: boolean }) => {
       if (orbitRef.current) orbitRef.current.enabled = !e.value
+      draggingRef.current = e.value
       // TC's gizmo meshes have no R3F handlers, so R3F passes the pointerdown
       // through to whichever body sits behind. Notify any pending body-drag
       // discriminators so they bail before they can promote or fire onClick.
-      if (e.value) notifyTransformDragStart()
+      if (e.value) {
+        notifyTransformDragStart()
+        // Snapshot the patch's pitch at drag start; the alt-az proxy carries
+        // only yaw, so the extracted Euler X is the *delta* from this anchor.
+        dragStartPitchRef.current = selectedPatch?.basePitchDeg ?? 0
+      }
       if (!e.value) flush(true)
     }
     tc.addEventListener('dragging-changed', onDrag)
@@ -399,13 +490,19 @@ function Controls({
   return (
     <>
       <OrbitControls ref={orbitRef} makeDefault enableDamping target={[0, stageH / 4, 0]} />
-      {patchTarget && (
+      <group ref={setProxy} />
+      {patchTarget && proxy && (
         <TransformControls
           ref={tcRef as never}
-          object={patchTarget}
-          mode="translate"
-          translationSnap={shiftHeld ? SNAP_DISTANCE_M : null}
-          onObjectChange={() => flush(false)}
+          object={proxy}
+          mode={gizmoMode}
+          space={useLocalSpace ? 'local' : 'world'}
+          showX
+          showY={rotateMode || !rigMounted}
+          showZ={!rotateMode && !rigMounted}
+          translationSnap={!rotateMode && shiftHeld ? SNAP_DISTANCE_M : null}
+          rotationSnap={rotateMode && shiftHeld ? MathUtils.degToRad(SNAP_ANGLE_DEG) : null}
+          onObjectChange={handleObjectChange}
         />
       )}
     </>
@@ -444,13 +541,7 @@ function patchPlacementFromWorld(
   // still produces an on-bar position. Rig frame is rotated by yaw/pitch/roll
   // around its origin per the Y/X/Z Euler order used in RiggingMeshes.
   SCRATCH_OBJ.position.set(rig.positionX ?? 0, rig.positionZ ?? 0, -(rig.positionY ?? 0))
-  SCRATCH_EULER.set(
-    MathUtils.degToRad(rig.pitchDeg ?? 0),
-    MathUtils.degToRad(rig.yawDeg ?? 0),
-    MathUtils.degToRad(rig.rollDeg ?? 0),
-    'YXZ',
-  )
-  SCRATCH_OBJ.rotation.copy(SCRATCH_EULER)
+  rigEuler(rig, SCRATCH_OBJ.rotation)
   SCRATCH_OBJ.updateMatrixWorld(true)
   const rigLocal = SCRATCH_OBJ.worldToLocal(SCRATCH_VEC2.copy(worldR3F))
   return {

@@ -57,6 +57,23 @@ export function headQuaternionFor(
   return target.setFromEuler(scratchEuler)
 }
 
+// Build the YXZ Euler that maps the rig's lighting-coord pitch/yaw/roll to a
+// three.js rotation. YXZ is intrinsic: yaw applies first (around lighting Z =
+// R3F Y), then pitch (lighting X = R3F X), then roll (lighting Y = R3F -Z).
+// Pass `target` to keep per-frame callers allocation-free.
+export function rigEuler(
+  rig: { pitchDeg: number | null; yawDeg: number | null; rollDeg: number | null },
+  target: Euler = new Euler(),
+): Euler {
+  target.set(
+    MathUtils.degToRad(rig.pitchDeg ?? 0),
+    MathUtils.degToRad(rig.yawDeg ?? 0),
+    MathUtils.degToRad(rig.rollDeg ?? 0),
+    "YXZ",
+  )
+  return target
+}
+
 // Convert a raw DMX slider value into degrees using the descriptor's
 // degMin/degMax mapping. Returns null when the descriptor lacks both bounds
 // (we never invent ranges — the 3D view treats the head as static instead).

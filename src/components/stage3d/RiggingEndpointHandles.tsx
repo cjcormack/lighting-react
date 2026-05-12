@@ -4,10 +4,10 @@
 // YXZ Euler inverse.
 import { useMemo, useState } from 'react'
 import { type ThreeEvent, useThree } from '@react-three/fiber'
-import { Euler, MathUtils, Vector3 } from 'three'
+import { MathUtils, Vector3 } from 'three'
 import type { RiggingDto } from '../../api/riggingApi'
 import type { RiggingPositionUpdate } from './Stage3D'
-import { toThree, fromThree } from '../../lib/stageCoords'
+import { rigEuler, toThree, fromThree } from '../../lib/stageCoords'
 import { useHandleDrag, verticalPlaneThroughR3F } from './useHandleDrag'
 import { DEFAULT_RIGGING_LENGTH_M } from './RiggingMeshes'
 import { snap, SNAP_DISTANCE_M } from './useShiftHeld'
@@ -37,13 +37,7 @@ function worldEndpointsFor(rig: RiggingDto): [Vector3, Vector3] {
   const py = rig.positionY ?? 0
   const pz = rig.positionZ ?? 0
   const length = rig.lengthM ?? DEFAULT_RIGGING_LENGTH_M
-  const euler = new Euler(
-    MathUtils.degToRad(rig.pitchDeg ?? 0),
-    MathUtils.degToRad(rig.yawDeg ?? 0),
-    MathUtils.degToRad(rig.rollDeg ?? 0),
-    'YXZ',
-  )
-  const halfR3F = new Vector3(length / 2, 0, 0).applyEuler(euler)
+  const halfR3F = new Vector3(length / 2, 0, 0).applyEuler(rigEuler(rig))
   const half = fromThree(halfR3F)
   return [
     new Vector3(px - half.x, py - half.y, pz - half.z),

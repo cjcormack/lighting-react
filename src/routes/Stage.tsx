@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Loader2, Pencil, Plus } from 'lucide-react'
+import { Loader2, Move, Pencil, Plus, RotateCw } from 'lucide-react'
 import { useViewedProject } from '../ProjectSwitcher'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import { store } from '../store'
@@ -23,10 +23,11 @@ import {
   useCreateRiggingMutation,
 } from '../store/riggings'
 import { formatError } from '../lib/formatError'
-import { Stage3D, type Selection } from '../components/stage3d/Stage3D'
+import { Stage3D, type GizmoMode, type Selection } from '../components/stage3d/Stage3D'
 import { DEFAULT_RIGGING_LENGTH_M } from '../components/stage3d/RiggingMeshes'
 import { StageViewMenu } from '../components/stage3d/StageViewMenu'
 import { useStageView } from '../components/stage3d/useStageView'
+import { useModifierHeld } from '../components/stage3d/useShiftHeld'
 import { clearComposedWorldPosition } from '../lib/stageCoords'
 import { StageOverviewPanel } from '../components/StageOverviewPanel'
 import {
@@ -100,6 +101,7 @@ export function Stage() {
   const [editMode, setEditMode] = useState(false)
   const [placing, setPlacing] = useState<'region' | 'rigging' | null>(null)
   const [panelCollapsed, setPanelCollapsed] = useState(false)
+  const [gizmoModeManual, setGizmoModeManual] = useState<GizmoMode>('translate')
   const { flags: viewFlags, setFlag: setViewFlag } = useStageView()
   const isTabletOrLarger = useMediaQuery(SM_BREAKPOINT)
 
@@ -142,6 +144,11 @@ export function Stage() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [placing])
+
+  // Hold Alt/Option to flip the fixture gizmo to the *other* mode while held.
+  const { held: altHeld } = useModifierHeld('altKey', editingActive)
+  const flippedGizmoMode: GizmoMode = gizmoModeManual === 'translate' ? 'rotate' : 'translate'
+  const gizmoMode: GizmoMode = altHeld ? flippedGizmoMode : gizmoModeManual
 
   // ⌘D / Ctrl+D duplicates the selected region or rigging, offset by 1m on X.
   // Live data is read through refs so the listener doesn't re-bind on every
@@ -313,6 +320,28 @@ export function Stage() {
               </Button>
             </>
           )}
+          {editingActive && selection?.kind === 'patch' && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <ToggleGroup
+                  type="single"
+                  size="sm"
+                  value={gizmoMode}
+                  onValueChange={(v) => {
+                    if (v === 'translate' || v === 'rotate') setGizmoModeManual(v)
+                  }}
+                >
+                  <ToggleGroupItem value="translate" aria-label="Move fixture">
+                    <Move className="size-3.5" />
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="rotate" aria-label="Rotate fixture">
+                    <RotateCw className="size-3.5" />
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              </TooltipTrigger>
+              <TooltipContent>Hold ⌥ Option to flip temporarily</TooltipContent>
+            </Tooltip>
+          )}
           {mode === '3d' && (
             <StageViewMenu flags={viewFlags} setFlag={setViewFlag} />
           )}
@@ -356,27 +385,57 @@ export function Stage() {
                 placing={placing}
                 placementZ={placementZ}
                 view={viewFlags}
+                gizmoMode={gizmoMode}
                 onSelectionChange={handleSelectionChange}
                 onPlacementClick={handlePlacementClick}
                 onPatchPlacementChange={(patch, next, settled) => {
+                  const rotateUpdate =
+                    next.baseYawDeg !== undefined || next.basePitchDeg !== undefined
+                  const nextBaseYaw = rotateUpdate
+                    ? next.baseYawDeg ?? null
+                    : patch.baseYawDeg
+                  const nextBasePitch = rotateUpdate
+                    ? next.basePitchDeg ?? null
+                    : patch.basePitchDeg
                   patchFormRef.current?.setPlacement({
                     riggingUuid: next.riggingUuid,
                     stageX: next.stageX,
                     stageY: next.stageY,
                     stageZ: next.stageZ,
-                    baseYawDeg: patch.baseYawDeg,
-                    basePitchDeg: patch.basePitchDeg,
+                    baseYawDeg: nextBaseYaw,
+                    basePitchDeg: nextBasePitch,
                   })
+                  // Rotate-mode dispatches every drag frame so the head
+                  // follows the gizmo live; translate-mode mirrors proxy→
+                  // body in Stage3D and only commits on settle.
+                  if (
+                    !settled &&
+                    rotateUpdate &&
+                    (nextBaseYaw !== patch.baseYawDeg || nextBasePitch !== patch.basePitchDeg)
+                  ) {
+                    store.dispatch(
+                      patchesApi.util.updateQueryData('patchList', projectId, (draft) => {
+                        const p = draft.find((x) => x.id === patch.id)
+                        if (!p) return
+                        p.baseYawDeg = nextBaseYaw
+                        p.basePitchDeg = nextBasePitch
+                      }),
+                    )
+                  }
                   if (!settled) return
                   // TransformControls fires `dragging-changed: false` on every
                   // mouseup, including click-without-drag — guard against firing
                   // a no-op PUT (and the cache invalidation it would trigger).
-                  if (
+                  const placementSame =
                     next.riggingUuid === patch.riggingUuid &&
                     next.stageX === patch.stageX &&
                     next.stageY === patch.stageY &&
                     next.stageZ === patch.stageZ
-                  ) return
+                  const orientationSame =
+                    !rotateUpdate ||
+                    (nextBaseYaw === patch.baseYawDeg &&
+                      nextBasePitch === patch.basePitchDeg)
+                  if (placementSame && orientationSame) return
                   // Optimistic write so the mesh stays put through the PUT round-trip.
                   store.dispatch(
                     patchesApi.util.updateQueryData('patchList', projectId, (draft) => {
@@ -386,6 +445,10 @@ export function Stage() {
                       p.stageX = next.stageX
                       p.stageY = next.stageY
                       p.stageZ = next.stageZ
+                      if (rotateUpdate) {
+                        p.baseYawDeg = nextBaseYaw
+                        p.basePitchDeg = nextBasePitch
+                      }
                       clearComposedWorldPosition(p)
                     }),
                   )
@@ -396,6 +459,9 @@ export function Stage() {
                     stageX: next.stageX,
                     stageY: next.stageY,
                     stageZ: next.stageZ,
+                    ...(rotateUpdate
+                      ? { baseYawDeg: nextBaseYaw, basePitchDeg: nextBasePitch }
+                      : {}),
                   }).catch(() => {})
                 }}
                 onRegionPositionChange={(region, next, settled) => {

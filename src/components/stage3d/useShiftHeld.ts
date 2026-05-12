@@ -1,23 +1,34 @@
 import { useEffect, useRef, useState } from 'react'
 
+type ModifierKey = 'shiftKey' | 'altKey' | 'ctrlKey' | 'metaKey'
+
 /**
- * Tracks whether the Shift key is currently held. Returns both a state value
- * (for components that need to re-render when Shift toggles, e.g. to pass to
- * TransformControls' snap props) and a ref (for drag handlers that need to
- * read the latest value mid-gesture without forcing a re-render every frame).
+ * Tracks whether a modifier key is currently held. Returns both a state value
+ * (so consumers re-render when the modifier toggles, e.g. to feed
+ * TransformControls' snap props) and a ref (so drag handlers can read the
+ * latest value mid-gesture without forcing a re-render every frame). Listen on
+ * both keydown and keyup — every key event carries the current modifier state,
+ * so we don't need to watch the modifier key by name.
  */
-export function useShiftHeld(): { held: boolean; ref: React.RefObject<boolean> } {
+export function useModifierHeld(
+  modifier: ModifierKey,
+  enabled = true,
+): { held: boolean; ref: React.RefObject<boolean> } {
   const [held, setHeld] = useState(false)
   const ref = useRef(false)
   useEffect(() => {
-    // Listen on both keydown and keyup: every key event carries the current
-    // modifier state (e.shiftKey), so we don't need to specifically watch for
-    // the Shift key itself. Bail early when the value hasn't changed so
-    // typing/autorepeat doesn't trigger React re-renders.
+    if (!enabled) {
+      if (ref.current) {
+        ref.current = false
+        setHeld(false)
+      }
+      return
+    }
     const onKey = (e: KeyboardEvent) => {
-      if (e.shiftKey === ref.current) return
-      ref.current = e.shiftKey
-      setHeld(e.shiftKey)
+      const v = e[modifier]
+      if (v === ref.current) return
+      ref.current = v
+      setHeld(v)
     }
     const onBlur = () => {
       if (!ref.current) return
@@ -32,8 +43,12 @@ export function useShiftHeld(): { held: boolean; ref: React.RefObject<boolean> }
       window.removeEventListener('keyup', onKey)
       window.removeEventListener('blur', onBlur)
     }
-  }, [])
+  }, [modifier, enabled])
   return { held, ref }
+}
+
+export function useShiftHeld() {
+  return useModifierHeld('shiftKey')
 }
 
 export const SNAP_DISTANCE_M = 0.25
