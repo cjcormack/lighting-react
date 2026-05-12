@@ -111,6 +111,21 @@ export function Stage3D({
   const orbitRef = useRef<React.ComponentRef<typeof OrbitControls>>(null!)
   const { held: shiftHeld, ref: shiftHeldRef } = useShiftHeld()
 
+  // Compare pointerdown vs pointerup positions so an orbit-drag that releases
+  // over empty space doesn't get treated as a click-to-clear.
+  const pointerDownRef = useRef<{ x: number; y: number } | null>(null)
+  const handlePointerMissed = useCallback(
+    (e: MouseEvent) => {
+      if (placing) return
+      if (!editMode) return
+      if (e.button !== 0) return
+      const d = pointerDownRef.current
+      if (d && (Math.abs(e.clientX - d.x) > DRAG_PX_THRESHOLD || Math.abs(e.clientY - d.y) > DRAG_PX_THRESHOLD)) return
+      onSelectionChange(null)
+    },
+    [placing, editMode, onSelectionChange],
+  )
+
   const disableOrbit = useCallback(() => {
     if (orbitRef.current) orbitRef.current.enabled = false
   }, [])
@@ -131,12 +146,14 @@ export function Stage3D({
     [onSelectionChange],
   )
   const handleFixtureClick = useCallback(
-    (patch: FixturePatch, group: Object3D) => {
+    (patch: FixturePatch) => {
       onSelectionChange({ kind: 'patch', patchKey: patch.key })
-      if (editMode) setPatchTarget(group)
     },
-    [editMode, onSelectionChange],
+    [onSelectionChange],
   )
+  const handleFixtureEditFocus = useCallback((group: Object3D) => {
+    setPatchTarget(group)
+  }, [])
 
   // Drop the patch gizmo target whenever edit mode turns off or selection
   // clears (or moves away from a patch).
@@ -174,19 +191,24 @@ export function Stage3D({
         selected={selection?.kind === 'patch' && selection.patchKey === patch.key}
         editMode={interactable}
         showLabel={view.labels}
-        onClick={interactable ? (group) => handleFixtureClick(patch, group) : undefined}
+        onClick={interactable ? () => handleFixtureClick(patch) : undefined}
+        onEditFocus={editMode ? handleFixtureEditFocus : undefined}
       />
     )
   })
 
   return (
-    <div className={`relative h-full w-full ${placing ? 'cursor-crosshair' : ''}`}>
+    <div
+      className={`relative h-full w-full ${placing ? 'cursor-crosshair' : ''}`}
+      onPointerDown={(e) => { pointerDownRef.current = { x: e.clientX, y: e.clientY } }}
+    >
       <Canvas
         flat
         dpr={[1, 2]}
         gl={{ toneMapping: NoToneMapping, antialias: true }}
         camera={{ position: [0, stageH * 0.7, cameraDistance], fov: 45 }}
         style={{ background: '#0b0e14' }}
+        onPointerMissed={handlePointerMissed}
       >
         <ambientLight intensity={0.5} />
         <gridHelper args={[gridSize, 20, '#4a5a6a', '#2a3540']} />

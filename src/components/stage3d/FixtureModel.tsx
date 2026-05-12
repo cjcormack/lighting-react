@@ -76,6 +76,10 @@ interface FixtureModelProps {
   editMode?: boolean
   showLabel?: boolean
   onClick?: (group: Group) => void
+  /** Called when this fixture becomes the edit-mode selection target, so the
+   *  parent can bind TransformControls to its group. Lets picker-based and
+   *  click-based selection share the same gizmo wiring. */
+  onEditFocus?: (group: Group) => void
 }
 
 export function FixtureModel({
@@ -89,6 +93,7 @@ export function FixtureModel({
   editMode,
   showLabel,
   onClick,
+  onEditFocus,
 }: FixtureModelProps) {
   const [hovered, setHovered] = useState(false)
   useCursor(!!editMode && hovered)
@@ -131,6 +136,12 @@ export function FixtureModel({
   const groupRef = useRef<Group>(null)
   const headRef = useRef<Group>(null)
   const lensRef = useRef<Mesh>(null)
+
+  useEffect(() => {
+    if (selected && editMode && onEditFocus && groupRef.current) {
+      onEditFocus(groupRef.current)
+    }
+  }, [selected, editMode, onEditFocus])
 
   const halfBeamRad = MathUtils.degToRad(beamDeg / 2)
   const coneHalfAngleRad = halfBeamRad + REGION_CULL_SLACK_RAD

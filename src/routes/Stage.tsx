@@ -34,6 +34,7 @@ import {
   StageEditorPanelStub,
   type StageEditorTarget,
 } from '../components/stage3d/StageEditorPanel'
+import { StageEditorPickerPanel } from '../components/stage3d/StageEditorPickerPanel'
 import type { EditPatchFormHandle } from '../components/patches/EditPatchForm'
 import type { EditStageRegionFormHandle } from '../components/stage/EditStageRegionForm'
 import type { EditRiggingFormHandle } from '../components/rigging/EditRiggingForm'
@@ -216,6 +217,7 @@ export function Stage() {
 
   const showPanel = editingActive && panelTarget != null && !panelCollapsed
   const showPanelStub = editingActive && panelTarget != null && panelCollapsed
+  const showPicker = editingActive && panelTarget == null && placing == null
 
   const handleSelectionChange = (s: Selection) => {
     setSelection(s)
@@ -512,6 +514,14 @@ export function Stage() {
             />
           )}
           {showPanelStub && <StageEditorPanelStub onExpand={() => setPanelCollapsed(false)} />}
+          {showPicker && (
+            <StageEditorPickerPanel
+              patches={patches ?? []}
+              regions={regions ?? []}
+              riggings={riggings ?? []}
+              onSelect={handleSelectionChange}
+            />
+          )}
         </main>
       </div>
     </TooltipProvider>
