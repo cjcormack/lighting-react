@@ -119,9 +119,6 @@ export function FixtureModel({
     const v = worldPositionFor(patch, riggings)
     return [v.x, v.y, v.z] as const
   }, [
-    patch.worldPositionX,
-    patch.worldPositionY,
-    patch.worldPositionZ,
     patch.stageX,
     patch.stageY,
     patch.stageZ,

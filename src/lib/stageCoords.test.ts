@@ -5,6 +5,7 @@ import {
   fromThree,
   panTiltToDir,
   headQuaternionFor,
+  patchPlacementFromWorld,
   worldPositionFor,
   dmxToDegrees,
 } from "./stageCoords"
@@ -35,9 +36,6 @@ function basePatch(overrides: Partial<FixturePatch> = {}): FixturePatch {
     baseYawDeg: null,
     basePitchDeg: null,
     riggingUuid: null,
-    worldPositionX: null,
-    worldPositionY: null,
-    worldPositionZ: null,
     riggingPosition: null,
     beamAngleDeg: null,
     gelCode: null,
@@ -166,21 +164,6 @@ describe("headQuaternionFor", () => {
 })
 
 describe("worldPositionFor", () => {
-  it("uses backend-composed worldPosition* when present (swizzled)", () => {
-    const patch = basePatch({
-      worldPositionX: 2,
-      worldPositionY: 5,
-      worldPositionZ: 7,
-      stageX: 99,
-      stageY: 99,
-      stageZ: 99,
-    })
-    const v = worldPositionFor(patch, [])
-    expect(v.x).toBeCloseTo(2, 10)
-    expect(v.y).toBeCloseTo(7, 10)
-    expect(v.z).toBeCloseTo(-5, 10)
-  })
-
   it("composes stage offset with a matching rigging position", () => {
     const rig = baseRig({ uuid: "rig-X", positionX: 1, positionY: 2, positionZ: 3 })
     const patch = basePatch({
@@ -223,6 +206,52 @@ describe("worldPositionFor", () => {
     expect(v.x).toBeCloseTo(0, 10)
     expect(v.y).toBeCloseTo(0, 10)
     expect(v.z).toBeCloseTo(0, 10)
+  })
+
+  it("round-trips through patchPlacementFromWorld for arbitrary rig poses", () => {
+    const rigs: RiggingDto[] = [
+      baseRig({ uuid: "rig-yaw", yawDeg: 90 }),
+      baseRig({ uuid: "rig-pitch", pitchDeg: 30 }),
+      baseRig({ uuid: "rig-roll", rollDeg: 45 }),
+      baseRig({ uuid: "rig-yp", yawDeg: 45, pitchDeg: 20 }),
+      baseRig({ uuid: "rig-ypr", yawDeg: 45, pitchDeg: 20, rollDeg: 10 }),
+      baseRig({
+        uuid: "rig-off-origin",
+        positionX: 2,
+        positionY: -1.5,
+        positionZ: 3,
+        yawDeg: 60,
+        pitchDeg: -25,
+        rollDeg: 15,
+      }),
+    ]
+    const stageOffsets: Array<[number, number, number]> = [
+      [1, 0, 0],
+      [0, 1, 0],
+      [0, 0, 1],
+      [-0.5, 1.2, 0.8],
+      [0, 0, 0],
+    ]
+    for (const rig of rigs) {
+      for (const [sx, sy, sz] of stageOffsets) {
+        const patch = basePatch({ stageX: sx, stageY: sy, stageZ: sz, riggingUuid: rig.uuid })
+        const world = worldPositionFor(patch, [rig])
+        const offset = patchPlacementFromWorld(patch, world, [rig])
+        expect(offset.stageX).toBeCloseTo(sx, 9)
+        expect(offset.stageY).toBeCloseTo(sy, 9)
+        expect(offset.stageZ).toBeCloseTo(sz, 9)
+        const patch2 = basePatch({
+          stageX: offset.stageX,
+          stageY: offset.stageY,
+          stageZ: offset.stageZ,
+          riggingUuid: rig.uuid,
+        })
+        const world2 = worldPositionFor(patch2, [rig])
+        expect(world2.x).toBeCloseTo(world.x, 9)
+        expect(world2.y).toBeCloseTo(world.y, 9)
+        expect(world2.z).toBeCloseTo(world.z, 9)
+      }
+    }
   })
 })
 

@@ -21,9 +21,6 @@ export interface FixturePatch {
   baseYawDeg: number | null;
   basePitchDeg: number | null;
   riggingUuid: string | null;
-  worldPositionX: number | null;
-  worldPositionY: number | null;
-  worldPositionZ: number | null;
   riggingPosition: string | null;
   beamAngleDeg: number | null;
   gelCode: string | null;

@@ -1,4 +1,4 @@
-import { Euler, MathUtils, Quaternion, Vector3 } from "three"
+import { Euler, MathUtils, Object3D, Quaternion, Vector3 } from "three"
 import type { FixturePatch } from "../api/patchApi"
 import type { RiggingDto } from "../api/riggingApi"
 import type { SliderPropertyDescriptor } from "../store/fixtures"
@@ -91,43 +91,17 @@ export function dmxToDegrees(
   return slider.degMin + tt * (slider.degMax - slider.degMin) + base
 }
 
-// Discard the cached composed world position so callers (e.g. an optimistic
-// drag-release update) can fall back to the freshly-written stage* triple
-// without waiting for the backend recomposition. Operates on a partial so it
-// works against either FixturePatch or an Immer draft of one.
-export function clearComposedWorldPosition(
-  patch: { worldPositionX: number | null; worldPositionY: number | null; worldPositionZ: number | null },
-): void {
-  patch.worldPositionX = null
-  patch.worldPositionY = null
-  patch.worldPositionZ = null
-}
-
-// Resolve a patch's world position in R3F space.
-//
-// 1. If the backend has populated `worldPositionX/Y/Z`, trust it — that's the
-//    composed result of any rig frame and is authoritative.
-// 2. If `riggingUuid` matches a known rigging, compose stage* (treated as an
-//    offset in the rigging's local frame) with the rigging's pose.
-// 3. Otherwise stage* is a free-space world coordinate.
-//
-// TODO(Session 4): the rigging-frame composition below is a simple translate
-// that ignores rigging yaw/pitch/roll. Patching ergonomics in Session 4 will
-// drive the full rotated-frame composition; until then the backend's pre-
-// composed worldPosition* (preferred path) covers the real cases.
+// Resolve a patch's world position in R3F space. When `riggingUuid` matches a
+// known rigging, stage* is treated as an offset in the rigging's local lighting
+// frame and composed with the rig's full pose (position + yaw/pitch/roll).
+// Otherwise stage* is a free-space world coordinate.
+const SCRATCH_RIG_EULER = new Euler()
+const SCRATCH_OFFSET = new Vector3()
 export function worldPositionFor(
   patch: FixturePatch,
   riggings: RiggingDto[],
   target = new Vector3(),
 ): Vector3 {
-  if (
-    patch.worldPositionX != null &&
-    patch.worldPositionY != null &&
-    patch.worldPositionZ != null
-  ) {
-    return toThree(patch.worldPositionX, patch.worldPositionY, patch.worldPositionZ, target)
-  }
-
   const sx = patch.stageX ?? 0
   const sy = patch.stageY ?? 0
   const sz = patch.stageZ ?? 0
@@ -135,10 +109,12 @@ export function worldPositionFor(
   if (patch.riggingUuid) {
     const rig = riggings.find((r) => r.uuid === patch.riggingUuid)
     if (rig) {
-      const rx = rig.positionX ?? 0
-      const ry = rig.positionY ?? 0
-      const rz = rig.positionZ ?? 0
-      return toThree(rx + sx, ry + sy, rz + sz, target)
+      // Swizzle stage offset into R3F-local, rotate by the rig's pose, then
+      // translate by the rig's R3F world position. rigEuler matches the YXZ
+      // Euler that RiggingMeshes applies to the visual mesh.
+      SCRATCH_OFFSET.set(sx, sz, -sy).applyEuler(rigEuler(rig, SCRATCH_RIG_EULER))
+      toThree(rig.positionX ?? 0, rig.positionY ?? 0, rig.positionZ ?? 0, target)
+      return target.add(SCRATCH_OFFSET)
     }
   }
 
@@ -153,14 +129,6 @@ export function worldPositionLighting(
   patch: FixturePatch,
   riggings: RiggingDto[],
 ): { x: number; y: number; z: number } | null {
-  if (
-    patch.worldPositionX != null &&
-    patch.worldPositionY != null &&
-    patch.worldPositionZ != null
-  ) {
-    return { x: patch.worldPositionX, y: patch.worldPositionY, z: patch.worldPositionZ }
-  }
-
   const sx = patch.stageX
   const sy = patch.stageY
   if (sx == null || sy == null) return null
@@ -169,13 +137,59 @@ export function worldPositionLighting(
   if (patch.riggingUuid) {
     const rig = riggings.find((r) => r.uuid === patch.riggingUuid)
     if (rig) {
+      // Apply the rig's pose to the offset by going through R3F space (where
+      // rigEuler is defined), then swizzle back to lighting coords.
+      SCRATCH_OFFSET.set(sx, sz, -sy).applyEuler(rigEuler(rig, SCRATCH_RIG_EULER))
       return {
-        x: (rig.positionX ?? 0) + sx,
-        y: (rig.positionY ?? 0) + sy,
-        z: (rig.positionZ ?? 0) + sz,
+        x: (rig.positionX ?? 0) + SCRATCH_OFFSET.x,
+        y: (rig.positionY ?? 0) - SCRATCH_OFFSET.z,
+        z: (rig.positionZ ?? 0) + SCRATCH_OFFSET.y,
       }
     }
   }
 
   return { x: sx, y: sy, z: sz }
+}
+
+// Inverse of `worldPositionFor`: project an R3F world point into a patch's
+// rig-local frame and recover stage* offsets in lighting coords. With no
+// rigging the world point is treated as a free-space lighting position.
+export interface RigPlacement {
+  riggingUuid: string | null
+  stageX: number | null
+  stageY: number | null
+  stageZ: number | null
+}
+const SCRATCH_OBJ = new Object3D()
+const SCRATCH_WORLDPOS = new Vector3()
+export function patchPlacementFromWorld(
+  patch: FixturePatch,
+  worldR3F: Vector3,
+  riggings: RiggingDto[],
+): RigPlacement {
+  if (!patch.riggingUuid) {
+    const l = fromThree(worldR3F)
+    return { riggingUuid: null, stageX: l.x, stageY: l.y, stageZ: l.z }
+  }
+
+  const rig = riggings.find((r) => r.uuid === patch.riggingUuid)
+  if (!rig) {
+    return {
+      riggingUuid: patch.riggingUuid,
+      stageX: patch.stageX,
+      stageY: patch.stageY,
+      stageZ: patch.stageZ,
+    }
+  }
+
+  SCRATCH_OBJ.position.set(rig.positionX ?? 0, rig.positionZ ?? 0, -(rig.positionY ?? 0))
+  rigEuler(rig, SCRATCH_OBJ.rotation)
+  SCRATCH_OBJ.updateMatrixWorld()
+  const local = SCRATCH_OBJ.worldToLocal(SCRATCH_WORLDPOS.copy(worldR3F))
+  return {
+    riggingUuid: patch.riggingUuid,
+    stageX: local.x,
+    stageY: -local.z,
+    stageZ: local.y,
+  }
 }

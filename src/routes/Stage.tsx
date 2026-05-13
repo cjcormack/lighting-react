@@ -28,7 +28,6 @@ import { DEFAULT_RIGGING_LENGTH_M } from '../components/stage3d/RiggingMeshes'
 import { StageViewMenu } from '../components/stage3d/StageViewMenu'
 import { useStageView } from '../components/stage3d/useStageView'
 import { useModifierHeld } from '../components/stage3d/useShiftHeld'
-import { clearComposedWorldPosition } from '../lib/stageCoords'
 import { StageOverviewPanel } from '../components/StageOverviewPanel'
 import {
   StageEditorPanel,
@@ -449,7 +448,6 @@ export function Stage() {
                         p.baseYawDeg = nextBaseYaw
                         p.basePitchDeg = nextBasePitch
                       }
-                      clearComposedWorldPosition(p)
                     }),
                   )
                   updatePatch({
