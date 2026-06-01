@@ -35,6 +35,7 @@ import {
   type StageEditorTarget,
 } from '../components/stage3d/StageEditorPanel'
 import { StageEditorPickerPanel } from '../components/stage3d/StageEditorPickerPanel'
+import { StageFixtureControlPanel } from '../components/stage3d/StageFixtureControlPanel'
 import type { EditPatchFormHandle } from '../components/patches/EditPatchForm'
 import type { EditStageRegionFormHandle } from '../components/stage/EditStageRegionForm'
 import type { EditRiggingFormHandle } from '../components/rigging/EditRiggingForm'
@@ -224,6 +225,10 @@ export function Stage() {
   const showPanel = editingActive && panelTarget != null && !panelCollapsed
   const showPanelStub = editingActive && panelTarget != null && panelCollapsed
   const showPicker = editingActive && panelTarget == null && placing == null
+  // View-mode (non-editing) fixture control card. Shares the selection state, so
+  // it works in both 3D and the 2D overview; gated to tablet+ like the edit panels.
+  const showControlPanel =
+    !editingActive && selection?.kind === 'patch' && isTabletOrLarger
 
   const handleSelectionChange = (s: Selection) => {
     setSelection(s)
@@ -385,6 +390,7 @@ export function Stage() {
                 placementZ={placementZ}
                 view={viewFlags}
                 gizmoMode={gizmoMode}
+                hidePatchSelectionInfo={showControlPanel}
                 onSelectionChange={handleSelectionChange}
                 onPlacementClick={handlePlacementClick}
                 onPatchPlacementChange={(patch, next, settled) => {
@@ -584,6 +590,12 @@ export function Stage() {
               regions={regions ?? []}
               riggings={riggings ?? []}
               onSelect={handleSelectionChange}
+            />
+          )}
+          {showControlPanel && selection?.kind === 'patch' && (
+            <StageFixtureControlPanel
+              patchKey={selection.patchKey}
+              onClose={() => setSelection(null)}
             />
           )}
         </main>

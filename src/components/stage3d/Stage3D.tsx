@@ -81,6 +81,9 @@ interface Stage3DProps {
   /** Which TransformControls mode the fixture gizmo runs in. The parent owns
    *  this so it can drive both a manual toggle button and a held-Alt key. */
   gizmoMode?: GizmoMode
+  /** Suppress the bottom-center patch info overlay — set when the parent shows
+   *  the right-hand fixture control card, so the name isn't shown twice. */
+  hidePatchSelectionInfo?: boolean
   onSelectionChange: (s: Selection) => void
   onPlacementClick?: (worldX: number, worldY: number) => void
   onPatchPlacementChange?: (patch: FixturePatch, next: PatchPlacementUpdate, settled: boolean) => void
@@ -96,6 +99,7 @@ export function Stage3D({
   view = DEFAULT_VIEW_FLAGS,
   placementZ,
   gizmoMode = 'translate',
+  hidePatchSelectionInfo = false,
   onSelectionChange,
   onPlacementClick,
   onPatchPlacementChange,
@@ -300,7 +304,7 @@ export function Stage3D({
           Click on the stage to place {placing === 'region' ? 'region' : 'rigging'} · Esc to cancel
         </div>
       )}
-      {!editMode && !placing && (
+      {!editMode && !placing && !(hidePatchSelectionInfo && selection?.kind === 'patch') && (
         <SelectionInfo selection={selection} patches={patches} regions={safeRegions} riggings={safeRiggings} />
       )}
     </div>
