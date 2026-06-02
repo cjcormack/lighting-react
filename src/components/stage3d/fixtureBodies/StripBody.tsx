@@ -1,21 +1,48 @@
 import { BODY_LENS_COLOR, housingColor } from './palette'
+import { PixelStrip } from './PixelStrip'
 import type { FixtureBodyProps } from './types'
 
 const STRIP_LEN = 0.6
 const STRIP_DEPTH = 0.06
 const STRIP_HEIGHT = 0.05
 
-// Per-pixel lenses are deferred — a STRIP renders as a single fixture for now
-// even when the underlying type is multi-element.
-export function StripBody({ active, headRef, lensRef }: FixtureBodyProps) {
+// Strip body sized per-axis from the fixture's real dimensions (lengthM is the
+// long horizontal axis → local X). A multi-element strip renders one lens
+// segment per element (PixelStrip); otherwise a single lens.
+export function StripBody({
+  active,
+  headRef,
+  lensRef,
+  dims,
+  pixelCount,
+  pixelColorsRef,
+}: FixtureBodyProps) {
+  const L = dims?.lengthM ?? STRIP_LEN
+  const H = dims?.heightM ?? STRIP_HEIGHT
+  const D = dims?.widthM ?? STRIP_DEPTH
+
+  if (pixelCount && pixelCount > 1 && pixelColorsRef) {
+    return (
+      <PixelStrip
+        active={active}
+        pixelCount={pixelCount}
+        lengthM={L}
+        heightM={H}
+        depthM={D}
+        headRef={headRef}
+        colorsRef={pixelColorsRef}
+      />
+    )
+  }
+
   return (
     <group ref={headRef}>
       <mesh>
-        <boxGeometry args={[STRIP_LEN, STRIP_HEIGHT, STRIP_DEPTH]} />
+        <boxGeometry args={[L, H, D]} />
         <meshStandardMaterial color={housingColor(active)} />
       </mesh>
-      <mesh ref={lensRef} position={[0, -STRIP_HEIGHT / 2 - 0.001, 0]}>
-        <boxGeometry args={[STRIP_LEN * 0.95, 0.01, STRIP_DEPTH * 0.85]} />
+      <mesh ref={lensRef} position={[0, -H / 2 - 0.001, 0]}>
+        <boxGeometry args={[L * 0.95, 0.01, D * 0.85]} />
         <meshBasicMaterial color={BODY_LENS_COLOR} />
       </mesh>
     </group>

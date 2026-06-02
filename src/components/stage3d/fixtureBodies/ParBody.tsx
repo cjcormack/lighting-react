@@ -1,11 +1,12 @@
 import { BODY_LENS_COLOR, housingColor, yokeColor } from './palette'
-import type { FixtureBodyProps } from './types'
+import { bodyScale, type FixtureBodyProps } from './types'
 
 const HOUSING_LEN = 0.14
+const DESIGN_SIZE = 0.21
 
-export function ParBody({ active, headRef, lensRef }: FixtureBodyProps) {
+export function ParBody({ active, headRef, lensRef, dims }: FixtureBodyProps) {
   return (
-    <>
+    <group scale={bodyScale(dims, DESIGN_SIZE)}>
       <mesh position={[0, 0, 0.075]}>
         <boxGeometry args={[0.16, 0.03, 0.03]} />
         <meshStandardMaterial color={yokeColor(active)} />
@@ -20,6 +21,6 @@ export function ParBody({ active, headRef, lensRef }: FixtureBodyProps) {
           <meshBasicMaterial color={BODY_LENS_COLOR} />
         </mesh>
       </group>
-    </>
+    </group>
   )
 }

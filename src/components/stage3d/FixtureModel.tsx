@@ -18,6 +18,7 @@ import type { RiggingDto } from '../../api/riggingApi'
 import {
   findColourSource,
   findDimmerProperty,
+  findGroupColourSource,
   type ColourPropertyDescriptor,
   type Fixture,
   type FixtureTypeInfo,
@@ -29,12 +30,14 @@ import {
   findTiltFineProperty,
   resolveFixtureKind,
 } from '../../store/fixtures'
+import type { GroupColourPropertyDescriptor } from '../../api/groupsApi'
 import {
   useColourValue,
   useSettingColourPreview,
   useSliderValue,
 } from '../../hooks/usePropertyValues'
-import { makeFallbackSlider, useNormalizedIntensity } from '../../hooks/useNormalizedIntensity'
+import { useGroupColourValues } from '../../hooks/useGroupPropertyValues'
+import { colourFactor, makeFallbackSlider, useNormalizedIntensity } from '../../hooks/useNormalizedIntensity'
 import { findGel } from '../../data/gels'
 import {
   dmxToDegrees,
@@ -44,9 +47,11 @@ import {
 } from '../../lib/stageCoords'
 import { BEAM_LENGTH, useEmitters, type EmittersHandle, type RegionGeometry } from './StageEmitters'
 import { FixtureBody } from './fixtureBodies'
+import type { FixtureBodyDims, PixelColorWriter } from './fixtureBodies/types'
 
 const DEFAULT_BEAM_DEG = 30
 const COLOR_TMP = new Color()
+const PIXEL_COLOR = new Color()
 const UNIT_Y = new Vector3(0, 1, 0)
 const SCRATCH_DIR = new Vector3()
 const SCRATCH_NEG_DIR = new Vector3()
@@ -104,6 +109,10 @@ export function FixtureModel({
     () => (fixture?.properties ? findColourSource(fixture.properties) : undefined),
     [fixture?.properties],
   )
+  // Per-element colour control of a multi-element fixture (e.g. a pixel bar).
+  const groupColour = useMemo(() => findGroupColourSource(fixture), [fixture])
+  const pixelCount = groupColour ? groupColour.memberColourChannels.length : 0
+  const pixelColorsRef = useRef<PixelColorWriter | null>(null)
   const dimmerProp = useMemo(
     () => findDimmerProperty(fixture?.properties),
     [fixture?.properties],
@@ -114,6 +123,16 @@ export function FixtureModel({
   const tiltFineProp = useMemo(() => findTiltFineProperty(fixture?.properties), [fixture?.properties])
   const gel =
     !colourSource && fixtureType?.acceptsGel && patch.gelCode ? findGel(patch.gelCode) : null
+
+  // Real physical size for body scaling; undefined when the backend didn't send
+  // dimensions, so bodies keep their hard-coded design size.
+  const bodyDims = useMemo<FixtureBodyDims | undefined>(() => {
+    const l = fixtureType?.lengthM
+    const w = fixtureType?.widthM
+    const h = fixtureType?.heightM
+    if (l == null || w == null || h == null) return undefined
+    return { lengthM: l, widthM: w, heightM: h }
+  }, [fixtureType?.lengthM, fixtureType?.widthM, fixtureType?.heightM])
 
   const fixturePos = useMemo(() => {
     const v = worldPositionFor(patch, riggings)
@@ -204,6 +223,9 @@ export function FixtureModel({
         active={active}
         headRef={headRef}
         lensRef={lensRef}
+        dims={bodyDims}
+        pixelCount={pixelCount > 1 ? pixelCount : undefined}
+        pixelColorsRef={pixelColorsRef}
       />
 
       {active && (
@@ -217,10 +239,12 @@ export function FixtureModel({
 
       <ColourSync
         colourSource={colourSource}
+        groupColour={pixelCount > 1 ? groupColour : undefined}
         gel={gel}
         dimmerProp={dimmerProp}
         lensRef={lensRef}
         colorStateRef={colorStateRef}
+        pixelColorsRef={pixelColorsRef}
       />
     </group>
   )
@@ -459,10 +483,12 @@ interface ColourSyncBaseProps {
   dimmerProp: SliderPropertyDescriptor | undefined
   lensRef: React.RefObject<Mesh | null>
   colorStateRef: React.RefObject<ColorState>
+  pixelColorsRef: React.RefObject<PixelColorWriter | null>
 }
 
 function ColourSync({
   colourSource,
+  groupColour,
   gel,
   ...refs
 }: ColourSyncBaseProps & {
@@ -470,8 +496,13 @@ function ColourSync({
     | { type: 'colour'; property: ColourPropertyDescriptor }
     | { type: 'setting'; property: SettingPropertyDescriptor }
     | undefined
+  groupColour: GroupColourPropertyDescriptor | undefined
   gel: { color: string } | null
 }) {
+  // Multi-element fixtures drive per-pixel bodies + one aggregate beam.
+  if (groupColour) {
+    return <MultiPixelColourSync groupColour={groupColour} {...refs} />
+  }
   if (colourSource?.type === 'colour') {
     return <ColourBeamSync colourProp={colourSource.property} {...refs} />
   }
@@ -516,7 +547,9 @@ function ColourBeamSync({
   ...refs
 }: ColourSyncBaseProps & { colourProp: ColourPropertyDescriptor }) {
   const colour = useColourValue(colourProp)
-  const intensity = useNormalizedIntensity(dimmerProp)
+  // Effective intensity = dimmer × colour so a colour-only fixture at RGB 0
+  // reads as dark rather than beaming at full.
+  const intensity = useNormalizedIntensity(dimmerProp) * colourFactor(colour.r, colour.g, colour.b, colour.w)
   return <BeamColourSync css={colour.combinedCss} intensity={intensity} dimmerProp={dimmerProp} {...refs} />
 }
 
@@ -525,9 +558,11 @@ function SettingColourBeamSync({
   dimmerProp,
   ...refs
 }: ColourSyncBaseProps & { settingProp: SettingPropertyDescriptor }) {
-  const preview = useSettingColourPreview(settingProp) ?? '#888888'
-  const intensity = useNormalizedIntensity(dimmerProp)
-  return <BeamColourSync css={preview} intensity={intensity} dimmerProp={dimmerProp} {...refs} />
+  const preview = useSettingColourPreview(settingProp)
+  // A selected colour preset reads as fully on; no selection (null) ⇒ dark.
+  // A separate dimmer at 0 still wins via the dimmer factor.
+  const intensity = useNormalizedIntensity(dimmerProp) * (preview ? 1 : 0)
+  return <BeamColourSync css={preview ?? '#888888'} intensity={intensity} dimmerProp={dimmerProp} {...refs} />
 }
 
 function FixedColourBeamSync({
@@ -535,6 +570,45 @@ function FixedColourBeamSync({
   dimmerProp,
   ...refs
 }: ColourSyncBaseProps & { hex: string }) {
+  // No colour channels (gel / dimmer-only), so colourFactor is implicitly 1 —
+  // intensity is the dimmer alone. A gel/setting fixture with no dimmer beams
+  // full by design (no brightness signal to gate on).
   const intensity = useNormalizedIntensity(dimmerProp)
   return <BeamColourSync css={hex} intensity={intensity} dimmerProp={dimmerProp} {...refs} />
+}
+
+// Multi-element fixture: drive each pixel's body lens from its own colour, and
+// feed the single aggregate beam (intensity-weighted hue + peak-blended level).
+function MultiPixelColourSync({
+  groupColour,
+  dimmerProp,
+  colorStateRef,
+  pixelColorsRef,
+}: ColourSyncBaseProps & { groupColour: GroupColourPropertyDescriptor }) {
+  const group = useGroupColourValues(groupColour)
+  const dimmerFactor = useNormalizedIntensity(dimmerProp)
+  useEffect(() => {
+    const writer = pixelColorsRef.current
+    if (writer) {
+      // reset() first so a pixel that just dropped to zero is explicitly driven
+      // dark — imperative material writes get no React default.
+      writer.reset()
+      for (let i = 0; i < group.members.length; i++) {
+        const m = group.members[i]
+        const ci = colourFactor(m.r, m.g, m.b, m.w) * dimmerFactor
+        PIXEL_COLOR.set(`rgb(${m.r}, ${m.g}, ${m.b})`)
+        writer.setPixel(i, PIXEL_COLOR, ci)
+      }
+    }
+    // Aggregate beam state — only consumed when a multi-element fixture also
+    // projects an emitter beam (beamShape ≠ NONE). Strips render per-head glows
+    // instead, so this is dormant for them.
+    const eff = group.beamIntensity * dimmerFactor
+    const state = colorStateRef.current
+    state.color.set(`rgb(${group.beamR}, ${group.beamG}, ${group.beamB})`)
+    state.coneOpacity = 0.32 * eff
+    state.poolOpacity = 0.55 * eff
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [group, dimmerFactor])
+  return null
 }

@@ -1,9 +1,11 @@
 import { BODY_LENS_COLOR } from './palette'
-import type { FixtureBodyProps } from './types'
+import { bodyScale, type FixtureBodyProps } from './types'
 
-export function LaserBody({ active, headRef, lensRef }: FixtureBodyProps) {
+const DESIGN_SIZE = 0.18
+
+export function LaserBody({ active, headRef, lensRef, dims }: FixtureBodyProps) {
   return (
-    <group ref={headRef}>
+    <group ref={headRef} scale={bodyScale(dims, DESIGN_SIZE)}>
       <mesh>
         <boxGeometry args={[0.18, 0.1, 0.16]} />
         <meshStandardMaterial color={active ? '#3a3f48' : '#23262c'} />

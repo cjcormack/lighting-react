@@ -1,7 +1,7 @@
 import { restApi } from "./restApi"
 import { lightingApi } from "../api/lightingApi"
 import { store } from "./index"
-import type { GroupPropertyDescriptor } from "../api/groupsApi"
+import type { GroupColourPropertyDescriptor, GroupPropertyDescriptor } from "../api/groupsApi"
 
 lightingApi.fixtures.subscribe(function() {
   store.dispatch(restApi.util.invalidateTags(['Fixture']))
@@ -91,6 +91,11 @@ export function resolveFixtureKind(
   return 'GENERIC'
 }
 
+/** How a fixture's beam is drawn on the stage view (mirrors backend BeamShape). */
+export type BeamShape = 'NONE' | 'ROUND' | 'LINEAR'
+/** Beam edge hardness (mirrors backend BeamEdge). */
+export type BeamEdge = 'HARD' | 'SOFT'
+
 export type FixtureTypeInfo = {
   typeKey: string
   manufacturer: string | null
@@ -105,6 +110,13 @@ export type FixtureTypeInfo = {
   acceptsGel?: boolean
   gelCompactDisplay?: CompactDisplayRole | null
   kind?: FixtureKind
+  /** Physical bounding size in metres; `lengthM` is the long axis. Optional so
+   *  older /types payloads still typecheck. */
+  lengthM?: number | null
+  widthM?: number | null
+  heightM?: number | null
+  beamShape?: BeamShape
+  beamEdge?: BeamEdge
 }
 
 // Channel reference for property descriptors
@@ -280,6 +292,19 @@ export function findColourSource(properties: PropertyDescriptor[]): ColourSource
   }
 
   return undefined
+}
+
+/**
+ * The aggregated per-element colour control of a multi-element fixture, if any.
+ * Present only when the backend exposed ≥2 elements with a common colour
+ * property (e.g. an RGBW pixel bar). Drives per-pixel stage rendering.
+ */
+export function findGroupColourSource(
+  fixture: Fixture | undefined,
+): GroupColourPropertyDescriptor | undefined {
+  return fixture?.elementGroupProperties?.find(
+    (p): p is GroupColourPropertyDescriptor => p.type === 'colour',
+  )
 }
 
 /**

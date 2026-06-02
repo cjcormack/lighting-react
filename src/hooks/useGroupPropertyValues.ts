@@ -146,6 +146,14 @@ export type GroupColourValueResult = {
   avgA?: number
   avgUv?: number
   combinedCss: string
+  // Aggregate beam representation for the single stage beam over all elements:
+  // intensity-weighted hue (saturation-preserving — a plain RGB average of a
+  // red+blue bar muddies to grey) + peak-blended level (a plain mean makes one
+  // bright pixel on a dark bar near-invisible). 0..255 hue, 0..1 level.
+  beamR: number
+  beamG: number
+  beamB: number
+  beamIntensity: number
   // Individual member values
   members: Array<{
     fixtureKey: string
@@ -201,6 +209,10 @@ export function useGroupColourValues(
         avgG: 0,
         avgB: 0,
         combinedCss: 'rgb(0, 0, 0)',
+        beamR: 0,
+        beamG: 0,
+        beamB: 0,
+        beamIntensity: 0,
         members: [],
       }
     }
@@ -239,6 +251,29 @@ export function useGroupColourValues(
     const displayText = isUniform ? `R:${avgR} G:${avgG} B:${avgB}` : 'Mixed'
     const combinedCss = `rgb(${avgR}, ${avgG}, ${avgB})`
 
+    // Aggregate beam: intensity-weight each pixel's hue by its own brightness
+    // (iₖ = max(r,g,b,w)/255) so bright pixels dominate and dim ones don't drag
+    // toward grey. Level blends mean with peak so a sparse-but-bright bar still
+    // throws a visible beam.
+    let weight = 0
+    let peak = 0
+    let wr = 0
+    let wg = 0
+    let wb = 0
+    for (const m of members) {
+      const ik = Math.max(m.r, m.g, m.b, m.w ?? 0) / 255
+      weight += ik
+      if (ik > peak) peak = ik
+      wr += ik * m.r
+      wg += ik * m.g
+      wb += ik * m.b
+    }
+    const lit = weight > 1e-4
+    const beamR = lit ? Math.round(wr / weight) : 0
+    const beamG = lit ? Math.round(wg / weight) : 0
+    const beamB = lit ? Math.round(wb / weight) : 0
+    const beamIntensity = lit ? Math.max(weight / members.length, peak * 0.6) : 0
+
     // Check if cached value is still valid
     const cached = cachedRef.current
     if (
@@ -249,7 +284,11 @@ export function useGroupColourValues(
       cached.avgW === avgW &&
       cached.avgA === avgA &&
       cached.avgUv === avgUv &&
-      cached.isUniform === isUniform
+      cached.isUniform === isUniform &&
+      cached.beamR === beamR &&
+      cached.beamG === beamG &&
+      cached.beamB === beamB &&
+      cached.beamIntensity === beamIntensity
     ) {
       return cached
     }
@@ -264,6 +303,10 @@ export function useGroupColourValues(
       avgA,
       avgUv,
       combinedCss,
+      beamR,
+      beamG,
+      beamB,
+      beamIntensity,
       members,
     }
     cachedRef.current = result
