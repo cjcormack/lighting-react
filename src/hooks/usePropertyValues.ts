@@ -20,13 +20,13 @@ import type {
   SettingPropertyDescriptor,
 } from '../store/fixtures'
 
-// Helper to create channel key
-function channelKey(ref: ChannelRef): string {
+// Helper to create channel key — must match the store's Map keys.
+export function channelKey(ref: ChannelRef): string {
   return `${ref.universe}:${ref.channelNo}`
 }
 
 // Get a single channel value
-function getChannelValue(channel: ChannelRef): number {
+export function getChannelValue(channel: ChannelRef): number {
   return lightingApi.channels.get(channel.universe, channel.channelNo)
 }
 
@@ -95,7 +95,7 @@ type ColourValueResult = {
   combinedCss: string
 }
 
-function computeCombinedCss(
+export function computeCombinedCss(
   r: number,
   g: number,
   b: number,

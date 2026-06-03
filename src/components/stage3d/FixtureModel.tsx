@@ -15,10 +15,12 @@ import {
 } from 'three'
 import type { FixturePatch } from '../../api/patchApi'
 import type { RiggingDto } from '../../api/riggingApi'
+import { lightingApi } from '../../api/lightingApi'
 import {
   findColourSource,
   findDimmerProperty,
   findGroupColourSource,
+  type ChannelRef,
   type ColourPropertyDescriptor,
   type Fixture,
   type FixtureTypeInfo,
@@ -32,12 +34,13 @@ import {
 } from '../../store/fixtures'
 import type { GroupColourPropertyDescriptor } from '../../api/groupsApi'
 import {
-  useColourValue,
-  useSettingColourPreview,
-  useSliderValue,
+  channelKey,
+  computeCombinedCss,
+  getChannelValue,
+  resolveSettingOption,
 } from '../../hooks/usePropertyValues'
-import { useGroupColourValues } from '../../hooks/useGroupPropertyValues'
-import { colourFactor, makeFallbackSlider, useNormalizedIntensity } from '../../hooks/useNormalizedIntensity'
+import { computeGroupColourValues } from '../../hooks/useGroupPropertyValues'
+import { colourFactor } from '../../hooks/useNormalizedIntensity'
 import { findGel } from '../../data/gels'
 import {
   dmxToDegrees,
@@ -276,11 +279,6 @@ interface BeamDirectorOpts {
   colorStateRef: React.RefObject<ColorState>
 }
 
-const FALLBACK_PAN = makeFallbackSlider('pan')
-const FALLBACK_TILT = makeFallbackSlider('tilt')
-const FALLBACK_PAN_FINE = makeFallbackSlider('pan_fine')
-const FALLBACK_TILT_FINE = makeFallbackSlider('tilt_fine')
-
 // 8-bit fine DMX channel divides one coarse step into 256 sub-steps.
 const FINE_STEPS = 256
 
@@ -317,12 +315,28 @@ function useBeamDirector({
   regionGeometry,
   colorStateRef,
 }: BeamDirectorOpts) {
-  const panRaw = useSliderValue(panProp ?? FALLBACK_PAN)
-  const tiltRaw = useSliderValue(tiltProp ?? FALLBACK_TILT)
-  const panFineRaw = useSliderValue(panFineProp ?? FALLBACK_PAN_FINE)
-  const tiltFineRaw = useSliderValue(tiltFineProp ?? FALLBACK_TILT_FINE)
+  // Pan/tilt feed geometry that's recomputed every frame anyway (TransformControls
+  // can move the group mid-drag), so read them straight from the live channel
+  // store in the frame loop rather than via React subscriptions — same reasoning
+  // as the colour sync below: the R3F reconciler can drop hook-driven updates,
+  // the frame loop can't. Keys are pre-baked so the per-frame read allocates nothing.
+  const panKeys = useMemo(
+    () => ({
+      pan: panProp ? channelKey(panProp.channel) : null,
+      tilt: tiltProp ? channelKey(tiltProp.channel) : null,
+      panFine: panFineProp ? channelKey(panFineProp.channel) : null,
+      tiltFine: tiltFineProp ? channelKey(tiltFineProp.channel) : null,
+    }),
+    [panProp, tiltProp, panFineProp, tiltFineProp],
+  )
 
   useFrame(() => {
+    const vals = lightingApi.channels.getAll()
+    const panRaw = panKeys.pan ? vals.get(panKeys.pan) ?? 0 : 0
+    const tiltRaw = panKeys.tilt ? vals.get(panKeys.tilt) ?? 0 : 0
+    const panFineRaw = panKeys.panFine ? vals.get(panKeys.panFine) ?? 0 : 0
+    const tiltFineRaw = panKeys.tiltFine ? vals.get(panKeys.tiltFine) ?? 0 : 0
+
     const panCombined = combineFine(panProp, panRaw, panFineProp, panFineRaw)
     const tiltCombined = combineFine(tiltProp, tiltRaw, tiltFineProp, tiltFineRaw)
     const panDeg = panProp ? dmxToDegrees(panCombined, panProp, baseYawDeg) : baseYawDeg
@@ -477,7 +491,15 @@ export function cullRegionCookies(
 }
 
 
-// — colour sync (React-rate via property hooks) —————————————————————
+// — colour sync (event-driven via live channel subscriptions) —————————
+//
+// Colour is applied to the scene imperatively from a raw channel subscription,
+// NOT through useSyncExternalStore → render → useEffect. Inside the R3F Canvas
+// (a separate reconciler root) those store-driven re-renders flush on the loop's
+// own cadence and drop beat-rate changes; the subscription callback fires
+// synchronously from the channel store, outside React, so every change lands.
+// The lens material is written here directly; the beam's colorStateRef is read
+// each frame by useBeamDirector and pushed to the emitter buffers.
 
 interface ColourSyncBaseProps {
   dimmerProp: SliderPropertyDescriptor | undefined
@@ -512,7 +534,12 @@ function ColourSync({
   return <FixedColourBeamSync hex={gel?.color ?? '#fff8d5'} {...refs} />
 }
 
-function applyColour(hex: string, intensity: number, refs: ColourSyncBaseProps) {
+interface ColourApplyRefs {
+  lensRef: React.RefObject<Mesh | null>
+  colorStateRef: React.RefObject<ColorState>
+}
+
+function applyColour(hex: string, intensity: number, refs: ColourApplyRefs) {
   COLOR_TMP.set(hex)
   // Lens stays partially visible at idle (it's the lamp body, not the beam).
   if (refs.lensRef.current) {
@@ -527,18 +554,35 @@ function applyColour(hex: string, intensity: number, refs: ColourSyncBaseProps) 
   state.poolOpacity = 0.55 * intensity
 }
 
-function BeamColourSync({
-  css,
-  intensity,
-  ...refs
-}: ColourSyncBaseProps & { css: string; intensity: number }) {
+// 0..1 dimmer factor from live DMX; 1 when the fixture has no dimmer ("always
+// on"). Mirrors useNormalizedIntensity but reads the store imperatively.
+function liveDimmerFactor(dimmerProp: SliderPropertyDescriptor | undefined): number {
+  if (!dimmerProp) return 1
+  return Math.max(0, Math.min(1, getChannelValue(dimmerProp.channel) / 255))
+}
+
+// Subscribe to live DMX for `channels` and run `apply` on every change — plus
+// once on mount and after each (rare) re-render, so descriptor/gel/dimmer-prop
+// changes also take effect. `channels` must be referentially stable across
+// renders or the subscription will thrash.
+function useLiveColour(channels: ChannelRef[], apply: () => void) {
+  const applyRef = useRef(apply)
+  applyRef.current = apply
+  // Re-apply after every render. These components no longer subscribe through
+  // React, so renders only happen on config/selection changes — cheap to redo,
+  // and it covers inputs (gel hex, dimmer prop) that aren't channel values.
   useEffect(() => {
-    applyColour(css, intensity, refs)
-    // refs object identity changes per render but its members are stable
-    // RefObjects, so we only re-run on meaningful inputs.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [css, intensity])
-  return null
+    applyRef.current()
+  })
+  // Live path: write straight to the scene from the channel callback, bypassing
+  // React entirely so beat-rate changes can't be dropped by the reconciler.
+  useEffect(() => {
+    const cb = () => applyRef.current()
+    const subs = channels.map((ch) =>
+      lightingApi.channels.subscribeToChannel(channelKey(ch), cb),
+    )
+    return () => subs.forEach((s) => s.unsubscribe())
+  }, [channels])
 }
 
 function ColourBeamSync({
@@ -546,11 +590,32 @@ function ColourBeamSync({
   dimmerProp,
   ...refs
 }: ColourSyncBaseProps & { colourProp: ColourPropertyDescriptor }) {
-  const colour = useColourValue(colourProp)
-  // Effective intensity = dimmer × colour so a colour-only fixture at RGB 0
-  // reads as dark rather than beaming at full.
-  const intensity = useNormalizedIntensity(dimmerProp) * colourFactor(colour.r, colour.g, colour.b, colour.w)
-  return <BeamColourSync css={colour.combinedCss} intensity={intensity} dimmerProp={dimmerProp} {...refs} />
+  const channels = useMemo(() => {
+    const cs: ChannelRef[] = [
+      colourProp.redChannel,
+      colourProp.greenChannel,
+      colourProp.blueChannel,
+    ]
+    if (colourProp.whiteChannel) cs.push(colourProp.whiteChannel)
+    if (colourProp.amberChannel) cs.push(colourProp.amberChannel)
+    if (colourProp.uvChannel) cs.push(colourProp.uvChannel)
+    if (dimmerProp) cs.push(dimmerProp.channel)
+    return cs
+  }, [colourProp, dimmerProp])
+
+  useLiveColour(channels, () => {
+    const r = getChannelValue(colourProp.redChannel)
+    const g = getChannelValue(colourProp.greenChannel)
+    const b = getChannelValue(colourProp.blueChannel)
+    const w = colourProp.whiteChannel ? getChannelValue(colourProp.whiteChannel) : undefined
+    const a = colourProp.amberChannel ? getChannelValue(colourProp.amberChannel) : undefined
+    const uv = colourProp.uvChannel ? getChannelValue(colourProp.uvChannel) : undefined
+    // Effective intensity = dimmer × colour so a colour-only fixture at RGB 0
+    // reads as dark rather than beaming at full.
+    const intensity = liveDimmerFactor(dimmerProp) * colourFactor(r, g, b, w)
+    applyColour(computeCombinedCss(r, g, b, w, a, uv), intensity, refs)
+  })
+  return null
 }
 
 function SettingColourBeamSync({
@@ -558,11 +623,21 @@ function SettingColourBeamSync({
   dimmerProp,
   ...refs
 }: ColourSyncBaseProps & { settingProp: SettingPropertyDescriptor }) {
-  const preview = useSettingColourPreview(settingProp)
-  // A selected colour preset reads as fully on; no selection (null) ⇒ dark.
-  // A separate dimmer at 0 still wins via the dimmer factor.
-  const intensity = useNormalizedIntensity(dimmerProp) * (preview ? 1 : 0)
-  return <BeamColourSync css={preview ?? '#888888'} intensity={intensity} dimmerProp={dimmerProp} {...refs} />
+  const channels = useMemo(() => {
+    const cs: ChannelRef[] = [settingProp.channel]
+    if (dimmerProp) cs.push(dimmerProp.channel)
+    return cs
+  }, [settingProp, dimmerProp])
+
+  useLiveColour(channels, () => {
+    const level = getChannelValue(settingProp.channel)
+    const preview = resolveSettingOption(settingProp.options, level)?.colourPreview
+    // A selected colour preset reads as fully on; no selection ⇒ dark. A separate
+    // dimmer at 0 still wins via the dimmer factor.
+    const intensity = liveDimmerFactor(dimmerProp) * (preview ? 1 : 0)
+    applyColour(preview ?? '#888888', intensity, refs)
+  })
+  return null
 }
 
 function FixedColourBeamSync({
@@ -573,8 +648,11 @@ function FixedColourBeamSync({
   // No colour channels (gel / dimmer-only), so colourFactor is implicitly 1 —
   // intensity is the dimmer alone. A gel/setting fixture with no dimmer beams
   // full by design (no brightness signal to gate on).
-  const intensity = useNormalizedIntensity(dimmerProp)
-  return <BeamColourSync css={hex} intensity={intensity} dimmerProp={dimmerProp} {...refs} />
+  const channels = useMemo(() => (dimmerProp ? [dimmerProp.channel] : []), [dimmerProp])
+  useLiveColour(channels, () => {
+    applyColour(hex, liveDimmerFactor(dimmerProp), refs)
+  })
+  return null
 }
 
 // Multi-element fixture: drive each pixel's body lens from its own colour, and
@@ -585,9 +663,21 @@ function MultiPixelColourSync({
   colorStateRef,
   pixelColorsRef,
 }: ColourSyncBaseProps & { groupColour: GroupColourPropertyDescriptor }) {
-  const group = useGroupColourValues(groupColour)
-  const dimmerFactor = useNormalizedIntensity(dimmerProp)
-  useEffect(() => {
+  const channels = useMemo(() => {
+    const cs: ChannelRef[] = []
+    groupColour.memberColourChannels.forEach((m) => {
+      cs.push(m.redChannel, m.greenChannel, m.blueChannel)
+      if (m.whiteChannel) cs.push(m.whiteChannel)
+      if (m.amberChannel) cs.push(m.amberChannel)
+      if (m.uvChannel) cs.push(m.uvChannel)
+    })
+    if (dimmerProp) cs.push(dimmerProp.channel)
+    return cs
+  }, [groupColour, dimmerProp])
+
+  useLiveColour(channels, () => {
+    const group = computeGroupColourValues(groupColour)
+    const dimmerFactor = liveDimmerFactor(dimmerProp)
     const writer = pixelColorsRef.current
     if (writer) {
       // reset() first so a pixel that just dropped to zero is explicitly driven
@@ -608,7 +698,6 @@ function MultiPixelColourSync({
     state.color.set(`rgb(${group.beamR}, ${group.beamG}, ${group.beamB})`)
     state.coneOpacity = 0.32 * eff
     state.poolOpacity = 0.55 * eff
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [group, dimmerFactor])
+  })
   return null
 }

@@ -167,6 +167,116 @@ export type GroupColourValueResult = {
 }
 
 /**
+ * Pure computation behind [useGroupColourValues] — reads live DMX for every
+ * member and returns per-member colours plus the aggregate beam hue/level.
+ * Exported so the 3D stage can recompute the same values imperatively from its
+ * channel subscription, bypassing React render/effect on the hot path.
+ */
+export function computeGroupColourValues(
+  property: GroupColourPropertyDescriptor
+): GroupColourValueResult {
+  const members = property.memberColourChannels.map((m) => ({
+    fixtureKey: m.fixtureKey,
+    r: getChannelValue(m.redChannel),
+    g: getChannelValue(m.greenChannel),
+    b: getChannelValue(m.blueChannel),
+    w: m.whiteChannel ? getChannelValue(m.whiteChannel) : undefined,
+    a: m.amberChannel ? getChannelValue(m.amberChannel) : undefined,
+    uv: m.uvChannel ? getChannelValue(m.uvChannel) : undefined,
+  }))
+
+  if (members.length === 0) {
+    return {
+      isUniform: true,
+      displayText: 'No members',
+      avgR: 0,
+      avgG: 0,
+      avgB: 0,
+      combinedCss: 'rgb(0, 0, 0)',
+      beamR: 0,
+      beamG: 0,
+      beamB: 0,
+      beamIntensity: 0,
+      members: [],
+    }
+  }
+
+  // Calculate averages for RGB
+  const avgR = Math.round(members.reduce((sum, m) => sum + m.r, 0) / members.length)
+  const avgG = Math.round(members.reduce((sum, m) => sum + m.g, 0) / members.length)
+  const avgB = Math.round(members.reduce((sum, m) => sum + m.b, 0) / members.length)
+
+  // Calculate averages for extended channels (only if any member has them)
+  const hasWhite = members.some((m) => m.w !== undefined)
+  const hasAmber = members.some((m) => m.a !== undefined)
+  const hasUv = members.some((m) => m.uv !== undefined)
+
+  const avgW = hasWhite
+    ? Math.round(members.reduce((sum, m) => sum + (m.w ?? 0), 0) / members.length)
+    : undefined
+  const avgA = hasAmber
+    ? Math.round(members.reduce((sum, m) => sum + (m.a ?? 0), 0) / members.length)
+    : undefined
+  const avgUv = hasUv
+    ? Math.round(members.reduce((sum, m) => sum + (m.uv ?? 0), 0) / members.length)
+    : undefined
+
+  // Check if all values are the same (including extended channels)
+  const isUniform = members.every(
+    (m) =>
+      m.r === members[0].r &&
+      m.g === members[0].g &&
+      m.b === members[0].b &&
+      m.w === members[0].w &&
+      m.a === members[0].a &&
+      m.uv === members[0].uv
+  )
+
+  const displayText = isUniform ? `R:${avgR} G:${avgG} B:${avgB}` : 'Mixed'
+  const combinedCss = `rgb(${avgR}, ${avgG}, ${avgB})`
+
+  // Aggregate beam: intensity-weight each pixel's hue by its own brightness
+  // (iₖ = max(r,g,b,w)/255) so bright pixels dominate and dim ones don't drag
+  // toward grey. Level blends mean with peak so a sparse-but-bright bar still
+  // throws a visible beam.
+  let weight = 0
+  let peak = 0
+  let wr = 0
+  let wg = 0
+  let wb = 0
+  for (const m of members) {
+    const ik = Math.max(m.r, m.g, m.b, m.w ?? 0) / 255
+    weight += ik
+    if (ik > peak) peak = ik
+    wr += ik * m.r
+    wg += ik * m.g
+    wb += ik * m.b
+  }
+  const lit = weight > 1e-4
+  const beamR = lit ? Math.round(wr / weight) : 0
+  const beamG = lit ? Math.round(wg / weight) : 0
+  const beamB = lit ? Math.round(wb / weight) : 0
+  const beamIntensity = lit ? Math.max(weight / members.length, peak * 0.6) : 0
+
+  return {
+    isUniform,
+    displayText,
+    avgR,
+    avgG,
+    avgB,
+    avgW,
+    avgA,
+    avgUv,
+    combinedCss,
+    beamR,
+    beamG,
+    beamB,
+    beamIntensity,
+    members,
+  }
+}
+
+/**
  * Hook to get aggregated colour values from all group members.
  */
 export function useGroupColourValues(
@@ -191,127 +301,31 @@ export function useGroupColourValues(
   )
 
   const getSnapshot = useCallback((): GroupColourValueResult => {
-    const members = property.memberColourChannels.map((m) => ({
-      fixtureKey: m.fixtureKey,
-      r: getChannelValue(m.redChannel),
-      g: getChannelValue(m.greenChannel),
-      b: getChannelValue(m.blueChannel),
-      w: m.whiteChannel ? getChannelValue(m.whiteChannel) : undefined,
-      a: m.amberChannel ? getChannelValue(m.amberChannel) : undefined,
-      uv: m.uvChannel ? getChannelValue(m.uvChannel) : undefined,
-    }))
+    const result = computeGroupColourValues(property)
 
-    if (members.length === 0) {
-      return {
-        isUniform: true,
-        displayText: 'No members',
-        avgR: 0,
-        avgG: 0,
-        avgB: 0,
-        combinedCss: 'rgb(0, 0, 0)',
-        beamR: 0,
-        beamG: 0,
-        beamB: 0,
-        beamIntensity: 0,
-        members: [],
-      }
-    }
-
-    // Calculate averages for RGB
-    const avgR = Math.round(members.reduce((sum, m) => sum + m.r, 0) / members.length)
-    const avgG = Math.round(members.reduce((sum, m) => sum + m.g, 0) / members.length)
-    const avgB = Math.round(members.reduce((sum, m) => sum + m.b, 0) / members.length)
-
-    // Calculate averages for extended channels (only if any member has them)
-    const hasWhite = members.some((m) => m.w !== undefined)
-    const hasAmber = members.some((m) => m.a !== undefined)
-    const hasUv = members.some((m) => m.uv !== undefined)
-
-    const avgW = hasWhite
-      ? Math.round(members.reduce((sum, m) => sum + (m.w ?? 0), 0) / members.length)
-      : undefined
-    const avgA = hasAmber
-      ? Math.round(members.reduce((sum, m) => sum + (m.a ?? 0), 0) / members.length)
-      : undefined
-    const avgUv = hasUv
-      ? Math.round(members.reduce((sum, m) => sum + (m.uv ?? 0), 0) / members.length)
-      : undefined
-
-    // Check if all values are the same (including extended channels)
-    const isUniform = members.every(
-      (m) =>
-        m.r === members[0].r &&
-        m.g === members[0].g &&
-        m.b === members[0].b &&
-        m.w === members[0].w &&
-        m.a === members[0].a &&
-        m.uv === members[0].uv
-    )
-
-    const displayText = isUniform ? `R:${avgR} G:${avgG} B:${avgB}` : 'Mixed'
-    const combinedCss = `rgb(${avgR}, ${avgG}, ${avgB})`
-
-    // Aggregate beam: intensity-weight each pixel's hue by its own brightness
-    // (iₖ = max(r,g,b,w)/255) so bright pixels dominate and dim ones don't drag
-    // toward grey. Level blends mean with peak so a sparse-but-bright bar still
-    // throws a visible beam.
-    let weight = 0
-    let peak = 0
-    let wr = 0
-    let wg = 0
-    let wb = 0
-    for (const m of members) {
-      const ik = Math.max(m.r, m.g, m.b, m.w ?? 0) / 255
-      weight += ik
-      if (ik > peak) peak = ik
-      wr += ik * m.r
-      wg += ik * m.g
-      wb += ik * m.b
-    }
-    const lit = weight > 1e-4
-    const beamR = lit ? Math.round(wr / weight) : 0
-    const beamG = lit ? Math.round(wg / weight) : 0
-    const beamB = lit ? Math.round(wb / weight) : 0
-    const beamIntensity = lit ? Math.max(weight / members.length, peak * 0.6) : 0
-
-    // Check if cached value is still valid
+    // Return the cached object identity when nothing observable changed, so
+    // useSyncExternalStore doesn't re-render on equal-but-fresh snapshots.
     const cached = cachedRef.current
     if (
       cached &&
-      cached.avgR === avgR &&
-      cached.avgG === avgG &&
-      cached.avgB === avgB &&
-      cached.avgW === avgW &&
-      cached.avgA === avgA &&
-      cached.avgUv === avgUv &&
-      cached.isUniform === isUniform &&
-      cached.beamR === beamR &&
-      cached.beamG === beamG &&
-      cached.beamB === beamB &&
-      cached.beamIntensity === beamIntensity
+      cached.avgR === result.avgR &&
+      cached.avgG === result.avgG &&
+      cached.avgB === result.avgB &&
+      cached.avgW === result.avgW &&
+      cached.avgA === result.avgA &&
+      cached.avgUv === result.avgUv &&
+      cached.isUniform === result.isUniform &&
+      cached.beamR === result.beamR &&
+      cached.beamG === result.beamG &&
+      cached.beamB === result.beamB &&
+      cached.beamIntensity === result.beamIntensity
     ) {
       return cached
     }
 
-    const result: GroupColourValueResult = {
-      isUniform,
-      displayText,
-      avgR,
-      avgG,
-      avgB,
-      avgW,
-      avgA,
-      avgUv,
-      combinedCss,
-      beamR,
-      beamG,
-      beamB,
-      beamIntensity,
-      members,
-    }
     cachedRef.current = result
     return result
-  }, [property.memberColourChannels])
+  }, [property])
 
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
