@@ -2,9 +2,11 @@ import { BODY_LENS_COLOR, housingColor } from './palette'
 import { PixelStrip } from './PixelStrip'
 import type { FixtureBodyProps } from './types'
 
-const STRIP_LEN = 0.6
-const STRIP_DEPTH = 0.06
-const STRIP_HEIGHT = 0.05
+// Design fallback dimensions when the backend sends no real size. Exported so
+// the wash director can lay out per-pixel origins identically to PixelStrip.
+export const STRIP_LEN = 0.6
+export const STRIP_DEPTH = 0.06
+export const STRIP_HEIGHT = 0.05
 
 // Strip body sized per-axis from the fixture's real dimensions (lengthM is the
 // long horizontal axis → local X). A multi-element strip renders one lens

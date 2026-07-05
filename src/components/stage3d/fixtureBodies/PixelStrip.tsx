@@ -5,9 +5,11 @@ import {
   Color,
   ConeGeometry,
   DoubleSide,
+  MathUtils,
   MeshBasicMaterial,
   ShaderMaterial,
 } from 'three'
+import { HAZE_LEVEL, WASH_ANGLE_DEG } from '../washConfig'
 import { BODY_LENS_COLOR, housingColor } from './palette'
 import type { PixelColorWriter } from './types'
 
@@ -21,17 +23,27 @@ interface PixelStripProps {
   colorsRef: React.RefObject<PixelColorWriter | null>
 }
 
-// Each head casts a small, soft, downward glow near the fixture — subtle (not a
-// full beam), and coloured per-head so the bar's per-pixel state reads at a
-// glance. Short throw + low opacity keeps a row of bars from overloading the view.
+// Each head casts a soft, downward wash volume below the fixture — coloured
+// per-head so the bar's per-pixel state reads at a glance, and scaled by the
+// global haze level (uHaze) so the mid-air throw only shows when the room is
+// hazy. Kept subtler than a beam cone; the per-pixel floor/region pools carry
+// the on-surface effect regardless of haze.
 //
 // Tunables — adjust freely to taste. NB: keep this a ConeGeometry — an
 // open-ended frustum here triggered a WebKit transparency artifact (black quad).
-const GLOW_LEN = 0.1 // how far the glow reaches below the bar (m)
-const GLOW_RADIUS = 0.1 // base radius; larger = wider/blunter cone (less of a point)
-const GLOW_MAX_OPACITY = 0.38 // peak additive opacity at full intensity
-const GLOW_FADE_POWER = 2 // length falloff; higher concentrates light at the lens, fading to black sooner
+const GLOW_LEN = 0.1 // how far the wash reaches below the bar (m)
+// Glow cone radius derived from the shared wash angle (radius = len × tan(½angle))
+// so the mid-air volume and the floor pool are the same cone shape. Capped so a
+// very wide angle can't produce an absurdly fat cone.
+const GLOW_RADIUS = Math.min(
+  GLOW_LEN * Math.tan(MathUtils.degToRad(WASH_ANGLE_DEG / 2)),
+  GLOW_LEN * 2,
+)
+const GLOW_MAX_OPACITY = 0.32 // peak additive opacity at full intensity (before haze)
+const GLOW_FADE_POWER = 1.4 // length falloff; higher concentrates light at the lens, fading to black sooner
 const GLOW_EDGE_SOFTNESS = 0.6 // silhouette fade exponent; lower = softer edges
+// How much subtler the mid-air wash is than a beam cone at the same haze.
+const WASH_SUBTLETY = 0.55
 
 // Soft additive glow: silhouette fade (abs(N·V)) × length fade (bright at the
 // lens apex, fading down). Colour/opacity are per-head uniforms; the two fade
@@ -51,6 +63,7 @@ const GLOW_VERTEX = /* glsl */ `
 const GLOW_FRAGMENT = /* glsl */ `
   uniform vec3 uColor;
   uniform float uOpacity;
+  uniform float uHaze;
   varying vec3 vViewNormal;
   varying vec3 vViewPos;
   varying float vAlong;
@@ -61,14 +74,22 @@ const GLOW_FRAGMENT = /* glsl */ `
     // (base, uv.y≈0). Clamp the base: pow() of a negative (out-of-range uv) is
     // NaN, which WebKit renders as a black quad under additive blending.
     float fade = pow(clamp(vAlong, 0.0, 1.0), ${GLOW_FADE_POWER.toFixed(2)});
-    float a = uOpacity * radial * fade;
+    // uHaze gates the mid-air wash on atmosphere (0 ⇒ no airborne throw).
+    float a = uOpacity * radial * fade * uHaze;
     gl_FragColor = vec4(uColor, a);
   }
 `
 
+// Mid-air wash strength tracks the global haze, kept subtler than a beam.
+const GLOW_HAZE = HAZE_LEVEL * WASH_SUBTLETY
+
 function makeGlowMaterial(): ShaderMaterial {
   return new ShaderMaterial({
-    uniforms: { uColor: { value: new Color('#ffffff') }, uOpacity: { value: 0 } },
+    uniforms: {
+      uColor: { value: new Color('#ffffff') },
+      uOpacity: { value: 0 },
+      uHaze: { value: GLOW_HAZE },
+    },
     vertexShader: GLOW_VERTEX,
     fragmentShader: GLOW_FRAGMENT,
     transparent: true,
@@ -104,7 +125,7 @@ export function PixelStrip({
     () => Array.from({ length: pixelCount }, makeGlowMaterial),
     [pixelCount],
   )
-  const glowGeo = useMemo(() => new ConeGeometry(GLOW_RADIUS, GLOW_LEN, 14, 1, true), [])
+  const glowGeo = useMemo(() => new ConeGeometry(GLOW_RADIUS, GLOW_LEN, 18, 1, true), [])
 
   useEffect(() => () => glowMats.forEach((m) => m.dispose()), [glowMats])
   useEffect(() => () => glowGeo.dispose(), [glowGeo])

@@ -18,10 +18,16 @@ import {
 import type { StageRegionDto } from '../../api/stageRegionApi'
 import { toThree } from '../../lib/stageCoords'
 import { NO_RAYCAST } from './raycast'
+import { HAZE_LEVEL } from './washConfig'
 
 export const MAX_BEAM_REGIONS = 16
 export const BEAM_LENGTH = 8
 export const COOKIE_LIFT_M = 0.001
+
+// Per-fixture cap on independently-washed pixels. A strip slot owns a
+// contiguous block of this many wash-pool instances (floor + per region);
+// fixtures with fewer pixels leave the tail hidden, more pixels are clamped.
+export const MAX_WASH_PIXELS = 16
 
 const REGION_UNIFORMS_GLSL = /* glsl */ `
   uniform int uNumRegions;
@@ -95,6 +101,7 @@ const CONE_VERTEX_SHADER = /* glsl */ `
 const CONE_FRAGMENT_SHADER = /* glsl */ `
   #define MAX_REGIONS ${MAX_BEAM_REGIONS}
   uniform float uFloorY;
+  uniform float uHaze;
   ${REGION_UNIFORMS_GLSL}
 
   varying vec3 vViewNormal;
@@ -126,7 +133,9 @@ const CONE_FRAGMENT_SHADER = /* glsl */ `
     float ndotv = abs(dot(normalize(vViewNormal), V));
     float radial = pow(ndotv, 0.7);
     float lengthFade = mix(0.18, 0.9, vAlong);
-    float a = vOpacity * radial * lengthFade;
+    // uHaze scales the mid-air beam volume (atmosphere). 1.0 preserves the
+    // pre-haze look; 0.0 leaves only the surface pools (a hazeless room).
+    float a = vOpacity * radial * lengthFade * uHaze;
     gl_FragColor = vec4(vColor, a);
   }
 `
@@ -174,6 +183,7 @@ const POOL_VERTEX_SHADER = /* glsl */ `
 const POOL_FRAGMENT_SHADER = /* glsl */ `
   #define MAX_REGIONS ${MAX_BEAM_REGIONS}
   uniform float uMaxDist;
+  uniform float uCoreBoost;
   ${REGION_UNIFORMS_GLSL}
 
   varying vec3 vWorldPos;
@@ -207,8 +217,10 @@ const POOL_FRAGMENT_SHADER = /* glsl */ `
 
     float distFade = mix(1.0, 0.55, clamp(fragDist / uMaxDist, 0.0, 1.0));
 
+    // Core white-hot boost for a beam's hotspot. Disabled (uCoreBoost=0) for
+    // wash pools so overlapping per-pixel colours stay coloured, not white.
     float core = pow(radial, 4.0);
-    vec3 finalColor = mix(vColor, vec3(1.0), core * 0.5);
+    vec3 finalColor = mix(vColor, vec3(1.0), core * uCoreBoost);
 
     float a = vOpacity * radial * distFade;
     gl_FragColor = vec4(finalColor, a);
@@ -234,6 +246,7 @@ function makeConeMaterial(): ShaderMaterial {
   return new ShaderMaterial({
     uniforms: {
       uFloorY: { value: 0.0 },
+      uHaze: { value: HAZE_LEVEL },
       ...makeRegionUniforms(),
     },
     vertexShader: CONE_VERTEX_SHADER,
@@ -249,6 +262,7 @@ function makePoolMaterial(): ShaderMaterial {
   return new ShaderMaterial({
     uniforms: {
       uMaxDist: { value: BEAM_LENGTH },
+      uCoreBoost: { value: 0.5 },
       ...makeRegionUniforms(),
     },
     vertexShader: POOL_VERTEX_SHADER,
@@ -328,9 +342,48 @@ export interface EmittersHandle {
     cosHalfAngle: number,
   ): void
 
+  // — per-pixel wash pools (strip/bar fixtures) —————————————————————
+  // A strip slot owns a block of MAX_WASH_PIXELS pool instances on the floor
+  // and (× regionCount) on region tops. Each pixel is independent: its own
+  // origin, direction, colour, opacity and footprint matrix.
+  writeWashFloorMatrix(
+    slot: number,
+    pixelIdx: number,
+    visible: boolean,
+    cx: number,
+    cz: number,
+    side: number,
+  ): void
+  writeWashFloorAttrs(
+    slot: number,
+    pixelIdx: number,
+    origin: Vector3,
+    dir: Vector3,
+    color: Color,
+    opacity: number,
+    cosHalfAngle: number,
+  ): void
+  writeWashRegionVisibility(
+    slot: number,
+    pixelIdx: number,
+    regionIdx: number,
+    visible: boolean,
+  ): void
+  writeWashRegionAttrs(
+    slot: number,
+    pixelIdx: number,
+    origin: Vector3,
+    dir: Vector3,
+    color: Color,
+    opacity: number,
+    cosHalfAngle: number,
+  ): void
+
   // Zero-scale all of a slot's matrices + clear all its region visibilities.
   // Called when a fixture is functionally off.
   hideSlot(slot: number): void
+  // Same, for a strip slot's whole wash block (all MAX_WASH_PIXELS pixels).
+  hideWashSlot(slot: number): void
 }
 
 const EmittersContext = createContext<EmittersHandle | null>(null)
@@ -355,14 +408,22 @@ export function StageEmitters({ fixtureCount, regionGeometry, children }: StageE
 
   const coneMaterial = useMemo(makeConeMaterial, [])
   const poolMaterial = useMemo(makePoolMaterial, [])
+  // Wash pools reuse the pool shader but drop the white hotspot boost so a bar's
+  // overlapping per-pixel colours blend as colour, not white.
+  const washPoolMaterial = useMemo(() => {
+    const m = makePoolMaterial()
+    m.uniforms.uCoreBoost.value = 0
+    return m
+  }, [])
   useEffect(() => () => coneMaterial.dispose(), [coneMaterial])
   useEffect(() => () => poolMaterial.dispose(), [poolMaterial])
+  useEffect(() => () => washPoolMaterial.dispose(), [washPoolMaterial])
 
   // Shared region OBB uniforms — sync into both materials whenever the
   // region layout changes. Pre-bake yaw into a cos/sin pair so the shader
   // skips per-fragment trig.
   useEffect(() => {
-    for (const mat of [coneMaterial, poolMaterial]) {
+    for (const mat of [coneMaterial, poolMaterial, washPoolMaterial]) {
       const u = mat.uniforms
       const centers = u.uRegionCenter.value as Vector3[]
       const halves = u.uRegionHalf.value as Vector3[]
@@ -381,8 +442,16 @@ export function StageEmitters({ fixtureCount, regionGeometry, children }: StageE
   // (fixtureCount × regionCount). Rebuilds when either count changes; in
   // practice this only happens when patches or regions are added/removed.
   const built = useMemo(
-    () => buildEmitters(fixtureCount, regionCount, regionGeometry, coneMaterial, poolMaterial),
-    [fixtureCount, regionCount, regionGeometry, coneMaterial, poolMaterial],
+    () =>
+      buildEmitters(
+        fixtureCount,
+        regionCount,
+        regionGeometry,
+        coneMaterial,
+        poolMaterial,
+        washPoolMaterial,
+      ),
+    [fixtureCount, regionCount, regionGeometry, coneMaterial, poolMaterial, washPoolMaterial],
   )
 
   useEffect(
@@ -390,9 +459,13 @@ export function StageEmitters({ fixtureCount, regionGeometry, children }: StageE
       built.coneMesh.dispose()
       built.floorMesh.dispose()
       built.regionMesh.dispose()
+      built.washFloorMesh.dispose()
+      built.washRegionMesh.dispose()
       built.coneMesh.geometry.dispose()
       built.floorMesh.geometry.dispose()
       built.regionMesh.geometry.dispose()
+      built.washFloorMesh.geometry.dispose()
+      built.washRegionMesh.geometry.dispose()
     },
     [built],
   )
@@ -424,6 +497,20 @@ export function StageEmitters({ fixtureCount, regionGeometry, children }: StageE
     m.regionOpacity.needsUpdate = true
     m.regionCosHalfAngle.needsUpdate = true
     m.regionVisible.needsUpdate = true
+
+    m.washFloorMesh.instanceMatrix.needsUpdate = true
+    m.washFloorOrigin.needsUpdate = true
+    m.washFloorDir.needsUpdate = true
+    m.washFloorColor.needsUpdate = true
+    m.washFloorOpacity.needsUpdate = true
+    m.washFloorCosHalfAngle.needsUpdate = true
+
+    m.washRegionOrigin.needsUpdate = true
+    m.washRegionDir.needsUpdate = true
+    m.washRegionColor.needsUpdate = true
+    m.washRegionOpacity.needsUpdate = true
+    m.washRegionCosHalfAngle.needsUpdate = true
+    m.washRegionVisible.needsUpdate = true
   }, 1)
 
   return (
@@ -431,6 +518,8 @@ export function StageEmitters({ fixtureCount, regionGeometry, children }: StageE
       <primitive object={built.coneMesh} raycast={NO_RAYCAST} />
       <primitive object={built.floorMesh} raycast={NO_RAYCAST} />
       <primitive object={built.regionMesh} raycast={NO_RAYCAST} />
+      <primitive object={built.washFloorMesh} raycast={NO_RAYCAST} />
+      <primitive object={built.washRegionMesh} raycast={NO_RAYCAST} />
       <EmittersContext.Provider value={handle}>{children}</EmittersContext.Provider>
     </>
   )
@@ -462,6 +551,27 @@ interface BuiltEmitters {
   regionCosHalfAngle: InstancedBufferAttribute
   // Per-(fixture, region) visibility — divisor=1.
   regionVisible: InstancedBufferAttribute
+
+  // Wash floor pools — one instance per (fixture, pixel); every attribute is
+  // per-instance (divisor=1) since each pixel washes independently. Hidden via
+  // a zero-scale matrix (aVisible is a constant 1 here, like floorMesh).
+  washFloorMesh: InstancedMesh
+  washFloorOrigin: InstancedBufferAttribute
+  washFloorDir: InstancedBufferAttribute
+  washFloorColor: InstancedBufferAttribute
+  washFloorOpacity: InstancedBufferAttribute
+  washFloorCosHalfAngle: InstancedBufferAttribute
+
+  // Wash region cookies — one instance per (fixture, pixel, region). The
+  // per-pixel attrs use divisor=regionCount (each pixel's value repeats across
+  // its region instances); visibility is per-instance (divisor=1).
+  washRegionMesh: InstancedMesh
+  washRegionOrigin: InstancedBufferAttribute
+  washRegionDir: InstancedBufferAttribute
+  washRegionColor: InstancedBufferAttribute
+  washRegionOpacity: InstancedBufferAttribute
+  washRegionCosHalfAngle: InstancedBufferAttribute
+  washRegionVisible: InstancedBufferAttribute
 }
 
 function buildEmitters(
@@ -470,6 +580,7 @@ function buildEmitters(
   regionGeometry: ReadonlyArray<RegionGeometry>,
   coneMaterial: ShaderMaterial,
   poolMaterial: ShaderMaterial,
+  washPoolMaterial: ShaderMaterial,
 ): BuiltEmitters {
   // Buffer capacity must be ≥1 even when nothing draws yet — Three.js' WebGL
   // backend can't bind zero-sized instance buffers. Draw count comes from
@@ -560,6 +671,68 @@ function buildEmitters(
   }
   regionMesh.instanceMatrix.needsUpdate = true
 
+  // — wash pools (per-pixel strip footprint) —————————————————————————
+  const washFloorCap = fixCap * MAX_WASH_PIXELS
+  const washRegionCap = washFloorCap * regDivisor
+
+  const washFloorGeo = new PlaneGeometry(1, 1)
+  washFloorGeo.rotateX(-Math.PI / 2)
+  const washFloorOrigin = vec3InstAttr(washFloorCap)
+  const washFloorDir = vec3InstAttr(washFloorCap)
+  const washFloorColor = vec3InstAttr(washFloorCap)
+  const washFloorOpacity = floatInstAttr(washFloorCap)
+  const washFloorCosHalfAngle = floatInstAttr(washFloorCap)
+  const washFloorVisibleAttr = floatInstAttr(washFloorCap)
+  for (let i = 0; i < washFloorCap; i++) washFloorVisibleAttr.setX(i, 1)
+  washFloorGeo.setAttribute('aBeamOrigin', washFloorOrigin)
+  washFloorGeo.setAttribute('aBeamDir', washFloorDir)
+  washFloorGeo.setAttribute('aColor', washFloorColor)
+  washFloorGeo.setAttribute('aOpacity', washFloorOpacity)
+  washFloorGeo.setAttribute('aCosHalfAngle', washFloorCosHalfAngle)
+  washFloorGeo.setAttribute('aVisible', washFloorVisibleAttr)
+
+  const washFloorMesh = new InstancedMesh(washFloorGeo, washPoolMaterial, washFloorCap)
+  washFloorMesh.frustumCulled = false
+  washFloorMesh.count = fixtureCount * MAX_WASH_PIXELS
+  // Start hidden — unwritten instances would otherwise draw at identity scale.
+  for (let i = 0; i < washFloorCap; i++) washFloorMesh.setMatrixAt(i, ZERO_MATRIX)
+  washFloorMesh.instanceMatrix.needsUpdate = true
+
+  const washRegionGeo = new PlaneGeometry(1, 1)
+  washRegionGeo.rotateX(-Math.PI / 2)
+  const washRegionOrigin = vec3InstAttr(washFloorCap)
+  washRegionOrigin.meshPerAttribute = regDivisor
+  const washRegionDir = vec3InstAttr(washFloorCap)
+  washRegionDir.meshPerAttribute = regDivisor
+  const washRegionColor = vec3InstAttr(washFloorCap)
+  washRegionColor.meshPerAttribute = regDivisor
+  const washRegionOpacity = floatInstAttr(washFloorCap)
+  washRegionOpacity.meshPerAttribute = regDivisor
+  const washRegionCosHalfAngle = floatInstAttr(washFloorCap)
+  washRegionCosHalfAngle.meshPerAttribute = regDivisor
+  const washRegionVisible = floatInstAttr(washRegionCap)
+  washRegionGeo.setAttribute('aBeamOrigin', washRegionOrigin)
+  washRegionGeo.setAttribute('aBeamDir', washRegionDir)
+  washRegionGeo.setAttribute('aColor', washRegionColor)
+  washRegionGeo.setAttribute('aOpacity', washRegionOpacity)
+  washRegionGeo.setAttribute('aCosHalfAngle', washRegionCosHalfAngle)
+  washRegionGeo.setAttribute('aVisible', washRegionVisible)
+
+  const washRegionMesh = new InstancedMesh(washRegionGeo, washPoolMaterial, washRegionCap)
+  washRegionMesh.frustumCulled = false
+  washRegionMesh.count = fixtureCount * MAX_WASH_PIXELS * regionCount
+  // Bake region placement into every (fixture, pixel) block; visibility
+  // (default 0) gates which actually draw, like the beam region cookies.
+  for (let slot = 0; slot < fixtureCount; slot++) {
+    for (let p = 0; p < MAX_WASH_PIXELS; p++) {
+      const block = (slot * MAX_WASH_PIXELS + p) * regionCount
+      for (let r = 0; r < regionCount; r++) {
+        washRegionMesh.setMatrixAt(block + r, regionMats[r])
+      }
+    }
+  }
+  washRegionMesh.instanceMatrix.needsUpdate = true
+
   return {
     fixtureCount,
     regionCount,
@@ -580,6 +753,19 @@ function buildEmitters(
     regionOpacity,
     regionCosHalfAngle,
     regionVisible,
+    washFloorMesh,
+    washFloorOrigin,
+    washFloorDir,
+    washFloorColor,
+    washFloorOpacity,
+    washFloorCosHalfAngle,
+    washRegionMesh,
+    washRegionOrigin,
+    washRegionDir,
+    washRegionColor,
+    washRegionOpacity,
+    washRegionCosHalfAngle,
+    washRegionVisible,
   }
 }
 
@@ -642,11 +828,53 @@ function makeHandle(b: BuiltEmitters): EmittersHandle {
       b.regionCosHalfAngle.setX(slot, cosHalfAngle)
     },
 
+    writeWashFloorMatrix(slot, pixelIdx, visible, cx, cz, side) {
+      const i = slot * MAX_WASH_PIXELS + pixelIdx
+      if (!visible) {
+        b.washFloorMesh.setMatrixAt(i, ZERO_MATRIX)
+        return
+      }
+      FLOOR_POS.set(cx, COOKIE_LIFT_M, cz)
+      FLOOR_QUAT.identity()
+      FLOOR_SCALE.set(side, 1, side)
+      FLOOR_MAT.compose(FLOOR_POS, FLOOR_QUAT, FLOOR_SCALE)
+      b.washFloorMesh.setMatrixAt(i, FLOOR_MAT)
+    },
+    writeWashFloorAttrs(slot, pixelIdx, origin, dir, color, opacity, cosHalfAngle) {
+      const i = slot * MAX_WASH_PIXELS + pixelIdx
+      b.washFloorOrigin.setXYZ(i, origin.x, origin.y, origin.z)
+      b.washFloorDir.setXYZ(i, dir.x, dir.y, dir.z)
+      b.washFloorColor.setXYZ(i, color.r, color.g, color.b)
+      b.washFloorOpacity.setX(i, opacity)
+      b.washFloorCosHalfAngle.setX(i, cosHalfAngle)
+    },
+    writeWashRegionVisibility(slot, pixelIdx, regionIdx, visible) {
+      const pix = slot * MAX_WASH_PIXELS + pixelIdx
+      b.washRegionVisible.setX(pix * b.regionCount + regionIdx, visible ? 1 : 0)
+    },
+    writeWashRegionAttrs(slot, pixelIdx, origin, dir, color, opacity, cosHalfAngle) {
+      const i = slot * MAX_WASH_PIXELS + pixelIdx
+      b.washRegionOrigin.setXYZ(i, origin.x, origin.y, origin.z)
+      b.washRegionDir.setXYZ(i, dir.x, dir.y, dir.z)
+      b.washRegionColor.setXYZ(i, color.r, color.g, color.b)
+      b.washRegionOpacity.setX(i, opacity)
+      b.washRegionCosHalfAngle.setX(i, cosHalfAngle)
+    },
+
     hideSlot(slot) {
       b.coneMesh.setMatrixAt(slot, ZERO_MATRIX)
       b.floorMesh.setMatrixAt(slot, ZERO_MATRIX)
       for (let r = 0; r < b.regionCount; r++) {
         b.regionVisible.setX(slot * b.regionCount + r, 0)
+      }
+    },
+    hideWashSlot(slot) {
+      for (let p = 0; p < MAX_WASH_PIXELS; p++) {
+        const pix = slot * MAX_WASH_PIXELS + p
+        b.washFloorMesh.setMatrixAt(pix, ZERO_MATRIX)
+        for (let r = 0; r < b.regionCount; r++) {
+          b.washRegionVisible.setX(pix * b.regionCount + r, 0)
+        }
       }
     },
   }

@@ -48,14 +48,24 @@ import {
   panTiltToDir,
   worldPositionFor,
 } from '../../lib/stageCoords'
-import { BEAM_LENGTH, useEmitters, type EmittersHandle, type RegionGeometry } from './StageEmitters'
+import {
+  BEAM_LENGTH,
+  MAX_WASH_PIXELS,
+  useEmitters,
+  type EmittersHandle,
+  type RegionGeometry,
+} from './StageEmitters'
 import { FixtureBody } from './fixtureBodies'
+import { STRIP_HEIGHT, STRIP_LEN } from './fixtureBodies/StripBody'
 import type { FixtureBodyDims, PixelColorWriter } from './fixtureBodies/types'
+import { WASH_ANGLE_DEG, WASH_OPACITY } from './washConfig'
 
 const DEFAULT_BEAM_DEG = 30
 const COLOR_TMP = new Color()
 const PIXEL_COLOR = new Color()
+const WASH_COLOR = new Color()
 const UNIT_Y = new Vector3(0, 1, 0)
+const LOCAL_DOWN = new Vector3(0, -1, 0)
 const SCRATCH_DIR = new Vector3()
 const SCRATCH_NEG_DIR = new Vector3()
 const SCRATCH_ORIGIN = new Vector3()
@@ -64,6 +74,9 @@ const SCRATCH_QUAT_EULER = new Euler()
 const SCRATCH_CONE_POS = new Vector3()
 const SCRATCH_CONE_SCALE = new Vector3()
 const SCRATCH_CONE_MAT = new Matrix4()
+const SCRATCH_WASH_DIR = new Vector3()
+const SCRATCH_WASH_QUAT = new Quaternion()
+const SCRATCH_PIXEL_POS = new Vector3()
 
 // Slack on the cone half-angle so cookies fade in before the shader's
 // cosAngle test would clip them — masks the boundary even on a wide spot
@@ -72,6 +85,26 @@ const REGION_CULL_SLACK_RAD = MathUtils.degToRad(3)
 
 // ~1% intensity, below one DMX step at the pool's 0.55x opacity scale.
 const LIGHT_OFF_OPACITY = 0.005
+
+// Wash cone trig derived from the (tuneable) full wash angle in degrees.
+interface WashGeom {
+  cosHalf: number
+  cosCull: number
+  sinCull: number
+  floorSide: number
+}
+function washGeomFor(angleDeg: number): WashGeom {
+  const half = MathUtils.degToRad(angleDeg / 2)
+  const cull = half + REGION_CULL_SLACK_RAD
+  return {
+    cosHalf: Math.cos(half),
+    cosCull: Math.cos(cull),
+    sinCull: Math.sin(cull),
+    floorSide: 2 * BEAM_LENGTH * Math.sin(cull),
+  }
+}
+// Wash angle is a fixed code constant, so the cone trig is computed once.
+const WASH_GEOM = washGeomFor(WASH_ANGLE_DEG)
 
 interface FixtureModelProps {
   patch: FixturePatch
@@ -116,6 +149,27 @@ export function FixtureModel({
   const groupColour = useMemo(() => findGroupColourSource(fixture), [fixture])
   const pixelCount = groupColour ? groupColour.memberColourChannels.length : 0
   const pixelColorsRef = useRef<PixelColorWriter | null>(null)
+  const kind = resolveFixtureKind(patch.kindOverride, fixtureType?.kind)
+  // Only the STRIP body lays pixels out linearly (PixelStrip); that's where a
+  // per-pixel wash makes sense.
+  const isPixelStrip = kind === 'STRIP' && pixelCount > 1
+
+  // Per-pixel colour+intensity snapshot: MultiPixelColourSync writes it on every
+  // channel change; useWashDirector reads it each frame (same event-driven-colour
+  // / per-frame-geometry split as the beam path's colorStateRef). Cached in the
+  // render body so it's ready before the child colour-sync's mount effect runs.
+  const pixelWashStateRef = useRef<PixelWashState | null>(null)
+  if (isPixelStrip) {
+    if (pixelWashStateRef.current?.count !== pixelCount) {
+      pixelWashStateRef.current = {
+        count: pixelCount,
+        colors: new Float32Array(pixelCount * 3),
+        intensities: new Float32Array(pixelCount),
+      }
+    }
+  } else if (pixelWashStateRef.current) {
+    pixelWashStateRef.current = null
+  }
   const dimmerProp = useMemo(
     () => findDimmerProperty(fixture?.properties),
     [fixture?.properties],
@@ -213,6 +267,32 @@ export function FixtureModel({
     colorStateRef,
   })
 
+  // Wash-slot zeroing — mirror the beam path. Vacate the wash block when this
+  // fixture isn't a per-pixel strip (slots persist across renders), and on
+  // unmount before the slot can be reused by a different fixture.
+  useEffect(() => {
+    if (!emitters || isPixelStrip) return
+    emitters.hideWashSlot(slot)
+  }, [emitters, isPixelStrip, slot])
+  useEffect(() => {
+    return () => {
+      if (emitters) emitters.hideWashSlot(slot)
+    }
+  }, [emitters, slot])
+
+  useWashDirector({
+    enabled: isPixelStrip,
+    pixelCount,
+    lengthM: bodyDims?.lengthM ?? STRIP_LEN,
+    heightM: bodyDims?.heightM ?? STRIP_HEIGHT,
+    headRef,
+    slot,
+    emitters,
+    regionGeometry,
+    colorStateRef,
+    pixelWashStateRef,
+  })
+
   return (
     <group
       ref={groupRef}
@@ -222,7 +302,7 @@ export function FixtureModel({
       onPointerOut={editMode ? () => setHovered(false) : undefined}
     >
       <FixtureBody
-        kind={resolveFixtureKind(patch.kindOverride, fixtureType?.kind)}
+        kind={kind}
         active={active}
         headRef={headRef}
         lensRef={lensRef}
@@ -248,6 +328,7 @@ export function FixtureModel({
         lensRef={lensRef}
         colorStateRef={colorStateRef}
         pixelColorsRef={pixelColorsRef}
+        pixelWashStateRef={pixelWashStateRef}
       />
     </group>
   )
@@ -257,6 +338,14 @@ interface ColorState {
   color: Color
   coneOpacity: number
   poolOpacity: number
+}
+
+// Per-pixel colour (0..1 RGB, packed) + effective intensity (0..1), written by
+// MultiPixelColourSync and read each frame by useWashDirector.
+interface PixelWashState {
+  count: number
+  colors: Float32Array
+  intensities: Float32Array
 }
 
 interface BeamDirectorOpts {
@@ -506,6 +595,7 @@ interface ColourSyncBaseProps {
   lensRef: React.RefObject<Mesh | null>
   colorStateRef: React.RefObject<ColorState>
   pixelColorsRef: React.RefObject<PixelColorWriter | null>
+  pixelWashStateRef?: React.RefObject<PixelWashState | null>
 }
 
 function ColourSync({
@@ -662,6 +752,7 @@ function MultiPixelColourSync({
   dimmerProp,
   colorStateRef,
   pixelColorsRef,
+  pixelWashStateRef,
 }: ColourSyncBaseProps & { groupColour: GroupColourPropertyDescriptor }) {
   const channels = useMemo(() => {
     const cs: ChannelRef[] = []
@@ -679,16 +770,27 @@ function MultiPixelColourSync({
     const group = computeGroupColourValues(groupColour)
     const dimmerFactor = liveDimmerFactor(dimmerProp)
     const writer = pixelColorsRef.current
-    if (writer) {
-      // reset() first so a pixel that just dropped to zero is explicitly driven
-      // dark — imperative material writes get no React default.
-      writer.reset()
-      for (let i = 0; i < group.members.length; i++) {
-        const m = group.members[i]
-        const ci = colourFactor(m.r, m.g, m.b, m.w) * dimmerFactor
+    const wash = pixelWashStateRef?.current ?? null
+    // reset() first so a pixel that just dropped to zero is explicitly driven
+    // dark — imperative material writes get no React default.
+    if (writer) writer.reset()
+    for (let i = 0; i < group.members.length; i++) {
+      const m = group.members[i]
+      const ci = colourFactor(m.r, m.g, m.b, m.w) * dimmerFactor
+      if (writer) {
         PIXEL_COLOR.set(`rgb(${m.r}, ${m.g}, ${m.b})`)
         writer.setPixel(i, PIXEL_COLOR, ci)
       }
+      if (wash && i < wash.count) {
+        wash.colors[i * 3] = m.r / 255
+        wash.colors[i * 3 + 1] = m.g / 255
+        wash.colors[i * 3 + 2] = m.b / 255
+        wash.intensities[i] = ci
+      }
+    }
+    // Zero any wash pixels past the live member count (mode change shrinking it).
+    if (wash) {
+      for (let i = group.members.length; i < wash.count; i++) wash.intensities[i] = 0
     }
     // Aggregate beam state — only consumed when a multi-element fixture also
     // projects an emitter beam (beamShape ≠ NONE). Strips render per-head glows
@@ -700,4 +802,158 @@ function MultiPixelColourSync({
     state.poolOpacity = 0.55 * eff
   })
   return null
+}
+
+// — per-pixel wash director (strips/bars) ————————————————————————————
+//
+// A pixel bar has no tight beam — each pixel throws a wide soft wash. Every
+// frame this transforms each pixel to world space, derives the bar's wash
+// direction from its mounted orientation, and writes one floor pool (+ region
+// cookies) per pixel, coloured from the live per-pixel snapshot. Overlapping
+// per-pixel pools additively blend into a continuous coloured wash on the floor.
+
+interface WashDirectorOpts {
+  enabled: boolean
+  pixelCount: number
+  lengthM: number
+  heightM: number
+  headRef: React.RefObject<Group | null>
+  slot: number
+  emitters: EmittersHandle | null
+  regionGeometry: ReadonlyArray<RegionGeometry>
+  colorStateRef: React.RefObject<ColorState>
+  pixelWashStateRef: React.RefObject<PixelWashState | null>
+}
+
+function useWashDirector({
+  enabled,
+  pixelCount,
+  lengthM,
+  heightM,
+  headRef,
+  slot,
+  emitters,
+  regionGeometry,
+  colorStateRef,
+  pixelWashStateRef,
+}: WashDirectorOpts) {
+  useFrame(() => {
+    if (!enabled || !emitters) return
+    const wash = pixelWashStateRef.current
+    const agg = colorStateRef.current
+    // Whole-bar off (aggregate below threshold) → drop the block in one go.
+    if (!wash || !agg || agg.poolOpacity < LIGHT_OFF_OPACITY) {
+      emitters.hideWashSlot(slot)
+      return
+    }
+    const head = headRef.current
+    if (!head) return
+
+    // Wash direction = the bar's local down (its emitting face) in world space.
+    head.updateWorldMatrix(true, false)
+    head.getWorldQuaternion(SCRATCH_WASH_QUAT)
+    SCRATCH_WASH_DIR.copy(LOCAL_DOWN).applyQuaternion(SCRATCH_WASH_QUAT).normalize()
+    const dir = SCRATCH_WASH_DIR
+
+    const pitch = lengthM / pixelCount
+    const lensY = -heightM / 2 - 0.001
+    const live = Math.min(pixelCount, wash.count, MAX_WASH_PIXELS)
+    const regionCount = regionGeometry.length
+
+    for (let i = 0; i < live; i++) {
+      const intensity = wash.intensities[i]
+      if (intensity < LIGHT_OFF_OPACITY) {
+        emitters.writeWashFloorMatrix(slot, i, false, 0, 0, 0)
+        for (let r = 0; r < regionCount; r++) emitters.writeWashRegionVisibility(slot, i, r, false)
+        continue
+      }
+      const x = -lengthM / 2 + pitch * (i + 0.5)
+      SCRATCH_PIXEL_POS.set(x, lensY, 0).applyMatrix4(head.matrixWorld)
+      WASH_COLOR.setRGB(wash.colors[i * 3], wash.colors[i * 3 + 1], wash.colors[i * 3 + 2])
+      const opacity = WASH_OPACITY * intensity
+
+      updateWashFloorCookie(emitters, slot, i, SCRATCH_PIXEL_POS, dir, WASH_GEOM)
+      emitters.writeWashFloorAttrs(slot, i, SCRATCH_PIXEL_POS, dir, WASH_COLOR, opacity, WASH_GEOM.cosHalf)
+      writeWashRegionCookies(
+        emitters,
+        slot,
+        i,
+        SCRATCH_PIXEL_POS,
+        dir,
+        regionGeometry,
+        WASH_COLOR,
+        opacity,
+        WASH_GEOM,
+      )
+    }
+    // Hide the unused tail of this slot's block (fewer pixels than the cap).
+    for (let i = live; i < MAX_WASH_PIXELS; i++) {
+      emitters.writeWashFloorMatrix(slot, i, false, 0, 0, 0)
+      for (let r = 0; r < regionCount; r++) emitters.writeWashRegionVisibility(slot, i, r, false)
+    }
+  })
+}
+
+// Project one pixel's wash onto the floor (same maths as updateFloorCookie,
+// per-pixel). Hidden when the pixel faces up.
+function updateWashFloorCookie(
+  emitters: EmittersHandle,
+  slot: number,
+  pixelIdx: number,
+  origin: Vector3,
+  dir: Vector3,
+  geom: WashGeom,
+): void {
+  if (dir.y >= geom.sinCull) {
+    emitters.writeWashFloorMatrix(slot, pixelIdx, false, 0, 0, 0)
+    return
+  }
+  let cx = origin.x
+  let cz = origin.z
+  if (dir.y < -1e-3) {
+    const t = Math.min(-origin.y / dir.y, BEAM_LENGTH)
+    if (t > 0) {
+      cx = origin.x + t * dir.x
+      cz = origin.z + t * dir.z
+    }
+  }
+  emitters.writeWashFloorMatrix(slot, pixelIdx, true, cx, cz, geom.floorSide)
+}
+
+// Per-pixel region-top cookies: cull (conservative cone-vs-sphere, same as
+// cullRegionCookies) then write this pixel's wash attrs for the region block.
+function writeWashRegionCookies(
+  emitters: EmittersHandle,
+  slot: number,
+  pixelIdx: number,
+  origin: Vector3,
+  dir: Vector3,
+  regions: ReadonlyArray<RegionGeometry>,
+  color: Color,
+  opacity: number,
+  geom: WashGeom,
+): void {
+  for (let i = 0; i < regions.length; i++) {
+    const r = regions[i]
+    const dx = r.topCenter.x - origin.x
+    const dy = r.topCenter.y - origin.y
+    const dz = r.topCenter.z - origin.z
+    const dist2 = dx * dx + dy * dy + dz * dz
+    const reach = BEAM_LENGTH + r.topBoundingRadius
+    let visible: boolean
+    if (dist2 > reach * reach) {
+      visible = false
+    } else if (dist2 < r.topBoundingRadius * r.topBoundingRadius) {
+      visible = true
+    } else {
+      const dist = Math.sqrt(dist2)
+      const sinAR = r.topBoundingRadius / dist
+      const cosAR = Math.sqrt(Math.max(0, 1 - sinAR * sinAR))
+      const cosBoundary = geom.cosCull * cosAR - geom.sinCull * sinAR
+      const cosAngle = (dir.x * dx + dir.y * dy + dir.z * dz) / dist
+      visible = cosAngle >= cosBoundary
+    }
+    emitters.writeWashRegionVisibility(slot, pixelIdx, i, visible)
+  }
+  emitters.writeWashRegionAttrs(slot, pixelIdx, origin, dir, color, opacity, geom.cosHalf)
 }
