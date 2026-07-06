@@ -16,6 +16,7 @@ import ProjectOverview, { ProjectOverviewRedirect } from "./routes/ProjectOvervi
 import { PatchesRedirect } from "./routes/Patches";
 import { ProgramPage, ProgramRedirect } from "./routes/ProgramPage";
 import { RunPage, RunRedirect, LegacyShowRedirect } from "./routes/RunPage";
+import { PromptBooksPage, PromptBookViewerPage, PromptBookRedirect } from "./routes/PromptBookPage";
 import { SurfacesRedirect } from "./routes/Surfaces";
 import { DiagnosticsRedirect } from "./routes/Diagnostics";
 import { ProjectCloudSync, CloudSyncHubRedirect } from "./routes/CloudSync";
@@ -215,6 +216,18 @@ function App() {
         {
           path: "run",
           element: <RunRedirect />,
+        },
+        {
+          path: "projects/:projectId/prompt-books",
+          element: <PromptBooksPage />,
+        },
+        {
+          path: "projects/:projectId/prompt-books/:bookId",
+          element: <PromptBookViewerPage />,
+        },
+        {
+          path: "prompt-books",
+          element: <PromptBookRedirect />,
         },
         // Legacy redirects — all former Show routes land on /run
         {

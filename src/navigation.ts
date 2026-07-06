@@ -7,6 +7,7 @@ import {
   Layers,
   AudioWaveform,
   Bookmark,
+  BookOpenText,
   Box,
   Boxes,
   Clapperboard,
@@ -143,6 +144,15 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/run`,
     visibility: "active-only",
     pathMatch: "/run",
+    group: "live",
+  },
+  {
+    id: "prompt-books",
+    label: "Prompt Book",
+    icon: BookOpenText,
+    path: (p) => `/projects/${p}/prompt-books`,
+    visibility: "active-only",
+    pathMatch: "/prompt-books",
     group: "live",
   },
   {
