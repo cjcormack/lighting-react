@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { cornersToRect, flattenCueOrder, moveRegionVertically, rectToStyle } from './geometry'
+import {
+  clientRectsToRegion,
+  cornersToRect,
+  flattenCueOrder,
+  mergeRectsByLine,
+  moveRegionVertically,
+  rectToStyle,
+} from './geometry'
 import type { CueStack, CueStackCueEntry } from '../../api/cueStacksApi'
 import type { ShowDetails, ShowEntryDto } from '../../api/showApi'
 
@@ -52,6 +59,94 @@ describe('cornersToRect', () => {
     const r = cornersToRect(0, { x: 0.5, y: 0.5 }, { x: 0.5, y: 0.5 })
     expect(r.w).toBeGreaterThan(0)
     expect(r.h).toBeGreaterThan(0)
+  })
+})
+
+describe('mergeRectsByLine', () => {
+  it('unions per-run slivers on the same line into one band', () => {
+    const merged = mergeRectsByLine([
+      { page: 0, x: 0.1, y: 0.2, w: 0.15, h: 0.02 },
+      { page: 0, x: 0.25, y: 0.201, w: 0.2, h: 0.02 }, // adjacent run, tiny y jitter
+    ])
+    expect(merged).toHaveLength(1)
+    expect(merged[0]).toMatchObject({ page: 0, x: 0.1 })
+    expect(merged[0].w).toBeCloseTo(0.35)
+  })
+
+  it('keeps separate lines separate', () => {
+    const merged = mergeRectsByLine([
+      { page: 0, x: 0.1, y: 0.2, w: 0.3, h: 0.02 },
+      { page: 0, x: 0.1, y: 0.26, w: 0.3, h: 0.02 },
+    ])
+    expect(merged).toHaveLength(2)
+  })
+
+  it('does not snowball tightly-leaded lines into one band', () => {
+    // Single-spaced script: line pitch ≈ 1.05× the glyph-box height. A midpoint±
+    // tolerance test merged these; overlap-based bucketing keeps them apart.
+    const merged = mergeRectsByLine([
+      { page: 0, x: 0.1, y: 0.2, w: 0.3, h: 0.02 },
+      { page: 0, x: 0.1, y: 0.221, w: 0.3, h: 0.02 },
+      { page: 0, x: 0.1, y: 0.242, w: 0.3, h: 0.02 },
+    ])
+    expect(merged).toHaveLength(3)
+  })
+
+  it('splits a two-column line on a large horizontal gap (name | dialogue)', () => {
+    const merged = mergeRectsByLine([
+      { page: 0, x: 0.06, y: 0.2, w: 0.08, h: 0.02 }, // character name
+      { page: 0, x: 0.4, y: 0.2, w: 0.3, h: 0.02 }, // dialogue, big gap before it
+    ])
+    expect(merged).toHaveLength(2)
+    expect(merged[0].x).toBeCloseTo(0.06)
+    expect(merged[1].x).toBeCloseTo(0.4)
+  })
+
+  it('groups rects by page', () => {
+    const merged = mergeRectsByLine([
+      { page: 0, x: 0.1, y: 0.9, w: 0.3, h: 0.02 },
+      { page: 1, x: 0.1, y: 0.05, w: 0.3, h: 0.02 },
+    ])
+    expect(new Set(merged.map((r) => r.page))).toEqual(new Set([0, 1]))
+  })
+})
+
+describe('clientRectsToRegion', () => {
+  // Two stacked pages, each 100px wide × 200px tall, with a 20px gap between.
+  const pages = [
+    { page: 0, left: 0, top: 0, width: 100, height: 200 },
+    { page: 1, left: 0, top: 220, width: 100, height: 200 },
+  ]
+
+  it('attributes a rect to the page containing its centre and normalizes', () => {
+    const region = clientRectsToRegion([{ left: 10, top: 20, right: 50, bottom: 40 }], pages)
+    expect(region).toHaveLength(1)
+    expect(region[0]).toMatchObject({ page: 0 })
+    expect(region[0].x).toBeCloseTo(0.1)
+    expect(region[0].y).toBeCloseTo(0.1)
+    expect(region[0].w).toBeCloseTo(0.4)
+  })
+
+  it('drops rects that fall in the inter-page gap', () => {
+    // Centre at y≈210 is between page 0 (0–200) and page 1 (220–420).
+    const region = clientRectsToRegion([{ left: 10, top: 205, right: 50, bottom: 215 }], pages)
+    expect(region).toHaveLength(0)
+  })
+
+  it('discards zero-width slivers', () => {
+    const region = clientRectsToRegion([{ left: 10, top: 20, right: 10.2, bottom: 40 }], pages)
+    expect(region).toHaveLength(0)
+  })
+
+  it('keeps rects across both pages for a multi-page selection', () => {
+    const region = clientRectsToRegion(
+      [
+        { left: 10, top: 180, right: 90, bottom: 195 }, // bottom of page 0
+        { left: 10, top: 225, right: 90, bottom: 240 }, // top of page 1
+      ],
+      pages,
+    )
+    expect(new Set(region.map((r) => r.page))).toEqual(new Set([0, 1]))
   })
 })
 

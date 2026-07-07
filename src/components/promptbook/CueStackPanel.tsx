@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 import { formatFadeText } from '@/lib/cueUtils'
 import type { CueAnchorDto } from '../../api/promptBooksApi'
 import type { DesyncWarning, FlatCue } from '../../lib/promptBook/desync'
-import { positionLabel } from '../../lib/promptBook/geometry'
+import { groupCuesByStack, positionLabel } from '../../lib/promptBook/geometry'
 import type { CueRunStatus } from './AnchorOverlay'
 import { DesyncWarningsPanel } from './DesyncWarningsPanel'
 
@@ -71,18 +71,7 @@ export function CueStackPanel({
   onClose,
 }: CueStackPanelProps) {
   // Group rows under stack headers — a prompt-book spans the whole show.
-  const rows = useMemo(() => {
-    const out: Array<{ type: 'header'; stackId: number; stackName: string } | { type: 'cue'; cue: FlatCue }> = []
-    let lastStackId: number | null = null
-    for (const cue of cueOrder) {
-      if (cue.stackId !== lastStackId) {
-        out.push({ type: 'header', stackId: cue.stackId, stackName: cue.stackName })
-        lastStackId = cue.stackId
-      }
-      out.push({ type: 'cue', cue })
-    }
-    return out
-  }, [cueOrder])
+  const rows = useMemo(() => groupCuesByStack(cueOrder), [cueOrder])
 
   // Shared right-edge affordances: warning marker + anchor place / remove.
   const anchorControls = (cue: FlatCue) => {

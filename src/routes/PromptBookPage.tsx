@@ -45,13 +45,14 @@ import {
   useUpdateAnnotationMutation,
   useDeleteAnnotationMutation,
 } from '../store/promptBooks'
-import { scriptDocUrl, type AnnotationDto, type AnnotationKind, type NoteTone, type Rect, type Region } from '../api/promptBooksApi'
+import { scriptDocUrl, type AnnotationDto, type AnnotationKind, type NoteTone, type Region } from '../api/promptBooksApi'
 import { cn } from '@/lib/utils'
 import { formatError } from '../lib/formatError'
 import { computeWarnings, type DesyncWarning, type FlatCue } from '../lib/promptBook/desync'
 import { flattenCueOrder } from '../lib/promptBook/geometry'
 import { Breadcrumbs } from '../components/Breadcrumbs'
-import { ScriptViewer, placedAnchorRect, type ScriptViewerHandle } from '../components/promptbook/ScriptViewer'
+import { ScriptViewer, type ScriptViewerHandle } from '../components/promptbook/ScriptViewer'
+import { CueAnchorPickerSheet } from '../components/promptbook/CueAnchorPickerSheet'
 import { PromptBookToolbar } from '../components/promptbook/PromptBookToolbar'
 import { ToolPalette, type PromptBookTool } from '../components/promptbook/ToolPalette'
 import { CueStackPanel } from '../components/promptbook/CueStackPanel'
@@ -209,7 +210,7 @@ export function PromptBooksPage() {
 // ─── Viewer ──────────────────────────────────────────────────────────────
 
 type AnnotationDialogState =
-  | { mode: 'create'; kind: AnnotationKind; rect: Rect }
+  | { mode: 'create'; kind: AnnotationKind; region: Region }
   | { mode: 'edit'; annotation: AnnotationDto }
 
 export function PromptBookViewerPage() {
@@ -243,6 +244,8 @@ export function PromptBookViewerPage() {
   const [locked, setLocked] = useState(true)
   const [tool, setTool] = useState<PromptBookTool>('move')
   const [placingCueId, setPlacingCueId] = useState<number | null>(null)
+  // Region awaiting a cue choice — set when "Anchor cue" is clicked on a selection.
+  const [anchorPicker, setAnchorPicker] = useState<{ region: Region } | null>(null)
   const [undoSnapshot, setUndoSnapshot] = useState<{ cueId: number; region: Region; label: string | null } | null>(null)
   const [showWarnings, setShowWarnings] = useState(true)
   const [annotationDialog, setAnnotationDialog] = useState<AnnotationDialogState | null>(null)
@@ -280,6 +283,9 @@ export function PromptBookViewerPage() {
   // ── Upstream running state — subscribed, never owned. ──
   const cueOrder: FlatCue[] = useMemo(() => flattenCueOrder(show, stacks), [show, stacks])
   const cueOrderIndex = useMemo(() => new Map(cueOrder.map((c, i) => [c.cueId, i])), [cueOrder])
+  // Live cue labels — the pill reads these so an edited cue number reflects at once
+  // (the anchor's own cached label only refreshes when the anchor is re-saved).
+  const cueLabelByCue = useMemo(() => new Map(cueOrder.map((c) => [c.cueId, c.label])), [cueOrder])
 
   const activeEntry = useMemo(
     () => show?.entries.find((e) => e.id === show.activeEntryId),
@@ -486,19 +492,35 @@ export function PromptBookViewerPage() {
   }, [undoSnapshot, upsertAnchor, projectIdNum, bookIdNum, noteEdit])
 
   const handlePlaceAnchor = useCallback(
-    (page: number, y: number) => {
+    (region: Region) => {
       if (placingCueId == null) return
-      const cue = cueOrder.find((c) => c.cueId === placingCueId)
+      // Re-anchoring an existing cue → snapshot the old region so it can be undone.
+      const existing = anchorByCue.get(placingCueId)
+      if (existing) setUndoSnapshot({ cueId: placingCueId, region: existing.region, label: existing.label ?? null })
       upsertAnchor({
         projectId: projectIdNum,
         bookId: bookIdNum,
         cueId: placingCueId,
-        region: [placedAnchorRect(page, y)],
-        label: cue?.label,
+        region,
+        label: cueLabelByCue.get(placingCueId),
       })
       setPlacingCueId(null)
     },
-    [placingCueId, cueOrder, upsertAnchor, projectIdNum, bookIdNum],
+    [placingCueId, cueLabelByCue, anchorByCue, upsertAnchor, projectIdNum, bookIdNum],
+  )
+
+  // Anchor a chosen cue to a selected region (from the cue picker). Overwriting an
+  // existing anchor re-anchors it; snapshot the old region so it can be undone.
+  const handleAnchorCue = useCallback(
+    (cueId: number, region: Region) => {
+      const existing = anchorByCue.get(cueId)
+      if (existing) setUndoSnapshot({ cueId, region: existing.region, label: existing.label ?? null })
+      upsertAnchor({ projectId: projectIdNum, bookId: bookIdNum, cueId, region, label: cueLabelByCue.get(cueId) })
+      setAnchorPicker(null)
+      setPlacingCueId(null)
+      noteEdit()
+    },
+    [cueLabelByCue, anchorByCue, upsertAnchor, projectIdNum, bookIdNum, noteEdit],
   )
 
   const handleCueClick = useCallback(
@@ -532,15 +554,15 @@ export function PromptBookViewerPage() {
     [anchorByCue],
   )
 
-  const handleDrawAnnotation = useCallback(
-    (kind: AnnotationKind, rect: Rect) => {
+  const handleCreateAnnotation = useCallback(
+    (kind: AnnotationKind, region: Region) => {
       if (kind === 'STRIKETHROUGH') {
-        createAnnotation({ projectId: projectIdNum, bookId: bookIdNum, kind, region: [rect] })
+        createAnnotation({ projectId: projectIdNum, bookId: bookIdNum, kind, region })
         return
       }
       setAnnotationText('')
       setAnnotationTone('NOTE')
-      setAnnotationDialog({ mode: 'create', kind, rect })
+      setAnnotationDialog({ mode: 'create', kind, region })
     },
     [createAnnotation, projectIdNum, bookIdNum],
   )
@@ -558,7 +580,7 @@ export function PromptBookViewerPage() {
         projectId: projectIdNum,
         bookId: bookIdNum,
         kind: annotationDialog.kind,
-        region: [annotationDialog.rect],
+        region: annotationDialog.region,
         text: annotationText || undefined,
         tone: annotationDialog.kind === 'NOTE' ? annotationTone : undefined,
       })
@@ -701,7 +723,15 @@ export function PromptBookViewerPage() {
       />
 
       {!locked && (
-        <ToolPalette tool={tool} onSelectTool={(t) => { setTool(t); setPlacingCueId(null); noteEdit() }} />
+        <ToolPalette
+          tool={tool}
+          placingLabel={placingCueId != null ? (cueLabelByCue.get(placingCueId) ?? null) : null}
+          onSelectTool={(t) => {
+            setTool(t)
+            setPlacingCueId(null)
+            noteEdit()
+          }}
+        />
       )}
 
       {/* Compact NOW / NEXT strip — tablet & phone only */}
@@ -776,19 +806,23 @@ export function PromptBookViewerPage() {
             </div>
           ) : (
             <ScriptViewer
-              key={pdfRetryNonce}
+              // Remount on a script change (different book/PDF) as well as on retry,
+              // so per-page text-bounds/scanned classification never carry over stale.
+              key={`${book.scriptHash}:${pdfRetryNonce}`}
               ref={viewerRef}
               fileUrl={scriptDocUrl(projectIdNum, book.scriptHash)}
               anchors={book.anchors}
               annotations={book.annotations}
               statusOf={statusOf}
+              cueLabels={cueLabelByCue}
               warningCueIds={warningCueIds}
               locked={locked}
               tool={tool}
               placingCueId={placingCueId}
               onMoveAnchor={handleMoveAnchor}
               onPlaceAnchor={handlePlaceAnchor}
-              onDrawAnnotation={handleDrawAnnotation}
+              onAnchorRequest={(region) => setAnchorPicker({ region })}
+              onCreateAnnotation={handleCreateAnnotation}
               onAnnotationClick={handleAnnotationClick}
               onEditInteraction={noteEdit}
               onDocumentError={handleDocumentError}
@@ -928,6 +962,17 @@ export function PromptBookViewerPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CueAnchorPickerSheet
+        open={anchorPicker != null}
+        cueOrder={cueOrder}
+        anchorByCue={anchorByCue}
+        preselectCueId={placingCueId}
+        onPick={(cueId) => {
+          if (anchorPicker) handleAnchorCue(cueId, anchorPicker.region)
+        }}
+        onClose={() => setAnchorPicker(null)}
+      />
     </div>
   )
 }

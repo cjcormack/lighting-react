@@ -19,9 +19,12 @@ const TOOLS: { id: PromptBookTool; label: string; icon: typeof MousePointer2; da
  */
 export function ToolPalette({
   tool,
+  placingLabel,
   onSelectTool,
 }: {
   tool: PromptBookTool
+  /** When a cue is armed for (re-)anchoring, its label ("Q12") — shows a targeted prompt. */
+  placingLabel?: string | null
   onSelectTool: (tool: PromptBookTool) => void
 }) {
   return (
@@ -47,9 +50,16 @@ export function ToolPalette({
         </Button>
       ))}
       <span className="flex-1" />
-      <span className="hidden text-[11px] text-muted-foreground md:inline">
-        Pick a tool, then drag a region on the script. Place cue anchors from the cue list.
-      </span>
+      {placingLabel ? (
+        <span className="text-[11px] font-semibold text-amber-600">
+          Select the script text to anchor {placingLabel}…
+        </span>
+      ) : (
+        <span className="hidden text-[11px] text-muted-foreground md:inline">
+          Select script text to highlight, cut, or note it — or arm a cue in the list, then select its line.
+          On scanned pages, pick a tool and drag a box.
+        </span>
+      )}
     </div>
   )
 }

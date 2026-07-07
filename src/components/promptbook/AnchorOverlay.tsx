@@ -1,7 +1,7 @@
 import type { PointerEvent } from 'react'
 import { cn } from '@/lib/utils'
 import type { CueAnchorDto, Rect } from '../../api/promptBooksApi'
-import { MARKER_MARGIN_X, rectToStyle, verticalBounds } from '../../lib/promptBook/geometry'
+import { MARKER_LANE_X, marginRailStyle, rectToStyle } from '../../lib/promptBook/geometry'
 
 /**
  * A cue's run status, driving the anchor's colour language (mirrors the Run view):
@@ -50,43 +50,47 @@ export function CueWash({
 }
 
 /**
- * Cue marker in the page's left margin: a solid colour band the height of the
- * cued region, with the cue number chip beside it, sitting just left of the
- * text. This is the drag handle when unlocked; the live cue's chip pulses.
- * Assumes the script leaves a normal left margin for it to occupy.
+ * Cue marker in the fixed left-margin rail: a solid colour accent band the height
+ * of the cued region, with the cue chip beside it (overflowing left into the paper
+ * gutter). Anchored to {@link MARKER_LANE_X} so every cue/cut marker lines up
+ * vertically, independent of where each region's text starts. This is the drag
+ * handle when unlocked; the live cue's chip pulses and shows a status dot.
  */
 export function CueMarginMarker({
   anchor,
+  label,
   rects,
   status,
   hasWarning,
   locked,
   dragging,
+  laneX = MARKER_LANE_X,
   onPointerDown,
 }: {
   anchor: CueAnchorDto
+  /** Live cue label from the cue stack; falls back to the anchor's cached label. */
+  label: string | null
   rects: Rect[]
   status: CueRunStatus
   hasWarning: boolean
   locked: boolean
   dragging: boolean
+  /** Normalized x of the shared margin rail (just left of the page's text block). */
+  laneX?: number
   onPointerDown: (e: PointerEvent<HTMLDivElement>) => void
 }) {
-  const { top, height } = verticalBounds(rects)
   const s = statusStyles[status]
   const isLive = status === 'live'
   return (
     <div
       data-anchor-cue={anchor.cueId}
       onPointerDown={onPointerDown}
-      style={{
-        top: `${top * 100}%`,
-        height: `${Math.max(height * 100, 1.6)}%`,
-        left: `${MARKER_MARGIN_X * 100}%`,
-        transform: 'translateX(-100%)',
-      }}
+      title={locked ? undefined : 'Drag to nudge — re-anchor by selecting the new text'}
+      // Right edge sits in the shared margin lane just left of the text; the box
+      // grows leftward to fit the chip, overflowing into the paper gutter.
+      style={marginRailStyle(rects, laneX)}
       className={cn(
-        'absolute flex items-start justify-end',
+        'flex items-start',
         locked ? 'pointer-events-none' : 'pointer-events-auto cursor-grab',
         dragging && 'cursor-grabbing',
       )}
@@ -94,11 +98,13 @@ export function CueMarginMarker({
       <span
         style={isLive ? { animation: 'r-live-pulse 1.6s ease-in-out infinite' } : undefined}
         className={cn(
-          'mr-1 rounded px-1.5 py-px font-mono text-[10px] leading-tight font-bold whitespace-nowrap shadow-sm',
+          'mr-1 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[11px] leading-none font-bold whitespace-nowrap shadow-sm',
           hasWarning ? 'bg-red-500 text-white' : s.chip,
+          isLive && 'ring-2 ring-white/90',
         )}
       >
-        {anchor.label ?? `#${anchor.cueId}`}
+        {isLive && <span className="size-1 rounded-full bg-white/90" />}
+        {label ?? `#${anchor.cueId}`}
         {hasWarning && ' ▲'}
       </span>
       <span

@@ -12,14 +12,6 @@ import type { ShowDetails } from '../../api/showApi'
 import type { CueStack } from '../../api/cueStacksApi'
 import { scriptPosition, type FlatCue } from './desync'
 
-/**
- * Fixed x (normalized) for the cue/cut margin band's right edge — a single lane
- * in the page's left margin so every marker's line + label align vertically,
- * regardless of where each annotated region's text starts. Assumes the script
- * leaves a normal left margin. The label extends left of this into the margin.
- */
-export const MARKER_MARGIN_X = 0.04
-
 /** Position a normalized rect inside a `position: relative` page wrapper. */
 export function rectToStyle(r: Rect): CSSProperties {
   return {
@@ -90,6 +82,32 @@ export function verticalBounds(rects: Rect[]): { top: number; height: number } {
   return { top, height: Math.max(bottom - top, 0) }
 }
 
+/**
+ * Fixed normalized x for the cue/cut marker lane. Every margin marker (chip, cut
+ * tag, accent band) anchors its right edge here so they form a single vertical
+ * rail in the left margin — aligned regardless of where each region's text starts.
+ * Sits in the script's typical left margin; markers overflow left into the paper
+ * gutter. The on-text wash / strikethrough is unaffected — only the margin rail.
+ */
+export const MARKER_LANE_X = 0.035
+
+/**
+ * Absolute-position style for a cue/cut margin marker: spans the region's vertical
+ * bounds with its right edge in the shared lane (`laneX`), growing leftward into
+ * the paper gutter. Shared by the cue and cut markers so their rail geometry can't
+ * drift apart.
+ */
+export function marginRailStyle(rects: Rect[], laneX: number): CSSProperties {
+  const { top, height } = verticalBounds(rects)
+  return {
+    position: 'absolute',
+    top: `${top * 100}%`,
+    height: `${Math.max(height * 100, 1.6)}%`,
+    right: `${(1 - laneX) * 100}%`,
+    marginRight: 2,
+  }
+}
+
 /** Order two rect corners into a normalized rect, with a minimum size floor. */
 export function cornersToRect(
   page: number,
@@ -102,6 +120,130 @@ export function cornersToRect(
   const w = Math.max(Math.abs(a.x - b.x), minSize)
   const h = Math.max(Math.abs(a.y - b.y), minSize)
   return { page, x, y, w: Math.min(w, 1 - x), h: Math.min(h, 1 - y) }
+}
+
+// ── Text-selection → Region ─────────────────────────────────────────────
+// A browser text selection over the PDF text layer yields one client rect per
+// text run (Chrome/Safari) or per line (Firefox). We attribute each to the page
+// it lands on, normalize it, then merge the slivers back into per-line bands so a
+// highlight hugs the actual words instead of a full-width box.
+
+/** Minimal client-rect shape (a DOMRect, or a plain object in tests). */
+export interface ClientRectLike {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
+/** A page's on-screen box, in the same client space as the selection rects. */
+export interface PageBox {
+  page: number
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
+/**
+ * Horizontal gap (normalized to page WIDTH) above which a run break is treated as
+ * a two-column gutter (character name | dialogue) and split, rather than a word
+ * space to union across. Kept in width units because x is width-normalized.
+ */
+const COLUMN_GAP_X = 0.05
+
+/**
+ * Union same-line rects into per-line bands, per page. Text-layer selections
+ * come back as many per-run slivers; without this a single highlighted line
+ * persists as a dozen rects. Rects are bucketed into lines by vertical overlap,
+ * then unioned along x — but a large horizontal gap (a two-column line: character
+ * name | dialogue) splits the band so the gutter isn't swallowed.
+ */
+export function mergeRectsByLine(rects: Rect[]): Rect[] {
+  const byPage = new Map<number, Rect[]>()
+  for (const r of rects) byPage.set(r.page, [...(byPage.get(r.page) ?? []), r])
+
+  const out: Rect[] = []
+  for (const [page, prects] of byPage) {
+    // 1) bucket into lines by vertical OVERLAP. A midpoint±tolerance test snowballs
+    //    adjacent lines together on tightly-leaded scripts (the accepted band keeps
+    //    growing as rects join); requiring real overlap keeps distinct lines apart
+    //    while still tolerating per-run height jitter within a line.
+    const lines: { top: number; bottom: number; rects: Rect[] }[] = []
+    for (const r of [...prects].sort((a, b) => a.y - b.y)) {
+      const line = lines.find((l) => {
+        const overlap = Math.min(l.bottom, r.y + r.h) - Math.max(l.top, r.y)
+        return overlap > 0.5 * Math.min(l.bottom - l.top, r.h)
+      })
+      if (line) {
+        line.rects.push(r)
+        line.top = Math.min(line.top, r.y)
+        line.bottom = Math.max(line.bottom, r.y + r.h)
+      } else {
+        lines.push({ top: r.y, bottom: r.y + r.h, rects: [r] })
+      }
+    }
+    // 2) union along x within each line, breaking on a large horizontal gap
+    for (const line of lines) {
+      const top = line.top
+      const height = line.bottom - line.top
+      const gap = COLUMN_GAP_X
+      const xs = [...line.rects].sort((a, b) => a.x - b.x)
+      let cur = { x: xs[0].x, right: xs[0].x + xs[0].w }
+      for (let i = 1; i < xs.length; i++) {
+        const r = xs[i]
+        if (r.x - cur.right > gap) {
+          out.push({ page, x: cur.x, y: top, w: cur.right - cur.x, h: height })
+          cur = { x: r.x, right: r.x + r.w }
+        } else {
+          cur.right = Math.max(cur.right, r.x + r.w)
+        }
+      }
+      out.push({ page, x: cur.x, y: top, w: cur.right - cur.x, h: height })
+    }
+  }
+  return out
+}
+
+/**
+ * Convert client-space selection rects into a normalized {@link Region}, pure so
+ * it can be unit-tested without a live DOM Range. Each rect is attributed to the
+ * page whose box contains its centre; rects in the inter-page gap (belonging to
+ * no page) are dropped rather than force-clipped onto one page, and zero-width
+ * slivers (trailing spaces / line breaks) are discarded. See {@link rangeToRegion}.
+ */
+export function clientRectsToRegion(rects: ClientRectLike[], pages: PageBox[]): Region {
+  const collected: Rect[] = []
+  for (const cr of rects) {
+    const w = cr.right - cr.left
+    const h = cr.bottom - cr.top
+    if (w <= 0.5 || h <= 0.5) continue
+    const cx = cr.left + w / 2
+    const cy = cr.top + h / 2
+    const p = pages.find(
+      (pg) => cx >= pg.left && cx <= pg.left + pg.width && cy >= pg.top && cy <= pg.top + pg.height,
+    )
+    if (!p || p.width <= 0 || p.height <= 0) continue
+    const x = clamp((cr.left - p.left) / p.width, 0, 1)
+    const y = clamp((cr.top - p.top) / p.height, 0, 1)
+    const x1 = clamp((cr.right - p.left) / p.width, 0, 1)
+    const y1 = clamp((cr.bottom - p.top) / p.height, 0, 1)
+    collected.push({ page: p.page, x, y, w: x1 - x, h: y1 - y })
+  }
+  return mergeRectsByLine(collected)
+}
+
+/**
+ * Build a normalized {@link Region} from a live DOM selection Range against the
+ * currently-mounted page elements. Thin wrapper over {@link clientRectsToRegion}.
+ */
+export function rangeToRegion(range: Range, pageEls: Map<number, HTMLElement>): Region {
+  const pages: PageBox[] = []
+  for (const [page, el] of pageEls) {
+    const b = el.getBoundingClientRect()
+    pages.push({ page, left: b.left, top: b.top, width: b.width, height: b.height })
+  }
+  return clientRectsToRegion(Array.from(range.getClientRects()), pages)
 }
 
 /**
@@ -134,6 +276,29 @@ export function flattenCueOrder(
         stackName: stack.name,
       })
     }
+  }
+  return out
+}
+
+/** A flattened cue list interleaved with per-stack header rows. */
+export type CueRailRow =
+  | { type: 'header'; stackId: number; stackName: string }
+  | { type: 'cue'; cue: FlatCue }
+
+/**
+ * Interleave a flattened cue order with a header row at each stack boundary — the
+ * shared row model for the cue rail and the anchor picker (a prompt-book spans the
+ * whole show, so both group cues under their stack).
+ */
+export function groupCuesByStack(cueOrder: FlatCue[]): CueRailRow[] {
+  const out: CueRailRow[] = []
+  let lastStackId: number | null = null
+  for (const cue of cueOrder) {
+    if (cue.stackId !== lastStackId) {
+      out.push({ type: 'header', stackId: cue.stackId, stackName: cue.stackName })
+      lastStackId = cue.stackId
+    }
+    out.push({ type: 'cue', cue })
   }
   return out
 }
