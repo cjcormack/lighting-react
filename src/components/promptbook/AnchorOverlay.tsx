@@ -1,40 +1,61 @@
-import type { CSSProperties, PointerEvent } from 'react'
+import type { PointerEvent } from 'react'
 import { cn } from '@/lib/utils'
 import type { CueAnchorDto, Rect } from '../../api/promptBooksApi'
-import { rectToStyle } from '../../lib/promptBook/geometry'
+import { MARKER_MARGIN_X, rectToStyle, verticalBounds } from '../../lib/promptBook/geometry'
 
-export type CueRunStatus = 'live' | 'done' | 'pending'
+/**
+ * A cue's run status, driving the anchor's colour language (mirrors the Run view):
+ * live=green, next=blue, standby=amber, done=grey. `next` is the cue armed to fire
+ * on the next GO; everything after it that hasn't fired is `standby`.
+ */
+export type CueRunStatus = 'live' | 'next' | 'standby' | 'done'
 
-interface AnchorOverlayProps {
-  anchor: CueAnchorDto
-  /** Rects of this anchor's region that sit on the rendered page. */
-  rects: Rect[]
-  status: CueRunStatus
-  hasWarning: boolean
-  locked: boolean
-  /** True while this anchor is the one being dragged. */
-  dragging: boolean
-  onPointerDown: (e: PointerEvent<HTMLDivElement>) => void
-}
-
-const statusText: Record<CueRunStatus, string> = {
-  live: 'text-amber-400',
-  done: 'text-emerald-600/70',
-  pending: 'text-muted-foreground/70',
-}
-
-const statusBorder: Record<CueRunStatus, string> = {
-  live: 'border-l-amber-400',
-  done: 'border-l-emerald-700/60',
-  pending: 'border-l-muted-foreground/50',
+/** Per-status treatment. Wash reads as a highlighter over the white PDF page. */
+const statusStyles: Record<CueRunStatus, { band: string; wash: string; chip: string }> = {
+  live: { band: 'bg-emerald-500', wash: 'bg-emerald-400/20', chip: 'bg-emerald-500 text-white' },
+  next: { band: 'bg-sky-500', wash: 'bg-sky-400/20', chip: 'bg-sky-500 text-white' },
+  standby: { band: 'bg-amber-500', wash: 'bg-amber-400/15', chip: 'bg-amber-500 text-white' },
+  done: { band: 'bg-slate-400', wash: 'bg-slate-400/10', chip: 'bg-slate-500 text-white' },
 }
 
 /**
- * One cue anchor on a script page: a left-ruled band per rect, with the cue
- * label in the margin of the first rect. The live cue gets the one saturated
- * colour in the view; everything else stays quiet so it's unmistakable.
+ * On-page highlighter wash over the cued line(s). Non-interactive — the drag
+ * handle and label live in the margin (see {@link CueMarginMarker}).
  */
-export function AnchorOverlay({
+export function CueWash({
+  rects,
+  status,
+  isLive,
+}: {
+  rects: Rect[]
+  status: CueRunStatus
+  isLive: boolean
+}) {
+  const s = statusStyles[status]
+  return (
+    <>
+      {rects.map((rect, i) => (
+        <div
+          key={i}
+          style={rectToStyle(rect)}
+          className={cn(
+            'rounded-sm',
+            s.wash,
+            isLive && 'shadow-[0_0_0_1px_rgba(16,185,129,0.5),0_0_14px_rgba(16,185,129,0.3)]',
+          )}
+        />
+      ))}
+    </>
+  )
+}
+
+/**
+ * Cue marker in the page's left margin: a solid colour band the height of the
+ * cued region, with the cue number chip beside it, sitting just left of the
+ * text. This is the drag handle when unlocked; the live cue's chip pulses.
+ * Assumes the script leaves a normal left margin for it to occupy.
+ */
+export function CueMarginMarker({
   anchor,
   rects,
   status,
@@ -42,43 +63,51 @@ export function AnchorOverlay({
   locked,
   dragging,
   onPointerDown,
-}: AnchorOverlayProps) {
+}: {
+  anchor: CueAnchorDto
+  rects: Rect[]
+  status: CueRunStatus
+  hasWarning: boolean
+  locked: boolean
+  dragging: boolean
+  onPointerDown: (e: PointerEvent<HTMLDivElement>) => void
+}) {
+  const { top, height } = verticalBounds(rects)
+  const s = statusStyles[status]
+  const isLive = status === 'live'
   return (
-    <>
-      {rects.map((rect, i) => {
-        const style: CSSProperties = rectToStyle(rect)
-        return (
-          <div
-            key={`${anchor.cueId}-${rect.page}-${i}`}
-            style={style}
-            data-anchor-cue={anchor.cueId}
-            onPointerDown={onPointerDown}
-            className={cn(
-              'rounded-sm border-l-[3px] transition-shadow',
-              statusBorder[status],
-              hasWarning && 'border-l-red-500',
-              status === 'live' && 'bg-amber-400/15 shadow-[0_0_0_1px_rgba(251,191,36,0.4),0_0_14px_rgba(251,191,36,0.2)]',
-              locked
-                ? 'pointer-events-none'
-                : 'pointer-events-auto cursor-grab hover:bg-amber-400/10 hover:shadow-[0_0_0_1px_rgba(251,191,36,0.3)]',
-              dragging && 'cursor-grabbing bg-amber-400/10 shadow-[0_0_0_1px_rgba(251,191,36,0.5)]',
-            )}
-          >
-            {i === 0 && (
-              <span
-                className={cn(
-                  'absolute -left-2 top-1/2 -translate-x-full -translate-y-1/2 select-none',
-                  'text-[10px] font-bold tracking-wide whitespace-nowrap',
-                  statusText[status],
-                )}
-              >
-                {anchor.label ?? `#${anchor.cueId}`}
-                {hasWarning && <span className="text-red-500"> ▲</span>}
-              </span>
-            )}
-          </div>
-        )
-      })}
-    </>
+    <div
+      data-anchor-cue={anchor.cueId}
+      onPointerDown={onPointerDown}
+      style={{
+        top: `${top * 100}%`,
+        height: `${Math.max(height * 100, 1.6)}%`,
+        left: `${MARKER_MARGIN_X * 100}%`,
+        transform: 'translateX(-100%)',
+      }}
+      className={cn(
+        'absolute flex items-start justify-end',
+        locked ? 'pointer-events-none' : 'pointer-events-auto cursor-grab',
+        dragging && 'cursor-grabbing',
+      )}
+    >
+      <span
+        style={isLive ? { animation: 'r-live-pulse 1.6s ease-in-out infinite' } : undefined}
+        className={cn(
+          'mr-1 rounded px-1.5 py-px font-mono text-[10px] leading-tight font-bold whitespace-nowrap shadow-sm',
+          hasWarning ? 'bg-red-500 text-white' : s.chip,
+        )}
+      >
+        {anchor.label ?? `#${anchor.cueId}`}
+        {hasWarning && ' ▲'}
+      </span>
+      <span
+        className={cn(
+          'h-full w-[3px] shrink-0 rounded-full',
+          hasWarning ? 'bg-red-500' : s.band,
+          isLive && 'shadow-[0_0_8px_rgba(16,185,129,0.6)]',
+        )}
+      />
+    </div>
   )
 }

@@ -21,6 +21,13 @@ export type Region = Rect[]
 
 export type AnnotationKind = 'NOTE' | 'STRIKETHROUGH' | 'FREETEXT'
 
+/**
+ * Severity/intent of a NOTE — drives the callout colour in the reader
+ * (NOTE=blue, WARN=amber, SAFETY=red). Only meaningful for NOTE annotations;
+ * null (or on non-NOTE kinds) reads as NOTE.
+ */
+export type NoteTone = 'NOTE' | 'WARN' | 'SAFETY'
+
 export interface CueAnchorDto {
   cueId: number
   region: Region
@@ -34,6 +41,7 @@ export interface AnnotationDto {
   region: Region
   text: string | null
   color: string | null
+  tone: NoteTone | null
 }
 
 export interface PromptBookSummary {
@@ -75,6 +83,7 @@ export interface AnnotationRequest {
   region: Region
   text?: string
   color?: string
+  tone?: NoteTone
 }
 
 export interface ScriptUploadResponse {

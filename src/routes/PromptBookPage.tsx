@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { BookOpenText, Loader2, Trash2 } from 'lucide-react'
+import { ArrowRight, BookOpenText, ChevronLeft, ListChecks, Loader2, Play, Trash2 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -29,8 +29,10 @@ import {
   useActivateCueStackMutation,
   useGoToCueInStackMutation,
 } from '../store/cueStacks'
-import { go, selectStackRunner, runnerSlice } from '../store/runnerSlice'
+import { go, back, selectStackRunner, setStandby, runnerSlice } from '../store/runnerSlice'
 import { useAdvanceShowMutation } from '../store/show'
+import { useFxStateQuery } from '../store/fx'
+import { useNarrowContainer } from '../hooks/useNarrowContainer'
 import {
   useProjectPromptBookListQuery,
   useProjectPromptBookQuery,
@@ -43,7 +45,8 @@ import {
   useUpdateAnnotationMutation,
   useDeleteAnnotationMutation,
 } from '../store/promptBooks'
-import { scriptDocUrl, type AnnotationDto, type AnnotationKind, type Rect, type Region } from '../api/promptBooksApi'
+import { scriptDocUrl, type AnnotationDto, type AnnotationKind, type NoteTone, type Rect, type Region } from '../api/promptBooksApi'
+import { cn } from '@/lib/utils'
 import { formatError } from '../lib/formatError'
 import { computeWarnings, type DesyncWarning, type FlatCue } from '../lib/promptBook/desync'
 import { flattenCueOrder } from '../lib/promptBook/geometry'
@@ -215,12 +218,14 @@ export function PromptBookViewerPage() {
   const bookIdNum = Number(bookId)
 
   const dispatch = useDispatch()
+  const navigate = useNavigate()
   const { data: book, isLoading: bookLoading } = useProjectPromptBookQuery({
     projectId: projectIdNum,
     bookId: bookIdNum,
   })
   const { data: show } = useProjectShowQuery(projectIdNum)
   const { data: stacks } = useProjectCueStackListQuery(projectIdNum)
+  const { data: fxState } = useFxStateQuery()
 
   const [advanceCueStack] = useAdvanceCueStackMutation()
   const [activateCueStack] = useActivateCueStackMutation()
@@ -242,9 +247,16 @@ export function PromptBookViewerPage() {
   const [showWarnings, setShowWarnings] = useState(true)
   const [annotationDialog, setAnnotationDialog] = useState<AnnotationDialogState | null>(null)
   const [annotationText, setAnnotationText] = useState('')
+  const [annotationTone, setAnnotationTone] = useState<NoteTone>('NOTE')
   const [pdfLoadState, setPdfLoadState] = useState<'ok' | 'missing' | 'error'>('ok')
   const [pdfRetryNonce, setPdfRetryNonce] = useState(0)
   const [hashMismatch, setHashMismatch] = useState<string | null>(null)
+
+  // Local blackout toggle (parity with the Run view) + tablet/phone drawer.
+  const [dbo, setDbo] = useState(false)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  // Below this container width the side rail becomes a drawer + bottom transport.
+  const [bodyRef, isNarrow] = useNarrowContainer(1040)
 
   const viewerRef = useRef<ScriptViewerHandle>(null)
 
@@ -280,16 +292,42 @@ export function PromptBookViewerPage() {
   )
   const activeCueId = activeStack?.activeCueId ?? null
 
+  // Consult the shared runner slice so a standby cue armed here (or on the Run
+  // page) is treated as the "next" cue — same source fireGo advances to.
+  const runner = useSelector((state: { runner: ReturnType<typeof runnerSlice.getInitialState> }) =>
+    selectStackRunner(state, activeStackId ?? 0),
+  )
+
+  // The cue armed to fire on the next GO: an explicit standby, else the next cue
+  // in reading order. Pre-show (nothing live) the first cue sits on deck.
+  const nextCueId = useMemo(() => {
+    // An explicitly-armed standby is the next GO — but never treat the cue that's
+    // already live as "next" (activating a standby leaves standbyCueId sitting on it).
+    const sb = runner.standbyCueId
+    if (sb != null && sb !== activeCueId) return sb
+    // Nothing fired yet: the active stack's first cue is on deck; fall back to the
+    // very first cue in the show only when no stack is active.
+    if (activeCueId == null) {
+      const firstOfActive =
+        activeStackId != null ? cueOrder.find((c) => c.stackId === activeStackId) : undefined
+      return (firstOfActive ?? cueOrder[0])?.cueId ?? null
+    }
+    const activeIdx = cueOrderIndex.get(activeCueId)
+    if (activeIdx == null) return null
+    return cueOrder[activeIdx + 1]?.cueId ?? null
+  }, [runner.standbyCueId, activeCueId, activeStackId, cueOrder, cueOrderIndex])
+
   const statusOf = useCallback(
     (cueId: number): CueRunStatus => {
       if (cueId === activeCueId) return 'live'
-      if (activeCueId == null) return 'pending'
+      if (cueId === nextCueId) return 'next'
+      if (activeCueId == null) return 'standby'
       const idx = cueOrderIndex.get(cueId)
       const activeIdx = cueOrderIndex.get(activeCueId)
-      if (idx == null || activeIdx == null) return 'pending'
-      return idx < activeIdx ? 'done' : 'pending'
+      if (idx == null || activeIdx == null) return 'standby'
+      return idx < activeIdx ? 'done' : 'standby'
     },
-    [activeCueId, cueOrderIndex],
+    [activeCueId, nextCueId, cueOrderIndex],
   )
 
   // ── Desync — advisory only; recomputed on every edit and on load. ──
@@ -324,12 +362,6 @@ export function PromptBookViewerPage() {
   const isShowActive = show?.activeEntryId != null
   const goDisabled = !isShowActive || !canEdit
 
-  // Consult the shared runner slice so a standby cue armed on the Run page (an
-  // out-of-order jump) fires from here too, instead of a blind sequential advance.
-  const runner = useSelector((state: { runner: ReturnType<typeof runnerSlice.getInitialState> }) =>
-    selectStackRunner(state, activeStackId ?? 0),
-  )
-
   const fireGo = useCallback(() => {
     noteGo()
     if (activeStackId == null || !activeStack) return
@@ -363,9 +395,37 @@ export function PromptBookViewerPage() {
   }, [noteGo, activeStackId, activeStack, activateCueStack, advanceCueStack, advanceShow, goToCueInStack, dispatch, projectIdNum, show, runner.standbyCueId])
 
   const fireBack = useCallback(() => {
-    if (activeStackId == null || activeStack?.activeCueId == null) return
-    advanceCueStack({ projectId: projectIdNum, stackId: activeStackId, direction: 'BACKWARD' })
-  }, [activeStackId, activeStack, advanceCueStack, projectIdNum])
+    if (activeStackId == null || !activeStack) return
+    // Step the runner's standby cursor back in lock-step with the server (parity
+    // with RunPage.handleBack) so a Back after an armed-standby GO doesn't leave
+    // standbyCueId stale and make the next GO / "next" highlight skip a cue.
+    dispatch(back({ stackId: activeStackId, cues: activeStack.cues }))
+    if (activeStack.activeCueId != null) {
+      advanceCueStack({ projectId: projectIdNum, stackId: activeStackId, direction: 'BACKWARD' })
+    }
+  }, [activeStackId, activeStack, advanceCueStack, dispatch, projectIdNum])
+
+  // Arm a cue as the next GO (mirrors the Run page's standby). Does NOT fire it.
+  const handleSetStandby = useCallback(
+    (cueId: number) => {
+      if (activeStackId == null || cueId === activeCueId) return
+      dispatch(setStandby({ stackId: activeStackId, cueId }))
+      setDrawerOpen(false)
+    },
+    [activeStackId, activeCueId, dispatch],
+  )
+
+  // Jump to the cue's editor. No per-cue deep link exists yet, so open Program.
+  const handleEditCue = useCallback(
+    (_cueId: number) => navigate(`/projects/${projectIdNum}/program`),
+    [navigate, projectIdNum],
+  )
+
+  const jumpToLive = useCallback(() => {
+    if (activeCueId == null) return
+    const anchor = anchorByCueRef.current.get(activeCueId)
+    if (anchor) viewerRef.current?.scrollToRegion(anchor.region)
+  }, [activeCueId])
 
   // Keyboard: Space=GO, Backspace=Back (parity with Run), L toggles lock.
   useEffect(() => {
@@ -479,6 +539,7 @@ export function PromptBookViewerPage() {
         return
       }
       setAnnotationText('')
+      setAnnotationTone('NOTE')
       setAnnotationDialog({ mode: 'create', kind, rect })
     },
     [createAnnotation, projectIdNum, bookIdNum],
@@ -486,6 +547,7 @@ export function PromptBookViewerPage() {
 
   const handleAnnotationClick = useCallback((annotation: AnnotationDto) => {
     setAnnotationText(annotation.text ?? '')
+    setAnnotationTone(annotation.tone ?? 'NOTE')
     setAnnotationDialog({ mode: 'edit', annotation })
   }, [])
 
@@ -498,6 +560,7 @@ export function PromptBookViewerPage() {
         kind: annotationDialog.kind,
         region: [annotationDialog.rect],
         text: annotationText || undefined,
+        tone: annotationDialog.kind === 'NOTE' ? annotationTone : undefined,
       })
     } else {
       const { annotation } = annotationDialog
@@ -509,11 +572,12 @@ export function PromptBookViewerPage() {
         region: annotation.region,
         text: annotationText || undefined,
         color: annotation.color ?? undefined,
+        tone: annotation.kind === 'NOTE' ? annotationTone : undefined,
       })
     }
     setAnnotationDialog(null)
     noteEdit()
-  }, [annotationDialog, annotationText, createAnnotation, updateAnnotation, projectIdNum, bookIdNum, noteEdit])
+  }, [annotationDialog, annotationText, annotationTone, createAnnotation, updateAnnotation, projectIdNum, bookIdNum, noteEdit])
 
   const handleDeleteAnnotation = useCallback(() => {
     if (annotationDialog?.mode !== 'edit') return
@@ -572,8 +636,40 @@ export function PromptBookViewerPage() {
     )
   }
 
-  const activeCueLabel =
-    activeCueId != null ? (cueOrder.find((c) => c.cueId === activeCueId)?.label ?? null) : null
+  const liveCue = activeCueId != null ? (cueOrder.find((c) => c.cueId === activeCueId) ?? null) : null
+  const activeCueLabel = liveCue?.label ?? null
+  const nextCue = nextCueId != null ? (cueOrder.find((c) => c.cueId === nextCueId) ?? null) : null
+  const railStackName = activeStack?.name ?? cueOrder[0]?.stackName ?? null
+
+  // Shared rail props — the same panel serves the desktop side rail and the drawer.
+  const railProps = {
+    cueOrder,
+    anchorByCue,
+    statusOf,
+    warningsByCue,
+    warnings,
+    showWarnings,
+    locked,
+    placingCueId,
+    onCueClick: handleCueClick,
+    onRemoveAnchor: handleRemoveAnchor,
+    onWarningClick: handleWarningClick,
+    onSetStandby: handleSetStandby,
+    onEditCue: handleEditCue,
+    goDisabled,
+    onGo: fireGo,
+    onBack: fireBack,
+    stackName: railStackName,
+    bpm: fxState?.bpm ?? null,
+    dbo,
+    onDbo: () => setDbo((d) => !d),
+  }
+
+  const toneBtnActive: Record<NoteTone, string> = {
+    NOTE: 'border-sky-600 bg-sky-500/15 text-sky-400',
+    WARN: 'border-amber-600 bg-amber-500/15 text-amber-500',
+    SAFETY: 'border-red-600 bg-red-500/15 text-red-400',
+  }
 
   const annotationKind =
     annotationDialog == null
@@ -589,30 +685,61 @@ export function PromptBookViewerPage() {
     <div className="flex h-full min-h-0 flex-col">
       <PromptBookToolbar
         bookName={book.name}
+        scriptFileName={book.scriptFileName}
+        projectId={projectIdNum}
         locked={locked}
         canEdit={canEdit}
         onToggleLock={toggleLock}
         canUndo={undoSnapshot != null}
         onUndo={handleUndo}
         activeLabel={activeCueLabel}
+        onJumpToLive={jumpToLive}
         warningCount={warnings.length}
         onToggleWarnings={() => setShowWarnings((s) => !s)}
         relockCountdown={relock.countdownSecondsLeft}
         onStayUnlocked={relock.stayUnlocked}
       />
 
+      {!locked && (
+        <ToolPalette tool={tool} onSelectTool={(t) => { setTool(t); setPlacingCueId(null); noteEdit() }} />
+      )}
+
+      {/* Compact NOW / NEXT strip — tablet & phone only */}
+      {isNarrow && (
+        <div className="flex items-center gap-2.5 border-b bg-background px-4 py-2">
+          {liveCue ? (
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className="grid size-5 shrink-0 place-items-center rounded-full border border-emerald-800 bg-emerald-950 text-emerald-400">
+                <Play className="size-2.5 fill-current" strokeWidth={0} />
+              </span>
+              <span className="font-mono text-sm font-bold text-emerald-400">{liveCue.label}</span>
+              <span className="truncate text-[13px]">{liveCue.name}</span>
+            </span>
+          ) : (
+            <span className="text-[13px] text-muted-foreground">No cue running</span>
+          )}
+          <ArrowRight className="size-3.5 shrink-0 text-muted-foreground/50" />
+          <span className="flex shrink-0 items-center gap-1.5">
+            <span className="text-[9px] font-bold tracking-wide text-muted-foreground uppercase">Next</span>
+            <span className="font-mono text-xs font-bold text-sky-400">{nextCue?.label ?? '—'}</span>
+          </span>
+          <span className="flex-1" />
+          <Button variant="outline" size="sm" onClick={() => setDrawerOpen(true)}>
+            <ListChecks className="size-3.5" /> Cues
+          </Button>
+        </div>
+      )}
+
       <div
-        className={
+        ref={bodyRef}
+        className={cn(
           // The editing state must be visually unmistakable: the whole script
           // pane gets an inset amber ring while unlocked.
-          locked
-            ? 'flex flex-1 min-h-0'
-            : 'flex flex-1 min-h-0 shadow-[inset_0_0_0_2px_rgba(245,158,11,0.55)]'
-        }
+          'relative flex min-h-0 flex-1 overflow-hidden',
+          !locked && 'shadow-[inset_0_0_0_2px_rgba(245,158,11,0.55)]',
+        )}
       >
         <div className="relative flex min-w-0 flex-1 flex-col">
-          {!locked && <ToolPalette tool={tool} onSelectTool={(t) => { setTool(t); setPlacingCueId(null); noteEdit() }} />}
-
           {pdfLoadState === 'missing' ? (
             <div className="flex flex-1 items-center justify-center p-8">
               <div className="max-w-md">
@@ -669,23 +796,48 @@ export function PromptBookViewerPage() {
           )}
         </div>
 
-        <CueStackPanel
-          cueOrder={cueOrder}
-          anchorByCue={anchorByCue}
-          statusOf={statusOf}
-          warningsByCue={warningsByCue}
-          warnings={warnings}
-          showWarnings={showWarnings}
-          locked={locked}
-          placingCueId={placingCueId}
-          onCueClick={handleCueClick}
-          onRemoveAnchor={handleRemoveAnchor}
-          onWarningClick={handleWarningClick}
-          goDisabled={goDisabled}
-          onGo={fireGo}
-          onBack={fireBack}
-        />
+        {!isNarrow && <CueStackPanel {...railProps} />}
+
+        {/* Tablet / phone: rail slides in from the right over a scrim. */}
+        {isNarrow && (
+          <>
+            <div
+              className={cn(
+                'absolute inset-0 z-30 bg-black/50 transition-opacity',
+                drawerOpen ? 'opacity-100' : 'pointer-events-none opacity-0',
+              )}
+              onClick={() => setDrawerOpen(false)}
+            />
+            <div
+              className={cn(
+                'absolute inset-y-0 right-0 z-40 flex w-[min(380px,88%)] flex-col border-l bg-background shadow-2xl transition-transform',
+                drawerOpen ? 'translate-x-0' : 'translate-x-full',
+              )}
+            >
+              <CueStackPanel {...railProps} inDrawer onClose={() => setDrawerOpen(false)} />
+            </div>
+          </>
+        )}
       </div>
+
+      {/* Bottom transport — tablet & phone (the desktop rail carries its own). */}
+      {isNarrow && (
+        <div
+          className="flex gap-2 border-t bg-background p-3"
+          style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
+        >
+          <Button variant="outline" onClick={fireBack} disabled={goDisabled} className="h-14 w-28">
+            <ChevronLeft className="size-4" /> BACK
+          </Button>
+          <Button
+            onClick={fireGo}
+            disabled={goDisabled}
+            className="h-14 flex-1 bg-amber-500 text-lg font-extrabold tracking-wide text-amber-950 hover:bg-amber-400"
+          >
+            <Play className="size-5" /> GO
+          </Button>
+        </div>
+      )}
 
       {/* Note / freetext text entry — a form, so a Sheet per the app's Sheet-vs-Dialog rule.
           A clicked strikethrough has nothing to edit; it gets a delete confirmation Dialog. */}
@@ -702,6 +854,30 @@ export function PromptBookViewerPage() {
             </SheetTitle>
           </SheetHeader>
           <SheetBody>
+            {annotationKind === 'NOTE' && (
+              <div>
+                <span className="mb-1.5 block text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase">
+                  Tone
+                </span>
+                <div className="flex gap-2">
+                  {(['NOTE', 'WARN', 'SAFETY'] as NoteTone[]).map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setAnnotationTone(t)}
+                      className={cn(
+                        'flex-1 rounded-md border px-2 py-1.5 text-xs font-semibold capitalize',
+                        annotationTone === t
+                          ? toneBtnActive[t]
+                          : 'text-muted-foreground hover:bg-muted/40',
+                      )}
+                    >
+                      {t.toLowerCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <Textarea
               value={annotationText}
               onChange={(e) => setAnnotationText(e.target.value)}

@@ -20,8 +20,8 @@ import {
   rectToStyle,
 } from '../../lib/promptBook/geometry'
 import { scriptPosition } from '../../lib/promptBook/desync'
-import { AnchorOverlay, type CueRunStatus } from './AnchorOverlay'
-import { AnnotationOverlay } from './AnnotationOverlay'
+import { CueWash, CueMarginMarker, type CueRunStatus } from './AnchorOverlay'
+import { CutOverlay, CutMarginMarker, FreetextOverlay, NoteCallout, NoteInline } from './AnnotationOverlay'
 import type { PromptBookTool } from './ToolPalette'
 
 // Vite worker wiring per react-pdf v10 docs — react-pdf pins the matching
@@ -90,20 +90,23 @@ export const ScriptViewer = forwardRef<ScriptViewerHandle, ScriptViewerProps>(fu
   const containerRef = useRef<HTMLDivElement>(null)
   const pageElsRef = useRef(new Map<number, HTMLDivElement>())
   const [numPages, setNumPages] = useState(0)
-  const [pageWidth, setPageWidth] = useState<number>(0)
+  const [containerWidth, setContainerWidth] = useState<number>(0)
 
-  // Fit-width: track the scroll container's inner width.
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
-    const observer = new ResizeObserver(() => {
-      // 3rem horizontal padding; clamp so a huge monitor doesn't render an
-      // unreadably tall canvas wall.
-      setPageWidth(clamp(el.clientWidth - 48, 280, 1100))
-    })
+    const observer = new ResizeObserver(() => setContainerWidth(el.clientWidth))
     observer.observe(el)
     return () => observer.disconnect()
   }, [])
+
+  // Cue/cut markers sit in the page's own left margin (assumed present); notes
+  // get a right gutter beside the page. When the pane is narrow the note gutter
+  // collapses and notes fall inline under their line instead. The page fills
+  // what's left, clamped so a huge monitor doesn't render a canvas wall.
+  const narrow = containerWidth > 0 && containerWidth < 720
+  const rightGutter = narrow ? 0 : 224
+  const pageWidth = clamp(containerWidth - rightGutter - 48, 280, 1000)
 
   const scrollToRegion = useCallback((region: Region) => {
     const container = containerRef.current
@@ -150,7 +153,7 @@ export const ScriptViewer = forwardRef<ScriptViewerHandle, ScriptViewerProps>(fu
       if (!pageEl) return
       e.stopPropagation()
       e.preventDefault()
-      ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+      ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
       dragRef.current = {
         cueId: anchor.cueId,
         startY: e.clientY,
@@ -188,7 +191,7 @@ export const ScriptViewer = forwardRef<ScriptViewerHandle, ScriptViewerProps>(fu
 
       if (tool === 'move') return
       e.preventDefault()
-      ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+      ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
       const start = clientPointToNormalized(e.clientX, e.clientY, pageEl)
       const rect = cornersToRect(page, start, start)
       drawRef.current = { page, start, lastRect: rect, pageEl }
@@ -274,61 +277,120 @@ export const ScriptViewer = forwardRef<ScriptViewerHandle, ScriptViewerProps>(fu
           </div>
         }
       >
-        <div className="flex flex-col items-center gap-4 px-6 py-6 pl-16">
-          {pageWidth > 0 &&
-            Array.from({ length: numPages }, (_, i) => (
-              <div
-                key={i}
-                ref={(el) => {
-                  if (el) pageElsRef.current.set(i, el)
-                  else pageElsRef.current.delete(i)
-                }}
-                data-page-index={i}
-                onPointerDown={(e) => onPagePointerDown(e, i)}
-                className={cn(
-                  'relative shadow-lg',
-                  placingCueId != null && 'cursor-crosshair',
-                  drawing && 'cursor-crosshair',
-                )}
-              >
-                <Page
-                  pageIndex={i}
-                  width={pageWidth}
-                  renderTextLayer={false}
-                  renderAnnotationLayer={false}
-                />
-                {/* Overlay layer — annotations under anchors, both percent-positioned. */}
-                <div className="absolute inset-0 pointer-events-none">
-                  {(annotationsByPage.get(i) ?? []).map(({ item: annotation, rects }) => (
-                    <AnnotationOverlay
-                      key={annotation.id}
-                      annotation={annotation}
-                      rects={rects}
-                      locked={locked || tool !== 'move'}
-                      onClick={() => onAnnotationClick(annotation)}
+        <div className="flex flex-col items-center gap-4 px-6 py-6">
+          {containerWidth > 0 &&
+            Array.from({ length: numPages }, (_, i) => {
+              const cues = anchorsByPage.get(i) ?? []
+              const anns = annotationsByPage.get(i) ?? []
+              const cuts = anns.filter((a) => a.item.kind === 'STRIKETHROUGH')
+              const notes = anns.filter((a) => a.item.kind === 'NOTE')
+              const freetexts = anns.filter((a) => a.item.kind === 'FREETEXT')
+              const annLocked = locked || tool !== 'move'
+              // One status lookup per cue, shared by its wash and margin marker.
+              const cueStatus = new Map(cues.map((c) => [c.item.cueId, statusOf(c.item.cueId)]))
+              return (
+                <div key={i} className="flex items-stretch" style={{ width: pageWidth + rightGutter }}>
+                  {/* Page + on-page overlays (markers in the left margin, washes, cuts, notes). */}
+                  <div
+                    ref={(el) => {
+                      if (el) pageElsRef.current.set(i, el)
+                      else pageElsRef.current.delete(i)
+                    }}
+                    data-page-index={i}
+                    onPointerDown={(e) => onPagePointerDown(e, i)}
+                    className={cn(
+                      'relative shrink-0 shadow-lg',
+                      (placingCueId != null || drawing) && 'cursor-crosshair',
+                    )}
+                    style={{ width: pageWidth }}
+                  >
+                    <Page
+                      pageIndex={i}
+                      width={pageWidth}
+                      renderTextLayer={false}
+                      renderAnnotationLayer={false}
                     />
-                  ))}
-                  {(anchorsByPage.get(i) ?? []).map(({ item: anchor, rects }) => (
-                    <AnchorOverlay
-                      key={anchor.cueId}
-                      anchor={anchor}
-                      rects={rects}
-                      status={statusOf(anchor.cueId)}
-                      hasWarning={warningCueIds.has(anchor.cueId)}
-                      locked={locked || tool !== 'move' || placingCueId != null}
-                      dragging={dragOverride?.cueId === anchor.cueId}
-                      onPointerDown={(e) => onAnchorPointerDown(e, anchor, i)}
-                    />
-                  ))}
-                  {draftRect && draftRect.page === i && (
-                    <div
-                      style={rectToStyle(draftRect)}
-                      className="rounded-sm border border-dashed border-amber-400 bg-amber-400/10"
-                    />
+                    <div className="pointer-events-none absolute inset-0">
+                      {cuts.map(({ item, rects }) => (
+                        <CutOverlay
+                          key={item.id}
+                          rects={rects}
+                          locked={annLocked}
+                          onClick={() => onAnnotationClick(item)}
+                        />
+                      ))}
+                      {freetexts.map(({ item, rects }) => (
+                        <FreetextOverlay
+                          key={item.id}
+                          annotation={item}
+                          rects={rects}
+                          locked={annLocked}
+                          onClick={() => onAnnotationClick(item)}
+                        />
+                      ))}
+                      {cues.map(({ item: anchor, rects }) => {
+                        const status = cueStatus.get(anchor.cueId)!
+                        return (
+                          <CueWash key={anchor.cueId} rects={rects} status={status} isLive={status === 'live'} />
+                        )
+                      })}
+                      {/* Margin markers — cue/cut labels + bands in the page's left margin. */}
+                      {cuts.map(({ item, rects }) => (
+                        <CutMarginMarker
+                          key={item.id}
+                          rects={rects}
+                          locked={annLocked}
+                          onClick={() => onAnnotationClick(item)}
+                        />
+                      ))}
+                      {cues.map(({ item: anchor, rects }) => (
+                        <CueMarginMarker
+                          key={anchor.cueId}
+                          anchor={anchor}
+                          rects={rects}
+                          status={cueStatus.get(anchor.cueId)!}
+                          hasWarning={warningCueIds.has(anchor.cueId)}
+                          locked={locked || tool !== 'move' || placingCueId != null}
+                          dragging={dragOverride?.cueId === anchor.cueId}
+                          onPointerDown={(e) => onAnchorPointerDown(e, anchor, i)}
+                        />
+                      ))}
+                      {narrow &&
+                        notes.map(({ item, rects }) => (
+                          <NoteInline
+                            key={item.id}
+                            annotation={item}
+                            rects={rects}
+                            locked={annLocked}
+                            onClick={() => onAnnotationClick(item)}
+                          />
+                        ))}
+                      {draftRect && draftRect.page === i && (
+                        <div
+                          style={rectToStyle(draftRect)}
+                          className="rounded-sm border border-dashed border-amber-400 bg-amber-400/10"
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right gutter — note callouts (desktop). */}
+                  {rightGutter > 0 && (
+                    <div className="relative shrink-0" style={{ width: rightGutter }}>
+                      {notes.map(({ item, rects }) => (
+                        <NoteCallout
+                          key={item.id}
+                          annotation={item}
+                          rects={rects}
+                          locked={annLocked}
+                          onClick={() => onAnnotationClick(item)}
+                        />
+                      ))}
+                    </div>
                   )}
                 </div>
-              </div>
-            ))}
+              )
+            })}
         </div>
       </Document>
     </div>

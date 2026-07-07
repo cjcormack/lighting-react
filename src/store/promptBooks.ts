@@ -19,6 +19,7 @@ export type {
   Rect,
   Region,
   AnnotationKind,
+  NoteTone,
 } from '../api/promptBooksApi'
 
 // Subscribe to WebSocket prompt book changes - invalidate all prompt book caches

@@ -11,13 +11,16 @@ function anchor(cueId: number, ...region: Rect[]): CueAnchorDto {
 }
 
 function strike(id: number, ...region: Rect[]): AnnotationDto {
-  return { id, kind: 'STRIKETHROUGH', region, text: null, color: null }
+  return { id, kind: 'STRIKETHROUGH', region, text: null, color: null, tone: null }
 }
 
 function order(...cues: Array<[cueId: number, stackId?: number]>): FlatCue[] {
   return cues.map(([cueId, stackId = 1]) => ({
     cueId,
     label: `Q${cueId}`,
+    name: `cue-${cueId}`,
+    fadeMs: null,
+    fadeCurve: 'LINEAR',
     stackId,
     stackName: `Stack ${stackId}`,
   }))
@@ -125,7 +128,7 @@ describe('computeWarnings', () => {
   })
 
   it('ignores non-strikethrough annotations for the cut check', () => {
-    const note: AnnotationDto = { id: 1, kind: 'NOTE', region: [rect(0, 0.2)], text: 'x', color: null }
+    const note: AnnotationDto = { id: 1, kind: 'NOTE', region: [rect(0, 0.2)], text: 'x', color: null, tone: null }
     expect(computeWarnings([anchor(1, rect(0, 0.2))], [note], order([1]))).toEqual([])
   })
 

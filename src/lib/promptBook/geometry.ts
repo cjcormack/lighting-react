@@ -10,7 +10,15 @@ import { clamp } from '../utils'
 import type { Rect, Region } from '../../api/promptBooksApi'
 import type { ShowDetails } from '../../api/showApi'
 import type { CueStack } from '../../api/cueStacksApi'
-import type { FlatCue } from './desync'
+import { scriptPosition, type FlatCue } from './desync'
+
+/**
+ * Fixed x (normalized) for the cue/cut margin band's right edge — a single lane
+ * in the page's left margin so every marker's line + label align vertically,
+ * regardless of where each annotated region's text starts. Assumes the script
+ * leaves a normal left margin. The label extends left of this into the margin.
+ */
+export const MARKER_MARGIN_X = 0.04
 
 /** Position a normalized rect inside a `position: relative` page wrapper. */
 export function rectToStyle(r: Rect): CSSProperties {
@@ -70,6 +78,18 @@ export function moveRegionVertically(region: Region, dy: number): Region {
   return region.map((r) => ({ ...r, y: r.y + clamped }))
 }
 
+/**
+ * Vertical extent of a set of rects (all assumed on one page): the topmost y and
+ * the total height down to the lowest edge. Used to draw a single gutter band that
+ * spans everything a region touches on a page.
+ */
+export function verticalBounds(rects: Rect[]): { top: number; height: number } {
+  if (rects.length === 0) return { top: 0, height: 0 }
+  const top = Math.min(...rects.map((r) => r.y))
+  const bottom = Math.max(...rects.map((r) => r.y + r.h))
+  return { top, height: Math.max(bottom - top, 0) }
+}
+
 /** Order two rect corners into a normalized rect, with a minimum size floor. */
 export function cornersToRect(
   page: number,
@@ -107,10 +127,27 @@ export function flattenCueOrder(
       out.push({
         cueId: cue.id,
         label: cue.cueNumber ? `Q${cue.cueNumber}` : cue.name,
+        name: cue.name,
+        fadeMs: cue.fadeDurationMs,
+        fadeCurve: cue.fadeCurve,
         stackId: stack.id,
         stackName: stack.name,
       })
     }
   }
   return out
+}
+
+/**
+ * A human "roughly where on the page" phrase for a region — used as the live
+ * cue's trigger-line stand-in in the rail, since the PDF has no text layer to
+ * quote. Buckets the region's reading-position y into fifths of the page.
+ * e.g. `{ page: 11, y: 0.5 }` → "middle of p. 12" (page index is 0-based).
+ */
+export function positionLabel(region: Region): string {
+  if (region.length === 0) return ''
+  const { page, y } = scriptPosition(region)
+  const band =
+    y < 0.2 ? 'top' : y < 0.4 ? 'upper' : y < 0.6 ? 'middle' : y < 0.8 ? 'lower' : 'bottom'
+  return `${band} of p. ${page + 1}`
 }

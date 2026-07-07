@@ -16,6 +16,12 @@ import type { Rect, Region, CueAnchorDto, AnnotationDto } from '../../api/prompt
 export interface FlatCue {
   cueId: number
   label: string
+  /** Cue name (distinct from the "Q12" label) — shown in the rail's hero row. */
+  name: string
+  /** Fade-in duration in ms (null → snap), for the rail's transition meta. */
+  fadeMs: number | null
+  /** Fade curve name ("lin", "sin", …), for the rail's transition meta. */
+  fadeCurve: string
   stackId: number
   stackName: string
 }
