@@ -8,6 +8,8 @@ import type { Cue } from '@/api/cuesApi'
 
 interface RunPropsPaneProps {
   cue: Cue
+  /** Prompt-book reading position, e.g. "top of p. 9". Omitted when not anchored. */
+  location?: string | null
 }
 
 /**
@@ -17,7 +19,7 @@ interface RunPropsPaneProps {
  * No editing affordances — to change anything the operator clicks "Edit Cue"
  * in the breadcrumb actions to jump to Program.
  */
-export function RunPropsPane({ cue }: RunPropsPaneProps) {
+export function RunPropsPane({ cue, location }: RunPropsPaneProps) {
   const fadeText = formatFadeText(cue.fadeDurationMs, cue.fadeCurve)
 
   return (
@@ -51,6 +53,11 @@ export function RunPropsPane({ cue }: RunPropsPaneProps) {
         {cue.notes && (
           <PropRow k="Note">
             <span className="italic text-muted-foreground">{cue.notes}</span>
+          </PropRow>
+        )}
+        {location && (
+          <PropRow k="Book">
+            <span className="italic text-muted-foreground">{location}</span>
           </PropRow>
         )}
       </div>

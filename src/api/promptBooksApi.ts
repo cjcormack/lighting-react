@@ -35,6 +35,18 @@ export interface CueAnchorDto {
   label: string | null
 }
 
+/**
+ * A cue's reading position in the project's prompt book — the anchor region reduced
+ * server-side to its earliest rect (topmost line on the lowest page). Served by
+ * GET project/{id}/cue-locations for the Run view; the frontend turns `{page, y}`
+ * into a "top of p. 9"-style label. Project-scoped and book-agnostic.
+ */
+export interface CueLocationDto {
+  cueId: number
+  page: number
+  y: number
+}
+
 export interface AnnotationDto {
   id: number
   kind: AnnotationKind

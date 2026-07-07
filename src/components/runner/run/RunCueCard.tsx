@@ -42,6 +42,8 @@ interface RunCueCardProps {
   fadeProgress: number | null
   /** Remaining ms in the fade-in. null when not fading. */
   fadeRemainMs: number | null
+  /** Prompt-book reading position, e.g. "top of p. 9". Shown in the expanded body only. */
+  location?: string | null
 }
 
 type Tab = 'output' | 'targets' | 'props'
@@ -71,6 +73,7 @@ export function RunCueCard({
   onToggleExpanded,
   fadeProgress,
   fadeRemainMs,
+  location,
 }: RunCueCardProps) {
   const [bodyRef, narrow] = useNarrowContainer(TABS_BREAKPOINT)
   const [tab, setTab] = useState<Tab>('output')
@@ -322,7 +325,7 @@ export function RunCueCard({
               hideTitleInTabs={narrow}
             >
               {cueData ? (
-                <RunPropsPane cue={cueData} />
+                <RunPropsPane cue={cueData} location={location} />
               ) : (
                 <p className="text-sm text-muted-foreground">
                   {isFetching ? 'Loading…' : 'No cue data.'}

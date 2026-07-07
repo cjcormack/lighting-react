@@ -149,7 +149,10 @@ interface ScriptViewerProps {
  * floating toolbar), falling back to drag-a-box / click-a-band on scanned pages
  * that have no text layer.
  */
-export const ScriptViewer = forwardRef<ScriptViewerHandle, ScriptViewerProps>(function ScriptViewer(
+// Memoized: the Prompt Book page re-renders on every fade-progress frame during a GO;
+// with all props referentially stable through a fade, memo spares the whole PDF + overlay
+// subtree from re-reconciling ~60×/s.
+export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProps>(function ScriptViewer(
   {
     fileUrl,
     anchors,
@@ -658,7 +661,7 @@ export const ScriptViewer = forwardRef<ScriptViewerHandle, ScriptViewerProps>(fu
       )}
     </div>
   )
-})
+}))
 
 /** Compute the default band rect for a click-placed anchor (scanned fallback). */
 function placedAnchorRect(page: number, y: number): Rect {

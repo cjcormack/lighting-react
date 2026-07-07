@@ -303,6 +303,57 @@ export function groupCuesByStack(cueOrder: FlatCue[]): CueRailRow[] {
   return out
 }
 
+/** Rail row model that also carries MARKER cues as separators. */
+export type ShowRailRow =
+  | { type: 'header'; stackId: number; stackName: string }
+  | { type: 'cue'; cue: FlatCue }
+  | { type: 'separator'; id: number; name: string }
+
+/**
+ * Build the prompt-book rail's rows straight from the show — like `flattenCueOrder`
+ * but keeping MARKER cues as `separator` rows so the rail mirrors the Run view's
+ * dividers. Per-stack headers are emitted only when the show spans more than one
+ * stack; with a single stack the panel header already names it (no duplicate).
+ */
+export function flattenShowRows(
+  show: ShowDetails | undefined,
+  stacks: CueStack[] | undefined,
+): ShowRailRow[] {
+  if (!show || !stacks) return []
+  const stackById = new Map(stacks.map((s) => [s.id, s]))
+  const entries = [...show.entries]
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .filter((e) => e.entryType === 'STACK' && e.cueStackId != null)
+  const distinctStacks = new Set(entries.map((e) => e.cueStackId)).size
+  const out: ShowRailRow[] = []
+  for (const entry of entries) {
+    const stack = stackById.get(entry.cueStackId!)
+    if (!stack) continue
+    if (distinctStacks > 1) {
+      out.push({ type: 'header', stackId: stack.id, stackName: stack.name })
+    }
+    for (const cue of stack.cues) {
+      if (cue.cueType === 'MARKER') {
+        out.push({ type: 'separator', id: cue.id, name: cue.name })
+      } else {
+        out.push({
+          type: 'cue',
+          cue: {
+            cueId: cue.id,
+            label: cue.cueNumber ? `Q${cue.cueNumber}` : cue.name,
+            name: cue.name,
+            fadeMs: cue.fadeDurationMs,
+            fadeCurve: cue.fadeCurve,
+            stackId: stack.id,
+            stackName: stack.name,
+          },
+        })
+      }
+    }
+  }
+  return out
+}
+
 /**
  * A human "roughly where on the page" phrase for a region — used as the live
  * cue's trigger-line stand-in in the rail, since the PDF has no text layer to
@@ -312,6 +363,15 @@ export function groupCuesByStack(cueOrder: FlatCue[]): CueRailRow[] {
 export function positionLabel(region: Region): string {
   if (region.length === 0) return ''
   const { page, y } = scriptPosition(region)
+  return positionLabelFor(page, y)
+}
+
+/**
+ * The band + page phrasing for a raw reading position — the single source of the
+ * "top of p. 9" wording, shared by the rail (which reduces a Region) and the Run
+ * view (which gets `{page, y}` from the cue-locations endpoint). `page` is 0-based.
+ */
+export function positionLabelFor(page: number, y: number): string {
   const band =
     y < 0.2 ? 'top' : y < 0.4 ? 'upper' : y < 0.6 ? 'middle' : y < 0.8 ? 'lower' : 'bottom'
   return `${band} of p. ${page + 1}`

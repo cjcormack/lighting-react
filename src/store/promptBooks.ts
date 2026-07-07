@@ -8,6 +8,7 @@ import type {
   UpsertAnchorRequest,
   AnnotationRequest,
   CueAnchorDto,
+  CueLocationDto,
   AnnotationDto,
   ScriptUploadResponse,
 } from '../api/promptBooksApi'
@@ -15,6 +16,7 @@ export type {
   PromptBookSummary,
   PromptBookDetails,
   CueAnchorDto,
+  CueLocationDto,
   AnnotationDto,
   Rect,
   Region,
@@ -42,6 +44,17 @@ export const promptBooksApi = restApi.injectEndpoints({
       providesTags: (_result, _error, { bookId }) => [
         { type: 'PromptBook', id: bookId },
         'PromptBook',
+      ],
+    }),
+
+    // Per-cue reading positions from the project's prompt book, for the Run view.
+    // Tagged PromptBookList so it rides the same invalidation as anchor edits (both
+    // the anchor mutations and the WS promptBookListChanged echo refresh it).
+    projectCueLocations: build.query<CueLocationDto[], number>({
+      query: (projectId) => `project/${projectId}/cue-locations`,
+      providesTags: (_result, _error, projectId) => [
+        { type: 'PromptBookList', id: projectId },
+        'PromptBookList',
       ],
     }),
 
@@ -209,6 +222,7 @@ export const promptBooksApi = restApi.injectEndpoints({
 export const {
   useProjectPromptBookListQuery,
   useProjectPromptBookQuery,
+  useProjectCueLocationsQuery,
   useCreatePromptBookMutation,
   useUpdatePromptBookMutation,
   useDeletePromptBookMutation,

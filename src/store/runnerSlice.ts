@@ -43,6 +43,9 @@ function nextStandardCue(
     for (let j = 0; j < idx; j++) {
       if (cues[j].cueType === 'STANDARD') return cues[j].id
     }
+    // Only one STANDARD cue in a looping stack: wrap to itself so GO re-fires it,
+    // rather than reporting "no next" (which callers treat as end-of-stack).
+    if (cues[idx]?.cueType === 'STANDARD') return currentId
   }
   return null
 }

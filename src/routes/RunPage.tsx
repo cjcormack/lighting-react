@@ -32,6 +32,8 @@ import {
 } from '../store/show'
 import type { ShowEntryDto } from '../api/showApi'
 import { useFxStateQuery } from '../store/fx'
+import { useProjectCueLocationsQuery } from '../store/promptBooks'
+import { positionLabelFor } from '../lib/promptBook/geometry'
 import { lightingApi } from '../api/lightingApi'
 import {
   go,
@@ -103,6 +105,15 @@ export function RunPage() {
   const { data: stacks, isLoading: stacksLoading } = useProjectCueStackListQuery(projectIdNum)
   const { data: fxState } = useFxStateQuery()
   const { data: show } = useProjectShowQuery(projectIdNum)
+  const { data: cueLocations } = useProjectCueLocationsQuery(projectIdNum)
+
+  // Per-cue prompt-book reading position, e.g. "top of p. 9". Empty when the project
+  // has no prompt book — the label just doesn't render.
+  const locationByCue = useMemo(() => {
+    const m = new Map<number, string>()
+    for (const l of cueLocations ?? []) m.set(l.cueId, positionLabelFor(l.page, l.y))
+    return m
+  }, [cueLocations])
 
   const isShowActive = show?.activeEntryId != null
 
@@ -575,6 +586,8 @@ export function RunPage() {
               onRequeueCue={handleCueRequeue}
               projectId={projectIdNum}
               fadeRemainMs={fadeRemainMs}
+              activeLocation={activeCue ? locationByCue.get(activeCue.id) ?? null : null}
+              standbyLocation={standbyCue ? locationByCue.get(standbyCue.id) ?? null : null}
             />
           ) : (
             <>
@@ -677,6 +690,7 @@ export function RunPage() {
                       onToggleExpanded={() => toggleExpanded(cue.id)}
                       fadeProgress={isFading ? runner.fadeProgress : null}
                       fadeRemainMs={isFading ? fadeRemainMs : null}
+                      location={locationByCue.get(cue.id) ?? null}
                     />
                   )
                 })}

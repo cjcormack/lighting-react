@@ -37,6 +37,9 @@ interface RunMobileProps {
   projectId: number
   /** ms remaining for the active cue's fade-in. null when not fading. */
   fadeRemainMs: number | null
+  /** Prompt-book reading position of the active / next cue, e.g. "top of p. 9". */
+  activeLocation: string | null
+  standbyLocation: string | null
 }
 
 /**
@@ -61,6 +64,8 @@ export function RunMobile({
   onRequeueCue,
   projectId,
   fadeRemainMs,
+  activeLocation,
+  standbyLocation,
 }: RunMobileProps) {
   const cues: CueStackCueEntry[] = stack?.cues ?? []
   const [stackPickerOpen, setStackPickerOpen] = useState(false)
@@ -160,6 +165,7 @@ export function RunMobile({
           counter={counter}
           fadeProgress={fadeProgress}
           fadeRemainMs={fadeRemainMs}
+          location={activeLocation}
         />
         <RunMobileCueCard
           kind="nxt"
@@ -168,6 +174,7 @@ export function RunMobile({
           expansion={expansion}
           onSetExpansion={setExpansion}
           onChange={() => setCueListOpen(true)}
+          location={standbyLocation}
         />
 
         {!standbyCue && nextStackEntry && (
