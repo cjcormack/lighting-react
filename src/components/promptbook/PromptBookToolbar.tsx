@@ -1,12 +1,10 @@
-import { BookOpenText, Lock, LockOpen, Pencil, Play, TriangleAlert, Undo2 } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Lock, LockOpen, Play, TriangleAlert, Undo2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
 interface PromptBookToolbarProps {
   scriptFileName: string | null
-  projectId: number
   locked: boolean
   canEdit: boolean
   onToggleLock: () => void
@@ -22,24 +20,6 @@ interface PromptBookToolbarProps {
   onStayUnlocked: () => void
 }
 
-/** Edit · Run · Prompt Book switcher — the reader is the current view. */
-function ViewSwitcher({ projectId }: { projectId: number }) {
-  const item = 'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold'
-  return (
-    <nav className="hidden items-center gap-0.5 rounded-lg border bg-card p-0.5 sm:inline-flex">
-      <Link to={`/projects/${projectId}/program`} className={cn(item, 'text-muted-foreground hover:text-foreground')}>
-        <Pencil className="size-3.5" /> Edit
-      </Link>
-      <Link to={`/projects/${projectId}/run`} className={cn(item, 'text-muted-foreground hover:text-foreground')}>
-        <Play className="size-3.5" /> Run
-      </Link>
-      <span className={cn(item, 'bg-muted text-foreground')}>
-        <BookOpenText className="size-3.5" /> Prompt Book
-      </span>
-    </nav>
-  )
-}
-
 /**
  * Header bar over the script pane. The lock state is deliberately unmistakable:
  * locked is the app's quiet default chrome; unlocked shifts the whole bar amber
@@ -48,7 +28,6 @@ function ViewSwitcher({ projectId }: { projectId: number }) {
  */
 export function PromptBookToolbar({
   scriptFileName,
-  projectId,
   locked,
   canEdit,
   onToggleLock,
@@ -118,8 +97,6 @@ export function PromptBookToolbar({
           Undo move
         </Button>
       )}
-
-      <ViewSwitcher projectId={projectId} />
 
       <Tooltip>
         <TooltipTrigger asChild>

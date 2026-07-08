@@ -21,8 +21,8 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
-import { useCurrentProjectQuery } from '../store/projects'
-import { useProjectShowQuery } from '../store/show'
+import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
+import { useProjectShowQuery, useActivateShowMutation, useDeactivateShowMutation } from '../store/show'
 import {
   useProjectCueStackListQuery,
   useAdvanceCueStackMutation,
@@ -52,6 +52,7 @@ import { computeWarnings, type DesyncWarning, type FlatCue } from '../lib/prompt
 import { flattenCueOrder, flattenShowRows } from '../lib/promptBook/geometry'
 import { ScriptViewer, type ScriptViewerHandle } from '../components/promptbook/ScriptViewer'
 import { CueAnchorPickerSheet } from '../components/promptbook/CueAnchorPickerSheet'
+import { ShowHeader } from '../components/ShowHeader'
 import { PromptBookToolbar } from '../components/promptbook/PromptBookToolbar'
 import { ToolPalette, type PromptBookTool } from '../components/promptbook/ToolPalette'
 import { CueStackPanel } from '../components/promptbook/CueStackPanel'
@@ -93,6 +94,7 @@ export function PromptBookViewerPage() {
   const dispatch = useDispatch()
   const navigate = useNavigate()
   const { data: book, isLoading: bookLoading, error: bookError, refetch: refetchBook } = useProjectPromptBookQuery(projectIdNum)
+  const { data: project } = useProjectQuery(projectIdNum)
   const { data: show } = useProjectShowQuery(projectIdNum)
   const { data: stacks } = useProjectCueStackListQuery(projectIdNum)
   const { data: fxState } = useFxStateQuery()
@@ -101,6 +103,8 @@ export function PromptBookViewerPage() {
   const [activateCueStack] = useActivateCueStackMutation()
   const [goToCueInStack] = useGoToCueInStackMutation()
   const [advanceShow] = useAdvanceShowMutation()
+  const [activateShow] = useActivateShowMutation()
+  const [deactivateShow] = useDeactivateShowMutation()
 
   const [upsertAnchor] = useUpsertAnchorMutation()
   const [deleteAnchor] = useDeleteAnchorMutation()
@@ -196,6 +200,8 @@ export function PromptBookViewerPage() {
   // (the anchor's own cached label only refreshes when the anchor is re-saved).
   const cueLabelByCue = useMemo(() => new Map(cueOrder.map((c) => [c.cueId, c.label])), [cueOrder])
 
+  const isShowActive = show?.activeEntryId != null
+
   const activeEntry = useMemo(
     () => show?.entries.find((e) => e.id === show.activeEntryId),
     [show],
@@ -217,6 +223,9 @@ export function PromptBookViewerPage() {
   // The cue armed to fire on the next GO: an explicit standby, else the next cue
   // in reading order. Pre-show (nothing live) the first cue sits on deck.
   const nextCueId = useMemo(() => {
+    // Stopped show: nothing is on deck. Without this, a null activeCueId would put
+    // the first cue on deck (blue "NEXT"), making a stopped rail look pre-show/armed.
+    if (!isShowActive) return null
     // An explicitly-armed standby is the next GO — but never treat the cue that's
     // already live as "next" (activating a standby leaves standbyCueId sitting on it).
     const sb = runner.standbyCueId
@@ -231,7 +240,7 @@ export function PromptBookViewerPage() {
     const activeIdx = cueOrderIndex.get(activeCueId)
     if (activeIdx == null) return null
     return cueOrder[activeIdx + 1]?.cueId ?? null
-  }, [runner.standbyCueId, activeCueId, activeStackId, cueOrder, cueOrderIndex])
+  }, [isShowActive, runner.standbyCueId, activeCueId, activeStackId, cueOrder, cueOrderIndex])
 
   const statusOf = useCallback(
     (cueId: number): CueRunStatus => {
@@ -348,7 +357,6 @@ export function PromptBookViewerPage() {
   }, [activeCueId, nextCueId])
 
   // ── GO surface — reuses the upstream mutations; also re-locks (fix-it edits end at GO). ──
-  const isShowActive = show?.activeEntryId != null
   const goDisabled = !isShowActive || !canEdit
 
   // Server call to move the backend cursor. Mirrors RunPage.fireGo.
@@ -435,11 +443,33 @@ export function PromptBookViewerPage() {
     [activeStackId, activeCueId, dispatch],
   )
 
-  // Jump to the cue's editor. No per-cue deep link exists yet, so open Program.
+  // Jump to the cue's editor in Program, deep-linking to the exact cue (mirrors Run's
+  // "Edit Cue"). Program's ?stack=&cue= handler requires the stack, so resolve it first.
   const handleEditCue = useCallback(
-    (_cueId: number) => navigate(`/projects/${projectIdNum}/program`),
-    [navigate, projectIdNum],
+    (cueId: number) => {
+      const flat = cueOrder[cueOrderIndex.get(cueId) ?? -1]
+      const params = new URLSearchParams()
+      if (flat?.stackId != null) params.set('stack', String(flat.stackId))
+      params.set('cue', String(cueId))
+      navigate(`/projects/${projectIdNum}/program?${params.toString()}`)
+    },
+    [cueOrder, cueOrderIndex, navigate, projectIdNum],
   )
+
+  // Start/Stop the show in place from the header (parity with Program/Run). State is
+  // derived from show.activeEntryId, so no local entry tracking is needed here.
+  const stackEntryCount = show?.entries.filter((e) => e.entryType === 'STACK').length ?? 0
+  const canStart = !isShowActive && stackEntryCount > 0
+  const handleStartShow = useCallback(() => {
+    activateShow({ projectId: projectIdNum })
+      .unwrap()
+      .catch(() => {
+        // Silently fail
+      })
+  }, [activateShow, projectIdNum])
+  const handleStopShow = useCallback(async () => {
+    await deactivateShow({ projectId: projectIdNum }).unwrap()
+  }, [deactivateShow, projectIdNum])
 
   const jumpToLive = useCallback(() => {
     if (activeCueId == null) return
@@ -746,6 +776,7 @@ export function PromptBookViewerPage() {
     onSetStandby: handleSetStandby,
     onEditCue: handleEditCue,
     goDisabled,
+    showActive: isShowActive,
     onGo: fireGo,
     onBack: fireBack,
     stackName: railStackName,
@@ -774,9 +805,17 @@ export function PromptBookViewerPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      <ShowHeader
+        view="prompt-book"
+        projectId={projectIdNum}
+        projectName={project?.name ?? ''}
+        isShowActive={isShowActive}
+        canStart={canStart}
+        onStart={handleStartShow}
+        onStop={handleStopShow}
+      />
       <PromptBookToolbar
         scriptFileName={book.scriptFileName}
-        projectId={projectIdNum}
         locked={locked}
         canEdit={canEdit}
         onToggleLock={toggleLock}

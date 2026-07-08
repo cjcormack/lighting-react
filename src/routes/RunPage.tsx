@@ -3,16 +3,7 @@ import { useParams, useNavigate, Navigate, Link } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { Loader2, RotateCcw, Play, Pencil, Square } from 'lucide-react'
+import { Loader2, RotateCcw, Play } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import {
@@ -43,7 +34,7 @@ import {
   selectStackRunner,
 } from '../store/runnerSlice'
 import { useRunnerAnimation } from '../hooks/useRunnerAnimation'
-import { Breadcrumbs } from '../components/Breadcrumbs'
+import { ShowHeader } from '../components/ShowHeader'
 import { MarkerRow } from '../components/runner/MarkerRow'
 import {
   OutOfOrderBanner,
@@ -98,7 +89,6 @@ export function RunPage() {
   const { projectId } = useParams()
   const projectIdNum = Number(projectId)
   const dispatch = useDispatch()
-  const navigate = useNavigate()
 
   const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
@@ -127,7 +117,6 @@ export function RunPage() {
 
   const [dbo, setDbo] = useState(false)
   const [oooDismissed, setOooDismissed] = useState(false)
-  const [stopConfirmOpen, setStopConfirmOpen] = useState(false)
   /** Set of expanded cue ids in the desktop list. */
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
 
@@ -335,8 +324,13 @@ export function RunPage() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!isShowActive) return
-      const tag = (e.target as HTMLElement).tagName
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return
+      const target = e.target as HTMLElement
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
+      // Don't fire transport from within a modal (e.g. the Stop-confirm dialog),
+      // where focus is trapped on a dialog button — there Space/Backspace act on the
+      // dialog, not the show. Guarding all buttons would break Space=GO whenever a
+      // toolbar/cue button holds focus, so scope the guard to open dialogs only.
+      if (target.closest?.('[role="dialog"]')) return
       if (e.code === 'Space') {
         e.preventDefault()
         handleGo()
@@ -395,23 +389,9 @@ export function RunPage() {
       .catch(() => {})
   }, [activateShow, projectIdNum])
 
-  const handleConfirmDeactivate = useCallback(async () => {
-    try {
-      await deactivateShow({ projectId: projectIdNum }).unwrap()
-    } catch {
-      // Silently fail
-    } finally {
-      setStopConfirmOpen(false)
-    }
+  const handleStopShow = useCallback(async () => {
+    await deactivateShow({ projectId: projectIdNum }).unwrap()
   }, [deactivateShow, projectIdNum])
-
-  const handleEditActiveCueInProgram = useCallback(() => {
-    if (activeStackId == null) return
-    const cueId = stack?.activeCueId ?? runner.activeCueId
-    const params = new URLSearchParams({ stack: String(activeStackId) })
-    if (cueId != null) params.set('cue', String(cueId))
-    navigate(`/projects/${projectIdNum}/program?${params.toString()}`)
-  }, [activeStackId, stack, runner.activeCueId, navigate, projectIdNum])
 
   // ── Cue card interactions ──
 
@@ -477,53 +457,15 @@ export function RunPage() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Breadcrumb row + Edit Cue / Stop / connection-dot cluster */}
-      <div className="flex items-center p-4 gap-3">
-        <div className="flex-1 min-w-0">
-          <Breadcrumbs projectName={project.name} currentPage="Run" />
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          {isShowActive && (
-            <>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleEditActiveCueInProgram}
-                    disabled={activeStackId == null}
-                    aria-label="Edit live cue in Program"
-                  >
-                    <Pencil className="size-3.5" />
-                    <span className="hidden min-[420px]:inline">Edit Cue</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">Edit live cue</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => setStopConfirmOpen(true)}
-                    aria-label="Stop show"
-                  >
-                    <Square className="size-3.5" />
-                    <span className="hidden min-[420px]:inline">Stop</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">Stop show</TooltipContent>
-              </Tooltip>
-              <span
-                className="size-3 rounded-full bg-green-500 ml-1"
-                aria-label="Show is running"
-                title="Show is running"
-              />
-            </>
-          )}
-        </div>
-      </div>
+      <ShowHeader
+        view="run"
+        projectId={projectIdNum}
+        projectName={project.name}
+        isShowActive={isShowActive}
+        canStart={canStart}
+        onStart={handleActivateShow}
+        onStop={handleStopShow}
+      />
 
       {!stacks || stacks.length === 0 ? (
         <Card className="m-4 p-8 flex flex-col items-center gap-2 text-muted-foreground">
@@ -699,27 +641,6 @@ export function RunPage() {
           )}
         </div>
       )}
-
-      {/* Stop-show confirmation */}
-      <Dialog open={stopConfirmOpen} onOpenChange={setStopConfirmOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Stop the show?</DialogTitle>
-          </DialogHeader>
-          <DialogDescription>
-            This will deactivate the show and clear the active cue. You can
-            start it again from this view at any time.
-          </DialogDescription>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setStopConfirmOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleConfirmDeactivate}>
-              Stop Show
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

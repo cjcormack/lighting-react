@@ -44,6 +44,8 @@ interface CueStackPanelProps {
   /** Jump to the cue's editor. */
   onEditCue: (cueId: number) => void
   goDisabled: boolean
+  /** Whether the show is running — drives the header dot colour + a "Stopped" label. */
+  showActive: boolean
   onGo: () => void
   onBack: () => void
   stackName: string | null
@@ -89,6 +91,7 @@ export function CueStackPanel({
   onSetStandby,
   onEditCue,
   goDisabled,
+  showActive,
   onGo,
   onBack,
   stackName,
@@ -111,8 +114,18 @@ export function CueStackPanel({
     >
       {/* Header — mirrors the Run view's top strip (stack name · BPM · TAP · DBO). */}
       <div className="flex h-12 shrink-0 items-center gap-1 border-b bg-card px-2">
-        <span className="size-1.5 shrink-0 rounded-full bg-emerald-500 shadow-[0_0_6px_#22c55e]" />
+        <span
+          className={cn(
+            'size-1.5 shrink-0 rounded-full',
+            showActive ? 'bg-emerald-500 shadow-[0_0_6px_#22c55e]' : 'bg-muted-foreground/40',
+          )}
+        />
         <span className="truncate text-sm font-medium">{stackName ?? 'Cue stack'}</span>
+        {!showActive && (
+          <span className="shrink-0 rounded bg-muted px-1.5 py-px text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+            Stopped
+          </span>
+        )}
         <span className="flex-1" />
         <span className="min-w-8 text-right font-mono text-xs text-muted-foreground tabular-nums">
           {bpm ?? '—'}

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate, Navigate, useSearchParams } from 'react-router-dom'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   Dialog,
   DialogContent,
@@ -11,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { ArrowRight, Loader2, Play } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import { useProjectCueStackListQuery } from '../store/cueStacks'
 import {
@@ -21,10 +20,11 @@ import {
 import {
   useProjectShowQuery,
   useActivateShowMutation,
+  useDeactivateShowMutation,
 } from '../store/show'
 import type { Cue } from '../api/cuesApi'
 import { buildCueInput } from '../lib/cueUtils'
-import { Breadcrumbs } from '../components/Breadcrumbs'
+import { ShowHeader } from '../components/ShowHeader'
 import { ProgramView } from '../components/runner/program/ProgramView'
 
 export function ProgramRedirect() {
@@ -51,7 +51,6 @@ export function ProgramRedirect() {
 export function ProgramPage() {
   const { projectId } = useParams()
   const projectIdNum = Number(projectId)
-  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
@@ -84,6 +83,7 @@ export function ProgramPage() {
   const [createCue] = useCreateProjectCueMutation()
   const [snapshotCueFromLive, { isLoading: snapshotPending }] = useSnapshotCueFromLiveMutation()
   const [activateShow] = useActivateShowMutation()
+  const [deactivateShow] = useDeactivateShowMutation()
 
   const [snapshotConfirmOpen, setSnapshotConfirmOpen] = useState(false)
   const [snapshotError, setSnapshotError] = useState<string | null>(null)
@@ -101,20 +101,22 @@ export function ProgramPage() {
 
   const initialDrillDoneRef = useRef(false)
 
-  // Start Show → activate, then jump to the runner
+  // Start/Stop the show in place — the header flips to the running state and the
+  // operator stays in Program (the view switcher is one click to Run).
   const stackEntryCount = show?.entries.filter((e) => e.entryType === 'STACK').length ?? 0
   const canStart = !isShowActive && stackEntryCount > 0
 
   const handleActivateShow = useCallback(() => {
     activateShow({ projectId: projectIdNum })
       .unwrap()
-      .then(() => {
-        navigate(`/projects/${projectIdNum}/run`)
-      })
       .catch(() => {
         // Silently fail
       })
-  }, [activateShow, projectIdNum, navigate])
+  }, [activateShow, projectIdNum])
+
+  const handleStopShow = useCallback(async () => {
+    await deactivateShow({ projectId: projectIdNum }).unwrap()
+  }, [deactivateShow, projectIdNum])
 
   // Auto-expand the active/standby cue when first drilling into a stack
   // (matches today's behaviour where the editor would auto-open).
@@ -165,10 +167,6 @@ export function ProgramPage() {
       )
     }
   }, [snapshotCueId, projectIdNum, snapshotCueFromLive])
-
-  const handleGoToRun = useCallback(() => {
-    navigate(`/projects/${projectIdNum}/run`)
-  }, [navigate, projectIdNum])
 
   // ── Auto-drill / deep-link ──
   // - If the URL has ?stack=&cue= (typically from Run's "Edit Cue" button),
@@ -227,53 +225,17 @@ export function ProgramPage() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header row */}
-      <div className="flex items-center p-4 gap-3">
-        <div className="flex-1 min-w-0">
-          <Breadcrumbs
-            projectName={project.name}
-            currentPage="Program"
-            extra={drillStack ? [drillStack.name] : undefined}
-            onCurrentPageClick={handleBreadcrumbCurrentPageClick}
-          />
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          {isShowActive ? (
-            <>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button size="sm" onClick={handleGoToRun} aria-label="Go to Run">
-                    <span className="hidden min-[420px]:inline">Go to Run</span>
-                    <ArrowRight className="size-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">Go to Run</TooltipContent>
-              </Tooltip>
-              <span
-                className="size-3 rounded-full bg-green-500 ml-1"
-                aria-label="Show is running"
-                title="Show is running"
-              />
-            </>
-          ) : (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="sm"
-                  onClick={handleActivateShow}
-                  disabled={!canStart}
-                  aria-label="Start show"
-                >
-                  <Play className="size-3.5" />
-                  <span className="hidden min-[420px]:inline">Start Show</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Start show</TooltipContent>
-            </Tooltip>
-          )}
-        </div>
-      </div>
+      <ShowHeader
+        view="program"
+        projectId={projectIdNum}
+        projectName={project.name}
+        extra={drillStack ? [drillStack.name] : undefined}
+        onCurrentPageClick={handleBreadcrumbCurrentPageClick}
+        isShowActive={isShowActive}
+        canStart={canStart}
+        onStart={handleActivateShow}
+        onStop={handleStopShow}
+      />
 
       {!stacks || stacks.length === 0 ? (
         <Card className="m-4 p-8 flex flex-col items-center gap-2 text-muted-foreground">
