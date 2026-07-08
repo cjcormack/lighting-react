@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, BookOpenText, ListChecks, Loader2, Play, Trash2 } from 'lucide-react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { ArrowLeft, ArrowRight, ListChecks, Loader2, Play, Trash2 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -21,7 +21,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
-import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
+import { useCurrentProjectQuery } from '../store/projects'
 import { useProjectShowQuery } from '../store/show'
 import {
   useProjectCueStackListQuery,
@@ -36,10 +36,8 @@ import { useAdvanceShowMutation } from '../store/show'
 import { useFxStateQuery, tapTempo } from '../store/fx'
 import { useNarrowContainer } from '../hooks/useNarrowContainer'
 import {
-  useProjectPromptBookListQuery,
   useProjectPromptBookQuery,
-  useCreatePromptBookMutation,
-  useDeletePromptBookMutation,
+  useSetPromptBookMutation,
   useUploadScriptDocMutation,
   useUpsertAnchorMutation,
   useDeleteAnchorMutation,
@@ -52,7 +50,6 @@ import { cn } from '@/lib/utils'
 import { formatError } from '../lib/formatError'
 import { computeWarnings, type DesyncWarning, type FlatCue } from '../lib/promptBook/desync'
 import { flattenCueOrder, flattenShowRows } from '../lib/promptBook/geometry'
-import { Breadcrumbs } from '../components/Breadcrumbs'
 import { ScriptViewer, type ScriptViewerHandle } from '../components/promptbook/ScriptViewer'
 import { CueAnchorPickerSheet } from '../components/promptbook/CueAnchorPickerSheet'
 import { PromptBookToolbar } from '../components/promptbook/PromptBookToolbar'
@@ -69,7 +66,7 @@ export function PromptBookRedirect() {
 
   useEffect(() => {
     if (!isLoading && currentProject) {
-      navigate(`/projects/${currentProject.id}/prompt-books`, { replace: true })
+      navigate(`/projects/${currentProject.id}/prompt-book`, { replace: true })
     }
   }, [currentProject, isLoading, navigate])
 
@@ -83,133 +80,6 @@ export function PromptBookRedirect() {
   return null
 }
 
-// ─── List / create ───────────────────────────────────────────────────────
-
-export function PromptBooksPage() {
-  const { projectId } = useParams()
-  const projectIdNum = Number(projectId)
-  const navigate = useNavigate()
-
-  const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
-  const { data: books, isLoading: booksLoading } = useProjectPromptBookListQuery(projectIdNum)
-
-  const [uploadScriptDoc, { isLoading: uploading }] = useUploadScriptDocMutation()
-  const [createPromptBook, { isLoading: creating }] = useCreatePromptBookMutation()
-  const [deletePromptBook] = useDeletePromptBookMutation()
-  const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null)
-  const [importError, setImportError] = useState<string | null>(null)
-
-  const handleImport = useCallback(
-    async (script: PickedScript) => {
-      setImportError(null)
-      try {
-        // The server computes the content hash — the script's identity — so import
-        // works on plain-HTTP LAN origins where crypto.subtle doesn't exist.
-        const upload = await uploadScriptDoc({ projectId: projectIdNum, bytes: script.bytes }).unwrap()
-        const baseName = script.fileName.replace(/\.pdf$/i, '') || 'Script'
-        const taken = new Set(books?.map((b) => b.name) ?? [])
-        let name = baseName
-        for (let i = 2; taken.has(name); i++) name = `${baseName} (${i})`
-        const created = await createPromptBook({
-          projectId: projectIdNum,
-          name,
-          scriptHash: upload.scriptHash,
-          pageCount: script.pageCount,
-          scriptFileName: script.fileName,
-        }).unwrap()
-        navigate(`/projects/${projectIdNum}/prompt-books/${created.id}`)
-      } catch (err) {
-        setImportError(`Import failed: ${formatError(err)}`)
-      }
-    },
-    [uploadScriptDoc, createPromptBook, books, projectIdNum, navigate],
-  )
-
-  if (projectLoading || booksLoading) {
-    return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
-    )
-  }
-
-  return (
-    <div className="flex flex-col gap-4 p-4">
-      <Breadcrumbs projectName={project?.name ?? ''} currentPage="Prompt Books" />
-
-      {books && books.length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {books.map((book) => (
-            <Card key={book.id} className="group relative p-4 transition-colors hover:border-amber-500/50">
-              <Link to={`/projects/${projectIdNum}/prompt-books/${book.id}`} className="block">
-                <div className="flex items-start gap-3">
-                  <BookOpenText className="mt-0.5 size-5 shrink-0 text-amber-500" />
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{book.name}</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {book.pageCount} page{book.pageCount === 1 ? '' : 's'} · {book.anchorCount} anchor
-                      {book.anchorCount === 1 ? '' : 's'} · {book.annotationCount} note
-                      {book.annotationCount === 1 ? '' : 's'}
-                    </p>
-                    {book.scriptFileName && (
-                      <p className="mt-0.5 truncate text-xs text-muted-foreground/60">{book.scriptFileName}</p>
-                    )}
-                  </div>
-                </div>
-              </Link>
-              {book.canEdit && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={`Delete ${book.name}`}
-                  className="absolute right-2 top-2 hidden size-7 text-muted-foreground hover:text-red-500 group-hover:flex"
-                  onClick={() => setDeleteTarget({ id: book.id, name: book.name })}
-                >
-                  <Trash2 className="size-3.5" />
-                </Button>
-              )}
-            </Card>
-          ))}
-        </div>
-      )}
-
-      <ScriptUploadCard
-        title={books && books.length > 0 ? 'Import another script' : 'Import a script PDF'}
-        description="The PDF becomes the spatial backbone of a prompt-book — cue anchors pin cues to it. Identity is the file's content, so re-importing the same PDF re-attaches cleanly."
-        uploading={uploading || creating}
-        error={importError}
-        onUpload={handleImport}
-      />
-
-      <Dialog open={deleteTarget != null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete “{deleteTarget?.name}”?</DialogTitle>
-          </DialogHeader>
-          <DialogDescription>
-            This removes the prompt-book's anchors and annotations. The cue stack itself is untouched —
-            anchors are only bindings.
-          </DialogDescription>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                if (deleteTarget) deletePromptBook({ projectId: projectIdNum, bookId: deleteTarget.id })
-                setDeleteTarget(null)
-              }}
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  )
-}
-
 // ─── Viewer ──────────────────────────────────────────────────────────────
 
 type AnnotationDialogState =
@@ -217,16 +87,12 @@ type AnnotationDialogState =
   | { mode: 'edit'; annotation: AnnotationDto }
 
 export function PromptBookViewerPage() {
-  const { projectId, bookId } = useParams()
+  const { projectId } = useParams()
   const projectIdNum = Number(projectId)
-  const bookIdNum = Number(bookId)
 
   const dispatch = useDispatch()
   const navigate = useNavigate()
-  const { data: book, isLoading: bookLoading } = useProjectPromptBookQuery({
-    projectId: projectIdNum,
-    bookId: bookIdNum,
-  })
+  const { data: book, isLoading: bookLoading, error: bookError, refetch: refetchBook } = useProjectPromptBookQuery(projectIdNum)
   const { data: show } = useProjectShowQuery(projectIdNum)
   const { data: stacks } = useProjectCueStackListQuery(projectIdNum)
   const { data: fxState } = useFxStateQuery()
@@ -242,6 +108,7 @@ export function PromptBookViewerPage() {
   const [updateAnnotation] = useUpdateAnnotationMutation()
   const [deleteAnnotation] = useDeleteAnnotationMutation()
   const [uploadScriptDoc, { isLoading: reuploading }] = useUploadScriptDocMutation()
+  const [setPromptBook, { isLoading: settingBook }] = useSetPromptBookMutation()
 
   // ── Runtime view state — NEVER persisted. Opens locked, always. ──
   const [locked, setLocked] = useState(true)
@@ -615,28 +482,26 @@ export function PromptBookViewerPage() {
       setUndoSnapshot({ cueId, region: prevRegion, label: anchor?.label ?? null })
       upsertAnchor({
         projectId: projectIdNum,
-        bookId: bookIdNum,
         cueId,
         region,
         label: anchor?.label ?? undefined,
       })
       noteEdit()
     },
-    [anchorByCue, upsertAnchor, projectIdNum, bookIdNum, noteEdit],
+    [anchorByCue, upsertAnchor, projectIdNum, noteEdit],
   )
 
   const handleUndo = useCallback(() => {
     if (!undoSnapshot) return
     upsertAnchor({
       projectId: projectIdNum,
-      bookId: bookIdNum,
       cueId: undoSnapshot.cueId,
       region: undoSnapshot.region,
       label: undoSnapshot.label ?? undefined,
     })
     setUndoSnapshot(null)
     noteEdit()
-  }, [undoSnapshot, upsertAnchor, projectIdNum, bookIdNum, noteEdit])
+  }, [undoSnapshot, upsertAnchor, projectIdNum, noteEdit])
 
   const handlePlaceAnchor = useCallback(
     (region: Region) => {
@@ -646,14 +511,13 @@ export function PromptBookViewerPage() {
       if (existing) setUndoSnapshot({ cueId: placingCueId, region: existing.region, label: existing.label ?? null })
       upsertAnchor({
         projectId: projectIdNum,
-        bookId: bookIdNum,
         cueId: placingCueId,
         region,
         label: cueLabelByCue.get(placingCueId),
       })
       setPlacingCueId(null)
     },
-    [placingCueId, cueLabelByCue, anchorByCue, upsertAnchor, projectIdNum, bookIdNum],
+    [placingCueId, cueLabelByCue, anchorByCue, upsertAnchor, projectIdNum],
   )
 
   // Anchor a chosen cue to a selected region (from the cue picker). Overwriting an
@@ -662,12 +526,12 @@ export function PromptBookViewerPage() {
     (cueId: number, region: Region) => {
       const existing = anchorByCue.get(cueId)
       if (existing) setUndoSnapshot({ cueId, region: existing.region, label: existing.label ?? null })
-      upsertAnchor({ projectId: projectIdNum, bookId: bookIdNum, cueId, region, label: cueLabelByCue.get(cueId) })
+      upsertAnchor({ projectId: projectIdNum, cueId, region, label: cueLabelByCue.get(cueId) })
       setAnchorPicker(null)
       setPlacingCueId(null)
       noteEdit()
     },
-    [cueLabelByCue, anchorByCue, upsertAnchor, projectIdNum, bookIdNum, noteEdit],
+    [cueLabelByCue, anchorByCue, upsertAnchor, projectIdNum, noteEdit],
   )
 
   const handleCueClick = useCallback(
@@ -687,10 +551,10 @@ export function PromptBookViewerPage() {
 
   const handleRemoveAnchor = useCallback(
     (cueId: number) => {
-      deleteAnchor({ projectId: projectIdNum, bookId: bookIdNum, cueId })
+      deleteAnchor({ projectId: projectIdNum, cueId })
       noteEdit()
     },
-    [deleteAnchor, projectIdNum, bookIdNum, noteEdit],
+    [deleteAnchor, projectIdNum, noteEdit],
   )
 
   // Stable identity so the memoized ScriptViewer isn't re-rendered every fade frame.
@@ -707,14 +571,14 @@ export function PromptBookViewerPage() {
   const handleCreateAnnotation = useCallback(
     (kind: AnnotationKind, region: Region) => {
       if (kind === 'STRIKETHROUGH') {
-        createAnnotation({ projectId: projectIdNum, bookId: bookIdNum, kind, region })
+        createAnnotation({ projectId: projectIdNum, kind, region })
         return
       }
       setAnnotationText('')
       setAnnotationTone('NOTE')
       setAnnotationDialog({ mode: 'create', kind, region })
     },
-    [createAnnotation, projectIdNum, bookIdNum],
+    [createAnnotation, projectIdNum],
   )
 
   const handleAnnotationClick = useCallback((annotation: AnnotationDto) => {
@@ -728,7 +592,6 @@ export function PromptBookViewerPage() {
     if (annotationDialog.mode === 'create') {
       createAnnotation({
         projectId: projectIdNum,
-        bookId: bookIdNum,
         kind: annotationDialog.kind,
         region: annotationDialog.region,
         text: annotationText || undefined,
@@ -738,7 +601,6 @@ export function PromptBookViewerPage() {
       const { annotation } = annotationDialog
       updateAnnotation({
         projectId: projectIdNum,
-        bookId: bookIdNum,
         annotationId: annotation.id,
         kind: annotation.kind,
         region: annotation.region,
@@ -749,14 +611,14 @@ export function PromptBookViewerPage() {
     }
     setAnnotationDialog(null)
     noteEdit()
-  }, [annotationDialog, annotationText, annotationTone, createAnnotation, updateAnnotation, projectIdNum, bookIdNum, noteEdit])
+  }, [annotationDialog, annotationText, annotationTone, createAnnotation, updateAnnotation, projectIdNum, noteEdit])
 
   const handleDeleteAnnotation = useCallback(() => {
     if (annotationDialog?.mode !== 'edit') return
-    deleteAnnotation({ projectId: projectIdNum, bookId: bookIdNum, annotationId: annotationDialog.annotation.id })
+    deleteAnnotation({ projectId: projectIdNum, annotationId: annotationDialog.annotation.id })
     setAnnotationDialog(null)
     noteEdit()
-  }, [annotationDialog, deleteAnnotation, projectIdNum, bookIdNum, noteEdit])
+  }, [annotationDialog, deleteAnnotation, projectIdNum, noteEdit])
 
   // ── Missing-PDF re-attach flow ──
   const [reuploadError, setReuploadError] = useState<string | null>(null)
@@ -787,6 +649,29 @@ export function PromptBookViewerPage() {
       .catch(() => setPdfLoadState('error'))
   }, [projectIdNum, book?.scriptHash])
 
+  // Import the show's prompt book from a picked PDF (the empty-state flow). The same
+  // route then shows the reader once the book exists — no navigation needed. The
+  // server computes the content hash (the script's identity), so import works on
+  // plain-HTTP LAN origins where crypto.subtle doesn't exist.
+  const [importError, setImportError] = useState<string | null>(null)
+  const handleImportBook = useCallback(
+    async (script: PickedScript) => {
+      setImportError(null)
+      try {
+        const upload = await uploadScriptDoc({ projectId: projectIdNum, bytes: script.bytes }).unwrap()
+        await setPromptBook({
+          projectId: projectIdNum,
+          scriptHash: upload.scriptHash,
+          pageCount: script.pageCount,
+          scriptFileName: script.fileName,
+        }).unwrap()
+      } catch (err) {
+        setImportError(`Import failed: ${formatError(err)}`)
+      }
+    },
+    [uploadScriptDoc, setPromptBook, projectIdNum],
+  )
+
   // ── Guards ──
 
   if (bookLoading) {
@@ -797,14 +682,37 @@ export function PromptBookViewerPage() {
     )
   }
 
-  if (!book || Number.isNaN(bookIdNum)) {
+  if (!book) {
+    // Only a genuine 404 means "no book yet". Any other failure (backend restarting,
+    // 500, network blip) must NOT show the import card — otherwise a transient blip
+    // during a show tempts the operator into re-importing, and setPromptBook (PUT
+    // upsert) would replace the real book. Show a retry instead.
+    const noBook = bookError != null && 'status' in bookError && bookError.status === 404
+    if (!noBook && bookError != null) {
+      return (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+          <p className="font-medium">Couldn't load the prompt book</p>
+          <p className="max-w-md text-sm text-muted-foreground">
+            The backend may be restarting or the connection blipped. Your prompt book is untouched.
+          </p>
+          <Button variant="outline" onClick={() => refetchBook()}>
+            Retry
+          </Button>
+        </div>
+      )
+    }
+    // No book yet → offer the import. Importing sets the show's one book and this
+    // same route re-renders as the reader.
     return (
-      <Card className="m-4 p-4">
-        <p className="text-muted-foreground">Prompt book not found.</p>
-        <Button asChild variant="outline" className="mt-3 w-fit">
-          <Link to={`/projects/${projectIdNum}/prompt-books`}>Back to prompt books</Link>
-        </Button>
-      </Card>
+      <div className="mx-auto mt-8 w-full max-w-md p-4">
+        <ScriptUploadCard
+          title="Import a script PDF"
+          description="The PDF becomes the spatial backbone of the show's prompt book — cue anchors pin cues to it. Identity is the file's content, so re-importing the same PDF re-attaches cleanly."
+          uploading={reuploading || settingBook}
+          error={importError}
+          onUpload={handleImportBook}
+        />
+      </div>
     )
   }
 
@@ -867,7 +775,6 @@ export function PromptBookViewerPage() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <PromptBookToolbar
-        bookName={book.name}
         scriptFileName={book.scriptFileName}
         projectId={projectIdNum}
         locked={locked}

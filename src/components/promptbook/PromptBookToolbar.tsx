@@ -5,7 +5,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils'
 
 interface PromptBookToolbarProps {
-  bookName: string
   scriptFileName: string | null
   projectId: number
   locked: boolean
@@ -48,7 +47,6 @@ function ViewSwitcher({ projectId }: { projectId: number }) {
  * corrupt the prompt-book mid-show).
  */
 export function PromptBookToolbar({
-  bookName,
   scriptFileName,
   projectId,
   locked,
@@ -73,12 +71,7 @@ export function PromptBookToolbar({
       <span className="hidden shrink-0 text-[11px] tracking-widest text-muted-foreground uppercase sm:inline">
         Prompt book
       </span>
-      <span className="truncate text-sm font-medium">{bookName}</span>
-      {scriptFileName && (
-        <span className="hidden truncate font-mono text-[10.5px] text-muted-foreground lg:inline">
-          {scriptFileName}
-        </span>
-      )}
+      {scriptFileName && <span className="truncate text-sm font-medium">{scriptFileName}</span>}
 
       {activeLabel && (
         <button

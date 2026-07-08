@@ -7,7 +7,7 @@ export interface PromptBooksWsApi {
 }
 
 type PromptBookInMessage = {
-  type: 'promptBookListChanged'
+  type: 'promptBookChanged'
 }
 
 export function createPromptBooksWsApi(conn: InternalApiConnection): PromptBooksWsApi {
@@ -19,7 +19,7 @@ export function createPromptBooksWsApi(conn: InternalApiConnection): PromptBooks
     } else if (evType === 'message' && ev instanceof MessageEvent) {
       const message: PromptBookInMessage = JSON.parse(ev.data)
       if (message == null) return
-      if (message.type === 'promptBookListChanged') {
+      if (message.type === 'promptBookChanged') {
         promptBooksChanged.notify()
       }
     }

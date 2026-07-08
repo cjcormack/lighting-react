@@ -56,20 +56,7 @@ export interface AnnotationDto {
   tone: NoteTone | null
 }
 
-export interface PromptBookSummary {
-  id: number
-  name: string
-  scriptHash: string
-  scriptFileName: string | null
-  pageCount: number
-  anchorCount: number
-  annotationCount: number
-  canEdit: boolean
-}
-
 export interface PromptBookDetails {
-  id: number
-  name: string
   scriptHash: string
   scriptFileName: string | null
   pageCount: number
@@ -79,7 +66,6 @@ export interface PromptBookDetails {
 }
 
 export interface NewPromptBookRequest {
-  name: string
   scriptHash: string
   pageCount: number
   scriptFileName?: string
@@ -109,5 +95,5 @@ export interface ScriptUploadResponse {
  * do the rest. Kept out of RTK Query on purpose: it's binary, not state.
  */
 export function scriptDocUrl(projectId: number, scriptHash: string): string {
-  return `/api/rest/project/${projectId}/prompt-books/scripts/${scriptHash}`
+  return `/api/rest/project/${projectId}/prompt-book/scripts/${scriptHash}`
 }

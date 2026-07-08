@@ -147,12 +147,12 @@ export const navItems: NavItem[] = [
     group: "live",
   },
   {
-    id: "prompt-books",
+    id: "prompt-book",
     label: "Prompt Book",
     icon: BookOpenText,
-    path: (p) => `/projects/${p}/prompt-books`,
+    path: (p) => `/projects/${p}/prompt-book`,
     visibility: "active-only",
-    pathMatch: "/prompt-books",
+    pathMatch: "/prompt-book",
     group: "live",
   },
   {
