@@ -8,7 +8,7 @@ export type ShowView = 'program' | 'run' | 'prompt-book'
 const ITEM = 'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold'
 
 /**
- * Edit · Run · Prompt Book switcher shared across the three live-show views. The
+ * Program · Run · Prompt Book switcher shared across the three live-show views. The
  * `current` view renders as a static pill; the other two are links. Icons show at
  * every width — only the text labels collapse below `sm` — so the switch stays
  * usable on phones (the sole in-view way to move between the three on a narrow screen).
@@ -20,7 +20,7 @@ export function ViewSwitcher({ current, projectId }: { current: ShowView; projec
         active={current === 'program'}
         to={`/projects/${projectId}/program`}
         icon={<Pencil className="size-3.5" />}
-        label="Edit"
+        label="Program"
       />
       <Segment
         active={current === 'run'}

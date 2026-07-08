@@ -1,4 +1,4 @@
-import { Lock, LockOpen, Minus, Play, Plus, TriangleAlert, Undo2 } from 'lucide-react'
+import { ListChecks, Lock, LockOpen, Minus, Play, Plus, TriangleAlert, Undo2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -23,6 +23,8 @@ interface PromptBookToolbarProps {
   /** Idle re-lock countdown (seconds); null unless the countdown is running. */
   relockCountdown: number | null
   onStayUnlocked: () => void
+  /** Opens the cue-list drawer. Passed only on narrow, where the side rail is a drawer. */
+  onOpenCues?: () => void
 }
 
 /**
@@ -47,6 +49,7 @@ export function PromptBookToolbar({
   onToggleWarnings,
   relockCountdown,
   onStayUnlocked,
+  onOpenCues,
 }: PromptBookToolbarProps) {
   return (
     <div
@@ -77,6 +80,13 @@ export function PromptBookToolbar({
       )}
 
       <span className="flex-1" />
+
+      {onOpenCues && (
+        <Button variant="outline" size="sm" onClick={onOpenCues} className="shrink-0">
+          <ListChecks className="size-3.5" />
+          Cues
+        </Button>
+      )}
 
       {relockCountdown != null && (
         <span className="flex items-center gap-2 rounded-md border border-amber-500 bg-amber-400/20 px-2 py-1 text-xs font-medium whitespace-nowrap text-amber-600">

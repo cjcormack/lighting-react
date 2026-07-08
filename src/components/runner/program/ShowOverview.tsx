@@ -3,14 +3,7 @@ import { ArrowRight, GripVertical, RotateCcw, X, Plus, SeparatorHorizontal } fro
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import { useMediaQuery, SM_BREAKPOINT } from '@/hooks/useMediaQuery'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody } from '@/components/ui/sheet'
 import {
   DndContext,
@@ -45,12 +38,11 @@ interface SortableStackEntryProps {
   index: number
   stack: CueStack | undefined
   isActive: boolean
-  isWide: boolean
   onDrill: (stackId: number) => void
   onRemove: (entryId: number) => void
 }
 
-function SortableStackEntry({ entry, index, stack, isActive, isWide, onDrill, onRemove }: SortableStackEntryProps) {
+function SortableStackEntry({ entry, index, stack, isActive, onDrill, onRemove }: SortableStackEntryProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: entry.id,
   })
@@ -70,7 +62,7 @@ function SortableStackEntry({ entry, index, stack, isActive, isWide, onDrill, on
       style={style}
       {...attributes}
       className={cn(
-        'flex items-center w-full gap-3 px-4 py-2.5 bg-card border rounded border-l-[3px] border-l-transparent transition-colors hover:bg-muted/30 hover:border-muted-foreground/20 text-left cursor-pointer',
+        'flex items-center w-full gap-3 px-4 py-2.5 bg-muted border rounded border-l-[3px] border-l-transparent transition-colors hover:bg-muted/70 hover:border-muted-foreground/20 text-left cursor-pointer',
         isActive && 'border-l-green-500 bg-green-500/[0.08]',
       )}
       onClick={() => entry.cueStackId != null && onDrill(entry.cueStackId)}
@@ -82,11 +74,9 @@ function SortableStackEntry({ entry, index, stack, isActive, isWide, onDrill, on
       >
         <GripVertical className="size-4" />
       </div>
-      {isWide && (
-        <span className="w-6 text-center font-mono text-xs text-muted-foreground shrink-0">
-          {index + 1}
-        </span>
-      )}
+      <span className="hidden @[560px]:block w-6 text-center font-mono text-xs text-muted-foreground shrink-0">
+        {index + 1}
+      </span>
       <span
         className={cn(
           'flex-1 text-sm font-medium text-foreground truncate min-w-0',
@@ -104,13 +94,11 @@ function SortableStackEntry({ entry, index, stack, isActive, isWide, onDrill, on
           Live
         </Badge>
       )}
-      {isWide && (
-        <span className="text-xs text-muted-foreground shrink-0">
-          {cueCount} cues &middot; {stack?.loop ? 'Loop' : 'Sequential'}
-        </span>
-      )}
-      {isWide && stack?.loop && (
-        <Badge variant="outline" className="text-xs px-1.5 py-0 gap-1">
+      <span className="hidden @[560px]:block text-xs text-muted-foreground shrink-0">
+        {cueCount} cues &middot; {stack?.loop ? 'Loop' : 'Sequential'}
+      </span>
+      {stack?.loop && (
+        <Badge variant="outline" className="hidden @[560px]:inline-flex text-xs px-1.5 py-0 gap-1">
           <RotateCcw className="size-2.5" />
           Loop
         </Badge>
@@ -225,7 +213,6 @@ export function ShowOverview({
   activeStackId,
   onDrillStack,
 }: ShowOverviewProps) {
-  const isWide = useMediaQuery(SM_BREAKPOINT)
   const stackMap = useMemo(() => new Map(stacks.map((s) => [s.id, s])), [stacks])
   const addedStackIds = useMemo(
     () => new Set(show.entries.filter((e) => e.entryType === 'STACK' && e.cueStackId != null).map((e) => e.cueStackId!)),
@@ -297,41 +284,26 @@ export function ShowOverview({
   )
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Top bar */}
+    <div className="@container flex-1 flex flex-col overflow-hidden">
+      {/* Top bar — control labels + secondary row data drop as the content area narrows
+          (container-query, sidebar-aware). */}
       <div className="flex items-center h-12 px-4 border-b gap-4 shrink-0">
         <span className="text-lg font-semibold">Show</span>
-        <span className="text-sm text-muted-foreground">
+        <span className="hidden @[420px]:inline text-sm text-muted-foreground">
           {stackEntries.length} stacks &middot; {totalCues} cues
         </span>
         <div className="flex-1" />
-        {isWide ? (
-          <>
-            <Button variant="outline" size="sm" onClick={handleAddMarker}>
-              <SeparatorHorizontal className="size-3.5 mr-1.5" />
-              Add Separator
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setShowStackPicker(true)}>
-              <Plus className="size-3.5 mr-1.5" />
-              Add Stack
-            </Button>
-          </>
-        ) : (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon-sm" aria-label="Add">
-                <Plus className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setShowStackPicker(true)}>Add Stack</DropdownMenuItem>
-              <DropdownMenuItem onClick={handleAddMarker}>Add Separator</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+        <Button variant="outline" size="sm" onClick={handleAddMarker} aria-label="Add separator">
+          <SeparatorHorizontal className="size-3.5" />
+          <span className="ml-1.5 hidden @[600px]:inline">Add Separator</span>
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => setShowStackPicker(true)} aria-label="Add stack">
+          <Plus className="size-3.5" />
+          <span className="ml-1.5 hidden @[600px]:inline">Add Stack</span>
+        </Button>
       </div>
 
-      {/* Entry list */}
+      {/* Entry list — scrolls within the recessed Row 4 surface set on the root above. */}
       <div className="flex-1 overflow-y-auto p-4 space-y-1.5">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext
@@ -359,7 +331,6 @@ export function ShowOverview({
                   index={idx}
                   stack={stack}
                   isActive={activeStackId !== null && entry.cueStackId === activeStackId}
-                  isWide={isWide}
                   onDrill={onDrillStack}
                   onRemove={handleRemoveEntry}
                 />

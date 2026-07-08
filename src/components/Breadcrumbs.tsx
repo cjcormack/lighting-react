@@ -1,6 +1,7 @@
 import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 
 interface BreadcrumbsProps {
   projectName: string
@@ -13,14 +14,28 @@ interface BreadcrumbsProps {
   onCurrentPageClick?: () => void
   /** Called when an extra segment is clicked (receives the segment index) */
   onExtraClick?: (index: number) => void
+  /** When set, the full trail collapses to just this label below the `@[640px]` container width
+   *  (needs a `@container` ancestor). Used by the show views so the breadcrumb can't overflow. */
+  collapsedLabel?: string
 }
 
-export function Breadcrumbs({ projectName, isActive = true, currentPage, extra, onCurrentPageClick, onExtraClick }: BreadcrumbsProps) {
+export function Breadcrumbs({ projectName, isActive = true, currentPage, extra, onCurrentPageClick, onExtraClick, collapsedLabel }: BreadcrumbsProps) {
   const navigate = useNavigate()
   const { projectId } = useParams()
 
   return (
-    <nav className="flex items-center gap-1 text-sm flex-wrap">
+    <>
+      {collapsedLabel && (
+        <span className="@[640px]:hidden text-sm font-medium truncate max-w-full">
+          {collapsedLabel}
+        </span>
+      )}
+      <nav
+        className={cn(
+          'items-center gap-1 text-sm flex-wrap',
+          collapsedLabel ? 'hidden @[640px]:flex' : 'flex',
+        )}
+      >
       <button
         onClick={() => navigate('/projects')}
         className="text-muted-foreground hover:text-foreground transition-colors"
@@ -90,6 +105,7 @@ export function Breadcrumbs({ projectName, isActive = true, currentPage, extra, 
           )}
         </>
       )}
-    </nav>
+      </nav>
+    </>
   )
 }

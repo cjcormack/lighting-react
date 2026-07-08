@@ -192,14 +192,18 @@ export const {
 } = runnerSlice.actions
 
 // Selectors
+
+// Stable reference for stacks with no runner entry yet — returning a fresh object here would
+// make useSelector (=== equality) re-render its subscriber on every unrelated dispatch (e.g. the
+// WebSocket channel/status stream) while the stack is idle. Never mutated by consumers.
+const EMPTY_STACK_RUNNER: StackRunnerState = {
+  activeCueId: null,
+  standbyCueId: null,
+  completedCueIds: [],
+  fadeProgress: 0,
+  autoProgress: null,
+}
+
 export function selectStackRunner(state: { runner: RunnerState }, stackId: number): StackRunnerState {
-  return (
-    state.runner.stacks[stackId] ?? {
-      activeCueId: null,
-      standbyCueId: null,
-      completedCueIds: [],
-      fadeProgress: 0,
-      autoProgress: null,
-    }
-  )
+  return state.runner.stacks[stackId] ?? EMPTY_STACK_RUNNER
 }

@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react'
+import { memo, useCallback, useMemo } from 'react'
 import { Card } from '@/components/ui/card'
 import {
   useCreateProjectCueMutation,
@@ -31,7 +31,11 @@ interface ProgramViewProps {
   snapshotPending?: boolean
 }
 
-export function ProgramView({
+// Memoized: ProgramPage now subscribes to the runner slice (via useShowTransport for the
+// Row 3 show bar), so it re-renders on every fade frame. Its props are stable during a fade
+// (activeCueId is the server cursor, not the optimistic fade cursor), so memo keeps the whole
+// editor subtree from reconciling ~60x/sec while a cue fades.
+export const ProgramView = memo(function ProgramView({
   projectId,
   stacks,
   drillStackId,
@@ -160,4 +164,4 @@ export function ProgramView({
       Loading show…
     </Card>
   )
-}
+})

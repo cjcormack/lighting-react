@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, ListChecks, Loader2, Play, Trash2 } from 'lucide-react'
+import { Loader2, Trash2 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -23,18 +22,11 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import { useProjectShowQuery, useActivateShowMutation, useDeactivateShowMutation } from '../store/show'
-import {
-  useProjectCueStackListQuery,
-  useAdvanceCueStackMutation,
-  useActivateCueStackMutation,
-  useGoToCueInStackMutation,
-} from '../store/cueStacks'
+import { useProjectCueStackListQuery } from '../store/cueStacks'
 import type { CueStackCueEntry } from '../api/cueStacksApi'
-import { go, back, resetStack, selectStackRunner, setStandby, runnerSlice } from '../store/runnerSlice'
-import { useRunnerAnimation } from '../hooks/useRunnerAnimation'
-import { useAdvanceShowMutation } from '../store/show'
 import { useFxStateQuery, tapTempo } from '../store/fx'
 import { useNarrowContainer } from '../hooks/useNarrowContainer'
+import { useShowTransport } from '../hooks/useShowTransport'
 import {
   useProjectPromptBookQuery,
   useSetPromptBookMutation,
@@ -53,6 +45,7 @@ import { flattenCueOrder, flattenShowRows } from '../lib/promptBook/geometry'
 import { ScriptViewer, type ScriptViewerHandle } from '../components/promptbook/ScriptViewer'
 import { CueAnchorPickerSheet } from '../components/promptbook/CueAnchorPickerSheet'
 import { ShowHeader } from '../components/ShowHeader'
+import { ShowBar } from '../components/ShowBar'
 import { PromptBookToolbar } from '../components/promptbook/PromptBookToolbar'
 import { ToolPalette, type PromptBookTool } from '../components/promptbook/ToolPalette'
 import { CueStackPanel } from '../components/promptbook/CueStackPanel'
@@ -91,7 +84,6 @@ export function PromptBookViewerPage() {
   const { projectId } = useParams()
   const projectIdNum = Number(projectId)
 
-  const dispatch = useDispatch()
   const navigate = useNavigate()
   const { data: book, isLoading: bookLoading, error: bookError, refetch: refetchBook } = useProjectPromptBookQuery(projectIdNum)
   const { data: project } = useProjectQuery(projectIdNum)
@@ -99,10 +91,6 @@ export function PromptBookViewerPage() {
   const { data: stacks } = useProjectCueStackListQuery(projectIdNum)
   const { data: fxState } = useFxStateQuery()
 
-  const [advanceCueStack] = useAdvanceCueStackMutation()
-  const [activateCueStack] = useActivateCueStackMutation()
-  const [goToCueInStack] = useGoToCueInStackMutation()
-  const [advanceShow] = useAdvanceShowMutation()
   const [activateShow] = useActivateShowMutation()
   const [deactivateShow] = useDeactivateShowMutation()
 
@@ -202,23 +190,27 @@ export function PromptBookViewerPage() {
 
   const isShowActive = show?.activeEntryId != null
 
-  const activeEntry = useMemo(
-    () => show?.entries.find((e) => e.id === show.activeEntryId),
-    [show],
-  )
-  const activeStackId = activeEntry?.cueStackId ?? null
-  const activeStack = useMemo(
-    () => stacks?.find((s) => s.id === activeStackId),
-    [stacks, activeStackId],
-  )
-  // Consult the shared runner slice so a standby cue armed here (or on the Run
-  // page) is treated as the "next" cue — same source fireGo advances to.
-  const runner = useSelector((state: { runner: ReturnType<typeof runnerSlice.getInitialState> }) =>
-    selectStackRunner(state, activeStackId ?? 0),
-  )
-  // Live cue: the optimistic runner cursor while a fade animates, else the server's
-  // active cue — mirrors the Run view so GO drives the same fade feedback.
-  const activeCueId = runner.activeCueId ?? activeStack?.activeCueId ?? null
+  // Row 3 (show bar) + rail transport — the follow-server runner shared with the Edit view.
+  // `onBeforeGo: noteGo` preserves relock-on-GO; `canOperate: canEdit` gates GO exactly as the
+  // old inline `goDisabled` did. Aliased to fireGo/fireBack so the rest of the page is unchanged.
+  const transport = useShowTransport({
+    projectId: projectIdNum,
+    show,
+    stacks,
+    canOperate: canEdit,
+    onBeforeGo: noteGo,
+  })
+  const {
+    activeStackId,
+    activeStack,
+    activeCueId,
+    standbyCueId,
+    fadeProgress,
+    fadeRemainMs,
+    goDisabled,
+    go: fireGo,
+    back: fireBack,
+  } = transport
 
   // The cue armed to fire on the next GO: an explicit standby, else the next cue
   // in reading order. Pre-show (nothing live) the first cue sits on deck.
@@ -228,7 +220,7 @@ export function PromptBookViewerPage() {
     if (!isShowActive) return null
     // An explicitly-armed standby is the next GO — but never treat the cue that's
     // already live as "next" (activating a standby leaves standbyCueId sitting on it).
-    const sb = runner.standbyCueId
+    const sb = standbyCueId
     if (sb != null && sb !== activeCueId) return sb
     // Nothing fired yet: the active stack's first cue is on deck; fall back to the
     // very first cue in the show only when no stack is active.
@@ -240,7 +232,7 @@ export function PromptBookViewerPage() {
     const activeIdx = cueOrderIndex.get(activeCueId)
     if (activeIdx == null) return null
     return cueOrder[activeIdx + 1]?.cueId ?? null
-  }, [isShowActive, runner.standbyCueId, activeCueId, activeStackId, cueOrder, cueOrderIndex])
+  }, [isShowActive, standbyCueId, activeCueId, activeStackId, cueOrder, cueOrderIndex])
 
   const statusOf = useCallback(
     (cueId: number): CueRunStatus => {
@@ -292,52 +284,6 @@ export function PromptBookViewerPage() {
     return m
   }, [stacks])
 
-  // ── Runner ↔ server reconciliation (mirrors RunPage) so GO can dispatch the
-  // optimistic go() that drives the fade animation. Init when the stack (or its
-  // cues) first load and on stack switch; reconcile when the server's active cue
-  // changes, unless we're mid-fade (the runner owns the cursor then). ──
-  // Signature of the active stack's cue set (ids in order). Re-initialises the runner
-  // when cues first load, on stack switch, AND on a cue reorder/add/remove — but NOT on
-  // an unrelated refetch or mid-fade re-render (same ids → same string → no re-run), so
-  // a user-armed standby and an in-flight fade are preserved.
-  const stackCueSig = activeStack ? activeStack.cues.map((c) => c.id).join(',') : ''
-  useEffect(() => {
-    if (activeStackId != null && activeStack && activeStack.cues.length > 0) {
-      dispatch(
-        resetStack({
-          stackId: activeStackId,
-          cues: activeStack.cues,
-          serverActiveCueId: activeStack.activeCueId,
-          loop: activeStack.loop,
-        }),
-      )
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeStackId, stackCueSig, dispatch])
-
-  const prevServerActiveCueRef = useRef<number | null | undefined>(undefined)
-  useEffect(() => {
-    prevServerActiveCueRef.current = undefined
-  }, [activeStackId])
-  useEffect(() => {
-    if (activeStackId == null || !activeStack) return
-    const serverActive = activeStack.activeCueId
-    const prev = prevServerActiveCueRef.current
-    prevServerActiveCueRef.current = serverActive
-    if (prev === undefined || serverActive === prev) return
-    if (runner.activeCueId != null) return
-    if (activeStack.cues.length > 0) {
-      dispatch(
-        resetStack({
-          stackId: activeStackId,
-          cues: activeStack.cues,
-          serverActiveCueId: serverActive,
-          loop: activeStack.loop,
-        }),
-      )
-    }
-  }, [activeStackId, activeStack, runner.activeCueId, dispatch])
-
   // ── Runtime emphasis: scroll the live cue's anchor into view on advance. ──
   // The anchor map lives in a ref so an unrelated book refetch (edit, WS echo)
   // can't re-run the effect and yank the viewport while the operator reads ahead.
@@ -356,91 +302,14 @@ export function PromptBookViewerPage() {
     setExpandedCues(new Set([activeCueId, nextCueId].filter((id): id is number => id != null)))
   }, [activeCueId, nextCueId])
 
-  // ── GO surface — reuses the upstream mutations; also re-locks (fix-it edits end at GO). ──
-  const goDisabled = !isShowActive || !canEdit
-
-  // Server call to move the backend cursor. Mirrors RunPage.fireGo.
-  const fireGoServer = useCallback(() => {
-    if (activeStackId == null || !activeStack) return
-    if (activeStack.activeCueId == null) {
-      activateCueStack({
-        projectId: projectIdNum,
-        stackId: activeStackId,
-        cueId: runner.standbyCueId ?? undefined,
-      })
-    } else if (runner.standbyCueId != null) {
-      goToCueInStack({ projectId: projectIdNum, stackId: activeStackId, cueId: runner.standbyCueId })
-    } else {
-      advanceCueStack({ projectId: projectIdNum, stackId: activeStackId, direction: 'FORWARD' })
-    }
-  }, [activeStackId, activeStack, activateCueStack, goToCueInStack, advanceCueStack, runner.standbyCueId, projectIdNum])
-
-  const handleAutoAdvanceComplete = useCallback(() => {
-    if (activeStackId == null || !activeStack) return
-    dispatch(go({ stackId: activeStackId, cues: activeStack.cues, loop: activeStack.loop }))
-    fireGoServer()
-  }, [activeStackId, activeStack, dispatch, fireGoServer])
-
-  // Drives the live cue's fade-in (and auto-advance) via the same hook the Run view
-  // uses, so GO shows an identical amber fade bar. Keyed on runner.activeCueId, which
-  // the optimistic go() below sets the instant GO is pressed.
-  const animCue = runner.activeCueId != null ? cueEntryByCue.get(runner.activeCueId) : undefined
-  const { cancelAnimations } = useRunnerAnimation({
-    stackId: activeStackId ?? 0,
-    activeCueId: runner.activeCueId,
-    fadeDurationMs: animCue?.fadeDurationMs ?? null,
-    autoAdvance: animCue?.autoAdvance ?? false,
-    autoAdvanceDelayMs: animCue?.autoAdvanceDelayMs ?? null,
-    onAutoAdvanceComplete: handleAutoAdvanceComplete,
-  })
-
-  const isFadingActive = runner.activeCueId != null && runner.fadeProgress < 1
-  const fadeProgress = isFadingActive ? runner.fadeProgress : null
-  const fadeRemainMs = useMemo(() => {
-    if (!isFadingActive || !animCue) return null
-    const dur = animCue.fadeDurationMs ?? 0
-    if (dur <= 0) return null
-    return Math.max(0, dur * (1 - runner.fadeProgress))
-  }, [isFadingActive, animCue, runner.fadeProgress])
-
-  const fireGo = useCallback(() => {
-    noteGo()
-    // Boundary GO: nothing on deck → advance to the next STACK entry in the show.
-    if (runner.standbyCueId == null) {
-      if (!show || activeStackId == null) return
-      const entries = show.entries ?? []
-      const curIdx = entries.findIndex((e) => e.id === show.activeEntryId)
-      const nextStack = entries.slice(curIdx + 1).find((e) => e.entryType === 'STACK')
-      if (nextStack) {
-        advanceShow({ projectId: projectIdNum, direction: 'FORWARD' })
-        cancelAnimations()
-      }
-      return
-    }
-    if (activeStackId == null || !activeStack) return
-    // Optimistic go() sets runner.activeCueId → fade animates immediately; the server
-    // is told in lock-step via fireGoServer.
-    dispatch(go({ stackId: activeStackId, cues: activeStack.cues, loop: activeStack.loop }))
-    fireGoServer()
-  }, [noteGo, runner.standbyCueId, show, activeStackId, activeStack, advanceShow, projectIdNum, cancelAnimations, dispatch, fireGoServer])
-
-  const fireBack = useCallback(() => {
-    if (activeStackId == null || !activeStack) return
-    cancelAnimations()
-    dispatch(back({ stackId: activeStackId, cues: activeStack.cues }))
-    if (activeStack.activeCueId != null) {
-      advanceCueStack({ projectId: projectIdNum, stackId: activeStackId, direction: 'BACKWARD' })
-    }
-  }, [activeStackId, activeStack, cancelAnimations, dispatch, advanceCueStack, projectIdNum])
-
-  // Arm a cue as the next GO (mirrors the Run page's standby). Does NOT fire it.
+  // Arm a cue as the next GO (mirrors the Run page's standby). Does NOT fire it. The
+  // transport ignores the live cue; we just also close the narrow drawer here.
   const handleSetStandby = useCallback(
     (cueId: number) => {
-      if (activeStackId == null || cueId === activeCueId) return
-      dispatch(setStandby({ stackId: activeStackId, cueId }))
+      transport.setStandby(cueId)
       setDrawerOpen(false)
     },
-    [activeStackId, activeCueId, dispatch],
+    [transport],
   )
 
   // Jump to the cue's editor in Program, deep-linking to the exact cue (mirrors Run's
@@ -771,6 +640,10 @@ export function PromptBookViewerPage() {
   const activeCueLabel = liveCue?.label ?? null
   const nextCue = nextCueId != null ? (cueOrder[cueOrderIndex.get(nextCueId) ?? -1] ?? null) : null
   const railStackName = activeStack?.name ?? cueOrder[0]?.stackName ?? null
+  // The show bar wants the Q-number and name as separate fields — FlatCue.label folds the
+  // name in for numberless cues, so pull the real cueNumber from the stack entry instead.
+  const liveEntry = liveCue ? cueEntryByCue.get(liveCue.cueId) : undefined
+  const nextEntry = nextCue ? cueEntryByCue.get(nextCue.cueId) : undefined
 
   // Shared rail props — the same panel serves the desktop side rail and the drawer.
   const railProps = {
@@ -797,8 +670,6 @@ export function PromptBookViewerPage() {
     onEditCue: handleEditCue,
     goDisabled,
     showActive: isShowActive,
-    onGo: fireGo,
-    onBack: fireBack,
     stackName: railStackName,
     bpm: fxState?.bpm ?? null,
     onTap: tapTempo,
@@ -835,6 +706,23 @@ export function PromptBookViewerPage() {
         onStart={handleStartShow}
         onStop={handleStopShow}
       />
+      {isShowActive && (
+        <ShowBar
+          stackName={railStackName}
+          dbo={dbo}
+          onDbo={() => setDbo((d) => !d)}
+          bpm={fxState?.bpm ?? null}
+          onTap={tapTempo}
+          activeNumber={liveEntry?.cueNumber ? `Q${liveEntry.cueNumber}` : null}
+          activeName={liveCue?.name ?? null}
+          standbyNumber={nextEntry?.cueNumber ? `Q${nextEntry.cueNumber}` : null}
+          standbyName={nextCue?.name ?? null}
+          fadeRemainMs={fadeRemainMs}
+          onGo={fireGo}
+          onBack={fireBack}
+          goDisabled={goDisabled}
+        />
+      )}
       <PromptBookToolbar
         scriptFileName={book.scriptFileName}
         locked={locked}
@@ -851,6 +739,7 @@ export function PromptBookViewerPage() {
         onToggleWarnings={() => setShowWarnings((s) => !s)}
         relockCountdown={relock.countdownSecondsLeft}
         onStayUnlocked={relock.stayUnlocked}
+        onOpenCues={isNarrow ? () => setDrawerOpen((o) => !o) : undefined}
       />
 
       {!locked && (
@@ -863,32 +752,6 @@ export function PromptBookViewerPage() {
             noteEdit()
           }}
         />
-      )}
-
-      {/* Compact NOW / NEXT strip — tablet & phone only */}
-      {isNarrow && (
-        <div className="flex items-center gap-2.5 border-b bg-background px-4 py-2">
-          {liveCue ? (
-            <span className="flex min-w-0 items-center gap-1.5">
-              <span className="grid size-5 shrink-0 place-items-center rounded-full border border-emerald-800 bg-emerald-950 text-emerald-400">
-                <Play className="size-2.5 fill-current" strokeWidth={0} />
-              </span>
-              <span className="font-mono text-sm font-bold text-emerald-400">{liveCue.label}</span>
-              <span className="truncate text-[13px]">{liveCue.name}</span>
-            </span>
-          ) : (
-            <span className="text-[13px] text-muted-foreground">No cue running</span>
-          )}
-          <ArrowRight className="size-3.5 shrink-0 text-muted-foreground/50" />
-          <span className="flex shrink-0 items-center gap-1.5">
-            <span className="text-[9px] font-bold tracking-wide text-muted-foreground uppercase">Next</span>
-            <span className="font-mono text-xs font-bold text-sky-400">{nextCue?.label ?? '—'}</span>
-          </span>
-          <span className="flex-1" />
-          <Button variant="outline" size="sm" onClick={() => setDrawerOpen((o) => !o)}>
-            <ListChecks className="size-3.5" /> Cues
-          </Button>
-        </div>
       )}
 
       <div
@@ -984,31 +847,6 @@ export function PromptBookViewerPage() {
           </>
         )}
       </div>
-
-      {/* Bottom transport — tablet & phone (the desktop rail carries its own).
-          Matches the Run mobile footer; the drawer omits its transport to avoid a duplicate. */}
-      {isNarrow && (
-        <div
-          className="grid grid-cols-[1fr_2fr] gap-2 border-t bg-background p-3"
-          style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
-        >
-          <Button
-            variant="outline"
-            onClick={fireBack}
-            disabled={goDisabled}
-            className="h-14 text-base font-bold tracking-wider uppercase"
-          >
-            <ArrowLeft className="size-5" /> Back
-          </Button>
-          <Button
-            onClick={fireGo}
-            disabled={goDisabled}
-            className="h-14 text-2xl font-bold tracking-[0.16em] uppercase"
-          >
-            GO
-          </Button>
-        </div>
-      )}
 
       {/* Note / freetext text entry — a form, so a Sheet per the app's Sheet-vs-Dialog rule.
           A clicked strikethrough has nothing to edit; it gets a delete confirmation Dialog. */}

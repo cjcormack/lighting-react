@@ -161,7 +161,7 @@ export function CueCardEditor({
     <div ref={setNodeRef} style={sortableStyle} {...attributes} data-cue-row={cue.id}>
       <div
         className={cn(
-          'rounded-lg border bg-card overflow-hidden transition-colors mx-2 my-1',
+          'rounded-lg border bg-muted overflow-hidden transition-colors mx-2 my-1',
           isActive && 'border-green-500/70 shadow-[0_0_0_1px_rgba(34,197,94,0.3)]',
           isStandby && !isActive && 'border-blue-500/60',
           expanded && !isActive && !isStandby && 'border-primary/40',
@@ -170,8 +170,10 @@ export function CueCardEditor({
         <div
           className={cn(
             'grid items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-muted/30 transition-colors',
-            'grid-cols-[16px_56px_minmax(0,80px)_minmax(0,1fr)_auto_auto_18px]',
-            'max-[800px]:grid-cols-[16px_44px_minmax(0,1fr)_auto_18px] max-[800px]:gap-2',
+            // Q# column is sized to fit the Play icon + a multi-char cue number (e.g. "QLX2")
+            // so the current cue's ID never truncates.
+            'grid-cols-[16px_64px_minmax(0,80px)_minmax(0,1fr)_auto_auto_18px]',
+            'max-[800px]:grid-cols-[16px_60px_minmax(0,1fr)_auto_18px] max-[800px]:gap-2',
           )}
           onClick={onToggleExpanded}
         >

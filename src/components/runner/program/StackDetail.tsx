@@ -8,17 +8,10 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { useMediaQuery, SM_BREAKPOINT } from '@/hooks/useMediaQuery'
 import {
   DndContext,
   closestCenter,
@@ -76,7 +69,6 @@ export function StackDetail({
   onSnapshotFromLive,
   snapshotPending,
 }: StackDetailProps) {
-  const isWide = useMediaQuery(SM_BREAKPOINT)
   const [reorderCues] = useReorderCueStackCuesMutation()
   const [layersMode, setLayersMode] = useState<LayersMode>('by-target')
 
@@ -131,18 +123,20 @@ export function StackDetail({
   )
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Header */}
+    <div className="@container flex-1 flex flex-col overflow-hidden">
+      {/* Header — controls drop their text labels progressively as the content area narrows
+          (container-query, sidebar-aware); everything stays reachable as an icon button down
+          to phone widths. */}
       <div className="flex items-center h-12 px-4 border-b gap-3 shrink-0">
         <Button
           variant="outline"
-          size={isWide ? 'sm' : 'icon-sm'}
+          size="sm"
           onClick={onBack}
-          className={isWide ? 'font-bold tracking-wider' : ''}
+          className="font-bold tracking-wider"
           aria-label="Back to stacks"
         >
           <ArrowLeft className="size-3.5" />
-          {isWide && <span className="ml-1.5">Stacks</span>}
+          <span className="ml-1.5 hidden @[520px]:inline">Stacks</span>
         </Button>
         <span className="text-sm font-semibold text-foreground truncate min-w-0">
           {stack.name}
@@ -154,7 +148,7 @@ export function StackDetail({
 
         {/* By-target / By-layer toggle */}
         <div
-          className="hidden sm:inline-flex items-center rounded-md border bg-muted/30 p-0.5 mr-1"
+          className="hidden @[680px]:inline-flex items-center rounded-md border bg-muted/30 p-0.5 mr-1"
           role="group"
           aria-label="Layers arrangement"
         >
@@ -200,33 +194,17 @@ export function StackDetail({
           </Tooltip>
         </div>
 
-        {isWide ? (
-          <>
-            <Button variant="outline" size="sm" onClick={onAddCue}>
-              <Plus className="size-3.5 mr-1.5" />
-              Add Cue
-            </Button>
-            <Button variant="outline" size="sm" onClick={onAddMarker}>
-              <SeparatorHorizontal className="size-3.5 mr-1.5" />
-              Separator
-            </Button>
-          </>
-        ) : (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon-sm" aria-label="Add">
-                <Plus className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={onAddCue}>Add Cue</DropdownMenuItem>
-              <DropdownMenuItem onClick={onAddMarker}>Add Separator</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+        <Button variant="outline" size="sm" onClick={onAddCue} aria-label="Add cue">
+          <Plus className="size-3.5" />
+          <span className="ml-1.5 hidden @[600px]:inline">Add Cue</span>
+        </Button>
+        <Button variant="outline" size="sm" onClick={onAddMarker} aria-label="Add separator">
+          <SeparatorHorizontal className="size-3.5" />
+          <span className="ml-1.5 hidden @[600px]:inline">Separator</span>
+        </Button>
       </div>
 
-      {/* Cue list */}
+      {/* Cue list — scrolls within the recessed Row 4 surface set on the root above. */}
       <div ref={listRef} className="flex-1 overflow-y-auto py-1">
         <DndContext
           sensors={sensors}

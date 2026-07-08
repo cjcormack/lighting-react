@@ -117,7 +117,7 @@ export function RunCueCard({
     <div
       data-cue-row={cue.id}
       className={cn(
-        'mx-2 my-1 rounded-lg border bg-card overflow-hidden transition-colors',
+        'mx-2 my-1 rounded-lg border bg-muted overflow-hidden transition-colors',
         isActive && 'border-green-500/70 bg-green-950/15',
         isStandby && !isActive && 'border-blue-500/60',
         isActive && isFading && 'border-amber-700/70 bg-amber-950/10',

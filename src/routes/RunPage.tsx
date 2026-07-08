@@ -40,7 +40,7 @@ import {
   OutOfOrderBanner,
   detectOutOfOrder,
 } from '../components/runner/OutOfOrderBanner'
-import { RunToolbar } from '../components/runner/run/RunToolbar'
+import { ShowBar } from '../components/ShowBar'
 import { RunCueCard } from '../components/runner/run/RunCueCard'
 import {
   RunMobile,
@@ -520,6 +520,7 @@ export function RunPage() {
               activeEntryId={activeEntryId}
               stack={stack}
               stackMap={stackMap}
+              multiStack={stackEntryCount > 1}
               display={runnerDisplay}
               bpm={fxState?.bpm ?? null}
               dbo={dbo}
@@ -536,8 +537,9 @@ export function RunPage() {
             />
           ) : (
             <>
-              {/* Top toolbar */}
-              <RunToolbar
+              {/* Row 3 — universal show bar */}
+              <ShowBar
+                stackName={stackEntryCount > 1 ? undefined : (stack?.name ?? null)}
                 dbo={dbo}
                 onDbo={handleDbo}
                 bpm={fxState?.bpm ?? null}
@@ -552,9 +554,11 @@ export function RunPage() {
                 fadeRemainMs={fadeRemainMs}
                 onGo={handleGo}
                 onBack={handleBack}
+                showShortcuts
               />
 
-              {/* Stack tabs */}
+              {/* Stack tabs — hidden when the show has a single stack (nothing to switch to). */}
+              {stackEntryCount > 1 && (
               <div className="flex h-12 shrink-0 items-stretch border-b overflow-x-auto">
                 {show!.entries.map((entry) => {
                   if (entry.entryType === 'MARKER') {
@@ -602,6 +606,7 @@ export function RunPage() {
                   )
                 })}
               </div>
+              )}
 
               {/* OOO banner */}
               {ooo && (

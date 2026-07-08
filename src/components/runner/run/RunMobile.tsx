@@ -25,6 +25,8 @@ interface RunMobileProps {
   activeEntryId: number | null
   stack: CueStack | undefined
   stackMap: Map<number, CueStack>
+  /** When false (single-stack show), the stack name is a plain label — no picker. */
+  multiStack: boolean
   display: RunnerDisplayState
   bpm: number | null
   dbo: boolean
@@ -53,6 +55,7 @@ export function RunMobile({
   activeEntryId,
   stack,
   stackMap,
+  multiStack,
   display,
   bpm,
   dbo,
@@ -100,21 +103,32 @@ export function RunMobile({
     <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
       {/* Top strip */}
       <div className="flex h-12 shrink-0 items-center gap-1 border-b bg-card px-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setStackPickerOpen(true)}
-          className="flex items-center gap-1 h-9 px-2 min-w-0 max-w-[45%]"
-          aria-label="Switch stack"
-        >
-          <span className="truncate text-sm font-medium">
-            {stack?.name ?? 'No stack'}
-          </span>
-          {stack?.loop && (
-            <RotateCcw className="size-3 shrink-0 text-muted-foreground" />
-          )}
-          <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
-        </Button>
+        {multiStack ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setStackPickerOpen(true)}
+            className="flex items-center gap-1 h-9 px-2 min-w-0 max-w-[45%]"
+            aria-label="Switch stack"
+          >
+            <span className="truncate text-sm font-medium">
+              {stack?.name ?? 'No stack'}
+            </span>
+            {stack?.loop && (
+              <RotateCcw className="size-3 shrink-0 text-muted-foreground" />
+            )}
+            <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+          </Button>
+        ) : (
+          <div className="flex items-center gap-1 h-9 px-2 min-w-0 max-w-[45%]">
+            <span className="truncate text-sm font-medium">
+              {stack?.name ?? 'No stack'}
+            </span>
+            {stack?.loop && (
+              <RotateCcw className="size-3 shrink-0 text-muted-foreground" />
+            )}
+          </div>
+        )}
 
         <Button
           variant="ghost"
@@ -207,14 +221,16 @@ export function RunMobile({
       </div>
 
       {/* Sheets */}
-      <StackPickerSheet
-        open={stackPickerOpen}
-        onOpenChange={setStackPickerOpen}
-        entries={show.entries}
-        activeEntryId={activeEntryId}
-        stackMap={stackMap}
-        onSwitchToEntry={onSwitchToEntry}
-      />
+      {multiStack && (
+        <StackPickerSheet
+          open={stackPickerOpen}
+          onOpenChange={setStackPickerOpen}
+          entries={show.entries}
+          activeEntryId={activeEntryId}
+          stackMap={stackMap}
+          onSwitchToEntry={onSwitchToEntry}
+        />
+      )}
       <MobileCueListSheet
         open={cueListOpen}
         onOpenChange={setCueListOpen}

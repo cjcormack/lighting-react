@@ -24,7 +24,10 @@ import {
 } from '../store/show'
 import type { Cue } from '../api/cuesApi'
 import { buildCueInput } from '../lib/cueUtils'
+import { useFxStateQuery, tapTempo } from '../store/fx'
+import { useShowTransport } from '../hooks/useShowTransport'
 import { ShowHeader } from '../components/ShowHeader'
+import { ShowBar } from '../components/ShowBar'
 import { ProgramView } from '../components/runner/program/ProgramView'
 
 export function ProgramRedirect() {
@@ -69,6 +72,15 @@ export function ProgramPage() {
     () => (activeStackId != null ? stacks?.find((s) => s.id === activeStackId) : undefined),
     [stacks, activeStackId],
   )
+
+  // Row 3 (show bar) — functional transport in the Program view (no keyboard shortcuts). Shown at
+  // every width (it collapses responsively) whenever the show is running.
+  const { data: fxState } = useFxStateQuery()
+  const transport = useShowTransport({ projectId: projectIdNum, show, stacks })
+  const [dbo, setDbo] = useState(false)
+  const barActiveCue = transport.activeStack?.cues.find((c) => c.id === transport.activeCueId) ?? null
+  const barStandbyCue =
+    transport.activeStack?.cues.find((c) => c.id === transport.standbyCueId) ?? null
 
   const [drillStackId, setDrillStackId] = useState<number | null>(null)
   const drillStack = useMemo(
@@ -237,6 +249,24 @@ export function ProgramPage() {
         onStop={handleStopShow}
       />
 
+      {isShowActive && (
+        <ShowBar
+          stackName={transport.activeStack?.name ?? null}
+          dbo={dbo}
+          onDbo={() => setDbo((d) => !d)}
+          bpm={fxState?.bpm ?? null}
+          onTap={tapTempo}
+          activeNumber={barActiveCue?.cueNumber ? `Q${barActiveCue.cueNumber}` : null}
+          activeName={barActiveCue?.name ?? null}
+          standbyNumber={barStandbyCue?.cueNumber ? `Q${barStandbyCue.cueNumber}` : null}
+          standbyName={barStandbyCue?.name ?? null}
+          fadeRemainMs={transport.fadeRemainMs}
+          onGo={transport.go}
+          onBack={transport.back}
+          goDisabled={transport.goDisabled}
+        />
+      )}
+
       {!stacks || stacks.length === 0 ? (
         <Card className="m-4 p-8 flex flex-col items-center gap-2 text-muted-foreground">
           <p>No cue stacks found.</p>
@@ -244,7 +274,7 @@ export function ProgramPage() {
         </Card>
       ) : (
         <div className="flex-1 flex min-h-0">
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 flex flex-col min-h-0">
             <ProgramView
               projectId={projectIdNum}
               stacks={stacks}

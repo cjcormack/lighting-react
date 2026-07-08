@@ -74,11 +74,12 @@ export function ShowHeader({
   }
 
   return (
-    <div className="flex items-center p-4 gap-3">
+    <div className="@container flex items-center p-4 gap-3">
       <div className="flex-1 min-w-0">
         <Breadcrumbs
           projectName={projectName}
           currentPage={PAGE_LABEL[view]}
+          collapsedLabel={PAGE_LABEL[view]}
           extra={extra}
           onCurrentPageClick={onCurrentPageClick}
         />
