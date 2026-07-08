@@ -54,6 +54,8 @@ interface CueStackPanelProps {
   dbo: boolean
   onDbo: () => void
   projectId: number
+  /** Front-matter page count, offsets each cue's page label to the script's numbering. */
+  coverPages: number
   /** Rendered inside the tablet/phone drawer — shows a close affordance, drops the
    *  border and the transport (the narrow layout carries its own bottom transport). */
   inDrawer?: boolean
@@ -100,6 +102,7 @@ export function CueStackPanel({
   dbo,
   onDbo,
   projectId,
+  coverPages,
   inDrawer,
   onClose,
 }: CueStackPanelProps) {
@@ -196,6 +199,7 @@ export function CueStackPanel({
               fadeProgress={fadeProgress}
               fadeRemainMs={fadeRemainMs}
               canSetNext={!goDisabled && row.cue.stackId === activeStackId}
+              coverPages={coverPages}
               onCueClick={() => onCueClick(row.cue)}
               onToggleExpanded={() => onToggleExpanded(row.cue.cueId)}
               onSetStandby={() => onSetStandby(row.cue.cueId)}

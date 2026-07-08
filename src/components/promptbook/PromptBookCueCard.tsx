@@ -29,6 +29,8 @@ interface PromptBookCueCardProps {
   fadeRemainMs: number | null
   /** Show active + editable — enables the "Set next" affordance. */
   canSetNext: boolean
+  /** Front-matter page count, offsets the cue's page label to the script's numbering. */
+  coverPages: number
   /** Primary action: scroll the book to this cue's anchor. */
   onCueClick: () => void
   onToggleExpanded: () => void
@@ -66,6 +68,7 @@ export function PromptBookCueCard({
   fadeProgress,
   fadeRemainMs,
   canSetNext,
+  coverPages,
   onCueClick,
   onToggleExpanded,
   onSetStandby,
@@ -176,7 +179,7 @@ export function PromptBookCueCard({
           projectId={projectId}
           mode={mode}
           onModeChange={onModeChange}
-          location={anchored ? positionLabel(anchor.region) : 'Not anchored to the script'}
+          location={anchored ? positionLabel(anchor.region, coverPages) : 'Not anchored to the script'}
           headerLabel={cue.label}
           fadeProgress={fadeProgress}
           fadeRemainMs={fadeRemainMs}

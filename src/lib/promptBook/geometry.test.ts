@@ -6,6 +6,8 @@ import {
   flattenShowRows,
   mergeRectsByLine,
   moveRegionVertically,
+  positionLabel,
+  positionLabelFor,
   rectToStyle,
 } from './geometry'
 import type { CueStack, CueStackCueEntry } from '../../api/cueStacksApi'
@@ -289,5 +291,54 @@ describe('flattenShowRows', () => {
   it('returns empty for missing inputs', () => {
     expect(flattenShowRows(undefined, [])).toEqual([])
     expect(flattenShowRows(show([]), undefined)).toEqual([])
+  })
+})
+
+describe('positionLabelFor', () => {
+  it('maps a 0-based page to a 1-based number with no cover page (default)', () => {
+    expect(positionLabelFor(0, 0.1)).toBe('top of p. 1')
+    expect(positionLabelFor(11, 0.5)).toBe('middle of p. 12')
+  })
+
+  it('buckets y into bands regardless of the offset', () => {
+    expect(positionLabelFor(5, 0.05)).toBe('top of p. 6')
+    expect(positionLabelFor(5, 0.3)).toBe('upper of p. 6')
+    expect(positionLabelFor(5, 0.5)).toBe('middle of p. 6')
+    expect(positionLabelFor(5, 0.7)).toBe('lower of p. 6')
+    expect(positionLabelFor(5, 0.95)).toBe('bottom of p. 6')
+  })
+
+  it('subtracts a single cover page so the first content page reads p. 1', () => {
+    // PDF page 0 is the cover; PDF page 1 is the script's printed page 1.
+    expect(positionLabelFor(1, 0.1, 1)).toBe('top of p. 1')
+    expect(positionLabelFor(9, 0.5, 1)).toBe('middle of p. 9')
+  })
+
+  it('handles multiple front-matter pages', () => {
+    // 2 leading pages → PDF page 2 is printed page 1.
+    expect(positionLabelFor(2, 0.1, 2)).toBe('top of p. 1')
+    expect(positionLabelFor(5, 0.5, 2)).toBe('middle of p. 4')
+  })
+
+  it('labels a cue anchored on the cover page instead of numbering it', () => {
+    expect(positionLabelFor(0, 0.1, 1)).toBe('top of the cover')
+    // With more than one cover page, disambiguate by position within the front matter.
+    expect(positionLabelFor(0, 0.1, 3)).toBe('top of cover p. 1')
+    expect(positionLabelFor(2, 0.5, 3)).toBe('middle of cover p. 3')
+  })
+})
+
+describe('positionLabel', () => {
+  it('reduces a region to its earliest rect and offsets by coverPages', () => {
+    const region = [
+      { page: 4, x: 0.1, y: 0.6, w: 0.5, h: 0.05 },
+      { page: 3, x: 0.1, y: 0.2, w: 0.5, h: 0.05 },
+    ]
+    // Earliest rect is page 3, y 0.2; with 1 cover page → printed p. 3.
+    expect(positionLabel(region, 1)).toBe('upper of p. 3')
+  })
+
+  it('returns empty for an empty region', () => {
+    expect(positionLabel([], 2)).toBe('')
   })
 })

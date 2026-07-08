@@ -650,6 +650,26 @@ export function PromptBookViewerPage() {
     noteEdit()
   }, [annotationDialog, deleteAnnotation, projectIdNum, noteEdit])
 
+  // Change the front-matter (cover/title) page count. Reuses the create-or-replace PUT
+  // (which keeps anchors/annotations) to persist just this field; the optimistic patch in
+  // the mutation makes the stepper snappy. Clamped so at least one numbered page remains.
+  const handleCoverPagesChange = useCallback(
+    (n: number) => {
+      if (!book) return
+      const next = Math.max(0, Math.min(n, book.pageCount - 1))
+      if (next === book.coverPages) return
+      setPromptBook({
+        projectId: projectIdNum,
+        scriptHash: book.scriptHash,
+        pageCount: book.pageCount,
+        scriptFileName: book.scriptFileName ?? undefined,
+        coverPages: next,
+      })
+      noteEdit()
+    },
+    [book, setPromptBook, projectIdNum, noteEdit],
+  )
+
   // ── Missing-PDF re-attach flow ──
   const [reuploadError, setReuploadError] = useState<string | null>(null)
   const handleReupload = useCallback(
@@ -785,6 +805,7 @@ export function PromptBookViewerPage() {
     dbo,
     onDbo: () => setDbo((d) => !d),
     projectId: projectIdNum,
+    coverPages: book.coverPages,
   }
 
   const toneBtnActive: Record<NoteTone, string> = {
@@ -821,6 +842,9 @@ export function PromptBookViewerPage() {
         onToggleLock={toggleLock}
         canUndo={undoSnapshot != null}
         onUndo={handleUndo}
+        coverPages={book.coverPages}
+        pageCount={book.pageCount}
+        onCoverPagesChange={handleCoverPagesChange}
         activeLabel={activeCueLabel}
         onJumpToLive={jumpToLive}
         warningCount={warnings.length}

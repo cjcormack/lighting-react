@@ -60,6 +60,12 @@ export interface PromptBookDetails {
   scriptHash: string
   scriptFileName: string | null
   pageCount: number
+  /**
+   * Leading front-matter (cover/title) PDF pages before the script's printed page 1.
+   * Cue page labels subtract this so the number shown matches the script's own
+   * numbering. 0 = no cover page (the raw PDF index + 1).
+   */
+  coverPages: number
   anchors: CueAnchorDto[]
   annotations: AnnotationDto[]
   canEdit: boolean
@@ -69,6 +75,8 @@ export interface NewPromptBookRequest {
   scriptHash: string
   pageCount: number
   scriptFileName?: string
+  /** Leading front-matter pages; omitted on import (defaults to 0), set later in the toolbar. */
+  coverPages?: number
 }
 
 export interface UpsertAnchorRequest {

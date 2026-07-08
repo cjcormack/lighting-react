@@ -51,6 +51,22 @@ export const promptBooksApi = restApi.injectEndpoints({
         method: 'PUT',
         body,
       }),
+      // Optimistic update for in-place edits (e.g. the front-matter stepper) so the
+      // page label reflects immediately. A no-op on first import (nothing cached yet);
+      // the invalidation below still refetches the authoritative book.
+      async onQueryStarted({ projectId, coverPages }, { dispatch, queryFulfilled }) {
+        if (coverPages == null) return
+        const patchResult = dispatch(
+          promptBooksApi.util.updateQueryData('projectPromptBook', projectId, (draft) => {
+            draft.coverPages = coverPages
+          }),
+        )
+        try {
+          await queryFulfilled
+        } catch {
+          patchResult.undo()
+        }
+      },
       invalidatesTags: ['PromptBook'],
     }),
 

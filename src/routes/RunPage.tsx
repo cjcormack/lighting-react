@@ -23,7 +23,7 @@ import {
 } from '../store/show'
 import type { ShowEntryDto } from '../api/showApi'
 import { useFxStateQuery } from '../store/fx'
-import { useProjectCueLocationsQuery } from '../store/promptBooks'
+import { useProjectCueLocationsQuery, useProjectPromptBookQuery } from '../store/promptBooks'
 import { positionLabelFor } from '../lib/promptBook/geometry'
 import { lightingApi } from '../api/lightingApi'
 import {
@@ -96,14 +96,17 @@ export function RunPage() {
   const { data: fxState } = useFxStateQuery()
   const { data: show } = useProjectShowQuery(projectIdNum)
   const { data: cueLocations } = useProjectCueLocationsQuery(projectIdNum)
+  // The book carries coverPages — the front-matter offset applied to each cue's page label.
+  const { data: promptBook } = useProjectPromptBookQuery(projectIdNum)
+  const coverPages = promptBook?.coverPages ?? 0
 
   // Per-cue prompt-book reading position, e.g. "top of p. 9". Empty when the project
   // has no prompt book — the label just doesn't render.
   const locationByCue = useMemo(() => {
     const m = new Map<number, string>()
-    for (const l of cueLocations ?? []) m.set(l.cueId, positionLabelFor(l.page, l.y))
+    for (const l of cueLocations ?? []) m.set(l.cueId, positionLabelFor(l.page, l.y, coverPages))
     return m
-  }, [cueLocations])
+  }, [cueLocations, coverPages])
 
   const isShowActive = show?.activeEntryId != null
 

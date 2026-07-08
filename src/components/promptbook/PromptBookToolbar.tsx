@@ -1,4 +1,4 @@
-import { Lock, LockOpen, Play, TriangleAlert, Undo2 } from 'lucide-react'
+import { Lock, LockOpen, Minus, Play, Plus, TriangleAlert, Undo2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -10,6 +10,11 @@ interface PromptBookToolbarProps {
   onToggleLock: () => void
   canUndo: boolean
   onUndo: () => void
+  /** Leading front-matter (cover/title) pages — offsets cue page labels to the script's numbering. */
+  coverPages: number
+  /** Total PDF pages — caps the front-matter count at pageCount - 1 (one numbered page must remain). */
+  pageCount: number
+  onCoverPagesChange: (n: number) => void
   /** Live cue label ("Q12") — renders a chip that jumps to its anchor. */
   activeLabel: string | null
   onJumpToLive: () => void
@@ -33,6 +38,9 @@ export function PromptBookToolbar({
   onToggleLock,
   canUndo,
   onUndo,
+  coverPages,
+  pageCount,
+  onCoverPagesChange,
   activeLabel,
   onJumpToLive,
   warningCount,
@@ -88,6 +96,43 @@ export function PromptBookToolbar({
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">Desync warnings — advisory only</TooltipContent>
+        </Tooltip>
+      )}
+
+      {/* Front-matter (cover/title) page count — an edit to the book, so it only
+          shows while unlocked. Subtracting it aligns cue page labels with the
+          script's own numbering. Capped so at least one numbered page remains. */}
+      {!locked && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex shrink-0 items-center gap-1 rounded-md border bg-background px-1.5 py-0.5">
+              <span className="hidden text-[11px] text-muted-foreground sm:inline">Front matter</span>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="size-6"
+                onClick={() => onCoverPagesChange(coverPages - 1)}
+                disabled={coverPages <= 0}
+                aria-label="Fewer front-matter pages"
+              >
+                <Minus className="size-3" />
+              </Button>
+              <span className="min-w-4 text-center font-mono text-xs tabular-nums">{coverPages}</span>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="size-6"
+                onClick={() => onCoverPagesChange(coverPages + 1)}
+                disabled={coverPages >= pageCount - 1}
+                aria-label="More front-matter pages"
+              >
+                <Plus className="size-3" />
+              </Button>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="max-w-56">
+            Leading cover/title pages before the script's page 1 — cue page numbers are offset by this.
+          </TooltipContent>
         </Tooltip>
       )}
 

@@ -359,20 +359,31 @@ export function flattenShowRows(
  * cue's trigger-line stand-in in the rail, since the PDF has no text layer to
  * quote. Buckets the region's reading-position y into fifths of the page.
  * e.g. `{ page: 11, y: 0.5 }` → "middle of p. 12" (page index is 0-based).
+ * `coverPages` offsets the number to the script's own page 1 (see positionLabelFor).
  */
-export function positionLabel(region: Region): string {
+export function positionLabel(region: Region, coverPages = 0): string {
   if (region.length === 0) return ''
   const { page, y } = scriptPosition(region)
-  return positionLabelFor(page, y)
+  return positionLabelFor(page, y, coverPages)
 }
 
 /**
  * The band + page phrasing for a raw reading position — the single source of the
  * "top of p. 9" wording, shared by the rail (which reduces a Region) and the Run
  * view (which gets `{page, y}` from the cue-locations endpoint). `page` is 0-based.
+ *
+ * `coverPages` is the count of leading front-matter pages (cover/title) before the
+ * script's printed page 1, so the shown number matches the script's own numbering:
+ *   • content page (page >= coverPages) → "p. ${page - coverPages + 1}"
+ *   • front matter (page <  coverPages) → a cover label, not a number
+ * Default 0 leaves the original "p. ${page + 1}" behaviour untouched.
  */
-export function positionLabelFor(page: number, y: number): string {
+export function positionLabelFor(page: number, y: number, coverPages = 0): string {
   const band =
     y < 0.2 ? 'top' : y < 0.4 ? 'upper' : y < 0.6 ? 'middle' : y < 0.8 ? 'lower' : 'bottom'
-  return `${band} of p. ${page + 1}`
+  if (page < coverPages) {
+    // Anchored on a front-matter page — no script page number applies.
+    return coverPages > 1 ? `${band} of cover p. ${page + 1}` : `${band} of the cover`
+  }
+  return `${band} of p. ${page - coverPages + 1}`
 }
