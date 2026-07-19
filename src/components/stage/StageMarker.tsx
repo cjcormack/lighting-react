@@ -16,6 +16,7 @@ import {
 } from '../../hooks/usePropertyValues'
 import { useGroupColourValues } from '../../hooks/useGroupPropertyValues'
 import { colourFactor, useNormalizedIntensity } from '../../hooks/useNormalizedIntensity'
+import { computeNormalizedHueCss, perceptualBrightness } from '@/lib/colourMath'
 import { findGel } from '../../data/gels'
 import type { FixturePatch } from '../../api/patchApi'
 import { cn } from '@/lib/utils'
@@ -159,9 +160,14 @@ function ColourMarker({
 }) {
   const colour = useColourValue(colourProp)
   // Effective intensity = dimmer × colour so a colour-only fixture at RGB 0
-  // reads as dark and doesn't beam.
-  const intensity = useNormalizedIntensity(dimmerProp) * colourFactor(colour.r, colour.g, colour.b, colour.w)
-  return <MarkerVisual {...rest} color={colour.combinedCss} intensity={intensity} />
+  // reads as dark and doesn't beam. Colour drives the hue at full brightness;
+  // `intensity` (curved perceptually in MarkerVisual) drives how lit it looks,
+  // so a dimmerless fixture at r:20 reads as dim orange, not near-black.
+  const intensity =
+    useNormalizedIntensity(dimmerProp) *
+    colourFactor(colour.r, colour.g, colour.b, colour.w, colour.a, colour.uv)
+  const hue = computeNormalizedHueCss(colour.r, colour.g, colour.b, colour.w, colour.a, colour.uv)
+  return <MarkerVisual {...rest} color={hue} intensity={intensity} />
 }
 
 function SettingColourMarker({
@@ -218,12 +224,32 @@ function MultiPixelMarker({
   const group = useGroupColourValues(groupColourProp)
   const dimmerFactor = useNormalizedIntensity(dimmerProp)
   const intensity = group.beamIntensity * dimmerFactor
-  const aggColor = `rgb(${group.beamR}, ${group.beamG}, ${group.beamB})`
+  const aggColor = computeNormalizedHueCss(group.beamR, group.beamG, group.beamB)
+  // Per-pixel: full-brightness hue + its own level, so dim pixels still read as
+  // their colour (MarkerVisual curves the level into the segment opacity).
   const segments: PixelSegment[] = group.members.map((m) => ({
-    css: `rgb(${m.r}, ${m.g}, ${m.b})`,
-    intensity: colourFactor(m.r, m.g, m.b, m.w) * dimmerFactor,
+    css: computeNormalizedHueCss(m.r, m.g, m.b, m.w, m.a, m.uv),
+    intensity: colourFactor(m.r, m.g, m.b, m.w, m.a, m.uv) * dimmerFactor,
   }))
   return <MarkerVisual {...rest} color={aggColor} intensity={intensity} segments={segments} />
+}
+
+/**
+ * Apply an alpha to a marker colour. `color` may be a hex (`#fff8d5`, `#666`)
+ * from gel/setting/placeholder markers or an `rgb(r, g, b)` string from
+ * computeNormalizedHueCss — so a bare hex suffix like `${color}aa` silently
+ * produces an invalid token (`rgb(255, 26, 0)aa`) and drops the whole box-shadow
+ * / gradient for rgb() markers. Returns an `rgba(...)` string valid for both.
+ */
+function withAlpha(color: string, alpha: number): string {
+  if (color.startsWith('#')) {
+    let hex = color.slice(1)
+    if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2]
+    const n = parseInt(hex, 16)
+    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`
+  }
+  const m = color.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/)
+  return m ? `rgba(${m[1]}, ${m[2]}, ${m[3]}, ${alpha})` : color
 }
 
 function MarkerVisual({
@@ -239,14 +265,19 @@ function MarkerVisual({
 }: LeafProps & { color: string; intensity: number; segments?: PixelSegment[] }) {
   const glowSize = 16 * beamScale
   const coneWidth = beamDeg * 1.6 * beamScale
+  // Beam-visibility gate stays on the raw level, so a near-off fixture still
+  // throws no beam even though the curve lifts how bright the dot looks.
   const showBeam = showCone && intensity > 0.05
+  // Perceptual display brightness: linear opacity crushes dim fixtures to
+  // invisible even though the real light is clearly lit.
+  const lit = perceptualBrightness(intensity)
 
   // Border + glow + opacity are shared by the single dot and the pixel strip;
   // only the shape/size differs.
   const frameStyle: React.CSSProperties = {
     border: selected ? '2px solid #fff' : '1px solid rgba(255,255,255,0.2)',
-    boxShadow: `0 0 ${4 + intensity * 18}px ${color}, 0 0 ${8 + intensity * 30}px ${color}aa`,
-    opacity: 0.3 + intensity * 0.7,
+    boxShadow: `0 0 ${4 + lit * 18}px ${color}, 0 0 ${8 + lit * 30}px ${withAlpha(color, 0.67)}`,
+    opacity: 0.3 + lit * 0.7,
   }
 
   return (
@@ -260,9 +291,9 @@ function MarkerVisual({
             transform: 'translateX(-50%)',
             width: `${coneWidth}px`,
             height: '100px',
-            background: `radial-gradient(ellipse at 50% 0%, ${color}cc 0%, ${color}55 25%, transparent 65%)`,
+            background: `radial-gradient(ellipse at 50% 0%, ${withAlpha(color, 0.8)} 0%, ${withAlpha(color, 0.33)} 25%, transparent 65%)`,
             filter: 'blur(6px)',
-            opacity: intensity,
+            opacity: lit,
             zIndex: -1,
           }}
         />
@@ -279,7 +310,7 @@ function MarkerVisual({
           {segments.map((seg, i) => (
             <div
               key={i}
-              style={{ flex: 1, backgroundColor: seg.css, opacity: 0.25 + seg.intensity * 0.75 }}
+              style={{ flex: 1, backgroundColor: seg.css, opacity: 0.25 + perceptualBrightness(seg.intensity) * 0.75 }}
             />
           ))}
         </div>

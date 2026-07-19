@@ -4,6 +4,8 @@ import { useEditorContext } from '../components/lighting-editor/EditorContext'
 import { usePresetDraft } from '../components/presets/PresetDraftContext'
 import { rgbToHex, serializeExtendedColour } from '../components/fx/colourUtils'
 import { resolveSettingOption } from './usePropertyValues'
+import { colourFactor } from './useNormalizedIntensity'
+import { foldChannels } from '../lib/colourMath'
 import type { ChannelRef } from '../store/fixtures'
 import type {
   GroupSliderPropertyDescriptor,
@@ -236,21 +238,24 @@ export function computeGroupColourValues(
   const combinedCss = `rgb(${avgR}, ${avgG}, ${avgB})`
 
   // Aggregate beam: intensity-weight each pixel's hue by its own brightness
-  // (iₖ = max(r,g,b,w)/255) so bright pixels dominate and dim ones don't drag
-  // toward grey. Level blends mean with peak so a sparse-but-bright bar still
-  // throws a visible beam.
+  // (iₖ = brightest emitter / 255, counting white/amber/UV) so bright pixels
+  // dominate and dim ones don't drag toward grey. The hue is folded first so an
+  // amber/UV-only bar contributes its warm/violet colour to the beam instead of
+  // reading as black. Level blends mean with peak so a sparse-but-bright bar
+  // still throws a visible beam.
   let weight = 0
   let peak = 0
   let wr = 0
   let wg = 0
   let wb = 0
   for (const m of members) {
-    const ik = Math.max(m.r, m.g, m.b, m.w ?? 0) / 255
+    const ik = colourFactor(m.r, m.g, m.b, m.w, m.a, m.uv)
     weight += ik
     if (ik > peak) peak = ik
-    wr += ik * m.r
-    wg += ik * m.g
-    wb += ik * m.b
+    const f = foldChannels(m.r, m.g, m.b, m.w, m.a, m.uv)
+    wr += ik * f.r
+    wg += ik * f.g
+    wb += ik * f.b
   }
   const lit = weight > 1e-4
   const beamR = lit ? Math.round(wr / weight) : 0

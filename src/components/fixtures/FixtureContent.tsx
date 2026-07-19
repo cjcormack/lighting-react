@@ -10,18 +10,21 @@ import {
   SettingPropertyDescriptor,
   SliderPropertyDescriptor,
   findColourSource,
+  findDimmerProperty,
   useFixtureTypeListQuery,
 } from '../../store/fixtures'
 import type { GroupPropertyDescriptor, GroupColourPropertyDescriptor } from '../../api/groupsApi'
 import { useGetChannelQuery } from '../../store/channels'
 import { useUpdateChannel } from '../../hooks/usePropertyValues'
-import { useColourValue, useSettingColourPreview } from '../../hooks/usePropertyValues'
+import { useSettingColourPreview } from '../../hooks/usePropertyValues'
+import { useColourAppearance } from '../../hooks/useColourAppearance'
 import { PropertyVisualizer, VirtualDimmerSlider } from './PropertyVisualizers'
 import { GroupPropertyVisualizer, GroupVirtualDimmerSlider } from './GroupPropertyVisualizers'
 import { GroupMembershipSection } from './GroupMembershipSection'
 import { FxSection } from '../fx/FxSection'
 import { FixtureBoundControlsRow } from '../surfaces/FixtureBoundControlsRow'
-import { GelSwatch } from './GelSwatch'
+import { GelSwatch, useDimmerBrightness } from './GelSwatch'
+import { SWATCH_FLOOR } from '@/lib/colourMath'
 import { findGel } from '../../data/gels'
 import { cn } from '@/lib/utils'
 
@@ -160,6 +163,7 @@ function PropertiesView({
               property={prop}
               fixtureKey={fixture.key}
               isEditing={isEditing}
+              dimmerProp={dimmerSliderProp}
             />
           ))}
           {egp?.colour.map((prop) => (
@@ -237,6 +241,7 @@ function PropertiesView({
               property={prop}
               fixtureKey={fixture.key}
               isEditing={isEditing}
+              dimmerProp={dimmerSliderProp}
             />
           ))}
           {egp?.setting.map((prop) => (
@@ -266,7 +271,7 @@ function PropertiesView({
               </h4>
             </div>
           )}
-          <ElementsView elements={fixture.elements} isEditing={isEditing} />
+          <ElementsView elements={fixture.elements} isEditing={isEditing} fixtureDimmer={dimmerSliderProp} />
         </>
       )}
 
@@ -303,16 +308,18 @@ function AllHeadsProperty({
 function ElementsView({
   elements,
   isEditing,
+  fixtureDimmer,
 }: {
   elements: ElementDescriptor[]
   isEditing: boolean
+  fixtureDimmer?: SliderPropertyDescriptor
 }) {
   const [expandedHead, setExpandedHead] = useState<string | null>(null)
 
   return (
     <div className="space-y-2">
       {/* Aggregate colour preview */}
-      <HeadsAggregatePreview elements={elements} />
+      <HeadsAggregatePreview elements={elements} fixtureDimmer={fixtureDimmer} />
 
       {/* Expandable head sections */}
       {elements.map((element) => (
@@ -324,7 +331,7 @@ function ElementsView({
             }
           >
             <div className="flex items-center gap-2">
-              <HeadColourPreview element={element} />
+              <HeadColourPreview element={element} fixtureDimmer={fixtureDimmer} />
               <span className="text-sm font-medium">{element.displayName}</span>
             </div>
             {expandedHead === element.key ? (
@@ -340,6 +347,7 @@ function ElementsView({
                 properties={element.properties}
                 fixtureKey={element.key}
                 isEditing={isEditing}
+                fixtureDimmer={fixtureDimmer}
               />
             </div>
           )}
@@ -350,12 +358,18 @@ function ElementsView({
 }
 
 /** Shows combined colour swatches for all heads in a row */
-function HeadsAggregatePreview({ elements }: { elements: ElementDescriptor[] }) {
+function HeadsAggregatePreview({
+  elements,
+  fixtureDimmer,
+}: {
+  elements: ElementDescriptor[]
+  fixtureDimmer?: SliderPropertyDescriptor
+}) {
   return (
     <div className="flex gap-1 mb-3 p-2 bg-muted/50 rounded">
       <span className="text-xs text-muted-foreground mr-2 self-center">Preview:</span>
       {elements.map((element) => (
-        <HeadColourPreview key={element.key} element={element} size="md" />
+        <HeadColourPreview key={element.key} element={element} size="md" fixtureDimmer={fixtureDimmer} />
       ))}
     </div>
   )
@@ -364,11 +378,15 @@ function HeadsAggregatePreview({ elements }: { elements: ElementDescriptor[] }) 
 function HeadColourPreview({
   element,
   size = 'sm',
+  fixtureDimmer,
 }: {
   element: ElementDescriptor
   size?: 'sm' | 'md'
+  fixtureDimmer?: SliderPropertyDescriptor
 }) {
   const colourSource = findColourSource(element.properties)
+  // A head dims by its own dimmer if it has one, otherwise the fixture's.
+  const dimmerProp = findDimmerProperty(element.properties) ?? fixtureDimmer
 
   if (!colourSource) {
     return (
@@ -383,29 +401,31 @@ function HeadColourPreview({
   }
 
   if (colourSource.type === 'colour') {
-    return <HeadColourDot colourProp={colourSource.property} title={element.displayName} size={size} />
+    return <HeadColourDot colourProp={colourSource.property} dimmerProp={dimmerProp} title={element.displayName} size={size} />
   }
 
-  return <HeadSettingColourDot settingProp={colourSource.property} title={element.displayName} size={size} />
+  return <HeadSettingColourDot settingProp={colourSource.property} dimmerProp={dimmerProp} title={element.displayName} size={size} />
 }
 
 function HeadColourDot({
   colourProp,
+  dimmerProp,
   title,
   size,
 }: {
   colourProp: ColourPropertyDescriptor
+  dimmerProp?: SliderPropertyDescriptor
   title: string
   size: 'sm' | 'md'
 }) {
-  const colour = useColourValue(colourProp)
+  const appearance = useColourAppearance(colourProp, dimmerProp, SWATCH_FLOOR)
   return (
     <div
       className={cn(
         'rounded border',
         size === 'sm' ? 'w-6 h-6' : 'w-8 h-8'
       )}
-      style={{ backgroundColor: colour.combinedCss }}
+      style={{ backgroundColor: appearance.appearanceCss }}
       title={title}
     />
   )
@@ -413,21 +433,27 @@ function HeadColourDot({
 
 function HeadSettingColourDot({
   settingProp,
+  dimmerProp,
   title,
   size,
 }: {
   settingProp: SettingPropertyDescriptor
+  dimmerProp?: SliderPropertyDescriptor
   title: string
   size: 'sm' | 'md'
 }) {
   const colourPreview = useSettingColourPreview(settingProp)
+  const dimmerBrightness = useDimmerBrightness(dimmerProp)
   return (
     <div
       className={cn(
         'rounded border',
         size === 'sm' ? 'w-6 h-6' : 'w-8 h-8'
       )}
-      style={{ backgroundColor: colourPreview ?? 'transparent' }}
+      style={{
+        backgroundColor: colourPreview ?? 'transparent',
+        filter: colourPreview ? `brightness(${dimmerBrightness})` : undefined,
+      }}
       title={title}
     />
   )
@@ -438,10 +464,12 @@ function PropertiesList({
   properties,
   fixtureKey,
   isEditing,
+  fixtureDimmer,
 }: {
   properties: ElementDescriptor['properties']
   fixtureKey?: string
   isEditing: boolean
+  fixtureDimmer?: SliderPropertyDescriptor
 }) {
   if (!properties || properties.length === 0) {
     return (
@@ -465,10 +493,13 @@ function PropertiesList({
     ? colourProps.find((p) => p.type === 'colour') as ColourPropertyDescriptor | undefined
     : undefined
 
+  // Colour/setting swatches dim by the head's own dimmer, else the fixture's.
+  const elementDimmer = (dimmerProps[0] as SliderPropertyDescriptor | undefined) ?? fixtureDimmer
+
   return (
     <div className="space-y-1">
       {colourProps.map((prop) => (
-        <PropertyVisualizer key={prop.name} property={prop} fixtureKey={fixtureKey} isEditing={isEditing} />
+        <PropertyVisualizer key={prop.name} property={prop} fixtureKey={fixtureKey} isEditing={isEditing} dimmerProp={elementDimmer} />
       ))}
       {positionProps.map((prop) => (
         <PropertyVisualizer key={prop.name} property={prop} fixtureKey={fixtureKey} isEditing={isEditing} />
@@ -488,7 +519,7 @@ function PropertiesList({
         <PropertyVisualizer key={prop.name} property={prop} fixtureKey={fixtureKey} isEditing={isEditing} />
       ))}
       {settingProps.map((prop) => (
-        <PropertyVisualizer key={prop.name} property={prop} fixtureKey={fixtureKey} isEditing={isEditing} />
+        <PropertyVisualizer key={prop.name} property={prop} fixtureKey={fixtureKey} isEditing={isEditing} dimmerProp={elementDimmer} />
       ))}
     </div>
   )

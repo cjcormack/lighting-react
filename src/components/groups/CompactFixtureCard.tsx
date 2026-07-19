@@ -17,11 +17,12 @@ import type { GroupSliderPropertyDescriptor, GroupColourPropertyDescriptor } fro
 import { useFixtureEffectsQuery } from '@/store/fixtureFx'
 import { AudioWaveform } from 'lucide-react'
 import {
-  useColourValue,
   useSliderValue,
   useSettingValue,
   useSettingColourPreview,
 } from '../../hooks/usePropertyValues'
+import { useColourAppearance } from '../../hooks/useColourAppearance'
+import { SWATCH_FLOOR } from '@/lib/colourMath'
 import { useGroupSliderValues } from '../../hooks/useGroupPropertyValues'
 import { useVirtualDimmer, useGroupVirtualDimmer } from '../../hooks/useVirtualDimmer'
 import { findGel } from '../../data/gels'
@@ -280,8 +281,9 @@ function HeadSquare({
 }
 
 /**
- * Colour square with brightness based on dimmer
- * Uses a wrapper div for the border so it's not affected by brightness filter
+ * Colour square: the perceptual appearance (hue × dimmer × colour magnitude) is
+ * baked into the background colour. Outer div holds the border/rounding; inner
+ * div carries the colour.
  */
 function ColourSquare({
   colourProp,
@@ -294,8 +296,9 @@ function ColourSquare({
   fullWidth?: boolean
   grow?: boolean
 }) {
-  const colour = useColourValue(colourProp)
-  const dimmerValue = useDimmerBrightness(dimmerProp)
+  // Appearance folds the colour magnitude in as a "virtual dimmer", so a
+  // dimmerless fixture at r:20 reads as a legible dim colour, not near-black.
+  const appearance = useColourAppearance(colourProp, dimmerProp, SWATCH_FLOOR)
 
   return (
     <div
@@ -306,10 +309,7 @@ function ColourSquare({
     >
       <div
         className="w-full h-full"
-        style={{
-          backgroundColor: colour.combinedCss,
-          filter: `brightness(${dimmerValue})`,
-        }}
+        style={{ backgroundColor: appearance.appearanceCss }}
       />
     </div>
   )

@@ -35,12 +35,16 @@ import {
 import type { GroupColourPropertyDescriptor } from '../../api/groupsApi'
 import {
   channelKey,
-  computeCombinedCss,
   getChannelValue,
   resolveSettingOption,
 } from '../../hooks/usePropertyValues'
 import { computeGroupColourValues } from '../../hooks/useGroupPropertyValues'
 import { colourFactor } from '../../hooks/useNormalizedIntensity'
+import {
+  computeNormalizedHue,
+  computeNormalizedHueCss,
+  perceptualBrightness,
+} from '../../lib/colourMath'
 import { findGel } from '../../data/gels'
 import {
   dmxToDegrees,
@@ -631,13 +635,19 @@ interface ColourApplyRefs {
 
 function applyColour(hex: string, intensity: number, refs: ColourApplyRefs) {
   COLOR_TMP.set(hex)
-  // Lens stays partially visible at idle (it's the lamp body, not the beam).
+  // The lens is the lamp face (the colour indicator) and is never culled, so it
+  // gets the perceptual curve — a linear opacity crushes a dim-but-lit lamp to
+  // near-invisible. `hex` is already a full-brightness hue. The lens also stays
+  // partially visible at idle (it's the lamp body, not the beam).
   if (refs.lensRef.current) {
     const mat = refs.lensRef.current.material as MeshBasicMaterial
     mat.color.copy(COLOR_TMP)
-    mat.opacity = 0.5 + 0.5 * intensity
+    mat.opacity = 0.5 + 0.5 * perceptualBrightness(intensity)
     mat.transparent = true
   }
+  // Beam cone/pool opacities stay LINEAR: they double as the LIGHT_OFF_OPACITY
+  // cull signal downstream, so curving them would resurrect near-off fixtures
+  // into ghost beams (the 2D path likewise gates its beam on the raw level).
   const state = refs.colorStateRef.current
   state.color.copy(COLOR_TMP)
   state.coneOpacity = 0.32 * intensity
@@ -701,9 +711,10 @@ function ColourBeamSync({
     const a = colourProp.amberChannel ? getChannelValue(colourProp.amberChannel) : undefined
     const uv = colourProp.uvChannel ? getChannelValue(colourProp.uvChannel) : undefined
     // Effective intensity = dimmer × colour so a colour-only fixture at RGB 0
-    // reads as dark rather than beaming at full.
-    const intensity = liveDimmerFactor(dimmerProp) * colourFactor(r, g, b, w)
-    applyColour(computeCombinedCss(r, g, b, w, a, uv), intensity, refs)
+    // reads as dark rather than beaming at full. Hue is normalised to full so a
+    // dimmerless fixture at r:20 shows dim orange (via the level) not near-black.
+    const intensity = liveDimmerFactor(dimmerProp) * colourFactor(r, g, b, w, a, uv)
+    applyColour(computeNormalizedHueCss(r, g, b, w, a, uv), intensity, refs)
   })
   return null
 }
@@ -776,15 +787,18 @@ function MultiPixelColourSync({
     if (writer) writer.reset()
     for (let i = 0; i < group.members.length; i++) {
       const m = group.members[i]
-      const ci = colourFactor(m.r, m.g, m.b, m.w) * dimmerFactor
+      // Full-brightness hue so a dim pixel still reads as its colour; the level
+      // stays LINEAR because it feeds the LIGHT_OFF_OPACITY wash cull below.
+      const ci = colourFactor(m.r, m.g, m.b, m.w, m.a, m.uv) * dimmerFactor
+      const hue = computeNormalizedHue(m.r, m.g, m.b, m.w, m.a, m.uv)
       if (writer) {
-        PIXEL_COLOR.set(`rgb(${m.r}, ${m.g}, ${m.b})`)
+        PIXEL_COLOR.set(`rgb(${hue.r}, ${hue.g}, ${hue.b})`)
         writer.setPixel(i, PIXEL_COLOR, ci)
       }
       if (wash && i < wash.count) {
-        wash.colors[i * 3] = m.r / 255
-        wash.colors[i * 3 + 1] = m.g / 255
-        wash.colors[i * 3 + 2] = m.b / 255
+        wash.colors[i * 3] = hue.r / 255
+        wash.colors[i * 3 + 1] = hue.g / 255
+        wash.colors[i * 3 + 2] = hue.b / 255
         wash.intensities[i] = ci
       }
     }
@@ -796,8 +810,9 @@ function MultiPixelColourSync({
     // projects an emitter beam (beamShape ≠ NONE). Strips render per-head glows
     // instead, so this is dormant for them.
     const eff = group.beamIntensity * dimmerFactor
+    const beamHue = computeNormalizedHue(group.beamR, group.beamG, group.beamB)
     const state = colorStateRef.current
-    state.color.set(`rgb(${group.beamR}, ${group.beamG}, ${group.beamB})`)
+    state.color.set(`rgb(${beamHue.r}, ${beamHue.g}, ${beamHue.b})`)
     state.coneOpacity = 0.32 * eff
     state.poolOpacity = 0.55 * eff
   })

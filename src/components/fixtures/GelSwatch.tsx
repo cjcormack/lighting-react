@@ -1,10 +1,14 @@
 import type { SliderPropertyDescriptor } from '../../store/fixtures'
 import { useSliderValue } from '../../hooks/usePropertyValues'
+import { perceptualBrightness, SWATCH_FLOOR } from '@/lib/colourMath'
 import { cn } from '@/lib/utils'
 
 /**
- * Maps DMX 0-255 to brightness 0.15-1.0. The 0.15 floor keeps the swatch faintly
- * visible at zero so the colour stays recognisable when the fixture is dark.
+ * Maps DMX 0-255 to a perceptual CSS brightness. The eye (and the display) are
+ * non-linear, so a linear ramp crushes low levels to near-black even though the
+ * real fixture is clearly lit; the gamma curve keeps dim colours legible. The
+ * 0.15 floor keeps the swatch faintly visible at zero so the colour stays
+ * recognisable when the fixture is dark.
  */
 export function useDimmerBrightness(dimmerProp?: SliderPropertyDescriptor): number {
   const value = useSliderValue(
@@ -20,8 +24,7 @@ export function useDimmerBrightness(dimmerProp?: SliderPropertyDescriptor): numb
   )
 
   if (!dimmerProp) return 1.0
-  const normalized = value / 255
-  return 0.15 + normalized * 0.85
+  return perceptualBrightness(value / 255, SWATCH_FLOOR)
 }
 
 export function GelSwatch({

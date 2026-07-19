@@ -26,6 +26,12 @@ import {
   useUpdateGroupSetting,
 } from '../../hooks/useGroupPropertyValues'
 import { useGroupVirtualDimmer } from '../../hooks/useVirtualDimmer'
+import {
+  colourMagnitude,
+  computeAppearanceCss,
+  perceptualBrightness,
+  SWATCH_FLOOR,
+} from '@/lib/colourMath'
 import { cn } from '@/lib/utils'
 import { ColourPickerPopover } from './ColourPickerPopover'
 
@@ -113,6 +119,14 @@ export const GroupColourSwatch = memo(function GroupColourSwatch({
     useGroupColourValues(property)
   const updateAll = useUpdateGroupColour(property)
 
+  // The aggregate colour's magnitude acts as a virtual dimmer, so a group of
+  // dim fixtures reads as a legible dim colour instead of near-black.
+  const level = colourMagnitude(avgR, avgG, avgB, avgW, avgA, avgUv)
+  const appearanceCss = computeAppearanceCss(
+    avgR, avgG, avgB, avgW, avgA, avgUv,
+    perceptualBrightness(level, SWATCH_FLOOR),
+  )
+
   // Check if any member has extended channels
   const hasWhite = property.memberColourChannels.some((m) => m.whiteChannel)
   const hasAmber = property.memberColourChannels.some((m) => m.amberChannel)
@@ -134,7 +148,7 @@ export const GroupColourSwatch = memo(function GroupColourSwatch({
         avgUv !== undefined && avgUv > 0 && 'ring-2 ring-purple-500/50',
         isEditing && 'cursor-pointer hover:ring-2 hover:ring-primary/50 transition-shadow'
       )}
-      style={{ backgroundColor: combinedCss }}
+      style={{ backgroundColor: appearanceCss }}
       title={isEditing ? 'Click to pick colour' : isUniform ? combinedCss : 'Mixed colours'}
     />
   )

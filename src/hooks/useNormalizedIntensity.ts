@@ -1,5 +1,6 @@
 import type { PropertyCategory, SliderPropertyDescriptor } from '../store/fixtures'
 import { useSliderValue } from './usePropertyValues'
+import { colourMagnitude } from '../lib/colourMath'
 
 /**
  * Stable hook-call-order placeholder for `useSliderValue` when the optional
@@ -36,8 +37,16 @@ export function useNormalizedIntensity(
  * Colour-derived brightness 0..1 (a "virtual dimmer" — the brightest channel).
  * The effective stage intensity is `dimmerFactor * colourFactor`, so a
  * colour-only fixture at RGB 0 reads as dark rather than beaming at full once
- * beams are broadened. For fixtures with no colour channel pass nothing → 1.
+ * beams are broadened. White/amber/UV all count as emitters. For fixtures with
+ * no colour channel pass nothing → 1.
  */
-export function colourFactor(r: number, g: number, b: number, w?: number): number {
-  return Math.max(0, Math.min(1, Math.max(r, g, b, w ?? 0) / 255))
+export function colourFactor(
+  r: number,
+  g: number,
+  b: number,
+  w?: number,
+  a?: number,
+  uv?: number,
+): number {
+  return colourMagnitude(r, g, b, w, a, uv)
 }

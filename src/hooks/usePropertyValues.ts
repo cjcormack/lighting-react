@@ -11,6 +11,7 @@ import {
   parseExtendedColour,
   serializeExtendedColour,
 } from '../components/fx/colourUtils'
+import { computeCombinedCss } from '../lib/colourMath'
 import type {
   ChannelRef,
   PropertyDescriptor,
@@ -93,37 +94,6 @@ type ColourValueResult = {
   uv?: number
   css: string
   combinedCss: string
-}
-
-export function computeCombinedCss(
-  r: number,
-  g: number,
-  b: number,
-  w: number | undefined,
-  a: number | undefined,
-  uv: number | undefined,
-): string {
-  let combinedR = r
-  let combinedG = g
-  let combinedB = b
-  if (w !== undefined && w > 0) {
-    const whiteFactor = w / 255
-    combinedR = Math.min(255, combinedR + whiteFactor * (255 - combinedR))
-    combinedG = Math.min(255, combinedG + whiteFactor * (255 - combinedG))
-    combinedB = Math.min(255, combinedB + whiteFactor * (255 - combinedB))
-  }
-  if (a !== undefined && a > 0) {
-    const amberFactor = a / 255
-    combinedR = Math.min(255, combinedR + amberFactor * (255 - combinedR * 0.3))
-    combinedG = Math.min(255, combinedG + amberFactor * (191 - combinedG * 0.5))
-  }
-  if (uv !== undefined && uv > 0) {
-    const uvFactor = uv / 255
-    combinedR = Math.min(255, combinedR + uvFactor * (139 - combinedR * 0.5))
-    combinedG = Math.min(255, combinedG * (1 - uvFactor * 0.3))
-    combinedB = Math.min(255, combinedB + uvFactor * (255 - combinedB * 0.3))
-  }
-  return `rgb(${Math.round(combinedR)}, ${Math.round(combinedG)}, ${Math.round(combinedB)})`
 }
 
 function parseColourFromDraft(

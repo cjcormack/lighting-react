@@ -19,13 +19,15 @@ import type {
 } from '../../store/fixtures'
 import {
   useSliderValue,
-  useColourValue,
   usePositionValue,
   useSettingValue,
   useUpdateChannel,
   useUpdateFixtureColour,
 } from '../../hooks/usePropertyValues'
+import { useColourAppearance } from '../../hooks/useColourAppearance'
 import { useVirtualDimmer } from '../../hooks/useVirtualDimmer'
+import { useDimmerBrightness } from './GelSwatch'
+import { SWATCH_FLOOR } from '@/lib/colourMath'
 import { usePropertyParkStatus } from '../../hooks/usePropertyParkStatus'
 import { cn } from '@/lib/utils'
 import { ColourPickerPopover } from './ColourPickerPopover'
@@ -46,6 +48,8 @@ interface PropertyVisualizerProps {
   property: PropertyDescriptor
   fixtureKey?: string
   isEditing?: boolean
+  /** Sibling dimmer, so colour/setting swatches can dim by dimmer × colour. */
+  dimmerProp?: SliderPropertyDescriptor
 }
 
 /**
@@ -55,12 +59,16 @@ export const ColourSwatch = memo(function ColourSwatch({
   property,
   fixtureKey,
   isEditing = false,
+  dimmerProp,
 }: {
   property: ColourPropertyDescriptor
   fixtureKey?: string
   isEditing?: boolean
+  dimmerProp?: SliderPropertyDescriptor
 }) {
-  const colour = useColourValue(property)
+  // Appearance (hue × perceptual level) drives the swatch; raw channel values
+  // (r/g/b/w/a/uv, combinedCss) still feed the picker so it edits true colour.
+  const colour = useColourAppearance(property, dimmerProp, SWATCH_FLOOR)
   const updateChannel = useUpdateChannel()
   const updateColour = useUpdateFixtureColour(property, fixtureKey)
   const { isAnyParked } = usePropertyParkStatus(property)
@@ -92,7 +100,7 @@ export const ColourSwatch = memo(function ColourSwatch({
         hasActiveUv && 'ring-2 ring-purple-500/50',
         isEditing && 'cursor-pointer hover:ring-2 hover:ring-primary/50 transition-shadow'
       )}
-      style={{ backgroundColor: colour.combinedCss }}
+      style={{ backgroundColor: colour.appearanceCss }}
       title={isEditing ? 'Click to pick colour' : colour.combinedCss}
     />
   )
@@ -381,13 +389,18 @@ export const SliderProperty = memo(function SliderProperty({
 export const SettingProperty = memo(function SettingProperty({
   property,
   isEditing = false,
+  dimmerProp,
 }: {
   property: SettingPropertyDescriptor
   isEditing?: boolean
+  dimmerProp?: SliderPropertyDescriptor
 }) {
   const { option } = useSettingValue(property)
   const updateChannel = useUpdateChannel()
   const { isAnyParked } = usePropertyParkStatus(property)
+  // Dim the current-selection preview by the (perceptual) dimmer; the dropdown
+  // choice list stays full-brightness since those are options, not the value.
+  const dimmerBrightness = useDimmerBrightness(dimmerProp)
 
   const canEdit = isEditing && !isAnyParked
 
@@ -431,7 +444,10 @@ export const SettingProperty = memo(function SettingProperty({
             {option?.colourPreview && (
               <div
                 className="w-5 h-5 rounded border"
-                style={{ backgroundColor: option.colourPreview }}
+                style={{
+                  backgroundColor: option.colourPreview,
+                  filter: `brightness(${dimmerBrightness})`,
+                }}
               />
             )}
             <Badge variant="secondary" className="font-normal">
@@ -447,16 +463,16 @@ export const SettingProperty = memo(function SettingProperty({
 /**
  * Property visualizer router - renders appropriate component based on property type
  */
-export function PropertyVisualizer({ property, fixtureKey, isEditing = false }: PropertyVisualizerProps) {
+export function PropertyVisualizer({ property, fixtureKey, isEditing = false, dimmerProp }: PropertyVisualizerProps) {
   switch (property.type) {
     case 'colour':
-      return <ColourSwatch property={property} fixtureKey={fixtureKey} isEditing={isEditing} />
+      return <ColourSwatch property={property} fixtureKey={fixtureKey} isEditing={isEditing} dimmerProp={dimmerProp} />
     case 'position':
       return <PositionIndicator property={property} isEditing={isEditing} />
     case 'slider':
       return <SliderProperty property={property} isEditing={isEditing} />
     case 'setting':
-      return <SettingProperty property={property} isEditing={isEditing} />
+      return <SettingProperty property={property} isEditing={isEditing} dimmerProp={dimmerProp} />
   }
 }
 
