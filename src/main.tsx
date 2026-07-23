@@ -4,19 +4,13 @@ import './index.css';
 import App from './App';
 import { Provider } from "react-redux"
 import { store } from "./store"
+import { applyThemeClass, getInitialTheme } from "./lib/theme"
 
 // Apply the stored (or system-preferred) theme before React mounts. The boot
 // loading overlay renders before Layout's ThemeToggle effect runs, so without
 // this the overlay would be light regardless of preference; this also removes
-// the flash-of-light on normal loads. Mirrors ThemeToggle's getInitialTheme().
-function applyInitialTheme() {
-  const stored = localStorage.getItem("theme")
-  const dark =
-    stored === "dark" ||
-    (stored == null && window.matchMedia("(prefers-color-scheme: dark)").matches)
-  document.documentElement.classList.toggle("dark", dark)
-}
-applyInitialTheme()
+// the flash-of-light on normal loads. Resolution is shared with ThemeToggle.
+applyThemeClass(getInitialTheme())
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
