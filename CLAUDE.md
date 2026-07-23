@@ -172,6 +172,17 @@ All sheets must follow this structure using the shared primitives from `src/comp
 - Prefer explicit types over `any`
 - Use interface for object shapes
 
+### Dependencies
+- Reaching for a well-maintained library is fine — often better — when the
+  alternative is rebuilding non-trivial functionality yourself (a testing
+  framework, date/time math, virtualization, etc.). Don't reinvent that.
+- But don't add a dependency to solve a trivial problem you could write in a few
+  lines (the left-pad trap), and weigh the transitive cost — avoid dragging in a
+  large or poorly-maintained tree for a small need ([xkcd 2347](https://xkcd.com/2347/)).
+- When it's a genuine judgment call, flag the trade-off and get a quick yes
+  before adding, rather than silently growing (or silently avoiding) the
+  dependency set.
+
 ## Backend API Reference
 
 The backend exposes these main endpoints:
