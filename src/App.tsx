@@ -1,5 +1,6 @@
 import React from "react"
 import { Toaster } from "sonner"
+import { BootGate } from "./BootGate"
 import Layout from "./Layout"
 import {createBrowserRouter, Navigate, RouterProvider, useParams} from "react-router-dom";
 import { ChannelsRedirect, ChannelsBaseRedirect, ProjectChannels } from "./routes/Channels";
@@ -256,7 +257,9 @@ function App() {
 
   return (
       <React.StrictMode>
-        <RouterProvider router={router}/>
+        <BootGate>
+          <RouterProvider router={router}/>
+        </BootGate>
         <Toaster position="bottom-right" />
       </React.StrictMode>
   )

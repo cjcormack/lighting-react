@@ -19,6 +19,7 @@ import {createStageRegionApi, StageRegionApi} from "./stageRegionApi";
 import {createParkApi, ParkApi} from "./parkApi";
 import {createShowWsApi, ShowWsApi} from "./showWsApi";
 import {createPromptBooksWsApi, PromptBooksWsApi} from "./promptBooksWsApi";
+import {createBootStatusWsApi, BootStatusWsApi} from "./bootStatusWsApi";
 import {createSurfacesWsApi, SurfacesWsApi} from "./surfacesApi";
 import {createCloudSyncWsApi, CloudSyncWsApi} from "./cloudSyncWsApi";
 
@@ -45,6 +46,7 @@ interface LightingApi {
   promptBooks: PromptBooksWsApi
   surfaces: SurfacesWsApi
   cloudSync: CloudSyncWsApi
+  bootStatus: BootStatusWsApi
 }
 
 export const lightingApi = createLightingApi()
@@ -84,6 +86,7 @@ function createLightingApi(): LightingApi {
   const promptBooksWsApi = createPromptBooksWsApi(connection)
   const surfacesWsApi = createSurfacesWsApi(connection)
   const cloudSyncWsApi = createCloudSyncWsApi(connection)
+  const bootStatusWsApi = createBootStatusWsApi(connection)
 
   return {
     universes: universesApi,
@@ -108,5 +111,6 @@ function createLightingApi(): LightingApi {
     promptBooks: promptBooksWsApi,
     surfaces: surfacesWsApi,
     cloudSync: cloudSyncWsApi,
+    bootStatus: bootStatusWsApi,
   }
 }
