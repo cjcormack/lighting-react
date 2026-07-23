@@ -20,7 +20,7 @@ import { RunPage, RunRedirect, LegacyShowRedirect } from "./routes/RunPage";
 import { PromptBookViewerPage, PromptBookRedirect } from "./routes/PromptBookPage";
 import { SurfacesRedirect } from "./routes/Surfaces";
 import { DiagnosticsRedirect } from "./routes/Diagnostics";
-import { ProjectCloudSync, CloudSyncHubRedirect } from "./routes/CloudSync";
+import { CloudSyncHubRedirect } from "./routes/CloudSync";
 import { ProjectSettings, ProjectSettingsRedirect } from "./routes/ProjectSettings";
 import { InstallSettings } from "./routes/InstallSettings";
 import { Stage, StageRedirect } from "./routes/Stage";
@@ -33,9 +33,9 @@ function SurfacesToSettings() {
   const { projectId } = useParams()
   return <Navigate to={`/projects/${projectId}/settings/surfaces`} replace />
 }
-function ProjectSyncToHub() {
+function ProjectSyncToSettings() {
   const { projectId } = useParams()
-  return <Navigate to={`/sync/projects/${projectId}`} replace />
+  return <Navigate to={`/projects/${projectId}/settings/sync`} replace />
 }
 
 function App() {
@@ -130,16 +130,16 @@ function App() {
           element: <InstallSettings />,
         },
 
-        // Cloud sync hub now lives as the Sync tab inside Install Settings.
-        // /sync remains as a back-compat redirect; the per-project drill-in
-        // keeps its short URL since it's deep-linked from the hub.
+        // Cloud sync hub now lives as the Sync tab inside Install Settings, and the
+        // per-project sync UI lives in Project Settings → Sync. /sync and the old
+        // drill-in remain as back-compat redirects.
         {
           path: "sync",
           element: <CloudSyncHubRedirect />,
         },
         {
           path: "sync/projects/:projectId",
-          element: <ProjectCloudSync />,
+          element: <ProjectSyncToSettings />,
         },
 
         // Legacy per-project paths — keep working but redirect to the new location.
@@ -157,7 +157,7 @@ function App() {
         },
         {
           path: "projects/:projectId/sync",
-          element: <ProjectSyncToHub />,
+          element: <ProjectSyncToSettings />,
         },
 
         // Legacy bare paths (no project context) — keep until Cmd+K migrates.

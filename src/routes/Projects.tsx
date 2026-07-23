@@ -11,7 +11,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { MoreVertical, PlusCircle, Upload, XCircle } from "lucide-react"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { Cloud, CloudDownload, MoreVertical, PlusCircle, Upload, XCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   useProjectListQuery,
@@ -19,6 +24,9 @@ import {
   useDeleteProjectMutation,
   useSetCurrentProjectMutation,
 } from "../store/projects"
+import { useCloudSyncConfigsQuery, type SyncConfig } from "../store/cloudSync"
+import { useOauthGithubIdentityQuery } from "../store/oauthGithub"
+import { formatRepoUrl } from "./CloudSync"
 import { ProjectSummary } from "../api/projectApi"
 import CreateProjectDialog from "../CreateProjectDialog"
 import DeleteProjectConfirmDialog from "../DeleteProjectConfirmDialog"
@@ -26,10 +34,25 @@ import ProjectSwitchConfirmDialog from "../ProjectSwitchConfirmDialog"
 import CloneProjectDialog from "../CloneProjectDialog"
 import ExportProjectDialog from "../ExportProjectDialog"
 import ImportProjectDialog from "../ImportProjectDialog"
+import { AddRemoteProjectDialog } from "../components/cloudSync/ImportFromRemoteDialog"
 
 export default function Projects() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
+  const [addRemoteOpen, setAddRemoteOpen] = useState(false)
+  const { data: identity } = useOauthGithubIdentityQuery()
+  const oauthConnected = identity?.connected === true
+
+  const addRemoteButton = (
+    <Button
+      variant="outline"
+      disabled={!oauthConnected}
+      onClick={oauthConnected ? () => setAddRemoteOpen(true) : undefined}
+    >
+      <CloudDownload className="size-4" />
+      Add remote project
+    </Button>
+  )
 
   return (
     <>
@@ -41,6 +64,11 @@ export default function Projects() {
         open={importDialogOpen}
         setOpen={setImportDialogOpen}
       />
+      <AddRemoteProjectDialog
+        open={addRemoteOpen}
+        onOpenChange={setAddRemoteOpen}
+        oauthConnected={oauthConnected}
+      />
       <Card className="m-4 p-4">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold">Projects</h1>
@@ -49,6 +77,19 @@ export default function Projects() {
               <Upload className="size-4" />
               Import
             </Button>
+            {oauthConnected ? (
+              addRemoteButton
+            ) : (
+              // Radix tooltip needs a focusable wrapper to fire on a disabled button.
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span tabIndex={0}>{addRemoteButton}</span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Connect GitHub in Install Settings &rsaquo; Sync to add a remote project.
+                </TooltipContent>
+              </Tooltip>
+            )}
             <Button onClick={() => setCreateDialogOpen(true)}>
               <PlusCircle className="size-4" />
               Create Project
@@ -63,6 +104,9 @@ export default function Projects() {
 
 function ProjectsContainer() {
   const { data: projects, isLoading, error } = useProjectListQuery()
+  // Sync state for the per-card badge. Sparse map keyed by stringified project id;
+  // projects that have never been synced are simply absent.
+  const { data: syncConfigs } = useCloudSyncConfigsQuery()
 
   if (isLoading) {
     return <div>Loading...</div>
@@ -80,13 +124,23 @@ function ProjectsContainer() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {projects?.map(project => (
-        <ProjectCard key={project.id} project={project} />
+        <ProjectCard
+          key={project.id}
+          project={project}
+          syncConfig={syncConfigs?.[String(project.id)]}
+        />
       ))}
     </div>
   )
 }
 
-function ProjectCard({ project }: { project: ProjectSummary }) {
+function ProjectCard({
+  project,
+  syncConfig,
+}: {
+  project: ProjectSummary
+  syncConfig?: SyncConfig
+}) {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [switchOpen, setSwitchOpen] = useState(false)
   const [cloneOpen, setCloneOpen] = useState(false)
@@ -207,10 +261,26 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
             </DropdownMenu>
           </div>
         </CardHeader>
-        <CardFooter className="p-0 px-3 mt-auto">
+        <CardFooter className="p-0 px-3 mt-auto flex items-center gap-2">
           <Badge variant={project.isCurrent ? "default" : "outline"}>
             {project.isCurrent ? "active" : "inactive"}
           </Badge>
+          {syncConfig?.synced && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="secondary" className="gap-1">
+                  <Cloud className="size-3" />
+                  synced
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>
+                {formatRepoUrl(syncConfig.repoUrl) ?? "synced"}
+                {syncConfig.lastSyncedAtMs
+                  ? ` · last synced ${new Date(syncConfig.lastSyncedAtMs).toLocaleString()}`
+                  : " · not yet synced"}
+              </TooltipContent>
+            </Tooltip>
+          )}
         </CardFooter>
       </Card>
     </>

@@ -16,8 +16,9 @@ import { PatchListContent } from "./Patches"
 import { SurfacesContent } from "./Surfaces"
 import { StageRegionsContent } from "./StageRegions"
 import { RiggingsContent } from "./Riggings"
+import { ProjectSyncContent } from "./CloudSync"
 
-const TABS = ["general", "patches", "surfaces", "stage", "rigging"] as const
+const TABS = ["general", "patches", "surfaces", "stage", "rigging", "sync"] as const
 type Tab = (typeof TABS)[number]
 
 function isTab(value: string | undefined): value is Tab {
@@ -88,6 +89,7 @@ export function ProjectSettings() {
             <TabsTrigger value="surfaces">Surfaces</TabsTrigger>
             <TabsTrigger value="stage">Stage</TabsTrigger>
             <TabsTrigger value="rigging">Rigging</TabsTrigger>
+            <TabsTrigger value="sync">Sync</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
@@ -99,6 +101,7 @@ export function ProjectSettings() {
         {activeTab === "surfaces" && <SurfacesContent projectId={projectIdNum} />}
         {activeTab === "stage" && <StageTab projectId={projectIdNum} />}
         {activeTab === "rigging" && <RiggingTab projectId={projectIdNum} />}
+        {activeTab === "sync" && <ProjectSyncContent projectId={projectIdNum} />}
       </div>
     </div>
   )

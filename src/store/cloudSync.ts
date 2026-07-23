@@ -2,10 +2,20 @@ import { restApi } from "./restApi"
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
+/** A repository this project has previously been linked to; offered for reconnect. */
+export interface LinkedRepo {
+  repoUrl: string
+  lastLinkedAtMs: number
+}
+
 export interface SyncConfig {
   branch: string
   repoUrl: string | null
-  enabled: boolean
+  /**
+   * A project is synced iff a repository is attached (`repoUrl != null`). There is no
+   * separate enable/disable flag — attaching a repo enables sync; disconnecting clears it.
+   */
+  synced: boolean
   autoSyncEnabled: boolean
   autoSyncIntervalMs: number | null
   lastSyncedSha: string | null
@@ -17,15 +27,28 @@ export interface SyncConfig {
    * input without needing a separate request.
    */
   tokenPresent: boolean
+  /**
+   * Repositories this project has previously been linked to, most-recently-linked first.
+   * The UI offers these for one-click reconnect — the only sanctioned way to re-attach an
+   * existing, non-empty repo.
+   */
+  linkedRepos: LinkedRepo[]
 }
 
 export interface UpdateSyncConfigRequest {
+  /**
+   * Attach a repository to a project with no repo yet. Ignored once a repo is attached —
+   * the repo is immutable except via disconnect → reconnect.
+   */
   repoUrl?: string | null
   branch?: string
-  enabled?: boolean
   autoSyncEnabled?: boolean
   /** Backend rejects values < 60000ms (`AutoSyncScheduler.MIN_INTERVAL_MS`). */
   autoSyncIntervalMs?: number | null
+}
+
+export interface ReconnectRequest {
+  repoUrl: string
 }
 
 /** Lower bound on `autoSyncIntervalMs` — kept in sync with `AutoSyncScheduler.MIN_INTERVAL_MS`. */
@@ -224,6 +247,35 @@ export const cloudSyncApi = restApi.injectEndpoints({
       }),
       invalidatesTags: ['CloudSyncConfig'],
     }),
+    /**
+     * Detach the current repo. The backend remembers the URL (for reconnect), stops
+     * auto-sync, and clears `repoUrl` while preserving the working tree + sync-state, so
+     * a later reconnect is cheap. `ProjectList` is busted so the projects-list sync badge
+     * updates; `CloudSyncStatus` because the synced/last-synced summary changes.
+     */
+    cloudSyncDisconnect: build.mutation<SyncConfig, number>({
+      query: (projectId) => ({
+        url: `project/${projectId}/sync/disconnect`,
+        method: 'POST',
+      }),
+      invalidatesTags: ['CloudSyncConfig', 'CloudSyncStatus', 'ProjectList'],
+    }),
+    /**
+     * Re-attach a previously-linked repo. `repoUrl` must be one of the project's
+     * remembered `linkedRepos` — the backend rejects anything else. Auto-sync defaults
+     * back on.
+     */
+    cloudSyncReconnect: build.mutation<
+      SyncConfig,
+      { projectId: number; body: ReconnectRequest }
+    >({
+      query: ({ projectId, body }) => ({
+        url: `project/${projectId}/sync/reconnect`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['CloudSyncConfig', 'CloudSyncStatus', 'ProjectList'],
+    }),
     cloudSyncStatus: build.query<SyncStatus, number>({
       query: (projectId) => `project/${projectId}/sync/status`,
       providesTags: ['CloudSyncStatus'],
@@ -355,6 +407,8 @@ export const {
   useCloudSyncConfigQuery,
   useCloudSyncConfigsQuery,
   useUpdateCloudSyncConfigMutation,
+  useCloudSyncDisconnectMutation,
+  useCloudSyncReconnectMutation,
   useCloudSyncStatusQuery,
   useCloudSyncLogQuery,
   useLazyCloudSyncActivityQuery,

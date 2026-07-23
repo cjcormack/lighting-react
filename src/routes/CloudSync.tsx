@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Navigate, useNavigate, useParams, Link } from "react-router-dom"
+import { Navigate, useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 import { useDispatch } from "react-redux"
 import { lightingApi } from "@/api/lightingApi"
@@ -16,6 +16,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
   Table,
   TableBody,
   TableCell,
@@ -30,13 +38,14 @@ import {
   RefreshCw,
   AlertTriangle,
   AlertCircle,
-  ArrowLeft,
   ChevronDown,
   ChevronRight,
   CloudDownload,
   Info,
+  Github,
+  Unlink,
 } from "lucide-react"
-import { useProjectListQuery, useProjectQuery } from "@/store/projects"
+import { useProjectListQuery } from "@/store/projects"
 import {
   useCloudSyncConfigQuery,
   useCloudSyncConfigsQuery,
@@ -46,6 +55,8 @@ import {
   useLazyCloudSyncActivityQuery,
   useCloudSyncConflictsQuery,
   useUpdateCloudSyncConfigMutation,
+  useCloudSyncDisconnectMutation,
+  useCloudSyncReconnectMutation,
   useCloudSyncSnapshotMutation,
   useSetCloudSyncCredentialsMutation,
   useClearCloudSyncCredentialsMutation,
@@ -56,11 +67,11 @@ import {
   type SyncLogEntry,
   type SyncStatus,
 } from "@/store/cloudSync"
-import { useOauthGithubIdentityQuery } from "@/store/oauthGithub"
+import { useOauthGithubIdentityQuery, type GithubRepo } from "@/store/oauthGithub"
 import { ConflictPanel } from "@/components/cloudSync/ConflictPanel"
 import { IdentityRow } from "@/components/cloudSync/IdentityRow"
-import { RepoPicker } from "@/components/cloudSync/RepoPicker"
-import { ImportFromRemoteDialog } from "@/components/cloudSync/ImportFromRemoteDialog"
+import { CreateRepoDialog } from "@/components/cloudSync/CreateRepoDialog"
+import { AddRemoteProjectDialog } from "@/components/cloudSync/ImportFromRemoteDialog"
 import { formatError } from "@/lib/formatError"
 
 const AUTO_SYNC_MIN_INTERVAL_SECONDS = AUTO_SYNC_MIN_INTERVAL_MS / 1000
@@ -79,7 +90,7 @@ function mergeUniqueById<T extends { id: number }>(prev: T[], next: T[]): T[] {
 
 // ─── Hub body (rendered as the Sync tab inside Install Settings) ─────
 
-function ImportFromRemoteButton({
+function AddRemoteProjectButton({
   oauthConnected,
   onClick,
 }: {
@@ -95,7 +106,7 @@ function ImportFromRemoteButton({
       onClick={oauthConnected ? onClick : undefined}
     >
       <CloudDownload className="size-3.5" />
-      Import from remote…
+      Add remote project
     </Button>
   )
   if (oauthConnected) return button
@@ -107,7 +118,7 @@ function ImportFromRemoteButton({
         <span tabIndex={0}>{button}</span>
       </TooltipTrigger>
       <TooltipContent side="left">
-        Connect GitHub above to clone a remote repo as a new project.
+        Connect GitHub above to add a synced project from a remote repository.
       </TooltipContent>
     </Tooltip>
   )
@@ -149,10 +160,10 @@ export function CloudSyncHubBody() {
           <div>
             <h2 className="text-sm font-semibold">Projects</h2>
             <p className="text-xs text-muted-foreground">
-              Select a project to configure its remote, take snapshots, or resolve conflicts.
+              Select a project to manage its sync, take snapshots, or resolve conflicts.
             </p>
           </div>
-          <ImportFromRemoteButton
+          <AddRemoteProjectButton
             oauthConnected={oauthConnected}
             onClick={() => setImportOpen(true)}
           />
@@ -191,7 +202,7 @@ export function CloudSyncHubBody() {
           </Table>
         )}
       </Card>
-      <ImportFromRemoteDialog
+      <AddRemoteProjectDialog
         open={importOpen}
         onOpenChange={setImportOpen}
         oauthConnected={oauthConnected}
@@ -220,7 +231,7 @@ function ProjectSyncRow({
 }) {
   const navigate = useNavigate()
   const repoLabel = formatRepoUrl(config?.repoUrl ?? null)
-  const onOpen = () => navigate(`/sync/projects/${projectId}`)
+  const onOpen = () => navigate(`/projects/${projectId}/settings/sync`)
 
   return (
     <TableRow className="cursor-pointer hover:bg-accent/50" onClick={onOpen}>
@@ -233,10 +244,10 @@ function ProjectSyncRow({
         </div>
       </TableCell>
       <TableCell>
-        {config?.enabled ? (
-          <Badge variant="secondary" className="text-[10px]">enabled</Badge>
+        {config?.synced ? (
+          <Badge variant="secondary" className="text-[10px]">synced</Badge>
         ) : (
-          <Badge variant="outline" className="text-[10px] text-muted-foreground">disabled</Badge>
+          <Badge variant="outline" className="text-[10px] text-muted-foreground">not synced</Badge>
         )}
       </TableCell>
       <TableCell className="hidden md:table-cell text-xs text-muted-foreground font-mono truncate max-w-[260px]">
@@ -260,20 +271,24 @@ function ProjectSyncRow({
   )
 }
 
-function formatRepoUrl(url: string | null): string | null {
+export function formatRepoUrl(url: string | null): string | null {
   if (!url) return null
   // GitHub URLs are the dominant case; show just owner/repo for brevity.
   const m = url.match(/github\.com[/:]([^/]+\/[^/.]+)/i)
   return m ? m[1] : url
 }
 
-// ─── Per-project drill-in (/sync/projects/:projectId) ────────────────
+// ─── Per-project sync (Project Settings → Sync tab) ──────────────────
 
-export function ProjectCloudSync() {
-  const { projectId } = useParams()
-  const projectIdNum = Number(projectId)
-  const { data: project, isLoading } = useProjectQuery(projectIdNum)
+/**
+ * The per-project cloud-sync UI, rendered inside Project Settings → Sync. The status /
+ * conflict / activity / history panels only make sense once a repo is attached, so they
+ * are gated on `config.synced`; the config panel handles both the not-synced (attach)
+ * and synced states.
+ */
+export function ProjectSyncContent({ projectId }: { projectId: number }) {
   const dispatch = useDispatch()
+  const { data: config, isLoading } = useCloudSyncConfigQuery(projectId)
 
   // Refresh status / log / config when the backend broadcasts a sync completion. The
   // mutation already invalidates these tags on success, but a sync triggered from a
@@ -308,75 +323,45 @@ export function ProjectCloudSync() {
     }
   }, [dispatch])
 
-  if (isLoading) {
+  if (isLoading && !config) {
     return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
-    )
-  }
-  if (!project) {
-    return (
-      <Card className="m-4 p-4">
-        <p className="text-destructive">Project not found</p>
-      </Card>
+      <div className="p-4 max-w-4xl">
+        <Card className="p-4 flex items-center justify-center">
+          <Loader2 className="size-6 animate-spin" />
+        </Card>
+      </div>
     )
   }
 
   return (
     <div className="p-4 space-y-4 max-w-4xl">
-      <nav className="flex items-center gap-1 text-sm">
-        <Link to="/install/sync" className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
-          <ArrowLeft className="size-3.5" />
-          Cloud Sync
-        </Link>
-        <ChevronRight className="size-4 text-muted-foreground" />
-        <span className="font-medium">{project.name}</span>
-      </nav>
-      <div>
-        <h1 className="text-lg font-semibold">Cloud Sync — {project.name}</h1>
-        <p className="text-sm text-muted-foreground">
-          Each snapshot is a git commit in this install&rsquo;s working tree.
-        </p>
-      </div>
-      <ConfigPanel projectId={projectIdNum} />
-      <StatusPanel projectId={projectIdNum} />
-      <ConflictPanel projectId={projectIdNum} />
-      {/* key= forces a fresh mount per project so accumulated paged state resets cleanly. */}
-      <ActivityPanel key={`activity-${projectIdNum}`} projectId={projectIdNum} />
-      <HistoryPanel key={`history-${projectIdNum}`} projectId={projectIdNum} />
+      <ConfigPanel projectId={projectId} />
+      {config?.synced && (
+        <>
+          <StatusPanel projectId={projectId} />
+          <ConflictPanel projectId={projectId} />
+          {/* key= forces a fresh mount per project so accumulated paged state resets cleanly. */}
+          <ActivityPanel key={`activity-${projectId}`} projectId={projectId} />
+          <HistoryPanel key={`history-${projectId}`} projectId={projectId} />
+        </>
+      )}
     </div>
   )
 }
 
 // ─── Configuration panel ──────────────────────────────────────────────
 
+const AUTO_SYNC_INTERVAL_HINT =
+  `Minimum ${AUTO_SYNC_MIN_INTERVAL_SECONDS}s. The first tick fires after one full ` +
+  `interval — recently-saved changes are not pushed mid-form-submit.`
+
+/**
+ * Cloud-sync configuration. A project is synced iff a repository is attached, so this
+ * panel has two shapes: an attach call-to-action when not synced, and a read-only
+ * summary + disconnect when synced.
+ */
 function ConfigPanel({ projectId }: { projectId: number }) {
   const { data: config, isLoading } = useCloudSyncConfigQuery(projectId)
-  const { data: identity } = useOauthGithubIdentityQuery()
-  const [updateConfig, { isLoading: isSaving }] = useUpdateCloudSyncConfigMutation()
-
-  const [branch, setBranch] = useState("main")
-  const [repoUrl, setRepoUrl] = useState<string | null>(null)
-  const [enabled, setEnabled] = useState(false)
-  const [autoSyncEnabled, setAutoSyncEnabled] = useState(false)
-  const [autoSyncIntervalSecondsStr, setAutoSyncIntervalSecondsStr] = useState(
-    String(AUTO_SYNC_MIN_INTERVAL_SECONDS),
-  )
-  const [advancedOpen, setAdvancedOpen] = useState(false)
-
-  useEffect(() => {
-    if (config) {
-      setBranch(config.branch)
-      setRepoUrl(config.repoUrl ?? null)
-      setEnabled(config.enabled)
-      setAutoSyncEnabled(config.autoSyncEnabled)
-      const seconds = config.autoSyncIntervalMs != null
-        ? Math.round(config.autoSyncIntervalMs / 1000)
-        : AUTO_SYNC_MIN_INTERVAL_SECONDS
-      setAutoSyncIntervalSecondsStr(String(seconds))
-    }
-  }, [config])
 
   if (isLoading || !config) {
     return (
@@ -386,155 +371,168 @@ function ConfigPanel({ projectId }: { projectId: number }) {
     )
   }
 
-  const intervalSecondsNum = Number(autoSyncIntervalSecondsStr)
-  const intervalValid = Number.isFinite(intervalSecondsNum)
-    && Number.isInteger(intervalSecondsNum)
-    && intervalSecondsNum >= AUTO_SYNC_MIN_INTERVAL_SECONDS
-  const intervalChanged = autoSyncEnabled
-    && intervalValid
-    && intervalSecondsNum * 1000 !== config.autoSyncIntervalMs
+  return config.synced
+    ? <SyncedConfigPanel projectId={projectId} config={config} />
+    : <AttachConfigPanel projectId={projectId} config={config} />
+}
 
-  const dirty = branch !== config.branch
-    || repoUrl !== (config.repoUrl ?? null)
-    || enabled !== config.enabled
-    || autoSyncEnabled !== config.autoSyncEnabled
-    || intervalChanged
-  const branchValid = branch.trim().length > 0
+/** Not-synced state: connect GitHub, create a new repo (or reconnect a remembered one). */
+function AttachConfigPanel({ projectId, config }: { projectId: number; config: SyncConfig }) {
+  const { data: identity } = useOauthGithubIdentityQuery()
+  const [updateConfig, { isLoading: isAttaching }] = useUpdateCloudSyncConfigMutation()
+  const [reconnect, { isLoading: isReconnecting }] = useCloudSyncReconnectMutation()
+  const [runSync] = useCloudSyncRunMutation()
+  const [createOpen, setCreateOpen] = useState(false)
+  const oauthConnected = identity?.connected === true
 
-  const handleSave = async () => {
-    if (!branchValid) return
-    if (autoSyncEnabled && !intervalValid) return
+  // Fire the first push so a freshly-attached repo doesn't sit empty. Non-fatal: if it
+  // fails (e.g. the GitHub App can't see the new repo yet) sync is still on and the user
+  // can retry "Sync now".
+  const firstSync = async () => {
+    try {
+      await runSync(projectId).unwrap()
+    } catch (err) {
+      toast.error(`Initial sync didn't complete: ${formatError(err)}`)
+    }
+  }
+
+  const handleAttach = async (repo: GithubRepo) => {
     try {
       await updateConfig({
         projectId,
-        body: {
-          branch: branch.trim(),
-          repoUrl,
-          enabled,
-          autoSyncEnabled,
-          autoSyncIntervalMs: autoSyncEnabled ? intervalSecondsNum * 1000 : null,
-        },
+        body: { repoUrl: repo.cloneUrl, branch: repo.defaultBranch || "main" },
       }).unwrap()
-      toast.success("Sync configuration saved")
+      toast.success(`Cloud sync enabled — ${repo.fullName}`)
+      void firstSync()
     } catch (err) {
-      toast.error(`Failed to save sync configuration: ${formatError(err)}`)
+      toast.error(`Failed to enable cloud sync: ${formatError(err)}`)
     }
   }
+
+  const handleReconnect = async (repoUrl: string) => {
+    try {
+      await reconnect({ projectId, body: { repoUrl } }).unwrap()
+      toast.success("Reconnected — cloud sync re-enabled")
+      void firstSync()
+    } catch (err) {
+      toast.error(`Reconnect failed: ${formatError(err)}`)
+    }
+  }
+
+  const enableButton = (
+    <Button onClick={() => setCreateOpen(true)} disabled={!oauthConnected || isAttaching}>
+      <CloudUpload className="size-4 mr-1.5" />
+      Enable cloud sync
+    </Button>
+  )
 
   return (
     <Card className="p-4 space-y-4">
       <div>
-        <h2 className="text-sm font-semibold">Configuration</h2>
+        <h2 className="text-sm font-semibold">Cloud sync</h2>
         <p className="text-xs text-muted-foreground">
-          Connect to GitHub, pick a repository, then use <strong>Sync now</strong>{" "}
-          below to push and pull.
+          This project isn&rsquo;t synced yet. Create a repository to start syncing —
+          changes are pushed and pulled automatically.
         </p>
       </div>
 
-      {/* Identity row at the top — primary "Connect GitHub" path. */}
+      {/* Identity row — connecting GitHub is a prerequisite for creating a repo. */}
       <div className="border rounded-md p-3 bg-muted/20">
         <IdentityRow projectId={projectId} />
       </div>
 
-      <div className="space-y-3">
-        <div className="space-y-1">
-          <Label>Repository</Label>
-          <RepoPicker
-            value={repoUrl}
-            onChange={(repo) => setRepoUrl(repo.cloneUrl)}
-            oauthConnected={identity?.connected === true}
-          />
-          {repoUrl && (
-            <p className="text-[10px] text-muted-foreground font-mono break-all">
-              {repoUrl}
-            </p>
-          )}
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-[160px_1fr] gap-4">
-          <div className="space-y-1">
-            <Label htmlFor="sync-branch">Branch *</Label>
-            <Input
-              id="sync-branch"
-              value={branch}
-              onChange={(e) => setBranch(e.target.value)}
-              placeholder="main"
-            />
-          </div>
-          <div className="flex items-end">
-            <div className="flex items-center gap-2">
-              <input
-                id="sync-enabled"
-                type="checkbox"
-                checked={enabled}
-                onChange={(e) => setEnabled(e.target.checked)}
-              />
-              <Label htmlFor="sync-enabled" className="text-xs">
-                Enable cloud sync for this project
-              </Label>
-            </div>
-          </div>
-        </div>
-
-        <div className="border-t pt-3 space-y-2">
-          <div className="flex items-center gap-2">
-            <input
-              id="auto-sync-enabled"
-              type="checkbox"
-              checked={autoSyncEnabled}
-              onChange={(e) => setAutoSyncEnabled(e.target.checked)}
-              disabled={!enabled}
-            />
-            <Label htmlFor="auto-sync-enabled" className="text-xs">
-              Auto-sync periodically
-            </Label>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-[160px_1fr] gap-4 items-start">
-            <div className="space-y-1">
-              <Label htmlFor="auto-sync-interval" className="text-xs">
-                Interval (seconds)
-              </Label>
-              <Input
-                id="auto-sync-interval"
-                type="number"
-                min={AUTO_SYNC_MIN_INTERVAL_SECONDS}
-                step={1}
-                value={autoSyncIntervalSecondsStr}
-                onChange={(e) => setAutoSyncIntervalSecondsStr(e.target.value)}
-                disabled={!enabled || !autoSyncEnabled}
-                className={
-                  autoSyncEnabled && !intervalValid ? "border-destructive" : undefined
-                }
-              />
-            </div>
-            <p className="text-xs text-muted-foreground self-end pb-1">
-              Minimum {AUTO_SYNC_MIN_INTERVAL_SECONDS}s. The first tick fires after one full
-              interval — recently-saved changes are not pushed mid-form-submit.
-            </p>
-          </div>
-          {autoSyncEnabled && !intervalValid && (
-            <p className="text-xs text-destructive flex items-center gap-1">
-              <AlertCircle className="size-3" />
-              Interval must be a whole number ≥ {AUTO_SYNC_MIN_INTERVAL_SECONDS} seconds.
-            </p>
-          )}
-        </div>
-
-        <div className="flex justify-end">
-          <Button
-            onClick={handleSave}
-            disabled={
-              !dirty
-              || !branchValid
-              || (autoSyncEnabled && !intervalValid)
-              || isSaving
-            }
-          >
-            {isSaving ? "Saving…" : "Save"}
-          </Button>
-        </div>
+      <div className="flex flex-wrap items-center gap-3">
+        {oauthConnected ? (
+          enableButton
+        ) : (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={0}>{enableButton}</span>
+            </TooltipTrigger>
+            <TooltipContent>Connect GitHub above to create a repository.</TooltipContent>
+          </Tooltip>
+        )}
+        <span className="text-xs text-muted-foreground">
+          Creates a new private repository for this project.
+        </span>
       </div>
 
-      {/* Advanced/PAT path — collapsed by default. */}
+      {config.linkedRepos.length > 0 && (
+        <div className="border-t pt-3 space-y-2">
+          <Label className="text-xs text-muted-foreground">Previously linked</Label>
+          <ul className="space-y-1">
+            {config.linkedRepos.map((r) => (
+              <li key={r.repoUrl} className="flex items-center justify-between gap-2">
+                <span className="text-xs font-mono truncate">
+                  {formatRepoUrl(r.repoUrl) ?? r.repoUrl}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleReconnect(r.repoUrl)}
+                  disabled={isReconnecting}
+                >
+                  Reconnect
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <CreateRepoDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={(repo) => {
+          setCreateOpen(false)
+          void handleAttach(repo)
+        }}
+      />
+    </Card>
+  )
+}
+
+/** Synced state: read-only repo summary, Advanced (auto-sync + PAT), and Disconnect. */
+function SyncedConfigPanel({ projectId, config }: { projectId: number; config: SyncConfig }) {
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [disconnectOpen, setDisconnectOpen] = useState(false)
+  const repoLabel = formatRepoUrl(config.repoUrl) ?? config.repoUrl ?? "—"
+
+  return (
+    <Card className="p-4 space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold">Cloud sync</h2>
+          <p className="text-xs text-muted-foreground">
+            Synced to a GitHub repository. Changes push and pull automatically.
+          </p>
+        </div>
+        <Badge variant="secondary" className="text-[10px] shrink-0">synced</Badge>
+      </div>
+
+      {/* Identity row — surfaces re-auth if the GitHub connection lapses. */}
+      <div className="border rounded-md p-3 bg-muted/20">
+        <IdentityRow projectId={projectId} />
+      </div>
+
+      <div className="space-y-1">
+        <Label className="text-xs text-muted-foreground">Repository</Label>
+        <div className="flex items-center gap-2 min-w-0">
+          <Github className="size-4 shrink-0 opacity-70" />
+          <span className="text-sm font-medium truncate">{repoLabel}</span>
+          <Badge variant="outline" className="text-[10px] shrink-0">{config.branch}</Badge>
+        </div>
+        {config.repoUrl && (
+          <p className="text-[10px] text-muted-foreground font-mono break-all">
+            {config.repoUrl}
+          </p>
+        )}
+        <p className="text-[10px] text-muted-foreground">
+          The repository can&rsquo;t be changed — disconnect to link a different one.
+        </p>
+      </div>
+
+      {/* Advanced — auto-sync cadence + access token, collapsed by default. */}
       <div className="border-t pt-3">
         <button
           type="button"
@@ -542,18 +540,177 @@ function ConfigPanel({ projectId }: { projectId: number }) {
           className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
         >
           {advancedOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
-          Advanced — Personal Access Token
+          Advanced — auto-sync &amp; access token
           {config.tokenPresent && (
             <Badge variant="secondary" className="ml-2 text-[10px]">PAT stored</Badge>
           )}
         </button>
         {advancedOpen && (
-          <div className="mt-3">
-            <PatPanel projectId={projectId} config={config} />
+          <div className="mt-3 space-y-4">
+            <AutoSyncForm projectId={projectId} config={config} />
+            <div className="border-t pt-4">
+              <PatPanel projectId={projectId} config={config} />
+            </div>
           </div>
         )}
       </div>
+
+      <div className="flex justify-end border-t pt-3">
+        <Button variant="outline" onClick={() => setDisconnectOpen(true)}>
+          <Unlink className="size-3.5 mr-1.5" />
+          Disconnect repository
+        </Button>
+      </div>
+
+      <DisconnectConfirmDialog
+        open={disconnectOpen}
+        onOpenChange={setDisconnectOpen}
+        projectId={projectId}
+        repoLabel={repoLabel}
+      />
     </Card>
+  )
+}
+
+/** Auto-sync toggle + interval, saved independently (advanced, defaults on). */
+function AutoSyncForm({ projectId, config }: { projectId: number; config: SyncConfig }) {
+  const [updateConfig, { isLoading: isSaving }] = useUpdateCloudSyncConfigMutation()
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(config.autoSyncEnabled)
+  const [intervalSecondsStr, setIntervalSecondsStr] = useState(
+    String(config.autoSyncIntervalMs != null
+      ? Math.round(config.autoSyncIntervalMs / 1000)
+      : AUTO_SYNC_MIN_INTERVAL_SECONDS),
+  )
+
+  // Reseed from server state (keyed on the values, not the object, so a refetch that
+  // doesn't move these doesn't clobber an in-progress edit).
+  useEffect(() => {
+    setAutoSyncEnabled(config.autoSyncEnabled)
+    setIntervalSecondsStr(String(config.autoSyncIntervalMs != null
+      ? Math.round(config.autoSyncIntervalMs / 1000)
+      : AUTO_SYNC_MIN_INTERVAL_SECONDS))
+  }, [config.autoSyncEnabled, config.autoSyncIntervalMs])
+
+  const intervalSecondsNum = Number(intervalSecondsStr)
+  const intervalValid = Number.isFinite(intervalSecondsNum)
+    && Number.isInteger(intervalSecondsNum)
+    && intervalSecondsNum >= AUTO_SYNC_MIN_INTERVAL_SECONDS
+  const intervalChanged = autoSyncEnabled
+    && intervalValid
+    && intervalSecondsNum * 1000 !== config.autoSyncIntervalMs
+  const dirty = autoSyncEnabled !== config.autoSyncEnabled || intervalChanged
+
+  const handleSave = async () => {
+    if (autoSyncEnabled && !intervalValid) return
+    try {
+      await updateConfig({
+        projectId,
+        body: {
+          autoSyncEnabled,
+          autoSyncIntervalMs: autoSyncEnabled ? intervalSecondsNum * 1000 : null,
+        },
+      }).unwrap()
+      toast.success("Auto-sync settings saved")
+    } catch (err) {
+      toast.error(`Failed to save auto-sync settings: ${formatError(err)}`)
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <input
+          id="auto-sync-enabled"
+          type="checkbox"
+          checked={autoSyncEnabled}
+          onChange={(e) => setAutoSyncEnabled(e.target.checked)}
+        />
+        <Label htmlFor="auto-sync-enabled" className="text-xs">
+          Auto-sync periodically
+        </Label>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-[160px_1fr] gap-4 items-start">
+        <div className="space-y-1">
+          <Label htmlFor="auto-sync-interval" className="text-xs">
+            Interval (seconds)
+          </Label>
+          <Input
+            id="auto-sync-interval"
+            type="number"
+            min={AUTO_SYNC_MIN_INTERVAL_SECONDS}
+            step={1}
+            value={intervalSecondsStr}
+            onChange={(e) => setIntervalSecondsStr(e.target.value)}
+            disabled={!autoSyncEnabled}
+            className={autoSyncEnabled && !intervalValid ? "border-destructive" : undefined}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground self-end pb-1">{AUTO_SYNC_INTERVAL_HINT}</p>
+      </div>
+      {autoSyncEnabled && !intervalValid && (
+        <p className="text-xs text-destructive flex items-center gap-1">
+          <AlertCircle className="size-3" />
+          Interval must be a whole number ≥ {AUTO_SYNC_MIN_INTERVAL_SECONDS} seconds.
+        </p>
+      )}
+      <div className="flex justify-end">
+        <Button
+          size="sm"
+          onClick={handleSave}
+          disabled={!dirty || (autoSyncEnabled && !intervalValid) || isSaving}
+        >
+          {isSaving ? "Saving…" : "Save"}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/** Confirmation for disconnecting cloud sync. */
+function DisconnectConfirmDialog({
+  open,
+  onOpenChange,
+  projectId,
+  repoLabel,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  projectId: number
+  repoLabel: string
+}) {
+  const [disconnect, { isLoading }] = useCloudSyncDisconnectMutation()
+
+  const handleDisconnect = async () => {
+    try {
+      await disconnect(projectId).unwrap()
+      toast.success("Disconnected from cloud sync")
+      onOpenChange(false)
+    } catch (err) {
+      toast.error(`Disconnect failed: ${formatError(err)}`)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Disconnect cloud sync?</DialogTitle>
+          <DialogDescription>
+            This stops syncing <span className="font-mono">{repoLabel}</span> and turns off
+            auto-sync. Your local project and its history are kept, and the repository is
+            remembered so you can reconnect later.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="flex-row justify-end gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
+            Cancel
+          </Button>
+          <Button variant="destructive" onClick={handleDisconnect} disabled={isLoading}>
+            {isLoading ? "Disconnecting…" : "Disconnect"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -704,8 +861,7 @@ function StatusPanel({ projectId }: { projectId: number }) {
   const sessionPending = conflictsData?.activeSession === true
   const hasCredentials = identity?.connected === true || config?.tokenPresent === true
   const syncDisabledReason = (() => {
-    if (!config?.enabled) return "Cloud sync disabled — enable it above"
-    if (!config.repoUrl) return "Repository not selected"
+    if (!config?.repoUrl) return "No repository attached — enable cloud sync first"
     if (!hasCredentials) return "Connect GitHub or store a Personal Access Token"
     if (sessionPending) return "Resolve or abort the open conflict session first"
     return null

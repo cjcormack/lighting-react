@@ -218,6 +218,16 @@ export const navItems: NavItem[] = [
     group: "settings",
     parent: "project-settings",
   },
+  {
+    id: "project-sync",
+    label: "Sync",
+    icon: Cloud,
+    path: (p) => `/projects/${p}/settings/sync`,
+    visibility: "always",
+    pathMatch: "/settings/sync",
+    group: "settings",
+    parent: "project-settings",
+  },
 
   // ── Install (no project context) ────────────────────────────────────
   // Path resolvers ignore the projectId arg — these routes are install-scope.

@@ -17,27 +17,27 @@ import { useCloudSyncImportMutation } from "@/store/cloudSync"
 import type { GithubRepo } from "@/store/oauthGithub"
 import { formatError } from "@/lib/formatError"
 
-interface ImportFromRemoteDialogProps {
+interface AddRemoteProjectDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** Drives the picker's connect-prompt — the import button itself is gated higher up. */
+  /** Drives the picker's connect-prompt — the trigger button itself is gated higher up. */
   oauthConnected: boolean
 }
 
 /**
- * Pick a remote repo + name and POST to `/cloud-sync/import` to clone it as a brand-new
- * local project. On success, navigates to the new project's sync drill-in so the user
- * can verify and run the first manual sync.
+ * Pick a remote repo + name and POST to `/cloud-sync/import` to add it as a new local
+ * project that stays continuously synced (not a one-time import). On success, navigates
+ * to the new project's Sync settings so the user can verify and run the first sync.
  *
  * Project-name input is pre-filled from the picked repo's `name` (e.g. `lighting7-show`),
  * but editable — backend collision handling lives in `ProjectImporter` so the UI just
  * surfaces whatever error comes back.
  */
-export function ImportFromRemoteDialog({
+export function AddRemoteProjectDialog({
   open,
   onOpenChange,
   oauthConnected,
-}: ImportFromRemoteDialogProps) {
+}: AddRemoteProjectDialogProps) {
   const navigate = useNavigate()
   const [importFromRemote, { isLoading }] = useCloudSyncImportMutation()
   const [repo, setRepo] = useState<GithubRepo | null>(null)
@@ -70,9 +70,9 @@ export function ImportFromRemoteDialog({
         branch,
         projectName: projectName.trim(),
       }).unwrap()
-      toast.success(`Imported "${result.name}" from ${repo.fullName}`)
+      toast.success(`Added "${result.name}" from ${repo.fullName}`)
       onOpenChange(false)
-      navigate(`/sync/projects/${result.projectId}`)
+      navigate(`/projects/${result.projectId}/settings/sync`)
     } catch (err) {
       toast.error(`Import failed: ${formatError(err)}`)
     }
@@ -82,10 +82,11 @@ export function ImportFromRemoteDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Import from remote</DialogTitle>
+          <DialogTitle>Add remote project</DialogTitle>
           <DialogDescription>
-            Clone an existing GitHub repository as a new local project. The remote&rsquo;s
-            default branch is used and cloud sync is enabled automatically.
+            Add an existing GitHub repository as a new local project. The remote&rsquo;s
+            default branch is used and the project stays continuously synced &mdash; changes
+            push and pull automatically.
           </DialogDescription>
         </DialogHeader>
 
