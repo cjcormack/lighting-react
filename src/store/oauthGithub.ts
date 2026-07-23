@@ -30,6 +30,15 @@ export interface GithubRepo {
   cloneUrl: string
   description: string | null
   pushPermission: boolean
+  /**
+   * Lighting-project metadata, populated only when the list is fetched with
+   * `lightingOnly: true` (the backend probes each repo's `project.json`). `projectName`
+   * / `projectDescription` come from that `project.json`, not the GitHub repo fields.
+   */
+  lightingProject: boolean
+  projectName: string | null
+  projectDescription: string | null
+  projectUuid: string | null
 }
 
 export interface CreateRepoBody {
@@ -79,7 +88,7 @@ export const oauthGithubApi = restApi.injectEndpoints({
     }),
     listGithubRepos: build.query<
       GithubRepo[],
-      { query?: string | null; page?: number; perPage?: number }
+      { query?: string | null; page?: number; perPage?: number; lightingOnly?: boolean }
     >({
       query: (args) => ({
         url: 'oauth/github/repositories',
@@ -87,6 +96,7 @@ export const oauthGithubApi = restApi.injectEndpoints({
           query: args.query?.trim() ? args.query.trim() : undefined,
           page: args.page,
           perPage: args.perPage,
+          lightingOnly: args.lightingOnly ? true : undefined,
         },
       }),
       providesTags: ['OAuthRepos'],

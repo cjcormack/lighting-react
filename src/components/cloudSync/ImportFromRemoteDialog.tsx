@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 import {
@@ -13,7 +13,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RepoPicker } from "./RepoPicker"
-import { useCloudSyncImportMutation } from "@/store/cloudSync"
+import { useCloudSyncImportMutation, useCloudSyncConfigsQuery } from "@/store/cloudSync"
+import { useProjectListQuery } from "@/store/projects"
 import type { GithubRepo } from "@/store/oauthGithub"
 import { formatError } from "@/lib/formatError"
 
@@ -29,9 +30,10 @@ interface AddRemoteProjectDialogProps {
  * project that stays continuously synced (not a one-time import). On success, navigates
  * to the new project's Sync settings so the user can verify and run the first sync.
  *
- * Project-name input is pre-filled from the picked repo's `name` (e.g. `lighting7-show`),
- * but editable — backend collision handling lives in `ProjectImporter` so the UI just
- * surfaces whatever error comes back.
+ * The picker lists only lighting projects (repos with a `project.json`) and the name input
+ * is pre-filled from that `project.json` name, but editable. Collisions with an existing
+ * local project name are flagged inline before submit; `ProjectImporter` remains the
+ * server-side source of truth and any error it returns is surfaced as a toast.
  */
 export function AddRemoteProjectDialog({
   open,
@@ -40,6 +42,8 @@ export function AddRemoteProjectDialog({
 }: AddRemoteProjectDialogProps) {
   const navigate = useNavigate()
   const [importFromRemote, { isLoading }] = useCloudSyncImportMutation()
+  const { data: syncConfigs } = useCloudSyncConfigsQuery()
+  const { data: projects } = useProjectListQuery()
   const [repo, setRepo] = useState<GithubRepo | null>(null)
   const [projectName, setProjectName] = useState("")
   // Track whether the user has typed in the name field — once they have, stop
@@ -54,13 +58,36 @@ export function AddRemoteProjectDialog({
     }
   }, [open])
 
+  // Clone URLs already attached to a local project — surfaced in the picker as
+  // "Already added" so a repo can't be re-imported.
+  const linkedRepoUrls = useMemo(
+    () =>
+      new Set(
+        Object.values(syncConfigs ?? {})
+          .map((c) => c.repoUrl)
+          .filter((u): u is string => !!u),
+      ),
+    [syncConfigs],
+  )
+
+  // Existing local project names for the pre-import collision check. Case-sensitive to
+  // match the backend's `DaoProjects.name eq targetName` (SQLite varchar, no NOCASE) — a
+  // case-only difference is a distinct name the backend accepts, so we mustn't block it.
+  const existingNames = useMemo(
+    () => new Set((projects ?? []).map((p) => p.name.trim())),
+    [projects],
+  )
+
   const handleRepoChange = (next: GithubRepo) => {
     setRepo(next)
-    if (!nameTouched) setProjectName(next.name)
+    // Prefer the real project.json name over the raw GitHub repo name.
+    if (!nameTouched) setProjectName(next.projectName ?? next.name)
   }
 
   const branch = repo?.defaultBranch ?? "main"
-  const canSubmit = !!repo && projectName.trim().length > 0 && !isLoading
+  const trimmedName = projectName.trim()
+  const nameCollision = trimmedName.length > 0 && existingNames.has(trimmedName)
+  const canSubmit = !!repo && trimmedName.length > 0 && !nameCollision && !isLoading
 
   const handleImport = async () => {
     if (!repo) return
@@ -97,7 +124,12 @@ export function AddRemoteProjectDialog({
               value={repo?.cloneUrl ?? null}
               onChange={handleRepoChange}
               oauthConnected={oauthConnected}
+              lightingOnly
+              linkedRepoUrls={linkedRepoUrls}
             />
+            {repo?.projectDescription && (
+              <p className="text-xs text-muted-foreground">{repo.projectDescription}</p>
+            )}
             {repo && (
               <p className="text-[10px] text-muted-foreground font-mono break-all">
                 {repo.cloneUrl}
@@ -113,12 +145,20 @@ export function AddRemoteProjectDialog({
                 setProjectName(e.target.value)
                 setNameTouched(true)
               }}
-              placeholder={repo?.name ?? "Project name"}
+              placeholder={repo?.projectName ?? repo?.name ?? "Project name"}
               disabled={!repo}
             />
-            <p className="text-[10px] text-muted-foreground">
-              Defaults to the repo name; rename if it would collide with an existing project.
-            </p>
+            {nameCollision ? (
+              <p className="text-[10px] text-destructive">
+                A project named &ldquo;{trimmedName}&rdquo; already exists locally &mdash; choose a
+                different name.
+              </p>
+            ) : (
+              <p className="text-[10px] text-muted-foreground">
+                Defaults to the project&rsquo;s name; rename if it would collide with an existing
+                project.
+              </p>
+            )}
           </div>
           {repo && (
             <div className="text-xs text-muted-foreground">
