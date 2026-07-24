@@ -300,7 +300,9 @@ export function groupCuesByStack(cueOrder: FlatCue[]): CueRailRow[] {
 export type ShowRailRow =
   | { type: 'header'; stackId: number; stackName: string }
   | { type: 'cue'; cue: FlatCue }
-  | { type: 'separator'; id: number; name: string }
+  // `source` disambiguates the two origins: a SEPARATOR stack's id and a MARKER cue's id come from
+  // different tables and can collide, so consumers must key on `source`+`id`, not `id` alone.
+  | { type: 'separator'; source: 'stack' | 'cue'; id: number; name: string }
 
 /**
  * Build the prompt-book rail's rows straight from the project's ordered stacks — like
@@ -316,7 +318,7 @@ export function flattenShowRows(stacks: CueStack[] | undefined): ShowRailRow[] {
   const out: ShowRailRow[] = []
   for (const stack of ordered) {
     if (stack.type === 'SEPARATOR') {
-      out.push({ type: 'separator', id: stack.id, name: stack.label ?? stack.name })
+      out.push({ type: 'separator', source: 'stack', id: stack.id, name: stack.label ?? stack.name })
       continue
     }
     if (distinctStacks > 1) {
@@ -324,7 +326,7 @@ export function flattenShowRows(stacks: CueStack[] | undefined): ShowRailRow[] {
     }
     for (const cue of stack.cues) {
       if (cue.cueType === 'MARKER') {
-        out.push({ type: 'separator', id: cue.id, name: cue.name })
+        out.push({ type: 'separator', source: 'cue', id: cue.id, name: cue.name })
       } else {
         out.push({
           type: 'cue',

@@ -178,7 +178,8 @@ export function CueStackPanel({
             )
           }
           if (row.type === 'separator') {
-            return <MarkerRow key={`s-${row.id}`} name={row.name} />
+            // Key on source+id: a SEPARATOR stack and a MARKER cue can share a numeric id.
+            return <MarkerRow key={`s-${row.source}-${row.id}`} name={row.name} />
           }
           const status = statusOf(row.cue.cueId)
           return (

@@ -239,8 +239,24 @@ describe('flattenShowRows', () => {
       ]),
     ])
     expect(rows.map((r) => r.type)).toEqual(['cue', 'separator', 'cue'])
-    expect(rows[1]).toMatchObject({ type: 'separator', id: 2, name: 'Interval' })
+    expect(rows[1]).toMatchObject({ type: 'separator', source: 'cue', id: 2, name: 'Interval' })
     expect(rows.some((r) => r.type === 'header')).toBe(false)
+  })
+
+  it('distinguishes a SEPARATOR stack from a MARKER cue that share a numeric id', () => {
+    // Both origins produce separator rows; keyed on id alone they would collide (both id 5).
+    const rows = flattenShowRows([
+      stack(1, 'Act One', [cue(9), cue(5, { cueType: 'MARKER', name: 'in-stack marker' })], 0),
+      separator(5, 'project separator', 1),
+    ])
+    const seps = rows.filter((r) => r.type === 'separator')
+    expect(seps).toEqual([
+      { type: 'separator', source: 'cue', id: 5, name: 'in-stack marker' },
+      { type: 'separator', source: 'stack', id: 5, name: 'project separator' },
+    ])
+    // A source+id composite key is unique even though the raw ids collide.
+    const keys = seps.map((r) => (r.type === 'separator' ? `${r.source}-${r.id}` : ''))
+    expect(new Set(keys).size).toBe(seps.length)
   })
 
   it('emits a per-stack header only when the show spans more than one runnable stack', () => {
@@ -260,7 +276,7 @@ describe('flattenShowRows', () => {
     ])
     const cueIds = rows.flatMap((r) => (r.type === 'cue' ? [r.cue.cueId] : []))
     expect(cueIds).toEqual([1, 2])
-    expect(rows.some((r) => r.type === 'separator' && r.name === 'Interval')).toBe(true)
+    expect(rows.some((r) => r.type === 'separator' && r.source === 'stack' && r.name === 'Interval')).toBe(true)
   })
 
   it('returns empty for missing inputs', () => {
