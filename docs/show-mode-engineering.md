@@ -22,15 +22,15 @@ The UI is structured around four distinct phases a lighting operator works throu
 
 A key insight: **tech runs live on the Run view, not the Program view**. A tech run is a running phase that occasionally requires a programming detour (switch to Program via the sidebar, edit in the CueEditor sheet, come back), not a programming phase that happens to involve running.
 
-The **FX Cues view** (separate from Show Mode) remains as "back-of-house authoring" -- building and managing individual cues by combining presets into named, deployable looks. The **Program view** is for assembling those cues into show order. Over time, the Program view may absorb the FX Cues view's capabilities entirely.
+The **Program view** is the single surface for authoring *and* assembling cues: it creates stacks, edits cues (palette, presets, ad-hoc effects, triggers), reorders the show, and runs it. It has fully **absorbed the old "FX Cues" view**, which no longer exists — `/cues/*` URLs redirect to `/program`. There are no longer any standalone cues: **every cue belongs to a stack**.
 
 ## Concepts
 
-**Show** -- the project's ordered list of **entries**, each being either a **STACK** reference (pointing to a cue stack) or a **MARKER** (a visual separator with a label). The show is active when the project has an `activeEntryId` set.
+**Show** -- the project's *ordered list of cue stacks* (there is no separate entries table). Each row is either a runnable **STACK** or a **SEPARATOR** (a label-only divider between stacks). Ordering is `cue_stacks.sortOrder`; the show is running when the project has an `activeStackId` set (the playhead).
 
-**Cue Stack** -- an ordered sequence of cues. Has a `loop` flag (repeat after last cue) and a `palette` (inherited by all cues). Stacks are the playable unit -- the runner steps through one stack at a time.
+**Cue Stack** -- an ordered sequence of cues. Has a `type` (`STACK` | `SEPARATOR`), a project-level `sortOrder`, an optional separator `label`, a `loop` flag (repeat after last cue) and a `palette` (inherited by all cues). STACK rows are the playable unit -- the runner steps through one stack at a time; SEPARATOR rows are skipped by activate/advance/go-to.
 
-**Cue** -- a single lighting state. Consists of:
+**Cue** -- a single lighting state, always belonging to a stack (`cueStackId` is non-null). Consists of:
 - A palette snapshot (DMX channel values)
 - Preset applications (named FX presets applied to fixture groups)
 - Ad-hoc effects (inline effects not from the library)
@@ -38,7 +38,14 @@ The **FX Cues view** (separate from Show Mode) remains as "back-of-house authori
 - Timing: fade duration, fade curve, auto-advance delay
 - Metadata: cue number (Q1, Q2.5), notes
 
-**Cue types**: `STANDARD` (a real cue) or `MARKER` (a visual separator within a stack).
+**Cue types**: `STANDARD` (a real cue) or `MARKER` (a visual separator *within* a stack — distinct from a SEPARATOR *stack* between stacks).
+
+## Program URLs
+
+- Overview (the ordered stack list): `/projects/:projectId/program`
+- Drilled into a stack: `/projects/:projectId/program/stacks/:stackId`
+- Expanded cue card (transient): `?cue=:cueId` on the stack path
+- Legacy `/cues`, `/cues/all`, `/cues/standalone` → `/program`; `/cues/stacks/:stackId` → `/program/stacks/:stackId`. The old `/program?stack=X&cue=Y` deep-link (from Run / Prompt Book "Edit Cue") is normalized to the path form on load.
 
 ## Architecture
 
@@ -57,21 +64,22 @@ API Layer          Type definitions + WebSocket subscription factories
 #### API Layer (types + WebSocket)
 | File | Purpose |
 |------|---------|
-| `src/api/showApi.ts` | Show types, request/response interfaces |
-| `src/api/showWsApi.ts` | WebSocket: `showEntriesChanged`, `showChanged` |
-| `src/api/cueStacksApi.ts` | Cue stack and cue entry types |
-| `src/api/cueStacksWsApi.ts` | WebSocket: `cueStackListChanged` |
+| `src/api/cueStacksApi.ts` | Cue stack + cue-entry types AND program-transport types (`ProgramState`, `AdvanceProgramRequest`, `GoToStackRequest`, ...) |
+| `src/api/cueStacksWsApi.ts` | WebSocket: `cueStackListChanged` + `showChanged` (program playhead) |
 | `src/api/cuesApi.ts` | Full cue types, input types, trigger types |
 | `src/api/cuesWsApi.ts` | WebSocket: `cueListChanged` |
 | `src/api/lightingApi.ts` | Central API hub -- composes all sub-APIs into a single `lightingApi` object |
 
+(The old `showApi.ts` / `showWsApi.ts` were removed — the show is just the ordered stacks, and the project-level playhead lives in `cueStacksApi`/`cueStacksWsApi`.)
+
 #### Store Layer (state management)
 | File | Purpose |
 |------|---------|
-| `src/store/show.ts` | RTK Query: show entry management, activate/deactivate/advance/go-to |
-| `src/store/cueStacks.ts` | RTK Query: stack CRUD, cue reorder, activate/deactivate/advance |
+| `src/store/cueStacks.ts` | RTK Query: stack CRUD, project reorder, per-stack activate/advance, AND program transport (`projectProgramState`, `activate/deactivate/advance/goToStack`) |
 | `src/store/cues.ts` | RTK Query: cue CRUD |
 | `src/store/runnerSlice.ts` | Redux slice: per-stack runner state (active, standby, progress) |
+
+(The old `store/show.ts` was removed — its endpoints moved into `store/cueStacks.ts`.)
 
 #### Component Layer (UI)
 | File | Purpose |
@@ -87,14 +95,11 @@ API Layer          Type definitions + WebSocket subscription factories
 | `src/components/runner/MobileCueListSheet.tsx` | Bottom sheet exposing the full cue list on mobile; tapping a cue opens CueEditor |
 | `src/components/runner/MobileCueRow.tsx` | Lean cue row used inside `MobileCueListSheet` (no fixed notes/auto-pill columns) |
 | `src/components/runner/program/ProgramView.tsx` | Program body: routes between ShowOverview and StackDetail based on `drillStackId` |
-| `src/components/runner/program/ShowOverview.tsx` | Show entry list with drag reorder, stack picker, marker edit. Activation controls live in `ProgramPage`'s header, not here. |
+| `src/components/runner/program/ShowOverview.tsx` | The project's ordered stack list: drag reorder, **Create Stack** (in place) + **Add Separator**, per-stack actions menu (edit settings / sort-by-cue-number / delete). Activation controls live in `ProgramPage`'s header, not here. |
 | `src/components/runner/program/StackDetail.tsx` | Cue list within a stack, dnd-kit reorder, add cue/marker, "Stacks" back button |
 | `src/components/runner/program/ProgramCueRow.tsx` | Expandable cue row with inline-editable Q/Name/Fade cells, CueFxTable, count badges |
 | `src/components/runner/program/ProgramMarkerRow.tsx` | Interactive marker with inline rename/delete |
-| `src/components/cues/CueEditor.tsx` | Cue edit sheet (properties, presets, effects, triggers) |
-| `src/components/cues/CueDetailSheet.tsx` | Read-only cue detail sheet (Run view eye-icon) — lighter companion to CueEditor for inspecting a cue's composition without risk of accidental edits |
-| `src/components/cues/InlineEditCell.tsx` | Click-to-edit cell for inline number editing (timing fields, fade duration) |
-| `src/components/cues/InlineTextCell.tsx` | Click-to-edit cell for inline string editing (cue number, cue name) |
+| `src/components/runner/program/CueCardEditor/` | Inline cue editor (palette, presets, ad-hoc effects, triggers, properties) used by the expandable Program cue rows. Replaced the standalone FX-Cues `CueEditor`. |
 | `src/hooks/useRunnerAnimation.ts` | requestAnimationFrame hook for fade/auto-advance progress |
 | `src/hooks/useNarrowContainer.ts` | ResizeObserver hook that returns `true` while a container's width is below a threshold. Used by `RunPage` to switch between desktop and mobile runner layouts. |
 | `src/lib/cueUtils.ts` | `buildCueInput()` -- converts a Cue to CueInput for mutations |
@@ -418,33 +423,29 @@ The backend is the source of truth. On mount each page fetches the show via `use
 
 ## REST API Endpoints
 
-### Show
+### Show (project-level playhead over the ordered stacks)
 ```
-GET    /project/{id}/show                       Get show state (entries + activeEntryId)
+GET    /project/{id}/show                       Get playhead state { projectId, activeStackId, canEdit }
 
-POST   /project/{id}/show/add-stack             Add stack entry
-POST   /project/{id}/show/add-marker            Add marker entry
-PUT    /project/{id}/show/entries/{eid}         Update entry label/order
-DELETE /project/{id}/show/entries/{eid}         Remove entry
-POST   /project/{id}/show/reorder               Reorder entries
-
-POST   /project/{id}/show/activate              Start show playback
-POST   /project/{id}/show/deactivate            Stop show playback
-POST   /project/{id}/show/advance               GO to next/prev stack entry
-POST   /project/{id}/show/go-to                 Jump to specific entry
+POST   /project/{id}/show/activate              Start playback (first runnable stack)
+POST   /project/{id}/show/deactivate            Stop playback
+POST   /project/{id}/show/advance               GO to next/prev runnable stack (skips separators)
+POST   /project/{id}/show/go-to                 Jump to a specific stack { stackId } (rejects separators)
 ```
+Stack *content and order* (including separators) live under `/cue-stacks` below — there is no
+separate show-entries collection.
 
 ### Cue Stacks
 ```
-GET    /project/{id}/cue-stacks                             List all stacks
+GET    /project/{id}/cue-stacks                             List stacks + separators in show order
 GET    /project/{id}/cue-stacks/{stackId}                   Get stack details
-POST   /project/{id}/cue-stacks                             Create stack
-PUT    /project/{id}/cue-stacks/{stackId}                   Update stack
-DELETE /project/{id}/cue-stacks/{stackId}                   Delete stack
+POST   /project/{id}/cue-stacks                             Create stack OR separator (type=SEPARATOR)
+PUT    /project/{id}/cue-stacks/{stackId}                   Update stack / separator
+DELETE /project/{id}/cue-stacks/{stackId}                   Delete stack (cascades its cues) / separator
+POST   /project/{id}/cue-stacks/reorder                     Reorder the project's stacks + separators { stackIds }
 
-POST   /project/{id}/cue-stacks/{sid}/reorder               Reorder cues
-POST   /project/{id}/cue-stacks/{sid}/add-cue               Add cue to stack
-POST   /project/{id}/cue-stacks/{sid}/remove-cue            Remove cue from stack
+POST   /project/{id}/cue-stacks/{sid}/reorder               Reorder cues within a stack
+POST   /project/{id}/cue-stacks/{sid}/add-cue               Add / move a cue into the stack
 POST   /project/{id}/cue-stacks/{sid}/sort-by-cue-number    Sort cues by Q number
 
 POST   /project/{id}/cue-stacks/{sid}/activate              Start stack playback
@@ -470,7 +471,7 @@ All messages are JSON with a `type` field, received on the shared WebSocket conn
 | Message Type | Payload | Effect |
 |-------------|---------|--------|
 | `showEntriesChanged` | (none) | Invalidates `ShowEntries` RTK Query tag. Fired on entry CRUD operations (add, remove, reorder, update). |
-| `showChanged` | `projectId`, `activeEntryId`, `activatedStackId`, `activatedStackName` | Fired on any change to `activeEntryId` — activate, deactivate, advance, go-to. When deactivating, entry/stack fields are `null`. |
+| `showChanged` | `projectId`, `activeStackId`, `activeStackName` | Fired on any playhead change — activate, deactivate, advance, go-to. When deactivating, `activeStackId`/`activeStackName` are `null`. |
 | `cueStackListChanged` | (none) | Invalidates `CueStackList` RTK Query tag |
 | `cueListChanged` | (none) | Invalidates `CueList` RTK Query tag |
 

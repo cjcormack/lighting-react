@@ -57,7 +57,7 @@ export function ActiveStackPalettes({ compact }: { compact?: boolean } = {}) {
             compact ? "gap-1 pl-1.5 pr-1 py-0.5" : "gap-1.5 pl-2 pr-1.5 py-0.5"
           )}
           onClick={() =>
-            navigate(`/projects/${projectId}/cues/stacks/${stackId}`)
+            navigate(`/projects/${projectId}/program/stacks/${stackId}`)
           }
           title={`Stack "${stackName}" — click to edit`}
         >

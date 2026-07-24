@@ -6,25 +6,23 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
-import type { ShowEntryDto } from '@/api/showApi'
 import type { CueStack } from '@/api/cueStacksApi'
 
 interface StackPickerSheetProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  entries: ShowEntryDto[]
-  activeEntryId: number | null
-  stackMap: Map<number, CueStack>
-  onSwitchToEntry: (entry: ShowEntryDto) => void
+  /** The project's ordered stacks + separators. */
+  stacks: CueStack[]
+  activeStackId: number | null
+  onSwitchToStack: (stack: CueStack) => void
 }
 
 export function StackPickerSheet({
   open,
   onOpenChange,
-  entries,
-  activeEntryId,
-  stackMap,
-  onSwitchToEntry,
+  stacks,
+  activeStackId,
+  onSwitchToStack,
 }: StackPickerSheetProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -36,35 +34,33 @@ export function StackPickerSheet({
           <SheetTitle>Stacks</SheetTitle>
         </SheetHeader>
         <div className="overflow-y-auto">
-          {entries.length === 0 ? (
+          {stacks.length === 0 ? (
             <div className="p-6 text-center text-sm text-muted-foreground">
               This show has no stacks yet.
             </div>
           ) : (
-            entries.map((entry) => {
-              if (entry.entryType === 'MARKER') {
+            stacks.map((stack) => {
+              if (stack.type === 'SEPARATOR') {
                 return (
                   <div
-                    key={entry.id}
+                    key={stack.id}
                     className="flex items-center gap-2.5 px-4 py-2 border-b"
                   >
                     <div className="flex-1 h-px bg-border" />
                     <span className="text-xs font-medium uppercase text-muted-foreground">
-                      {entry.label}
+                      {stack.label ?? stack.name}
                     </span>
                     <div className="flex-1 h-px bg-border" />
                   </div>
                 )
               }
-              const entryStack =
-                entry.cueStackId != null ? stackMap.get(entry.cueStackId) : undefined
-              const isActive = entry.id === activeEntryId
+              const isActive = stack.id === activeStackId
               return (
                 <button
-                  key={entry.id}
+                  key={stack.id}
                   type="button"
                   onClick={() => {
-                    onSwitchToEntry(entry)
+                    onSwitchToStack(stack)
                     onOpenChange(false)
                   }}
                   className={cn(
@@ -79,12 +75,12 @@ export function StackPickerSheet({
                       isActive && 'text-primary',
                     )}
                   >
-                    {entry.cueStackName}
+                    {stack.name}
                   </span>
-                  {entryStack?.loop && (
+                  {stack.loop && (
                     <RotateCcw className="size-3.5 text-muted-foreground shrink-0" />
                   )}
-                  {entryStack?.activeCueId != null && !isActive && (
+                  {stack.activeCueId != null && !isActive && (
                     <span className="text-[10px] font-medium uppercase tracking-wide text-green-500 shrink-0">
                       Live
                     </span>

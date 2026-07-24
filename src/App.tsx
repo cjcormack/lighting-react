@@ -12,10 +12,9 @@ import { ProjectFxLibrary, FxLibraryRedirect } from "./routes/FxLibrary";
 
 import { FxRedirect, ProjectFxBusking } from "./routes/FxBusking";
 import { PresetsRedirect, ProjectFxPresets } from "./routes/FxPresets";
-import { CuesRedirect, CuesBaseRedirect, ProjectCues } from "./routes/Cues";
 import ProjectOverview, { ProjectOverviewRedirect } from "./routes/ProjectOverview";
 import { PatchesRedirect } from "./routes/Patches";
-import { ProgramPage, ProgramRedirect } from "./routes/ProgramPage";
+import { ProgramPage, ProgramRedirect, CuesLegacyRedirect } from "./routes/ProgramPage";
 import { RunPage, RunRedirect, LegacyShowRedirect } from "./routes/RunPage";
 import { PromptBookViewerPage, PromptBookRedirect } from "./routes/PromptBookPage";
 import { SurfacesRedirect } from "./routes/Surfaces";
@@ -88,25 +87,26 @@ function App() {
           path: "presets",
           element: <PresetsRedirect />,
         },
+        // Legacy FX Cues routes — the view was folded into Program. Redirect to keep bookmarks alive.
         {
           path: "projects/:projectId/cues",
-          element: <CuesBaseRedirect />,
+          element: <CuesLegacyRedirect />,
         },
         {
           path: "projects/:projectId/cues/all",
-          element: <ProjectCues />,
+          element: <CuesLegacyRedirect />,
         },
         {
           path: "projects/:projectId/cues/standalone",
-          element: <ProjectCues />,
+          element: <CuesLegacyRedirect />,
         },
         {
           path: "projects/:projectId/cues/stacks/:stackId",
-          element: <ProjectCues />,
+          element: <CuesLegacyRedirect />,
         },
         {
           path: "cues",
-          element: <CuesRedirect />,
+          element: <ProgramRedirect />,
         },
         {
           path: "projects/:projectId/settings",
@@ -204,6 +204,10 @@ function App() {
 
         {
           path: "projects/:projectId/program",
+          element: <ProgramPage />,
+        },
+        {
+          path: "projects/:projectId/program/stacks/:stackId",
           element: <ProgramPage />,
         },
         {

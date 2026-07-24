@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
-import { useProjectShowQuery, useActivateShowMutation, useDeactivateShowMutation } from '../store/show'
+import { useProjectProgramStateQuery, useActivateProgramMutation, useDeactivateProgramMutation } from '../store/cueStacks'
 import { useProjectCueStackListQuery } from '../store/cueStacks'
 import type { CueStackCueEntry } from '../api/cueStacksApi'
 import { useFxStateQuery, tapTempo } from '../store/fx'
@@ -87,12 +87,14 @@ export function PromptBookViewerPage() {
   const navigate = useNavigate()
   const { data: book, isLoading: bookLoading, error: bookError, refetch: refetchBook } = useProjectPromptBookQuery(projectIdNum)
   const { data: project } = useProjectQuery(projectIdNum)
-  const { data: show } = useProjectShowQuery(projectIdNum)
+  const { data: programState } = useProjectProgramStateQuery(projectIdNum)
   const { data: stacks } = useProjectCueStackListQuery(projectIdNum)
   const { data: fxState } = useFxStateQuery()
 
-  const [activateShow] = useActivateShowMutation()
-  const [deactivateShow] = useDeactivateShowMutation()
+  const [activateShow] = useActivateProgramMutation()
+  const [deactivateShow] = useDeactivateProgramMutation()
+
+  const activeStackId = programState?.activeStackId ?? null
 
   const [upsertAnchor] = useUpsertAnchorMutation()
   const [deleteAnchor] = useDeleteAnchorMutation()
@@ -180,28 +182,27 @@ export function PromptBookViewerPage() {
   }, [canEdit, locked, lock])
 
   // ── Upstream running state — subscribed, never owned. ──
-  const cueOrder: FlatCue[] = useMemo(() => flattenCueOrder(show, stacks), [show, stacks])
-  // Rail rows include MARKER separators + per-stack headers (multi-stack only).
-  const railRows = useMemo(() => flattenShowRows(show, stacks), [show, stacks])
+  const cueOrder: FlatCue[] = useMemo(() => flattenCueOrder(stacks), [stacks])
+  // Rail rows include separators + per-stack headers (multi-stack only).
+  const railRows = useMemo(() => flattenShowRows(stacks), [stacks])
   const cueOrderIndex = useMemo(() => new Map(cueOrder.map((c, i) => [c.cueId, i])), [cueOrder])
   // Live cue labels — the pill reads these so an edited cue number reflects at once
   // (the anchor's own cached label only refreshes when the anchor is re-saved).
   const cueLabelByCue = useMemo(() => new Map(cueOrder.map((c) => [c.cueId, c.label])), [cueOrder])
 
-  const isShowActive = show?.activeEntryId != null
+  const isShowActive = activeStackId != null
 
   // Row 3 (show bar) + rail transport — the follow-server runner shared with the Edit view.
   // `onBeforeGo: noteGo` preserves relock-on-GO; `canOperate: canEdit` gates GO exactly as the
   // old inline `goDisabled` did. Aliased to fireGo/fireBack so the rest of the page is unchanged.
   const transport = useShowTransport({
     projectId: projectIdNum,
-    show,
+    activeStackId,
     stacks,
     canOperate: canEdit,
     onBeforeGo: noteGo,
   })
   const {
-    activeStackId,
     activeStack,
     activeCueId,
     standbyCueId,
@@ -317,18 +318,19 @@ export function PromptBookViewerPage() {
   const handleEditCue = useCallback(
     (cueId: number) => {
       const flat = cueOrder[cueOrderIndex.get(cueId) ?? -1]
-      const params = new URLSearchParams()
-      if (flat?.stackId != null) params.set('stack', String(flat.stackId))
-      params.set('cue', String(cueId))
-      navigate(`/projects/${projectIdNum}/program?${params.toString()}`)
+      if (flat?.stackId != null) {
+        navigate(`/projects/${projectIdNum}/program/stacks/${flat.stackId}?cue=${cueId}`)
+      } else {
+        navigate(`/projects/${projectIdNum}/program`)
+      }
     },
     [cueOrder, cueOrderIndex, navigate, projectIdNum],
   )
 
   // Start/Stop the show in place from the header (parity with Program/Run). State is
-  // derived from show.activeEntryId, so no local entry tracking is needed here.
-  const stackEntryCount = show?.entries.filter((e) => e.entryType === 'STACK').length ?? 0
-  const canStart = !isShowActive && stackEntryCount > 0
+  // derived from the program playhead, so no local entry tracking is needed here.
+  const runnableStackCount = stacks?.filter((s) => s.type === 'STACK').length ?? 0
+  const canStart = !isShowActive && runnableStackCount > 0
   const handleStartShow = useCallback(() => {
     activateShow({ projectId: projectIdNum })
       .unwrap()

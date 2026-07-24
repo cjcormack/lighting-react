@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import type { CueStack } from '../api/cueStacksApi'
-import type { ShowDetails } from '../api/showApi'
 import {
   useAdvanceCueStackMutation,
   useActivateCueStackMutation,
   useGoToCueInStackMutation,
+  useAdvanceProgramMutation,
 } from '../store/cueStacks'
-import { useAdvanceShowMutation } from '../store/show'
 import {
   go as goAction,
   back as backAction,
@@ -20,7 +19,8 @@ import { useRunnerAnimation } from './useRunnerAnimation'
 
 interface UseShowTransportArgs {
   projectId: number
-  show: ShowDetails | undefined
+  /** The project's live stack (the show playhead), or null when the show is not running. */
+  activeStackId: number | null
   stacks: CueStack[] | undefined
   /** Extra gate ANDed into `goDisabled`. Prompt Book passes `canEdit`. Default true. */
   canOperate?: boolean
@@ -47,15 +47,15 @@ export interface ShowTransport {
 
 /**
  * The "follow-server" show transport shared by the Program (Edit) and Prompt Book views: the
- * active stack is derived purely from `show.activeEntryId` (no local entry tracking, no stack
- * tabs), GO advances across stack boundaries via `advanceShow`, and the optimistic runner slice
+ * active stack is the project playhead (`activeStackId`, passed in from `projectProgramState`),
+ * GO advances across stack boundaries via `advanceProgram`, and the optimistic runner slice
  * drives the fade animation. This is a hook-ified lift of the block that previously lived inline
  * in PromptBookPage. The Run view deliberately does NOT use this — its manual stack-tab browsing
  * model is different code, not duplication.
  */
 export function useShowTransport({
   projectId,
-  show,
+  activeStackId,
   stacks,
   canOperate,
   onBeforeGo,
@@ -65,17 +65,12 @@ export function useShowTransport({
   const [advanceCueStack] = useAdvanceCueStackMutation()
   const [activateCueStack] = useActivateCueStackMutation()
   const [goToCueInStack] = useGoToCueInStackMutation()
-  const [advanceShow] = useAdvanceShowMutation()
+  const [advanceProgram] = useAdvanceProgramMutation()
 
-  const isShowActive = show?.activeEntryId != null
+  const isShowActive = activeStackId != null
 
-  const activeEntry = useMemo(
-    () => show?.entries.find((e) => e.id === show.activeEntryId),
-    [show],
-  )
-  const activeStackId = activeEntry?.cueStackId ?? null
   const activeStack = useMemo(
-    () => stacks?.find((s) => s.id === activeStackId),
+    () => (activeStackId != null ? stacks?.find((s) => s.id === activeStackId) : undefined),
     [stacks, activeStackId],
   )
 
@@ -178,14 +173,14 @@ export function useShowTransport({
 
   const go = useCallback(() => {
     onBeforeGo?.()
-    // Boundary GO: nothing on deck → advance to the next STACK entry in the show.
+    // Boundary GO: nothing on deck → advance to the next runnable stack in show order.
     if (runner.standbyCueId == null) {
-      if (!show || activeStackId == null) return
-      const entries = show.entries ?? []
-      const curIdx = entries.findIndex((e) => e.id === show.activeEntryId)
-      const nextStack = entries.slice(curIdx + 1).find((e) => e.entryType === 'STACK')
+      if (activeStackId == null || !stacks) return
+      const runnable = stacks.filter((s) => s.type === 'STACK')
+      const curIdx = runnable.findIndex((s) => s.id === activeStackId)
+      const nextStack = curIdx >= 0 ? runnable[curIdx + 1] : undefined
       if (nextStack) {
-        advanceShow({ projectId, direction: 'FORWARD' })
+        advanceProgram({ projectId, direction: 'FORWARD' })
         cancelAnimations()
       }
       return
@@ -195,7 +190,7 @@ export function useShowTransport({
     // in lock-step via fireGoServer.
     dispatch(goAction({ stackId: activeStackId, cues: activeStack.cues, loop: activeStack.loop }))
     fireGoServer()
-  }, [onBeforeGo, runner.standbyCueId, show, activeStackId, activeStack, advanceShow, projectId, cancelAnimations, dispatch, fireGoServer])
+  }, [onBeforeGo, runner.standbyCueId, stacks, activeStackId, activeStack, advanceProgram, projectId, cancelAnimations, dispatch, fireGoServer])
 
   const back = useCallback(() => {
     if (activeStackId == null || !activeStack) return

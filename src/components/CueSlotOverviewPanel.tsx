@@ -462,9 +462,9 @@ export function CueSlotOverviewPanel({ isVisible }: CueSlotOverviewPanelProps) {
   const handleViewSlot = useCallback(
     (slot: CueSlot) => {
       if (slot.itemType === 'cue_stack') {
-        navigate(`/projects/${projectId}/cues/stacks/${slot.itemId}`)
+        navigate(`/projects/${projectId}/program/stacks/${slot.itemId}`)
       } else {
-        navigate(`/projects/${projectId}/cues/all`)
+        navigate(`/projects/${projectId}/program`)
       }
     },
     [navigate, projectId],

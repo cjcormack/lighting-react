@@ -1,15 +1,11 @@
 import { memo, useCallback, useMemo } from 'react'
-import { Card } from '@/components/ui/card'
 import {
   useCreateProjectCueMutation,
+  useDeleteProjectCueMutation,
   usePatchProjectCueMutation,
   useProjectCueListQuery,
 } from '@/store/cues'
-import {
-  useRemoveCueFromCueStackMutation,
-} from '@/store/cueStacks'
 import type { CueStack } from '@/api/cueStacksApi'
-import type { ShowDetails } from '@/api/showApi'
 import type { Cue } from '@/api/cuesApi'
 import { StackDetail } from './StackDetail'
 import { ShowOverview } from './ShowOverview'
@@ -20,7 +16,6 @@ interface ProgramViewProps {
   stacks: CueStack[]
   drillStackId: number | null
   onDrillStack: (id: number | null) => void
-  show?: ShowDetails
   activeStackId: number | null
   activeCueId: number | null
   /** Cue id whose card is currently expanded inline. */
@@ -40,7 +35,6 @@ export const ProgramView = memo(function ProgramView({
   stacks,
   drillStackId,
   onDrillStack,
-  show,
   activeStackId,
   activeCueId,
   expandedCueId,
@@ -50,7 +44,7 @@ export const ProgramView = memo(function ProgramView({
   snapshotPending,
 }: ProgramViewProps) {
   const [createCue] = useCreateProjectCueMutation()
-  const [removeCueFromStack] = useRemoveCueFromCueStackMutation()
+  const [deleteCue] = useDeleteProjectCueMutation()
   const [patchCue] = usePatchProjectCueMutation()
   const { data: allCues } = useProjectCueListQuery(projectId)
 
@@ -111,20 +105,11 @@ export const ProgramView = memo(function ProgramView({
 
   const handleMarkerDelete = useCallback(
     (cueId: number) => {
-      if (drillStackId == null) return
-      removeCueFromStack({ projectId, stackId: drillStackId, cueId })
+      // In-stack separators are just MARKER cues — deleting one removes the cue.
+      deleteCue({ projectId, cueId })
     },
-    [drillStackId, projectId, removeCueFromStack],
+    [projectId, deleteCue],
   )
-
-  if (stacks.length === 0) {
-    return (
-      <Card className="m-4 p-8 flex flex-col items-center gap-2 text-muted-foreground">
-        <p>No cue stacks found.</p>
-        <p className="text-sm">Create a cue stack in the FX Cues view first.</p>
-      </Card>
-    )
-  }
 
   if (drillStack) {
     return (
@@ -146,22 +131,13 @@ export const ProgramView = memo(function ProgramView({
     )
   }
 
-  // Show overview — always visible; the show is always present on a project.
-  if (show) {
-    return (
-      <ShowOverview
-        projectId={projectId}
-        show={show}
-        stacks={stacks}
-        activeStackId={activeStackId}
-        onDrillStack={(id) => onDrillStack(id)}
-      />
-    )
-  }
-
+  // Overview — the project's ordered stacks + separators.
   return (
-    <Card className="m-4 p-4 flex items-center justify-center text-muted-foreground">
-      Loading show…
-    </Card>
+    <ShowOverview
+      projectId={projectId}
+      stacks={stacks}
+      activeStackId={activeStackId}
+      onDrillStack={(id) => onDrillStack(id)}
+    />
   )
 })

@@ -8,7 +8,6 @@
 import type { CSSProperties } from 'react'
 import { clamp } from '../utils'
 import type { Rect, Region } from '../../api/promptBooksApi'
-import type { ShowDetails } from '../../api/showApi'
 import type { CueStack } from '../../api/cueStacksApi'
 import { scriptPosition, type FlatCue } from './desync'
 
@@ -247,23 +246,17 @@ export function rangeToRegion(range: Range, pageEls: Map<number, HTMLElement>): 
 }
 
 /**
- * Flatten the show into the authoritative cue order the desync check walks:
- * STACK entries in show order, each contributing its STANDARD cues in stack
- * order. Markers contribute nothing; entries whose stack isn't loaded (or was
- * deleted) are tolerated and skipped.
+ * Flatten the show into the authoritative cue order the desync check walks: the project's
+ * runnable stacks in show order (`sortOrder`), each contributing its STANDARD cues in stack order.
+ * SEPARATOR stacks and in-stack MARKER cues contribute nothing.
  */
-export function flattenCueOrder(
-  show: ShowDetails | undefined,
-  stacks: CueStack[] | undefined,
-): FlatCue[] {
-  if (!show || !stacks) return []
-  const stackById = new Map(stacks.map((s) => [s.id, s]))
+export function flattenCueOrder(stacks: CueStack[] | undefined): FlatCue[] {
+  if (!stacks) return []
   const out: FlatCue[] = []
-  const entries = [...show.entries].sort((a, b) => a.sortOrder - b.sortOrder)
-  for (const entry of entries) {
-    if (entry.entryType !== 'STACK' || entry.cueStackId == null) continue
-    const stack = stackById.get(entry.cueStackId)
-    if (!stack) continue
+  const ordered = [...stacks]
+    .filter((s) => s.type === 'STACK')
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+  for (const stack of ordered) {
     for (const cue of stack.cues) {
       if (cue.cueType !== 'STANDARD') continue
       out.push({
@@ -303,32 +296,29 @@ export function groupCuesByStack(cueOrder: FlatCue[]): CueRailRow[] {
   return out
 }
 
-/** Rail row model that also carries MARKER cues as separators. */
+/** Rail row model that carries both project-level separators and in-stack MARKER cues as separators. */
 export type ShowRailRow =
   | { type: 'header'; stackId: number; stackName: string }
   | { type: 'cue'; cue: FlatCue }
   | { type: 'separator'; id: number; name: string }
 
 /**
- * Build the prompt-book rail's rows straight from the show — like `flattenCueOrder`
- * but keeping MARKER cues as `separator` rows so the rail mirrors the Run view's
- * dividers. Per-stack headers are emitted only when the show spans more than one
- * stack; with a single stack the panel header already names it (no duplicate).
+ * Build the prompt-book rail's rows straight from the project's ordered stacks — like
+ * `flattenCueOrder` but keeping dividers as `separator` rows so the rail mirrors the Run view.
+ * Both project-level SEPARATOR stacks and in-stack MARKER cues become `separator` rows. Per-stack
+ * headers are emitted only when the show spans more than one runnable stack; with a single stack
+ * the panel header already names it (no duplicate).
  */
-export function flattenShowRows(
-  show: ShowDetails | undefined,
-  stacks: CueStack[] | undefined,
-): ShowRailRow[] {
-  if (!show || !stacks) return []
-  const stackById = new Map(stacks.map((s) => [s.id, s]))
-  const entries = [...show.entries]
-    .sort((a, b) => a.sortOrder - b.sortOrder)
-    .filter((e) => e.entryType === 'STACK' && e.cueStackId != null)
-  const distinctStacks = new Set(entries.map((e) => e.cueStackId)).size
+export function flattenShowRows(stacks: CueStack[] | undefined): ShowRailRow[] {
+  if (!stacks) return []
+  const ordered = [...stacks].sort((a, b) => a.sortOrder - b.sortOrder)
+  const distinctStacks = ordered.filter((s) => s.type === 'STACK').length
   const out: ShowRailRow[] = []
-  for (const entry of entries) {
-    const stack = stackById.get(entry.cueStackId!)
-    if (!stack) continue
+  for (const stack of ordered) {
+    if (stack.type === 'SEPARATOR') {
+      out.push({ type: 'separator', id: stack.id, name: stack.label ?? stack.name })
+      continue
+    }
     if (distinctStacks > 1) {
       out.push({ type: 'header', stackId: stack.id, stackName: stack.name })
     }

@@ -10,7 +10,6 @@ import {
   BookOpenText,
   Box,
   Boxes,
-  Clapperboard,
   SlidersHorizontal,
   Theater,
   Play,
@@ -99,15 +98,6 @@ export const navItems: NavItem[] = [
     pathMatch: "/presets",
     group: "program",
   },
-  {
-    id: "cues",
-    label: "FX Cues",
-    icon: Clapperboard,
-    path: (p) => `/projects/${p}/cues`,
-    visibility: "always",
-    pathMatch: "/cues",
-    group: "program",
-  },
 
   // ── Live ────────────────────────────────────────────────────────────
   {
@@ -130,10 +120,13 @@ export const navItems: NavItem[] = [
   },
   {
     id: "program",
+    // Program is the single cue/stack authoring + running surface (it absorbed the FX Cues view),
+    // so it stays visible for any project — authoring and cross-project cue copy don't need the
+    // project to be active.
     label: "Program",
     icon: Theater,
     path: (p) => `/projects/${p}/program`,
-    visibility: "active-only",
+    visibility: "always",
     pathMatch: "/program",
     group: "live",
   },

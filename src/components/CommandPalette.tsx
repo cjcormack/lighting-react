@@ -278,13 +278,13 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
                     New FX Preset
                   </Command.Item>
                   <Command.Item
-                    value="New FX Cue"
-                    keywords={["cue", "effect", "create"]}
-                    onSelect={() => runAction(() => navigate(`/projects/${viewedProject.id}/cues/standalone?action=new`))}
+                    value="New Cue Stack"
+                    keywords={["cue", "stack", "effect", "create", "program"]}
+                    onSelect={() => runAction(() => navigate(`/projects/${viewedProject.id}/program`))}
                     className={itemClassName}
                   >
                     <Clapperboard className="size-4 text-muted-foreground" />
-                    New FX Cue
+                    New Cue Stack
                   </Command.Item>
                   <Command.Item
                     value="New FX"

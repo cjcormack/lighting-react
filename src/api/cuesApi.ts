@@ -118,8 +118,9 @@ export interface Cue {
   adHocEffects: CueAdHocEffect[]
   propertyAssignments: CuePropertyAssignment[]
   triggers: CueTriggerDetail[]
-  cueStackId: number | null
-  cueStackName: string | null
+  // Every cue belongs to a stack — standalone cues no longer exist.
+  cueStackId: number
+  cueStackName: string
   sortOrder: number
   autoAdvance: boolean
   autoAdvanceDelayMs: number | null
@@ -140,7 +141,8 @@ export interface CueInput {
   adHocEffects: CueAdHocEffect[]
   propertyAssignments?: CuePropertyAssignment[]
   triggers?: CueTrigger[]
-  cueStackId?: number | null
+  // Required — every cue belongs to a stack. (PUT/PATCH ignore it server-side; it's used on POST.)
+  cueStackId: number
   sortOrder?: number
   autoAdvance?: boolean
   autoAdvanceDelayMs?: number | null

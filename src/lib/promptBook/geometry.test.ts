@@ -11,7 +11,6 @@ import {
   rectToStyle,
 } from './geometry'
 import type { CueStack, CueStackCueEntry } from '../../api/cueStacksApi'
-import type { ShowDetails, ShowEntryDto } from '../../api/showApi'
 
 describe('rectToStyle', () => {
   it('converts normalized coords to CSS percentages', () => {
@@ -173,47 +172,33 @@ describe('flattenCueOrder', () => {
     }
   }
 
-  function stack(id: number, name: string, cues: CueStackCueEntry[]): CueStack {
-    return { id, name, palette: [], loop: false, cues, activeCueId: null, canEdit: true, canDelete: true }
+  function stack(id: number, name: string, cues: CueStackCueEntry[], sortOrder = 0): CueStack {
+    return { id, name, palette: [], loop: false, sortOrder, type: 'STACK', label: null, cues, activeCueId: null, canEdit: true, canDelete: true }
   }
 
-  function entry(id: number, sortOrder: number, cueStackId: number | null, entryType: 'STACK' | 'MARKER' = 'STACK'): ShowEntryDto {
-    return { id, entryType, sortOrder, label: null, cueStackId, cueStackName: null }
+  function separator(id: number, label: string, sortOrder: number): CueStack {
+    return { id, name: label, palette: [], loop: false, sortOrder, type: 'SEPARATOR', label, cues: [], activeCueId: null, canEdit: true, canDelete: true }
   }
 
-  function show(entries: ShowEntryDto[]): ShowDetails {
-    return { projectId: 1, activeEntryId: null, entries, canEdit: true }
-  }
-
-  const stacks = [
-    stack(10, 'Act One', [cue(1, { cueNumber: '1' }), cue(2, { cueNumber: '2.5' })]),
-    stack(11, 'Act Two', [cue(3)]),
-  ]
-
-  it('flattens STACK entries in show order, skipping markers', () => {
-    const result = flattenCueOrder(
-      show([entry(100, 1, 11), entry(101, 0, 10), entry(102, 2, null, 'MARKER')]),
-      stacks,
-    )
+  it('flattens runnable stacks in show order, skipping separators', () => {
+    const result = flattenCueOrder([
+      stack(11, 'Act Two', [cue(3)], 1),
+      stack(10, 'Act One', [cue(1, { cueNumber: '1' }), cue(2, { cueNumber: '2.5' })], 0),
+      separator(12, 'End', 2),
+    ])
     expect(result.map((c) => c.cueId)).toEqual([1, 2, 3])
     expect(result[0]).toMatchObject({ stackId: 10, stackName: 'Act One', label: 'Q1' })
     expect(result[2]).toMatchObject({ stackId: 11, label: 'cue-3' })
   })
 
   it('excludes marker-type cues within a stack', () => {
-    const withMarker = [stack(10, 'S', [cue(1), cue(2, { cueType: 'MARKER' }), cue(3)])]
-    const result = flattenCueOrder(show([entry(100, 0, 10)]), withMarker)
+    const result = flattenCueOrder([stack(10, 'S', [cue(1), cue(2, { cueType: 'MARKER' }), cue(3)])])
     expect(result.map((c) => c.cueId)).toEqual([1, 3])
   })
 
-  it('tolerates entries whose stack is missing', () => {
-    const result = flattenCueOrder(show([entry(100, 0, 999), entry(101, 1, 10)]), stacks)
-    expect(result.map((c) => c.cueId)).toEqual([1, 2])
-  })
-
   it('returns empty for missing inputs', () => {
-    expect(flattenCueOrder(undefined, stacks)).toEqual([])
-    expect(flattenCueOrder(show([]), undefined)).toEqual([])
+    expect(flattenCueOrder(undefined)).toEqual([])
+    expect(flattenCueOrder([])).toEqual([])
   })
 })
 
@@ -237,40 +222,29 @@ describe('flattenShowRows', () => {
     }
   }
 
-  function stack(id: number, name: string, cues: CueStackCueEntry[]): CueStack {
-    return { id, name, palette: [], loop: false, cues, activeCueId: null, canEdit: true, canDelete: true }
+  function stack(id: number, name: string, cues: CueStackCueEntry[], sortOrder = 0): CueStack {
+    return { id, name, palette: [], loop: false, sortOrder, type: 'STACK', label: null, cues, activeCueId: null, canEdit: true, canDelete: true }
   }
 
-  function entry(
-    id: number,
-    sortOrder: number,
-    cueStackId: number | null,
-    entryType: 'STACK' | 'MARKER' = 'STACK',
-  ): ShowEntryDto {
-    return { id, entryType, sortOrder, label: null, cueStackId, cueStackName: null }
+  function separator(id: number, label: string, sortOrder: number): CueStack {
+    return { id, name: label, palette: [], loop: false, sortOrder, type: 'SEPARATOR', label, cues: [], activeCueId: null, canEdit: true, canDelete: true }
   }
 
-  function show(entries: ShowEntryDto[]): ShowDetails {
-    return { projectId: 1, activeEntryId: null, entries, canEdit: true }
-  }
-
-  it('keeps MARKER cues as separator rows and (single stack) emits no stack header', () => {
-    const stacks = [
+  it('keeps in-stack MARKER cues as separator rows and (single stack) emits no stack header', () => {
+    const rows = flattenShowRows([
       stack(10, 'Act One', [
         cue(1, { cueNumber: '1' }),
         cue(2, { cueType: 'MARKER', name: 'Interval' }),
         cue(3),
       ]),
-    ]
-    const rows = flattenShowRows(show([entry(100, 0, 10)]), stacks)
+    ])
     expect(rows.map((r) => r.type)).toEqual(['cue', 'separator', 'cue'])
     expect(rows[1]).toMatchObject({ type: 'separator', id: 2, name: 'Interval' })
     expect(rows.some((r) => r.type === 'header')).toBe(false)
   })
 
-  it('emits a per-stack header only when the show spans more than one stack', () => {
-    const stacks = [stack(10, 'Act One', [cue(1)]), stack(11, 'Act Two', [cue(2)])]
-    const rows = flattenShowRows(show([entry(100, 0, 10), entry(101, 1, 11)]), stacks)
+  it('emits a per-stack header only when the show spans more than one runnable stack', () => {
+    const rows = flattenShowRows([stack(10, 'Act One', [cue(1)], 0), stack(11, 'Act Two', [cue(2)], 1)])
     expect(rows.map((r) => r.type)).toEqual(['header', 'cue', 'header', 'cue'])
     expect(rows.filter((r) => r.type === 'header').map((r) => (r.type === 'header' ? r.stackName : ''))).toEqual([
       'Act One',
@@ -278,19 +252,20 @@ describe('flattenShowRows', () => {
     ])
   })
 
-  it('orders by show-entry sortOrder and skips MARKER show-entries', () => {
-    const stacks = [stack(10, 'A', [cue(1)]), stack(11, 'B', [cue(2)])]
-    const rows = flattenShowRows(
-      show([entry(100, 1, 11), entry(101, 0, 10), entry(102, 2, null, 'MARKER')]),
-      stacks,
-    )
+  it('orders by stack sortOrder and renders project-level SEPARATOR stacks as separators', () => {
+    const rows = flattenShowRows([
+      stack(11, 'B', [cue(2)], 1),
+      stack(10, 'A', [cue(1)], 0),
+      separator(12, 'Interval', 2),
+    ])
     const cueIds = rows.flatMap((r) => (r.type === 'cue' ? [r.cue.cueId] : []))
     expect(cueIds).toEqual([1, 2])
+    expect(rows.some((r) => r.type === 'separator' && r.name === 'Interval')).toBe(true)
   })
 
   it('returns empty for missing inputs', () => {
-    expect(flattenShowRows(undefined, [])).toEqual([])
-    expect(flattenShowRows(show([]), undefined)).toEqual([])
+    expect(flattenShowRows(undefined)).toEqual([])
+    expect(flattenShowRows([])).toEqual([])
   })
 })
 

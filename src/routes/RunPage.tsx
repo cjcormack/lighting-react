@@ -8,20 +8,17 @@ import { cn } from '@/lib/utils'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import {
   useProjectCueStackListQuery,
+  useProjectProgramStateQuery,
   useAdvanceCueStackMutation,
   useActivateCueStackMutation,
   useDeactivateCueStackMutation,
   useSortCueStackByCueNumberMutation,
   useGoToCueInStackMutation,
+  useActivateProgramMutation,
+  useDeactivateProgramMutation,
+  useAdvanceProgramMutation,
+  useGoToStackMutation,
 } from '../store/cueStacks'
-import {
-  useProjectShowQuery,
-  useActivateShowMutation,
-  useDeactivateShowMutation,
-  useAdvanceShowMutation,
-  useGoToShowEntryMutation,
-} from '../store/show'
-import type { ShowEntryDto } from '../api/showApi'
 import { useFxStateQuery } from '../store/fx'
 import { useProjectCueLocationsQuery, useProjectPromptBookQuery } from '../store/promptBooks'
 import { positionLabelFor } from '../lib/promptBook/geometry'
@@ -94,7 +91,7 @@ export function RunPage() {
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
   const { data: stacks, isLoading: stacksLoading } = useProjectCueStackListQuery(projectIdNum)
   const { data: fxState } = useFxStateQuery()
-  const { data: show } = useProjectShowQuery(projectIdNum)
+  const { data: programState } = useProjectProgramStateQuery(projectIdNum)
   const { data: cueLocations } = useProjectCueLocationsQuery(projectIdNum)
   // The book carries coverPages — the front-matter offset applied to each cue's page label.
   const { data: promptBook } = useProjectPromptBookQuery(projectIdNum)
@@ -108,15 +105,12 @@ export function RunPage() {
     return m
   }, [cueLocations, coverPages])
 
-  const isShowActive = show?.activeEntryId != null
+  const isShowActive = programState?.activeStackId != null
 
-  const [activeEntryId, setActiveEntryId] = useState<number | null>(null)
-
-  const activeEntry: ShowEntryDto | undefined = useMemo(
-    () => show?.entries.find((e) => e.id === activeEntryId),
-    [show, activeEntryId],
-  )
-  const activeStackId = activeEntry?.cueStackId ?? null
+  // The stack currently being browsed in the tab strip. Switching a tab moves the server playhead
+  // (goToStack), so this follows `programState.activeStackId`; it's local so the strip stays
+  // responsive between the click and the refetch.
+  const [activeStackId, setActiveStackId] = useState<number | null>(null)
 
   const [dbo, setDbo] = useState(false)
   const [oooDismissed, setOooDismissed] = useState(false)
@@ -135,23 +129,22 @@ export function RunPage() {
   const [goToCueInStack] = useGoToCueInStackMutation()
   const [sortByCueNumber] = useSortCueStackByCueNumberMutation()
 
-  const [activateShow] = useActivateShowMutation()
-  const [deactivateShow] = useDeactivateShowMutation()
-  const [advanceShow] = useAdvanceShowMutation()
-  const [goToEntry] = useGoToShowEntryMutation()
+  const [activateShow] = useActivateProgramMutation()
+  const [deactivateShow] = useDeactivateProgramMutation()
+  const [advanceShow] = useAdvanceProgramMutation()
+  const [goToStack] = useGoToStackMutation()
 
-  // Bootstrap activeEntryId from server show state on mount / project switch / refetch.
+  // Bootstrap the browsed stack from the server playhead (falling back to the first runnable stack)
+  // on mount / project switch / when the playhead moves or the stack list size changes.
   useEffect(() => {
-    if (!show) {
-      setActiveEntryId(null)
-      return
-    }
-    const next = show.activeEntryId
-      ?? show.entries.find((e) => e.entryType === 'STACK')?.id
-      ?? null
-    setActiveEntryId((prev) => (prev === next ? prev : next))
+    const next =
+      programState?.activeStackId ?? stacks?.find((s) => s.type === 'STACK')?.id ?? null
+    setActiveStackId((prev) => (prev === next ? prev : next))
+    // Keyed on whether the stack list has *loaded* (not its length): follow server-playhead moves
+    // and pick a first stack once data arrives, but never re-run on add/remove/reorder — which
+    // would yank the operator off a manually-browsed tab mid-show.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [show?.projectId, show?.activeEntryId])
+  }, [programState?.projectId, programState?.activeStackId, stacks != null])
 
   const stackMap = useMemo(
     () => new Map(stacks?.map((s) => [s.id, s]) ?? []),
@@ -254,11 +247,12 @@ export function RunPage() {
     onAutoAdvanceComplete: handleAutoAdvanceComplete,
   })
 
-  const nextStackEntry = useMemo(() => {
-    if (runner.standbyCueId != null || !show || activeEntryId == null) return null
-    const curIdx = show.entries.findIndex((e) => e.id === activeEntryId)
-    return show.entries.slice(curIdx + 1).find((e) => e.entryType === 'STACK') ?? null
-  }, [runner.standbyCueId, show, activeEntryId])
+  const nextStack = useMemo(() => {
+    if (runner.standbyCueId != null || activeStackId == null || !stacks) return null
+    const runnable = stacks.filter((s) => s.type === 'STACK')
+    const curIdx = runnable.findIndex((s) => s.id === activeStackId)
+    return curIdx >= 0 ? runnable[curIdx + 1] ?? null : null
+  }, [runner.standbyCueId, stacks, activeStackId])
 
   // True only while a fade is in progress. `runner.activeCueId` is set by
   // go() and cleared by markDone(); the stack's server activeCueId persists
@@ -279,7 +273,7 @@ export function RunPage() {
   const runnerDisplay: RunnerDisplayState = {
     activeCue,
     standbyCue,
-    nextStackEntry,
+    nextStack,
     fadeProgress: isFadingActive ? runner.fadeProgress : null,
     autoProgress: runner.autoProgress,
     activeCueId: effectiveActiveCueId,
@@ -289,13 +283,14 @@ export function RunPage() {
 
   const handleGo = useCallback(() => {
     if (runner.standbyCueId == null) {
-      // Boundary GO: advance to next STACK entry in show
-      if (!show || activeEntryId == null) return
-      const curIdx = show.entries.findIndex((e) => e.id === activeEntryId)
-      const nextStack = show.entries.slice(curIdx + 1).find((e) => e.entryType === 'STACK')
-      if (nextStack) {
+      // Boundary GO: advance to the next runnable stack in show order.
+      if (activeStackId == null || !stacks) return
+      const runnable = stacks.filter((s) => s.type === 'STACK')
+      const curIdx = runnable.findIndex((s) => s.id === activeStackId)
+      const next = curIdx >= 0 ? runnable[curIdx + 1] : undefined
+      if (next) {
         advanceShow({ projectId: projectIdNum, direction: 'FORWARD' })
-        setActiveEntryId(nextStack.id)
+        setActiveStackId(next.id)
         cancelAnimations()
         setOooDismissed(false)
       }
@@ -304,7 +299,7 @@ export function RunPage() {
     if (activeStackId == null || !stack) return
     dispatch(go({ stackId: activeStackId, cues, loop: stack.loop }))
     fireGo()
-  }, [activeStackId, stack, cues, runner.standbyCueId, dispatch, fireGo, show, activeEntryId, advanceShow, projectIdNum, cancelAnimations])
+  }, [activeStackId, stack, cues, runner.standbyCueId, dispatch, fireGo, stacks, advanceShow, projectIdNum, cancelAnimations])
 
   const handleBack = useCallback(() => {
     if (activeStackId == null) return
@@ -347,27 +342,27 @@ export function RunPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [handleGo, handleBack, isShowActive])
 
-  const handleSwitchToEntry = useCallback(
-    (entry: ShowEntryDto) => {
-      if (entry.entryType !== 'STACK' || entry.cueStackId == null) return
-      if (entry.id === activeEntryId) return
+  const handleSwitchToStack = useCallback(
+    (target: CueStack) => {
+      if (target.type !== 'STACK') return
+      if (target.id === activeStackId) return
       manualSwitchRef.current = true
       if (activeStackId != null && stack?.activeCueId != null) {
         deactivateCueStack({ projectId: projectIdNum, stackId: activeStackId })
       }
-      goToEntry({ projectId: projectIdNum, entryId: entry.id })
+      goToStack({ projectId: projectIdNum, stackId: target.id })
         .unwrap()
         .then(() => {
-          deactivateCueStack({ projectId: projectIdNum, stackId: entry.cueStackId! })
+          deactivateCueStack({ projectId: projectIdNum, stackId: target.id })
         })
         .catch(() => {
           manualSwitchRef.current = false
         })
-      setActiveEntryId(entry.id)
+      setActiveStackId(target.id)
       setOooDismissed(false)
       cancelAnimations()
     },
-    [activeEntryId, activeStackId, stack, projectIdNum, deactivateCueStack, goToEntry, cancelAnimations],
+    [activeStackId, stack, projectIdNum, deactivateCueStack, goToStack, cancelAnimations],
   )
 
   const ooo = !oooDismissed && detectOutOfOrder(cues)
@@ -380,14 +375,14 @@ export function RunPage() {
 
   // ── Activation handlers ──
 
-  const stackEntryCount = show?.entries.filter((e) => e.entryType === 'STACK').length ?? 0
-  const canStart = !isShowActive && stackEntryCount > 0
+  const runnableStackCount = stacks?.filter((s) => s.type === 'STACK').length ?? 0
+  const canStart = !isShowActive && runnableStackCount > 0
 
   const handleActivateShow = useCallback(() => {
     activateShow({ projectId: projectIdNum })
       .unwrap()
       .then((result) => {
-        setActiveEntryId(result.activeEntryId)
+        setActiveStackId(result.activeStackId)
       })
       .catch(() => {})
   }, [activateShow, projectIdNum])
@@ -472,18 +467,18 @@ export function RunPage() {
 
       {!stacks || stacks.length === 0 ? (
         <Card className="m-4 p-8 flex flex-col items-center gap-2 text-muted-foreground">
-          <p>No cue stacks found.</p>
-          <p className="text-sm">Create a cue stack in the FX Cues view first.</p>
+          <p>No cue stacks yet.</p>
+          <p className="text-sm">Create one in Program to get started.</p>
         </Card>
       ) : !isShowActive ? (
         // ── Start CTA hero ──
         <div className="flex-1 flex items-center justify-center p-8">
           <div className="flex flex-col items-center gap-4 max-w-md text-center">
             <h2 className="text-2xl font-semibold">Show is not running</h2>
-            {stackEntryCount === 0 ? (
+            {runnableStackCount === 0 ? (
               <>
                 <p className="text-muted-foreground text-sm">
-                  Add at least one stack to the show before starting.
+                  Create at least one cue stack before starting.
                 </p>
                 <Button asChild variant="outline">
                   <Link to={`/projects/${projectIdNum}/program`}>Go to Program</Link>
@@ -516,11 +511,10 @@ export function RunPage() {
         >
           {isNarrowRunner ? (
             <RunMobile
-              show={show!}
-              activeEntryId={activeEntryId}
+              stacks={stacks}
+              activeStackId={activeStackId}
               stack={stack}
-              stackMap={stackMap}
-              multiStack={stackEntryCount > 1}
+              multiStack={runnableStackCount > 1}
               display={runnerDisplay}
               bpm={fxState?.bpm ?? null}
               dbo={dbo}
@@ -528,7 +522,7 @@ export function RunPage() {
               onBack={handleBack}
               onDbo={handleDbo}
               onTap={handleTap}
-              onSwitchToEntry={handleSwitchToEntry}
+              onSwitchToStack={handleSwitchToStack}
               onRequeueCue={handleCueRequeue}
               projectId={projectIdNum}
               fadeRemainMs={fadeRemainMs}
@@ -539,7 +533,7 @@ export function RunPage() {
             <>
               {/* Row 3 — universal show bar */}
               <ShowBar
-                stackName={stackEntryCount > 1 ? undefined : (stack?.name ?? null)}
+                stackName={runnableStackCount > 1 ? undefined : (stack?.name ?? null)}
                 dbo={dbo}
                 onDbo={handleDbo}
                 bpm={fxState?.bpm ?? null}
@@ -549,7 +543,7 @@ export function RunPage() {
                 standbyNumber={standbyCue?.cueNumber ? `Q${standbyCue.cueNumber}` : null}
                 standbyName={
                   standbyCue?.name
-                    ?? (nextStackEntry ? `→ ${nextStackEntry.cueStackName}` : null)
+                    ?? (nextStack ? `→ ${nextStack.name}` : null)
                 }
                 fadeRemainMs={fadeRemainMs}
                 onGo={handleGo}
@@ -558,49 +552,45 @@ export function RunPage() {
               />
 
               {/* Stack tabs — hidden when the show has a single stack (nothing to switch to). */}
-              {stackEntryCount > 1 && (
+              {runnableStackCount > 1 && (
               <div className="flex h-12 shrink-0 items-stretch border-b overflow-x-auto">
-                {show!.entries.map((entry) => {
-                  if (entry.entryType === 'MARKER') {
+                {stacks.map((s) => {
+                  if (s.type === 'SEPARATOR') {
                     return (
                       <div
-                        key={entry.id}
+                        key={s.id}
                         className="flex items-center h-full px-2 gap-1.5 shrink-0 pointer-events-none"
                       >
                         <div className="w-px h-4 bg-border" />
                         <span className="text-xs font-medium uppercase text-muted-foreground whitespace-nowrap">
-                          {entry.label}
+                          {s.label ?? s.name}
                         </span>
                         <div className="w-px h-4 bg-border" />
                       </div>
                     )
                   }
-                  const entryStack = entry.cueStackId != null ? stackMap.get(entry.cueStackId) : undefined
-                  const entryStandardCount =
-                    entryStack?.cues.filter((c) => c.cueType === 'STANDARD').length ?? 0
+                  const standardCount = s.cues.filter((c) => c.cueType === 'STANDARD').length
                   return (
                     <Button
-                      key={entry.id}
+                      key={s.id}
                       variant="ghost"
-                      onClick={() => handleSwitchToEntry(entry)}
+                      onClick={() => handleSwitchToStack(s)}
                       className={cn(
                         'flex items-center gap-2 px-5 h-full rounded-none border-r text-xs font-medium text-muted-foreground relative shrink-0',
                         'hover:text-foreground hover:bg-muted/10',
-                        entry.id === activeEntryId &&
+                        s.id === activeStackId &&
                           'text-foreground bg-muted/20 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary',
                       )}
                     >
-                      {entry.cueStackId === stack?.activeCueId
-                        ? null
-                        : entryStack?.activeCueId != null && (
-                          <span className="size-1.5 rounded-full bg-green-500 shadow-[0_0_6px_currentColor]" />
-                        )}
-                      {entry.cueStackName}
-                      {entryStack?.loop && (
+                      {s.id !== activeStackId && s.activeCueId != null && (
+                        <span className="size-1.5 rounded-full bg-green-500 shadow-[0_0_6px_currentColor]" />
+                      )}
+                      {s.name}
+                      {s.loop && (
                         <RotateCcw className="size-3 text-muted-foreground" />
                       )}
                       <span className="font-mono text-[9.5px] rounded-full border bg-muted/40 px-1.5 text-muted-foreground/80 ml-0.5">
-                        {entryStandardCount}
+                        {standardCount}
                       </span>
                     </Button>
                   )

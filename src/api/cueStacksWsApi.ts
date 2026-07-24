@@ -1,17 +1,22 @@
 import { InternalApiConnection } from './internalApi'
 import { Subscription } from './subscription'
+import type { ProgramStateChangedEvent } from './cueStacksApi'
 import { createWsSubscribable } from './wsSubscriptionFactory'
 
 export interface CueStacksWsApi {
+  /** The stack collection changed (create/rename/delete/reorder/separator/order). */
   subscribe(fn: () => void): Subscription
+  /** The project playhead moved (activate/deactivate/advance/go-to). */
+  subscribeToProgramState(fn: (event: ProgramStateChangedEvent) => void): Subscription
 }
 
-type CueStackInMessage = {
-  type: 'cueStackListChanged'
-}
+type CueStackInMessage =
+  | { type: 'cueStackListChanged' }
+  | { type: 'showChanged'; projectId: number; activeStackId: number | null; activeStackName: string | null }
 
 export function createCueStacksWsApi(conn: InternalApiConnection): CueStacksWsApi {
   const cueStacksChanged = createWsSubscribable<void>()
+  const programStateChanged = createWsSubscribable<ProgramStateChangedEvent>()
 
   conn.subscribe((evType, ev) => {
     if (evType === 'open') {
@@ -21,9 +26,18 @@ export function createCueStacksWsApi(conn: InternalApiConnection): CueStacksWsAp
       if (message == null) return
       if (message.type === 'cueStackListChanged') {
         cueStacksChanged.notify()
+      } else if (message.type === 'showChanged') {
+        programStateChanged.notify({
+          projectId: message.projectId,
+          activeStackId: message.activeStackId,
+          activeStackName: message.activeStackName,
+        })
       }
     }
   })
 
-  return cueStacksChanged.api
+  return {
+    subscribe: cueStacksChanged.api.subscribe,
+    subscribeToProgramState: programStateChanged.api.subscribe,
+  }
 }

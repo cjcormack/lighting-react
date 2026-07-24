@@ -1,9 +1,7 @@
 import { useState, useMemo } from 'react'
-import { ChevronRight, Layers, ListMusic } from 'lucide-react'
+import { ChevronRight, Layers } from 'lucide-react'
 import { useDraggable } from '@dnd-kit/core'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
-import { useProjectCueListQuery } from '../store/cues'
 import { useProjectCueStackListQuery } from '../store/cueStacks'
 import { SlotItemContent, type CueSlotAssignDragData } from './CueSlotOverviewPanel'
 
@@ -12,101 +10,77 @@ interface EditModeAssignPanelProps {
 }
 
 export function EditModeAssignPanel({ projectId }: EditModeAssignPanelProps) {
-  const { data: cues } = useProjectCueListQuery(projectId)
   const { data: stacks } = useProjectCueStackListQuery(projectId)
   const [expandedStackId, setExpandedStackId] = useState<number | null>(null)
 
-  // Standalone cues (not belonging to any stack)
-  const standaloneCues = useMemo(
-    () => (cues ?? []).filter((c) => c.cueStackId == null),
-    [cues],
+  // Only runnable stacks are assignable — separators carry no cues.
+  const runnableStacks = useMemo(
+    () => (stacks ?? []).filter((s) => s.type === 'STACK'),
+    [stacks],
   )
 
   const expandedStack = useMemo(
-    () => (stacks ?? []).find((s) => s.id === expandedStackId),
-    [stacks, expandedStackId],
+    () => runnableStacks.find((s) => s.id === expandedStackId),
+    [runnableStacks, expandedStackId],
+  )
+
+  const expandedCues = useMemo(
+    () => (expandedStack?.cues ?? []).filter((c) => c.cueType === 'STANDARD'),
+    [expandedStack],
   )
 
   return (
-    <div className="border-t pt-2">
-      <Tabs defaultValue="stacks" className="gap-1.5">
-        <TabsList className="w-full">
-          <TabsTrigger value="cues" className="text-xs">
-            <ListMusic className="size-3.5" />
-            FX Cues
-          </TabsTrigger>
-          <TabsTrigger value="stacks" className="text-xs">
-            <Layers className="size-3.5" />
-            Stacks
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="cues">
-          <div className="max-h-48 overflow-y-auto">
-            {standaloneCues.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-3">No standalone FX cues</p>
-            ) : (
-              <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
-                {standaloneCues.map((cue) => (
-                  <DraggableAssignCard
-                    key={cue.id}
-                    id={cue.id}
-                    name={cue.name}
-                    palette={cue.palette}
-                    itemType="cue"
+    <div className="border-t pt-2 space-y-2">
+      <div className="flex items-center gap-1.5 px-0.5 text-xs text-muted-foreground">
+        <Layers className="size-3.5" />
+        Stacks
+      </div>
+      <div className="max-h-48 overflow-y-auto space-y-2">
+        {runnableStacks.length === 0 ? (
+          <p className="text-xs text-muted-foreground text-center py-3">No cue stacks</p>
+        ) : (
+          <>
+            <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
+              {runnableStacks.map((stack) => {
+                const cueCount = stack.cues.filter((c) => c.cueType === 'STANDARD').length
+                return (
+                  <DraggableStackCard
+                    key={stack.id}
+                    stackId={stack.id}
+                    name={stack.name}
+                    palette={stack.palette}
+                    cueCount={cueCount}
+                    isExpanded={expandedStackId === stack.id}
+                    onToggleExpand={() =>
+                      setExpandedStackId(expandedStackId === stack.id ? null : stack.id)
+                    }
                   />
-                ))}
-              </div>
-            )}
-          </div>
-        </TabsContent>
+                )
+              })}
+            </div>
 
-        <TabsContent value="stacks">
-          <div className="max-h-48 overflow-y-auto space-y-2">
-            {(stacks ?? []).length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-3">No FX cue stacks</p>
-            ) : (
-              <>
+            {/* Expanded stack's individual cues */}
+            {expandedStack && expandedCues.length > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-1.5">
+                  {expandedStack.name} cues
+                </p>
                 <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
-                  {(stacks ?? []).map((stack) => (
-                    <DraggableStackCard
-                      key={stack.id}
-                      stackId={stack.id}
-                      name={stack.name}
-                      palette={stack.palette}
-                      cueCount={stack.cues.length}
-                      isExpanded={expandedStackId === stack.id}
-                      onToggleExpand={() =>
-                        setExpandedStackId(expandedStackId === stack.id ? null : stack.id)
-                      }
+                  {expandedCues.map((cue) => (
+                    <DraggableAssignCard
+                      key={cue.id}
+                      id={cue.id}
+                      name={cue.name}
+                      palette={[]}
+                      itemType="cue"
                     />
                   ))}
                 </div>
-
-                {/* Expanded stack's individual cues */}
-                {expandedStack && expandedStack.cues.length > 0 && (
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1.5">
-                      {expandedStack.name} FX cues
-                    </p>
-                    <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
-                      {expandedStack.cues.map((cue) => (
-                        <DraggableAssignCard
-                          key={cue.id}
-                          id={cue.id}
-                          name={cue.name}
-                          palette={[]}
-                          itemType="cue"
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
+              </div>
             )}
-          </div>
-        </TabsContent>
-      </Tabs>
+          </>
+        )}
+      </div>
     </div>
   )
 }

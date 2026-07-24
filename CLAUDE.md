@@ -15,11 +15,11 @@ no PR). Pre-commit equivalent is `npm run type-check` + `npm run build` +
 
 ## Tech Stack
 
-- **React 18** with TypeScript
+- **React 19** with TypeScript
 - **Vite** for bundling and development
-- **Material-UI (MUI) v6** for UI components
+- **Radix UI primitives + Tailwind** for UI components (via `src/components/ui/`)
 - **Redux Toolkit** with RTK Query for state management and API calls
-- **React Router v6** for routing
+- **React Router v7** for routing
 - **WebSockets** for real-time backend communication
 
 ## Project Structure
@@ -91,8 +91,8 @@ DMX fixture definitions - describes what channels a fixture uses and how to cont
 ### Channels
 Raw DMX channel control per universe. Shows all 512 channels with current values.
 
-### FX Cues & Triggers
-Cues bundle palettes, FX preset applications, ad-hoc effects, and **script hooks** into named snapshots.
+### Cues, Stacks & Triggers
+Cues bundle palettes, FX preset applications, ad-hoc effects, and **script hooks** into named snapshots. **Every cue belongs to a cue stack** — there are no standalone cues. A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of cues. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). Cues and stacks are authored and run entirely in the **Program** view (`/projects/:projectId/program`, drilling into a stack at `/program/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed.
 
 **Timed effects**: Preset applications and ad-hoc effects can have optional timing (delayMs, intervalMs, randomWindowMs) to fire after a delay or on a recurring interval. Immediate (no timing) is the default.
 
@@ -128,7 +128,7 @@ REST API is used for CRUD operations on scripts, scenes, fixtures, etc.
 - All navigation items are defined in `src/navigation.ts`
 - When adding a new page/route, add an entry to the `navItems` array in `src/navigation.ts`
 - This automatically registers the page in both the sidebar and the Cmd+K command palette
-- Dynamic items (e.g. universes) are handled by the `useNavItems()` hook
+- Dynamic items (e.g. universes) are handled by the `useUniverseNavItems()` hook (`useNavItems()` just returns the static `navItems`)
 
 ### Sheets vs Dialogs
 

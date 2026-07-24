@@ -1,10 +1,34 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { ArrowRight, GripVertical, RotateCcw, X, Plus, SeparatorHorizontal } from 'lucide-react'
+import {
+  ArrowRight,
+  GripVertical,
+  RotateCcw,
+  X,
+  Plus,
+  SeparatorHorizontal,
+  MoreVertical,
+  Pencil,
+  ArrowDownAZ,
+  Trash2,
+} from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody } from '@/components/ui/sheet'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   DndContext,
   closestCenter,
@@ -22,29 +46,30 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
-  useAddStackToShowMutation,
-  useAddMarkerToShowMutation,
-  useDeleteShowEntryMutation,
-  useReorderShowEntriesMutation,
-  useUpdateShowEntryMutation,
-} from '@/store/show'
-import type { ShowDetails, ShowEntryDto } from '@/api/showApi'
-import type { CueStack } from '@/api/cueStacksApi'
+  useCreateProjectCueStackMutation,
+  useSaveProjectCueStackMutation,
+  useDeleteProjectCueStackMutation,
+  useReorderCueStacksMutation,
+  useSortCueStackByCueNumberMutation,
+} from '@/store/cueStacks'
+import { CueStackForm } from '@/components/cues/CueStackForm'
+import type { CueStack, CueStackInput } from '@/api/cueStacksApi'
 
 // ── Sortable STACK entry row ────────────────────────────────────────────────
 
 interface SortableStackEntryProps {
-  entry: ShowEntryDto
+  stack: CueStack
   index: number
-  stack: CueStack | undefined
   isActive: boolean
   onDrill: (stackId: number) => void
-  onRemove: (entryId: number) => void
+  onEdit: (stack: CueStack) => void
+  onSort: (stackId: number) => void
+  onRemove: (stack: CueStack) => void
 }
 
-function SortableStackEntry({ entry, index, stack, isActive, onDrill, onRemove }: SortableStackEntryProps) {
+function SortableStackEntry({ stack, index, isActive, onDrill, onEdit, onSort, onRemove }: SortableStackEntryProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: entry.id,
+    id: stack.id,
   })
 
   const style = {
@@ -54,7 +79,7 @@ function SortableStackEntry({ entry, index, stack, isActive, onDrill, onRemove }
     opacity: isDragging ? 0.5 : undefined,
   }
 
-  const cueCount = stack?.cues.filter((c) => c.cueType === 'STANDARD').length ?? 0
+  const cueCount = stack.cues.filter((c) => c.cueType === 'STANDARD').length
 
   return (
     <div
@@ -65,7 +90,7 @@ function SortableStackEntry({ entry, index, stack, isActive, onDrill, onRemove }
         'flex items-center w-full gap-3 px-4 py-2.5 bg-muted border rounded border-l-[3px] border-l-transparent transition-colors hover:bg-muted/70 hover:border-muted-foreground/20 text-left cursor-pointer',
         isActive && 'border-l-green-500 bg-green-500/[0.08]',
       )}
-      onClick={() => entry.cueStackId != null && onDrill(entry.cueStackId)}
+      onClick={() => onDrill(stack.id)}
     >
       <div
         {...listeners}
@@ -83,7 +108,7 @@ function SortableStackEntry({ entry, index, stack, isActive, onDrill, onRemove }
           isActive && 'text-green-300 font-semibold',
         )}
       >
-        {entry.cueStackName ?? entry.label ?? 'Unknown'}
+        {stack.name}
       </span>
       {isActive && (
         <Badge
@@ -95,50 +120,66 @@ function SortableStackEntry({ entry, index, stack, isActive, onDrill, onRemove }
         </Badge>
       )}
       <span className="hidden @[560px]:block text-xs text-muted-foreground shrink-0">
-        {cueCount} cues &middot; {stack?.loop ? 'Loop' : 'Sequential'}
+        {cueCount} cues &middot; {stack.loop ? 'Loop' : 'Sequential'}
       </span>
-      {stack?.loop && (
+      {stack.loop && (
         <Badge variant="outline" className="hidden @[560px]:inline-flex text-xs px-1.5 py-0 gap-1">
           <RotateCcw className="size-2.5" />
           Loop
         </Badge>
       )}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="size-5 text-muted-foreground hover:text-destructive shrink-0"
-        onClick={(e) => {
-          e.stopPropagation()
-          onRemove(entry.id)
-        }}
-      >
-        <X className="size-3.5" />
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6 text-muted-foreground shrink-0"
+            aria-label="Stack actions"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <MoreVertical className="size-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+          <DropdownMenuItem onClick={() => onEdit(stack)}>
+            <Pencil className="size-3.5 mr-2" /> Stack settings
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onSort(stack.id)}>
+            <ArrowDownAZ className="size-3.5 mr-2" /> Sort by cue number
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="text-destructive focus:text-destructive"
+            onClick={() => onRemove(stack)}
+          >
+            <Trash2 className="size-3.5 mr-2" /> Delete stack
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <ArrowRight className="size-4 text-muted-foreground shrink-0" />
     </div>
   )
 }
 
-// ── Sortable MARKER entry row ───────────────────────────────────────────────
+// ── Sortable SEPARATOR entry row ────────────────────────────────────────────
 
-interface SortableMarkerEntryProps {
-  entry: ShowEntryDto
+interface SortableSeparatorEntryProps {
+  stack: CueStack
   projectId: number
-  onRemove: (entryId: number) => void
+  onRemove: (stack: CueStack) => void
 }
 
-function SortableMarkerEntry({ entry, projectId, onRemove }: SortableMarkerEntryProps) {
+function SortableSeparatorEntry({ stack, projectId, onRemove }: SortableSeparatorEntryProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: entry.id,
+    id: stack.id,
   })
-  const [updateEntry] = useUpdateShowEntryMutation()
+  const [saveStack] = useSaveProjectCueStackMutation()
 
-  const [localLabel, setLocalLabel] = useState(entry.label ?? '')
+  const [localLabel, setLocalLabel] = useState(stack.label ?? stack.name)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    setLocalLabel(entry.label ?? '')
-  }, [entry.label])
+    setLocalLabel(stack.label ?? stack.name)
+  }, [stack.label, stack.name])
 
   useEffect(() => {
     return () => {
@@ -151,7 +192,15 @@ function SortableMarkerEntry({ entry, projectId, onRemove }: SortableMarkerEntry
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
       if (value.trim()) {
-        updateEntry({ projectId, entryId: entry.id, label: value.trim() })
+        saveStack({
+          projectId,
+          stackId: stack.id,
+          name: value.trim(),
+          palette: [],
+          loop: false,
+          type: 'SEPARATOR',
+          label: value.trim(),
+        })
       }
     }, 400)
   }
@@ -188,7 +237,7 @@ function SortableMarkerEntry({ entry, projectId, onRemove }: SortableMarkerEntry
         variant="ghost"
         size="icon"
         className="size-5 text-muted-foreground hover:text-destructive shrink-0"
-        onClick={() => onRemove(entry.id)}
+        onClick={() => onRemove(stack)}
       >
         <X className="size-3.5" />
       </Button>
@@ -200,64 +249,70 @@ function SortableMarkerEntry({ entry, projectId, onRemove }: SortableMarkerEntry
 
 interface ShowOverviewProps {
   projectId: number
-  show: ShowDetails
   stacks: CueStack[]
   activeStackId: number | null
   onDrillStack: (stackId: number) => void
 }
 
-export function ShowOverview({
-  projectId,
-  show,
-  stacks,
-  activeStackId,
-  onDrillStack,
-}: ShowOverviewProps) {
-  const stackMap = useMemo(() => new Map(stacks.map((s) => [s.id, s])), [stacks])
-  const addedStackIds = useMemo(
-    () => new Set(show.entries.filter((e) => e.entryType === 'STACK' && e.cueStackId != null).map((e) => e.cueStackId!)),
-    [show.entries],
+export function ShowOverview({ projectId, stacks, activeStackId, onDrillStack }: ShowOverviewProps) {
+  const stackRows = stacks.filter((s) => s.type === 'STACK')
+  const totalCues = stackRows.reduce(
+    (n, s) => n + s.cues.filter((c) => c.cueType === 'STANDARD').length,
+    0,
   )
 
-  const stackEntries = show.entries.filter((e) => e.entryType === 'STACK')
-  const totalCues = stackEntries.reduce((n, e) => {
-    const s = e.cueStackId != null ? stackMap.get(e.cueStackId) : null
-    return n + (s?.cues.filter((c) => c.cueType === 'STANDARD').length ?? 0)
-  }, 0)
+  const [createStack, { isLoading: creating }] = useCreateProjectCueStackMutation()
+  const [saveStack, { isLoading: saving }] = useSaveProjectCueStackMutation()
+  const [deleteStack] = useDeleteProjectCueStackMutation()
+  const [reorderStacks] = useReorderCueStacksMutation()
+  const [sortByCueNumber] = useSortCueStackByCueNumberMutation()
 
-  // Mutations
-  const [addStack] = useAddStackToShowMutation()
-  const [addMarker] = useAddMarkerToShowMutation()
-  const [deleteEntry] = useDeleteShowEntryMutation()
-  const [reorderEntries] = useReorderShowEntriesMutation()
+  // Create / edit stack sheet
+  const [formOpen, setFormOpen] = useState(false)
+  const [editingStack, setEditingStack] = useState<CueStack | null>(null)
 
-  // Stack picker sheet
-  const [showStackPicker, setShowStackPicker] = useState(false)
-  const [pickerSearch, setPickerSearch] = useState('')
+  // Delete confirmation
+  const [pendingDelete, setPendingDelete] = useState<CueStack | null>(null)
 
-  const filteredStacks = useMemo(() => {
-    if (!pickerSearch.trim()) return stacks
-    const q = pickerSearch.toLowerCase()
-    return stacks.filter((s) => s.name.toLowerCase().includes(q))
-  }, [stacks, pickerSearch])
+  const handleCreateStack = useCallback(() => {
+    setEditingStack(null)
+    setFormOpen(true)
+  }, [])
 
-  const handleAddStack = useCallback(
-    (stackId: number) => {
-      addStack({ projectId, cueStackId: stackId })
+  const handleEditStack = useCallback((stack: CueStack) => {
+    setEditingStack(stack)
+    setFormOpen(true)
+  }, [])
+
+  const handleSaveStack = useCallback(
+    async (input: CueStackInput) => {
+      if (editingStack) {
+        await saveStack({ projectId, stackId: editingStack.id, ...input }).unwrap()
+      } else {
+        const created = await createStack({ projectId, ...input }).unwrap()
+        onDrillStack(created.id) // jump straight into the new stack
+      }
     },
-    [addStack, projectId],
+    [editingStack, projectId, saveStack, createStack, onDrillStack],
   )
 
-  const handleAddMarker = useCallback(() => {
-    addMarker({ projectId, label: 'New Separator' })
-  }, [addMarker, projectId])
+  const handleAddSeparator = useCallback(() => {
+    createStack({ projectId, name: 'New Separator', palette: [], loop: false, type: 'SEPARATOR', label: 'New Separator' })
+  }, [createStack, projectId])
 
-  const handleRemoveEntry = useCallback(
-    (entryId: number) => {
-      deleteEntry({ projectId, entryId })
-    },
-    [deleteEntry, projectId],
-  )
+  const handleRemove = useCallback((stack: CueStack) => {
+    if (stack.type === 'SEPARATOR') {
+      // Separators carry no cues — delete without a confirmation prompt.
+      deleteStack({ projectId, stackId: stack.id })
+    } else {
+      setPendingDelete(stack)
+    }
+  }, [deleteStack, projectId])
+
+  const confirmDelete = useCallback(() => {
+    if (pendingDelete) deleteStack({ projectId, stackId: pendingDelete.id })
+    setPendingDelete(null)
+  }, [pendingDelete, deleteStack, projectId])
 
   // dnd-kit
   const sensors = useSensors(
@@ -270,136 +325,108 @@ export function ShowOverview({
       const { active, over } = event
       if (!over || active.id === over.id) return
 
-      const oldIndex = show.entries.findIndex((e) => e.id === active.id)
-      const newIndex = show.entries.findIndex((e) => e.id === over.id)
+      const oldIndex = stacks.findIndex((s) => s.id === active.id)
+      const newIndex = stacks.findIndex((s) => s.id === over.id)
       if (oldIndex === -1 || newIndex === -1) return
 
-      const reordered = arrayMove(show.entries, oldIndex, newIndex)
-      reorderEntries({
-        projectId,
-        entryIds: reordered.map((e) => e.id),
-      })
+      const reordered = arrayMove(stacks, oldIndex, newIndex)
+      reorderStacks({ projectId, stackIds: reordered.map((s) => s.id) })
     },
-    [show, projectId, reorderEntries],
+    [stacks, projectId, reorderStacks],
+  )
+
+  const pendingDeleteCueCount = useMemo(
+    () => pendingDelete?.cues.filter((c) => c.cueType === 'STANDARD').length ?? 0,
+    [pendingDelete],
   )
 
   return (
     <div className="@container flex-1 flex flex-col overflow-hidden">
-      {/* Top bar — control labels + secondary row data drop as the content area narrows
-          (container-query, sidebar-aware). */}
       <div className="flex items-center h-12 px-4 border-b gap-4 shrink-0">
         <span className="text-lg font-semibold">Show</span>
         <span className="hidden @[420px]:inline text-sm text-muted-foreground">
-          {stackEntries.length} stacks &middot; {totalCues} cues
+          {stackRows.length} stacks &middot; {totalCues} cues
         </span>
         <div className="flex-1" />
-        <Button variant="outline" size="sm" onClick={handleAddMarker} aria-label="Add separator">
+        <Button variant="outline" size="sm" onClick={handleAddSeparator} aria-label="Add separator">
           <SeparatorHorizontal className="size-3.5" />
           <span className="ml-1.5 hidden @[600px]:inline">Add Separator</span>
         </Button>
-        <Button variant="outline" size="sm" onClick={() => setShowStackPicker(true)} aria-label="Add stack">
+        <Button size="sm" onClick={handleCreateStack} aria-label="Create stack">
           <Plus className="size-3.5" />
-          <span className="ml-1.5 hidden @[600px]:inline">Add Stack</span>
+          <span className="ml-1.5 hidden @[600px]:inline">Create Stack</span>
         </Button>
       </div>
 
-      {/* Entry list — scrolls within the recessed Row 4 surface set on the root above. */}
       <div className="flex-1 overflow-y-auto p-4 space-y-1.5">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext
-            items={show.entries.map((e) => e.id)}
-            strategy={verticalListSortingStrategy}
-          >
-            {show.entries.map((entry, idx) => {
-              if (entry.entryType === 'MARKER') {
+          <SortableContext items={stacks.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+            {stacks.map((stack, idx) => {
+              if (stack.type === 'SEPARATOR') {
                 return (
-                  <SortableMarkerEntry
-                    key={entry.id}
-                    entry={entry}
+                  <SortableSeparatorEntry
+                    key={stack.id}
+                    stack={stack}
                     projectId={projectId}
-                    onRemove={handleRemoveEntry}
+                    onRemove={handleRemove}
                   />
                 )
               }
-
-              const stack = entry.cueStackId != null ? stackMap.get(entry.cueStackId) : undefined
-
               return (
                 <SortableStackEntry
-                  key={entry.id}
-                  entry={entry}
-                  index={idx}
+                  key={stack.id}
                   stack={stack}
-                  isActive={activeStackId !== null && entry.cueStackId === activeStackId}
+                  index={idx}
+                  isActive={activeStackId !== null && stack.id === activeStackId}
                   onDrill={onDrillStack}
-                  onRemove={handleRemoveEntry}
+                  onEdit={handleEditStack}
+                  onSort={(stackId) => sortByCueNumber({ projectId, stackId })}
+                  onRemove={handleRemove}
                 />
               )
             })}
           </SortableContext>
         </DndContext>
 
-        {show.entries.length === 0 && (
+        {stacks.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
-            <p className="text-sm">No stacks in this show yet.</p>
-            <Button variant="outline" size="sm" onClick={() => setShowStackPicker(true)}>
+            <p className="text-sm">No cue stacks yet.</p>
+            <Button variant="outline" size="sm" onClick={handleCreateStack}>
               <Plus className="size-3.5 mr-1.5" />
-              Add a Stack
+              Create your first stack
             </Button>
           </div>
         )}
       </div>
 
-      {/* Stack picker sheet */}
-      <Sheet open={showStackPicker} onOpenChange={(open) => {
-        setShowStackPicker(open)
-        if (!open) setPickerSearch('')
-      }}>
-        <SheetContent className="flex flex-col sm:max-w-[380px]">
-          <SheetHeader>
-            <SheetTitle>Add Stack to Show</SheetTitle>
-          </SheetHeader>
-          <div className="px-4 shrink-0">
-            <Input
-              placeholder="Search stacks..."
-              value={pickerSearch}
-              onChange={(e) => setPickerSearch(e.target.value)}
-              autoFocus
-            />
-          </div>
-          <SheetBody className="space-y-0 p-0">
-            {filteredStacks.map((s) => {
-              const cueCount = s.cues.filter((c) => c.cueType === 'STANDARD').length
-              const added = addedStackIds.has(s.id)
-              return (
-                <div
-                  key={s.id}
-                  className="flex items-center px-4 py-2.5 gap-3 border-b border-border/30 hover:bg-muted/20 transition-colors"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-foreground truncate">
-                      {s.name}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {cueCount} cues &middot; {s.loop ? 'Loop' : 'Sequential'}
-                    </div>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant={added ? 'outline' : 'default'}
-                    onClick={() => {
-                      if (!added) handleAddStack(s.id)
-                    }}
-                    disabled={added}
-                  >
-                    {added ? 'Added' : '+ Add'}
-                  </Button>
-                </div>
-              )
-            })}
-          </SheetBody>
-        </SheetContent>
-      </Sheet>
+      <CueStackForm
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        stack={editingStack}
+        onSave={handleSaveStack}
+        isSaving={creating || saving}
+      />
+
+      <Dialog open={pendingDelete != null} onOpenChange={(open) => !open && setPendingDelete(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete stack?</DialogTitle>
+          </DialogHeader>
+          <DialogDescription>
+            {pendingDeleteCueCount > 0
+              ? `This permanently deletes "${pendingDelete?.name}" and its ${pendingDeleteCueCount} cue${pendingDeleteCueCount === 1 ? '' : 's'}.`
+              : `This permanently deletes the empty stack "${pendingDelete?.name}".`}
+          </DialogDescription>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingDelete(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -5,13 +5,12 @@ import { cn } from '@/lib/utils'
 import { StackPickerSheet } from '../StackPickerSheet'
 import { MobileCueListSheet } from '../MobileCueListSheet'
 import { RunMobileCueCard, type MobileExpansion } from './RunMobileCueCard'
-import type { ShowDetails, ShowEntryDto } from '@/api/showApi'
 import type { CueStack, CueStackCueEntry } from '@/api/cueStacksApi'
 
 export interface RunnerDisplayState {
   activeCue: CueStackCueEntry | null
   standbyCue: CueStackCueEntry | null
-  nextStackEntry: ShowEntryDto | null
+  nextStack: CueStack | null
   /** 0..1 while the active cue is fading in, null otherwise. */
   fadeProgress: number | null
   autoProgress: number | null
@@ -21,10 +20,9 @@ export interface RunnerDisplayState {
 }
 
 interface RunMobileProps {
-  show: ShowDetails
-  activeEntryId: number | null
+  stacks: CueStack[]
+  activeStackId: number | null
   stack: CueStack | undefined
-  stackMap: Map<number, CueStack>
   /** When false (single-stack show), the stack name is a plain label — no picker. */
   multiStack: boolean
   display: RunnerDisplayState
@@ -34,7 +32,7 @@ interface RunMobileProps {
   onBack: () => void
   onDbo: () => void
   onTap: () => void
-  onSwitchToEntry: (entry: ShowEntryDto) => void
+  onSwitchToStack: (stack: CueStack) => void
   onRequeueCue: (cueId: number) => void
   projectId: number
   /** ms remaining for the active cue's fade-in. null when not fading. */
@@ -51,10 +49,9 @@ interface RunMobileProps {
  * re-queueing, and a fixed BACK + GO transport.
  */
 export function RunMobile({
-  show,
-  activeEntryId,
+  stacks,
+  activeStackId,
   stack,
-  stackMap,
   multiStack,
   display,
   bpm,
@@ -63,7 +60,7 @@ export function RunMobile({
   onBack,
   onDbo,
   onTap,
-  onSwitchToEntry,
+  onSwitchToStack,
   onRequeueCue,
   projectId,
   fadeRemainMs,
@@ -78,7 +75,7 @@ export function RunMobile({
     mode: 'stage',
   })
 
-  const { activeCue, standbyCue, nextStackEntry, fadeProgress } = display
+  const { activeCue, standbyCue, nextStack, fadeProgress } = display
 
   const playable = useMemo(
     () => cues.filter((c) => c.cueType === 'STANDARD'),
@@ -96,8 +93,8 @@ export function RunMobile({
     [onRequeueCue],
   )
 
-  const goLabel = standbyCue || nextStackEntry ? 'GO' : 'END'
-  const goDisabled = !standbyCue && !nextStackEntry
+  const goLabel = standbyCue || nextStack ? 'GO' : 'END'
+  const goDisabled = !standbyCue && !nextStack
 
   return (
     <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
@@ -191,9 +188,9 @@ export function RunMobile({
           location={standbyLocation}
         />
 
-        {!standbyCue && nextStackEntry && (
+        {!standbyCue && nextStack && (
           <div className="rounded-lg border border-blue-900/60 bg-blue-950/20 px-3 py-2 text-sm text-blue-300 italic">
-            End of stack — next stack: {nextStackEntry.cueStackName}
+            End of stack — next stack: {nextStack.name}
           </div>
         )}
       </div>
@@ -225,10 +222,9 @@ export function RunMobile({
         <StackPickerSheet
           open={stackPickerOpen}
           onOpenChange={setStackPickerOpen}
-          entries={show.entries}
-          activeEntryId={activeEntryId}
-          stackMap={stackMap}
-          onSwitchToEntry={onSwitchToEntry}
+          stacks={stacks}
+          activeStackId={activeStackId}
+          onSwitchToStack={onSwitchToStack}
         />
       )}
       <MobileCueListSheet

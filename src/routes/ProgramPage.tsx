@@ -18,10 +18,10 @@ import {
   useSnapshotCueFromLiveMutation,
 } from '../store/cues'
 import {
-  useProjectShowQuery,
-  useActivateShowMutation,
-  useDeactivateShowMutation,
-} from '../store/show'
+  useProjectProgramStateQuery,
+  useActivateProgramMutation,
+  useDeactivateProgramMutation,
+} from '../store/cueStacks'
 import type { Cue } from '../api/cuesApi'
 import { buildCueInput } from '../lib/cueUtils'
 import { useFxStateQuery, tapTempo } from '../store/fx'
@@ -51,72 +51,101 @@ export function ProgramRedirect() {
   return null
 }
 
+/**
+ * Back-compat for the removed FX Cues view. `/cues`, `/cues/all`, `/cues/standalone` →
+ * `/program`; `/cues/stacks/:stackId` → `/program/stacks/:stackId`.
+ */
+export function CuesLegacyRedirect() {
+  const { projectId, stackId } = useParams()
+  const target = stackId
+    ? `/projects/${projectId}/program/stacks/${stackId}`
+    : `/projects/${projectId}/program`
+  return <Navigate to={target} replace />
+}
+
 export function ProgramPage() {
-  const { projectId } = useParams()
+  const { projectId, stackId } = useParams()
   const projectIdNum = Number(projectId)
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
-  const { data: stacks, isLoading: stacksLoading } = useProjectCueStackListQuery(projectIdNum)
-  const { data: show } = useProjectShowQuery(projectIdNum)
+  const { data: stacks, isLoading: stacksLoading, isFetching: stacksFetching } =
+    useProjectCueStackListQuery(projectIdNum)
+  const { data: programState } = useProjectProgramStateQuery(projectIdNum)
 
-  const isShowActive = show?.activeEntryId != null
-
-  const activeEntry = useMemo(
-    () => show?.entries.find((e) => e.id === show.activeEntryId),
-    [show],
-  )
-  const activeStackId = activeEntry?.cueStackId ?? null
+  const isShowActive = programState?.activeStackId != null
+  const activeStackId = programState?.activeStackId ?? null
   const activeStack = useMemo(
     () => (activeStackId != null ? stacks?.find((s) => s.id === activeStackId) : undefined),
     [stacks, activeStackId],
   )
 
+  // ── URL-derived navigation state ──
+  // The drilled stack lives in the path (`/program/stacks/:stackId`); the inline-expanded cue is a
+  // transient `?cue=` modifier. This mirrors how the (removed) FX Cues view derived its view from
+  // the URL, and makes both deep-linkable / refresh-stable.
+  const drillStackId = stackId ? Number(stackId) : null
+  const drillStack = useMemo(
+    () => (drillStackId != null ? stacks?.find((s) => s.id === drillStackId) : null),
+    [stacks, drillStackId],
+  )
+  const cueParam = searchParams.get('cue')
+  const expandedCueId = cueParam ? Number(cueParam) : null
+
   // Row 3 (show bar) — functional transport in the Program view (no keyboard shortcuts). Shown at
   // every width (it collapses responsively) whenever the show is running.
   const { data: fxState } = useFxStateQuery()
-  const transport = useShowTransport({ projectId: projectIdNum, show, stacks })
+  const transport = useShowTransport({ projectId: projectIdNum, activeStackId, stacks })
   const [dbo, setDbo] = useState(false)
   const barActiveCue = transport.activeStack?.cues.find((c) => c.id === transport.activeCueId) ?? null
   const barStandbyCue =
     transport.activeStack?.cues.find((c) => c.id === transport.standbyCueId) ?? null
 
-  const [drillStackId, setDrillStackId] = useState<number | null>(null)
-  const drillStack = useMemo(
-    () => (drillStackId != null ? stacks?.find((s) => s.id === drillStackId) : null),
-    [stacks, drillStackId],
-  )
-
-  /** Inline-expanded cue card. One at a time — opening another collapses any
-   *  existing one (and ends its `cueEdit.*` session inside `CueCardEditor`). */
-  const [expandedCueId, setExpandedCueId] = useState<number | null>(null)
-
   const [createCue] = useCreateProjectCueMutation()
   const [snapshotCueFromLive, { isLoading: snapshotPending }] = useSnapshotCueFromLiveMutation()
-  const [activateShow] = useActivateShowMutation()
-  const [deactivateShow] = useDeactivateShowMutation()
+  const [activateShow] = useActivateProgramMutation()
+  const [deactivateShow] = useDeactivateProgramMutation()
 
   const [snapshotConfirmOpen, setSnapshotConfirmOpen] = useState(false)
   const [snapshotError, setSnapshotError] = useState<string | null>(null)
   const [snapshotCueId, setSnapshotCueId] = useState<number | null>(null)
 
-  const handleDrillStack = useCallback((id: number | null) => {
-    setDrillStackId(id)
-    if (id == null) setExpandedCueId(null)
-  }, [])
+  // Set/clear the `?cue=` modifier without touching the stack path (replace: no history spam).
+  const setExpandedCueId = useCallback(
+    (cueId: number | null) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          if (cueId == null) next.delete('cue')
+          else next.set('cue', String(cueId))
+          return next
+        },
+        { replace: true },
+      )
+    },
+    [setSearchParams],
+  )
+
+  const handleDrillStack = useCallback(
+    (id: number | null) => {
+      if (id == null) navigate(`/projects/${projectIdNum}/program`)
+      else navigate(`/projects/${projectIdNum}/program/stacks/${id}`)
+    },
+    [navigate, projectIdNum],
+  )
 
   const handleBreadcrumbCurrentPageClick = useCallback(() => {
-    setDrillStackId(null)
-    setExpandedCueId(null)
-  }, [])
+    navigate(`/projects/${projectIdNum}/program`)
+  }, [navigate, projectIdNum])
 
   const initialDrillDoneRef = useRef(false)
 
   // Start/Stop the show in place — the header flips to the running state and the
   // operator stays in Program (the view switcher is one click to Run).
-  const stackEntryCount = show?.entries.filter((e) => e.entryType === 'STACK').length ?? 0
-  const canStart = !isShowActive && stackEntryCount > 0
+  const runnableStackCount = stacks?.filter((s) => s.type === 'STACK').length ?? 0
+  const canStart = !isShowActive && runnableStackCount > 0
 
   const handleActivateShow = useCallback(() => {
     activateShow({ projectId: projectIdNum })
@@ -180,39 +209,50 @@ export function ProgramPage() {
     }
   }, [snapshotCueId, projectIdNum, snapshotCueFromLive])
 
-  // ── Auto-drill / deep-link ──
-  // - If the URL has ?stack=&cue= (typically from Run's "Edit Cue" button),
-  //   drill into that stack and auto-expand the cue.
-  // - Otherwise, when the show is running, drill into the active stack on
-  //   first mount so the operator lands where the action is.
+  // ── Deep-link normalizer + auto-drill ──
+  // - Legacy `/program?stack=X&cue=Y` links (from Run / Prompt Book "Edit Cue") are rewritten to
+  //   the new path scheme `/program/stacks/X?cue=Y`.
+  // - Otherwise, when the show is running, drill into the active stack on first mount so the
+  //   operator lands where the action is.
   useEffect(() => {
     if (initialDrillDoneRef.current) return
     if (!stacks) return
 
-    const stackParam = searchParams.get('stack')
-    const cueParam = searchParams.get('cue')
-    if (stackParam) {
-      const stackId = Number(stackParam)
-      if (Number.isFinite(stackId) && stacks.some((s) => s.id === stackId)) {
-        setDrillStackId(stackId)
-        if (cueParam) {
-          const cueId = Number(cueParam)
-          if (Number.isFinite(cueId)) {
-            setExpandedCueId(cueId)
-          }
-        }
-      }
-      // Strip the params so a refresh doesn't re-open the card.
-      setSearchParams({}, { replace: true })
+    const legacyStack = searchParams.get('stack')
+    if (legacyStack && drillStackId == null) {
       initialDrillDoneRef.current = true
+      const sid = Number(legacyStack)
+      if (Number.isFinite(sid) && stacks.some((s) => s.id === sid)) {
+        const cue = searchParams.get('cue')
+        navigate(
+          `/projects/${projectIdNum}/program/stacks/${sid}${cue ? `?cue=${cue}` : ''}`,
+          { replace: true },
+        )
+      } else {
+        navigate(`/projects/${projectIdNum}/program`, { replace: true })
+      }
       return
     }
 
-    if (isShowActive && activeStackId != null) {
-      setDrillStackId(activeStackId)
+    if (drillStackId == null && isShowActive && activeStackId != null) {
       initialDrillDoneRef.current = true
+      navigate(`/projects/${projectIdNum}/program/stacks/${activeStackId}`, { replace: true })
     }
-  }, [stacks, isShowActive, activeStackId, searchParams, setSearchParams])
+  }, [stacks, isShowActive, activeStackId, drillStackId, searchParams, navigate, projectIdNum])
+
+  // Redirect away from a stale/unknown drilled stack (e.g. after deletion). Wait until the list has
+  // settled — during the refetch that follows creating a stack, `stacks` briefly lacks the new
+  // stack, and redirecting then would bounce the operator straight back out of it.
+  useEffect(() => {
+    if (
+      drillStackId != null &&
+      stacks &&
+      !stacksFetching &&
+      !stacks.some((s) => s.id === drillStackId)
+    ) {
+      navigate(`/projects/${projectIdNum}/program`, { replace: true })
+    }
+  }, [drillStackId, stacks, stacksFetching, navigate, projectIdNum])
 
   // Loading / redirect guards
   if (!currentLoading && currentProject && projectIdNum !== currentProject.id) {
@@ -267,20 +307,14 @@ export function ProgramPage() {
         />
       )}
 
-      {!stacks || stacks.length === 0 ? (
-        <Card className="m-4 p-8 flex flex-col items-center gap-2 text-muted-foreground">
-          <p>No cue stacks found.</p>
-          <p className="text-sm">Create a cue stack in the FX Cues view first.</p>
-        </Card>
-      ) : (
+      {(
         <div className="flex-1 flex min-h-0">
           <div className="flex-1 min-w-0 flex flex-col min-h-0">
             <ProgramView
               projectId={projectIdNum}
-              stacks={stacks}
+              stacks={stacks ?? []}
               drillStackId={drillStackId}
               onDrillStack={handleDrillStack}
-              show={show}
               activeStackId={activeStackId}
               // Server-tracked activeCueId reflects what's on stage, not the
               // transient fade cursor — so the marker stays stable during fades.

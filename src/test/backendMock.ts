@@ -57,12 +57,52 @@ export function installBootStatusFetch(getStatus: () => BootStatus) {
   return fetchMock
 }
 
+// A fetch mock that routes requests to canned JSON by URL substring, resolving
+// on a 1ms timer and honouring the abort signal (see installBootStatusFetch for
+// why). `routes` maps a URL substring → the JSON body to return; unmatched URLs
+// get `{}`. Returns the vi.fn so tests can assert on `.mock.calls`.
+export function installRecordingFetch(routes: Record<string, unknown> = {}) {
+  const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = input instanceof Request ? input.url : String(input)
+    const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined)
+    const match = Object.keys(routes).find((k) => url.includes(k))
+    const body = match ? routes[match] : {}
+    return new Promise<Response>((resolve, reject) => {
+      const onAbort = () => {
+        clearTimeout(timer)
+        reject(new DOMException("Aborted", "AbortError"))
+      }
+      const timer = setTimeout(() => {
+        signal?.removeEventListener("abort", onAbort)
+        resolve(
+          new Response(JSON.stringify(body), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+      }, 1)
+      if (signal) {
+        if (signal.aborted) onAbort()
+        else signal.addEventListener("abort", onAbort)
+      }
+    })
+  })
+  vi.stubGlobal("fetch", fetchMock)
+  return fetchMock
+}
+
 // lightingApi opens a real WebSocket at import time, which jsdom lacks. These
 // two exports replace it and capture the bootStatus WS-bridge callback that
 // store/bootStatus.ts subscribes at import, so a test can fire a synthetic
 // notification. Used from a `vi.mock("@/api/lightingApi", ...)` factory; vitest
 // isolates modules per test file, so `bootStatusWs` is a fresh holder per file.
 export const bootStatusWs: { callback: null | (() => void) } = { callback: null }
+
+// Program-state WS bridge callback captured from store/cueStacks.ts, so a test
+// can fire a synthetic `showChanged` notification.
+export const programStateWs: { callback: null | ((e: unknown) => void) } = { callback: null }
+
+const noopSub = () => ({ unsubscribe: () => {} })
 
 export function lightingApiMock() {
   return {
@@ -73,6 +113,20 @@ export function lightingApiMock() {
           return {
             unsubscribe: () => {
               bootStatusWs.callback = null
+            },
+          }
+        },
+      },
+      // Slices imported by a test self-register their WS subscriptions at module
+      // load; stub the ones the cue/stack stores touch so importing them is safe.
+      cues: { subscribe: noopSub },
+      cueStacks: {
+        subscribe: noopSub,
+        subscribeToProgramState: (fn: (e: unknown) => void) => {
+          programStateWs.callback = fn
+          return {
+            unsubscribe: () => {
+              programStateWs.callback = null
             },
           }
         },
