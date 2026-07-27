@@ -6,11 +6,13 @@ import {
   flattenShowRows,
   mergeRectsByLine,
   moveRegionVertically,
+  orderedCueIdsForInsert,
   positionLabel,
   positionLabelFor,
   rectToStyle,
 } from './geometry'
 import type { CueStack, CueStackCueEntry } from '../../api/cueStacksApi'
+import type { CueAnchorDto, Region } from '../../api/promptBooksApi'
 
 describe('rectToStyle', () => {
   it('converts normalized coords to CSS percentages', () => {
@@ -331,5 +333,69 @@ describe('positionLabel', () => {
 
   it('returns empty for an empty region', () => {
     expect(positionLabel([], 2)).toBe('')
+  })
+})
+
+describe('orderedCueIdsForInsert', () => {
+  function cue(id: number): CueStackCueEntry {
+    return {
+      id,
+      name: `cue-${id}`,
+      sortOrder: 0,
+      paletteSize: 0,
+      presetCount: 0,
+      adHocEffectCount: 0,
+      autoAdvance: false,
+      autoAdvanceDelayMs: null,
+      fadeDurationMs: null,
+      fadeCurve: 'LINEAR',
+      cueNumber: null,
+      notes: null,
+      cueType: 'STANDARD',
+    }
+  }
+  function stack(cues: CueStackCueEntry[]): CueStack {
+    return { id: 1, name: 'S', palette: [], loop: false, sortOrder: 0, type: 'STACK', label: null, cues, activeCueId: null, canEdit: true, canDelete: true }
+  }
+  function regionAt(page: number, y: number): Region {
+    return [{ page, x: 0.1, y, w: 0.5, h: 0.03 }]
+  }
+  /** Build an anchor map from `[cueId, page, y]` tuples. */
+  function anchors(entries: Array<[number, number, number]>): Map<number, CueAnchorDto> {
+    return new Map(entries.map(([cueId, page, y]) => [cueId, { cueId, region: regionAt(page, y), label: null }]))
+  }
+
+  it('inserts between two anchored cues by reading position', () => {
+    const s = stack([cue(1), cue(2)])
+    const byCue = anchors([[1, 0, 0.2], [2, 0, 0.8]])
+    expect(orderedCueIdsForInsert(s, byCue, regionAt(0, 0.5), 99)).toEqual([1, 99, 2])
+  })
+
+  it('inserts at the front when the selection precedes every anchor', () => {
+    const s = stack([cue(1), cue(2)])
+    const byCue = anchors([[1, 1, 0.2], [2, 1, 0.8]])
+    expect(orderedCueIdsForInsert(s, byCue, regionAt(0, 0.9), 99)).toEqual([99, 1, 2])
+  })
+
+  it('appends when the selection follows every anchor (later page)', () => {
+    const s = stack([cue(1), cue(2)])
+    const byCue = anchors([[1, 0, 0.2], [2, 0, 0.8]])
+    expect(orderedCueIdsForInsert(s, byCue, regionAt(3, 0.1), 99)).toEqual([1, 2, 99])
+  })
+
+  it('appends to a wholly unanchored stack (no positions to compare)', () => {
+    const s = stack([cue(1), cue(2)])
+    expect(orderedCueIdsForInsert(s, new Map(), regionAt(0, 0.5), 99)).toEqual([1, 2, 99])
+  })
+
+  it('ignores unanchored cues when placing (keeps their slot)', () => {
+    // cue 2 is unanchored; the selection sits after cue 1 and before cue 3.
+    const s = stack([cue(1), cue(2), cue(3)])
+    const byCue = anchors([[1, 0, 0.2], [3, 0, 0.8]])
+    expect(orderedCueIdsForInsert(s, byCue, regionAt(0, 0.5), 99)).toEqual([1, 99, 2, 3])
+  })
+
+  it('places the only cue of an empty stack first', () => {
+    expect(orderedCueIdsForInsert(stack([]), new Map(), regionAt(0, 0.5), 99)).toEqual([99])
   })
 })

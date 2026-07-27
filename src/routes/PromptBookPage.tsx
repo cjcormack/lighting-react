@@ -22,7 +22,12 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import { useProjectProgramStateQuery, useActivateProgramMutation, useDeactivateProgramMutation } from '../store/cueStacks'
-import { useProjectCueStackListQuery } from '../store/cueStacks'
+import {
+  useProjectCueStackListQuery,
+  useReorderCueStackCuesMutation,
+  useCreateProjectCueStackMutation,
+} from '../store/cueStacks'
+import { useCreateProjectCueMutation } from '../store/cues'
 import type { CueStackCueEntry } from '../api/cueStacksApi'
 import { useFxStateQuery, tapTempo } from '../store/fx'
 import { useNarrowContainer } from '../hooks/useNarrowContainer'
@@ -40,10 +45,10 @@ import {
 import { scriptDocUrl, type AnnotationDto, type AnnotationKind, type NoteTone, type Region } from '../api/promptBooksApi'
 import { cn } from '@/lib/utils'
 import { formatError } from '../lib/formatError'
-import { computeWarnings, type DesyncWarning, type FlatCue } from '../lib/promptBook/desync'
-import { flattenCueOrder, flattenShowRows } from '../lib/promptBook/geometry'
+import { computeWarnings, regionsOverlap, type DesyncWarning, type FlatCue } from '../lib/promptBook/desync'
+import { flattenCueOrder, flattenShowRows, orderedCueIdsForInsert } from '../lib/promptBook/geometry'
 import { ScriptViewer, type ScriptViewerHandle } from '../components/promptbook/ScriptViewer'
-import { CueAnchorPickerSheet } from '../components/promptbook/CueAnchorPickerSheet'
+import { CueAnchorPickerSheet, type NewCueStackChoice } from '../components/promptbook/CueAnchorPickerSheet'
 import { ShowHeader } from '../components/ShowHeader'
 import { ShowBar } from '../components/ShowBar'
 import { PromptBookToolbar } from '../components/promptbook/PromptBookToolbar'
@@ -103,6 +108,9 @@ export function PromptBookViewerPage() {
   const [deleteAnnotation] = useDeleteAnnotationMutation()
   const [uploadScriptDoc, { isLoading: reuploading }] = useUploadScriptDocMutation()
   const [setPromptBook, { isLoading: settingBook }] = useSetPromptBookMutation()
+  const [createCue] = useCreateProjectCueMutation()
+  const [reorderCues] = useReorderCueStackCuesMutation()
+  const [createStack] = useCreateProjectCueStackMutation()
 
   // ── Runtime view state — NEVER persisted. Opens locked, always. ──
   const [locked, setLocked] = useState(true)
@@ -277,6 +285,25 @@ export function PromptBookViewerPage() {
     [book],
   )
 
+  // Names in play, so the create form can suggest a non-colliding "New Cue N".
+  const existingCueNames = useMemo(() => new Set(cueOrder.map((c) => c.name)), [cueOrder])
+
+  // Default target stack for a cue created from a selection: the live stack (if runnable),
+  // else the sole runnable stack, else the first in show order. null → no stack to add to.
+  const defaultStackId = useMemo(() => {
+    const runnable = (stacks ?? []).filter((s) => s.type === 'STACK')
+    if (runnable.length === 0) return null
+    if (activeStackId != null && runnable.some((s) => s.id === activeStackId)) return activeStackId
+    return [...runnable].sort((a, b) => a.sortOrder - b.sortOrder)[0]?.id ?? null
+  }, [stacks, activeStackId])
+
+  // When the picker opens on a selection that lands on an existing anchor, surface that
+  // cue (preselect + edit affordance) so "edit this cue" is one tap.
+  const overlapCueId = useMemo(() => {
+    if (!anchorPicker) return null
+    return (book?.anchors ?? []).find((a) => regionsOverlap(a.region, anchorPicker.region))?.cueId ?? null
+  }, [anchorPicker, book])
+
   // Full stack entries by cue id — each expanded rail card renders the shared Run
   // card, which needs the entry's cueNumber/notes/auto (FlatCue carries only a label).
   const cueEntryByCue = useMemo(() => {
@@ -433,6 +460,68 @@ export function PromptBookViewerPage() {
       noteEdit()
     },
     [cueLabelByCue, anchorByCue, upsertAnchor, projectIdNum, noteEdit],
+  )
+
+  // Create a brand-new cue from the current selection: resolve the target stack (creating
+  // one inline when asked), make the cue, anchor it to the region, then slot it into an
+  // existing stack in reading order. Reused create-stack/create-cue/anchor/reorder mutations
+  // — no new backend surface. The sheet stays open on failure to retry.
+  const handleCreateCueFromSelection = useCallback(
+    async ({ name, cueNumber, stack }: { name: string; cueNumber: string | null; stack: NewCueStackChoice }) => {
+      if (!anchorPicker) return
+      const region = anchorPicker.region
+      try {
+        // A brand-new stack has no other cues, so there's nothing to reorder against.
+        let stackId: number
+        if (stack.kind === 'new') {
+          const created = await createStack({
+            projectId: projectIdNum,
+            name: stack.name,
+            palette: [],
+            loop: false,
+            type: 'STACK',
+          }).unwrap()
+          stackId = created.id
+        } else {
+          stackId = stack.id
+        }
+        const newCue = await createCue({
+          projectId: projectIdNum,
+          name,
+          cueNumber,
+          palette: [],
+          updateGlobalPalette: false,
+          presetApplications: [],
+          adHocEffects: [],
+          triggers: [],
+          fadeDurationMs: 3000,
+          fadeCurve: 'LINEAR',
+          cueStackId: stackId,
+        }).unwrap()
+        await upsertAnchor({
+          projectId: projectIdNum,
+          cueId: newCue.id,
+          region,
+          label: cueNumber ? `Q${cueNumber}` : name,
+        }).unwrap()
+        // Reading-order placement only matters when joining an existing stack that has cues;
+        // reorder only when it differs from the natural append the create already performed.
+        if (stack.kind === 'existing') {
+          const existing = (stacks ?? []).find((s) => s.id === stackId)
+          if (existing) {
+            const cueIds = orderedCueIdsForInsert(existing, anchorByCue, region, newCue.id)
+            const appended = [...existing.cues.map((c) => c.id), newCue.id]
+            const isAppend = cueIds.length === appended.length && cueIds.every((id, i) => id === appended[i])
+            if (!isAppend) await reorderCues({ projectId: projectIdNum, stackId, cueIds }).unwrap()
+          }
+        }
+        setAnchorPicker(null)
+        noteEdit()
+      } catch {
+        // Leave the sheet open so the operator can retry.
+      }
+    },
+    [anchorPicker, createStack, createCue, upsertAnchor, reorderCues, projectIdNum, stacks, anchorByCue, noteEdit],
   )
 
   const handleCueClick = useCallback(
@@ -944,10 +1033,15 @@ export function PromptBookViewerPage() {
         open={anchorPicker != null}
         cueOrder={cueOrder}
         anchorByCue={anchorByCue}
-        preselectCueId={placingCueId}
+        stacks={stacks ?? []}
+        defaultStackId={defaultStackId}
+        existingCueNames={existingCueNames}
+        preselectCueId={placingCueId ?? overlapCueId}
         onPick={(cueId) => {
           if (anchorPicker) handleAnchorCue(cueId, anchorPicker.region)
         }}
+        onCreateCue={handleCreateCueFromSelection}
+        onEditCue={handleEditCue}
         onClose={() => setAnchorPicker(null)}
       />
     </div>

@@ -7,7 +7,7 @@
 
 import type { CSSProperties } from 'react'
 import { clamp } from '../utils'
-import type { Rect, Region } from '../../api/promptBooksApi'
+import type { Rect, Region, CueAnchorDto } from '../../api/promptBooksApi'
 import type { CueStack } from '../../api/cueStacksApi'
 import { scriptPosition, type FlatCue } from './desync'
 
@@ -271,6 +271,44 @@ export function flattenCueOrder(stacks: CueStack[] | undefined): FlatCue[] {
     }
   }
   return out
+}
+
+/**
+ * Compute the stack's cue-id order after inserting a new cue at the reading position
+ * of `region` — the ordering to POST to `reorderCueStackCues` when a cue is created
+ * from a prompt-book selection. `stack.cues` is the CURRENT list (before the new cue
+ * lands in cache); the new cue is spliced in immediately after the last anchored cue
+ * whose reading position precedes-or-equals the selection.
+ *
+ * When there are no anchored cues to compare against, the new cue is appended — the
+ * natural result of anchoring a stack top-to-bottom. When the stack has anchors but
+ * none precede the selection, it goes to the front.
+ *
+ * Placement is advisory: unanchored neighbours have no reading position and keep their
+ * slot, and any residual disorder is surfaced by the existing desync warnings — this
+ * doesn't attempt a total re-sort of the stack.
+ */
+export function orderedCueIdsForInsert(
+  stack: CueStack,
+  anchorByCue: Map<number, CueAnchorDto>,
+  region: Region,
+  newCueId: number,
+): number[] {
+  const sel = scriptPosition(region)
+  const ids = stack.cues.map((c) => c.id)
+  const anchored = stack.cues
+    .map((c, i) => ({ i, anchor: anchorByCue.get(c.id) }))
+    .filter((e): e is { i: number; anchor: CueAnchorDto } => e.anchor != null)
+  // Nothing to order against → append (natural when anchoring a stack top-to-bottom).
+  if (anchored.length === 0) return [...ids, newCueId]
+  let insertIndex = 0
+  for (const { i, anchor } of anchored) {
+    const pos = scriptPosition(anchor.region)
+    if (pos.page < sel.page || (pos.page === sel.page && pos.y <= sel.y)) {
+      insertIndex = i + 1
+    }
+  }
+  return [...ids.slice(0, insertIndex), newCueId, ...ids.slice(insertIndex)]
 }
 
 /** A flattened cue list interleaved with per-stack header rows. */
