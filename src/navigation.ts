@@ -105,7 +105,7 @@ export const navItems: NavItem[] = [
     label: "Stage",
     icon: Boxes,
     path: (p) => `/projects/${p}/stage`,
-    visibility: "always",
+    visibility: "active-only",
     pathMatch: "/stage",
     group: "live",
   },
@@ -120,13 +120,12 @@ export const navItems: NavItem[] = [
   },
   {
     id: "program",
-    // Program is the single cue/stack authoring + running surface (it absorbed the FX Cues view),
-    // so it stays visible for any project — authoring and cross-project cue copy don't need the
-    // project to be active.
+    // Program is the single cue/stack authoring + running surface (it absorbed the FX Cues view).
+    // Scoped to the active project — running cues from Program needs the project live.
     label: "Program",
     icon: Theater,
     path: (p) => `/projects/${p}/program`,
-    visibility: "always",
+    visibility: "active-only",
     pathMatch: "/program",
     group: "live",
   },
