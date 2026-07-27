@@ -22,6 +22,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { XCircle } from 'lucide-react'
 import { useProjectListQuery } from '@/store/projects'
 import { useCopyCueMutation } from '@/store/cues'
+import { formatError } from '@/lib/formatError'
 
 interface CopyCueDialogProps {
   open: boolean
@@ -77,12 +78,9 @@ export function CopyCueDialog({
 
   const isValid = targetProjectId !== ''
 
-  const errorMessage =
-    error && 'status' in error && error.status === 409
-      ? 'An FX cue with this name already exists in the target project'
-      : error
-        ? 'Failed to copy FX cue'
-        : undefined
+  // Show whatever the server actually said. The old hardcoded 409 branch assumed cue names were
+  // unique per project — they no longer are, so a name collision isn't an error at all.
+  const errorMessage = error ? formatError(error) : undefined
 
   return (
     <Sheet open={open} onOpenChange={(open) => !open && handleClose()}>

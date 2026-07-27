@@ -33,10 +33,16 @@ export default function CreateProjectDialog({
   }
 
   const handleCreate = async () => {
-    await createProject({
-      name,
-      description: description || undefined,
-    }).unwrap()
+    // Reported by errorToastMiddleware; keep the sheet open (and the typed name) if the create
+    // didn't land.
+    try {
+      await createProject({
+        name,
+        description: description || undefined,
+      }).unwrap()
+    } catch {
+      return
+    }
     handleClose()
   }
 

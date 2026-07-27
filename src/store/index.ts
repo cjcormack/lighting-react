@@ -2,6 +2,7 @@ import { configureStore } from '@reduxjs/toolkit'
 import {restApi} from "./restApi";
 import { setupListeners } from "@reduxjs/toolkit/query"
 import { runnerSlice } from './runnerSlice'
+import { errorToastMiddleware } from './errorToastMiddleware'
 
 export const store = configureStore({
   reducer: {
@@ -19,7 +20,9 @@ export const store = configureStore({
         // Ignore RTK Query internal paths - large state with many cache entries
         ignoredPaths: ['restApi.queries', 'restApi.mutations', 'restApi.subscriptions'],
       },
-    }).concat(restApi.middleware)
+      // Runs after restApi.middleware so it sees the rejected endpoint actions RTK Query
+      // dispatches. Any mutation failure not claimed by its call site becomes a toast.
+    }).concat(restApi.middleware, errorToastMiddleware)
   }
 })
 

@@ -1,0 +1,108 @@
+import { isRejectedWithValue } from '@reduxjs/toolkit'
+import type { Middleware } from '@reduxjs/toolkit'
+import { toast } from 'sonner'
+import { formatError } from '../lib/formatError'
+
+/**
+ * Endpoints whose call sites already report their own failures. Everything *not* listed here
+ * toasts automatically — silence is opt-in and has to be justified with a comment, so a new
+ * mutation can never fail invisibly just because nobody remembered to handle it.
+ *
+ * A per-call opt-out flag isn't viable: mutations build their request body by rest-spreading the
+ * arg (`query: ({ projectId, ...body }) => ({ body })`), so an extra flag would be sent to the
+ * server. Hence a deny-list keyed on endpoint name.
+ *
+ * `errorToastMiddleware.test.ts` asserts every name here actually exists on `restApi`, so a
+ * renamed or deleted endpoint can't silently leave a hole.
+ */
+export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
+  // Inline <Alert variant="destructive"> rendered from the mutation's own `error` state
+  'copyCue', // src/components/cues/CopyCueDialog.tsx
+  'copyPreset', // src/components/presets/CopyPresetDialog.tsx
+  'copyScript', // src/CopyScriptDialog.tsx
+  'cloneProject', // src/CloneProjectDialog.tsx
+  'importProject', // src/ImportProjectDialog.tsx
+  'exportProject', // src/ExportProjectDialog.tsx
+  'deleteProject', // src/routes/Projects.tsx
+  'snapshotCueFromLive', // src/routes/ProgramPage.tsx — shown in the confirm dialog
+
+  // Call site raises its own toast.error()
+  'updateProject', // src/routes/ProjectSettings.tsx
+  'updateInstall', // src/routes/InstallSettings.tsx
+  'createStageRegion', // src/components/stage/EditStageRegionForm.tsx
+  'updateStageRegion',
+  'deleteStageRegion',
+  'createRigging', // src/components/rigging/EditRiggingForm.tsx
+  'updateRigging',
+  'deleteRigging',
+  // NB: the script endpoints are deliberately *not* listed. `createProjectScript` has two call
+  // sites — ScriptForm and CueTriggerEditor's inline-script step — and only one of them reported
+  // anything, so deny-listing it made the other silent again. Both now rely on this middleware.
+
+  // Cloud sync — src/routes/CloudSync.tsx and src/components/cloudSync/*
+  'updateCloudSyncConfig',
+  'cloudSyncReconnect',
+  'cloudSyncRun',
+  'cloudSyncDisconnect',
+  'cloudSyncSnapshot',
+  'cloudSyncImport',
+  'cloudSyncResolve',
+  'cloudSyncApply',
+  'cloudSyncAbort',
+  'setCloudSyncCredentials',
+  'clearCloudSyncCredentials',
+  'createGithubRepo',
+  'startGithubDeviceFlow',
+  'pollGithubDeviceFlow',
+  'disconnectOAuthGithub',
+])
+
+/**
+ * Swallows a rejected `.unwrap()` promise.
+ *
+ * [errorToastMiddleware] fires on the Redux action, which is independent of the promise
+ * `.unwrap()` returns — so it reports the failure but does *not* stop the rejection becoming an
+ * unhandled promise rejection. Attach this wherever a mutation is fired and nothing further
+ * depends on its result: `void save(...).unwrap().catch(ignoreReportedError)`.
+ *
+ * Do not use it where subsequent code must be skipped on failure — use try/catch and return.
+ */
+export function ignoreReportedError(): void {}
+
+/** Shape of the `meta` RTK Query attaches to a rejected endpoint action. */
+interface RejectedMeta {
+  arg?: { type?: string; endpointName?: string }
+  condition?: boolean
+}
+
+/**
+ * Surfaces failed RTK Query **mutations** as toasts.
+ *
+ * Without this a rejected mutation is completely invisible — no toast, no console line, no state
+ * change — so a failing button just appears to do nothing. Uses RTK's own `isRejectedWithValue`
+ * pattern rather than a listener middleware; there's no effect or cancellation logic to warrant
+ * the heavier API.
+ *
+ * Queries are deliberately excluded: they retry and refetch on window focus, so a flaky
+ * connection would produce a stream of duplicate toasts for something the app recovers from
+ * on its own. Mutations are user-initiated and one-shot — if one fails, the user needs to know.
+ */
+export const errorToastMiddleware: Middleware = () => (next) => (action) => {
+  if (isRejectedWithValue(action)) {
+    const meta = action.meta as RejectedMeta | undefined
+    const endpointName = meta?.arg?.endpointName
+
+    // `condition` marks a request the client skipped or aborted (e.g. an unmounted component),
+    // not something that actually failed.
+    const isReportableMutation =
+      meta?.arg?.type === 'mutation' && !meta.condition && endpointName !== undefined
+
+    if (isReportableMutation && !SILENT_ENDPOINTS.has(endpointName)) {
+      // A stable per-endpoint id makes sonner *replace* rather than stack, so a burst of failing
+      // keystroke-driven saves (patchCue fires per edit) collapses into one toast, not ten.
+      toast.error(formatError(action.payload), { id: `mutation-error:${endpointName}` })
+    }
+  }
+
+  return next(action)
+}

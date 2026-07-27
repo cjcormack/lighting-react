@@ -13,6 +13,7 @@ import { PatchPlacementFields, type PatchPlacementValue } from './PatchPlacement
 import { BeamAngleField } from './BeamAngleField'
 import { GelPickerField } from './GelPickerField'
 import type { FixturePatch } from '@/api/patchApi'
+import { ignoreReportedError } from '@/store/errorToastMiddleware'
 
 export interface EditPatchFormHandle {
   setPlacement: (next: PatchPlacementValue) => void
@@ -102,21 +103,35 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
     if (beamAngleDeg !== patch.beamAngleDeg) body.beamAngleDeg = beamAngleDeg
     if (gelCode !== patch.gelCode) body.gelCode = gelCode
     if (kindOverride !== patch.kindOverride) body.kindOverride = kindOverride
-    await updatePatch({ projectId, patchId: patch.id, ...body }).unwrap()
+    // Errors are reported by errorToastMiddleware; don't close over a save that failed, or the
+    // operator loses their edits with no indication the form still holds unsaved changes.
+    try {
+      await updatePatch({ projectId, patchId: patch.id, ...body }).unwrap()
+    } catch {
+      return
+    }
     onClose()
   }
 
   const handleAddToGroup = async (name: string) => {
     if (!name) return
-    await updatePatch({ projectId, patchId: patch.id, addToGroup: name }).unwrap()
+    await updatePatch({ projectId, patchId: patch.id, addToGroup: name })
+      .unwrap()
+      .catch(ignoreReportedError)
   }
 
   const handleRemoveFromGroup = async (groupId: number) => {
-    await updatePatch({ projectId, patchId: patch.id, removeFromGroupId: groupId }).unwrap()
+    await updatePatch({ projectId, patchId: patch.id, removeFromGroupId: groupId })
+      .unwrap()
+      .catch(ignoreReportedError)
   }
 
   const handleDelete = async () => {
-    await deletePatch({ projectId, patchId: patch.id }).unwrap()
+    try {
+      await deletePatch({ projectId, patchId: patch.id }).unwrap()
+    } catch {
+      return
+    }
     onClose()
   }
 

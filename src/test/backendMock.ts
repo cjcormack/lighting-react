@@ -105,8 +105,7 @@ export const programStateWs: { callback: null | ((e: unknown) => void) } = { cal
 const noopSub = () => ({ unsubscribe: () => {} })
 
 export function lightingApiMock() {
-  return {
-    lightingApi: {
+  const namespaces: Record<string, unknown> = {
       bootStatus: {
         subscribe: (fn: () => void) => {
           bootStatusWs.callback = fn
@@ -117,9 +116,6 @@ export function lightingApiMock() {
           }
         },
       },
-      // Slices imported by a test self-register their WS subscriptions at module
-      // load; stub the ones the cue/stack stores touch so importing them is safe.
-      cues: { subscribe: noopSub },
       cueStacks: {
         subscribe: noopSub,
         subscribeToProgramState: (fn: (e: unknown) => void) => {
@@ -131,6 +127,19 @@ export function lightingApiMock() {
           }
         },
       },
-    },
+  }
+
+  // Store slices self-register a WS subscription at module load, so merely importing one has to
+  // be safe. Rather than enumerate every namespace and every `subscribeToX` variant, fall back to
+  // a no-op subscriber for anything the test didn't ask to observe — a new slice then can't break
+  // unrelated tests just by existing.
+  const anySubscriber = new Proxy({} as Record<string, unknown>, {
+    get: () => noopSub,
+  })
+
+  return {
+    lightingApi: new Proxy(namespaces, {
+      get: (target, prop: string) => target[prop] ?? anySubscriber,
+    }),
   }
 }

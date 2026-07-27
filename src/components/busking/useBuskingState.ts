@@ -9,6 +9,7 @@ import type { EffectLibraryEntry, FixtureDirectEffect } from '@/store/fixtureFx'
 import type { GroupActiveEffect, BlendMode, DistributionStrategy, EffectType, ElementMode } from '@/api/groupsApi'
 import type { FxPreset } from '@/api/fxPresetsApi'
 import type { TogglePresetTarget } from '@/api/fxPresetsApi'
+import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import {
   type BuskingTarget,
   type PropertyButton,
@@ -250,7 +251,7 @@ export function useBuskingState() {
             }
           }
         }
-        await Promise.all(removals)
+        await Promise.all(removals).catch(ignoreReportedError)
       } else {
         // Add or update on each target
         const paramKey = button.kind === 'setting' ? 'level' : 'value'
@@ -309,7 +310,7 @@ export function useBuskingState() {
             }
           }
         }
-        await Promise.all(actions)
+        await Promise.all(actions).catch(ignoreReportedError)
       }
     },
     [defaultBeatDivision, addFixtureFx, removeFx, applyGroupFx, removeGroupFx],
@@ -419,7 +420,7 @@ export function useBuskingState() {
             }
           }
         }
-        await Promise.all(removals)
+        await Promise.all(removals).catch(ignoreReportedError)
       } else {
         // Add to targets that don't have it
         const defaults: Record<string, string> = {}
@@ -473,7 +474,7 @@ export function useBuskingState() {
             }
           }
         }
-        await Promise.all(additions)
+        await Promise.all(additions).catch(ignoreReportedError)
       }
     },
     [defaultBeatDivision, resolveProperty, addFixtureFx, removeFx, applyGroupFx, removeGroupFx],
@@ -530,7 +531,7 @@ export function useBuskingState() {
           )
         }
       }
-      await Promise.all(additions)
+      await Promise.all(additions).catch(ignoreReportedError)
     },
     [resolveProperty, addFixtureFx, applyGroupFx],
   )
@@ -549,7 +550,9 @@ export function useBuskingState() {
         projectId,
         presetId: preset.id,
         targets,
-      }).unwrap()
+      })
+        .unwrap()
+        .catch(ignoreReportedError)
     },
     [currentProject?.id, togglePresetMutation],
   )

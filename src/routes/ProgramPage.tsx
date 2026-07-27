@@ -24,6 +24,7 @@ import {
 } from '../store/cueStacks'
 import type { Cue } from '../api/cuesApi'
 import { buildCueInput } from '../lib/cueUtils'
+import { formatError } from '../lib/formatError'
 import { useFxStateQuery, tapTempo } from '../store/fx'
 import { useShowTransport } from '../hooks/useShowTransport'
 import { ShowHeader } from '../components/ShowHeader'
@@ -151,12 +152,16 @@ export function ProgramPage() {
     activateShow({ projectId: projectIdNum })
       .unwrap()
       .catch(() => {
-        // Silently fail
+        // Reported by errorToastMiddleware; caught here only to stop the unhandled rejection.
       })
   }, [activateShow, projectIdNum])
 
   const handleStopShow = useCallback(async () => {
-    await deactivateShow({ projectId: projectIdNum }).unwrap()
+    await deactivateShow({ projectId: projectIdNum })
+      .unwrap()
+      .catch(() => {
+        // Reported by errorToastMiddleware; caught here only to stop the unhandled rejection.
+      })
   }, [deactivateShow, projectIdNum])
 
   // Auto-expand the active/standby cue when first drilling into a stack
@@ -181,7 +186,7 @@ export function ProgramPage() {
         const result = await createCue({ projectId: projectIdNum, ...input }).unwrap()
         setExpandedCueId(result.id)
       } catch {
-        // Silently fail
+        // Reported by errorToastMiddleware; caught here only to stop the unhandled rejection.
       }
     },
     [drillStackId, projectIdNum, createCue],
@@ -203,9 +208,9 @@ export function ProgramPage() {
       setSnapshotConfirmOpen(false)
       setSnapshotCueId(null)
     } catch (err) {
-      setSnapshotError(
-        err instanceof Error ? err.message : 'Failed to capture live state',
-      )
+      // formatError, not `err.message` — RTK Query rejects with a plain `{status, data}` object,
+      // never an Error, so an `instanceof Error` test would always drop the server's message.
+      setSnapshotError(formatError(err))
     }
   }, [snapshotCueId, projectIdNum, snapshotCueFromLive])
 

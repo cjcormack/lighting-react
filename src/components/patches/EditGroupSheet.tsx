@@ -35,6 +35,7 @@ import {
   useUpdatePatchMutation,
 } from '@/store/patches'
 import type { FixturePatch, PatchGroupMember } from '@/api/patchApi'
+import { ignoreReportedError } from '@/store/errorToastMiddleware'
 
 interface EditGroupSheetProps {
   open: boolean
@@ -97,12 +98,22 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
     const body: Record<string, unknown> = {}
     if (nameChanged) body.name = name.trim()
     if (orderChanged) body.memberOrder = currentOrder
-    await updateGroup({ projectId, groupId, ...body }).unwrap()
+    // Reported by errorToastMiddleware; keep the sheet open on a save that didn't land, or the
+    // operator loses their edits with the toast as the only trace.
+    try {
+      await updateGroup({ projectId, groupId, ...body }).unwrap()
+    } catch {
+      return
+    }
     onOpenChange(false)
   }
 
   const handleDelete = async () => {
-    await deleteGroup({ projectId, groupId }).unwrap()
+    try {
+      await deleteGroup({ projectId, groupId }).unwrap()
+    } catch {
+      return
+    }
     onOpenChange(false)
   }
 
@@ -148,7 +159,9 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
                     key={member.patchId}
                     member={member}
                     onRemove={groupId ? async () => {
-                      await updatePatch({ projectId, patchId: member.patchId, removeFromGroupId: groupId }).unwrap()
+                      await updatePatch({ projectId, patchId: member.patchId, removeFromGroupId: groupId })
+                        .unwrap()
+                        .catch(ignoreReportedError)
                     } : undefined}
                   />
                 ))}
@@ -168,11 +181,15 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
             patches={patches}
             projectId={projectId}
             onAdd={async (patchId) => {
-              await updatePatch({ projectId, patchId, addToGroup: groupDetail?.name ?? initialName }).unwrap()
+              await updatePatch({ projectId, patchId, addToGroup: groupDetail?.name ?? initialName })
+                .unwrap()
+                .catch(ignoreReportedError)
             }}
             onRemove={async (patchId) => {
               if (!groupId) return
-              await updatePatch({ projectId, patchId, removeFromGroupId: groupId }).unwrap()
+              await updatePatch({ projectId, patchId, removeFromGroupId: groupId })
+                .unwrap()
+                .catch(ignoreReportedError)
             }}
           />
 

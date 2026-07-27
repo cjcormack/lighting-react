@@ -23,6 +23,7 @@ import {
 } from '../api/fxPresetsApi'
 import type { FxPreset, FxPresetInput, FixtureTypeHierarchy } from '../api/fxPresetsApi'
 import { Breadcrumbs } from '../components/Breadcrumbs'
+import { ignoreReportedError } from '../store/errorToastMiddleware'
 
 const CAPABILITY_CHIPS = [
   { value: 'dimmer', label: 'Dimmer', icon: Sun },
@@ -205,7 +206,9 @@ export function ProjectFxPresets() {
       palette: preset.palette,
       effects: preset.effects,
       propertyAssignments: preset.propertyAssignments,
-    }).unwrap()
+    })
+      .unwrap()
+      .catch(ignoreReportedError)
   }
 
   const handleSave = async (input: FxPresetInput) => {
@@ -225,10 +228,15 @@ export function ProjectFxPresets() {
 
   const handleDelete = async () => {
     if (!editingPreset) return
-    await deletePreset({
-      projectId: projectIdNum,
-      presetId: editingPreset.id,
-    }).unwrap()
+    // Leave the editor open if the delete failed, so the toast isn't the only trace of it.
+    try {
+      await deletePreset({
+        projectId: projectIdNum,
+        presetId: editingPreset.id,
+      }).unwrap()
+    } catch {
+      return
+    }
     setFormOpen(false)
   }
 

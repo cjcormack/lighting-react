@@ -270,7 +270,13 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
 
   const handleDeletePreset = useCallback(async () => {
     if (!currentProject || !editingPreset) return
-    await deletePreset({ projectId: currentProject.id, presetId: editingPreset.id }).unwrap()
+    // PresetEditor invokes onDelete fire-and-forget, so nothing downstream catches this.
+    // Reported by errorToastMiddleware; leave the editor open on a delete that didn't land.
+    try {
+      await deletePreset({ projectId: currentProject.id, presetId: editingPreset.id }).unwrap()
+    } catch {
+      return
+    }
     setPresetFormOpen(false)
     setEditingPreset(null)
   }, [currentProject, editingPreset, deletePreset])

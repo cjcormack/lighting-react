@@ -54,7 +54,13 @@ export function CueStackForm({
       palette,
       loop,
     }
-    await onSave(input)
+    // Keep the sheet open if the save failed — errorToastMiddleware says what went wrong, and
+    // closing would discard the operator's edits behind the toast.
+    try {
+      await onSave(input)
+    } catch {
+      return
+    }
     onOpenChange(false)
   }
 

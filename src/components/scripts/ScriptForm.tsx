@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react'
-import { toast } from 'sonner'
 import { Wrench, Play, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -150,10 +149,9 @@ export function ScriptForm({
         scriptType: editType,
       }).unwrap()
       onOpenChange(false)
-    } catch (err) {
-      toast.error('Failed to create script', {
-        description: err instanceof Error ? err.message : undefined,
-      })
+    } catch {
+      // Reported by errorToastMiddleware (which shows the server's message verbatim); caught
+      // here so the sheet stays open on the failed create and the rejection doesn't escape.
     }
   }
 
@@ -168,10 +166,9 @@ export function ScriptForm({
         scriptType,
       }).unwrap()
       setHasEdited(false)
-    } catch (err) {
-      toast.error('Failed to save script', {
-        description: err instanceof Error ? err.message : undefined,
-      })
+    } catch {
+      // Reported by errorToastMiddleware; keep `hasEdited` set so the unsaved changes are
+      // still flagged as dirty.
     }
   }
 
@@ -185,7 +182,12 @@ export function ScriptForm({
   const handleDelete = async () => {
     if (!script) return
     if (confirm(`Delete "${script.name}"?`)) {
-      await runDelete({ projectId, scriptId: script.id }).unwrap()
+      try {
+        await runDelete({ projectId, scriptId: script.id }).unwrap()
+      } catch {
+        // Reported by errorToastMiddleware; leave the sheet open on a delete that didn't land.
+        return
+      }
       onOpenChange(false)
     }
   }

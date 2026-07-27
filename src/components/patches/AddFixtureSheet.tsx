@@ -181,16 +181,22 @@ export function AddFixtureSheet({
     const patchedName = fixtureName.trim()
     const patchedKey = effectiveKey
 
-    await createPatch({
-      projectId,
-      universe,
-      fixtureTypeKey: selectedTypeKey,
-      key: patchedKey,
-      name: patchedName,
-      startChannel,
-      address: !universeExists && address ? address : undefined,
-      groupName: groupName || undefined,
-    }).unwrap()
+    try {
+      await createPatch({
+        projectId,
+        universe,
+        fixtureTypeKey: selectedTypeKey,
+        key: patchedKey,
+        name: patchedName,
+        startChannel,
+        address: !universeExists && address ? address : undefined,
+        groupName: groupName || undefined,
+      }).unwrap()
+    } catch {
+      // Reported by errorToastMiddleware. Bail out so we don't claim success or advance the
+      // form to the next fixture on a patch that never landed.
+      return
+    }
 
     toast.success(`Patched ${patchedName}`, {
       description: `${patchedKey} at ${universe}-${String(startChannel).padStart(3, '0')}`,

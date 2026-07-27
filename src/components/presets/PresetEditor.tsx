@@ -267,14 +267,20 @@ export function PresetEditor({
 
   const handleSave = async () => {
     if (!isValid) return
-    await onSave({
-      name: name.trim(),
-      description: description.trim() || null,
-      fixtureType,
-      palette,
-      effects,
-      propertyAssignments,
-    })
+    // Keep the sheet open if the save failed — errorToastMiddleware says what went wrong, and
+    // closing would discard the operator's edits behind the toast.
+    try {
+      await onSave({
+        name: name.trim(),
+        description: description.trim() || null,
+        fixtureType,
+        palette,
+        effects,
+        propertyAssignments,
+      })
+    } catch {
+      return
+    }
     onOpenChange(false)
   }
 

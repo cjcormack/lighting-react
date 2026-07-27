@@ -362,7 +362,7 @@ export function PromptBookViewerPage() {
     activateShow({ projectId: projectIdNum })
       .unwrap()
       .catch(() => {
-        // Silently fail
+        // Reported by errorToastMiddleware; caught here only to stop the unhandled rejection.
       })
   }, [activateShow, projectIdNum])
   const handleStopShow = useCallback(async () => {

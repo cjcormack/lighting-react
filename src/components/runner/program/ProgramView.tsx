@@ -72,7 +72,7 @@ export const ProgramView = memo(function ProgramView({
       }).unwrap()
       onExpandedCueChange(result.id)
     } catch {
-      // Silently fail
+      // Reported by errorToastMiddleware; caught here only to stop the unhandled rejection.
     }
   }, [drillStackId, projectId, createCue, existingCueNames, onExpandedCueChange])
 
@@ -90,7 +90,7 @@ export const ProgramView = memo(function ProgramView({
         cueType: 'MARKER',
       }).unwrap()
     } catch {
-      // Silently fail
+      // Reported by errorToastMiddleware; caught here only to stop the unhandled rejection.
     }
   }, [drillStackId, projectId, createCue, existingCueNames])
 
