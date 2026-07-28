@@ -1,5 +1,4 @@
 import { restApi } from './restApi'
-import { cuesApi } from './cues'
 import { lightingApi } from '../api/lightingApi'
 import { store } from './index'
 import type {
@@ -18,6 +17,7 @@ import type {
   AdvanceProgramRequest,
   GoToStackRequest,
   ProgramActivateResponse,
+  SortByCueNumberResponse,
 } from '../api/cueStacksApi'
 export type { CueStack, CueStackCueEntry } from '../api/cueStacksApi'
 export type { CueType, StackType } from '../api/cueStacksApi'
@@ -138,17 +138,32 @@ export const cueStacksApi = restApi.injectEndpoints({
         method: 'POST',
         body,
       }),
-      // Optimistic update: immediately rewrite sortOrder in the cue list cache
-      // so the UI doesn't snap back to the old order while waiting for the server
-      async onQueryStarted({ projectId, cueIds }, { dispatch, queryFulfilled }) {
+      // Optimistically reorder the stack's cues so the dragged row stays where it was
+      // dropped instead of springing back until the refetch lands.
+      //
+      // This has to patch `projectCueStackList` — that's the query the Program table renders
+      // from (`StackDetail` reads `stack.cues`). An earlier version patched
+      // `cuesApi.projectCueList`, which nothing in Program reads, so the drag had no optimism
+      // at all. Mirrors `reorderCueStacks` above.
+      async onQueryStarted({ projectId, stackId, cueIds }, { dispatch, queryFulfilled }) {
         const patchResult = dispatch(
-          cuesApi.util.updateQueryData('projectCueList', projectId, (draft) => {
-            for (const cue of draft) {
-              const newIndex = cueIds.indexOf(cue.id)
-              if (newIndex !== -1) {
-                cue.sortOrder = newIndex
-              }
+          cueStacksApi.util.updateQueryData('projectCueStackList', projectId, (draft) => {
+            const stack = draft.find((s) => s.id === stackId)
+            if (!stack) return
+            const byId = new Map(stack.cues.map((cue) => [cue.id, cue]))
+            const reordered = cueIds
+              .map((id) => byId.get(id))
+              .filter((cue): cue is CueStackCueEntry => cue != null)
+            // Anything the request didn't name keeps its relative order at the end, matching
+            // the server, which only rewrites sortOrder for the ids it was given.
+            const named = new Set(cueIds)
+            for (const cue of stack.cues) {
+              if (!named.has(cue.id)) reordered.push(cue)
             }
+            reordered.forEach((cue, index) => {
+              cue.sortOrder = index
+            })
+            stack.cues = reordered
           }),
         )
         try {
@@ -322,7 +337,7 @@ export const cueStacksApi = restApi.injectEndpoints({
     }),
 
     sortCueStackByCueNumber: build.mutation<
-      CueStackCueEntry[],
+      SortByCueNumberResponse,
       { projectId: number; stackId: number }
     >({
       query: ({ projectId, stackId }) => ({

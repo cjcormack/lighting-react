@@ -63,6 +63,7 @@ export function MobileCueListSheet({
                 <MobileCueRow
                   key={cue.id}
                   cueNumber={cue.cueNumber}
+                  cueNumberAuto={cue.cueNumberAuto}
                   name={cue.name}
                   fadeDurationMs={cue.fadeDurationMs}
                   fadeCurve={cue.fadeCurve}

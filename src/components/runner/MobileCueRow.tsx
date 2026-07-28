@@ -4,6 +4,8 @@ import { cueStatusIcon } from './cueStatusIcon'
 
 interface MobileCueRowProps {
   cueNumber: string | null
+  /** Number was derived from position — rendered fainter to mark it provisional. */
+  cueNumberAuto?: boolean
   name: string
   fadeDurationMs: number | null
   fadeCurve: string
@@ -19,6 +21,7 @@ interface MobileCueRowProps {
 
 export function MobileCueRow({
   cueNumber,
+  cueNumberAuto = false,
   name,
   fadeDurationMs,
   fadeCurve,
@@ -67,7 +70,12 @@ export function MobileCueRow({
 
       {/* Q-number (theatre only) */}
       {isTheatre && (
-        <div className="w-10 shrink-0 font-mono text-xs text-muted-foreground">
+        <div
+          className={cn(
+            'w-10 shrink-0 font-mono text-xs text-muted-foreground',
+            cueNumberAuto && 'opacity-70',
+          )}
+        >
           {cueNumber ? `Q${cueNumber}` : ''}
         </div>
       )}

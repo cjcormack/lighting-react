@@ -77,3 +77,113 @@ describe('cueStacks program transport', () => {
     expect(JSON.parse(body)).toEqual({ stackIds: [3, 1, 2] })
   })
 })
+
+/**
+ * The Program cue table renders `stack.cues` out of `projectCueStackList`, so that is the cache
+ * the cue reorder has to patch optimistically — an earlier version patched `projectCueList`,
+ * which nothing in Program reads, and the dragged row visibly sprang back until the refetch.
+ */
+describe('reorderCueStackCues optimistic patch', () => {
+  const cue = (id: number, sortOrder: number) => ({
+    id,
+    name: `cue-${id}`,
+    sortOrder,
+    paletteSize: 0,
+    presetCount: 0,
+    adHocEffectCount: 0,
+    autoAdvance: false,
+    autoAdvanceDelayMs: null,
+    fadeDurationMs: null,
+    fadeCurve: 'LINEAR',
+    cueNumber: String(id),
+    cueNumberAuto: false,
+    notes: null,
+    cueType: 'STANDARD' as const,
+  })
+
+  beforeEach(() => {
+    installRelativeUrlRequest()
+    installRecordingFetch({
+      'project/1/cue-stacks/7/reorder': {},
+      'project/1/cue-stacks': [
+        {
+          id: 7,
+          name: 'Act 1',
+          palette: [],
+          loop: false,
+          sortOrder: 0,
+          type: 'STACK',
+          label: null,
+          activeCueId: null,
+          canEdit: true,
+          canDelete: true,
+          cues: [cue(10, 0), cue(11, 1), cue(12, 2)],
+        },
+      ],
+    })
+  })
+
+  afterEach(() => {
+    store.dispatch(restApi.util.resetApiState())
+    vi.unstubAllGlobals()
+  })
+
+  const cueIdsInCache = () =>
+    cueStacksApi.endpoints.projectCueStackList
+      .select(1)(store.getState())
+      .data?.find((s) => s.id === 7)
+      ?.cues.map((c) => c.id)
+
+  it('reorders the drilled stack in projectCueStackList', async () => {
+    await store.dispatch(cueStacksApi.endpoints.projectCueStackList.initiate(1))
+    await vi.waitFor(() => expect(cueIdsInCache()).toEqual([10, 11, 12]))
+
+    const promise = store.dispatch(
+      cueStacksApi.endpoints.reorderCueStackCues.initiate({
+        projectId: 1,
+        stackId: 7,
+        cueIds: [12, 10, 11],
+      }),
+    )
+
+    // Patched synchronously, before the request settles — that's what stops the snap-back.
+    expect(cueIdsInCache()).toEqual([12, 10, 11])
+    const patched = cueStacksApi.endpoints.projectCueStackList
+      .select(1)(store.getState())
+      .data?.find((s) => s.id === 7)
+    expect(patched?.cues.map((c) => c.sortOrder)).toEqual([0, 1, 2])
+
+    await promise
+  })
+
+  it('keeps cues the request did not name at the end', async () => {
+    await store.dispatch(cueStacksApi.endpoints.projectCueStackList.initiate(1))
+    await vi.waitFor(() => expect(cueIdsInCache()).toEqual([10, 11, 12]))
+
+    await store.dispatch(
+      cueStacksApi.endpoints.reorderCueStackCues.initiate({
+        projectId: 1,
+        stackId: 7,
+        cueIds: [12, 10],
+      }),
+    )
+
+    // The server only rewrites sortOrder for the ids it was given, so 11 lands after them.
+    expect(cueIdsInCache()).toEqual([12, 10, 11])
+  })
+
+  it('leaves other stacks alone when the id is unknown', async () => {
+    await store.dispatch(cueStacksApi.endpoints.projectCueStackList.initiate(1))
+    await vi.waitFor(() => expect(cueIdsInCache()).toEqual([10, 11, 12]))
+
+    await store.dispatch(
+      cueStacksApi.endpoints.reorderCueStackCues.initiate({
+        projectId: 1,
+        stackId: 999,
+        cueIds: [12, 10, 11],
+      }),
+    )
+
+    expect(cueIdsInCache()).toEqual([10, 11, 12])
+  })
+})

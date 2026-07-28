@@ -33,10 +33,8 @@ import {
 import { useRunnerAnimation } from '../hooks/useRunnerAnimation'
 import { ShowHeader } from '../components/ShowHeader'
 import { MarkerRow } from '../components/runner/MarkerRow'
-import {
-  OutOfOrderBanner,
-  detectOutOfOrder,
-} from '../components/runner/OutOfOrderBanner'
+import { OutOfOrderBanner } from '../components/runner/OutOfOrderBanner'
+import { detectOutOfOrder } from '@/lib/cueNumber'
 import { ShowBar } from '../components/ShowBar'
 import { RunCueCard } from '../components/runner/run/RunCueCard'
 import {

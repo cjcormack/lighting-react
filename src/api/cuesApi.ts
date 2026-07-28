@@ -127,7 +127,10 @@ export interface Cue {
   fadeDurationMs: number | null
   fadeCurve: string
   cueNumber: string | null
+  /** True when `cueNumber` was derived from the cue's position rather than typed by the operator. */
+  cueNumberAuto: boolean
   notes: string | null
+  cueType: CueType
   canEdit: boolean
   canDelete: boolean
 }

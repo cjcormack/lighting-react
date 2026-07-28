@@ -1,6 +1,7 @@
 import { TriggerSummary } from '@/components/cues/TriggerSummary'
 import { Badge } from '@/components/ui/badge'
 import { formatFadeText } from '@/lib/cueUtils'
+import { AUTO_CUE_NUMBER_CLASS } from '@/lib/cueNumber'
 import { formatMs } from '@/lib/formatMs'
 import { resolveColourToHex } from '@/components/fx/colourUtils'
 import { cn } from '@/lib/utils'
@@ -27,7 +28,14 @@ export function RunPropsPane({ cue, location }: RunPropsPaneProps) {
       {/* Summary card */}
       <div className="rounded-md border bg-muted/20 p-3 space-y-2">
         <PropRow k="Number" mono>
-          {cue.cueNumber ? `Q${cue.cueNumber}` : <span className="text-muted-foreground">—</span>}
+          {cue.cueNumber ? (
+            <span className={cn(cue.cueNumberAuto && AUTO_CUE_NUMBER_CLASS)}>
+              Q{cue.cueNumber}
+              {cue.cueNumberAuto && <span className="ml-1.5 text-[10px] uppercase">auto</span>}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
         </PropRow>
         <PropRow k="Name">{cue.name}</PropRow>
         <PropRow k="Palette">

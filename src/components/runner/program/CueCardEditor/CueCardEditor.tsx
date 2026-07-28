@@ -39,6 +39,7 @@ import {
   formatFadeDuration,
   parseFadeDuration,
 } from '@/lib/cueUtils'
+import { AUTO_CUE_NUMBER_CLASS } from '@/lib/cueNumber'
 import { TargetsPane } from './TargetsPane'
 import { CuePropsPane } from './CuePropsPane'
 import { LayersPane, type LayersMode } from './LayersPane'
@@ -233,8 +234,15 @@ export function CueCardEditor({
               onCommit={commitCueNumber}
               ariaLabel="cue number"
               placeholder="14A"
-              title="Click to edit the cue number"
-              className="min-w-0 flex-1 truncate px-0.5"
+              title={
+                cue.cueNumberAuto
+                  ? 'Auto-numbered from position — click to set an explicit cue number'
+                  : 'Click to edit the cue number'
+              }
+              className={cn(
+                'min-w-0 flex-1 truncate px-0.5',
+                cue.cueNumberAuto && AUTO_CUE_NUMBER_CLASS,
+              )}
             />
           </div>
 

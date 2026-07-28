@@ -26,11 +26,16 @@ import {
   verticalListSortingStrategy,
   arrayMove,
 } from '@dnd-kit/sortable'
-import { useReorderCueStackCuesMutation } from '@/store/cueStacks'
+import {
+  useReorderCueStackCuesMutation,
+  useSortCueStackByCueNumberMutation,
+} from '@/store/cueStacks'
 import type { CueStack } from '@/api/cueStacksApi'
 import type { Cue } from '@/api/cuesApi'
 import { ProgramCueRow } from './ProgramCueRow'
 import { ProgramMarkerRow } from './ProgramMarkerRow'
+import { OutOfOrderBanner } from '@/components/runner/OutOfOrderBanner'
+import { detectOutOfOrder } from '@/lib/cueNumber'
 import { cn } from '@/lib/utils'
 import type { LayersMode } from './CueCardEditor/CueCardEditor'
 
@@ -70,7 +75,14 @@ export function StackDetail({
   snapshotPending,
 }: StackDetailProps) {
   const [reorderCues] = useReorderCueStackCuesMutation()
+  const [sortByCueNumber] = useSortCueStackByCueNumberMutation()
   const [layersMode, setLayersMode] = useState<LayersMode>('by-target')
+
+  // Offer to fix the order when a cue-number group descends against itself. Dismissal is scoped
+  // to the stack so drilling into another one asks again.
+  const outOfOrder = useMemo(() => detectOutOfOrder(stack.cues), [stack.cues])
+  const [dismissedFor, setDismissedFor] = useState<number | null>(null)
+  const showOutOfOrder = outOfOrder && dismissedFor !== stack.id
 
   // Scroll the active cue into view when drilling in or when the active cue
   // changes for this stack.
@@ -203,6 +215,13 @@ export function StackDetail({
           <span className="ml-1.5 hidden @[600px]:inline">Separator</span>
         </Button>
       </div>
+
+      {showOutOfOrder && (
+        <OutOfOrderBanner
+          onFixOrder={() => sortByCueNumber({ projectId, stackId: stack.id })}
+          onDismiss={() => setDismissedFor(stack.id)}
+        />
+      )}
 
       {/* Cue list — scrolls within the recessed Row 4 surface set on the root above. */}
       <div ref={listRef} className="flex-1 overflow-y-auto py-1">

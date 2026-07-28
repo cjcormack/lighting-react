@@ -21,6 +21,11 @@ export interface CueStackCueEntry {
   fadeDurationMs: number | null
   fadeCurve: string
   cueNumber: string | null
+  /**
+   * True when `cueNumber` was derived from the cue's position rather than typed by the operator.
+   * Auto numbers move with the cue and are rendered dimmed to mark them as provisional.
+   */
+  cueNumberAuto: boolean
   notes: string | null
   cueType: CueType
 }
@@ -54,6 +59,14 @@ export interface CueStackInput {
 
 export interface ReorderCuesRequest {
   cueIds: number[]
+}
+
+/** Result of `POST /cue-stacks/{stackId}/sort-by-cue-number`. */
+export interface SortByCueNumberResponse {
+  updatedCues: CueStackCueEntry[]
+  /** Cue numbers with nothing to order by (e.g. "intro"), left in place. */
+  pinnedCount: number
+  nullNumberCount: number
 }
 
 export interface AddCueToStackRequest {

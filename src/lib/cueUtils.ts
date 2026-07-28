@@ -99,5 +99,8 @@ export function buildCueInput(cue: Cue): CueInput {
     fadeCurve: cue.fadeCurve,
     cueNumber: cue.cueNumber,
     notes: cue.notes,
+    // Round-tripped so a PUT can't reinterpret a MARKER as a STANDARD cue. (The server ignores
+    // cueType on PUT, but sending the truth keeps the payload honest if that ever changes.)
+    cueType: cue.cueType,
   }
 }

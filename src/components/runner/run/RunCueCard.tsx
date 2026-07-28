@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { useNarrowContainer } from '@/hooks/useNarrowContainer'
 import { useProjectCueQuery } from '@/store/cues'
 import { formatFadeText } from '@/lib/cueUtils'
+import { AUTO_CUE_NUMBER_CLASS } from '@/lib/cueNumber'
 import { resolveColourToHex } from '@/components/fx/colourUtils'
 import { collectCueTargets } from '@/components/runner/program/CueCardEditor/targetUtils'
 import type { Cue, CueTarget } from '@/api/cuesApi'
@@ -161,6 +162,7 @@ export function RunCueCard({
         <div
           className={cn(
             'font-mono text-sm font-bold truncate',
+            cue.cueNumberAuto && AUTO_CUE_NUMBER_CLASS,
             isActive && 'text-green-400',
             isStandby && !isActive && 'text-blue-300',
           )}

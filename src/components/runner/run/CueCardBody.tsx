@@ -8,6 +8,7 @@ import { CueDetailContent } from '@/components/cues/CueDetailContent'
 import { collectCueTargets } from '@/components/runner/program/CueCardEditor/targetUtils'
 import { InlineEditField } from '@/components/InlineEditField'
 import { formatFadeText } from '@/lib/cueUtils'
+import { AUTO_CUE_NUMBER_CLASS } from '@/lib/cueNumber'
 import type { CueStackCueEntry } from '@/api/cueStacksApi'
 
 export type ExpansionMode = 'stage' | 'details'
@@ -90,10 +91,16 @@ export function CueCardBody({
         ariaLabel="cue number"
         placeholder="Q#"
         onEditInteraction={onEditInteraction}
-        className={cn('max-w-full', isCur ? 'text-center' : 'truncate')}
+        className={cn(
+          'max-w-full',
+          isCur ? 'text-center' : 'truncate',
+          cue.cueNumberAuto && AUTO_CUE_NUMBER_CLASS,
+        )}
       />
+    ) : cue.cueNumber ? (
+      <span className={cn(cue.cueNumberAuto && AUTO_CUE_NUMBER_CLASS)}>Q{cue.cueNumber}</span>
     ) : (
-      (cue.cueNumber ? `Q${cue.cueNumber}` : '—')
+      '—'
     )
 
   const cueNameNode =

@@ -191,14 +191,25 @@ export function CuePropsPane({ cue, projectId }: CuePropsPaneProps) {
 
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1.5">
-          <Label htmlFor={`cue-${cue.id}-num`}>Cue #</Label>
+          <div className="flex items-center gap-1.5">
+            <Label htmlFor={`cue-${cue.id}-num`}>Cue #</Label>
+            {cue.cueNumberAuto && (
+              <Badge
+                variant="outline"
+                className="h-4 px-1 text-[9px] font-bold uppercase tracking-wider text-muted-foreground"
+                title="Derived from this cue's position. Type a number to set it explicitly, or clear the field to go back to auto."
+              >
+                Auto
+              </Badge>
+            )}
+          </div>
           <Input
             id={`cue-${cue.id}-num`}
             value={cueNumber}
             onChange={(e) => setCueNumber(e.target.value)}
             onBlur={commitCueNumber}
             placeholder="14A"
-            className="h-9"
+            className={cn('h-9', cue.cueNumberAuto && 'text-muted-foreground')}
           />
         </div>
         <div className="space-y-1.5">

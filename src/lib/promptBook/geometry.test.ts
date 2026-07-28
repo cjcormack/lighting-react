@@ -170,6 +170,7 @@ describe('flattenCueOrder', () => {
       fadeDurationMs: null,
       fadeCurve: 'LINEAR',
       cueNumber: null,
+      cueNumberAuto: false,
       notes: null,
       cueType: 'STANDARD',
       ...overrides,
@@ -220,6 +221,7 @@ describe('flattenShowRows', () => {
       fadeDurationMs: null,
       fadeCurve: 'LINEAR',
       cueNumber: null,
+      cueNumberAuto: false,
       notes: null,
       cueType: 'STANDARD',
       ...overrides,
@@ -362,6 +364,7 @@ describe('orderedCueIdsForInsert', () => {
       fadeDurationMs: null,
       fadeCurve: 'LINEAR',
       cueNumber: null,
+      cueNumberAuto: false,
       notes: null,
       cueType: 'STANDARD',
     }
