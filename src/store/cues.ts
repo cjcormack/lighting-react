@@ -71,10 +71,19 @@ export const cuesApi = restApi.injectEndpoints({
         method: 'PATCH',
         body,
       }),
-      // Don't invalidate the project-wide list on PATCH — keystroke-driven
-      // edits would refetch every cue. The WS `cues.subscribe` invalidates
-      // CueList for changes that affect list-level fields.
-      invalidatesTags: (_result, _error, { cueId }) => [{ type: 'Cue', id: cueId }],
+      // Don't invalidate the project-wide CueList on PATCH — that query carries every
+      // cue's full children, and keystroke-driven edits would refetch the lot. The WS
+      // `cues.subscribe` invalidates CueList for changes that affect list-level fields.
+      //
+      // CueStackList is different: it's the lightweight entries list that the Program
+      // table and Prompt Book rail render name/cue#/fade from, so it has to reflect an
+      // inline edit at once. Invalidating on our own response (rather than waiting for
+      // the WS echo) also guarantees the refetch sees the committed write — the echo
+      // races the commit and lands a refresh one event behind.
+      invalidatesTags: (_result, _error, { projectId, cueId }) => [
+        { type: 'Cue', id: cueId },
+        { type: 'CueStackList', id: projectId },
+      ],
     }),
 
     deleteProjectCue: build.mutation<void, { projectId: number; cueId: number }>({

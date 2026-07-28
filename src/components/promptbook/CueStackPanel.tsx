@@ -43,6 +43,12 @@ interface CueStackPanelProps {
   onSetStandby: (cueId: number) => void
   /** Jump to the cue's editor. */
   onEditCue: (cueId: number) => void
+  /** Rename a cue in place (unlocked only — the cards gate on `locked` themselves). */
+  onRenameCue: (cueId: number, name: string) => void
+  /** Set or clear a cue's number in place (unlocked only). */
+  onRenumberCue: (cueId: number, cueNumber: string | null) => void
+  /** Resets the idle auto-relock clock while a cue field is being edited. */
+  onEditInteraction: () => void
   goDisabled: boolean
   /** Whether the show is running — drives the drawer header dot colour + a "Stopped" label. */
   showActive: boolean
@@ -90,6 +96,9 @@ export function CueStackPanel({
   onWarningClick,
   onSetStandby,
   onEditCue,
+  onRenameCue,
+  onRenumberCue,
+  onEditInteraction,
   goDisabled,
   showActive,
   stackName,
@@ -205,6 +214,9 @@ export function CueStackPanel({
               onSetStandby={() => onSetStandby(row.cue.cueId)}
               onRemoveAnchor={() => onRemoveAnchor(row.cue.cueId)}
               onEditCue={() => onEditCue(row.cue.cueId)}
+              onRenameCue={(name) => onRenameCue(row.cue.cueId, name)}
+              onRenumberCue={(cueNumber) => onRenumberCue(row.cue.cueId, cueNumber)}
+              onEditInteraction={onEditInteraction}
             />
           )
         })}

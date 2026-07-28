@@ -19,7 +19,12 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useNarrowContainer } from '@/hooks/useNarrowContainer'
-import { useProjectCueQuery, useDeleteProjectCueMutation } from '@/store/cues'
+import {
+  useProjectCueQuery,
+  useDeleteProjectCueMutation,
+  usePatchProjectCueMutation,
+} from '@/store/cues'
+import { InlineEditField } from '@/components/InlineEditField'
 import {
   EditorContextProvider,
   beginCueEditSession,
@@ -29,7 +34,11 @@ import {
 import type { CueEditMode } from '@/api/cueEditWsApi'
 import type { Cue, CueTarget } from '@/api/cuesApi'
 import type { CueStackCueEntry } from '@/api/cueStacksApi'
-import { formatFadeText } from '@/lib/cueUtils'
+import {
+  formatFadeCurve,
+  formatFadeDuration,
+  parseFadeDuration,
+} from '@/lib/cueUtils'
 import { TargetsPane } from './TargetsPane'
 import { CuePropsPane } from './CuePropsPane'
 import { LayersPane, type LayersMode } from './LayersPane'
@@ -96,6 +105,7 @@ export function CueCardEditor({
     { skip: !expanded },
   )
   const [deleteCue] = useDeleteProjectCueMutation()
+  const [patchCue] = usePatchProjectCueMutation()
 
   // Sticky placeholder so a PATCH-driven refetch doesn't flash an empty body.
   // Cleared on cue-id change so a recycled component slot doesn't show a stale
@@ -155,7 +165,31 @@ export function CueCardEditor({
     (cueData?.adHocEffects.length ?? 0) +
     (cueData?.presetApplications.length ?? 0)
 
-  const fadeText = formatFadeText(cue.fadeDurationMs, cue.fadeCurve)
+  // Inline edits from the collapsed row. Same PATCH-on-commit contract as the expanded
+  // card's Properties pane, so the two stay consistent — every field auto-saves.
+  const commitName = (next: string) => {
+    const trimmed = next.trim()
+    if (trimmed === '') return false
+    if (trimmed !== cue.name) patchCue({ projectId, cueId: cue.id, name: trimmed })
+  }
+
+  const commitCueNumber = (next: string) => {
+    const trimmed = next.trim() || null
+    if (trimmed !== (cue.cueNumber ?? null)) {
+      patchCue({ projectId, cueId: cue.id, cueNumber: trimmed })
+    }
+  }
+
+  const commitFade = (next: string) => {
+    const parsed = parseFadeDuration(next)
+    if (parsed === undefined) return false
+    if (parsed !== (cue.fadeDurationMs ?? null)) {
+      patchCue({ projectId, cueId: cue.id, fadeDurationMs: parsed })
+    }
+  }
+
+  const fadeCurveLabel =
+    cue.fadeDurationMs != null && cue.fadeDurationMs > 0 ? formatFadeCurve(cue.fadeCurve) : ''
 
   return (
     <div ref={setNodeRef} style={sortableStyle} {...attributes} data-cue-row={cue.id}>
@@ -170,10 +204,11 @@ export function CueCardEditor({
         <div
           className={cn(
             'grid items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-muted/30 transition-colors',
-            // Q# column is sized to fit the Play icon + a multi-char cue number (e.g. "QLX2")
-            // so the current cue's ID never truncates.
-            'grid-cols-[16px_64px_minmax(0,80px)_minmax(0,1fr)_auto_auto_18px]',
-            'max-[800px]:grid-cols-[16px_60px_minmax(0,1fr)_auto_18px] max-[800px]:gap-2',
+            // Q# column budget: the live row's Play icon (12px) + gap (6px) + the inline-edit
+            // field's border/padding (6px), leaving ~64px for a 7-char number like "QS1-3.1"
+            // — so the current cue's ID never truncates.
+            'grid-cols-[16px_88px_minmax(0,80px)_minmax(0,1fr)_auto_auto_18px]',
+            'max-[800px]:grid-cols-[16px_84px_minmax(0,1fr)_auto_18px] max-[800px]:gap-2',
           )}
           onClick={onToggleExpanded}
         >
@@ -192,21 +227,31 @@ export function CueCardEditor({
                 aria-label="Live"
               />
             )}
-            <span className="truncate">{cue.cueNumber ? `Q${cue.cueNumber}` : '—'}</span>
+            <InlineEditField
+              value={cue.cueNumber ?? ''}
+              formatDisplay={(v) => (v ? `Q${v}` : '—')}
+              onCommit={commitCueNumber}
+              ariaLabel="cue number"
+              placeholder="14A"
+              title="Click to edit the cue number"
+              className="min-w-0 flex-1 truncate px-0.5"
+            />
           </div>
 
           <div className="h-5 rounded overflow-hidden flex max-[800px]:hidden">
             <PaletteBar palette={cueData?.palette ?? []} />
           </div>
 
-          <div
+          <InlineEditField
+            value={cue.name}
+            onCommit={commitName}
+            ariaLabel="cue name"
+            title="Click to rename"
             className={cn(
               'truncate text-sm',
               isActive ? 'text-green-300 font-semibold' : isStandby ? 'text-blue-300 font-semibold' : 'font-medium',
             )}
-          >
-            {cue.name}
-          </div>
+          />
 
           <div className="flex items-center gap-1 flex-nowrap max-[1000px]:hidden">
             {targets.slice(0, 4).map((t) => (
@@ -228,7 +273,20 @@ export function CueCardEditor({
           </div>
 
           <div className="flex flex-col items-end font-mono text-xs gap-0 leading-tight shrink-0">
-            <span className="text-foreground">{fadeText}</span>
+            <span className="flex items-center gap-1 text-foreground">
+              <InlineEditField
+                value={formatFadeDuration(cue.fadeDurationMs)}
+                formatDisplay={(v) => v || 'SNAP'}
+                onCommit={commitFade}
+                ariaLabel="fade duration"
+                placeholder="2s"
+                title="Fade duration — e.g. 2s, 500ms (a bare number is seconds)"
+                className="w-14 text-right"
+              />
+              {fadeCurveLabel && (
+                <span className="text-muted-foreground">{fadeCurveLabel}</span>
+              )}
+            </span>
             {cue.autoAdvance && (
               <span className="text-[9px] text-blue-500 uppercase tracking-wide">
                 auto

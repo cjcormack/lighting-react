@@ -6,6 +6,7 @@ import { resolveColourToHex } from '@/components/fx/colourUtils'
 import { MiniStage } from '@/components/runner/program/CueCardEditor/MiniStage'
 import { CueDetailContent } from '@/components/cues/CueDetailContent'
 import { collectCueTargets } from '@/components/runner/program/CueCardEditor/targetUtils'
+import { InlineEditField } from '@/components/InlineEditField'
 import { formatFadeText } from '@/lib/cueUtils'
 import type { CueStackCueEntry } from '@/api/cueStacksApi'
 
@@ -34,6 +35,15 @@ interface CueCardBodyProps {
   /** cur-only: 0..1 fade-in progress; drives the amber fade bar + FADING badge. */
   fadeProgress?: number | null
   fadeRemainMs?: number | null
+  /**
+   * When set, the hero Q number becomes inline-editable (unlocked Prompt Book). Receives
+   * the trimmed text, or null when cleared. Omit for a read-only card (Run).
+   */
+  onCueNumberCommit?: (next: string | null) => void
+  /** When set, the cue name becomes inline-editable. Rejects an empty name. */
+  onCueNameCommit?: (next: string) => void
+  /** Forwarded to the editable fields — resets a host idle timer that could unmount them. */
+  onEditInteraction?: () => void
 }
 
 /**
@@ -59,11 +69,49 @@ export function CueCardBody({
   onBodyClick,
   fadeProgress,
   fadeRemainMs,
+  onCueNumberCommit,
+  onCueNameCommit,
+  onEditInteraction,
 }: CueCardBodyProps) {
   const isCur = kind === 'cur'
   const isNxt = kind === 'nxt'
   const isFading = isCur && fadeProgress != null && fadeProgress < 1
   const label = isCur ? 'Now playing' : isNxt ? 'Up next' : (headerLabel ?? '')
+
+  // Editable identity (unlocked Prompt Book). The fields inherit the surrounding type
+  // styles — including the hero Q's container-query font size — so the card looks the same
+  // whether or not it is editable.
+  const cueNumberNode =
+    cue == null ? null : onCueNumberCommit ? (
+      <InlineEditField
+        value={cue.cueNumber ?? ''}
+        formatDisplay={(v) => (v ? `Q${v}` : '—')}
+        onCommit={(next) => onCueNumberCommit(next.trim() || null)}
+        ariaLabel="cue number"
+        placeholder="Q#"
+        onEditInteraction={onEditInteraction}
+        className={cn('max-w-full', isCur ? 'text-center' : 'truncate')}
+      />
+    ) : (
+      (cue.cueNumber ? `Q${cue.cueNumber}` : '—')
+    )
+
+  const cueNameNode =
+    cue == null ? null : onCueNameCommit ? (
+      <InlineEditField
+        value={cue.name}
+        onCommit={(next) => {
+          const trimmed = next.trim()
+          if (trimmed === '') return false
+          onCueNameCommit(trimmed)
+        }}
+        ariaLabel="cue name"
+        onEditInteraction={onEditInteraction}
+        className={cn('max-w-full', isCur ? 'text-center' : 'truncate')}
+      />
+    ) : (
+      cue.name
+    )
 
   return (
     <section
@@ -163,10 +211,10 @@ export function CueCardBody({
                     textShadow: '0 0 24px rgba(74,222,128,0.3)',
                   }}
                 >
-                  {cue.cueNumber ? `Q${cue.cueNumber}` : '—'}
+                  {cueNumberNode}
                 </div>
                 <div className="mt-1 text-[15px] font-semibold text-foreground">
-                  {cue.name}
+                  {cueNameNode}
                 </div>
                 <CardPalette cue={cue} projectId={projectId} variant="centered" />
               </div>
@@ -178,10 +226,10 @@ export function CueCardBody({
                     isNxt ? 'text-blue-400' : 'text-foreground',
                   )}
                 >
-                  {cue.cueNumber ? `Q${cue.cueNumber}` : '—'}
+                  {cueNumberNode}
                 </span>
-                <span className="text-[13px] font-semibold text-foreground truncate">
-                  {cue.name}
+                <span className="min-w-0 truncate text-[13px] font-semibold text-foreground">
+                  {cueNameNode}
                 </span>
                 <CardPalette cue={cue} projectId={projectId} variant="inline" />
               </div>

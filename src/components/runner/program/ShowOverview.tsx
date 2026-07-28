@@ -53,6 +53,7 @@ import {
   useSortCueStackByCueNumberMutation,
 } from '@/store/cueStacks'
 import { CueStackForm } from '@/components/cues/CueStackForm'
+import { InlineEditField } from '@/components/InlineEditField'
 import type { CueStack, CueStackInput } from '@/api/cueStacksApi'
 
 // ── Sortable STACK entry row ────────────────────────────────────────────────
@@ -63,11 +64,21 @@ interface SortableStackEntryProps {
   isActive: boolean
   onDrill: (stackId: number) => void
   onEdit: (stack: CueStack) => void
+  onRename: (stack: CueStack, name: string) => void
   onSort: (stackId: number) => void
   onRemove: (stack: CueStack) => void
 }
 
-function SortableStackEntry({ stack, index, isActive, onDrill, onEdit, onSort, onRemove }: SortableStackEntryProps) {
+function SortableStackEntry({
+  stack,
+  index,
+  isActive,
+  onDrill,
+  onEdit,
+  onRename,
+  onSort,
+  onRemove,
+}: SortableStackEntryProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: stack.id,
   })
@@ -102,14 +113,21 @@ function SortableStackEntry({ stack, index, isActive, onDrill, onEdit, onSort, o
       <span className="hidden @[560px]:block w-6 text-center font-mono text-xs text-muted-foreground shrink-0">
         {index + 1}
       </span>
-      <span
+      <InlineEditField
+        value={stack.name}
+        onCommit={(next) => {
+          const trimmed = next.trim()
+          if (trimmed === '') return false
+          onRename(stack, trimmed)
+        }}
+        ariaLabel="stack name"
+        disabled={!stack.canEdit}
+        title={stack.canEdit ? 'Click to rename' : undefined}
         className={cn(
-          'flex-1 text-sm font-medium text-foreground truncate min-w-0',
+          'flex-1 min-w-0 truncate text-sm font-medium text-foreground',
           isActive && 'text-green-300 font-semibold',
         )}
-      >
-        {stack.name}
-      </span>
+      />
       {isActive && (
         <Badge
           variant="outline"
@@ -296,6 +314,22 @@ export function ShowOverview({ projectId, stacks, activeStackId, onDrillStack }:
     [editingStack, projectId, saveStack, createStack, onDrillStack],
   )
 
+  // Inline rename from the table row. PUT is the only stack write route, so echo back the
+  // fields it rewrites (palette/loop) unchanged; sortOrder and type it leaves alone.
+  const handleRenameStack = useCallback(
+    (stack: CueStack, name: string) => {
+      if (name === stack.name) return
+      saveStack({
+        projectId,
+        stackId: stack.id,
+        name,
+        palette: stack.palette,
+        loop: stack.loop,
+      })
+    },
+    [saveStack, projectId],
+  )
+
   const handleAddSeparator = useCallback(() => {
     createStack({ projectId, name: 'New Separator', palette: [], loop: false, type: 'SEPARATOR', label: 'New Separator' })
   }, [createStack, projectId])
@@ -380,6 +414,7 @@ export function ShowOverview({ projectId, stacks, activeStackId, onDrillStack }:
                   isActive={activeStackId !== null && stack.id === activeStackId}
                   onDrill={onDrillStack}
                   onEdit={handleEditStack}
+                  onRename={handleRenameStack}
                   onSort={(stackId) => sortByCueNumber({ projectId, stackId })}
                   onRemove={handleRemove}
                 />

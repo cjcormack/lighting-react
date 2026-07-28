@@ -27,7 +27,7 @@ import {
   useReorderCueStackCuesMutation,
   useCreateProjectCueStackMutation,
 } from '../store/cueStacks'
-import { useCreateProjectCueMutation } from '../store/cues'
+import { useCreateProjectCueMutation, usePatchProjectCueMutation } from '../store/cues'
 import type { CueStackCueEntry } from '../api/cueStacksApi'
 import { useFxStateQuery, tapTempo } from '../store/fx'
 import { useNarrowContainer } from '../hooks/useNarrowContainer'
@@ -109,6 +109,7 @@ export function PromptBookViewerPage() {
   const [uploadScriptDoc, { isLoading: reuploading }] = useUploadScriptDocMutation()
   const [setPromptBook, { isLoading: settingBook }] = useSetPromptBookMutation()
   const [createCue] = useCreateProjectCueMutation()
+  const [patchCue] = usePatchProjectCueMutation()
   const [reorderCues] = useReorderCueStackCuesMutation()
   const [createStack] = useCreateProjectCueStackMutation()
 
@@ -352,6 +353,26 @@ export function PromptBookViewerPage() {
       }
     },
     [cueOrder, cueOrderIndex, navigate, projectIdNum],
+  )
+
+  // Inline cue identity edits from the rail, unlocked only. PATCH so we touch one field and
+  // leave the cue's children alone; the WS echo refreshes the rail and the script's cue pills.
+  // Existing anchors keep their cached label, which the rail/viewer already override with the
+  // live cue labels — so a renumber shows up immediately without re-saving anchors.
+  const handleRenameCue = useCallback(
+    (cueId: number, name: string) => {
+      patchCue({ projectId: projectIdNum, cueId, name })
+      noteEdit()
+    },
+    [patchCue, projectIdNum, noteEdit],
+  )
+
+  const handleRenumberCue = useCallback(
+    (cueId: number, cueNumber: string | null) => {
+      patchCue({ projectId: projectIdNum, cueId, cueNumber })
+      noteEdit()
+    },
+    [patchCue, projectIdNum, noteEdit],
   )
 
   // Start/Stop the show in place from the header (parity with Program/Run). State is
@@ -759,6 +780,9 @@ export function PromptBookViewerPage() {
     onWarningClick: handleWarningClick,
     onSetStandby: handleSetStandby,
     onEditCue: handleEditCue,
+    onRenameCue: handleRenameCue,
+    onRenumberCue: handleRenumberCue,
+    onEditInteraction: noteEdit,
     goDisabled,
     showActive: isShowActive,
     stackName: railStackName,

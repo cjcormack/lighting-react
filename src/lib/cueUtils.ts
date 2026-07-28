@@ -18,6 +18,45 @@ export function formatFadeText(fadeDurationMs: number | null, fadeCurve: string)
   return 'SNAP'
 }
 
+/** The curve half of `formatFadeText` on its own — for layouts that make the duration editable. */
+export function formatFadeCurve(fadeCurve: string): string {
+  return CURVE_LABELS[fadeCurve] ?? ''
+}
+
+/** The duration half of `formatFadeText`: "2.0s", "500ms", or '' for a snap. */
+export function formatFadeDuration(fadeDurationMs: number | null): string {
+  if (fadeDurationMs != null && fadeDurationMs > 0) return formatMs(fadeDurationMs)
+  return ''
+}
+
+/**
+ * Parse a fade duration typed by an operator into milliseconds.
+ *
+ * Accepts an explicit unit ("500ms", "2s", "1.5m") or a bare number, which is read
+ * as **seconds** — the console convention, and the unit the table shows fades in.
+ * Empty / "0" / "snap" mean no fade.
+ *
+ * Returns `null` for a snap and `undefined` when the text can't be parsed, so
+ * callers can distinguish "clear the fade" from "reject this input".
+ */
+export function parseFadeDuration(raw: string): number | null | undefined {
+  const text = raw.trim()
+  if (text === '' || /^snap$/i.test(text)) return null
+  const match = /^(\d*\.?\d+)\s*(ms|msec|s|sec|secs|m|min)?$/i.exec(text)
+  if (!match) return undefined
+  const value = Number(match[1])
+  if (!Number.isFinite(value) || value < 0) return undefined
+  const unit = (match[2] ?? 's').toLowerCase()
+  const ms =
+    unit === 'ms' || unit === 'msec'
+      ? value
+      : unit === 'm' || unit === 'min'
+        ? value * 60_000
+        : value * 1000
+  const rounded = Math.round(ms)
+  return rounded > 0 ? rounded : null
+}
+
 /** Find the next available name of the form "{base}", "{base} 2", "{base} 3"… */
 export function nextAvailableName(base: string, taken: Set<string>): string {
   if (!taken.has(base)) return base

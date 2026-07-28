@@ -2,6 +2,7 @@ import { Anchor, ChevronRight, Pencil, TriangleAlert, X } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { positionLabel } from '@/lib/promptBook/geometry'
+import { InlineEditField } from '@/components/InlineEditField'
 import { CueCardBody, type CueCardKind, type ExpansionMode } from '@/components/runner/run/CueCardBody'
 import type { CueAnchorDto } from '@/api/promptBooksApi'
 import type { CueStackCueEntry } from '@/api/cueStacksApi'
@@ -37,6 +38,12 @@ interface PromptBookCueCardProps {
   onSetStandby: () => void
   onRemoveAnchor: () => void
   onEditCue: () => void
+  /** Rename the cue. Only wired up while the book is unlocked. */
+  onRenameCue: (name: string) => void
+  /** Set (or clear, with null) the cue number. Only wired up while unlocked. */
+  onRenumberCue: (cueNumber: string | null) => void
+  /** Resets the idle auto-relock clock, so it can't tear down a field mid-edit. */
+  onEditInteraction: () => void
 }
 
 const STATUS_KIND: Record<CueRunStatus, CueCardKind> = {
@@ -74,9 +81,16 @@ export function PromptBookCueCard({
   onSetStandby,
   onRemoveAnchor,
   onEditCue,
+  onRenameCue,
+  onRenumberCue,
+  onEditInteraction,
 }: PromptBookCueCardProps) {
   const anchored = anchor != null
   const showSetNext = canSetNext && status !== 'live' && status !== 'next'
+
+  // Cue identity is editable exactly while the book is unlocked — the same gate as anchors
+  // and annotations. `cueEntry` carries the raw cueNumber (FlatCue only has the folded label).
+  const editable = !locked && cueEntry != null
 
   const warningTriangle =
     warnings.length > 0 ? (
@@ -184,6 +198,9 @@ export function PromptBookCueCard({
           fadeProgress={fadeProgress}
           fadeRemainMs={fadeRemainMs}
           onBodyClick={onCueClick}
+          onCueNumberCommit={editable ? onRenumberCue : undefined}
+          onCueNameCommit={editable ? onRenameCue : undefined}
+          onEditInteraction={onEditInteraction}
           headerTrailing={
             <>
               {warningTriangle}
@@ -217,6 +234,26 @@ export function PromptBookCueCard({
   const isLive = status === 'live'
   const isNext = status === 'next'
   const isDone = status === 'done'
+  const labelClass = cn(
+    'w-12 shrink-0 text-[13px] font-bold',
+    isLive
+      ? 'text-emerald-300'
+      : isNext
+        ? 'text-sky-300'
+        : isDone
+          ? 'text-muted-foreground/60'
+          : 'text-foreground',
+  )
+  const nameClass = cn(
+    'flex-1 truncate text-xs',
+    isLive
+      ? 'text-emerald-100/80'
+      : isNext
+        ? 'text-sky-200/70'
+        : isDone
+          ? 'text-muted-foreground/50'
+          : 'text-muted-foreground',
+  )
   return (
     <div
       role="button"
@@ -252,34 +289,41 @@ export function PromptBookCueCard({
           )}
         />
       )}
-      <span
-        className={cn(
-          'w-12 shrink-0 text-[13px] font-bold',
-          isLive
-            ? 'text-emerald-300'
-            : isNext
-              ? 'text-sky-300'
-              : isDone
-                ? 'text-muted-foreground/60'
-                : 'text-foreground',
-        )}
-      >
-        {cue.label}
-      </span>
-      <span
-        className={cn(
-          'flex-1 truncate text-xs',
-          isLive
-            ? 'text-emerald-100/80'
-            : isNext
-              ? 'text-sky-200/70'
-              : isDone
-                ? 'text-muted-foreground/50'
-                : 'text-muted-foreground',
-        )}
-      >
-        {cue.name}
-      </span>
+      {editable ? (
+        <>
+          <InlineEditField
+            value={cueEntry.cueNumber ?? ''}
+            // A numberless cue's label folds in its name — keep showing that, so unlocking
+            // doesn't change what the rail reads. Fall back to the sibling `cueEntry.name`
+            // rather than `cue.label`: both come from the stack list, so clearing a number
+            // shows the name at once instead of the stale "Q…" until `cueOrder` refetches.
+            formatDisplay={(v) => (v ? `Q${v}` : cueEntry.name)}
+            onCommit={(next) => onRenumberCue(next.trim() || null)}
+            ariaLabel="cue number"
+            placeholder="Q#"
+            onEditInteraction={onEditInteraction}
+            // px-0: the 3rem label cell is tight enough that padding would force an
+            // extra wrap the read-only span doesn't have.
+            className={cn(labelClass, 'px-0')}
+          />
+          <InlineEditField
+            value={cueEntry.name}
+            onCommit={(next) => {
+              const trimmed = next.trim()
+              if (trimmed === '') return false
+              onRenameCue(trimmed)
+            }}
+            ariaLabel="cue name"
+            onEditInteraction={onEditInteraction}
+            className={nameClass}
+          />
+        </>
+      ) : (
+        <>
+          <span className={labelClass}>{cue.label}</span>
+          <span className={nameClass}>{cue.name}</span>
+        </>
+      )}
       {setNextButton}
       {warningTriangle}
       {anchorAffordance}

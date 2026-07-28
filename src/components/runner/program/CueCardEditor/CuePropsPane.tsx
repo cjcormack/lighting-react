@@ -57,16 +57,28 @@ export function CuePropsPane({ cue, projectId }: CuePropsPaneProps) {
     cue.autoAdvanceDelayMs != null ? String(cue.autoAdvanceDelayMs) : '',
   )
 
-  // Re-sync only when the cue identity changes — keying on every field would
-  // clobber in-flight typing whenever a refetch lands mid-keystroke.
+  // Re-sync whenever a field changes underneath us — the collapsed row edits name / cue# /
+  // fade inline as well, so holding a stale local value here would write it straight back
+  // on the next blur and silently revert that edit. A field the operator is currently
+  // typing in is skipped, which is what keying on `cue.id` alone used to protect.
   useEffect(() => {
-    setName(cue.name)
-    setCueNumber(cue.cueNumber ?? '')
-    setNotes(cue.notes ?? '')
-    setFadeMs(cue.fadeDurationMs != null ? String(cue.fadeDurationMs) : '')
-    setAutoAdvanceDelay(cue.autoAdvanceDelayMs != null ? String(cue.autoAdvanceDelayMs) : '')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cue.id])
+    const focused = document.activeElement?.id
+    const fresh = (field: string) => focused !== `cue-${cue.id}-${field}`
+    if (fresh('name')) setName(cue.name)
+    if (fresh('num')) setCueNumber(cue.cueNumber ?? '')
+    if (fresh('notes')) setNotes(cue.notes ?? '')
+    if (fresh('fade')) setFadeMs(cue.fadeDurationMs != null ? String(cue.fadeDurationMs) : '')
+    if (fresh('auto-delay')) {
+      setAutoAdvanceDelay(cue.autoAdvanceDelayMs != null ? String(cue.autoAdvanceDelayMs) : '')
+    }
+  }, [
+    cue.id,
+    cue.name,
+    cue.cueNumber,
+    cue.notes,
+    cue.fadeDurationMs,
+    cue.autoAdvanceDelayMs,
+  ])
 
   const commitName = useCallback(() => {
     const trimmed = name.trim()
