@@ -105,6 +105,7 @@ export function PromptBookViewerPage() {
   const [deactivateShow] = useDeactivateProgramMutation()
 
   const activeStackId = programState?.activeStackId ?? null
+  const isShowActive = activeStackId != null
 
   const [upsertAnchor] = useUpsertAnchorMutation()
   const [deleteAnchor] = useDeleteAnchorMutation()
@@ -118,8 +119,9 @@ export function PromptBookViewerPage() {
   const [reorderCues] = useReorderCueStackCuesMutation()
   const [createStack] = useCreateProjectCueStackMutation()
 
-  // ── Runtime view state — NEVER persisted. Opens locked, always. ──
-  const [locked, setLocked] = useState(true)
+  // ── Runtime view state — NEVER persisted. A running show always opens locked. ──
+  // Only consulted while the show is running — see the derived `locked` below.
+  const [lockRequested, setLockRequested] = useState(true)
   const [tool, setTool] = useState<PromptBookTool>('move')
   const [placingCueId, setPlacingCueId] = useState<number | null>(null)
   // Region awaiting a cue choice — set when "Anchor cue" is clicked on a selection.
@@ -180,20 +182,35 @@ export function PromptBookViewerPage() {
 
   const canEdit = book?.canEdit ?? false
 
+  // The lock exists for one reason: a stray click mid-show must not corrupt the book the
+  // operator is running from. With the show stopped there is nothing to protect, so the
+  // book is simply editable — and none of the editing chrome (amber wash, lock button,
+  // re-lock countdown) is shown, because there is no state to warn about. A book the
+  // backend won't let us edit stays locked either way.
+  const locked = !canEdit || (isShowActive && lockRequested)
+
   const lock = useCallback(() => {
-    setLocked(true)
+    setLockRequested(true)
     setTool('move')
     setPlacingCueId(null)
   }, [])
 
-  const relock = useAutoRelock({ locked, onRelock: lock })
+  // Starting the show re-arms the lock, so an edit session begun while stopped can't
+  // silently carry into the running show.
+  useEffect(() => {
+    if (isShowActive) lock()
+  }, [isShowActive, lock])
+
+  // Auto-relock is a mid-show safety net; disarm it whenever the show isn't running,
+  // or its countdown would fire at an operator who never asked to be unlocked.
+  const relock = useAutoRelock({ locked: locked || !isShowActive, onRelock: lock })
   const { noteEdit, noteGo } = relock
 
   const toggleLock = useCallback(() => {
-    if (!canEdit) return
-    if (locked) setLocked(false)
+    if (!canEdit || !isShowActive) return
+    if (locked) setLockRequested(false)
     else lock()
-  }, [canEdit, locked, lock])
+  }, [canEdit, isShowActive, locked, lock])
 
   // ── Upstream running state — subscribed, never owned. ──
   const cueOrder: FlatCue[] = useMemo(() => flattenCueOrder(stacks), [stacks])
@@ -203,8 +220,6 @@ export function PromptBookViewerPage() {
   // Live cue labels — the pill reads these so an edited cue number reflects at once
   // (the anchor's own cached label only refreshes when the anchor is re-saved).
   const cueLabelByCue = useMemo(() => new Map(cueOrder.map((c) => [c.cueId, c.label])), [cueOrder])
-
-  const isShowActive = activeStackId != null
 
   // Row 3 (show bar) + rail transport — the follow-server runner shared with the Edit view.
   // `onBeforeGo: noteGo` preserves relock-on-GO; `canOperate: canEdit` gates GO exactly as the
@@ -873,6 +888,7 @@ export function PromptBookViewerPage() {
       <PromptBookToolbar
         scriptFileName={book.scriptFileName}
         locked={locked}
+        showActive={isShowActive}
         canEdit={canEdit}
         onToggleLock={toggleLock}
         canUndo={undoSnapshot != null}
@@ -892,6 +908,9 @@ export function PromptBookViewerPage() {
       {!locked && (
         <ToolPalette
           tool={tool}
+          // Amber is the "you unlocked a running show" signal — with the show stopped the
+          // bar is just the normal way to annotate, so it wears the normal chrome.
+          warn={isShowActive}
           placingLabel={placingCueId != null ? (cueLabelByCue.get(placingCueId) ?? null) : null}
           onSelectTool={(t) => {
             setTool(t)
@@ -904,10 +923,10 @@ export function PromptBookViewerPage() {
       <div
         ref={bodyRef}
         className={cn(
-          // The editing state must be visually unmistakable: the whole script
-          // pane gets an inset amber ring while unlocked.
+          // Unlocking a RUNNING show must be visually unmistakable: the whole script pane
+          // gets an inset amber ring. Editing a stopped show is unremarkable — no ring.
           'relative flex min-h-0 flex-1 overflow-hidden',
-          !locked && 'shadow-[inset_0_0_0_2px_rgba(245,158,11,0.55)]',
+          !locked && isShowActive && 'shadow-[inset_0_0_0_2px_rgba(245,158,11,0.55)]',
         )}
       >
         <div className="relative flex min-w-0 flex-1 flex-col">

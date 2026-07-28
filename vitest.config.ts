@@ -18,5 +18,9 @@ export default defineConfig({
     // docblock at the top of the file.
     environment: "node",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    // Registers testing-library cleanup + jest-dom matchers for the jsdom files, and
+    // does nothing at all for the node ones. See the file for why cleanup can't be
+    // left to each test to remember.
+    setupFiles: ["./src/test/setup.ts"],
   },
 })

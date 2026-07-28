@@ -6,6 +6,8 @@ import { cn } from '@/lib/utils'
 interface PromptBookToolbarProps {
   scriptFileName: string | null
   locked: boolean
+  /** Show running. Off, the book is unconditionally editable — no lock, no warning chrome. */
+  showActive: boolean
   canEdit: boolean
   onToggleLock: () => void
   canUndo: boolean
@@ -28,14 +30,18 @@ interface PromptBookToolbarProps {
 }
 
 /**
- * Header bar over the script pane. The lock state is deliberately unmistakable:
- * locked is the app's quiet default chrome; unlocked shifts the whole bar amber
- * with a pulsing EDITING badge (thinking you're locked when you're not can
- * corrupt the prompt-book mid-show).
+ * Header bar over the script pane. While the show RUNS the lock state is deliberately
+ * unmistakable: locked is the app's quiet default chrome; unlocked shifts the whole bar
+ * amber with a pulsing EDITING badge (thinking you're locked when you're not can corrupt
+ * the prompt-book mid-show).
+ *
+ * With the show stopped there is no lock to be wrong about — the button and all of the
+ * amber chrome drop away, and the bar is the plain header of an editable document.
  */
 export function PromptBookToolbar({
   scriptFileName,
   locked,
+  showActive,
   canEdit,
   onToggleLock,
   canUndo,
@@ -51,11 +57,13 @@ export function PromptBookToolbar({
   onStayUnlocked,
   onOpenCues,
 }: PromptBookToolbarProps) {
+  // Unlocked mid-show is the only state worth shouting about.
+  const warn = !locked && showActive
   return (
     <div
       className={cn(
         'flex shrink-0 items-center gap-3 border-b px-4 py-2 transition-colors',
-        locked ? 'bg-background' : 'border-amber-500/50 bg-amber-400/15',
+        warn ? 'border-amber-500/50 bg-amber-400/15' : 'bg-background',
       )}
     >
       <span className="hidden shrink-0 text-[11px] tracking-widest text-muted-foreground uppercase sm:inline">
@@ -153,34 +161,39 @@ export function PromptBookToolbar({
         </Button>
       )}
 
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant={locked ? 'outline' : 'default'}
-            size="sm"
-            onClick={onToggleLock}
-            disabled={!canEdit}
-            aria-label={locked ? 'Unlock for editing' : 'Lock the prompt book'}
-            className={cn(
-              !locked &&
-                'animate-pulse bg-amber-500 font-bold text-amber-950 [animation-duration:2.5s] hover:bg-amber-400',
-            )}
-          >
-            {locked ? (
-              <>
-                <Lock className="size-3.5" /> Locked
-              </>
-            ) : (
-              <>
-                <LockOpen className="size-3.5" /> EDITING — tap to lock
-              </>
-            )}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">
-          {locked ? 'Unlock to edit anchors & annotations (L)' : 'Lock the prompt book (L)'}
-        </TooltipContent>
-      </Tooltip>
+      {/* Nothing to lock while the show is stopped — the book is already editable. The
+          exception is a book we aren't allowed to edit: there the disabled control is the
+          only thing saying why nothing can be changed. */}
+      {(showActive || !canEdit) && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant={locked ? 'outline' : 'default'}
+              size="sm"
+              onClick={onToggleLock}
+              disabled={!canEdit}
+              aria-label={locked ? 'Unlock for editing' : 'Lock the prompt book'}
+              className={cn(
+                !locked &&
+                  'animate-pulse bg-amber-500 font-bold text-amber-950 [animation-duration:2.5s] hover:bg-amber-400',
+              )}
+            >
+              {locked ? (
+                <>
+                  <Lock className="size-3.5" /> Locked
+                </>
+              ) : (
+                <>
+                  <LockOpen className="size-3.5" /> EDITING — tap to lock
+                </>
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            {locked ? 'Unlock to edit anchors & annotations (L)' : 'Lock the prompt book (L)'}
+          </TooltipContent>
+        </Tooltip>
+      )}
     </div>
   )
 }

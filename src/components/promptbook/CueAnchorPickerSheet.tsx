@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { TruncateStart } from '@/components/TruncateStart'
 import { nextAvailableName } from '@/lib/cueUtils'
 import type { CueAnchorDto } from '../../api/promptBooksApi'
 import type { CueStack } from '../../api/cueStacksApi'
@@ -239,7 +240,11 @@ export function CueAnchorPickerSheet({
                         onClick={() => onPick(row.cue.cueId)}
                         className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left"
                       >
-                        <span className="w-12 shrink-0 font-mono text-sm font-bold">{row.cue.label}</span>
+                        <TruncateStart
+                          text={row.cue.label}
+                          title={row.cue.label}
+                          className="w-16 shrink-0 font-mono text-sm font-bold"
+                        />
                         <span className="min-w-0 flex-1 truncate text-sm">{row.cue.name}</span>
                         {anchorByCue.has(row.cue.cueId) ? (
                           <span className="inline-flex shrink-0 items-center gap-1 text-[11px] text-amber-600">

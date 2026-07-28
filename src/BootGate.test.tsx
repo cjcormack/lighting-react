@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import "@testing-library/jest-dom/vitest"
 import { StrictMode } from "react"
 import { Provider } from "react-redux"
 import { act, cleanup, render, screen } from "@testing-library/react"
@@ -58,6 +57,10 @@ beforeEach(() => {
   fetchMock = installBootStatusFetch(() => currentStatus)
 })
 
+// The global cleanup (src/test/setup.ts) would run AFTER this hook — vitest unwinds
+// afterEach in reverse registration order — and this suite must unmount before it resets
+// the store and pulls the fetch mock, or the still-mounted gate refetches into nothing.
+// cleanup() is idempotent, so calling it here just fixes the ordering.
 afterEach(() => {
   cleanup()
   store.dispatch(restApi.util.resetApiState())

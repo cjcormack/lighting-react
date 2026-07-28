@@ -3,6 +3,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils'
 import { positionLabel } from '@/lib/promptBook/geometry'
 import { InlineEditField } from '@/components/InlineEditField'
+import { TruncateStart } from '@/components/TruncateStart'
 import { CueCardBody, type CueCardKind, type ExpansionMode } from '@/components/runner/run/CueCardBody'
 import type { CueAnchorDto } from '@/api/promptBooksApi'
 import type { CueStackCueEntry } from '@/api/cueStacksApi'
@@ -259,8 +260,13 @@ export function PromptBookCueCard({
   // The whole locked-mode signal for an unanchored cue: one notch quieter than an
   // anchored standby row. Live/next/done carry their own strong tier, so leave those be.
   const dim = !anchored && !isLive && !isNext && !isDone
+  // 4rem, not 3: a prefixed/decimal number ("QS1-3.2" ≈ 60px with the field's padding)
+  // wrapped to a second line in the old w-12 cell. Still a fixed column so every row's
+  // name starts at the same x; anything longer clips rather than reflowing the rail.
+  // Overflow is clipped at the START (`TruncateStart`) — the tail of a cue number is what
+  // tells "S1-3.1" from "S1-3.2", so that is the end worth keeping.
   const labelClass = cn(
-    'w-12 shrink-0 text-[13px] font-bold',
+    'w-16 shrink-0 text-[13px] font-bold',
     isLive
       ? 'text-emerald-300'
       : isNext
@@ -311,10 +317,13 @@ export function PromptBookCueCard({
           NEXT
         </span>
       ) : (
+        // The amber dot is the standby colour of this cue's band on the script — an
+        // unanchored cue has no band, so it gets a blank (but still space-holding) slot
+        // rather than a dot pointing at nothing.
         <span
           className={cn(
             'size-2 shrink-0 rounded-full',
-            isDone ? 'bg-slate-500/50' : 'bg-amber-500/70',
+            isDone ? 'bg-slate-500/50' : anchored ? 'bg-amber-500/70' : 'bg-transparent',
           )}
         />
       )}
@@ -326,13 +335,16 @@ export function PromptBookCueCard({
             // doesn't change what the rail reads. Fall back to the sibling `cueEntry.name`
             // rather than `cue.label`: both come from the stack list, so clearing a number
             // shows the name at once instead of the stale "Q…" until `cueOrder` refetches.
-            formatDisplay={(v) => (v ? `Q${v}` : cueEntry.name)}
+            formatDisplay={(v) => <TruncateStart text={v ? `Q${v}` : cueEntry.name} className="w-full" />}
             onCommit={(next) => onRenumberCue(next.trim() || null)}
             ariaLabel="cue number"
             placeholder="Q#"
             onEditInteraction={onEditInteraction}
-            // px-0: the 3rem label cell is tight enough that padding would force an
-            // extra wrap the read-only span doesn't have.
+            // Whatever the cell ends up showing, in full — it is the same cell that folds
+            // in the name when there's no number, and either can be clipped.
+            title={cueEntry.cueNumber ? `Q${cueEntry.cueNumber}` : cueEntry.name}
+            // px-0: the label cell is tight enough that padding would cost the widest
+            // number the room the read-only span gives it.
             className={cn(labelClass, 'px-0')}
           />
           <InlineEditField
@@ -349,7 +361,7 @@ export function PromptBookCueCard({
         </>
       ) : (
         <>
-          <span className={labelClass}>{cue.label}</span>
+          <TruncateStart text={cue.label} title={cue.label} className={labelClass} />
           <span className={nameClass}>{cue.name}</span>
         </>
       )}

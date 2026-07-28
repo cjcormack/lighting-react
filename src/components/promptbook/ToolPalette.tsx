@@ -13,23 +13,41 @@ const TOOLS: { id: PromptBookTool; label: string; icon: typeof MousePointer2; da
 
 /**
  * Edit-mode annotation bar — a horizontal row under the toolbar, rendered only
- * while unlocked. Its amber wash matches the app's "you are editing" signal.
- * Cue anchors are placed from the cue list (click a cue → click the script), so
- * this bar covers only the free annotations.
+ * while unlocked. Cue anchors are placed from the cue list (click a cue → click the
+ * script), so this bar covers only the free annotations.
+ *
+ * `warn` carries the app's "you are editing" signal: amber while the show is RUNNING,
+ * where being unlocked is a hazard. Editing a stopped show is the ordinary case and
+ * gets ordinary chrome.
  */
 export function ToolPalette({
   tool,
+  warn,
   placingLabel,
   onSelectTool,
 }: {
   tool: PromptBookTool
+  /** Unlocked mid-show — wash the bar amber. */
+  warn: boolean
   /** When a cue is armed for (re-)anchoring, its label ("Q12") — shows a targeted prompt. */
   placingLabel?: string | null
   onSelectTool: (tool: PromptBookTool) => void
 }) {
   return (
-    <div className="flex shrink-0 items-center gap-1.5 border-b border-amber-500/40 bg-amber-400/10 px-4 py-1.5">
-      <span className="mr-1 text-[10px] font-bold tracking-widest text-amber-600/80 uppercase">Annotate</span>
+    <div
+      className={cn(
+        'flex shrink-0 items-center gap-1.5 border-b px-4 py-1.5',
+        warn && 'border-amber-500/40 bg-amber-400/10',
+      )}
+    >
+      <span
+        className={cn(
+          'mr-1 text-[10px] font-bold tracking-widest uppercase',
+          warn ? 'text-amber-600/80' : 'text-muted-foreground',
+        )}
+      >
+        Annotate
+      </span>
       {TOOLS.map(({ id, label, icon: Icon, danger }) => (
         <Button
           key={id}
@@ -41,7 +59,9 @@ export function ToolPalette({
             tool === id
               ? danger
                 ? 'bg-red-500/15 text-red-400 hover:bg-red-500/20 hover:text-red-400'
-                : 'bg-amber-400/20 text-amber-600 hover:bg-amber-400/25 hover:text-amber-600'
+                : warn
+                  ? 'bg-amber-400/20 text-amber-600 hover:bg-amber-400/25 hover:text-amber-600'
+                  : 'bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary'
               : 'text-muted-foreground hover:text-foreground',
           )}
         >
