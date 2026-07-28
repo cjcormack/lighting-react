@@ -58,21 +58,18 @@ describe('computeWarnings', () => {
     expect(warnings).toEqual([])
   })
 
-  it('flags an unanchored cue in a partially anchored stack', () => {
-    const warnings = computeWarnings([anchor(1, rect(0, 0.1))], [], order([1], [2]))
-    expect(warnings).toHaveLength(1)
-    expect(warnings[0]).toMatchObject({ kind: 'unanchored-cue', cueId: 2 })
+  it('says nothing about an unanchored cue', () => {
+    // Pre-show states and auto-followed cues reasonably have no line to point at.
+    expect(computeWarnings([anchor(1, rect(0, 0.1))], [], order([1], [2]))).toEqual([])
   })
 
-  it('collapses a wholly unanchored stack to one warning', () => {
+  it('says nothing about a wholly unanchored stack', () => {
     const warnings = computeWarnings(
       [anchor(1, rect(0, 0.1))],
       [],
       order([1, 1], [10, 2], [11, 2], [12, 2]),
     )
-    expect(warnings).toHaveLength(1)
-    expect(warnings[0]).toMatchObject({ kind: 'unanchored-stack', stackId: 2, cueId: 10 })
-    expect(warnings[0].message).toContain('3 cues')
+    expect(warnings).toEqual([])
   })
 
   it('flags out-of-order anchors on the same page', () => {
@@ -108,13 +105,25 @@ describe('computeWarnings', () => {
   })
 
   it('skips unanchored cues when checking order', () => {
-    // 1 (y=.1) → 2 unanchored → 3 (y=.5): still monotonic, only the unanchored warning.
+    // 1 (y=.1) → 2 unanchored → 3 (y=.5): still monotonic, so nothing to report.
     const warnings = computeWarnings(
       [anchor(1, rect(0, 0.1)), anchor(3, rect(0, 0.5))],
       [],
       order([1], [2], [3]),
     )
-    expect(warnings.map((w) => w.kind)).toEqual(['unanchored-cue'])
+    expect(warnings).toEqual([])
+  })
+
+  it('still compares across an unanchored cue', () => {
+    // 1 (y=.5) → 2 unanchored → 3 (y=.2): the gap must not hide the disorder.
+    const warnings = computeWarnings(
+      [anchor(1, rect(0, 0.5)), anchor(3, rect(0, 0.2))],
+      [],
+      order([1], [2], [3]),
+    )
+    expect(warnings.map((w) => w.kind)).toEqual(['out-of-order'])
+    expect(warnings[0]).toMatchObject({ cueId: 3 })
+    expect(warnings[0].message).toContain('Q1')
   })
 
   it('flags an anchor overlapping a strikethrough', () => {

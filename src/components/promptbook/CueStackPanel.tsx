@@ -15,6 +15,8 @@ interface CueStackPanelProps {
   /** Rail rows in show order — headers, cue cards, and separators (markers). */
   rows: ShowRailRow[]
   anchorByCue: Map<number, CueAnchorDto>
+  /** Per-unanchored-cue hint naming the neighbour the book borrows, e.g. "follows Q12". */
+  anchorHintByCue: Map<number, string>
   /** Full stack entries by cue id — feeds each expanded card's palette/notes/auto. */
   cueEntryByCue: Map<number, CueStackCueEntry>
   statusOf: (cueId: number) => CueRunStatus
@@ -77,6 +79,7 @@ interface CueStackPanelProps {
 export function CueStackPanel({
   rows,
   anchorByCue,
+  anchorHintByCue,
   cueEntryByCue,
   statusOf,
   warningsByCue,
@@ -197,6 +200,7 @@ export function CueStackPanel({
               cue={row.cue}
               status={status}
               anchor={anchorByCue.get(row.cue.cueId)}
+              anchorHint={anchorHintByCue.get(row.cue.cueId) ?? null}
               cueEntry={cueEntryByCue.get(row.cue.cueId)}
               projectId={projectId}
               warnings={warningsByCue.get(row.cue.cueId) ?? []}

@@ -46,7 +46,12 @@ import { scriptDocUrl, type AnnotationDto, type AnnotationKind, type NoteTone, t
 import { cn } from '@/lib/utils'
 import { formatError } from '../lib/formatError'
 import { computeWarnings, regionsOverlap, type DesyncWarning, type FlatCue } from '../lib/promptBook/desync'
-import { flattenCueOrder, flattenShowRows, orderedCueIdsForInsert } from '../lib/promptBook/geometry'
+import {
+  flattenCueOrder,
+  flattenShowRows,
+  nearestAnchoredCue,
+  orderedCueIdsForInsert,
+} from '../lib/promptBook/geometry'
 import { ScriptViewer, type ScriptViewerHandle } from '../components/promptbook/ScriptViewer'
 import { CueAnchorPickerSheet, type NewCueStackChoice } from '../components/promptbook/CueAnchorPickerSheet'
 import { ShowHeader } from '../components/ShowHeader'
@@ -313,15 +318,41 @@ export function PromptBookViewerPage() {
     return m
   }, [stacks])
 
-  // ── Runtime emphasis: scroll the live cue's anchor into view on advance. ──
-  // The anchor map lives in a ref so an unrelated book refetch (edit, WS echo)
-  // can't re-run the effect and yank the viewport while the operator reads ahead.
-  const anchorByCueRef = useRef(anchorByCue)
-  anchorByCueRef.current = anchorByCue
+  // Where the book should scroll for a cue: its own anchor, else a best-effort borrow
+  // from the nearest anchored cue (normally the one before it). An unanchored cue —
+  // pre-show, house lights, an auto-follow — is a legitimate state, not a dead end.
+  const resolveScrollRegion = useCallback(
+    (cueId: number): Region | null => {
+      const anchor = anchorByCue.get(cueId)
+      if (anchor) return anchor.region
+      return nearestAnchoredCue(cueId, cueOrder, anchorByCue)?.region ?? null
+    },
+    [anchorByCue, cueOrder],
+  )
+
+  // "follows Q12" / "before Q14" for each unanchored cue — names what the book scrolls
+  // to. Built from the same helper as the navigation, so the two can't disagree.
+  const anchorHintByCue = useMemo(() => {
+    const m = new Map<number, string>()
+    for (const cue of cueOrder) {
+      if (anchorByCue.has(cue.cueId)) continue
+      const fallback = nearestAnchoredCue(cue.cueId, cueOrder, anchorByCue)
+      if (fallback) {
+        m.set(cue.cueId, `${fallback.direction === 'before' ? 'follows' : 'before'} ${fallback.cue.label}`)
+      }
+    }
+    return m
+  }, [cueOrder, anchorByCue])
+
+  // ── Runtime emphasis: scroll the live cue into view on advance. ──
+  // The resolver lives in a ref so an unrelated book refetch (edit, WS echo) can't
+  // re-run the effect and yank the viewport while the operator reads ahead.
+  const resolveScrollRegionRef = useRef(resolveScrollRegion)
+  resolveScrollRegionRef.current = resolveScrollRegion
   useEffect(() => {
     if (activeCueId == null) return
-    const anchor = anchorByCueRef.current.get(activeCueId)
-    if (anchor) viewerRef.current?.scrollToRegion(anchor.region)
+    const region = resolveScrollRegionRef.current(activeCueId)
+    if (region) viewerRef.current?.scrollToRegion(region)
   }, [activeCueId])
 
   // Reset rail expansion to its default — live + next expanded, everything else
@@ -392,8 +423,8 @@ export function PromptBookViewerPage() {
 
   const jumpToLive = useCallback(() => {
     if (activeCueId == null) return
-    const anchor = anchorByCueRef.current.get(activeCueId)
-    if (anchor) viewerRef.current?.scrollToRegion(anchor.region)
+    const region = resolveScrollRegionRef.current(activeCueId)
+    if (region) viewerRef.current?.scrollToRegion(region)
   }, [activeCueId])
 
   // Keyboard: Space=GO, Backspace=Back (parity with Run), L toggles lock.
@@ -545,19 +576,19 @@ export function PromptBookViewerPage() {
     [anchorPicker, createStack, createCue, upsertAnchor, reorderCues, projectIdNum, stacks, anchorByCue, noteEdit],
   )
 
+  // Primary rail click: always move the book as close to the cue as we can — its own
+  // anchor, or a borrowed neighbour position. Unlocked, an unanchored cue ALSO arms
+  // click-to-place, so you land near where the anchor belongs and can select the line.
   const handleCueClick = useCallback(
     (cue: FlatCue) => {
-      const anchor = anchorByCue.get(cue.cueId)
-      if (anchor) {
-        viewerRef.current?.scrollToRegion(anchor.region)
-        return
-      }
-      if (!locked) {
+      const region = resolveScrollRegion(cue.cueId)
+      if (region) viewerRef.current?.scrollToRegion(region)
+      if (!anchorByCue.has(cue.cueId) && !locked) {
         setPlacingCueId((prev) => (prev === cue.cueId ? null : cue.cueId))
         noteEdit()
       }
     },
-    [anchorByCue, locked, noteEdit],
+    [resolveScrollRegion, anchorByCue, locked, noteEdit],
   )
 
   const handleRemoveAnchor = useCallback(
@@ -573,10 +604,10 @@ export function PromptBookViewerPage() {
 
   const handleWarningClick = useCallback(
     (warning: DesyncWarning) => {
-      const anchor = anchorByCue.get(warning.cueId)
-      if (anchor) viewerRef.current?.scrollToRegion(anchor.region)
+      const region = resolveScrollRegion(warning.cueId)
+      if (region) viewerRef.current?.scrollToRegion(region)
     },
-    [anchorByCue],
+    [resolveScrollRegion],
   )
 
   const handleCreateAnnotation = useCallback(
@@ -761,6 +792,7 @@ export function PromptBookViewerPage() {
   const railProps = {
     rows: railRows,
     anchorByCue,
+    anchorHintByCue,
     cueEntryByCue,
     statusOf,
     warningsByCue,

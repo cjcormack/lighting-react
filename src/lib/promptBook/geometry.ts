@@ -311,6 +311,46 @@ export function orderedCueIdsForInsert(
   return [...ids.slice(0, insertIndex), newCueId, ...ids.slice(insertIndex)]
 }
 
+/** A borrowed reading position for a cue that has no anchor of its own. */
+export interface AnchorFallback {
+  /** The anchored cue whose reading position we're borrowing. */
+  cue: FlatCue
+  region: Region
+  /** Where the borrowed cue sits relative to the requested one, in show order. */
+  direction: 'before' | 'after'
+}
+
+/**
+ * Best-effort reading position for a cue with no anchor — a pre-show state or an
+ * auto-followed cue reasonably has no line to point at, but the book should still
+ * navigate somewhere sensible.
+ *
+ * Searches BACKWARDS from the cue first: you read down the script, so the previous
+ * cue's anchor is the closest known "you are here". Only when nothing precedes it
+ * (a cue ahead of every anchor in the show) does it borrow forwards.
+ *
+ * Deliberately crosses stack boundaries — `cueOrder` is the show's flattened reading
+ * order, so a wholly unanchored act still borrows from the act before it. Returns null
+ * when the cue isn't in the order or the book has no anchors at all.
+ */
+export function nearestAnchoredCue(
+  cueId: number,
+  cueOrder: FlatCue[],
+  anchorByCue: Map<number, CueAnchorDto>,
+): AnchorFallback | null {
+  const index = cueOrder.findIndex((c) => c.cueId === cueId)
+  if (index < 0) return null
+  for (let i = index - 1; i >= 0; i--) {
+    const anchor = anchorByCue.get(cueOrder[i].cueId)
+    if (anchor) return { cue: cueOrder[i], region: anchor.region, direction: 'before' }
+  }
+  for (let i = index + 1; i < cueOrder.length; i++) {
+    const anchor = anchorByCue.get(cueOrder[i].cueId)
+    if (anchor) return { cue: cueOrder[i], region: anchor.region, direction: 'after' }
+  }
+  return null
+}
+
 /** A flattened cue list interleaved with per-stack header rows. */
 export type CueRailRow =
   | { type: 'header'; stackId: number; stackName: string }

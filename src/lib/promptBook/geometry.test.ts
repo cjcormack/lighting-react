@@ -6,6 +6,7 @@ import {
   flattenShowRows,
   mergeRectsByLine,
   moveRegionVertically,
+  nearestAnchoredCue,
   orderedCueIdsForInsert,
   positionLabel,
   positionLabelFor,
@@ -13,6 +14,7 @@ import {
 } from './geometry'
 import type { CueStack, CueStackCueEntry } from '../../api/cueStacksApi'
 import type { CueAnchorDto, Region } from '../../api/promptBooksApi'
+import type { FlatCue } from './desync'
 
 describe('rectToStyle', () => {
   it('converts normalized coords to CSS percentages', () => {
@@ -336,6 +338,16 @@ describe('positionLabel', () => {
   })
 })
 
+/** A single-rect region at a reading position — shared by the anchor-map fixtures below. */
+function regionAt(page: number, y: number): Region {
+  return [{ page, x: 0.1, y, w: 0.5, h: 0.03 }]
+}
+
+/** Build an anchor map from `[cueId, page, y]` tuples. */
+function anchors(entries: Array<[number, number, number]>): Map<number, CueAnchorDto> {
+  return new Map(entries.map(([cueId, page, y]) => [cueId, { cueId, region: regionAt(page, y), label: null }]))
+}
+
 describe('orderedCueIdsForInsert', () => {
   function cue(id: number): CueStackCueEntry {
     return {
@@ -356,13 +368,6 @@ describe('orderedCueIdsForInsert', () => {
   }
   function stack(cues: CueStackCueEntry[]): CueStack {
     return { id: 1, name: 'S', palette: [], loop: false, sortOrder: 0, type: 'STACK', label: null, cues, activeCueId: null, canEdit: true, canDelete: true }
-  }
-  function regionAt(page: number, y: number): Region {
-    return [{ page, x: 0.1, y, w: 0.5, h: 0.03 }]
-  }
-  /** Build an anchor map from `[cueId, page, y]` tuples. */
-  function anchors(entries: Array<[number, number, number]>): Map<number, CueAnchorDto> {
-    return new Map(entries.map(([cueId, page, y]) => [cueId, { cueId, region: regionAt(page, y), label: null }]))
   }
 
   it('inserts between two anchored cues by reading position', () => {
@@ -397,5 +402,52 @@ describe('orderedCueIdsForInsert', () => {
 
   it('places the only cue of an empty stack first', () => {
     expect(orderedCueIdsForInsert(stack([]), new Map(), regionAt(0, 0.5), 99)).toEqual([99])
+  })
+})
+
+describe('nearestAnchoredCue', () => {
+  function order(...cues: Array<[cueId: number, stackId?: number]>): FlatCue[] {
+    return cues.map(([cueId, stackId = 1]) => ({
+      cueId,
+      label: `Q${cueId}`,
+      name: `cue-${cueId}`,
+      fadeMs: null,
+      fadeCurve: 'LINEAR',
+      stackId,
+      stackName: `Stack ${stackId}`,
+    }))
+  }
+
+  it('borrows the previous anchored cue, even when a later one is nearer in the list', () => {
+    const found = nearestAnchoredCue(2, order([1], [2], [3]), anchors([[1, 0, 0.2], [3, 0, 0.8]]))
+    expect(found).toMatchObject({ direction: 'before', region: regionAt(0, 0.2) })
+    expect(found?.cue.cueId).toBe(1)
+  })
+
+  it('skips other unanchored cues to reach the nearest anchor behind it', () => {
+    const found = nearestAnchoredCue(4, order([1], [2], [3], [4]), anchors([[1, 0, 0.2]]))
+    expect(found?.cue.cueId).toBe(1)
+    expect(found?.direction).toBe('before')
+  })
+
+  it('borrows forwards for a cue ahead of every anchor', () => {
+    const found = nearestAnchoredCue(1, order([1], [2], [3]), anchors([[3, 2, 0.4]]))
+    expect(found).toMatchObject({ direction: 'after', region: regionAt(2, 0.4) })
+    expect(found?.cue.cueId).toBe(3)
+  })
+
+  it('borrows across a stack boundary (show order, not stack order)', () => {
+    // Stack 2 is wholly unanchored; it borrows from the end of stack 1.
+    const found = nearestAnchoredCue(10, order([1, 1], [2, 1], [10, 2], [11, 2]), anchors([[1, 0, 0.2], [2, 1, 0.5]]))
+    expect(found?.cue.cueId).toBe(2)
+    expect(found?.cue.stackId).toBe(1)
+  })
+
+  it('returns null for a book with no anchors at all', () => {
+    expect(nearestAnchoredCue(2, order([1], [2]), new Map())).toBeNull()
+  })
+
+  it('returns null for a cue that is not in the show order', () => {
+    expect(nearestAnchoredCue(99, order([1], [2]), anchors([[1, 0, 0.2]]))).toBeNull()
   })
 })

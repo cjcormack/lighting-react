@@ -13,6 +13,8 @@ interface PromptBookCueCardProps {
   cue: FlatCue
   status: CueRunStatus
   anchor: CueAnchorDto | undefined
+  /** Unanchored cues only: the neighbour the book borrows, e.g. "follows Q12". */
+  anchorHint: string | null
   /** The full stack entry (palette/notes/auto), for the expanded card. */
   cueEntry: CueStackCueEntry | undefined
   projectId: number
@@ -59,11 +61,17 @@ const STATUS_KIND: Record<CueRunStatus, CueCardKind> = {
  * blue next, blue "other". The primary click always scrolls the book to the cue; a small
  * "Set next" arms it as the next GO, and the anchor place/remove + desync warning
  * affordances ride along. There is no "Change" button.
+ *
+ * Having no anchor is NOT an error — a pre-show state or an auto-followed cue reasonably
+ * has no line to point at. While locked the row says nothing about it beyond slightly
+ * dimmer text; the "place anchor" affordance only appears while the book is unlocked,
+ * and the expanded card states it in words.
  */
 export function PromptBookCueCard({
   cue,
   status,
   anchor,
+  anchorHint,
   cueEntry,
   projectId,
   warnings,
@@ -106,17 +114,25 @@ export function PromptBookCueCard({
       </Tooltip>
     ) : null
 
+  // Unanchored: nothing VISIBLE while locked (run mode has no opinion about it) — the row's
+  // dimmer text is the whole signal, so the state is spelled out for screen readers, which
+  // can't see opacity. Unlocked it becomes an editing affordance, muted until the row is
+  // hovered, so a mostly unanchored rail doesn't read as a wall of warnings.
   const anchorAffordance = !anchored ? (
-    <span
-      className={cn(
-        'shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-bold',
-        locked
-          ? 'border-red-500/40 text-red-500/90'
-          : 'border-amber-500/60 text-amber-500 group-hover:bg-amber-400/10',
-      )}
-    >
-      {locked ? 'no anchor' : placing ? 'placing…' : 'place anchor'}
-    </span>
+    locked ? (
+      <span className="sr-only">no anchor</span>
+    ) : (
+      <span
+        className={cn(
+          'shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-bold',
+          placing
+            ? 'border-amber-500 text-amber-500'
+            : 'border-transparent text-muted-foreground/50 group-hover:border-amber-500/60 group-hover:text-amber-500',
+        )}
+      >
+        {placing ? 'placing…' : 'place anchor'}
+      </span>
+    )
   ) : (
     <span className="inline-flex shrink-0 items-center gap-1">
       <Anchor className="size-3 text-muted-foreground/50" />
@@ -193,7 +209,13 @@ export function PromptBookCueCard({
           projectId={projectId}
           mode={mode}
           onModeChange={onModeChange}
-          location={anchored ? positionLabel(anchor.region, coverPages) : 'Not anchored to the script'}
+          location={
+            anchored
+              ? positionLabel(anchor.region, coverPages)
+              : anchorHint
+                ? `No anchor · ${anchorHint}`
+                : 'No anchor'
+          }
           headerLabel={cue.label}
           fadeProgress={fadeProgress}
           fadeRemainMs={fadeRemainMs}
@@ -234,6 +256,9 @@ export function PromptBookCueCard({
   const isLive = status === 'live'
   const isNext = status === 'next'
   const isDone = status === 'done'
+  // The whole locked-mode signal for an unanchored cue: one notch quieter than an
+  // anchored standby row. Live/next/done carry their own strong tier, so leave those be.
+  const dim = !anchored && !isLive && !isNext && !isDone
   const labelClass = cn(
     'w-12 shrink-0 text-[13px] font-bold',
     isLive
@@ -242,7 +267,9 @@ export function PromptBookCueCard({
         ? 'text-sky-300'
         : isDone
           ? 'text-muted-foreground/60'
-          : 'text-foreground',
+          : dim
+            ? 'text-foreground/50'
+            : 'text-foreground',
   )
   const nameClass = cn(
     'flex-1 truncate text-xs',
@@ -252,7 +279,9 @@ export function PromptBookCueCard({
         ? 'text-sky-200/70'
         : isDone
           ? 'text-muted-foreground/50'
-          : 'text-muted-foreground',
+          : dim
+            ? 'text-muted-foreground/60'
+            : 'text-muted-foreground',
   )
   return (
     <div

@@ -6,9 +6,12 @@
 //   • script position  — each anchor's (page, y) reading position
 //
 // Agreement means: advancing the stack moves you monotonically DOWN the script.
-// Ported from src/prototypes/model.ts (the design-session spec) with numeric cue
-// ids and per-stack grouping so a wholly unanchored stack collapses to one
-// summary warning instead of one warning per cue.
+// Ported from src/prototypes/model.ts (the design-session spec) with numeric cue ids.
+//
+// A cue with no anchor is NOT a fault: a pre-show state, house lights, or an
+// auto-followed cue has no line to point at and never will. Unanchored cues are
+// simply skipped here (the rail signals them quietly and borrows a neighbour's
+// position for navigation — see geometry.nearestAnchoredCue).
 
 import type { Rect, Region, CueAnchorDto, AnnotationDto } from '../../api/promptBooksApi'
 
@@ -26,11 +29,11 @@ export interface FlatCue {
   stackName: string
 }
 
-export type WarningKind = 'out-of-order' | 'anchor-in-cut' | 'unanchored-cue' | 'unanchored-stack'
+export type WarningKind = 'out-of-order' | 'anchor-in-cut'
 
 export interface DesyncWarning {
   kind: WarningKind
-  /** The cue the warning is about; for `unanchored-stack`, the stack's first cue. */
+  /** The cue the warning is about — always an anchored cue, so it can be scrolled to. */
   cueId: number
   stackId: number
   message: string
@@ -67,41 +70,14 @@ export function computeWarnings(
   const anchorByCue = new Map(anchors.map((a) => [a.cueId, a]))
   const cuts = annotations.filter((n) => n.kind === 'STRIKETHROUGH')
 
-  // Stacks with no anchors at all collapse to one warning each, so an act that
-  // simply hasn't been anchored yet doesn't bury real issues under per-cue noise.
-  const unanchoredStackIds = new Set<number>()
-  const cuesByStack = new Map<number, FlatCue[]>()
-  for (const cue of cueOrder) {
-    cuesByStack.set(cue.stackId, [...(cuesByStack.get(cue.stackId) ?? []), cue])
-  }
-  for (const [stackId, cues] of cuesByStack) {
-    if (cues.every((c) => !anchorByCue.has(c.cueId))) {
-      unanchoredStackIds.add(stackId)
-      warnings.push({
-        kind: 'unanchored-stack',
-        cueId: cues[0].cueId,
-        stackId,
-        message: `${cues[0].stackName} has no anchors on the script (${cues.length} cue${cues.length > 1 ? 's' : ''}).`,
-      })
-    }
-  }
-
-  // Walk cues in stack order, requiring monotonic script position.
+  // Walk cues in stack order, requiring monotonic script position. Unanchored cues
+  // carry no reading position, so they neither warn nor break the comparison between
+  // their anchored neighbours.
   let prev: { page: number; y: number } | null = null
   let prevLabel: string | null = null
   for (const cue of cueOrder) {
     const anchor = anchorByCue.get(cue.cueId)
-    if (!anchor) {
-      if (!unanchoredStackIds.has(cue.stackId)) {
-        warnings.push({
-          kind: 'unanchored-cue',
-          cueId: cue.cueId,
-          stackId: cue.stackId,
-          message: `${cue.label} has no anchor on the script.`,
-        })
-      }
-      continue
-    }
+    if (!anchor) continue
 
     const pos = scriptPosition(anchor.region)
     if (prev && (pos.page < prev.page || (pos.page === prev.page && pos.y < prev.y))) {
