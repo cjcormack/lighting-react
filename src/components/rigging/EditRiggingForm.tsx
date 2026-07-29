@@ -247,7 +247,7 @@ export const EditRiggingForm = forwardRef<EditRiggingFormHandle, EditRiggingForm
             placeholder="3.0"
           />
           <p className="text-xs text-muted-foreground">
-            Length along the rig's local X axis. Used for the 3D bar render.
+            Length along the rig&rsquo;s local X axis. Used for the 3D bar render.
           </p>
         </div>
 

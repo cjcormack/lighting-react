@@ -256,7 +256,7 @@ function UnmatchedDeviceState({ device }: { device: SurfaceDeviceInfo }) {
     <Card className="p-6 space-y-2">
       <h2 className="font-semibold">{device.displayName}</h2>
       <p className="text-sm text-muted-foreground">
-        This device didn't match any registered <code>@ControlSurfaceType</code> profile.
+        This device didn&rsquo;t match any registered <code>@ControlSurfaceType</code> profile.
         Add a Kotlin profile under <code>src/main/kotlin/uk/me/cormack/lighting7/midi/devices/</code>
         to bind controls on this device.
       </p>

@@ -181,6 +181,9 @@ function ByTarget({
   onRemovePreset,
   onAddAssignment,
   onAddEffect,
+  // Wired in from the parent but not yet surfaced: the by-target Presets section
+  // has no Add button, unlike Assignments/Effects here and Presets in ByLayer.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onAddPreset,
 }: {
   cue: Cue

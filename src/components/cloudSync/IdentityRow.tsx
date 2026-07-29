@@ -2,7 +2,8 @@ import { useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Github, LogOut, Loader2 } from "lucide-react"
+import { LogOut, Loader2 } from "lucide-react"
+import { GithubIcon } from "@/components/GithubIcon"
 import {
   useDisconnectOAuthGithubMutation,
   useOauthGithubIdentityQuery,
@@ -70,7 +71,7 @@ export function IdentityRow({ projectId }: { projectId: number | null }) {
     return (
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
-          <Github className="size-4 shrink-0" />
+          <GithubIcon className="size-4 shrink-0" />
           <span className="text-sm truncate">
             Connected as <strong>@{identity.login}</strong>
           </span>
@@ -97,12 +98,12 @@ export function IdentityRow({ projectId }: { projectId: number | null }) {
     <div className="space-y-1">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Github className="size-4 shrink-0" />
+          <GithubIcon className="size-4 shrink-0" />
           <span className="text-sm">Not connected to GitHub.</span>
         </div>
         <a href={startUrl}>
           <Button size="sm">
-            <Github className="size-3.5 mr-1.5" />
+            <GithubIcon className="size-3.5 mr-1.5" />
             Connect GitHub
           </Button>
         </a>

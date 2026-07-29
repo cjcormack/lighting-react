@@ -143,7 +143,6 @@ function FixturesContainer() {
       <AllFixturesView
         fixtureList={fixtureList}
         filteredFixtures={filteredFixtures}
-        filter={filter}
       />
     </ViewModeContext.Provider>
   )
@@ -152,11 +151,9 @@ function FixturesContainer() {
 function AllFixturesView({
   fixtureList,
   filteredFixtures,
-  filter,
 }: {
   fixtureList: Fixture[]
   filteredFixtures: Fixture[]
-  filter: string
 }) {
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
 
@@ -185,7 +182,7 @@ function AllFixturesView({
   )
 }
 
-const FixtureCard = React.memo(({ fixture, onGroupClick }: { fixture: Fixture; onGroupClick: (groupName: string) => void }) => {
+const FixtureCard = React.memo(function FixtureCard({ fixture, onGroupClick }: { fixture: Fixture; onGroupClick: (groupName: string) => void }) {
   return (
     <EditModeProvider>
       <Card>

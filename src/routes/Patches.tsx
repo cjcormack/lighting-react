@@ -129,7 +129,7 @@ export function PatchListContent({
           <div className="flex justify-center py-8"><Loader2 className="size-6 animate-spin" /></div>
         ) : rows.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
-            No fixtures patched yet. Click "Patch" to get started.
+            No fixtures patched yet. Click &ldquo;Patch&rdquo; to get started.
           </div>
         ) : (
           <PatchTable

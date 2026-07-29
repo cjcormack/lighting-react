@@ -35,7 +35,6 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
   const [displayName, setDisplayName] = useState(patch.displayName)
   const [key, setKey] = useState(patch.key)
   const [startChannel, setStartChannel] = useState(patch.startChannel)
-  const [addGroupValue, setAddGroupValue] = useState('')
 
   const [placement, setPlacement] = useState<PatchPlacementValue>({
     riggingUuid: patch.riggingUuid,
@@ -245,7 +244,8 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
             </div>
           )}
           <GroupComboInput
-            value={addGroupValue}
+            // Stays empty: `clearOnSelect` resets the field after each add.
+            value=""
             onChange={(name) => {
               if (name) handleAddToGroup(name)
             }}

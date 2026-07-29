@@ -40,7 +40,7 @@ const CHANNEL_GROUPS: number[][] = Array.from({ length: 64 }, (_, g) =>
   Array.from({ length: 8 }, (_, i) => g * 8 + i + 1),
 )
 
-export const ChannelSlider = React.memo(({
+export const ChannelSlider = React.memo(function ChannelSlider({
   universe,
   id,
   isEditing,
@@ -54,7 +54,7 @@ export const ChannelSlider = React.memo(({
   mapping?: ChannelMappingEntry
   parkedValue?: number
   onFixtureClick?: (fixtureKey: string) => void
-}) => {
+}) {
   const { data: maybeValue } = useGetChannelQuery({
     universe: universe,
     channelNo: id,

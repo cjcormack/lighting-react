@@ -3,7 +3,7 @@ import { Scissors } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { InlineEditField } from '@/components/InlineEditField'
 import type { AnnotationDto, NoteTone, Rect } from '../../api/promptBooksApi'
-import { MARKER_LANE_X, marginRailStyle, rectToStyle, verticalBounds } from '../../lib/promptBook/geometry'
+import { MARKER_LANE_X, marginRailStyle, rectToStyle } from '../../lib/promptBook/geometry'
 
 /** Above this normalized height a cut rect is a multi-line block/region (a drawn
  *  box or legacy band) rather than one text line, and gets the obvious crossed-out

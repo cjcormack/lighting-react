@@ -50,7 +50,7 @@ export function RiggingsContent({ projectId }: { projectId: number }) {
         </div>
       ) : sortedRiggings.length === 0 ? (
         <p className="text-sm text-muted-foreground py-4">
-          No riggings yet. Click "Add rigging" to define one.
+          No riggings yet. Click &ldquo;Add rigging&rdquo; to define one.
         </p>
       ) : (
         <Table>

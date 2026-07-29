@@ -136,7 +136,7 @@ export function InlineEditField({
 
   if (editing) {
     const editorProps = {
-      // eslint-disable-next-line jsx-a11y/no-autofocus -- the field only mounts on an explicit click
+      // Safe to autofocus: the field only mounts on an explicit click.
       autoFocus: true,
       value: draft,
       placeholder,

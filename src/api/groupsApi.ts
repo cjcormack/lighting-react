@@ -212,12 +212,6 @@ export function createGroupsApi(conn: InternalApiConnection): GroupsApi {
     })
   }
 
-  const notifyChange = (groupName: string, data: GroupDetail) => {
-    itemSubscriptions.get(groupName)?.forEach((fn) => {
-      fn(data)
-    })
-  }
-
   const handleOnOpen = () => {
     notifyListChange()
   }
@@ -259,6 +253,14 @@ export function createGroupsApi(conn: InternalApiConnection): GroupsApi {
       }
     },
 
+    /**
+     * Registers `fn` against a group name — but nothing currently notifies it.
+     * The backend has no per-group detail message: `handleOnMessage` only ever
+     * fires `notifyListChange`, and group detail stays fresh because that
+     * invalidates the `GroupList` tag and forces a refetch (see store/groups).
+     * Wiring a push path means adding both a message type here *and* the
+     * dispatch loop over `itemSubscriptions`; until then this is inert.
+     */
     subscribeToGroup(name: string, fn: (data: GroupDetail) => void): Subscription {
       const thisId = nextSubscriptionId
       nextSubscriptionId++

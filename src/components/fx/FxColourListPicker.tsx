@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback } from 'react'
 import { HexColorPicker } from 'react-colorful'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Slider } from '@/components/ui/slider'
@@ -66,6 +66,13 @@ export function FxColourListPicker({
   palette: paletteProp,
 }: FxColourListPickerProps) {
   const useAllPalette = isAllPaletteRef(value.trim())
+  // Seeded once on mount — there is no effect syncing `value` back into `items`.
+  // ParameterInput keys on `param.name` (EffectParameterForm), so switching to a
+  // different effect that reuses a colourlist param name keeps this instance
+  // alive and the swatches go stale. Any sync added here has to compare against
+  // the last value we *emitted*, not against the items: emitChange serialises
+  // palette refs as `P1` while the items hold resolved hex, so a naive
+  // items-vs-value guard mis-fires and clobbers the user's edits.
   const [items, setItems] = useState<ColourItem[]>(() =>
     useAllPalette ? [] : parseColourList(value),
   )
@@ -78,13 +85,6 @@ export function FxColourListPicker({
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor)
-  )
-
-  // Sync from parent value changes (e.g. loading an existing effect)
-  // We only re-parse if the serialized form actually differs
-  const serialized = useMemo(
-    () => items.map((i) => serializeExtendedColour(i.colour)).join(','),
-    [items]
   )
 
   const emitChange = useCallback(
@@ -190,7 +190,6 @@ export function FxColourListPicker({
                 <SortableColourSwatch
                   key={item.id}
                   item={item}
-                  index={index}
                   isEditing={editingIndex === index}
                   onEdit={() => setEditingIndex(editingIndex === index ? null : index)}
                   onRemove={() => handleRemove(index)}
@@ -217,7 +216,6 @@ export function FxColourListPicker({
 
 function SortableColourSwatch({
   item,
-  index,
   isEditing,
   onEdit,
   onRemove,
@@ -226,7 +224,6 @@ function SortableColourSwatch({
   palette: paletteProp,
 }: {
   item: ColourItem
-  index: number
   isEditing: boolean
   onEdit: () => void
   onRemove: () => void

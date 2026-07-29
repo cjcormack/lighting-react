@@ -796,7 +796,7 @@ export function PromptBookViewerPage() {
     if (!noBook && bookError != null) {
       return (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
-          <p className="font-medium">Couldn't load the prompt book</p>
+          <p className="font-medium">Couldn&rsquo;t load the prompt book</p>
           <p className="max-w-md text-sm text-muted-foreground">
             The backend may be restarting or the connection blipped. Your prompt book is untouched.
           </p>
@@ -971,7 +971,7 @@ export function PromptBookViewerPage() {
                 />
                 {hashMismatch && (
                   <p className="mt-3 text-sm text-red-500">
-                    That PDF's content doesn't match this prompt-book's script (different hash). If the
+                    That PDF&rsquo;s content doesn&rsquo;t match this prompt-book&rsquo;s script (different hash). If the
                     script was revised, open the book settings to swap it in and re-anchor.
                   </p>
                 )}
@@ -979,7 +979,7 @@ export function PromptBookViewerPage() {
             </div>
           ) : pdfLoadState === 'error' ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
-              <p className="font-medium">Couldn't load the script PDF</p>
+              <p className="font-medium">Couldn&rsquo;t load the script PDF</p>
               <p className="max-w-md text-sm text-muted-foreground">
                 The backend may be restarting or the connection blipped. The script itself is untouched.
               </p>

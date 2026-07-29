@@ -14,7 +14,6 @@ import {
 import { computeCombinedCss } from '../lib/colourMath'
 import type {
   ChannelRef,
-  PropertyDescriptor,
   SliderPropertyDescriptor,
   ColourPropertyDescriptor,
   PositionPropertyDescriptor,
@@ -307,22 +306,6 @@ export function useSettingValue(property: SettingPropertyDescriptor): SettingVal
     return { level, option: resolveSettingOption(property.options, level) }
   }
   return liveResult
-}
-
-/**
- * Hook to get any property's value based on its type
- */
-export function usePropertyValue(property: PropertyDescriptor) {
-  switch (property.type) {
-    case 'slider':
-      return useSliderValue(property)
-    case 'colour':
-      return useColourValue(property)
-    case 'position':
-      return usePositionValue(property)
-    case 'setting':
-      return useSettingValue(property)
-  }
 }
 
 /**

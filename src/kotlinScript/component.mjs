@@ -98,7 +98,6 @@ class ReactKotlinPlayground extends Component {
     render() {
         const {
             className,
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
             playground: _playground,
             ...props
         } = this.props;

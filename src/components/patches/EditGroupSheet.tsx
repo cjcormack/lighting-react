@@ -176,18 +176,10 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
           )}
 
           <AddFixturesToGroup
-            groupName={groupDetail?.name ?? initialName}
             members={members}
             patches={patches}
-            projectId={projectId}
             onAdd={async (patchId) => {
               await updatePatch({ projectId, patchId, addToGroup: groupDetail?.name ?? initialName })
-                .unwrap()
-                .catch(ignoreReportedError)
-            }}
-            onRemove={async (patchId) => {
-              if (!groupId) return
-              await updatePatch({ projectId, patchId, removeFromGroupId: groupId })
                 .unwrap()
                 .catch(ignoreReportedError)
             }}
@@ -220,19 +212,13 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
 }
 
 function AddFixturesToGroup({
-  groupName,
   members,
   patches,
-  projectId,
   onAdd,
-  onRemove,
 }: {
-  groupName: string
   members: PatchGroupMember[]
   patches: FixturePatch[]
-  projectId: number
   onAdd: (patchId: number) => Promise<void>
-  onRemove: (patchId: number) => Promise<void>
 }) {
   const [search, setSearch] = useState('')
   const memberPatchIds = new Set(members.map(m => m.patchId))

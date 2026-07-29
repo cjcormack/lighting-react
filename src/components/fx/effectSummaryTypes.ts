@@ -10,7 +10,6 @@ import type {
   EffectParameterDef,
 } from '@/store/fixtureFx'
 import type { GroupActiveEffect } from '@/api/groupsApi'
-import { EFFECT_DESCRIPTIONS } from './fxConstants'
 
 /** Normalised effect data consumed by EffectSummary. */
 export interface EffectSummaryData {

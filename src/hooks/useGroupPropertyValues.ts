@@ -12,7 +12,6 @@ import type {
   GroupColourPropertyDescriptor,
   GroupPositionPropertyDescriptor,
   GroupSettingPropertyDescriptor,
-  GroupPropertyDescriptor,
 } from '../api/groupsApi'
 
 // Group writes persist as per-fixture rows in cue mode — GroupPropertyDescriptor doesn't
@@ -632,22 +631,4 @@ export function useUpdateGroupSetting(property: GroupSettingPropertyDescriptor) 
     },
     [ctx, draft, property.memberChannels, property.name]
   )
-}
-
-// === Generic Group Property Value Hook ===
-
-/**
- * Hook to get any group property's aggregated values based on its type.
- */
-export function useGroupPropertyValue(property: GroupPropertyDescriptor) {
-  switch (property.type) {
-    case 'slider':
-      return useGroupSliderValues(property)
-    case 'colour':
-      return useGroupColourValues(property)
-    case 'position':
-      return useGroupPositionValues(property)
-    case 'setting':
-      return useGroupSettingValues(property)
-  }
 }

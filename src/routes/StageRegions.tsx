@@ -77,7 +77,7 @@ export function StageRegionsContent({ projectId }: { projectId: number }) {
         </div>
       ) : sortedRegions.length === 0 ? (
         <p className="text-sm text-muted-foreground py-4">
-          No stage regions yet. Click "Add region" to define one.
+          No stage regions yet. Click &ldquo;Add region&rdquo; to define one.
         </p>
       ) : (
         <Table>

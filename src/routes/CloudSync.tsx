@@ -42,9 +42,9 @@ import {
   ChevronRight,
   CloudDownload,
   Info,
-  Github,
   Unlink,
 } from "lucide-react"
+import { GithubIcon } from "@/components/GithubIcon"
 import { useProjectListQuery } from "@/store/projects"
 import {
   useCloudSyncConfigQuery,
@@ -518,7 +518,7 @@ function SyncedConfigPanel({ projectId, config }: { projectId: number; config: S
       <div className="space-y-1">
         <Label className="text-xs text-muted-foreground">Repository</Label>
         <div className="flex items-center gap-2 min-w-0">
-          <Github className="size-4 shrink-0 opacity-70" />
+          <GithubIcon className="size-4 shrink-0 opacity-70" />
           <span className="text-sm font-medium truncate">{repoLabel}</span>
           <Badge variant="outline" className="text-[10px] shrink-0">{config.branch}</Badge>
         </div>

@@ -106,7 +106,8 @@ export function TargetsPane({ cue, projectId, targets }: TargetsPaneProps) {
             onToggle={() => {
               setOpenGroups((s) => {
                 const n = new Set(s)
-                n.has(t.key) ? n.delete(t.key) : n.add(t.key)
+                if (n.has(t.key)) n.delete(t.key)
+                else n.add(t.key)
                 return n
               })
             }}

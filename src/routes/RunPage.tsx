@@ -496,7 +496,7 @@ export function RunPage() {
               <>
                 <p className="text-muted-foreground text-sm">
                   The show will start from the first stack. Press GO to fire the
-                  first cue once it's running.
+                  first cue once it&rsquo;s running.
                 </p>
                 <Button
                   size="lg"

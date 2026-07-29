@@ -149,7 +149,7 @@ export function PromptBookToolbar({
             </div>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="max-w-56">
-            Leading cover/title pages before the script's page 1 — cue page numbers are offset by this.
+            Leading cover/title pages before the script&rsquo;s page 1 — cue page numbers are offset by this.
           </TooltipContent>
         </Tooltip>
       )}
