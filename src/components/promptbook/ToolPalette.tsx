@@ -19,6 +19,11 @@ const TOOLS: { id: PromptBookTool; label: string; icon: typeof MousePointer2; da
  * `warn` carries the app's "you are editing" signal: amber while the show is RUNNING,
  * where being unlocked is a hazard. Editing a stopped show is the ordinary case and
  * gets ordinary chrome.
+ *
+ * Sizing is driven by *container* queries, not the viewport: the bar sits beside the
+ * cue rail, so its own width — not the window's — decides what fits. It sheds the
+ * hint, then the "Annotate" heading, then the button labels as it narrows, and wraps
+ * as a last resort so it can never widen the page into a horizontal scroll.
  */
 export function ToolPalette({
   tool,
@@ -36,13 +41,14 @@ export function ToolPalette({
   return (
     <div
       className={cn(
-        'flex shrink-0 items-center gap-1.5 border-b px-4 py-1.5',
+        '@container/annotate flex shrink-0 flex-wrap items-center gap-x-1 gap-y-1 border-b px-2 py-1.5',
+        '@md/annotate:gap-x-1.5 @md/annotate:px-4',
         warn && 'border-amber-500/40 bg-amber-400/10',
       )}
     >
       <span
         className={cn(
-          'mr-1 text-[10px] font-bold tracking-widest uppercase',
+          'mr-1 hidden text-[10px] font-bold tracking-widest uppercase @md/annotate:inline',
           warn ? 'text-amber-600/80' : 'text-muted-foreground',
         )}
       >
@@ -54,8 +60,12 @@ export function ToolPalette({
           variant="ghost"
           size="sm"
           onClick={() => onSelectTool(id)}
+          // The label is dropped on the narrowest containers, so it has to survive as
+          // the accessible name (and hover title) on its own.
+          aria-label={label}
+          title={label}
           className={cn(
-            'h-7 gap-1.5 px-2 text-xs',
+            'h-7 shrink-0 gap-1.5 px-2 text-xs',
             tool === id
               ? danger
                 ? 'bg-red-500/15 text-red-400 hover:bg-red-500/20 hover:text-red-400'
@@ -66,16 +76,17 @@ export function ToolPalette({
           )}
         >
           <Icon className="size-3.5" />
-          {label}
+          <span className="hidden @xs/annotate:inline">{label}</span>
         </Button>
       ))}
-      <span className="flex-1" />
       {placingLabel ? (
-        <span className="text-[11px] font-semibold text-amber-600">
+        <span className="w-full text-[11px] font-semibold text-amber-600 @md/annotate:ml-auto @md/annotate:w-auto">
           Select the script text to anchor {placingLabel}…
         </span>
       ) : (
-        <span className="hidden text-[11px] text-muted-foreground md:inline">
+        // flex-1/min-w-0 keeps the hint on the buttons' line, shrinking and wrapping
+        // inside itself rather than claiming a whole second row of chrome.
+        <span className="hidden min-w-0 flex-1 text-[11px] text-muted-foreground @3xl/annotate:block">
           Select script text to highlight, cut, or note it — or arm a cue in the list, then select its line.
           On scanned pages, pick a tool and drag a box.
         </span>
