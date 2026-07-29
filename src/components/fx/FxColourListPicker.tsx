@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { HexColorPicker } from 'react-colorful'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Slider } from '@/components/ui/slider'
@@ -66,13 +66,6 @@ export function FxColourListPicker({
   palette: paletteProp,
 }: FxColourListPickerProps) {
   const useAllPalette = isAllPaletteRef(value.trim())
-  // Seeded once on mount — there is no effect syncing `value` back into `items`.
-  // ParameterInput keys on `param.name` (EffectParameterForm), so switching to a
-  // different effect that reuses a colourlist param name keeps this instance
-  // alive and the swatches go stale. Any sync added here has to compare against
-  // the last value we *emitted*, not against the items: emitChange serialises
-  // palette refs as `P1` while the items hold resolved hex, so a naive
-  // items-vs-value guard mis-fires and clobbers the user's edits.
   const [items, setItems] = useState<ColourItem[]>(() =>
     useAllPalette ? [] : parseColourList(value),
   )
@@ -81,6 +74,30 @@ export function FxColourListPicker({
   const [savedValue, setSavedValue] = useState<string>(() =>
     useAllPalette ? 'P1,P2,P3' : value,
   )
+
+  // The last string this picker pushed up, used to tell "the parent echoed our
+  // own edit back" from "the parent handed us a different list". It can't be
+  // re-derived from `items`: emitChange keeps a palette ref as `P1` while the
+  // parsed item carries a #000000 placeholder, so an items-vs-value comparison
+  // never matches on a palette list and re-parses on every edit. The colours
+  // would survive that (parse/serialize round-trips) but the item ids would
+  // not, and SortableColourSwatch keys on them while owning the hex field's
+  // state — so the swatch being typed into would remount mid-keystroke.
+  const lastEmitted = useRef(value)
+
+  // `items` is otherwise seeded only at mount, but this instance can outlive the
+  // value it was seeded from: ParameterInput keys on `param.name`, so editing
+  // the same effect on a second target — busking's ActiveEffectSheet swaps its
+  // context without closing — reuses this picker, and the previous target's
+  // swatches would stay on screen and get written back on the next edit.
+  useEffect(() => {
+    if (value === lastEmitted.current) return
+    lastEmitted.current = value
+    const allPalette = isAllPaletteRef(value.trim())
+    setItems(allPalette ? [] : parseColourList(value))
+    setSavedValue(allPalette ? 'P1,P2,P3' : value)
+    setEditingIndex(null)
+  }, [value])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -96,6 +113,7 @@ export function FxColourListPicker({
         )
         .join(',')
       setSavedValue(newValue)
+      lastEmitted.current = newValue
       onChange(newValue)
     },
     [onChange]
@@ -148,10 +166,12 @@ export function FxColourListPicker({
     (checked: boolean) => {
       if (checked) {
         setEditingIndex(null)
+        lastEmitted.current = 'P*'
         onChange('P*')
       } else {
         const restored = parseColourList(savedValue)
         setItems(restored)
+        lastEmitted.current = savedValue
         onChange(savedValue)
       }
     },
