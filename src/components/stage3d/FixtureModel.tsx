@@ -198,6 +198,10 @@ export function FixtureModel({
   const fixturePos = useMemo(() => {
     const v = worldPositionFor(patch, riggings)
     return [v.x, v.y, v.z] as const
+    // worldPositionFor reads only these four patch fields, so listing them is
+    // complete — and cheaper than recomputing on every new patch object in a
+    // per-frame render path.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     patch.stageX,
     patch.stageY,

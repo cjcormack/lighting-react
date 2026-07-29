@@ -181,9 +181,6 @@ function ByTarget({
   onRemovePreset,
   onAddAssignment,
   onAddEffect,
-  // Wired in from the parent but not yet surfaced: the by-target Presets section
-  // has no Add button, unlike Assignments/Effects here and Presets in ByLayer.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onAddPreset,
 }: {
   cue: Cue
@@ -270,9 +267,15 @@ function ByTarget({
             </div>
 
             <div className="p-2 space-y-3">
-              {presetApps.length > 0 && (
-                <Section title="Presets" icon={<Bookmark className="size-3.5" />}>
-                  {presetApps.map(({ pa, i }) => {
+              <Section
+                title="Presets"
+                icon={<Bookmark className="size-3.5" />}
+                action={<AddBtn label="Add" onClick={() => onAddPreset(target)} />}
+              >
+                {presetApps.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground px-1">—</p>
+                ) : (
+                  presetApps.map(({ pa, i }) => {
                     const fullPreset = presets?.find((p) => p.id === pa.presetId)
                     const presetEffects = (fullPreset?.effects ?? []).map((e) =>
                       fromPresetEffect(e, library),
@@ -297,9 +300,9 @@ function ByTarget({
                         }
                       />
                     )
-                  })}
-                </Section>
-              )}
+                  })
+                )}
+              </Section>
 
               <Section
                 title="Assignments"

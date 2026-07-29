@@ -24,15 +24,14 @@ export function EditorContextProvider({
 }) {
   // Tolerate callers that pass a fresh object literal on every render — only rebroadcast
   // when a field consumers actually care about changes.
-  const stable = useMemo(
-    () => value,
-    [
-      value.kind,
-      value.kind === 'cue' ? value.id : null,
-      value.kind === 'cue' ? value.mode : null,
-      value.kind === 'preset' ? value.id : null,
-    ]
-  )
+  const kind = value.kind
+  const cueId = value.kind === 'cue' ? value.id : null
+  const cueMode = value.kind === 'cue' ? value.mode : null
+  const presetId = value.kind === 'preset' ? value.id : null
+  // `value` is deliberately not a dependency: depending on it is exactly the
+  // per-render rebroadcast this memo exists to absorb.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const stable = useMemo(() => value, [kind, cueId, cueMode, presetId])
   return <EditorContext.Provider value={stable}>{children}</EditorContext.Provider>
 }
 

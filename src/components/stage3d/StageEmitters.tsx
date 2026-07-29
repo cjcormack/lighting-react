@@ -436,7 +436,7 @@ export function StageEmitters({ fixtureCount, regionGeometry, children }: StageE
       }
       u.uNumRegions.value = regionCount
     }
-  }, [coneMaterial, poolMaterial, regionGeometry, regionCount])
+  }, [coneMaterial, poolMaterial, washPoolMaterial, regionGeometry, regionCount])
 
   // Pre-allocate buffers + InstancedMesh objects sized to fixtureCount and
   // (fixtureCount × regionCount). Rebuilds when either count changes; in

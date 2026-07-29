@@ -159,7 +159,7 @@ export function PixelStrip({
         },
       }
     },
-    [colorsRef, lensRefs, glowMats, pixelCount],
+    [lensRefs, glowMats, pixelCount],
   )
 
   const pitch = lengthM / pixelCount

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { HexColorPicker } from 'react-colorful'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Label } from '@/components/ui/label'
@@ -39,7 +39,13 @@ export function FxColourPicker({
   palette: paletteProp,
 }: FxColourPickerProps) {
   const { data: fxState } = useFxStateQuery()
-  const palette = paletteProp ?? fxState?.palette ?? []
+  // Memoised: the sync effect below depends on this and writes fresh objects
+  // into state, so a new `[]` each render would re-run it on every render and
+  // overwrite whatever the user is typing into the open picker.
+  const palette = useMemo(
+    () => paletteProp ?? fxState?.palette ?? [],
+    [paletteProp, fxState?.palette],
+  )
   const isPalRef = isPaletteRef(value)
 
   const [isOpen, setIsOpen] = useState(false)

@@ -189,7 +189,7 @@ export function ProgramPage() {
         // Reported by errorToastMiddleware; caught here only to stop the unhandled rejection.
       }
     },
-    [drillStackId, projectIdNum, createCue],
+    [drillStackId, projectIdNum, createCue, setExpandedCueId],
   )
 
   const handleSnapshotFromLiveRequest = useCallback((cueId: number) => {

@@ -112,6 +112,10 @@ export function ScriptForm({
       resetCompile()
       resetRun()
     }
+    // Keyed on `script?.id`, not `script`: this seeds the form fields, so
+    // re-running it whenever the cached script object is replaced would wipe
+    // whatever the user has typed since opening the sheet.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, script?.id, isCurrentProject, resetCompile, resetRun])
 
   const scriptType = script ? script.scriptType : editType

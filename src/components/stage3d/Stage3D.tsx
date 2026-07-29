@@ -411,6 +411,9 @@ function Controls({
       proxy.rotation.set(0, 0, 0)
     }
     proxy.updateMatrixWorld(true)
+    // rigEuler reads only pitchDeg/yawDeg/rollDeg, so the listed rig fields
+    // cover every value this effect actually consumes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     proxy,
     rotateMode,
@@ -509,7 +512,7 @@ function Controls({
     }
     tc.addEventListener('dragging-changed', onDrag)
     return () => tc.removeEventListener('dragging-changed', onDrag)
-  }, [patchTarget, flush, orbitRef])
+  }, [patchTarget, flush, orbitRef, selectedPatch?.basePitchDeg])
 
   return (
     <>

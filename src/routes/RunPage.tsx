@@ -195,7 +195,10 @@ export function RunPage() {
         loop: stack.loop,
       }))
     }
-  }, [activeStackId, stack?.activeCueId, runner.activeCueId, cues, dispatch, stack?.loop])
+    // `stack` itself is a dep only to satisfy the null guard; a new stack object
+    // with an unchanged activeCueId falls out at the `serverActive === prev`
+    // check below without dispatching.
+  }, [activeStackId, stack, stack?.activeCueId, runner.activeCueId, cues, dispatch, stack?.loop])
 
   const effectiveActiveCueId = runner.activeCueId ?? stack?.activeCueId ?? null
 

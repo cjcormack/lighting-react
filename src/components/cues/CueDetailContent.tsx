@@ -1,4 +1,4 @@
-import { memo, useMemo, type ComponentType } from 'react'
+import { memo, type ComponentType } from 'react'
 import { Badge } from '@/components/ui/badge'
 import {
   Palette,
@@ -72,10 +72,7 @@ export const CueDetailContent = memo(function CueDetailContent({
   const adHocEffects = cue?.adHocEffects ?? []
   const triggers = cue?.triggers ?? []
 
-  const fadeText = useMemo(
-    () => (cue ? formatFadeText(cue.fadeDurationMs, cue.fadeCurve) : ''),
-    [cue?.fadeDurationMs, cue?.fadeCurve],
-  )
+  const fadeText = cue ? formatFadeText(cue.fadeDurationMs, cue.fadeCurve) : ''
 
   if (!cue) {
     return <p className="text-sm text-muted-foreground">No cue selected.</p>

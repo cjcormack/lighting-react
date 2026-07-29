@@ -67,15 +67,19 @@ function parsePositionCanonical(value: string | undefined): { pan: number; tilt:
 export function useSliderValue(property: SliderPropertyDescriptor): number {
   const ctx = useEditorContext()
   const draftValue = usePresetDraftValue(property.name)
+  // ChannelRef is exactly {universe, channelNo}, so these two fully identify the
+  // channel. Keying off them rather than the enclosing descriptor avoids
+  // resubscribing every time a caller hands over a fresh property object.
+  const { universe, channelNo } = property.channel
 
   const subscribe = useCallback(
-    (callback: () => void) => subscribeToChannels([property.channel], callback),
-    [property.channel.universe, property.channel.channelNo]
+    (callback: () => void) => subscribeToChannels([{ universe, channelNo }], callback),
+    [universe, channelNo]
   )
 
   const getSnapshot = useCallback(
-    () => getChannelValue(property.channel),
-    [property.channel.universe, property.channel.channelNo]
+    () => getChannelValue({ universe, channelNo }),
+    [universe, channelNo]
   )
 
   const liveValue = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
@@ -279,10 +283,12 @@ export function useSettingValue(property: SettingPropertyDescriptor): SettingVal
   const ctx = useEditorContext()
   const draftValue = usePresetDraftValue(property.name)
   const cachedRef = useRef<SettingValueResult | null>(null)
+  // See useSliderValue: the two ChannelRef fields fully identify the channel.
+  const { universe, channelNo } = property.channel
 
   const subscribe = useCallback(
-    (callback: () => void) => subscribeToChannels([property.channel], callback),
-    [property.channel.universe, property.channel.channelNo]
+    (callback: () => void) => subscribeToChannels([{ universe, channelNo }], callback),
+    [universe, channelNo]
   )
 
   const getSnapshot = useCallback((): SettingValueResult => {

@@ -87,7 +87,7 @@ function FixturesContainer() {
   const [filter, setFilter] = useState("")
   const [viewMode, setViewMode] = useState<FixtureViewMode>('properties')
 
-  const fixtureList = maybeFixtureList || []
+  const fixtureList = useMemo(() => maybeFixtureList ?? [], [maybeFixtureList])
 
   const filteredFixtures = useMemo(() => {
     if (!filter.trim()) return fixtureList

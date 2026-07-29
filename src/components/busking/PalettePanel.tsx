@@ -62,7 +62,9 @@ function paletteEquals(a: string[], b: string[]): boolean {
 
 export function PalettePanel({ label, compact }: { label?: string; compact?: boolean } = {}) {
   const { data: fxState } = useFxStateQuery()
-  const serverPalette = fxState?.palette ?? []
+  // Memoised so the `?? []` fallback doesn't hand out a fresh array on every
+  // render — three hooks below key off this identity.
+  const serverPalette = useMemo(() => fxState?.palette ?? [], [fxState?.palette])
 
   // Draft state — all edits are local until "Apply"
   const [items, setItems] = useState<PaletteItem[]>(() => parsePaletteItems(serverPalette))

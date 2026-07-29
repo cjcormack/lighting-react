@@ -67,7 +67,7 @@ export function RunMobile({
   activeLocation,
   standbyLocation,
 }: RunMobileProps) {
-  const cues: CueStackCueEntry[] = stack?.cues ?? []
+  const cues = useMemo<CueStackCueEntry[]>(() => stack?.cues ?? [], [stack?.cues])
   const [stackPickerOpen, setStackPickerOpen] = useState(false)
   const [cueListOpen, setCueListOpen] = useState(false)
   const [expansion, setExpansion] = useState<MobileExpansion | null>({
