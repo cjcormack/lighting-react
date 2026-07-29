@@ -10,8 +10,46 @@ Solo personal repo — commit and push directly to `main`. Do **not** open pull
 requests, do **not** create feature branches. The standard "still don't commit
 or push without me asking" rule from the global CLAUDE.md still applies; this
 section only changes *how* a confirmed commit/push happens (straight to `main`,
-no PR). Pre-commit equivalent is `npm run type-check` + `npm run build` +
-`npm test`; ESLint is project-wide noisy and not a useful gate.
+no PR).
+
+### Pre-commit gate
+
+```bash
+npm run check
+```
+
+That's `build` + `test` + `lint`. There's no separate `type-check` step in it:
+`build` is `tsc && vite build`, so the standalone `npm run type-check` would run
+the same full `tsc` a second time for ~9s of nothing. Use `type-check` on its
+own during development when you want types without a build.
+
+Lint is a real gate now. The tree is at 0 errors and 0 warnings, so any finding
+ESLint reports is one this change introduced. Fix it rather than committing
+over it. `npm run lint` passes `--max-warnings 0`, because plain `eslint` exits
+0 on warnings and would wave them through.
+
+**A git hook enforces this.** `.githooks/pre-commit` runs `npm run check` and
+refuses the commit if it fails; it skips the run when nothing buildable is
+staged (docs, `.idea/`, assets). Enable it in a fresh clone with
+`git config core.hooksPath .githooks`. Bypass a single commit with
+`git commit --no-verify`. It checks the working tree rather than the staged
+snapshot — see the comment at the top of the hook for why.
+
+Warnings count. `react-hooks/exhaustive-deps` in particular is left at `warn`
+because the right answer is case-by-case, not because it can be ignored —
+adding a dependency changes when an effect re-runs, so decide deliberately:
+
+- **Add the dep** when the hook genuinely reads a value that can change.
+- **Narrow the input** when only part of an object matters — destructure the
+  fields the hook actually uses and depend on those (see `useSliderValue` in
+  `src/hooks/usePropertyValues.ts`).
+- **Memoise the input** when a `?? []` fallback hands out a fresh identity
+  every render (see `serverPalette` in `components/busking/PalettePanel.tsx`).
+- **Disable with a reason** only when the narrow deps are provably complete —
+  say *why* they're complete, naming the callee whose fields you checked (see
+  `rigEuler` in `components/stage3d/Stage3D.tsx`).
+
+A bare `eslint-disable` with no justification is not an acceptable fix.
 
 ## Tech Stack
 
