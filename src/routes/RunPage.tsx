@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef, type CSSProperties } from 'react'
 import { useParams, useNavigate, Navigate, Link } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import { Card } from '@/components/ui/card'
@@ -34,7 +34,7 @@ import { useRunnerAnimation } from '../hooks/useRunnerAnimation'
 import { ShowHeader } from '../components/ShowHeader'
 import { MarkerRow } from '../components/runner/MarkerRow'
 import { OutOfOrderBanner } from '../components/runner/OutOfOrderBanner'
-import { detectOutOfOrder } from '@/lib/cueNumber'
+import { cueNumberColumnChars, detectOutOfOrder } from '@/lib/cueNumber'
 import { ShowBar } from '../components/ShowBar'
 import { RunCueCard } from '../components/runner/run/RunCueCard'
 import {
@@ -365,6 +365,16 @@ export function RunPage() {
 
   const ooo = !oooDismissed && detectOutOfOrder(cues)
 
+  // Number-column width for every row in the running stack. MARKERs are unnumbered dividers, so
+  // they must not drag the column down to the "—" placeholder width.
+  const cueNumChars = useMemo(
+    () =>
+      cueNumberColumnChars(
+        cues.filter((c) => c.cueType === 'STANDARD').map((c) => c.cueNumber),
+      ),
+    [cues],
+  )
+
   const handleFixOrder = useCallback(() => {
     if (activeStackId == null) return
     sortByCueNumber({ projectId: projectIdNum, stackId: activeStackId })
@@ -605,7 +615,10 @@ export function RunPage() {
               )}
 
               {/* Cue list — inline expanding read-only cards */}
-              <div className="flex-1 overflow-y-auto min-h-0 py-1">
+              <div
+                className="flex-1 overflow-y-auto min-h-0 py-1"
+                style={{ '--cue-num-chars': cueNumChars } as CSSProperties}
+              >
                 {cues.map((cue) => {
                   if (cue.cueType === 'MARKER') {
                     return <MarkerRow key={cue.id} name={cue.name} />

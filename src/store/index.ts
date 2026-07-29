@@ -3,11 +3,14 @@ import {restApi} from "./restApi";
 import { setupListeners } from "@reduxjs/toolkit/query"
 import { runnerSlice } from './runnerSlice'
 import { errorToastMiddleware } from './errorToastMiddleware'
+import { saveStatusSlice } from './saveStatusSlice'
 
 export const store = configureStore({
   reducer: {
     [restApi.reducerPath]: restApi.reducer,
     runner: runnerSlice.reducer,
+    // Matches on RTK Query's mutation lifecycle actions — see saveStatusSlice.
+    saveStatus: saveStatusSlice.reducer,
   },
 
   middleware: (getDefaultMiddleware) => {

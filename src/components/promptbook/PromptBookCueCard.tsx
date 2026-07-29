@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils'
 import { positionLabel } from '@/lib/promptBook/geometry'
 import { InlineEditField } from '@/components/InlineEditField'
 import { TruncateStart } from '@/components/TruncateStart'
+import { cueNumberCellWidth } from '@/lib/cueNumber'
 import { CueCardBody, type CueCardKind, type ExpansionMode } from '@/components/runner/run/CueCardBody'
 import type { CueAnchorDto } from '@/api/promptBooksApi'
 import type { CueStackCueEntry } from '@/api/cueStacksApi'
@@ -45,6 +46,8 @@ interface PromptBookCueCardProps {
   onRenameCue: (name: string) => void
   /** Set (or clear, with null) the cue number. Only wired up while unlocked. */
   onRenumberCue: (cueNumber: string | null) => void
+  /** Set (or clear, with null) the cue's note. Only wired up while unlocked. */
+  onRenoteCue: (notes: string | null) => void
   /** Resets the idle auto-relock clock, so it can't tear down a field mid-edit. */
   onEditInteraction: () => void
 }
@@ -92,6 +95,7 @@ export function PromptBookCueCard({
   onEditCue,
   onRenameCue,
   onRenumberCue,
+  onRenoteCue,
   onEditInteraction,
 }: PromptBookCueCardProps) {
   const anchored = anchor != null
@@ -223,6 +227,7 @@ export function PromptBookCueCard({
           onBodyClick={onCueClick}
           onCueNumberCommit={editable ? onRenumberCue : undefined}
           onCueNameCommit={editable ? onRenameCue : undefined}
+          onNotesCommit={editable ? onRenoteCue : undefined}
           onEditInteraction={onEditInteraction}
           headerTrailing={
             <>
@@ -260,13 +265,12 @@ export function PromptBookCueCard({
   // The whole locked-mode signal for an unanchored cue: one notch quieter than an
   // anchored standby row. Live/next/done carry their own strong tier, so leave those be.
   const dim = !anchored && !isLive && !isNext && !isDone
-  // 4rem, not 3: a prefixed/decimal number ("QS1-3.2" ≈ 60px with the field's padding)
-  // wrapped to a second line in the old w-12 cell. Still a fixed column so every row's
-  // name starts at the same x; anything longer clips rather than reflowing the rail.
-  // Overflow is clipped at the START (`TruncateStart`) — the tail of a cue number is what
-  // tells "S1-3.1" from "S1-3.2", so that is the end worth keeping.
+  // Sized to the longest number in the rail (`--cue-num-chars`, published by CueStackPanel) so
+  // "QS1-3.2.10" shows whole where the old fixed 4rem cell clipped it — but still one width for
+  // every row, so each name starts at the same x. Overflow is clipped at the START
+  // (`TruncateStart`): the tail of a cue number is what tells "S1-3.1" from "S1-3.2".
   const labelClass = cn(
-    'w-16 shrink-0 text-[13px] font-bold',
+    'shrink-0 text-[13px] font-bold',
     isLive
       ? 'text-emerald-300'
       : isNext
@@ -277,8 +281,10 @@ export function PromptBookCueCard({
             ? 'text-foreground/50'
             : 'text-foreground',
   )
+  // px-0 on the editable variant, so no field padding to allow for — just a little slack.
+  const labelStyle = cueNumberCellWidth('0.25rem')
   const nameClass = cn(
-    'flex-1 truncate text-xs',
+    'truncate text-xs',
     isLive
       ? 'text-emerald-100/80'
       : isNext
@@ -329,40 +335,53 @@ export function PromptBookCueCard({
       )}
       {editable ? (
         <>
-          <InlineEditField
-            value={cueEntry.cueNumber ?? ''}
-            // A numberless cue's label folds in its name — keep showing that, so unlocking
-            // doesn't change what the rail reads. Fall back to the sibling `cueEntry.name`
-            // rather than `cue.label`: both come from the stack list, so clearing a number
-            // shows the name at once instead of the stale "Q…" until `cueOrder` refetches.
-            formatDisplay={(v) => <TruncateStart text={v ? `Q${v}` : cueEntry.name} className="w-full" />}
-            onCommit={(next) => onRenumberCue(next.trim() || null)}
-            ariaLabel="cue number"
-            placeholder="Q#"
-            onEditInteraction={onEditInteraction}
-            // Whatever the cell ends up showing, in full — it is the same cell that folds
-            // in the name when there's no number, and either can be clipped.
-            title={cueEntry.cueNumber ? `Q${cueEntry.cueNumber}` : cueEntry.name}
-            // px-0: the label cell is tight enough that padding would cost the widest
-            // number the room the read-only span gives it.
-            className={cn(labelClass, 'px-0')}
-          />
-          <InlineEditField
-            value={cueEntry.name}
-            onCommit={(next) => {
-              const trimmed = next.trim()
-              if (trimmed === '') return false
-              onRenameCue(trimmed)
-            }}
-            ariaLabel="cue name"
-            onEditInteraction={onEditInteraction}
-            className={nameClass}
-          />
+          {/* The width lives on the wrapper so every row's name starts at the same x; the field
+              inside wraps its own text, so only the number opens the editor. */}
+          <span className={labelClass} style={labelStyle}>
+            <InlineEditField
+              value={cueEntry.cueNumber ?? ''}
+              // A numberless cue's label folds in its name — keep showing that, so unlocking
+              // doesn't change what the rail reads. Fall back to the sibling `cueEntry.name`
+              // rather than `cue.label`: both come from the stack list, so clearing a number
+              // shows the name at once instead of the stale "Q…" until `cueOrder` refetches.
+              formatDisplay={(v) => <TruncateStart text={v ? `Q${v}` : cueEntry.name} />}
+              onCommit={(next) => onRenumberCue(next.trim() || null)}
+              ariaLabel="cue number"
+              placeholder="Q#"
+              onEditInteraction={onEditInteraction}
+              // Whatever the cell ends up showing, in full — it is the same cell that folds
+              // in the name when there's no number, and either can be clipped.
+              title={cueEntry.cueNumber ? `Q${cueEntry.cueNumber}` : cueEntry.name}
+              // px-0: the label cell is tight enough that padding would cost the widest
+              // number the room the read-only span gives it.
+              className="max-w-full px-0"
+            />
+          </span>
+          {/* The field wraps its text rather than filling the row, so the space beside a short
+              cue name still belongs to the row (scroll the book / place the anchor). */}
+          <span className="flex min-w-0 flex-1">
+            <InlineEditField
+              value={cueEntry.name}
+              onCommit={(next) => {
+                const trimmed = next.trim()
+                if (trimmed === '') return false
+                onRenameCue(trimmed)
+              }}
+              ariaLabel="cue name"
+              onEditInteraction={onEditInteraction}
+              className={cn(nameClass, 'max-w-full')}
+            />
+          </span>
         </>
       ) : (
         <>
-          <TruncateStart text={cue.label} title={cue.label} className={labelClass} />
-          <span className={nameClass}>{cue.name}</span>
+          <TruncateStart
+            text={cue.label}
+            title={cue.label}
+            className={labelClass}
+            style={labelStyle}
+          />
+          <span className={cn(nameClass, 'flex-1')}>{cue.name}</span>
         </>
       )}
       {setNextButton}

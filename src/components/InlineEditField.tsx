@@ -34,11 +34,20 @@ interface InlineEditFieldProps {
   displayClassName?: string
   inputClassName?: string
   title?: string
+  /**
+   * Edit in a `<textarea>` instead of an `<input>`. Enter then inserts a newline and
+   * Cmd/Ctrl+Enter commits — cue notes are prose and run to several lines, so the single-line
+   * convention of "Enter saves" would make a line break impossible to type.
+   */
+  multiline?: boolean
+  /** Rows for the `multiline` textarea. */
+  rows?: number
 }
 
 /**
  * Click-to-edit text cell for row/table layouts: shows the value, swaps to an input on
- * click, commits on Enter or blur, cancels on Escape.
+ * click, commits on Enter or blur, cancels on Escape. Pass `multiline` for prose (cue notes),
+ * where Enter inserts a newline and Cmd/Ctrl+Enter commits instead.
  *
  * Every pointer/key event is stopped from propagating so the field works inside rows that
  * are themselves click targets (expand a cue, drill into a stack) and alongside the
@@ -60,12 +69,14 @@ export function InlineEditField({
   displayClassName,
   inputClassName,
   title,
+  multiline = false,
+  rows = 3,
 }: InlineEditFieldProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
   const [invalid, setInvalid] = useState(false)
   const [pending, setPending] = useState<string | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null)
   const pendingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // The committed value moved (our own save landed, or another client changed it) — the
@@ -124,23 +135,58 @@ export function InlineEditField({
   }
 
   if (editing) {
+    const editorProps = {
+      // eslint-disable-next-line jsx-a11y/no-autofocus -- the field only mounts on an explicit click
+      autoFocus: true,
+      value: draft,
+      placeholder,
+      'aria-label': ariaLabel,
+      'aria-invalid': invalid || undefined,
+      onChange: (e: { target: { value: string } }) => {
+        setDraft(e.target.value)
+        setInvalid(false)
+        onEditInteraction?.()
+      },
+      onClick: (e: { stopPropagation: () => void }) => e.stopPropagation(),
+      onPointerDown: (e: { stopPropagation: () => void }) => e.stopPropagation(),
+      onBlur: () => commit('blur'),
+      className: cn(
+        'min-w-0 rounded border border-input bg-background px-1 outline-none',
+        'focus:border-ring focus:ring-1 focus:ring-ring/50',
+        'aria-invalid:border-destructive aria-invalid:ring-1 aria-invalid:ring-destructive/50',
+        className,
+        inputClassName,
+      ),
+    }
+
+    if (multiline) {
+      return (
+        <textarea
+          {...editorProps}
+          ref={inputRef as React.RefObject<HTMLTextAreaElement>}
+          rows={rows}
+          // No select-on-focus: the caret lands where the operator clicked, because editing a
+          // note usually means amending it, not replacing it.
+          onKeyDown={(e) => {
+            e.stopPropagation()
+            // Enter is a newline here, so committing needs the modifier. Blur still saves.
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault()
+              commit('enter')
+            } else if (e.key === 'Escape') {
+              e.preventDefault()
+              cancel()
+            }
+          }}
+        />
+      )
+    }
+
     return (
       <input
-        ref={inputRef}
-        // eslint-disable-next-line jsx-a11y/no-autofocus -- the field only mounts on an explicit click
-        autoFocus
-        value={draft}
-        placeholder={placeholder}
-        aria-label={ariaLabel}
-        aria-invalid={invalid || undefined}
-        onChange={(e) => {
-          setDraft(e.target.value)
-          setInvalid(false)
-          onEditInteraction?.()
-        }}
+        {...editorProps}
+        ref={inputRef as React.RefObject<HTMLInputElement>}
         onFocus={(e) => e.currentTarget.select()}
-        onClick={(e) => e.stopPropagation()}
-        onPointerDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
           e.stopPropagation()
           if (e.key === 'Enter') {
@@ -151,14 +197,6 @@ export function InlineEditField({
             cancel()
           }
         }}
-        onBlur={() => commit('blur')}
-        className={cn(
-          'min-w-0 rounded border border-input bg-background px-1 outline-none',
-          'focus:border-ring focus:ring-1 focus:ring-ring/50',
-          'aria-invalid:border-destructive aria-invalid:ring-1 aria-invalid:ring-destructive/50',
-          className,
-          inputClassName,
-        )}
       />
     )
   }
@@ -168,6 +206,9 @@ export function InlineEditField({
   // A transparent border matches the input's box so opening the field can't reflow the row.
   const boxClass = cn(
     'min-w-0 rounded border border-transparent px-1 text-left',
+    // Multi-line values are prose — keep the operator's own line breaks, and let the text wrap
+    // rather than running off the side as a single-line cell would.
+    multiline && 'block whitespace-pre-wrap',
     className,
     displayClassName,
   )

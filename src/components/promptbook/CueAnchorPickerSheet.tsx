@@ -11,6 +11,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
@@ -67,7 +68,12 @@ export function CueAnchorPickerSheet({
   /** Cue to highlight as the likely pick (armed from the rail, or overlapping the selection). */
   preselectCueId: number | null
   onPick: (cueId: number) => void
-  onCreateCue: (input: { name: string; cueNumber: string | null; stack: NewCueStackChoice }) => void | Promise<void>
+  onCreateCue: (input: {
+    name: string
+    cueNumber: string | null
+    notes: string | null
+    stack: NewCueStackChoice
+  }) => void | Promise<void>
   onEditCue: (cueId: number) => void
   onClose: () => void
 }) {
@@ -78,6 +84,7 @@ export function CueAnchorPickerSheet({
   const [mode, setMode] = useState<'pick' | 'create'>('pick')
   const [name, setName] = useState('')
   const [cueNumber, setCueNumber] = useState('')
+  const [notes, setNotes] = useState('')
   // Chosen stack: an existing id, or NEW_STACK to create one named `newStackName`.
   const [stackChoice, setStackChoice] = useState<number | typeof NEW_STACK>(NEW_STACK)
   const [newStackName, setNewStackName] = useState('')
@@ -88,6 +95,7 @@ export function CueAnchorPickerSheet({
   const initCreate = () => {
     setName(nextAvailableName('New Cue', existingCueNames))
     setCueNumber('')
+    setNotes('')
     // Prefer an existing stack when there is one; otherwise the only path is a new stack.
     const preset = defaultStackId ?? runnableStacks[0]?.id
     setStackChoice(preset ?? NEW_STACK)
@@ -121,7 +129,12 @@ export function CueAnchorPickerSheet({
       : { kind: 'existing', id: stackChoice as number }
     setSubmitting(true)
     try {
-      await onCreateCue({ name: name.trim(), cueNumber: cueNumber.trim() || null, stack })
+      await onCreateCue({
+        name: name.trim(),
+        cueNumber: cueNumber.trim() || null,
+        notes: notes.trim() || null,
+        stack,
+      })
     } finally {
       setSubmitting(false)
     }
@@ -155,6 +168,16 @@ export function CueAnchorPickerSheet({
                   onChange={(e) => setCueNumber(e.target.value)}
                   placeholder="14A"
                   className="h-9"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="new-cue-notes">Notes (optional)</Label>
+                <Textarea
+                  id="new-cue-notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Performance note…"
+                  className="min-h-[60px] resize-y"
                 />
               </div>
               <div className="space-y-1.5">

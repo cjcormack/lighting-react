@@ -113,21 +113,25 @@ function SortableStackEntry({
       <span className="hidden @[560px]:block w-6 text-center font-mono text-xs text-muted-foreground shrink-0">
         {index + 1}
       </span>
-      <InlineEditField
-        value={stack.name}
-        onCommit={(next) => {
-          const trimmed = next.trim()
-          if (trimmed === '') return false
-          onRename(stack, trimmed)
-        }}
-        ariaLabel="stack name"
-        disabled={!stack.canEdit}
-        title={stack.canEdit ? 'Click to rename' : undefined}
-        className={cn(
-          'flex-1 min-w-0 truncate text-sm font-medium text-foreground',
-          isActive && 'text-green-300 font-semibold',
-        )}
-      />
+      {/* The field wraps its text rather than filling the row, so clicking the space beside a
+          short stack name drills into the stack instead of opening the rename editor. */}
+      <span className="flex flex-1 min-w-0">
+        <InlineEditField
+          value={stack.name}
+          onCommit={(next) => {
+            const trimmed = next.trim()
+            if (trimmed === '') return false
+            onRename(stack, trimmed)
+          }}
+          ariaLabel="stack name"
+          disabled={!stack.canEdit}
+          title={stack.canEdit ? 'Click to rename' : undefined}
+          className={cn(
+            'min-w-0 max-w-full truncate text-sm font-medium text-foreground',
+            isActive && 'text-green-300 font-semibold',
+          )}
+        />
+      </span>
       {isActive && (
         <Badge
           variant="outline"

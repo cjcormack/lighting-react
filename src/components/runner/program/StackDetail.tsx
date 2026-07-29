@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import {
   ArrowLeft,
   Layers,
@@ -35,7 +35,7 @@ import type { Cue } from '@/api/cuesApi'
 import { ProgramCueRow } from './ProgramCueRow'
 import { ProgramMarkerRow } from './ProgramMarkerRow'
 import { OutOfOrderBanner } from '@/components/runner/OutOfOrderBanner'
-import { detectOutOfOrder } from '@/lib/cueNumber'
+import { cueNumberColumnChars, detectOutOfOrder } from '@/lib/cueNumber'
 import { cn } from '@/lib/utils'
 import type { LayersMode } from './CueCardEditor/CueCardEditor'
 
@@ -106,6 +106,16 @@ export function StackDetail({
 
   const standardCount = useMemo(
     () => stack.cues.filter((c) => c.cueType === 'STANDARD').length,
+    [stack.cues],
+  )
+
+  // Number-column width for every row in this stack. MARKERs are unnumbered dividers, so they
+  // must not drag the column down to the "—" placeholder width.
+  const cueNumChars = useMemo(
+    () =>
+      cueNumberColumnChars(
+        stack.cues.filter((c) => c.cueType === 'STANDARD').map((c) => c.cueNumber),
+      ),
     [stack.cues],
   )
 
@@ -224,7 +234,11 @@ export function StackDetail({
       )}
 
       {/* Cue list — scrolls within the recessed Row 4 surface set on the root above. */}
-      <div ref={listRef} className="flex-1 overflow-y-auto py-1">
+      <div
+        ref={listRef}
+        className="flex-1 overflow-y-auto py-1"
+        style={{ '--cue-num-chars': cueNumChars } as CSSProperties}
+      >
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}

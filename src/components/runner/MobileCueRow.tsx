@@ -1,5 +1,7 @@
 import { cn } from '@/lib/utils'
 import { formatFadeText } from '@/lib/cueUtils'
+import { AUTO_CUE_NUMBER_CLASS } from '@/lib/cueNumber'
+import { TruncateStart } from '@/components/TruncateStart'
 import { cueStatusIcon } from './cueStatusIcon'
 
 interface MobileCueRowProps {
@@ -68,16 +70,16 @@ export function MobileCueRow({
       {/* Status */}
       <div className="w-5 shrink-0 flex items-center justify-center">{statusIcon}</div>
 
-      {/* Q-number (theatre only) */}
+      {/* Q-number (theatre only) — clipped at the START so a long number keeps its tail. */}
       {isTheatre && (
-        <div
+        <TruncateStart
+          text={cueNumber ? `Q${cueNumber}` : ''}
+          title={cueNumber ? `Q${cueNumber}` : undefined}
           className={cn(
             'w-10 shrink-0 font-mono text-xs text-muted-foreground',
-            cueNumberAuto && 'opacity-70',
+            cueNumberAuto && AUTO_CUE_NUMBER_CLASS,
           )}
-        >
-          {cueNumber ? `Q${cueNumber}` : ''}
-        </div>
+        />
       )}
 
       {/* Name */}

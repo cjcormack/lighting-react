@@ -12,6 +12,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { Breadcrumbs } from './Breadcrumbs'
+import { SaveStatusIndicator } from './SaveStatusIndicator'
 import { ViewSwitcher, type ShowView } from './ViewSwitcher'
 
 const PAGE_LABEL: Record<ShowView, string> = {
@@ -86,6 +87,9 @@ export function ShowHeader({
       </div>
 
       <div className="flex items-center gap-2 shrink-0">
+        {/* Ahead of the view-specific actions: everything to its right is fixed-position, so the
+            pill appearing and clearing can't shift the Start/Stop button under the cursor. */}
+        <SaveStatusIndicator />
         {actions}
         <ViewSwitcher current={view} projectId={projectId} />
         {isShowActive ? (

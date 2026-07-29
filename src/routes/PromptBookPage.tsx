@@ -333,6 +333,15 @@ export function PromptBookViewerPage() {
     return m
   }, [stacks])
 
+  // Notes for the script's right gutter. Only cues that actually have one are included, so the
+  // viewer can render a bubble per entry without filtering blanks itself. An unanchored cue has
+  // nowhere on the page to sit — its note shows on the rail card instead.
+  const cueNotesByCue = useMemo(() => {
+    const m = new Map<number, string>()
+    for (const [id, c] of cueEntryByCue) if (c.notes) m.set(id, c.notes)
+    return m
+  }, [cueEntryByCue])
+
   // Where the book should scroll for a cue: its own anchor, else a best-effort borrow
   // from the nearest anchored cue (normally the one before it). An unanchored cue —
   // pre-show, house lights, an auto-follow — is a legitimate state, not a dead end.
@@ -416,6 +425,14 @@ export function PromptBookViewerPage() {
   const handleRenumberCue = useCallback(
     (cueId: number, cueNumber: string | null) => {
       patchCue({ projectId: projectIdNum, cueId, cueNumber })
+      noteEdit()
+    },
+    [patchCue, projectIdNum, noteEdit],
+  )
+
+  const handleRenoteCue = useCallback(
+    (cueId: number, notes: string | null) => {
+      patchCue({ projectId: projectIdNum, cueId, notes })
       noteEdit()
     },
     [patchCue, projectIdNum, noteEdit],
@@ -534,7 +551,17 @@ export function PromptBookViewerPage() {
   // existing stack in reading order. Reused create-stack/create-cue/anchor/reorder mutations
   // — no new backend surface. The sheet stays open on failure to retry.
   const handleCreateCueFromSelection = useCallback(
-    async ({ name, cueNumber, stack }: { name: string; cueNumber: string | null; stack: NewCueStackChoice }) => {
+    async ({
+      name,
+      cueNumber,
+      notes,
+      stack,
+    }: {
+      name: string
+      cueNumber: string | null
+      notes: string | null
+      stack: NewCueStackChoice
+    }) => {
       if (!anchorPicker) return
       const region = anchorPicker.region
       try {
@@ -556,6 +583,7 @@ export function PromptBookViewerPage() {
           projectId: projectIdNum,
           name,
           cueNumber,
+          notes,
           palette: [],
           updateGlobalPalette: false,
           presetApplications: [],
@@ -829,6 +857,7 @@ export function PromptBookViewerPage() {
     onEditCue: handleEditCue,
     onRenameCue: handleRenameCue,
     onRenumberCue: handleRenumberCue,
+    onRenoteCue: handleRenoteCue,
     onEditInteraction: noteEdit,
     goDisabled,
     showActive: isShowActive,
@@ -975,6 +1004,8 @@ export function PromptBookViewerPage() {
               annotations={book.annotations}
               statusOf={statusOf}
               cueLabels={cueLabelByCue}
+              cueNotes={cueNotesByCue}
+              onRenoteCue={handleRenoteCue}
               warningCueIds={warningCueIds}
               locked={locked}
               tool={tool}

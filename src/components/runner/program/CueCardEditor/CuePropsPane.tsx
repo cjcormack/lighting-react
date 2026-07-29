@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useFieldAutosave } from '@/hooks/useFieldAutosave'
 import { ChevronDown, Palette, Plus, Zap } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -36,12 +37,13 @@ interface CuePropsPaneProps {
 
 /**
  * Properties pane: name, cue#, fade in/out, easing, palette, notes,
- * auto-advance, script hooks. Every field is auto-saved via PATCH on commit
- * (input blur / change for text+selects, change for toggles).
+ * auto-advance, script hooks. Every field auto-saves via PATCH — selects and
+ * toggles on change, text fields on blur, on Enter, and a beat after typing
+ * stops (`useFieldAutosave`). There is no Save button and none is wanted.
  *
- * Local state mirrors the cue while typing so we can dispatch one PATCH on
- * blur instead of a PATCH per keystroke; the displayed value still reflects
- * the live `cue` prop after save resolves.
+ * Local state mirrors the cue while typing so a PATCH goes out per pause
+ * rather than per keystroke; the displayed value still reflects the live
+ * `cue` prop once the save resolves.
  */
 export function CuePropsPane({ cue, projectId }: CuePropsPaneProps) {
   const [patchCue] = usePatchProjectCueMutation()
@@ -122,6 +124,26 @@ export function CuePropsPane({ cue, projectId }: CuePropsPaneProps) {
     [cue.fadeCurve, cue.id, patchCue, projectId],
   )
 
+  // Every text field saves itself a beat after typing stops as well as on blur, so an edit
+  // survives collapsing the card or switching pane tabs — neither of which fires a blur.
+  useFieldAutosave(name, commitName)
+  useFieldAutosave(cueNumber, commitCueNumber)
+  useFieldAutosave(notes, commitNotes)
+  useFieldAutosave(fadeMs, commitFade)
+  useFieldAutosave(autoAdvanceDelay, commitAutoAdvanceDelay)
+
+  /** Enter commits the single-line fields outright — no need to wait out the autosave pause. */
+  const commitOnEnter = (commit: () => void) => (e: React.KeyboardEvent) => {
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    commit()
+  }
+
+  // Read off the field being typed in, not the committed cue, so the easing control wakes up as
+  // soon as a duration is entered rather than waiting for the blur that saves it. A blank field
+  // (`Number('')` is 0) is a snap, same as an explicit zero.
+  const hasFade = Number(fadeMs) > 0
+
   const setAutoAdvance = useCallback(
     (next: boolean) => {
       if (next === cue.autoAdvance) return
@@ -178,18 +200,20 @@ export function CuePropsPane({ cue, projectId }: CuePropsPaneProps) {
 
   return (
     <div className="space-y-3">
-      <div className="space-y-1.5">
-        <Label htmlFor={`cue-${cue.id}-name`}>Name</Label>
-        <Input
-          id={`cue-${cue.id}-name`}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onBlur={commitName}
-          className="h-9"
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
+      {/* Identity on one row — Cue # is three characters wide and looked adrift spanning the
+          pane on its own. Easing belongs to the fade, so it lives in Transition below. */}
+      <div className="grid grid-cols-[1fr_8rem] gap-2">
+        <div className="space-y-1.5">
+          <Label htmlFor={`cue-${cue.id}-name`}>Name</Label>
+          <Input
+            id={`cue-${cue.id}-name`}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={commitName}
+            onKeyDown={commitOnEnter(commitName)}
+            className="h-9"
+          />
+        </div>
         <div className="space-y-1.5">
           <div className="flex items-center gap-1.5">
             <Label htmlFor={`cue-${cue.id}-num`}>Cue #</Label>
@@ -208,25 +232,10 @@ export function CuePropsPane({ cue, projectId }: CuePropsPaneProps) {
             value={cueNumber}
             onChange={(e) => setCueNumber(e.target.value)}
             onBlur={commitCueNumber}
+            onKeyDown={commitOnEnter(commitCueNumber)}
             placeholder="14A"
             className={cn('h-9', cue.cueNumberAuto && 'text-muted-foreground')}
           />
-        </div>
-        <div className="space-y-1.5">
-          <Label>Easing</Label>
-          <Select value={cue.fadeCurve} onValueChange={setFadeCurve}>
-            <SelectTrigger className="h-9">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="LINEAR">Linear</SelectItem>
-              <SelectItem value="SINE_IN_OUT">Sine In/Out</SelectItem>
-              <SelectItem value="CUBIC_IN_OUT">Cubic In/Out</SelectItem>
-              <SelectItem value="EASE_IN">Ease In</SelectItem>
-              <SelectItem value="EASE_OUT">Ease Out</SelectItem>
-              <SelectItem value="EASE_IN_OUT">Ease In/Out</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
       </div>
 
@@ -270,9 +279,32 @@ export function CuePropsPane({ cue, projectId }: CuePropsPaneProps) {
               value={fadeMs}
               onChange={(e) => setFadeMs(e.target.value)}
               onBlur={commitFade}
+              onKeyDown={commitOnEnter(commitFade)}
               placeholder="2000"
               className="h-9 font-mono"
             />
+          </div>
+          {/* Easing is the shape of the fade, so it sits beside the duration that gives it
+              something to shape — and goes inert on a snap, where there is no fade to curve. */}
+          <div className="space-y-1.5">
+            <Label htmlFor={`cue-${cue.id}-curve`}>Easing</Label>
+            <Select value={cue.fadeCurve} onValueChange={setFadeCurve} disabled={!hasFade}>
+              <SelectTrigger
+                id={`cue-${cue.id}-curve`}
+                className="h-9"
+                title={hasFade ? undefined : 'Set a fade duration to choose an easing curve'}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="LINEAR">Linear</SelectItem>
+                <SelectItem value="SINE_IN_OUT">Sine In/Out</SelectItem>
+                <SelectItem value="CUBIC_IN_OUT">Cubic In/Out</SelectItem>
+                <SelectItem value="EASE_IN">Ease In</SelectItem>
+                <SelectItem value="EASE_OUT">Ease Out</SelectItem>
+                <SelectItem value="EASE_IN_OUT">Ease In/Out</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
@@ -316,6 +348,7 @@ export function CuePropsPane({ cue, projectId }: CuePropsPaneProps) {
               value={autoAdvanceDelay}
               onChange={(e) => setAutoAdvanceDelay(e.target.value)}
               onBlur={commitAutoAdvanceDelay}
+              onKeyDown={commitOnEnter(commitAutoAdvanceDelay)}
               placeholder="5000"
               className="h-9 font-mono"
             />

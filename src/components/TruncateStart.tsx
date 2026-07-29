@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { cn } from '@/lib/utils'
 
 /**
@@ -12,6 +12,14 @@ import { cn } from '@/lib/utils'
  *
  * Measurement is done on a canvas rather than by probing the DOM, so narrowing the text
  * costs no layout passes.
+ *
+ * The element may shrink-wrap its text — hosts rely on that to keep a click-to-edit target no
+ * bigger than the value it edits. That needs care, because the width is both an input to the
+ * clipping and an output of it: sized off the *displayed* string, every re-fit would shrink the
+ * box, which would clip further, and the text would ratchet away to nothing. So an invisible
+ * sizer carrying the FULL string sets the intrinsic width. The box therefore measures
+ * `min(full text, whatever the parent allows)` — a function of the input text only — and the
+ * clipped string is free to be shorter without feeding back.
  */
 
 const ELLIPSIS = '…'
@@ -29,11 +37,18 @@ function context(): CanvasRenderingContext2D | null {
 export function TruncateStart({
   text,
   className,
+  style,
   title,
 }: {
   text: string
-  /** Must give the element a width — it is measured against, not derived from, the text. */
+  /**
+   * Bounds the element. Give it a width (`w-full`, a fixed track) to fill a cell, or leave it
+   * unbounded to shrink-wrap the text — either way the box never sizes itself off the *clipped*
+   * string, so the fit is stable.
+   */
   className?: string
+  /** As `className` — for widths that have to be computed (see `cueNumberCellWidth`). */
+  style?: CSSProperties
   title?: string
 }) {
   const ref = useRef<HTMLSpanElement>(null)
@@ -51,12 +66,22 @@ export function TruncateStart({
     }
 
     const fit = () => {
-      const avail = el.clientWidth
+      const style = getComputedStyle(el)
+      // Sub-pixel width, deliberately not `clientWidth`. `clientWidth` rounds to an integer, and
+      // when the element shrink-wraps its text the two are the same measurement — so a box of
+      // 42.15px reports 42, the text "doesn't fit" its own width, and a character is clipped off
+      // a label that was never too long. `getBoundingClientRect` keeps the fraction; the padding
+      // and border it includes come back off here.
+      const avail =
+        el.getBoundingClientRect().width -
+        parseFloat(style.paddingLeft) -
+        parseFloat(style.paddingRight) -
+        parseFloat(style.borderLeftWidth) -
+        parseFloat(style.borderRightWidth)
       // Not laid out yet (or in a collapsed pane): leave the last good text alone rather
       // than clipping everything down to a bare ellipsis.
-      if (avail <= 0) return
+      if (!(avail > 0)) return
 
-      const style = getComputedStyle(el)
       ctx.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`
       const fits = (s: string) => ctx.measureText(s).width <= avail
 
@@ -85,11 +110,19 @@ export function TruncateStart({
   }, [text])
 
   return (
-    <span ref={ref} title={title} className={cn('block overflow-hidden whitespace-nowrap', className)}>
+    <span ref={ref} title={title} style={style} className={cn('block overflow-hidden', className)}>
       {/* The clipping is a visual accommodation, so assistive tech gets the whole string:
           announcing "…3.2.10" would make QS1-3.2.10 and QS2-3.2.10 indistinguishable. */}
       <span className="sr-only">{text}</span>
-      <span aria-hidden="true">{display}</span>
+      {/* Intrinsic sizer — see the note above. `sr-only` can't do this job: it is positioned
+          absolutely and so contributes no width at all. Zero-height and hidden, it costs a line
+          box and nothing else. */}
+      <span aria-hidden="true" className="invisible block h-0 overflow-hidden whitespace-nowrap">
+        {text}
+      </span>
+      <span aria-hidden="true" className="block overflow-hidden whitespace-nowrap">
+        {display}
+      </span>
     </span>
   )
 }

@@ -1,5 +1,7 @@
+import type { ReactNode } from 'react'
 import { Scissors } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { InlineEditField } from '@/components/InlineEditField'
 import type { AnnotationDto, NoteTone, Rect } from '../../api/promptBooksApi'
 import { MARKER_LANE_X, marginRailStyle, rectToStyle, verticalBounds } from '../../lib/promptBook/geometry'
 
@@ -8,12 +10,17 @@ import { MARKER_LANE_X, marginRailStyle, rectToStyle, verticalBounds } from '../
  *  treatment instead of a single strikethrough rule. */
 const BLOCK_CUT_MIN_H = 0.03
 
-/** Note callout styling by tone — a dark sticky-note that reads over the page.
- *  `tailBd`/`tailBg` are concrete colours for the CSS speech-bubble tail. */
-const toneStyles: Record<
-  NoteTone,
-  { box: string; tag: string; label: string; tailBd: string; tailBg: string }
-> = {
+/** A bubble's colourway. `tailBd`/`tailBg` are concrete colours for the CSS speech-bubble tail. */
+interface BubbleStyle {
+  box: string
+  tag: string
+  label: string
+  tailBd: string
+  tailBg: string
+}
+
+/** Note callout styling by tone — a dark sticky-note that reads over the page. */
+const toneStyles: Record<NoteTone, BubbleStyle> = {
   NOTE: {
     box: 'border-sky-700 bg-sky-950/95 text-sky-100',
     tag: 'border-sky-700 text-sky-300',
@@ -164,6 +171,69 @@ export function CutMarginMarker({
   )
 }
 
+/** The visual shell every gutter bubble shares — tone box, tag chip, optional tail. */
+function Bubble({
+  style,
+  label,
+  withTail,
+  onClick,
+  interactive,
+  children,
+}: {
+  style: BubbleStyle
+  /** Overrides the style's own tag text (a cue note is tagged with its cue number). */
+  label?: string
+  withTail?: boolean
+  /** Whole-bubble click target. Omit when the bubble's own content handles pointers. */
+  onClick?: () => void
+  /** Whether the bubble takes pointer events at all — the overlay above the page is inert. */
+  interactive: boolean
+  children: ReactNode
+}) {
+  return (
+    <div
+      onClick={onClick}
+      className={cn(
+        'relative rounded-md border p-2 shadow-lg',
+        style.box,
+        interactive && 'pointer-events-auto',
+        interactive && onClick && 'cursor-pointer hover:brightness-110',
+      )}
+    >
+      {/* Left-pointing speech-bubble tail (two triangles: border then fill). */}
+      {withTail && (
+        <>
+          <span
+            className="absolute top-3 -left-[7px]"
+            style={{
+              borderTop: '6px solid transparent',
+              borderBottom: '6px solid transparent',
+              borderRight: `7px solid ${style.tailBd}`,
+            }}
+          />
+          <span
+            className="absolute top-3 -left-[6px] mt-px"
+            style={{
+              borderTop: '5px solid transparent',
+              borderBottom: '5px solid transparent',
+              borderRight: `6px solid ${style.tailBg}`,
+            }}
+          />
+        </>
+      )}
+      <span
+        className={cn(
+          'mb-1 block w-fit rounded border px-1 font-mono text-[8.5px] leading-tight font-bold tracking-wide uppercase',
+          style.tag,
+        )}
+      >
+        {label ?? style.label}
+      </span>
+      {children}
+    </div>
+  )
+}
+
 /** Tone-coloured note callout. Used in the right gutter (desktop, with a tail) or inline (narrow). */
 function NoteBubble({
   annotation,
@@ -177,47 +247,15 @@ function NoteBubble({
   withTail?: boolean
 }) {
   const tone: NoteTone = annotation.tone ?? 'NOTE'
-  const t = toneStyles[tone]
   return (
-    <div
+    <Bubble
+      style={toneStyles[tone]}
+      withTail={withTail}
+      interactive={!locked}
       onClick={locked ? undefined : onClick}
-      className={cn(
-        'relative rounded-md border p-2 shadow-lg',
-        t.box,
-        !locked && 'pointer-events-auto cursor-pointer hover:brightness-110',
-      )}
     >
-      {/* Left-pointing speech-bubble tail (two triangles: border then fill). */}
-      {withTail && (
-        <>
-          <span
-            className="absolute top-3 -left-[7px]"
-            style={{
-              borderTop: '6px solid transparent',
-              borderBottom: '6px solid transparent',
-              borderRight: `7px solid ${t.tailBd}`,
-            }}
-          />
-          <span
-            className="absolute top-3 -left-[6px] mt-px"
-            style={{
-              borderTop: '5px solid transparent',
-              borderBottom: '5px solid transparent',
-              borderRight: `6px solid ${t.tailBg}`,
-            }}
-          />
-        </>
-      )}
-      <span
-        className={cn(
-          'mb-1 block w-fit rounded border px-1 font-mono text-[8.5px] leading-tight font-bold tracking-wide uppercase',
-          t.tag,
-        )}
-      >
-        {t.label}
-      </span>
-      <div className="text-[11.5px] leading-snug">{annotation.text}</div>
-    </div>
+      <div className="text-[11.5px] leading-snug whitespace-pre-wrap">{annotation.text}</div>
+    </Bubble>
   )
 }
 
@@ -229,14 +267,19 @@ function NoteBubble({
  */
 export function NoteCallout({
   annotation,
-  rects,
+  topPct,
   locked,
   leftPct,
   widthPx,
   onClick,
 }: {
   annotation: AnnotationDto
-  rects: Rect[]
+  /**
+   * Normalized y (×100) of the bubble's top. Supplied by the caller rather than read off the
+   * region, because the gutter is shared: bubbles are spread apart there so two notes anchored
+   * to the same line don't stack on top of each other.
+   */
+  topPct: number
   locked: boolean
   /** Normalized x (×100) of the note's tail — just right of the text block. */
   leftPct: number
@@ -244,35 +287,155 @@ export function NoteCallout({
   widthPx: number
   onClick: () => void
 }) {
-  const { top } = verticalBounds(rects)
   return (
     <div
       className="pointer-events-none absolute"
-      style={{ top: `${top * 100}%`, left: `${leftPct}%`, width: widthPx }}
+      style={{ top: `${topPct}%`, left: `${leftPct}%`, width: widthPx }}
     >
       <NoteBubble annotation={annotation} locked={locked} onClick={onClick} withTail />
     </div>
   )
 }
 
+/**
+ * A cue's own note, as opposed to an annotation on the script.
+ *
+ * Deliberately a different colourway from the tone notes: those belong to the script and are
+ * authored on the page, this one belongs to the cue and follows it wherever the cue is anchored.
+ * Tagged with the cue number so it is obvious which cue on the page it is speaking for.
+ */
+const cueNoteStyle: BubbleStyle = {
+  box: 'border-slate-600 bg-slate-900/95 text-slate-100',
+  tag: 'border-slate-600 text-slate-300',
+  label: 'Cue',
+  tailBd: '#475569',
+  tailBg: '#0f172a',
+}
+
+/**
+ * Cue note in the right gutter, positioned like {@link NoteCallout} — top-aligned to the cue's
+ * anchored text, tail against the text's right edge. Editable in place when the book is
+ * unlocked, so a note can be written without leaving for the Program editor.
+ */
+export function CueNoteCallout({
+  label,
+  notes,
+  topPct,
+  locked,
+  leftPct,
+  widthPx,
+  onCommit,
+  onEditInteraction,
+}: {
+  /** The cue's display number, e.g. "Q12" — the bubble's tag. */
+  label: string
+  notes: string | null
+  /** Normalized y (×100) of the bubble's top — see {@link NoteCallout}. */
+  topPct: number
+  locked: boolean
+  leftPct: number
+  widthPx: number
+  onCommit: (next: string | null) => void
+  onEditInteraction: () => void
+}) {
+  return (
+    <div
+      className="pointer-events-none absolute"
+      style={{ top: `${topPct}%`, left: `${leftPct}%`, width: widthPx }}
+    >
+      <Bubble style={cueNoteStyle} label={label} withTail interactive={!locked}>
+        <CueNoteText
+          notes={notes}
+          locked={locked}
+          onCommit={onCommit}
+          onEditInteraction={onEditInteraction}
+        />
+      </Bubble>
+    </div>
+  )
+}
+
+/** Narrow-layout cue note: inline under the anchored line, where there is no gutter to use. */
+export function CueNoteInline({
+  label,
+  notes,
+  topPct,
+  locked,
+  onCommit,
+  onEditInteraction,
+}: {
+  label: string
+  notes: string | null
+  /** Normalized y (×100) of the bubble's top — see {@link NoteCallout}. */
+  topPct: number
+  locked: boolean
+  onCommit: (next: string | null) => void
+  onEditInteraction: () => void
+}) {
+  return (
+    <div
+      className="pointer-events-none absolute right-2 left-2"
+      style={{ top: `${topPct}%`, marginTop: 4 }}
+    >
+      <div className="max-w-[min(320px,90%)]">
+        <Bubble style={cueNoteStyle} label={label} interactive={!locked}>
+          <CueNoteText
+            notes={notes}
+            locked={locked}
+            onCommit={onCommit}
+            onEditInteraction={onEditInteraction}
+          />
+        </Bubble>
+      </div>
+    </div>
+  )
+}
+
+/** The note body — read-only text when locked, click-to-edit when not. */
+function CueNoteText({
+  notes,
+  locked,
+  onCommit,
+  onEditInteraction,
+}: {
+  notes: string | null
+  locked: boolean
+  onCommit: (next: string | null) => void
+  onEditInteraction: () => void
+}) {
+  if (locked) {
+    return <div className="text-[11.5px] leading-snug whitespace-pre-wrap">{notes}</div>
+  }
+  return (
+    <InlineEditField
+      value={notes ?? ''}
+      onCommit={(next) => onCommit(next.trim() || null)}
+      ariaLabel="cue notes"
+      placeholder="Performance note…"
+      onEditInteraction={onEditInteraction}
+      multiline
+      rows={3}
+      formatDisplay={(v) => v || <span className="opacity-60">+ Add note</span>}
+      className="w-full text-[11.5px] leading-snug"
+    />
+  )
+}
+
 /** Narrow-layout note: rendered inline over the page, just below the region. */
 export function NoteInline({
   annotation,
-  rects,
+  topPct,
   locked,
   onClick,
 }: {
   annotation: AnnotationDto
-  rects: Rect[]
+  /** Normalized y (×100) of the bubble's top — see {@link NoteCallout}. */
+  topPct: number
   locked: boolean
   onClick: () => void
 }) {
-  const { top, height } = verticalBounds(rects)
   return (
-    <div
-      className="absolute right-2 left-2"
-      style={{ top: `${(top + height) * 100}%`, marginTop: 4 }}
-    >
+    <div className="absolute right-2 left-2" style={{ top: `${topPct}%`, marginTop: 4 }}>
       <div className="max-w-[min(320px,90%)]">
         <NoteBubble annotation={annotation} locked={locked} onClick={onClick} />
       </div>

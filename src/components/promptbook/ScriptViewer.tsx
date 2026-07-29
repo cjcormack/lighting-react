@@ -22,10 +22,19 @@ import {
   moveRegionVertically,
   rangeToRegion,
   rectToStyle,
+  verticalBounds,
 } from '../../lib/promptBook/geometry'
 import { scriptPosition } from '../../lib/promptBook/desync'
 import { CueWash, CueMarginMarker, type CueRunStatus } from './AnchorOverlay'
-import { CutOverlay, CutMarginMarker, FreetextOverlay, NoteCallout, NoteInline } from './AnnotationOverlay'
+import {
+  CueNoteCallout,
+  CueNoteInline,
+  CutOverlay,
+  CutMarginMarker,
+  FreetextOverlay,
+  NoteCallout,
+  NoteInline,
+} from './AnnotationOverlay'
 import { FloatingSelectionToolbar } from './FloatingSelectionToolbar'
 import type { PromptBookTool } from './ToolPalette'
 
@@ -53,6 +62,17 @@ const MAX_MARKER_LANE_X = 0.15
 const NOTE_EDGE_GAP = 0.016
 /** Px kept between a note's right edge and the sheet's right edge. */
 const NOTE_RIGHT_MARGIN = 8
+/** Normalized vertical clearance between two bubbles sharing the right gutter lane. */
+const GUTTER_MIN_GAP = 0.055
+
+/**
+ * One bubble in the right gutter lane: either a script annotation or a cue's own note. They are
+ * laid out together so the two kinds can't land on top of each other. `top` is mutated during
+ * the stacking pass.
+ */
+type GutterNote =
+  | { key: string; top: number; annotation: AnnotationDto }
+  | { key: string; top: number; cueId: number; label: string; notes: string | null }
 
 /**
  * Measure the normalized left/right edge of a rendered page's text block from its
@@ -117,6 +137,10 @@ interface ScriptViewerProps {
   /** Live cue labels from the cue stack, keyed by cueId — the anchor's cached
    *  label can go stale when a cue number is edited, so this wins when present. */
   cueLabels: Map<number, string>
+  /** Cue notes keyed by cueId — rendered in the right gutter beside the cue's anchor. */
+  cueNotes: Map<number, string>
+  /** Set or clear an anchored cue's note from the gutter (unlocked only). */
+  onRenoteCue: (cueId: number, notes: string | null) => void
   warningCueIds: Set<number>
   locked: boolean
   tool: PromptBookTool
@@ -159,6 +183,8 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
     annotations,
     statusOf,
     cueLabels,
+    cueNotes,
+    onRenoteCue,
     warningCueIds,
     locked,
     tool,
@@ -520,6 +546,47 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
                 150,
                 250,
               )
+              // Annotation notes and cue notes share one gutter lane, so they are placed
+              // together: sorted by the line they belong to, then pushed down so each clears
+              // the one above. GUTTER_MIN_GAP is a floor, not a measurement — a bubble's height
+              // depends on its text — but it stops the common case of two notes anchored to the
+              // same line rendering exactly on top of each other.
+              // Desktop hangs a bubble off the TOP of its region (tail against that line);
+              // narrow drops it BELOW the region, inline under the line. Both then go through
+              // the same de-collision pass, so the two kinds can't overlap in either layout.
+              const anchorY = (rects: Rect[]) => {
+                const b = verticalBounds(rects)
+                return narrow ? b.top + b.height : b.top
+              }
+              const gutterNotes: GutterNote[] = [
+                ...notes.map(({ item, rects }) => ({
+                  key: `ann-${item.id}`,
+                  top: anchorY(rects),
+                  annotation: item,
+                })),
+                ...cues
+                  .filter(({ item }) => cueNotes.has(item.cueId))
+                  .map(({ item, rects }) => ({
+                    key: `cue-${item.cueId}`,
+                    top: anchorY(rects),
+                    cueId: item.cueId,
+                    // Falls back to the bubble's generic tag rather than rendering an empty chip.
+                    label: cueLabels.get(item.cueId) ?? item.label ?? 'Cue',
+                    notes: cueNotes.get(item.cueId) ?? null,
+                  })),
+              ].sort((a, b) => a.top - b.top)
+              // Clamped at the foot of the sheet: the page does not clip its overlay, so a
+              // dense page could otherwise push the last bubbles off the bottom and leave them
+              // floating in the grey gap between pages, pointing at nothing. Once the lane is
+              // full the remaining bubbles pile up on the last line rather than escaping it.
+              let lastGutterTop = -Infinity
+              for (const note of gutterNotes) {
+                note.top = Math.min(
+                  Math.max(note.top, lastGutterTop + GUTTER_MIN_GAP),
+                  1 - GUTTER_MIN_GAP,
+                )
+                lastGutterTop = note.top
+              }
               return (
                 <div
                   key={i}
@@ -598,30 +665,60 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
                         />
                       ))}
                       {/* Notes — desktop: tail anchored to the text's right edge, bubble
-                          extends into the paper gutter; narrow: inline under the line. */}
+                          extends into the paper gutter; narrow: inline under the line.
+                          Script annotations and cue notes share the lane, hence one list. */}
                       {!narrow &&
                         notesReady &&
-                        notes.map(({ item, rects }) => (
-                          <NoteCallout
-                            key={item.id}
-                            annotation={item}
-                            rects={rects}
-                            locked={annLocked}
-                            leftPct={noteLeftNorm * 100}
-                            widthPx={noteWidthPx}
-                            onClick={() => onAnnotationClick(item)}
-                          />
-                        ))}
+                        gutterNotes.map((note) =>
+                          'annotation' in note ? (
+                            <NoteCallout
+                              key={note.key}
+                              annotation={note.annotation}
+                              topPct={note.top * 100}
+                              locked={annLocked}
+                              leftPct={noteLeftNorm * 100}
+                              widthPx={noteWidthPx}
+                              onClick={() => onAnnotationClick(note.annotation)}
+                            />
+                          ) : (
+                            <CueNoteCallout
+                              key={note.key}
+                              label={note.label}
+                              notes={note.notes}
+                              topPct={note.top * 100}
+                              // `annLocked`, not `locked`: with a drawing tool armed every
+                              // overlay has to go inert so a box-drag that starts over it
+                              // reaches the page instead of being swallowed.
+                              locked={annLocked}
+                              leftPct={noteLeftNorm * 100}
+                              widthPx={noteWidthPx}
+                              onCommit={(next) => onRenoteCue(note.cueId, next)}
+                              onEditInteraction={onEditInteraction}
+                            />
+                          ),
+                        )}
                       {narrow &&
-                        notes.map(({ item, rects }) => (
-                          <NoteInline
-                            key={item.id}
-                            annotation={item}
-                            rects={rects}
-                            locked={annLocked}
-                            onClick={() => onAnnotationClick(item)}
-                          />
-                        ))}
+                        gutterNotes.map((note) =>
+                          'annotation' in note ? (
+                            <NoteInline
+                              key={note.key}
+                              annotation={note.annotation}
+                              topPct={note.top * 100}
+                              locked={annLocked}
+                              onClick={() => onAnnotationClick(note.annotation)}
+                            />
+                          ) : (
+                            <CueNoteInline
+                              key={note.key}
+                              label={note.label}
+                              notes={note.notes}
+                              topPct={note.top * 100}
+                              locked={annLocked}
+                              onCommit={(next) => onRenoteCue(note.cueId, next)}
+                              onEditInteraction={onEditInteraction}
+                            />
+                          ),
+                        )}
                       {draftRect && draftRect.page === i && (
                         <div
                           style={rectToStyle(draftRect)}

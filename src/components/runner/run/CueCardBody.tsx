@@ -7,6 +7,7 @@ import { MiniStage } from '@/components/runner/program/CueCardEditor/MiniStage'
 import { CueDetailContent } from '@/components/cues/CueDetailContent'
 import { collectCueTargets } from '@/components/runner/program/CueCardEditor/targetUtils'
 import { InlineEditField } from '@/components/InlineEditField'
+import { TruncateStart } from '@/components/TruncateStart'
 import { formatFadeText } from '@/lib/cueUtils'
 import { AUTO_CUE_NUMBER_CLASS } from '@/lib/cueNumber'
 import type { CueStackCueEntry } from '@/api/cueStacksApi'
@@ -43,6 +44,11 @@ interface CueCardBodyProps {
   onCueNumberCommit?: (next: string | null) => void
   /** When set, the cue name becomes inline-editable. Rejects an empty name. */
   onCueNameCommit?: (next: string) => void
+  /**
+   * When set, the note becomes inline-editable and a cue with none gets an "Add note"
+   * affordance. Receives the trimmed text, or null when cleared. Omit for a read-only card.
+   */
+  onNotesCommit?: (next: string | null) => void
   /** Forwarded to the editable fields — resets a host idle timer that could unmount them. */
   onEditInteraction?: () => void
 }
@@ -72,6 +78,7 @@ export function CueCardBody({
   fadeRemainMs,
   onCueNumberCommit,
   onCueNameCommit,
+  onNotesCommit,
   onEditInteraction,
 }: CueCardBodyProps) {
   const isCur = kind === 'cur'
@@ -82,23 +89,34 @@ export function CueCardBody({
   // Editable identity (unlocked Prompt Book). The fields inherit the surrounding type
   // styles — including the hero Q's container-query font size — so the card looks the same
   // whether or not it is editable.
+  // The hero Q is 96px at full size, so a long number has to be clipped — at the START, keeping
+  // the tail that identifies the cue. It stays `w-full` because the hero is centred: a
+  // shrink-wrapped box would have nothing to centre within. The smaller header renders its number
+  // in an `auto` grid column instead, which shows it whole — nothing to clip there.
+  const heroQ = (text: string) =>
+    isCur ? <TruncateStart text={text} title={text} className="w-full" /> : text
+
   const cueNumberNode =
     cue == null ? null : onCueNumberCommit ? (
       <InlineEditField
         value={cue.cueNumber ?? ''}
-        formatDisplay={(v) => (v ? `Q${v}` : '—')}
+        formatDisplay={(v) => heroQ(v ? `Q${v}` : '—')}
         onCommit={(next) => onCueNumberCommit(next.trim() || null)}
         ariaLabel="cue number"
         placeholder="Q#"
         onEditInteraction={onEditInteraction}
         className={cn(
-          'max-w-full',
-          isCur ? 'text-center' : 'truncate',
+          isCur ? 'w-full text-center' : 'max-w-full',
           cue.cueNumberAuto && AUTO_CUE_NUMBER_CLASS,
         )}
       />
     ) : cue.cueNumber ? (
-      <span className={cn(cue.cueNumberAuto && AUTO_CUE_NUMBER_CLASS)}>Q{cue.cueNumber}</span>
+      // `block` only for the hero, where TruncateStart needs a block box to measure. On the
+      // smaller card the parent ellipsises with `truncate`, and a block child would give it no
+      // inline content to ellipsise — the number would hard-clip mid-glyph instead.
+      <span className={cn(isCur && 'block', cue.cueNumberAuto && AUTO_CUE_NUMBER_CLASS)}>
+        {heroQ(`Q${cue.cueNumber}`)}
+      </span>
     ) : (
       '—'
     )
@@ -229,7 +247,8 @@ export function CueCardBody({
               <div className="px-3 py-2 grid grid-cols-[auto_1fr_auto] items-center gap-2.5">
                 <span
                   className={cn(
-                    'font-mono text-2xl font-extrabold',
+                    // Capped so an outsized number can't starve the name beside it.
+                    'max-w-[45%] truncate font-mono text-2xl font-extrabold',
                     isNxt ? 'text-blue-400' : 'text-foreground',
                   )}
                 >
@@ -294,20 +313,55 @@ export function CueCardBody({
             )}
           </div>
 
-          {/* Notes — amber "Trigger" callout on the armed next, subtle italic otherwise */}
-          {cue.notes && kind !== 'nxt' && (
-            <div className="mx-3 mb-3 rounded-md border bg-muted/20 px-2.5 py-2 text-[12px] italic text-muted-foreground">
+          {/* Notes — amber "Trigger" callout on the armed next, subtle italic otherwise.
+              Editable hosts (the unlocked Prompt Book) get click-to-edit here, plus a placeholder
+              on a cue with no note, so writing one never means leaving for the Program editor. */}
+          {onNotesCommit && kind !== 'nxt' && (
+            <div className="mx-3 mb-3">
+              <InlineEditField
+                value={cue.notes ?? ''}
+                onCommit={(next) => onNotesCommit(next.trim() || null)}
+                ariaLabel="cue notes"
+                placeholder="Performance note…"
+                onEditInteraction={onEditInteraction}
+                multiline
+                rows={3}
+                formatDisplay={(v) =>
+                  v || <span className="not-italic opacity-70">+ Add note</span>
+                }
+                className="w-full rounded-md border bg-muted/20 px-2.5 py-2 text-[12px] italic text-muted-foreground"
+              />
+            </div>
+          )}
+          {!onNotesCommit && cue.notes && kind !== 'nxt' && (
+            <div className="mx-3 mb-3 rounded-md border bg-muted/20 px-2.5 py-2 text-[12px] italic text-muted-foreground whitespace-pre-wrap">
               {cue.notes}
             </div>
           )}
-          {cue.notes && kind === 'nxt' && (
+          {(cue.notes || onNotesCommit) && kind === 'nxt' && (
             <div className="mx-3 mb-3 rounded-md border border-amber-700/40 bg-amber-950/30 px-2.5 py-2 text-[12px] text-amber-200 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5">
               <span className="font-mono text-[9.5px] font-bold uppercase tracking-[0.12em] text-amber-400">
                 Trigger
               </span>
               <span />
               <span />
-              <span className="font-medium">{cue.notes}</span>
+              {/* The armed cue's note is the one the operator is about to act on, so it has to be
+                  as editable as the rest — a late change can't mean a trip to the Program view. */}
+              {onNotesCommit ? (
+                <InlineEditField
+                  value={cue.notes ?? ''}
+                  onCommit={(next) => onNotesCommit(next.trim() || null)}
+                  ariaLabel="cue notes"
+                  placeholder="Performance note…"
+                  onEditInteraction={onEditInteraction}
+                  multiline
+                  rows={3}
+                  formatDisplay={(v) => v || <span className="opacity-70">+ Add note</span>}
+                  className="w-full font-medium text-amber-200"
+                />
+              ) : (
+                <span className="font-medium whitespace-pre-wrap">{cue.notes}</span>
+              )}
             </div>
           )}
 

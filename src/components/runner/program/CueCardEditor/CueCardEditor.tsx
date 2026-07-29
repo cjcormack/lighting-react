@@ -39,7 +39,9 @@ import {
   formatFadeDuration,
   parseFadeDuration,
 } from '@/lib/cueUtils'
-import { AUTO_CUE_NUMBER_CLASS } from '@/lib/cueNumber'
+import { AUTO_CUE_NUMBER_CLASS, cueNumberCellWidth } from '@/lib/cueNumber'
+import { TruncateStart } from '@/components/TruncateStart'
+import { SaveStatusIndicator } from '@/components/SaveStatusIndicator'
 import { TargetsPane } from './TargetsPane'
 import { CuePropsPane } from './CuePropsPane'
 import { LayersPane, type LayersMode } from './LayersPane'
@@ -205,11 +207,11 @@ export function CueCardEditor({
         <div
           className={cn(
             'grid items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-muted/30 transition-colors',
-            // Q# column budget: the live row's Play icon (12px) + gap (6px) + the inline-edit
-            // field's border/padding (6px), leaving ~64px for a 7-char number like "QS1-3.1"
-            // — so the current cue's ID never truncates.
-            'grid-cols-[16px_88px_minmax(0,80px)_minmax(0,1fr)_auto_auto_18px]',
-            'max-[800px]:grid-cols-[16px_84px_minmax(0,1fr)_auto_18px] max-[800px]:gap-2',
+            // The Q# track is `auto`, sized by the fixed-width cell inside it — see
+            // `cueNumberCellWidth`. Every row in a stack resolves the same width, so the column
+            // still lines up, but a stack of "Q1"–"Q40" no longer reserves room it never uses.
+            'grid-cols-[16px_auto_minmax(0,80px)_minmax(0,1fr)_auto_auto_18px]',
+            'max-[800px]:grid-cols-[16px_auto_minmax(0,1fr)_auto_18px] max-[800px]:gap-2',
           )}
           onClick={onToggleExpanded}
         >
@@ -221,7 +223,11 @@ export function CueCardEditor({
             <GripVertical className="size-4" />
           </div>
 
-          <div className="font-mono text-sm font-semibold flex items-center gap-1.5 min-w-0">
+          <div
+            className="font-mono text-sm font-semibold flex items-center gap-1.5 min-w-0"
+            // Play icon (12px) + gap (6px) + the inline field's border/padding (6px).
+            style={cueNumberCellWidth('1.5rem')}
+          >
             {isActive && (
               <Play
                 className="size-3 fill-green-400 text-green-400 shrink-0"
@@ -230,7 +236,9 @@ export function CueCardEditor({
             )}
             <InlineEditField
               value={cue.cueNumber ?? ''}
-              formatDisplay={(v) => (v ? `Q${v}` : '—')}
+              // Clipped at the START: the tail is what tells "QS1-3.1" from "QS1-3.2", so it is
+              // the end worth keeping.
+              formatDisplay={(v) => <TruncateStart text={v ? `Q${v}` : '—'} />}
               onCommit={commitCueNumber}
               ariaLabel="cue number"
               placeholder="14A"
@@ -239,8 +247,10 @@ export function CueCardEditor({
                   ? 'Auto-numbered from position — click to set an explicit cue number'
                   : 'Click to edit the cue number'
               }
+              // Wraps the number rather than filling the cell, so only the text itself opens the
+              // editor; the rest of the cell belongs to the row and expands the cue.
               className={cn(
-                'min-w-0 flex-1 truncate px-0.5',
+                'min-w-0 max-w-full px-0.5',
                 cue.cueNumberAuto && AUTO_CUE_NUMBER_CLASS,
               )}
             />
@@ -255,8 +265,11 @@ export function CueCardEditor({
             onCommit={commitName}
             ariaLabel="cue name"
             title="Click to rename"
+            // `justify-self-start` keeps the field the width of the name it holds. Left to
+            // stretch (the grid default) it would cover the whole 1fr column, so clicking the
+            // empty space beside a short cue name opened the editor instead of expanding the cue.
             className={cn(
-              'truncate text-sm',
+              'justify-self-start min-w-0 max-w-full truncate text-sm',
               isActive ? 'text-green-300 font-semibold' : isStandby ? 'text-blue-300 font-semibold' : 'font-medium',
             )}
           />
@@ -323,7 +336,11 @@ export function CueCardEditor({
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center justify-end gap-2 px-3 py-2 border-b bg-muted/20">
+                  <div className="flex items-center justify-between gap-2 px-3 py-2 border-b bg-muted/20">
+                    {/* Scoped to this cue: the show-wide pill in the header reports any write in
+                        the project, which is no use when you want to know that the field you
+                        just left actually landed. */}
+                    <SaveStatusIndicator cueId={cue.id} className="justify-start" />
                     <Button
                       type="button"
                       variant="outline"

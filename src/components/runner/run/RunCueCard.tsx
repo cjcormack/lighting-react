@@ -12,7 +12,8 @@ import { cn } from '@/lib/utils'
 import { useNarrowContainer } from '@/hooks/useNarrowContainer'
 import { useProjectCueQuery } from '@/store/cues'
 import { formatFadeText } from '@/lib/cueUtils'
-import { AUTO_CUE_NUMBER_CLASS } from '@/lib/cueNumber'
+import { AUTO_CUE_NUMBER_CLASS, cueNumberCellWidth } from '@/lib/cueNumber'
+import { TruncateStart } from '@/components/TruncateStart'
 import { resolveColourToHex } from '@/components/fx/colourUtils'
 import { collectCueTargets } from '@/components/runner/program/CueCardEditor/targetUtils'
 import type { Cue, CueTarget } from '@/api/cuesApi'
@@ -136,9 +137,11 @@ export function RunCueCard({
         }
         className={cn(
           'grid items-center gap-3 px-3.5 py-2.5 cursor-pointer relative',
-          'grid-cols-[22px_56px_80px_minmax(0,1fr)_auto_auto_28px]',
-          'max-[999px]:grid-cols-[22px_50px_70px_minmax(0,1fr)_auto_28px]',
-          'max-[699px]:grid-cols-[22px_50px_minmax(0,1fr)_auto_28px]',
+          // The Q# track is `auto`, sized by the fixed-width cell inside it (`cueNumberCellWidth`)
+          // so the column fits the longest number in the show instead of a flat 56px.
+          'grid-cols-[22px_auto_80px_minmax(0,1fr)_auto_auto_28px]',
+          'max-[999px]:grid-cols-[22px_auto_70px_minmax(0,1fr)_auto_28px]',
+          'max-[699px]:grid-cols-[22px_auto_minmax(0,1fr)_auto_28px]',
           isActive && 'hover:bg-green-500/[0.04]',
           !isActive && 'hover:bg-blue-500/[0.04]',
         )}
@@ -158,17 +161,19 @@ export function RunCueCard({
         {/* State pip */}
         <CueStatePip isActive={isActive} isStandby={isStandby} />
 
-        {/* Q-number */}
-        <div
+        {/* Q-number — clipped at the START, so "…3.2.10" keeps the part that identifies the cue. */}
+        <TruncateStart
+          text={cue.cueNumber ? `Q${cue.cueNumber}` : '—'}
+          title={cue.cueNumber ? `Q${cue.cueNumber}` : undefined}
           className={cn(
-            'font-mono text-sm font-bold truncate',
+            'font-mono text-sm font-bold',
             cue.cueNumberAuto && AUTO_CUE_NUMBER_CLASS,
             isActive && 'text-green-400',
             isStandby && !isActive && 'text-blue-300',
           )}
-        >
-          {cue.cueNumber ? `Q${cue.cueNumber}` : '—'}
-        </div>
+          // Nothing shares this cell, so it only has to cover the text itself.
+          style={cueNumberCellWidth('0.25rem')}
+        />
 
         {/* Palette bar — hidden on narrow */}
         <div className="h-[22px] rounded overflow-hidden flex max-[699px]:hidden">

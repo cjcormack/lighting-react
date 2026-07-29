@@ -1,6 +1,8 @@
+import { useMemo, type CSSProperties } from 'react'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { cueNumberColumnChars } from '@/lib/cueNumber'
 import { MarkerRow } from '@/components/runner/MarkerRow'
 import type { ExpansionMode } from '@/components/runner/run/CueCardBody'
 import type { CueAnchorDto } from '../../api/promptBooksApi'
@@ -49,6 +51,8 @@ interface CueStackPanelProps {
   onRenameCue: (cueId: number, name: string) => void
   /** Set or clear a cue's number in place (unlocked only). */
   onRenumberCue: (cueId: number, cueNumber: string | null) => void
+  /** Set or clear a cue's note in place (unlocked only). */
+  onRenoteCue: (cueId: number, notes: string | null) => void
   /** Resets the idle auto-relock clock while a cue field is being edited. */
   onEditInteraction: () => void
   goDisabled: boolean
@@ -101,6 +105,7 @@ export function CueStackPanel({
   onEditCue,
   onRenameCue,
   onRenumberCue,
+  onRenoteCue,
   onEditInteraction,
   goDisabled,
   showActive,
@@ -115,6 +120,18 @@ export function CueStackPanel({
   onClose,
 }: CueStackPanelProps) {
   const hasCues = rows.some((r) => r.type === 'cue')
+
+  // One number-column width for the whole rail — it spans every stack in the show, so the
+  // widest number anywhere sets it and each row's name still starts at the same x.
+  const cueNumChars = useMemo(
+    () =>
+      cueNumberColumnChars(
+        [...cueEntryByCue.values()]
+          .filter((c) => c.cueType === 'STANDARD')
+          .map((c) => c.cueNumber),
+      ),
+    [cueEntryByCue],
+  )
 
   return (
     <div
@@ -172,7 +189,10 @@ export function CueStackPanel({
 
       {showWarnings && <DesyncWarningsPanel warnings={warnings} onWarningClick={onWarningClick} />}
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+      <div
+        className="min-h-0 flex-1 overflow-y-auto px-2 py-2"
+        style={{ '--cue-num-chars': cueNumChars } as CSSProperties}
+      >
         {!hasCues && (
           <p className="px-2 py-4 text-sm text-muted-foreground">
             No cues in the show yet. Build the show in Program first.
@@ -220,6 +240,7 @@ export function CueStackPanel({
               onEditCue={() => onEditCue(row.cue.cueId)}
               onRenameCue={(name) => onRenameCue(row.cue.cueId, name)}
               onRenumberCue={(cueNumber) => onRenumberCue(row.cue.cueId, cueNumber)}
+              onRenoteCue={(notes) => onRenoteCue(row.cue.cueId, notes)}
               onEditInteraction={onEditInteraction}
             />
           )

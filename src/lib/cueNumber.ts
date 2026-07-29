@@ -90,6 +90,46 @@ export function detectCueNumbersOutOfOrder(cueNumbers: (string | null | undefine
  */
 export const AUTO_CUE_NUMBER_CLASS = 'text-muted-foreground/70 font-normal'
 
+/**
+ * Widest rendered cue number in a list, in characters — the `Q` prefix included.
+ *
+ * Cue lists size their number column from this rather than a fixed pixel budget, so a stack of
+ * `Q1`–`Q40` stays narrow while one holding `QS1-3.2.10` gets the room to show it whole. Every
+ * row is its own grid, so the count has to be computed once by the list and handed down; a
+ * `max-content` track would size each row independently and stagger the column.
+ *
+ * Publish it as `--cue-num-chars` on the list, then size the *cell* (not the grid track) with
+ * `1ch` — `ch` resolves against the element it is used on, and only the cell is `font-mono`.
+ */
+export function cueNumberColumnChars(cueNumbers: (string | null | undefined)[]): number {
+  let widest = 0
+  for (const raw of cueNumbers) {
+    // Matches the em-dash placeholder the rows render for a numberless cue.
+    const rendered = raw ? `Q${raw}` : '—'
+    if (rendered.length > widest) widest = rendered.length
+  }
+  return widest
+}
+
+/**
+ * Inline style sizing a cue-number cell from the list's `--cue-num-chars`.
+ *
+ * `pad` covers whatever else shares the cell — the live row's Play icon, the inline field's
+ * border and padding — so the widest number still fits on the busiest row. The floor keeps
+ * short-numbered stacks from collapsing to nothing; the ceiling stops one absurd number from
+ * eating the name column, and `TruncateStart` clips whatever is left over.
+ *
+ * Goes on the cell rather than the grid track for two reasons: `ch` resolves against the element
+ * it is used on, and the cell is the only `font-mono` box in the row; and `minWidth` has to ride
+ * along. Without it an `auto` track collapses to the cell's *content* minimum — which the inline
+ * field's own `min-w-0` puts at zero — so each row would compress by however much its cue name
+ * demanded and the column would stagger.
+ */
+export function cueNumberCellWidth(pad: string): { width: string; minWidth: string } {
+  const w = `clamp(4rem, calc(var(--cue-num-chars, 7) * 1ch + ${pad}), 12rem)`
+  return { width: w, minWidth: w }
+}
+
 /** Cue-shaped subset `detectOutOfOrder` needs — satisfied by `CueStackCueEntry`. */
 interface NumberedCue {
   cueType: string
