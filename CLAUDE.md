@@ -59,8 +59,22 @@ A bare `eslint-disable` with no justification is not an acceptable fix.
 - **Redux Toolkit** with RTK Query for state management and API calls
 - **React Router v8** for routing — note there is no `react-router-dom` package in
   v8: import hooks and components from `react-router`, and `RouterProvider` from
-  `react-router/dom`. v8 also sets the Node floor (see `engines` in `package.json`).
+  `react-router/dom`.
 - **WebSockets** for real-time backend communication
+
+### The `engines.node` range
+
+`^22.22.2 || ^24.15.0 || >=26.0.0` is the intersection of what the dependency
+set actually supports, not a tidy floor. **Don't "simplify" it to `>=22.22.2`
+or `>=24.15.0`** — both are wrong:
+
+- React Router 8 sets the hard floor at `>=22.22.0`.
+- jsdom 30 accepts `^22.22.2 || ^24.15.0 || >=26.0.0` — it skips the
+  odd-numbered 25 line entirely, and 24.0–24.14 with it. That's what carves
+  the range into three clauses.
+
+Recompute it when a dependency bumps its own `engines`; `npm install` warns
+(`EBADENGINE`) rather than failing, so a wrong range is easy to miss.
 
 ## Project Structure
 
