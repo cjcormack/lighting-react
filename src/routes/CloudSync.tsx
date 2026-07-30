@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Navigate, useNavigate } from "react-router-dom"
+import { Navigate, useNavigate } from "react-router"
 import { toast } from "sonner"
 import { useDispatch } from "react-redux"
 import { lightingApi } from "@/api/lightingApi"

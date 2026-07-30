@@ -1,5 +1,5 @@
 import { Dispatch, SetStateAction, useEffect, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate } from "react-router"
 import {
   Sheet,
   SheetBody,

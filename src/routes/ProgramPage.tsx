@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useParams, useNavigate, Navigate, useSearchParams } from 'react-router-dom'
+import { useParams, useNavigate, Navigate, useSearchParams } from 'react-router'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {

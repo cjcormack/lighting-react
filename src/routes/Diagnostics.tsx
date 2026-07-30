@@ -1,4 +1,4 @@
-import { Navigate } from "react-router-dom"
+import { Navigate } from "react-router"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {

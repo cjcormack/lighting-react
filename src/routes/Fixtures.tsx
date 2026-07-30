@@ -1,5 +1,5 @@
 import React, { Suspense, useState, useMemo, useEffect, createContext, useContext } from "react"
-import { useParams, useNavigate, Navigate } from "react-router-dom"
+import { useParams, useNavigate, Navigate } from "react-router"
 import { Card, CardContent, CardHeader, CardTitle, CardAction } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"

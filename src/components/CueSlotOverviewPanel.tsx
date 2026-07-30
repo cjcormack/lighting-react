@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useMemo, useEffect, createContext, useContext } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import {
   Layers,
   ListMusic,

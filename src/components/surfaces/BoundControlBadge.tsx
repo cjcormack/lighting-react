@@ -1,5 +1,5 @@
 import { useMemo } from "react"
-import { useNavigate, useParams } from "react-router-dom"
+import { useNavigate, useParams } from "react-router"
 import { Sliders } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import {

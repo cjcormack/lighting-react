@@ -11,7 +11,7 @@ import {
   ContextMenuContent,
   ContextMenuItem,
 } from "@/components/ui/context-menu"
-import { useParams, useNavigate, useSearchParams, Navigate } from "react-router-dom"
+import { useParams, useNavigate, useSearchParams, Navigate } from "react-router"
 import {
   DropdownMenu,
   DropdownMenuTrigger,

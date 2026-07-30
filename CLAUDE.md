@@ -57,7 +57,9 @@ A bare `eslint-disable` with no justification is not an acceptable fix.
 - **Vite** for bundling and development
 - **Radix UI primitives + Tailwind** for UI components (via `src/components/ui/`)
 - **Redux Toolkit** with RTK Query for state management and API calls
-- **React Router v7** for routing
+- **React Router v8** for routing — note there is no `react-router-dom` package in
+  v8: import hooks and components from `react-router`, and `RouterProvider` from
+  `react-router/dom`. v8 also sets the Node floor (see `engines` in `package.json`).
 - **WebSockets** for real-time backend communication
 
 ## Project Structure

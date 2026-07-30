@@ -1,5 +1,5 @@
 import { Suspense, useState, useEffect } from 'react'
-import { useParams, useNavigate, Navigate } from 'react-router-dom'
+import { useParams, useNavigate, Navigate } from 'react-router'
 import { Card } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'

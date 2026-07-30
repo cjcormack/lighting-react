@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react"
-import { Outlet, useLocation } from "react-router-dom"
+import { Outlet, useLocation } from "react-router"
 import { ChevronLeft, Menu, LayoutGrid, Grid3X3, AudioWaveform, Sparkles, Theater } from "lucide-react"
 
 import { Button } from "@/components/ui/button"

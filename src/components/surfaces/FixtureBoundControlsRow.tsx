@@ -1,5 +1,5 @@
 import { useMemo } from "react"
-import { useParams } from "react-router-dom"
+import { useParams } from "react-router"
 import { useSurfaceBindingsQuery } from "@/store/surfaces"
 import { BoundControlBadge } from "./BoundControlBadge"
 import { effectiveTarget } from "./targetUtils"

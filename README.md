@@ -41,11 +41,11 @@ The app opens at http://localhost:5173 and proxies API requests to the backend a
 
 ## Tech Stack
 
-- React 18 + TypeScript
+- React 19 + TypeScript
 - Vite
-- Material-UI v6
+- Radix UI primitives + Tailwind
 - Redux Toolkit + RTK Query
-- React Router v6
+- React Router v8
 
 ## Project Structure
 

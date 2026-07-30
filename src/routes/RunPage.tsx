@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef, type CSSProperties } from 'react'
-import { useParams, useNavigate, Navigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, Navigate, Link } from 'react-router'
 import { useSelector, useDispatch } from 'react-redux'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'

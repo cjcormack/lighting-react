@@ -2,7 +2,9 @@ import React from "react"
 import { Toaster } from "sonner"
 import { BootGate } from "./BootGate"
 import Layout from "./Layout"
-import {createBrowserRouter, Navigate, RouterProvider, useParams} from "react-router-dom";
+import {createBrowserRouter, Navigate, useParams} from "react-router";
+// v8 keeps the DOM-specific entry points in `react-router/dom`.
+import {RouterProvider} from "react-router/dom";
 import { ChannelsRedirect, ChannelsBaseRedirect, ProjectChannels } from "./routes/Channels";
 import { FixturesRedirect, ProjectFixtures } from "./routes/Fixtures";
 import { GroupsRedirect, ProjectGroups } from "./routes/Groups";
