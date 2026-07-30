@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { EyeOff } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn, formatTriple } from '@/lib/utils'
 import type { FixturePatch } from '@/api/patchApi'
@@ -12,6 +13,9 @@ interface Row {
   selection: RowSelection
   label: string
   sublabel: string
+  /** Patch rows only: marks a `stageHidden` fixture. It isn't drawn in the
+   *  scene, so this list is the only way to reach it and un-hide it. */
+  hidden?: boolean
 }
 
 interface Section {
@@ -69,6 +73,7 @@ export function StageEditorPickerPanel({
         selection: { kind: 'patch', patchKey: p.key },
         label: p.displayName || `Patch ${p.id}`,
         sublabel: patchSublabel(p),
+        hidden: p.stageHidden,
       }))
     const regionRows: Row[] = [...regions]
       .sort((a, b) => a.name.localeCompare(b.name))
@@ -179,7 +184,16 @@ export function StageEditorPickerPanel({
                         active ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50',
                       )}
                     >
-                      <span className="w-full truncate text-sm leading-tight">{r.label}</span>
+                      <span className="flex w-full items-center gap-1.5 text-sm leading-tight">
+                        <span className="truncate">{r.label}</span>
+                        {r.hidden && (
+                          <EyeOff
+                            className="size-3 shrink-0 text-muted-foreground"
+                            role="img"
+                            aria-label="Hidden from Stage view"
+                          />
+                        )}
+                      </span>
                       <span className="w-full truncate text-[11px] leading-tight text-muted-foreground">
                         {r.sublabel}
                       </span>

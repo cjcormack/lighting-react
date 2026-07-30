@@ -47,7 +47,7 @@ export function MiniStage({
     patch.groups.some((g) => groupTargetNames.has(g.name))
 
   const placedPatches = useMemo(
-    () => (patches ?? []).filter((p) => p.stageX != null && p.stageY != null),
+    () => (patches ?? []).filter((p) => !p.stageHidden && p.stageX != null && p.stageY != null),
     [patches],
   )
 

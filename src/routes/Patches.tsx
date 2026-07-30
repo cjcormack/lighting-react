@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Loader2, Plus, Pencil, Check } from "lucide-react"
+import { Loader2, Plus, Pencil, Check, EyeOff } from "lucide-react"
 import { useCurrentProjectQuery } from "../store/projects"
 import { usePatchListQuery, useUniverseConfigListQuery, useUpdateUniverseConfigMutation, usePatchGroupListQuery } from "../store/patches"
 import { useRiggingListQuery } from "../store/riggings"
@@ -234,6 +234,7 @@ interface PatchRow {
   beamAngleDeg: number | null
   gelCode: string | null
   groups: { id: number; name: string }[]
+  stageHidden: boolean
   sortKey: number
 }
 
@@ -297,7 +298,16 @@ function PatchTable({
               <GelCell code={row.gelCode} />
             </TableCell>
             <TableCell>
-              <div className="font-medium text-sm">{row.displayName}</div>
+              <div className="font-medium text-sm flex items-center gap-1.5">
+                <span>{row.displayName}</span>
+                {row.stageHidden && (
+                  <EyeOff
+                    className="size-3 shrink-0 text-muted-foreground"
+                    role="img"
+                    aria-label="Hidden from Stage view"
+                  />
+                )}
+              </div>
               {row.fixtureType && (
                 <div className="sm:hidden text-[11px] text-muted-foreground flex items-center gap-1">
                   <span>{row.fixtureType}</span>
@@ -376,6 +386,7 @@ function buildPatchRows(
       beamAngleDeg: p.beamAngleDeg,
       gelCode: p.gelCode,
       groups: p.groups,
+      stageHidden: p.stageHidden,
       sortKey: p.universe * 1000 + p.startChannel,
     }
   })

@@ -196,6 +196,7 @@ function makePatches(
       beamAngleDeg: 22 + (floorIdx % 4) * 6,
       gelCode: null,
       kindOverride: null,
+      stageHidden: false,
     })
     floorIdx++
   }
@@ -233,5 +234,6 @@ function makePatch(
     beamAngleDeg: 18 + (id % 5) * 5,
     gelCode: null,
     kindOverride: null,
+    stageHidden: false,
   }
 }

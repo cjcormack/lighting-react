@@ -47,6 +47,7 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
   const [beamAngleDeg, setBeamAngleDeg] = useState<number | null>(patch.beamAngleDeg)
   const [gelCode, setGelCode] = useState<string | null>(patch.gelCode)
   const [kindOverride, setKindOverride] = useState<string | null>(patch.kindOverride)
+  const [stageHidden, setStageHidden] = useState(patch.stageHidden)
 
   const [updatePatch, { isLoading: isUpdating }] = useUpdatePatchMutation()
   const [deletePatch, { isLoading: isDeleting }] = useDeletePatchMutation()
@@ -86,7 +87,8 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
     placement.basePitchDeg !== patch.basePitchDeg ||
     beamAngleDeg !== patch.beamAngleDeg ||
     gelCode !== patch.gelCode ||
-    kindOverride !== patch.kindOverride
+    kindOverride !== patch.kindOverride ||
+    stageHidden !== patch.stageHidden
 
   const handleSave = async () => {
     const body: Record<string, unknown> = {}
@@ -102,6 +104,7 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
     if (beamAngleDeg !== patch.beamAngleDeg) body.beamAngleDeg = beamAngleDeg
     if (gelCode !== patch.gelCode) body.gelCode = gelCode
     if (kindOverride !== patch.kindOverride) body.kindOverride = kindOverride
+    if (stageHidden !== patch.stageHidden) body.stageHidden = stageHidden
     // Errors are reported by errorToastMiddleware; don't close over a save that failed, or the
     // operator loses their edits with no indication the form still holds unsaved changes.
     try {
@@ -224,6 +227,22 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
             onChange={setKindOverride}
           />
         )}
+
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <input
+              id="edit-stage-hidden"
+              type="checkbox"
+              checked={stageHidden}
+              onChange={(e) => setStageHidden(e.target.checked)}
+            />
+            <Label htmlFor="edit-stage-hidden">Hide from Stage view</Label>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            For fixtures that aren&apos;t stage objects — a dimmer driving hard power. Still
+            patched, still outputs, still runs in cues and FX.
+          </p>
+        </div>
 
         <div className="space-y-1.5">
           <Label>Groups</Label>

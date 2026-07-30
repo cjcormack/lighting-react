@@ -27,6 +27,10 @@ export interface FixturePatch {
   /** Per-patch FixtureKind override for the 3D view — null means inherit
    *  the kind declared on the fixture type. */
   kindOverride: string | null;
+  /** Omit this patch from the Stage view (2D map and 3D scene). For real DMX
+   *  that isn't a stage object — a dimmer driving hard power. Presentational
+   *  only: the fixture still patches, outputs, and runs in cues and FX. */
+  stageHidden: boolean;
 }
 
 export interface UniverseConfig {
@@ -56,6 +60,7 @@ export interface CreatePatchRequest {
   beamAngleDeg?: number | null;
   gelCode?: string | null;
   kindOverride?: string | null;
+  stageHidden?: boolean;
 }
 
 export interface UpdatePatchRequest {
@@ -74,6 +79,7 @@ export interface UpdatePatchRequest {
   beamAngleDeg?: number | null;
   gelCode?: string | null;
   kindOverride?: string | null;
+  stageHidden?: boolean;
 }
 
 export interface PatchGroup {

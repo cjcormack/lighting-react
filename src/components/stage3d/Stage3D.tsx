@@ -124,6 +124,16 @@ export function Stage3D({
   const safePatches = patches ?? EMPTY_PATCHES
   const regionGeometry = useMemo(() => computeRegionGeometry(safeRegions), [safeRegions])
 
+  // `stageHidden` patches are omitted from the scene entirely — they're real
+  // DMX but not stage objects (a dimmer on hard power). The exception is the
+  // selected one: the picker panel can select a hidden patch, and drawing it
+  // is the only way the operator can see what they're about to un-hide.
+  const selectedPatchKey = selection?.kind === 'patch' ? selection.patchKey : null
+  const visiblePatches = useMemo(
+    () => safePatches.filter((p) => !p.stageHidden || p.key === selectedPatchKey),
+    [safePatches, selectedPatchKey],
+  )
+
   // patchTarget feeds TransformControls for the patch translate gizmo. Region
   // and rigging never use this — their interactions are entirely handle-based.
   const [patchTarget, setPatchTarget] = useState<Object3D | null>(null)
@@ -195,7 +205,7 @@ export function Stage3D({
     [selection, safeRiggings],
   )
 
-  const fixtureNodes = safePatches.map((patch, slot) => {
+  const fixtureNodes = visiblePatches.map((patch, slot) => {
     const fixture = fixtureByKey.get(patch.key)
     const fixtureType = fixture ? typeByKey.get(fixture.typeKey) : undefined
     return (
@@ -264,7 +274,7 @@ export function Stage3D({
           />
         )}
         {view.fixtures && (view.beamCones ? (
-          <StageEmitters fixtureCount={safePatches.length} regionGeometry={regionGeometry}>
+          <StageEmitters fixtureCount={visiblePatches.length} regionGeometry={regionGeometry}>
             {fixtureNodes}
           </StageEmitters>
         ) : fixtureNodes)}

@@ -46,9 +46,14 @@ export function StageOverviewPanel({
 
   // Compose metric lighting coords (worldPosition* if backed in, else
   // rig+offset, else raw stage*) and map to canvas %. Patches with no
-  // resolvable position are filtered out.
+  // resolvable position — and patches marked `stageHidden` — are filtered out.
+  // The selected patch survives the `stageHidden` cut even so: this panel shares
+  // its selection with Stage3D (see routes/Stage.tsx), which draws the selected
+  // hidden patch so the operator can see what they're about to un-hide. Dropping
+  // it here would blank the highlight on one surface while it shows on the other.
   const placedPatches = useMemo(() => {
     return (patches ?? [])
+      .filter((patch) => !patch.stageHidden || patch.key === selectedFixtureKey)
       .map((patch) => {
         const pos = worldPositionLighting(patch, riggings ?? [])
         if (!pos) return null
@@ -58,7 +63,7 @@ export function StageOverviewPanel({
         return { patch, xPct, yPct }
       })
       .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
-  }, [patches, riggings, stageWidthM, stageDepthM])
+  }, [patches, riggings, stageWidthM, stageDepthM, selectedFixtureKey])
 
   const visibleGroups = (groups ?? []).filter((g) => g.memberCount > 0)
   const showChips = visibleGroups.length > 0
