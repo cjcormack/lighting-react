@@ -25,3 +25,4 @@ yarn-rror.log*
 
 # Spector.js captures from Stage 3D profileHarness runs
 capture*.json
+/.claude/launch.json

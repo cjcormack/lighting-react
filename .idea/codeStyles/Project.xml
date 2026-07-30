@@ -1,7 +1,6 @@
 <component name="ProjectCodeStyleConfiguration">
   <code_scheme name="Project" version="173">
     <GoCodeStyleSettings>
-      <option name="IMPORT_SORTING" value="GOIMPORTS" />
       <option name="GROUP_STDLIB_IMPORTS" value="true" />
       <option name="CREATE_LOCAL_GROUP" value="true" />
       <option name="LOCAL_PACKAGE_PREFIXES" />
