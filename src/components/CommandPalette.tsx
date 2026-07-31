@@ -4,7 +4,7 @@ import { Command } from "cmdk"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
 import {
   Settings, FolderOpen, PlusCircle, Search, TableProperties, Bookmark, Sparkles,
-  Clapperboard, AudioWaveform, LayoutGrid, Layers, ArrowLeft, Lock, LockOpen,
+  Clapperboard, AudioWaveform, LayoutGrid, Layers, ArrowLeft, Lock,
   SlidersHorizontal,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
@@ -15,7 +15,7 @@ import type { GroupSummary } from "@/api/groupsApi"
 import { useNavItems, useUniverseNavItems, filterNavItems } from "@/navigation"
 import { useViewedProject } from "@/ProjectSwitcher"
 import type { FxTarget } from "@/components/fx/AddEditFxSheet"
-import { useGetParkStateListQuery, useUnparkAllMutation, useUnparkChannelMutation } from "@/store/park"
+import { useGetParkStateListQuery } from "@/store/park"
 import { useGetChannelMappingListQuery } from "@/store/channelMapping"
 
 export interface ToggleState {
@@ -136,8 +136,6 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   const universeNavItems = useUniverseNavItems()
 
   const { data: parkStateList } = useGetParkStateListQuery()
-  const [runUnparkAll] = useUnparkAllMutation()
-  const [runUnparkChannel] = useUnparkChannelMutation()
   const { data: channelMappings } = useGetChannelMappingListQuery()
   const parkedCount = parkStateList?.length ?? 0
 
@@ -205,7 +203,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
         <Command.Input
           placeholder={
             activePage === "apply-fx" ? "Select a fixture or group..."
-            : activePage === "unpark-channel" ? "Select a channel to unpark..."
+            : activePage === "parked-channel" ? "Jump to a parked channel..."
             : "Type a command or search..."
           }
           value={search}
@@ -331,27 +329,17 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
                     <span className="flex-1">View Parked Channels</span>
                     <span className="text-xs text-muted-foreground">{parkedCount}</span>
                   </Command.Item>
+                  {/* Jump-to, not unpark. Releasing park is deliberately confined to the
+                      Channels view in Edit mode — a fuzzy match plus Enter is far too little
+                      friction for dropping the override on a hard-powered fixture. */}
                   <Command.Item
-                    value="Unpark Channel"
-                    keywords={["unpark", "unlock", "release", "channel"]}
-                    onSelect={() => pushPage("unpark-channel")}
+                    value="Go to Parked Channel"
+                    keywords={["unpark", "unlock", "release", "channel", "park"]}
+                    onSelect={() => pushPage("parked-channel")}
                     className={itemClassName}
                   >
-                    <LockOpen className="size-4 text-muted-foreground" />
-                    Unpark Channel...
-                  </Command.Item>
-                  <Command.Item
-                    value="Unpark All Channels"
-                    keywords={["unpark", "unlock", "clear", "release"]}
-                    onSelect={() => {
-                      if (confirm(`Unpark all ${parkedCount} channel(s)?`)) {
-                        runAction(() => runUnparkAll())
-                      }
-                    }}
-                    className={itemClassName}
-                  >
-                    <LockOpen className="size-4 text-muted-foreground" />
-                    Unpark All Channels
+                    <Lock className="size-4 text-muted-foreground" />
+                    Go to Parked Channel...
                   </Command.Item>
                 </>
               )}
@@ -481,8 +469,8 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
           </>
         )}
 
-        {/* Unpark Channel sub-page: list parked channels */}
-        {activePage === "unpark-channel" && parkStateList && parkStateList.length > 0 && (
+        {/* Parked-channel sub-page: jump to a parked channel in the Channels view */}
+        {activePage === "parked-channel" && viewedProject && parkStateList && parkStateList.length > 0 && (
           <Command.Group heading="Parked Channels" className={groupClassName}>
             {parkStateList.map((parked) => {
               const mapping = channelMappings?.[parked.universe]?.[parked.channel]
@@ -494,10 +482,14 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
                   key={`${parked.universe}:${parked.channel}`}
                   value={`${parked.universe}-${parked.channel} ${label}`}
                   keywords={[String(parked.channel), mapping?.fixtureName ?? "", mapping?.description ?? ""]}
-                  onSelect={() => runAction(() => runUnparkChannel({ universe: parked.universe, channelNo: parked.channel }))}
+                  onSelect={() =>
+                    runAction(() =>
+                      navigate(`/projects/${viewedProject.id}/channels/${parked.universe}?parked=true`),
+                    )
+                  }
                   className={itemClassName}
                 >
-                  <LockOpen className="size-4 text-muted-foreground" />
+                  <Lock className="size-4 text-muted-foreground" />
                   <span className="flex-1 truncate">
                     <span className="font-mono text-xs">{parked.universe}-{String(parked.channel).padStart(3, "0")}</span>
                     {" "}

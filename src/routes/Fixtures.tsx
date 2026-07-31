@@ -228,7 +228,7 @@ function FixtureCardHeader({ fixture }: { fixture: Fixture }) {
         </p>
       )}
       <CardAction className="flex items-center gap-1">
-        <FixtureParkButton fixture={fixture} iconOnly />
+        <FixtureParkButton fixture={fixture} isEditing={isEditing} iconOnly />
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

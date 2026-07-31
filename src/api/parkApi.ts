@@ -7,7 +7,6 @@ export interface ParkApi {
   getParkedValue(universe: number, channelNo: number): number | undefined
   park(universe: number, channelNo: number, value: number): void
   unpark(universe: number, channelNo: number): void
-  unparkAll(): void
   subscribe(fn: (parked: Map<string, number>) => void): Subscription
   subscribeToChannel(key: string, fn: (value: number | undefined) => void): Subscription
 }
@@ -109,10 +108,6 @@ export function createParkApi(conn: InternalApiConnection): ParkApi {
           channel: channelNo,
         })
       )
-    },
-
-    unparkAll() {
-      conn.send(JSON.stringify({ type: "unparkAll" }))
     },
 
     subscribe(fn: (parked: Map<string, number>) => void): Subscription {

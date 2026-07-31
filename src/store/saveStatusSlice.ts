@@ -33,7 +33,6 @@ export const NON_SAVE_ENDPOINTS: ReadonlySet<string> = new Set([
   'updateChannel',
   'parkChannel',
   'unparkChannel',
-  'unparkAll',
   'addFixtureFx',
   'updateFx',
   'removeFx',

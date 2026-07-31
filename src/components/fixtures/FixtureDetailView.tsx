@@ -64,7 +64,7 @@ export function FixtureDetailView({
                 <SlidersHorizontal className="h-4 w-4" />
               </ToggleGroupItem>
             </ToggleGroup>
-            {fixture && <FixtureParkButton fixture={fixture} />}
+            {fixture && <FixtureParkButton fixture={fixture} isEditing={isEditing} />}
             {showEditButton && (
               <Button
                 variant={isEditing ? 'default' : 'outline'}

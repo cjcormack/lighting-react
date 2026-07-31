@@ -86,13 +86,18 @@ export const ChannelSlider = React.memo(function ChannelSlider({
     runUpdateChannelMutation({ universe, channelNo: id, value: clamped })
   }, [runUpdateChannelMutation, universe, id])
 
+  // Unpark is only offered in Edit mode. Park locks output where it already is, so it is
+  // always safe; releasing it hands a hard-powered fixture back to the show, so it needs a
+  // deliberate mode switch rather than a hover-and-click.
+  const canUnpark = isParked && isEditing
+
   const handleParkToggle = useCallback(() => {
     if (isParked) {
-      runUnparkChannel({ universe, channelNo: id })
+      if (canUnpark) runUnparkChannel({ universe, channelNo: id })
     } else {
       runParkChannel({ universe, channelNo: id, value })
     }
-  }, [isParked, universe, id, value, runParkChannel, runUnparkChannel])
+  }, [isParked, canUnpark, universe, id, value, runParkChannel, runUnparkChannel])
 
   const channelContent = (
     <div className={`rounded px-1 py-0.5 ${isParked ? "bg-amber-50/70 dark:bg-amber-900/20" : ""}`}>
@@ -158,27 +163,41 @@ export const ChannelSlider = React.memo(function ChannelSlider({
           </>
         )}
 
-        {/* Park/unpark button - visible on hover, in edit mode, or on touch devices */}
+        {/* Park/unpark button — visible on hover, in edit mode, or on touch devices.
+            While parked outside Edit mode it is a disabled status indicator, not a
+            one-click release. */}
         <Tooltip>
           <TooltipTrigger asChild>
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                handleParkToggle()
-              }}
-              className={`shrink-0 p-0.5 rounded transition-opacity ${
-                isParked
-                  ? "text-amber-600 dark:text-amber-400 opacity-100"
-                  : isEditing
-                    ? "text-muted-foreground opacity-70 hover:opacity-100"
-                    : "text-muted-foreground opacity-0 group-hover/channel:opacity-100 pointer-coarse:opacity-70"
-              } hover:text-foreground`}
-            >
-              {isParked ? <Lock className="size-3" /> : <LockOpen className="size-3" />}
-            </button>
+            {isParked && !canUnpark ? (
+              // Status only: a `button` here would be a disabled one, and a disabled
+              // button swallows the hover that surfaces the "why" tooltip.
+              <span className="shrink-0 p-0.5 text-amber-600 dark:text-amber-400">
+                <Lock className="size-3" />
+              </span>
+            ) : (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleParkToggle()
+                }}
+                className={`shrink-0 p-0.5 rounded transition-opacity hover:text-foreground ${
+                  isParked
+                    ? "text-amber-600 dark:text-amber-400 opacity-100"
+                    : isEditing
+                      ? "text-muted-foreground opacity-70 hover:opacity-100"
+                      : "text-muted-foreground opacity-0 group-hover/channel:opacity-100 pointer-coarse:opacity-70"
+                }`}
+              >
+                {canUnpark ? <LockOpen className="size-3" /> : <Lock className="size-3" />}
+              </button>
+            )}
           </TooltipTrigger>
           <TooltipContent>
-            {isParked ? "Unpark channel" : "Park at current value"}
+            {!isParked
+              ? "Park at current value"
+              : canUnpark
+                ? "Unpark channel"
+                : `Parked at ${parkedValue} — enable Edit mode to unpark`}
           </TooltipContent>
         </Tooltip>
       </div>
@@ -213,9 +232,12 @@ export const ChannelSlider = React.memo(function ChannelSlider({
       </ContextMenuTrigger>
       <ContextMenuContent>
         {isParked ? (
-          <ContextMenuItem onClick={() => runUnparkChannel({ universe, channelNo: id })}>
+          <ContextMenuItem
+            disabled={!canUnpark}
+            onClick={() => canUnpark && runUnparkChannel({ universe, channelNo: id })}
+          >
             <LockOpen className="size-4" />
-            Unpark
+            {canUnpark ? "Unpark" : `Parked at ${parkedValue} — Edit mode to unpark`}
           </ContextMenuItem>
         ) : (
           <ContextMenuItem
@@ -230,9 +252,67 @@ export const ChannelSlider = React.memo(function ChannelSlider({
   )
 })
 
-// Redirect component for /channels (no universe) - redirects to /channels/0
+/**
+ * `/projects/:projectId/channels` — no universe in the URL. Lands on the project's first
+ * patched universe rather than universe 0: rigs don't necessarily start at 0, and sending
+ * the sidebar's "Channels" entry to an unpatched universe shows 512 empty channels.
+ *
+ * The universe list arrives over the WebSocket, so an empty list means "not yet" for the
+ * first moment after mount. [UNIVERSE_WAIT_MS] bounds that wait; past it, an empty list is
+ * taken at face value and reported as "no universes" instead of silently redirecting
+ * somewhere equally empty.
+ */
+const UNIVERSE_WAIT_MS = 3000
+
+export function ProjectChannelsDefaultUniverse() {
+  const { projectId } = useParams()
+  const { data: universes } = useGetUniverseQuery()
+  const [waitedForUniverses, setWaitedForUniverses] = useState(false)
+
+  useEffect(() => {
+    const timer = setTimeout(() => setWaitedForUniverses(true), UNIVERSE_WAIT_MS)
+    return () => clearTimeout(timer)
+  }, [])
+
+  const firstUniverse = universes?.[0]
+
+  if (firstUniverse !== undefined) {
+    return <Navigate to={`/projects/${projectId}/channels/${firstUniverse}`} replace />
+  }
+
+  if (waitedForUniverses) {
+    return (
+      <Card className="m-4 p-4">
+        <p className="text-muted-foreground">
+          This project has no DMX universes. Add one in Project Settings → Universes.
+        </p>
+      </Card>
+    )
+  }
+
+  return (
+    <Card className="m-4 p-4 flex items-center justify-center">
+      <Loader2 className="size-6 animate-spin" />
+    </Card>
+  )
+}
+
+// Redirect component for /channels (no universe) — hands off to the project-scoped
+// route, which resolves the first patched universe.
 export function ChannelsBaseRedirect() {
-  return <Navigate to="/channels/0" replace />
+  const { data: currentProject, isLoading } = useCurrentProjectQuery()
+
+  if (isLoading) {
+    return (
+      <Card className="m-4 p-4 flex items-center justify-center">
+        <Loader2 className="size-6 animate-spin" />
+      </Card>
+    )
+  }
+
+  if (!currentProject) return <Navigate to="/projects" replace />
+
+  return <Navigate to={`/projects/${currentProject.id}/channels`} replace />
 }
 
 // Redirect component for /channels/:universe route
@@ -324,8 +404,17 @@ function ProjectChannelsContent({ projectId, projectName, universe }: { projectI
   const { isEditing, toggleEditing } = useEditMode()
   const [selectedFixtureKey, setSelectedFixtureKey] = useState<string | null>(null)
   const [searchParams] = useSearchParams()
-  const [showParkedOnly, setShowParkedOnly] = useState(searchParams.get("parked") === "true")
+  const parkedParam = searchParams.get("parked") === "true"
+  const [showParkedOnly, setShowParkedOnly] = useState(parkedParam)
   const [channelDialogMode, setChannelDialogMode] = useState<"park" | "set" | null>(null)
+
+  // `?parked=true` can arrive at an already-mounted view — the command palette's "Go to
+  // Parked Channel" navigates here from here. Seeding state at mount alone would make that
+  // jump a no-op. One-way on purpose: the effect only ever switches the filter *on*, so
+  // clicking "Show All" afterwards isn't immediately undone by the unchanged param.
+  useEffect(() => {
+    if (parkedParam) setShowParkedOnly(true)
+  }, [parkedParam])
 
   // Lifted queries — single subscription for all mappings and park states
   const { data: parkStateList } = useGetParkStateListQuery()
@@ -349,7 +438,12 @@ function ProjectChannelsContent({ projectId, projectName, universe }: { projectI
   // Channel mappings for this universe
   const universeMappings = mappingRecord?.[universe]
 
+  // Bulk release is Edit-mode-only *and* confirmed — it is the single most destructive
+  // park action on the page.
+  const canUnpark = isEditing && parkedCount > 0
+
   const handleUnparkAll = () => {
+    if (!canUnpark) return
     if (confirm(`Unpark all ${parkedCount} channel(s) in universe ${universe}?`)) {
       parkStateList
         ?.filter((p) => p.universe === universe)
@@ -363,8 +457,11 @@ function ProjectChannelsContent({ projectId, projectName, universe }: { projectI
         <div className="flex items-start justify-between gap-2 mb-4">
           <Breadcrumbs projectName={projectName} />
           <div className="flex items-center gap-2">
-            {/* Inline buttons — hidden on narrow viewports */}
-            {parkedCount > 0 && (
+            {/* Inline buttons — hidden on narrow viewports. Kept mounted while the filter
+                is on even at zero parked channels: unparking the last one would otherwise
+                take the "Show All" button away with it, leaving an empty grid and no way
+                back to the full channel list. */}
+            {(parkedCount > 0 || showParkedOnly) && (
               <>
                 <Button
                   variant={showParkedOnly ? "default" : "outline"}
@@ -378,15 +475,17 @@ function ProjectChannelsContent({ projectId, projectName, universe }: { projectI
                     {parkedCount}
                   </Badge>
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleUnparkAll}
-                  className="hidden sm:inline-flex"
-                >
-                  <LockOpen className="size-3.5" />
-                  Unpark All
-                </Button>
+                {canUnpark && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleUnparkAll}
+                    className="hidden sm:inline-flex"
+                  >
+                    <LockOpen className="size-3.5" />
+                    Unpark All
+                  </Button>
+                )}
               </>
             )}
             <Button
@@ -446,16 +545,18 @@ function ProjectChannelsContent({ projectId, projectName, universe }: { projectI
                   <Lock className="size-4" />
                   Park Channel at Value
                 </DropdownMenuItem>
-                {parkedCount > 0 && (
+                {/* Same reason as the inline buttons above: stays available while the
+                    filter is on so it can always be switched back off. */}
+                {(parkedCount > 0 || showParkedOnly) && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setShowParkedOnly(!showParkedOnly)}>
                       <Lock className="size-4" />
                       {showParkedOnly ? "Show All Channels" : `Show Parked (${parkedCount})`}
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleUnparkAll}>
+                    <DropdownMenuItem disabled={!canUnpark} onClick={handleUnparkAll}>
                       <LockOpen className="size-4" />
-                      Unpark All ({parkedCount})
+                      {canUnpark ? `Unpark All (${parkedCount})` : "Unpark All — Edit mode only"}
                     </DropdownMenuItem>
                   </>
                 )}

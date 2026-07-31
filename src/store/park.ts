@@ -70,13 +70,6 @@ export const parkApi = restApi.injectEndpoints({
           return { data: undefined }
         },
       }),
-
-      unparkAll: build.mutation<void, void>({
-        queryFn: () => {
-          lightingApi.park.unparkAll()
-          return { data: undefined }
-        },
-      }),
     }
   },
   overrideExisting: false,
@@ -87,5 +80,4 @@ export const {
   useGetParkStateListQuery,
   useParkChannelMutation,
   useUnparkChannelMutation,
-  useUnparkAllMutation,
 } = parkApi

@@ -151,7 +151,9 @@ export const navItems: NavItem[] = [
     id: "channels",
     label: "Channels",
     icon: SlidersHorizontal,
-    path: (p) => `/projects/${p}/channels/0`,
+    // No universe in the path: the route resolves the project's first patched universe
+    // (rigs don't always start at 0).
+    path: (p) => `/projects/${p}/channels`,
     visibility: "active-only",
     pathMatch: "/channels",
     group: "live",

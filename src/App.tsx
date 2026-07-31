@@ -5,7 +5,12 @@ import Layout from "./Layout"
 import {createBrowserRouter, Navigate, useParams} from "react-router";
 // v8 keeps the DOM-specific entry points in `react-router/dom`.
 import {RouterProvider} from "react-router/dom";
-import { ChannelsRedirect, ChannelsBaseRedirect, ProjectChannels } from "./routes/Channels";
+import {
+  ChannelsRedirect,
+  ChannelsBaseRedirect,
+  ProjectChannels,
+  ProjectChannelsDefaultUniverse,
+} from "./routes/Channels";
 import { FixturesRedirect, ProjectFixtures } from "./routes/Fixtures";
 import { GroupsRedirect, ProjectGroups } from "./routes/Groups";
 import Projects from "./routes/Projects";
@@ -174,6 +179,10 @@ function App() {
         {
           path: "diagnostics",
           element: <DiagnosticsRedirect />,
+        },
+        {
+          path: "projects/:projectId/channels",
+          element: <ProjectChannelsDefaultUniverse />,
         },
         {
           path: "projects/:projectId/channels/:universe",
