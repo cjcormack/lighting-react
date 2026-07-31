@@ -3,7 +3,9 @@ import { type ThreeEvent } from '@react-three/fiber'
 import { Object3D } from 'three'
 import { useHandleDrag, type StartDragOptions } from './useHandleDrag'
 
-const DRAG_PX_THRESHOLD = 4
+/** Pointer travel that promotes a press from a click into a drag. Shared with the
+ *  2D editor's useBodyDrag2D so both views discriminate identically. */
+export const DRAG_PX_THRESHOLD = 4
 
 function isDescendantOf(node: Object3D | null, ancestor: Object3D): boolean {
   let cur: Object3D | null = node

@@ -151,29 +151,82 @@ export function worldPositionLighting(
   return { x: sx, y: sy, z: sz }
 }
 
-// Inverse of `worldPositionFor`: project an R3F world point into a patch's
-// rig-local frame and recover stage* offsets in lighting coords. With no
-// rigging the world point is treated as a free-space lighting position.
 export interface RigPlacement {
   riggingUuid: string | null
   stageX: number | null
   stageY: number | null
   stageZ: number | null
 }
+
+/**
+ * Inverse of `worldPositionLighting`, with the destination frame named
+ * **explicitly** rather than read off a patch. Pass `rig = null` to get
+ * free-space world coordinates.
+ *
+ * Use this — never `patchPlacementFromWorld` — whenever the fixture may be
+ * changing rigs. `patchPlacementFromWorld` resolves the frame from
+ * `patch.riggingUuid`, so calling it while re-parenting yields offsets in the
+ * *old* rig's frame that then get stored against the *new* rig's uuid. The
+ * numbers stay inside the server's ±500 m bound, the write succeeds, and the
+ * fixture is drawn somewhere plausible but wrong — nothing ever surfaces an
+ * error. Naming the rig is what makes that mistake unrepresentable.
+ *
+ * Note `stageZ` is up-positive in the rig's local frame even though the patch
+ * form labels it "drop": local +Z maps to R3F +Y. A "drop 0.5 m" control must
+ * therefore emit `stageZ = -0.5`.
+ */
 const SCRATCH_OBJ = new Object3D()
 const SCRATCH_WORLDPOS = new Vector3()
+export function placementFromWorldLighting(
+  world: { x: number; y: number; z: number },
+  rig: RiggingDto | null,
+): { stageX: number; stageY: number; stageZ: number } {
+  if (!rig) return { stageX: world.x, stageY: world.y, stageZ: world.z }
+
+  SCRATCH_OBJ.position.set(rig.positionX ?? 0, rig.positionZ ?? 0, -(rig.positionY ?? 0))
+  rigEuler(rig, SCRATCH_OBJ.rotation)
+  SCRATCH_OBJ.updateMatrixWorld()
+  const local = SCRATCH_OBJ.worldToLocal(
+    toThree(world.x, world.y, world.z, SCRATCH_WORLDPOS),
+  )
+  return { stageX: local.x, stageY: -local.z, stageZ: local.y }
+}
+
+/**
+ * Unit vector, in world lighting coords, of one of a rig's local axes:
+ * 'x' = along the truss, 'y' = out from it, 'z' = up. Used to constrain drags
+ * to the bar and to lay fixtures out along it.
+ */
+const SCRATCH_AXIS = new Vector3()
+export function rigAxisLighting(
+  rig: RiggingDto,
+  axis: 'x' | 'y' | 'z',
+): { x: number; y: number; z: number } {
+  // Build the axis in the rig's *lighting*-local frame, swizzle to R3F (which is
+  // where rigEuler is defined), rotate, then swizzle back.
+  const l = axis === 'x' ? [1, 0, 0] : axis === 'y' ? [0, 1, 0] : [0, 0, 1]
+  toThree(l[0], l[1], l[2], SCRATCH_AXIS).applyEuler(rigEuler(rig, SCRATCH_RIG_EULER))
+  return fromThree(SCRATCH_AXIS)
+}
+
+// Inverse of `worldPositionFor`: project an R3F world point into a patch's
+// rig-local frame and recover stage* offsets in lighting coords. With no
+// rigging the world point is treated as a free-space lighting position.
+//
+// Delegates to `placementFromWorldLighting` so exactly one inverse exists and
+// the two cannot drift. **Cannot re-parent** — see that function's note.
 export function patchPlacementFromWorld(
   patch: FixturePatch,
   worldR3F: Vector3,
   riggings: RiggingDto[],
 ): RigPlacement {
-  if (!patch.riggingUuid) {
-    const l = fromThree(worldR3F)
-    return { riggingUuid: null, stageX: l.x, stageY: l.y, stageZ: l.z }
-  }
+  const rig = patch.riggingUuid
+    ? riggings.find((r) => r.uuid === patch.riggingUuid)
+    : undefined
 
-  const rig = riggings.find((r) => r.uuid === patch.riggingUuid)
-  if (!rig) {
+  // A dangling riggingUuid (rig deleted elsewhere) has no frame to project
+  // into, so leave the stored offsets alone rather than reinterpreting them.
+  if (patch.riggingUuid && !rig) {
     return {
       riggingUuid: patch.riggingUuid,
       stageX: patch.stageX,
@@ -182,14 +235,8 @@ export function patchPlacementFromWorld(
     }
   }
 
-  SCRATCH_OBJ.position.set(rig.positionX ?? 0, rig.positionZ ?? 0, -(rig.positionY ?? 0))
-  rigEuler(rig, SCRATCH_OBJ.rotation)
-  SCRATCH_OBJ.updateMatrixWorld()
-  const local = SCRATCH_OBJ.worldToLocal(SCRATCH_WORLDPOS.copy(worldR3F))
   return {
     riggingUuid: patch.riggingUuid,
-    stageX: local.x,
-    stageY: -local.z,
-    stageZ: local.y,
+    ...placementFromWorldLighting(fromThree(worldR3F), rig ?? null),
   }
 }

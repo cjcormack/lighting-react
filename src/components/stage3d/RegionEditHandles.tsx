@@ -6,6 +6,14 @@ import { MathUtils, Plane, Vector3 } from 'three'
 import type { StageRegionDto } from '../../api/stageRegionApi'
 import type { RegionPositionUpdate } from './Stage3D'
 import { toThree, fromThree } from '../../lib/stageCoords'
+import {
+  deriveFromDraggedCorner,
+  localEdgeMidpoints,
+  localRotationOffsets,
+  pinnedIndexFor,
+  rotateXY,
+  worldCornersFor,
+} from '../../lib/stageGeometry'
 import { useHandleDrag, verticalPlaneThroughR3F } from './useHandleDrag'
 import { snap, SNAP_DISTANCE_M, SNAP_ANGLE_DEG } from './useShiftHeld'
 
@@ -13,8 +21,9 @@ interface RegionEditHandlesProps {
   region: StageRegionDto
   /** Live update during drag; final settled call also fired on pointerup. */
   onChange: (next: RegionPositionUpdate, settled: boolean) => void
-  /** When .current is true (Shift held), drag positions snap to the grid. */
-  shiftHeldRef?: React.RefObject<boolean>
+  /** When .current is true, drag positions snap to the grid. Snapping is on by
+   *  default and Shift suspends it — see useSnapGrid. */
+  snapActiveRef?: React.RefObject<boolean>
   onDragStart?: () => void
   onDragEnd?: () => void
 }
@@ -33,87 +42,6 @@ const ROTATION_TORUS_RADIUS = 0.22
 const ROTATION_TORUS_TUBE = 0.055
 const MIN_HEIGHT_M = 0.05
 
-// Corner index 0-3 around the floor of the rectangle (CCW starting front-left):
-//   0 = (-w/2, -d/2)   1 = (+w/2, -d/2)
-//   3 = (-w/2, +d/2)   2 = (+w/2, +d/2)
-// 4-7 mirror that order at the top face.
-function localCorners(w: number, d: number): Array<[number, number]> {
-  return [
-    [-w / 2, -d / 2],
-    [+w / 2, -d / 2],
-    [+w / 2, +d / 2],
-    [-w / 2, +d / 2],
-  ]
-}
-
-// Edge / side index 0-3 in the same orientation as corner index modulo 4:
-//   0 = front (–Y)   1 = right (+X)   2 = back (+Y)   3 = left (–X)
-function localEdgeMidpoints(w: number, d: number): Array<[number, number]> {
-  return [
-    [0, -d / 2],
-    [+w / 2, 0],
-    [0, +d / 2],
-    [-w / 2, 0],
-  ]
-}
-
-function localRotationOffsets(w: number, d: number, offset: number): Array<[number, number]> {
-  return [
-    [0, -d / 2 - offset],
-    [+w / 2 + offset, 0],
-    [0, +d / 2 + offset],
-    [-w / 2 - offset, 0],
-  ]
-}
-
-function rotateXY(x: number, y: number, yawRad: number): [number, number] {
-  const c = Math.cos(yawRad)
-  const s = Math.sin(yawRad)
-  return [x * c - y * s, x * s + y * c]
-}
-
-function worldCornersFor(region: StageRegionDto): Array<[number, number, number]> {
-  const cx = region.centerX ?? 0
-  const cy = region.centerY ?? 0
-  const cz = region.centerZ ?? 0
-  const h = region.heightM ?? 1
-  const w = region.widthM ?? 1
-  const d = region.depthM ?? 1
-  const yaw = MathUtils.degToRad(region.yawDeg ?? 0)
-  const xys = localCorners(w, d).map(([lx, ly]) => rotateXY(lx, ly, yaw))
-  const floor: Array<[number, number, number]> = xys.map(([rx, ry]) => [cx + rx, cy + ry, cz])
-  const top: Array<[number, number, number]> = xys.map(([rx, ry]) => [cx + rx, cy + ry, cz + h])
-  return [...floor, ...top]
-}
-
-function pinnedIndexFor(idx: number): number {
-  // Pinned corner is diagonally opposite at the same height level.
-  const base = idx < 4 ? 0 : 4
-  return base + ((idx - base + 2) % 4)
-}
-
-/**
- * Derives new region pose from the dragged corner and the pinned (diagonally
- * opposite) corner. Yaw is preserved — width/depth are absolute projections
- * of the diagonal vector onto the local yawed axes.
- */
-function deriveFromDraggedCorner(
-  draggedX: number,
-  draggedY: number,
-  pinnedX: number,
-  pinnedY: number,
-  yawDeg: number,
-): { centerX: number; centerY: number; widthM: number; depthM: number } {
-  const cx = (draggedX + pinnedX) / 2
-  const cy = (draggedY + pinnedY) / 2
-  const dx = draggedX - pinnedX
-  const dy = draggedY - pinnedY
-  const yaw = MathUtils.degToRad(yawDeg)
-  const widthM = Math.abs(dx * Math.cos(yaw) + dy * Math.sin(yaw))
-  const depthM = Math.abs(-dx * Math.sin(yaw) + dy * Math.cos(yaw))
-  return { centerX: cx, centerY: cy, widthM, depthM }
-}
-
 type HeightTier = 'top' | 'floor'
 
 type DraggingId =
@@ -122,7 +50,7 @@ type DraggingId =
   | { kind: 'rotation'; idx: number }
   | null
 
-export function RegionEditHandles({ region, onChange, shiftHeldRef, onDragStart, onDragEnd }: RegionEditHandlesProps) {
+export function RegionEditHandles({ region, onChange, snapActiveRef, onDragStart, onDragEnd }: RegionEditHandlesProps) {
   const startDrag = useHandleDrag()
   const { camera } = useThree()
   const [dragging, setDragging] = useState<DraggingId>(null)
@@ -175,7 +103,7 @@ export function RegionEditHandles({ region, onChange, shiftHeldRef, onDragStart,
 
     const updateFromHit = (p: Vector3, settled: boolean) => {
       const { x, y } = fromThree(p)
-      const snapped = shiftHeldRef?.current
+      const snapped = snapActiveRef?.current
         ? { x: snap(x, SNAP_DISTANCE_M), y: snap(y, SNAP_DISTANCE_M) }
         : { x, y }
       const result = deriveFromDraggedCorner(snapped.x, snapped.y, pinnedX, pinnedY, lockedYawDeg)
@@ -220,7 +148,7 @@ export function RegionEditHandles({ region, onChange, shiftHeldRef, onDragStart,
     if (tier === 'top') {
       const lockedCz = cz
       updateFromHit = (p, settled) => {
-        const newTopZ = shiftHeldRef?.current ? snap(p.y, SNAP_DISTANCE_M) : p.y
+        const newTopZ = snapActiveRef?.current ? snap(p.y, SNAP_DISTANCE_M) : p.y
         const newHeight = Math.max(MIN_HEIGHT_M, newTopZ - lockedCz)
         onChange(
           { centerX: lockedCx, centerY: lockedCy, centerZ: lockedCz, yawDeg: lockedYaw, heightM: newHeight },
@@ -232,7 +160,7 @@ export function RegionEditHandles({ region, onChange, shiftHeldRef, onDragStart,
       // top face stays put. Clamp so heightM stays above MIN_HEIGHT_M.
       const lockedTopZ = cz + h
       updateFromHit = (p, settled) => {
-        const raw = shiftHeldRef?.current ? snap(p.y, SNAP_DISTANCE_M) : p.y
+        const raw = snapActiveRef?.current ? snap(p.y, SNAP_DISTANCE_M) : p.y
         let newCz = raw
         let newHeight = lockedTopZ - newCz
         if (newHeight < MIN_HEIGHT_M) {
@@ -278,7 +206,7 @@ export function RegionEditHandles({ region, onChange, shiftHeldRef, onDragStart,
       const { x, y } = fromThree(p)
       const currentAngle = Math.atan2(y - lockedCy, x - lockedCx)
       let newYawDeg = startYawDeg + MathUtils.radToDeg(currentAngle - startAngle)
-      if (shiftHeldRef?.current) newYawDeg = snap(newYawDeg, SNAP_ANGLE_DEG)
+      if (snapActiveRef?.current) newYawDeg = snap(newYawDeg, SNAP_ANGLE_DEG)
       onChange(
         { centerX: lockedCx, centerY: lockedCy, centerZ: lockedCz, yawDeg: newYawDeg },
         settled,

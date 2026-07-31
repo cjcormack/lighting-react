@@ -1,14 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { Loader2, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useViewedProject } from '../ProjectSwitcher'
 import { usePatchListQuery, usePatchGroupListQuery } from '../store/patches'
-import { useProjectQuery } from '../store/projects'
-import { useRiggingListQuery } from '../store/riggings'
 import { useFixtureLookup } from '../hooks/useFixtureLookup'
-import { worldPositionLighting } from '../lib/stageCoords'
+import { useProjectedPatches } from '../hooks/useProjectedPatches'
 import { StageMarker } from './stage/StageMarker'
 import { StageBackdrop } from './stage/StageBackdrop'
 import { chipButtonClassName } from './patches/chipButton'
@@ -29,41 +27,23 @@ export function StageOverviewPanel({
   const project = useViewedProject()
   const projectId = project?.id
 
-  const { data: patches, isLoading: patchesLoading } = usePatchListQuery(projectId!, {
+  const { isLoading: patchesLoading } = usePatchListQuery(projectId!, {
     skip: projectId == null,
   })
   const { fixtureByKey, typeByKey } = useFixtureLookup()
   const { data: groups } = usePatchGroupListQuery(projectId!, {
     skip: projectId == null,
   })
-  const { data: projectDetail } = useProjectQuery(projectId!, { skip: projectId == null })
-  const { data: riggings } = useRiggingListQuery(projectId!, { skip: projectId == null })
 
   const [groupFilter, setGroupFilter] = useState<number | null>(null)
 
-  const stageWidthM = projectDetail?.stageWidthM ?? 10
-  const stageDepthM = projectDetail?.stageDepthM ?? 8
-
-  // Compose metric lighting coords (worldPosition* if backed in, else
-  // rig+offset, else raw stage*) and map to canvas %. Patches with no
-  // resolvable position — and patches marked `stageHidden` — are filtered out.
-  // The selected patch survives the `stageHidden` cut even so: this panel shares
-  // its selection with Stage3D (see routes/Stage.tsx), which draws the selected
+  // The selected patch survives the `stageHidden` cut: this panel shares its
+  // selection with Stage3D (see routes/Stage.tsx), which draws the selected
   // hidden patch so the operator can see what they're about to un-hide. Dropping
   // it here would blank the highlight on one surface while it shows on the other.
-  const placedPatches = useMemo(() => {
-    return (patches ?? [])
-      .filter((patch) => !patch.stageHidden || patch.key === selectedFixtureKey)
-      .map((patch) => {
-        const pos = worldPositionLighting(patch, riggings ?? [])
-        if (!pos) return null
-        const halfW = stageWidthM / 2
-        const xPct = ((pos.x + halfW) / stageWidthM) * 100
-        const yPct = (1 - pos.y / stageDepthM) * 100
-        return { patch, xPct, yPct }
-      })
-      .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
-  }, [patches, riggings, stageWidthM, stageDepthM, selectedFixtureKey])
+  const { points: placedPatches } = useProjectedPatches(projectId, {
+    includeKey: selectedFixtureKey,
+  })
 
   const visibleGroups = (groups ?? []).filter((g) => g.memberCount > 0)
   const showChips = visibleGroups.length > 0
@@ -131,7 +111,7 @@ export function StageOverviewPanel({
               <EmptyState projectId={projectId} />
             ) : (
               <StageBackdrop className={STAGE_CANVAS_HEIGHT}>
-                {placedPatches.map(({ patch, xPct, yPct }) => {
+                {placedPatches.map(({ patch, leftPct, topPct }) => {
                   const fixture = fixtureByKey.get(patch.key)
                   const fixtureType = fixture
                     ? typeByKey.get(fixture.typeKey)
@@ -146,8 +126,8 @@ export function StageOverviewPanel({
                       onClick={() => onFixtureClick(patch.key)}
                       className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer focus:outline-none"
                       style={{
-                        left: `${xPct}%`,
-                        top: `${yPct}%`,
+                        left: `${leftPct}%`,
+                        top: `${topPct}%`,
                       }}
                     >
                       <StageMarker

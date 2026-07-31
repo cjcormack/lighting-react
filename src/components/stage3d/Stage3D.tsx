@@ -9,7 +9,8 @@ import { RiggingMeshes } from './RiggingMeshes'
 import { FixtureModel } from './FixtureModel'
 import { RegionEditHandles } from './RegionEditHandles'
 import { RiggingEndpointHandles } from './RiggingEndpointHandles'
-import { useShiftHeld, SNAP_ANGLE_DEG, SNAP_DISTANCE_M } from './useShiftHeld'
+import { SNAP_ANGLE_DEG } from './useShiftHeld'
+import type { SnapGrid } from '../stage2d/useSnapGrid'
 import { notifyTransformDragStart } from './useBodyDrag'
 import { DEFAULT_VIEW_FLAGS, type StageViewFlags } from './useStageView'
 import { useStageData } from './useStageData'
@@ -18,6 +19,13 @@ import type { RiggingDto } from '../../api/riggingApi'
 import type { FixturePatch } from '../../api/patchApi'
 import type { StageRegionDto } from '../../api/stageRegionApi'
 import { fromThree, patchPlacementFromWorld, rigEuler } from '../../lib/stageCoords'
+import type {
+  PatchPlacementUpdate,
+  PlacementPoint,
+  RegionPositionUpdate,
+  RiggingPositionUpdate,
+  Selection,
+} from '../stage/stageEditing'
 import { formatTriple } from '../../lib/utils'
 import { NO_RAYCAST } from './raycast'
 
@@ -30,44 +38,18 @@ const EMPTY_REGIONS: StageRegionDto[] = []
 // reachable interaction is a single-axis drag.
 const PLANE_HANDLE_NAMES = new Set(['XY', 'XZ', 'YZ', 'XYZ'])
 
-export type Selection =
-  | { kind: 'patch'; patchKey: string }
-  | { kind: 'region'; uuid: string }
-  | { kind: 'rigging'; uuid: string }
-  | null
-
-export interface PatchPlacementUpdate {
-  riggingUuid: string | null
-  stageX: number | null
-  stageY: number | null
-  stageZ: number | null
-  /** Present only for rotate-mode drags; null for translate drags so the
-   *  caller doesn't overwrite the existing base orientation on a move. */
-  baseYawDeg?: number | null
-  basePitchDeg?: number | null
-}
+// The view-agnostic editing types live in ../stage/stageEditing so the 2D
+// editor can name them without importing this module (and with it, three.js).
+// Re-exported here so existing import sites are unaffected.
+export type {
+  Selection,
+  PatchPlacementUpdate,
+  RegionPositionUpdate,
+  RiggingPositionUpdate,
+  PlacementPoint,
+} from '../stage/stageEditing'
 
 export type GizmoMode = 'translate' | 'rotate'
-
-export interface RegionPositionUpdate {
-  centerX: number | null
-  centerY: number | null
-  centerZ: number | null
-  yawDeg: number | null
-  widthM?: number | null
-  depthM?: number | null
-  heightM?: number | null
-}
-
-export interface RiggingPositionUpdate {
-  positionX: number | null
-  positionY: number | null
-  positionZ: number | null
-  yawDeg: number | null
-  pitchDeg: number | null
-  rollDeg: number | null
-  lengthM?: number | null
-}
 
 interface Stage3DProps {
   projectId: number
@@ -81,11 +63,13 @@ interface Stage3DProps {
   /** Which TransformControls mode the fixture gizmo runs in. The parent owns
    *  this so it can drive both a manual toggle button and a held-Alt key. */
   gizmoMode?: GizmoMode
+  /** Grid-snap state, owned by the route and shared with the 2D editor. */
+  snap: SnapGrid
   /** Suppress the bottom-center patch info overlay — set when the parent shows
    *  the right-hand fixture control card, so the name isn't shown twice. */
   hidePatchSelectionInfo?: boolean
   onSelectionChange: (s: Selection) => void
-  onPlacementClick?: (worldX: number, worldY: number) => void
+  onPlacementClick?: (p: PlacementPoint) => void
   onPatchPlacementChange?: (patch: FixturePatch, next: PatchPlacementUpdate, settled: boolean) => void
   onRegionPositionChange?: (region: StageRegionDto, next: RegionPositionUpdate, settled: boolean) => void
   onRiggingPositionChange?: (rig: RiggingDto, next: RiggingPositionUpdate, settled: boolean) => void
@@ -100,6 +84,7 @@ export function Stage3D({
   placementZ,
   gizmoMode = 'translate',
   hidePatchSelectionInfo = false,
+  snap,
   onSelectionChange,
   onPlacementClick,
   onPatchPlacementChange,
@@ -138,7 +123,10 @@ export function Stage3D({
   // and rigging never use this — their interactions are entirely handle-based.
   const [patchTarget, setPatchTarget] = useState<Object3D | null>(null)
   const orbitRef = useRef<React.ComponentRef<typeof OrbitControls>>(null!)
-  const { held: shiftHeld, ref: shiftHeldRef } = useShiftHeld()
+  // Snapping state is owned by the route and shared with the 2D editor, so one
+  // header control governs both views and Shift means the same thing in each.
+  const snapActive = snap.active
+  const snapActiveRef = snap.activeRef
 
   // Compare pointerdown vs pointerup positions so an orbit-drag that releases
   // over empty space doesn't get treated as a click-to-clear.
@@ -245,7 +233,7 @@ export function Stage3D({
         <StageBoxOutline width={stageW} depth={stageD} height={stageH} />
         <OriginMarkers depth={stageD} />
         {placing && onPlacementClick && (
-          <PlacementClickCatcher targetY={placementZ ?? 0} onClick={onPlacementClick} />
+          <PlacementClickCatcher targetZ={placementZ ?? 0} onClick={onPlacementClick} />
         )}
         {view.regions && (
           <StageRegionMeshes
@@ -255,7 +243,7 @@ export function Stage3D({
             showLabel={view.labels}
             onClick={interactable ? handleRegionClick : undefined}
             onMove={canEdit && onRegionPositionChange ? onRegionPositionChange : undefined}
-            shiftHeldRef={shiftHeldRef}
+            snapActiveRef={snapActiveRef}
             onDragStart={disableOrbit}
             onDragEnd={enableOrbit}
           />
@@ -268,7 +256,7 @@ export function Stage3D({
             showLabel={view.labels}
             onClick={interactable ? handleRiggingClick : undefined}
             onMove={canEdit && onRiggingPositionChange ? onRiggingPositionChange : undefined}
-            shiftHeldRef={shiftHeldRef}
+            snapActiveRef={snapActiveRef}
             onDragStart={disableOrbit}
             onDragEnd={enableOrbit}
           />
@@ -281,7 +269,7 @@ export function Stage3D({
         {canEdit && selectedRegion && onRegionPositionChange && (
           <RegionEditHandles
             region={selectedRegion}
-            shiftHeldRef={shiftHeldRef}
+            snapActiveRef={snapActiveRef}
             onChange={(next, settled) => onRegionPositionChange(selectedRegion, next, settled)}
             onDragStart={disableOrbit}
             onDragEnd={enableOrbit}
@@ -290,7 +278,7 @@ export function Stage3D({
         {canEdit && selectedRigging && onRiggingPositionChange && (
           <RiggingEndpointHandles
             rig={selectedRigging}
-            shiftHeldRef={shiftHeldRef}
+            snapActiveRef={snapActiveRef}
             onChange={(next, settled) => onRiggingPositionChange(selectedRigging, next, settled)}
             onDragStart={disableOrbit}
             onDragEnd={enableOrbit}
@@ -303,7 +291,8 @@ export function Stage3D({
           patches={patches ?? null}
           riggings={safeRiggings}
           stageH={stageH}
-          shiftHeld={shiftHeld}
+          snapActive={snapActive}
+          snapStepM={snap.step}
           gizmoMode={gizmoMode}
           onPatchPlacementChange={onPatchPlacementChange}
         />
@@ -367,7 +356,8 @@ interface ControlsProps {
   patches: FixturePatch[] | null
   riggings: RiggingDto[]
   stageH: number
-  shiftHeld: boolean
+  snapActive: boolean
+  snapStepM: number
   gizmoMode: GizmoMode
   onPatchPlacementChange?: (patch: FixturePatch, next: PatchPlacementUpdate, settled: boolean) => void
 }
@@ -382,7 +372,8 @@ function Controls({
   patches,
   riggings,
   stageH,
-  shiftHeld,
+  snapActive,
+  snapStepM,
   gizmoMode,
   onPatchPlacementChange,
 }: ControlsProps) {
@@ -537,8 +528,8 @@ function Controls({
           showX
           showY
           showZ={!rotateMode}
-          translationSnap={!rotateMode && shiftHeld ? SNAP_DISTANCE_M : null}
-          rotationSnap={rotateMode && shiftHeld ? MathUtils.degToRad(SNAP_ANGLE_DEG) : null}
+          translationSnap={!rotateMode && snapActive ? snapStepM : null}
+          rotationSnap={rotateMode && snapActive ? MathUtils.degToRad(SNAP_ANGLE_DEG) : null}
           onObjectChange={handleObjectChange}
         />
       )}
@@ -579,15 +570,25 @@ function StageBoxOutline({
 const PLACEMENT_NORMAL = new Vector3(0, 1, 0)
 const DRAG_PX_THRESHOLD = 4
 
-function PlacementClickCatcher({ targetY, onClick }: { targetY: number; onClick: (worldX: number, worldY: number) => void }) {
+// Raycasts pointer clicks onto a horizontal plane at lighting height `targetZ`.
+// A ground-plane hit fixes X and Y; Z is the plane's own height, so the emitted
+// point is complete and the caller needs no fallback.
+function PlacementClickCatcher({
+  targetZ,
+  onClick,
+}: {
+  targetZ: number
+  onClick: (p: PlacementPoint) => void
+}) {
   const { camera, gl } = useThree()
   useEffect(() => {
     const el = gl.domElement
     const raycaster = new Raycaster()
     const ndc = new Vector2()
     const hit = new Vector3()
-    // Plane equation n·X + d = 0 with n=(0,1,0) means y + d = 0, so d=-targetY.
-    const plane = new Plane(PLACEMENT_NORMAL, -targetY)
+    // Plane equation n·X + d = 0 with n=(0,1,0) means y + d = 0, so d=-targetZ.
+    // R3F +Y is lighting +Z, so the plane sits at lighting height targetZ.
+    const plane = new Plane(PLACEMENT_NORMAL, -targetZ)
     let downX = 0
     let downY = 0
     const onDown = (e: PointerEvent) => { downX = e.clientX; downY = e.clientY }
@@ -602,7 +603,7 @@ function PlacementClickCatcher({ targetY, onClick }: { targetY: number; onClick:
       raycaster.setFromCamera(ndc, camera)
       if (!raycaster.ray.intersectPlane(plane, hit)) return
       const { x, y } = fromThree(hit)
-      onClick(x, y)
+      onClick({ x, y, z: targetZ })
     }
     el.addEventListener('pointerdown', onDown)
     el.addEventListener('pointerup', onUp)
@@ -610,7 +611,7 @@ function PlacementClickCatcher({ targetY, onClick }: { targetY: number; onClick:
       el.removeEventListener('pointerdown', onDown)
       el.removeEventListener('pointerup', onUp)
     }
-  }, [camera, gl, onClick, targetY])
+  }, [camera, gl, onClick, targetZ])
   return null
 }
 

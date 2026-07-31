@@ -29,15 +29,27 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // Call site raises its own toast.error()
   'updateProject', // src/routes/ProjectSettings.tsx
   'updateInstall', // src/routes/InstallSettings.tsx
+  // NB: 'updateStageRegion' and 'updateRigging' have TWO call sites each — the
+  // edit form and the stage drag handler in src/routes/Stage.tsx. The drag path
+  // used to swallow failures with `.catch(() => {})`, so a rejected move was
+  // completely silent *and* left the rejected position in the cache. Both paths
+  // now toast and roll back; if a third call site appears, it must do the same or
+  // these names have to come off this list.
   'createStageRegion', // src/components/stage/EditStageRegionForm.tsx
-  'updateStageRegion',
+  'updateStageRegion', // ...and the drag handler in src/routes/Stage.tsx
   'deleteStageRegion',
   'createRigging', // src/components/rigging/EditRiggingForm.tsx
-  'updateRigging',
+  'updateRigging', // ...and the drag handler in src/routes/Stage.tsx
   'deleteRigging',
   // NB: the script endpoints are deliberately *not* listed. `createProjectScript` has two call
   // sites — ScriptForm and CueTriggerEditor's inline-script step — and only one of them reported
   // anything, so deny-listing it made the other silent again. Both now rely on this middleware.
+
+  // `commitPlacements` in store/stagePlacement.ts reports the outcome of a bulk
+  // placement as one toast naming the operation ("Align left: 2 of 8 failed"),
+  // which is more use than the raw transport error. It is the only permitted
+  // caller of this endpoint.
+  'bulkPlacements',
 
   // Cloud sync — src/routes/CloudSync.tsx and src/components/cloudSync/*
   'updateCloudSyncConfig',

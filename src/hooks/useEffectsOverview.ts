@@ -1,52 +1,41 @@
 import { useState, useCallback, useRef } from 'react'
+import { usePersistentState } from './usePersistentState'
 
-const STORAGE_KEY = 'effects-overview-visible'
-
-function getInitialState(): boolean {
-  if (typeof window === 'undefined') return false
-  return localStorage.getItem(STORAGE_KEY) === 'true'
-}
-
+/**
+ * Visibility for the effects overview panel, with a lock the FX view holds while
+ * it's mounted.
+ *
+ * The lock is deliberately *not* persisted: `isVisible` is the user's stored
+ * preference OR-ed with the lock, so forcing the panel open never overwrites
+ * what they chose, and releasing the lock restores that choice without needing
+ * to save and replay it.
+ */
 export function useEffectsOverview() {
-  const [isVisible, setIsVisible] = useState<boolean>(getInitialState)
+  const [preferVisible, setPreferVisible] = usePersistentState<boolean>(
+    'effects-overview-visible',
+    false,
+  )
   const [isLocked, setIsLocked] = useState(false)
 
-  // Refs to keep callbacks stable while reading latest values
+  // Read the lock through a ref so toggle/hide stay referentially stable.
   const isLockedRef = useRef(false)
-  const isVisibleRef = useRef(isVisible)
-  const wasVisibleBeforeLock = useRef(false)
   isLockedRef.current = isLocked
-  isVisibleRef.current = isVisible
 
   const toggle = useCallback(() => {
     if (isLockedRef.current) return
-    setIsVisible((prev) => {
-      const next = !prev
-      localStorage.setItem(STORAGE_KEY, String(next))
-      return next
-    })
-  }, [])
+    setPreferVisible((prev) => !prev)
+  }, [setPreferVisible])
 
   const hide = useCallback(() => {
     if (isLockedRef.current) return
-    setIsVisible(false)
-    localStorage.setItem(STORAGE_KEY, 'false')
-  }, [])
+    setPreferVisible(false)
+  }, [setPreferVisible])
 
   /** Lock the overview open (called when entering FX view) */
-  const lock = useCallback(() => {
-    wasVisibleBeforeLock.current = isVisibleRef.current
-    setIsLocked(true)
-    setIsVisible(true)
-  }, [])
+  const lock = useCallback(() => setIsLocked(true), [])
 
-  /** Unlock and restore prior state (called when leaving FX view) */
-  const unlock = useCallback(() => {
-    setIsLocked(false)
-    if (!wasVisibleBeforeLock.current) {
-      setIsVisible(false)
-    }
-  }, [])
+  /** Unlock, restoring the stored preference (called when leaving FX view) */
+  const unlock = useCallback(() => setIsLocked(false), [])
 
-  return { isVisible, isLocked, toggle, hide, lock, unlock }
+  return { isVisible: preferVisible || isLocked, isLocked, toggle, hide, lock, unlock }
 }

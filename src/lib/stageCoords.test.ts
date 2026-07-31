@@ -6,9 +6,14 @@ import {
   panTiltToDir,
   headQuaternionFor,
   patchPlacementFromWorld,
+  placementFromWorldLighting,
+  rigAxisLighting,
   worldPositionFor,
+  worldPositionLighting,
   dmxToDegrees,
 } from "./stageCoords"
+import { worldEndpointsFor } from "./stageGeometry"
+import { STAGE_PROJECTIONS, project, unproject } from "./stageProjection"
 import type { FixturePatch } from "../api/patchApi"
 import type { RiggingDto } from "../api/riggingApi"
 import type { SliderPropertyDescriptor } from "../store/fixtures"
@@ -294,5 +299,142 @@ describe("dmxToDegrees", () => {
 
   it("returns null when span is zero or negative", () => {
     expect(dmxToDegrees(0, baseSlider({ min: 10, max: 10, degMin: 0, degMax: 540 }))).toBeNull()
+  })
+})
+
+describe("placementFromWorldLighting", () => {
+  it("passes world coords straight through with no rig", () => {
+    expect(placementFromWorldLighting({ x: 3, y: -2, z: 1 }, null)).toEqual({
+      stageX: 3,
+      stageY: -2,
+      stageZ: 1,
+    })
+  })
+
+  it("inverts worldPositionLighting for arbitrary rig poses", () => {
+    const rigs = [
+      baseRig({ yawDeg: 90 }),
+      baseRig({ pitchDeg: 30 }),
+      baseRig({ rollDeg: 45 }),
+      baseRig({ yawDeg: 45, pitchDeg: 20, rollDeg: 10 }),
+      baseRig({ positionX: 2, positionY: -1.5, positionZ: 3, yawDeg: 60, pitchDeg: -25, rollDeg: 15 }),
+    ]
+    const offsets: Array<[number, number, number]> = [
+      [1, 0, 0],
+      [0, 0, -0.5],
+      [-0.5, 1.2, 0.8],
+      [0, 0, 0],
+    ]
+    for (const rig of rigs) {
+      for (const [sx, sy, sz] of offsets) {
+        const patch = basePatch({ stageX: sx, stageY: sy, stageZ: sz, riggingUuid: rig.uuid })
+        const world = worldPositionLighting(patch, [rig])!
+        const back = placementFromWorldLighting(world, rig)
+        expect(back.stageX).toBeCloseTo(sx, 9)
+        expect(back.stageY).toBeCloseTo(sy, 9)
+        expect(back.stageZ).toBeCloseTo(sz, 9)
+      }
+    }
+  })
+
+  it("re-frames a world point into a DIFFERENT rig than the patch names", () => {
+    // The whole reason this function takes the rig explicitly: re-parenting must
+    // project into the destination frame. patchPlacementFromWorld reads
+    // patch.riggingUuid and so cannot express this.
+    const from = baseRig({ uuid: "from", positionX: 0, yawDeg: 0 })
+    const to = baseRig({ uuid: "to", positionX: 5, positionZ: 4, yawDeg: 90 })
+    const patch = basePatch({ stageX: 1, stageY: 0, stageZ: 0, riggingUuid: from.uuid })
+    const world = worldPositionLighting(patch, [from, to])!
+    expect(world).toEqual({ x: 1, y: 0, z: 0 })
+
+    const local = placementFromWorldLighting(world, to)
+    // Re-composing those offsets against `to` must land back on the same world point.
+    const moved = basePatch({ ...local, riggingUuid: to.uuid })
+    const world2 = worldPositionLighting(moved, [from, to])!
+    expect(world2.x).toBeCloseTo(world.x, 9)
+    expect(world2.y).toBeCloseTo(world.y, 9)
+    expect(world2.z).toBeCloseTo(world.z, 9)
+  })
+
+  it("keeps a front-elevation drag from shifting the fixture up or downstage", () => {
+    // The correctness hotspot for the 2D elevation editor. Project a
+    // truss-mounted fixture into the front view, move it in-plane, lift it back
+    // out, and re-derive its rig-local offsets: the world Y it never touched
+    // must survive the whole round trip.
+    const rig = baseRig({
+      uuid: "rig-compound",
+      positionX: 1,
+      positionY: 2.5,
+      positionZ: 4,
+      yawDeg: 45,
+      pitchDeg: 0,
+      rollDeg: 10,
+    })
+    const patch = basePatch({ stageX: 0.75, stageY: 0, stageZ: -0.4, riggingUuid: rig.uuid })
+
+    const world = worldPositionLighting(patch, [rig])!
+    const front = STAGE_PROJECTIONS.front
+    const screen = project(world, front)
+    // Drag: 1.2 m right on screen, 0.6 m up (v is screen-down, so subtract).
+    const dragged = { h: screen.h + 1.2, v: screen.v - 0.6 }
+    const world2 = unproject(dragged, front, world)
+
+    // Y is the out-of-plane axis in the front view — bit-identical, not merely close.
+    expect(world2.y).toBe(world.y)
+    expect(world2.x).toBeCloseTo(world.x + 1.2, 12)
+    expect(world2.z).toBeCloseTo(world.z + 0.6, 12)
+
+    // And the rig-local offsets we'd persist must recompose to exactly that point.
+    const next = placementFromWorldLighting(world2, rig)
+    const after = worldPositionLighting(basePatch({ ...next, riggingUuid: rig.uuid }), [rig])!
+    expect(after.x).toBeCloseTo(world2.x, 9)
+    expect(after.y).toBeCloseTo(world.y, 9)
+    expect(after.z).toBeCloseTo(world2.z, 9)
+  })
+})
+
+describe("rigAxisLighting", () => {
+  it("returns the world axes for an unrotated rig", () => {
+    const rig = baseRig()
+    expect(rigAxisLighting(rig, "x").x).toBeCloseTo(1, 12)
+    expect(rigAxisLighting(rig, "y").y).toBeCloseTo(1, 12)
+    expect(rigAxisLighting(rig, "z").z).toBeCloseTo(1, 12)
+  })
+
+  it("swings local X into upstage at 90° yaw", () => {
+    const a = rigAxisLighting(baseRig({ yawDeg: 90 }), "x")
+    expect(a.x).toBeCloseTo(0, 12)
+    expect(a.y).toBeCloseTo(1, 12)
+    expect(a.z).toBeCloseTo(0, 12)
+  })
+
+  it("tilts local X out of the horizontal with roll", () => {
+    const a = rigAxisLighting(baseRig({ rollDeg: 90 }), "x")
+    expect(a.z).toBeCloseTo(1, 12)
+  })
+
+  it("stays a unit vector and stays orthogonal under a compound pose", () => {
+    const rig = baseRig({ yawDeg: 33, pitchDeg: -21, rollDeg: 47 })
+    const ax = rigAxisLighting(rig, "x")
+    const ay = rigAxisLighting(rig, "y")
+    const az = rigAxisLighting(rig, "z")
+    for (const a of [ax, ay, az]) {
+      expect(Math.hypot(a.x, a.y, a.z)).toBeCloseTo(1, 10)
+    }
+    const dot = (p: typeof ax, q: typeof ax) => p.x * q.x + p.y * q.y + p.z * q.z
+    expect(dot(ax, ay)).toBeCloseTo(0, 10)
+    expect(dot(ax, az)).toBeCloseTo(0, 10)
+    expect(dot(ay, az)).toBeCloseTo(0, 10)
+  })
+
+  it("agrees with the direction between the rig's own endpoints", () => {
+    const rig = baseRig({ yawDeg: 33, rollDeg: 20, lengthM: 4 })
+    const [a, b] = worldEndpointsFor(rig)
+    const len = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z)
+    const dir = { x: (b.x - a.x) / len, y: (b.y - a.y) / len, z: (b.z - a.z) / len }
+    const axis = rigAxisLighting(rig, "x")
+    expect(axis.x).toBeCloseTo(dir.x, 10)
+    expect(axis.y).toBeCloseTo(dir.y, 10)
+    expect(axis.z).toBeCloseTo(dir.z, 10)
   })
 })

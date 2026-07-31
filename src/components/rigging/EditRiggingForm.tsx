@@ -29,6 +29,16 @@ interface EditRiggingFormProps {
   rigging: RiggingDto | null
   projectId: number
   onClose: () => void
+  /**
+   * Focus the name field on mount.
+   *
+   * True for the sheet, where the user deliberately opened the form to edit it.
+   * **False for the docked stage panel**: there the form appears because the user
+   * clicked an object on the canvas, and moving focus into a text field silently
+   * disables every keyboard shortcut — arrow-key nudge, Delete, ⌘D — since they all
+   * (correctly) stand down while the user is typing.
+   */
+  autoFocusName?: boolean
 }
 
 interface FormState {
@@ -85,7 +95,7 @@ export interface EditRiggingFormHandle {
 }
 
 export const EditRiggingForm = forwardRef<EditRiggingFormHandle, EditRiggingFormProps>(function EditRiggingForm(
-  { rigging, projectId, onClose },
+  { rigging, projectId, onClose, autoFocusName = true },
   ref,
 ) {
   const isEdit = rigging != null
@@ -171,7 +181,7 @@ export const EditRiggingForm = forwardRef<EditRiggingFormHandle, EditRiggingForm
             id="rigging-name"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
-            autoFocus
+            autoFocus={autoFocusName}
           />
         </div>
 

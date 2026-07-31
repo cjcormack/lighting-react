@@ -19,6 +19,16 @@ interface EditStageRegionFormProps {
   region: StageRegionDto | null
   projectId: number
   onClose: () => void
+  /**
+   * Focus the name field on mount.
+   *
+   * True for the sheet, where the user deliberately opened the form to edit it.
+   * **False for the docked stage panel**: there the form appears because the user
+   * clicked an object on the canvas, and moving focus into a text field silently
+   * disables every keyboard shortcut — arrow-key nudge, Delete, ⌘D — since they all
+   * (correctly) stand down while the user is typing.
+   */
+  autoFocusName?: boolean
 }
 
 interface FormState {
@@ -72,7 +82,7 @@ export interface EditStageRegionFormHandle {
 }
 
 export const EditStageRegionForm = forwardRef<EditStageRegionFormHandle, EditStageRegionFormProps>(function EditStageRegionForm(
-  { region, projectId, onClose },
+  { region, projectId, onClose, autoFocusName = true },
   ref,
 ) {
   const isEdit = region != null
@@ -156,7 +166,7 @@ export const EditStageRegionForm = forwardRef<EditStageRegionFormHandle, EditSta
             id="region-name"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
-            autoFocus
+            autoFocus={autoFocusName}
           />
         </div>
 

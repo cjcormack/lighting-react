@@ -24,10 +24,20 @@ interface EditPatchFormProps {
   projectId: number
   existingPatches: FixturePatch[]
   onClose: () => void
+  /**
+   * Focus the name field on mount.
+   *
+   * True for the sheet, where the user deliberately opened the form to edit it.
+   * **False for the docked stage panel**: there the form appears because the user
+   * clicked an object on the canvas, and moving focus into a text field silently
+   * disables every keyboard shortcut — arrow-key nudge, Delete, ⌘D — since they all
+   * (correctly) stand down while the user is typing.
+   */
+  autoFocusName?: boolean
 }
 
 export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>(function EditPatchForm(
-  { patch, projectId, existingPatches, onClose },
+  { patch, projectId, existingPatches, onClose, autoFocusName = true },
   ref,
 ) {
   // Callers (sheet wrapper + docked panel) re-key on patch.id so this form
@@ -157,7 +167,7 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
             id="edit-name"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
-            autoFocus
+            autoFocus={autoFocusName}
           />
         </div>
 

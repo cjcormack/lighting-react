@@ -1,9 +1,9 @@
 import { useMemo } from 'react'
 import { cn } from '@/lib/utils'
-import { usePatchListQuery } from '@/store/patches'
 import { findGel } from '@/data/gels'
 import { StageBackdrop } from '@/components/stage/StageBackdrop'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
+import { useProjectedPatches } from '@/hooks/useProjectedPatches'
 import type { CueTarget } from '@/api/cuesApi'
 
 interface MiniStageProps {
@@ -30,7 +30,7 @@ export function MiniStage({
   targets,
   heightClass = 'h-32',
 }: MiniStageProps) {
-  const { data: patches } = usePatchListQuery(projectId, { skip: !projectId })
+  const { points: placedPatches } = useProjectedPatches(projectId || undefined)
   const { fixtures, fixtureByKey, typeByKey } = useFixtureLookup()
 
   const groupTargetNames = useMemo(
@@ -45,11 +45,6 @@ export function MiniStage({
   const isTargeted = (patch: { key: string; groups: { name: string }[] }) =>
     fixtureTargetKeys.has(patch.key) ||
     patch.groups.some((g) => groupTargetNames.has(g.name))
-
-  const placedPatches = useMemo(
-    () => (patches ?? []).filter((p) => !p.stageHidden && p.stageX != null && p.stageY != null),
-    [patches],
-  )
 
   // Fallback layout: when nothing is placed yet, show a wrapped row of dots so
   // the operator at least sees which fixtures are lit. Skip entirely if there
@@ -89,7 +84,7 @@ export function MiniStage({
 
   return (
     <StageBackdrop className={cn('w-full', heightClass)}>
-      {placedPatches.map((patch) => {
+      {placedPatches.map(({ patch, leftPct, topPct }) => {
         const lit = isTargeted(patch)
         const fixture = fixtureByKey.get(patch.key)
         const fixtureType = fixture ? typeByKey.get(fixture.typeKey) : undefined
@@ -100,7 +95,7 @@ export function MiniStage({
           <div
             key={patch.id}
             className="absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none"
-            style={{ left: `${patch.stageX}%`, top: `${patch.stageY}%` }}
+            style={{ left: `${leftPct}%`, top: `${topPct}%` }}
           >
             <SimulatedMarker
               colour={colour}

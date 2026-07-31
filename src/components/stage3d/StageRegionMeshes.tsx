@@ -19,7 +19,7 @@ interface StageRegionMeshesProps {
    *  unchanged). Only present in edit mode; absent disables body drag. */
   onMove?: (region: StageRegionDto, next: RegionPositionUpdate, settled: boolean) => void
   /** Read-only Shift-held ref shared with handle drags for grid-snap parity. */
-  shiftHeldRef?: React.RefObject<boolean>
+  snapActiveRef?: React.RefObject<boolean>
   /** Called on drag promotion / settle so the parent can toggle OrbitControls. */
   onDragStart?: () => void
   onDragEnd?: () => void
@@ -32,7 +32,7 @@ export function StageRegionMeshes({
   showLabel,
   onClick,
   onMove,
-  shiftHeldRef,
+  snapActiveRef,
   onDragStart,
   onDragEnd,
 }: StageRegionMeshesProps) {
@@ -47,7 +47,7 @@ export function StageRegionMeshes({
           showLabel={showLabel}
           onClick={onClick}
           onMove={onMove}
-          shiftHeldRef={shiftHeldRef}
+          snapActiveRef={snapActiveRef}
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
         />
@@ -63,7 +63,7 @@ interface RegionMeshProps {
   showLabel?: boolean
   onClick?: (region: StageRegionDto, mesh: Object3D) => void
   onMove?: (region: StageRegionDto, next: RegionPositionUpdate, settled: boolean) => void
-  shiftHeldRef?: React.RefObject<boolean>
+  snapActiveRef?: React.RefObject<boolean>
   onDragStart?: () => void
   onDragEnd?: () => void
 }
@@ -97,7 +97,7 @@ function RegionMesh({
   showLabel,
   onClick,
   onMove,
-  shiftHeldRef,
+  snapActiveRef,
   onDragStart,
   onDragEnd,
 }: RegionMeshProps) {
@@ -138,8 +138,8 @@ function RegionMesh({
             const plane = new Plane(PLANE_NORMAL_UP, -handleWorld.y)
             const emit = (p: Vector3, settled: boolean) => {
               const { x, y } = fromThree(p)
-              const sx = shiftHeldRef?.current ? snap(x, SNAP_DISTANCE_M) : x
-              const sy = shiftHeldRef?.current ? snap(y, SNAP_DISTANCE_M) : y
+              const sx = snapActiveRef?.current ? snap(x, SNAP_DISTANCE_M) : x
+              const sy = snapActiveRef?.current ? snap(y, SNAP_DISTANCE_M) : y
               onMove(region, { centerX: sx, centerY: sy, centerZ: cz, yawDeg }, settled)
             }
             return {

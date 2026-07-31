@@ -5,6 +5,7 @@ import { MathUtils, Plane, Vector3, type Object3D } from 'three'
 import type { RiggingDto } from '../../api/riggingApi'
 import type { RiggingPositionUpdate } from './Stage3D'
 import { toThree, fromThree } from '../../lib/stageCoords'
+import { DEFAULT_RIGGING_LENGTH_M } from '../../lib/stageGeometry'
 import { useBodyDrag } from './useBodyDrag'
 import { snap, SNAP_DISTANCE_M } from './useShiftHeld'
 import { StageLabel } from './StageLabel'
@@ -18,7 +19,7 @@ interface RiggingMeshesProps {
   /** Body drag emits a horizontal move (positionX/Y change). Absent in
    *  view/placement mode disables body drag. */
   onMove?: (rig: RiggingDto, next: RiggingPositionUpdate, settled: boolean) => void
-  shiftHeldRef?: React.RefObject<boolean>
+  snapActiveRef?: React.RefObject<boolean>
   onDragStart?: () => void
   onDragEnd?: () => void
 }
@@ -26,7 +27,9 @@ interface RiggingMeshesProps {
 // Each rigging renders as a bar along its local X axis. lengthM defaults to 3 m
 // for un-set DTOs. Yaw/pitch/roll come from the DTO; rotation order 'YXZ' matches
 // the convention used by panTiltToDir in stageCoords.
-export const DEFAULT_RIGGING_LENGTH_M = 3
+// Single-sourced in lib/stageGeometry (the pure module the 2D editor shares);
+// re-exported here because this is where consumers already import it from.
+export { DEFAULT_RIGGING_LENGTH_M }
 const RIGGING_THICKNESS_M = 0.18
 const PLANE_NORMAL_UP = new Vector3(0, 1, 0)
 
@@ -37,7 +40,7 @@ export function RiggingMeshes({
   showLabel,
   onClick,
   onMove,
-  shiftHeldRef,
+  snapActiveRef,
   onDragStart,
   onDragEnd,
 }: RiggingMeshesProps) {
@@ -52,7 +55,7 @@ export function RiggingMeshes({
           showLabel={showLabel}
           onClick={onClick}
           onMove={onMove}
-          shiftHeldRef={shiftHeldRef}
+          snapActiveRef={snapActiveRef}
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
         />
@@ -68,7 +71,7 @@ interface RiggingMeshProps {
   showLabel?: boolean
   onClick?: (rig: RiggingDto, mesh: Object3D) => void
   onMove?: (rig: RiggingDto, next: RiggingPositionUpdate, settled: boolean) => void
-  shiftHeldRef?: React.RefObject<boolean>
+  snapActiveRef?: React.RefObject<boolean>
   onDragStart?: () => void
   onDragEnd?: () => void
 }
@@ -80,7 +83,7 @@ function RiggingMesh({
   showLabel,
   onClick,
   onMove,
-  shiftHeldRef,
+  snapActiveRef,
   onDragStart,
   onDragEnd,
 }: RiggingMeshProps) {
@@ -111,8 +114,8 @@ function RiggingMesh({
             const plane = new Plane(PLANE_NORMAL_UP, -handleWorld.y)
             const emit = (p: Vector3, settled: boolean) => {
               const { x, y } = fromThree(p)
-              const sx = shiftHeldRef?.current ? snap(x, SNAP_DISTANCE_M) : x
-              const sy = shiftHeldRef?.current ? snap(y, SNAP_DISTANCE_M) : y
+              const sx = snapActiveRef?.current ? snap(x, SNAP_DISTANCE_M) : x
+              const sy = snapActiveRef?.current ? snap(y, SNAP_DISTANCE_M) : y
               onMove(
                 rig,
                 {

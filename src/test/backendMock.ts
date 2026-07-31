@@ -57,16 +57,36 @@ export function installBootStatusFetch(getStatus: () => BootStatus) {
   return fetchMock
 }
 
+// A non-2xx response, for testing failure paths. Wrap a route's value in
+// `failWith(...)` instead of giving it a plain body.
+const MOCK_STATUS = Symbol("mockStatus")
+interface MockFailure {
+  [MOCK_STATUS]: number
+  body: unknown
+}
+
+export function failWith(status: number, body: unknown = { message: "mock failure" }): unknown {
+  return { [MOCK_STATUS]: status, body } satisfies MockFailure
+}
+
+function asFailure(v: unknown): MockFailure | null {
+  return typeof v === "object" && v !== null && MOCK_STATUS in v ? (v as MockFailure) : null
+}
+
 // A fetch mock that routes requests to canned JSON by URL substring, resolving
 // on a 1ms timer and honouring the abort signal (see installBootStatusFetch for
 // why). `routes` maps a URL substring → the JSON body to return; unmatched URLs
-// get `{}`. Returns the vi.fn so tests can assert on `.mock.calls`.
+// get `{}`. Wrap a value in `failWith(status, body)` to return an error instead.
+// Returns the vi.fn so tests can assert on `.mock.calls`.
 export function installRecordingFetch(routes: Record<string, unknown> = {}) {
   const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = input instanceof Request ? input.url : String(input)
     const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined)
     const match = Object.keys(routes).find((k) => url.includes(k))
-    const body = match ? routes[match] : {}
+    const matched = match ? routes[match] : {}
+    const failure = asFailure(matched)
+    const body = failure ? failure.body : matched
+    const status = failure ? failure[MOCK_STATUS] : 200
     return new Promise<Response>((resolve, reject) => {
       const onAbort = () => {
         clearTimeout(timer)
@@ -76,7 +96,7 @@ export function installRecordingFetch(routes: Record<string, unknown> = {}) {
         signal?.removeEventListener("abort", onAbort)
         resolve(
           new Response(JSON.stringify(body), {
-            status: 200,
+            status,
             headers: { "Content-Type": "application/json" },
           }),
         )
@@ -102,6 +122,10 @@ export const bootStatusWs: { callback: null | (() => void) } = { callback: null 
 // can fire a synthetic `showChanged` notification.
 export const programStateWs: { callback: null | ((e: unknown) => void) } = { callback: null }
 
+// Patch-list WS bridge callback captured from store/patches.ts, so a test can
+// fire a synthetic `patchListChanged` and assert on invalidation batching.
+export const patchesWs: { callback: null | (() => void) } = { callback: null }
+
 const noopSub = () => ({ unsubscribe: () => {} })
 
 export function lightingApiMock() {
@@ -112,6 +136,16 @@ export function lightingApiMock() {
           return {
             unsubscribe: () => {
               bootStatusWs.callback = null
+            },
+          }
+        },
+      },
+      patches: {
+        subscribe: (fn: () => void) => {
+          patchesWs.callback = fn
+          return {
+            unsubscribe: () => {
+              patchesWs.callback = null
             },
           }
         },

@@ -13,9 +13,12 @@ import type { StageViewFlags } from './useStageView'
 interface StageViewMenuProps {
   flags: StageViewFlags
   setFlag: <K extends keyof StageViewFlags>(key: K, value: boolean) => void
+  /** Flags with no meaning in the current view — e.g. beam cones in a 2D plot. */
+  hide?: ReadonlyArray<keyof StageViewFlags>
 }
 
-export function StageViewMenu({ flags, setFlag }: StageViewMenuProps) {
+export function StageViewMenu({ flags, setFlag, hide }: StageViewMenuProps) {
+  const hidden = (key: keyof StageViewFlags) => hide?.includes(key) ?? false
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -33,12 +36,14 @@ export function StageViewMenu({ flags, setFlag }: StageViewMenuProps) {
         >
           Fixtures
         </DropdownMenuCheckboxItem>
-        <DropdownMenuCheckboxItem
-          checked={flags.beamCones}
-          onCheckedChange={(v) => setFlag('beamCones', !!v)}
-        >
-          Beam cones
-        </DropdownMenuCheckboxItem>
+        {!hidden('beamCones') && (
+          <DropdownMenuCheckboxItem
+            checked={flags.beamCones}
+            onCheckedChange={(v) => setFlag('beamCones', !!v)}
+          >
+            Beam cones
+          </DropdownMenuCheckboxItem>
+        )}
         <DropdownMenuCheckboxItem
           checked={flags.riggings}
           onCheckedChange={(v) => setFlag('riggings', !!v)}

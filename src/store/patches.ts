@@ -11,9 +11,75 @@ import type {
   UpdatePatchGroupRequest,
 } from "../api/patchApi"
 
+/**
+ * One entry in a bulk placement request.
+ *
+ * `patchId` identifies the row; every other key follows the backend's tri-state
+ * convention — absent means unchanged, an explicit `null` clears the field.
+ */
+export interface BulkPlacementEntry {
+  patchId: number
+  riggingUuid?: string | null
+  stageX?: number | null
+  stageY?: number | null
+  stageZ?: number | null
+  baseYawDeg?: number | null
+  basePitchDeg?: number | null
+}
+
+export interface BulkPlacementResponse {
+  updated: FixturePatch[]
+  failed: Array<{ patchId: number; error: string }>
+  /** Non-fatal notices, e.g. a fixture placed past the end of its truss. Only
+   *  the server knows the bar's length at write time, so only it can spot this. */
+  warnings: string[]
+}
+
+// A bulk placement operation fires one PUT per patch, and the backend broadcasts
+// `patchListChanged` after each one — so a 20-fixture align would trigger 20 full
+// list refetches while the batch is still running. `commitPlacements` holds this
+// suspension for the duration and takes a single refetch at the end.
+//
+// Counted rather than boolean so nested/overlapping batches can't have the inner
+// one release the outer one's suspension.
+let invalidationSuspended = 0
+let invalidationPending = false
+
+function invalidatePatchTags() {
+  store.dispatch(restApi.util.invalidateTags(['Patch', 'UniverseConfig']))
+}
+
+/**
+ * Suspends WebSocket-driven patch invalidation until the returned release is
+ * called.
+ *
+ * The release **never dispatches** — it reports whether a broadcast arrived while
+ * suspended and leaves the invalidation to the caller. That's deliberate: the
+ * caller is going to invalidate anyway once its batch finishes, and having both
+ * fire produced two full list refetches per bulk operation instead of one.
+ * Ownership sits with whoever knows the batch is done.
+ */
+export function suspendPatchInvalidation(): () => boolean {
+  invalidationSuspended++
+  let released = false
+  return () => {
+    if (released) return false
+    released = true
+    invalidationSuspended--
+    if (invalidationSuspended > 0) return false
+    const wasPending = invalidationPending
+    invalidationPending = false
+    return wasPending
+  }
+}
+
 // Subscribe to WebSocket patch changes
 lightingApi.patches.subscribe(() => {
-  store.dispatch(restApi.util.invalidateTags(['Patch', 'UniverseConfig']))
+  if (invalidationSuspended > 0) {
+    invalidationPending = true
+    return
+  }
+  invalidatePatchTags()
 })
 
 export const patchesApi = restApi.injectEndpoints({
@@ -42,6 +108,27 @@ export const patchesApi = restApi.injectEndpoints({
         body,
       }),
       invalidatesTags: ['Patch', 'Fixture'],
+    }),
+
+    // Bulk placement — one request, one transaction, one broadcast.
+    //
+    // Deliberately declares NO `invalidatesTags`: `commitPlacements` owns the
+    // single invalidation that follows the batch. Only ever call it through
+    // `commitPlacements` — calling it directly leaves the cache un-reconciled.
+    //
+    // Every key in every entry must be inside the backend's placement-only set
+    // (METADATA_ONLY_PUT_KEYS in projectPatches.kt); the route rejects anything
+    // else with a 400, which is what structurally guarantees it can skip the
+    // fixture-registry rebuild.
+    bulkPlacements: build.mutation<
+      BulkPlacementResponse,
+      { projectId: number; updates: BulkPlacementEntry[]; atomic?: boolean }
+    >({
+      query: ({ projectId, updates, atomic = true }) => ({
+        url: `project/${projectId}/patches/placements`,
+        method: 'PUT',
+        body: { updates, atomic },
+      }),
     }),
 
     // Delete a patch

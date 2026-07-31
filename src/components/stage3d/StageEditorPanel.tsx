@@ -46,6 +46,7 @@ export function StageEditorPanel({
       </button>
       {target.kind === 'patch' && (
         <EditPatchForm
+          autoFocusName={false}
           ref={patchRef}
           key={`patch-${target.patch.id}`}
           patch={target.patch}
@@ -56,6 +57,7 @@ export function StageEditorPanel({
       )}
       {target.kind === 'region' && (
         <EditStageRegionForm
+          autoFocusName={false}
           ref={regionRef}
           key={`region-${target.region?.uuid ?? 'new'}`}
           region={target.region}
@@ -65,6 +67,7 @@ export function StageEditorPanel({
       )}
       {target.kind === 'rigging' && (
         <EditRiggingForm
+          autoFocusName={false}
           ref={riggingRef}
           key={`rigging-${target.rigging?.uuid ?? 'new'}`}
           rigging={target.rigging}
