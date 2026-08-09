@@ -152,6 +152,7 @@ export type PropertyCategory =
   | 'gobo'
   | 'gobo_rotation'
   | 'prism'
+  | 'prism_rotation'
   | 'focus'
   | 'zoom'
   | 'iris'
@@ -216,10 +217,15 @@ export type SettingOption = {
   level: number
   displayName: string
   colourPreview?: string
-  /** Renderer gobo layer for this wheel position; 0 = open. Optional — when the
-   *  backend doesn't declare one, the stage view falls back to the option's
-   *  index on the wheel (see resolveGoboSlot in stage3d/beamOptics.ts). */
-  goboSlot?: number
+  /** Gobo pattern name at this wheel position (the backend GoboPattern
+   *  vocabulary, lowercase). Absent on open/scroll positions and on wheels
+   *  nobody has annotated — the stage view then falls back to the option's
+   *  index (see resolveGoboSlot in stage3d/beamOptics.ts); an unknown name
+   *  renders as open rather than as a wrong pattern. */
+  gobo?: string
+  /** Prism facet count at this wheel position; absent when the prism is out
+   *  (or the wheel is unannotated — see resolvePrismFacets). */
+  prismFacets?: number
 }
 
 export type SettingPropertyDescriptor = {
@@ -409,16 +415,21 @@ function findWheel(
 }
 
 /**
- * The gobo wheel. Returns the **last** match, not the first: the Robe ColorSpot
- * 575 exposes a static wheel and a rotating wheel in that order, and the
- * rotating one is the interesting one to draw (it's what gobo rotation acts on).
+ * Every gobo wheel, in descriptor order. The Robe ColorSpot 575 exposes two
+ * (static + rotating), and the backend emits descriptors in Kotlin reflection
+ * order — alphabetical in practice, guaranteed nothing — so no single pick is
+ * principled. The stage view renders the first wheel whose *current DMX value*
+ * selects a pattern, so engaging either wheel shows its gobo regardless of
+ * descriptor order.
  */
-export function findGoboProperty(
+export function findGoboProperties(
   properties: PropertyDescriptor[] | undefined,
-): SliderPropertyDescriptor | SettingPropertyDescriptor | undefined {
-  return properties?.findLast(
-    (p): p is SliderPropertyDescriptor | SettingPropertyDescriptor =>
-      (p.type === 'slider' || p.type === 'setting') && p.category === 'gobo',
+): Array<SliderPropertyDescriptor | SettingPropertyDescriptor> {
+  return (
+    properties?.filter(
+      (p): p is SliderPropertyDescriptor | SettingPropertyDescriptor =>
+        (p.type === 'slider' || p.type === 'setting') && p.category === 'gobo',
+    ) ?? []
   )
 }
 
@@ -428,6 +439,10 @@ export function findGoboRotationProperty(properties: PropertyDescriptor[] | unde
 
 export function findPrismProperty(properties: PropertyDescriptor[] | undefined) {
   return findWheel(properties, 'prism')
+}
+
+export function findPrismRotationProperty(properties: PropertyDescriptor[] | undefined) {
+  return findWheel(properties, 'prism_rotation')
 }
 
 export function findLedMacroProperty(properties: PropertyDescriptor[] | undefined) {

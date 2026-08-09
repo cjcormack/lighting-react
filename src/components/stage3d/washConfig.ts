@@ -15,3 +15,38 @@ export const WASH_ANGLE_DEG = 90
 /** Per-pixel wash pool opacity 0..1 (additive). Low so a bar's overlapping
  *  pixels blend as colour rather than blowing out to white. */
 export const WASH_OPACITY = 0.3
+
+// — focal model ————————————————————————————————————————————————————
+// Focus maps the fixture's focus channel to a focal *distance* along the
+// throw; pattern blur and rim softness both grow with how far the receiving
+// surface sits from that plane (see resolveFocusDistance in beamOptics).
+
+/** Mip LOD added per metre of defocus — higher = blurrier faster. */
+export const FOCUS_LOD_K = 1.2
+
+/** LOD ceiling for defocus blur (128px atlas has 8 mip levels; 6 is mush). */
+export const FOCUS_LOD_MAX = 6
+
+/** Defocus distance (m) over which the pool rim fades from crisp to the
+ *  original soft falloff. */
+export const EDGE_SOFT_RANGE_M = 1.5
+
+// — volumetric beam ————————————————————————————————————————————————
+// A fixture with a gobo in the beam renders a raymarched volume instead of
+// the silhouette shell, so the pattern breaks the beam into sub-beams
+// through the haze.
+
+/** March samples per fragment at dpr ≤ 1.5; high-dpr displays drop a third
+ *  (fill quadruples at dpr 2, so trade depth for area). Compile-time max 16. */
+export const VOLUMETRIC_STEPS = 12
+
+/** Overall gain on the marched beam (per-metre density scale), tuned so
+ *  engaging a gobo reads as "a pattern appears in the beam", not a brightness
+ *  jump against the shell: side-on through a ~1 m chord the shell's two
+ *  silhouette faces sum to roughly 0.6× opacity, so the density must sit near
+ *  that per metre after the radial/axial/gobo terms (~0.1 mean) eat into it. */
+export const VOL_GAIN = 6.0
+
+/** Base mip level for in-air gobo samples — a touch of blur reads as
+ *  scattering and hides banding; defocus LOD adds on top. */
+export const VOL_LOD_BASE = 1.0

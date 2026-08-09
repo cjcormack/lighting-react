@@ -14,7 +14,7 @@ import type { SnapGrid } from '../stage2d/useSnapGrid'
 import { notifyTransformDragStart } from './useBodyDrag'
 import { DEFAULT_VIEW_FLAGS, type StageViewFlags } from './useStageView'
 import { useStageData } from './useStageData'
-import { StageEmitters, computeRegionGeometry } from './StageEmitters'
+import { MAX_BEAM_REGIONS, StageEmitters, computeRegionGeometry } from './StageEmitters'
 import type { RiggingDto } from '../../api/riggingApi'
 import type { FixturePatch } from '../../api/patchApi'
 import type { StageRegionDto } from '../../api/stageRegionApi'
@@ -109,10 +109,24 @@ export function Stage3D({
 
   const cameraDistance = Math.max(stageW, stageD) * 1.4
   const gridSize = Math.max(stageW, stageD) * 1.6
+  // Stable identity: StageEmitters rebuilds its instance buffers when this
+  // changes, so it must not be a fresh object every render.
+  const stageDims = useMemo(
+    () => ({ width: stageW, height: stageH, depth: stageD }),
+    [stageW, stageH, stageD],
+  )
   const safeRiggings = riggings ?? EMPTY_RIGGINGS
   const safeRegions = regions ?? EMPTY_REGIONS
   const safePatches = patches ?? EMPTY_PATCHES
-  const regionGeometry = useMemo(() => computeRegionGeometry(safeRegions), [safeRegions])
+  // Clamped to the emitters' region capacity HERE, not just inside
+  // StageEmitters: the per-fixture culls index visibility buffers by position
+  // in this array, so an unclamped list past MAX_BEAM_REGIONS would write into
+  // the next lobe's block. Regions beyond the cap still render as boxes; they
+  // just don't receive light or cast beam shadows.
+  const regionGeometry = useMemo(
+    () => computeRegionGeometry(safeRegions).slice(0, MAX_BEAM_REGIONS),
+    [safeRegions],
+  )
 
   // `stageHidden` patches are omitted from the scene entirely — they're real
   // DMX but not stage objects (a dimmer on hard power). The exception is the
@@ -235,6 +249,7 @@ export function Stage3D({
         <ambientLight intensity={0.5} />
         <gridHelper args={[gridSize, 20, '#4a5a6a', '#2a3540']} />
         <StageFloor width={stageW} depth={stageD} />
+        <StageBackWall width={stageW} depth={stageD} height={stageH} />
         <StageBoxOutline width={stageW} depth={stageD} height={stageH} />
         <OriginMarkers depth={stageD} />
         {placing && onPlacementClick && (
@@ -267,7 +282,11 @@ export function Stage3D({
           />
         )}
         {view.fixtures && (view.beamCones ? (
-          <StageEmitters fixtureCount={visiblePatches.length} regionGeometry={regionGeometry}>
+          <StageEmitters
+            fixtureCount={visiblePatches.length}
+            regionGeometry={regionGeometry}
+            stage={stageDims}
+          >
             {fixtureNodes}
           </StageEmitters>
         ) : fixtureNodes)}
@@ -636,6 +655,18 @@ function StageFloor({ width, depth }: { width: number; depth: number }) {
     >
       <planeGeometry args={[width, depth]} />
       <meshBasicMaterial color="#1c2330" transparent opacity={0.55} />
+    </mesh>
+  )
+}
+
+// The upstage back wall — a real surface, styled like StageFloor, so wall
+// cookies (gobos on the cyc) land on something visible. Placed a hair behind
+// the emitters' wall plane at z = -depth so the cookie quad draws in front.
+function StageBackWall({ width, depth, height }: { width: number; depth: number; height: number }) {
+  return (
+    <mesh position={[0, height / 2, -depth - 0.002]} raycast={NO_RAYCAST}>
+      <planeGeometry args={[width, height]} />
+      <meshBasicMaterial color="#161c26" transparent opacity={0.55} />
     </mesh>
   )
 }

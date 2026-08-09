@@ -3,6 +3,8 @@ import type {
   SettingPropertyDescriptor,
   SliderPropertyDescriptor,
 } from '../../store/fixtures'
+import { MAX_PRISM_LOBES } from './emitterLayout'
+import { GOBO_SLOT_COUNT, goboLayerFor } from './goboPatterns'
 
 /**
  * Pure decoding of the beam-shaping DMX channels into renderer inputs.
@@ -13,8 +15,7 @@ import type {
  * reproducible, and makes the whole module unit-testable without a renderer.
  */
 
-/** Layers in the gobo array texture. Layer 0 is "open" (no pattern). */
-export const GOBO_SLOT_COUNT = 8
+export { GOBO_SLOT_COUNT }
 
 const TAU = Math.PI * 2
 
@@ -85,16 +86,30 @@ function optionsOf(prop: ByteDescriptor): readonly SettingOption[] {
   return prop.type === 'setting' ? prop.options : []
 }
 
+// Module-level predicates: these run once per fixture per frame inside
+// useFrame, and an inline arrow there would allocate a closure per call —
+// the exact class of churn this module's header rules out.
+function hasGoboAnnotation(o: SettingOption): boolean {
+  return o.gobo != null
+}
+
+function hasPrismAnnotation(o: SettingOption): boolean {
+  return o.prismFacets != null
+}
+
 /**
  * Gobo slot for the current wheel position: 0 = open, 1..GOBO_SLOT_COUNT-1 = a
  * pattern layer.
  *
- * Prefers a `goboSlot` declared on the option; otherwise falls back to the
- * option's index on the wheel. Index rather than a name regex because fixture
- * enums are wildly inconsistent — the Fusion names them GOBO_1..GOBO_5 but the
- * Martin MAC 250 uses descriptive names (FIBROID, DEC_BEAM, CONE_SHAKE) with no
- * numbers at all. Index works for both, and the exact pattern a slot maps to is
- * arbitrary anyway: this is a visual approximation, not a gobo library.
+ * Prefers the pattern *name* the backend declares on the option, resolved
+ * through the registry in `goboPatterns.ts`. On a wheel where any option is
+ * named, a nameless option means "deliberately open" (scroll/rainbow bands) and
+ * an unknown name means "vocabulary newer than this build" — both render open
+ * rather than guessing. Only a wholly unannotated wheel falls back to the
+ * option's index, because fixture enums are wildly inconsistent — the Fusion
+ * names them GOBO_1..GOBO_5 but the Martin MAC 250 uses descriptive names
+ * (FIBROID, DEC_BEAM, CONE_SHAKE) with no numbers at all. Index works for both,
+ * and which pattern an unannotated slot maps to is arbitrary anyway.
  */
 export function resolveGoboSlot(prop: ByteDescriptor | undefined, level: number): number {
   if (!prop) return 0
@@ -107,9 +122,9 @@ export function resolveGoboSlot(prop: ByteDescriptor | undefined, level: number)
   const { index } = settingBand(options, level)
   if (index < 0) return 0
   const option = options[index]
-  if (option.goboSlot != null) {
-    return Math.max(0, Math.min(GOBO_SLOT_COUNT - 1, option.goboSlot))
-  }
+  const named = goboLayerFor(option.gobo)
+  if (named != null) return named
+  if (options.some(hasGoboAnnotation)) return 0
   if (isNoOpOption(option.name)) return 0
   return ((index - 1 + GOBO_SLOT_COUNT - 1) % (GOBO_SLOT_COUNT - 1)) + 1
 }
@@ -128,18 +143,13 @@ function spinFromSlider(level: number): number {
 }
 
 /**
- * Signed gobo rotation speed in revolutions per second. Positive is forward.
- *
- * For a setting-backed channel the *band* names the direction and speed class
- * and the position within the band interpolates. Note the Fusion orders its
- * bands fast-before-slow (FORWARD_ROTATION_FAST at 10, FORWARD_ROTATION_SLOW at
- * 129), so band identity has to come from the name, not from its position.
+ * Unit-scale (0..1, signed) spin decoded from a setting channel's bands. The
+ * *band* names the direction and speed class and the position within the band
+ * interpolates. Note the Fusion orders its bands fast-before-slow
+ * (FORWARD_ROTATION_FAST at 10, FORWARD_ROTATION_SLOW at 129), so band
+ * identity has to come from the name, not from its position.
  */
-export function resolveGoboSpin(prop: ByteDescriptor | undefined, level: number): number {
-  if (!prop) return 0
-  const options = optionsOf(prop)
-  if (options.length === 0) return spinFromSlider(level)
-
+function spinFromSettingBands(options: readonly SettingOption[], level: number): number {
   const { index } = settingBand(options, level)
   if (index < 0) return 0
   const name = normaliseOptionName(options[index].name ?? '')
@@ -152,19 +162,102 @@ export function resolveGoboSpin(prop: ByteDescriptor | undefined, level: number)
   // speed spans the whole range.
   const t = bandFraction(options, level)
   const base = slow ? 0.15 + 0.25 * t : fast ? 0.5 + 0.5 * t : 0.2 + 0.8 * t
-  return (reverse ? -1 : 1) * base * MAX_SPIN_REV_PER_SEC
+  return (reverse ? -1 : 1) * base
 }
 
-/** Prism facet count: 0 = prism out. Only 3-facet prisms exist in the library. */
+/** Signed gobo rotation speed in revolutions per second. Positive is forward. */
+export function resolveGoboSpin(prop: ByteDescriptor | undefined, level: number): number {
+  if (!prop) return 0
+  const options = optionsOf(prop)
+  if (options.length === 0) return spinFromSlider(level)
+  return spinFromSettingBands(options, level) * MAX_SPIN_REV_PER_SEC
+}
+
+/**
+ * Default prism facet count when a fixture predates the metadata: 0 = prism
+ * out. Every annotated prism in the library is 3-facet, so the legacy fallback
+ * matches the metadata for all known fixtures.
+ */
 export const PRISM_FACETS = 3
 
+/**
+ * Facet count of the prism currently in the beam; 0 = prism out. Clamped to
+ * `MAX_PRISM_LOBES` — the renderer allocates exactly that many lobes per
+ * fixture, so a larger return value would index into the next slot's block.
+ *
+ * Prefers `prismFacets` declared on the option. On an annotated wheel a null
+ * option means "prism out" (the OFF bands); only a wholly unannotated wheel
+ * falls back to the no-op-name heuristic with the default facet count.
+ */
 export function resolvePrismFacets(prop: ByteDescriptor | undefined, level: number): number {
   if (!prop) return 0
   const options = optionsOf(prop)
   if (options.length === 0) return level >= 8 ? PRISM_FACETS : 0
   const { index } = settingBand(options, level)
-  if (index < 0 || isNoOpOption(options[index].name)) return 0
+  if (index < 0) return 0
+  const option = options[index]
+  if (option.prismFacets != null) {
+    return Math.max(0, Math.min(MAX_PRISM_LOBES, option.prismFacets))
+  }
+  if (options.some(hasPrismAnnotation)) return 0
+  if (isNoOpOption(option.name)) return 0
   return PRISM_FACETS
+}
+
+// Prisms visibly rotate slower than gobo wheels; a full-speed prism at gobo
+// speed reads as a blur rather than three orbiting images.
+const MAX_PRISM_REV_PER_SEC = 0.8
+
+/**
+ * The Robe ColorSpot 575's prism-rotation slider curve, documented in the
+ * personality: 0 no rotation, 1–127 CW fast→slow, 128–129 stop, 130–255 CCW
+ * slow→fast. Note both halves run opposite ways — this is NOT the gobo-spin
+ * slider convention (slow→fast in both directions). The Robe is the only
+ * slider-backed prism rotation in the library, so this "approximation" is
+ * currently exact; for anything else it's the documented best guess.
+ */
+export function prismSpinFromSlider(level: number): number {
+  if (level <= 0) return 0
+  if (level < 128) return MAX_PRISM_REV_PER_SEC * (1 - (level - 1) / 126)
+  if (level <= 129) return 0
+  return -MAX_PRISM_REV_PER_SEC * ((level - 130) / 125)
+}
+
+/**
+ * Signed prism rotation in revolutions per second; positive is CW.
+ *
+ * Prefers a dedicated `prism_rotation` channel: setting-backed decodes by band
+ * name exactly like gobo spin (the hook for per-fixture curves), slider-backed
+ * uses the Robe curve. With no dedicated channel, falls back to rotation bands
+ * folded into the prism wheel itself (MAC 250: ROT_CCW / NO_ROT / ROT_CW mixed
+ * in with PRISM_OFF and MACRO_* bands — only the explicit ROT bands spin).
+ */
+export function resolvePrismSpin(
+  rotProp: ByteDescriptor | undefined,
+  rotLevel: number,
+  prismProp: ByteDescriptor | undefined,
+  prismLevel: number,
+): number {
+  if (rotProp) {
+    const options = optionsOf(rotProp)
+    if (options.length === 0) return prismSpinFromSlider(rotLevel)
+    return spinFromSettingBands(options, rotLevel) * MAX_PRISM_REV_PER_SEC
+  }
+
+  if (!prismProp) return 0
+  const options = optionsOf(prismProp)
+  if (options.length === 0) return 0
+  const { index } = settingBand(options, prismLevel)
+  if (index < 0) return 0
+  const raw = options[index].name ?? ''
+  const name = normaliseOptionName(raw)
+  // Macro bands do rotate on the real fixture, but each macro is a different
+  // canned program; without per-macro data, a spinning guess looks worse than
+  // a static split.
+  if (isNoOpOption(raw) || !name.includes('ROT') || name.includes('MACRO')) return 0
+  const reverse = name.includes('CCW') || name.includes('REVERSE')
+  const t = bandFraction(options, prismLevel)
+  return (reverse ? -1 : 1) * MAX_PRISM_REV_PER_SEC * (0.2 + 0.8 * t)
 }
 
 /**
@@ -179,6 +272,28 @@ export function resolveFocusParam(
   const span = prop.max - prop.min
   if (span <= 0) return null
   return Math.max(0, Math.min(1, (level - prop.min) / span))
+}
+
+/** "Always in focus" sentinel — a fixture with no focus channel renders with
+ *  zero defocus everywhere, which is byte-identical to the pre-focal look. */
+export const FOCUS_ALWAYS_SHARP = -1
+
+// Focal-plane curve endpoints as fractions of the beam length. Real fixtures
+// rack from a couple of metres to the full throw, with most of the *useful*
+// travel at distance — the quadratic gives finer control where the pool
+// actually lives.
+export const FOCUS_NEAR_FRAC = 0.15
+
+/**
+ * Focal-plane distance (metres along the throw) for a focus channel value, or
+ * [FOCUS_ALWAYS_SHARP] when the fixture has no focus channel. The pool and
+ * volume shaders blur the gobo and soften the rim by how far a surface or
+ * sample sits from this plane.
+ */
+export function resolveFocusDistance(focusParam: number | null, beamLength: number): number {
+  if (focusParam == null) return FOCUS_ALWAYS_SHARP
+  const p = Math.max(0, Math.min(1, focusParam))
+  return beamLength * (FOCUS_NEAR_FRAC + (1 - FOCUS_NEAR_FRAC) * p * p)
 }
 
 /** Macro program index; 0 = no macro running. */

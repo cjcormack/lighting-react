@@ -32,9 +32,10 @@ import {
   findTiltFineProperty,
   findFocusProperty,
   findZoomProperty,
-  findGoboProperty,
+  findGoboProperties,
   findGoboRotationProperty,
   findPrismProperty,
+  findPrismRotationProperty,
   findLedMacroProperty,
   findMovementMacroProperty,
   resolveFixtureKind,
@@ -64,11 +65,13 @@ import {
   evalLedMacro,
   evalMovementMacro,
   makeBeamGeom,
+  resolveFocusDistance,
   resolveFocusParam,
   resolveGoboSlot,
   resolveGoboSpin,
   resolveMacroIndex,
   resolvePrismFacets,
+  resolvePrismSpin,
   type BeamGeom,
   type ByteDescriptor,
   type MacroColour,
@@ -111,19 +114,16 @@ const SCRATCH_HSL = { h: 0, s: 0, l: 0 }
 const LED_MACRO_MIN_SATURATION = 0.8
 const TAU = Math.PI * 2
 
-// Prism approximation: the air column widens and dims rather than splitting into
-// separate cones, which would need emitter capacity the pool doesn't have.
-const PRISM_SPREAD = 2.2
-const PRISM_CONE_DIM = 0.6
-// Lobe centres sit this many beam half-angles off axis — just past 1 so they
-// separate visibly while still overlapping, which is what a real 3-facet prism
-// looks like on the floor.
+// A prism shows N displaced copies of the *whole* beam image — gobo included —
+// so each facet gets its own full lobe (cone/volume + every pool) from the
+// slot's lobe block. Lobe centres sit this many beam half-angles off axis:
+// just past 1 so they separate visibly while still overlapping, which is what
+// a real 3-facet prism looks like.
 const PRISM_SPLAY = 1.35
-// Lobe and centre shares. They sum to roughly 1 so total floor flux is about
-// what the un-prismed beam put down — the prism spreads light, it doesn't make
-// any. The centre keeps a little extra because all three lobes overlap it.
-const PRISM_LOBE_DIM = 0.28
-const PRISM_CENTRE_DIM = 0.3
+// A prism redistributes flux, it doesn't make any: each lobe carries 1/N of
+// the beam, with a little back because the lobes overlap near the axis and
+// additive blending under-reads the overlap region otherwise.
+const PRISM_OVERLAP_GAIN = 1.1
 const SCRATCH_PRISM_X = new Vector3()
 const SCRATCH_PRISM_Y = new Vector3()
 const SCRATCH_LOBE_DIR = new Vector3()
@@ -228,12 +228,16 @@ export function FixtureModel({
   // categories, which is what makes the optics below degrade to the old look.
   const focusProp = useMemo(() => findFocusProperty(fixture?.properties), [fixture?.properties])
   const zoomProp = useMemo(() => findZoomProperty(fixture?.properties), [fixture?.properties])
-  const goboProp = useMemo(() => findGoboProperty(fixture?.properties), [fixture?.properties])
+  const goboProps = useMemo(() => findGoboProperties(fixture?.properties), [fixture?.properties])
   const goboRotProp = useMemo(
     () => findGoboRotationProperty(fixture?.properties),
     [fixture?.properties],
   )
   const prismProp = useMemo(() => findPrismProperty(fixture?.properties), [fixture?.properties])
+  const prismRotProp = useMemo(
+    () => findPrismRotationProperty(fixture?.properties),
+    [fixture?.properties],
+  )
   const ledMacroProp = useMemo(
     () => findLedMacroProperty(fixture?.properties),
     [fixture?.properties],
@@ -352,9 +356,11 @@ export function FixtureModel({
     baseBeamDeg,
     focusProp,
     zoomProp,
-    goboProp,
+    goboProp: goboProps[0],
+    goboProp2: goboProps[1],
     goboRotProp,
     prismProp,
+    prismRotProp,
     ledMacroProp,
     moveMacroProp,
     groupRef,
@@ -462,8 +468,12 @@ interface BeamDirectorOpts {
   focusProp: SliderPropertyDescriptor | undefined
   zoomProp: SliderPropertyDescriptor | undefined
   goboProp: ByteDescriptor | undefined
+  /** Second gobo wheel where one exists (Robe: static + rotating). Drawn when
+   *  the first wheel sits at open — see the resolve fallback in the director. */
+  goboProp2: ByteDescriptor | undefined
   goboRotProp: ByteDescriptor | undefined
   prismProp: ByteDescriptor | undefined
+  prismRotProp: ByteDescriptor | undefined
   ledMacroProp: ByteDescriptor | undefined
   moveMacroProp: ByteDescriptor | undefined
   groupRef: React.RefObject<Group | null>
@@ -512,8 +522,10 @@ function useBeamDirector({
   focusProp,
   zoomProp,
   goboProp,
+  goboProp2,
   goboRotProp,
   prismProp,
+  prismRotProp,
   ledMacroProp,
   moveMacroProp,
   groupRef,
@@ -540,8 +552,10 @@ function useBeamDirector({
       focus: focusProp ? channelKey(focusProp.channel) : null,
       zoom: zoomProp ? channelKey(zoomProp.channel) : null,
       gobo: goboProp ? channelKey(goboProp.channel) : null,
+      gobo2: goboProp2 ? channelKey(goboProp2.channel) : null,
       goboRot: goboRotProp ? channelKey(goboRotProp.channel) : null,
       prism: prismProp ? channelKey(prismProp.channel) : null,
+      prismRot: prismRotProp ? channelKey(prismRotProp.channel) : null,
       ledMacro: ledMacroProp ? channelKey(ledMacroProp.channel) : null,
       moveMacro: moveMacroProp ? channelKey(moveMacroProp.channel) : null,
     }),
@@ -553,8 +567,10 @@ function useBeamDirector({
       focusProp,
       zoomProp,
       goboProp,
+      goboProp2,
       goboRotProp,
       prismProp,
+      prismRotProp,
       ledMacroProp,
       moveMacroProp,
     ],
@@ -565,12 +581,15 @@ function useBeamDirector({
   // one float compare a frame. Per-fixture, not module-level: several readers
   // touch it within the same frame.
   const geomRef = useRef<BeamGeom>(makeBeamGeom())
-  // Gobo rotation is an integrated angle, so it has to persist across frames.
+  // Gobo and prism rotation are integrated angles, so they persist across
+  // frames. The prism angle spins the lobe *arrangement*; the gobo angle spins
+  // the image inside each lobe — the two compose independently, as on the
+  // real fixture.
   const goboAngleRef = useRef(0)
-  // Whether this slot currently owns its wash block for prism lobes, so it can
-  // be vacated exactly once when the prism swings out.
-  const prismLitRef = useRef(false)
-  const lobeGeomRef = useRef<WashGeom>({ cosHalf: 1, cosCull: 1, sinCull: 0, floorSide: 0 })
+  const prismAngleRef = useRef(0)
+  // Lobes written last frame, so a shrinking facet count parks the excess
+  // exactly once instead of every frame.
+  const litLobesRef = useRef(1)
 
   useFrame((state, delta) => {
     const elapsed = state.clock.elapsedTime
@@ -644,15 +663,10 @@ function useBeamDirector({
     }
 
     // Cull on the *base* opacity, not the macro-scaled one, so a pulsing macro
-    // doesn't vacate and re-take the emitter slot every cycle.
+    // doesn't vacate and re-take the emitter slot every cycle. hideSlot parks
+    // every lobe, so a prism split can't ghost after a blackout.
     if (colorState.poolOpacity < LIGHT_OFF_OPACITY) {
       emitters.hideSlot(slot)
-      // hideSlot covers the beam block only; the borrowed prism lobes live in
-      // the wash block and would otherwise ghost after a blackout.
-      if (prismLitRef.current) {
-        emitters.hideWashSlot(slot)
-        prismLitRef.current = false
-      }
       return
     }
 
@@ -667,17 +681,27 @@ function useBeamDirector({
       computeBeamGeom(beamDeg, BEAM_LENGTH, REGION_CULL_SLACK_RAD, geom)
     }
 
-    // Focus hardens the beam edge. A fixture with no focus channel stays at 0,
-    // which is byte-for-byte the pre-focus falloff.
+    // Focus maps to a focal-plane distance; the pool shaders derive both the
+    // pattern blur and the rim hardness from a surface's distance to it. A
+    // fixture with no focus channel gets the "always sharp" sentinel plus
+    // edge 0, which is byte-for-byte the pre-focus falloff.
     //
     // Deliberately NOT seeded from fixtureType.beamEdge: beamDefaults() marks
     // every SCANNER and PROFILE as HARD, so honouring it here would re-skin the
     // pools of fixtures nobody touched — a Source 4 in an existing show would
     // render crisper than it did yesterday with no DMX change. beamEdge is
     // documented as anticipatory; switching it on is its own decision.
-    const edge = resolveFocusParam(focusProp, readChannel(vals, beamKeys.focus)) ?? 0
+    const focusParam = resolveFocusParam(focusProp, readChannel(vals, beamKeys.focus))
+    const edge = focusParam ?? 0
+    const focusDist = resolveFocusDistance(focusParam, BEAM_LENGTH)
 
-    const goboSlot = resolveGoboSlot(goboProp, readChannel(vals, beamKeys.gobo))
+    // A fixture can carry two gobo wheels in series (Robe: static + rotating);
+    // the renderer projects one pattern, so draw whichever wheel currently
+    // selects one — descriptor order decides only the tie when both do.
+    let goboSlot = resolveGoboSlot(goboProp, readChannel(vals, beamKeys.gobo))
+    if (goboSlot === 0 && goboProp2) {
+      goboSlot = resolveGoboSlot(goboProp2, readChannel(vals, beamKeys.gobo2))
+    }
     if (goboSlot > 0) {
       const spin = resolveGoboSpin(goboRotProp, readChannel(vals, beamKeys.goboRot))
       if (spin !== 0) {
@@ -712,141 +736,207 @@ function useBeamDirector({
       (head ?? group).matrixWorld,
     )
 
-    // Cone matrix: unit cone scaled to (beamRadius, BEAM_LENGTH, beamRadius),
-    // rotated so UNIT_Y → -dir (apex back toward fixture), translated to the
-    // midpoint along the beam. Apex ends up at fixture origin in world space.
-    SCRATCH_NEG_DIR.copy(dir).multiplyScalar(-1)
-    SCRATCH_QUAT.setFromUnitVectors(UNIT_Y, SCRATCH_NEG_DIR)
-    SCRATCH_CONE_POS.set(
-      SCRATCH_ORIGIN.x + (dir.x * BEAM_LENGTH) / 2,
-      SCRATCH_ORIGIN.y + (dir.y * BEAM_LENGTH) / 2,
-      SCRATCH_ORIGIN.z + (dir.z * BEAM_LENGTH) / 2,
-    )
-    // A prism splits the beam into splayed copies. The mid-air column just widens
-    // and dims (a hollow shell has no interior to split), while the surface
-    // pools get real separated lobes — see the prism block after the cone write.
-    const prismFacets = resolvePrismFacets(prismProp, readChannel(vals, beamKeys.prism))
-    const coneRadius = prismFacets > 0 ? geom.beamRadius * PRISM_SPREAD : geom.beamRadius
-    const coneAlpha = prismFacets > 0 ? coneOpacity * PRISM_CONE_DIM : coneOpacity
-    // A prism redistributes the beam's flux, it doesn't add any. The pools are
-    // additive, so the centre pool has to give up its share to the lobes or
-    // swinging the prism in reads as a brightness jump instead of a split.
-    const centreAlpha = prismFacets > 0 ? poolOpacity * PRISM_CENTRE_DIM : poolOpacity
-
-    SCRATCH_CONE_SCALE.set(coneRadius, BEAM_LENGTH, coneRadius)
-    SCRATCH_CONE_MAT.compose(SCRATCH_CONE_POS, SCRATCH_QUAT, SCRATCH_CONE_SCALE)
-    emitters.writeConeMatrix(slot, SCRATCH_CONE_MAT)
-    emitters.writeConeAttrs(slot, SCRATCH_ORIGIN, beamColor, coneAlpha)
-
-    // The head's world X axis gives the gobo a stable cross-section frame.
+    // The head's world X axis gives the gobo a stable cross-section frame, and
+    // the prism lobes their splay basis.
     SCRATCH_RIGHT.set(1, 0, 0).transformDirection((head ?? group).matrixWorld)
-    emitters.writeBeamFx(slot, edge, goboSlot, goboAngleRef.current, SCRATCH_RIGHT)
 
-    updateFloorCookie(
-      emitters,
-      slot,
-      SCRATCH_ORIGIN,
-      dir,
-      BEAM_LENGTH,
-      geom.sinCull,
-      geom.floorSide,
-    )
-    emitters.writeFloorAttrs(
-      slot,
-      SCRATCH_ORIGIN,
-      dir,
-      beamColor,
-      centreAlpha,
-      geom.cosHalfBeam,
-    )
-
-    cullRegionCookies(
-      emitters,
-      slot,
-      SCRATCH_ORIGIN,
-      dir,
-      BEAM_LENGTH,
-      geom.cosCull,
-      geom.sinCull,
-      regionGeometry,
-    )
-    emitters.writeRegionAttrs(
-      slot,
-      SCRATCH_ORIGIN,
-      dir,
-      beamColor,
-      centreAlpha,
-      geom.cosHalfBeam,
-    )
-
-    // Prism lobes borrow this fixture's own wash-pool block. Every slot is
-    // allocated MAX_WASH_PIXELS floor + region cookies for pixel strips, and a
-    // fixture with a prism is never a strip, so those instances are otherwise
-    // idle for its whole lifetime — three splayed lobes for no new buffers and
-    // no capacity change. They use the wash material, which has no gobo path:
-    // prism and gobo can't combine, much as on the real fixture, where the
-    // prism sits after the gobo wheel.
+    // A prism shows N displaced copies of the whole beam — gobo, focus, volume
+    // and all — so each engaged facet takes one lobe of the slot's block and
+    // gets the complete write set below. Disengaged, lobe 0 is the beam.
+    // resolvePrismFacets clamps to MAX_PRISM_LOBES, so this indexes in-block.
+    const prismFacets = resolvePrismFacets(prismProp, readChannel(vals, beamKeys.prism))
     if (prismFacets > 0) {
-      // Beam-local basis, same construction as the gobo's.
+      const prismSpin = resolvePrismSpin(
+        prismRotProp,
+        readChannel(vals, beamKeys.prismRot),
+        prismProp,
+        readChannel(vals, beamKeys.prism),
+      )
+      if (prismSpin !== 0) {
+        prismAngleRef.current =
+          (prismAngleRef.current + prismSpin * TAU * Math.min(delta, 0.1)) % TAU
+      }
+      // Beam-local basis for the splay circle, same construction as the gobo's.
       SCRATCH_PRISM_X.copy(SCRATCH_RIGHT)
         .addScaledVector(dir, -SCRATCH_RIGHT.dot(dir))
         .normalize()
       SCRATCH_PRISM_Y.crossVectors(dir, SCRATCH_PRISM_X)
+    } else {
+      prismAngleRef.current = 0
+    }
 
-      const splay = MathUtils.degToRad(beamDeg / 2) * PRISM_SPLAY
-      const sinS = Math.sin(splay)
-      const cosS = Math.cos(splay)
-      const lobeGeom = lobeGeomRef.current
-      lobeGeom.cosHalf = geom.cosHalfBeam
-      lobeGeom.cosCull = geom.cosCull
-      lobeGeom.sinCull = geom.sinCull
-      lobeGeom.floorSide = geom.floorSide
-      const lobeAlpha = poolOpacity * PRISM_LOBE_DIM
+    const lobes = prismFacets > 0 ? prismFacets : 1
+    // A prism redistributes the beam's flux, it doesn't add any: each lobe
+    // carries 1/N (plus a little overlap compensation) so swinging the prism
+    // in reads as a split, not a brightness jump.
+    const lobeConeAlpha =
+      prismFacets > 0 ? (coneOpacity / prismFacets) * PRISM_OVERLAP_GAIN : coneOpacity
+    const lobePoolAlpha =
+      prismFacets > 0 ? (poolOpacity / prismFacets) * PRISM_OVERLAP_GAIN : poolOpacity
+    const splay = MathUtils.degToRad(beamDeg / 2) * PRISM_SPLAY
 
-      for (let i = 0; i < prismFacets && i < MAX_WASH_PIXELS; i++) {
-        const a = (TAU * i) / prismFacets
-        SCRATCH_LOBE_DIR.copy(dir)
-          .multiplyScalar(cosS)
-          .addScaledVector(SCRATCH_PRISM_X, Math.cos(a) * sinS)
-          .addScaledVector(SCRATCH_PRISM_Y, Math.sin(a) * sinS)
-          .normalize()
-        updateWashFloorCookie(emitters, slot, i, SCRATCH_ORIGIN, SCRATCH_LOBE_DIR, lobeGeom)
-        emitters.writeWashFloorAttrs(
-          slot,
-          i,
-          SCRATCH_ORIGIN,
-          SCRATCH_LOBE_DIR,
-          beamColor,
-          lobeAlpha,
-          lobeGeom.cosHalf,
-        )
-        writeWashRegionCookies(
+    const wall = emitters.wall
+    for (let lobe = 0; lobe < lobes; lobe++) {
+      const lobeDir =
+        prismFacets > 0
+          ? computeLobeDirection(
+              dir,
+              SCRATCH_PRISM_X,
+              SCRATCH_PRISM_Y,
+              splay,
+              prismAngleRef.current + (TAU * lobe) / prismFacets,
+              SCRATCH_LOBE_DIR,
+            )
+          : dir
+
+      // Cone matrix: unit cone scaled to (beamRadius, BEAM_LENGTH, beamRadius),
+      // rotated so UNIT_Y → -lobeDir (apex back toward fixture), translated to
+      // the midpoint along the beam. Apex ends up at the lens in world space.
+      SCRATCH_NEG_DIR.copy(lobeDir).multiplyScalar(-1)
+      SCRATCH_QUAT.setFromUnitVectors(UNIT_Y, SCRATCH_NEG_DIR)
+      SCRATCH_CONE_POS.set(
+        SCRATCH_ORIGIN.x + (lobeDir.x * BEAM_LENGTH) / 2,
+        SCRATCH_ORIGIN.y + (lobeDir.y * BEAM_LENGTH) / 2,
+        SCRATCH_ORIGIN.z + (lobeDir.z * BEAM_LENGTH) / 2,
+      )
+      SCRATCH_CONE_SCALE.set(geom.beamRadius, BEAM_LENGTH, geom.beamRadius)
+      SCRATCH_CONE_MAT.compose(SCRATCH_CONE_POS, SCRATCH_QUAT, SCRATCH_CONE_SCALE)
+      // A gobo in the beam draws the raymarched volume (the pattern must exist
+      // inside the cone); an open beam keeps the cheap silhouette shell, which
+      // is byte-identical to the pre-volumetric look.
+      emitters.writeBeamMatrix(slot, lobe, SCRATCH_CONE_MAT, goboSlot > 0)
+      emitters.writeConeAttrs(
+        slot,
+        lobe,
+        SCRATCH_ORIGIN,
+        lobeDir,
+        beamColor,
+        lobeConeAlpha,
+        geom.cosHalfBeam,
+      )
+      emitters.writeBeamFx(
+        slot,
+        lobe,
+        edge,
+        goboSlot,
+        goboAngleRef.current,
+        focusDist,
+        SCRATCH_RIGHT,
+      )
+
+      updateFloorCookie(
+        emitters,
+        slot,
+        lobe,
+        SCRATCH_ORIGIN,
+        lobeDir,
+        BEAM_LENGTH,
+        geom.sinCull,
+        geom.floorSide,
+      )
+      emitters.writeFloorAttrs(
+        slot,
+        lobe,
+        SCRATCH_ORIGIN,
+        lobeDir,
+        beamColor,
+        lobePoolAlpha,
+        geom.cosHalfBeam,
+      )
+
+      const shadowMask = cullRegionCookies(
+        emitters,
+        slot,
+        lobe,
+        SCRATCH_ORIGIN,
+        lobeDir,
+        BEAM_LENGTH,
+        geom.cosCull,
+        geom.sinCull,
+        regionGeometry,
+      )
+      emitters.writeShadowMask(slot, lobe, shadowMask)
+      emitters.writeRegionAttrs(
+        slot,
+        lobe,
+        SCRATCH_ORIGIN,
+        lobeDir,
+        beamColor,
+        lobePoolAlpha,
+        geom.cosHalfBeam,
+      )
+
+      if (wall) {
+        updateWallCookie(
           emitters,
           slot,
-          i,
+          lobe,
           SCRATCH_ORIGIN,
-          SCRATCH_LOBE_DIR,
-          regionGeometry,
+          lobeDir,
+          BEAM_LENGTH,
+          geom.sinCull,
+          geom.floorSide,
+          wall,
+        )
+        emitters.writeWallAttrs(
+          slot,
+          lobe,
+          SCRATCH_ORIGIN,
+          lobeDir,
           beamColor,
-          lobeAlpha,
-          lobeGeom,
+          lobePoolAlpha,
+          geom.cosHalfBeam,
         )
       }
-      prismLitRef.current = true
-    } else if (prismLitRef.current) {
-      // Vacate the borrowed block once, on the frame the prism swings out.
-      emitters.hideWashSlot(slot)
-      prismLitRef.current = false
     }
+
+    // Park lobes the prism no longer lights, once, on the frame it shrinks.
+    if (lobes < litLobesRef.current) {
+      emitters.hideLobes(slot, lobes)
+    }
+    litLobesRef.current = lobes
   })
+}
+
+/**
+ * Direction of prism lobe at `angle` around the splay circle: the beam axis
+ * tipped `splayRad` toward the beam-local (bx, by) basis. Pure and
+ * allocation-free (writes into `out`), like the cookie helpers.
+ */
+export function computeLobeDirection(
+  dir: Vector3,
+  bx: Vector3,
+  by: Vector3,
+  splayRad: number,
+  angle: number,
+  out: Vector3,
+): Vector3 {
+  const sinS = Math.sin(splayRad)
+  const cosS = Math.cos(splayRad)
+  return out
+    .copy(dir)
+    .multiplyScalar(cosS)
+    .addScaledVector(bx, Math.cos(angle) * sinS)
+    .addScaledVector(by, Math.sin(angle) * sinS)
+    .normalize()
 }
 
 // Resize + reposition the floor cookie to bound the cone's actual floor reach.
 // `sinCone` and `side` are precomputed against the same slacked half-angle as
 // the region cull so the horizon fade and bounding box share that padding.
 export function updateFloorCookie(
-  emitters: { writeFloorMatrix: (slot: number, visible: boolean, cx: number, cz: number, side: number) => void },
+  emitters: {
+    writeFloorMatrix: (
+      slot: number,
+      lobe: number,
+      visible: boolean,
+      cx: number,
+      cz: number,
+      side: number,
+    ) => void
+  },
   slot: number,
+  lobe: number,
   origin: Vector3,
   dir: Vector3,
   beamLength: number,
@@ -854,7 +944,7 @@ export function updateFloorCookie(
   side: number,
 ): void {
   if (dir.y >= sinCone) {
-    emitters.writeFloorMatrix(slot, false, 0, 0, 0)
+    emitters.writeFloorMatrix(slot, lobe, false, 0, 0, 0)
     return
   }
   // dir.y near zero would project the centerline to a huge distance; fall
@@ -868,45 +958,123 @@ export function updateFloorCookie(
       cz = origin.z + t * dir.z
     }
   }
-  emitters.writeFloorMatrix(slot, true, cx, cz, side)
+  emitters.writeFloorMatrix(slot, lobe, true, cx, cz, side)
 }
 
-// Toggle each region-top cookie's visibility via a conservative cone-vs-sphere
-// test. Conservative so we never pop a cookie out while the cone is still
-// touching its bounding sphere — the shader's per-fragment shadow + cosAngle
-// tests handle the exact silhouette.
-export function cullRegionCookies(
-  emitters: { writeRegionVisibility: (slot: number, regionIdx: number, visible: boolean) => void },
-  slot: number,
+// Conservative cone-vs-sphere reach test shared by the region, wash-region
+// and wall culls. Conservative so a cookie never pops out while the cone is
+// still touching its bounding sphere — the shader's per-fragment shadow +
+// cosAngle tests handle the exact silhouette.
+function coneReachesSphere(
   origin: Vector3,
   dir: Vector3,
   beamLength: number,
   cosCone: number,
   sinCone: number,
-  regions: ReadonlyArray<{ topCenter: Vector3; topBoundingRadius: number }>,
-): void {
+  center: Vector3,
+  radius: number,
+): boolean {
+  const dx = center.x - origin.x
+  const dy = center.y - origin.y
+  const dz = center.z - origin.z
+  const dist2 = dx * dx + dy * dy + dz * dz
+  const reach = beamLength + radius
+  if (dist2 > reach * reach) return false
+  if (dist2 < radius * radius) return true
+  const dist = Math.sqrt(dist2)
+  const sinAR = radius / dist
+  const cosAR = Math.sqrt(Math.max(0, 1 - sinAR * sinAR))
+  const cosBoundary = cosCone * cosAR - sinCone * sinAR
+  const cosAngle = (dir.x * dx + dir.y * dy + dir.z * dz) / dist
+  return cosAngle >= cosBoundary
+}
+
+/**
+ * Toggle each region cookie's visibility, and return the same bits as the
+ * shadow mask (bit i set = the beam can reach region i) for
+ * `EmittersHandle.writeShadowMask` — one cull pass feeds both.
+ */
+export function cullRegionCookies(
+  emitters: {
+    writeRegionVisibility: (slot: number, lobe: number, regionIdx: number, visible: boolean) => void
+  },
+  slot: number,
+  lobe: number,
+  origin: Vector3,
+  dir: Vector3,
+  beamLength: number,
+  cosCone: number,
+  sinCone: number,
+  regions: ReadonlyArray<{ cookieCenter: Vector3; cookieBoundingRadius: number }>,
+): number {
+  let mask = 0
   for (let i = 0; i < regions.length; i++) {
     const r = regions[i]
-    const dx = r.topCenter.x - origin.x
-    const dy = r.topCenter.y - origin.y
-    const dz = r.topCenter.z - origin.z
-    const dist2 = dx * dx + dy * dy + dz * dz
-    const reach = beamLength + r.topBoundingRadius
-    if (dist2 > reach * reach) {
-      emitters.writeRegionVisibility(slot, i, false)
-      continue
-    }
-    if (dist2 < r.topBoundingRadius * r.topBoundingRadius) {
-      emitters.writeRegionVisibility(slot, i, true)
-      continue
-    }
-    const dist = Math.sqrt(dist2)
-    const sinAR = r.topBoundingRadius / dist
-    const cosAR = Math.sqrt(Math.max(0, 1 - sinAR * sinAR))
-    const cosBoundary = cosCone * cosAR - sinCone * sinAR
-    const cosAngle = (dir.x * dx + dir.y * dy + dir.z * dz) / dist
-    emitters.writeRegionVisibility(slot, i, cosAngle >= cosBoundary)
+    const visible = coneReachesSphere(
+      origin,
+      dir,
+      beamLength,
+      cosCone,
+      sinCone,
+      r.cookieCenter,
+      r.cookieBoundingRadius,
+    )
+    emitters.writeRegionVisibility(slot, lobe, i, visible)
+    if (visible && i < 32) mask |= 1 << i
   }
+  return mask
+}
+
+/**
+ * Size + place the upstage wall cookie to the beam's footprint on the wall
+ * plane, clamped to the wall rectangle (a quad hanging past the wall's edge
+ * would glow in mid-air). Mirrors `updateFloorCookie`, with the extra clamp
+ * because the wall — unlike the mathematical floor plane — has edges.
+ */
+export function updateWallCookie(
+  emitters: {
+    writeWallMatrix: (
+      slot: number,
+      lobe: number,
+      visible: boolean,
+      cx: number,
+      cy: number,
+      sideX: number,
+      sideY: number,
+    ) => void
+  },
+  slot: number,
+  lobe: number,
+  origin: Vector3,
+  dir: Vector3,
+  beamLength: number,
+  sinCone: number,
+  side: number,
+  wall: { z: number; halfWidth: number; height: number },
+): void {
+  // No part of the cone points upstage, or the wall is out of reach.
+  if (dir.z >= sinCone || origin.z - wall.z > beamLength) {
+    emitters.writeWallMatrix(slot, lobe, false, 0, 0, 0, 0)
+    return
+  }
+  let cx = origin.x
+  let cy = origin.y
+  if (dir.z < -1e-3) {
+    const t = Math.min((wall.z - origin.z) / dir.z, beamLength)
+    if (t > 0) {
+      cx = origin.x + t * dir.x
+      cy = origin.y + t * dir.y
+    }
+  }
+  const x0 = Math.max(cx - side / 2, -wall.halfWidth)
+  const x1 = Math.min(cx + side / 2, wall.halfWidth)
+  const y0 = Math.max(cy - side / 2, 0)
+  const y1 = Math.min(cy + side / 2, wall.height)
+  if (x1 <= x0 || y1 <= y0) {
+    emitters.writeWallMatrix(slot, lobe, false, 0, 0, 0, 0)
+    return
+  }
+  emitters.writeWallMatrix(slot, lobe, true, (x0 + x1) / 2, (y0 + y1) / 2, x1 - x0, y1 - y0)
 }
 
 
@@ -1278,24 +1446,15 @@ function writeWashRegionCookies(
 ): void {
   for (let i = 0; i < regions.length; i++) {
     const r = regions[i]
-    const dx = r.topCenter.x - origin.x
-    const dy = r.topCenter.y - origin.y
-    const dz = r.topCenter.z - origin.z
-    const dist2 = dx * dx + dy * dy + dz * dz
-    const reach = BEAM_LENGTH + r.topBoundingRadius
-    let visible: boolean
-    if (dist2 > reach * reach) {
-      visible = false
-    } else if (dist2 < r.topBoundingRadius * r.topBoundingRadius) {
-      visible = true
-    } else {
-      const dist = Math.sqrt(dist2)
-      const sinAR = r.topBoundingRadius / dist
-      const cosAR = Math.sqrt(Math.max(0, 1 - sinAR * sinAR))
-      const cosBoundary = geom.cosCull * cosAR - geom.sinCull * sinAR
-      const cosAngle = (dir.x * dx + dir.y * dy + dir.z * dz) / dist
-      visible = cosAngle >= cosBoundary
-    }
+    const visible = coneReachesSphere(
+      origin,
+      dir,
+      BEAM_LENGTH,
+      geom.cosCull,
+      geom.sinCull,
+      r.cookieCenter,
+      r.cookieBoundingRadius,
+    )
     emitters.writeWashRegionVisibility(slot, pixelIdx, i, visible)
   }
   emitters.writeWashRegionAttrs(slot, pixelIdx, origin, dir, color, opacity, geom.cosHalf)

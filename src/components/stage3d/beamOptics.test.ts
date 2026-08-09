@@ -1,26 +1,33 @@
 import { describe, it, expect } from 'vitest'
+import { MAX_PRISM_LOBES } from './emitterLayout'
 import {
+  FOCUS_ALWAYS_SHARP,
+  FOCUS_NEAR_FRAC,
   GOBO_SLOT_COUNT,
   PRISM_FACETS,
   computeBeamGeom,
   evalLedMacro,
   evalMovementMacro,
   makeBeamGeom,
+  prismSpinFromSlider,
+  resolveFocusDistance,
   resolveFocusParam,
   resolveGoboSlot,
   resolveGoboSpin,
   resolveMacroIndex,
   resolvePrismFacets,
+  resolvePrismSpin,
   settingBand,
 } from './beamOptics'
+import { goboLayerFor } from './goboPatterns'
 import type {
   SettingOption,
   SettingPropertyDescriptor,
   SliderPropertyDescriptor,
 } from '../../store/fixtures'
 
-function opts(pairs: [string, number][]): SettingOption[] {
-  return pairs.map(([name, level]) => ({ name, level, displayName: name }))
+function opts(pairs: [string, number, Partial<SettingOption>?][]): SettingOption[] {
+  return pairs.map(([name, level, over]) => ({ name, level, displayName: name, ...over }))
 }
 
 function setting(
@@ -112,19 +119,35 @@ describe('resolveGoboSlot', () => {
     }
   })
 
-  it('prefers a declared goboSlot over the index fallback', () => {
-    const declared = setting([
-      { name: 'OPEN', level: 0, displayName: 'Open' },
-      { name: 'MYSTERY', level: 10, displayName: 'Mystery', goboSlot: 5 },
-    ])
-    expect(resolveGoboSlot(declared, 10)).toBe(5)
+  // The annotated MAC 250 wheel as the backend now serialises it.
+  const MAC_GOBO = opts([
+    ['OPEN', 0],
+    ['CONE', 10, { gobo: 'cone' }],
+    ['BAR', 20, { gobo: 'bars' }],
+    ['FIBROID', 60, { gobo: 'fibroid' }],
+    ['CONE_SHAKE', 195, { gobo: 'cone' }],
+    ['SCROLL_CW', 210],
+  ])
+
+  it('resolves a backend pattern name through the registry', () => {
+    expect(resolveGoboSlot(setting(MAC_GOBO), 10)).toBe(goboLayerFor('cone'))
+    expect(resolveGoboSlot(setting(MAC_GOBO), 60)).toBe(goboLayerFor('fibroid'))
+    // Shake variant shares the base slot's artwork.
+    expect(resolveGoboSlot(setting(MAC_GOBO), 195)).toBe(resolveGoboSlot(setting(MAC_GOBO), 10))
   })
 
-  it('clamps a declared slot into range', () => {
-    const declared = setting([
-      { name: 'X', level: 0, displayName: 'X', goboSlot: 99 },
-    ])
-    expect(resolveGoboSlot(declared, 0)).toBe(GOBO_SLOT_COUNT - 1)
+  it('renders unnamed positions on an annotated wheel as open, not index-hashed', () => {
+    // OPEN and the moving scroll band carry no pattern on purpose.
+    expect(resolveGoboSlot(setting(MAC_GOBO), 0)).toBe(0)
+    expect(resolveGoboSlot(setting(MAC_GOBO), 220)).toBe(0)
+  })
+
+  it('renders a pattern name this build does not know as open', () => {
+    const future = setting(opts([
+      ['OPEN', 0],
+      ['NEW_HOTNESS', 10, { gobo: 'hyperspace_vortex' }],
+    ]))
+    expect(resolveGoboSlot(future, 10)).toBe(0)
   })
 
   it('treats descriptive Martin-style names as ordinary positions', () => {
@@ -181,7 +204,7 @@ describe('resolveGoboSpin', () => {
 describe('resolvePrismFacets', () => {
   const fusionPrism = setting(opts([['OPEN', 0], ['PRISM', 8]]), 'prism')
 
-  it('is out at the open position and in above it', () => {
+  it('is out at the open position and in above it (legacy heuristic)', () => {
     expect(resolvePrismFacets(fusionPrism, 0)).toBe(0)
     expect(resolvePrismFacets(fusionPrism, 7)).toBe(0)
     expect(resolvePrismFacets(fusionPrism, 8)).toBe(PRISM_FACETS)
@@ -190,6 +213,90 @@ describe('resolvePrismFacets', () => {
 
   it('is out when the fixture has no prism', () => {
     expect(resolvePrismFacets(undefined, 255)).toBe(0)
+  })
+
+  // The annotated MAC 250 wheel: OFF bands carry no facets, engaged bands do.
+  const MAC_PRISM = setting(opts([
+    ['PRISM_OFF', 0],
+    ['ROT_CCW', 20, { prismFacets: 3 }],
+    ['NO_ROT', 80, { prismFacets: 3 }],
+    ['ROT_CW', 90, { prismFacets: 3 }],
+    ['PRISM_OFF_2', 150],
+    ['MACRO_1', 216, { prismFacets: 3 }],
+  ]), 'prism')
+
+  it('prefers declared facets and treats unannotated bands as prism-out', () => {
+    expect(resolvePrismFacets(MAC_PRISM, 0)).toBe(0)
+    expect(resolvePrismFacets(MAC_PRISM, 30)).toBe(3)
+    expect(resolvePrismFacets(MAC_PRISM, 85)).toBe(3)
+    // PRISM_OFF_2 has no facets on an annotated wheel: prism out, no heuristic.
+    expect(resolvePrismFacets(MAC_PRISM, 160)).toBe(0)
+    expect(resolvePrismFacets(MAC_PRISM, 220)).toBe(3)
+  })
+
+  it('clamps declared facets to the renderer lobe budget', () => {
+    const exotic = setting(opts([['MEGA', 0, { prismFacets: 12 }]]), 'prism')
+    expect(resolvePrismFacets(exotic, 0)).toBe(MAX_PRISM_LOBES)
+  })
+})
+
+describe('resolvePrismSpin', () => {
+  // The Robe curve: 0 stop, 1-127 CW fast→slow, 128-129 stop, 130-255 CCW slow→fast.
+  it('pins the Robe slider curve', () => {
+    expect(prismSpinFromSlider(0)).toBe(0)
+    expect(prismSpinFromSlider(1)).toBeGreaterThan(0)
+    expect(prismSpinFromSlider(1)).toBeGreaterThan(prismSpinFromSlider(64))
+    expect(prismSpinFromSlider(127)).toBeCloseTo(0, 5)
+    expect(prismSpinFromSlider(128)).toBe(0)
+    expect(prismSpinFromSlider(129)).toBe(0)
+    expect(prismSpinFromSlider(130)).toBeLessThanOrEqual(0)
+    expect(prismSpinFromSlider(255)).toBeLessThan(prismSpinFromSlider(180))
+  })
+
+  it('routes a slider-backed dedicated channel through the Robe curve', () => {
+    const rot = slider({ category: 'prism_rotation' })
+    expect(resolvePrismSpin(rot, 1, undefined, 0)).toBe(prismSpinFromSlider(1))
+    expect(resolvePrismSpin(rot, 200, undefined, 0)).toBeLessThan(0)
+  })
+
+  it('decodes a setting-backed dedicated channel by band name', () => {
+    const rot = setting(opts([
+      ['STOP', 0],
+      ['FORWARD_SLOW', 10],
+      ['REVERSE_FAST', 130],
+    ]), 'prism_rotation')
+    expect(resolvePrismSpin(rot, 0, undefined, 0)).toBe(0)
+    expect(resolvePrismSpin(rot, 10, undefined, 0)).toBeGreaterThan(0)
+    expect(resolvePrismSpin(rot, 200, undefined, 0)).toBeLessThan(0)
+  })
+
+  const MAC_PRISM = setting(opts([
+    ['PRISM_OFF', 0],
+    ['ROT_CCW', 20],
+    ['NO_ROT', 80],
+    ['ROT_CW', 90],
+    ['PRISM_OFF_2', 150],
+    ['MACRO_1', 216],
+  ]), 'prism')
+
+  it('falls back to rotation bands folded into the prism wheel', () => {
+    expect(resolvePrismSpin(undefined, 0, MAC_PRISM, 30)).toBeLessThan(0) // ROT_CCW
+    expect(resolvePrismSpin(undefined, 0, MAC_PRISM, 85)).toBe(0) // NO_ROT
+    expect(resolvePrismSpin(undefined, 0, MAC_PRISM, 100)).toBeGreaterThan(0) // ROT_CW
+    expect(resolvePrismSpin(undefined, 0, MAC_PRISM, 0)).toBe(0) // PRISM_OFF
+    // Macros rotate on the real fixture but each is a different canned
+    // program; a static split beats a wrong spin.
+    expect(resolvePrismSpin(undefined, 0, MAC_PRISM, 220)).toBe(0)
+  })
+
+  it('prefers the dedicated channel over folded bands', () => {
+    const rot = slider({ category: 'prism_rotation' })
+    // Dedicated says stop; folded bands would say CW.
+    expect(resolvePrismSpin(rot, 0, MAC_PRISM, 100)).toBe(0)
+  })
+
+  it('is zero with neither channel', () => {
+    expect(resolvePrismSpin(undefined, 0, undefined, 0)).toBe(0)
   })
 })
 
@@ -203,6 +310,35 @@ describe('resolveFocusParam', () => {
   it('is null without a focus channel, so the type default stands', () => {
     expect(resolveFocusParam(undefined, 128)).toBeNull()
     expect(resolveFocusParam(slider({ min: 5, max: 5 }), 5)).toBeNull()
+  })
+})
+
+describe('resolveFocusDistance', () => {
+  const LEN = 8
+
+  it('is the always-sharp sentinel without a focus channel', () => {
+    expect(resolveFocusDistance(null, LEN)).toBe(FOCUS_ALWAYS_SHARP)
+    expect(FOCUS_ALWAYS_SHARP).toBeLessThan(0)
+  })
+
+  it('pins the quadratic curve endpoints and midpoint', () => {
+    expect(resolveFocusDistance(0, LEN)).toBeCloseTo(LEN * FOCUS_NEAR_FRAC, 9)
+    expect(resolveFocusDistance(1, LEN)).toBeCloseTo(LEN, 9)
+    expect(resolveFocusDistance(0.5, LEN)).toBeCloseTo(
+      LEN * (FOCUS_NEAR_FRAC + (1 - FOCUS_NEAR_FRAC) * 0.25),
+      9,
+    )
+  })
+
+  it('grows monotonically and clamps out-of-range params', () => {
+    let prev = -Infinity
+    for (let p = 0; p <= 1; p += 0.1) {
+      const d = resolveFocusDistance(p, LEN)
+      expect(d).toBeGreaterThan(prev)
+      prev = d
+    }
+    expect(resolveFocusDistance(-0.5, LEN)).toBe(resolveFocusDistance(0, LEN))
+    expect(resolveFocusDistance(1.5, LEN)).toBe(resolveFocusDistance(1, LEN))
   })
 })
 

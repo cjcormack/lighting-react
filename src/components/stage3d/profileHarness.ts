@@ -8,7 +8,7 @@
 import type { FixturePatch } from '../../api/patchApi'
 import type { RiggingDto } from '../../api/riggingApi'
 import type { StageRegionDto } from '../../api/stageRegionApi'
-import type { Fixture, FixtureTypeInfo } from '../../store/fixtures'
+import type { Fixture, FixtureTypeInfo, PropertyDescriptor } from '../../store/fixtures'
 
 const HARNESS_TYPE_KEY = '__profileHarness_type__'
 
@@ -30,10 +30,74 @@ export interface HarnessData {
 }
 
 // Stage is W (X right) × D (Y upstage) × H (Z up) in metres.
+// Beam-shaping channels for the synthetic fixture, so the harness exercises
+// the gobo/focus/prism code paths rather than silently skipping them (every
+// findXxx returned undefined when `properties` was empty). The gobo option at
+// level 0 carries a pattern, so all 50 fixtures sample the gobo texture *at
+// rest* — the worst case for the pool shaders. The prism is out at level 0;
+// engage it while profiling by writing DMX 1/4 ≥ 8 (all fixtures share the
+// channel refs, so one write drives the whole rig).
+function makeBeamShapingProperties(): PropertyDescriptor[] {
+  const ch = (channelNo: number) => ({ universe: 1, channelNo })
+  return [
+    {
+      type: 'setting',
+      name: 'gobo',
+      displayName: 'Gobo',
+      category: 'gobo',
+      channel: ch(1),
+      options: [
+        { name: 'BREAKUP', level: 0, displayName: 'Breakup', gobo: 'breakup' },
+        { name: 'DOTS', level: 64, displayName: 'Dots', gobo: 'dots' },
+        { name: 'OPEN', level: 192, displayName: 'Open' },
+      ],
+    },
+    {
+      type: 'slider',
+      name: 'goboRotation',
+      displayName: 'Gobo rotation',
+      category: 'gobo_rotation',
+      channel: ch(2),
+      min: 0,
+      max: 255,
+    },
+    {
+      type: 'slider',
+      name: 'focus',
+      displayName: 'Focus',
+      category: 'focus',
+      channel: ch(3),
+      min: 0,
+      max: 255,
+    },
+    {
+      type: 'setting',
+      name: 'prism',
+      displayName: 'Prism',
+      category: 'prism',
+      channel: ch(4),
+      options: [
+        { name: 'OPEN', level: 0, displayName: 'Open' },
+        { name: 'PRISM', level: 8, displayName: 'Prism', prismFacets: 3 },
+      ],
+    },
+    {
+      type: 'slider',
+      name: 'prismRotation',
+      displayName: 'Prism rotation',
+      category: 'prism_rotation',
+      channel: ch(5),
+      min: 0,
+      max: 255,
+    },
+  ]
+}
+
 export function buildHarness(stageW: number, stageD: number, stageH: number): HarnessData {
   const riggings = makeRiggings(stageW, stageD, stageH)
   const regions = makeRegions(stageW, stageD)
   const patches = makePatches(stageW, stageD, stageH, riggings)
+  const beamShaping = makeBeamShapingProperties()
   const syntheticType: FixtureTypeInfo = {
     typeKey: HARNESS_TYPE_KEY,
     manufacturer: 'Harness',
@@ -42,7 +106,7 @@ export function buildHarness(stageW: number, stageD: number, stageH: number): Ha
     channelCount: 4,
     isRegistered: true,
     capabilities: [],
-    properties: [],
+    properties: beamShaping,
     elementGroupProperties: null,
     acceptsBeamAngle: true,
     acceptsGel: false,
@@ -56,7 +120,7 @@ export function buildHarness(stageW: number, stageD: number, stageH: number): Ha
     firstChannel: 1,
     channelCount: 4,
     channels: [],
-    properties: [],
+    properties: beamShaping,
     capabilities: [],
     groups: [],
     compatiblePresetIds: [],

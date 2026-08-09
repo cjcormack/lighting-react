@@ -1,11 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useRef } from 'react'
-import { useFrame } from '@react-three/fiber'
-import type { DataArrayTexture } from 'three'
+import { useFrame, useThree } from '@react-three/fiber'
 import {
-  AdditiveBlending,
+  BoxGeometry,
   Color,
   ConeGeometry,
-  DoubleSide,
   InstancedBufferAttribute,
   InstancedMesh,
   MathUtils,
@@ -19,343 +17,50 @@ import {
 import type { StageRegionDto } from '../../api/stageRegionApi'
 import { toThree } from '../../lib/stageCoords'
 import { NO_RAYCAST } from './raycast'
-import { createGoboTexture } from './goboAtlas'
-import { HAZE_LEVEL } from './washConfig'
+import { getGoboTexture } from './goboAtlas'
+import { makeConeMaterial, makePoolMaterial, makeVolumeMaterial } from './beamShaders'
+import { VOLUMETRIC_STEPS } from './washConfig'
+import {
+  COOKIE_LIFT_M,
+  MAX_BEAM_REGIONS,
+  MAX_PRISM_LOBES,
+  MAX_WASH_PIXELS,
+  beamCapacity,
+  beamInstanceIndex,
+  regionCapacity,
+  regionDivisor,
+  regionInstanceIndex,
+  washFloorCapacity,
+  washPixelIndex,
+  washRegionCapacity,
+  washRegionInstanceIndex,
+} from './emitterLayout'
 
-export const MAX_BEAM_REGIONS = 16
-export const BEAM_LENGTH = 8
-export const COOKIE_LIFT_M = 0.001
-
-// Per-fixture cap on independently-washed pixels. A strip slot owns a
-// contiguous block of this many wash-pool instances (floor + per region);
-// fixtures with fewer pixels leave the tail hidden, more pixels are clamped.
-export const MAX_WASH_PIXELS = 16
-
-const REGION_UNIFORMS_GLSL = /* glsl */ `
-  uniform int uNumRegions;
-  uniform vec3 uRegionCenter[MAX_REGIONS];
-  uniform vec3 uRegionHalf[MAX_REGIONS];
-  uniform vec2 uRegionYawCs[MAX_REGIONS];
-`
-
-const RAY_OBB_T_GLSL = /* glsl */ `
-  float rayObbT(vec3 origin, vec3 dir, vec3 center, vec3 halfExt, vec2 yawCs) {
-    vec3 rel = origin - center;
-    float c = yawCs.x; float s = yawCs.y;
-    vec3 lo = vec3(c * rel.x - s * rel.z, rel.y, s * rel.x + c * rel.z);
-    vec3 ld = vec3(c * dir.x - s * dir.z, dir.y, s * dir.x + c * dir.z);
-    vec3 invD = 1.0 / ld;
-    vec3 t1 = (-halfExt - lo) * invD;
-    vec3 t2 = ( halfExt - lo) * invD;
-    vec3 tmin = min(t1, t2);
-    vec3 tmax = max(t1, t2);
-    float tNear = max(max(tmin.x, tmin.y), tmin.z);
-    float tFar  = min(min(tmax.x, tmax.y), tmax.z);
-    if (tNear > tFar || tFar < 0.0 || tNear < 0.0) return -1.0;
-    return tNear;
-  }
-`
-
-// Hollow cone shell, additive, double-sided; alpha biased by abs(N·V) so
-// silhouette edges fade. Per-fragment ray-OBB shadow discards fragments
-// blocked by regions, which carves the same shape the floor pool projects.
-// Per-fixture origin/color/opacity arrive via instance attributes.
-const CONE_VERTEX_SHADER = /* glsl */ `
-  attribute vec3 aBeamOrigin;
-  attribute vec3 aColor;
-  attribute float aOpacity;
-  attribute vec4 aBeamFx;
-
-  varying vec3 vViewNormal;
-  varying vec3 vViewPos;
-  varying vec3 vWorldPos;
-  varying float vAlong;
-  varying vec3 vColor;
-  varying float vOpacity;
-  varying vec3 vBeamOrigin;
-  varying float vEdge;
-
-  void main() {
-    vAlong = uv.y;
-    vEdge = aBeamFx.x;
-
-    vec4 worldPos4 = modelMatrix * instanceMatrix * vec4(position, 1.0);
-    vWorldPos = worldPos4.xyz;
-    vec4 viewPos4 = viewMatrix * worldPos4;
-    vViewPos = viewPos4.xyz;
-
-    // Normal transform that tolerates non-uniform scale on the instance
-    // matrix (cone scale is (R, L, R) where L >> R for narrow beams).
-    mat3 m = mat3(instanceMatrix);
-    vec3 transformedNormal = normal / vec3(
-      dot(m[0], m[0]),
-      dot(m[1], m[1]),
-      dot(m[2], m[2])
-    );
-    transformedNormal = m * transformedNormal;
-    vViewNormal = normalize(normalMatrix * transformedNormal);
-
-    vColor = aColor;
-    vOpacity = aOpacity;
-    vBeamOrigin = aBeamOrigin;
-
-    gl_Position = projectionMatrix * viewPos4;
-  }
-`
-
-const CONE_FRAGMENT_SHADER = /* glsl */ `
-  #define MAX_REGIONS ${MAX_BEAM_REGIONS}
-  uniform float uFloorY;
-  uniform float uHaze;
-  ${REGION_UNIFORMS_GLSL}
-
-  varying vec3 vViewNormal;
-  varying vec3 vViewPos;
-  varying vec3 vWorldPos;
-  varying float vAlong;
-  varying vec3 vColor;
-  varying float vOpacity;
-  varying vec3 vBeamOrigin;
-  varying float vEdge;
-
-  ${RAY_OBB_T_GLSL}
-
-  void main() {
-    if (vWorldPos.y < uFloorY) discard;
-
-    vec3 toFrag = vWorldPos - vBeamOrigin;
-    float fragDist = length(toFrag);
-
-    if (uNumRegions > 0 && fragDist > 0.0001) {
-      vec3 rayDir = toFrag / fragDist;
-      for (int i = 0; i < MAX_REGIONS; i++) {
-        if (i >= uNumRegions) break;
-        float t = rayObbT(vBeamOrigin, rayDir, uRegionCenter[i], uRegionHalf[i], uRegionYawCs[i]);
-        if (t > 0.0 && t < fragDist - 0.01) discard;
-      }
-    }
-
-    vec3 V = normalize(-vViewPos);
-    float ndotv = abs(dot(normalize(vViewNormal), V));
-    // vEdge 0 reproduces the pre-focus curve exactly, so a fixture with no focus
-    // channel (or an older backend) renders unchanged. Sharpening the shell in
-    // step with the pool keeps a tightly-focused beam from reading as a hard
-    // floor spot inside a woolly column of air.
-    float radial = pow(ndotv, mix(0.7, 1.15, vEdge));
-    float lengthFade = mix(0.18, 0.9, vAlong);
-    // uHaze scales the mid-air beam volume (atmosphere). 1.0 preserves the
-    // pre-haze look; 0.0 leaves only the surface pools (a hazeless room).
-    float a = vOpacity * radial * lengthFade * uHaze;
-    gl_FragColor = vec4(vColor, a);
-  }
-`
-
-// Cookie quad projected onto a surface (floor or region top). Used by both
-// the floor InstancedMesh and the region-top InstancedMesh — same shader,
-// only the per-instance geometry differs (placement is in the instance
-// matrix). `aVisible < 0.5` lets the region mesh hide individual cookies
-// without rewriting their matrices each frame.
-const POOL_VERTEX_SHADER = /* glsl */ `
-  attribute vec3 aBeamOrigin;
-  attribute vec3 aBeamDir;
-  attribute vec3 aColor;
-  attribute float aOpacity;
-  attribute float aCosHalfAngle;
-  attribute float aVisible;
-  #ifdef USE_GOBO
-  attribute vec4 aBeamFx;
-  attribute vec3 aBeamRight;
-  #endif
-
-  varying vec3 vWorldPos;
-  varying vec3 vBeamOrigin;
-  varying vec3 vBeamDir;
-  varying vec3 vColor;
-  varying float vOpacity;
-  varying float vCosHalfAngle;
-  #ifdef USE_GOBO
-  varying vec4 vBeamFx;
-  varying vec3 vBeamRight;
-  #endif
-
-  void main() {
-    if (aVisible < 0.5) {
-      // Send out of clip volume; rasterizer rejects all fragments.
-      gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
-      return;
-    }
-
-    vec4 wp = modelMatrix * instanceMatrix * vec4(position, 1.0);
-    vWorldPos = wp.xyz;
-
-    vBeamOrigin = aBeamOrigin;
-    vBeamDir = aBeamDir;
-    vColor = aColor;
-    vOpacity = aOpacity;
-    vCosHalfAngle = aCosHalfAngle;
-    #ifdef USE_GOBO
-    vBeamFx = aBeamFx;
-    vBeamRight = aBeamRight;
-    #endif
-
-    gl_Position = projectionMatrix * viewMatrix * wp;
-  }
-`
-
-const POOL_FRAGMENT_SHADER = /* glsl */ `
-  #define MAX_REGIONS ${MAX_BEAM_REGIONS}
-  uniform float uMaxDist;
-  uniform float uCoreBoost;
-  ${REGION_UNIFORMS_GLSL}
-
-  varying vec3 vWorldPos;
-  varying vec3 vBeamOrigin;
-  varying vec3 vBeamDir;
-  varying vec3 vColor;
-  varying float vOpacity;
-  varying float vCosHalfAngle;
-  #ifdef USE_GOBO
-  uniform sampler2DArray uGobo;
-  varying vec4 vBeamFx;
-  varying vec3 vBeamRight;
-  #endif
-
-  ${RAY_OBB_T_GLSL}
-
-  void main() {
-    vec3 toFrag = vWorldPos - vBeamOrigin;
-    float fragDist = length(toFrag);
-    if (fragDist > uMaxDist || fragDist < 0.001) discard;
-    vec3 rayDir = toFrag / fragDist;
-
-    float cosAngle = dot(rayDir, vBeamDir);
-    if (cosAngle < vCosHalfAngle) discard;
-
-    if (uNumRegions > 0) {
-      for (int i = 0; i < MAX_REGIONS; i++) {
-        if (i >= uNumRegions) break;
-        float t = rayObbT(vBeamOrigin, rayDir, uRegionCenter[i], uRegionHalf[i], uRegionYawCs[i]);
-        if (t > 0.0 && t < fragDist - 0.01) discard;
-      }
-    }
-
-    float t = (cosAngle - vCosHalfAngle) / max(0.0001, 1.0 - vCosHalfAngle);
-    // Edge hardness from focus. 0 is the original soft falloff exactly, so a
-    // focus-less fixture is pixel-identical to before; 1 is a crisp rim, which
-    // is also what makes a gobo legible.
-    #ifdef USE_GOBO
-    float radial = mix(pow(t, 0.7), smoothstep(0.0, 0.12, t), vBeamFx.x);
-    #else
-    float radial = pow(t, 0.7);
-    #endif
-
-    #ifdef USE_GOBO
-    if (vBeamFx.y >= 0.5) {
-      // Sample the gobo in the beam's own cross-section frame rather than the
-      // cookie quad's UV: the quad is world-axis-aligned and sized to the
-      // slacked cull bound, so its UV neither rotates with pan nor keeps a
-      // stable scale. Projecting rayDir onto a basis carried with the head gives
-      // a frame that pans, tilts and keystones on an oblique hit for free.
-      // aBeamRight comes from the head's matrix — deriving a basis from the
-      // direction alone is unstable when the beam points near straight down.
-      vec3 bx = normalize(vBeamRight - vBeamDir * dot(vBeamRight, vBeamDir));
-      vec3 by = cross(vBeamDir, bx);
-      // Normalise by tan(halfAngle), not sin: dividing the perpendicular part
-      // of rayDir by its axial part already gives tan(offAxisAngle), which
-      // reaches tan(half) at the rim. Dividing by sin(half) instead would map
-      // the rim to 1/cos(half) — a 3% crop on a 30° spot but 41% on a 90° wash,
-      // so the pattern would visibly zoom as zoom widened the beam.
-      float axial = max(1e-4, cosAngle);
-      float sinHalf = sqrt(max(0.0, 1.0 - vCosHalfAngle * vCosHalfAngle));
-      float tanHalf = max(1e-4, sinHalf / max(1e-4, vCosHalfAngle));
-      vec2 g = vec2(dot(rayDir, bx), dot(rayDir, by)) / (axial * tanHalf);
-
-      float ca = cos(vBeamFx.z);
-      float sa = sin(vBeamFx.z);
-      vec2 guv = vec2(ca * g.x - sa * g.y, sa * g.x + ca * g.y) * 0.5 + 0.5;
-      radial *= texture(uGobo, vec3(guv, vBeamFx.y)).r;
-    }
-    #endif
-
-    float distFade = mix(1.0, 0.55, clamp(fragDist / uMaxDist, 0.0, 1.0));
-
-    // Core white-hot boost for a beam's hotspot. Disabled (uCoreBoost=0) for
-    // wash pools so overlapping per-pixel colours stay coloured, not white.
-    float core = pow(radial, 4.0);
-    vec3 finalColor = mix(vColor, vec3(1.0), core * uCoreBoost);
-
-    float a = vOpacity * radial * distFade;
-    gl_FragColor = vec4(finalColor, a);
-  }
-`
-
-function makeRegionUniforms() {
-  return {
-    uNumRegions: { value: 0 },
-    uRegionCenter: {
-      value: Array.from({ length: MAX_BEAM_REGIONS }, () => new Vector3()),
-    },
-    uRegionHalf: {
-      value: Array.from({ length: MAX_BEAM_REGIONS }, () => new Vector3()),
-    },
-    uRegionYawCs: {
-      value: Array.from({ length: MAX_BEAM_REGIONS }, () => new Vector2(1, 0)),
-    },
-  }
-}
-
-function makeConeMaterial(): ShaderMaterial {
-  return new ShaderMaterial({
-    uniforms: {
-      uFloorY: { value: 0.0 },
-      uHaze: { value: HAZE_LEVEL },
-      ...makeRegionUniforms(),
-    },
-    vertexShader: CONE_VERTEX_SHADER,
-    fragmentShader: CONE_FRAGMENT_SHADER,
-    transparent: true,
-    blending: AdditiveBlending,
-    depthWrite: false,
-    side: DoubleSide,
-  })
-}
-
-/**
- * `withGobo` compiles in the focus/gobo path. Off for the per-pixel wash pools:
- * a strip draws 16 pools per fixture (× regions) and can't gobo anything, so it
- * shouldn't pay for the texture fetch or the two cross products — and the
- * `#ifdef` also keeps two extra instanced attributes off that geometry.
- */
-function makePoolMaterial(withGobo: boolean, gobo?: DataArrayTexture): ShaderMaterial {
-  return new ShaderMaterial({
-    defines: withGobo ? { USE_GOBO: '' } : {},
-    uniforms: {
-      uMaxDist: { value: BEAM_LENGTH },
-      uCoreBoost: { value: 0.5 },
-      ...(withGobo ? { uGobo: { value: gobo ?? null } } : {}),
-      ...makeRegionUniforms(),
-    },
-    vertexShader: POOL_VERTEX_SHADER,
-    fragmentShader: POOL_FRAGMENT_SHADER,
-    transparent: true,
-    blending: AdditiveBlending,
-    depthWrite: false,
-  })
-}
+export {
+  BEAM_LENGTH,
+  COOKIE_LIFT_M,
+  MAX_BEAM_REGIONS,
+  MAX_PRISM_LOBES,
+  MAX_WASH_PIXELS,
+} from './emitterLayout'
 
 export interface RegionGeometry {
   uuid: string
   widthM: number
   depthM: number
+  heightM: number
   yawRad: number
   // OBB lifted to h/2 — feeds shader uRegion* uniforms for ray-OBB shadow tests.
   obbCenter: Vector3
   obbHalfX: number
   obbHalfY: number
   obbHalfZ: number
-  // Top-face centre + bounding-sphere radius — feeds the per-frame cookie cull.
-  topCenter: Vector3
-  topBoundingRadius: number
+  /** Whole-box centre + bounding-sphere radius — feeds the per-frame cookie
+   *  cull and the shadow mask. The receiver is the region's whole box (all
+   *  faces catch light), so this is the OBB centre and full diagonal, not the
+   *  old top-face-only values. */
+  cookieCenter: Vector3
+  cookieBoundingRadius: number
 }
 
 export function computeRegionGeometry(regions: StageRegionDto[]): RegionGeometry[] {
@@ -365,52 +70,53 @@ export function computeRegionGeometry(regions: StageRegionDto[]): RegionGeometry
     const h = r.heightM ?? 1
     const cz = r.centerZ ?? 0
     const obbCenter = toThree(r.centerX ?? 0, r.centerY ?? 0, cz + h / 2)
-    const topCenter = toThree(r.centerX ?? 0, r.centerY ?? 0, cz + h + COOKIE_LIFT_M)
     return {
       uuid: r.uuid,
       widthM: w,
       depthM: d,
+      heightM: h,
       yawRad: MathUtils.degToRad(r.yawDeg ?? 0),
       obbCenter,
       obbHalfX: w / 2,
       obbHalfY: h / 2,
       obbHalfZ: d / 2,
-      topCenter,
-      topBoundingRadius: Math.hypot(w / 2, d / 2),
+      cookieCenter: obbCenter,
+      cookieBoundingRadius: Math.hypot(w / 2, h / 2, d / 2),
     }
   })
 }
 
+/** Upstage wall receiver geometry, exposed to the per-fixture directors.
+ *  The wall's reach test is analytic (plane intersect + rectangle clamp in
+ *  `updateWallCookie`), so unlike regions it carries no bounding sphere. */
+export interface WallGeometry {
+  /** Wall plane z (the stage's upstage boundary). */
+  z: number
+  halfWidth: number
+  height: number
+}
+
 // Per-fixture emitter writes, called from FixtureModel's per-frame loop.
-// All writes target a slot index allocated to the fixture by the controller.
-// Buffer needsUpdate flags are marked dirty centrally by the controller's
-// own useFrame so the caller doesn't have to.
+// All writes target a (slot, lobe) allocated to the fixture by the controller:
+// lobe 0 is the primary beam, lobes 1+ exist for prism images and stay parked
+// otherwise. Buffer needsUpdate flags are marked dirty centrally by the
+// controller's own useFrame so the caller doesn't have to.
 export interface EmittersHandle {
   fixtureCount: number
   regionCount: number
-
-  writeConeMatrix(slot: number, matrix: Matrix4): void
-  writeConeAttrs(slot: number, origin: Vector3, color: Color, opacity: number): void
+  /** Null when the stage has no wall (shouldn't happen — stage dims always exist). */
+  wall: WallGeometry | null
 
   /**
-   * Beam-shaping params for a slot, applied to its cone and both pool meshes.
-   * `edge` 0..1 is focus hardness (0 = the original soft falloff, so a fixture
-   * with no focus channel is unchanged). `goboSlot` 0 = open. `goboAngle` is in
-   * radians. `right` is the head's world X axis, giving the gobo a stable
-   * cross-section frame — a basis derived from the beam direction alone degenerates
-   * when the beam points near straight down, which is most of the time.
+   * Place a (slot, lobe)'s mid-air beam. `volumetric` selects which mesh
+   * draws it — the cheap silhouette shell (open gobo) or the raymarched
+   * volume (gobo in the beam) — and parks the other, so switching is
+   * stateless for the caller.
    */
-  writeBeamFx(
+  writeBeamMatrix(slot: number, lobe: number, matrix: Matrix4, volumetric: boolean): void
+  writeConeAttrs(
     slot: number,
-    edge: number,
-    goboSlot: number,
-    goboAngle: number,
-    right: Vector3,
-  ): void
-
-  writeFloorMatrix(slot: number, visible: boolean, cx: number, cz: number, side: number): void
-  writeFloorAttrs(
-    slot: number,
+    lobe: number,
     origin: Vector3,
     dir: Vector3,
     color: Color,
@@ -418,9 +124,75 @@ export interface EmittersHandle {
     cosHalfAngle: number,
   ): void
 
-  writeRegionVisibility(slot: number, regionIdx: number, visible: boolean): void
+  /**
+   * Beam-shaping params for a (slot, lobe), applied to its cone and every pool
+   * mesh. `edge` 0..1 is focus hardness (0 = the original soft falloff, so a
+   * fixture with no focus channel is unchanged). `goboSlot` 0 = open.
+   * `goboAngle` is in radians. `focusDist` is the focal-plane distance in
+   * metres, or negative ("always sharp") when the fixture has no focus
+   * channel. `right` is the head's world X axis, giving the gobo a stable
+   * cross-section frame — a basis derived from the beam direction alone
+   * degenerates when the beam points near straight down, which is most of
+   * the time.
+   */
+  writeBeamFx(
+    slot: number,
+    lobe: number,
+    edge: number,
+    goboSlot: number,
+    goboAngle: number,
+    focusDist: number,
+    right: Vector3,
+  ): void
+
+  /**
+   * Bitmask of region indices this (slot, lobe)'s beam can reach, from the
+   * CPU cone-vs-sphere cull. The pool shaders shadow-test only masked
+   * regions, so the common case runs 0-2 ray-OBB tests instead of 16.
+   */
+  writeShadowMask(slot: number, lobe: number, mask: number): void
+
+  writeFloorMatrix(
+    slot: number,
+    lobe: number,
+    visible: boolean,
+    cx: number,
+    cz: number,
+    side: number,
+  ): void
+  writeFloorAttrs(
+    slot: number,
+    lobe: number,
+    origin: Vector3,
+    dir: Vector3,
+    color: Color,
+    opacity: number,
+    cosHalfAngle: number,
+  ): void
+
+  writeRegionVisibility(slot: number, lobe: number, regionIdx: number, visible: boolean): void
   writeRegionAttrs(
     slot: number,
+    lobe: number,
+    origin: Vector3,
+    dir: Vector3,
+    color: Color,
+    opacity: number,
+    cosHalfAngle: number,
+  ): void
+
+  writeWallMatrix(
+    slot: number,
+    lobe: number,
+    visible: boolean,
+    cx: number,
+    cy: number,
+    sideX: number,
+    sideY: number,
+  ): void
+  writeWallAttrs(
+    slot: number,
+    lobe: number,
     origin: Vector3,
     dir: Vector3,
     color: Color,
@@ -430,7 +202,7 @@ export interface EmittersHandle {
 
   // — per-pixel wash pools (strip/bar fixtures) —————————————————————
   // A strip slot owns a block of MAX_WASH_PIXELS pool instances on the floor
-  // and (× regionCount) on region tops. Each pixel is independent: its own
+  // and (× regionCount) on region boxes. Each pixel is independent: its own
   // origin, direction, colour, opacity and footprint matrix.
   writeWashFloorMatrix(
     slot: number,
@@ -465,7 +237,9 @@ export interface EmittersHandle {
     cosHalfAngle: number,
   ): void
 
-  // Zero-scale all of a slot's matrices + clear all its region visibilities.
+  /** Park every lobe ≥ fromLobe of a slot — the "prism swung out" transition. */
+  hideLobes(slot: number, fromLobe: number): void
+  // Zero-scale all of a slot's matrices + clear all its visibilities.
   // Called when a fixture is functionally off.
   hideSlot(slot: number): void
   // Same, for a strip slot's whole wash block (all MAX_WASH_PIXELS pixels).
@@ -478,23 +252,38 @@ export function useEmitters(): EmittersHandle | null {
   return useContext(EmittersContext)
 }
 
+export interface StageDims {
+  width: number
+  height: number
+  depth: number
+}
+
 interface StageEmittersProps {
   fixtureCount: number
   regionGeometry: ReadonlyArray<RegionGeometry>
+  stage: StageDims
   children: React.ReactNode
 }
 
-// Stage-level controller owning the three InstancedMesh objects (cone,
-// floor cookie, region cookie). Allocates per-instance attribute buffers
-// sized to fixtureCount × regionCount, then exposes an imperative write
-// handle so each FixtureModel can populate its slot without taking on the
-// mesh state itself.
-export function StageEmitters({ fixtureCount, regionGeometry, children }: StageEmittersProps) {
+// Stage-level controller owning the InstancedMesh objects (cone, floor
+// cookie, region cookie boxes, wall cookie, wash pools). Allocates
+// per-instance attribute buffers sized by emitterLayout, then exposes an
+// imperative write handle so each FixtureModel can populate its slot without
+// taking on the mesh state itself.
+export function StageEmitters({
+  fixtureCount,
+  regionGeometry,
+  stage,
+  children,
+}: StageEmittersProps) {
   const regionCount = Math.min(regionGeometry.length, MAX_BEAM_REGIONS)
 
   const coneMaterial = useMemo(makeConeMaterial, [])
-  const goboTexture = useMemo(createGoboTexture, [])
+  // Module-level shared texture — deterministic, expensive to bake, so a
+  // remount of the Stage view must not rebuild it (and must not dispose it).
+  const goboTexture = getGoboTexture()
   const poolMaterial = useMemo(() => makePoolMaterial(true, goboTexture), [goboTexture])
+  const volumeMaterial = useMemo(() => makeVolumeMaterial(goboTexture), [goboTexture])
   // Wash pools reuse the pool shader but drop the white hotspot boost so a bar's
   // overlapping per-pixel colours blend as colour, not white.
   const washPoolMaterial = useMemo(() => {
@@ -504,14 +293,24 @@ export function StageEmitters({ fixtureCount, regionGeometry, children }: StageE
   }, [])
   useEffect(() => () => coneMaterial.dispose(), [coneMaterial])
   useEffect(() => () => poolMaterial.dispose(), [poolMaterial])
+  useEffect(() => () => volumeMaterial.dispose(), [volumeMaterial])
   useEffect(() => () => washPoolMaterial.dispose(), [washPoolMaterial])
-  useEffect(() => () => goboTexture.dispose(), [goboTexture])
 
-  // Shared region OBB uniforms — sync into both materials whenever the
-  // region layout changes. Pre-bake yaw into a cos/sin pair so the shader
-  // skips per-fragment trig.
+  // March depth trades against fill: dpr 2 quadruples the shaded area, so
+  // drop a third of the samples there. Set once per pixel-ratio change.
+  const gl = useThree((s) => s.gl)
   useEffect(() => {
-    for (const mat of [coneMaterial, poolMaterial, washPoolMaterial]) {
+    const dpr = gl.getPixelRatio()
+    volumeMaterial.uniforms.uVolSteps.value =
+      dpr > 1.5 ? Math.max(6, VOLUMETRIC_STEPS - 4) : VOLUMETRIC_STEPS
+  }, [gl, volumeMaterial])
+
+  // Shared region OBB uniforms — sync into all materials whenever the region
+  // layout changes. Pre-bake yaw into a cos/sin pair so the shader skips
+  // per-fragment trig. The wall plane rides along: it clips beams and pools
+  // at the upstage boundary.
+  useEffect(() => {
+    for (const mat of [coneMaterial, poolMaterial, volumeMaterial, washPoolMaterial]) {
       const u = mat.uniforms
       const centers = u.uRegionCenter.value as Vector3[]
       const halves = u.uRegionHalf.value as Vector3[]
@@ -523,35 +322,59 @@ export function StageEmitters({ fixtureCount, regionGeometry, children }: StageE
         yawCs[i].set(Math.cos(-r.yawRad), Math.sin(-r.yawRad))
       }
       u.uNumRegions.value = regionCount
+      u.uWallZ.value = -stage.depth
     }
-  }, [coneMaterial, poolMaterial, washPoolMaterial, regionGeometry, regionCount])
+  }, [
+    coneMaterial,
+    poolMaterial,
+    volumeMaterial,
+    washPoolMaterial,
+    regionGeometry,
+    regionCount,
+    stage.depth,
+  ])
 
-  // Pre-allocate buffers + InstancedMesh objects sized to fixtureCount and
-  // (fixtureCount × regionCount). Rebuilds when either count changes; in
-  // practice this only happens when patches or regions are added/removed.
+  // Pre-allocate buffers + InstancedMesh objects sized by emitterLayout.
+  // Rebuilds when the counts or stage change; in practice this only happens
+  // when patches, regions or the stage size are edited.
   const built = useMemo(
     () =>
       buildEmitters(
         fixtureCount,
         regionCount,
         regionGeometry,
+        stage,
         coneMaterial,
+        volumeMaterial,
         poolMaterial,
         washPoolMaterial,
       ),
-    [fixtureCount, regionCount, regionGeometry, coneMaterial, poolMaterial, washPoolMaterial],
+    [
+      fixtureCount,
+      regionCount,
+      regionGeometry,
+      stage,
+      coneMaterial,
+      volumeMaterial,
+      poolMaterial,
+      washPoolMaterial,
+    ],
   )
 
   useEffect(
     () => () => {
       built.coneMesh.dispose()
+      built.volumeMesh.dispose()
       built.floorMesh.dispose()
       built.regionMesh.dispose()
+      built.wallMesh.dispose()
       built.washFloorMesh.dispose()
       built.washRegionMesh.dispose()
       built.coneMesh.geometry.dispose()
+      built.volumeMesh.geometry.dispose()
       built.floorMesh.geometry.dispose()
       built.regionMesh.geometry.dispose()
+      built.wallMesh.geometry.dispose()
       built.washFloorMesh.geometry.dispose()
       built.washRegionMesh.geometry.dispose()
     },
@@ -573,6 +396,16 @@ export function StageEmitters({ fixtureCount, regionGeometry, children }: StageE
     m.coneOpacity.needsUpdate = true
     m.coneFx.needsUpdate = true
 
+    m.volumeMesh.instanceMatrix.needsUpdate = true
+    m.volumeOrigin.needsUpdate = true
+    m.volumeDir.needsUpdate = true
+    m.volumeRight.needsUpdate = true
+    m.volumeColor.needsUpdate = true
+    m.volumeOpacity.needsUpdate = true
+    m.volumeCosHalfAngle.needsUpdate = true
+    m.volumeFx.needsUpdate = true
+    m.volumeMask.needsUpdate = true
+
     m.floorMesh.instanceMatrix.needsUpdate = true
     m.floorOrigin.needsUpdate = true
     m.floorDir.needsUpdate = true
@@ -581,15 +414,27 @@ export function StageEmitters({ fixtureCount, regionGeometry, children }: StageE
     m.floorCosHalfAngle.needsUpdate = true
     m.floorFx.needsUpdate = true
     m.floorRight.needsUpdate = true
+    m.floorMask.needsUpdate = true
 
     m.regionOrigin.needsUpdate = true
     m.regionFx.needsUpdate = true
     m.regionRight.needsUpdate = true
+    m.regionMask.needsUpdate = true
     m.regionDir.needsUpdate = true
     m.regionColor.needsUpdate = true
     m.regionOpacity.needsUpdate = true
     m.regionCosHalfAngle.needsUpdate = true
     m.regionVisible.needsUpdate = true
+
+    m.wallMesh.instanceMatrix.needsUpdate = true
+    m.wallOrigin.needsUpdate = true
+    m.wallDir.needsUpdate = true
+    m.wallColor.needsUpdate = true
+    m.wallOpacity.needsUpdate = true
+    m.wallCosHalfAngle.needsUpdate = true
+    m.wallFx.needsUpdate = true
+    m.wallRight.needsUpdate = true
+    m.wallMask.needsUpdate = true
 
     m.washFloorMesh.instanceMatrix.needsUpdate = true
     m.washFloorOrigin.needsUpdate = true
@@ -609,8 +454,10 @@ export function StageEmitters({ fixtureCount, regionGeometry, children }: StageE
   return (
     <>
       <primitive object={built.coneMesh} raycast={NO_RAYCAST} />
+      <primitive object={built.volumeMesh} raycast={NO_RAYCAST} />
       <primitive object={built.floorMesh} raycast={NO_RAYCAST} />
       <primitive object={built.regionMesh} raycast={NO_RAYCAST} />
+      <primitive object={built.wallMesh} raycast={NO_RAYCAST} />
       <primitive object={built.washFloorMesh} raycast={NO_RAYCAST} />
       <primitive object={built.washRegionMesh} raycast={NO_RAYCAST} />
       <EmittersContext.Provider value={handle}>{children}</EmittersContext.Provider>
@@ -621,34 +468,58 @@ export function StageEmitters({ fixtureCount, regionGeometry, children }: StageE
 interface BuiltEmitters {
   fixtureCount: number
   regionCount: number
+  wall: WallGeometry
+
   coneMesh: InstancedMesh
+  volumeMesh: InstancedMesh
   floorMesh: InstancedMesh
   regionMesh: InstancedMesh
+  wallMesh: InstancedMesh
 
   coneOrigin: InstancedBufferAttribute
   coneFx: InstancedBufferAttribute
   coneColor: InstancedBufferAttribute
   coneOpacity: InstancedBufferAttribute
 
+  volumeOrigin: InstancedBufferAttribute
+  volumeDir: InstancedBufferAttribute
+  volumeRight: InstancedBufferAttribute
+  volumeColor: InstancedBufferAttribute
+  volumeOpacity: InstancedBufferAttribute
+  volumeCosHalfAngle: InstancedBufferAttribute
+  volumeFx: InstancedBufferAttribute
+  volumeMask: InstancedBufferAttribute
+
   floorOrigin: InstancedBufferAttribute
   floorFx: InstancedBufferAttribute
   floorRight: InstancedBufferAttribute
+  floorMask: InstancedBufferAttribute
   floorDir: InstancedBufferAttribute
   floorColor: InstancedBufferAttribute
   floorOpacity: InstancedBufferAttribute
   floorCosHalfAngle: InstancedBufferAttribute
 
-  // Per-fixture attribute buffers — divisor=regionCount so each fixture's
+  // Per-(slot, lobe) attribute buffers — divisor=regionCount so each lobe's
   // value applies to all regionCount of its cookie instances.
   regionOrigin: InstancedBufferAttribute
   regionFx: InstancedBufferAttribute
   regionRight: InstancedBufferAttribute
+  regionMask: InstancedBufferAttribute
   regionDir: InstancedBufferAttribute
   regionColor: InstancedBufferAttribute
   regionOpacity: InstancedBufferAttribute
   regionCosHalfAngle: InstancedBufferAttribute
-  // Per-(fixture, region) visibility — divisor=1.
+  // Per-(slot, lobe, region) visibility — divisor=1.
   regionVisible: InstancedBufferAttribute
+
+  wallOrigin: InstancedBufferAttribute
+  wallFx: InstancedBufferAttribute
+  wallRight: InstancedBufferAttribute
+  wallMask: InstancedBufferAttribute
+  wallDir: InstancedBufferAttribute
+  wallColor: InstancedBufferAttribute
+  wallOpacity: InstancedBufferAttribute
+  wallCosHalfAngle: InstancedBufferAttribute
 
   // Wash floor pools — one instance per (fixture, pixel); every attribute is
   // per-instance (divisor=1) since each pixel washes independently. Hidden via
@@ -676,72 +547,102 @@ function buildEmitters(
   fixtureCount: number,
   regionCount: number,
   regionGeometry: ReadonlyArray<RegionGeometry>,
+  stage: StageDims,
   coneMaterial: ShaderMaterial,
+  volumeMaterial: ShaderMaterial,
   poolMaterial: ShaderMaterial,
   washPoolMaterial: ShaderMaterial,
 ): BuiltEmitters {
-  // Buffer capacity must be ≥1 even when nothing draws yet — Three.js' WebGL
-  // backend can't bind zero-sized instance buffers. Draw count comes from
-  // mesh.count, which can still be 0.
-  const fixCap = Math.max(fixtureCount, 1)
-  const regDivisor = Math.max(regionCount, 1)
-  const regCap = fixCap * regDivisor
+  const beamCap = beamCapacity(fixtureCount)
+  const regDivisor = regionDivisor(regionCount)
+  const regCap = regionCapacity(fixtureCount, regionCount)
 
   const coneGeo = new ConeGeometry(1, 1, 48, 1, true)
+  // Closed + coarse: the volume hull is only a conservative fragment
+  // generator (back faces), the analytic intersection in the shader is the
+  // real boundary.
+  const volumeGeo = new ConeGeometry(1, 1, 24, 1, false)
   const floorGeo = new PlaneGeometry(1, 1)
   floorGeo.rotateX(-Math.PI / 2)
-  const regionGeo = new PlaneGeometry(1, 1)
-  regionGeo.rotateX(-Math.PI / 2)
+  // The region receiver is the region's own (slightly inflated) box: the pool
+  // shader shades any world-space fragment from the beam's geometry, so side
+  // faces work exactly like the old top-face quad did — the shader's
+  // self-OBB shadow test discards back/far faces.
+  const regionGeo = new BoxGeometry(1, 1, 1)
+  // Wall receiver quad faces downstage (+z) — PlaneGeometry's natural facing.
+  const wallGeo = new PlaneGeometry(1, 1)
 
-  const coneOrigin = vec3InstAttr(fixCap)
-  const coneColor = vec3InstAttr(fixCap)
-  const coneOpacity = floatInstAttr(fixCap)
-  const coneFx = vec4InstAttr(fixCap)
+  const coneOrigin = vec3InstAttr(beamCap)
+  const coneColor = vec3InstAttr(beamCap)
+  const coneOpacity = floatInstAttr(beamCap)
+  const coneFx = vec4InstAttr(beamCap)
   coneGeo.setAttribute('aBeamOrigin', coneOrigin)
   coneGeo.setAttribute('aColor', coneColor)
   coneGeo.setAttribute('aOpacity', coneOpacity)
   coneGeo.setAttribute('aBeamFx', coneFx)
 
-  const floorOrigin = vec3InstAttr(fixCap)
-  const floorDir = vec3InstAttr(fixCap)
-  const floorColor = vec3InstAttr(fixCap)
-  const floorOpacity = floatInstAttr(fixCap)
-  const floorCosHalfAngle = floatInstAttr(fixCap)
+  const volumeOrigin = vec3InstAttr(beamCap)
+  const volumeDir = vec3InstAttr(beamCap)
+  const volumeRight = vec3InstAttr(beamCap)
+  const volumeColor = vec3InstAttr(beamCap)
+  const volumeOpacity = floatInstAttr(beamCap)
+  const volumeCosHalfAngle = floatInstAttr(beamCap)
+  const volumeFx = vec4InstAttr(beamCap)
+  const volumeMask = floatInstAttr(beamCap)
+  volumeGeo.setAttribute('aBeamOrigin', volumeOrigin)
+  volumeGeo.setAttribute('aBeamDir', volumeDir)
+  volumeGeo.setAttribute('aBeamRight', volumeRight)
+  volumeGeo.setAttribute('aColor', volumeColor)
+  volumeGeo.setAttribute('aOpacity', volumeOpacity)
+  volumeGeo.setAttribute('aCosHalfAngle', volumeCosHalfAngle)
+  volumeGeo.setAttribute('aBeamFx', volumeFx)
+  volumeGeo.setAttribute('aShadowMask', volumeMask)
+
+  const floorOrigin = vec3InstAttr(beamCap)
+  const floorDir = vec3InstAttr(beamCap)
+  const floorColor = vec3InstAttr(beamCap)
+  const floorOpacity = floatInstAttr(beamCap)
+  const floorCosHalfAngle = floatInstAttr(beamCap)
   floorGeo.setAttribute('aBeamOrigin', floorOrigin)
   floorGeo.setAttribute('aBeamDir', floorDir)
   floorGeo.setAttribute('aColor', floorColor)
   floorGeo.setAttribute('aOpacity', floorOpacity)
   floorGeo.setAttribute('aCosHalfAngle', floorCosHalfAngle)
-  const floorFx = vec4InstAttr(fixCap)
-  const floorRight = vec3InstAttr(fixCap)
+  const floorFx = vec4InstAttr(beamCap)
+  const floorRight = vec3InstAttr(beamCap)
+  const floorMask = floatInstAttr(beamCap)
   floorGeo.setAttribute('aBeamFx', floorFx)
   floorGeo.setAttribute('aBeamRight', floorRight)
+  floorGeo.setAttribute('aShadowMask', floorMask)
   // Floor shares the pool shader, which gates on aVisible — keep it always
-  // 1 here; per-fixture visibility is encoded in scale-to-zero on the
+  // 1 here; per-lobe visibility is encoded in scale-to-zero on the
   // instance matrix.
-  const floorVisibleAttr = floatInstAttr(fixCap)
-  for (let i = 0; i < fixCap; i++) floorVisibleAttr.setX(i, 1)
+  const floorVisibleAttr = floatInstAttr(beamCap)
+  for (let i = 0; i < beamCap; i++) floorVisibleAttr.setX(i, 1)
   floorGeo.setAttribute('aVisible', floorVisibleAttr)
 
-  const regionOrigin = vec3InstAttr(fixCap)
+  const regionOrigin = vec3InstAttr(beamCap)
   regionOrigin.meshPerAttribute = regDivisor
-  const regionDir = vec3InstAttr(fixCap)
+  const regionDir = vec3InstAttr(beamCap)
   regionDir.meshPerAttribute = regDivisor
-  const regionColor = vec3InstAttr(fixCap)
+  const regionColor = vec3InstAttr(beamCap)
   regionColor.meshPerAttribute = regDivisor
-  const regionOpacity = floatInstAttr(fixCap)
+  const regionOpacity = floatInstAttr(beamCap)
   regionOpacity.meshPerAttribute = regDivisor
-  const regionCosHalfAngle = floatInstAttr(fixCap)
+  const regionCosHalfAngle = floatInstAttr(beamCap)
   regionCosHalfAngle.meshPerAttribute = regDivisor
-  // Per-fixture, like its neighbours above — without meshPerAttribute each
-  // fixture's gobo would bleed into the next fixture's region cookies.
-  const regionFx = vec4InstAttr(fixCap)
+  // Per-(slot, lobe), like its neighbours above — without meshPerAttribute
+  // each lobe's gobo would bleed into the next lobe's region cookies.
+  const regionFx = vec4InstAttr(beamCap)
   regionFx.meshPerAttribute = regDivisor
-  const regionRight = vec3InstAttr(fixCap)
+  const regionRight = vec3InstAttr(beamCap)
   regionRight.meshPerAttribute = regDivisor
+  const regionMask = floatInstAttr(beamCap)
+  regionMask.meshPerAttribute = regDivisor
   const regionVisible = floatInstAttr(regCap)
   regionGeo.setAttribute('aBeamFx', regionFx)
   regionGeo.setAttribute('aBeamRight', regionRight)
+  regionGeo.setAttribute('aShadowMask', regionMask)
   regionGeo.setAttribute('aBeamOrigin', regionOrigin)
   regionGeo.setAttribute('aBeamDir', regionDir)
   regionGeo.setAttribute('aColor', regionColor)
@@ -749,20 +650,63 @@ function buildEmitters(
   regionGeo.setAttribute('aCosHalfAngle', regionCosHalfAngle)
   regionGeo.setAttribute('aVisible', regionVisible)
 
-  const coneMesh = new InstancedMesh(coneGeo, coneMaterial, fixCap)
-  coneMesh.frustumCulled = false
-  coneMesh.count = fixtureCount
+  const wallOrigin = vec3InstAttr(beamCap)
+  const wallDir = vec3InstAttr(beamCap)
+  const wallColor = vec3InstAttr(beamCap)
+  const wallOpacity = floatInstAttr(beamCap)
+  const wallCosHalfAngle = floatInstAttr(beamCap)
+  const wallFx = vec4InstAttr(beamCap)
+  const wallRight = vec3InstAttr(beamCap)
+  const wallMask = floatInstAttr(beamCap)
+  const wallVisibleAttr = floatInstAttr(beamCap)
+  for (let i = 0; i < beamCap; i++) wallVisibleAttr.setX(i, 1)
+  wallGeo.setAttribute('aBeamOrigin', wallOrigin)
+  wallGeo.setAttribute('aBeamDir', wallDir)
+  wallGeo.setAttribute('aColor', wallColor)
+  wallGeo.setAttribute('aOpacity', wallOpacity)
+  wallGeo.setAttribute('aCosHalfAngle', wallCosHalfAngle)
+  wallGeo.setAttribute('aBeamFx', wallFx)
+  wallGeo.setAttribute('aBeamRight', wallRight)
+  wallGeo.setAttribute('aShadowMask', wallMask)
+  wallGeo.setAttribute('aVisible', wallVisibleAttr)
 
-  const floorMesh = new InstancedMesh(floorGeo, poolMaterial, fixCap)
+  const coneMesh = new InstancedMesh(coneGeo, coneMaterial, beamCap)
+  coneMesh.frustumCulled = false
+  coneMesh.count = fixtureCount * MAX_PRISM_LOBES
+
+  const volumeMesh = new InstancedMesh(volumeGeo, volumeMaterial, beamCap)
+  volumeMesh.frustumCulled = false
+  volumeMesh.count = fixtureCount * MAX_PRISM_LOBES
+
+  const floorMesh = new InstancedMesh(floorGeo, poolMaterial, beamCap)
   floorMesh.frustumCulled = false
-  floorMesh.count = fixtureCount
+  floorMesh.count = fixtureCount * MAX_PRISM_LOBES
+
+  const wallMesh = new InstancedMesh(wallGeo, poolMaterial, beamCap)
+  wallMesh.frustumCulled = false
+  wallMesh.count = fixtureCount * MAX_PRISM_LOBES
+
+  // Start every beam instance parked — the directors only write lobes they
+  // use, and an unwritten instance would otherwise draw at identity scale.
+  for (let i = 0; i < beamCap; i++) {
+    coneMesh.setMatrixAt(i, ZERO_MATRIX)
+    volumeMesh.setMatrixAt(i, ZERO_MATRIX)
+    floorMesh.setMatrixAt(i, ZERO_MATRIX)
+    wallMesh.setMatrixAt(i, ZERO_MATRIX)
+  }
+  coneMesh.instanceMatrix.needsUpdate = true
+  volumeMesh.instanceMatrix.needsUpdate = true
+  floorMesh.instanceMatrix.needsUpdate = true
+  wallMesh.instanceMatrix.needsUpdate = true
 
   const regionMesh = new InstancedMesh(regionGeo, poolMaterial, regCap)
   regionMesh.frustumCulled = false
-  regionMesh.count = fixtureCount * regionCount
+  regionMesh.count = fixtureCount * MAX_PRISM_LOBES * regionCount
 
   // Bake one matrix per region (placement is constant across fixtures), then
-  // stamp it into every fixture's slot for that region.
+  // stamp it into every (slot, lobe) block for that region. The box is
+  // inflated by the cookie lift on every axis so its skin sits just off the
+  // region's own faces.
   const pos = new Vector3()
   const quat = new Quaternion()
   const scale = new Vector3()
@@ -770,22 +714,26 @@ function buildEmitters(
   for (let r = 0; r < regionCount; r++) {
     const rg = regionGeometry[r]
     const m = new Matrix4()
-    pos.copy(rg.topCenter)
+    pos.copy(rg.obbCenter)
     quat.setFromAxisAngle(UNIT_Y, rg.yawRad)
-    scale.set(rg.widthM, 1, rg.depthM)
+    scale.set(
+      rg.widthM + 2 * COOKIE_LIFT_M,
+      rg.heightM + 2 * COOKIE_LIFT_M,
+      rg.depthM + 2 * COOKIE_LIFT_M,
+    )
     m.compose(pos, quat, scale)
     regionMats.push(m)
   }
-  for (let slot = 0; slot < fixtureCount; slot++) {
+  for (let beam = 0; beam < fixtureCount * MAX_PRISM_LOBES; beam++) {
     for (let r = 0; r < regionCount; r++) {
-      regionMesh.setMatrixAt(slot * regionCount + r, regionMats[r])
+      regionMesh.setMatrixAt(beam * regionCount + r, regionMats[r])
     }
   }
   regionMesh.instanceMatrix.needsUpdate = true
 
   // — wash pools (per-pixel strip footprint) —————————————————————————
-  const washFloorCap = fixCap * MAX_WASH_PIXELS
-  const washRegionCap = washFloorCap * regDivisor
+  const washFloorCap = washFloorCapacity(fixtureCount)
+  const washRegionCap = washRegionCapacity(fixtureCount, regionCount)
 
   const washFloorGeo = new PlaneGeometry(1, 1)
   washFloorGeo.rotateX(-Math.PI / 2)
@@ -810,8 +758,7 @@ function buildEmitters(
   for (let i = 0; i < washFloorCap; i++) washFloorMesh.setMatrixAt(i, ZERO_MATRIX)
   washFloorMesh.instanceMatrix.needsUpdate = true
 
-  const washRegionGeo = new PlaneGeometry(1, 1)
-  washRegionGeo.rotateX(-Math.PI / 2)
+  const washRegionGeo = new BoxGeometry(1, 1, 1)
   const washRegionOrigin = vec3InstAttr(washFloorCap)
   washRegionOrigin.meshPerAttribute = regDivisor
   const washRegionDir = vec3InstAttr(washFloorCap)
@@ -845,19 +792,37 @@ function buildEmitters(
   }
   washRegionMesh.instanceMatrix.needsUpdate = true
 
+  const wall: WallGeometry = {
+    z: -stage.depth,
+    halfWidth: stage.width / 2,
+    height: stage.height,
+  }
+
   return {
     fixtureCount,
     regionCount,
+    wall,
     coneMesh,
+    volumeMesh,
     floorMesh,
     regionMesh,
+    wallMesh,
     coneOrigin,
     coneFx,
     coneColor,
     coneOpacity,
+    volumeOrigin,
+    volumeDir,
+    volumeRight,
+    volumeColor,
+    volumeOpacity,
+    volumeCosHalfAngle,
+    volumeFx,
+    volumeMask,
     floorOrigin,
     floorFx,
     floorRight,
+    floorMask,
     floorDir,
     floorColor,
     floorOpacity,
@@ -865,11 +830,20 @@ function buildEmitters(
     regionOrigin,
     regionFx,
     regionRight,
+    regionMask,
     regionDir,
     regionColor,
     regionOpacity,
     regionCosHalfAngle,
     regionVisible,
+    wallOrigin,
+    wallFx,
+    wallRight,
+    wallMask,
+    wallDir,
+    wallColor,
+    wallOpacity,
+    wallCosHalfAngle,
     washFloorMesh,
     washFloorOrigin,
     washFloorDir,
@@ -909,61 +883,126 @@ const FLOOR_SCALE = new Vector3()
 const FLOOR_MAT = new Matrix4()
 
 function makeHandle(b: BuiltEmitters): EmittersHandle {
+  // A named closure rather than a `this`-call so the handle survives
+  // destructuring (the tests stub methods individually).
+  function hideLobes(slot: number, fromLobe: number): void {
+    for (let lobe = fromLobe; lobe < MAX_PRISM_LOBES; lobe++) {
+      const i = beamInstanceIndex(slot, lobe)
+      b.coneMesh.setMatrixAt(i, ZERO_MATRIX)
+      b.volumeMesh.setMatrixAt(i, ZERO_MATRIX)
+      b.floorMesh.setMatrixAt(i, ZERO_MATRIX)
+      b.wallMesh.setMatrixAt(i, ZERO_MATRIX)
+      for (let r = 0; r < b.regionCount; r++) {
+        b.regionVisible.setX(regionInstanceIndex(slot, lobe, b.regionCount, r), 0)
+      }
+    }
+  }
+
   return {
     fixtureCount: b.fixtureCount,
     regionCount: b.regionCount,
+    wall: b.wall,
 
-    writeConeMatrix(slot, matrix) {
-      b.coneMesh.setMatrixAt(slot, matrix)
+    writeBeamMatrix(slot, lobe, matrix, volumetric) {
+      const i = beamInstanceIndex(slot, lobe)
+      b.coneMesh.setMatrixAt(i, volumetric ? ZERO_MATRIX : matrix)
+      b.volumeMesh.setMatrixAt(i, volumetric ? matrix : ZERO_MATRIX)
     },
-    writeConeAttrs(slot, origin, color, opacity) {
-      b.coneOrigin.setXYZ(slot, origin.x, origin.y, origin.z)
-      b.coneColor.setXYZ(slot, color.r, color.g, color.b)
-      b.coneOpacity.setX(slot, opacity)
-    },
-
-    writeBeamFx(slot, edge, goboSlot, goboAngle, right) {
-      // The cone reads only .x (edge) — it has no interior to project into, so
-      // the gobo is a floor/region-pool effect only.
-      b.coneFx.setXYZW(slot, edge, 0, 0, 0)
-      b.floorFx.setXYZW(slot, edge, goboSlot, goboAngle, 0)
-      b.regionFx.setXYZW(slot, edge, goboSlot, goboAngle, 0)
-      b.floorRight.setXYZ(slot, right.x, right.y, right.z)
-      b.regionRight.setXYZ(slot, right.x, right.y, right.z)
+    writeConeAttrs(slot, lobe, origin, dir, color, opacity, cosHalfAngle) {
+      const i = beamInstanceIndex(slot, lobe)
+      b.coneOrigin.setXYZ(i, origin.x, origin.y, origin.z)
+      b.coneColor.setXYZ(i, color.r, color.g, color.b)
+      b.coneOpacity.setX(i, opacity)
+      b.volumeOrigin.setXYZ(i, origin.x, origin.y, origin.z)
+      b.volumeDir.setXYZ(i, dir.x, dir.y, dir.z)
+      b.volumeColor.setXYZ(i, color.r, color.g, color.b)
+      b.volumeOpacity.setX(i, opacity)
+      b.volumeCosHalfAngle.setX(i, cosHalfAngle)
     },
 
-    writeFloorMatrix(slot, visible, cx, cz, side) {
+    writeBeamFx(slot, lobe, edge, goboSlot, goboAngle, focusDist, right) {
+      const i = beamInstanceIndex(slot, lobe)
+      // The cone shell reads only .x (edge) — it has no interior to project
+      // into, so the gobo/focus payload matters on the pool meshes (and the
+      // volumetric cone, which shares this fx layout).
+      b.coneFx.setXYZW(i, edge, goboSlot, goboAngle, focusDist)
+      b.volumeFx.setXYZW(i, edge, goboSlot, goboAngle, focusDist)
+      b.floorFx.setXYZW(i, edge, goboSlot, goboAngle, focusDist)
+      b.regionFx.setXYZW(i, edge, goboSlot, goboAngle, focusDist)
+      b.wallFx.setXYZW(i, edge, goboSlot, goboAngle, focusDist)
+      b.volumeRight.setXYZ(i, right.x, right.y, right.z)
+      b.floorRight.setXYZ(i, right.x, right.y, right.z)
+      b.regionRight.setXYZ(i, right.x, right.y, right.z)
+      b.wallRight.setXYZ(i, right.x, right.y, right.z)
+    },
+
+    writeShadowMask(slot, lobe, mask) {
+      const i = beamInstanceIndex(slot, lobe)
+      b.volumeMask.setX(i, mask)
+      b.floorMask.setX(i, mask)
+      b.regionMask.setX(i, mask)
+      b.wallMask.setX(i, mask)
+    },
+
+    writeFloorMatrix(slot, lobe, visible, cx, cz, side) {
+      const i = beamInstanceIndex(slot, lobe)
       if (!visible) {
-        b.floorMesh.setMatrixAt(slot, ZERO_MATRIX)
+        b.floorMesh.setMatrixAt(i, ZERO_MATRIX)
         return
       }
       FLOOR_POS.set(cx, COOKIE_LIFT_M, cz)
       FLOOR_QUAT.identity()
       FLOOR_SCALE.set(side, 1, side)
       FLOOR_MAT.compose(FLOOR_POS, FLOOR_QUAT, FLOOR_SCALE)
-      b.floorMesh.setMatrixAt(slot, FLOOR_MAT)
+      b.floorMesh.setMatrixAt(i, FLOOR_MAT)
     },
-    writeFloorAttrs(slot, origin, dir, color, opacity, cosHalfAngle) {
-      b.floorOrigin.setXYZ(slot, origin.x, origin.y, origin.z)
-      b.floorDir.setXYZ(slot, dir.x, dir.y, dir.z)
-      b.floorColor.setXYZ(slot, color.r, color.g, color.b)
-      b.floorOpacity.setX(slot, opacity)
-      b.floorCosHalfAngle.setX(slot, cosHalfAngle)
+    writeFloorAttrs(slot, lobe, origin, dir, color, opacity, cosHalfAngle) {
+      const i = beamInstanceIndex(slot, lobe)
+      b.floorOrigin.setXYZ(i, origin.x, origin.y, origin.z)
+      b.floorDir.setXYZ(i, dir.x, dir.y, dir.z)
+      b.floorColor.setXYZ(i, color.r, color.g, color.b)
+      b.floorOpacity.setX(i, opacity)
+      b.floorCosHalfAngle.setX(i, cosHalfAngle)
     },
 
-    writeRegionVisibility(slot, regionIdx, visible) {
-      b.regionVisible.setX(slot * b.regionCount + regionIdx, visible ? 1 : 0)
+    writeRegionVisibility(slot, lobe, regionIdx, visible) {
+      b.regionVisible.setX(
+        regionInstanceIndex(slot, lobe, b.regionCount, regionIdx),
+        visible ? 1 : 0,
+      )
     },
-    writeRegionAttrs(slot, origin, dir, color, opacity, cosHalfAngle) {
-      b.regionOrigin.setXYZ(slot, origin.x, origin.y, origin.z)
-      b.regionDir.setXYZ(slot, dir.x, dir.y, dir.z)
-      b.regionColor.setXYZ(slot, color.r, color.g, color.b)
-      b.regionOpacity.setX(slot, opacity)
-      b.regionCosHalfAngle.setX(slot, cosHalfAngle)
+    writeRegionAttrs(slot, lobe, origin, dir, color, opacity, cosHalfAngle) {
+      const i = beamInstanceIndex(slot, lobe)
+      b.regionOrigin.setXYZ(i, origin.x, origin.y, origin.z)
+      b.regionDir.setXYZ(i, dir.x, dir.y, dir.z)
+      b.regionColor.setXYZ(i, color.r, color.g, color.b)
+      b.regionOpacity.setX(i, opacity)
+      b.regionCosHalfAngle.setX(i, cosHalfAngle)
+    },
+
+    writeWallMatrix(slot, lobe, visible, cx, cy, sideX, sideY) {
+      const i = beamInstanceIndex(slot, lobe)
+      if (!visible) {
+        b.wallMesh.setMatrixAt(i, ZERO_MATRIX)
+        return
+      }
+      FLOOR_POS.set(cx, cy, b.wall.z + COOKIE_LIFT_M)
+      FLOOR_QUAT.identity()
+      FLOOR_SCALE.set(sideX, sideY, 1)
+      FLOOR_MAT.compose(FLOOR_POS, FLOOR_QUAT, FLOOR_SCALE)
+      b.wallMesh.setMatrixAt(i, FLOOR_MAT)
+    },
+    writeWallAttrs(slot, lobe, origin, dir, color, opacity, cosHalfAngle) {
+      const i = beamInstanceIndex(slot, lobe)
+      b.wallOrigin.setXYZ(i, origin.x, origin.y, origin.z)
+      b.wallDir.setXYZ(i, dir.x, dir.y, dir.z)
+      b.wallColor.setXYZ(i, color.r, color.g, color.b)
+      b.wallOpacity.setX(i, opacity)
+      b.wallCosHalfAngle.setX(i, cosHalfAngle)
     },
 
     writeWashFloorMatrix(slot, pixelIdx, visible, cx, cz, side) {
-      const i = slot * MAX_WASH_PIXELS + pixelIdx
+      const i = washPixelIndex(slot, pixelIdx)
       if (!visible) {
         b.washFloorMesh.setMatrixAt(i, ZERO_MATRIX)
         return
@@ -975,7 +1014,7 @@ function makeHandle(b: BuiltEmitters): EmittersHandle {
       b.washFloorMesh.setMatrixAt(i, FLOOR_MAT)
     },
     writeWashFloorAttrs(slot, pixelIdx, origin, dir, color, opacity, cosHalfAngle) {
-      const i = slot * MAX_WASH_PIXELS + pixelIdx
+      const i = washPixelIndex(slot, pixelIdx)
       b.washFloorOrigin.setXYZ(i, origin.x, origin.y, origin.z)
       b.washFloorDir.setXYZ(i, dir.x, dir.y, dir.z)
       b.washFloorColor.setXYZ(i, color.r, color.g, color.b)
@@ -983,11 +1022,13 @@ function makeHandle(b: BuiltEmitters): EmittersHandle {
       b.washFloorCosHalfAngle.setX(i, cosHalfAngle)
     },
     writeWashRegionVisibility(slot, pixelIdx, regionIdx, visible) {
-      const pix = slot * MAX_WASH_PIXELS + pixelIdx
-      b.washRegionVisible.setX(pix * b.regionCount + regionIdx, visible ? 1 : 0)
+      b.washRegionVisible.setX(
+        washRegionInstanceIndex(slot, pixelIdx, b.regionCount, regionIdx),
+        visible ? 1 : 0,
+      )
     },
     writeWashRegionAttrs(slot, pixelIdx, origin, dir, color, opacity, cosHalfAngle) {
-      const i = slot * MAX_WASH_PIXELS + pixelIdx
+      const i = washPixelIndex(slot, pixelIdx)
       b.washRegionOrigin.setXYZ(i, origin.x, origin.y, origin.z)
       b.washRegionDir.setXYZ(i, dir.x, dir.y, dir.z)
       b.washRegionColor.setXYZ(i, color.r, color.g, color.b)
@@ -995,19 +1036,16 @@ function makeHandle(b: BuiltEmitters): EmittersHandle {
       b.washRegionCosHalfAngle.setX(i, cosHalfAngle)
     },
 
+    hideLobes,
     hideSlot(slot) {
-      b.coneMesh.setMatrixAt(slot, ZERO_MATRIX)
-      b.floorMesh.setMatrixAt(slot, ZERO_MATRIX)
-      for (let r = 0; r < b.regionCount; r++) {
-        b.regionVisible.setX(slot * b.regionCount + r, 0)
-      }
+      hideLobes(slot, 0)
     },
     hideWashSlot(slot) {
       for (let p = 0; p < MAX_WASH_PIXELS; p++) {
-        const pix = slot * MAX_WASH_PIXELS + p
+        const pix = washPixelIndex(slot, p)
         b.washFloorMesh.setMatrixAt(pix, ZERO_MATRIX)
         for (let r = 0; r < b.regionCount; r++) {
-          b.washRegionVisible.setX(pix * b.regionCount + r, 0)
+          b.washRegionVisible.setX(washRegionInstanceIndex(slot, p, b.regionCount, r), 0)
         }
       }
     },
