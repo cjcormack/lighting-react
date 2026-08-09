@@ -98,9 +98,51 @@ next one can be picked up cold:
     (lighting coords are Z-up — easier to swizzle than to flip
     `Object3D.DEFAULT_UP`, since the app already uses default-up Three.js
     nowhere else and we avoid camera-framing surprises).
-  - `panTiltToDir(panDeg, tiltDeg): Vector3` per discovery doc lines 109–116.
+  - `panTiltToDir(panDeg, tiltDeg): Vector3` — see the convention block below.
+    (Superseded the discovery-doc prototype at lines 109–116, which hardcoded a
+    270° pan centre and never centred tilt at all.)
   - `worldPositionFor(patch, riggings): Vector3` — prefers
     `worldPositionX/Y/Z` if set, else composes from `stage*` + rigging frame.
+### Pan/tilt convention (revised)
+
+Every rotation below is in R3F space (X = stage right, Y = up, Z = downstage).
+
+- **`baseYawDeg` / `basePitchDeg` are the fixture body's mount orientation**,
+  applied as `Euler(pitch, yaw, 0, 'YXZ')` to a group wrapping the body mesh.
+  Nothing else consumes them — folding them into the beam maths as well would
+  double-apply.
+- **Pan and tilt are signed angles about each axis's mechanical centre**, where
+  centre is `(degMin + degMax) / 2`. The backend declares `degMin`/`degMax` as
+  the axis's *travel range* (pan 0–540, tilt 0–210), not a signed angle, so the
+  DMX-centre position is the midpoint — never 0, and never a fixed 270.
+- **A head that tilts rests along +Y in its own frame**: mid-DMX tilt points up
+  the body axis, away from the base. A floor-standing mover is `basePitch = 0`;
+  a hung one is `basePitch = 180`.
+- **A fixture with no tilt axis is a rigid body emitting along −Y** (its lens
+  face). That keeps a PAR at pitch 0 pointing at the floor rather than the
+  ceiling, which is why the two rest poses differ.
+- The rest axis is chosen from **the presence of a tilt descriptor, never from
+  `kind`** — a Source 4 Revolution is a `PROFILE` that pans and tilts, and a
+  Scantastic 4 is a `SCANNER` that does.
+- A body with a modelled yoke publishes `yokeRef`: pan drives the yoke (arms and
+  all) and tilt drives the head between them. Bodies without one take the
+  combined `headQuaternionFor(pan, tilt)`. `stageCoords.test.ts` asserts the two
+  paths agree.
+- The beam's origin and direction are read from the **lens and head world
+  matrices**, not recomputed in JS, so the drawn model and the beam cannot
+  disagree.
+
+**Migration (applied 2026-08-09).** Removing the hardcoded −270 changed the
+meaning of `baseYawDeg` for fixtures with no pan axis, where it had effectively
+meant "yaw − 270". Static patches carrying a base orientation had
+`baseYawDeg += 90` applied (5 rows across Experiment, TCH: Sleeping Beauty and
+The Commemoration Hall) — appearance-preserving, and pinned by a regression test
+in `stageCoords.test.ts`. Movers whose pan range isn't 0–540 would need
+`+= centre − 270` (−180 for Scantastic 4, +45 for Varytec Easymove XL 60); none
+had a base orientation set, so nothing was needed. Mover `basePitchDeg` cannot be
+migrated — the old value was an aim offset inside a broken convention, not a
+mount orientation, so re-author it as 0 (floor) or 180 (hung).
+
 - **Data reset**: one-time mutation flow that nulls `stageX/Y/Z` on all patches
   with non-null values (existing percentages are meaningless under the new
   metres convention). Either a small admin button on `Patches.tsx` ("Clear

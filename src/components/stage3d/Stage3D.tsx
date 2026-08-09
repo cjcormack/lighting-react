@@ -18,7 +18,12 @@ import { StageEmitters, computeRegionGeometry } from './StageEmitters'
 import type { RiggingDto } from '../../api/riggingApi'
 import type { FixturePatch } from '../../api/patchApi'
 import type { StageRegionDto } from '../../api/stageRegionApi'
-import { fromThree, patchPlacementFromWorld, rigEuler } from '../../lib/stageCoords'
+import {
+  fromThree,
+  normaliseSignedDeg,
+  patchPlacementFromWorld,
+  rigEuler,
+} from '../../lib/stageCoords'
 import type {
   PatchPlacementUpdate,
   PlacementPoint,
@@ -448,8 +453,13 @@ function Controls({
           stageX: selectedPatch.stageX,
           stageY: selectedPatch.stageY,
           stageZ: selectedPatch.stageZ,
-          baseYawDeg: MathUtils.radToDeg(SCRATCH_EULER.y),
-          basePitchDeg: dragStartPitchRef.current + MathUtils.radToDeg(SCRATCH_EULER.x),
+          // Both normalised: the backend validates these to ±180, and a hung
+          // mover now sits at basePitch 180, so without this the very next
+          // nudge of the gizmo would push it out of range and 400.
+          baseYawDeg: normaliseSignedDeg(MathUtils.radToDeg(SCRATCH_EULER.y)),
+          basePitchDeg: normaliseSignedDeg(
+            dragStartPitchRef.current + MathUtils.radToDeg(SCRATCH_EULER.x),
+          ),
         }
         onPatchPlacementChange?.(selectedPatch, next, settled)
         return

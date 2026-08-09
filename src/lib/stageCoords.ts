@@ -20,10 +20,21 @@ export function fromThree(v: Vector3): { x: number; y: number; z: number } {
   return { x: v.x, y: -v.z, z: v.y }
 }
 
-// Build a unit beam direction (in R3F space) from DMX-decoded pan and tilt
-// degrees. Mirrors the prototype in stage-vis-discovery.md lines 109-116:
-// pan rotates around world Y, then tilt around the fixture's local X. Pan is
-// re-centred so 0° points downstage rather than the DMX raw 270° centre.
+// Build a unit beam direction (in R3F space) from *signed* pan and tilt angles
+// — angles about each axis's own mechanical centre, as produced by
+// `dmxToSignedDegrees`. Not raw travel positions, and not base orientation:
+// `baseYawDeg`/`basePitchDeg` are the body's mount pose and are carried by the
+// fixture's body group, so folding them in here would apply them twice.
+//
+// Rest is +Y: at pan 0 / tilt 0 the head points straight up its own body axis,
+// away from its base. That is where a yoke sits at mid-travel, so DMX-centre
+// tilt lands on the fixture's own axis. A hung mover is basePitchDeg = 180.
+//
+// 'YXZ' is intrinsic, so the vector tilts about X first and then pans about Y —
+// head-inside-yoke, which is the order the metal actually moves in.
+//
+//   tilt  +90 ⇒ downstage (+Z)   tilt -90 ⇒ upstage (−Z)   tilt 180 ⇒ down
+//   pan   +90 ⇒ swings a downstage beam toward stage right (+X)
 //
 // `target`/`scratchEuler` let per-frame callers pre-allocate to keep the
 // useFrame hot path free of per-call Vector3/Euler allocations.
@@ -34,16 +45,14 @@ export function panTiltToDir(
   target = new Vector3(),
   scratchEuler: Euler = SCRATCH_EULER,
 ): Vector3 {
-  const pan = MathUtils.degToRad(panDeg - 270)
-  const tilt = MathUtils.degToRad(tiltDeg)
-  scratchEuler.set(tilt, pan, 0, "YXZ")
-  return target.set(0, -1, 0).applyEuler(scratchEuler)
+  scratchEuler.set(MathUtils.degToRad(tiltDeg), MathUtils.degToRad(panDeg), 0, "YXZ")
+  return target.set(0, 1, 0).applyEuler(scratchEuler)
 }
 
-// Quaternion-only variant of panTiltToDir for the head group on a fixture
-// model. Returns the rotation that should be applied to a head whose rest
-// pose points down (-Y in R3F). Allocation-free when target/scratchEuler are
-// passed in.
+// Quaternion variant of panTiltToDir, for a body with no separate yoke node
+// that must carry pan and tilt on one object. Equivalent to composing a yoke
+// pan about Y with a head tilt about X — pinned by a test in stageCoords.test
+// so the split-node and single-node drive paths can't drift apart.
 const SCRATCH_QUAT_EULER = new Euler()
 export function headQuaternionFor(
   panDeg: number,
@@ -51,9 +60,7 @@ export function headQuaternionFor(
   target = new Quaternion(),
   scratchEuler: Euler = SCRATCH_QUAT_EULER,
 ): Quaternion {
-  const pan = MathUtils.degToRad(panDeg - 270)
-  const tilt = MathUtils.degToRad(tiltDeg)
-  scratchEuler.set(tilt, pan, 0, "YXZ")
+  scratchEuler.set(MathUtils.degToRad(tiltDeg), MathUtils.degToRad(panDeg), 0, "YXZ")
   return target.setFromEuler(scratchEuler)
 }
 
@@ -77,18 +84,56 @@ export function rigEuler(
 // Convert a raw DMX slider value into degrees using the descriptor's
 // degMin/degMax mapping. Returns null when the descriptor lacks both bounds
 // (we never invent ranges — the 3D view treats the head as static instead).
-// `base` is added after mapping to support per-patch baseYawDeg/basePitchDeg.
+//
+// The result is a position along the axis's *travel range* (a mover declares
+// pan 0–540, tilt 0–210), not a signed angle. Callers aiming a head want
+// `dmxToSignedDegrees`. Also reused verbatim for ZOOM sliders, where degMin /
+// degMax mean "full beam angle at DMX min / max".
 export function dmxToDegrees(
   dmx: number,
   slider: SliderPropertyDescriptor,
-  base = 0,
 ): number | null {
   if (slider.degMin == null || slider.degMax == null) return null
   const span = slider.max - slider.min
   if (span <= 0) return null
   const t = Math.max(0, Math.min(1, (dmx - slider.min) / span))
   const tt = slider.inverted ? 1 - t : t
-  return slider.degMin + tt * (slider.degMax - slider.degMin) + base
+  return slider.degMin + tt * (slider.degMax - slider.degMin)
+}
+
+// Mechanical centre of a pan/tilt axis, in travel degrees. Because degMin/degMax
+// describe travel rather than a signed angle, the DMX-centre position is the
+// midpoint — never 0, and never the 270° that used to be hardcoded here (that
+// was only ever correct for the 0–540 pan movers, and wrong for tilt on all of
+// them, for Scantastic 4's 0–180 pan and for Varytec's 0–630).
+export function axisCentreDeg(slider: SliderPropertyDescriptor): number | null {
+  if (slider.degMin == null || slider.degMax == null) return null
+  return (slider.degMin + slider.degMax) / 2
+}
+
+// Travel position expressed as a signed angle about the axis centre — what the
+// scene graph wants. Mid-DMX ⇒ 0 ⇒ head sitting on the fixture's own axis.
+//
+// Centring is a subtraction applied after the interpolation, so a fractional
+// coarse value from `combineFine` (16-bit pan/tilt) survives untouched.
+export function dmxToSignedDegrees(
+  dmx: number,
+  slider: SliderPropertyDescriptor,
+): number | null {
+  const travel = dmxToDegrees(dmx, slider)
+  if (travel == null) return null
+  // Non-null whenever dmxToDegrees was: both read the same two bounds.
+  return travel - axisCentreDeg(slider)!
+}
+
+// Normalise an angle in degrees to (-180, 180]. The backend validates
+// basePitchDeg to ±180 (projectPatches.kt), so a hung mover sitting at 180 would
+// otherwise have the very next rotate-gizmo nudge rejected with a 400.
+// Range is (-180, 180] rather than [-180, 180) so that a deliberate 180 — the
+// canonical "hung upside down" pitch — survives a round trip as 180.
+export function normaliseSignedDeg(deg: number): number {
+  const wrapped = ((deg % 360) + 360) % 360
+  return wrapped > 180 ? wrapped - 360 : wrapped
 }
 
 // Resolve a patch's world position in R3F space. When `riggingUuid` matches a

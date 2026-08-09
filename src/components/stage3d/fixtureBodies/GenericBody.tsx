@@ -3,8 +3,12 @@ import { bodyScale, type FixtureBodyProps } from './types'
 
 const DESIGN_SIZE = 0.2
 
-// Cylinder yoke + sphere lens — used as the dispatch fallback for unknown
-// or unset kinds.
+// Cylinder yoke + sphere lens — the dispatch fallback for unknown or unset
+// kinds, and also what a SCANNER renders as, so this body does get a live
+// pan/tilt quaternion (the Scantastic 4 declares both axes). It needs no
+// `emitAxis` mirror: the lens is a sphere centred on the head origin, so it
+// looks the same whichever face emits, and the beam direction is FixtureModel's
+// business rather than the body's.
 export function GenericBody({ active, headRef, lensRef, dims }: FixtureBodyProps) {
   return (
     <group scale={bodyScale(dims, DESIGN_SIZE)}>

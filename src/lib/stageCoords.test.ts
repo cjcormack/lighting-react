@@ -1,10 +1,13 @@
 import { describe, it, expect } from "vitest"
-import { Vector3 } from "three"
+import { Euler, Group, MathUtils, Quaternion, Vector3 } from "three"
 import {
   toThree,
   fromThree,
   panTiltToDir,
   headQuaternionFor,
+  axisCentreDeg,
+  dmxToSignedDegrees,
+  normaliseSignedDeg,
   patchPlacementFromWorld,
   placementFromWorldLighting,
   rigAxisLighting,
@@ -115,56 +118,225 @@ describe("toThree / fromThree", () => {
   })
 })
 
+// Signed angles about each axis's centre — what dmxToSignedDegrees produces.
+const AIM_CASES: [number, number][] = [
+  [0, 0],
+  [90, 45],
+  [180, 30],
+  [-90, 90],
+  [45, -60],
+  [135, 75],
+]
+
 describe("panTiltToDir", () => {
-  it("at DMX-centre (pan=270, tilt=0) points straight down", () => {
-    const v = panTiltToDir(270, 0)
+  it("at pan 0 / tilt 0 points straight up the body axis", () => {
+    const v = panTiltToDir(0, 0)
     expect(v.x).toBeCloseTo(0, APPROX)
-    expect(v.y).toBeCloseTo(-1, APPROX)
+    expect(v.y).toBeCloseTo(1, APPROX)
+    expect(v.z).toBeCloseTo(0, APPROX)
+  })
+
+  it("tilts through the horizon to straight down at 180", () => {
+    const level = panTiltToDir(0, 90)
+    expect(level.y).toBeCloseTo(0, APPROX)
+    expect(level.z).toBeCloseTo(1, APPROX) // downstage
+
+    const back = panTiltToDir(0, -90)
+    expect(back.z).toBeCloseTo(-1, APPROX) // upstage
+
+    const down = panTiltToDir(0, 180)
+    expect(down.y).toBeCloseTo(-1, APPROX)
+  })
+
+  it("pans a level beam toward stage right", () => {
+    const v = panTiltToDir(90, 90)
+    expect(v.x).toBeCloseTo(1, APPROX)
+    expect(v.y).toBeCloseTo(0, APPROX)
     expect(v.z).toBeCloseTo(0, APPROX)
   })
 
   it("produces a unit vector for arbitrary inputs", () => {
-    const cases: [number, number][] = [
-      [0, 0],
-      [90, 45],
-      [180, 30],
-      [270, 90],
-      [45, -60],
-      [359, 89],
-    ]
-    for (const [pan, tilt] of cases) {
+    for (const [pan, tilt] of AIM_CASES) {
       const v = panTiltToDir(pan, tilt)
-      const mag = Math.hypot(v.x, v.y, v.z)
-      expect(mag).toBeCloseTo(1, 9)
+      expect(Math.hypot(v.x, v.y, v.z)).toBeCloseTo(1, 9)
     }
   })
 
   it("writes into a caller-provided target", () => {
     const target = new Vector3(99, 99, 99)
-    const result = panTiltToDir(270, 0, target)
+    const result = panTiltToDir(0, 0, target)
     expect(result).toBe(target)
-    expect(target.y).toBeCloseTo(-1, APPROX)
+    expect(target.y).toBeCloseTo(1, APPROX)
   })
 })
 
 describe("headQuaternionFor", () => {
   it("applied to the rest direction reproduces panTiltToDir", () => {
-    const cases: [number, number][] = [
-      [270, 0],
-      [0, 0],
-      [90, 45],
-      [180, 30],
-      [45, -60],
-      [315, 75],
-    ]
-    for (const [pan, tilt] of cases) {
-      const q = headQuaternionFor(pan, tilt)
-      const rest = new Vector3(0, -1, 0)
-      rest.applyQuaternion(q)
+    for (const [pan, tilt] of AIM_CASES) {
+      const rest = new Vector3(0, 1, 0).applyQuaternion(headQuaternionFor(pan, tilt))
       const expected = panTiltToDir(pan, tilt)
       expect(rest.x).toBeCloseTo(expected.x, 9)
       expect(rest.y).toBeCloseTo(expected.y, 9)
       expect(rest.z).toBeCloseTo(expected.z, 9)
+    }
+  })
+
+  // useBeamDirector drives a real yoke as two nodes (yoke pans, head tilts) and
+  // falls back to this single combined quaternion for bodies with no yoke. The
+  // two paths must agree or a Scantastic would aim differently from a Fusion.
+  it("equals a yoke pan about Y composed with a head tilt about X", () => {
+    for (const [pan, tilt] of AIM_CASES) {
+      const composed = new Quaternion()
+        .setFromAxisAngle(new Vector3(0, 1, 0), MathUtils.degToRad(pan))
+        .multiply(
+          new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), MathUtils.degToRad(tilt)),
+        )
+      expect(headQuaternionFor(pan, tilt).angleTo(composed)).toBeCloseTo(0, 9)
+    }
+  })
+})
+
+describe("axisCentreDeg / dmxToSignedDegrees", () => {
+  // Every pan/tilt range declared in the lighting7 fixture library.
+  const RANGES: [number, number][] = [
+    [0, 540], // pan, most movers
+    [0, 630], // pan, Varytec Easymove XL 60
+    [0, 180], // pan, Scantastic 4
+    [0, 270], // tilt, several
+    [0, 257], // tilt, Martin MAC 250 / Robe ColorSpot 575
+    [0, 210], // tilt, Fusion 100 Spot MKII
+    [0, 90], // tilt, Scantastic 4
+  ]
+
+  it("centres on the midpoint of the declared travel", () => {
+    for (const [degMin, degMax] of RANGES) {
+      expect(axisCentreDeg(baseSlider({ degMin, degMax }))).toBeCloseTo(
+        (degMin + degMax) / 2,
+        9,
+      )
+    }
+  })
+
+  it("is null without both bounds", () => {
+    expect(axisCentreDeg(baseSlider())).toBeNull()
+    expect(axisCentreDeg(baseSlider({ degMin: 0 }))).toBeNull()
+    expect(dmxToSignedDegrees(128, baseSlider({ degMax: 540 }))).toBeNull()
+  })
+
+  it("reads zero at DMX centre and ±half-travel at the extremes", () => {
+    for (const [degMin, degMax] of RANGES) {
+      const s = baseSlider({ degMin, degMax })
+      const half = (degMax - degMin) / 2
+      expect(dmxToSignedDegrees(127.5, s)).toBeCloseTo(0, 9)
+      expect(dmxToSignedDegrees(0, s)).toBeCloseTo(-half, 9)
+      expect(dmxToSignedDegrees(255, s)).toBeCloseTo(half, 9)
+    }
+  })
+
+  it("flips sign when inverted", () => {
+    const s = baseSlider({ degMin: 0, degMax: 210, inverted: true })
+    expect(dmxToSignedDegrees(127.5, s)).toBeCloseTo(0, 9)
+    expect(dmxToSignedDegrees(0, s)).toBeCloseTo(105, 9)
+    expect(dmxToSignedDegrees(255, s)).toBeCloseTo(-105, 9)
+  })
+
+  // Guards that centring didn't break 16-bit: combineFine hands in a fractional
+  // coarse value, and one fine step must stay a sub-degree nudge off centre.
+  it("keeps a 16-bit fine step as a hair off centre", () => {
+    const s = baseSlider({ degMin: 0, degMax: 210 })
+    const oneFineStep = dmxToSignedDegrees(127.5 + 1 / 256, s)!
+    expect(oneFineStep).toBeGreaterThan(0)
+    expect(oneFineStep).toBeLessThan(0.01)
+  })
+})
+
+describe("normaliseSignedDeg", () => {
+  it("wraps into (-180, 180], keeping a deliberate 180", () => {
+    expect(normaliseSignedDeg(0)).toBe(0)
+    expect(normaliseSignedDeg(180)).toBe(180)
+    expect(normaliseSignedDeg(-180)).toBe(180)
+    expect(normaliseSignedDeg(181)).toBeCloseTo(-179, 9)
+    expect(normaliseSignedDeg(190)).toBeCloseTo(-170, 9)
+    expect(normaliseSignedDeg(-190)).toBeCloseTo(170, 9)
+    expect(normaliseSignedDeg(360)).toBe(0)
+    expect(normaliseSignedDeg(540)).toBe(180)
+  })
+})
+
+// The scene graph FixtureModel builds: body group carries the mount pose, yoke
+// pans, head tilts. These assert the rendered model and the beam maths agree —
+// the disagreement between them was the whole bug.
+describe("fixture scene graph", () => {
+  function aim(
+    pitchDeg: number,
+    yawDeg: number,
+    panDeg: number,
+    tiltDeg: number,
+    emitAxis: 1 | -1,
+  ): Vector3 {
+    const root = new Group()
+    const body = new Group()
+    const yoke = new Group()
+    const head = new Group()
+    root.add(body)
+    body.add(yoke)
+    yoke.add(head)
+    body.rotation.set(MathUtils.degToRad(pitchDeg), MathUtils.degToRad(yawDeg), 0, "YXZ")
+    yoke.rotation.set(0, MathUtils.degToRad(panDeg), 0)
+    head.rotation.set(MathUtils.degToRad(tiltDeg), 0, 0)
+    root.updateMatrixWorld(true)
+    return new Vector3(0, emitAxis, 0).transformDirection(head.matrixWorld)
+  }
+
+  it("aims a floor-standing mover straight up at DMX centre", () => {
+    const v = aim(0, 0, 0, 0, 1)
+    expect(v.y).toBeCloseTo(1, 9)
+  })
+
+  it("aims a hung mover (basePitch 180) straight down at DMX centre", () => {
+    const v = aim(180, 0, 0, 0, 1)
+    expect(v.y).toBeCloseTo(-1, 9)
+  })
+
+  it("matches panTiltToDir for an unrotated mount", () => {
+    for (const [pan, tilt] of AIM_CASES) {
+      const graph = aim(0, 0, pan, tilt, 1)
+      const maths = panTiltToDir(pan, tilt)
+      expect(graph.distanceTo(maths)).toBeCloseTo(0, 9)
+    }
+  })
+
+  it("composes the mount pose on top of pan/tilt", () => {
+    for (const [pitch, yaw] of [
+      [35, 0],
+      [-20, 47],
+      [180, 120],
+    ]) {
+      for (const [pan, tilt] of AIM_CASES) {
+        const graph = aim(pitch, yaw, pan, tilt, 1)
+        const maths = panTiltToDir(pan, tilt).applyEuler(
+          new Euler(MathUtils.degToRad(pitch), MathUtils.degToRad(yaw), 0, "YXZ"),
+        )
+        expect(graph.distanceTo(maths)).toBeCloseTo(0, 9)
+      }
+    }
+  })
+
+  // The migration contract for fixtures with no pan axis. The old code
+  // subtracted a hardcoded 270 even with no pan property, so baseYawDeg
+  // effectively meant "yaw - 270"; adding 90 reproduces the old aim exactly.
+  it("reproduces a static fixture's old aim given baseYawDeg + 90", () => {
+    const oldDir = (yaw: number, pitch: number) =>
+      new Vector3(0, -1, 0).applyEuler(
+        new Euler(MathUtils.degToRad(pitch), MathUtils.degToRad(yaw - 270), 0, "YXZ"),
+      )
+    for (const [yaw, pitch] of [
+      [0, 35],
+      [47, -20],
+      [120, 80],
+    ]) {
+      const now = aim(pitch, yaw + 90, 0, 0, -1)
+      expect(now.distanceTo(oldDir(yaw, pitch))).toBeCloseTo(0, 9)
     }
   })
 })
@@ -289,12 +461,6 @@ describe("dmxToDegrees", () => {
     const s = baseSlider({ degMin: 0, degMax: 540, inverted: true })
     expect(dmxToDegrees(0, s)).toBeCloseTo(540, 9)
     expect(dmxToDegrees(255, s)).toBeCloseTo(0, 9)
-  })
-
-  it("adds the base offset after mapping", () => {
-    const s = baseSlider({ degMin: 0, degMax: 540 })
-    expect(dmxToDegrees(0, s, 30)).toBeCloseTo(30, 9)
-    expect(dmxToDegrees(255, s, -45)).toBeCloseTo(540 - 45, 9)
   })
 
   it("returns null when span is zero or negative", () => {

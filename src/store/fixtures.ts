@@ -143,8 +143,22 @@ export type PropertyCategory =
   | 'strobe'
   | 'amber'
   | 'white'
-  | 'setting'
   | 'speed'
+  // Beam-shaping roles (mirrors the backend PropertyCategory). Split out of
+  // 'setting'/'other' so the 3D stage view can recognise them, the same way it
+  // already keys off 'pan'/'tilt'. An older backend simply never sends these,
+  // and every findXxx below returns undefined — the renderer then behaves
+  // exactly as it did before, so no version check is needed anywhere.
+  | 'gobo'
+  | 'gobo_rotation'
+  | 'prism'
+  | 'focus'
+  | 'zoom'
+  | 'iris'
+  | 'frost'
+  | 'led_macro'
+  | 'movement_macro'
+  | 'setting'
   | 'other'
 
 export type CompactDisplayRole = 'primary' | 'secondary'
@@ -202,6 +216,10 @@ export type SettingOption = {
   level: number
   displayName: string
   colourPreview?: string
+  /** Renderer gobo layer for this wheel position; 0 = open. Optional — when the
+   *  backend doesn't declare one, the stage view falls back to the option's
+   *  index on the wheel (see resolveGoboSlot in stage3d/beamOptics.ts). */
+  goboSlot?: number
 }
 
 export type SettingPropertyDescriptor = {
@@ -357,4 +375,78 @@ export function findTiltFineProperty(
   return properties?.find(
     (p): p is SliderPropertyDescriptor => p.type === 'slider' && p.category === 'tilt_fine',
   )
+}
+
+// — beam-shaping channels ————————————————————————————————————————————
+//
+// All of these return undefined against a backend that predates the categories,
+// which is what makes the 3D view's new optics degrade silently to its old
+// behaviour rather than needing a capability check.
+
+/** A continuous beam slider by category (focus / zoom / iris / frost). */
+function findSlider(
+  properties: PropertyDescriptor[] | undefined,
+  category: PropertyCategory,
+): SliderPropertyDescriptor | undefined {
+  return properties?.find(
+    (p): p is SliderPropertyDescriptor => p.type === 'slider' && p.category === category,
+  )
+}
+
+/**
+ * A wheel-like channel by category. Matches either descriptor shape on purpose:
+ * gobo rotation is a setting on the Equinox Fusion 100 and a plain slider on the
+ * Martin MAC 250, Robe ColorSpot 575 and Varytec Easymove.
+ */
+function findWheel(
+  properties: PropertyDescriptor[] | undefined,
+  category: PropertyCategory,
+): SliderPropertyDescriptor | SettingPropertyDescriptor | undefined {
+  return properties?.find(
+    (p): p is SliderPropertyDescriptor | SettingPropertyDescriptor =>
+      (p.type === 'slider' || p.type === 'setting') && p.category === category,
+  )
+}
+
+/**
+ * The gobo wheel. Returns the **last** match, not the first: the Robe ColorSpot
+ * 575 exposes a static wheel and a rotating wheel in that order, and the
+ * rotating one is the interesting one to draw (it's what gobo rotation acts on).
+ */
+export function findGoboProperty(
+  properties: PropertyDescriptor[] | undefined,
+): SliderPropertyDescriptor | SettingPropertyDescriptor | undefined {
+  return properties?.findLast(
+    (p): p is SliderPropertyDescriptor | SettingPropertyDescriptor =>
+      (p.type === 'slider' || p.type === 'setting') && p.category === 'gobo',
+  )
+}
+
+export function findGoboRotationProperty(properties: PropertyDescriptor[] | undefined) {
+  return findWheel(properties, 'gobo_rotation')
+}
+
+export function findPrismProperty(properties: PropertyDescriptor[] | undefined) {
+  return findWheel(properties, 'prism')
+}
+
+export function findLedMacroProperty(properties: PropertyDescriptor[] | undefined) {
+  return findWheel(properties, 'led_macro')
+}
+
+export function findMovementMacroProperty(properties: PropertyDescriptor[] | undefined) {
+  return findWheel(properties, 'movement_macro')
+}
+
+export function findFocusProperty(properties: PropertyDescriptor[] | undefined) {
+  return findSlider(properties, 'focus')
+}
+
+/** Zoom carries degMin/degMax as the full beam angle at DMX min/max. */
+export function findZoomProperty(properties: PropertyDescriptor[] | undefined) {
+  return findSlider(properties, 'zoom')
+}
+
+export function findIrisProperty(properties: PropertyDescriptor[] | undefined) {
+  return findSlider(properties, 'iris')
 }

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
+import type { DataArrayTexture } from 'three'
 import {
   AdditiveBlending,
   Color,
@@ -18,6 +19,7 @@ import {
 import type { StageRegionDto } from '../../api/stageRegionApi'
 import { toThree } from '../../lib/stageCoords'
 import { NO_RAYCAST } from './raycast'
+import { createGoboTexture } from './goboAtlas'
 import { HAZE_LEVEL } from './washConfig'
 
 export const MAX_BEAM_REGIONS = 16
@@ -62,6 +64,7 @@ const CONE_VERTEX_SHADER = /* glsl */ `
   attribute vec3 aBeamOrigin;
   attribute vec3 aColor;
   attribute float aOpacity;
+  attribute vec4 aBeamFx;
 
   varying vec3 vViewNormal;
   varying vec3 vViewPos;
@@ -70,9 +73,11 @@ const CONE_VERTEX_SHADER = /* glsl */ `
   varying vec3 vColor;
   varying float vOpacity;
   varying vec3 vBeamOrigin;
+  varying float vEdge;
 
   void main() {
     vAlong = uv.y;
+    vEdge = aBeamFx.x;
 
     vec4 worldPos4 = modelMatrix * instanceMatrix * vec4(position, 1.0);
     vWorldPos = worldPos4.xyz;
@@ -111,6 +116,7 @@ const CONE_FRAGMENT_SHADER = /* glsl */ `
   varying vec3 vColor;
   varying float vOpacity;
   varying vec3 vBeamOrigin;
+  varying float vEdge;
 
   ${RAY_OBB_T_GLSL}
 
@@ -131,7 +137,11 @@ const CONE_FRAGMENT_SHADER = /* glsl */ `
 
     vec3 V = normalize(-vViewPos);
     float ndotv = abs(dot(normalize(vViewNormal), V));
-    float radial = pow(ndotv, 0.7);
+    // vEdge 0 reproduces the pre-focus curve exactly, so a fixture with no focus
+    // channel (or an older backend) renders unchanged. Sharpening the shell in
+    // step with the pool keeps a tightly-focused beam from reading as a hard
+    // floor spot inside a woolly column of air.
+    float radial = pow(ndotv, mix(0.7, 1.15, vEdge));
     float lengthFade = mix(0.18, 0.9, vAlong);
     // uHaze scales the mid-air beam volume (atmosphere). 1.0 preserves the
     // pre-haze look; 0.0 leaves only the surface pools (a hazeless room).
@@ -152,6 +162,10 @@ const POOL_VERTEX_SHADER = /* glsl */ `
   attribute float aOpacity;
   attribute float aCosHalfAngle;
   attribute float aVisible;
+  #ifdef USE_GOBO
+  attribute vec4 aBeamFx;
+  attribute vec3 aBeamRight;
+  #endif
 
   varying vec3 vWorldPos;
   varying vec3 vBeamOrigin;
@@ -159,6 +173,10 @@ const POOL_VERTEX_SHADER = /* glsl */ `
   varying vec3 vColor;
   varying float vOpacity;
   varying float vCosHalfAngle;
+  #ifdef USE_GOBO
+  varying vec4 vBeamFx;
+  varying vec3 vBeamRight;
+  #endif
 
   void main() {
     if (aVisible < 0.5) {
@@ -175,6 +193,10 @@ const POOL_VERTEX_SHADER = /* glsl */ `
     vColor = aColor;
     vOpacity = aOpacity;
     vCosHalfAngle = aCosHalfAngle;
+    #ifdef USE_GOBO
+    vBeamFx = aBeamFx;
+    vBeamRight = aBeamRight;
+    #endif
 
     gl_Position = projectionMatrix * viewMatrix * wp;
   }
@@ -192,6 +214,11 @@ const POOL_FRAGMENT_SHADER = /* glsl */ `
   varying vec3 vColor;
   varying float vOpacity;
   varying float vCosHalfAngle;
+  #ifdef USE_GOBO
+  uniform sampler2DArray uGobo;
+  varying vec4 vBeamFx;
+  varying vec3 vBeamRight;
+  #endif
 
   ${RAY_OBB_T_GLSL}
 
@@ -212,8 +239,43 @@ const POOL_FRAGMENT_SHADER = /* glsl */ `
       }
     }
 
-    float radial = (cosAngle - vCosHalfAngle) / max(0.0001, 1.0 - vCosHalfAngle);
-    radial = pow(radial, 0.7);
+    float t = (cosAngle - vCosHalfAngle) / max(0.0001, 1.0 - vCosHalfAngle);
+    // Edge hardness from focus. 0 is the original soft falloff exactly, so a
+    // focus-less fixture is pixel-identical to before; 1 is a crisp rim, which
+    // is also what makes a gobo legible.
+    #ifdef USE_GOBO
+    float radial = mix(pow(t, 0.7), smoothstep(0.0, 0.12, t), vBeamFx.x);
+    #else
+    float radial = pow(t, 0.7);
+    #endif
+
+    #ifdef USE_GOBO
+    if (vBeamFx.y >= 0.5) {
+      // Sample the gobo in the beam's own cross-section frame rather than the
+      // cookie quad's UV: the quad is world-axis-aligned and sized to the
+      // slacked cull bound, so its UV neither rotates with pan nor keeps a
+      // stable scale. Projecting rayDir onto a basis carried with the head gives
+      // a frame that pans, tilts and keystones on an oblique hit for free.
+      // aBeamRight comes from the head's matrix — deriving a basis from the
+      // direction alone is unstable when the beam points near straight down.
+      vec3 bx = normalize(vBeamRight - vBeamDir * dot(vBeamRight, vBeamDir));
+      vec3 by = cross(vBeamDir, bx);
+      // Normalise by tan(halfAngle), not sin: dividing the perpendicular part
+      // of rayDir by its axial part already gives tan(offAxisAngle), which
+      // reaches tan(half) at the rim. Dividing by sin(half) instead would map
+      // the rim to 1/cos(half) — a 3% crop on a 30° spot but 41% on a 90° wash,
+      // so the pattern would visibly zoom as zoom widened the beam.
+      float axial = max(1e-4, cosAngle);
+      float sinHalf = sqrt(max(0.0, 1.0 - vCosHalfAngle * vCosHalfAngle));
+      float tanHalf = max(1e-4, sinHalf / max(1e-4, vCosHalfAngle));
+      vec2 g = vec2(dot(rayDir, bx), dot(rayDir, by)) / (axial * tanHalf);
+
+      float ca = cos(vBeamFx.z);
+      float sa = sin(vBeamFx.z);
+      vec2 guv = vec2(ca * g.x - sa * g.y, sa * g.x + ca * g.y) * 0.5 + 0.5;
+      radial *= texture(uGobo, vec3(guv, vBeamFx.y)).r;
+    }
+    #endif
 
     float distFade = mix(1.0, 0.55, clamp(fragDist / uMaxDist, 0.0, 1.0));
 
@@ -258,11 +320,19 @@ function makeConeMaterial(): ShaderMaterial {
   })
 }
 
-function makePoolMaterial(): ShaderMaterial {
+/**
+ * `withGobo` compiles in the focus/gobo path. Off for the per-pixel wash pools:
+ * a strip draws 16 pools per fixture (× regions) and can't gobo anything, so it
+ * shouldn't pay for the texture fetch or the two cross products — and the
+ * `#ifdef` also keeps two extra instanced attributes off that geometry.
+ */
+function makePoolMaterial(withGobo: boolean, gobo?: DataArrayTexture): ShaderMaterial {
   return new ShaderMaterial({
+    defines: withGobo ? { USE_GOBO: '' } : {},
     uniforms: {
       uMaxDist: { value: BEAM_LENGTH },
       uCoreBoost: { value: 0.5 },
+      ...(withGobo ? { uGobo: { value: gobo ?? null } } : {}),
       ...makeRegionUniforms(),
     },
     vertexShader: POOL_VERTEX_SHADER,
@@ -321,6 +391,22 @@ export interface EmittersHandle {
 
   writeConeMatrix(slot: number, matrix: Matrix4): void
   writeConeAttrs(slot: number, origin: Vector3, color: Color, opacity: number): void
+
+  /**
+   * Beam-shaping params for a slot, applied to its cone and both pool meshes.
+   * `edge` 0..1 is focus hardness (0 = the original soft falloff, so a fixture
+   * with no focus channel is unchanged). `goboSlot` 0 = open. `goboAngle` is in
+   * radians. `right` is the head's world X axis, giving the gobo a stable
+   * cross-section frame — a basis derived from the beam direction alone degenerates
+   * when the beam points near straight down, which is most of the time.
+   */
+  writeBeamFx(
+    slot: number,
+    edge: number,
+    goboSlot: number,
+    goboAngle: number,
+    right: Vector3,
+  ): void
 
   writeFloorMatrix(slot: number, visible: boolean, cx: number, cz: number, side: number): void
   writeFloorAttrs(
@@ -407,17 +493,19 @@ export function StageEmitters({ fixtureCount, regionGeometry, children }: StageE
   const regionCount = Math.min(regionGeometry.length, MAX_BEAM_REGIONS)
 
   const coneMaterial = useMemo(makeConeMaterial, [])
-  const poolMaterial = useMemo(makePoolMaterial, [])
+  const goboTexture = useMemo(createGoboTexture, [])
+  const poolMaterial = useMemo(() => makePoolMaterial(true, goboTexture), [goboTexture])
   // Wash pools reuse the pool shader but drop the white hotspot boost so a bar's
   // overlapping per-pixel colours blend as colour, not white.
   const washPoolMaterial = useMemo(() => {
-    const m = makePoolMaterial()
+    const m = makePoolMaterial(false)
     m.uniforms.uCoreBoost.value = 0
     return m
   }, [])
   useEffect(() => () => coneMaterial.dispose(), [coneMaterial])
   useEffect(() => () => poolMaterial.dispose(), [poolMaterial])
   useEffect(() => () => washPoolMaterial.dispose(), [washPoolMaterial])
+  useEffect(() => () => goboTexture.dispose(), [goboTexture])
 
   // Shared region OBB uniforms — sync into both materials whenever the
   // region layout changes. Pre-bake yaw into a cos/sin pair so the shader
@@ -483,6 +571,7 @@ export function StageEmitters({ fixtureCount, regionGeometry, children }: StageE
     m.coneOrigin.needsUpdate = true
     m.coneColor.needsUpdate = true
     m.coneOpacity.needsUpdate = true
+    m.coneFx.needsUpdate = true
 
     m.floorMesh.instanceMatrix.needsUpdate = true
     m.floorOrigin.needsUpdate = true
@@ -490,8 +579,12 @@ export function StageEmitters({ fixtureCount, regionGeometry, children }: StageE
     m.floorColor.needsUpdate = true
     m.floorOpacity.needsUpdate = true
     m.floorCosHalfAngle.needsUpdate = true
+    m.floorFx.needsUpdate = true
+    m.floorRight.needsUpdate = true
 
     m.regionOrigin.needsUpdate = true
+    m.regionFx.needsUpdate = true
+    m.regionRight.needsUpdate = true
     m.regionDir.needsUpdate = true
     m.regionColor.needsUpdate = true
     m.regionOpacity.needsUpdate = true
@@ -533,10 +626,13 @@ interface BuiltEmitters {
   regionMesh: InstancedMesh
 
   coneOrigin: InstancedBufferAttribute
+  coneFx: InstancedBufferAttribute
   coneColor: InstancedBufferAttribute
   coneOpacity: InstancedBufferAttribute
 
   floorOrigin: InstancedBufferAttribute
+  floorFx: InstancedBufferAttribute
+  floorRight: InstancedBufferAttribute
   floorDir: InstancedBufferAttribute
   floorColor: InstancedBufferAttribute
   floorOpacity: InstancedBufferAttribute
@@ -545,6 +641,8 @@ interface BuiltEmitters {
   // Per-fixture attribute buffers — divisor=regionCount so each fixture's
   // value applies to all regionCount of its cookie instances.
   regionOrigin: InstancedBufferAttribute
+  regionFx: InstancedBufferAttribute
+  regionRight: InstancedBufferAttribute
   regionDir: InstancedBufferAttribute
   regionColor: InstancedBufferAttribute
   regionOpacity: InstancedBufferAttribute
@@ -598,9 +696,11 @@ function buildEmitters(
   const coneOrigin = vec3InstAttr(fixCap)
   const coneColor = vec3InstAttr(fixCap)
   const coneOpacity = floatInstAttr(fixCap)
+  const coneFx = vec4InstAttr(fixCap)
   coneGeo.setAttribute('aBeamOrigin', coneOrigin)
   coneGeo.setAttribute('aColor', coneColor)
   coneGeo.setAttribute('aOpacity', coneOpacity)
+  coneGeo.setAttribute('aBeamFx', coneFx)
 
   const floorOrigin = vec3InstAttr(fixCap)
   const floorDir = vec3InstAttr(fixCap)
@@ -612,6 +712,10 @@ function buildEmitters(
   floorGeo.setAttribute('aColor', floorColor)
   floorGeo.setAttribute('aOpacity', floorOpacity)
   floorGeo.setAttribute('aCosHalfAngle', floorCosHalfAngle)
+  const floorFx = vec4InstAttr(fixCap)
+  const floorRight = vec3InstAttr(fixCap)
+  floorGeo.setAttribute('aBeamFx', floorFx)
+  floorGeo.setAttribute('aBeamRight', floorRight)
   // Floor shares the pool shader, which gates on aVisible — keep it always
   // 1 here; per-fixture visibility is encoded in scale-to-zero on the
   // instance matrix.
@@ -629,7 +733,15 @@ function buildEmitters(
   regionOpacity.meshPerAttribute = regDivisor
   const regionCosHalfAngle = floatInstAttr(fixCap)
   regionCosHalfAngle.meshPerAttribute = regDivisor
+  // Per-fixture, like its neighbours above — without meshPerAttribute each
+  // fixture's gobo would bleed into the next fixture's region cookies.
+  const regionFx = vec4InstAttr(fixCap)
+  regionFx.meshPerAttribute = regDivisor
+  const regionRight = vec3InstAttr(fixCap)
+  regionRight.meshPerAttribute = regDivisor
   const regionVisible = floatInstAttr(regCap)
+  regionGeo.setAttribute('aBeamFx', regionFx)
+  regionGeo.setAttribute('aBeamRight', regionRight)
   regionGeo.setAttribute('aBeamOrigin', regionOrigin)
   regionGeo.setAttribute('aBeamDir', regionDir)
   regionGeo.setAttribute('aColor', regionColor)
@@ -740,14 +852,19 @@ function buildEmitters(
     floorMesh,
     regionMesh,
     coneOrigin,
+    coneFx,
     coneColor,
     coneOpacity,
     floorOrigin,
+    floorFx,
+    floorRight,
     floorDir,
     floorColor,
     floorOpacity,
     floorCosHalfAngle,
     regionOrigin,
+    regionFx,
+    regionRight,
     regionDir,
     regionColor,
     regionOpacity,
@@ -777,6 +894,13 @@ function floatInstAttr(count: number): InstancedBufferAttribute {
   return new InstancedBufferAttribute(new Float32Array(count), 1)
 }
 
+// Beam-shaping params packed as one vec4 (edge, goboSlot, goboAngle, spare)
+// rather than four scalars: the pool program is already near the 16-attribute
+// floor guaranteed by WebGL2, and one attribute means one needsUpdate flip.
+function vec4InstAttr(count: number): InstancedBufferAttribute {
+  return new InstancedBufferAttribute(new Float32Array(count * 4), 4)
+}
+
 const UNIT_Y = new Vector3(0, 1, 0)
 const ZERO_MATRIX = new Matrix4().makeScale(0, 0, 0)
 const FLOOR_POS = new Vector3()
@@ -796,6 +920,16 @@ function makeHandle(b: BuiltEmitters): EmittersHandle {
       b.coneOrigin.setXYZ(slot, origin.x, origin.y, origin.z)
       b.coneColor.setXYZ(slot, color.r, color.g, color.b)
       b.coneOpacity.setX(slot, opacity)
+    },
+
+    writeBeamFx(slot, edge, goboSlot, goboAngle, right) {
+      // The cone reads only .x (edge) — it has no interior to project into, so
+      // the gobo is a floor/region-pool effect only.
+      b.coneFx.setXYZW(slot, edge, 0, 0, 0)
+      b.floorFx.setXYZW(slot, edge, goboSlot, goboAngle, 0)
+      b.regionFx.setXYZW(slot, edge, goboSlot, goboAngle, 0)
+      b.floorRight.setXYZ(slot, right.x, right.y, right.z)
+      b.regionRight.setXYZ(slot, right.x, right.y, right.z)
     },
 
     writeFloorMatrix(slot, visible, cx, cz, side) {

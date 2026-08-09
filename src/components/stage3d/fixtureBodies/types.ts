@@ -9,8 +9,21 @@ export interface FixtureBodyDims {
 
 export interface FixtureBodyProps {
   active: boolean
+  /** Tilt node — rotated about its local X by the signed tilt angle. */
   headRef: React.RefObject<Group | null>
+  /** Pan node: the yoke, carrying the arms *and* the head. Bodies that model a
+   *  real yoke publish this so the arms swing with the head instead of the head
+   *  swinging out from between them. Bodies without one leave it unset and take
+   *  the combined pan+tilt quaternion on `headRef` instead. */
+  yokeRef?: React.RefObject<Group | null>
   lensRef: React.RefObject<Mesh | null>
+  /** Which way the head emits along its own Y. `1` for a tilting head, whose
+   *  rest pose is up the body axis away from the base; `-1` for a rigid body
+   *  whose lens simply faces down. Bodies mirror their housing taper and lens
+   *  position to match. Chosen by FixtureModel from the presence of a tilt
+   *  descriptor — never from `kind`, because a Source 4 Revolution is a PROFILE
+   *  that tilts and a Scantastic 4 is a SCANNER that does. */
+  emitAxis?: 1 | -1
   /** Real fixture size. Undefined ⇒ the body keeps its hard-coded design size
    *  (e.g. an older backend that doesn't send dimensions). */
   dims?: FixtureBodyDims

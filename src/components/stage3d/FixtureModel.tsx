@@ -30,6 +30,13 @@ import {
   findTiltProperty,
   findPanFineProperty,
   findTiltFineProperty,
+  findFocusProperty,
+  findZoomProperty,
+  findGoboProperty,
+  findGoboRotationProperty,
+  findPrismProperty,
+  findLedMacroProperty,
+  findMovementMacroProperty,
   resolveFixtureKind,
 } from '../../store/fixtures'
 import type { GroupColourPropertyDescriptor } from '../../api/groupsApi'
@@ -48,10 +55,25 @@ import {
 import { findGel } from '../../data/gels'
 import {
   dmxToDegrees,
+  dmxToSignedDegrees,
   headQuaternionFor,
-  panTiltToDir,
   worldPositionFor,
 } from '../../lib/stageCoords'
+import {
+  computeBeamGeom,
+  evalLedMacro,
+  evalMovementMacro,
+  makeBeamGeom,
+  resolveFocusParam,
+  resolveGoboSlot,
+  resolveGoboSpin,
+  resolveMacroIndex,
+  resolvePrismFacets,
+  type BeamGeom,
+  type ByteDescriptor,
+  type MacroColour,
+  type MacroMovement,
+} from './beamOptics'
 import {
   BEAM_LENGTH,
   MAX_WASH_PIXELS,
@@ -69,7 +91,6 @@ const COLOR_TMP = new Color()
 const PIXEL_COLOR = new Color()
 const WASH_COLOR = new Color()
 const UNIT_Y = new Vector3(0, 1, 0)
-const LOCAL_DOWN = new Vector3(0, -1, 0)
 const SCRATCH_DIR = new Vector3()
 const SCRATCH_NEG_DIR = new Vector3()
 const SCRATCH_ORIGIN = new Vector3()
@@ -79,8 +100,33 @@ const SCRATCH_CONE_POS = new Vector3()
 const SCRATCH_CONE_SCALE = new Vector3()
 const SCRATCH_CONE_MAT = new Matrix4()
 const SCRATCH_WASH_DIR = new Vector3()
-const SCRATCH_WASH_QUAT = new Quaternion()
 const SCRATCH_PIXEL_POS = new Vector3()
+const SCRATCH_RIGHT = new Vector3()
+const SCRATCH_MACRO_COLOR = new Color()
+const SCRATCH_MOVE_MACRO: MacroMovement = { panDeg: 0, tiltDeg: 0 }
+const SCRATCH_LED_MACRO: MacroColour = { hueShift: 0, intensityScale: 1 }
+const SCRATCH_HSL = { h: 0, s: 0, l: 0 }
+// Saturation floor for a hue-cycling LED macro, so it still reads as a colour
+// chase when the fixture's base colour is white.
+const LED_MACRO_MIN_SATURATION = 0.8
+const TAU = Math.PI * 2
+
+// Prism approximation: the air column widens and dims rather than splitting into
+// separate cones, which would need emitter capacity the pool doesn't have.
+const PRISM_SPREAD = 2.2
+const PRISM_CONE_DIM = 0.6
+// Lobe centres sit this many beam half-angles off axis — just past 1 so they
+// separate visibly while still overlapping, which is what a real 3-facet prism
+// looks like on the floor.
+const PRISM_SPLAY = 1.35
+// Lobe and centre shares. They sum to roughly 1 so total floor flux is about
+// what the un-prismed beam put down — the prism spreads light, it doesn't make
+// any. The centre keeps a little extra because all three lobes overlap it.
+const PRISM_LOBE_DIM = 0.28
+const PRISM_CENTRE_DIM = 0.3
+const SCRATCH_PRISM_X = new Vector3()
+const SCRATCH_PRISM_Y = new Vector3()
+const SCRATCH_LOBE_DIR = new Vector3()
 
 // Slack on the cone half-angle so cookies fade in before the shader's
 // cosAngle test would clip them — masks the boundary even on a wide spot
@@ -178,6 +224,25 @@ export function FixtureModel({
     () => findDimmerProperty(fixture?.properties),
     [fixture?.properties],
   )
+  // Beam-shaping channels. All undefined against a backend that predates the
+  // categories, which is what makes the optics below degrade to the old look.
+  const focusProp = useMemo(() => findFocusProperty(fixture?.properties), [fixture?.properties])
+  const zoomProp = useMemo(() => findZoomProperty(fixture?.properties), [fixture?.properties])
+  const goboProp = useMemo(() => findGoboProperty(fixture?.properties), [fixture?.properties])
+  const goboRotProp = useMemo(
+    () => findGoboRotationProperty(fixture?.properties),
+    [fixture?.properties],
+  )
+  const prismProp = useMemo(() => findPrismProperty(fixture?.properties), [fixture?.properties])
+  const ledMacroProp = useMemo(
+    () => findLedMacroProperty(fixture?.properties),
+    [fixture?.properties],
+  )
+  const moveMacroProp = useMemo(
+    () => findMovementMacroProperty(fixture?.properties),
+    [fixture?.properties],
+  )
+
   const panProp = useMemo(() => findPanProperty(fixture?.properties), [fixture?.properties])
   const tiltProp = useMemo(() => findTiltProperty(fixture?.properties), [fixture?.properties])
   const panFineProp = useMemo(() => findPanFineProperty(fixture?.properties), [fixture?.properties])
@@ -210,26 +275,50 @@ export function FixtureModel({
     riggings,
   ])
 
-  const beamDeg = patch.beamAngleDeg ?? DEFAULT_BEAM_DEG
-  const beamRadius = BEAM_LENGTH * Math.tan(MathUtils.degToRad(beamDeg / 2))
+  // Fallback beam angle. A ZOOM channel overrides this per frame inside the
+  // director, which is why none of the derived trig can live in a React memo
+  // any more — see BeamGeom in beamOptics.
+  const baseBeamDeg = patch.beamAngleDeg ?? DEFAULT_BEAM_DEG
   const showCone = !!fixtureType?.acceptsBeamAngle && !!emitters
 
   const groupRef = useRef<Group>(null)
+  const yokeRef = useRef<Group>(null)
   const headRef = useRef<Group>(null)
   const lensRef = useRef<Mesh>(null)
+
+  // A fixture with a tilt axis has a head that rests along +Y — mid-DMX tilt
+  // points up the body, away from the base. Anything else is a rigid body whose
+  // lens faces -Y and which is aimed entirely by baseYaw/basePitch. Keyed off
+  // the tilt descriptor rather than `kind`, because a Source 4 Revolution is a
+  // PROFILE that tilts and a Scantastic 4 is a SCANNER that does.
+  //
+  // `kind === 'MOVING_HEAD'` is the second half of the test, not a substitute
+  // for the first: a Slender Beam Bar Quad in 1CH or 6CH mode is registered as
+  // MOVING_HEAD but declares pan/tilt only on its element heads, so `tiltProp`
+  // is undefined. Without this it would draw its head hanging below the yoke
+  // pivot and fire straight down through its own base disc.
+  const emitAxis: 1 | -1 = tiltProp || kind === 'MOVING_HEAD' ? 1 : -1
+
+  // Mount orientation for the body. Kept on an inner group so groupRef itself
+  // stays axis-aligned: TransformControls and the placement raycaster write
+  // through it, and the label should stay upright above a fixture hung upside
+  // down. YXZ matches rigEuler's convention.
+  const baseRotation = useMemo(
+    () =>
+      new Euler(
+        MathUtils.degToRad(patch.basePitchDeg ?? 0),
+        MathUtils.degToRad(patch.baseYawDeg ?? 0),
+        0,
+        'YXZ',
+      ),
+    [patch.basePitchDeg, patch.baseYawDeg],
+  )
 
   useEffect(() => {
     if (selected && editMode && onEditFocus && groupRef.current) {
       onEditFocus(groupRef.current)
     }
   }, [selected, editMode, onEditFocus])
-
-  const halfBeamRad = MathUtils.degToRad(beamDeg / 2)
-  const coneHalfAngleRad = halfBeamRad + REGION_CULL_SLACK_RAD
-  const cullTrig = useMemo(
-    () => ({ cosCone: Math.cos(coneHalfAngleRad), sinCone: Math.sin(coneHalfAngleRad) }),
-    [coneHalfAngleRad],
-  )
 
   // Shared per-fixture color state. ColourSync writes here (React-rate);
   // useBeamDirector reads here (per-frame) and pushes to the emitter slot.
@@ -260,15 +349,19 @@ export function FixtureModel({
     tiltProp,
     panFineProp,
     tiltFineProp,
-    baseYawDeg: patch.baseYawDeg ?? 0,
-    basePitchDeg: patch.basePitchDeg ?? 0,
-    beamRadius,
-    cullCosCone: cullTrig.cosCone,
-    cullSinCone: cullTrig.sinCone,
-    floorCookieSide: 2 * BEAM_LENGTH * cullTrig.sinCone,
-    cosHalfBeam: Math.cos(halfBeamRad),
+    baseBeamDeg,
+    focusProp,
+    zoomProp,
+    goboProp,
+    goboRotProp,
+    prismProp,
+    ledMacroProp,
+    moveMacroProp,
     groupRef,
+    yokeRef,
     headRef,
+    lensRef,
+    emitAxis,
     slot,
     emitters: showCone ? emitters : null,
     regionGeometry,
@@ -309,15 +402,19 @@ export function FixtureModel({
       onPointerOver={editMode ? (e) => { e.stopPropagation(); setHovered(true) } : undefined}
       onPointerOut={editMode ? () => setHovered(false) : undefined}
     >
-      <FixtureBody
-        kind={kind}
-        active={active}
-        headRef={headRef}
-        lensRef={lensRef}
-        dims={bodyDims}
-        pixelCount={pixelCount > 1 ? pixelCount : undefined}
-        pixelColorsRef={pixelColorsRef}
-      />
+      <group rotation={baseRotation}>
+        <FixtureBody
+          kind={kind}
+          active={active}
+          headRef={headRef}
+          yokeRef={yokeRef}
+          lensRef={lensRef}
+          emitAxis={emitAxis}
+          dims={bodyDims}
+          pixelCount={pixelCount > 1 ? pixelCount : undefined}
+          pixelColorsRef={pixelColorsRef}
+        />
+      </group>
 
       {active && (
         <mesh rotation={[Math.PI / 2, 0, 0]}>
@@ -361,15 +458,19 @@ interface BeamDirectorOpts {
   tiltProp: SliderPropertyDescriptor | undefined
   panFineProp: SliderPropertyDescriptor | undefined
   tiltFineProp: SliderPropertyDescriptor | undefined
-  baseYawDeg: number
-  basePitchDeg: number
-  beamRadius: number
-  cullCosCone: number
-  cullSinCone: number
-  floorCookieSide: number
-  cosHalfBeam: number
+  baseBeamDeg: number
+  focusProp: SliderPropertyDescriptor | undefined
+  zoomProp: SliderPropertyDescriptor | undefined
+  goboProp: ByteDescriptor | undefined
+  goboRotProp: ByteDescriptor | undefined
+  prismProp: ByteDescriptor | undefined
+  ledMacroProp: ByteDescriptor | undefined
+  moveMacroProp: ByteDescriptor | undefined
   groupRef: React.RefObject<Group | null>
+  yokeRef: React.RefObject<Group | null>
   headRef: React.RefObject<Group | null>
+  lensRef: React.RefObject<Mesh | null>
+  emitAxis: 1 | -1
   slot: number
   emitters: EmittersHandle | null
   regionGeometry: ReadonlyArray<RegionGeometry>
@@ -378,6 +479,14 @@ interface BeamDirectorOpts {
 
 // 8-bit fine DMX channel divides one coarse step into 256 sub-steps.
 const FINE_STEPS = 256
+
+// Module-level, not a per-frame closure: useFrame runs once per fixture per
+// frame and this path is deliberately allocation-free (see the SCRATCH_*
+// constants above), so a fresh arrow function here would cost ~3k throwaway
+// closures a second on the 50-fixture profile harness.
+function readChannel(vals: Map<string, number>, key: string | null): number {
+  return key ? vals.get(key) ?? 0 : 0
+}
 
 function combineFine(
   coarseProp: SliderPropertyDescriptor | undefined,
@@ -389,24 +498,29 @@ function combineFine(
   return fineProp ? coarseRaw + fineRaw / FINE_STEPS : coarseRaw
 }
 
-// Per-frame: decode pan/tilt to a beam direction, point the head, then push
-// the fixture's slot in the shared instanced emitters. Origin has to come
-// from the THREE group (not the React `fixturePos` prop) — TransformControls
-// mutates the group position directly during drag and React state lags.
+// Per-frame: decode pan/tilt, articulate the model, then read the beam back off
+// the model's own matrices and push the fixture's slot in the shared instanced
+// emitters. Origin has to come from the THREE objects (not the React
+// `fixturePos` prop) — TransformControls mutates the group position directly
+// during drag and React state lags.
 function useBeamDirector({
   panProp,
   tiltProp,
   panFineProp,
   tiltFineProp,
-  baseYawDeg,
-  basePitchDeg,
-  beamRadius,
-  cullCosCone,
-  cullSinCone,
-  floorCookieSide,
-  cosHalfBeam,
+  baseBeamDeg,
+  focusProp,
+  zoomProp,
+  goboProp,
+  goboRotProp,
+  prismProp,
+  ledMacroProp,
+  moveMacroProp,
   groupRef,
+  yokeRef,
   headRef,
+  lensRef,
+  emitAxis,
   slot,
   emitters,
   regionGeometry,
@@ -417,53 +531,186 @@ function useBeamDirector({
   // store in the frame loop rather than via React subscriptions — same reasoning
   // as the colour sync below: the R3F reconciler can drop hook-driven updates,
   // the frame loop can't. Keys are pre-baked so the per-frame read allocates nothing.
-  const panKeys = useMemo(
+  const beamKeys = useMemo(
     () => ({
       pan: panProp ? channelKey(panProp.channel) : null,
       tilt: tiltProp ? channelKey(tiltProp.channel) : null,
       panFine: panFineProp ? channelKey(panFineProp.channel) : null,
       tiltFine: tiltFineProp ? channelKey(tiltFineProp.channel) : null,
+      focus: focusProp ? channelKey(focusProp.channel) : null,
+      zoom: zoomProp ? channelKey(zoomProp.channel) : null,
+      gobo: goboProp ? channelKey(goboProp.channel) : null,
+      goboRot: goboRotProp ? channelKey(goboRotProp.channel) : null,
+      prism: prismProp ? channelKey(prismProp.channel) : null,
+      ledMacro: ledMacroProp ? channelKey(ledMacroProp.channel) : null,
+      moveMacro: moveMacroProp ? channelKey(moveMacroProp.channel) : null,
     }),
-    [panProp, tiltProp, panFineProp, tiltFineProp],
+    [
+      panProp,
+      tiltProp,
+      panFineProp,
+      tiltFineProp,
+      focusProp,
+      zoomProp,
+      goboProp,
+      goboRotProp,
+      prismProp,
+      ledMacroProp,
+      moveMacroProp,
+    ],
   )
 
-  useFrame(() => {
+  // Beam cone trig. Zoom makes the angle per-frame, so this is a mutable struct
+  // refreshed behind a dirty check rather than a memo — a static fixture pays
+  // one float compare a frame. Per-fixture, not module-level: several readers
+  // touch it within the same frame.
+  const geomRef = useRef<BeamGeom>(makeBeamGeom())
+  // Gobo rotation is an integrated angle, so it has to persist across frames.
+  const goboAngleRef = useRef(0)
+  // Whether this slot currently owns its wash block for prism lobes, so it can
+  // be vacated exactly once when the prism swings out.
+  const prismLitRef = useRef(false)
+  const lobeGeomRef = useRef<WashGeom>({ cosHalf: 1, cosCull: 1, sinCull: 0, floorSide: 0 })
+
+  useFrame((state, delta) => {
+    const elapsed = state.clock.elapsedTime
     const vals = lightingApi.channels.getAll()
-    const panRaw = panKeys.pan ? vals.get(panKeys.pan) ?? 0 : 0
-    const tiltRaw = panKeys.tilt ? vals.get(panKeys.tilt) ?? 0 : 0
-    const panFineRaw = panKeys.panFine ? vals.get(panKeys.panFine) ?? 0 : 0
-    const tiltFineRaw = panKeys.tiltFine ? vals.get(panKeys.tiltFine) ?? 0 : 0
+    const panRaw = readChannel(vals, beamKeys.pan)
+    const tiltRaw = readChannel(vals, beamKeys.tilt)
 
-    const panCombined = combineFine(panProp, panRaw, panFineProp, panFineRaw)
-    const tiltCombined = combineFine(tiltProp, tiltRaw, tiltFineProp, tiltFineRaw)
-    const panDeg = panProp ? dmxToDegrees(panCombined, panProp, baseYawDeg) : baseYawDeg
-    const tiltDeg = tiltProp
-      ? dmxToDegrees(tiltCombined, tiltProp, basePitchDeg)
-      : basePitchDeg
-    const finalPan = panDeg ?? baseYawDeg
-    const finalTilt = tiltDeg ?? basePitchDeg
+    const panCombined = combineFine(panProp, panRaw, panFineProp, readChannel(vals, beamKeys.panFine))
+    const tiltCombined = combineFine(tiltProp, tiltRaw, tiltFineProp, readChannel(vals, beamKeys.tiltFine))
 
-    const dir = panTiltToDir(finalPan, finalTilt, SCRATCH_DIR)
+    // Signed about each axis's own centre. No base angles here: baseYaw and
+    // basePitch are the body's mount orientation and are carried by the body
+    // group, so folding them in again would apply them twice.
+    let panDeg = panProp ? dmxToSignedDegrees(panCombined, panProp) ?? 0 : 0
+    let tiltDeg = tiltProp ? dmxToSignedDegrees(tiltCombined, tiltProp) ?? 0 : 0
 
-    if (headRef.current) {
-      headRef.current.quaternion.copy(
-        headQuaternionFor(finalPan, finalTilt, SCRATCH_QUAT, SCRATCH_QUAT_EULER),
+    // A movement macro is an offset on top of the live pan/tilt, so both the
+    // head model and the beam pick it up — they read from the same two values.
+    const moveMacro = resolveMacroIndex(moveMacroProp, readChannel(vals, beamKeys.moveMacro))
+    if (moveMacro > 0) {
+      evalMovementMacro(moveMacro, elapsed, SCRATCH_MOVE_MACRO)
+      panDeg += SCRATCH_MOVE_MACRO.panDeg
+      tiltDeg += SCRATCH_MOVE_MACRO.tiltDeg
+    }
+
+    const yoke = yokeRef.current
+    const head = headRef.current
+    if (yoke && head) {
+      // Split drive: the yoke pans, carrying the arms, and the head tilts
+      // between them. Composed this equals headQuaternionFor(pan, tilt), which
+      // stageCoords.test asserts so the two drive paths can't drift.
+      yoke.rotation.set(0, MathUtils.degToRad(panDeg), 0)
+      head.rotation.set(MathUtils.degToRad(tiltDeg), 0, 0)
+    } else if (head) {
+      head.quaternion.copy(
+        headQuaternionFor(panDeg, tiltDeg, SCRATCH_QUAT, SCRATCH_QUAT_EULER),
       )
     }
 
     if (!emitters) return
 
     const colorState = colorStateRef.current
-    const lightOn = colorState.poolOpacity >= LIGHT_OFF_OPACITY
-    if (!lightOn) {
+
+    // An LED macro modulates on top of the base colour. Written to a scratch
+    // colour, never back into colorState: that field belongs to ColourSync, and
+    // folding the macro in would leave the fixture permanently tinted once the
+    // macro stops.
+    const ledMacro = resolveMacroIndex(ledMacroProp, readChannel(vals, beamKeys.ledMacro))
+    let beamColor = colorState.color
+    let poolOpacity = colorState.poolOpacity
+    let coneOpacity = colorState.coneOpacity
+    if (ledMacro > 0) {
+      evalLedMacro(ledMacro, elapsed, SCRATCH_LED_MACRO)
+      SCRATCH_MACRO_COLOR.copy(colorState.color)
+      if (SCRATCH_LED_MACRO.hueShift !== 0) {
+        // offsetHSL alone is a no-op on an unsaturated base — every hue maps to
+        // the same grey — and white is the common case here (the default beam
+        // colour is #fff8d5, and a colour wheel sits at OPEN_WHITE). So pull
+        // saturation up to a floor first, or the cycle would do nothing at all
+        // on exactly the fixtures most likely to be running it.
+        SCRATCH_MACRO_COLOR.getHSL(SCRATCH_HSL)
+        SCRATCH_MACRO_COLOR.setHSL(
+          (SCRATCH_HSL.h + SCRATCH_LED_MACRO.hueShift) % 1,
+          Math.max(SCRATCH_HSL.s, LED_MACRO_MIN_SATURATION),
+          SCRATCH_HSL.l,
+        )
+      }
+      beamColor = SCRATCH_MACRO_COLOR
+      poolOpacity *= SCRATCH_LED_MACRO.intensityScale
+      coneOpacity *= SCRATCH_LED_MACRO.intensityScale
+    }
+
+    // Cull on the *base* opacity, not the macro-scaled one, so a pulsing macro
+    // doesn't vacate and re-take the emitter slot every cycle.
+    if (colorState.poolOpacity < LIGHT_OFF_OPACITY) {
       emitters.hideSlot(slot)
+      // hideSlot covers the beam block only; the borrowed prism lobes live in
+      // the wash block and would otherwise ghost after a blackout.
+      if (prismLitRef.current) {
+        emitters.hideWashSlot(slot)
+        prismLitRef.current = false
+      }
       return
     }
 
-    if (groupRef.current) {
-      groupRef.current.updateMatrixWorld()
-      groupRef.current.getWorldPosition(SCRATCH_ORIGIN)
+    // Zoom overrides the patch's static beam angle. dmxToDegrees is reused
+    // as-is: on a ZOOM slider degMin/degMax are the beam angle at each end, and
+    // it returns null when the fixture declares no range (Robe, Source 4), which
+    // falls back to the patch value.
+    const zoomDeg = zoomProp ? dmxToDegrees(readChannel(vals, beamKeys.zoom), zoomProp) : null
+    const beamDeg = zoomDeg ?? baseBeamDeg
+    const geom = geomRef.current
+    if (beamDeg !== geom.beamDeg) {
+      computeBeamGeom(beamDeg, BEAM_LENGTH, REGION_CULL_SLACK_RAD, geom)
     }
+
+    // Focus hardens the beam edge. A fixture with no focus channel stays at 0,
+    // which is byte-for-byte the pre-focus falloff.
+    //
+    // Deliberately NOT seeded from fixtureType.beamEdge: beamDefaults() marks
+    // every SCANNER and PROFILE as HARD, so honouring it here would re-skin the
+    // pools of fixtures nobody touched — a Source 4 in an existing show would
+    // render crisper than it did yesterday with no DMX change. beamEdge is
+    // documented as anticipatory; switching it on is its own decision.
+    const edge = resolveFocusParam(focusProp, readChannel(vals, beamKeys.focus)) ?? 0
+
+    const goboSlot = resolveGoboSlot(goboProp, readChannel(vals, beamKeys.gobo))
+    if (goboSlot > 0) {
+      const spin = resolveGoboSpin(goboRotProp, readChannel(vals, beamKeys.goboRot))
+      if (spin !== 0) {
+        // Wrapped, not free-running: an unbounded accumulator loses float
+        // precision within the hour and the pattern starts visibly stepping.
+        // delta is clamped because a backgrounded tab hands back seconds.
+        goboAngleRef.current =
+          (goboAngleRef.current + spin * TAU * Math.min(delta, 0.1)) % TAU
+      }
+    } else {
+      goboAngleRef.current = 0
+    }
+
+    const group = groupRef.current
+    if (!group) return
+    // One walk of this fixture's subtree, after the rotations above, so the lens
+    // and head matrices read below are this frame's.
+    group.updateMatrixWorld()
+
+    // The beam leaves the lens, not the base of the yoke. Fallback chain covers
+    // PixelStrip (renders per-pixel meshes, never assigns lensRef) and any body
+    // with no head node.
+    const originObj = lensRef.current ?? head ?? group
+    SCRATCH_ORIGIN.setFromMatrixPosition(originObj.matrixWorld)
+
+    // Direction read straight off the model's matrix rather than recomputed in
+    // JS. This whole bug family was the beam and the geometry disagreeing;
+    // reading one from the other makes that unrepresentable, and it picks up the
+    // mount rotation and any rig pose above it for free. transformDirection
+    // normalises, so a scaled body doesn't skew the beam.
+    const dir = SCRATCH_DIR.set(0, emitAxis, 0).transformDirection(
+      (head ?? group).matrixWorld,
+    )
 
     // Cone matrix: unit cone scaled to (beamRadius, BEAM_LENGTH, beamRadius),
     // rotated so UNIT_Y → -dir (apex back toward fixture), translated to the
@@ -475,10 +722,25 @@ function useBeamDirector({
       SCRATCH_ORIGIN.y + (dir.y * BEAM_LENGTH) / 2,
       SCRATCH_ORIGIN.z + (dir.z * BEAM_LENGTH) / 2,
     )
-    SCRATCH_CONE_SCALE.set(beamRadius, BEAM_LENGTH, beamRadius)
+    // A prism splits the beam into splayed copies. The mid-air column just widens
+    // and dims (a hollow shell has no interior to split), while the surface
+    // pools get real separated lobes — see the prism block after the cone write.
+    const prismFacets = resolvePrismFacets(prismProp, readChannel(vals, beamKeys.prism))
+    const coneRadius = prismFacets > 0 ? geom.beamRadius * PRISM_SPREAD : geom.beamRadius
+    const coneAlpha = prismFacets > 0 ? coneOpacity * PRISM_CONE_DIM : coneOpacity
+    // A prism redistributes the beam's flux, it doesn't add any. The pools are
+    // additive, so the centre pool has to give up its share to the lobes or
+    // swinging the prism in reads as a brightness jump instead of a split.
+    const centreAlpha = prismFacets > 0 ? poolOpacity * PRISM_CENTRE_DIM : poolOpacity
+
+    SCRATCH_CONE_SCALE.set(coneRadius, BEAM_LENGTH, coneRadius)
     SCRATCH_CONE_MAT.compose(SCRATCH_CONE_POS, SCRATCH_QUAT, SCRATCH_CONE_SCALE)
     emitters.writeConeMatrix(slot, SCRATCH_CONE_MAT)
-    emitters.writeConeAttrs(slot, SCRATCH_ORIGIN, colorState.color, colorState.coneOpacity)
+    emitters.writeConeAttrs(slot, SCRATCH_ORIGIN, beamColor, coneAlpha)
+
+    // The head's world X axis gives the gobo a stable cross-section frame.
+    SCRATCH_RIGHT.set(1, 0, 0).transformDirection((head ?? group).matrixWorld)
+    emitters.writeBeamFx(slot, edge, goboSlot, goboAngleRef.current, SCRATCH_RIGHT)
 
     updateFloorCookie(
       emitters,
@@ -486,16 +748,16 @@ function useBeamDirector({
       SCRATCH_ORIGIN,
       dir,
       BEAM_LENGTH,
-      cullSinCone,
-      floorCookieSide,
+      geom.sinCull,
+      geom.floorSide,
     )
     emitters.writeFloorAttrs(
       slot,
       SCRATCH_ORIGIN,
       dir,
-      colorState.color,
-      colorState.poolOpacity,
-      cosHalfBeam,
+      beamColor,
+      centreAlpha,
+      geom.cosHalfBeam,
     )
 
     cullRegionCookies(
@@ -504,18 +766,78 @@ function useBeamDirector({
       SCRATCH_ORIGIN,
       dir,
       BEAM_LENGTH,
-      cullCosCone,
-      cullSinCone,
+      geom.cosCull,
+      geom.sinCull,
       regionGeometry,
     )
     emitters.writeRegionAttrs(
       slot,
       SCRATCH_ORIGIN,
       dir,
-      colorState.color,
-      colorState.poolOpacity,
-      cosHalfBeam,
+      beamColor,
+      centreAlpha,
+      geom.cosHalfBeam,
     )
+
+    // Prism lobes borrow this fixture's own wash-pool block. Every slot is
+    // allocated MAX_WASH_PIXELS floor + region cookies for pixel strips, and a
+    // fixture with a prism is never a strip, so those instances are otherwise
+    // idle for its whole lifetime — three splayed lobes for no new buffers and
+    // no capacity change. They use the wash material, which has no gobo path:
+    // prism and gobo can't combine, much as on the real fixture, where the
+    // prism sits after the gobo wheel.
+    if (prismFacets > 0) {
+      // Beam-local basis, same construction as the gobo's.
+      SCRATCH_PRISM_X.copy(SCRATCH_RIGHT)
+        .addScaledVector(dir, -SCRATCH_RIGHT.dot(dir))
+        .normalize()
+      SCRATCH_PRISM_Y.crossVectors(dir, SCRATCH_PRISM_X)
+
+      const splay = MathUtils.degToRad(beamDeg / 2) * PRISM_SPLAY
+      const sinS = Math.sin(splay)
+      const cosS = Math.cos(splay)
+      const lobeGeom = lobeGeomRef.current
+      lobeGeom.cosHalf = geom.cosHalfBeam
+      lobeGeom.cosCull = geom.cosCull
+      lobeGeom.sinCull = geom.sinCull
+      lobeGeom.floorSide = geom.floorSide
+      const lobeAlpha = poolOpacity * PRISM_LOBE_DIM
+
+      for (let i = 0; i < prismFacets && i < MAX_WASH_PIXELS; i++) {
+        const a = (TAU * i) / prismFacets
+        SCRATCH_LOBE_DIR.copy(dir)
+          .multiplyScalar(cosS)
+          .addScaledVector(SCRATCH_PRISM_X, Math.cos(a) * sinS)
+          .addScaledVector(SCRATCH_PRISM_Y, Math.sin(a) * sinS)
+          .normalize()
+        updateWashFloorCookie(emitters, slot, i, SCRATCH_ORIGIN, SCRATCH_LOBE_DIR, lobeGeom)
+        emitters.writeWashFloorAttrs(
+          slot,
+          i,
+          SCRATCH_ORIGIN,
+          SCRATCH_LOBE_DIR,
+          beamColor,
+          lobeAlpha,
+          lobeGeom.cosHalf,
+        )
+        writeWashRegionCookies(
+          emitters,
+          slot,
+          i,
+          SCRATCH_ORIGIN,
+          SCRATCH_LOBE_DIR,
+          regionGeometry,
+          beamColor,
+          lobeAlpha,
+          lobeGeom,
+        )
+      }
+      prismLitRef.current = true
+    } else if (prismLitRef.current) {
+      // Vacate the borrowed block once, on the frame the prism swings out.
+      emitters.hideWashSlot(slot)
+      prismLitRef.current = false
+    }
   })
 }
 
@@ -869,10 +1191,12 @@ function useWashDirector({
     if (!head) return
 
     // Wash direction = the bar's local down (its emitting face) in world space.
+    // A strip is never a mover, so emitAxis is always -1 here. Read off the
+    // matrix, matching useBeamDirector; transformDirection normalises. This hook
+    // keeps its own updateWorldMatrix because useBeamDirector returns early when
+    // there are no emitters — which is exactly the strip case.
     head.updateWorldMatrix(true, false)
-    head.getWorldQuaternion(SCRATCH_WASH_QUAT)
-    SCRATCH_WASH_DIR.copy(LOCAL_DOWN).applyQuaternion(SCRATCH_WASH_QUAT).normalize()
-    const dir = SCRATCH_WASH_DIR
+    const dir = SCRATCH_WASH_DIR.set(0, -1, 0).transformDirection(head.matrixWorld)
 
     const pitch = lengthM / pixelCount
     const lensY = -heightM / 2 - 0.001
