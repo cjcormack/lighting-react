@@ -54,7 +54,7 @@ export const PositionCell = memo(function PositionCell({
       </PopoverTrigger>
       <PopoverContent className="w-64 space-y-3" align="start">
         {batchCount > 1 && (
-          <p className="text-xs text-muted-foreground">Applying to {batchCount} fixtures</p>
+          <p className="text-xs text-muted-foreground">Applying to {batchCount} targets</p>
         )}
         <div className="space-y-1">
           <div className="flex items-center justify-between text-xs text-muted-foreground">

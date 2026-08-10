@@ -4,13 +4,14 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { LocateButton } from '../fixtures/LocateButton'
 import { COLUMN_DEFS } from './columns'
+import { rowLocateTarget } from './rowModel'
 import { buildRowCells, useRowValues } from './useRowValues'
 import { SliderCell } from './cells/SliderCell'
 import { ColourCell } from './cells/ColourCell'
 import { PositionCell } from './cells/PositionCell'
 import { SettingCell } from './cells/SettingCell'
 import type { ColumnKey } from './columns'
-import type { CellCommit, Row, RowId } from './rowModel'
+import type { CellCommit, FixtureRow, GroupRow, Row, RowId } from './rowModel'
 import type { RowCell } from './useRowValues'
 
 const ROW_HEIGHT = 36
@@ -22,12 +23,14 @@ export interface FixturesTableProps {
   /** Name-cell or checkbox click — the caller derives the intent from the
    *  mouse event; a checkbox click defaults to toggle instead of replace. */
   onRowClick: (id: RowId, e: React.MouseEvent, viaCheckbox?: boolean) => void
-  onToggleExpand: (groupName: string) => void
+  onToggleExpand: (row: GroupRow | FixtureRow) => void
   /** A cell editor is opening on this row — the caller adjusts the selection. */
   onBeginCellEdit: (row: Row) => void
   onCellCommit: (row: Row, col: ColumnKey, commit: CellCommit) => void
-  /** How many fixtures a commit from this row would write to (for the popover header). */
-  batchCountFor: (row: Row) => number
+  /** How many write targets a commit from this row's cell in this column
+   *  would reach (multi-head fixtures expand per element) — for the editor
+   *  popover's "Applying to N" header. */
+  batchCountFor: (row: Row, col: ColumnKey) => number
   /** Row to scroll into view (deep-link); cleared via onScrolledToRow. */
   scrollToRowId?: RowId | null
   onScrolledToRow?: () => void
@@ -125,7 +128,7 @@ export function FixturesTable({
                   onToggleExpand={onToggleExpand}
                   onBeginCellEdit={onBeginCellEdit}
                   onCellCommit={onCellCommit}
-                  batchCount={batchCountFor(row)}
+                  batchCountFor={batchCountFor}
                 />
               </div>
             )
@@ -142,11 +145,14 @@ interface RowViewProps {
   gridTemplateColumns: string
   selected: boolean
   onRowClick: (id: RowId, e: React.MouseEvent, viaCheckbox?: boolean) => void
-  onToggleExpand: (groupName: string) => void
+  onToggleExpand: (row: GroupRow | FixtureRow) => void
   onBeginCellEdit: (row: Row) => void
   onCellCommit: (row: Row, col: ColumnKey, commit: CellCommit) => void
-  batchCount: number
+  batchCountFor: (row: Row, col: ColumnKey) => number
 }
+
+/** Checkbox indent per nesting depth (member rows 1, element rows 2). */
+const INDENT_CLASS = ['', 'ml-5', 'ml-10']
 
 const RowView = React.memo(function RowView({
   row,
@@ -157,7 +163,7 @@ const RowView = React.memo(function RowView({
   onToggleExpand,
   onBeginCellEdit,
   onCellCommit,
-  batchCount,
+  batchCountFor,
 }: RowViewProps) {
   // Hooks run unconditionally; divider rows just have no cells.
   const cells = useMemo(() => buildRowCells(row, visibleColumns), [row, visibleColumns])
@@ -175,7 +181,25 @@ const RowView = React.memo(function RowView({
   }
 
   const isGroup = row.kind === 'group'
-  const isMember = row.kind === 'fixture' && row.parentGroup !== undefined
+  const isElement = row.kind === 'element'
+  const elementCount = row.kind === 'fixture' ? (row.fixture.elements?.length ?? 0) : 0
+  // Multi-head fixture rows expand like group rows do.
+  const expandable = isGroup || (row.kind === 'fixture' && elementCount > 0)
+  const isExpanded = row.kind !== 'element' && row.isExpanded
+  // Member rows indent one level; element rows one more than their parent.
+  const indentLevel =
+    (row.kind !== 'group' && row.parentGroup !== undefined ? 1 : 0) + (isElement ? 1 : 0)
+  const rowName = isGroup
+    ? row.name
+    : isElement
+      ? row.element.displayName
+      : row.fixture.name
+  // Element display names are generic ("Head 1"); accessible names and locate
+  // labels qualify them with the owning fixture so two expanded bars stay
+  // distinguishable.
+  const qualifiedName = isElement ? `${row.fixture.name} ${row.element.displayName}` : rowName
+  const badgeCount = isGroup ? row.members.length : elementCount > 0 ? elementCount : undefined
+  const locate = rowLocateTarget(row)
 
   return (
     <div
@@ -204,45 +228,47 @@ const RowView = React.memo(function RowView({
             e.stopPropagation()
             onRowClick(row.id, e, true)
           }}
-          className={`relative size-3.5 shrink-0 accent-primary ${isMember ? 'ml-5' : ''}`}
-          aria-label={`Select ${isGroup ? row.name : row.fixture.name}`}
+          className={`relative size-3.5 shrink-0 accent-primary ${INDENT_CLASS[indentLevel] ?? ''}`}
+          aria-label={`Select ${qualifiedName}`}
         />
-        {isGroup && (
+        {/* `expandable` already narrows row to GroupRow | FixtureRow. */}
+        {expandable && (
           <button
             type="button"
             className="relative shrink-0 rounded p-0.5 hover:bg-accent"
             onClick={(e) => {
               e.stopPropagation()
-              onToggleExpand(row.name)
+              onToggleExpand(row)
             }}
-            aria-label={row.isExpanded ? `Collapse ${row.name}` : `Expand ${row.name}`}
+            aria-label={isExpanded ? `Collapse ${rowName}` : `Expand ${rowName}`}
           >
-            {row.isExpanded ? (
+            {isExpanded ? (
               <ChevronDown className="size-3.5 text-muted-foreground" />
             ) : (
               <ChevronRight className="size-3.5 text-muted-foreground" />
             )}
           </button>
         )}
-        <span className={`relative min-w-0 flex-1 truncate ${isGroup ? 'font-medium' : ''}`}>
-          {isGroup ? row.name : row.fixture.name}
+        <span
+          className={`relative min-w-0 flex-1 truncate ${
+            isGroup ? 'font-medium' : isElement ? 'text-muted-foreground' : ''
+          }`}
+        >
+          {rowName}
         </span>
-        {isGroup && (
+        {badgeCount !== undefined && (
           <Badge variant="secondary" className="relative shrink-0 px-1 text-[10px]">
-            {row.members.length}
+            {badgeCount}
           </Badge>
         )}
-        <span
-          className="relative hidden shrink-0 group-hover/row:inline-flex"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <LocateButton
-            type={isGroup ? 'group' : 'fixture'}
-            targetKey={isGroup ? row.name : row.fixture.key}
-            name={isGroup ? row.name : row.fixture.name}
-            iconOnly
-          />
-        </span>
+        {locate && (
+          <span
+            className="relative hidden shrink-0 group-hover/row:inline-flex"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <LocateButton type={locate.type} targetKey={locate.key} name={qualifiedName} iconOnly />
+          </span>
+        )}
       </div>
 
       {/* Property cells */}
@@ -257,7 +283,7 @@ const RowView = React.memo(function RowView({
             <PropertyCell
               cell={cell}
               value={value}
-              batchCount={batchCount}
+              batchCount={batchCountFor(row, col)}
               onBeginEdit={() => onBeginCellEdit(row)}
               onCommit={(commit) => onCellCommit(row, col, commit)}
             />

@@ -6,7 +6,8 @@ import {
   subscribeToChannels,
 } from '../../hooks/usePropertyValues'
 import { computeCombinedCss } from '../../lib/colourMath'
-import { resolutionChannels, resolveCell } from './columns'
+import { resolutionChannels } from './columns'
+import { resolveTargetCells, rowWriteTargets } from './rowModel'
 import type { CellResolution, ColumnKey } from './columns'
 import type { Row } from './rowModel'
 import type { ChannelRef, SettingOption } from '../../store/fixtures'
@@ -47,31 +48,28 @@ export type CellValue =
 
 export interface RowCell {
   col: ColumnKey
-  /** Non-null resolutions: one for a fixture row, one per member-with-the-
-   *  property for a group row. */
+  /** Non-null resolutions: one for a plain fixture or element row, one per
+   *  element for a multi-head fixture row whose parent lacks the property,
+   *  one per member-with-the-property for a group row. */
   resolutions: NonNullable<CellResolution>[]
 }
 
 export type RowValues = Partial<Record<ColumnKey, CellValue>>
 
 /**
- * Resolve a row's cells for the visible columns. Group rows resolve every
- * member; a column no member supports resolves to no cell (renders empty).
+ * Resolve a row's cells for the visible columns, through the same
+ * rowWriteTargets + resolveTargetCells pair the write path uses — what a cell
+ * displays is by construction what an edit on it writes (parent-first
+ * precedence, element fallback, group members expanded). A column no target
+ * supports resolves to no cell (renders empty).
  */
 export function buildRowCells(row: Row, visibleColumns: readonly ColumnKey[]): RowCell[] {
-  if (row.kind === 'divider') return []
+  const targets = rowWriteTargets(row)
   const cells: RowCell[] = []
   for (const col of visibleColumns) {
-    const resolutions: NonNullable<CellResolution>[] = []
-    if (row.kind === 'fixture') {
-      const res = resolveCell(row.fixture.properties, col)
-      if (res) resolutions.push(res)
-    } else {
-      for (const member of row.members) {
-        const res = resolveCell(member.properties, col)
-        if (res) resolutions.push(res)
-      }
-    }
+    const resolutions = targets.flatMap((target) =>
+      resolveTargetCells(target, col).map((r) => r.resolution),
+    )
     if (resolutions.length > 0) cells.push({ col, resolutions })
   }
   return cells

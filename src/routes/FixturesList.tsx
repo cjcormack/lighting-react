@@ -18,12 +18,16 @@ import { usePersistentState } from '../hooks/usePersistentState'
 import { COLUMN_DEFS, DEFAULT_COLUMN_VISIBILITY } from '../components/fixtures-list/columns'
 import {
   buildRows,
-  expandSelectionToFixtures,
+  coveredFixtureKeys,
+  expandSelectionToTargets,
   fixtureRowId,
   groupRowId,
   memberRowId,
   parseSelectParam,
   planBatchWrites,
+  resolveTargetCells,
+  rowLocateTarget,
+  rowWriteTargets,
 } from '../components/fixtures-list/rowModel'
 import { isEditableTarget } from '../lib/domUtils'
 import {
@@ -35,7 +39,13 @@ import { useLitFixtureKeys } from '../components/fixtures-list/useLitFixtureKeys
 import { FixturesTable } from '../components/fixtures-list/FixturesTable'
 import { SelectionToolbar } from '../components/fixtures-list/SelectionToolbar'
 import type { ColumnKey } from '../components/fixtures-list/columns'
-import type { CellCommit, Row, RowId } from '../components/fixtures-list/rowModel'
+import type {
+  CellCommit,
+  FixtureRow,
+  GroupRow,
+  Row,
+  RowId,
+} from '../components/fixtures-list/rowModel'
 import type { LocateTarget } from '../store/locate'
 import type { Fixture } from '../store/fixtures'
 import type { GroupSummary } from '../api/groupsApi'
@@ -128,6 +138,7 @@ function FixturesListContainer() {
     { merge: true },
   )
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(new Set<string>())
+  const [expandedFixtures, setExpandedFixtures] = useState<ReadonlySet<string>>(new Set<string>())
   const [scrollToRowId, setScrollToRowId] = useState<RowId | null>(null)
 
   const visibleColumns = useMemo(
@@ -143,10 +154,11 @@ function FixturesListContainer() {
         fixtures,
         groups,
         expandedGroups,
+        expandedFixtures,
         textFilter: filter,
         litFixtureKeys: onlyLit ? litFixtureKeys : undefined,
       }),
-    [fixtures, groups, expandedGroups, filter, onlyLit, litFixtureKeys],
+    [fixtures, groups, expandedGroups, expandedFixtures, filter, onlyLit, litFixtureKeys],
   )
 
   // Dividers aren't selectable — they're excluded from the selection order so
@@ -160,22 +172,24 @@ function FixturesListContainer() {
   // Selected ids whose rows are hidden (collapsed group, active filter) are
   // inert everywhere below — every consumer intersects with `rows` — so no
   // aggressive reconcile is needed when visibility changes.
-  const selectedFixtures = useMemo(
-    () => expandSelectionToFixtures(rows, selection.selectedIds),
+  const selectedTargets = useMemo(
+    () => expandSelectionToTargets(rows, selection.selectedIds),
     [rows, selection.selectedIds],
   )
 
   const locateTargets = useMemo<LocateTarget[]>(() => {
     // Deduped by (type, key): a fixture selected via two group memberships
-    // must toggle locate once, not twice (two toggles cancel out).
+    // must toggle locate once, not twice (two toggles cancel out). Element
+    // rows under a covered parent are dropped for the same reason — locating
+    // a parent resolves every element, so both together would double-toggle.
+    const covered = coveredFixtureKeys(rows, selection.selectedIds)
     const seen = new Set<string>()
     const targets: LocateTarget[] = []
     for (const row of rows) {
-      if (row.kind === 'divider' || !selection.selectedIds.has(row.id)) continue
-      const target: LocateTarget =
-        row.kind === 'group'
-          ? { type: 'group', key: row.name }
-          : { type: 'fixture', key: row.fixture.key }
+      if (!selection.selectedIds.has(row.id)) continue
+      if (row.kind === 'element' && covered.has(row.fixture.key)) continue
+      const target = rowLocateTarget(row)
+      if (!target) continue
       const dedupeKey = `${target.type}:${target.key}`
       if (seen.has(dedupeKey)) continue
       seen.add(dedupeKey)
@@ -196,13 +210,15 @@ function FixturesListContainer() {
     [selection],
   )
 
-  const handleToggleExpand = useCallback((groupName: string) => {
-    setExpandedGroups((prev) => {
+  const handleToggleExpand = useCallback((row: GroupRow | FixtureRow) => {
+    const toggled = (prev: ReadonlySet<string>, key: string): ReadonlySet<string> => {
       const next = new Set(prev)
-      if (next.has(groupName)) next.delete(groupName)
-      else next.add(groupName)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
       return next
-    })
+    }
+    if (row.kind === 'group') setExpandedGroups((prev) => toggled(prev, row.name))
+    else setExpandedFixtures((prev) => toggled(prev, row.fixture.key))
   }, [])
 
   // Opening an editor on an unselected row targets just that row (and the
@@ -217,21 +233,15 @@ function FixturesListContainer() {
     [selection],
   )
 
-  const rowOwnFixtures = useCallback((row: Row): Fixture[] => {
-    if (row.kind === 'group') return row.members
-    if (row.kind === 'fixture') return [row.fixture]
-    return []
-  }, [])
-
   const commitNow = useCallback(
     (row: Row, col: ColumnKey, commit: CellCommit) => {
       const targets =
         row.kind !== 'divider' && selection.isSelected(row.id)
-          ? selectedFixtures
-          : rowOwnFixtures(row)
-      // planBatchWrites clamps the commit to each fixture's own ranges.
+          ? selectedTargets
+          : rowWriteTargets(row)
+      // planBatchWrites clamps the commit to each target's own ranges.
       for (const planned of planBatchWrites(targets, col, commit)) {
-        const { fixture, resolution } = planned
+        const { target, resolution } = planned
         const clamped = planned.commit
         switch (clamped.kind) {
           case 'slider':
@@ -242,7 +252,7 @@ function FixturesListContainer() {
           case 'colour':
             if (resolution.kind === 'colour') {
               writers.writeColour(
-                fixture.key,
+                target.key,
                 resolution.property,
                 clamped.r,
                 clamped.g,
@@ -255,7 +265,7 @@ function FixturesListContainer() {
             break
           case 'position':
             if (resolution.kind === 'position') {
-              writers.writePosition(fixture.key, resolution.pan, resolution.tilt, clamped.pan, clamped.tilt)
+              writers.writePosition(target.key, resolution.pan, resolution.tilt, clamped.pan, clamped.tilt)
             }
             break
           case 'setting':
@@ -266,7 +276,7 @@ function FixturesListContainer() {
         }
       }
     },
-    [selectedFixtures, selection, rowOwnFixtures, writers],
+    [selectedTargets, selection, writers],
   )
 
   // Continuous drag commits (slider/colour/position editors fire per pointer
@@ -331,13 +341,17 @@ function FixturesListContainer() {
     [flushPendingCommit],
   )
 
+  // Counts write RESOLUTIONS for the column, not rows — a collapsed 12-head
+  // bar's colour cell must warn "Applying to 12", matching what
+  // planBatchWrites will actually expand the commit into.
   const batchCountFor = useCallback(
-    (row: Row): number => {
+    (row: Row, col: ColumnKey): number => {
       if (row.kind === 'divider') return 0
-      if (selection.isSelected(row.id)) return selectedFixtures.length
-      return row.kind === 'group' ? row.members.length : 1
+      const targets =
+        selection.isSelected(row.id) ? selectedTargets : rowWriteTargets(row)
+      return targets.reduce((n, target) => n + resolveTargetCells(target, col).length, 0)
     },
-    [selection, selectedFixtures],
+    [selection, selectedTargets],
   )
 
   // ?select=fixture:<key> / ?select=group:<name> deep-link (Cmd+K lands here):
@@ -488,7 +502,7 @@ function FixturesListContainer() {
         {locateTargets.length > 0 && (
           <SelectionToolbar
             locateTargets={locateTargets}
-            fixtures={selectedFixtures}
+            targets={selectedTargets}
             onClear={selection.clear}
           />
         )}

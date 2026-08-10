@@ -78,7 +78,7 @@ export const SliderCell = memo(function SliderCell({
       </PopoverTrigger>
       <PopoverContent className="w-64 space-y-3" align="start">
         {batchCount > 1 && (
-          <p className="text-xs text-muted-foreground">Applying to {batchCount} fixtures</p>
+          <p className="text-xs text-muted-foreground">Applying to {batchCount} targets</p>
         )}
         <div className="flex items-center gap-3">
           <Slider

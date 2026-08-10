@@ -58,7 +58,7 @@ export const SettingCell = memo(function SettingCell({
       <PopoverContent className="w-56 p-1" align="start">
         {batchCount > 1 && (
           <p className="px-2 py-1.5 text-xs text-muted-foreground">
-            Applying to {batchCount} fixtures
+            Applying to {batchCount} targets
           </p>
         )}
         <div className="max-h-64 overflow-y-auto">

@@ -1,6 +1,7 @@
 import type {
   ChannelRef,
   ColourPropertyDescriptor,
+  ElementDescriptor,
   Fixture,
   PositionPropertyDescriptor,
   PropertyCategory,
@@ -9,6 +10,7 @@ import type {
   SettingPropertyDescriptor,
   SliderPropertyDescriptor,
 } from '@/store/fixtures'
+import type { GroupSummary } from '@/api/groupsApi'
 
 // Hand-built descriptor/fixture factories for fixtures-list tests. Type-only
 // imports from store/fixtures, so importing this file never touches the store
@@ -115,4 +117,48 @@ export function makeFixture(
     compatiblePresetIds: [],
     ...over,
   }
+}
+
+export function groupSummary(name: string, memberCount = 0): GroupSummary {
+  return {
+    name,
+    memberCount,
+    capabilities: [],
+    symmetricMode: 'NONE',
+    defaultDistribution: 'LINEAR',
+    compatiblePresetIds: [],
+  }
+}
+
+export function element(
+  index: number,
+  key: string,
+  properties: PropertyDescriptor[],
+  displayName = `Head ${index + 1}`,
+): ElementDescriptor {
+  return { index, key, displayName, properties }
+}
+
+/**
+ * N-head pixel bar: no parent-level properties unless given; one RGB colour
+ * property per head on fresh channels, elements keyed `${key}.pixel-${i}`
+ * (matching the live LED Lightbar shape).
+ */
+export function makePixelBar(
+  key: string,
+  heads: number,
+  parentProps: PropertyDescriptor[] = [],
+  over: Partial<Fixture> = {},
+): Fixture {
+  const elements: ElementDescriptor[] = []
+  for (let i = 0; i < heads; i++) {
+    const first = nextChannel
+    nextChannel += 3
+    elements.push(
+      element(i, `${key}.pixel-${i}`, [
+        colourProp('rgbColour', chan(first), chan(first + 1), chan(first + 2)),
+      ]),
+    )
+  }
+  return makeFixture(key, parentProps, { elements, ...over })
 }

@@ -6,22 +6,23 @@ import { useLocateStateQuery, useToggleLocateMutation } from '../../store/locate
 import { FanPopover } from './FanPopover'
 import { useHighlight } from './useHighlight'
 import type { LocateTarget } from '../../store/locate'
-import type { Fixture } from '../../store/fixtures'
+import type { WriteTarget } from './rowModel'
 
 export interface SelectionToolbarProps {
   /** Selected rows as locate targets (groups stay groups — the backend
    *  handles their members natively). */
   locateTargets: readonly LocateTarget[]
-  /** Distinct fixtures the selection expands to, in visible row order. */
-  fixtures: readonly Fixture[]
+  /** Distinct write targets (fixtures or elements) the selection expands to,
+   *  in visible row order. */
+  targets: readonly WriteTarget[]
   onClear: () => void
 }
 
-export function SelectionToolbar({ locateTargets, fixtures, onClear }: SelectionToolbarProps) {
+export function SelectionToolbar({ locateTargets, targets, onClear }: SelectionToolbarProps) {
   const { data: locateState } = useLocateStateQuery()
   const [toggleLocate] = useToggleLocateMutation()
-  const getFixtures = useCallback(() => [...fixtures], [fixtures])
-  const highlight = useHighlight(getFixtures)
+  const getTargets = useCallback(() => [...targets], [targets])
+  const highlight = useHighlight(getTargets)
 
   const isActive = (target: LocateTarget) =>
     locateState?.targets.some((t) => t.type === target.type && t.key === target.key) ?? false
@@ -40,9 +41,9 @@ export function SelectionToolbar({ locateTargets, fixtures, onClear }: Selection
   return (
     <div className="flex items-center gap-2">
       <span className="text-xs text-muted-foreground tabular-nums">
-        {fixtures.length} fixture{fixtures.length === 1 ? '' : 's'} selected
+        {targets.length} selected
       </span>
-      <FanPopover fixtures={fixtures} />
+      <FanPopover targets={targets} />
       <Tooltip>
         <TooltipTrigger asChild>
           <Button

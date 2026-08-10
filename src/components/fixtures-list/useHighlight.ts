@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { lightingApi } from '../../api/lightingApi'
 import { channelKey } from '../../hooks/usePropertyValues'
-import { findDimmerProperty } from '../../store/fixtures'
-import type { ChannelRef, Fixture } from '../../store/fixtures'
+import { resolveTargetCells } from './rowModel'
+import type { ChannelRef } from '../../store/fixtures'
+import type { WriteTarget } from './rowModel'
 
 /**
- * Momentary Highlight: while held, every selected fixture's dimmer goes to
- * full; on release the captured values are written back. Live context only —
- * this is a stage tool, not an editing operation.
+ * Momentary Highlight: while held, every selected target's dimmer goes to
+ * full; on release the captured values are written back. Dimmer lookup goes
+ * through resolveTargetCells, so it lifts exactly the channels the Dimmer
+ * column shows (parent master first, else per-element dimmers); targets with
+ * no dimmer anywhere are skipped, and `isActive` stays false when nothing was
+ * captured so the button never claims a no-op did something. Live context
+ * only — this is a stage tool, not an editing operation.
  *
  * Kept deliberately simple: values that change underneath during the hold
  * (an FX engine, another operator) are clobbered by the snapshot restore,
@@ -15,7 +20,7 @@ import type { ChannelRef, Fixture } from '../../store/fixtures'
  * press time — changing it mid-hold doesn't re-capture; we restore exactly
  * what we highlighted.
  */
-export function useHighlight(getSelectedFixtures: () => Fixture[]) {
+export function useHighlight(getTargets: () => WriteTarget[]) {
   const capturedRef = useRef<Map<string, { ref: ChannelRef; value: number }> | null>(null)
   const [isActive, setIsActive] = useState(false)
 
@@ -32,18 +37,19 @@ export function useHighlight(getSelectedFixtures: () => Fixture[]) {
   const press = useCallback(() => {
     if (capturedRef.current) return
     const captured = new Map<string, { ref: ChannelRef; value: number }>()
-    for (const fixture of getSelectedFixtures()) {
-      const dimmer = findDimmerProperty(fixture.properties)
-      if (!dimmer) continue
-      const ref = dimmer.channel
-      const key = channelKey(ref)
-      if (captured.has(key)) continue
-      captured.set(key, { ref, value: lightingApi.channels.get(ref.universe, ref.channelNo) })
-      lightingApi.channels.update(ref.universe, ref.channelNo, 255)
+    for (const target of getTargets()) {
+      for (const { resolution } of resolveTargetCells(target, 'dimmer')) {
+        if (resolution.kind !== 'slider') continue
+        const ref = resolution.property.channel
+        const key = channelKey(ref)
+        if (captured.has(key)) continue
+        captured.set(key, { ref, value: lightingApi.channels.get(ref.universe, ref.channelNo) })
+        lightingApi.channels.update(ref.universe, ref.channelNo, 255)
+      }
     }
     capturedRef.current = captured
-    setIsActive(true)
-  }, [getSelectedFixtures])
+    setIsActive(captured.size > 0)
+  }, [getTargets])
 
   // Restore on unmount so navigating away mid-hold doesn't strand the rig at full.
   useEffect(() => release, [release])

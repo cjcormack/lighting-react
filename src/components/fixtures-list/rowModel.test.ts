@@ -6,26 +6,23 @@ import {
   buildRows,
   clampCommitToResolution,
   commitMatchesResolution,
-  expandSelectionToFixtures,
+  expandSelectionToTargets,
   fixtureSelectParam,
   groupSelectParam,
   parseSelectParam,
   planBatchWrites,
 } from './rowModel'
 import { resolveCell } from './columns'
-import { chan, colourProp, makeFixture, settingProp, sliderProp } from '@/test/fixtureFactories'
-import type { GroupSummary } from '@/api/groupsApi'
-
-function groupSummary(name: string, memberCount = 0): GroupSummary {
-  return {
-    name,
-    memberCount,
-    capabilities: [],
-    symmetricMode: 'NONE',
-    defaultDistribution: 'LINEAR',
-    compatiblePresetIds: [],
-  }
-}
+import {
+  chan,
+  colourProp,
+  element,
+  groupSummary,
+  makeFixture,
+  makePixelBar,
+  settingProp,
+  sliderProp,
+} from '@/test/fixtureFactories'
 
 const dimmerOnly = () => [sliderProp('dimmer', 'dimmer', chan(1))]
 
@@ -154,7 +151,82 @@ describe('buildRows', () => {
   })
 })
 
-describe('expandSelectionToFixtures', () => {
+describe('buildRows with multi-head fixtures', () => {
+  const bar = makePixelBar('bar', 3)
+  const loose = makeFixture('loose', dimmerOnly())
+
+  it('keeps element rows collapsed by default, with isExpanded false', () => {
+    const rows = buildRows({
+      fixtures: [bar, loose],
+      groups: [],
+      expandedGroups: new Set(),
+      textFilter: '',
+    })
+    expect(rows.map((r) => r.id)).toEqual(['fixture:bar', 'fixture:loose'])
+    expect(rows[0]).toMatchObject({ kind: 'fixture', isExpanded: false })
+  })
+
+  it('inlines one element row per head when the fixture is expanded', () => {
+    const rows = buildRows({
+      fixtures: [bar, loose],
+      groups: [],
+      expandedGroups: new Set(),
+      expandedFixtures: new Set(['bar']),
+      textFilter: '',
+    })
+    expect(rows.map((r) => r.id)).toEqual([
+      'fixture:bar',
+      'element:fixture:bar:bar.pixel-0',
+      'element:fixture:bar:bar.pixel-1',
+      'element:fixture:bar:bar.pixel-2',
+      'fixture:loose',
+    ])
+    expect(rows[0]).toMatchObject({ kind: 'fixture', isExpanded: true })
+    expect(rows[1]).toMatchObject({
+      kind: 'element',
+      fixture: bar,
+      element: bar.elements![0],
+    })
+  })
+
+  it('expanding a fixture without elements is a no-op', () => {
+    const rows = buildRows({
+      fixtures: [loose],
+      groups: [],
+      expandedGroups: new Set(),
+      expandedFixtures: new Set(['loose']),
+      textFilter: '',
+    })
+    expect(rows.map((r) => r.id)).toEqual(['fixture:loose'])
+    expect(rows[0]).toMatchObject({ kind: 'fixture', isExpanded: false })
+  })
+
+  it('scopes element row ids by parent row id across group instances', () => {
+    const grouped = makePixelBar('gbar', 2, [], { groups: ['A', 'B'] })
+    const rows = buildRows({
+      fixtures: [grouped],
+      groups: [groupSummary('A', 1), groupSummary('B', 1)],
+      expandedGroups: new Set(['A', 'B']),
+      expandedFixtures: new Set(['gbar']),
+      textFilter: '',
+    })
+    expect(rows.map((r) => r.id)).toEqual([
+      'group:A',
+      'member:A:gbar',
+      'element:member:A:gbar:gbar.pixel-0',
+      'element:member:A:gbar:gbar.pixel-1',
+      'group:B',
+      'member:B:gbar',
+      'element:member:B:gbar:gbar.pixel-0',
+      'element:member:B:gbar:gbar.pixel-1',
+    ])
+    // All ids distinct even though the same fixture appears twice.
+    expect(new Set(rows.map((r) => r.id)).size).toBe(rows.length)
+    expect(rows[2]).toMatchObject({ kind: 'element', parentGroup: 'A' })
+  })
+})
+
+describe('expandSelectionToTargets', () => {
   const spotA = makeFixture('spotA', dimmerOnly(), { groups: ['Spots'] })
   const spotB = makeFixture('spotB', dimmerOnly(), { groups: ['Spots'] })
   const loose = makeFixture('loose', dimmerOnly())
@@ -170,7 +242,7 @@ describe('expandSelectionToFixtures', () => {
     })
     // Group selected AND one of its members selected directly: member written once.
     const selected = new Set(['group:Spots', 'member:Spots:spotB', 'fixture:loose'])
-    expect(expandSelectionToFixtures(rows, selected).map((f) => f.key)).toEqual([
+    expect(expandSelectionToTargets(rows, selected).map((t) => t.key)).toEqual([
       'spotA',
       'spotB',
       'loose',
@@ -180,7 +252,71 @@ describe('expandSelectionToFixtures', () => {
   it('ignores selected ids whose rows are no longer visible', () => {
     const rows = buildRows({ fixtures, groups, expandedGroups: new Set(), textFilter: '' })
     const selected = new Set(['member:Spots:spotB', 'fixture:loose'])
-    expect(expandSelectionToFixtures(rows, selected).map((f) => f.key)).toEqual(['loose'])
+    expect(expandSelectionToTargets(rows, selected).map((t) => t.key)).toEqual(['loose'])
+  })
+
+  it('emits element targets in visible row order', () => {
+    const bar = makePixelBar('bar', 3)
+    const rows = buildRows({
+      fixtures: [bar, loose],
+      groups: [],
+      expandedGroups: new Set(),
+      expandedFixtures: new Set(['bar']),
+      textFilter: '',
+    })
+    const selected = new Set([
+      'element:fixture:bar:bar.pixel-0',
+      'element:fixture:bar:bar.pixel-2',
+      'fixture:loose',
+    ])
+    expect(expandSelectionToTargets(rows, selected).map((t) => t.key)).toEqual([
+      'bar.pixel-0',
+      'bar.pixel-2',
+      'loose',
+    ])
+  })
+
+  it('drops element targets whose parent fixture row is also selected', () => {
+    const bar = makePixelBar('bar', 2)
+    const rows = buildRows({
+      fixtures: [bar],
+      groups: [],
+      expandedGroups: new Set(),
+      expandedFixtures: new Set(['bar']),
+      textFilter: '',
+    })
+    // ⌘A shape: parent and every child selected together.
+    const selected = new Set(rows.map((r) => r.id))
+    expect(expandSelectionToTargets(rows, selected).map((t) => t.key)).toEqual(['bar'])
+  })
+
+  it('drops element targets whose parent is covered via a selected group row', () => {
+    const bar = makePixelBar('gbar', 2, [], { groups: ['A'] })
+    const rows = buildRows({
+      fixtures: [bar],
+      groups: [groupSummary('A', 1)],
+      expandedGroups: new Set(['A']),
+      expandedFixtures: new Set(['gbar']),
+      textFilter: '',
+    })
+    const selected = new Set(['group:A', 'element:member:A:gbar:gbar.pixel-1'])
+    expect(expandSelectionToTargets(rows, selected).map((t) => t.key)).toEqual(['gbar'])
+  })
+
+  it('dedupes the same element selected under two group instances', () => {
+    const bar = makePixelBar('gbar', 2, [], { groups: ['A', 'B'] })
+    const rows = buildRows({
+      fixtures: [bar],
+      groups: [groupSummary('A', 1), groupSummary('B', 1)],
+      expandedGroups: new Set(['A', 'B']),
+      expandedFixtures: new Set(['gbar']),
+      textFilter: '',
+    })
+    const selected = new Set([
+      'element:member:A:gbar:gbar.pixel-0',
+      'element:member:B:gbar:gbar.pixel-0',
+    ])
+    expect(expandSelectionToTargets(rows, selected).map((t) => t.key)).toEqual(['gbar.pixel-0'])
   })
 })
 
@@ -196,7 +332,7 @@ describe('batch write planning', () => {
       g: 0,
       b: 0,
     })
-    expect(planned.map((p) => p.fixture.key)).toEqual(['rgb'])
+    expect(planned.map((p) => p.target.key)).toEqual(['rgb'])
   })
 
   it('routes setting commits to both plain settings and colour wheels', () => {
@@ -204,7 +340,7 @@ describe('batch write planning', () => {
       kind: 'setting',
       level: 10,
     })
-    expect(planned.map((p) => p.fixture.key)).toEqual(['wheel'])
+    expect(planned.map((p) => p.target.key)).toEqual(['wheel'])
   })
 
   it('skips fixtures without the property at all', () => {
@@ -212,7 +348,7 @@ describe('batch write planning', () => {
       kind: 'slider',
       value: 128,
     })
-    expect(planned.map((p) => p.fixture.key)).toEqual(['dim'])
+    expect(planned.map((p) => p.target.key)).toEqual(['dim'])
   })
 
   it('commitMatchesResolution rejects nulls and cross-kind pairs', () => {
@@ -239,6 +375,67 @@ describe('batch write planning', () => {
       pan: 540,
       tilt: undefined,
     })
+  })
+})
+
+describe('batch write planning with multi-head fixtures', () => {
+  it('expands a fixture without the parent property into per-element writes, in element order', () => {
+    const bar = makePixelBar('bar', 3)
+    const planned = planBatchWrites([bar], 'colour', { kind: 'colour', r: 255, g: 0, b: 0 })
+    expect(planned.map((p) => p.target.key)).toEqual([
+      'bar.pixel-0',
+      'bar.pixel-1',
+      'bar.pixel-2',
+    ])
+  })
+
+  it('keeps element writes inline at the parent position in a mixed list (fan ordering)', () => {
+    const spotA = makeFixture('spotA', [colourProp('rgbColour', chan(1), chan(2), chan(3))])
+    const spotB = makeFixture('spotB', [colourProp('rgbColour', chan(4), chan(5), chan(6))])
+    const bar = makePixelBar('bar', 3)
+    const planned = planBatchWrites([spotA, bar, spotB], 'colour', {
+      kind: 'colour',
+      r: 0,
+      g: 0,
+      b: 255,
+    })
+    expect(planned.map((p) => p.target.key)).toEqual([
+      'spotA',
+      'bar.pixel-0',
+      'bar.pixel-1',
+      'bar.pixel-2',
+      'spotB',
+    ])
+  })
+
+  it('lets a parent-level property win over element fallbacks (master dimmer + colour heads)', () => {
+    const master = makePixelBar('master', 2, [sliderProp('dimmer', 'dimmer', chan(100))])
+    const slider = planBatchWrites([master], 'dimmer', { kind: 'slider', value: 200 })
+    expect(slider.map((p) => p.target.key)).toEqual(['master'])
+    const colour = planBatchWrites([master], 'colour', { kind: 'colour', r: 1, g: 2, b: 3 })
+    expect(colour.map((p) => p.target.key)).toEqual(['master.pixel-0', 'master.pixel-1'])
+  })
+
+  it('never falls through to elements when the parent resolves but the commit shape mismatches', () => {
+    // Parent colour WHEEL claims the colour column outright: a colour commit
+    // is skipped, not routed to the heads — display and writes must agree.
+    const wheelBar = makePixelBar('wheelBar', 2, [settingProp('colourWheel', 'colour', chan(101))])
+    const planned = planBatchWrites([wheelBar], 'colour', { kind: 'colour', r: 255, g: 0, b: 0 })
+    expect(planned).toEqual([])
+  })
+
+  it('clamps per element resolution', () => {
+    const bar = makeFixture('bar', [], {
+      elements: [
+        element(0, 'bar.pixel-0', [sliderProp('dimmer', 'dimmer', chan(110), { max: 100 })]),
+        element(1, 'bar.pixel-1', [sliderProp('dimmer', 'dimmer', chan(111))]),
+      ],
+    })
+    const planned = planBatchWrites([bar], 'dimmer', { kind: 'slider', value: 255 })
+    expect(planned.map((p) => p.commit)).toEqual([
+      { kind: 'slider', value: 100 },
+      { kind: 'slider', value: 255 },
+    ])
   })
 })
 

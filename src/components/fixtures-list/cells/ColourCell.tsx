@@ -49,7 +49,7 @@ export const ColourCell = memo(function ColourCell({
         type="button"
         onClick={onBeginEdit}
         className="flex h-full w-full items-center gap-1.5 rounded px-1.5 text-left hover:bg-accent/50"
-        title={batchCount > 1 ? `Applying to ${batchCount} fixtures` : undefined}
+        title={batchCount > 1 ? `Applying to ${batchCount} targets` : undefined}
       >
         <span
           className="size-4 shrink-0 rounded-sm border border-border"
