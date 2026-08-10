@@ -11,6 +11,7 @@ import { Fixture, useFixtureListQuery } from "../store/fixtures"
 import { EditModeProvider, useEditMode } from "../components/fixtures/EditModeContext"
 import { FxBadge } from "../components/fx/FxBadge"
 import { FixtureParkButton } from "../components/fixtures/FixtureParkButton"
+import { LocateButton } from "../components/fixtures/LocateButton"
 import { Breadcrumbs } from "../components/Breadcrumbs"
 import { FixtureContent, FixtureViewMode } from "../components/fixtures/FixtureContent"
 import { GroupDetailModal } from "../components/fixtures/GroupDetailModal"
@@ -228,6 +229,7 @@ function FixtureCardHeader({ fixture }: { fixture: Fixture }) {
         </p>
       )}
       <CardAction className="flex items-center gap-1">
+        <LocateButton type="fixture" targetKey={fixture.key} name={fixture.name} iconOnly />
         <FixtureParkButton fixture={fixture} isEditing={isEditing} iconOnly />
         <Tooltip>
           <TooltipTrigger asChild>

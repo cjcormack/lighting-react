@@ -6,6 +6,7 @@ import { Settings2, SlidersHorizontal } from 'lucide-react'
 import { SheetBody, SheetHeader } from '@/components/ui/sheet'
 import { FixtureContent, FixtureViewMode } from './FixtureContent'
 import { FixtureParkButton } from './FixtureParkButton'
+import { LocateButton } from './LocateButton'
 import type { Fixture } from '../../store/fixtures'
 
 interface FixtureDetailViewProps {
@@ -64,6 +65,9 @@ export function FixtureDetailView({
                 <SlidersHorizontal className="h-4 w-4" />
               </ToggleGroupItem>
             </ToggleGroup>
+            {fixture && (
+              <LocateButton type="fixture" targetKey={fixture.key} name={fixture.name} iconOnly />
+            )}
             {fixture && <FixtureParkButton fixture={fixture} isEditing={isEditing} />}
             {showEditButton && (
               <Button

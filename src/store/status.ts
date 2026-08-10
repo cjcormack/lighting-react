@@ -11,7 +11,7 @@ lightingApi.status.subscribe((status) => {
     store.dispatch(restApi.util.invalidateTags([
       'Channel', 'Fixture', 'Script', 'Project', 'ProjectList',
       'GroupList', 'GroupActiveEffects', 'FixtureEffects', 'FxPreset',
-      'CueList', 'CueStackList', 'CueSlotList', 'AiConversation',
+      'CueList', 'CueStackList', 'CueSlotList', 'AiConversation', 'Locate',
     ]))
   }
   previousStatus = status

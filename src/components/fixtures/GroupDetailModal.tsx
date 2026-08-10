@@ -13,6 +13,7 @@ import { useGroupListQuery, useGroupQuery, useGroupPropertiesQuery } from '../..
 import { GroupPropertiesSection } from '../groups/GroupCard'
 import { GroupMembersSection } from '../groups/GroupMembersSection'
 import { FixtureDetailModal } from '../groups/FixtureDetailModal'
+import { LocateButton } from './LocateButton'
 
 interface GroupDetailModalProps {
   groupName: string | null
@@ -54,13 +55,18 @@ export function GroupDetailModal({
                 </p>
               )}
             </div>
-            <Button
-              variant={isEditing ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setIsEditing(!isEditing)}
-            >
-              {isEditing ? 'Done' : 'Edit'}
-            </Button>
+            <div className="flex items-center gap-1 shrink-0">
+              {groupName && (
+                <LocateButton type="group" targetKey={groupName} name={groupName} iconOnly />
+              )}
+              <Button
+                variant={isEditing ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setIsEditing(!isEditing)}
+              >
+                {isEditing ? 'Done' : 'Edit'}
+              </Button>
+            </div>
           </div>
 
           {/* Capability badges */}

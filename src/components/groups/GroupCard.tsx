@@ -6,6 +6,7 @@ import { Loader2 } from 'lucide-react'
 import { useGroupQuery, useGroupPropertiesQuery } from '../../store/groups'
 import { GroupPropertyVisualizer, GroupVirtualDimmerSlider } from '../fixtures/GroupPropertyVisualizers'
 import { GroupMembersSection } from './GroupMembersSection'
+import { LocateButton } from '../fixtures/LocateButton'
 import { FxBadge } from '../fx/FxBadge'
 import { FxSection } from '../fx/FxSection'
 import { BoundControlBadge } from '../surfaces/BoundControlBadge'
@@ -71,14 +72,16 @@ function GroupCardHeader({
             {group.memberCount} fixture{group.memberCount !== 1 ? 's' : ''}
           </p>
         </div>
-        <Button
-          variant={isEditing ? 'default' : 'outline'}
-          size="sm"
-          onClick={onToggleEdit}
-          className="shrink-0"
-        >
-          {isEditing ? 'Done' : 'Edit'}
-        </Button>
+        <div className="flex items-center gap-1 shrink-0">
+          <LocateButton type="group" targetKey={group.name} name={group.name} iconOnly />
+          <Button
+            variant={isEditing ? 'default' : 'outline'}
+            size="sm"
+            onClick={onToggleEdit}
+          >
+            {isEditing ? 'Done' : 'Edit'}
+          </Button>
+        </div>
       </div>
       <div className="flex flex-wrap gap-1 mt-1">
         {group.capabilities.map((cap) => (
