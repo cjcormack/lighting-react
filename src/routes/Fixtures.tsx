@@ -8,6 +8,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { Search, Loader2, Settings2, SlidersHorizontal, Pencil, Check } from "lucide-react"
 import { Fixture, useFixtureListQuery } from "../store/fixtures"
+import { filterTerms, fixtureMatchesTerms } from "../lib/fixtureSearch"
 import { EditModeProvider, useEditMode } from "../components/fixtures/EditModeContext"
 import { FxBadge } from "../components/fx/FxBadge"
 import { FixtureParkButton } from "../components/fixtures/FixtureParkButton"
@@ -91,22 +92,9 @@ function FixturesContainer() {
   const fixtureList = useMemo(() => maybeFixtureList ?? [], [maybeFixtureList])
 
   const filteredFixtures = useMemo(() => {
-    if (!filter.trim()) return fixtureList
-
-    const searchTerms = filter.toLowerCase().split(/\s+/)
-    return fixtureList.filter((fixture) => {
-      const searchableText = [
-        fixture.name,
-        fixture.manufacturer,
-        fixture.model,
-        fixture.typeKey,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-
-      return searchTerms.every((term) => searchableText.includes(term))
-    })
+    const terms = filterTerms(filter)
+    if (terms.length === 0) return fixtureList
+    return fixtureList.filter((fixture) => fixtureMatchesTerms(fixture, terms))
   }, [fixtureList, filter])
 
   if (isLoading) {

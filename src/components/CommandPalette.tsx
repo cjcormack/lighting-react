@@ -13,6 +13,7 @@ import { useFixtureListQuery, type Fixture } from "@/store/fixtures"
 import { useGroupListQuery } from "@/store/groups"
 import type { GroupSummary } from "@/api/groupsApi"
 import { useNavItems, useUniverseNavItems, filterNavItems } from "@/navigation"
+import { fixtureSelectParam, groupSelectParam } from "@/components/fixtures-list/rowModel"
 import { useViewedProject } from "@/ProjectSwitcher"
 import type { FxTarget } from "@/components/fx/AddEditFxSheet"
 import { useGetParkStateListQuery } from "@/store/park"
@@ -389,18 +390,32 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
             {/* Fixtures & Groups */}
             {isViewingActiveProject && (fixtures?.length || groups?.length) ? (
               <Command.Group heading="Fixtures & Groups" className={groupClassName}>
+                {/* Land on the Fixtures List with the row selected and scrolled
+                    into view — the card pages have no way to find an item. */}
                 {fixtures?.map((fixture) => (
                   <FixtureItem
                     key={fixture.key}
                     fixture={fixture}
-                    onSelect={() => runAction(() => navigate(`/projects/${viewedProject!.id}/fixtures`))}
+                    onSelect={() =>
+                      runAction(() =>
+                        navigate(
+                          `/projects/${viewedProject!.id}/fixtures/list?select=${encodeURIComponent(fixtureSelectParam(fixture.key))}`,
+                        ),
+                      )
+                    }
                   />
                 ))}
                 {groups?.map((group) => (
                   <GroupItem
                     key={group.name}
                     group={group}
-                    onSelect={() => runAction(() => navigate(`/projects/${viewedProject!.id}/groups`))}
+                    onSelect={() =>
+                      runAction(() =>
+                        navigate(
+                          `/projects/${viewedProject!.id}/fixtures/list?select=${encodeURIComponent(groupSelectParam(group.name))}`,
+                        ),
+                      )
+                    }
                   />
                 ))}
               </Command.Group>

@@ -61,6 +61,18 @@ export const navItems: NavItem[] = [
     group: "setup",
   },
   {
+    id: "fixtures-list",
+    label: "Fixtures List",
+    icon: TableProperties,
+    path: (p) => `/projects/${p}/fixtures/list`,
+    visibility: "active-only",
+    // Longest-pathMatch wins in the sidebar, so this doesn't steal /fixtures'
+    // active state.
+    pathMatch: "/fixtures/list",
+    group: "setup",
+    parent: "fixtures",
+  },
+  {
     id: "groups",
     label: "Groups",
     icon: Layers,

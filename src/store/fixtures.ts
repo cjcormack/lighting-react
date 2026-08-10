@@ -404,7 +404,7 @@ function findSlider(
  * gobo rotation is a setting on the Equinox Fusion 100 and a plain slider on the
  * Martin MAC 250, Robe ColorSpot 575 and Varytec Easymove.
  */
-function findWheel(
+export function findWheel(
   properties: PropertyDescriptor[] | undefined,
   category: PropertyCategory,
 ): SliderPropertyDescriptor | SettingPropertyDescriptor | undefined {

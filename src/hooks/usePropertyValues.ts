@@ -31,7 +31,7 @@ export function getChannelValue(channel: ChannelRef): number {
 }
 
 // Subscribe to channel updates for specific channels
-function subscribeToChannels(
+export function subscribeToChannels(
   channels: ChannelRef[],
   callback: () => void
 ): () => void {

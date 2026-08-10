@@ -12,6 +12,7 @@ import {
   ProjectChannelsDefaultUniverse,
 } from "./routes/Channels";
 import { FixturesRedirect, ProjectFixtures } from "./routes/Fixtures";
+import { FixturesListRedirect, ProjectFixturesList } from "./routes/FixturesList";
 import { GroupsRedirect, ProjectGroups } from "./routes/Groups";
 import Projects from "./routes/Projects";
 import ProjectScripts, { ScriptsRedirect } from "./routes/ProjectScripts";
@@ -57,6 +58,14 @@ function App() {
         {
           path: "projects/:projectId",
           element: <ProjectOverview />,
+        },
+        {
+          path: "projects/:projectId/fixtures/list",
+          element: <ProjectFixturesList />,
+        },
+        {
+          path: "fixtures/list",
+          element: <FixturesListRedirect />,
         },
         {
           path: "projects/:projectId/fixtures",
