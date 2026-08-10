@@ -802,8 +802,7 @@ function useBeamDirector({
       SCRATCH_CONE_SCALE.set(geom.beamRadius, BEAM_LENGTH, geom.beamRadius)
       SCRATCH_CONE_MAT.compose(SCRATCH_CONE_POS, SCRATCH_QUAT, SCRATCH_CONE_SCALE)
       // A gobo in the beam draws the raymarched volume (the pattern must exist
-      // inside the cone); an open beam keeps the cheap silhouette shell, which
-      // is byte-identical to the pre-volumetric look.
+      // inside the cone); an open beam keeps the cheap silhouette shell.
       emitters.writeBeamMatrix(slot, lobe, SCRATCH_CONE_MAT, goboSlot > 0)
       emitters.writeConeAttrs(
         slot,

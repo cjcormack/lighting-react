@@ -70,10 +70,12 @@ export const CROSS_SECTION_GLSL = /* glsl */ `
     return vec2(dot(rayDir, bx), dot(rayDir, by)) / (axial * tanHalf);
   }
 
-  vec2 goboUv(vec2 g, float angle) {
-    float ca = cos(angle);
-    float sa = sin(angle);
+  vec2 goboUvCs(vec2 g, float ca, float sa) {
     return vec2(ca * g.x - sa * g.y, sa * g.x + ca * g.y) * 0.5 + 0.5;
+  }
+
+  vec2 goboUv(vec2 g, float angle) {
+    return goboUvCs(g, cos(angle), sin(angle));
   }
 `
 
@@ -90,7 +92,6 @@ const CONE_VERTEX_SHADER = /* glsl */ `
   varying vec3 vViewNormal;
   varying vec3 vViewPos;
   varying vec3 vWorldPos;
-  varying float vAlong;
   varying vec3 vColor;
   varying float vOpacity;
   varying vec3 vBeamOrigin;
@@ -98,7 +99,6 @@ const CONE_VERTEX_SHADER = /* glsl */ `
   varying float vFocusDist;
 
   void main() {
-    vAlong = uv.y;
     vEdge = aBeamFx.x;
     vFocusDist = aBeamFx.w;
 
@@ -137,7 +137,6 @@ const CONE_FRAGMENT_SHADER = /* glsl */ `
   varying vec3 vViewNormal;
   varying vec3 vViewPos;
   varying vec3 vWorldPos;
-  varying float vAlong;
   varying vec3 vColor;
   varying float vOpacity;
   varying vec3 vBeamOrigin;
@@ -175,10 +174,11 @@ const CONE_FRAGMENT_SHADER = /* glsl */ `
       ? vEdge
       : 1.0 - smoothstep(0.0, uEdgeSoftRange, abs(fragDist - vFocusDist));
     float radial = pow(ndotv, mix(0.7, 1.15, effEdge));
-    float lengthFade = mix(0.18, 0.9, vAlong);
-    // uHaze scales the mid-air beam volume (atmosphere). 1.0 preserves the
-    // pre-haze look; 0.0 leaves only the surface pools (a hazeless room).
-    float a = vOpacity * radial * lengthFade * uHaze;
+    // uHaze scales the mid-air beam volume (atmosphere); 0.0 leaves only the
+    // surface pools (a hazeless room). Brightness is deliberately uniform
+    // along the throw — a stylised consistent cone, not a physical falloff
+    // (see the axial-profile note in washConfig).
+    float a = vOpacity * radial * uHaze;
     gl_FragColor = vec4(vColor, a);
   }
 `
@@ -240,7 +240,7 @@ const POOL_VERTEX_SHADER = /* glsl */ `
 
 const POOL_FRAGMENT_SHADER = /* glsl */ `
   #define MAX_REGIONS ${MAX_BEAM_REGIONS}
-  uniform float uMaxDist;
+  #define MAX_DIST ${BEAM_LENGTH.toFixed(1)}
   uniform float uCoreBoost;
   uniform float uWallZ;
   ${REGION_UNIFORMS_GLSL}
@@ -271,7 +271,7 @@ const POOL_FRAGMENT_SHADER = /* glsl */ `
 
     vec3 toFrag = vWorldPos - vBeamOrigin;
     float fragDist = length(toFrag);
-    if (fragDist > uMaxDist || fragDist < 0.001) discard;
+    if (fragDist > MAX_DIST || fragDist < 0.001) discard;
     vec3 rayDir = toFrag / fragDist;
 
     float cosAngle = dot(rayDir, vBeamDir);
@@ -331,14 +331,14 @@ const POOL_FRAGMENT_SHADER = /* glsl */ `
     }
     #endif
 
-    float distFade = mix(1.0, 0.55, clamp(fragDist / uMaxDist, 0.0, 1.0));
-
     // Core white-hot boost for a beam's hotspot. Disabled (uCoreBoost=0) for
     // wash pools so overlapping per-pixel colours stay coloured, not white.
     float core = pow(radial, 4.0);
     vec3 finalColor = mix(vColor, vec3(1.0), core * uCoreBoost);
 
-    float a = vOpacity * radial * distFade;
+    // Pool strength is deliberately independent of throw distance, matching
+    // the uniform mid-air cone.
+    float a = vOpacity * radial;
     gl_FragColor = vec4(finalColor, a);
   }
 `
@@ -506,6 +506,10 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
     vec3 by = cross(d, bx);
     float sinHalf = sqrt(max(0.0, 1.0 - cos2));
     float tanHalf = max(1e-4, sinHalf / max(1e-4, vCosHalfAngle));
+    // The gobo rotation is per-fragment constant too — cos/sin hoisted with
+    // the frame; goboUvCs keeps the rotate itself shared with the pool path.
+    float goboCs = cos(vBeamFx.z);
+    float goboSn = sin(vBeamFx.z);
 
     int lightMask = int(vShadowMask + 0.5);
     float focusDist = vBeamFx.w;
@@ -515,7 +519,6 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
       float t = mix(tEnter, tExit, (float(i) + jitter) / float(uVolSteps));
       vec3 p = camPos + rayDir * t;
       vec3 rel = p - O;
-      float axial = dot(rel, d);
       float relLen = max(length(rel), 1e-4);
       vec3 lightDir = rel / relLen;
 
@@ -523,22 +526,18 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
       vec2 g = vec2(dot(lightDir, bx), dot(lightDir, by)) / (max(1e-4, cosAngle) * tanHalf);
       float rr = length(g);
       float tEquiv = clamp(1.0 - rr, 0.0, 1.0);
+      float defocus = focusDist < 0.0 ? 0.0 : abs(relLen - focusDist);
       float effEdge = focusDist < 0.0
         ? vBeamFx.x
-        : 1.0 - smoothstep(0.0, uEdgeSoftRange, abs(relLen - focusDist));
+        : 1.0 - smoothstep(0.0, uEdgeSoftRange, defocus);
       float radial = mix(pow(tEquiv, 0.7), smoothstep(0.0, 0.12, tEquiv), effEdge);
 
       float gobo = 1.0;
       if (vBeamFx.y >= 0.5) {
-        vec2 guv = goboUv(g, vBeamFx.z);
-        float defocus = focusDist < 0.0 ? 0.0 : abs(relLen - focusDist);
+        vec2 guv = goboUvCs(g, goboCs, goboSn);
         float lod = clamp(uVolLodBase + uLodK * defocus, 0.0, uLodMax);
         gobo = textureLod(uGobo, vec3(guv, vBeamFx.y), lod).r;
       }
-
-      // The old shell's lengthFade, reparameterised on axial distance so the
-      // beam still bloods out toward its end.
-      float axialFade = mix(0.18, 0.9, 1.0 - axial / BEAM_LEN);
 
       // Light-ray shadow: only regions the CPU cull flagged can block.
       float lit = 1.0;
@@ -549,7 +548,7 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
         if (tb > 0.0 && tb < relLen - 0.01) { lit = 0.0; break; }
       }
 
-      sum += gobo * radial * axialFade * lit;
+      sum += gobo * radial * lit;
     }
 
     float alpha = uHaze * vOpacity * uVolGain * sum * (tExit - tEnter) / float(uVolSteps);
@@ -627,7 +626,6 @@ export function makePoolMaterial(withGobo: boolean, gobo?: DataArrayTexture): Sh
   return new ShaderMaterial({
     defines: withGobo ? { USE_GOBO: '' } : {},
     uniforms: {
-      uMaxDist: { value: BEAM_LENGTH },
       uCoreBoost: { value: 0.5 },
       uWallZ: { value: NO_WALL_Z },
       ...(withGobo

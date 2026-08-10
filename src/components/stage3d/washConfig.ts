@@ -7,6 +7,16 @@
  *  air); >1 = denser, smokier room. Surface pools are unaffected. */
 export const HAZE_LEVEL = 1
 
+// — axial profile ——————————————————————————————————————————————————
+// Beam cones, gobo volumes and surface pools are deliberately UNIFORM along
+// the throw — no axial or distance fade (all three shaders in beamShaders.ts;
+// they end hard at BEAM_LENGTH by design). The one exception is the
+// PixelStrip bar glow (fixtureBodies/PixelStrip.tsx, GLOW_FADE_POWER): a
+// ~0.1 m lens bloom that keeps its lens-to-tip fade so it dies out instead of
+// ending in a visible disc. Don't "unify" in either direction without
+// deciding the look — and never re-add a fade to only one beam shader, or the
+// shell↔march brightness match VOL_GAIN is calibrated against breaks.
+
 /** Full cone angle (deg) shared by each pixel's floor/region wash pool and its
  *  mid-air glow cone. Wider = softer / more spread; narrower = tighter with more
  *  per-pixel colour separation. */
@@ -44,9 +54,14 @@ export const VOLUMETRIC_STEPS = 12
  *  engaging a gobo reads as "a pattern appears in the beam", not a brightness
  *  jump against the shell: side-on through a ~1 m chord the shell's two
  *  silhouette faces sum to roughly 0.6× opacity, so the density must sit near
- *  that per metre after the radial/axial/gobo terms (~0.1 mean) eat into it. */
+ *  that per metre after the radial/gobo terms eat into it. Brightness is
+ *  uniform along the throw (no axial fade) in both the shell and the march,
+ *  so the two stay matched without folding a fade into this gain. */
 export const VOL_GAIN = 6.0
 
-/** Base mip level for in-air gobo samples — a touch of blur reads as
- *  scattering and hides banding; defocus LOD adds on top. */
-export const VOL_LOD_BASE = 1.0
+/** Base mip level for in-air gobo samples; defocus LOD adds on top. 0 keeps
+ *  the pattern crisp for the full throw — the stylised "consistent cone"
+ *  look. The march samples with textureLod (no automatic minification), so
+ *  raise this if fine gobos (dots/stars) shimmer or alias at long throw, or
+ *  if march banding shows through the jitter + bloom. */
+export const VOL_LOD_BASE = 0.0

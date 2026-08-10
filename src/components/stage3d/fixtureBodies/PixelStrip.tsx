@@ -40,9 +40,16 @@ const GLOW_RADIUS = Math.min(
   GLOW_LEN * 2,
 )
 const GLOW_MAX_OPACITY = 0.32 // peak additive opacity at full intensity (before haze)
-const GLOW_FADE_POWER = 1.4 // length falloff; higher concentrates light at the lens, fading to black sooner
+// Length falloff; higher concentrates light at the lens, fading to black
+// sooner. Deliberately kept while the beam cones went uniform (see the
+// axial-profile note in washConfig): this ~0.1 m lens bloom needs to die out
+// rather than end in a visible disc.
+const GLOW_FADE_POWER = 1.4
 const GLOW_EDGE_SOFTNESS = 0.6 // silhouette fade exponent; lower = softer edges
-// How much subtler the mid-air wash is than a beam cone at the same haze.
+// Scales the glow's haze response below HAZE_LEVEL so the wash stays subtler
+// than a beam. NB: no longer a direct glow:cone brightness ratio — beam cones
+// are uniform along the throw while this glow keeps its length fade, so the
+// effective mid-air ratio is lower than this number; re-tune by eye.
 const WASH_SUBTLETY = 0.55
 
 // Soft additive glow: silhouette fade (abs(N·V)) × length fade (bright at the
