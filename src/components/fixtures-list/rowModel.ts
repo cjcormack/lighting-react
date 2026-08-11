@@ -71,6 +71,9 @@ export type DividerRow = {
 
 export type Row = GroupRow | FixtureRow | ElementRow | DividerRow
 
+/** Rows that can open a detail sheet (everything except dividers). */
+export type InfoRow = GroupRow | FixtureRow | ElementRow
+
 export interface BuildRowsOptions {
   fixtures: Fixture[]
   groups: GroupSummary[]
@@ -82,6 +85,10 @@ export interface BuildRowsOptions {
   textFilter: string
   /** Fixture keys currently lit (dimmer > 0). `undefined` = filter off. */
   litFixtureKeys?: ReadonlySet<string>
+  /** When false, emit a flat fixture list in fixture-list order — no group or
+   *  member rows, no Ungrouped divider. Multi-head element expansion still
+   *  applies. Default true. */
+  groupByGroups?: boolean
 }
 
 /**
@@ -101,15 +108,6 @@ export function buildRows(opts: BuildRowsOptions): Row[] {
     if (!fixtureMatchesTerms(fixture, terms)) return false
     if (litFixtureKeys && !litFixtureKeys.has(fixture.key)) return false
     return true
-  }
-
-  const membersByGroup = new Map<string, Fixture[]>()
-  for (const fixture of fixtures) {
-    for (const groupName of fixture.groups) {
-      const list = membersByGroup.get(groupName)
-      if (list) list.push(fixture)
-      else membersByGroup.set(groupName, [fixture])
-    }
   }
 
   const rows: Row[] = []
@@ -132,6 +130,22 @@ export function buildRows(opts: BuildRowsOptions): Row[] {
           parentGroup,
         })
       }
+    }
+  }
+
+  if (opts.groupByGroups === false) {
+    for (const fixture of fixtures) {
+      if (visible(fixture)) pushFixtureRows(fixture, fixtureRowId(fixture.key))
+    }
+    return rows
+  }
+
+  const membersByGroup = new Map<string, Fixture[]>()
+  for (const fixture of fixtures) {
+    for (const groupName of fixture.groups) {
+      const list = membersByGroup.get(groupName)
+      if (list) list.push(fixture)
+      else membersByGroup.set(groupName, [fixture])
     }
   }
 

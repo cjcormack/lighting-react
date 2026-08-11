@@ -151,6 +151,84 @@ describe('buildRows', () => {
   })
 })
 
+describe('buildRows flat mode (groupByGroups: false)', () => {
+  const spotA = makeFixture('spotA', dimmerOnly(), { groups: ['Spots'] })
+  const spotB = makeFixture('spotB', dimmerOnly(), { groups: ['Spots'] })
+  const wash = makeFixture('wash', dimmerOnly(), { groups: ['Washes'] })
+  const loose = makeFixture('loose', dimmerOnly())
+  const fixtures = [spotA, spotB, wash, loose]
+  const groups = [groupSummary('Spots', 2), groupSummary('Washes', 1)]
+
+  it('emits fixtures in fixture-list order with no group, member, or divider rows', () => {
+    const rows = buildRows({
+      fixtures,
+      groups,
+      expandedGroups: new Set(),
+      textFilter: '',
+      groupByGroups: false,
+    })
+    expect(rows.map((r) => r.id)).toEqual([
+      'fixture:spotA',
+      'fixture:spotB',
+      'fixture:wash',
+      'fixture:loose',
+    ])
+    expect(rows.every((r) => r.kind === 'fixture' && r.parentGroup === undefined)).toBe(true)
+  })
+
+  it('still applies the text and lit filters', () => {
+    const filtered = buildRows({
+      fixtures,
+      groups,
+      expandedGroups: new Set(),
+      textFilter: 'spot',
+      groupByGroups: false,
+    })
+    expect(filtered.map((r) => r.id)).toEqual(['fixture:spotA', 'fixture:spotB'])
+
+    const lit = buildRows({
+      fixtures,
+      groups,
+      expandedGroups: new Set(),
+      textFilter: '',
+      litFixtureKeys: new Set(['wash']),
+      groupByGroups: false,
+    })
+    expect(lit.map((r) => r.id)).toEqual(['fixture:wash'])
+  })
+
+  it('still inlines element rows for expanded multi-head fixtures', () => {
+    const bar = makePixelBar('bar', 2, [], { groups: ['Spots'] })
+    const rows = buildRows({
+      fixtures: [bar, loose],
+      groups,
+      expandedGroups: new Set(),
+      expandedFixtures: new Set(['bar']),
+      textFilter: '',
+      groupByGroups: false,
+    })
+    expect(rows.map((r) => r.id)).toEqual([
+      'fixture:bar',
+      'element:fixture:bar:bar.pixel-0',
+      'element:fixture:bar:bar.pixel-1',
+      'fixture:loose',
+    ])
+  })
+
+  it('matches grouped output when the option is omitted or true', () => {
+    const omitted = buildRows({ fixtures, groups, expandedGroups: new Set(), textFilter: '' })
+    const explicit = buildRows({
+      fixtures,
+      groups,
+      expandedGroups: new Set(),
+      textFilter: '',
+      groupByGroups: true,
+    })
+    expect(explicit).toEqual(omitted)
+    expect(omitted.map((r) => r.id)).toContain('group:Spots')
+  })
+})
+
 describe('buildRows with multi-head fixtures', () => {
   const bar = makePixelBar('bar', 3)
   const loose = makeFixture('loose', dimmerOnly())

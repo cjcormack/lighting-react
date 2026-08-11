@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, Info } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { LocateButton } from '../fixtures/LocateButton'
 import { COLUMN_DEFS } from './columns'
 import { rowLocateTarget } from './rowModel'
@@ -11,7 +13,7 @@ import { ColourCell } from './cells/ColourCell'
 import { PositionCell } from './cells/PositionCell'
 import { SettingCell } from './cells/SettingCell'
 import type { ColumnKey } from './columns'
-import type { CellCommit, FixtureRow, GroupRow, Row, RowId } from './rowModel'
+import type { CellCommit, FixtureRow, GroupRow, InfoRow, Row, RowId } from './rowModel'
 import type { RowCell } from './useRowValues'
 
 const ROW_HEIGHT = 36
@@ -31,6 +33,9 @@ export interface FixturesTableProps {
    *  would reach (multi-head fixtures expand per element) — for the editor
    *  popover's "Applying to N" header. */
   batchCountFor: (row: Row, col: ColumnKey) => number
+  /** Open the detail sheet for a row (group → group sheet, fixture/element →
+   *  fixture sheet). */
+  onShowInfo: (row: InfoRow) => void
   /** Row to scroll into view (deep-link); cleared via onScrolledToRow. */
   scrollToRowId?: RowId | null
   onScrolledToRow?: () => void
@@ -51,6 +56,7 @@ export function FixturesTable({
   onBeginCellEdit,
   onCellCommit,
   batchCountFor,
+  onShowInfo,
   scrollToRowId,
   onScrolledToRow,
 }: FixturesTableProps) {
@@ -129,6 +135,7 @@ export function FixturesTable({
                   onBeginCellEdit={onBeginCellEdit}
                   onCellCommit={onCellCommit}
                   batchCountFor={batchCountFor}
+                  onShowInfo={onShowInfo}
                 />
               </div>
             )
@@ -149,6 +156,7 @@ interface RowViewProps {
   onBeginCellEdit: (row: Row) => void
   onCellCommit: (row: Row, col: ColumnKey, commit: CellCommit) => void
   batchCountFor: (row: Row, col: ColumnKey) => number
+  onShowInfo: (row: InfoRow) => void
 }
 
 /** Checkbox indent per nesting depth (member rows 1, element rows 2). */
@@ -164,6 +172,7 @@ const RowView = React.memo(function RowView({
   onBeginCellEdit,
   onCellCommit,
   batchCountFor,
+  onShowInfo,
 }: RowViewProps) {
   // Hooks run unconditionally; divider rows just have no cells.
   const cells = useMemo(() => buildRowCells(row, visibleColumns), [row, visibleColumns])
@@ -261,11 +270,29 @@ const RowView = React.memo(function RowView({
             {badgeCount}
           </Badge>
         )}
+        {/* Hover actions: the span's stopPropagation keeps both buttons from
+            reaching the name cell's selection click. focus-within keeps the
+            buttons tabbable — once the row's checkbox has focus they display,
+            entering the tab order for keyboard users. */}
         {locate && (
           <span
-            className="relative hidden shrink-0 group-hover/row:inline-flex"
+            className="relative hidden shrink-0 items-center gap-0.5 group-hover/row:inline-flex group-focus-within/row:inline-flex"
             onClick={(e) => e.stopPropagation()}
           >
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="size-8"
+                  onClick={() => onShowInfo(row)}
+                  aria-label={`Details for ${qualifiedName}`}
+                >
+                  <Info className="size-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Details for {qualifiedName}</TooltipContent>
+            </Tooltip>
             <LocateButton type={locate.type} targetKey={locate.key} name={qualifiedName} iconOnly />
           </span>
         )}

@@ -14,6 +14,7 @@ import {
 import { FixturesRedirect, ProjectFixtures } from "./routes/Fixtures";
 import { FixturesListRedirect, ProjectFixturesList } from "./routes/FixturesList";
 import { GroupsRedirect, ProjectGroups } from "./routes/Groups";
+import { GroupsListRedirect, ProjectGroupsList } from "./routes/GroupsList";
 import Projects from "./routes/Projects";
 import ProjectScripts, { ScriptsRedirect } from "./routes/ProjectScripts";
 import { ProjectFxLibrary, FxLibraryRedirect } from "./routes/FxLibrary";
@@ -78,6 +79,14 @@ function App() {
         {
           path: "stage",
           element: <StageRedirect />,
+        },
+        {
+          path: "projects/:projectId/groups/list",
+          element: <ProjectGroupsList />,
+        },
+        {
+          path: "groups/list",
+          element: <GroupsListRedirect />,
         },
         {
           path: "projects/:projectId/groups",

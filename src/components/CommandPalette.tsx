@@ -390,8 +390,10 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
             {/* Fixtures & Groups */}
             {isViewingActiveProject && (fixtures?.length || groups?.length) ? (
               <Command.Group heading="Fixtures & Groups" className={groupClassName}>
-                {/* Land on the Fixtures List with the row selected and scrolled
-                    into view — the card pages have no way to find an item. */}
+                {/* Land on the list views with the row selected and scrolled
+                    into view — the card pages have no way to find an item.
+                    Fixtures go to the flat Fixtures list; groups to the
+                    grouped Groups list (the only view with group rows). */}
                 {fixtures?.map((fixture) => (
                   <FixtureItem
                     key={fixture.key}
@@ -412,7 +414,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
                     onSelect={() =>
                       runAction(() =>
                         navigate(
-                          `/projects/${viewedProject!.id}/fixtures/list?select=${encodeURIComponent(groupSelectParam(group.name))}`,
+                          `/projects/${viewedProject!.id}/groups/list?select=${encodeURIComponent(groupSelectParam(group.name))}`,
                         ),
                       )
                     }

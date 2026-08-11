@@ -1,5 +1,5 @@
 import { Suspense, useState, useEffect } from 'react'
-import { useParams, useNavigate, Navigate } from 'react-router'
+import { useParams, useNavigate, useLocation, Navigate } from 'react-router'
 import { Card } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
@@ -7,6 +7,12 @@ import { useGroupListQuery } from '../store/groups'
 import { GroupCard } from '../components/groups/GroupCard'
 import { FixtureDetailModal } from '../components/groups/FixtureDetailModal'
 import { Breadcrumbs } from '../components/Breadcrumbs'
+import {
+  GROUPS_VIEW_KEY,
+  GroupsViewSwitcher,
+  getStoredCardsListView,
+  isCardsLinkState,
+} from '../components/ViewSwitcher'
 
 // Redirect component for /groups route
 export function GroupsRedirect() {
@@ -36,10 +42,19 @@ export function ProjectGroups() {
   const projectIdNum = Number(projectId)
   const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
+  const location = useLocation()
 
   // If viewing a non-current project, redirect to the current project
   if (!currentLoading && currentProject && projectIdNum !== currentProject.id) {
     return <Navigate to={`/projects/${currentProject.id}/groups`} replace />
+  }
+
+  // Sticky view: the sidebar's "Groups" entry points here, so honour the
+  // last-used view. The switcher's Cards segment both rewrites the preference
+  // and tags its navigation with link state, so Cards stays reachable even
+  // when the localStorage write fails.
+  if (!isCardsLinkState(location.state) && getStoredCardsListView(GROUPS_VIEW_KEY) === 'list') {
+    return <Navigate to={`/projects/${projectIdNum}/groups/list`} replace />
   }
 
   if (projectLoading || currentLoading) {
@@ -60,8 +75,9 @@ export function ProjectGroups() {
 
   return (
     <Card className="m-4 p-4">
-      <div className="mb-4">
+      <div className="mb-4 flex items-center justify-between gap-3">
         <Breadcrumbs projectName={project.name} currentPage="Groups" />
+        <GroupsViewSwitcher current="cards" projectId={projectIdNum} />
       </div>
       <Suspense fallback={<GroupsLoading />}>
         <GroupsContainer />

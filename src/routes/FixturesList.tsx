@@ -11,6 +11,11 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Columns3, Lightbulb, Loader2, Search } from 'lucide-react'
 import { Breadcrumbs } from '../components/Breadcrumbs'
+import {
+  FIXTURES_VIEW_KEY,
+  FixturesViewSwitcher,
+  setStoredCardsListView,
+} from '../components/ViewSwitcher'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import { useFixtureListQuery } from '../store/fixtures'
 import { useGroupListQuery } from '../store/groups'
@@ -38,11 +43,14 @@ import { useCellWriters } from '../components/fixtures-list/useCellWriters'
 import { useLitFixtureKeys } from '../components/fixtures-list/useLitFixtureKeys'
 import { FixturesTable } from '../components/fixtures-list/FixturesTable'
 import { SelectionToolbar } from '../components/fixtures-list/SelectionToolbar'
+import { FixtureDetailModal } from '../components/groups/FixtureDetailModal'
+import { GroupDetailModal } from '../components/fixtures/GroupDetailModal'
 import type { ColumnKey } from '../components/fixtures-list/columns'
 import type {
   CellCommit,
   FixtureRow,
   GroupRow,
+  InfoRow,
   Row,
   RowId,
 } from '../components/fixtures-list/rowModel'
@@ -83,6 +91,13 @@ export function ProjectFixturesList() {
   const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
 
+  // Record this as the last-used fixtures view even when arriving via a
+  // deep link (Cmd+K ?select=) rather than the switcher, so the sidebar's
+  // "Fixtures" entry keeps landing here.
+  useEffect(() => {
+    setStoredCardsListView(FIXTURES_VIEW_KEY, 'list')
+  }, [])
+
   if (!currentLoading && currentProject && projectIdNum !== currentProject.id) {
     // Carry ?select= across, matching FixturesListRedirect — a shared link's
     // deep-link target shouldn't be dropped just because the project id in
@@ -108,11 +123,12 @@ export function ProjectFixturesList() {
 
   return (
     <Card className="m-4 p-4">
-      <div className="mb-4">
-        <Breadcrumbs projectName={project.name} currentPage="Fixtures List" />
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <Breadcrumbs projectName={project.name} currentPage="Fixtures" />
+        <FixturesViewSwitcher current="list" projectId={projectIdNum} />
       </div>
       <Suspense fallback={<div>Loading...</div>}>
-        <FixturesListContainer />
+        <FixturesListContainer grouped={false} />
       </Suspense>
     </Card>
   )
@@ -121,10 +137,16 @@ export function ProjectFixturesList() {
 const EMPTY_FIXTURES: Fixture[] = []
 const EMPTY_GROUPS: GroupSummary[] = []
 
-function FixturesListContainer() {
+/**
+ * The spreadsheet view shared by Fixtures → List (flat, `grouped: false`) and
+ * Groups → List (group rows + members + Ungrouped, `grouped: true`).
+ */
+export function FixturesListContainer({ grouped }: { grouped: boolean }) {
   const { data: maybeFixtures, isLoading: fixturesLoading } = useFixtureListQuery()
   const { data: maybeGroups, isLoading: groupsLoading } = useGroupListQuery()
   const [searchParams, setSearchParams] = useSearchParams()
+  const { projectId } = useParams()
+  const navigate = useNavigate()
 
   // Module-level constants keep the fallback identity stable across renders.
   const fixtures = maybeFixtures ?? EMPTY_FIXTURES
@@ -140,6 +162,8 @@ function FixturesListContainer() {
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(new Set<string>())
   const [expandedFixtures, setExpandedFixtures] = useState<ReadonlySet<string>>(new Set<string>())
   const [scrollToRowId, setScrollToRowId] = useState<RowId | null>(null)
+  const [infoFixtureKey, setInfoFixtureKey] = useState<string | null>(null)
+  const [infoGroupName, setInfoGroupName] = useState<string | null>(null)
 
   const visibleColumns = useMemo(
     () => COLUMN_DEFS.filter((d) => columnVisibility[d.key]).map((d) => d.key),
@@ -157,8 +181,9 @@ function FixturesListContainer() {
         expandedFixtures,
         textFilter: filter,
         litFixtureKeys: onlyLit ? litFixtureKeys : undefined,
+        groupByGroups: grouped,
       }),
-    [fixtures, groups, expandedGroups, expandedFixtures, filter, onlyLit, litFixtureKeys],
+    [fixtures, groups, expandedGroups, expandedFixtures, filter, onlyLit, litFixtureKeys, grouped],
   )
 
   // Dividers aren't selectable — they're excluded from the selection order so
@@ -209,6 +234,13 @@ function FixturesListContainer() {
     },
     [selection],
   )
+
+  // Element rows open the PARENT fixture's sheet — FixtureDetailModal resolves
+  // by fixture-list key, and element keys aren't in that list.
+  const handleShowInfo = useCallback((row: InfoRow) => {
+    if (row.kind === 'group') setInfoGroupName(row.name)
+    else setInfoFixtureKey(row.fixture.key)
+  }, [])
 
   const handleToggleExpand = useCallback((row: GroupRow | FixtureRow) => {
     const toggled = (prev: ReadonlySet<string>, key: string): ReadonlySet<string> => {
@@ -365,13 +397,25 @@ function FixturesListContainer() {
   useEffect(() => {
     if (!selectParam || fixturesLoading || groupsLoading) return
     const parsed = parseSelectParam(selectParam)
+    // Group rows only exist on the grouped list. Links minted before the
+    // fixtures/groups list split pointed group selects at /fixtures/list, so
+    // forward them to /groups/list instead of silently consuming the param.
+    if (parsed?.kind === 'group' && !grouped) {
+      navigate(`/projects/${projectId}/groups/list?select=${encodeURIComponent(selectParam)}`, {
+        replace: true,
+      })
+      return
+    }
     let rowId: RowId | null = null
     if (parsed?.kind === 'group' && groups.some((g) => g.name === parsed.key)) {
       rowId = groupRowId(parsed.key)
     } else if (parsed?.kind === 'fixture') {
       const fixture = fixtures.find((f) => f.key === parsed.key)
       if (fixture) {
-        const parentGroup = fixture.groups.find((name) => groups.some((g) => g.name === name))
+        // Flat mode has no member rows — the fixture's own row is the target.
+        const parentGroup = grouped
+          ? fixture.groups.find((name) => groups.some((g) => g.name === name))
+          : undefined
         if (parentGroup) {
           setExpandedGroups((prev) => new Set(prev).add(parentGroup))
           rowId = memberRowId(parentGroup, parsed.key)
@@ -395,9 +439,11 @@ function FixturesListContainer() {
     )
     // selection.select is referentially stable (useCallback with no deps in
     // useListSelection); setOnlyLit/setSearchParams are stable setters;
-    // groups/fixtures/loading flags cover everything else read here.
+    // navigate/projectId only feed the group-forwarding branch, which leaves
+    // this route anyway; groups/fixtures/loading flags/grouped cover
+    // everything else read here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectParam, fixtures, groups, fixturesLoading, groupsLoading, setSearchParams])
+  }, [selectParam, fixtures, groups, fixturesLoading, groupsLoading, grouped, setSearchParams])
 
   // View-level shortcuts: Escape clears, ⌘/Ctrl+A selects all visible rows,
   // ↑/↓ move the selection (Shift extends the range from the anchor). Guarded
@@ -526,10 +572,14 @@ function FixturesListContainer() {
           onBeginCellEdit={handleBeginCellEdit}
           onCellCommit={handleCellCommit}
           batchCountFor={batchCountFor}
+          onShowInfo={handleShowInfo}
           scrollToRowId={scrollToRowId}
           onScrolledToRow={() => setScrollToRowId(null)}
         />
       )}
+
+      <FixtureDetailModal fixtureKey={infoFixtureKey} onClose={() => setInfoFixtureKey(null)} />
+      <GroupDetailModal groupName={infoGroupName} onClose={() => setInfoGroupName(null)} />
     </div>
   )
 }

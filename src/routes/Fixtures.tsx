@@ -1,5 +1,5 @@
 import React, { Suspense, useState, useMemo, useEffect, createContext, useContext } from "react"
-import { useParams, useNavigate, Navigate } from "react-router"
+import { useParams, useNavigate, useLocation, Navigate } from "react-router"
 import { Card, CardContent, CardHeader, CardTitle, CardAction } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -14,6 +14,12 @@ import { FxBadge } from "../components/fx/FxBadge"
 import { FixtureParkButton } from "../components/fixtures/FixtureParkButton"
 import { LocateButton } from "../components/fixtures/LocateButton"
 import { Breadcrumbs } from "../components/Breadcrumbs"
+import {
+  FIXTURES_VIEW_KEY,
+  FixturesViewSwitcher,
+  getStoredCardsListView,
+  isCardsLinkState,
+} from "../components/ViewSwitcher"
 import { FixtureContent, FixtureViewMode } from "../components/fixtures/FixtureContent"
 import { GroupDetailModal } from "../components/fixtures/GroupDetailModal"
 import { useCurrentProjectQuery, useProjectQuery } from "../store/projects"
@@ -50,10 +56,19 @@ export function ProjectFixtures() {
   const projectIdNum = Number(projectId)
   const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
+  const location = useLocation()
 
   // If viewing a non-current project, redirect to the current project
   if (!currentLoading && currentProject && projectIdNum !== currentProject.id) {
     return <Navigate to={`/projects/${currentProject.id}/fixtures`} replace />
+  }
+
+  // Sticky view: the sidebar's single "Fixtures" entry points here, so honour
+  // the last-used view. The switcher's Cards segment both rewrites the
+  // preference and tags its navigation with link state, so Cards stays
+  // reachable even when the localStorage write fails.
+  if (!isCardsLinkState(location.state) && getStoredCardsListView(FIXTURES_VIEW_KEY) === 'list') {
+    return <Navigate to={`/projects/${projectIdNum}/fixtures/list`} replace />
   }
 
   if (projectLoading || currentLoading) {
@@ -74,8 +89,9 @@ export function ProjectFixtures() {
 
   return (
     <Card className="m-4 p-4">
-      <div className="mb-4">
+      <div className="mb-4 flex items-center justify-between gap-3">
         <Breadcrumbs projectName={project.name} currentPage="Fixtures" />
+        <FixturesViewSwitcher current="cards" projectId={projectIdNum} />
       </div>
       <Suspense fallback={<div>Loading...</div>}>
         <FixturesContainer />

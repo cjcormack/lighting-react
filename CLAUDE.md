@@ -187,6 +187,13 @@ REST API is used for CRUD operations on scripts, scenes, fixtures, etc.
 - When adding a new page/route, add an entry to the `navItems` array in `src/navigation.ts`
 - This automatically registers the page in both the sidebar and the Cmd+K command palette
 - Dynamic items (e.g. universes) are handled by the `useUniverseNavItems()` hook (`useNavItems()` just returns the static `navItems`)
+- **Exception — cards/list sibling routes**: list views that pair with a cards
+  view (`/fixtures/list`, `/groups/list`) deliberately have **no** `navItems`
+  entry. They're reached via the in-page Cards/List switcher
+  (`src/components/ViewSwitcher.tsx`) and Cmd+K item deep links, and the
+  sidebar keeps one entry per resource; the cards route redirects to the list
+  when the sticky view preference says so. Follow that pattern for any new
+  cards/list pair instead of adding a second sidebar row.
 
 ### Sheets vs Dialogs
 
