@@ -24,7 +24,9 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   'importProject', // src/ImportProjectDialog.tsx
   'exportProject', // src/ExportProjectDialog.tsx
   'deleteProject', // src/routes/Projects.tsx
-  'snapshotCueFromLive', // src/routes/ProgramPage.tsx — shown in the confirm dialog
+  'recordProgrammer', // src/components/programmer/RecordSheet.tsx
+  'includeCue', // src/components/programmer/IncludeCueSheet.tsx
+  'updateProgrammer', // src/components/programmer/UpdateDialog.tsx
 
   // Call site raises its own toast.error()
   'updateProject', // src/routes/ProjectSettings.tsx

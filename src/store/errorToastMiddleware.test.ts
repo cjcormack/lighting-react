@@ -118,6 +118,7 @@ describe('SILENT_ENDPOINTS', () => {
       import('./stageRegions'),
       import('./riggings'),
       import('./patches'),
+      import('./programmerOps'),
     ])
 
     const known = new Set(Object.keys(restApi.endpoints))

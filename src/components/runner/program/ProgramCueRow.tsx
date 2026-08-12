@@ -19,8 +19,11 @@ interface ProgramCueRowProps {
   /** Open Duplicate flow with the freshly fetched full cue. */
   onDuplicate?: (cue: Cue) => void
   /** Open Grab-live confirmation. */
-  onSnapshotFromLive?: (cueId: number) => Promise<void> | void
-  snapshotPending?: boolean
+  /** Record the programmer into this cue — opens the Record sheet targeting it. */
+  onRecordInto?: (cueId: number) => void
+  /** Load this cue into the programmer to edit it on stage. */
+  onIncludeCue?: (cueId: number) => void
+  includePending?: boolean
 }
 
 /** Thin wrapper around `CueCardEditor` — kept so `StackDetail` doesn't have to

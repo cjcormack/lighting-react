@@ -54,8 +54,11 @@ interface StackDetailProps {
   onMarkerRename: (cueId: number, name: string) => void
   onMarkerDelete: (cueId: number) => void
   onDuplicate?: (cue: Cue) => void
-  onSnapshotFromLive?: (cueId: number) => Promise<void> | void
-  snapshotPending?: boolean
+  /** Record the programmer into this cue — opens the Record sheet targeting it. */
+  onRecordInto?: (cueId: number) => void
+  /** Load this cue into the programmer to edit it on stage. */
+  onIncludeCue?: (cueId: number) => void
+  includePending?: boolean
 }
 
 export function StackDetail({
@@ -71,8 +74,9 @@ export function StackDetail({
   onMarkerRename,
   onMarkerDelete,
   onDuplicate,
-  onSnapshotFromLive,
-  snapshotPending,
+  onRecordInto,
+  onIncludeCue,
+  includePending,
 }: StackDetailProps) {
   const [reorderCues] = useReorderCueStackCuesMutation()
   const [sortByCueNumber] = useSortCueStackByCueNumberMutation()
@@ -273,8 +277,9 @@ export function StackDetail({
                   isStandby={cue.id === standbyCueId}
                   layersMode={layersMode}
                   onDuplicate={onDuplicate}
-                  onSnapshotFromLive={onSnapshotFromLive}
-                  snapshotPending={snapshotPending}
+                  onRecordInto={onRecordInto}
+                  onIncludeCue={onIncludeCue}
+                  includePending={includePending}
                 />
               )
             })}

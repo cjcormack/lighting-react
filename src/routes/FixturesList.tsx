@@ -35,6 +35,7 @@ import {
   rowWriteTargets,
 } from '../components/fixtures-list/rowModel'
 import { isEditableTarget } from '../lib/domUtils'
+import { useIncludeSelectionRequest } from '../store/includeSelection'
 import {
   listSelectionIntentFor,
   useListSelection,
@@ -158,6 +159,12 @@ export interface FixturesListContainerProps {
    * a group select out of the programmer and onto /groups/list.
    */
   enableDeepLinkSelect?: boolean
+  /**
+   * React to Include by selecting the fixtures it pulled in ("Select Heads on Include").
+   * Opt-in so the plain Fixtures and Groups lists don't have their selection yanked by a
+   * programmer action happening elsewhere.
+   */
+  respondToIncludeSelection?: boolean
 }
 
 /**
@@ -170,6 +177,7 @@ export function FixturesListContainer({
   showOwnership = false,
   toolbarExtra,
   enableDeepLinkSelect = true,
+  respondToIncludeSelection = false,
 }: FixturesListContainerProps) {
   const { data: maybeFixtures, isLoading: fixturesLoading } = useFixtureListQuery()
   const { data: maybeGroups, isLoading: groupsLoading } = useGroupListQuery()
@@ -451,6 +459,61 @@ export function FixturesListContainer({
     enableDeepLinkSelect,
     setSearchParams,
   ])
+
+  // "Select Heads on Include": pick up the fixtures the last Include pulled in. Keyed on the
+  // request's nonce, not its contents — including the same cue twice must re-select, since the
+  // operator may have changed the selection in between.
+  const includeSelection = useIncludeSelectionRequest()
+  const includeNonce = respondToIncludeSelection ? includeSelection.nonce : 0
+  // Each nonce is applied at most once. The effect also depends on `fixtures`/`groups`/
+  // `grouped` — it has to, to map keys onto row ids — and any of those can change long after
+  // the Include: a background fixture-list refetch, or the operator hitting the Groups toggle.
+  // Without this guard that would silently re-apply the old Include's selection over whatever
+  // they had since selected, and reset their filter and scroll position with it.
+  const appliedIncludeNonceRef = useRef(0)
+  useEffect(() => {
+    if (includeNonce === 0 || appliedIncludeNonceRef.current === includeNonce) return
+    const { fixtureKeys, groupKeys } = includeSelection
+    // Prefer the group row when the sheet is in rollup mode and the whole group came in —
+    // that is the shape the operator was working in, and it keeps the row count readable.
+    const wanted: RowId[] = []
+    if (grouped) {
+      const groupSet = new Set(groupKeys)
+      for (const name of groupKeys) {
+        if (groups.some((g) => g.name === name)) wanted.push(groupRowId(name))
+      }
+      for (const key of fixtureKeys) {
+        const fixture = fixtures.find((f) => f.key === key)
+        if (!fixture) continue
+        const parent = fixture.groups.find((name) => groups.some((g) => g.name === name))
+        // Skip members already covered by a selected group row.
+        if (parent && groupSet.has(parent)) continue
+        if (parent) {
+          setExpandedGroups((prev) => (prev.has(parent) ? prev : new Set(prev).add(parent)))
+          wanted.push(memberRowId(parent, key))
+        } else {
+          wanted.push(fixtureRowId(key))
+        }
+      }
+    } else {
+      for (const key of fixtureKeys) {
+        if (fixtures.some((f) => f.key === key)) wanted.push(fixtureRowId(key))
+      }
+    }
+    // Nothing resolved — the fixtures may still be loading, so leave the nonce unapplied and
+    // let the next run (when they arrive) do it.
+    if (wanted.length === 0) return
+    appliedIncludeNonceRef.current = includeNonce
+    // A filter would hide most of what we just selected, and the operator did not ask for it.
+    setFilter('')
+    setOnlyLit(false)
+    selection.setSelection(wanted)
+    setScrollToRowId(wanted[0])
+    // `includeSelection` is read fresh rather than depended on: its identity changes with every
+    // publish, and the arrays inside it are the same data the nonce already tracks.
+    // `selection.setSelection` and `setOnlyLit` are referentially stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [includeNonce, fixtures, groups, grouped])
 
   // View-level shortcuts: Escape clears, ⌘/Ctrl+A selects all visible rows,
   // ↑/↓ move the selection (Shift extends the range from the anchor). Guarded

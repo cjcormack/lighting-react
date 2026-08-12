@@ -53,9 +53,21 @@ export interface ProvenanceEntry {
   propertyName: string
   source: ProvenanceSource
   cueId?: number
-  /** Not populated for CUE sources yet — see `FU-PROG-PROVENANCE-STACKID` in lighting7. */
   cueStackId?: number
   effectId?: number
+}
+
+/**
+ * What Include last pulled into the programmer, and therefore what a bare Update writes back
+ * to. Null means nothing is staged from a cue, so Update falls through to the Mode B checklist.
+ */
+export interface IncludedTarget {
+  /** `CUE` today; palettes arrive in Session 4. */
+  kind: string
+  cueId: number
+  cueStackId?: number
+  cueName?: string
+  cueNumber?: string
 }
 
 /** The client-side view of the programmer, rebuilt from each `programmer.state` snapshot. */
@@ -66,6 +78,7 @@ export interface ProgrammerState {
   channels: readonly ProgrammerChannelEntry[]
   /** Keyed by [programmerKey]. A key absent here is baseline-owned. */
   provenance: ReadonlyMap<string, ProvenanceEntry>
+  lastIncluded: IncludedTarget | null
 }
 
 /** Per-cell lookup result: what the programmer and the cascade say about one property. */
@@ -83,6 +96,7 @@ interface ProgrammerSetOutgoing {
   propertyName: string
   value: string
   fadeMs?: number
+  sourceGroup?: string
 }
 
 interface ProgrammerSetColourOutgoing {
@@ -97,6 +111,7 @@ interface ProgrammerSetColourOutgoing {
   a?: number
   uv?: number
   fadeMs?: number
+  sourceGroup?: string
 }
 
 interface ProgrammerSetPositionOutgoing {
@@ -106,6 +121,7 @@ interface ProgrammerSetPositionOutgoing {
   pan: number
   tilt: number
   fadeMs?: number
+  sourceGroup?: string
 }
 
 interface ProgrammerClearEntryOutgoing {
@@ -147,6 +163,12 @@ interface ProgrammerStateIncoming {
   blind: boolean
   entries: ProgrammerEntry[]
   channels: ProgrammerChannelEntry[]
+  lastIncluded?: IncludedTarget | null
+}
+
+interface ProgrammerIncludeTargetIncoming {
+  type: 'programmer.includeTarget'
+  target?: IncludedTarget | null
 }
 
 interface ProgrammerEntryChangedIncoming {
@@ -188,6 +210,7 @@ interface ProvenanceStateIncoming {
 
 type ProgrammerIncomingMessage =
   | ProgrammerStateIncoming
+  | ProgrammerIncludeTargetIncoming
   | ProgrammerEntryChangedIncoming
   | ProgrammerEntryClearedIncoming
   | ProgrammerClearedIncoming
@@ -204,6 +227,8 @@ export interface ProgrammerApi {
   isBlind(): boolean
   /** Number of stored property entries (the "programmer holds data" count). */
   entryCount(): number
+  /** What Include last loaded, or null. Drives the Update button's label and target. */
+  lastIncluded(): IncludedTarget | null
 
   set(
     targetType: ProgrammerTargetType,
@@ -211,6 +236,13 @@ export interface ProgrammerApi {
     propertyName: string,
     value: string,
     fadeMs?: number,
+    /**
+     * Names the group control this write came from, for fan-outs that can't send
+     * `targetType: 'group'` (a group virtual dimmer over heterogeneous members, a Highlight
+     * release restoring per-fixture values). It only widens the shape Record can emit, and
+     * the server drops it unless the group really contains this fixture.
+     */
+    sourceGroup?: string,
   ): void
   setColour(
     targetType: ProgrammerTargetType,
@@ -218,6 +250,7 @@ export interface ProgrammerApi {
     propertyName: string,
     rgb: { r: number; g: number; b: number; w?: number; a?: number; uv?: number },
     fadeMs?: number,
+    sourceGroup?: string,
   ): void
   setPosition(
     targetType: ProgrammerTargetType,
@@ -225,6 +258,7 @@ export interface ProgrammerApi {
     pan: number,
     tilt: number,
     fadeMs?: number,
+    sourceGroup?: string,
   ): void
   clearEntry(
     targetType: ProgrammerTargetType,
@@ -271,10 +305,11 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
   let entries = new Map<string, ProgrammerEntry>()
   let channels: ProgrammerChannelEntry[] = []
   let provenance = new Map<string, ProvenanceEntry>()
+  let lastIncluded: IncludedTarget | null = null
 
-  let snapshot: ProgrammerState = { blind, entries, channels, provenance }
+  let snapshot: ProgrammerState = { blind, entries, channels, provenance, lastIncluded }
   const rebuildSnapshot = () => {
-    snapshot = { blind, entries, channels, provenance }
+    snapshot = { blind, entries, channels, provenance, lastIncluded }
   }
 
   let nextSubscriptionId = 1
@@ -357,6 +392,10 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     blind = message.blind
     entries = nextEntries
     channels = message.channels
+    // The include target isn't per-key, so it rides `notifyState` only and is deliberately
+    // *not* part of `entrySignature` — including it there would wake every cell whenever the
+    // operator included a different cue.
+    lastIncluded = message.lastIncluded ?? null
     notifyKeys(touched)
     notifyState()
   }
@@ -418,6 +457,12 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
       case 'programmer.state':
         applyStateSnapshot(message)
         break
+      case 'programmer.includeTarget':
+        // Broadcast, unlike the other programmer replies: the programmer is shared, so a
+        // second tab's Update button must offer the same target.
+        lastIncluded = message.target ?? null
+        notifyState()
+        break
       case 'provenanceState':
         applyProvenance(message)
         break
@@ -431,6 +476,8 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
         const touched = [...entries.keys()]
         entries = new Map()
         channels = []
+        // Clear releases everything Include staged, so the server drops the target too.
+        lastIncluded = null
         notifyKeys(touched)
         notifyState()
         break
@@ -477,15 +524,32 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     getKeyState: (targetKey, propertyName) => keyStateFor(programmerKey(targetKey, propertyName)),
     isBlind: () => blind,
     entryCount: () => entries.size,
+    lastIncluded: () => lastIncluded,
 
-    set(targetType, targetKey, propertyName, value, fadeMs) {
-      send({ type: 'programmer.set', targetType, targetKey, propertyName, value, fadeMs })
+    set(targetType, targetKey, propertyName, value, fadeMs, sourceGroup) {
+      send({
+        type: 'programmer.set',
+        targetType,
+        targetKey,
+        propertyName,
+        value,
+        fadeMs,
+        sourceGroup,
+      })
     },
-    setColour(targetType, targetKey, propertyName, rgb, fadeMs) {
-      send({ type: 'programmer.setColour', targetType, targetKey, propertyName, ...rgb, fadeMs })
+    setColour(targetType, targetKey, propertyName, rgb, fadeMs, sourceGroup) {
+      send({
+        type: 'programmer.setColour',
+        targetType,
+        targetKey,
+        propertyName,
+        ...rgb,
+        fadeMs,
+        sourceGroup,
+      })
     },
-    setPosition(targetType, targetKey, pan, tilt, fadeMs) {
-      send({ type: 'programmer.setPosition', targetType, targetKey, pan, tilt, fadeMs })
+    setPosition(targetType, targetKey, pan, tilt, fadeMs, sourceGroup) {
+      send({ type: 'programmer.setPosition', targetType, targetKey, pan, tilt, fadeMs, sourceGroup })
     },
     clearEntry(targetType, targetKey, propertyName, fadeMs) {
       send({ type: 'programmer.clearEntry', targetType, targetKey, propertyName, fadeMs })

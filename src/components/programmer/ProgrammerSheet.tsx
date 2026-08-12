@@ -26,6 +26,8 @@ export function ProgrammerSheet() {
         // Cmd+K's ?select= links target the fixtures/groups pair; consuming them here would
         // bounce a group select straight back out to /groups/list.
         enableDeepLinkSelect={false}
+        // Include auto-selects the heads it pulled in — the sheet is where you then edit them.
+        respondToIncludeSelection
         toolbarExtra={
           <>
             <ProgrammerToolbar />

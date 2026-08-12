@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ChevronRight,
   Copy,
+  Download,
   Eye,
   EyeOff,
   GripVertical,
@@ -60,8 +61,11 @@ interface CueCardEditorProps {
   isStandby?: boolean
   layersMode: LayersMode
   onDuplicate?: (cue: Cue) => void
-  onSnapshotFromLive?: (cueId: number) => Promise<void> | void
-  snapshotPending?: boolean
+  /** Record the programmer into this cue — opens the Record sheet targeting it. */
+  onRecordInto?: (cueId: number) => void
+  /** Load this cue into the programmer to edit it on stage. */
+  onIncludeCue?: (cueId: number) => void
+  includePending?: boolean
   /** Stack header sets this — width threshold (px) below which the body uses tabs. */
   tabsBreakpoint?: number
 }
@@ -84,8 +88,9 @@ export function CueCardEditor({
   isStandby = false,
   layersMode,
   onDuplicate,
-  onSnapshotFromLive,
-  snapshotPending = false,
+  onRecordInto,
+  onIncludeCue,
+  includePending = false,
   tabsBreakpoint = 1000,
 }: CueCardEditorProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -471,20 +476,36 @@ export function CueCardEditor({
                         Duplicate
                       </Button>
                     )}
-                    {onSnapshotFromLive && (
+                    {/* The programmer loop, from the cue you're already looking at. Include
+                        loads this cue into the programmer to edit on stage; Record writes the
+                        programmer back. Together they replace the old "Grab live" button —
+                        capturing the whole stage is now one Record source among several,
+                        rather than the only (and lossiest) way in. */}
+                    {onIncludeCue && (
                       <Button
                         variant="outline"
                         size="sm"
                         className="h-7 text-xs gap-1"
-                        onClick={() => onSnapshotFromLive(cue.id)}
-                        disabled={snapshotPending}
+                        onClick={() => onIncludeCue(cue.id)}
+                        disabled={includePending}
                       >
-                        {snapshotPending ? (
+                        {includePending ? (
                           <Loader2 className="size-3.5 animate-spin" />
                         ) : (
-                          <Zap className="size-3.5" />
+                          <Download className="size-3.5" />
                         )}
-                        Grab live
+                        Include
+                      </Button>
+                    )}
+                    {onRecordInto && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1"
+                        onClick={() => onRecordInto(cue.id)}
+                      >
+                        <Zap className="size-3.5" />
+                        Record
                       </Button>
                     )}
                   </div>

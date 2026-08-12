@@ -27,7 +27,11 @@ export const NON_SAVE_ENDPOINTS: ReadonlySet<string> = new Set([
   'advanceProgram',
   'applyCue',
   'stopCue',
-  'snapshotCueFromLive', // Grabs live state into a cue; reports itself in the confirm dialog.
+  // The programmer's authoring loop. Each reports itself in its own sheet/dialog, and
+  // Record/Update also report counts and skips there — a save-status flash would say less.
+  'recordProgrammer',
+  'includeCue',
+  'updateProgrammer',
 
   // ── Live output: DMX and effects state, none of it persisted ──
   'updateChannel',

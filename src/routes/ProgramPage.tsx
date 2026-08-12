@@ -1,22 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate, Navigate, useSearchParams } from 'react-router'
 import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Loader2 } from 'lucide-react'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import { useProjectCueStackListQuery } from '../store/cueStacks'
-import {
-  useCreateProjectCueMutation,
-  useSnapshotCueFromLiveMutation,
-} from '../store/cues'
+import { useCreateProjectCueMutation } from '../store/cues'
 import {
   useProjectProgramStateQuery,
   useActivateProgramMutation,
@@ -24,13 +12,24 @@ import {
 } from '../store/cueStacks'
 import type { Cue } from '../api/cuesApi'
 import { buildCueInput } from '../lib/cueUtils'
-import { formatError } from '../lib/formatError'
 import { useFxStateQuery, tapTempo } from '../store/fx'
 import { useShowTransport } from '../hooks/useShowTransport'
 import { ShowHeader } from '../components/ShowHeader'
 import { ShowBar } from '../components/ShowBar'
 import { ProgramView } from '../components/runner/program/ProgramView'
 import { ProgrammerPane } from '../components/programmer/ProgrammerPane'
+import { RecordSheet } from '../components/programmer/RecordSheet'
+import { useIncludeCue } from '../components/programmer/useIncludeCue'
+import type { CueStack } from '../api/cueStacksApi'
+
+/** The cue's display name for the Record sheet's header, or undefined if it has vanished. */
+function cueNameFor(stacks: CueStack[] | undefined, cueId: number): string | undefined {
+  for (const stack of stacks ?? []) {
+    const cue = stack.cues?.find((c) => c.id === cueId)
+    if (cue) return cue.name
+  }
+  return undefined
+}
 
 export function ProgramRedirect() {
   const { data: currentProject, isLoading } = useCurrentProjectQuery()
@@ -106,13 +105,14 @@ export function ProgramPage() {
     transport.activeStack?.cues.find((c) => c.id === transport.standbyCueId) ?? null
 
   const [createCue] = useCreateProjectCueMutation()
-  const [snapshotCueFromLive, { isLoading: snapshotPending }] = useSnapshotCueFromLiveMutation()
   const [activateShow] = useActivateProgramMutation()
   const [deactivateShow] = useDeactivateProgramMutation()
 
-  const [snapshotConfirmOpen, setSnapshotConfirmOpen] = useState(false)
-  const [snapshotError, setSnapshotError] = useState<string | null>(null)
-  const [snapshotCueId, setSnapshotCueId] = useState<number | null>(null)
+  // Record replaces the old "Grab live state" button. Grab-live is still reachable — it is
+  // `source: 'STAGE_SNAPSHOT'` in the Record sheet — but it is no longer the only way to get
+  // the stage into a cue, and it was the lossy one.
+  const { include, isLoading: includePending } = useIncludeCue(projectIdNum)
+  const [recordCueId, setRecordCueId] = useState<number | null>(null)
 
   // Set/clear the `?cue=` modifier without touching the stack path (replace: no history spam).
   const setExpandedCueId = useCallback(
@@ -193,27 +193,9 @@ export function ProgramPage() {
     [drillStackId, projectIdNum, createCue, setExpandedCueId],
   )
 
-  const handleSnapshotFromLiveRequest = useCallback((cueId: number) => {
-    setSnapshotCueId(cueId)
-    setSnapshotError(null)
-    setSnapshotConfirmOpen(true)
-  }, [])
+  const handleRecordInto = useCallback((cueId: number) => setRecordCueId(cueId), [])
 
-  const handleSnapshotFromLiveConfirm = useCallback(async () => {
-    if (snapshotCueId == null) return
-    try {
-      await snapshotCueFromLive({
-        projectId: projectIdNum,
-        cueId: snapshotCueId,
-      }).unwrap()
-      setSnapshotConfirmOpen(false)
-      setSnapshotCueId(null)
-    } catch (err) {
-      // formatError, not `err.message` — RTK Query rejects with a plain `{status, data}` object,
-      // never an Error, so an `instanceof Error` test would always drop the server's message.
-      setSnapshotError(formatError(err))
-    }
-  }, [snapshotCueId, projectIdNum, snapshotCueFromLive])
+  const handleIncludeCue = useCallback((cueId: number) => void include(cueId), [include])
 
   // ── Deep-link normalizer + auto-drill ──
   // - Legacy `/program?stack=X&cue=Y` links (from Run / Prompt Book "Edit Cue") are rewritten to
@@ -330,51 +312,23 @@ export function ProgramPage() {
               expandedCueId={expandedCueId}
               onExpandedCueChange={setExpandedCueId}
               onDuplicate={handleDuplicate}
-              onSnapshotFromLive={handleSnapshotFromLiveRequest}
-              snapshotPending={snapshotPending}
+              onRecordInto={handleRecordInto}
+              onIncludeCue={handleIncludeCue}
+              includePending={includePending}
             />
           </div>
         </div>
       )}
 
-      <Dialog
-        open={snapshotConfirmOpen}
-        onOpenChange={(open) => {
-          if (!snapshotPending) setSnapshotConfirmOpen(open)
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Grab live state?</DialogTitle>
-          </DialogHeader>
-          <DialogDescription>
-            Replace this cue&apos;s property assignments with the current stage
-            state. Existing fixture assignments on the cue will be overwritten.
-          </DialogDescription>
-          {snapshotError && (
-            <p className="text-sm text-destructive">{snapshotError}</p>
-          )}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setSnapshotConfirmOpen(false)}
-              disabled={snapshotPending}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleSnapshotFromLiveConfirm} disabled={snapshotPending}>
-              {snapshotPending ? (
-                <>
-                  <Loader2 className="size-3.5 animate-spin mr-1.5" />
-                  Capturing...
-                </>
-              ) : (
-                'Grab live state'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {recordCueId != null && (
+        <RecordSheet
+          open
+          onOpenChange={(open) => !open && setRecordCueId(null)}
+          projectId={projectIdNum}
+          targetCueId={recordCueId}
+          targetCueName={cueNameFor(stacks, recordCueId)}
+        />
+      )}
     </div>
   )
 }

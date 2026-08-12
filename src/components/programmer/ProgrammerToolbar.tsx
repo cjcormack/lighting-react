@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { useParams } from 'react-router'
 import { Circle, Download, Eraser, EyeOff, MoreHorizontal, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -23,6 +25,9 @@ import {
   useProgrammerSummaryQuery,
 } from '../../store/programmer'
 import { useActiveEffectsQuery } from '../../store/fixtureFx'
+import { IncludeCueSheet } from './IncludeCueSheet'
+import { RecordSheet } from './RecordSheet'
+import { UpdateDialog } from './UpdateDialog'
 
 /** Fade options for Clear and for entering/leaving Blind, in milliseconds. */
 const FADE_OPTIONS = [
@@ -36,29 +41,22 @@ const FADE_OPTIONS = [
 const FADE_KEY = 'programmer.fadeMs'
 
 /**
- * The Record / Include / Update loop, still to come. Declared once so the inline row and the
- * narrow-viewport overflow menu can't drift apart.
- */
-const SESSION_3_ACTIONS = [
-  { label: 'Record', Icon: Circle },
-  { label: 'Include', Icon: Download },
-  { label: 'Update', Icon: Upload },
-] as const
-
-/**
  * The programmer's own controls, rendered ahead of the shared list toolbar (which already
  * carries Locate, Highlight and Fan for the current selection).
- *
- * Record / Include / Update are Session 3 of the redesign and render disabled here rather
- * than being omitted: the shape of the loop is part of what the sheet teaches, and a missing
- * button reads as "not supported" where a disabled one reads as "not yet".
  */
 export function ProgrammerToolbar() {
   const { data: summary } = useProgrammerSummaryQuery()
   const [fadeMs, setFadeMs] = usePersistentState<string>(FADE_KEY, '0')
+  const { projectId: projectIdParam } = useParams()
+  const projectId = Number(projectIdParam)
+
+  const [recordOpen, setRecordOpen] = useState(false)
+  const [includeOpen, setIncludeOpen] = useState(false)
+  const [updateOpen, setUpdateOpen] = useState(false)
 
   const blind = summary?.blind ?? false
   const entryCount = summary?.entryCount ?? 0
+  const includeTarget = summary?.lastIncluded ?? null
   const fade = Number(fadeMs) || 0
 
   // Clear releases programmer values *and* programmer-band FX, and the two are independent:
@@ -68,6 +66,40 @@ export function ProgrammerToolbar() {
   const { data: activeEffects } = useActiveEffectsQuery()
   const programmerFxCount = activeEffects?.filter((e) => e.programmerOwned).length ?? 0
   const hasSomethingToClear = entryCount > 0 || programmerFxCount > 0
+
+  // Record and Update both read the programmer, so both are meaningless when it is empty.
+  // Include is not: it is how you *fill* the programmer.
+  const hasContent = entryCount > 0 || programmerFxCount > 0
+
+  const actions = [
+    {
+      label: 'Record',
+      Icon: Circle,
+      disabled: !hasContent || !projectId,
+      tooltip: hasContent
+        ? 'Write the programmer into a cue'
+        : 'The programmer is empty — nothing to record',
+      onSelect: () => setRecordOpen(true),
+    },
+    {
+      label: 'Include',
+      Icon: Download,
+      disabled: !projectId,
+      tooltip: 'Load a cue into the programmer to edit it',
+      onSelect: () => setIncludeOpen(true),
+    },
+    {
+      label: 'Update',
+      Icon: Upload,
+      disabled: !hasContent || !projectId,
+      tooltip: includeTarget
+        ? `Write your changes back into ${includeTarget.cueName ?? `cue ${includeTarget.cueId}`}`
+        : hasContent
+          ? 'Show the cues the programmer is overriding'
+          : 'The programmer is empty — nothing to update',
+      onSelect: () => setUpdateOpen(true),
+    },
+  ] as const
 
   return (
     <div className="flex items-center gap-2">
@@ -146,25 +178,33 @@ export function ProgrammerToolbar() {
         </TooltipContent>
       </Tooltip>
 
-      {/* Session 3 — Record / Include / Update.
+      {/* Record / Include / Update.
           Inline above `sm`; below it they collapse into the overflow menu rather than
           disappearing, so the loop the programmer is built around stays discoverable on a
           phone instead of looking like it doesn't exist. */}
       <div className="hidden items-center gap-2 sm:flex">
         <div className="mx-1 h-5 w-px bg-border" />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="flex items-center gap-2">
-              {SESSION_3_ACTIONS.map(({ label, Icon }) => (
-                <Button key={label} variant="outline" size="sm" disabled>
+        {actions.map(({ label, Icon, disabled, tooltip, onSelect }) => (
+          <Tooltip key={label}>
+            <TooltipTrigger asChild>
+              {/* Wrapped: a disabled button emits no pointer events, so the tooltip needs a
+                  live element to hang off — otherwise the "why is this off?" hint never
+                  appears, which is exactly when it's wanted. */}
+              <div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={disabled}
+                  onClick={onSelect}
+                >
                   <Icon className="size-3.5" />
                   {label}
                 </Button>
-              ))}
-            </div>
-          </TooltipTrigger>
-          <TooltipContent>Record / Include / Update land in a later session</TooltipContent>
-        </Tooltip>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>{tooltip}</TooltipContent>
+          </Tooltip>
+        ))}
       </div>
 
       <DropdownMenu>
@@ -175,16 +215,33 @@ export function ProgrammerToolbar() {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
           <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-            Available in a later session
+            Programmer
           </DropdownMenuLabel>
-          {SESSION_3_ACTIONS.map(({ label, Icon }) => (
-            <DropdownMenuItem key={label} disabled>
+          {actions.map(({ label, Icon, disabled, onSelect }) => (
+            <DropdownMenuItem key={label} disabled={disabled} onSelect={onSelect}>
               <Icon className="size-3.5" />
               {label}
             </DropdownMenuItem>
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {projectId > 0 && (
+        <>
+          <RecordSheet open={recordOpen} onOpenChange={setRecordOpen} projectId={projectId} />
+          <IncludeCueSheet
+            open={includeOpen}
+            onOpenChange={setIncludeOpen}
+            projectId={projectId}
+          />
+          <UpdateDialog
+            open={updateOpen}
+            onOpenChange={setUpdateOpen}
+            projectId={projectId}
+            includeTarget={includeTarget}
+          />
+        </>
+      )}
     </div>
   )
 }

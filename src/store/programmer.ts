@@ -1,9 +1,10 @@
 import { useSyncExternalStore } from 'react'
 import { restApi } from './restApi'
 import { lightingApi } from '../api/lightingApi'
-import type { ProgrammerTargetType } from '../api/programmerWsApi'
+import type { IncludedTarget, ProgrammerTargetType } from '../api/programmerWsApi'
 
 export type {
+  IncludedTarget,
   ProgrammerEntry,
   ProgrammerKeyState,
   ProgrammerState,
@@ -24,12 +25,15 @@ export { programmerKey } from '../api/programmerWsApi'
 export interface ProgrammerSummary {
   blind: boolean
   entryCount: number
+  /** What Include last loaded — drives the Update button's target and label. */
+  lastIncluded: IncludedTarget | null
 }
 
 function currentSummary(): ProgrammerSummary {
   return {
     blind: lightingApi.programmer.isBlind(),
     entryCount: lightingApi.programmer.entryCount(),
+    lastIncluded: lightingApi.programmer.lastIncluded(),
   }
 }
 
@@ -45,6 +49,7 @@ export const programmerApi = restApi.injectEndpoints({
             // neither counter moved (a provenance-only push).
             draft.blind = state.blind
             draft.entryCount = state.entries.size
+            draft.lastIncluded = state.lastIncluded
           })
         })
         await cacheEntryRemoved

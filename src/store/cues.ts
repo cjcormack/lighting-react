@@ -143,17 +143,10 @@ export const cuesApi = restApi.injectEndpoints({
       query: (projectId) => `project/${projectId}/cues/current-state`,
     }),
 
-    snapshotCueFromLive: build.mutation<Cue, { projectId: number; cueId: number }>({
-      query: ({ projectId, cueId }) => ({
-        url: `project/${projectId}/cues/${cueId}/snapshot-from-live`,
-        method: 'POST',
-      }),
-      invalidatesTags: (_result, _error, { projectId, cueId }) => [
-        { type: 'CueList', id: projectId },
-        { type: 'Cue', id: cueId },
-        'CueList',
-      ],
-    }),
+    // `snapshotCueFromLive` lived here until Session 3. Capturing the stage is now
+    // `recordProgrammer({ source: 'STAGE_SNAPSHOT' })` in `programmerOps.ts` — the same
+    // capture, plus the programmer overlay it used to miss, as one Record source among
+    // several rather than an endpoint of its own.
   }),
   overrideExisting: false,
 })
@@ -170,7 +163,6 @@ export const {
   useApplyCueMutation,
   useStopCueMutation,
   useLazyCurrentCueStateQuery,
-  useSnapshotCueFromLiveMutation,
 } = cuesApi
 
 /** Derive active cue IDs from the real-time FxState WebSocket stream. */

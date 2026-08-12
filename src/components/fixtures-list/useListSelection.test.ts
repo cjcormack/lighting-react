@@ -4,6 +4,7 @@ import { act, renderHook } from '@testing-library/react'
 import {
   applyListSelection,
   listSelectionIntentFor,
+  setListSelection,
   useListSelection,
   type ListSelectionState,
 } from './useListSelection'
@@ -88,7 +89,42 @@ describe('applyListSelection', () => {
   })
 })
 
+describe('setListSelection', () => {
+  it('selects exactly the requested rows, in visible order', () => {
+    // Include returns fixture keys in its own order; the sheet must show them top-to-bottom.
+    expect(setListSelection(['d', 'a'], order)).toEqual({ ids: ['a', 'd'], anchor: 'd' })
+  })
+
+  it('drops rows that are not currently visible', () => {
+    // A filtered-out row, or a group row while the sheet is in flat mode. Selecting the
+    // survivors beats either throwing or selecting nothing.
+    expect(setListSelection(['a', 'not-a-row'], order)).toEqual({ ids: ['a'], anchor: 'a' })
+  })
+
+  it('an empty request clears the selection', () => {
+    expect(setListSelection([], order)).toEqual({ ids: [], anchor: null })
+  })
+})
+
 describe('useListSelection', () => {
+  it('setSelection replaces the whole selection in one go', () => {
+    // "Select Heads on Include" — not a click, so it goes through its own action rather
+    // than a loop of toggles.
+    const { result } = renderHook(() => useListSelection(order))
+    act(() => result.current.select('g1'))
+    act(() => result.current.setSelection(['b', 'd']))
+    expect(result.current.orderedSelected).toEqual(['b', 'd'])
+  })
+
+  it('setSelection is referentially stable across renders', () => {
+    // Keyboard-shortcut effects depend on these callbacks not re-binding per render.
+    const { result, rerender } = renderHook(() => useListSelection(order))
+    const before = result.current.setSelection
+    rerender()
+    expect(result.current.setSelection).toBe(before)
+  })
+
+
   it('orders selection by visible row order regardless of click order', () => {
     const { result } = renderHook(() => useListSelection(order))
     act(() => result.current.select('d', 'toggle'))

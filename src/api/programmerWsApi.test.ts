@@ -372,6 +372,64 @@ describe('createProgrammerApi', () => {
     ])
   })
 
+  it('carries an optional sourceGroup on the set ops', () => {
+    // For fan-outs that can't send targetType:'group' — a group virtual dimmer over
+    // heterogeneous members, a Highlight release restoring per-fixture values.
+    const { conn, sent } = fakeConnection()
+    const api = createProgrammerApi(conn)
+
+    api.set('fixture', 'hex-1', 'dimmer', '200', undefined, 'front-wash')
+    api.setPosition('fixture', 'mover-1', 10, 20, undefined, 'movers')
+
+    expect(sent[0]).toMatchObject({ type: 'programmer.set', sourceGroup: 'front-wash' })
+    expect(sent[1]).toMatchObject({ type: 'programmer.setPosition', sourceGroup: 'movers' })
+  })
+
+  it('tracks the include target from the state snapshot and the broadcast', () => {
+    const { conn, frame } = fakeConnection()
+    const api = createProgrammerApi(conn)
+    expect(api.lastIncluded()).toBeNull()
+
+    const target = { kind: 'CUE', cueId: 42, cueStackId: 7, cueName: 'Look 1' }
+    frame({ ...stateFrame(), lastIncluded: target })
+    expect(api.lastIncluded()).toEqual(target)
+
+    // The include target is broadcast, unlike the other programmer replies: the programmer is
+    // shared, so a second tab's Update button must offer the same target.
+    frame({ type: 'programmer.includeTarget', target: { kind: 'CUE', cueId: 9 } })
+    expect(api.lastIncluded()?.cueId).toBe(9)
+
+    frame({ type: 'programmer.includeTarget', target: null })
+    expect(api.lastIncluded()).toBeNull()
+  })
+
+  it('forgets the include target when the programmer is cleared', () => {
+    // Clear releases everything Include staged, so an Update offering that target would
+    // silently write nothing.
+    const { conn, frame } = fakeConnection()
+    const api = createProgrammerApi(conn)
+    frame({ ...stateFrame(), lastIncluded: { kind: 'CUE', cueId: 42 } })
+
+    frame({ type: 'programmer.cleared', entryCount: 1 })
+
+    expect(api.lastIncluded()).toBeNull()
+  })
+
+  it('does not wake per-key subscribers when only the include target changed', () => {
+    // `lastIncluded` is deliberately outside `entrySignature`: including a different cue must
+    // not re-render every cell in a few-hundred-row sheet.
+    const { conn, frame } = fakeConnection()
+    const api = createProgrammerApi(conn)
+    const spy = vi.fn()
+    api.subscribeToKey('hex-1', 'dimmer', spy)
+    frame(stateFrame())
+    expect(spy).toHaveBeenCalledTimes(1)
+
+    frame({ type: 'programmer.includeTarget', target: { kind: 'CUE', cueId: 42 } })
+
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+
   it('stops delivering to a key subscriber after it unsubscribes', () => {
     const { conn, frame } = fakeConnection()
     const api = createProgrammerApi(conn)

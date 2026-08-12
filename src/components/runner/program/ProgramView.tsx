@@ -22,8 +22,11 @@ interface ProgramViewProps {
   expandedCueId: number | null
   onExpandedCueChange: (cueId: number | null) => void
   onDuplicate?: (cue: Cue) => void
-  onSnapshotFromLive?: (cueId: number) => Promise<void> | void
-  snapshotPending?: boolean
+  /** Record the programmer into this cue — opens the Record sheet targeting it. */
+  onRecordInto?: (cueId: number) => void
+  /** Load this cue into the programmer to edit it on stage. */
+  onIncludeCue?: (cueId: number) => void
+  includePending?: boolean
 }
 
 // Memoized: ProgramPage now subscribes to the runner slice (via useShowTransport for the
@@ -40,8 +43,9 @@ export const ProgramView = memo(function ProgramView({
   expandedCueId,
   onExpandedCueChange,
   onDuplicate,
-  onSnapshotFromLive,
-  snapshotPending,
+  onRecordInto,
+  onIncludeCue,
+  includePending,
 }: ProgramViewProps) {
   const [createCue] = useCreateProjectCueMutation()
   const [deleteCue] = useDeleteProjectCueMutation()
@@ -125,8 +129,9 @@ export const ProgramView = memo(function ProgramView({
         onMarkerRename={handleMarkerRename}
         onMarkerDelete={handleMarkerDelete}
         onDuplicate={onDuplicate}
-        onSnapshotFromLive={onSnapshotFromLive}
-        snapshotPending={snapshotPending}
+        onRecordInto={onRecordInto}
+                  onIncludeCue={onIncludeCue}
+        includePending={includePending}
       />
     )
   }

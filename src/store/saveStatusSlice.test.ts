@@ -196,6 +196,7 @@ describe('NON_SAVE_ENDPOINTS', () => {
       import('./cloudSync'),
       import('./oauthGithub'),
       import('./ai'),
+      import('./programmerOps'),
       import('./perf'),
       import('./status'),
     ])

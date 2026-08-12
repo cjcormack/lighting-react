@@ -73,6 +73,22 @@ export function applyListSelection(
   return { ids: [id], anchor: id }
 }
 
+/**
+ * Replace the whole selection with [ids], keeping only those currently in view.
+ *
+ * Separate from `select(id, 'replace')` because it is not a click: Include hands back a set
+ * of fixtures and the sheet selects exactly them. Ids that aren't visible (filtered out, or a
+ * group row in the wrong rollup mode) are dropped rather than silently selecting nothing.
+ */
+export function setListSelection(
+  ids: readonly RowId[],
+  visibleOrder: readonly RowId[],
+): ListSelectionState {
+  const wanted = new Set(ids)
+  const present = visibleOrder.filter((id) => wanted.has(id))
+  return { ids: present, anchor: present[present.length - 1] ?? null }
+}
+
 export interface ListSelection {
   selectedIds: ReadonlySet<RowId>
   /** Selected ids in *visible row order* (top→bottom) — the order fan and
@@ -84,6 +100,8 @@ export interface ListSelection {
   select: (id: RowId, intent?: ListSelectIntent) => void
   selectAll: () => void
   clear: () => void
+  /** Select exactly these rows — see [setListSelection]. */
+  setSelection: (ids: readonly RowId[]) => void
 }
 
 export function useListSelection(visibleOrder: readonly RowId[]): ListSelection {
@@ -111,6 +129,10 @@ export function useListSelection(visibleOrder: readonly RowId[]): ListSelection 
 
   const clear = useCallback(() => setState({ ids: [], anchor: null }), [])
 
+  const setSelection = useCallback((ids: readonly RowId[]) => {
+    setState(setListSelection(ids, orderRef.current))
+  }, [])
+
   const isSelected = useCallback((id: RowId) => selectedIds.has(id), [selectedIds])
 
   // A stable object identity while the selection is unchanged — consumers
@@ -126,7 +148,18 @@ export function useListSelection(visibleOrder: readonly RowId[]): ListSelection 
       select,
       selectAll,
       clear,
+      setSelection,
     }),
-    [selectedIds, orderedSelected, state.anchor, state.ids.length, isSelected, select, selectAll, clear],
+    [
+      selectedIds,
+      orderedSelected,
+      state.anchor,
+      state.ids.length,
+      isSelected,
+      select,
+      selectAll,
+      clear,
+      setSelection,
+    ],
   )
 }
