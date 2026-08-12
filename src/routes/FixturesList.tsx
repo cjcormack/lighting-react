@@ -39,7 +39,7 @@ import {
   listSelectionIntentFor,
   useListSelection,
 } from '../components/fixtures-list/useListSelection'
-import { useCellWriters } from '../components/fixtures-list/useCellWriters'
+import { applyPlannedWrite, useCellWriters } from '../components/fixtures-list/useCellWriters'
 import { useLitFixtureKeys } from '../components/fixtures-list/useLitFixtureKeys'
 import { FixturesTable } from '../components/fixtures-list/FixturesTable'
 import { SelectionToolbar } from '../components/fixtures-list/SelectionToolbar'
@@ -122,8 +122,8 @@ export function ProjectFixturesList() {
   }
 
   return (
-    <Card className="m-4 p-4">
-      <div className="mb-4 flex items-center justify-between gap-3">
+    <Card className={LIST_PAGE_CARD_CLASS}>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <Breadcrumbs projectName={project.name} currentPage="Fixtures" />
         <FixturesViewSwitcher current="list" projectId={projectIdNum} />
       </div>
@@ -134,14 +134,43 @@ export function ProjectFixturesList() {
   )
 }
 
+/**
+ * Page chrome for the spreadsheet routes. Tighter than the card views' `m-4 p-4` at phone
+ * widths: margin + padding cost 64px of a 375px viewport before a single column renders,
+ * and the table is the content — losing a sixth of the screen to a frame around it is the
+ * wrong trade. Shared so the three list routes can't drift apart.
+ */
+export const LIST_PAGE_CARD_CLASS = 'm-2 p-2 sm:m-4 sm:p-4'
+
 const EMPTY_FIXTURES: Fixture[] = []
 const EMPTY_GROUPS: GroupSummary[] = []
 
+export interface FixturesListContainerProps {
+  /** Group rows + members + "Ungrouped" (true), or a flat fixture list (false). */
+  grouped: boolean
+  /** Colour cells by owning layer and show blind-staged values — the programmer sheet. */
+  showOwnership?: boolean
+  /** Extra controls rendered at the start of the toolbar (the programmer's Clear/Blind row). */
+  toolbarExtra?: React.ReactNode
+  /**
+   * Consume the `?select=` deep-link param. Off for the programmer sheet: those links are
+   * minted by Cmd+K for the fixtures/groups pair, and the forwarding branch here would bounce
+   * a group select out of the programmer and onto /groups/list.
+   */
+  enableDeepLinkSelect?: boolean
+}
+
 /**
- * The spreadsheet view shared by Fixtures → List (flat, `grouped: false`) and
- * Groups → List (group rows + members + Ungrouped, `grouped: true`).
+ * The spreadsheet view shared by Fixtures → List (flat, `grouped: false`),
+ * Groups → List (group rows + members + Ungrouped, `grouped: true`), and the
+ * programmer sheet (`showOwnership`, either grouping).
  */
-export function FixturesListContainer({ grouped }: { grouped: boolean }) {
+export function FixturesListContainer({
+  grouped,
+  showOwnership = false,
+  toolbarExtra,
+  enableDeepLinkSelect = true,
+}: FixturesListContainerProps) {
   const { data: maybeFixtures, isLoading: fixturesLoading } = useFixtureListQuery()
   const { data: maybeGroups, isLoading: groupsLoading } = useGroupListQuery()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -273,39 +302,7 @@ export function FixturesListContainer({ grouped }: { grouped: boolean }) {
           : rowWriteTargets(row)
       // planBatchWrites clamps the commit to each target's own ranges.
       for (const planned of planBatchWrites(targets, col, commit)) {
-        const { target, resolution } = planned
-        const clamped = planned.commit
-        switch (clamped.kind) {
-          case 'slider':
-            if (resolution.kind === 'slider') {
-              writers.writeSlider(resolution.property.channel, clamped.value)
-            }
-            break
-          case 'colour':
-            if (resolution.kind === 'colour') {
-              writers.writeColour(
-                target.key,
-                resolution.property,
-                clamped.r,
-                clamped.g,
-                clamped.b,
-                clamped.w,
-                clamped.a,
-                clamped.uv,
-              )
-            }
-            break
-          case 'position':
-            if (resolution.kind === 'position') {
-              writers.writePosition(target.key, resolution.pan, resolution.tilt, clamped.pan, clamped.tilt)
-            }
-            break
-          case 'setting':
-            if (resolution.kind === 'setting' || resolution.kind === 'colour-setting') {
-              writers.writeSetting(resolution.property.channel, clamped.level)
-            }
-            break
-        }
+        applyPlannedWrite(writers, planned)
       }
     },
     [selectedTargets, selection, writers],
@@ -395,6 +392,7 @@ export function FixturesListContainer({ grouped }: { grouped: boolean }) {
   // a filter left on last session.
   const selectParam = searchParams.get('select')
   useEffect(() => {
+    if (!enableDeepLinkSelect) return
     if (!selectParam || fixturesLoading || groupsLoading) return
     const parsed = parseSelectParam(selectParam)
     // Group rows only exist on the grouped list. Links minted before the
@@ -443,7 +441,16 @@ export function FixturesListContainer({ grouped }: { grouped: boolean }) {
     // this route anyway; groups/fixtures/loading flags/grouped cover
     // everything else read here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectParam, fixtures, groups, fixturesLoading, groupsLoading, grouped, setSearchParams])
+  }, [
+    selectParam,
+    fixtures,
+    groups,
+    fixturesLoading,
+    groupsLoading,
+    grouped,
+    enableDeepLinkSelect,
+    setSearchParams,
+  ])
 
   // View-level shortcuts: Escape clears, ⌘/Ctrl+A selects all visible rows,
   // ↑/↓ move the selection (Shift extends the range from the anchor). Guarded
@@ -499,9 +506,12 @@ export function FixturesListContainer({ grouped }: { grouped: boolean }) {
 
   return (
     <div className="space-y-3">
-      {/* Toolbar */}
+      {/* Toolbar. At phone widths the filter takes a full row of its own — sharing one with
+          the buttons squeezes it to a few characters, and it is the control most likely to be
+          reached for on a small screen. */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-48 flex-1">
+        {toolbarExtra}
+        <div className="relative w-full min-w-48 sm:w-auto sm:flex-1">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Filter fixtures by name, manufacturer, or type..."
@@ -517,13 +527,15 @@ export function FixturesListContainer({ grouped }: { grouped: boolean }) {
           title="Show only fixtures with intensity above zero"
         >
           <Lightbulb className="size-3.5" />
-          Lit
+          {/* Icon-only on phones: the toolbar is already several rows deep there, and both
+              of these carry a title/tooltip. */}
+          <span className="hidden sm:inline">Lit</span>
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" title="Choose visible columns">
               <Columns3 className="size-3.5" />
-              Columns
+              <span className="hidden sm:inline">Columns</span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
@@ -575,6 +587,7 @@ export function FixturesListContainer({ grouped }: { grouped: boolean }) {
           onShowInfo={handleShowInfo}
           scrollToRowId={scrollToRowId}
           onScrolledToRow={() => setScrollToRowId(null)}
+          showOwnership={showOwnership}
         />
       )}
 

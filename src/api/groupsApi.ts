@@ -82,6 +82,12 @@ export interface ApplyFxRequest {
   elementMode?: ElementMode
   elementFilter?: string
   stepTiming?: boolean
+  /**
+   * Create the effect in the programmer's reserved priority band, so it composes *on top of*
+   * programmer values instead of being suppressed by them, and Clear sweeps it with them.
+   * Set by the busking pad; cue and script authoring leave it off.
+   */
+  programmerOwned?: boolean
 }
 
 export interface ApplyFxResponse {

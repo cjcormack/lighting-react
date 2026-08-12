@@ -194,6 +194,13 @@ REST API is used for CRUD operations on scripts, scenes, fixtures, etc.
   sidebar keeps one entry per resource; the cards route redirects to the list
   when the sticky view preference says so. Follow that pattern for any new
   cards/list pair instead of adding a second sidebar row.
+- **Same exception — the programmer's sibling views**: `/programmer` (Values) has
+  a `navItems` entry, `/programmer/fx` (FX) deliberately does not. It is reached
+  via `ProgrammerViewSwitcher` in `src/components/ViewSwitcher.tsx`. Unlike the
+  cards/list pair this switcher is **not** sticky and there is no redirect: the
+  FX sheet is a diagnostic read of what is running, so landing there because you
+  last looked at it — rather than on the values you came to edit — would be the
+  wrong default.
 
 ### Sheets vs Dialogs
 

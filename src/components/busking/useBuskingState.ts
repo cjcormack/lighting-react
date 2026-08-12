@@ -10,6 +10,10 @@ import type { GroupActiveEffect, BlendMode, DistributionStrategy, EffectType, El
 import type { FxPreset } from '@/api/fxPresetsApi'
 import type { TogglePresetTarget } from '@/api/fxPresetsApi'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
+import { lightingApi } from '@/api/lightingApi'
+import { programmerClearEntry, programmerSet } from '@/store/programmer'
+import { parseProgrammerValue, serializeLevel } from '@/lib/programmerValue'
+import type { ProgrammerTargetType } from '@/store/programmer'
 import {
   type BuskingTarget,
   type PropertyButton,
@@ -18,6 +22,16 @@ import {
   targetKey,
   normalizeEffectName,
 } from './buskingTypes'
+
+/** A busking target as the programmer addresses it. */
+function programmerTarget(target: BuskingTarget): {
+  targetType: ProgrammerTargetType
+  targetKey: string
+} {
+  return target.type === 'group'
+    ? { targetType: 'group', targetKey: target.name }
+    : { targetType: 'fixture', targetKey: target.key }
+}
 
 export interface TargetEffectsData {
   key: string
@@ -192,36 +206,71 @@ export function useBuskingState() {
     [],
   )
 
-  // Compute property-specific presence (matches by both effectType AND propertyName)
+  /**
+   * Fixture keys a busking target writes to. A group write is fanned out by the backend and
+   * stored per member (with `sourceGroup` recorded), so reading a group's state means reading
+   * its members'.
+   */
+  const targetFixtureKeys = useCallback(
+    (target: BuskingTarget): string[] => {
+      if (target.type === 'fixture') return [target.key]
+      return (fixtureList ?? []).filter((f) => f.groups.includes(target.name)).map((f) => f.key)
+    },
+    [fixtureList],
+  )
+
+  /**
+   * The programmer entry a property pad represents on one target, if it holds one.
+   *
+   * Only entries the *pad* could have made count — those whose winning owner is `web`. A
+   * property held by a Locate, a preset toggle or a MIDI fader is somebody else's, and
+   * treating it as the pad's would light the pad and, worse, arm its off-tap: `clearEntry`
+   * releases **every** owner on the property, so tapping a pad that looked lit because of a
+   * Locate would silently drop the Locate too.
+   */
+  const programmerEntryFor = useCallback(
+    (target: BuskingTarget, propertyName: string) => {
+      for (const key of targetFixtureKeys(target)) {
+        const entry = lightingApi.programmer.getKeyState(key, propertyName).entry
+        if (entry?.owner === 'web') return entry
+      }
+      return undefined
+    },
+    [targetFixtureKeys],
+  )
+
+  /**
+   * Property-pad presence, read from the programmer rather than from the FX list.
+   *
+   * Plain static values stopped being `StaticValue` / `StaticSetting` effect instances when
+   * the programmer landed: the pad has no blend-mode or distribution controls, so every write
+   * it makes is the "plain case" the redesign moves to programmer values (§5.7). Blend-mode
+   * and distributed statics still exist as effects — created from scripts, cues, or the
+   * effect configuration sheet — and are untouched by this.
+   */
   const computePropertyPresence = useCallback(
     (button: PropertyButton, targetEffectsData: TargetEffectsData[]): EffectPresence => {
       if (targetEffectsData.length === 0) return 'none'
 
-      const normalizedType = normalizeEffectName(button.effectType)
       let activeCount = 0
-
       for (const data of targetEffectsData) {
-        let hasEffect = false
-        if (data.target.type === 'group' && data.groupEffects) {
-          hasEffect = data.groupEffects.some(
-            (e) => normalizeEffectName(e.effectType) === normalizedType && e.propertyName === button.propertyName,
-          )
-        } else if (data.target.type === 'fixture' && data.fixtureDirectEffects) {
-          hasEffect = data.fixtureDirectEffects.some(
-            (e) => normalizeEffectName(e.effectType) === normalizedType && e.propertyName === button.propertyName,
-          )
-        }
-        if (hasEffect) activeCount++
+        if (programmerEntryFor(data.target, button.propertyName)) activeCount++
       }
 
       if (activeCount === 0) return 'none'
       if (activeCount === targetEffectsData.length) return 'all'
       return 'some'
     },
-    [],
+    [programmerEntryFor],
   )
 
-  // Toggle a property-specific effect (setting or slider)
+  /**
+   * Toggle or set a property value on every selected target.
+   *
+   * Writes go straight to the programmer: on for a plain set, `clearEntry` to release. The
+   * release is a full clear of the property (every owner), which is what the operator means
+   * by tapping the pad off — a busked value sitting under a locate should go too.
+   */
   const togglePropertyEffect = useCallback(
     async (
       button: PropertyButton,
@@ -229,115 +278,38 @@ export function useBuskingState() {
       targetEffectsData: TargetEffectsData[],
       settingLevel?: number,
     ) => {
-      const normalizedType = normalizeEffectName(button.effectType)
-
+      // A tap with no explicit level on an already-set pad means "turn it off".
       if (presence === 'all' && settingLevel === undefined) {
-        // Remove from all selected targets
-        const removals: Promise<unknown>[] = []
         for (const data of targetEffectsData) {
-          if (data.target.type === 'group' && data.groupEffects) {
-            const matching = data.groupEffects.filter(
-              (e) => normalizeEffectName(e.effectType) === normalizedType && e.propertyName === button.propertyName,
-            )
-            for (const fx of matching) {
-              removals.push(removeGroupFx({ id: fx.id, groupName: data.target.name }).unwrap())
-            }
-          } else if (data.target.type === 'fixture' && data.fixtureDirectEffects) {
-            const matching = data.fixtureDirectEffects.filter(
-              (e) => normalizeEffectName(e.effectType) === normalizedType && e.propertyName === button.propertyName,
-            )
-            for (const fx of matching) {
-              removals.push(removeFx({ id: fx.id, fixtureKey: data.target.key }).unwrap())
-            }
-          }
+          const { targetType, targetKey } = programmerTarget(data.target)
+          programmerClearEntry(targetType, targetKey, button.propertyName)
         }
-        await Promise.all(removals).catch(ignoreReportedError)
-      } else {
-        // Add or update on each target
-        const paramKey = button.kind === 'setting' ? 'level' : 'value'
-        const paramValue = settingLevel !== undefined ? String(settingLevel) : button.kind === 'slider' ? '128' : '0'
+        return
+      }
 
-        const actions: Promise<unknown>[] = []
-        for (const data of targetEffectsData) {
-          // Check if already exists on this target
-          let existingFx: GroupActiveEffect | FixtureDirectEffect | undefined
-          if (data.target.type === 'group' && data.groupEffects) {
-            existingFx = data.groupEffects.find(
-              (e) => normalizeEffectName(e.effectType) === normalizedType && e.propertyName === button.propertyName,
-            )
-          } else if (data.target.type === 'fixture' && data.fixtureDirectEffects) {
-            existingFx = data.fixtureDirectEffects.find(
-              (e) => normalizeEffectName(e.effectType) === normalizedType && e.propertyName === button.propertyName,
-            )
-          }
-
-          if (existingFx && settingLevel !== undefined) {
-            // Already active but updating the value — remove and re-add
-            if (data.target.type === 'group') {
-              actions.push(removeGroupFx({ id: existingFx.id, groupName: data.target.name }).unwrap())
-            } else if (data.target.type === 'fixture') {
-              actions.push(removeFx({ id: existingFx.id, fixtureKey: data.target.key }).unwrap())
-            }
-          }
-
-          if (!existingFx || settingLevel !== undefined) {
-            if (data.target.type === 'group') {
-              actions.push(
-                applyGroupFx({
-                  groupName: data.target.name,
-                  effectType: button.effectType as EffectType,
-                  propertyName: button.propertyName,
-                  beatDivision: defaultBeatDivision,
-                  blendMode: 'OVERRIDE' as BlendMode,
-                  distribution: 'LINEAR' as DistributionStrategy,
-                  phaseOffset: 0,
-                  parameters: { [paramKey]: paramValue },
-                }).unwrap(),
-              )
-            } else {
-              actions.push(
-                addFixtureFx({
-                  effectType: button.effectType,
-                  fixtureKey: data.target.key,
-                  propertyName: button.propertyName,
-                  beatDivision: defaultBeatDivision,
-                  blendMode: 'OVERRIDE' as BlendMode,
-                  startOnBeat: true,
-                  phaseOffset: 0,
-                  parameters: { [paramKey]: paramValue },
-                }).unwrap(),
-              )
-            }
-          }
-        }
-        await Promise.all(actions).catch(ignoreReportedError)
+      const level =
+        settingLevel !== undefined ? settingLevel : button.kind === 'slider' ? 128 : 0
+      for (const data of targetEffectsData) {
+        const { targetType, targetKey } = programmerTarget(data.target)
+        programmerSet(targetType, targetKey, button.propertyName, serializeLevel(level))
       }
     },
-    [defaultBeatDivision, addFixtureFx, removeFx, applyGroupFx, removeGroupFx],
+    [],
   )
 
-  // Get the active value for a property button from the first matching active effect
+  /** The level a property pad is currently holding, from the first target that has one. */
   const getActivePropertyValue = useCallback(
     (button: PropertyButton, targetEffectsData: TargetEffectsData[]): string | null => {
-      const normalizedType = normalizeEffectName(button.effectType)
-      const paramKey = button.kind === 'setting' ? 'level' : 'value'
-
       for (const data of targetEffectsData) {
-        if (data.target.type === 'group' && data.groupEffects) {
-          const fx = data.groupEffects.find(
-            (e) => normalizeEffectName(e.effectType) === normalizedType && e.propertyName === button.propertyName,
-          )
-          if (fx) return fx.parameters[paramKey] ?? null
-        } else if (data.target.type === 'fixture' && data.fixtureDirectEffects) {
-          const fx = data.fixtureDirectEffects.find(
-            (e) => normalizeEffectName(e.effectType) === normalizedType && e.propertyName === button.propertyName,
-          )
-          if (fx) return fx.parameters[paramKey] ?? null
-        }
+        const entry = programmerEntryFor(data.target, button.propertyName)
+        if (!entry) continue
+        const parsed = parseProgrammerValue(entry.value)
+        // Pads are scalar; a colour or position entry on the same property isn't one of ours.
+        return parsed?.kind === 'level' ? String(parsed.value) : null
       }
       return null
     },
-    [],
+    [programmerEntryFor],
   )
 
   // Resolve the target property for an effect on a specific target.
@@ -456,6 +428,7 @@ export function useBuskingState() {
                   distribution: 'LINEAR' as DistributionStrategy,
                   phaseOffset: 0,
                   parameters: { ...defaults },
+                  programmerOwned: true,
                 }).unwrap(),
               )
             } else {
@@ -469,6 +442,7 @@ export function useBuskingState() {
                   startOnBeat: true,
                   phaseOffset: 0,
                   parameters: { ...defaults },
+                  programmerOwned: true,
                 }).unwrap(),
               )
             }
@@ -510,6 +484,7 @@ export function useBuskingState() {
               distribution: params.distribution as DistributionStrategy,
               phaseOffset: params.phaseOffset,
               parameters: { ...params.parameters },
+              programmerOwned: true,
               ...(params.elementMode ? { elementMode: params.elementMode as ElementMode } : {}),
               ...(params.stepTiming !== undefined ? { stepTiming: params.stepTiming } : {}),
             }).unwrap(),
@@ -526,6 +501,7 @@ export function useBuskingState() {
               phaseOffset: params.phaseOffset,
               parameters: { ...params.parameters },
               distributionStrategy: params.distribution,
+              programmerOwned: true,
               ...(params.stepTiming !== undefined ? { stepTiming: params.stepTiming } : {}),
             }).unwrap(),
           )

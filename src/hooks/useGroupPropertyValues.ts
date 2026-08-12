@@ -6,6 +6,7 @@ import { rgbToHex, serializeExtendedColour } from '../components/fx/colourUtils'
 import { resolveSettingOption } from './usePropertyValues'
 import { colourFactor } from './useNormalizedIntensity'
 import { foldChannels } from '../lib/colourMath'
+import { serializeLevel } from '../lib/programmerValue'
 import type { ChannelRef } from '../store/fixtures'
 import type {
   GroupSliderPropertyDescriptor,
@@ -110,8 +111,21 @@ export function useGroupSliderValues(
 
 /**
  * Hook to update all slider channels in a group to the same value.
+ *
+ * Pass [groupName] for a real backend group: the write then goes out as a single
+ * group-targeted programmer op, and the backend fans it to members *and* records
+ * `sourceGroup` on each entry so the programmer sheet can show where the value came from.
+ *
+ * Without it — the element-group controls inside a multi-head fixture, which are a
+ * client-side grouping the backend has no name for — the write falls back to one raw channel
+ * update per member. Those still reach the programmer through the compatibility shim; this
+ * descriptor is the one group shape that carries no per-member fixture key, so there is no
+ * property-level middle ground.
  */
-export function useUpdateGroupSlider(property: GroupSliderPropertyDescriptor) {
+export function useUpdateGroupSlider(
+  property: GroupSliderPropertyDescriptor,
+  groupName?: string,
+) {
   const ctx = useEditorContext()
   const draft = usePresetDraft()
   return useCallback(
@@ -126,11 +140,15 @@ export function useUpdateGroupSlider(property: GroupSliderPropertyDescriptor) {
         draft.onSetProperty(property.name, String(value))
         return
       }
+      if (groupName) {
+        lightingApi.programmer.set('group', groupName, property.name, serializeLevel(value))
+        return
+      }
       property.memberChannels.forEach((channel) => {
         lightingApi.channels.update(channel.universe, channel.channelNo, value)
       })
     },
-    [ctx, draft, property.memberChannels, property.name]
+    [ctx, draft, groupName, property.memberChannels, property.name]
   )
 }
 
@@ -340,7 +358,10 @@ export function useGroupColourValues(
  * In cue mode the backend rejects setChannel on R/G/B (they're sub-channels of rgbColour), so
  * we send one setProperty per fixture for RGB and fall through to setChannel for W/A/UV.
  */
-export function useUpdateGroupColour(property: GroupColourPropertyDescriptor) {
+export function useUpdateGroupColour(
+  property: GroupColourPropertyDescriptor,
+  groupName?: string,
+) {
   const ctx = useEditorContext()
   const draft = usePresetDraft()
   return useCallback(
@@ -381,22 +402,25 @@ export function useUpdateGroupColour(property: GroupColourPropertyDescriptor) {
         draft.onSetProperty(property.name, value)
         return
       }
+      if (groupName) {
+        lightingApi.programmer.setColour('group', groupName, property.name, { r, g, b, w, a, uv })
+        return
+      }
       property.memberColourChannels.forEach((m) => {
-        lightingApi.channels.update(m.redChannel.universe, m.redChannel.channelNo, r)
-        lightingApi.channels.update(m.greenChannel.universe, m.greenChannel.channelNo, g)
-        lightingApi.channels.update(m.blueChannel.universe, m.blueChannel.channelNo, b)
-        if (m.whiteChannel && w !== undefined) {
-          lightingApi.channels.update(m.whiteChannel.universe, m.whiteChannel.channelNo, w)
-        }
-        if (m.amberChannel && a !== undefined) {
-          lightingApi.channels.update(m.amberChannel.universe, m.amberChannel.channelNo, a)
-        }
-        if (m.uvChannel && uv !== undefined) {
-          lightingApi.channels.update(m.uvChannel.universe, m.uvChannel.channelNo, uv)
-        }
+        // One entry per member covering the whole colour: only send the extended components
+        // the member actually has a channel for, so a fixture without a white channel isn't
+        // handed a white it can't render.
+        lightingApi.programmer.setColour('fixture', m.fixtureKey, property.name, {
+          r,
+          g,
+          b,
+          w: m.whiteChannel ? w : undefined,
+          a: m.amberChannel ? a : undefined,
+          uv: m.uvChannel ? uv : undefined,
+        })
       })
     },
-    [ctx, draft, property.memberColourChannels, property.name]
+    [ctx, draft, groupName, property.memberColourChannels, property.name]
   )
 }
 
@@ -503,8 +527,15 @@ export function useGroupPositionValues(
 
 /**
  * Hook to update all position channels in a group to the same values.
+ *
+ * See [useUpdateGroupSlider] for what [groupName] buys. Without it the members are still
+ * written at property level, one `setPosition` each — the descriptor carries a fixture key
+ * per member, so an element group inside a multi-head fixture stays property-shaped.
  */
-export function useUpdateGroupPosition(property: GroupPositionPropertyDescriptor) {
+export function useUpdateGroupPosition(
+  property: GroupPositionPropertyDescriptor,
+  groupName?: string,
+) {
   const ctx = useEditorContext()
   const draft = usePresetDraft()
   return useCallback(
@@ -527,12 +558,20 @@ export function useUpdateGroupPosition(property: GroupPositionPropertyDescriptor
         draft.onSetProperty(property.name, `${pan},${tilt}`)
         return
       }
+      if (groupName) {
+        lightingApi.programmer.setPosition('group', groupName, Math.round(pan), Math.round(tilt))
+        return
+      }
       property.memberPositionChannels.forEach((m) => {
-        lightingApi.channels.update(m.panChannel.universe, m.panChannel.channelNo, pan)
-        lightingApi.channels.update(m.tiltChannel.universe, m.tiltChannel.channelNo, tilt)
+        lightingApi.programmer.setPosition(
+          'fixture',
+          m.fixtureKey,
+          Math.round(pan),
+          Math.round(tilt),
+        )
       })
     },
-    [ctx, draft, property.memberPositionChannels, property.name]
+    [ctx, draft, groupName, property.memberPositionChannels, property.name]
   )
 }
 
@@ -610,7 +649,10 @@ export function useGroupSettingValues(
 /**
  * Hook to update all setting channels in a group to the same value.
  */
-export function useUpdateGroupSetting(property: GroupSettingPropertyDescriptor) {
+export function useUpdateGroupSetting(
+  property: GroupSettingPropertyDescriptor,
+  groupName?: string,
+) {
   const ctx = useEditorContext()
   const draft = usePresetDraft()
   return useCallback(
@@ -625,10 +667,14 @@ export function useUpdateGroupSetting(property: GroupSettingPropertyDescriptor) 
         draft.onSetProperty(property.name, String(level))
         return
       }
+      if (groupName) {
+        lightingApi.programmer.set('group', groupName, property.name, serializeLevel(level))
+        return
+      }
       property.memberChannels.forEach((m) => {
-        lightingApi.channels.update(m.channel.universe, m.channel.channelNo, level)
+        lightingApi.programmer.set('fixture', m.fixtureKey, property.name, serializeLevel(level))
       })
     },
-    [ctx, draft, property.memberChannels, property.name]
+    [ctx, draft, groupName, property.memberChannels, property.name]
   )
 }

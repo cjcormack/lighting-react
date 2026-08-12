@@ -24,6 +24,7 @@ import { PresetsRedirect, ProjectFxPresets } from "./routes/FxPresets";
 import ProjectOverview, { ProjectOverviewRedirect } from "./routes/ProjectOverview";
 import { PatchesRedirect } from "./routes/Patches";
 import { ProgramPage, ProgramRedirect, CuesLegacyRedirect } from "./routes/ProgramPage";
+import { ProgrammerPage, ProgrammerRedirect } from "./routes/Programmer";
 import { RunPage, RunRedirect, LegacyShowRedirect } from "./routes/RunPage";
 import { PromptBookViewerPage, PromptBookRedirect } from "./routes/PromptBookPage";
 import { SurfacesRedirect } from "./routes/Surfaces";
@@ -242,6 +243,20 @@ function App() {
         {
           path: "program",
           element: <ProgramRedirect />,
+        },
+        // Programmer: one nav entry (Values); the FX sibling is reached via the in-page
+        // switcher, following the cards/list precedent.
+        {
+          path: "projects/:projectId/programmer",
+          element: <ProgrammerPage view="values" />,
+        },
+        {
+          path: "projects/:projectId/programmer/fx",
+          element: <ProgrammerPage view="fx" />,
+        },
+        {
+          path: "programmer",
+          element: <ProgrammerRedirect />,
         },
         {
           path: "projects/:projectId/run",

@@ -2,10 +2,13 @@ import { useMemo } from 'react'
 import { lightingApi } from '../../api/lightingApi'
 import { useEditorContext } from '../../components/lighting-editor/EditorContext'
 import { rgbToHex } from '../../components/fx/colourUtils'
+import { parseProgrammerValue, serializeLevel } from '../../lib/programmerValue'
+import type { PlannedWrite } from './rowModel'
 import type { ChannelRef, ColourPropertyDescriptor } from '../../store/fixtures'
 
 export interface CellWriters {
-  writeSlider(ref: ChannelRef, value: number): void
+  /** `propertyName` is the backend's own name for the property behind `ref`. */
+  writeSlider(fixtureKey: string, propertyName: string, ref: ChannelRef, value: number): void
   writeColour(
     fixtureKey: string,
     property: ColourPropertyDescriptor,
@@ -24,8 +27,10 @@ export interface CellWriters {
     tilt: ChannelRef,
     panValue: number | undefined,
     tiltValue: number | undefined,
+    /** Property names for the pan/tilt axes when they are separate sliders. */
+    axisProperties?: { pan?: string; tilt?: string },
   ): void
-  writeSetting(ref: ChannelRef, level: number): void
+  writeSetting(fixtureKey: string, propertyName: string, ref: ChannelRef, level: number): void
 }
 
 /**
@@ -34,18 +39,86 @@ export interface CellWriters {
  * target as an argument so a single hook instance serves every cell in the
  * table — batch apply is a loop over these calls.
  *
- * Routing mirrors usePropertyValues.ts: live → direct channel writes (Layer 4);
- * cue → cueEdit.setChannel, except RGB (one setProperty('rgbColour') per
- * fixture — the backend rejects per-channel writes on RGB sub-channels) and
- * position (setProperty('position'), matching useUpdateGroupPosition). Preset
- * contexts are a no-op: the list view only ships on the live route, and preset
- * drafts are property-name-keyed, which this channel-level layer doesn't carry.
+ * Routing: live → the **programmer** (Layer 2) at property level; cue →
+ * cueEdit.setChannel, except RGB (one setProperty('rgbColour') per fixture — the backend
+ * rejects per-channel writes on RGB sub-channels) and position (setProperty('position'),
+ * matching useUpdateGroupPosition). Preset contexts are a no-op: the list view only ships on
+ * the live route, and preset drafts are property-name-keyed, which this channel-level layer
+ * doesn't carry.
+ *
+ * The cue branch still works in channel refs because that is what `cueEdit.setChannel`
+ * takes; the live branch works in property names because that is the programmer's key space.
+ * Both are passed so neither has to reverse-engineer the other.
  */
+/**
+ * Dispatch one planned write to the matching writer. The single place that maps a
+ * `(target, resolution, commit)` triple onto a writer call — cell edits, batch apply and Fan
+ * all funnel through it, so the property names the programmer is keyed by are derived once.
+ *
+ * Commits whose shape doesn't match the resolution are skipped (planBatchWrites already
+ * filters those, but Fan builds its commits directly).
+ */
+export function applyPlannedWrite(writers: CellWriters, planned: PlannedWrite): void {
+  const { target, resolution, commit } = planned
+  switch (commit.kind) {
+    case 'slider':
+      if (resolution.kind === 'slider') {
+        writers.writeSlider(target.key, resolution.property.name, resolution.property.channel, commit.value)
+      }
+      break
+    case 'colour':
+      if (resolution.kind === 'colour') {
+        writers.writeColour(
+          target.key,
+          resolution.property,
+          commit.r,
+          commit.g,
+          commit.b,
+          commit.w,
+          commit.a,
+          commit.uv,
+        )
+      }
+      break
+    case 'position':
+      if (resolution.kind === 'position') {
+        writers.writePosition(
+          target.key,
+          resolution.pan,
+          resolution.tilt,
+          commit.pan,
+          commit.tilt,
+          // Present only when the position was paired from two axis sliders; a real
+          // `position` descriptor writes both axes as one entry instead.
+          resolution.property
+            ? undefined
+            : { pan: resolution.panProperty?.name, tilt: resolution.tiltProperty?.name },
+        )
+      }
+      break
+    case 'setting':
+      if (resolution.kind === 'setting' || resolution.kind === 'colour-setting') {
+        writers.writeSetting(
+          target.key,
+          resolution.property.name,
+          resolution.property.channel,
+          commit.level,
+        )
+      }
+      break
+  }
+}
+
 export function useCellWriters(): CellWriters {
   const ctx = useEditorContext()
 
   return useMemo<CellWriters>(() => {
-    const writeChannel = (ref: ChannelRef, value: number) => {
+    const writeChannelValue = (
+      fixtureKey: string,
+      propertyName: string,
+      ref: ChannelRef,
+      value: number,
+    ) => {
       if (ctx.kind === 'cue') {
         lightingApi.cueEdit.send({
           type: 'cueEdit.setChannel',
@@ -57,12 +130,12 @@ export function useCellWriters(): CellWriters {
         return
       }
       if (ctx.kind === 'preset') return
-      lightingApi.channels.update(ref.universe, ref.channelNo, value)
+      lightingApi.programmer.set('fixture', fixtureKey, propertyName, serializeLevel(value))
     }
 
     return {
-      writeSlider: writeChannel,
-      writeSetting: writeChannel,
+      writeSlider: writeChannelValue,
+      writeSetting: writeChannelValue,
 
       writeColour(fixtureKey, property, r, g, b, w, a, uv) {
         if (ctx.kind === 'preset') return
@@ -85,17 +158,37 @@ export function useCellWriters(): CellWriters {
             propertyName: 'rgbColour',
             value: rgbToHex(r, g, b),
           })
-        } else {
-          lightingApi.channels.update(property.redChannel.universe, property.redChannel.channelNo, r)
-          lightingApi.channels.update(property.greenChannel.universe, property.greenChannel.channelNo, g)
-          lightingApi.channels.update(property.blueChannel.universe, property.blueChannel.channelNo, b)
+          if (property.whiteChannel && w !== undefined) {
+            writeChannelValue(fixtureKey, property.name, property.whiteChannel, w)
+          }
+          if (property.amberChannel && a !== undefined) {
+            writeChannelValue(fixtureKey, property.name, property.amberChannel, a)
+          }
+          if (property.uvChannel && uv !== undefined) {
+            writeChannelValue(fixtureKey, property.name, property.uvChannel, uv)
+          }
+          return
         }
-        if (property.whiteChannel && w !== undefined) writeChannel(property.whiteChannel, w)
-        if (property.amberChannel && a !== undefined) writeChannel(property.amberChannel, a)
-        if (property.uvChannel && uv !== undefined) writeChannel(property.uvChannel, uv)
+        // Live: one entry for the whole colour, extended components included.
+        //
+        // A colour entry is atomic — a component the write omits is set to 0, not left alone.
+        // So for any channel the fixture actually has, an undefined component is filled from
+        // its current value rather than dropped. Without this, callers that legitimately
+        // supply only RGB (Fan, which ramps a hue across a selection) would black out the
+        // white/amber/UV emitters on every RGBW fixture they touched.
+        const current = (ref?: ChannelRef) =>
+          ref ? lightingApi.channels.get(ref.universe, ref.channelNo) : undefined
+        lightingApi.programmer.setColour('fixture', fixtureKey, property.name, {
+          r,
+          g,
+          b,
+          w: property.whiteChannel ? (w ?? current(property.whiteChannel)) : undefined,
+          a: property.amberChannel ? (a ?? current(property.amberChannel)) : undefined,
+          uv: property.uvChannel ? (uv ?? current(property.uvChannel)) : undefined,
+        })
       },
 
-      writePosition(fixtureKey, pan, tilt, panValue, tiltValue) {
+      writePosition(fixtureKey, pan, tilt, panValue, tiltValue, axisProperties) {
         if (ctx.kind === 'preset') return
         if (panValue === undefined && tiltValue === undefined) return
         if (ctx.kind === 'cue') {
@@ -114,12 +207,47 @@ export function useCellWriters(): CellWriters {
           })
           return
         }
-        if (panValue !== undefined) {
-          lightingApi.channels.update(pan.universe, pan.channelNo, panValue)
+        if (axisProperties) {
+          // Separate pan/tilt sliders: write only the axis that moved. Folding them into a
+          // `position` entry would freeze the other axis into the programmer — the reason
+          // the backend keeps raw pan/tilt in its channel sideband.
+          if (panValue !== undefined && axisProperties.pan) {
+            lightingApi.programmer.set(
+              'fixture',
+              fixtureKey,
+              axisProperties.pan,
+              serializeLevel(panValue),
+            )
+          }
+          if (tiltValue !== undefined && axisProperties.tilt) {
+            lightingApi.programmer.set(
+              'fixture',
+              fixtureKey,
+              axisProperties.tilt,
+              serializeLevel(tiltValue),
+            )
+          }
+          return
         }
-        if (tiltValue !== undefined) {
-          lightingApi.channels.update(tilt.universe, tilt.channelNo, tiltValue)
-        }
+        // A real `position` property is one atomic entry covering both axes, so a single-axis
+        // nudge has to supply the other one. Prefer the axis the programmer already holds
+        // over the live wire value: if an effect is driving the untouched axis, the wire is a
+        // moving target and sampling it bakes in whatever instant the pointer happened to
+        // land on. (Taking the whole position is the console-normal consequence of touching
+        // one axis; what we avoid here is freezing it to an arbitrary sample.)
+        const held = lightingApi.programmer.getKeyState(fixtureKey, 'position').entry
+        const heldPosition = held ? parseProgrammerValue(held.value) : null
+        const staged = heldPosition?.kind === 'position' ? heldPosition : null
+        const effectivePan =
+          panValue ?? staged?.pan ?? lightingApi.channels.get(pan.universe, pan.channelNo)
+        const effectiveTilt =
+          tiltValue ?? staged?.tilt ?? lightingApi.channels.get(tilt.universe, tilt.channelNo)
+        lightingApi.programmer.setPosition(
+          'fixture',
+          fixtureKey,
+          Math.round(effectivePan),
+          Math.round(effectiveTilt),
+        )
       },
     }
   }, [ctx])

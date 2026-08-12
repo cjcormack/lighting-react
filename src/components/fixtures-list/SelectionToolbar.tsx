@@ -39,9 +39,12 @@ export function SelectionToolbar({ locateTargets, targets, onClear }: SelectionT
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1.5 sm:gap-2">
+      {/* "12 selected" is three times the width of "12" and says the same thing next to a
+          row of selection actions. Narrow viewports get the number alone. */}
       <span className="text-xs text-muted-foreground tabular-nums">
-        {targets.length} selected
+        {targets.length}
+        <span className="hidden sm:inline"> selected</span>
       </span>
       <FanPopover targets={targets} />
       <Tooltip>
@@ -53,7 +56,7 @@ export function SelectionToolbar({ locateTargets, targets, onClear }: SelectionT
             className={allLocated ? 'bg-sky-500 text-white hover:bg-sky-600' : ''}
           >
             <Crosshair className="size-3.5" />
-            Locate
+            <span className="hidden sm:inline">Locate</span>
           </Button>
         </TooltipTrigger>
         <TooltipContent>
@@ -71,14 +74,17 @@ export function SelectionToolbar({ locateTargets, targets, onClear }: SelectionT
             onPointerLeave={highlight.release}
           >
             <Flashlight className="size-3.5" />
-            Highlight
+            <span className="hidden sm:inline">Highlight</span>
           </Button>
         </TooltipTrigger>
         <TooltipContent>Hold: full intensity on the selection, restored on release</TooltipContent>
       </Tooltip>
-      <Button variant="ghost" size="sm" onClick={onClear}>
+      {/* "Deselect", not "Clear": on the programmer sheet this sits beside the programmer's
+          own Clear, and two buttons a few pixels apart that mean "drop the selection" and
+          "release every value on the rig" must not share a label. */}
+      <Button variant="ghost" size="sm" onClick={onClear} title="Deselect all">
         <X className="size-3.5" />
-        Clear
+        <span className="hidden sm:inline">Deselect</span>
       </Button>
     </div>
   )

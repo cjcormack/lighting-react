@@ -30,6 +30,7 @@ import { useShowTransport } from '../hooks/useShowTransport'
 import { ShowHeader } from '../components/ShowHeader'
 import { ShowBar } from '../components/ShowBar'
 import { ProgramView } from '../components/runner/program/ProgramView'
+import { ProgrammerPane } from '../components/programmer/ProgrammerPane'
 
 export function ProgramRedirect() {
   const { data: currentProject, isLoading } = useCurrentProjectQuery()
@@ -311,6 +312,8 @@ export function ProgramPage() {
           goDisabled={transport.goDisabled}
         />
       )}
+
+      <ProgrammerPane />
 
       {(
         <div className="flex-1 flex min-h-0">

@@ -37,6 +37,13 @@ import { ColourPickerPopover } from './ColourPickerPopover'
 
 interface GroupPropertyVisualizerProps {
   property: GroupPropertyDescriptor
+  /**
+   * Name of the backend fixture group, when there is one. Present, a live edit goes out as a
+   * single group-targeted programmer write and the backend records `sourceGroup` on every
+   * member's entry. Absent — the "all heads" controls inside a multi-head fixture, which are
+   * a client-side grouping with no backend name — members are written individually.
+   */
+  groupName?: string
   isEditing?: boolean
   /** Extra content rendered after the property name (e.g. a badge) */
   nameExtra?: React.ReactNode
@@ -47,15 +54,17 @@ interface GroupPropertyVisualizerProps {
  */
 export const GroupSliderProperty = memo(function GroupSliderProperty({
   property,
+  groupName,
   isEditing = false,
   nameExtra,
 }: {
   property: GroupSliderPropertyDescriptor
+  groupName?: string
   isEditing?: boolean
   nameExtra?: React.ReactNode
 }) {
   const { min, max, isUniform, displayText } = useGroupSliderValues(property)
-  const updateAll = useUpdateGroupSlider(property)
+  const updateAll = useUpdateGroupSlider(property, groupName)
 
   const minPct = Math.round(((min - property.min) / (property.max - property.min)) * 100)
   const maxPct = Math.round(((max - property.min) / (property.max - property.min)) * 100)
@@ -108,16 +117,18 @@ export const GroupSliderProperty = memo(function GroupSliderProperty({
  */
 export const GroupColourSwatch = memo(function GroupColourSwatch({
   property,
+  groupName,
   isEditing = false,
   nameExtra,
 }: {
   property: GroupColourPropertyDescriptor
+  groupName?: string
   isEditing?: boolean
   nameExtra?: React.ReactNode
 }) {
   const { isUniform, avgR, avgG, avgB, avgW, avgA, avgUv, combinedCss, displayText } =
     useGroupColourValues(property)
-  const updateAll = useUpdateGroupColour(property)
+  const updateAll = useUpdateGroupColour(property, groupName)
 
   // The aggregate colour's magnitude acts as a virtual dimmer, so a group of
   // dim fixtures reads as a legible dim colour instead of near-black.
@@ -289,16 +300,18 @@ function ColourChannelSlider({
  */
 export const GroupPositionIndicator = memo(function GroupPositionIndicator({
   property,
+  groupName,
   isEditing = false,
   nameExtra,
 }: {
   property: GroupPositionPropertyDescriptor
+  groupName?: string
   isEditing?: boolean
   nameExtra?: React.ReactNode
 }) {
   const { isUniform, avgPan, avgTilt, avgPanNormalized, avgTiltNormalized, displayText } =
     useGroupPositionValues(property)
-  const updateAll = useUpdateGroupPosition(property)
+  const updateAll = useUpdateGroupPosition(property, groupName)
 
   // Use first member's range for editing
   const first = property.memberPositionChannels[0]
@@ -396,15 +409,17 @@ export const GroupPositionIndicator = memo(function GroupPositionIndicator({
  */
 export const GroupSettingProperty = memo(function GroupSettingProperty({
   property,
+  groupName,
   isEditing = false,
   nameExtra,
 }: {
   property: GroupSettingPropertyDescriptor
+  groupName?: string
   isEditing?: boolean
   nameExtra?: React.ReactNode
 }) {
   const { isUniform, displayText, currentOption } = useGroupSettingValues(property)
-  const updateAll = useUpdateGroupSetting(property)
+  const updateAll = useUpdateGroupSetting(property, groupName)
 
   const handleChange = (value: string) => {
     const selectedOption = property.options.find((o) => o.name === value)
@@ -464,18 +479,20 @@ export const GroupSettingProperty = memo(function GroupSettingProperty({
  */
 export function GroupPropertyVisualizer({
   property,
+  groupName,
   isEditing = false,
   nameExtra,
 }: GroupPropertyVisualizerProps) {
+  const shared = { groupName, isEditing, nameExtra }
   switch (property.type) {
     case 'slider':
-      return <GroupSliderProperty property={property} isEditing={isEditing} nameExtra={nameExtra} />
+      return <GroupSliderProperty property={property} {...shared} />
     case 'colour':
-      return <GroupColourSwatch property={property} isEditing={isEditing} nameExtra={nameExtra} />
+      return <GroupColourSwatch property={property} {...shared} />
     case 'position':
-      return <GroupPositionIndicator property={property} isEditing={isEditing} nameExtra={nameExtra} />
+      return <GroupPositionIndicator property={property} {...shared} />
     case 'setting':
-      return <GroupSettingProperty property={property} isEditing={isEditing} nameExtra={nameExtra} />
+      return <GroupSettingProperty property={property} {...shared} />
   }
 }
 

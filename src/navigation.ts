@@ -18,6 +18,7 @@ import {
   Computer,
   TableProperties,
   Sliders,
+  SlidersVertical,
   Activity,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
@@ -127,6 +128,18 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/program`,
     visibility: "active-only",
     pathMatch: "/program",
+    group: "live",
+  },
+  {
+    id: "programmer",
+    // The busking / manual-override surface (Layer 2). Only the Values view is registered —
+    // the FX sibling (`/programmer/fx`) is reached via the in-page switcher, matching the
+    // cards/list exception documented in CLAUDE.md.
+    label: "Programmer",
+    icon: SlidersVertical,
+    path: (p) => `/projects/${p}/programmer`,
+    visibility: "active-only",
+    pathMatch: "/programmer",
     group: "live",
   },
   {

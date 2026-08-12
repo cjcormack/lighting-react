@@ -147,17 +147,35 @@ export function GroupPropertiesSection({
     <div className="space-y-1">
       {/* Colour properties first (most visually prominent) */}
       {grouped.colour.map((prop) => (
-        <GroupPropertyVisualizer key={prop.name} property={prop} isEditing={isEditing} nameExtra={badgeFor(prop.name)} />
+        <GroupPropertyVisualizer
+          key={prop.name}
+          property={prop}
+          groupName={groupName}
+          isEditing={isEditing}
+          nameExtra={badgeFor(prop.name)}
+        />
       ))}
 
       {/* Position properties */}
       {grouped.position.map((prop) => (
-        <GroupPropertyVisualizer key={prop.name} property={prop} isEditing={isEditing} nameExtra={badgeFor(prop.name)} />
+        <GroupPropertyVisualizer
+          key={prop.name}
+          property={prop}
+          groupName={groupName}
+          isEditing={isEditing}
+          nameExtra={badgeFor(prop.name)}
+        />
       ))}
 
       {/* Dimmer properties */}
       {grouped.dimmer.map((prop) => (
-        <GroupPropertyVisualizer key={prop.name} property={prop} isEditing={isEditing} nameExtra={badgeFor(prop.name)} />
+        <GroupPropertyVisualizer
+          key={prop.name}
+          property={prop}
+          groupName={groupName}
+          isEditing={isEditing}
+          nameExtra={badgeFor(prop.name)}
+        />
       ))}
 
       {/* Virtual dimmer (colour but no real dimmer) */}
@@ -171,12 +189,24 @@ export function GroupPropertiesSection({
 
       {/* Other slider properties */}
       {grouped.slider.map((prop) => (
-        <GroupPropertyVisualizer key={prop.name} property={prop} isEditing={isEditing} nameExtra={badgeFor(prop.name)} />
+        <GroupPropertyVisualizer
+          key={prop.name}
+          property={prop}
+          groupName={groupName}
+          isEditing={isEditing}
+          nameExtra={badgeFor(prop.name)}
+        />
       ))}
 
       {/* Setting properties */}
       {grouped.setting.map((prop) => (
-        <GroupPropertyVisualizer key={prop.name} property={prop} isEditing={isEditing} nameExtra={badgeFor(prop.name)} />
+        <GroupPropertyVisualizer
+          key={prop.name}
+          property={prop}
+          groupName={groupName}
+          isEditing={isEditing}
+          nameExtra={badgeFor(prop.name)}
+        />
       ))}
     </div>
   )

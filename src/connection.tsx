@@ -50,7 +50,7 @@ export const ConnectionStatus = () => {
           <div>
             {/* Compact: icon-only pill on narrow viewports */}
             <div className={cn(
-              "sm:hidden flex items-center justify-center rounded-lg border p-1.5 bg-card",
+              "@[760px]:hidden flex items-center justify-center rounded-lg border p-1.5 bg-card",
               config.variant === "destructive" && "text-destructive",
               config.iconClassName,
               config.alertClassName?.replace(/\[&>svg\][^ ]*/g, ''),
@@ -60,14 +60,14 @@ export const ConnectionStatus = () => {
             {/* Full: Alert with label on wider viewports */}
             <Alert
               variant={config.variant}
-              className={cn("hidden sm:grid w-fit py-1 px-3 gap-x-2!", config.alertClassName)}
+              className={cn("hidden @[760px]:grid w-fit py-1 px-3 gap-x-2!", config.alertClassName)}
             >
               {config.icon}
               <AlertDescription>{config.label}</AlertDescription>
             </Alert>
           </div>
         </TooltipTrigger>
-        <TooltipContent className="sm:hidden">{config.label}</TooltipContent>
+        <TooltipContent className="@[760px]:hidden">{config.label}</TooltipContent>
       </Tooltip>
       {readyState === Status.CLOSED && (
         <Button

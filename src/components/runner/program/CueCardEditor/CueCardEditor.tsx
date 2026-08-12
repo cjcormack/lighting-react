@@ -352,10 +352,14 @@ export function CueCardEditor({
                           ? 'border-primary text-primary'
                           : 'border-amber-500 text-amber-600 bg-amber-50 dark:bg-amber-950/30',
                       )}
+                      // "Preview edit", not "Blind": the programmer has its own Blind gate
+                      // (which excludes it from the stage merge) and the two now coexist in
+                      // the same session. Same word, different mechanism — so this one gets
+                      // a different name.
                       title={
                         editMode === 'live'
                           ? 'Live — edits apply to the stage'
-                          : 'Blind — edits persist to the cue only; stage untouched'
+                          : 'Preview edit — edits persist to the cue only; stage untouched'
                       }
                     >
                       {editMode === 'live' ? (
@@ -366,7 +370,7 @@ export function CueCardEditor({
                       ) : (
                         <>
                           <EyeOff className="size-3.5" />
-                          Blind
+                          Preview edit
                         </>
                       )}
                     </Button>

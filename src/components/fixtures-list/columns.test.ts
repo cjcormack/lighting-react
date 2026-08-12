@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 // WebSocket at import time — replace it before anything imports it.
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
-import { resolveCell, resolutionChannels } from './columns'
+import { resolveCell, resolutionChannels, resolutionPropertyNames } from './columns'
 import { chan, colourProp, positionProp, settingProp, sliderProp } from '@/test/fixtureFactories'
 
 describe('resolveCell', () => {
@@ -81,5 +81,34 @@ describe('resolutionChannels', () => {
     expect(resolutionChannels(resolveCell([pos], 'position'))).toEqual([chan(5), chan(6)])
 
     expect(resolutionChannels(null)).toEqual([])
+  })
+})
+
+describe('resolutionPropertyNames', () => {
+  it('names the single backing property for scalar-shaped columns', () => {
+    const dimmer = sliderProp('dimmer', 'dimmer', chan(1))
+    expect(resolutionPropertyNames(resolveCell([dimmer], 'dimmer'))).toEqual(['dimmer'])
+
+    const rgb = colourProp('rgbColour', chan(2), chan(3), chan(4))
+    expect(resolutionPropertyNames(resolveCell([rgb], 'colour'))).toEqual(['rgbColour'])
+
+    const wheel = settingProp('gobo', 'gobo', chan(5))
+    expect(resolutionPropertyNames(resolveCell([wheel], 'gobo'))).toEqual(['gobo'])
+
+    expect(resolutionPropertyNames(null)).toEqual([])
+  })
+
+  it('names the position descriptor when the fixture has one', () => {
+    const pos = positionProp('position', chan(1), chan(2))
+    expect(resolutionPropertyNames(resolveCell([pos], 'position'))).toEqual(['position'])
+  })
+
+  it('names both axes when position was paired from two sliders', () => {
+    // The programmer must write these independently: lifting one axis into a `position`
+    // entry would freeze the other, which is why Session 1 routes raw pan/tilt to the
+    // channel sideband.
+    const pan = sliderProp('pan', 'pan', chan(3), { axis: 'PAN' })
+    const tilt = sliderProp('tilt', 'tilt', chan(4), { axis: 'TILT' })
+    expect(resolutionPropertyNames(resolveCell([pan, tilt], 'position'))).toEqual(['pan', 'tilt'])
   })
 })

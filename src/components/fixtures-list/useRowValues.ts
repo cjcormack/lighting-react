@@ -6,7 +6,7 @@ import {
   subscribeToChannels,
 } from '../../hooks/usePropertyValues'
 import { computeCombinedCss } from '../../lib/colourMath'
-import { resolutionChannels } from './columns'
+import { resolutionChannels, resolutionPropertyNames } from './columns'
 import { resolveTargetCells, rowWriteTargets } from './rowModel'
 import type { CellResolution, ColumnKey } from './columns'
 import type { Row } from './rowModel'
@@ -46,12 +46,24 @@ export type CellValue =
       option?: SettingOption
     }
 
+/**
+ * One programmer/provenance lookup key behind a cell. Not parallel to `resolutions` — a
+ * position cell built from separate pan/tilt sliders is a single resolution backed by two
+ * independent properties.
+ */
+export interface CellPropertyKey {
+  targetKey: string
+  propertyName: string
+}
+
 export interface RowCell {
   col: ColumnKey
   /** Non-null resolutions: one for a plain fixture or element row, one per
    *  element for a multi-head fixture row whose parent lacks the property,
    *  one per member-with-the-property for a group row. */
   resolutions: NonNullable<CellResolution>[]
+  /** Every (target, property) the cell covers — the programmer's key space. */
+  keys: CellPropertyKey[]
 }
 
 export type RowValues = Partial<Record<ColumnKey, CellValue>>
@@ -67,10 +79,19 @@ export function buildRowCells(row: Row, visibleColumns: readonly ColumnKey[]): R
   const targets = rowWriteTargets(row)
   const cells: RowCell[] = []
   for (const col of visibleColumns) {
-    const resolutions = targets.flatMap((target) =>
-      resolveTargetCells(target, col).map((r) => r.resolution),
-    )
-    if (resolutions.length > 0) cells.push({ col, resolutions })
+    const resolutions: NonNullable<CellResolution>[] = []
+    const keys: CellPropertyKey[] = []
+    for (const target of targets) {
+      for (const { target: resolved, resolution } of resolveTargetCells(target, col)) {
+        resolutions.push(resolution)
+        // `resolved` is the element for a multi-head fallback, the target itself otherwise —
+        // exactly the key the backend stores the programmer entry under.
+        for (const propertyName of resolutionPropertyNames(resolution)) {
+          keys.push({ targetKey: resolved.key, propertyName })
+        }
+      }
+    }
+    if (resolutions.length > 0) cells.push({ col, resolutions, keys })
   }
   return cells
 }

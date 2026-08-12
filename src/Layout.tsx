@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 import { useMediaQuery } from "@/hooks/useMediaQuery"
 
 import { ConnectionStatus } from "./connection"
+import { ProgrammerIndicator } from './components/ProgrammerIndicator'
 import ProjectSwitcher from "./ProjectSwitcher"
 import ThemeToggle from "./ThemeToggle"
 import { FixtureOverviewToggle } from "./components/FixtureOverviewToggle"
@@ -142,26 +143,43 @@ export default function Layout() {
           className="flex flex-1 flex-col transition-all duration-200 min-w-0"
           style={{ marginLeft: isDesktop ? sidebarWidth : 0 }}
         >
-          {/* Header */}
-          <header className="sticky top-0 z-40 border-b bg-primary px-4 py-2 text-primary-foreground">
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          {/* Header. The tool row must stay on ONE line: it is chrome, and a wrapped chrome
+              bar eats a third of an iPhone's viewport before any content renders.
+
+              Breakpoints here are CONTAINER queries, not viewport ones, for the same reason
+              ShowBar uses them — the desktop sidebar insets this region by 64–240px, so at a
+              768px viewport the header really has ~528px to work with. Viewport breakpoints
+              expand the status/programmer chips into space that isn't there, which then
+              squeezes the title down to a stub.
+
+              The thresholds are measured, not guessed: the title is 188px, the compact tool
+              row 320px, and the row grows to ~455px once the status and programmer chips
+              show their labels. So the title appears at 620px (fits untruncated even with
+              the mobile hamburger) and the chips expand at 760px (title + expanded row +
+              padding ≈ 691px, with margin). */}
+          <header className="@container sticky top-0 z-40 border-b bg-primary px-2 py-2 text-primary-foreground sm:px-4">
+            <div className="flex items-center gap-x-2 sm:gap-x-4">
               {/* Mobile hamburger button */}
               {!isDesktop && (
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="text-primary-foreground hover:bg-primary-foreground/10 -ml-2"
+                  className="text-primary-foreground hover:bg-primary-foreground/10 -ml-1 shrink-0"
                   onClick={() => setMobileDrawerOpen(true)}
                 >
                   <Menu className="size-5" />
                 </Button>
               )}
-              <h1 className="text-lg font-semibold whitespace-nowrap">
+              {/* Hidden rather than truncated when the row is tight: a title clipped to
+                  "C" is noise, and the hamburger plus the page's own breadcrumbs already
+                  say where you are. */}
+              <h1 className="hidden min-w-0 flex-1 truncate text-base font-semibold @[620px]:block @[760px]:text-lg">
                 Chris&apos; DMX Controller v7
               </h1>
-              <div className="flex-1" />
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex-1 @[620px]:hidden" />
+              <div className="flex shrink-0 items-center gap-1 overflow-x-auto sm:gap-2">
                 <ConnectionStatus />
+                <ProgrammerIndicator />
                 <StageOverviewToggle isVisible={isStageVisible} onToggle={toggleStage} />
                 <FixtureOverviewToggle isVisible={isOverviewVisible} onToggle={toggleOverview} />
                 <CueSlotOverviewToggle isVisible={isCueSlotsVisible} onToggle={toggleCueSlots} />

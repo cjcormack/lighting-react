@@ -12,6 +12,7 @@ import {
   serializeExtendedColour,
 } from '../components/fx/colourUtils'
 import { computeCombinedCss } from '../lib/colourMath'
+import { serializeLevel } from '../lib/programmerValue'
 import type {
   ChannelRef,
   SliderPropertyDescriptor,
@@ -315,16 +316,35 @@ export function useSettingValue(property: SettingPropertyDescriptor): SettingVal
 }
 
 /**
+ * Names the property a channel write really belongs to, so the live branch can write the
+ * programmer at property level instead of channel level.
+ */
+export interface PropertyWriteTarget {
+  fixtureKey: string
+  propertyName: string
+}
+
+/**
  * Hook to update a channel value. Routes through `cueEdit.setChannel` when the surrounding
- * [EditorContext] is `kind: 'cue'`, else writes direct to Layer 4. In `kind: 'preset'` mode
- * channel-level writes are a no-op — preset assignments are property-keyed, not channel-
- * keyed, and the synthetic fixture's channel refs don't map to real DMX anyway. Callers
- * authoring preset properties should use the property-level write hooks instead.
+ * [EditorContext] is `kind: 'cue'`; in `kind: 'preset'` mode channel-level writes are a
+ * no-op — preset assignments are property-keyed, not channel-keyed, and the synthetic
+ * fixture's channel refs don't map to real DMX anyway.
+ *
+ * Live writes go to the **programmer** (Layer 2). Pass [target] whenever the caller knows
+ * which property the channel backs and the write covers that property outright: the value
+ * then lands as a property entry, which is what suppresses effects, carries a fade, and
+ * shows up in the programmer sheet as a first-class entry.
+ *
+ * Without [target] the write falls back to a raw `updateChannel`. That still reaches the
+ * programmer — the backend's compatibility shim lifts property-backed channels — but pays
+ * the shim's coarser semantics (a colour sub-channel freezes its siblings into a whole
+ * `rgbColour` entry; a pan/tilt axis lands in the channel sideband). Use the fallback only
+ * where there genuinely is no single owning property, such as the raw Channels view.
  */
 export function useUpdateChannel() {
   const ctx = useEditorContext()
   return useCallback(
-    (channel: ChannelRef, value: number) => {
+    (channel: ChannelRef, value: number, target?: PropertyWriteTarget) => {
       if (ctx.kind === 'cue') {
         lightingApi.cueEdit.send({
           type: 'cueEdit.setChannel',
@@ -336,9 +356,57 @@ export function useUpdateChannel() {
         return
       }
       if (ctx.kind === 'preset') return
+      if (target) {
+        lightingApi.programmer.set(
+          'fixture',
+          target.fixtureKey,
+          target.propertyName,
+          serializeLevel(value),
+        )
+        return
+      }
       lightingApi.channels.update(channel.universe, channel.channelNo, value)
     },
     [ctx]
+  )
+}
+
+/**
+ * Update a fixture's position as one programmer entry rather than two channel writes.
+ *
+ * Only valid for a real `position` descriptor. A fixture whose movement is two independent
+ * pan/tilt *sliders* must keep writing them separately (via [useUpdateChannel] with each
+ * slider's own property name) — lifting one axis into a `position` entry would freeze the
+ * other, which is exactly why the backend routes raw pan/tilt writes to its channel
+ * sideband.
+ */
+export function useUpdateFixturePosition(
+  property: PositionPropertyDescriptor,
+  fixtureKey: string | undefined,
+) {
+  const ctx = useEditorContext()
+  return useCallback(
+    (pan: number, tilt: number) => {
+      if (ctx.kind === 'cue' && fixtureKey) {
+        lightingApi.cueEdit.send({
+          type: 'cueEdit.setProperty',
+          cueId: ctx.id,
+          targetType: 'fixture',
+          targetKey: fixtureKey,
+          propertyName: property.name,
+          value: `${Math.round(pan)},${Math.round(tilt)}`,
+        })
+        return
+      }
+      if (ctx.kind === 'preset') return
+      if (!fixtureKey) {
+        lightingApi.channels.update(property.panChannel.universe, property.panChannel.channelNo, pan)
+        lightingApi.channels.update(property.tiltChannel.universe, property.tiltChannel.channelNo, tilt)
+        return
+      }
+      lightingApi.programmer.setPosition('fixture', fixtureKey, Math.round(pan), Math.round(tilt))
+    },
+    [ctx, fixtureKey, property]
   )
 }
 
@@ -403,6 +471,20 @@ export function useUpdateFixtureColour(
           uv: property.uvChannel ? uv ?? 0 : 0,
         })
         draft.onSetProperty(property.name, value)
+        return
+      }
+      if (fixtureKey) {
+        // One programmer entry for the whole colour, extended channels included. Writing
+        // the components separately would make each one a distinct write that freezes its
+        // siblings, which is what the raw-channel shim has to do and what we're avoiding.
+        lightingApi.programmer.setColour('fixture', fixtureKey, property.name, {
+          r,
+          g,
+          b,
+          w: property.whiteChannel ? w : undefined,
+          a: property.amberChannel ? a : undefined,
+          uv: property.uvChannel ? uv : undefined,
+        })
         return
       }
       lightingApi.channels.update(property.redChannel.universe, property.redChannel.channelNo, r)

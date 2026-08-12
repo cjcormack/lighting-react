@@ -137,6 +137,12 @@ export function useVirtualDimmer(
         r = getChannelValue(colourProp.redChannel)
         g = getChannelValue(colourProp.greenChannel)
         b = getChannelValue(colourProp.blueChannel)
+        // Read the extended components too: the live write below sends the colour as one
+        // programmer entry, so anything not carried through would be zeroed rather than
+        // simply left alone (which is what the old per-channel RGB writes did).
+        if (colourProp.whiteChannel) existingWhite = getChannelValue(colourProp.whiteChannel)
+        if (colourProp.amberChannel) existingAmber = getChannelValue(colourProp.amberChannel)
+        if (colourProp.uvChannel) existingUv = getChannelValue(colourProp.uvChannel)
       }
       const oldMax = Math.max(r, g, b)
 
@@ -183,11 +189,27 @@ export function useVirtualDimmer(
         return
       }
 
+      if (fixtureKey) {
+        // One programmer entry for the scaled colour, carrying the W/A/UV read above.
+        lightingApi.programmer.setColour('fixture', fixtureKey, colourProp.name, {
+          r: newR,
+          g: newG,
+          b: newB,
+          w: colourProp.whiteChannel ? existingWhite : undefined,
+          a: colourProp.amberChannel ? existingAmber : undefined,
+          uv: colourProp.uvChannel ? existingUv : undefined,
+        })
+        return
+      }
+      // No fixture key (a synthetic descriptor) — fall back to raw channel writes, which the
+      // backend's compatibility shim still lifts into the programmer.
       lightingApi.channels.update(colourProp.redChannel.universe, colourProp.redChannel.channelNo, newR)
       lightingApi.channels.update(colourProp.greenChannel.universe, colourProp.greenChannel.channelNo, newG)
       lightingApi.channels.update(colourProp.blueChannel.universe, colourProp.blueChannel.channelNo, newB)
     },
-    [ctx, draft, fixtureKey, colourProp.name, colourProp.redChannel, colourProp.greenChannel, colourProp.blueChannel]
+    // The whole descriptor is read now (extended channels included), so depend on it rather
+    // than picking out individual channel refs.
+    [ctx, draft, fixtureKey, colourProp]
   )
 
   return { value, percentage, setValue }
@@ -307,12 +329,19 @@ export function useGroupVirtualDimmer(
           newB = Math.round(ratios.b * clamped)
         }
 
-        lightingApi.channels.update(m.redChannel.universe, m.redChannel.channelNo, Math.min(255, newR))
-        lightingApi.channels.update(m.greenChannel.universe, m.greenChannel.channelNo, Math.min(255, newG))
-        lightingApi.channels.update(m.blueChannel.universe, m.blueChannel.channelNo, Math.min(255, newB))
+        // Per member rather than one group write: each member's scale factor comes from its
+        // own current colour, so this is genuinely N different values, not one fanned out.
+        lightingApi.programmer.setColour('fixture', m.fixtureKey, colourProp.name, {
+          r: Math.min(255, newR),
+          g: Math.min(255, newG),
+          b: Math.min(255, newB),
+          w: m.whiteChannel ? getChannelValue(m.whiteChannel) : undefined,
+          a: m.amberChannel ? getChannelValue(m.amberChannel) : undefined,
+          uv: m.uvChannel ? getChannelValue(m.uvChannel) : undefined,
+        })
       }
     },
-    [colourProp.memberColourChannels]
+    [colourProp.memberColourChannels, colourProp.name]
   )
 
   return { min, max, isUniform, displayText, setValue }

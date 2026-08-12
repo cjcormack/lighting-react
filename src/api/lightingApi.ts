@@ -21,6 +21,7 @@ import {createPromptBooksWsApi, PromptBooksWsApi} from "./promptBooksWsApi";
 import {createBootStatusWsApi, BootStatusWsApi} from "./bootStatusWsApi";
 import {createSurfacesWsApi, SurfacesWsApi} from "./surfacesApi";
 import {createCloudSyncWsApi, CloudSyncWsApi} from "./cloudSyncWsApi";
+import {createProgrammerApi, ProgrammerApi} from "./programmerWsApi";
 
 interface LightingApi {
   universes: UniversesApi
@@ -45,6 +46,7 @@ interface LightingApi {
   surfaces: SurfacesWsApi
   cloudSync: CloudSyncWsApi
   bootStatus: BootStatusWsApi
+  programmer: ProgrammerApi
 }
 
 export const lightingApi = createLightingApi()
@@ -84,6 +86,7 @@ function createLightingApi(): LightingApi {
   const surfacesWsApi = createSurfacesWsApi(connection)
   const cloudSyncWsApi = createCloudSyncWsApi(connection)
   const bootStatusWsApi = createBootStatusWsApi(connection)
+  const programmerApi = createProgrammerApi(connection)
 
   return {
     universes: universesApi,
@@ -108,5 +111,6 @@ function createLightingApi(): LightingApi {
     surfaces: surfacesWsApi,
     cloudSync: cloudSyncWsApi,
     bootStatus: bootStatusWsApi,
+    programmer: programmerApi,
   }
 }

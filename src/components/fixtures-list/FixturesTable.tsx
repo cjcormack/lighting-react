@@ -8,6 +8,8 @@ import { LocateButton } from '../fixtures/LocateButton'
 import { COLUMN_DEFS } from './columns'
 import { rowLocateTarget } from './rowModel'
 import { buildRowCells, useRowValues } from './useRowValues'
+import { useRowOwnership } from './useRowOwnership'
+import { applyStagedValue, ownershipCellClass, ownershipTitle } from './ownership'
 import { SliderCell } from './cells/SliderCell'
 import { ColourCell } from './cells/ColourCell'
 import { PositionCell } from './cells/PositionCell'
@@ -17,6 +19,9 @@ import type { CellCommit, FixtureRow, GroupRow, InfoRow, Row, RowId } from './ro
 import type { RowCell } from './useRowValues'
 
 const ROW_HEIGHT = 36
+
+/** Sticky name column: 260px on a desktop, but never more than 45% of a narrow viewport. */
+const NAME_COLUMN_WIDTH = 'min(45vw, 260px)'
 
 export interface FixturesTableProps {
   rows: Row[]
@@ -39,6 +44,12 @@ export interface FixturesTableProps {
   /** Row to scroll into view (deep-link); cleared via onScrolledToRow. */
   scrollToRowId?: RowId | null
   onScrolledToRow?: () => void
+  /**
+   * Colour each cell by which layer owns it, and show the programmer's staged value while
+   * blind. Opt-in: the programmer sheet wants it, the plain Fixtures / Groups lists are
+   * patch-management views where provenance tinting would just be noise.
+   */
+  showOwnership?: boolean
 }
 
 /**
@@ -59,6 +70,7 @@ export function FixturesTable({
   onShowInfo,
   scrollToRowId,
   onScrolledToRow,
+  showOwnership = false,
 }: FixturesTableProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -80,8 +92,12 @@ export function FixturesTable({
     }
   }, [scrollToRowId, rows, virtualizer, onScrolledToRow])
 
+  // The name column is the single biggest consumer of width, and 260px of a 375px phone
+  // leaves room for barely one property. `min()` scales it down with the viewport without
+  // needing a JS breakpoint — inline styles can't carry media queries, but they can carry
+  // CSS math.
   const gridTemplateColumns = useMemo(
-    () => `260px repeat(${visibleColumns.length}, minmax(110px, 1fr))`,
+    () => `${NAME_COLUMN_WIDTH} repeat(${visibleColumns.length}, minmax(96px, 1fr))`,
     [visibleColumns.length],
   )
 
@@ -96,7 +112,7 @@ export function FixturesTable({
       className="overflow-auto rounded-md border border-border"
       style={{ maxHeight: 'calc(100vh - 14rem)' }}
     >
-      <div style={{ minWidth: `${260 + visibleColumns.length * 110}px` }}>
+      <div style={{ minWidth: `calc(${NAME_COLUMN_WIDTH} + ${visibleColumns.length * 96}px)` }}>
         {/* Header */}
         <div
           className="sticky top-0 z-20 grid border-b border-border bg-background"
@@ -136,6 +152,7 @@ export function FixturesTable({
                   onCellCommit={onCellCommit}
                   batchCountFor={batchCountFor}
                   onShowInfo={onShowInfo}
+                  showOwnership={showOwnership}
                 />
               </div>
             )
@@ -157,10 +174,14 @@ interface RowViewProps {
   onCellCommit: (row: Row, col: ColumnKey, commit: CellCommit) => void
   batchCountFor: (row: Row, col: ColumnKey) => number
   onShowInfo: (row: InfoRow) => void
+  showOwnership: boolean
 }
 
 /** Checkbox indent per nesting depth (member rows 1, element rows 2). */
 const INDENT_CLASS = ['', 'ml-5', 'ml-10']
+
+/** Stable identity for the ownership-off path, so the hook's memos never churn. */
+const EMPTY_CELLS: RowCell[] = []
 
 const RowView = React.memo(function RowView({
   row,
@@ -173,10 +194,15 @@ const RowView = React.memo(function RowView({
   onCellCommit,
   batchCountFor,
   onShowInfo,
+  showOwnership,
 }: RowViewProps) {
   // Hooks run unconditionally; divider rows just have no cells.
   const cells = useMemo(() => buildRowCells(row, visibleColumns), [row, visibleColumns])
   const values = useRowValues(cells)
+  // Passing an empty cell list is the "off" state: useRowOwnership then registers no
+  // subscriptions and returns a constant, so the plain list views pay nothing for this.
+  const ownershipCells = showOwnership ? cells : EMPTY_CELLS
+  const ownership = useRowOwnership(ownershipCells)
   const cellByCol = useMemo(() => new Map(cells.map((cell) => [cell.col, cell])), [cells])
 
   if (row.kind === 'divider') {
@@ -305,11 +331,16 @@ const RowView = React.memo(function RowView({
         if (!cell || !value) {
           return <div key={col} className="h-full" />
         }
+        const owned = ownership[col]
         return (
-          <div key={col} className="h-full min-w-0 py-0.5">
+          <div
+            key={col}
+            className={`h-full min-w-0 py-0.5 ${ownershipCellClass(owned)}`}
+            title={ownershipTitle(owned)}
+          >
             <PropertyCell
               cell={cell}
-              value={value}
+              value={applyStagedValue(value, owned?.staged, cell.resolutions)}
               batchCount={batchCountFor(row, col)}
               onBeginEdit={() => onBeginCellEdit(row)}
               onCommit={(commit) => onCellCommit(row, col, commit)}

@@ -8,7 +8,7 @@ import { GitCommitHorizontal } from 'lucide-react'
 import { COLUMN_DEFS } from './columns'
 import { fanColours, fanValues } from './fanMath'
 import { clampCommitToResolution, planBatchWrites } from './rowModel'
-import { useCellWriters } from './useCellWriters'
+import { applyPlannedWrite, useCellWriters } from './useCellWriters'
 import type { ColumnKey } from './columns'
 import type { CellCommit, WriteTarget } from './rowModel'
 
@@ -73,29 +73,29 @@ export function FanPopover({ targets }: FanPopoverProps) {
     const planned = reverse ? [...activePlan.planned].reverse() : activePlan.planned
     if (activePlan.col === 'colour') {
       const colours = fanColours(fromColour, toColour, planned.length)
-      planned.forEach(({ target, resolution }, i) => {
-        if (resolution.kind !== 'colour') return
+      planned.forEach((write, i) => {
         const c = colours[i]
-        writers.writeColour(target.key, resolution.property, c.r, c.g, c.b)
+        applyPlannedWrite(writers, {
+          ...write,
+          commit: { kind: 'colour', r: c.r, g: c.g, b: c.b },
+        })
       })
       return
     }
     const values = fanValues(fromValue, toValue, planned.length)
-    planned.forEach(({ resolution }, i) => {
-      if (resolution.kind !== 'slider') return
+    planned.forEach((write, i) => {
       // Clamp the ramp value to each target's own channel range.
-      const clamped = clampCommitToResolution({ kind: 'slider', value: values[i] }, resolution)
-      if (clamped.kind !== 'slider') return
-      writers.writeSlider(resolution.property.channel, clamped.value)
+      const commit = clampCommitToResolution({ kind: 'slider', value: values[i] }, write.resolution)
+      applyPlannedWrite(writers, { ...write, commit })
     })
   }
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" disabled={!canFan}>
+        <Button variant="outline" size="sm" disabled={!canFan} title="Fan values across the selection">
           <GitCommitHorizontal className="size-3.5" />
-          Fan
+          <span className="hidden sm:inline">Fan</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto space-y-3" align="end">

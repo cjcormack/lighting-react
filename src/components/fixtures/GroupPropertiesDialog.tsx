@@ -77,17 +77,17 @@ export function GroupPropertiesDialog({
           <div className="space-y-4">
             {/* Colour properties first */}
             {groupedProperties.colour.length > 0 && (
-              <PropertySection title="Colour" properties={groupedProperties.colour} isEditing={isEditing} />
+              <PropertySection title="Colour" properties={groupedProperties.colour} groupName={groupName} isEditing={isEditing} />
             )}
 
             {/* Position properties */}
             {groupedProperties.position.length > 0 && (
-              <PropertySection title="Position" properties={groupedProperties.position} isEditing={isEditing} />
+              <PropertySection title="Position" properties={groupedProperties.position} groupName={groupName} isEditing={isEditing} />
             )}
 
             {/* Dimmer properties */}
             {groupedProperties.dimmer.length > 0 && (
-              <PropertySection title="Dimmer" properties={groupedProperties.dimmer} isEditing={isEditing} />
+              <PropertySection title="Dimmer" properties={groupedProperties.dimmer} groupName={groupName} isEditing={isEditing} />
             )}
 
             {/* Virtual dimmer (colour but no real dimmer) */}
@@ -113,12 +113,12 @@ export function GroupPropertiesDialog({
 
             {/* Other sliders */}
             {groupedProperties.slider.length > 0 && (
-              <PropertySection title="Controls" properties={groupedProperties.slider} isEditing={isEditing} />
+              <PropertySection title="Controls" properties={groupedProperties.slider} groupName={groupName} isEditing={isEditing} />
             )}
 
             {/* Settings */}
             {groupedProperties.setting.length > 0 && (
-              <PropertySection title="Settings" properties={groupedProperties.setting} isEditing={isEditing} />
+              <PropertySection title="Settings" properties={groupedProperties.setting} groupName={groupName} isEditing={isEditing} />
             )}
           </div>
         )}
@@ -134,10 +134,12 @@ export function GroupPropertiesDialog({
 function PropertySection({
   title,
   properties,
+  groupName,
   isEditing,
 }: {
   title: string
   properties: GroupPropertyDescriptor[]
+  groupName: string
   isEditing: boolean
 }) {
   return (
@@ -152,6 +154,7 @@ function PropertySection({
           <GroupPropertyVisualizer
             key={prop.name}
             property={prop}
+            groupName={groupName}
             isEditing={isEditing}
           />
         ))}

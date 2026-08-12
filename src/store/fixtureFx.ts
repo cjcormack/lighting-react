@@ -112,6 +112,42 @@ export interface AddFixtureFxRequest {
   distributionStrategy?: string
   elementFilter?: string
   stepTiming?: boolean
+  /**
+   * Create the effect in the programmer's reserved priority band, so it composes *on top of*
+   * programmer values instead of being suppressed by them, and Clear sweeps it with them.
+   * Set by the busking pad; cue and script authoring leave it off.
+   */
+  programmerOwned?: boolean
+}
+
+/**
+ * One running effect, as `GET /api/rest/fx/active` reports it. Richer than the `fxState`
+ * WebSocket frame, which carries no `propertyName` or group flag — both of which the FX
+ * sheet needs to place a chip in the right fixture x column.
+ */
+export interface ActiveEffect {
+  id: number
+  effectType: string
+  targetKey: string
+  propertyName: string
+  beatDivision: number
+  blendMode: string
+  isRunning: boolean
+  phaseOffset: number
+  currentPhase: number
+  parameters: Record<string, string>
+  isGroupTarget: boolean
+  distributionStrategy: string | null
+  elementMode: string | null
+  elementFilter: string | null
+  stepTiming: boolean
+  presetId: number | null
+  cueId: number | null
+  timingSource: string
+  /** True when the effect sits in the programmer's priority band. */
+  programmerOwned: boolean
+  /** Fade envelope in [0, 1]; the effect's output is scaled by this before blending. */
+  intensityMultiplier: number
 }
 
 export interface UpdateFxRequest {
@@ -134,6 +170,12 @@ export const fixtureFxApi = restApi.injectEndpoints({
       providesTags: (_result, _error, fixtureKey) => [
         { type: 'FixtureEffects', id: fixtureKey },
       ],
+    }),
+
+    /** Every running effect, rig-wide. Invalidated by the `fxChanged` subscription above. */
+    activeEffects: build.query<ActiveEffect[], void>({
+      query: () => 'fx/active',
+      providesTags: ['FixtureEffects'],
     }),
 
     effectLibrary: build.query<EffectLibraryEntry[], void>({
@@ -198,6 +240,7 @@ export const fixtureFxApi = restApi.injectEndpoints({
 
 export const {
   useFixtureEffectsQuery,
+  useActiveEffectsQuery,
   useEffectLibraryQuery,
   useAddFixtureFxMutation,
   useUpdateFxMutation,

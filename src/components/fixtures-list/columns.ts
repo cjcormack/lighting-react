@@ -13,6 +13,7 @@ import {
 import type {
   ChannelRef,
   ColourPropertyDescriptor,
+  PositionPropertyDescriptor,
   PropertyCategory,
   PropertyDescriptor,
   SettingPropertyDescriptor,
@@ -63,6 +64,13 @@ export const DEFAULT_COLUMN_VISIBILITY: Record<ColumnKey, boolean> = Object.from
  * How one fixture's descriptors satisfy one column. Position is synthesised to
  * plain channel refs + ranges so cells don't care whether the fixture exposes a
  * `position`-type descriptor or separate pan/tilt sliders.
+ *
+ * Position additionally keeps the *descriptors* it was built from. Cells don't need them,
+ * but the programmer does: it is keyed by (target, property name), not by channel, and the
+ * two position shapes must be written differently — a real `position` descriptor takes one
+ * `programmer.setPosition`, while a pan/tilt slider pair takes one `programmer.set` per
+ * axis (lifting a single axis into a `position` entry would freeze the other). See
+ * [resolutionPropertyNames].
  */
 export type CellResolution =
   | { kind: 'slider'; property: SliderPropertyDescriptor }
@@ -78,6 +86,11 @@ export type CellResolution =
       panMax: number
       tiltMin: number
       tiltMax: number
+      /** Set when the fixture exposes a real `position` descriptor. */
+      property?: PositionPropertyDescriptor
+      /** Set instead when the position was paired from two axis sliders. */
+      panProperty?: SliderPropertyDescriptor
+      tiltProperty?: SliderPropertyDescriptor
     }
   | { kind: 'setting'; property: SettingPropertyDescriptor }
   | null
@@ -129,6 +142,7 @@ export function resolveCell(properties: PropertyDescriptor[], col: ColumnKey): C
           panMax: posProp.panMax,
           tiltMin: posProp.tiltMin,
           tiltMax: posProp.tiltMax,
+          property: posProp,
         }
       }
       const pan = findPanProperty(properties)
@@ -142,6 +156,8 @@ export function resolveCell(properties: PropertyDescriptor[], col: ColumnKey): C
         panMax: pan.max,
         tiltMin: tilt.min,
         tiltMax: tilt.max,
+        panProperty: pan,
+        tiltProperty: tilt,
       }
     }
     case 'gobo': {
@@ -196,5 +212,34 @@ export function resolutionChannels(res: CellResolution): ChannelRef[] {
       return [res.property.channel]
     case 'position':
       return [res.pan, res.tilt]
+  }
+}
+
+/**
+ * Every backend property name a resolution covers — the programmer/provenance keys for the
+ * cell, paired with `WriteTarget.key` to form a `(targetKey, propertyName)` lookup.
+ *
+ * Usually one name. Position is the exception: a fixture with separate pan/tilt sliders has
+ * two independent properties behind a single cell, and both must be consulted (for ownership
+ * colouring) and written (for edits).
+ *
+ * Names come straight off the descriptors, which carry the backend's own vocabulary —
+ * `dimmer`, `rgbColour`, `position`, `pan`, `tilt`.
+ */
+export function resolutionPropertyNames(res: CellResolution): string[] {
+  if (!res) return []
+  switch (res.kind) {
+    case 'slider':
+    case 'colour':
+    case 'colour-setting':
+    case 'setting':
+      return [res.property.name]
+    case 'position': {
+      if (res.property) return [res.property.name]
+      const names: string[] = []
+      if (res.panProperty) names.push(res.panProperty.name)
+      if (res.tiltProperty) names.push(res.tiltProperty.name)
+      return names
+    }
   }
 }

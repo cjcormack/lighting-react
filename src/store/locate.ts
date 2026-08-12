@@ -16,7 +16,12 @@ export interface LocateState {
 export interface ToggleLocateResponse {
   active: boolean
   writeCount: number
-  effectsRemoved: number
+  /**
+   * True when the toggle came back inactive *because* park masks every property locate would
+   * have written — otherwise indistinguishable from "this target has no DMX-backed
+   * properties".
+   */
+  parkMasked?: boolean
 }
 
 // === API ===
@@ -30,11 +35,12 @@ export const locateApi = restApi.injectEndpoints({
     }),
 
     /**
-     * Toggle locate for a fixture or group. Locate-on removes running effects on the
-     * target, but the effects tags are NOT invalidated here — the FX WebSocket
-     * subscriptions in fixtureFx.ts / groups.ts already invalidate them when the
-     * engine broadcasts the removal, and a bare tag here would refetch every
-     * per-fixture effects query on each toggle.
+     * Toggle locate for a fixture or group.
+     *
+     * Locate writes programmer entries (owner `locate`) rather than destroying effects:
+     * covering effects are *suppressed* while the locate holds and resume on release. The
+     * effects tags are deliberately not invalidated here — nothing is removed to refetch,
+     * and a bare tag would refetch every per-fixture effects query on each toggle.
      */
     toggleLocate: build.mutation<ToggleLocateResponse, LocateTarget>({
       query: (body) => ({

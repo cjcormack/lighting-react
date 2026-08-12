@@ -1,6 +1,7 @@
 import { ArrowRight, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { ProgrammerIndicator } from './ProgrammerIndicator'
 
 interface ShowBarProps {
   /** Leading "current stack" segment. Rendered only when non-null — Run passes it only when
@@ -107,6 +108,13 @@ export function ShowBar({
         >
           TAP
         </button>
+      </div>
+
+      {/* Programmer tile — renders itself only when the programmer holds something or blind
+          is engaged, so it costs no width during a clean show. It reads its own state, which
+          is why it takes no props from here. */}
+      <div className="flex shrink-0 items-center">
+        <ProgrammerIndicator className="px-2.5 py-2" />
       </div>
 
       {/* Live state — flexes to fill. Dropped entirely at phone widths (the live cue is visible

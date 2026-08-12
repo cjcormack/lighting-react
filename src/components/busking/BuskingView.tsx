@@ -14,6 +14,7 @@ import { ConfigureEffectSheet } from './ConfigureEffectSheet'
 import { PresetEditor } from '@/components/presets/PresetEditor'
 import { FixtureDetailModal } from '@/components/groups/FixtureDetailModal'
 import { useBuskingState, type TargetEffectsData } from './useBuskingState'
+import { programmerClearEntry, useProgrammerRevision } from '@/store/programmer'
 import {
   type BuskingTarget,
   type PropertyButton,
@@ -507,7 +508,15 @@ function EffectPadWrapper({
     [targetEffectsData, setEditingEffect, setConfiguringEffect],
   )
 
-  // Property button bound callbacks
+  // Property button bound callbacks.
+  //
+  // Property pads read the programmer directly (their values stopped being FX instances when
+  // plain statics became programmer values), so they need a subscription to know when to look
+  // again — the RTK Query summary only tracks counters, and re-setting a pad to a different
+  // level leaves the count alone. Subscribing here is enough: EffectPad is not memoised, so a
+  // re-render of this component recomputes every pad's presence and value from live state.
+  useProgrammerRevision()
+
   const getPropertyPresence = useCallback(
     (button: PropertyButton): EffectPresence => {
       return computePropertyPresence(button, targetEffectsData)
@@ -523,30 +532,25 @@ function EffectPadWrapper({
     [getPropertyPresence, togglePropertyEffect, targetEffectsData],
   )
 
+  /**
+   * Long-press a property pad to release it.
+   *
+   * This used to open the underlying `StaticValue` / `StaticSetting` effect's parameter
+   * sheet. Those instances no longer exist — a plain pad write is a programmer value now —
+   * and the sheet's controls (blend mode, beat division, phase) never meant anything for a
+   * flat value anyway. Releasing is the gesture the pad was missing.
+   */
   const handlePropertyLongPress = useCallback(
     (button: PropertyButton) => {
-      const normalizedType = normalizeEffectName(button.effectType)
       for (const data of targetEffectsData) {
-        if (data.target.type === 'group' && data.groupEffects) {
-          const match = data.groupEffects.find(
-            (e) => normalizeEffectName(e.effectType) === normalizedType && e.propertyName === button.propertyName,
-          )
-          if (match) {
-            setEditingEffect({ type: 'group', groupName: data.target.name, effect: match })
-            return
-          }
-        } else if (data.target.type === 'fixture' && data.fixtureDirectEffects) {
-          const match = data.fixtureDirectEffects.find(
-            (e) => normalizeEffectName(e.effectType) === normalizedType && e.propertyName === button.propertyName,
-          )
-          if (match) {
-            setEditingEffect({ type: 'fixture', fixtureKey: data.target.key, effect: match })
-            return
-          }
-        }
+        const target =
+          data.target.type === 'group'
+            ? ({ type: 'group', key: data.target.name } as const)
+            : ({ type: 'fixture', key: data.target.key } as const)
+        programmerClearEntry(target.type, target.key, button.propertyName)
       }
     },
-    [targetEffectsData, setEditingEffect],
+    [targetEffectsData],
   )
 
   const getPropertyValue = useCallback(

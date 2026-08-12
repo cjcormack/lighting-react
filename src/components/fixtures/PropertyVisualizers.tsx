@@ -22,6 +22,7 @@ import {
   usePositionValue,
   useSettingValue,
   useUpdateChannel,
+  useUpdateFixturePosition,
   useUpdateFixtureColour,
 } from '../../hooks/usePropertyValues'
 import { useColourAppearance } from '../../hooks/useColourAppearance'
@@ -69,7 +70,6 @@ export const ColourSwatch = memo(function ColourSwatch({
   // Appearance (hue × perceptual level) drives the swatch; raw channel values
   // (r/g/b/w/a/uv, combinedCss) still feed the picker so it edits true colour.
   const colour = useColourAppearance(property, dimmerProp, SWATCH_FLOOR)
-  const updateChannel = useUpdateChannel()
   const updateColour = useUpdateFixtureColour(property, fixtureKey)
   const { isAnyParked } = usePropertyParkStatus(property)
 
@@ -91,6 +91,21 @@ export const ColourSwatch = memo(function ColourSwatch({
   const setB = useCallback(
     (v: number) => updateColour(colour.r, colour.g, v, colour.w, colour.a, colour.uv),
     [updateColour, colour.r, colour.g, colour.w, colour.a, colour.uv],
+  )
+  // W/A/UV go through `updateColour` too, for the same reason R/G/B do: the programmer
+  // holds one entry for the whole colour, so writing a component on its own would have to
+  // re-freeze the others anyway.
+  const setW = useCallback(
+    (v: number) => updateColour(colour.r, colour.g, colour.b, v, colour.a, colour.uv),
+    [updateColour, colour.r, colour.g, colour.b, colour.a, colour.uv],
+  )
+  const setA = useCallback(
+    (v: number) => updateColour(colour.r, colour.g, colour.b, colour.w, v, colour.uv),
+    [updateColour, colour.r, colour.g, colour.b, colour.w, colour.uv],
+  )
+  const setUv = useCallback(
+    (v: number) => updateColour(colour.r, colour.g, colour.b, colour.w, colour.a, v),
+    [updateColour, colour.r, colour.g, colour.b, colour.w, colour.a],
   )
 
   const swatchElement = (
@@ -177,14 +192,14 @@ export const ColourSwatch = memo(function ColourSwatch({
             <ColourChannelSlider
               label="W"
               value={colour.w ?? 0}
-              onChange={(v) => updateChannel(property.whiteChannel!, v)}
+              onChange={setW}
             />
           )}
           {property.amberChannel && (
             <ColourChannelSlider
               label="A"
               value={colour.a ?? 0}
-              onChange={(v) => updateChannel(property.amberChannel!, v)}
+              onChange={setA}
               className="text-amber-500"
             />
           )}
@@ -192,7 +207,7 @@ export const ColourSwatch = memo(function ColourSwatch({
             <ColourChannelSlider
               label="UV"
               value={colour.uv ?? 0}
-              onChange={(v) => updateChannel(property.uvChannel!, v)}
+              onChange={setUv}
               className="text-purple-400"
             />
           )}
@@ -234,13 +249,15 @@ function ColourChannelSlider({
  */
 export const PositionIndicator = memo(function PositionIndicator({
   property,
+  fixtureKey,
   isEditing = false,
 }: {
   property: PositionPropertyDescriptor
+  fixtureKey?: string
   isEditing?: boolean
 }) {
   const position = usePositionValue(property)
-  const updateChannel = useUpdateChannel()
+  const updatePosition = useUpdateFixturePosition(property, fixtureKey)
   const { isAnyParked } = usePropertyParkStatus(property)
 
   const canEdit = isEditing && !isAnyParked
@@ -255,8 +272,10 @@ export const PositionIndicator = memo(function PositionIndicator({
     const panValue = Math.round(property.panMin + x * (property.panMax - property.panMin))
     const tiltValue = Math.round(property.tiltMin + y * (property.tiltMax - property.tiltMin))
 
-    updateChannel(property.panChannel, Math.max(property.panMin, Math.min(property.panMax, panValue)))
-    updateChannel(property.tiltChannel, Math.max(property.tiltMin, Math.min(property.tiltMax, tiltValue)))
+    updatePosition(
+      Math.max(property.panMin, Math.min(property.panMax, panValue)),
+      Math.max(property.tiltMin, Math.min(property.tiltMax, tiltValue)),
+    )
   }
 
   return (
@@ -304,7 +323,7 @@ export const PositionIndicator = memo(function PositionIndicator({
               min={property.panMin}
               max={property.panMax}
               step={1}
-              onValueChange={([v]) => updateChannel(property.panChannel, v)}
+              onValueChange={([v]) => updatePosition(v, position.tilt)}
               className="flex-1"
             />
             <span className="w-8 text-xs text-right text-muted-foreground">{position.pan}</span>
@@ -316,7 +335,7 @@ export const PositionIndicator = memo(function PositionIndicator({
               min={property.tiltMin}
               max={property.tiltMax}
               step={1}
-              onValueChange={([v]) => updateChannel(property.tiltChannel, v)}
+              onValueChange={([v]) => updatePosition(position.pan, v)}
               className="flex-1"
             />
             <span className="w-8 text-xs text-right text-muted-foreground">{position.tilt}</span>
@@ -332,13 +351,16 @@ export const PositionIndicator = memo(function PositionIndicator({
  */
 export const SliderProperty = memo(function SliderProperty({
   property,
+  fixtureKey,
   isEditing = false,
 }: {
   property: SliderPropertyDescriptor
+  fixtureKey?: string
   isEditing?: boolean
 }) {
   const value = useSliderValue(property)
   const updateChannel = useUpdateChannel()
+  const writeTarget = fixtureKey ? { fixtureKey, propertyName: property.name } : undefined
   const { isAnyParked } = usePropertyParkStatus(property)
 
   const percentage = Math.round(((value - property.min) / (property.max - property.min)) * 100)
@@ -358,7 +380,7 @@ export const SliderProperty = memo(function SliderProperty({
               min={property.min}
               max={property.max}
               step={1}
-              onValueChange={([v]) => updateChannel(property.channel, v)}
+              onValueChange={([v]) => updateChannel(property.channel, v, writeTarget)}
               className="flex-1"
             />
             <span className="w-[4.5rem] text-xs text-right text-muted-foreground whitespace-nowrap">
@@ -388,10 +410,12 @@ export const SliderProperty = memo(function SliderProperty({
  */
 export const SettingProperty = memo(function SettingProperty({
   property,
+  fixtureKey,
   isEditing = false,
   dimmerProp,
 }: {
   property: SettingPropertyDescriptor
+  fixtureKey?: string
   isEditing?: boolean
   dimmerProp?: SliderPropertyDescriptor
 }) {
@@ -407,7 +431,11 @@ export const SettingProperty = memo(function SettingProperty({
   const handleChange = (value: string) => {
     const selectedOption = property.options.find((o) => o.name === value)
     if (selectedOption) {
-      updateChannel(property.channel, selectedOption.level)
+      updateChannel(
+        property.channel,
+        selectedOption.level,
+        fixtureKey ? { fixtureKey, propertyName: property.name } : undefined,
+      )
     }
   }
 
@@ -468,11 +496,18 @@ export function PropertyVisualizer({ property, fixtureKey, isEditing = false, di
     case 'colour':
       return <ColourSwatch property={property} fixtureKey={fixtureKey} isEditing={isEditing} dimmerProp={dimmerProp} />
     case 'position':
-      return <PositionIndicator property={property} isEditing={isEditing} />
+      return <PositionIndicator property={property} fixtureKey={fixtureKey} isEditing={isEditing} />
     case 'slider':
-      return <SliderProperty property={property} isEditing={isEditing} />
+      return <SliderProperty property={property} fixtureKey={fixtureKey} isEditing={isEditing} />
     case 'setting':
-      return <SettingProperty property={property} isEditing={isEditing} dimmerProp={dimmerProp} />
+      return (
+        <SettingProperty
+          property={property}
+          fixtureKey={fixtureKey}
+          isEditing={isEditing}
+          dimmerProp={dimmerProp}
+        />
+      )
   }
 }
 
