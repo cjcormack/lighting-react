@@ -21,6 +21,7 @@ import type {
   UpdateResponse,
 } from '@/store/programmerOps'
 import type { IncludedTarget } from '@/api/programmerWsApi'
+import { describeIncludedTarget, includedTargetKey } from '@/lib/includedTarget'
 
 export interface UpdateDialogProps {
   open: boolean
@@ -88,7 +89,7 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
   // open, flipping it from Mode A to Mode B. Keying on `open` alone left it showing a Mode B
   // frame with no checklist behind it and a permanently disabled button.
   const modeB = !includeTarget
-  const runKey = open ? (modeB ? 'B' : `A:${includeTarget.cueId}`) : null
+  const runKey = open ? includedTargetKey(includeTarget) : null
   const appliedRunKeyRef = useRef<string | null>(null)
   useEffect(() => {
     if (runKey === null) {
@@ -128,7 +129,7 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
           <DialogTitle>Update</DialogTitle>
           <DialogDescription>
             {includeTarget
-              ? `Write your changes back into ${describeTarget(includeTarget)}.`
+              ? `Write your changes back into ${describeIncludedTarget(includeTarget)}.`
               : 'Nothing is included, so these are the cues the programmer is currently overriding.'}
           </DialogDescription>
         </DialogHeader>
@@ -207,11 +208,6 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
       </DialogContent>
     </Dialog>
   )
-}
-
-function describeTarget(target: IncludedTarget): string {
-  const label = [target.cueNumber, target.cueName].filter(Boolean).join(' ')
-  return label !== '' ? `“${label}”` : `cue ${target.cueId}`
 }
 
 function ChecklistView({

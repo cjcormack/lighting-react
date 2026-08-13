@@ -27,6 +27,7 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   'recordProgrammer', // src/components/programmer/RecordSheet.tsx
   'includeCue', // src/components/programmer/IncludeCueSheet.tsx
   'updateProgrammer', // src/components/programmer/UpdateDialog.tsx
+  'recordPalette', // src/components/palettes/RecordPaletteSheet.tsx
 
   // Call site raises its own toast.error()
   'updateProject', // src/routes/ProjectSettings.tsx

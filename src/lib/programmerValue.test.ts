@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
+  isPaletteRefValue,
+  parsePaletteRefUuid,
+  parseProgrammerEntryValue,
   parseProgrammerValue,
   serializeColour,
   serializeLevel,
+  serializePaletteRef,
   serializePosition,
 } from './programmerValue'
+
+/** A well-formed palette uuid, shared by the reference cases below. */
+const PALETTE_UUID = '2f1c9a54-8d3b-4f7e-9a11-6c0de5b47a02'
 
 describe('parseProgrammerValue', () => {
   it('reads slider and setting levels', () => {
@@ -65,13 +72,18 @@ describe('parseProgrammerValue', () => {
   })
 
   it('returns null for values it cannot represent, so callers fall back to live DMX', () => {
-    // "P1" is a palette ref. The store serializes resolved colours today, so this only
-    // arrives once Session 4 lands refs on the wire — until then it must not render as a
-    // guessed colour.
+    // `P1` is the *positional* colour-list ref. It only ever appears inside FX effect params,
+    // which resolve it themselves, so returning null here is correct permanently — not a gap.
     expect(parseProgrammerValue('P1')).toBeNull()
     expect(parseProgrammerValue('')).toBeNull()
     expect(parseProgrammerValue('   ')).toBeNull()
     expect(parseProgrammerValue('1,2,3')).toBeNull()
+  })
+
+  it('returns null for a named-palette reference, because a reference is not a value', () => {
+    // Callers with a whole entry use parseProgrammerEntryValue, which reads the resolved literal
+    // the backend sends alongside. This parser must not invent one.
+    expect(parseProgrammerValue(`ref:${PALETTE_UUID}`)).toBeNull()
   })
 
   it('does not coerce arbitrary words into colours', () => {
@@ -118,5 +130,52 @@ describe('serialization round-trips', () => {
 
   it('omits zero extended channels, matching the backend serializer', () => {
     expect(serializeColour(255, 0, 128)).toBe('#FF0080')
+  })
+})
+
+describe('named-palette references', () => {
+  it('parses a reference to its palette uuid', () => {
+    expect(parsePaletteRefUuid(`ref:${PALETTE_UUID}`)).toBe(PALETTE_UUID)
+    expect(isPaletteRefValue(`ref:${PALETTE_UUID}`)).toBe(true)
+    expect(serializePaletteRef(PALETTE_UUID)).toBe(`ref:${PALETTE_UUID}`)
+  })
+
+  it('tolerates surrounding whitespace and upper-case uuids', () => {
+    expect(parsePaletteRefUuid(`  ref:${PALETTE_UUID.toUpperCase()}  `)).toBe(PALETTE_UUID)
+  })
+
+  it('rejects anything that is not a well-formed reference', () => {
+    // Strict on purpose: a corrupt value must read as "not a reference" rather than as a
+    // reference to nothing, which would render a broken badge instead of falling back.
+    for (const value of ['ref:', 'ref:12', 'ref:not-a-uuid', 'P1', 'P*', '#ff8800', '200', '120,64']) {
+      expect(parsePaletteRefUuid(value), value).toBeNull()
+      expect(isPaletteRefValue(value), value).toBe(false)
+    }
+  })
+
+  it('is not confused with the positional colour-list ref helpers', () => {
+    // colourUtils.isPaletteRef matches `P1`; these two are easy to mix up and impossible to
+    // interchange, which is why they are named differently.
+    expect(isPaletteRefValue('P1')).toBe(false)
+  })
+})
+
+describe('parseProgrammerEntryValue', () => {
+  it('reads a literal entry directly', () => {
+    expect(parseProgrammerEntryValue({ value: '200' })).toEqual({ kind: 'level', value: 200 })
+  })
+
+  it('reads a reference through its resolved literal', () => {
+    // Per target and property — a position palette gives every head a different value, so the
+    // resolved literal cannot be shared across an entry set.
+    expect(
+      parseProgrammerEntryValue({ value: `ref:${PALETTE_UUID}`, resolvedValue: '120,64' }),
+    ).toEqual({ kind: 'position', pan: 120, tilt: 64 })
+  })
+
+  it('returns null for a reference with nothing resolved', () => {
+    // The palette no longer covers this target. Callers fall back to the live wire value rather
+    // than rendering a guess.
+    expect(parseProgrammerEntryValue({ value: `ref:${PALETTE_UUID}` })).toBeNull()
   })
 })

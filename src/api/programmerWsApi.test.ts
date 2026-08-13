@@ -397,7 +397,7 @@ describe('createProgrammerApi', () => {
     // The include target is broadcast, unlike the other programmer replies: the programmer is
     // shared, so a second tab's Update button must offer the same target.
     frame({ type: 'programmer.includeTarget', target: { kind: 'CUE', cueId: 9 } })
-    expect(api.lastIncluded()?.cueId).toBe(9)
+    expect(api.lastIncluded()).toEqual({ kind: 'CUE', cueId: 9 })
 
     frame({ type: 'programmer.includeTarget', target: null })
     expect(api.lastIncluded()).toBeNull()
@@ -442,5 +442,74 @@ describe('createProgrammerApi', () => {
     sub.unsubscribe()
     frame(stateFrame([]))
     expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  it('notifies a key when only the palette name changed', () => {
+    // Guards the entrySignature fields. A palette rename or re-record moves nothing else on the
+    // entry, so if the signature ignores them changedKeys reports nothing and the cell keeps
+    // painting its old value — stale, and indistinguishable from correct.
+    const { conn, frame } = fakeConnection()
+    const api = createProgrammerApi(conn)
+    const seen: string[][] = []
+    api.subscribeToKey('hex-1', 'rgbColour', () => seen.push(['hex-1|rgbColour']))
+
+    const entry = (paletteName: string) => ({
+      targetKey: 'hex-1',
+      propertyName: 'rgbColour',
+      value: 'ref:2f1c9a54-8d3b-4f7e-9a11-6c0de5b47a02',
+      resolvedValue: '#ff8800',
+      paletteUuid: '2f1c9a54-8d3b-4f7e-9a11-6c0de5b47a02',
+      paletteName,
+      paletteResolved: true,
+      owner: 'web',
+      touched: true,
+      owners: ['web'],
+    })
+
+    frame({ type: 'programmer.state', blind: false, entries: [entry('Warm Amber')], channels: [] })
+    const before = seen.length
+    frame({ type: 'programmer.state', blind: false, entries: [entry('Warm Amber 2')], channels: [] })
+    expect(seen.length).toBeGreaterThan(before)
+  })
+
+  it('notifies a key when a reference stops resolving', () => {
+    const { conn, frame } = fakeConnection()
+    const api = createProgrammerApi(conn)
+    let notifications = 0
+    api.subscribeToKey('hex-1', 'rgbColour', () => {
+      notifications += 1
+    })
+
+    const entry = (resolved: boolean) => ({
+      targetKey: 'hex-1',
+      propertyName: 'rgbColour',
+      value: 'ref:2f1c9a54-8d3b-4f7e-9a11-6c0de5b47a02',
+      resolvedValue: resolved ? '#ff8800' : undefined,
+      paletteUuid: '2f1c9a54-8d3b-4f7e-9a11-6c0de5b47a02',
+      paletteResolved: resolved,
+      owner: 'web',
+      touched: true,
+      owners: ['web'],
+    })
+
+    frame({ type: 'programmer.state', blind: false, entries: [entry(true)], channels: [] })
+    const before = notifications
+    frame({ type: 'programmer.state', blind: false, entries: [entry(false)], channels: [] })
+    expect(notifications).toBeGreaterThan(before)
+  })
+
+  it('accepts a PALETTE include target', () => {
+    const { conn, frame } = fakeConnection()
+    const api = createProgrammerApi(conn)
+    frame({
+      type: 'programmer.includeTarget',
+      target: { kind: 'PALETTE', paletteId: 4, paletteName: 'Warm Amber', paletteType: 'COLOUR' },
+    })
+    expect(api.lastIncluded()).toEqual({
+      kind: 'PALETTE',
+      paletteId: 4,
+      paletteName: 'Warm Amber',
+      paletteType: 'COLOUR',
+    })
   })
 })

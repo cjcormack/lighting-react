@@ -19,9 +19,16 @@ import {
  * contribution is gated out of the merge, the staged value exists only in `programmer.state`
  * — the wire values the sheet normally displays still show the layers underneath.
  *
- * Palette refs (`"P1"`) are deliberately not handled: the store keeps `Hard(resolved)` values
- * and serializes the *resolved* colour, so a ref never reaches this parser today. Session 4
- * (palettes as first-class references) is where that changes.
+ * **Neither palette reference form is handled here, for two different reasons.**
+ *
+ * `"P1"` — the positional ordered-colour-list form — only ever appears inside FX effect parameters,
+ * which resolve it themselves against the live list (`colourUtils.ts`). It never reaches this
+ * parser, and returning null for it is correct forever.
+ *
+ * `"ref:{uuid}"` — a named-palette reference — *can* now appear as a programmer entry's or a cue
+ * row's `value`. This parser still returns null for it, deliberately: a reference is not a value.
+ * The backend sends the literal it resolved to separately, so use [parseProgrammerEntryValue] when
+ * you have a whole entry and want something renderable.
  */
 export type ProgrammerParsedValue =
   | { kind: 'level'; value: number }
@@ -91,4 +98,57 @@ export function serializeColour(
   uv = 0,
 ): string {
   return serializeExtendedColour({ hex: rgbToHex(r, g, b), white: w, amber: a, uv })
+}
+
+/**
+ * The prefix marking a named-palette reference in a programmer entry or a stored assignment value.
+ *
+ * Distinct from the positional `P1` form in `components/fx/colourUtils.ts` — that one indexes an
+ * ordered colour list and is matched by `isPaletteRef`/`parsePaletteIndex` there. These two are easy
+ * to confuse and impossible to interchange, hence the different names.
+ */
+export const PALETTE_REF_PREFIX = 'ref:'
+
+const PALETTE_REF_RE = /^ref:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i
+
+/**
+ * The referenced palette's uuid, or null when `value` is not a named-palette reference.
+ *
+ * Returns the **uuid**, which is what the value actually stores — the int `id` is only for REST
+ * paths. Strict about the uuid shape so a corrupt value reads as "not a reference" rather than as a
+ * reference to nothing.
+ */
+export function parsePaletteRefUuid(value: string): string | null {
+  const match = PALETTE_REF_RE.exec(value.trim())
+  return match ? match[1].toLowerCase() : null
+}
+
+/** True when `value` is a named-palette reference. */
+export function isPaletteRefValue(value: string): boolean {
+  return parsePaletteRefUuid(value) !== null
+}
+
+/** The stored value form for a reference to the palette with this uuid. */
+export function serializePaletteRef(paletteUuid: string): string {
+  return `${PALETTE_REF_PREFIX}${paletteUuid}`
+}
+
+/**
+ * Parse whatever a programmer entry should *display* as.
+ *
+ * For a literal entry that is just its value. For a reference it is `resolvedValue` — the literal
+ * the backend resolved the reference to **for this target and property**, which matters because a
+ * position palette legitimately gives every head a different value.
+ *
+ * Returns null when a reference has no resolved value (the palette no longer covers this target), so
+ * callers fall back to the live wire value rather than rendering a guess.
+ */
+export function parseProgrammerEntryValue(entry: {
+  value: string
+  resolvedValue?: string
+}): ProgrammerParsedValue | null {
+  if (isPaletteRefValue(entry.value)) {
+    return entry.resolvedValue ? parseProgrammerValue(entry.resolvedValue) : null
+  }
+  return parseProgrammerValue(entry.value)
 }

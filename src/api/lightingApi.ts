@@ -22,6 +22,7 @@ import {createBootStatusWsApi, BootStatusWsApi} from "./bootStatusWsApi";
 import {createSurfacesWsApi, SurfacesWsApi} from "./surfacesApi";
 import {createCloudSyncWsApi, CloudSyncWsApi} from "./cloudSyncWsApi";
 import {createProgrammerApi, ProgrammerApi} from "./programmerWsApi";
+import {createPalettesWsApi, PalettesWsApi} from "./palettesWsApi";
 
 interface LightingApi {
   universes: UniversesApi
@@ -34,6 +35,7 @@ interface LightingApi {
   groups: GroupsApi
   fx: FxApi
   fxPresets: FxPresetsWsApi
+  palettes: PalettesWsApi
   cues: CuesWsApi
   cueEdit: CueEditWsApi
   cueStacks: CueStacksWsApi
@@ -87,6 +89,7 @@ function createLightingApi(): LightingApi {
   const cloudSyncWsApi = createCloudSyncWsApi(connection)
   const bootStatusWsApi = createBootStatusWsApi(connection)
   const programmerApi = createProgrammerApi(connection)
+  const palettesWsApi = createPalettesWsApi(connection)
 
   return {
     universes: universesApi,
@@ -99,6 +102,7 @@ function createLightingApi(): LightingApi {
     groups: groupsApi,
     fx: fxApi,
     fxPresets: fxPresetsWsApi,
+    palettes: palettesWsApi,
     cues: cuesWsApi,
     cueEdit: cueEditWsApi,
     cueStacks: cueStacksWsApi,

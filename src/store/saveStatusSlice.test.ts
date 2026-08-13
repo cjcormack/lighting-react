@@ -197,6 +197,7 @@ describe('NON_SAVE_ENDPOINTS', () => {
       import('./oauthGithub'),
       import('./ai'),
       import('./programmerOps'),
+      import('./palettes'),
       import('./perf'),
       import('./status'),
     ])

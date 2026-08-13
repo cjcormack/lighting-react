@@ -28,6 +28,7 @@ import { useActiveEffectsQuery } from '../../store/fixtureFx'
 import { IncludeCueSheet } from './IncludeCueSheet'
 import { RecordSheet } from './RecordSheet'
 import { UpdateDialog } from './UpdateDialog'
+import { describeIncludedTarget } from '@/lib/includedTarget'
 
 /** Fade options for Clear and for entering/leaving Blind, in milliseconds. */
 const FADE_OPTIONS = [
@@ -93,7 +94,7 @@ export function ProgrammerToolbar() {
       Icon: Upload,
       disabled: !hasContent || !projectId,
       tooltip: includeTarget
-        ? `Write your changes back into ${includeTarget.cueName ?? `cue ${includeTarget.cueId}`}`
+        ? `Write your changes back into ${describeIncludedTarget(includeTarget)}`
         : hasContent
           ? 'Show the cues the programmer is overriding'
           : 'The programmer is empty — nothing to update',

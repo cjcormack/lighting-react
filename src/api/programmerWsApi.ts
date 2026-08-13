@@ -1,5 +1,6 @@
 import type { InternalApiConnection } from './internalApi'
 import type { Subscription } from './subscription'
+import type { PaletteType } from './palettesApi'
 
 /**
  * Client for the backend's Layer-2 programmer (`programmer.*` WS ops plus the
@@ -28,8 +29,30 @@ export type ProvenanceSource = 'PARKED' | 'PROGRAMMER' | 'EFFECT' | 'CUE'
 export interface ProgrammerEntry {
   targetKey: string
   propertyName: string
-  /** Canonical assignment string — see `src/lib/programmerValue.ts`. */
+  /**
+   * Canonical assignment string, **or** `ref:{paletteUuid}` when this entry references a named
+   * palette — the same grammar a stored cue row uses. See `src/lib/programmerValue.ts`.
+   */
   value: string
+  /**
+   * For a `ref:` entry, the literal it currently resolves to **for this target and property**.
+   * Undefined otherwise, and also when the palette no longer covers this target.
+   *
+   * Per-target rather than per-palette, which is load-bearing: a position palette gives every head
+   * a different value, so there is no single resolved literal for a reference.
+   */
+  resolvedValue?: string
+  /** Set on a `ref:` entry: the referenced palette, denormalised so a cell needs no join. */
+  paletteUuid?: string
+  paletteId?: number
+  paletteName?: string
+  paletteType?: PaletteType
+  /**
+   * False when the palette exists but no longer covers this target. The entry keeps its last
+   * resolved value — silently dropping an operator's programmer entry mid-show would be worse —
+   * and the sheet marks it broken.
+   */
+  paletteResolved?: boolean
   /** Winning slot's owner: `web` | `surface` | `flash` | `locate` | `unpark` | `preset:{id}`. */
   owner: string
   /** Sticky operator-edit flag. False marks a mechanical hand-down (unpark). */
@@ -58,17 +81,28 @@ export interface ProvenanceEntry {
 }
 
 /**
- * What Include last pulled into the programmer, and therefore what a bare Update writes back
- * to. Null means nothing is staged from a cue, so Update falls through to the Mode B checklist.
+ * What Include last pulled into the programmer, and therefore what a bare Update writes back to.
+ * Null means nothing is staged, so Update falls through to the Mode B checklist.
+ *
+ * A discriminated union rather than one shape with nullable halves: a cue target has no palette and
+ * vice versa, and the compiler should say so at every read site. Use `describeIncludedTarget` in
+ * `src/lib/includedTarget.ts` for anything user-facing so the wording can't drift between the
+ * toolbar, the Update dialog and the collapsed pane.
  */
-export interface IncludedTarget {
-  /** `CUE` today; palettes arrive in Session 4. */
-  kind: string
-  cueId: number
-  cueStackId?: number
-  cueName?: string
-  cueNumber?: string
-}
+export type IncludedTarget =
+  | {
+      kind: 'CUE'
+      cueId: number
+      cueStackId?: number
+      cueName?: string
+      cueNumber?: string
+    }
+  | {
+      kind: 'PALETTE'
+      paletteId: number
+      paletteName?: string
+      paletteType?: PaletteType
+    }
 
 /** The client-side view of the programmer, rebuilt from each `programmer.state` snapshot. */
 export interface ProgrammerState {
@@ -366,8 +400,24 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
   // JSON, not a delimiter-joined string: group names and palette-ref values are free text,
   // so any separator character could also occur inside a field and make two different
   // entries compare equal.
+  //
+  // Every field a cell renders has to be in here. The palette fields especially: without them a
+  // rename, a re-record, or a reference going unresolved changes nothing observable, `changedKeys`
+  // reports no change, and the cell keeps painting the old colour indefinitely — a stale cell that
+  // looks perfectly fine.
   const entrySignature = (e: ProgrammerEntry) =>
-    JSON.stringify([e.value, e.owner, e.touched, e.sourceGroup ?? null, e.owners])
+    JSON.stringify([
+      e.value,
+      e.resolvedValue ?? null,
+      e.paletteUuid ?? null,
+      e.paletteName ?? null,
+      e.paletteType ?? null,
+      e.paletteResolved ?? null,
+      e.owner,
+      e.touched,
+      e.sourceGroup ?? null,
+      e.owners,
+    ])
 
   const provenanceSignature = (p: ProvenanceEntry) =>
     JSON.stringify([p.source, p.cueId ?? null, p.cueStackId ?? null, p.effectId ?? null])
