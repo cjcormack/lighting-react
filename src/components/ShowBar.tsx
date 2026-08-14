@@ -2,6 +2,7 @@ import { ArrowRight, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { ProgrammerIndicator } from './ProgrammerIndicator'
+import { SpeedMastersStrip } from './SpeedMastersStrip'
 
 interface ShowBarProps {
   /** Leading "current stack" segment. Rendered only when non-null — Run passes it only when
@@ -91,11 +92,12 @@ export function ShowBar({
         </span>
       </button>
 
-      {/* BPM tile */}
+      {/* BPM tile — master 1, the global tempo. The strip beside it renders masters 2..N;
+          this tile is deliberately the M1 readout rather than duplicating it there. */}
       <div className="flex shrink-0 items-stretch rounded-md border bg-card overflow-hidden">
         <div className="flex flex-col justify-start gap-px px-3 py-1.5">
           <span className="text-[9px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
-            BPM
+            M1 · BPM
           </span>
           <span className="font-mono text-lg font-bold leading-none text-foreground">
             {bpm ?? '—'}
@@ -109,6 +111,11 @@ export function ShowBar({
           TAP
         </button>
       </div>
+
+      {/* Speed masters 2..N — self-contained like the programmer tile below; degrades to a
+          single sticky-selected tile at mid widths and disappears at phone widths (the M1
+          tile above survives everywhere). */}
+      <SpeedMastersStrip />
 
       {/* Programmer tile — renders itself only when the programmer holds something or blind
           is engaged, so it costs no width during a clean show. It reads its own state, which

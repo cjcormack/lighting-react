@@ -44,6 +44,8 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
     clearSelection,
     defaultBeatDivision,
     setDefaultBeatDivision,
+    defaultSpeedMasterUuid,
+    setDefaultSpeedMasterUuid,
     effectsByCategory,
     computePresence,
     toggleEffect,
@@ -302,6 +304,8 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
               toggleEffect={toggleEffect}
               defaultBeatDivision={defaultBeatDivision}
               onBeatDivisionChange={setDefaultBeatDivision}
+              defaultSpeedMasterUuid={defaultSpeedMasterUuid}
+              onSpeedMasterChange={setDefaultSpeedMasterUuid}
               propertyButtons={propertyButtons}
               computePropertyPresence={computePropertyPresence}
               togglePropertyEffect={togglePropertyEffect}
@@ -346,6 +350,8 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
             toggleEffect={toggleEffect}
             defaultBeatDivision={defaultBeatDivision}
             onBeatDivisionChange={setDefaultBeatDivision}
+            defaultSpeedMasterUuid={defaultSpeedMasterUuid}
+            onSpeedMasterChange={setDefaultSpeedMasterUuid}
             propertyButtons={propertyButtons}
             computePropertyPresence={computePropertyPresence}
             togglePropertyEffect={togglePropertyEffect}
@@ -389,6 +395,7 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
       <ConfigureEffectSheet
         effect={configuringEffect}
         defaultBeatDivision={defaultBeatDivision}
+        defaultSpeedMasterUuid={defaultSpeedMasterUuid}
         showDistribution={showDistribution}
         showElementMode={hasMultiElementTarget}
         extendedChannels={extendedChannels}
@@ -429,6 +436,8 @@ function EffectPadWrapper({
   toggleEffect,
   defaultBeatDivision,
   onBeatDivisionChange,
+  defaultSpeedMasterUuid,
+  onSpeedMasterChange,
   propertyButtons,
   computePropertyPresence,
   togglePropertyEffect,
@@ -450,6 +459,8 @@ function EffectPadWrapper({
   toggleEffect: (effect: EffectLibraryEntry, presence: EffectPresence, data: TargetEffectsData[]) => Promise<void>
   defaultBeatDivision: number
   onBeatDivisionChange: (value: number) => void
+  defaultSpeedMasterUuid: string | null
+  onSpeedMasterChange: (masterUuid: string) => void
   propertyButtons: PropertyButton[]
   computePropertyPresence: (button: PropertyButton, data: TargetEffectsData[]) => EffectPresence
   togglePropertyEffect: (button: PropertyButton, presence: EffectPresence, data: TargetEffectsData[], settingLevel?: number) => Promise<void>
@@ -581,6 +592,8 @@ function EffectPadWrapper({
       currentProjectId={currentProjectId}
       defaultBeatDivision={defaultBeatDivision}
       onBeatDivisionChange={onBeatDivisionChange}
+      defaultSpeedMasterUuid={defaultSpeedMasterUuid}
+      onSpeedMasterChange={onSpeedMasterChange}
       propertyButtons={propertyButtons}
       getPropertyPresence={getPropertyPresence}
       onPropertyToggle={handlePropertyToggle}

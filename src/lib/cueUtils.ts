@@ -80,6 +80,11 @@ export function buildCueInput(cue: Cue): CueInput {
       intervalMs: pa.intervalMs,
       randomWindowMs: pa.randomWindowMs,
       sortOrder: pa.sortOrder,
+      // Rebuilt field-by-field (unlike adHocEffects' spread) because the detail row carries
+      // presetName, which the input type must not. The cost of that shape is that every new
+      // field must be added HERE too, or every inline cue edit silently strips it — exactly
+      // what happened to nothing yet, and what a regression test now pins for this one.
+      speedMasterUuid: pa.speedMasterUuid,
     })),
     adHocEffects: cue.adHocEffects.map((e) => ({ ...e })),
     propertyAssignments: cue.propertyAssignments.map((a) => ({ ...a })),

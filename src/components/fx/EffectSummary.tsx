@@ -9,6 +9,7 @@ import {
   getElementFilterLabel,
 } from './fxConstants'
 import { resolveColourToHex, resolveColourWithPalette } from './colourUtils'
+import { SpeedMasterChip } from './SpeedMasterChip'
 import type { EffectSummaryData } from './effectSummaryTypes'
 
 export interface EffectSummaryProps {
@@ -58,6 +59,8 @@ export function EffectSummary({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="font-medium truncate">{effect.effectType}</span>
+          {/* Only rendered when the effect runs on a master other than M1. */}
+          <SpeedMasterChip speedMasterUuid={effect.speedMasterUuid} />
           {badge && (
             <Badge variant="outline" className="text-[10px] leading-tight px-1 py-0 shrink-0">
               {badge}

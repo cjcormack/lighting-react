@@ -78,6 +78,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
   const [elementMode, setElementMode] = useState<ElementMode>('PER_FIXTURE')
   const [elementFilter, setElementFilter] = useState('ALL')
   const [stepTiming, setStepTiming] = useState(false)
+  const [speedMasterUuid, setSpeedMasterUuid] = useState<string | null>(null)
   const [selectedSettingProp, setSelectedSettingProp] = useState<string | null>(null)
   const [selectedSliderProp, setSelectedSliderProp] = useState<string | null>(null)
 
@@ -244,6 +245,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
       setSelectedSliderProp(mode.effect.propertyName ?? null)
 
       setStepTiming(mode.effect.stepTiming ?? false)
+      setSpeedMasterUuid(mode.effect.speedMasterUuid ?? null)
 
       if (target.type === 'group' && 'distribution' in mode.effect) {
         setDistributionStrategy(mode.effect.distribution)
@@ -266,6 +268,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
       setElementMode('PER_FIXTURE')
       setElementFilter('ALL')
       setStepTiming(false)
+      setSpeedMasterUuid(null)
       setSelectedSettingProp(null)
       setSelectedSliderProp(null)
     }
@@ -304,6 +307,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
             phaseOffset,
             parameters,
             stepTiming,
+            ...(speedMasterUuid != null ? { speedMasterUuid } : {}),
             ...(fixtureIsMultiHead ? { distributionStrategy } : {}),
             ...filterPayload,
           },
@@ -319,6 +323,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
           phaseOffset,
           parameters,
           stepTiming,
+          ...(speedMasterUuid != null ? { speedMasterUuid } : {}),
           ...(fixtureIsMultiHead ? { distributionStrategy } : {}),
           ...filterPayload,
         })
@@ -340,6 +345,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
             parameters,
             distributionStrategy,
             stepTiming,
+            ...(speedMasterUuid != null ? { speedMasterUuid } : {}),
             ...(hasMultiElementMembers ? { elementMode } : {}),
             ...filterPayload,
           },
@@ -355,6 +361,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
           phaseOffset,
           parameters,
           stepTiming,
+          ...(speedMasterUuid != null ? { speedMasterUuid } : {}),
           ...(hasMultiElementMembers ? { elementMode } : {}),
           ...filterPayload,
         })
@@ -422,6 +429,8 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
               extendedChannels={selectedEffect?.category === 'colour' ? extendedChannels : undefined}
               stepTiming={stepTiming}
               onStepTimingChange={setStepTiming}
+              speedMasterUuid={speedMasterUuid}
+              onSpeedMasterChange={setSpeedMasterUuid}
             />
           )}
         </SheetBody>

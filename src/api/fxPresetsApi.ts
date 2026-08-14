@@ -14,6 +14,8 @@ export interface FxPresetEffect {
   elementFilter: string | null
   stepTiming: boolean | null
   parameters: Record<string, string>
+  /** Speed master this effect subscribes to, as the master's uuid (null → master 1). */
+  speedMasterUuid?: string | null
 }
 
 // Unlike `CuePropertyAssignment` these have no target fields — targets come from the

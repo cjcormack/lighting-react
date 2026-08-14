@@ -2,6 +2,6 @@ import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react"
 
 export const restApi = createApi({
   baseQuery: fetchBaseQuery({ baseUrl: '/api/rest' }),
-  tagTypes: ['Channel', 'Fixture', 'Script', 'Project', 'ProjectList', 'GroupList', 'GroupActiveEffects', 'FixtureEffects', 'FxLibrary', 'FxPreset', 'Palette', 'PaletteList', 'Cue', 'CueList', 'CueStackList', 'CueSlotList', 'AiConversation', 'Patch', 'UniverseConfig', 'ProgramState', 'ControlSurfaceType', 'SurfaceBinding', 'PerfMidi', 'Install', 'CloudSyncConfig', 'CloudSyncStatus', 'CloudSyncLog', 'CloudSyncActivity', 'CloudSyncConflicts', 'OAuthIdentity', 'OAuthRepos', 'Rigging', 'StageRegion', 'PromptBook', 'BootStatus', 'Locate'],
+  tagTypes: ['Channel', 'Fixture', 'Script', 'Project', 'ProjectList', 'GroupList', 'GroupActiveEffects', 'FixtureEffects', 'FxLibrary', 'FxPreset', 'Palette', 'PaletteList', 'SpeedMaster', 'SpeedMasterList', 'Cue', 'CueList', 'CueStackList', 'CueSlotList', 'AiConversation', 'Patch', 'UniverseConfig', 'ProgramState', 'ControlSurfaceType', 'SurfaceBinding', 'PerfMidi', 'Install', 'CloudSyncConfig', 'CloudSyncStatus', 'CloudSyncLog', 'CloudSyncActivity', 'CloudSyncConflicts', 'OAuthIdentity', 'OAuthRepos', 'Rigging', 'StageRegion', 'PromptBook', 'BootStatus', 'Locate'],
   endpoints: () => ({}),
 })

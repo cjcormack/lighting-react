@@ -27,6 +27,8 @@ export interface FixtureDirectEffect {
   stepTiming: boolean
   presetId: number | null
   cueId: number | null
+  /** Speed master this effect subscribes to (null → master 1). */
+  speedMasterUuid?: string | null
 }
 
 export interface FixtureIndirectEffect {
@@ -42,6 +44,8 @@ export interface FixtureIndirectEffect {
   parameters: Record<string, string>
   distributionStrategy: string
   stepTiming: boolean
+  /** Speed master this effect subscribes to (null → master 1). */
+  speedMasterUuid?: string | null
 }
 
 export interface FixtureEffects {
@@ -112,6 +116,8 @@ export interface AddFixtureFxRequest {
   distributionStrategy?: string
   elementFilter?: string
   stepTiming?: boolean
+  /** Speed master to subscribe to, as the master's uuid (omitted → master 1). */
+  speedMasterUuid?: string
   /**
    * Create the effect in the programmer's reserved priority band, so it composes *on top of*
    * programmer values instead of being suppressed by them, and Clear sweeps it with them.
@@ -148,6 +154,8 @@ export interface ActiveEffect {
   programmerOwned: boolean
   /** Fade envelope in [0, 1]; the effect's output is scaled by this before blending. */
   intensityMultiplier: number
+  /** Speed master this effect subscribes to (null → master 1). */
+  speedMasterUuid: string | null
 }
 
 export interface UpdateFxRequest {
@@ -159,6 +167,11 @@ export interface UpdateFxRequest {
   distributionStrategy?: string
   elementFilter?: string
   stepTiming?: boolean
+  /**
+   * Reassign the effect's speed master (omitted = no change, like every other field). The
+   * picker always sends a concrete uuid — master 1's uuid means "back to the default".
+   */
+  speedMasterUuid?: string
 }
 
 // === RTK Query Endpoints ===

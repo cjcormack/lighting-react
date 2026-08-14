@@ -3,6 +3,7 @@ import { Bookmark, Layers, LayoutGrid } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { EFFECT_CATEGORY_INFO } from './fxConstants'
 import { EffectSummary } from './EffectSummary'
+import { SpeedMasterChip } from './SpeedMasterChip'
 import type { EffectSummaryData } from './effectSummaryTypes'
 
 export interface PresetApplicationSummaryProps {
@@ -10,6 +11,8 @@ export interface PresetApplicationSummaryProps {
   presetId: number
   effects: EffectSummaryData[]
   targets: { type: 'group' | 'fixture'; key: string }[]
+  /** Per-application speed-master override (null → each effect follows its own master). */
+  speedMasterUuid?: string | null
   onClick?: () => void
   actions?: React.ReactNode
   palette?: string[]
@@ -21,6 +24,7 @@ export function PresetApplicationSummary({
   presetId,
   effects,
   targets,
+  speedMasterUuid,
   onClick,
   actions,
   palette,
@@ -45,6 +49,8 @@ export function PresetApplicationSummary({
             <span className="text-sm font-medium truncate">
               {presetName ?? `Preset #${presetId}`}
             </span>
+            {/* The application-level override, distinct from any per-effect chips below. */}
+            <SpeedMasterChip speedMasterUuid={speedMasterUuid} />
             {categories.map((cat) => {
               const info = EFFECT_CATEGORY_INFO[cat]
               if (!info) return null

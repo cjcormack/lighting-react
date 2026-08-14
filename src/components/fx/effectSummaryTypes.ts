@@ -26,6 +26,12 @@ export interface EffectSummaryData {
   parameters: Record<string, string>
   /** Parameter definitions from effect library — used to determine param types for colour swatch rendering. */
   parameterDefs?: EffectParameterDef[]
+  /**
+   * Speed master this effect subscribes to (null → master 1). Every adapter below must
+   * carry it — an adapter that drops it renders the effect as master-1 in summaries even
+   * though it runs elsewhere.
+   */
+  speedMasterUuid: string | null
 }
 
 // ─── Category inference ────────────────────────────────────────────────────
@@ -85,6 +91,7 @@ export function fromPresetEffect(
     elementFilter: e.elementFilter,
     parameters: e.parameters,
     parameterDefs: lookupParameterDefs(e.effectType, library),
+    speedMasterUuid: e.speedMasterUuid ?? null,
   }
 }
 
@@ -105,6 +112,7 @@ export function fromCueAdHocEffect(
     elementFilter: e.elementFilter,
     parameters: e.parameters,
     parameterDefs: lookupParameterDefs(e.effectType, library),
+    speedMasterUuid: e.speedMasterUuid ?? null,
   }
 }
 
@@ -125,6 +133,7 @@ export function fromFixtureDirectEffect(
     elementFilter: e.elementFilter,
     parameters: e.parameters,
     parameterDefs: lookupParameterDefs(e.effectType, library),
+    speedMasterUuid: e.speedMasterUuid ?? null,
   }
 }
 
@@ -145,6 +154,7 @@ export function fromFixtureIndirectEffect(
     elementFilter: null,
     parameters: e.parameters,
     parameterDefs: lookupParameterDefs(e.effectType, library),
+    speedMasterUuid: e.speedMasterUuid ?? null,
   }
 }
 
@@ -165,5 +175,6 @@ export function fromGroupActiveEffect(
     elementFilter: e.elementFilter,
     parameters: e.parameters,
     parameterDefs: lookupParameterDefs(e.effectType, library),
+    speedMasterUuid: e.speedMasterUuid ?? null,
   }
 }

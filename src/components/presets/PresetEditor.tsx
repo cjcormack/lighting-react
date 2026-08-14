@@ -42,6 +42,7 @@ import { CuePaletteEditor } from '@/components/cues/CuePaletteEditor'
 import { EffectCategoryPicker } from '@/components/fx/EffectCategoryPicker'
 import { EffectTypePicker } from '@/components/fx/EffectTypePicker'
 import { EffectParameterForm } from '@/components/fx/EffectParameterForm'
+import { SpeedMasterChip } from '@/components/fx/SpeedMasterChip'
 import { detectExtendedChannels } from '@/components/fx/colourUtils'
 import {
   BEAT_DIVISION_OPTIONS,
@@ -554,6 +555,7 @@ export function PresetEditor({
                       </span>
                     )}
                     <div className="ml-auto flex items-center gap-1.5 shrink-0">
+                      <SpeedMasterChip speedMasterUuid={effect.speedMasterUuid} />
                       <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                         {closestBeat.label}
                       </Badge>
@@ -692,6 +694,10 @@ export function PresetEditor({
             stepTiming={effectDraft.stepTiming ?? false}
             onStepTimingChange={(v) =>
               setEffectDraft((d) => (d ? { ...d, stepTiming: v || null } : d))
+            }
+            speedMasterUuid={effectDraft.speedMasterUuid ?? null}
+            onSpeedMasterChange={(v) =>
+              setEffectDraft((d) => (d ? { ...d, speedMasterUuid: v } : d))
             }
             palette={palette}
           />

@@ -43,6 +43,9 @@ export interface TargetEffectsData {
 export function useBuskingState() {
   const [selectedTargets, setSelectedTargets] = useState<Map<string, BuskingTarget>>(new Map())
   const [defaultBeatDivision, setDefaultBeatDivision] = useState(1.0)
+  // Pad-wide default master (uuid; null → master 1). One-tap applies and the configure
+  // sheet's starting value both take it, so a busk can be pinned to M2 wholesale.
+  const [defaultSpeedMasterUuid, setDefaultSpeedMasterUuid] = useState<string | null>(null)
   const [editingEffect, setEditingEffect] = useState<ActiveEffectContext | null>(null)
 
   const { data: library } = useEffectLibraryQuery()
@@ -428,6 +431,7 @@ export function useBuskingState() {
                   distribution: 'LINEAR' as DistributionStrategy,
                   phaseOffset: 0,
                   parameters: { ...defaults },
+                  ...(defaultSpeedMasterUuid != null ? { speedMasterUuid: defaultSpeedMasterUuid } : {}),
                   programmerOwned: true,
                 }).unwrap(),
               )
@@ -442,6 +446,7 @@ export function useBuskingState() {
                   startOnBeat: true,
                   phaseOffset: 0,
                   parameters: { ...defaults },
+                  ...(defaultSpeedMasterUuid != null ? { speedMasterUuid: defaultSpeedMasterUuid } : {}),
                   programmerOwned: true,
                 }).unwrap(),
               )
@@ -451,7 +456,7 @@ export function useBuskingState() {
         await Promise.all(additions).catch(ignoreReportedError)
       }
     },
-    [defaultBeatDivision, resolveProperty, addFixtureFx, removeFx, applyGroupFx, removeGroupFx],
+    [defaultBeatDivision, defaultSpeedMasterUuid, resolveProperty, addFixtureFx, removeFx, applyGroupFx, removeGroupFx],
   )
 
   const applyEffectWithParams = useCallback(
@@ -466,6 +471,7 @@ export function useBuskingState() {
         elementMode?: string
         stepTiming?: boolean
         parameters: Record<string, string>
+        speedMasterUuid?: string
       },
     ) => {
       const additions: Promise<unknown>[] = []
@@ -487,6 +493,7 @@ export function useBuskingState() {
               programmerOwned: true,
               ...(params.elementMode ? { elementMode: params.elementMode as ElementMode } : {}),
               ...(params.stepTiming !== undefined ? { stepTiming: params.stepTiming } : {}),
+              ...(params.speedMasterUuid != null ? { speedMasterUuid: params.speedMasterUuid } : {}),
             }).unwrap(),
           )
         } else {
@@ -503,6 +510,7 @@ export function useBuskingState() {
               distributionStrategy: params.distribution,
               programmerOwned: true,
               ...(params.stepTiming !== undefined ? { stepTiming: params.stepTiming } : {}),
+              ...(params.speedMasterUuid != null ? { speedMasterUuid: params.speedMasterUuid } : {}),
             }).unwrap(),
           )
         }
@@ -568,6 +576,10 @@ export function useBuskingState() {
     // Beat division
     defaultBeatDivision,
     setDefaultBeatDivision,
+
+    // Pad-wide default speed master
+    defaultSpeedMasterUuid,
+    setDefaultSpeedMasterUuid,
 
     // Effect data
     effectsByCategory,

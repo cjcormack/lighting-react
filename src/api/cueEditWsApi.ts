@@ -52,6 +52,8 @@ export interface CueEditAddPresetApplicationOutgoing {
   delayMs?: number | null
   intervalMs?: number | null
   randomWindowMs?: number | null
+  /** Per-application speed-master override (omitted → each preset effect's own → master 1). */
+  speedMasterUuid?: string | null
 }
 
 export interface CueEditAddAdHocEffectOutgoing {
@@ -75,6 +77,8 @@ export interface CueEditAddAdHocEffectOutgoing {
     intervalMs?: number | null
     randomWindowMs?: number | null
     sortOrder?: number
+    /** Speed master this effect subscribes to, as the master's uuid (omitted → master 1). */
+    speedMasterUuid?: string | null
   }
 }
 

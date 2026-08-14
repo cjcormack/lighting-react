@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { formatFadeDuration, parseFadeDuration } from './cueUtils'
+import { buildCueInput, formatFadeDuration, parseFadeDuration } from './cueUtils'
+import type { Cue } from '@/api/cuesApi'
 
 describe('parseFadeDuration', () => {
   it('reads an explicit unit', () => {
@@ -44,5 +45,57 @@ describe('parseFadeDuration', () => {
     }
     expect(formatFadeDuration(null)).toBe('')
     expect(formatFadeDuration(0)).toBe('')
+  })
+})
+
+describe('buildCueInput', () => {
+  /**
+   * `buildCueInput` rebuilds `presetApplications` and `triggers` field-by-field (to strip
+   * response-only fields like `presetName`), which means a field missing from that rebuild
+   * is silently dropped on *every inline cue edit* — the change appears to save and the
+   * data quietly vanishes. This pins the speed-master override against that failure mode.
+   */
+  it('carries a preset application speed-master override through the rebuild', () => {
+    const cue: Cue = {
+      id: 1,
+      name: 'open',
+      palette: [],
+      updateGlobalPalette: false,
+      presetApplications: [
+        {
+          presetId: 7,
+          presetName: 'warm-pulse',
+          targets: [{ type: 'group', key: 'front-wash' }],
+          delayMs: null,
+          intervalMs: null,
+          randomWindowMs: null,
+          sortOrder: 0,
+          speedMasterUuid: 'aaaaaaaa-0000-0000-0000-000000000002',
+        },
+      ],
+      adHocEffects: [],
+      propertyAssignments: [],
+      triggers: [],
+      cueStackId: 1,
+      cueStackName: 'show',
+      sortOrder: 0,
+      autoAdvance: false,
+      autoAdvanceDelayMs: null,
+      fadeDurationMs: null,
+      fadeCurve: 'LINEAR',
+      cueNumber: null,
+      cueNumberAuto: true,
+      notes: null,
+      cueType: 'STANDARD',
+      canEdit: true,
+      canDelete: true,
+    }
+
+    const input = buildCueInput(cue)
+    expect(input.presetApplications[0].speedMasterUuid).toBe(
+      'aaaaaaaa-0000-0000-0000-000000000002',
+    )
+    // And the response-only field is stripped, which is why the rebuild exists at all.
+    expect('presetName' in input.presetApplications[0]).toBe(false)
   })
 })

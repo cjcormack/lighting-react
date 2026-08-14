@@ -18,6 +18,7 @@ import type { EffectLibraryEntry, EffectParameterDef } from '@/store/fixtureFx'
 import type { SettingOption, SettingPropertyDescriptor, SliderPropertyDescriptor } from '@/store/fixtures'
 import { FxColourPicker } from './FxColourPicker'
 import { FxColourListPicker } from './FxColourListPicker'
+import { SpeedMasterSelect } from './SpeedMasterSelect'
 
 interface EffectParameterFormProps {
   effect: EffectLibraryEntry
@@ -59,6 +60,14 @@ interface EffectParameterFormProps {
   onStepTimingChange?: (v: boolean) => void
   /** Override palette for colour pickers (e.g. cue palette). */
   palette?: string[]
+  /**
+   * The effect's speed master (uuid; null → master 1). The picker renders only when the
+   * change callback is supplied — surfaces that can't persist the field don't show it.
+   * Sits beside Speed rather than under Advanced: which tempo bus an effect follows is a
+   * performance control, not a tuning detail.
+   */
+  speedMasterUuid?: string | null
+  onSpeedMasterChange?: (masterUuid: string) => void
 }
 
 export function EffectParameterForm({
@@ -95,6 +104,8 @@ export function EffectParameterForm({
   stepTiming,
   onStepTimingChange,
   palette,
+  speedMasterUuid,
+  onSpeedMasterChange,
 }: EffectParameterFormProps) {
   const [showAdvanced, setShowAdvanced] = useState(false)
 
@@ -150,6 +161,11 @@ export function EffectParameterForm({
           ))}
         </ToggleGroup>
       </div>
+
+      {/* Speed master — which tempo bus the effect follows */}
+      {onSpeedMasterChange && (
+        <SpeedMasterSelect value={speedMasterUuid} onChange={onSpeedMasterChange} />
+      )}
 
       {/* Step timing (multi-head fixtures only) */}
       {showDistribution && stepTiming !== undefined && onStepTimingChange && (

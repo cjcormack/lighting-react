@@ -54,6 +54,7 @@ export function ActiveEffectSheet({ context, onClose }: ActiveEffectSheetProps) 
   const [parameters, setParameters] = useState<Record<string, string>>({})
   const [distributionStrategy, setDistributionStrategy] = useState('LINEAR')
   const [stepTiming, setStepTiming] = useState(false)
+  const [speedMasterUuid, setSpeedMasterUuid] = useState<string | null>(null)
   const [elementMode, setElementMode] = useState<ElementMode>('PER_FIXTURE')
 
   const selectedEffect = useMemo(() => {
@@ -104,6 +105,7 @@ export function ActiveEffectSheet({ context, onClose }: ActiveEffectSheetProps) 
     setPhaseOffset(effect.phaseOffset)
     setParameters({ ...effect.parameters })
     setStepTiming(context.effect.stepTiming ?? false)
+    setSpeedMasterUuid(context.effect.speedMasterUuid ?? null)
     if (context.type === 'group') {
       setDistributionStrategy(context.effect.distribution)
       setElementMode(context.effect.elementMode ?? 'PER_FIXTURE')
@@ -121,6 +123,7 @@ export function ActiveEffectSheet({ context, onClose }: ActiveEffectSheetProps) 
       blendMode,
       phaseOffset,
       parameters,
+      ...(speedMasterUuid != null ? { speedMasterUuid } : {}),
     }
 
     if (context.type === 'group') {
@@ -216,6 +219,8 @@ export function ActiveEffectSheet({ context, onClose }: ActiveEffectSheetProps) 
               extendedChannels={selectedEffect?.category === 'colour' ? extendedChannels : undefined}
               stepTiming={stepTiming}
               onStepTimingChange={setStepTiming}
+              speedMasterUuid={speedMasterUuid}
+              onSpeedMasterChange={setSpeedMasterUuid}
             />
           )}
         </SheetBody>

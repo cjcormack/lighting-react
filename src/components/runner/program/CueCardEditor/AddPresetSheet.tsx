@@ -16,6 +16,7 @@ interface AddPresetSheetProps {
     presetId: number,
     targets: CueTarget[],
     timing: { delayMs?: number | null; intervalMs?: number | null; randomWindowMs?: number | null },
+    speedMasterUuid?: string | null,
   ) => void
 }
 
@@ -41,11 +42,16 @@ export function AddPresetSheet({
             projectId={projectId}
             preselectedTarget={defaultTarget}
             onConfirm={(app) => {
-              onAdd(app.presetId, app.targets, {
-                delayMs: app.delayMs,
-                intervalMs: app.intervalMs,
-                randomWindowMs: app.randomWindowMs,
-              })
+              onAdd(
+                app.presetId,
+                app.targets,
+                {
+                  delayMs: app.delayMs,
+                  intervalMs: app.intervalMs,
+                  randomWindowMs: app.randomWindowMs,
+                },
+                app.speedMasterUuid,
+              )
             }}
             onCancel={() => onOpenChange(false)}
           />

@@ -8,6 +8,7 @@ import { usePersistentState } from '../../hooks/usePersistentState'
 import { useFixtureListQuery } from '../../store/fixtures'
 import { useGroupListQuery } from '../../store/groups'
 import { useActiveEffectsQuery, useRemoveFxMutation } from '../../store/fixtureFx'
+import { useSpeedMasterDisplay } from '../../store/speedMasters'
 import { useRemoveGroupFxMutation } from '../../store/groups'
 import { lightingApi } from '../../api/lightingApi'
 import { useProgrammerRevision } from '../../store/programmer'
@@ -356,6 +357,9 @@ function toEffectContext(effect: ActiveEffect): ActiveEffectContext {
     stepTiming: effect.stepTiming,
     presetId: effect.presetId,
     cueId: effect.cueId,
+    // Explicit like everything else here: dropping this would hand the edit sheet a
+    // master-less copy, and its Update would silently reset the effect to master 1.
+    speedMasterUuid: effect.speedMasterUuid,
   }
   if (effect.isGroupTarget) {
     return {
@@ -397,11 +401,15 @@ function EffectChip({
   onStop: () => void
 }) {
   const intensityPct = Math.round(effect.intensityMultiplier * 100)
+  // Shared hide-at-M1 rule + own-master-only subscription — see useSpeedMasterDisplay.
+  const master = useSpeedMasterDisplay(effect.speedMasterUuid)
+  const masterLabel = master ? `M${master.index}` : null
   const tip = [
     effect.effectType,
     effect.isGroupTarget ? `group ${effect.targetKey}` : null,
     `${intensityPct}% intensity`,
     effect.blendMode,
+    master ? `speed master M${master.index} — ${master.name}` : null,
     effect.programmerOwned ? 'Programmer FX — Clear removes it' : null,
     suppressed ? 'Suppressed: the programmer holds this property' : null,
     !effect.isRunning ? 'Paused' : null,
@@ -425,6 +433,9 @@ function EffectChip({
           <button type="button" onClick={onOpen} className="truncate hover:underline">
             {effect.effectType}
           </button>
+          {masterLabel && (
+            <span className="shrink-0 font-mono text-[10px] opacity-70">{masterLabel}</span>
+          )}
           {intensityPct < 100 && (
             <span className="shrink-0 tabular-nums opacity-70">{intensityPct}%</span>
           )}

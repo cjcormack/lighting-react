@@ -6,6 +6,8 @@ import { useGroupListQuery } from '@/store/groups'
 import { useFixtureListQuery } from '@/store/fixtures'
 import { CueTargetPicker } from '../CueTargetPicker'
 import { TimingFields } from '../TimingEditor'
+import { SpeedMasterSelect } from '@/components/fx/SpeedMasterSelect'
+import { useSpeedMasterLiveQuery } from '@/store/speedMasters'
 import { EFFECT_CATEGORY_INFO } from '@/components/fx/fxConstants'
 import type { CueTarget } from '@/api/cuesApi'
 
@@ -24,6 +26,7 @@ interface PresetPickerProps {
     delayMs?: number | null
     intervalMs?: number | null
     randomWindowMs?: number | null
+    speedMasterUuid?: string | null
   }) => void
   onCancel: () => void
   /** For edit mode: pre-selected targets */
@@ -32,6 +35,8 @@ interface PresetPickerProps {
   existingPresetId?: number
   /** For edit mode: pre-populate timing values */
   existingTiming?: TimingValues
+  /** For edit mode: pre-populate the per-application speed-master override. */
+  existingSpeedMasterUuid?: string | null
   /** Add mode: pre-selected target — skips the target-picker step. */
   preselectedTarget?: CueTarget | null
 }
@@ -45,11 +50,13 @@ export function PresetPicker({
   existingTargets,
   existingPresetId,
   existingTiming,
+  existingSpeedMasterUuid,
   preselectedTarget,
 }: PresetPickerProps) {
   const { data: presets } = useProjectPresetListQuery(projectId)
   const { data: groups } = useGroupListQuery()
   const { data: fixtures } = useFixtureListQuery()
+  const { data: liveMasters } = useSpeedMasterLiveQuery()
 
   const isEdit = existingPresetId != null
   const hasPreselectedTarget = !isEdit && !!preselectedTarget
@@ -68,6 +75,14 @@ export function PresetPicker({
     intervalMs: existingTiming?.intervalMs ?? null,
     randomWindowMs: existingTiming?.randomWindowMs ?? null,
   })
+  // Per-application override. Null means "each preset effect follows its own master" —
+  // deliberately distinct from picking M1, which pins every effect in this application to
+  // the global master. When the operator opens the override, the state is seeded with a
+  // CONCRETE uuid (master 1's) immediately: the select would otherwise *display* M1 without
+  // any onChange firing, and confirming would silently save no override at all.
+  const [speedMasterUuid, setSpeedMasterUuid] = useState<string | null>(
+    existingSpeedMasterUuid ?? null,
+  )
 
   // Resolve preset name for edit mode
   const resolvedPresetName = selectedPresetName ?? presets?.find((p) => p.id === selectedPresetId)?.name ?? 'Preset'
@@ -144,6 +159,7 @@ export function PresetPicker({
       delayMs: timingValues.delayMs,
       intervalMs: timingValues.intervalMs,
       randomWindowMs: timingValues.randomWindowMs,
+      speedMasterUuid,
     })
   }
 
@@ -264,8 +280,37 @@ export function PresetPicker({
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-4 pb-4">
+          <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-4">
             <TimingFields values={timingValues} onChange={setTimingValues} />
+
+            {/* Per-application speed master. Opt-in: unset means every effect in the
+                preset follows its own master, and most applications want exactly that.
+                Opening seeds master 1's concrete uuid so what the select shows is what
+                gets saved — confirm-without-touching must not silently drop the pin. */}
+            {speedMasterUuid == null ? (
+              <button
+                type="button"
+                disabled={!liveMasters?.length}
+                onClick={() => {
+                  const master1 = liveMasters?.find((m) => m.index === 1)
+                  if (master1?.uuid) setSpeedMasterUuid(master1.uuid)
+                }}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+              >
+                + Override speed master for this application
+              </button>
+            ) : (
+              <div className="space-y-1.5">
+                <SpeedMasterSelect value={speedMasterUuid} onChange={setSpeedMasterUuid} />
+                <button
+                  type="button"
+                  onClick={() => setSpeedMasterUuid(null)}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Remove override — each effect follows its own master
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="border-t p-4 flex items-center gap-2">

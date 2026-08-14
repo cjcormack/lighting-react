@@ -78,6 +78,9 @@ export function EffectFlow({
   const [elementMode, setElementMode] = useState(existingEffect?.elementMode ?? 'PER_FIXTURE')
   const [elementFilter, setElementFilter] = useState(existingEffect?.elementFilter ?? 'ALL')
   const [stepTiming, setStepTiming] = useState(existingEffect?.stepTiming ?? false)
+  const [speedMasterUuid, setSpeedMasterUuid] = useState<string | null>(
+    existingEffect?.speedMasterUuid ?? null,
+  )
   const [parameters, setParameters] = useState<Record<string, string>>(
     existingEffect?.parameters ?? {},
   )
@@ -275,6 +278,7 @@ export function EffectFlow({
       delayMs: timingValues.delayMs,
       intervalMs: timingValues.intervalMs,
       randomWindowMs: timingValues.randomWindowMs,
+      speedMasterUuid,
     }]
 
     onConfirm(effects)
@@ -298,6 +302,7 @@ export function EffectFlow({
       delayMs: timingValues.delayMs,
       intervalMs: timingValues.intervalMs,
       randomWindowMs: timingValues.randomWindowMs,
+      speedMasterUuid,
     })
   }
 
@@ -425,6 +430,8 @@ export function EffectFlow({
               showElementFilter={hasGroupTarget}
               stepTiming={stepTiming}
               onStepTimingChange={setStepTiming}
+              speedMasterUuid={speedMasterUuid}
+              onSpeedMasterChange={setSpeedMasterUuid}
               // Extended channels: show all since targets may be mixed
               extendedChannels={{ white: true, amber: true, uv: true }}
               palette={palette}

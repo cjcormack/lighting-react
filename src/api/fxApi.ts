@@ -13,6 +13,10 @@ export interface FxEffectState {
   cueId: number | null
   cueStackId: number | null
   timingSource?: string
+  /** Speed master this effect subscribes to (null → master 1). */
+  speedMasterUuid?: string | null
+  /** 1-based display index of that master — what the FX-sheet chip renders. */
+  speedMasterIndex?: number
 }
 
 export interface FxState {

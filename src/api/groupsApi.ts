@@ -82,6 +82,8 @@ export interface ApplyFxRequest {
   elementMode?: ElementMode
   elementFilter?: string
   stepTiming?: boolean
+  /** Speed master to subscribe to, as the master's uuid (omitted → master 1). */
+  speedMasterUuid?: string
   /**
    * Create the effect in the programmer's reserved priority band, so it composes *on top of*
    * programmer values instead of being suppressed by them, and Clear sweeps it with them.
@@ -110,6 +112,8 @@ export interface GroupActiveEffect {
   stepTiming: boolean
   presetId: number | null
   cueId: number | null
+  /** Speed master this effect subscribes to (null → master 1). */
+  speedMasterUuid?: string | null
 }
 
 export interface ClearFxResponse {

@@ -14,6 +14,8 @@ export interface CuePresetApplication {
   intervalMs?: number | null
   randomWindowMs?: number | null
   sortOrder?: number
+  /** Per-application speed-master override (null → each preset effect's own → master 1). */
+  speedMasterUuid?: string | null
 }
 
 // Resolved preset application with name (from API response)
@@ -25,6 +27,8 @@ export interface CuePresetApplicationDetail {
   intervalMs?: number | null
   randomWindowMs?: number | null
   sortOrder?: number
+  /** Per-application speed-master override (null → each preset effect's own → master 1). */
+  speedMasterUuid?: string | null
 }
 
 // Ad-hoc effect stored inline in a cue (with optional timing)
@@ -46,6 +50,8 @@ export interface CueAdHocEffect {
   intervalMs?: number | null
   randomWindowMs?: number | null
   sortOrder?: number
+  /** Speed master this effect subscribes to, as the master's uuid (null → master 1). */
+  speedMasterUuid?: string | null
 }
 
 /**

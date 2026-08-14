@@ -98,6 +98,7 @@ export function LayersPane({ cue, projectId, mode, targets }: LayersPaneProps) {
     presetId: number,
     appTargets: CueTarget[],
     timing: { delayMs?: number | null; intervalMs?: number | null; randomWindowMs?: number | null },
+    speedMasterUuid?: string | null,
   ) => {
     const next = [
       ...buildCueInput(cue).presetApplications,
@@ -107,6 +108,7 @@ export function LayersPane({ cue, projectId, mode, targets }: LayersPaneProps) {
         delayMs: timing.delayMs ?? null,
         intervalMs: timing.intervalMs ?? null,
         randomWindowMs: timing.randomWindowMs ?? null,
+        speedMasterUuid: speedMasterUuid ?? null,
       },
     ]
     patchCue({ projectId, cueId: cue.id, presetApplications: next })
@@ -146,8 +148,8 @@ export function LayersPane({ cue, projectId, mode, targets }: LayersPaneProps) {
         }}
         projectId={projectId}
         defaultTarget={addPresetTarget === 'any' ? null : addPresetTarget}
-        onAdd={(presetId, appTargets, timing) => {
-          addPresetApp(presetId, appTargets, timing)
+        onAdd={(presetId, appTargets, timing, speedMasterUuid) => {
+          addPresetApp(presetId, appTargets, timing, speedMasterUuid)
           setAddPresetTarget(null)
         }}
       />
@@ -313,6 +315,7 @@ function ByTarget({
                         presetId={pa.presetId}
                         effects={presetEffects}
                         targets={pa.targets}
+                        speedMasterUuid={pa.speedMasterUuid}
                         palette={cue.palette}
                         actions={
                           <>
@@ -439,6 +442,7 @@ function ByLayer({
               presetId={pa.presetId}
               effects={presetEffects}
               targets={pa.targets}
+              speedMasterUuid={pa.speedMasterUuid}
               palette={cue.palette}
               actions={
                 <>

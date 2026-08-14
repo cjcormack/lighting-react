@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo } from 'react'
 import { ArrowLeft, ChevronDown, List, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { SpeedMastersStrip } from '../../SpeedMastersStrip'
 import { StackPickerSheet } from '../StackPickerSheet'
 import { MobileCueListSheet } from '../MobileCueListSheet'
 import { RunMobileCueCard, type MobileExpansion } from './RunMobileCueCard'
@@ -150,6 +151,8 @@ export function RunMobile({
           >
             TAP
           </Button>
+          {/* Masters 2..N as a single sticky-selected tile; the readout above stays M1. */}
+          <SpeedMastersStrip compact />
         </div>
 
         <Button

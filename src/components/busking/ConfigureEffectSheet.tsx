@@ -16,6 +16,8 @@ import type { EffectLibraryEntry } from '@/store/fixtureFx'
 interface ConfigureEffectSheetProps {
   effect: EffectLibraryEntry | null
   defaultBeatDivision: number
+  /** Pad-wide default speed master (uuid; null → master 1). */
+  defaultSpeedMasterUuid?: string | null
   onApply: (params: {
     beatDivision: number
     blendMode: string
@@ -24,6 +26,7 @@ interface ConfigureEffectSheetProps {
     elementMode?: string
     stepTiming?: boolean
     parameters: Record<string, string>
+    speedMasterUuid?: string
   }) => void
   onClose: () => void
   /** Whether to show the distribution strategy selector */
@@ -37,6 +40,7 @@ interface ConfigureEffectSheetProps {
 export function ConfigureEffectSheet({
   effect,
   defaultBeatDivision,
+  defaultSpeedMasterUuid = null,
   onApply,
   onClose,
   showDistribution,
@@ -51,6 +55,7 @@ export function ConfigureEffectSheet({
   const [distribution, setDistribution] = useState('LINEAR')
   const [elementMode, setElementMode] = useState('PER_FIXTURE')
   const [stepTiming, setStepTiming] = useState(false)
+  const [speedMasterUuid, setSpeedMasterUuid] = useState<string | null>(defaultSpeedMasterUuid)
   const [parameters, setParameters] = useState<Record<string, string>>({})
 
   // Reset state when a new effect is opened
@@ -62,12 +67,13 @@ export function ConfigureEffectSheet({
     setDistribution('LINEAR')
     setElementMode('PER_FIXTURE')
     setStepTiming(false)
+    setSpeedMasterUuid(defaultSpeedMasterUuid)
     const defaults: Record<string, string> = {}
     effect.parameters.forEach((p) => {
       defaults[p.name] = p.defaultValue
     })
     setParameters(defaults)
-  }, [effect, defaultBeatDivision])
+  }, [effect, defaultBeatDivision, defaultSpeedMasterUuid])
 
   // Resolve the target property name for display
   const targetPropertyName = useMemo(() => {
@@ -87,6 +93,7 @@ export function ConfigureEffectSheet({
       ...(showElementMode ? { elementMode } : {}),
       stepTiming,
       parameters,
+      ...(speedMasterUuid != null ? { speedMasterUuid } : {}),
     })
   }
 
@@ -124,6 +131,8 @@ export function ConfigureEffectSheet({
               extendedChannels={effect.category === 'colour' ? extendedChannels : undefined}
               stepTiming={stepTiming}
               onStepTimingChange={setStepTiming}
+              speedMasterUuid={speedMasterUuid}
+              onSpeedMasterChange={setSpeedMasterUuid}
             />
           )}
         </SheetBody>
