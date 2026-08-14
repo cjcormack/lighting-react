@@ -2,7 +2,7 @@ import { computeCombinedCss } from '../../lib/colourMath'
 import { resolveSettingOption } from '../../hooks/usePropertyValues'
 import type { CellResolution } from './columns'
 import type { CellValue } from './useRowValues'
-import type { CellOwnership, StagedValue } from './useRowOwnership'
+import type { CellOwnership, CellPaletteRef, StagedValue } from './useRowOwnership'
 
 /**
  * Ownership styling for a programmer-sheet cell.
@@ -20,6 +20,13 @@ import type { CellOwnership, StagedValue } from './useRowOwnership'
  */
 export function ownershipCellClass(ownership?: CellOwnership): string {
   if (!ownership) return ''
+  // A *broken* reference overrides the ownership colour: the cell is showing the last value the
+  // palette resolved to, which is indistinguishable from a healthy one until something says so.
+  // A healthy reference deliberately gets no new colour — the four ownership colours are already
+  // a learned vocabulary, and the reference marker is a separate, additive signal.
+  if (ownership.paletteRef && !ownership.paletteRef.resolved) {
+    return 'rounded-sm ring-1 ring-inset ring-destructive bg-destructive/10'
+  }
   const mixed = ownership.isUniform ? '' : ' border-dashed'
   switch (ownership.source) {
     case 'parked':
@@ -59,7 +66,23 @@ export function ownershipTitle(ownership?: CellOwnership): string | undefined {
   const parts = [base]
   if (ownership.sourceGroup) parts.push(`via group ${ownership.sourceGroup}`)
   if (!ownership.isUniform) parts.push('mixed across this row')
+  const ref = ownership.paletteRef
+  if (ref) parts.push(describePaletteRef(ref))
   return parts.join(' · ')
+}
+
+/**
+ * One clause naming what a cell's reference is doing. Shared by the hover title and the editor
+ * popover so the two can't word it differently.
+ */
+export function describePaletteRef(ref: CellPaletteRef): string {
+  if (!ref.resolved) {
+    return ref.name
+      ? `references “${ref.name}”, which no longer covers this — showing the last value it resolved to`
+      : 'references a palette that no longer resolves — showing the last value it resolved to'
+  }
+  if (ref.mixed) return 'references more than one palette across this row'
+  return ref.name ? `references “${ref.name}”` : 'references a palette'
 }
 
 /**
@@ -69,6 +92,11 @@ export function ownershipTitle(ownership?: CellOwnership): string | undefined {
  * whatever the cues and effects underneath are painting — not what the operator is building.
  * Without this, blind busking in the sheet would be invisible, which is the whole point of
  * the gesture.
+ *
+ * A palette reference needs no case here, and that is the design: a reference always resolves to
+ * one of the same four literal shapes, so `useRowOwnership` stages the *resolved* literal and this
+ * switch stays exhaustive over the four value kinds. There is deliberately no fifth `kind: 'ref'`
+ * — references are decoration on a value, not a value.
  *
  * Only shapes that match the cell's own kind are substituted; a mismatch (which would mean
  * the programmer holds something the column doesn't render) falls through to the live value.

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useParams } from 'react-router'
-import { Circle, Download, Eraser, EyeOff, MoreHorizontal, Upload } from 'lucide-react'
+import { Circle, Download, Eraser, EyeOff, Link2Off, MoreHorizontal, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -25,9 +25,10 @@ import {
   useProgrammerSummaryQuery,
 } from '../../store/programmer'
 import { useActiveEffectsQuery } from '../../store/fixtureFx'
-import { IncludeCueSheet } from './IncludeCueSheet'
+import { IncludeSheet } from './IncludeSheet'
 import { RecordSheet } from './RecordSheet'
 import { UpdateDialog } from './UpdateDialog'
+import { MakeHardDialog } from '../palettes/MakeHardDialog'
 import { describeIncludedTarget } from '@/lib/includedTarget'
 
 /** Fade options for Clear and for entering/leaving Blind, in milliseconds. */
@@ -54,10 +55,12 @@ export function ProgrammerToolbar() {
   const [recordOpen, setRecordOpen] = useState(false)
   const [includeOpen, setIncludeOpen] = useState(false)
   const [updateOpen, setUpdateOpen] = useState(false)
+  const [makeHardOpen, setMakeHardOpen] = useState(false)
 
   const blind = summary?.blind ?? false
   const entryCount = summary?.entryCount ?? 0
   const includeTarget = summary?.lastIncluded ?? null
+  const referenceCount = summary?.referenceCount ?? 0
   const fade = Number(fadeMs) || 0
 
   // Clear releases programmer values *and* programmer-band FX, and the two are independent:
@@ -86,7 +89,7 @@ export function ProgrammerToolbar() {
       label: 'Include',
       Icon: Download,
       disabled: !projectId,
-      tooltip: 'Load a cue into the programmer to edit it',
+      tooltip: 'Load a cue or a palette into the programmer to edit it',
       onSelect: () => setIncludeOpen(true),
     },
     {
@@ -99,6 +102,19 @@ export function ProgrammerToolbar() {
           ? 'Show the cues the programmer is overriding'
           : 'The programmer is empty — nothing to update',
       onSelect: () => setUpdateOpen(true),
+    },
+    {
+      label: 'Make hard',
+      Icon: Link2Off,
+      // Programmer-wide, so it belongs here rather than in the selection toolbar — and it is
+      // disabled rather than hidden when there is nothing referencing a palette, so the escape
+      // hatch is discoverable before you need it.
+      disabled: referenceCount === 0,
+      tooltip:
+        referenceCount > 0
+          ? `Stop ${referenceCount} programmer value(s) tracking their palettes`
+          : 'The programmer holds no palette references',
+      onSelect: () => setMakeHardOpen(true),
     },
   ] as const
 
@@ -230,7 +246,7 @@ export function ProgrammerToolbar() {
       {projectId > 0 && (
         <>
           <RecordSheet open={recordOpen} onOpenChange={setRecordOpen} projectId={projectId} />
-          <IncludeCueSheet
+          <IncludeSheet
             open={includeOpen}
             onOpenChange={setIncludeOpen}
             projectId={projectId}
@@ -240,6 +256,12 @@ export function ProgrammerToolbar() {
             onOpenChange={setUpdateOpen}
             projectId={projectId}
             includeTarget={includeTarget}
+          />
+          <MakeHardDialog
+            open={makeHardOpen}
+            onOpenChange={setMakeHardOpen}
+            projectId={projectId}
+            scope={{ kind: 'programmer', referenceCount }}
           />
         </>
       )}

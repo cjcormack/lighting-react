@@ -19,8 +19,13 @@ import {
 } from '@/components/fx/effectSummaryTypes'
 import { useEffectLibraryQuery, type EffectLibraryEntry } from '@/store/fixtureFx'
 import { useProjectPresetListQuery } from '@/store/fxPresets'
+import { usePaletteListQuery } from '@/store/palettes'
 import { usePatchProjectCueMutation } from '@/store/cues'
 import { buildCueInput } from '@/lib/cueUtils'
+import { PaletteRefBadge } from '@/components/palettes/PaletteRefBadge'
+import { PalettePreviewRow } from '@/components/palettes/paletteValue'
+import { parsePaletteRefUuid } from '@/lib/programmerValue'
+import { describeHealth } from '@/lib/healthDescriptor'
 import { AddAssignmentSheet } from './AddAssignmentSheet'
 import { AddEffectSheet } from './AddEffectSheet'
 import { AddPresetSheet } from './AddPresetSheet'
@@ -30,6 +35,7 @@ import type {
   CuePropertyAssignment,
 } from '@/api/cuesApi'
 import type { FxPreset } from '@/api/fxPresetsApi'
+import type { PaletteSummary } from '@/api/palettesApi'
 import type { CueTarget } from '@/api/cuesApi'
 
 export type LayersMode = 'by-target' | 'by-layer'
@@ -51,7 +57,17 @@ interface LayersPaneProps {
 export function LayersPane({ cue, projectId, mode, targets }: LayersPaneProps) {
   const { data: library } = useEffectLibraryQuery()
   const { data: presets } = useProjectPresetListQuery(projectId)
+  const { data: paletteList } = usePaletteListQuery({ projectId })
   const [patchCue] = usePatchProjectCueMutation()
+
+  // Built once for the whole pane and threaded to both arrangements. A per-row lookup would
+  // mean one subscription per assignment row, and a cue with forty rows referencing four
+  // palettes would fetch the bank forty times.
+  const palettes = useMemo(
+    () => new Map((paletteList ?? []).map((palette) => [palette.uuid, palette])),
+    [paletteList],
+  )
+  const palettesLoaded = paletteList != null
 
   const [addPresetTarget, setAddPresetTarget] = useState<CueTarget | 'any' | null>(null)
   const [addEffectTarget, setAddEffectTarget] = useState<CueTarget | 'any' | null>(null)
@@ -104,6 +120,7 @@ export function LayersPane({ cue, projectId, mode, targets }: LayersPaneProps) {
           if (!open) setAddAssignmentTarget(null)
         }}
         cue={cue}
+        projectId={projectId}
         defaultTarget={addAssignmentTarget === 'any' ? null : addAssignmentTarget}
         onAdd={(a) => {
           addAssignment(a)
@@ -145,6 +162,8 @@ export function LayersPane({ cue, projectId, mode, targets }: LayersPaneProps) {
           targets={targets}
           presets={presets}
           library={library}
+          palettes={palettes}
+          palettesLoaded={palettesLoaded}
           onRemoveAssignment={removeAssignment}
           onRemoveEffect={removeEffect}
           onRemovePreset={removePreset}
@@ -157,6 +176,8 @@ export function LayersPane({ cue, projectId, mode, targets }: LayersPaneProps) {
           cue={cue}
           presets={presets}
           library={library}
+          palettes={palettes}
+          palettesLoaded={palettesLoaded}
           onRemoveAssignment={removeAssignment}
           onRemoveEffect={removeEffect}
           onRemovePreset={removePreset}
@@ -176,6 +197,8 @@ function ByTarget({
   targets,
   presets,
   library,
+  palettes,
+  palettesLoaded,
   onRemoveAssignment,
   onRemoveEffect,
   onRemovePreset,
@@ -187,6 +210,9 @@ function ByTarget({
   targets: CueTarget[]
   presets: FxPreset[] | undefined
   library: EffectLibraryEntry[] | undefined
+  /** Keyed by uuid — a stored reference names the palette by uuid, never by id. */
+  palettes: ReadonlyMap<string, PaletteSummary>
+  palettesLoaded: boolean
   onRemoveAssignment: (index: number) => void
   onRemoveEffect: (index: number) => void
   onRemovePreset: (index: number) => void
@@ -318,6 +344,8 @@ function ByTarget({
                     <AssignmentRow
                       key={`a-${i}`}
                       assignment={a}
+                      palettes={palettes}
+                      palettesLoaded={palettesLoaded}
                       onRemove={() => onRemoveAssignment(i)}
                     />
                   ))
@@ -364,6 +392,8 @@ function ByLayer({
   cue,
   presets,
   library,
+  palettes,
+  palettesLoaded,
   onRemoveAssignment,
   onRemoveEffect,
   onRemovePreset,
@@ -374,6 +404,9 @@ function ByLayer({
   cue: Cue
   presets: FxPreset[] | undefined
   library: EffectLibraryEntry[] | undefined
+  /** Keyed by uuid — a stored reference names the palette by uuid, never by id. */
+  palettes: ReadonlyMap<string, PaletteSummary>
+  palettesLoaded: boolean
   onRemoveAssignment: (index: number) => void
   onRemoveEffect: (index: number) => void
   onRemovePreset: (index: number) => void
@@ -437,6 +470,8 @@ function ByLayer({
           <AssignmentRow
             key={`a-${i}`}
             assignment={a}
+            palettes={palettes}
+            palettesLoaded={palettesLoaded}
             showTarget
             onRemove={() => onRemoveAssignment(i)}
           />
@@ -511,10 +546,14 @@ function Section({
 
 function AssignmentRow({
   assignment,
+  palettes,
+  palettesLoaded,
   showTarget,
   onRemove,
 }: {
   assignment: CuePropertyAssignment
+  palettes: ReadonlyMap<string, PaletteSummary>
+  palettesLoaded: boolean
   showTarget?: boolean
   onRemove: () => void
 }) {
@@ -532,7 +571,11 @@ function AssignmentRow({
         {assignment.propertyName}
       </Badge>
       <span className="text-muted-foreground">=</span>
-      <span className="font-mono truncate flex-1 min-w-0">{assignment.value}</span>
+      <AssignmentValue
+        assignment={assignment}
+        palettes={palettes}
+        palettesLoaded={palettesLoaded}
+      />
       {assignment.fadeDurationMs != null && (
         <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
           {(assignment.fadeDurationMs / 1000).toFixed(1)}s
@@ -545,6 +588,58 @@ function AssignmentRow({
       )}
       <RemoveBtn onClick={onRemove} />
     </div>
+  )
+}
+
+/**
+ * A stored assignment's value: a literal, or the palette it references.
+ *
+ * The third form of the `value` column, and the one that has to be *un*-encoded for the
+ * operator — `ref:8f3c…` on a cue card is a diagnostic string, not a value. A reference whose
+ * palette is missing renders as broken rather than as its raw uuid, because the row will be
+ * silently skipped when the cue fires and this card is where that has to be visible.
+ */
+function AssignmentValue({
+  assignment,
+  palettes,
+  palettesLoaded,
+}: {
+  assignment: CuePropertyAssignment
+  palettes: ReadonlyMap<string, PaletteSummary>
+  /** False while the palette list is still in flight — see `broken` below. */
+  palettesLoaded: boolean
+}) {
+  const uuid = parsePaletteRefUuid(assignment.value)
+  if (uuid == null) {
+    return <span className="font-mono truncate flex-1 min-w-0">{assignment.value}</span>
+  }
+  const palette = palettes.get(uuid)
+  const healthNote = describeHealth(assignment.health)
+  const health = assignment.health?.type
+  // `health` is the server's verdict and leads; the local lookup only adds the case where the
+  // palette was deleted since this cue was read. It must be gated on the list having *loaded* —
+  // an in-flight query leaves the map empty, and treating that as "missing" paints every healthy
+  // reference in the cue destructive-red for as long as the fetch takes.
+  const broken =
+    health === 'missingPalette' ||
+    health === 'missingPaletteEntry' ||
+    health === 'paletteTypeMismatch' ||
+    (palettesLoaded && palette == null)
+  return (
+    <span className="flex min-w-0 flex-1 items-center gap-1" title={healthNote ?? undefined}>
+      <PaletteRefBadge name={palette?.name} type={palette?.type} missing={broken} />
+      {/* The palette's own preview, not a resolved value: the cue read has no per-fixture
+          resolution, and a single swatch here would claim to be this row's colour when a
+          palette legitimately gives every head a different one. Several chips read as
+          "what's in it", which is true. */}
+      {palette && !broken && (
+        <PalettePreviewRow
+          type={palette.type}
+          preview={palette.preview.slice(0, 3)}
+          className="shrink-0"
+        />
+      )}
+    </span>
   )
 }
 

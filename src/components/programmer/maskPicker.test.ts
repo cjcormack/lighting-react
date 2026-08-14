@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { describeSkips } from './maskPicker'
+import { describeSkips, MASK_GROUPS } from './maskPicker'
+import { PALETTE_TYPES, PALETTE_TYPE_LABELS } from '@/lib/paletteTypes'
 import type { ProgrammerSkip } from '@/store/programmerOps'
 
 const skip = (reason: ProgrammerSkip['reason'], targetKey = 'hex-1'): ProgrammerSkip => ({
@@ -29,5 +30,20 @@ describe('describeSkips', () => {
     expect(describeSkips([{ universe: 0, channel: 100, reason: 'NO_BACKING_PROPERTY' }])).toContain(
       'raw channels with no backing property',
     )
+  })
+})
+
+describe('mask groups vs palette types', () => {
+  it('offers exactly the four palette types, in the same order', () => {
+    // Not a coincidence to be kept in step by hand — on the backend `PaletteType` *is*
+    // `PropertyMaskGroup`. A COLOUR palette records exactly what a COLOUR mask records, so if
+    // these two lists ever diverged one of them would be describing a thing that doesn't exist.
+    expect(MASK_GROUPS.map((group) => group.value)).toEqual([...PALETTE_TYPES])
+  })
+
+  it('labels them the same way the palette pages do', () => {
+    for (const group of MASK_GROUPS) {
+      expect(group.label).toBe(PALETTE_TYPE_LABELS[group.value].singular)
+    }
   })
 })

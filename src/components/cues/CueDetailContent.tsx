@@ -107,10 +107,11 @@ export const CueDetailContent = memo(function CueDetailContent({
         </div>
       )}
 
-      {/* ── Palette ── */}
+      {/* ── Colour List ── (the cue-scoped positional list FX params index as `P1`, not a
+          named Palette entity — see PalettePanel for why the word is qualified.) */}
       {palette.length > 0 && (
         <div className="space-y-1.5">
-          <SectionHeader icon={Palette} label="Palette" count={palette.length} />
+          <SectionHeader icon={Palette} label="Colour List" count={palette.length} />
           <div className="flex flex-wrap gap-1.5">
             {palette.map((raw, i) => {
               const hex = resolveColourToHex(raw)

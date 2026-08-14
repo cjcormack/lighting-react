@@ -12,6 +12,8 @@ import {
   SheetFooter,
 } from '@/components/ui/sheet'
 import { CueTargetPicker } from '@/components/cues/CueTargetPicker'
+import { PalettePickerPopover } from '@/components/palettes/PalettePickerPopover'
+import { paletteTypeForCategory } from '@/lib/paletteTypes'
 import {
   useTargetProperties,
   defaultValueFor,
@@ -28,6 +30,7 @@ interface AddAssignmentSheetProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   cue: Cue
+  projectId: number
   defaultTarget: CueTarget | null
   onAdd: (assignment: CuePropertyAssignment) => void
 }
@@ -43,6 +46,7 @@ export function AddAssignmentSheet({
   open,
   onOpenChange,
   cue,
+  projectId,
   defaultTarget,
   onAdd,
 }: AddAssignmentSheetProps) {
@@ -189,14 +193,26 @@ export function AddAssignmentSheet({
                     ({selectedProp.type})
                   </span>
                 </Label>
-                <Input
-                  id="asg-value"
-                  className="h-9 font-mono"
-                  value={value}
-                  onChange={(e) => setValue(e.target.value)}
-                  placeholder={placeholderFor(selectedProp)}
-                  autoFocus
-                />
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="asg-value"
+                    className="h-9 flex-1 font-mono"
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    placeholder={placeholderFor(selectedProp)}
+                    autoFocus
+                  />
+                  {/* A palette reference is the third form this field accepts. Filtered to the
+                      type that can cover this property: a colour palette on a position row can
+                      never resolve, so offering it would only produce a dead row later. */}
+                  <PalettePickerPopover
+                    projectId={projectId}
+                    type={paletteTypeForCategory(
+                      selectedProp.type === 'position' ? 'position' : selectedProp.category,
+                    )}
+                    onPick={setValue}
+                  />
+                </div>
               </div>
 
               <div className="space-y-1.5">

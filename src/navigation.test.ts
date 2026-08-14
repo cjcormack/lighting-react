@@ -4,6 +4,7 @@
 import { describe, it, expect } from "vitest"
 import { Box } from "lucide-react"
 import { navItems, filterNavItems, type NavItem } from "./navigation"
+import { PALETTE_TYPES, paletteTypeSlug } from "./lib/paletteTypes"
 
 /** Minimal NavItem factory for exercising filterNavItems in isolation. */
 function makeItem(id: string, visibility: NavItem["visibility"]): NavItem {
@@ -89,5 +90,29 @@ describe("navItems registry", () => {
     // Sanity: always-visible items survive the same filter.
     expect(ids).toContain("scripts")
     expect(ids).toContain("install-settings")
+  })
+})
+
+describe("palette navigation", () => {
+  it("registers exactly one Palettes entry, on the bare path", () => {
+    const palettes = navItems.filter((i) => i.pathMatch.startsWith("/palettes"))
+    expect(palettes.map((i) => i.id)).toEqual(["palettes"])
+    expect(palettes[0].pathMatch).toBe("/palettes")
+  })
+
+  it("registers no per-type entry in the sidebar registry", () => {
+    // The four type routes are sibling views reached through the in-page switcher — the same
+    // exception the cards/list pair and the programmer's Values/FX make. A second sidebar row
+    // per type would put five Palettes entries in a nine-item group.
+    expect(navItems.filter((i) => i.pathMatch.includes("/palettes/"))).toEqual([])
+  })
+
+  it("gives the Cmd+K per-type items ids that can't collide with the sidebar entry", () => {
+    // `usePaletteTypeNavItems` is a hook, but its items are static — build the ids the same way
+    // it does rather than rendering, so this stays a plain unit test.
+    const ids = PALETTE_TYPES.map((type) => `palettes-${paletteTypeSlug(type)}`)
+    expect(new Set(ids).size).toBe(ids.length)
+    const staticIds = new Set(navItems.map((i) => i.id))
+    for (const id of ids) expect(staticIds.has(id)).toBe(false)
   })
 })

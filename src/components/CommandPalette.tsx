@@ -12,7 +12,12 @@ import { useProjectListQuery, useCurrentProjectQuery } from "@/store/projects"
 import { useFixtureListQuery, type Fixture } from "@/store/fixtures"
 import { useGroupListQuery } from "@/store/groups"
 import type { GroupSummary } from "@/api/groupsApi"
-import { useNavItems, useUniverseNavItems, filterNavItems } from "@/navigation"
+import {
+  useNavItems,
+  useUniverseNavItems,
+  usePaletteTypeNavItems,
+  filterNavItems,
+} from "@/navigation"
 import { fixtureSelectParam, groupSelectParam } from "@/components/fixtures-list/rowModel"
 import { useViewedProject } from "@/ProjectSwitcher"
 import type { FxTarget } from "@/components/fx/AddEditFxSheet"
@@ -135,6 +140,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   const { data: groups } = useGroupListQuery()
   const allNavItems = useNavItems()
   const universeNavItems = useUniverseNavItems()
+  const paletteNavItems = usePaletteTypeNavItems()
 
   const { data: parkStateList } = useGetParkStateListQuery()
   const { data: channelMappings } = useGetChannelMappingListQuery()
@@ -144,6 +150,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   const isViewingActiveProject = viewedProject?.id === currentProject?.id
   const visibleItems = filterNavItems(allNavItems, isViewingActiveProject)
   const visibleUniverseItems = filterNavItems(universeNavItems, isViewingActiveProject)
+  const visiblePaletteItems = filterNavItems(paletteNavItems, isViewingActiveProject)
 
   const activePage = pages[pages.length - 1] ?? "root"
 
@@ -229,7 +236,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
             {/* Navigation */}
             {viewedProject && (
               <Command.Group heading="Navigation" className={groupClassName}>
-                {[...visibleItems, ...visibleUniverseItems].map((item) => (
+                {[...visibleItems, ...visibleUniverseItems, ...visiblePaletteItems].map((item) => (
                   <Command.Item
                     key={item.id}
                     value={item.label}

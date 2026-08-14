@@ -1,4 +1,7 @@
 import type { AssignmentHealth } from './cuesApi'
+// Type-only, so nothing from the store is pulled into this DTO module at runtime. Record and
+// record-palette report skips in exactly the same shape — see `ProgrammerSkip`'s own doc.
+import type { ProgrammerSkip } from '@/store/programmerOps'
 
 /**
  * The four attribute families a palette can be typed by — the same I/P/C/B vocabulary the
@@ -51,8 +54,25 @@ export interface PaletteSummary {
   referenceCount: number
 }
 
-export interface Palette extends PaletteSummary {
+/**
+ * One palette with its contents.
+ *
+ * Deliberately **not** `extends PaletteSummary`: the detail read carries the real entries, so the
+ * summary's derived `entryCount` / `targetCount` / `preview` would be duplicated state that a
+ * caller could read after they'd gone stale. Derive them from `entries` when a detail view needs
+ * them.
+ */
+export interface Palette {
+  id: number
+  /** See `PaletteSummary.uuid` — this is what a `ref:` value stores. */
+  uuid: string
+  name: string
+  type: PaletteType
+  notes?: string | null
+  sortOrder: number
   entries: PaletteEntry[]
+  /** Persisted rows referencing this palette. Non-zero blocks an unforced delete. */
+  referenceCount: number
   /** Cues holding at least one row that references this palette. */
   referencedByCueIds: number[]
 }
@@ -108,13 +128,9 @@ export interface RecordPaletteResponse {
   groupRowsEmitted: number
   /** Programmer entries that were themselves references — stored as their current literal. */
   refsFlattened: number
-  skipped: { targetKey?: string; propertyName?: string; reason: string }[]
+  /** Reuses Record's shape verbatim, so `describeSkips` renders these unchanged. */
+  skipped: ProgrammerSkip[]
+  /** Set when the palette already had live consumers: what the re-resolve moved. */
   programmerKeysRefreshed: number
   cuesRepublished: number[]
-}
-
-/** `POST /project/{id}/cues/{cueId}/make-hard`. */
-export interface CueMakeHardRequest {
-  paletteUuids?: string[]
-  mask?: PaletteType[]
 }

@@ -145,6 +145,30 @@ DMX fixture definitions - describes what channels a fixture uses and how to cont
 ### Channels
 Raw DMX channel control per universe. Shows all 512 channels with current values.
 
+### Palettes
+
+Named, typed (INTENSITY / POSITION / COLOUR / BEAM) collections of **per-fixture**
+property values that cues, FX preset rows and programmer entries reference by
+identity rather than by value. The stored value is `ref:{paletteUuid}` — a uuid,
+not the int id, because int primary keys never appear in the backend's sync
+export and are re-minted on import, so `ref:12` would dangle after any import or
+clone. Use `id` for REST paths and `uuid` for anything naming a palette inside a
+value; `src/lib/programmerValue.ts` owns that grammar.
+
+Editing a palette republishes every live consumer — one edit moves every look
+that references it, which is the point of the feature. There is deliberately **no
+per-cell palette editor**: you Record from the programmer, or Include → edit on
+stage → Update. **Make Hard** (programmer-wide or per cue) is the escape hatch,
+replacing references with the literals they currently resolve to.
+
+Two unrelated things are called "palette" in the lighting world, so this repo
+qualifies the older one: the positional ordered colour list that FX parameters
+index as `P1`/`P2`/`P*` is labelled **"Colour List"** in the UI. Its helpers
+(`isPaletteRef` / `parsePaletteIndex` in `components/fx/colourUtils.ts`) mean that
+form; the named-palette ones (`isPaletteRefValue` / `parsePaletteRefUuid`) mean
+this one. **Never mint a `P<n>` short code for a named palette** — display its
+name.
+
 ### Cues, Stacks & Triggers
 Cues bundle palettes, FX preset applications, ad-hoc effects, and **script hooks** into named snapshots. **Every cue belongs to a cue stack** — there are no standalone cues. A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of cues. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). Cues and stacks are authored and run entirely in the **Program** view (`/projects/:projectId/program`, drilling into a stack at `/program/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed.
 
@@ -201,6 +225,16 @@ REST API is used for CRUD operations on scripts, scenes, fixtures, etc.
   FX sheet is a diagnostic read of what is running, so landing there because you
   last looked at it — rather than on the values you came to edit — would be the
   wrong default.
+- **Same exception — the palette type pages**: `/palettes` has one `navItems`
+  entry; the four type routes (`/palettes/colour`, `/palettes/position`,
+  `/palettes/intensity`, `/palettes/beam`) do not. They're reached via
+  `PaletteTypeSwitcher`, which **is** sticky (unlike Values/FX — the four types
+  are peers, not an editor and a diagnostic), plus four Cmd+K deep links from
+  `usePaletteTypeNavItems()`. Note **no type owns the bare `/palettes` path**: it
+  is its own redirect route to the sticky type. That is what keeps the redirect
+  acyclic — its target is always a different route — so nothing here needs the
+  `CARDS_LINK_STATE` escape the cards/list pair does. Three instances now; treat
+  it as the rule for sibling views rather than a one-off.
 
 ### Sheets vs Dialogs
 

@@ -1,6 +1,9 @@
 import { memo } from 'react'
+import { Link2 } from 'lucide-react'
 import { ColourPickerPopover } from '../../fixtures/ColourPickerPopover'
+import { PaletteRefNotice } from './PaletteRefNotice'
 import type { CellResolution } from '../columns'
+import type { CellPaletteRef } from '../useRowOwnership'
 import type { CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
 
@@ -8,6 +11,8 @@ interface ColourCellProps {
   value: Extract<CellValue, { kind: 'colour' }>
   resolutions: NonNullable<CellResolution>[]
   batchCount: number
+  /** Set when this cell's programmer entries reference a named palette. */
+  paletteRef?: CellPaletteRef
   onCommit: (commit: CellCommit) => void
   onBeginEdit: () => void
 }
@@ -21,6 +26,7 @@ export const ColourCell = memo(function ColourCell({
   value,
   resolutions,
   batchCount,
+  paletteRef,
   onCommit,
   onBeginEdit,
 }: ColourCellProps) {
@@ -44,6 +50,7 @@ export const ColourCell = memo(function ColourCell({
       hasAmberChannel={hasAmber}
       hasUvChannel={hasUv}
       onColourChange={(r, g, b, w, a, uv) => onCommit({ kind: 'colour', r, g, b, w, a, uv })}
+      notice={<PaletteRefNotice paletteRef={paletteRef} />}
     >
       <button
         type="button"
@@ -51,12 +58,29 @@ export const ColourCell = memo(function ColourCell({
         className="flex h-full w-full items-center gap-1.5 rounded px-1.5 text-left hover:bg-accent/50"
         title={batchCount > 1 ? `Applying to ${batchCount} targets` : undefined}
       >
+        {/* Resolved colour with the reference glyph on top of it, the idiom
+            `FxColourListPicker` already uses for `P1`. The drop-shadow is load-bearing rather
+            than decorative: a white glyph on an arbitrary palette colour is otherwise
+            illegible, and a pale palette is exactly the case that matters. */}
         <span
-          className="size-4 shrink-0 rounded-sm border border-border"
+          className="relative size-4 shrink-0 overflow-hidden rounded-sm border border-border"
           style={{ backgroundColor: value.combinedCss }}
-        />
+        >
+          {paletteRef && (
+            <Link2 className="absolute inset-0 m-auto size-2.5 text-white drop-shadow-[0_0_2px_rgba(0,0,0,0.8)]" />
+          )}
+        </span>
+        {/* The name only replaces the readout when the row genuinely agrees on one colour.
+            `paletteRef.mixed` is about palette *identity*; a single palette still resolves per
+            fixture, so a row can reference one palette and hold three different colours — and
+            printing its name there would hide from the operator that Record is about to capture
+            three different literals. */}
         <span className="truncate text-xs tabular-nums text-muted-foreground">
-          {value.isUniform ? `${value.r},${value.g},${value.b}` : 'Mixed'}
+          {paletteRef && !paletteRef.mixed && paletteRef.name && value.isUniform
+            ? paletteRef.name
+            : value.isUniform
+              ? `${value.r},${value.g},${value.b}`
+              : 'Mixed'}
         </span>
       </button>
     </ColourPickerPopover>

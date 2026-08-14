@@ -240,9 +240,13 @@ export function CuePropsPane({ cue, projectId }: CuePropsPaneProps) {
       </div>
 
       <div className="space-y-1.5">
+        {/* "Colour List", not "Palette": this is the cue's positional ordered list that FX
+            params index as `P1`, and the pane beside it now shows named-palette references on
+            assignment rows. Two unrelated things called "palette" in one cue card is exactly
+            what the relabel exists to prevent. */}
         <Label className="flex items-center gap-1.5">
           <Palette className="size-3.5" />
-          Palette
+          Colour List
           {cue.palette.length > 0 && (
             <Badge variant="secondary" className="text-[10px] px-1.5 py-0 ml-1">
               {cue.palette.length}

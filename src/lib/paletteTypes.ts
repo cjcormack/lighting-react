@@ -1,5 +1,6 @@
 import type { PaletteType } from '@/api/palettesApi'
 import type { ColumnKey } from '@/components/fixtures-list/columns'
+import type { PropertyCategory } from '@/store/fixtures'
 
 export const PALETTE_TYPES: readonly PaletteType[] = ['INTENSITY', 'POSITION', 'COLOUR', 'BEAM']
 
@@ -26,6 +27,58 @@ export const PALETTE_TYPE_COLUMNS: Record<PaletteType, readonly ColumnKey[]> = {
   POSITION: ['position'],
   COLOUR: ['colour'],
   BEAM: ['gobo', 'zoom', 'focus', 'iris', 'prism', 'speed'],
+}
+
+/**
+ * Which palette type covers a property, from its category.
+ *
+ * A direct mirror of the backend's `PropertyCategory.maskGroup()` (`fx/PropertyMask.kt`), which
+ * is the only definition that matters — the palette type *is* the mask, so a client that
+ * classified a property differently would offer a palette that could never resolve on it.
+ *
+ * Keep in step with that function. The two non-obvious arms: `strobe` is INTENSITY (an intensity
+ * modulation, HTP like dimmer), and the extra emitters — amber, white, UV — are COLOUR, because
+ * they are emitters of the same mixed colour and splitting them out would record half a look.
+ *
+ * `position` is the synthetic pan/tilt pair, which has no category of its own; it is handled by
+ * the `pan`/`tilt` arms via the descriptors it was built from.
+ */
+const PALETTE_TYPE_BY_CATEGORY: Record<PropertyCategory, PaletteType> = {
+  dimmer: 'INTENSITY',
+  strobe: 'INTENSITY',
+  pan: 'POSITION',
+  tilt: 'POSITION',
+  pan_fine: 'POSITION',
+  tilt_fine: 'POSITION',
+  colour: 'COLOUR',
+  amber: 'COLOUR',
+  white: 'COLOUR',
+  uv: 'COLOUR',
+  gobo: 'BEAM',
+  gobo_rotation: 'BEAM',
+  prism: 'BEAM',
+  prism_rotation: 'BEAM',
+  focus: 'BEAM',
+  zoom: 'BEAM',
+  iris: 'BEAM',
+  frost: 'BEAM',
+  led_macro: 'BEAM',
+  movement_macro: 'BEAM',
+  speed: 'BEAM',
+  setting: 'BEAM',
+  other: 'BEAM',
+}
+
+export function paletteTypeForCategory(category: string): PaletteType {
+  // `position` is the synthetic pan/tilt pair. It has no entry in `PropertyCategory` — the
+  // backend answers it before its own category lookup for the same reason — but it does appear
+  // as a descriptor's category, so it is answered here rather than falling into BEAM.
+  if (category === 'position') return 'POSITION'
+  // Loose `string` rather than `PropertyCategory`, because group property descriptors carry an
+  // untyped category off the wire. The Record above still forces every known category to be
+  // classified; an unrecognised one lands in BEAM, which is where the backend's own catch-all
+  // categories (`SETTING`, `OTHER`) go.
+  return PALETTE_TYPE_BY_CATEGORY[category as PropertyCategory] ?? 'BEAM'
 }
 
 /** URL slug for a type, e.g. `COLOUR` → `colour`. */

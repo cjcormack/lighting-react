@@ -19,10 +19,12 @@ import {
   TableProperties,
   Sliders,
   SlidersVertical,
+  SwatchBook,
   Activity,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { useGetUniverseQuery } from "./store/universes"
+import { PALETTE_TYPES, PALETTE_TYPE_LABELS, paletteTypeSlug } from "./lib/paletteTypes"
 
 export type NavGroup = "setup" | "program" | "live" | "settings" | "install"
 
@@ -97,6 +99,25 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/presets`,
     visibility: "always",
     pathMatch: "/presets",
+    group: "program",
+  },
+  {
+    id: "palettes",
+    // Named palettes — the typed, per-fixture entity a cue row references as `ref:{uuid}`,
+    // not the positional colour list the busking bar calls a Colour List.
+    //
+    // One entry for four sibling routes (`/palettes/colour`, `/palettes/position`, …), which
+    // are reached through the in-page type switcher. That is the *third* instance of the
+    // sibling-route exception documented in CLAUDE.md, after Fixtures/Groups cards-vs-list and
+    // the programmer's Values/FX — one sidebar row per resource, and the in-page switcher owns
+    // the sub-view. Note the bare `/palettes` path deliberately belongs to no type: it
+    // redirects to the sticky one, so no type's own route can be the redirect's target and
+    // loop.
+    label: "Palettes",
+    icon: SwatchBook,
+    path: (p) => `/projects/${p}/palettes`,
+    visibility: "always",
+    pathMatch: "/palettes",
     group: "program",
   },
 
@@ -295,6 +316,30 @@ export function useUniverseNavItems(): NavItem[] {
         group: "live" as const,
       })),
     [universes],
+  )
+}
+
+/**
+ * Returns one item per palette type ("Colour Palettes", "Position Palettes", …).
+ *
+ * Cmd+K only, on the [useUniverseNavItems] precedent: the sidebar keeps its single "Palettes"
+ * row and the in-page switcher moves between types, but jumping straight to the position bank
+ * is exactly the kind of thing the command palette is for.
+ */
+export function usePaletteTypeNavItems(): NavItem[] {
+  return useMemo(
+    () =>
+      PALETTE_TYPES.map((type) => ({
+        // Prefixed rather than bare, so these can never collide with the static `palettes` id.
+        id: `palettes-${paletteTypeSlug(type)}`,
+        label: `${PALETTE_TYPE_LABELS[type].singular} Palettes`,
+        icon: SwatchBook,
+        path: (p: number) => `/projects/${p}/palettes/${paletteTypeSlug(type)}`,
+        visibility: "always" as const,
+        pathMatch: `/palettes/${paletteTypeSlug(type)}`,
+        group: "program" as const,
+      })),
+    [],
   )
 }
 

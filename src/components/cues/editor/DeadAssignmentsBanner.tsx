@@ -14,10 +14,15 @@ interface DeadAssignmentsBannerProps {
 }
 
 /**
- * Phase 6 dead-reference banner. Lists any property-assignment rows whose target or
- * property doesn't resolve against the current patch. Each row gets a visible reason
- * + a one-click Remove action — the pragmatic "Rebind" (operator re-adds against the
- * current fixture from the grid below). Hides itself when every row is healthy.
+ * Dead-reference banner. Lists any property-assignment row that doesn't resolve against the
+ * current patch — a target or property that no longer exists, or a **palette reference** that
+ * has nothing to resolve to. Each row gets a visible reason + a one-click Remove action, the
+ * pragmatic "Rebind" (the operator re-adds against the current fixture from the grid below).
+ * Hides itself when every row is healthy.
+ *
+ * Palette references belong here for the same reason the original variants do: the row is
+ * silently skipped when the cue fires, so unless something says so the cue simply does less
+ * than it looks like it does.
  */
 export function DeadAssignmentsBanner({
   assignments,
@@ -42,7 +47,7 @@ export function DeadAssignmentsBanner({
         <AlertTriangle className="size-3.5" />
         {deadIndices.length} dead assignment{deadIndices.length === 1 ? '' : 's'}
         <span className="text-[11px] font-normal text-muted-foreground ml-1">
-          — target or property no longer exists
+          — the target, property or palette no longer resolves
         </span>
       </div>
       <ul className="space-y-1">

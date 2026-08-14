@@ -19,7 +19,7 @@ import { ShowBar } from '../components/ShowBar'
 import { ProgramView } from '../components/runner/program/ProgramView'
 import { ProgrammerPane } from '../components/programmer/ProgrammerPane'
 import { RecordSheet } from '../components/programmer/RecordSheet'
-import { useIncludeCue } from '../components/programmer/useIncludeCue'
+import { useInclude } from '../components/programmer/useInclude'
 import type { CueStack } from '../api/cueStacksApi'
 
 /** The cue's display name for the Record sheet's header, or undefined if it has vanished. */
@@ -111,7 +111,7 @@ export function ProgramPage() {
   // Record replaces the old "Grab live state" button. Grab-live is still reachable — it is
   // `source: 'STAGE_SNAPSHOT'` in the Record sheet — but it is no longer the only way to get
   // the stage into a cue, and it was the lossy one.
-  const { include, isLoading: includePending } = useIncludeCue(projectIdNum)
+  const { includeCue, isLoading: includePending } = useInclude(projectIdNum)
   const [recordCueId, setRecordCueId] = useState<number | null>(null)
 
   // Set/clear the `?cue=` modifier without touching the stack path (replace: no history spam).
@@ -195,7 +195,7 @@ export function ProgramPage() {
 
   const handleRecordInto = useCallback((cueId: number) => setRecordCueId(cueId), [])
 
-  const handleIncludeCue = useCallback((cueId: number) => void include(cueId), [include])
+  const handleIncludeCue = useCallback((cueId: number) => void includeCue(cueId), [includeCue])
 
   // ── Deep-link normalizer + auto-drill ──
   // - Legacy `/program?stack=X&cue=Y` links (from Run / Prompt Book "Edit Cue") are rewritten to

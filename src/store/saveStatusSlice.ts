@@ -30,8 +30,11 @@ export const NON_SAVE_ENDPOINTS: ReadonlySet<string> = new Set([
   // The programmer's authoring loop. Each reports itself in its own sheet/dialog, and
   // Record/Update also report counts and skips there — a save-status flash would say less.
   'recordProgrammer',
-  'includeCue',
+  'includeIntoProgrammer',
   'updateProgrammer',
+  // Make Hard at *programmer* level writes only live programmer state — no persisted row moves,
+  // so a "Saved" flash would be a lie. The cue-level one really does save, and is absent here.
+  'makeProgrammerHard',
 
   // ── Live output: DMX and effects state, none of it persisted ──
   'updateChannel',

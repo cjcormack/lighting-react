@@ -2,7 +2,9 @@ import { memo, useState } from 'react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Slider } from '@/components/ui/slider'
 import { Input } from '@/components/ui/input'
+import { PaletteRefNotice } from './PaletteRefNotice'
 import type { CellResolution } from '../columns'
+import type { CellPaletteRef } from '../useRowOwnership'
 import type { CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
 
@@ -11,6 +13,8 @@ interface SliderCellProps {
   resolutions: NonNullable<CellResolution>[]
   /** How many fixtures a commit from this cell will write to. */
   batchCount: number
+  /** Set when this cell's programmer entries reference a named palette. */
+  paletteRef?: CellPaletteRef
   onCommit: (commit: CellCommit) => void
   onBeginEdit: () => void
 }
@@ -28,6 +32,7 @@ export const SliderCell = memo(function SliderCell({
   value,
   resolutions,
   batchCount,
+  paletteRef,
   onCommit,
   onBeginEdit,
 }: SliderCellProps) {
@@ -77,6 +82,7 @@ export const SliderCell = memo(function SliderCell({
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-64 space-y-3" align="start">
+        <PaletteRefNotice paletteRef={paletteRef} />
         {batchCount > 1 && (
           <p className="text-xs text-muted-foreground">Applying to {batchCount} targets</p>
         )}

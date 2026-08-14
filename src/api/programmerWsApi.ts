@@ -1,3 +1,4 @@
+import { parsePaletteRefUuid } from '../lib/programmerValue'
 import type { InternalApiConnection } from './internalApi'
 import type { Subscription } from './subscription'
 import type { PaletteType } from './palettesApi'
@@ -479,10 +480,23 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     // thing driving it until the refetch lands. `sourceGroup` is dropped for the same reason:
     // a direct write did not come through a group control.
     const owners = ['web', ...(existing?.owners ?? []).filter((o) => o !== 'web')]
+    // The echo carries only the value, so a write of a `ref:` string would otherwise land
+    // locally as a *reference-less* entry until the refetch corrected it — and Apply Palette
+    // writes exactly that. For the ~100 ms in between, every cell it just touched would drop its
+    // reference badge and (in blind) blank its staged preview. Recover the identity from the
+    // value, and carry the palette's metadata forward when it is the same palette as before;
+    // the name and the freshly resolved literal arrive with the authoritative refetch.
+    const paletteUuid = parsePaletteRefUuid(message.value) ?? undefined
+    const samePalette = paletteUuid !== undefined && paletteUuid === existing?.paletteUuid
     next.set(key, {
       targetKey: message.targetKey,
       propertyName: message.propertyName,
       value: message.value,
+      paletteUuid,
+      paletteId: samePalette ? existing?.paletteId : undefined,
+      paletteName: samePalette ? existing?.paletteName : undefined,
+      paletteType: samePalette ? existing?.paletteType : undefined,
+      resolvedValue: samePalette ? existing?.resolvedValue : undefined,
       owner: 'web',
       touched: true,
       owners,

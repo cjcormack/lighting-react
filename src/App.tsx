@@ -21,6 +21,7 @@ import { ProjectFxLibrary, FxLibraryRedirect } from "./routes/FxLibrary";
 
 import { FxRedirect, ProjectFxBusking } from "./routes/FxBusking";
 import { PresetsRedirect, ProjectFxPresets } from "./routes/FxPresets";
+import { PalettesRedirect, PalettesTypeRedirect, ProjectPalettes } from "./routes/Palettes";
 import ProjectOverview, { ProjectOverviewRedirect } from "./routes/ProjectOverview";
 import { PatchesRedirect } from "./routes/Patches";
 import { ProgramPage, ProgramRedirect, CuesLegacyRedirect } from "./routes/ProgramPage";
@@ -112,6 +113,21 @@ function App() {
         {
           path: "presets",
           element: <PresetsRedirect />,
+        },
+        // Palettes: one nav entry, four sibling type routes reached via the in-page switcher.
+        // The bare project path belongs to no type — it redirects to the sticky one, which is
+        // what keeps the redirect acyclic.
+        {
+          path: "projects/:projectId/palettes/:type",
+          element: <ProjectPalettes />,
+        },
+        {
+          path: "projects/:projectId/palettes",
+          element: <PalettesTypeRedirect />,
+        },
+        {
+          path: "palettes",
+          element: <PalettesRedirect />,
         },
         // Legacy FX Cues routes — the view was folded into Program. Redirect to keep bookmarks alive.
         {

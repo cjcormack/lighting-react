@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { lightingApi } from '../../api/lightingApi'
 import { useEditorContext } from '../../components/lighting-editor/EditorContext'
 import { rgbToHex } from '../../components/fx/colourUtils'
-import { parseProgrammerValue, serializeLevel } from '../../lib/programmerValue'
+import { parseProgrammerEntryValue, serializeLevel } from '../../lib/programmerValue'
 import type { PlannedWrite } from './rowModel'
 import type { ChannelRef, ColourPropertyDescriptor } from '../../store/fixtures'
 
@@ -236,7 +236,10 @@ export function useCellWriters(): CellWriters {
         // land on. (Taking the whole position is the console-normal consequence of touching
         // one axis; what we avoid here is freezing it to an arbitrary sample.)
         const held = lightingApi.programmer.getKeyState(fixtureKey, 'position').entry
-        const heldPosition = held ? parseProgrammerValue(held.value) : null
+        // Through `parseProgrammerEntryValue`, not `parseProgrammerValue(held.value)`: a slot
+        // holding a palette reference has `ref:{uuid}` as its value, which parses to null and
+        // would drop us onto the live wire sample this branch exists to avoid.
+        const heldPosition = held ? parseProgrammerEntryValue(held) : null
         const staged = heldPosition?.kind === 'position' ? heldPosition : null
         const effectivePan =
           panValue ?? staged?.pan ?? lightingApi.channels.get(pan.universe, pan.channelNo)

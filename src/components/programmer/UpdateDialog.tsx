@@ -184,6 +184,21 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
                     {r.republishedLive ? ' (live cue republished)' : ''}.
                   </p>
                 ))}
+                {/* A separate field from `results` rather than a cue-shaped entry, matching the
+                    wire: a palette Update writes entries, not assignments, and what it moves is
+                    every consumer of the palette rather than one cue. That second number is the
+                    one the operator most needs — it is the rest of the show changing. */}
+                {result.paletteResult && (
+                  <p>
+                    Updated “{result.paletteResult.paletteName}” —{' '}
+                    {result.paletteResult.entriesWritten} value
+                    {result.paletteResult.entriesWritten === 1 ? '' : 's'} written
+                    {result.paletteResult.cuesRepublished.length > 0
+                      ? `, ${result.paletteResult.cuesRepublished.length} live cue(s) moved with it`
+                      : ''}
+                    .
+                  </p>
+                )}
                 {result.warnings.map((warning) => (
                   <p key={warning} className="text-xs text-amber-600 dark:text-amber-500">
                     {warning}

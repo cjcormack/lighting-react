@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { ChevronDown, ChevronRight, Info } from 'lucide-react'
+import { ChevronDown, ChevronRight, Info, Link2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -14,11 +14,27 @@ import { SliderCell } from './cells/SliderCell'
 import { ColourCell } from './cells/ColourCell'
 import { PositionCell } from './cells/PositionCell'
 import { SettingCell } from './cells/SettingCell'
+import type { PaletteType } from '@/api/palettesApi'
 import type { ColumnKey } from './columns'
 import type { CellCommit, FixtureRow, GroupRow, InfoRow, Row, RowId } from './rowModel'
+import type { CellPaletteRef } from './useRowOwnership'
 import type { RowCell } from './useRowValues'
 
 const ROW_HEIGHT = 36
+
+/**
+ * Left-edge bar colour per palette type — a quiet type cue, not a fifth ownership colour.
+ *
+ * `MIXED` covers a cell whose covered properties reference more than one palette, which has no
+ * single type to tint by.
+ */
+const PALETTE_REF_BAR_CLASS: Record<PaletteType | 'MIXED', string> = {
+  INTENSITY: 'bg-zinc-400',
+  POSITION: 'bg-emerald-500',
+  COLOUR: 'bg-fuchsia-500',
+  BEAM: 'bg-cyan-500',
+  MIXED: 'bg-muted-foreground',
+}
 
 /** Sticky name column: 260px on a desktop, but never more than 45% of a narrow viewport. */
 const NAME_COLUMN_WIDTH = 'min(45vw, 260px)'
@@ -332,16 +348,35 @@ const RowView = React.memo(function RowView({
           return <div key={col} className="h-full" />
         }
         const owned = ownership[col]
+        const paletteRef = owned?.paletteRef
         return (
           <div
             key={col}
-            className={`h-full min-w-0 py-0.5 ${ownershipCellClass(owned)}`}
+            className={`relative h-full min-w-0 py-0.5 ${ownershipCellClass(owned)}`}
             title={ownershipTitle(owned)}
           >
+            {/* Reference marker, layered around the cell rather than inside it — the same choice
+                `ownershipCellClass` documents. The four cell editors already encode value shape,
+                and a marker drawn inside one of them would have to be drawn four times. */}
+            {paletteRef && (
+              <span
+                className={`pointer-events-none absolute inset-y-0.5 left-0 w-0.5 rounded-full ${
+                  paletteRef.resolved ? PALETTE_REF_BAR_CLASS[paletteRef.type ?? 'MIXED'] : 'bg-destructive'
+                }`}
+              />
+            )}
+            {paletteRef && (
+              <Link2
+                className={`pointer-events-none absolute right-0.5 top-0.5 size-2.5 ${
+                  paletteRef.resolved ? 'text-muted-foreground' : 'text-destructive'
+                }`}
+              />
+            )}
             <PropertyCell
               cell={cell}
               value={applyStagedValue(value, owned?.staged, cell.resolutions)}
               batchCount={batchCountFor(row, col)}
+              paletteRef={paletteRef}
               onBeginEdit={() => onBeginCellEdit(row)}
               onCommit={(commit) => onCellCommit(row, col, commit)}
             />
@@ -356,12 +391,14 @@ function PropertyCell({
   cell,
   value,
   batchCount,
+  paletteRef,
   onBeginEdit,
   onCommit,
 }: {
   cell: RowCell
   value: NonNullable<ReturnType<typeof useRowValues>[ColumnKey]>
   batchCount: number
+  paletteRef?: CellPaletteRef
   onBeginEdit: () => void
   onCommit: (commit: CellCommit) => void
 }) {
@@ -372,6 +409,7 @@ function PropertyCell({
           value={value}
           resolutions={cell.resolutions}
           batchCount={batchCount}
+          paletteRef={paletteRef}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
         />
@@ -382,6 +420,7 @@ function PropertyCell({
           value={value}
           resolutions={cell.resolutions}
           batchCount={batchCount}
+          paletteRef={paletteRef}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
         />
@@ -392,6 +431,7 @@ function PropertyCell({
           value={value}
           resolutions={cell.resolutions}
           batchCount={batchCount}
+          paletteRef={paletteRef}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
         />
@@ -402,6 +442,7 @@ function PropertyCell({
           value={value}
           resolutions={cell.resolutions}
           batchCount={batchCount}
+          paletteRef={paletteRef}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
         />

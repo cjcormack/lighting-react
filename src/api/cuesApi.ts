@@ -59,6 +59,16 @@ export type AssignmentHealth =
   | { type: 'missingFixture'; fixtureKey: string }
   | { type: 'missingGroup'; groupName: string }
   | { type: 'missingProperty'; targetKey: string; propertyName: string }
+  // ── Named-palette references ──
+  /** The row's value is `ref:{uuid}` and no palette with that uuid exists (a forced delete,
+   *  or an import whose palette folder was incomplete). The row is skipped at apply. */
+  | { type: 'missingPalette'; paletteUuid: string }
+  /** The palette exists but holds nothing for this target and property, so there is nothing
+   *  to resolve to — an honest gap, or a type mismatch. */
+  | { type: 'missingPaletteEntry'; paletteUuid: string; targetKey: string; propertyName: string }
+  /** A COLOUR palette referenced from a `position` row: it can never cover this property.
+   *  Read-path only — resolution reports the same case as `missingPaletteEntry`. */
+  | { type: 'paletteTypeMismatch'; paletteUuid: string; paletteType: string; propertyGroup: string }
 
 // Layer 3 property assignment on a cue.
 export interface CuePropertyAssignment {

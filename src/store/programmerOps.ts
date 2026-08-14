@@ -1,5 +1,6 @@
 import { restApi } from './restApi'
 import type { Cue } from '../api/cuesApi'
+import type { PaletteType } from '../api/palettesApi'
 import type { IncludedTarget } from '../api/programmerWsApi'
 
 /**
@@ -34,6 +35,11 @@ export interface ProgrammerSkip {
     | 'MISSING_PROPERTY'
     | 'NO_BACKING_PROPERTY'
     | 'MASKED_OUT'
+    /**
+     * Outside the request's fixture scope. Only the palette routes pass a scope — a palette
+     * recorded from the *whole* programmer would capture every head it happens to hold.
+     */
+    | 'OUT_OF_SCOPE'
 }
 
 /** What a write deliberately left alone. */
@@ -75,16 +81,25 @@ export interface RecordResponse {
 
 export interface IncludeRequest {
   projectId: number
-  cueId: number
+  /** Exactly one of `cueId` / `paletteId`. The backend 400s on both or neither. */
+  cueId?: number
+  paletteId?: number
   mask?: PropertyMaskGroup[]
   includeFx?: boolean
   fadeMs?: number
 }
 
 export interface IncludeResponse {
-  cueId: number
+  kind: 'CUE' | 'PALETTE'
+  /** Null when a palette was included. */
+  cueId?: number
   cueStackId?: number
-  cueName: string
+  paletteId?: number
+  /**
+   * The cue's *or* the palette's name — `name` rather than `cueName` because it is now either,
+   * and a field called `cueName` holding a palette name is a lie. Renamed on the wire too.
+   */
+  name: string
   entriesWritten: number
   /** MagicQ's "Select Heads on Include" — the sheet selects these. */
   fixtureKeys: string[]
@@ -153,13 +168,69 @@ export interface UpdateResult {
   republishedLive: boolean
 }
 
+/**
+ * Mode A written back into a palette rather than a cue.
+ *
+ * A separate field from `results` rather than a nullable `cueId` on `UpdateResult`, matching the
+ * backend: everything that already reads `results` for cue counts keeps working untouched.
+ */
+export interface PaletteUpdateResult {
+  paletteId: number
+  paletteName: string
+  paletteType: PaletteType
+  entriesWritten: number
+  /** What the re-resolve moved — the live consumers of the palette. */
+  programmerKeysRefreshed: number
+  cuesRepublished: number[]
+}
+
 export interface UpdateResponse {
   applied: boolean
   mode: 'A' | 'B' | 'CHECKLIST'
   results: UpdateResult[]
+  /** Set when Mode A's include target was a palette. Mode B is cue-only, by design. */
+  paletteResult?: PaletteUpdateResult
   checklist?: UpdateChecklist
   skipped: ProgrammerSkip[]
   warnings: string[]
+}
+
+/** `POST /programmer/make-hard` — stop the programmer's references tracking their palettes. */
+export interface MakeProgrammerHardRequest {
+  /** Restrict to these programmer targets. Omitted = every reference the programmer holds. */
+  targetKeys?: string[]
+  mask?: PropertyMaskGroup[]
+}
+
+export interface MakeProgrammerHardResponse {
+  /** References replaced by the literal they currently resolve to. */
+  converted: number
+  /** References left alone because they fell outside the scope or mask. */
+  skipped: number
+}
+
+/** `POST /project/{projectId}/cues/{cueId}/make-hard`. */
+export interface MakeCueHardRequest {
+  projectId: number
+  cueId: number
+  /** Restrict to rows referencing these palettes. Omitted = every reference in the cue. */
+  paletteUuids?: string[]
+  mask?: PropertyMaskGroup[]
+  /** Harden anyway when a cue-edit session is open on the cue. */
+  force?: boolean
+}
+
+export interface MakeCueHardResponse {
+  cue: Cue
+  converted: number
+  /**
+   * Group rows replaced by one row per member, because the members resolved to different
+   * literals. The cue's row count grows, and the operator is told rather than surprised.
+   */
+  groupRowsExpanded: number
+  /** Rows left as references because they don't currently resolve. */
+  unresolved: number
+  republishedLive: boolean
 }
 
 /** The 409 body both Record and Update use, so the caller can offer "do it anyway". */
@@ -192,7 +263,12 @@ export const programmerOpsApi = restApi.injectEndpoints({
             ],
     }),
 
-    includeCue: build.mutation<IncludeResponse, IncludeRequest>({
+    /**
+     * Named `includeIntoProgrammer`, not `includeCue`: the same route now loads a palette's
+     * contents as well, and `ProgrammerStore.lastIncludedTarget` is single-valued so the two
+     * could not have been separate endpoints anyway.
+     */
+    includeIntoProgrammer: build.mutation<IncludeResponse, IncludeRequest>({
       query: ({ projectId, ...body }) => ({
         url: 'programmer/include',
         method: 'POST',
@@ -211,7 +287,46 @@ export const programmerOpsApi = restApi.injectEndpoints({
       // A checklist fetch writes nothing, so it must not invalidate — the dialog opens with
       // one, and a refetch storm behind an open dialog is pure churn.
       invalidatesTags: (result, _error, { projectId }) =>
-        result?.applied ? [{ type: 'CueList', id: projectId }, 'CueList'] : [],
+        result?.applied
+          ? [
+              { type: 'CueList', id: projectId },
+              'CueList',
+              // Mode A can write a palette instead of a cue, which changes what every
+              // referencing row resolves to.
+              ...(result.paletteResult ? (['Palette', 'PaletteList'] as const) : []),
+            ]
+          : [],
+    }),
+
+    /**
+     * Stop the programmer's references tracking their palettes.
+     *
+     * Nothing on stage moves — a hardened slot keeps the value it already resolved to — so this
+     * invalidates nothing. The refreshed entries arrive over the programmer WS channel, which the
+     * backend pokes with a provenance push precisely so a second tab's badges don't go stale.
+     */
+    makeProgrammerHard: build.mutation<MakeProgrammerHardResponse, MakeProgrammerHardRequest>({
+      query: (body) => ({ url: 'programmer/make-hard', method: 'POST', body }),
+    }),
+
+    makeCueHard: build.mutation<MakeCueHardResponse, MakeCueHardRequest>({
+      query: ({ projectId, cueId, force, ...body }) => ({
+        url: `project/${projectId}/cues/${cueId}/make-hard${force ? '?force=true' : ''}`,
+        method: 'POST',
+        body,
+      }),
+      // Palette tags too: hardening drops references, so the palette's "used by" count moves and
+      // a delete that was blocked a moment ago may now be allowed.
+      invalidatesTags: (result, _error, { projectId, cueId }) =>
+        result == null
+          ? []
+          : [
+              { type: 'Cue', id: cueId },
+              { type: 'CueList', id: projectId },
+              'CueList',
+              'Palette',
+              'PaletteList',
+            ],
     }),
   }),
   overrideExisting: false,
@@ -219,6 +334,8 @@ export const programmerOpsApi = restApi.injectEndpoints({
 
 export const {
   useRecordProgrammerMutation,
-  useIncludeCueMutation,
+  useIncludeIntoProgrammerMutation,
   useUpdateProgrammerMutation,
+  useMakeProgrammerHardMutation,
+  useMakeCueHardMutation,
 } = programmerOpsApi

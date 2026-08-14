@@ -17,11 +17,23 @@ export function describeHealth(health: BindingHealth | undefined): string | null
       return `Group '${health.groupName}' no longer exists`
     case "missingProperty":
       return `Property '${health.propertyName}' is not defined on '${health.targetKey}'`
+    case "missingPalette":
+      return "The palette this references no longer exists"
+    case "missingPaletteEntry":
+      return `The referenced palette has no ${health.propertyName} for '${health.targetKey}'`
+    case "paletteTypeMismatch":
+      return `A ${health.paletteType.toLowerCase()} palette can't cover a ${health.propertyGroup.toLowerCase()} property`
     case "missingStack":
       return `Cue stack #${health.stackId} no longer exists`
     case "missingCue":
       return `Cue #${health.cueId} no longer exists`
     case "unknownBank":
       return `Bank '${health.bankId}' is not defined on device '${health.deviceTypeKey}'`
+    default:
+      // Not dead code: the backend's health ADT is versioned independently of this client, so
+      // a newer server can send a variant TypeScript here has never heard of. Falling through
+      // to a generic message keeps an unknown variant *visible* as a problem, which is the
+      // point of the diagnostic — returning null would render it as healthy.
+      return "This reference no longer resolves"
   }
 }

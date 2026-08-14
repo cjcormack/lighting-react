@@ -274,6 +274,76 @@ describe('createProgrammerApi', () => {
     expect(api.entryCount()).toBe(1)
   })
 
+  it('keeps the reference identity when the echoed write is itself a palette reference', () => {
+    // Apply Palette writes `ref:{uuid}` through the ordinary `programmer.set` path, and the echo
+    // carries only the value. Without recovering the uuid from it, every cell the operator just
+    // applied to would drop its reference badge — and blank its blind preview — until the
+    // authoritative refetch landed ~100ms later.
+    const { conn, frame } = fakeConnection()
+    const api = createProgrammerApi(conn)
+    const uuid = '11111111-2222-3333-4444-555555555555'
+    frame(
+      stateFrame([
+        {
+          ...ENTRY,
+          value: `ref:${uuid}`,
+          resolvedValue: '120',
+          paletteUuid: uuid,
+          paletteId: 7,
+          paletteName: 'Warm Amber',
+          paletteType: 'COLOUR',
+        },
+      ]),
+    )
+
+    frame({
+      type: 'programmer.entryChanged',
+      targetType: 'fixture',
+      targetKey: 'hex-1',
+      propertyName: 'dimmer',
+      value: `ref:${uuid}`,
+    })
+
+    const entry = api.getKeyState('hex-1', 'dimmer').entry
+    expect(entry?.paletteUuid).toBe(uuid)
+    // Same palette as before, so its name and resolved literal carry forward rather than
+    // blanking for a frame.
+    expect(entry?.paletteName).toBe('Warm Amber')
+    expect(entry?.resolvedValue).toBe('120')
+  })
+
+  it('drops the palette fields when a write replaces a reference with a literal', () => {
+    // The other half of the same rule: dragging a slider on a referencing cell breaks the
+    // reference, and the cell must stop claiming to track a palette immediately.
+    const { conn, frame } = fakeConnection()
+    const api = createProgrammerApi(conn)
+    const uuid = '11111111-2222-3333-4444-555555555555'
+    frame(
+      stateFrame([
+        {
+          ...ENTRY,
+          value: `ref:${uuid}`,
+          resolvedValue: '120',
+          paletteUuid: uuid,
+          paletteName: 'Warm Amber',
+        },
+      ]),
+    )
+
+    frame({
+      type: 'programmer.entryChanged',
+      targetType: 'fixture',
+      targetKey: 'hex-1',
+      propertyName: 'dimmer',
+      value: '200',
+    })
+
+    const entry = api.getKeyState('hex-1', 'dimmer').entry
+    expect(entry?.paletteUuid).toBeUndefined()
+    expect(entry?.paletteName).toBeUndefined()
+    expect(entry?.resolvedValue).toBeUndefined()
+  })
+
   it('drops the entry on an own-connection clear', () => {
     const { conn, frame } = fakeConnection()
     const api = createProgrammerApi(conn)

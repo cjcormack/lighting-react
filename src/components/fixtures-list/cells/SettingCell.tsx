@@ -1,7 +1,9 @@
 import { memo, useState } from 'react'
 import { Check } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { PaletteRefNotice } from './PaletteRefNotice'
 import type { CellResolution } from '../columns'
+import type { CellPaletteRef } from '../useRowOwnership'
 import type { CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
 
@@ -9,6 +11,8 @@ interface SettingCellProps {
   value: Extract<CellValue, { kind: 'setting' }>
   resolutions: NonNullable<CellResolution>[]
   batchCount: number
+  /** Set when this cell's programmer entries reference a named palette. */
+  paletteRef?: CellPaletteRef
   onCommit: (commit: CellCommit) => void
   onBeginEdit: () => void
 }
@@ -24,6 +28,7 @@ export const SettingCell = memo(function SettingCell({
   value,
   resolutions,
   batchCount,
+  paletteRef,
   onCommit,
   onBeginEdit,
 }: SettingCellProps) {
@@ -56,6 +61,11 @@ export const SettingCell = memo(function SettingCell({
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-56 p-1" align="start">
+        {paletteRef && (
+          <div className="px-2 py-1.5">
+            <PaletteRefNotice paletteRef={paletteRef} />
+          </div>
+        )}
         {batchCount > 1 && (
           <p className="px-2 py-1.5 text-xs text-muted-foreground">
             Applying to {batchCount} targets

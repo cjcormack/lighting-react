@@ -9,7 +9,7 @@ import type { ProgrammerSkip, PropertyMaskGroup } from '@/store/programmerOps'
  * and a plain slider on another), so a category-level mask would silently miss fixtures. This
  * is the console I/P/C/B vocabulary, and it is four checkboxes rather than twenty-two.
  */
-const MASK_GROUPS: { value: PropertyMaskGroup; label: string }[] = [
+export const MASK_GROUPS: { value: PropertyMaskGroup; label: string }[] = [
   { value: 'INTENSITY', label: 'Intensity' },
   { value: 'POSITION', label: 'Position' },
   { value: 'COLOUR', label: 'Colour' },
@@ -56,6 +56,7 @@ const SKIP_REASONS: Record<ProgrammerSkip['reason'], string> = {
   MISSING_PROPERTY: 'properties that no longer resolve',
   NO_BACKING_PROPERTY: 'raw channels with no backing property',
   MASKED_OUT: 'entries outside the attribute mask',
+  OUT_OF_SCOPE: 'entries outside the selection',
 }
 
 /**

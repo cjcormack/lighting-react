@@ -25,15 +25,30 @@ export { programmerKey } from '../api/programmerWsApi'
 export interface ProgrammerSummary {
   blind: boolean
   entryCount: number
+  /**
+   * Entries holding a palette reference rather than a literal. Gates Make Hard, which is
+   * meaningless — and would read as broken — when the programmer holds none.
+   */
+  referenceCount: number
   /** What Include last loaded — drives the Update button's target and label. */
   lastIncluded: IncludedTarget | null
 }
 
+function countReferences(entries: Iterable<{ paletteUuid?: string }>): number {
+  let count = 0
+  for (const entry of entries) {
+    if (entry.paletteUuid) count += 1
+  }
+  return count
+}
+
 function currentSummary(): ProgrammerSummary {
+  const state = lightingApi.programmer.getState()
   return {
-    blind: lightingApi.programmer.isBlind(),
-    entryCount: lightingApi.programmer.entryCount(),
-    lastIncluded: lightingApi.programmer.lastIncluded(),
+    blind: state.blind,
+    entryCount: state.entries.size,
+    referenceCount: countReferences(state.entries.values()),
+    lastIncluded: state.lastIncluded,
   }
 }
 
@@ -49,6 +64,7 @@ export const programmerApi = restApi.injectEndpoints({
             // neither counter moved (a provenance-only push).
             draft.blind = state.blind
             draft.entryCount = state.entries.size
+            draft.referenceCount = countReferences(state.entries.values())
             draft.lastIncluded = state.lastIncluded
           })
         })

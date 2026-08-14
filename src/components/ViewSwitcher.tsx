@@ -1,7 +1,25 @@
 import { type ReactNode } from 'react'
-import { AudioWaveform, BookOpenText, LayoutGrid, Pencil, Play, TableProperties } from 'lucide-react'
+import {
+  Aperture,
+  AudioWaveform,
+  BookOpenText,
+  LayoutGrid,
+  Move,
+  Palette,
+  Pencil,
+  Play,
+  Sun,
+  TableProperties,
+} from 'lucide-react'
 import { Link } from 'react-router'
 import { cn } from '@/lib/utils'
+import {
+  PALETTE_TYPES,
+  PALETTE_TYPE_LABELS,
+  paletteTypeSlug,
+  parsePaletteTypeSlug,
+} from '@/lib/paletteTypes'
+import type { PaletteType } from '@/api/palettesApi'
 
 export type ShowView = 'program' | 'run' | 'prompt-book'
 
@@ -182,6 +200,79 @@ export function ProgrammerViewSwitcher({
       />
     </nav>
   )
+}
+
+/**
+ * localStorage key remembering which palette type was last open, so the sidebar's single
+ * "Palettes" row lands where you left it.
+ */
+export const PALETTE_TYPE_KEY = 'palettes.type'
+
+export function setStoredPaletteType(type: PaletteType) {
+  try {
+    localStorage.setItem(PALETTE_TYPE_KEY, JSON.stringify(type))
+  } catch {
+    // Storage unavailable (private mode, quota) — stickiness just degrades.
+  }
+}
+
+/**
+ * Read-only counterpart for the bare `/palettes` route's sticky redirect. Deliberately not
+ * `usePersistentState`, for the same reason as [getStoredCardsListView]: the redirect is a
+ * one-shot read, and a hook that writes back on mount would make the *arrival* the choice.
+ *
+ * Defaults to COLOUR — the type an operator reaches for first, and the only one of the four
+ * that is useful before the rig has any moving heads in it.
+ */
+export function getStoredPaletteType(): PaletteType {
+  try {
+    return parsePaletteTypeSlug(
+      String(JSON.parse(localStorage.getItem(PALETTE_TYPE_KEY) ?? '""')).toLowerCase(),
+    ) ?? 'COLOUR'
+  } catch {
+    return 'COLOUR'
+  }
+}
+
+/**
+ * The four palette-type sibling routes, switched in-page.
+ *
+ * Sticky, unlike the programmer's Values/FX pair: the four types are peers rather than an editor
+ * and a diagnostic read, so returning to the one you were working in is the right default. No
+ * type owns the bare `/palettes` path — that redirects here — which is what keeps the
+ * redirect-loop that `CARDS_LINK_STATE` exists to break from being reachable at all.
+ */
+export function PaletteTypeSwitcher({
+  current,
+  projectId,
+}: {
+  current: PaletteType
+  projectId: number
+}) {
+  return (
+    <nav className="inline-flex items-center gap-0.5 rounded-lg border bg-card p-0.5">
+      {PALETTE_TYPES.map((type) => {
+        const Icon = PALETTE_TYPE_ICONS[type]
+        return (
+          <Segment
+            key={type}
+            active={current === type}
+            to={`/projects/${projectId}/palettes/${paletteTypeSlug(type)}`}
+            icon={<Icon className="size-3.5" />}
+            label={PALETTE_TYPE_LABELS[type].singular}
+            onClick={() => setStoredPaletteType(type)}
+          />
+        )
+      })}
+    </nav>
+  )
+}
+
+const PALETTE_TYPE_ICONS: Record<PaletteType, typeof Sun> = {
+  INTENSITY: Sun,
+  POSITION: Move,
+  COLOUR: Palette,
+  BEAM: Aperture,
 }
 
 function Segment({

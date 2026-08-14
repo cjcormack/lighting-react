@@ -41,7 +41,10 @@ export const palettesApi = restApi.injectEndpoints({
         method: 'POST',
         body,
       }),
-      invalidatesTags: ['PaletteList'],
+      // Guarded on the result, like every other mutation here: a create can fail on a blank
+      // name (400) or a duplicate name (409), and invalidating then refetches the bank to
+      // learn nothing changed.
+      invalidatesTags: (result) => (result == null ? [] : ['PaletteList']),
     }),
 
     savePalette: build.mutation<
@@ -53,10 +56,9 @@ export const palettesApi = restApi.injectEndpoints({
         method: 'PUT',
         body,
       }),
-      invalidatesTags: (_result, _error, { paletteId }) => [
-        { type: 'Palette', id: paletteId },
-        'PaletteList',
-      ],
+      // A rename can collide (409), and nothing moved when it does.
+      invalidatesTags: (result, _error, { paletteId }) =>
+        result == null ? [] : [{ type: 'Palette', id: paletteId }, 'PaletteList'],
     }),
 
     deletePalette: build.mutation<
@@ -68,7 +70,12 @@ export const palettesApi = restApi.injectEndpoints({
         method: 'DELETE',
       }),
       // Cue tags too: a forced delete leaves referencing rows dangling, and their health changes.
-      invalidatesTags: ['PaletteList', 'Palette', 'CueList', 'Cue'],
+      //
+      // Nothing is invalidated on failure, and the 409 `PALETTE_IN_USE` path is an ordinary part
+      // of the flow — refetching every cue behind the still-open sheet each time an operator
+      // tries to delete a palette that is in use would be pure churn.
+      invalidatesTags: (result, error) =>
+        error ? [] : ['PaletteList', 'Palette', 'CueList', 'Cue'],
     }),
 
     /**
@@ -77,10 +84,13 @@ export const palettesApi = restApi.injectEndpoints({
      * include / update follow.
      */
     recordPalette: build.mutation<RecordPaletteResponse, RecordPaletteRequest>({
-      query: (body) => ({
+      // `projectId` goes as a string, matching the backend DTO (and the sibling record /
+      // include / update mutations). It survives as a number today only because Ktor's
+      // DefaultJson is lenient — not something to depend on.
+      query: ({ projectId, ...body }) => ({
         url: 'programmer/record-palette',
         method: 'POST',
-        body,
+        body: { ...body, projectId: String(projectId) },
       }),
       // Cue tags because a re-record republishes referencing cues, changing what they resolve to.
       invalidatesTags: ['PaletteList', 'Palette', 'Cue', 'CueList'],
@@ -92,6 +102,10 @@ export const palettesApi = restApi.injectEndpoints({
 export const {
   usePaletteListQuery,
   usePaletteQuery,
+  // Lazy: Apply needs one palette's entries at the moment it is clicked, to report which of the
+  // selected fixtures it doesn't cover. Subscribing to every palette's detail up front would
+  // fetch the whole bank to answer a question about one.
+  useLazyPaletteQuery,
   useCreatePaletteMutation,
   useSavePaletteMutation,
   useDeletePaletteMutation,

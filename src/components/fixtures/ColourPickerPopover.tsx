@@ -20,6 +20,13 @@ interface ColourPickerPopoverProps {
   hasUvChannel: boolean
   /** Callback when colour is picked */
   onColourChange: (r: number, g: number, b: number, w?: number, a?: number, uv?: number) => void
+  /**
+   * Rendered above the picker. The programmer sheet uses it to warn that editing a cell which
+   * references a palette replaces that reference with a fixed value — a slot rather than a
+   * boolean prop, so callers that have nothing to say pay nothing and this component stays
+   * ignorant of palettes.
+   */
+  notice?: React.ReactNode
   /** The trigger element (swatch) */
   children: React.ReactNode
 }
@@ -55,6 +62,7 @@ export function ColourPickerPopover({
   hasAmberChannel,
   hasUvChannel,
   onColourChange,
+  notice,
   children,
 }: ColourPickerPopoverProps) {
   const [isOpen, setIsOpen] = useState(false)
@@ -122,6 +130,7 @@ export function ColourPickerPopover({
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent className="w-auto" align="start">
         <div className="space-y-3">
+          {notice}
           <RgbColorPicker color={pickerColor} onChange={handleColourChange} />
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span className="font-mono">

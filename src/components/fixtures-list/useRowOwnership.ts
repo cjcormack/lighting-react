@@ -1,7 +1,8 @@
 import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react'
 import { lightingApi } from '../../api/lightingApi'
 import { parseProgrammerValue } from '../../lib/programmerValue'
-import type { ProgrammerKeyState, ProvenanceSource } from '../../api/programmerWsApi'
+import type { PaletteType } from '../../api/palettesApi'
+import type { ProgrammerEntry, ProgrammerKeyState, ProvenanceSource } from '../../api/programmerWsApi'
 import type { CellPropertyKey, RowCell } from './useRowValues'
 import type { ColumnKey } from './columns'
 
@@ -31,11 +32,45 @@ export interface CellOwnership {
    * value) or the cell's covered properties disagree.
    */
   staged?: StagedValue
-  /*
-   * Session 4 seam: a `paletteRef` field belongs here once programmer values can hold
-   * `Ref(paletteId)`. Nothing populates or renders it yet — `parseProgrammerValue` returns
-   * null for a ref rather than guessing, so the cell falls back to the live value.
+  /**
+   * Set when at least one of the cell's covered properties references a named palette. The cell
+   * paints a reference marker; editing it replaces the reference with a fixed value.
    */
+  paletteRef?: CellPaletteRef
+}
+
+/**
+ * The named palette a cell's programmer entries reference.
+ *
+ * One object for the whole cell, because a cell can cover many properties (every member of a
+ * group row, both axes of a pan/tilt slider pair, every head of a collapsed multi-head fixture)
+ * and the operator needs one answer, not twelve.
+ */
+export interface CellPaletteRef {
+  /** Undefined when the covered properties reference *different* palettes — see `mixed`. */
+  uuid?: string
+  id?: number
+  name?: string
+  type?: PaletteType
+  /**
+   * False when at least one covered property's reference no longer resolves: the palette was
+   * deleted, or it no longer covers that fixture. The entry keeps its last resolved value, so
+   * the only signal the operator gets is this one.
+   */
+  resolved: boolean
+  /** The covered properties don't all reference the same palette (or some hold literals). */
+  mixed: boolean
+}
+
+/**
+ * The literal an entry currently *means*, which for a reference is what it resolved to.
+ *
+ * Comparing `value` instead is the trap: on a POSITION palette every head of a group row holds
+ * the identical `ref:{uuid}` string but resolves to a different pan/tilt, so a `value` comparison
+ * reports the cell uniform and paints one head's crosshair for all twelve.
+ */
+function resolvedLiteralOf(entry: ProgrammerEntry): string | undefined {
+  return entry.paletteUuid ? entry.resolvedValue : entry.value
 }
 
 export type StagedValue =
@@ -92,6 +127,15 @@ export function aggregateCellOwnership(
   let stagedValue: string | undefined
   let stagedUniform = true
 
+  // Reference state, tracked separately from ownership: the two disagree routinely. Every head
+  // of a group row can be programmer-owned and uniform (one `isUniform`) while only half of them
+  // are covered by the palette (the other).
+  let refUuid: string | undefined
+  let refEntry: ProgrammerEntry | undefined
+  let refCount = 0
+  let refMixed = false
+  let refResolved = true
+
   keys.forEach((key, index) => {
     const state = lookup(key.targetKey, key.propertyName)
     const keySource = sourceFor(state)
@@ -107,8 +151,24 @@ export function aggregateCellOwnership(
       for (const owner of state.entry.owners) {
         if (!owners.includes(owner)) owners.push(owner)
       }
-      if (index === 0) stagedValue = state.entry.value
-      else if (state.entry.value !== stagedValue) stagedUniform = false
+      const literal = resolvedLiteralOf(state.entry)
+      if (index === 0) stagedValue = literal
+      else if (literal !== stagedValue) stagedUniform = false
+
+      const uuid = state.entry.paletteUuid
+      if (uuid) {
+        refCount += 1
+        if (refUuid === undefined) {
+          refUuid = uuid
+          refEntry = state.entry
+        } else if (refUuid !== uuid) {
+          refMixed = true
+        }
+        // `paletteResolved` is only sent as `false`; a resolving reference omits it entirely.
+        if (state.entry.paletteResolved === false || state.entry.resolvedValue === undefined) {
+          refResolved = false
+        }
+      }
     } else if (index === 0) {
       stagedValue = undefined
     } else {
@@ -121,7 +181,23 @@ export function aggregateCellOwnership(
       ? (parseProgrammerValue(stagedValue) ?? undefined)
       : undefined
 
-  return { source, touched, isUniform: uniform, owners, sourceGroup, staged }
+  // Some-but-not-all counts as mixed too: a badge saying "references Warm Amber" over a cell where
+  // four of twelve heads hold a hand-typed literal would be a confident lie about what Record
+  // will capture.
+  const mixed = refMixed || refCount !== keys.length
+  const paletteRef: CellPaletteRef | undefined =
+    refCount === 0
+      ? undefined
+      : {
+          uuid: refMixed ? undefined : refUuid,
+          id: refMixed ? undefined : refEntry?.paletteId,
+          name: refMixed ? undefined : refEntry?.paletteName,
+          type: refMixed ? undefined : refEntry?.paletteType,
+          resolved: refResolved,
+          mixed,
+        }
+
+  return { source, touched, isUniform: uniform, owners, sourceGroup, staged, paletteRef }
 }
 
 /**

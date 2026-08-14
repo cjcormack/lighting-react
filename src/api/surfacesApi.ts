@@ -89,6 +89,11 @@ export type BindingHealth =
   | { type: "missingFixture"; fixtureKey: string }
   | { type: "missingGroup"; groupName: string }
   | { type: "missingProperty"; targetKey: string; propertyName: string }
+  // Palette-reference variants. Control surfaces can't hold a `ref:` value themselves, but
+  // this type is the superset `describeHealth` switches over, so it carries them.
+  | { type: "missingPalette"; paletteUuid: string }
+  | { type: "missingPaletteEntry"; paletteUuid: string; targetKey: string; propertyName: string }
+  | { type: "paletteTypeMismatch"; paletteUuid: string; paletteType: string; propertyGroup: string }
   | { type: "missingStack"; stackId: number }
   | { type: "missingCue"; cueId: number }
   | { type: "unknownBank"; deviceTypeKey: string; bankId: string }
