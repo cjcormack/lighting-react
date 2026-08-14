@@ -32,6 +32,11 @@ export interface EffectSummaryData {
    * though it runs elsewhere.
    */
   speedMasterUuid: string | null
+  /**
+   * Wall-clock rate master (null → unscaled). Same rule as [speedMasterUuid]: every adapter
+   * must carry it, or a wall-clock effect renders as unscaled while it is running scaled.
+   */
+  rateSpeedMasterUuid: string | null
 }
 
 // ─── Category inference ────────────────────────────────────────────────────
@@ -92,6 +97,7 @@ export function fromPresetEffect(
     parameters: e.parameters,
     parameterDefs: lookupParameterDefs(e.effectType, library),
     speedMasterUuid: e.speedMasterUuid ?? null,
+    rateSpeedMasterUuid: e.rateSpeedMasterUuid ?? null,
   }
 }
 
@@ -113,6 +119,7 @@ export function fromCueAdHocEffect(
     parameters: e.parameters,
     parameterDefs: lookupParameterDefs(e.effectType, library),
     speedMasterUuid: e.speedMasterUuid ?? null,
+    rateSpeedMasterUuid: e.rateSpeedMasterUuid ?? null,
   }
 }
 
@@ -134,6 +141,7 @@ export function fromFixtureDirectEffect(
     parameters: e.parameters,
     parameterDefs: lookupParameterDefs(e.effectType, library),
     speedMasterUuid: e.speedMasterUuid ?? null,
+    rateSpeedMasterUuid: e.rateSpeedMasterUuid ?? null,
   }
 }
 
@@ -155,6 +163,7 @@ export function fromFixtureIndirectEffect(
     parameters: e.parameters,
     parameterDefs: lookupParameterDefs(e.effectType, library),
     speedMasterUuid: e.speedMasterUuid ?? null,
+    rateSpeedMasterUuid: e.rateSpeedMasterUuid ?? null,
   }
 }
 
@@ -176,5 +185,6 @@ export function fromGroupActiveEffect(
     parameters: e.parameters,
     parameterDefs: lookupParameterDefs(e.effectType, library),
     speedMasterUuid: e.speedMasterUuid ?? null,
+    rateSpeedMasterUuid: e.rateSpeedMasterUuid ?? null,
   }
 }

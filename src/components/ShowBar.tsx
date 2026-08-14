@@ -1,6 +1,7 @@
 import { ArrowRight, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { BeatIndicator } from './BeatIndicator'
 import { ProgrammerIndicator } from './ProgrammerIndicator'
 import { SpeedMastersStrip } from './SpeedMastersStrip'
 
@@ -96,7 +97,8 @@ export function ShowBar({
           this tile is deliberately the M1 readout rather than duplicating it there. */}
       <div className="flex shrink-0 items-stretch rounded-md border bg-card overflow-hidden">
         <div className="flex flex-col justify-start gap-px px-3 py-1.5">
-          <span className="text-[9px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+          <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+            <BeatIndicator className="size-1.5 shrink-0" />
             M1 · BPM
           </span>
           <span className="font-mono text-lg font-bold leading-none text-foreground">

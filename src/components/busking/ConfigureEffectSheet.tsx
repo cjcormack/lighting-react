@@ -18,6 +18,8 @@ interface ConfigureEffectSheetProps {
   defaultBeatDivision: number
   /** Pad-wide default speed master (uuid; null → master 1). */
   defaultSpeedMasterUuid?: string | null
+  /** Pad-wide default wall-clock rate master (uuid; null → unscaled). */
+  defaultRateSpeedMasterUuid?: string | null
   onApply: (params: {
     beatDivision: number
     blendMode: string
@@ -27,6 +29,7 @@ interface ConfigureEffectSheetProps {
     stepTiming?: boolean
     parameters: Record<string, string>
     speedMasterUuid?: string
+    rateSpeedMasterUuid?: string
   }) => void
   onClose: () => void
   /** Whether to show the distribution strategy selector */
@@ -41,6 +44,7 @@ export function ConfigureEffectSheet({
   effect,
   defaultBeatDivision,
   defaultSpeedMasterUuid = null,
+  defaultRateSpeedMasterUuid = null,
   onApply,
   onClose,
   showDistribution,
@@ -56,6 +60,9 @@ export function ConfigureEffectSheet({
   const [elementMode, setElementMode] = useState('PER_FIXTURE')
   const [stepTiming, setStepTiming] = useState(false)
   const [speedMasterUuid, setSpeedMasterUuid] = useState<string | null>(defaultSpeedMasterUuid)
+  const [rateSpeedMasterUuid, setRateSpeedMasterUuid] = useState<string | null>(
+    defaultRateSpeedMasterUuid,
+  )
   const [parameters, setParameters] = useState<Record<string, string>>({})
 
   // Reset state when a new effect is opened
@@ -68,12 +75,13 @@ export function ConfigureEffectSheet({
     setElementMode('PER_FIXTURE')
     setStepTiming(false)
     setSpeedMasterUuid(defaultSpeedMasterUuid)
+    setRateSpeedMasterUuid(defaultRateSpeedMasterUuid)
     const defaults: Record<string, string> = {}
     effect.parameters.forEach((p) => {
       defaults[p.name] = p.defaultValue
     })
     setParameters(defaults)
-  }, [effect, defaultBeatDivision, defaultSpeedMasterUuid])
+  }, [effect, defaultBeatDivision, defaultSpeedMasterUuid, defaultRateSpeedMasterUuid])
 
   // Resolve the target property name for display
   const targetPropertyName = useMemo(() => {
@@ -94,6 +102,7 @@ export function ConfigureEffectSheet({
       stepTiming,
       parameters,
       ...(speedMasterUuid != null ? { speedMasterUuid } : {}),
+      ...(rateSpeedMasterUuid != null ? { rateSpeedMasterUuid } : {}),
     })
   }
 
@@ -133,6 +142,8 @@ export function ConfigureEffectSheet({
               onStepTimingChange={setStepTiming}
               speedMasterUuid={speedMasterUuid}
               onSpeedMasterChange={setSpeedMasterUuid}
+              rateSpeedMasterUuid={rateSpeedMasterUuid}
+              onRateSpeedMasterChange={setRateSpeedMasterUuid}
             />
           )}
         </SheetBody>

@@ -29,6 +29,12 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   'updateProgrammer', // src/components/programmer/UpdateDialog.tsx
   'recordPalette', // src/components/palettes/RecordPaletteSheet.tsx
   'makeCueHard', // src/components/palettes/MakeHardDialog.tsx
+  // The 409s are ordinary steps in this flow, not failures: SPEED_MASTER_IN_USE opens the
+  // "delete anyway" confirmation, and SPEED_MASTER_PROTECTED can only be reached by a stale
+  // client (the UI disables master 1's delete button).
+  'deleteSpeedMaster', // src/components/speedMasters/SpeedMasterDetailSheet.tsx
+  'saveSpeedMaster', // ...same sheet: a duplicate name is a 409 rendered inline
+
 
   // Call site raises its own toast.error()
   'updateProject', // src/routes/ProjectSettings.tsx

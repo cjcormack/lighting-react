@@ -556,6 +556,7 @@ export function PresetEditor({
                     )}
                     <div className="ml-auto flex items-center gap-1.5 shrink-0">
                       <SpeedMasterChip speedMasterUuid={effect.speedMasterUuid} />
+                      <SpeedMasterChip speedMasterUuid={effect.rateSpeedMasterUuid} kind="rate" />
                       <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                         {closestBeat.label}
                       </Badge>
@@ -696,6 +697,10 @@ export function PresetEditor({
               setEffectDraft((d) => (d ? { ...d, stepTiming: v || null } : d))
             }
             speedMasterUuid={effectDraft.speedMasterUuid ?? null}
+            rateSpeedMasterUuid={effectDraft.rateSpeedMasterUuid ?? null}
+            onRateSpeedMasterChange={(v) =>
+              setEffectDraft((d) => (d ? { ...d, rateSpeedMasterUuid: v } : d))
+            }
             onSpeedMasterChange={(v) =>
               setEffectDraft((d) => (d ? { ...d, speedMasterUuid: v } : d))
             }

@@ -85,6 +85,7 @@ export function buildCueInput(cue: Cue): CueInput {
       // field must be added HERE too, or every inline cue edit silently strips it — exactly
       // what happened to nothing yet, and what a regression test now pins for this one.
       speedMasterUuid: pa.speedMasterUuid,
+      rateSpeedMasterUuid: pa.rateSpeedMasterUuid,
     })),
     adHocEffects: cue.adHocEffects.map((e) => ({ ...e })),
     propertyAssignments: cue.propertyAssignments.map((a) => ({ ...a })),

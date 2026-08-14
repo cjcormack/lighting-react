@@ -27,6 +27,7 @@ interface PresetPickerProps {
     intervalMs?: number | null
     randomWindowMs?: number | null
     speedMasterUuid?: string | null
+    rateSpeedMasterUuid?: string | null
   }) => void
   onCancel: () => void
   /** For edit mode: pre-selected targets */
@@ -37,6 +38,7 @@ interface PresetPickerProps {
   existingTiming?: TimingValues
   /** For edit mode: pre-populate the per-application speed-master override. */
   existingSpeedMasterUuid?: string | null
+  existingRateSpeedMasterUuid?: string | null
   /** Add mode: pre-selected target — skips the target-picker step. */
   preselectedTarget?: CueTarget | null
 }
@@ -51,6 +53,7 @@ export function PresetPicker({
   existingPresetId,
   existingTiming,
   existingSpeedMasterUuid,
+  existingRateSpeedMasterUuid,
   preselectedTarget,
 }: PresetPickerProps) {
   const { data: presets } = useProjectPresetListQuery(projectId)
@@ -82,6 +85,12 @@ export function PresetPicker({
   // any onChange firing, and confirming would silently save no override at all.
   const [speedMasterUuid, setSpeedMasterUuid] = useState<string | null>(
     existingSpeedMasterUuid ?? null,
+  )
+  // Independent of the speed override above, and seeded the same way for the same reason:
+  // a wall-clock effect's rate master is a separate axis, so pinning one must not imply
+  // anything about the other.
+  const [rateSpeedMasterUuid, setRateSpeedMasterUuid] = useState<string | null>(
+    existingRateSpeedMasterUuid ?? null,
   )
 
   // Resolve preset name for edit mode
@@ -160,6 +169,7 @@ export function PresetPicker({
       intervalMs: timingValues.intervalMs,
       randomWindowMs: timingValues.randomWindowMs,
       speedMasterUuid,
+      rateSpeedMasterUuid,
     })
   }
 
@@ -308,6 +318,39 @@ export function PresetPicker({
                   className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Remove override — each effect follows its own master
+                </button>
+              </div>
+            )}
+
+            {/* Wall-clock rate master, same opt-in shape. Separate control because the two
+                apply to different effects: a preset can hold both beat and wall-clock
+                effects, and pinning one axis says nothing about the other. */}
+            {rateSpeedMasterUuid == null ? (
+              <button
+                type="button"
+                disabled={!liveMasters?.length}
+                onClick={() => {
+                  const master1 = liveMasters?.find((m) => m.index === 1)
+                  if (master1?.uuid) setRateSpeedMasterUuid(master1.uuid)
+                }}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+              >
+                + Override rate master for this application
+              </button>
+            ) : (
+              <div className="space-y-1.5">
+                <SpeedMasterSelect
+                  value={rateSpeedMasterUuid}
+                  onChange={setRateSpeedMasterUuid}
+                  label="Rate master"
+                  description="Only wall-clock effects in this preset are affected."
+                />
+                <button
+                  type="button"
+                  onClick={() => setRateSpeedMasterUuid(null)}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Remove override — each effect follows its own rate master
                 </button>
               </div>
             )}

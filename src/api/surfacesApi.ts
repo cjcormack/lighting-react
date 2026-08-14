@@ -60,6 +60,27 @@ export interface SetBankTarget {
   bank: string
 }
 
+/**
+ * Drive a speed master's tempo from a fader / encoder. `masterUuid` null means master 1,
+ * matching the `speedMasters.*` WS family — and a uuid rather than an int id, so the binding
+ * survives clone and cross-install import.
+ *
+ * The control's 0..127 maps across `minBpm`..`maxBpm` rather than the clock's full 20..300:
+ * 128 steps over the whole range is ~2.2 BPM a step, too coarse to trim a tempo with.
+ */
+export interface SpeedMasterBpmTarget {
+  type: "speedMasterBpm"
+  masterUuid: string | null
+  minBpm: number
+  maxBpm: number
+}
+
+/** Tap a speed master's tempo on button press (`masterUuid` null → master 1). */
+export interface SpeedMasterTapTarget {
+  type: "speedMasterTap"
+  masterUuid: string | null
+}
+
 export type BindingTarget =
   | FixturePropertyTarget
   | GroupPropertyTarget
@@ -71,6 +92,8 @@ export type BindingTarget =
   | BlackoutTarget
   | GrandMasterToggleTarget
   | SetBankTarget
+  | SpeedMasterBpmTarget
+  | SpeedMasterTapTarget
 
 export type TakeoverPolicy = "IMMEDIATE" | "PICKUP"
 
@@ -97,6 +120,7 @@ export type BindingHealth =
   | { type: "missingStack"; stackId: number }
   | { type: "missingCue"; cueId: number }
   | { type: "unknownBank"; deviceTypeKey: string; bankId: string }
+  | { type: "missingSpeedMaster"; masterUuid: string }
 
 /** A single persisted binding. */
 export interface ControlSurfaceBinding {

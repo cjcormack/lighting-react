@@ -7,11 +7,24 @@ import type { SpeedMasterLiveState } from '../api/speedMastersWsApi'
 // just as importantly — keeps the import graph away from lightingApi's real WebSocket.
 const setSpeedMasterBpm = vi.fn()
 const tapSpeedMaster = vi.fn()
+const subscribeToSpeedMasterBeat = vi.fn(
+  (_masterUuid: string | null, _fn: (beat: { bpm: number }) => void) => ({
+    unsubscribe: () => {},
+  }),
+)
 let liveMasters: SpeedMasterLiveState[] = []
 vi.mock('../store/speedMasters', () => ({
   useSpeedMasterLiveQuery: () => ({ data: liveMasters }),
   setSpeedMasterBpm: (...args: unknown[]) => setSpeedMasterBpm(...args),
   tapSpeedMaster: (...args: unknown[]) => tapSpeedMaster(...args),
+  // Each tile now carries a BeatIndicator keyed to its own master.
+  subscribeToSpeedMasterBeat: (masterUuid: string | null, fn: (beat: { bpm: number }) => void) =>
+    subscribeToSpeedMasterBeat(masterUuid, fn),
+}))
+// ...which also reaches the legacy beat stream for master 1.
+vi.mock('../store/fx', () => ({
+  subscribeToBeat: () => ({ unsubscribe: () => {} }),
+  requestBeatSync: () => {},
 }))
 
 import { SpeedMastersStrip } from './SpeedMastersStrip'

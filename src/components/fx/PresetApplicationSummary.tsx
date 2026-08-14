@@ -13,6 +13,7 @@ export interface PresetApplicationSummaryProps {
   targets: { type: 'group' | 'fixture'; key: string }[]
   /** Per-application speed-master override (null → each effect follows its own master). */
   speedMasterUuid?: string | null
+  rateSpeedMasterUuid?: string | null
   onClick?: () => void
   actions?: React.ReactNode
   palette?: string[]
@@ -25,6 +26,7 @@ export function PresetApplicationSummary({
   effects,
   targets,
   speedMasterUuid,
+  rateSpeedMasterUuid,
   onClick,
   actions,
   palette,
@@ -51,6 +53,7 @@ export function PresetApplicationSummary({
             </span>
             {/* The application-level override, distinct from any per-effect chips below. */}
             <SpeedMasterChip speedMasterUuid={speedMasterUuid} />
+            <SpeedMasterChip speedMasterUuid={rateSpeedMasterUuid} kind="rate" />
             {categories.map((cat) => {
               const info = EFFECT_CATEGORY_INFO[cat]
               if (!info) return null

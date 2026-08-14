@@ -15,6 +15,8 @@ export interface FxEffectState {
   timingSource?: string
   /** Speed master this effect subscribes to (null → master 1). */
   speedMasterUuid?: string | null
+  /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
+  rateSpeedMasterUuid?: string | null
   /** 1-based display index of that master — what the FX-sheet chip renders. */
   speedMasterIndex?: number
 }

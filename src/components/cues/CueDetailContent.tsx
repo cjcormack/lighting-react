@@ -145,6 +145,7 @@ export const CueDetailContent = memo(function CueDetailContent({
                 effects={presetEffects.map((e) => fromPresetEffect(e, library))}
                 targets={pa.targets}
                 speedMasterUuid={pa.speedMasterUuid}
+                rateSpeedMasterUuid={pa.rateSpeedMasterUuid}
                 palette={palette}
                 actions={
                   <TimingBadge

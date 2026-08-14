@@ -81,6 +81,9 @@ export function EffectFlow({
   const [speedMasterUuid, setSpeedMasterUuid] = useState<string | null>(
     existingEffect?.speedMasterUuid ?? null,
   )
+  const [rateSpeedMasterUuid, setRateSpeedMasterUuid] = useState<string | null>(
+    existingEffect?.rateSpeedMasterUuid ?? null,
+  )
   const [parameters, setParameters] = useState<Record<string, string>>(
     existingEffect?.parameters ?? {},
   )
@@ -279,6 +282,7 @@ export function EffectFlow({
       intervalMs: timingValues.intervalMs,
       randomWindowMs: timingValues.randomWindowMs,
       speedMasterUuid,
+      rateSpeedMasterUuid,
     }]
 
     onConfirm(effects)
@@ -303,6 +307,7 @@ export function EffectFlow({
       intervalMs: timingValues.intervalMs,
       randomWindowMs: timingValues.randomWindowMs,
       speedMasterUuid,
+      rateSpeedMasterUuid,
     })
   }
 
@@ -432,6 +437,8 @@ export function EffectFlow({
               onStepTimingChange={setStepTiming}
               speedMasterUuid={speedMasterUuid}
               onSpeedMasterChange={setSpeedMasterUuid}
+              rateSpeedMasterUuid={rateSpeedMasterUuid}
+              onRateSpeedMasterChange={setRateSpeedMasterUuid}
               // Extended channels: show all since targets may be mixed
               extendedChannels={{ white: true, amber: true, uv: true }}
               palette={palette}

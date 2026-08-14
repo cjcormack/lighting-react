@@ -169,6 +169,40 @@ form; the named-palette ones (`isPaletteRefValue` / `parsePaletteRefUuid`) mean
 this one. **Never mint a `P<n>` short code for a named palette** — display its
 name.
 
+### Speed Masters
+
+Named tempo buses. Effects subscribe to one by uuid rather than owning a speed, so
+retuning a master moves every look that follows it. **Master 1 is the global tempo**:
+every legacy surface means it, every unassigned effect resolves to it, and it cannot
+be deleted.
+
+Two different BPMs live on a master and the UI must not conflate them. The **stored**
+bpm (`useSpeedMasterListQuery`) is what it boots at; the **live** bpm
+(`useSpeedMasterLiveQuery`, streamed over `speedMasters.*`) is what it is running at
+now. Rows show the live one and edit it with tap / click-to-type; the stored default is
+editable only in the detail sheet, where it can be labelled as such.
+
+`/projects/:id/speed-masters` manages the bank — one nav entry, one route, no sibling
+switcher. `SpeedMastersStrip` in the ShowBar is the performance surface and shows
+masters **2..N** only, because the ShowBar's BPM tile already *is* master 1.
+
+Two independent per-effect references, both uuid-addressed:
+
+- `speedMasterUuid` — which tempo an effect's beats come from. BEAT effects only.
+- `rateSpeedMasterUuid` — scales a **WALL_CLOCK** effect's cycle (`bpm / 120`). Beat
+  effects never read it.
+
+`EffectParameterForm` gates on the library entry's `timingSource`: a wall-clock effect
+gets "Cycle length (seconds)" and the rate picker, a beat effect gets beat divisions and
+the speed picker. Showing both to both was the pre-existing bug — a wall-clock effect's
+"Speed Master" did nothing at all.
+
+`BeatIndicator` takes an optional master and pulses from the keyed `speedMasters.beat`
+stream; without one it uses the legacy unkeyed `beatSync`, which is bound to master 1's
+clock object and cannot speak for any other master. Server frames are throttled (one per
+16 beats), so the component free-runs a local timer in between — that interpolation is
+load-bearing, not decoration.
+
 ### Cues, Stacks & Triggers
 Cues bundle palettes, FX preset applications, ad-hoc effects, and **script hooks** into named snapshots. **Every cue belongs to a cue stack** — there are no standalone cues. A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of cues. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). Cues and stacks are authored and run entirely in the **Program** view (`/projects/:projectId/program`, drilling into a stack at `/program/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed.
 

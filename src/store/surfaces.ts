@@ -31,6 +31,8 @@ export type {
   BlackoutTarget,
   GrandMasterToggleTarget,
   SetBankTarget,
+  SpeedMasterBpmTarget,
+  SpeedMasterTapTarget,
   ControlDescriptor,
   FaderControl,
   EncoderControl,

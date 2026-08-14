@@ -84,6 +84,8 @@ export interface ApplyFxRequest {
   stepTiming?: boolean
   /** Speed master to subscribe to, as the master's uuid (omitted → master 1). */
   speedMasterUuid?: string
+  /** Wall-clock rate master, as the master's uuid (omitted → unscaled). */
+  rateSpeedMasterUuid?: string
   /**
    * Create the effect in the programmer's reserved priority band, so it composes *on top of*
    * programmer values instead of being suppressed by them, and Clear sweeps it with them.
@@ -114,6 +116,8 @@ export interface GroupActiveEffect {
   cueId: number | null
   /** Speed master this effect subscribes to (null → master 1). */
   speedMasterUuid?: string | null
+  /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
+  rateSpeedMasterUuid?: string | null
 }
 
 export interface ClearFxResponse {

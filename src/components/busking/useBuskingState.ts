@@ -472,6 +472,7 @@ export function useBuskingState() {
         stepTiming?: boolean
         parameters: Record<string, string>
         speedMasterUuid?: string
+        rateSpeedMasterUuid?: string
       },
     ) => {
       const additions: Promise<unknown>[] = []
@@ -494,6 +495,9 @@ export function useBuskingState() {
               ...(params.elementMode ? { elementMode: params.elementMode as ElementMode } : {}),
               ...(params.stepTiming !== undefined ? { stepTiming: params.stepTiming } : {}),
               ...(params.speedMasterUuid != null ? { speedMasterUuid: params.speedMasterUuid } : {}),
+              ...(params.rateSpeedMasterUuid != null
+                ? { rateSpeedMasterUuid: params.rateSpeedMasterUuid }
+                : {}),
             }).unwrap(),
           )
         } else {
@@ -511,6 +515,9 @@ export function useBuskingState() {
               programmerOwned: true,
               ...(params.stepTiming !== undefined ? { stepTiming: params.stepTiming } : {}),
               ...(params.speedMasterUuid != null ? { speedMasterUuid: params.speedMasterUuid } : {}),
+              ...(params.rateSpeedMasterUuid != null
+                ? { rateSpeedMasterUuid: params.rateSpeedMasterUuid }
+                : {}),
             }).unwrap(),
           )
         }

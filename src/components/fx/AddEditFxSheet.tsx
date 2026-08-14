@@ -79,6 +79,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
   const [elementFilter, setElementFilter] = useState('ALL')
   const [stepTiming, setStepTiming] = useState(false)
   const [speedMasterUuid, setSpeedMasterUuid] = useState<string | null>(null)
+  const [rateSpeedMasterUuid, setRateSpeedMasterUuid] = useState<string | null>(null)
   const [selectedSettingProp, setSelectedSettingProp] = useState<string | null>(null)
   const [selectedSliderProp, setSelectedSliderProp] = useState<string | null>(null)
 
@@ -246,6 +247,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
 
       setStepTiming(mode.effect.stepTiming ?? false)
       setSpeedMasterUuid(mode.effect.speedMasterUuid ?? null)
+      setRateSpeedMasterUuid(mode.effect.rateSpeedMasterUuid ?? null)
 
       if (target.type === 'group' && 'distribution' in mode.effect) {
         setDistributionStrategy(mode.effect.distribution)
@@ -269,6 +271,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
       setElementFilter('ALL')
       setStepTiming(false)
       setSpeedMasterUuid(null)
+      setRateSpeedMasterUuid(null)
       setSelectedSettingProp(null)
       setSelectedSliderProp(null)
     }
@@ -290,6 +293,14 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
   }
 
   const handleApply = async () => {
+    // A rate master only means anything to a WALL_CLOCK effect. The picker is already gated
+    // on that, but the state survives stepping Back and choosing a different effect — so
+    // gate the payload too, or a BEAT effect gets persisted with a rate master the engine
+    // never reads and a summary chip claiming a scaling that does not happen.
+    const ratePayload =
+      selectedEffect?.timingSource === 'WALL_CLOCK' && rateSpeedMasterUuid != null
+        ? { rateSpeedMasterUuid }
+        : {}
     if (target.type === 'fixture') {
       const fixture = target.fixture
       const fixtureIsMultiHead = (fixture.elementGroupProperties?.length ?? 0) > 0
@@ -308,6 +319,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
             parameters,
             stepTiming,
             ...(speedMasterUuid != null ? { speedMasterUuid } : {}),
+            ...ratePayload,
             ...(fixtureIsMultiHead ? { distributionStrategy } : {}),
             ...filterPayload,
           },
@@ -324,6 +336,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
           parameters,
           stepTiming,
           ...(speedMasterUuid != null ? { speedMasterUuid } : {}),
+          ...ratePayload,
           ...(fixtureIsMultiHead ? { distributionStrategy } : {}),
           ...filterPayload,
         })
@@ -346,6 +359,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
             distributionStrategy,
             stepTiming,
             ...(speedMasterUuid != null ? { speedMasterUuid } : {}),
+            ...ratePayload,
             ...(hasMultiElementMembers ? { elementMode } : {}),
             ...filterPayload,
           },
@@ -362,6 +376,7 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
           parameters,
           stepTiming,
           ...(speedMasterUuid != null ? { speedMasterUuid } : {}),
+          ...ratePayload,
           ...(hasMultiElementMembers ? { elementMode } : {}),
           ...filterPayload,
         })
@@ -431,6 +446,8 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
               onStepTimingChange={setStepTiming}
               speedMasterUuid={speedMasterUuid}
               onSpeedMasterChange={setSpeedMasterUuid}
+              rateSpeedMasterUuid={rateSpeedMasterUuid}
+              onRateSpeedMasterChange={setRateSpeedMasterUuid}
             />
           )}
         </SheetBody>

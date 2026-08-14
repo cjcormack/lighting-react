@@ -17,6 +17,7 @@ interface AddPresetSheetProps {
     targets: CueTarget[],
     timing: { delayMs?: number | null; intervalMs?: number | null; randomWindowMs?: number | null },
     speedMasterUuid?: string | null,
+    rateSpeedMasterUuid?: string | null,
   ) => void
 }
 
@@ -51,6 +52,7 @@ export function AddPresetSheet({
                   randomWindowMs: app.randomWindowMs,
                 },
                 app.speedMasterUuid,
+                app.rateSpeedMasterUuid,
               )
             }}
             onCancel={() => onOpenChange(false)}

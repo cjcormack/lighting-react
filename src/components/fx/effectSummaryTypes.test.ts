@@ -80,3 +80,45 @@ describe('effectSummaryTypes speed-master threading', () => {
     expect(fromPresetEffect(e).speedMasterUuid).toBeNull()
   })
 })
+
+/**
+ * The rate master is a second, independent reference with exactly the same failure mode: an
+ * adapter that drops it shows a wall-clock effect as running unscaled while it is in fact
+ * being scaled by a master.
+ */
+describe('effectSummaryTypes rate-master threading', () => {
+  const RATE = 'aaaaaaaa-0000-0000-0000-000000000003'
+
+  it('fromPresetEffect carries it independently of the speed master', () => {
+    const e: FxPresetEffect = {
+      effectType: 'CandleFlicker', category: 'dimmer', propertyName: 'dimmer',
+      beatDivision: 4, blendMode: 'OVERRIDE', distribution: 'LINEAR',
+      phaseOffset: 0, elementMode: null, elementFilter: null, stepTiming: null,
+      parameters: {}, speedMasterUuid: MASTER, rateSpeedMasterUuid: RATE,
+    }
+    const summary = fromPresetEffect(e)
+    expect(summary.speedMasterUuid).toBe(MASTER)
+    expect(summary.rateSpeedMasterUuid).toBe(RATE)
+  })
+
+  it('fromCueAdHocEffect carries it', () => {
+    const e: CueAdHocEffect = {
+      targetType: 'fixture', targetKey: 'hex-1', effectType: 'CandleFlicker',
+      category: 'dimmer', propertyName: 'dimmer', beatDivision: 4,
+      blendMode: 'OVERRIDE', distribution: 'LINEAR', phaseOffset: 0,
+      elementMode: null, elementFilter: null, stepTiming: null,
+      parameters: {}, rateSpeedMasterUuid: RATE,
+    }
+    expect(fromCueAdHocEffect(e).rateSpeedMasterUuid).toBe(RATE)
+  })
+
+  it('an absent rate reference normalises to null, meaning unscaled', () => {
+    const e: FxPresetEffect = {
+      effectType: 'Pulse', category: 'dimmer', propertyName: 'dimmer',
+      beatDivision: 1, blendMode: 'OVERRIDE', distribution: 'LINEAR',
+      phaseOffset: 0, elementMode: null, elementFilter: null, stepTiming: null,
+      parameters: {},
+    }
+    expect(fromPresetEffect(e).rateSpeedMasterUuid).toBeNull()
+  })
+})

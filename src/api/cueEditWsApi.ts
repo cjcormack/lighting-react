@@ -54,6 +54,8 @@ export interface CueEditAddPresetApplicationOutgoing {
   randomWindowMs?: number | null
   /** Per-application speed-master override (omitted → each preset effect's own → master 1). */
   speedMasterUuid?: string | null
+  /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
+  rateSpeedMasterUuid?: string | null
 }
 
 export interface CueEditAddAdHocEffectOutgoing {
@@ -79,6 +81,8 @@ export interface CueEditAddAdHocEffectOutgoing {
     sortOrder?: number
     /** Speed master this effect subscribes to, as the master's uuid (omitted → master 1). */
     speedMasterUuid?: string | null
+    /** Wall-clock rate master (null → unscaled). */
+    rateSpeedMasterUuid?: string | null
   }
 }
 

@@ -1,5 +1,8 @@
-import { useEffect, useState } from 'react'
+import { Link, useParams } from 'react-router'
+import { Settings2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { BeatIndicator } from './BeatIndicator'
+import { formatBpm, useBpmDraft } from '../hooks/useBpmDraft'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { setSpeedMasterBpm, tapSpeedMaster, useSpeedMasterLiveQuery } from '../store/speedMasters'
 import type { SpeedMasterLiveState } from '../api/speedMastersWsApi'
@@ -69,6 +72,7 @@ export function SpeedMastersStrip({ compact = false }: { compact?: boolean }) {
             <MasterTile master={m} showName />
           </div>
         ))}
+        <ManageMastersLink />
       </div>
       {/* Mid widths — the sticky-selected master only. */}
       <div className="hidden @[560px]:flex @[900px]:hidden items-stretch shrink-0">
@@ -79,34 +83,47 @@ export function SpeedMastersStrip({ compact = false }: { compact?: boolean }) {
 }
 
 /**
+ * Shortcut to the Speed Masters page, for adding or renaming a master mid-show without
+ * hunting through the sidebar. Only rendered in the full strip: at mid widths the single
+ * tile is already fighting for room, and the sidebar entry covers that case.
+ *
+ * Renders nothing off a project-scoped route — the strip's three hosts (Program, Run, Prompt
+ * Book) are all under `/projects/:projectId`, so this is belt-and-braces rather than a case
+ * that happens today.
+ */
+function ManageMastersLink() {
+  const { projectId } = useParams<{ projectId: string }>()
+  if (projectId == null) return null
+
+  return (
+    <Link
+      to={`/projects/${projectId}/speed-masters`}
+      title="Manage speed masters"
+      aria-label="Manage speed masters"
+      className="flex items-center rounded-md border bg-card px-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+    >
+      <Settings2 className="size-3.5" />
+    </Link>
+  )
+}
+
+/**
  * One master's readout + TAP, matching the ShowBar BPM-tile idiom. The BPM value is a
  * click-to-edit input with dirty tracking: while the operator is typing, server pushes are
  * ignored so a tap from another surface can't yank the field out from under them; Enter or
  * blur commits, Escape reverts.
  */
 function MasterTile({ master, showName }: { master: SpeedMasterLiveState; showName: boolean }) {
-  const [draft, setDraft] = useState<string | null>(null)
-  const editing = draft != null
-
-  // If the master under the tile changes (switcher click, delete), abandon the edit —
-  // committing a half-typed tempo to a different master is worse than losing keystrokes.
-  useEffect(() => {
-    setDraft(null)
-  }, [master.uuid])
-
-  const commit = () => {
-    if (draft == null) return
-    const parsed = Number(draft)
-    if (Number.isFinite(parsed) && parsed > 0) {
-      setSpeedMasterBpm(master.uuid, parsed)
-    }
-    setDraft(null)
-  }
+  const { editing, draft, start, change, commit, onKeyDown } = useBpmDraft(
+    master.uuid,
+    (bpm) => setSpeedMasterBpm(master.uuid, bpm),
+  )
 
   return (
     <>
       <div className="flex flex-col justify-start gap-px px-3 py-1.5">
-        <span className="text-[9px] font-bold uppercase tracking-[0.08em] text-muted-foreground truncate max-w-[10ch]">
+        <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.08em] text-muted-foreground truncate max-w-[12ch]">
+          <BeatIndicator master={master} className="size-1.5 shrink-0" />
           M{master.index}
           {showName && ` · ${master.name}`}
           {master.source === 'TAP' && !editing && ' · tap'}
@@ -116,23 +133,20 @@ function MasterTile({ master, showName }: { master: SpeedMasterLiveState; showNa
             autoFocus
             inputMode="decimal"
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => change(e.target.value)}
             onBlur={commit}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') commit()
-              if (e.key === 'Escape') setDraft(null)
-            }}
+            onKeyDown={onKeyDown}
             aria-label={`Master ${master.index} BPM`}
             className="w-[5ch] bg-transparent font-mono text-lg font-bold leading-none text-foreground outline-none border-b border-primary"
           />
         ) : (
           <button
             type="button"
-            onClick={() => setDraft(String(Math.round(master.bpm * 10) / 10))}
+            onClick={() => start(master.bpm)}
             title={`Master ${master.index} — click to type a tempo`}
             className="font-mono text-lg font-bold leading-none text-foreground text-left tabular-nums hover:text-primary transition-colors"
           >
-            {Math.round(master.bpm * 10) / 10}
+            {formatBpm(master.bpm)}
           </button>
         )}
       </div>

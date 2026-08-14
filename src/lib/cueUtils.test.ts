@@ -71,6 +71,7 @@ describe('buildCueInput', () => {
           randomWindowMs: null,
           sortOrder: 0,
           speedMasterUuid: 'aaaaaaaa-0000-0000-0000-000000000002',
+          rateSpeedMasterUuid: 'aaaaaaaa-0000-0000-0000-000000000003',
         },
       ],
       adHocEffects: [],
@@ -94,6 +95,11 @@ describe('buildCueInput', () => {
     const input = buildCueInput(cue)
     expect(input.presetApplications[0].speedMasterUuid).toBe(
       'aaaaaaaa-0000-0000-0000-000000000002',
+    )
+    // The rate override is a second field on the same hand-enumerated rebuild, and so has
+    // exactly the same way of silently vanishing on an inline cue edit.
+    expect(input.presetApplications[0].rateSpeedMasterUuid).toBe(
+      'aaaaaaaa-0000-0000-0000-000000000003',
     )
     // And the response-only field is stripped, which is why the rebuild exists at all.
     expect('presetName' in input.presetApplications[0]).toBe(false)

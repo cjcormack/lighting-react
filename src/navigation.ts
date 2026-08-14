@@ -7,6 +7,7 @@ import {
   Layers,
   AudioWaveform,
   Bookmark,
+  Gauge,
   BookOpenText,
   Box,
   Boxes,
@@ -118,6 +119,17 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/palettes`,
     visibility: "always",
     pathMatch: "/palettes",
+    group: "program",
+  },
+  {
+    id: "speed-masters",
+    // The tempo buses effects subscribe to. One entry, one route — no cards/list pair and no
+    // type switcher, so none of the sibling-route exceptions in CLAUDE.md apply here.
+    label: "Speed Masters",
+    icon: Gauge,
+    path: (p) => `/projects/${p}/speed-masters`,
+    visibility: "always",
+    pathMatch: "/speed-masters",
     group: "program",
   },
 

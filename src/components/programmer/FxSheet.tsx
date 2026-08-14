@@ -360,6 +360,7 @@ function toEffectContext(effect: ActiveEffect): ActiveEffectContext {
     // Explicit like everything else here: dropping this would hand the edit sheet a
     // master-less copy, and its Update would silently reset the effect to master 1.
     speedMasterUuid: effect.speedMasterUuid,
+    rateSpeedMasterUuid: effect.rateSpeedMasterUuid,
   }
   if (effect.isGroupTarget) {
     return {

@@ -68,6 +68,12 @@ interface EffectParameterFormProps {
    */
   speedMasterUuid?: string | null
   onSpeedMasterChange?: (masterUuid: string) => void
+  /**
+   * The effect's wall-clock rate master (uuid; null → unscaled). Rendered only for
+   * WALL_CLOCK effects, and only when the change callback is supplied.
+   */
+  rateSpeedMasterUuid?: string | null
+  onRateSpeedMasterChange?: (masterUuid: string) => void
 }
 
 export function EffectParameterForm({
@@ -106,8 +112,15 @@ export function EffectParameterForm({
   palette,
   speedMasterUuid,
   onSpeedMasterChange,
+  rateSpeedMasterUuid,
+  onRateSpeedMasterChange,
 }: EffectParameterFormProps) {
   const [showAdvanced, setShowAdvanced] = useState(false)
+
+  // A wall-clock effect runs on a fixed timer rather than the beat grid: its beatDivision is
+  // cycle *seconds*, and it never reads a speed master. Both facts change what this form
+  // should show, and both come from the library entry rather than the instance.
+  const isWallClock = effect.timingSource === 'WALL_CLOCK'
 
   const handleParameterChange = (name: string, value: string) => {
     onParametersChange({ ...parameters, [name]: value })
@@ -140,31 +153,63 @@ export function EffectParameterForm({
         )}
       </div>
 
-      {/* Speed selector */}
-      <div>
-        <Label className="text-xs text-muted-foreground mb-1.5 block">Speed</Label>
-        <ToggleGroup
-          type="single"
-          value={String(closestBeatDivision.value)}
-          onValueChange={(v) => v && onBeatDivisionChange(Number(v))}
-          className="flex flex-wrap gap-1"
-        >
-          {BEAT_DIVISION_OPTIONS.map((option) => (
-            <ToggleGroupItem
-              key={option.value}
-              value={String(option.value)}
-              className="text-xs px-2 h-7"
-              title={option.description}
-            >
-              {option.label}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-      </div>
+      {/* Speed — beat divisions for a beat-timed effect, seconds for a wall-clock one.
+          Same `beatDivision` field on the wire either way; only the units differ. */}
+      {isWallClock ? (
+        <div>
+          <Label className="text-xs text-muted-foreground mb-1.5 block" htmlFor="fx-cycle-seconds">
+            Cycle length
+          </Label>
+          <div className="flex items-center gap-2">
+            <Input
+              id="fx-cycle-seconds"
+              inputMode="decimal"
+              value={String(beatDivision)}
+              onChange={(e) => {
+                const next = Number(e.target.value)
+                if (Number.isFinite(next) && next > 0) onBeatDivisionChange(next)
+              }}
+              className="h-7 w-24 text-xs"
+            />
+            <span className="text-xs text-muted-foreground">seconds</span>
+          </div>
+        </div>
+      ) : (
+        <div>
+          <Label className="text-xs text-muted-foreground mb-1.5 block">Speed</Label>
+          <ToggleGroup
+            type="single"
+            value={String(closestBeatDivision.value)}
+            onValueChange={(v) => v && onBeatDivisionChange(Number(v))}
+            className="flex flex-wrap gap-1"
+          >
+            {BEAT_DIVISION_OPTIONS.map((option) => (
+              <ToggleGroupItem
+                key={option.value}
+                value={String(option.value)}
+                className="text-xs px-2 h-7"
+                title={option.description}
+              >
+                {option.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </div>
+      )}
 
-      {/* Speed master — which tempo bus the effect follows */}
-      {onSpeedMasterChange && (
+      {/* Which master the effect follows. A wall-clock effect never consults a speed master
+          — it is not driven by ticks at all — so showing that picker here would be a knob
+          that does nothing. It gets the rate master instead, which scales its cycle. */}
+      {onSpeedMasterChange && !isWallClock && (
         <SpeedMasterSelect value={speedMasterUuid} onChange={onSpeedMasterChange} />
+      )}
+      {onRateSpeedMasterChange && isWallClock && (
+        <SpeedMasterSelect
+          value={rateSpeedMasterUuid}
+          onChange={onRateSpeedMasterChange}
+          label="Rate master"
+          description="Scales this effect's cycle by the master's tempo (120 BPM = unchanged)."
+        />
       )}
 
       {/* Step timing (multi-head fixtures only) */}

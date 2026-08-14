@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { SpeedMasterSelect } from "@/components/fx/SpeedMasterSelect"
 import { useGroupListQuery } from "@/store/groups"
 import { usePatchListQuery } from "@/store/patches"
 import { useProjectCueStackListQuery } from "@/store/cueStacks"
@@ -34,8 +35,10 @@ type TargetKind =
   | "blackout"
   | "grandMasterToggle"
   | "setBank"
+  | "speedMasterBpm"
+  | "speedMasterTap"
 
-const CONTINUOUS_KINDS: TargetKind[] = ["fixtureProperty", "groupProperty"]
+const CONTINUOUS_KINDS: TargetKind[] = ["fixtureProperty", "groupProperty", "speedMasterBpm"]
 const BUTTON_KINDS: TargetKind[] = [
   "flash",
   "cueStackGo",
@@ -45,6 +48,7 @@ const BUTTON_KINDS: TargetKind[] = [
   "blackout",
   "grandMasterToggle",
   "setBank",
+  "speedMasterTap",
 ]
 
 const KIND_LABELS: Record<TargetKind, string> = {
@@ -58,6 +62,8 @@ const KIND_LABELS: Record<TargetKind, string> = {
   blackout: "Blackout",
   grandMasterToggle: "Grand Master",
   setBank: "Set bank",
+  speedMasterBpm: "Speed master — BPM",
+  speedMasterTap: "Speed master — Tap",
 }
 
 export function BindingTargetPicker({
@@ -286,7 +292,63 @@ function TargetBody({
       </div>
     )
   }
+
+  if (kind === "speedMasterBpm" && value.type === "speedMasterBpm") {
+    return (
+      <div className="space-y-3">
+        <SpeedMasterSelect
+          value={value.masterUuid}
+          onChange={(masterUuid) => onChange({ ...value, masterUuid })}
+        />
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Min BPM</Label>
+            <Input
+              inputMode="decimal"
+              value={String(value.minBpm)}
+              onChange={(e) => onChange({ ...value, minBpm: clampBpm(e.target.value, value.minBpm) })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Max BPM</Label>
+            <Input
+              inputMode="decimal"
+              value={String(value.maxBpm)}
+              onChange={(e) => onChange({ ...value, maxBpm: clampBpm(e.target.value, value.maxBpm) })}
+            />
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          The control&apos;s full travel spans this range. Narrower is finer — the whole
+          20–300 range over 128 steps is about 2 BPM a step.
+        </p>
+      </div>
+    )
+  }
+
+  if (kind === "speedMasterTap" && value.type === "speedMasterTap") {
+    return (
+      <SpeedMasterSelect
+        value={value.masterUuid}
+        onChange={(masterUuid) => onChange({ ...value, masterUuid })}
+      />
+    )
+  }
+
   return null
+}
+
+/**
+ * Keep a BPM range field inside the clock's 20..300, falling back to the previous value for
+ * anything unparseable. Without this a cleared field reads `Number('') === 0` and a typo
+ * reads `NaN` (which serialises to `null`), and both blow up the backend's
+ * `SpeedMasterBpm` init requires during deserialisation — before the route's try/catch, so
+ * they surface as a 500 rather than a validation message.
+ */
+function clampBpm(raw: string, fallback: number): number {
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.min(300, Math.max(20, parsed))
 }
 
 function defaultForKind(
@@ -320,5 +382,11 @@ function defaultForKind(
       return { type: "grandMasterToggle" }
     case "setBank":
       return { type: "setBank", deviceTypeKey: "", bank: "" }
+    // null = master 1, which always exists — so the default binding is useful before the
+    // live bank has even loaded, and the picker never starts in an unresolvable state.
+    case "speedMasterBpm":
+      return { type: "speedMasterBpm", masterUuid: null, minBpm: 60, maxBpm: 180 }
+    case "speedMasterTap":
+      return { type: "speedMasterTap", masterUuid: null }
   }
 }

@@ -61,6 +61,7 @@ export function EffectSummary({
           <span className="font-medium truncate">{effect.effectType}</span>
           {/* Only rendered when the effect runs on a master other than M1. */}
           <SpeedMasterChip speedMasterUuid={effect.speedMasterUuid} />
+          <SpeedMasterChip speedMasterUuid={effect.rateSpeedMasterUuid} kind="rate" />
           {badge && (
             <Badge variant="outline" className="text-[10px] leading-tight px-1 py-0 shrink-0">
               {badge}

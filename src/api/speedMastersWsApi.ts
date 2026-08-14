@@ -15,6 +15,16 @@ export interface SpeedMasterLiveState {
   source: 'MANUAL' | 'TAP'
 }
 
+/** One master crossing a beat boundary, as streamed by `speedMasters.beat`. */
+export interface SpeedMasterBeat {
+  /** Null for master 1, matching the write messages' convention. */
+  masterUuid: string | null
+  index: number
+  beatNumber: number
+  bpm: number
+  timestampMs: number
+}
+
 export interface SpeedMastersWsApi {
   /**
    * CRUD notifications — created, renamed, deleted. Drives RTK Query cache invalidation.
@@ -26,6 +36,17 @@ export interface SpeedMastersWsApi {
   subscribe(fn: (masters: SpeedMasterLiveState[]) => void): Subscription
   /** Latest known bank, slot order (master 1 first). Empty before the first state frame. */
   getState(): SpeedMasterLiveState[]
+  /**
+   * Beat boundaries for **one** master (null uuid → master 1). Keyed so an indicator beside
+   * a master-2 effect pulses at master 2's tempo, which the unkeyed `beatSync` can never do
+   * — it is wired to master 1's clock object rather than addressed by uuid.
+   *
+   * Server frames are throttled (every 16 beats, as `beatSync` is), so subscribers are
+   * expected to free-run a local timer in between and use these to correct drift.
+   * Subscribing sends a `requestBeat` so a freshly-mounted indicator locks phase promptly
+   * instead of waiting out the throttle.
+   */
+  subscribeBeat(masterUuid: string | null, fn: (beat: SpeedMasterBeat) => void): Subscription
   /** Set one master's BPM (null uuid → master 1). Fire-and-forget, like `setFxBpm`. */
   setBpm(masterUuid: string | null, bpm: number): void
   /** Tap one master's tempo (null uuid → master 1). */
@@ -42,11 +63,32 @@ type SpeedMasterInMessage =
       source: 'MANUAL' | 'TAP'
       timestampMs: number
     }
+  | ({ type: 'speedMasters.beat' } & SpeedMasterBeat)
   | { type: 'speedMasterListChanged' }
 
 export function createSpeedMastersWsApi(conn: InternalApiConnection): SpeedMastersWsApi {
   const listChanged = createWsSubscribable<void>()
   const stateChanged = createWsSubscribable<SpeedMasterLiveState[]>()
+
+  // One subscribable per master rather than one shared stream that every indicator filters:
+  // a bank of four masters at 120 BPM is a steady trickle of frames, and waking every
+  // indicator on every master's beat only to discard it is exactly the re-render pattern
+  // `useSpeedMasterDisplay`'s selectFromResult exists to avoid.
+  const beatByMaster = new Map<string, ReturnType<typeof createWsSubscribable<SpeedMasterBeat>>>()
+  const MASTER_1_KEY = ''
+  const beatKey = (masterUuid: string | null) => masterUuid ?? MASTER_1_KEY
+
+  /** Ask for an immediate beat frame for each key — `''` is master 1's omitted uuid. */
+  const requestBeatsFor = (keys: Iterable<string>) => {
+    for (const key of keys) {
+      conn.send(
+        JSON.stringify({
+          type: 'speedMasters.requestBeat',
+          masterUuid: key === MASTER_1_KEY ? undefined : key,
+        }),
+      )
+    }
+  }
 
   let masters: SpeedMasterLiveState[] = []
 
@@ -55,6 +97,11 @@ export function createSpeedMastersWsApi(conn: InternalApiConnection): SpeedMaste
       // The server also sends a state frame in its connect burst; requesting one here as
       // well covers reconnects racing that burst, and the duplicate is one small frame.
       conn.send(JSON.stringify({ type: 'speedMasters.state' }))
+      // Beat requests are one-shot and live on the server's per-connection scope, so a
+      // reconnect loses every pending one. Without re-asking, an indicator keeps free-
+      // running its local timer at the pre-drop tempo until the next throttled frame —
+      // up to 16 beats later, and at the wrong rate if the tempo moved meanwhile.
+      requestBeatsFor(beatByMaster.keys())
       listChanged.notify()
     } else if (evType === 'message' && ev instanceof MessageEvent) {
       // Fast-path: skip JSON.parse for the torrent of unrelated frames.
@@ -73,6 +120,8 @@ export function createSpeedMastersWsApi(conn: InternalApiConnection): SpeedMaste
             : m,
         )
         stateChanged.notify(masters)
+      } else if (message.type === 'speedMasters.beat') {
+        beatByMaster.get(beatKey(message.masterUuid))?.notify(message)
       } else if (message.type === 'speedMasterListChanged') {
         // Membership changed — re-request the live bank alongside the REST invalidation,
         // since the server does not push a state frame on CRUD.
@@ -86,6 +135,17 @@ export function createSpeedMastersWsApi(conn: InternalApiConnection): SpeedMaste
     subscribeList: listChanged.api.subscribe,
     subscribe: stateChanged.api.subscribe,
     getState: () => masters,
+    subscribeBeat(masterUuid, fn) {
+      const key = beatKey(masterUuid)
+      let entry = beatByMaster.get(key)
+      if (entry == null) {
+        entry = createWsSubscribable<SpeedMasterBeat>()
+        beatByMaster.set(key, entry)
+      }
+      const subscription = entry.api.subscribe(fn)
+      requestBeatsFor([key])
+      return subscription
+    },
     setBpm(masterUuid, bpm) {
       conn.send(
         JSON.stringify({ type: 'speedMasters.setBpm', masterUuid: masterUuid ?? undefined, bpm }),

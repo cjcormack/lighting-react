@@ -144,6 +144,95 @@ describe('createSpeedMastersWsApi', () => {
     ])
   })
 
+  it('routes a beat frame only to the subscribers of that master', () => {
+    const { conn, frame } = fakeConnection()
+    const api = createSpeedMastersWsApi(conn)
+
+    const onM1 = vi.fn()
+    const onM2 = vi.fn()
+    api.subscribeBeat(null, onM1)
+    api.subscribeBeat(MASTER_2.uuid, onM2)
+
+    frame({
+      type: 'speedMasters.beat',
+      masterUuid: MASTER_2.uuid,
+      index: 2,
+      beatNumber: 16,
+      bpm: 60,
+      timestampMs: 1,
+    })
+
+    // The whole point of keying: a master-2 beat must not pulse a master-1 indicator, which
+    // is exactly what the unkeyed `beatSync` stream would have done.
+    expect(onM2).toHaveBeenCalledTimes(1)
+    expect(onM2.mock.calls[0][0]).toMatchObject({ index: 2, beatNumber: 16, bpm: 60 })
+    expect(onM1).not.toHaveBeenCalled()
+
+    frame({
+      type: 'speedMasters.beat',
+      masterUuid: null,
+      index: 1,
+      beatNumber: 32,
+      bpm: 120,
+      timestampMs: 2,
+    })
+    expect(onM1).toHaveBeenCalledTimes(1)
+    expect(onM2).toHaveBeenCalledTimes(1)
+  })
+
+  it('requests an immediate beat when a subscriber attaches', () => {
+    const { conn, sent } = fakeConnection()
+    const api = createSpeedMastersWsApi(conn)
+
+    // Frames are throttled to one every 16 beats, so without this a freshly-mounted
+    // indicator would sit unsynced for ~8s at 120 BPM.
+    api.subscribeBeat(MASTER_2.uuid, () => {})
+    api.subscribeBeat(null, () => {})
+
+    expect(sent).toEqual([
+      { type: 'speedMasters.requestBeat', masterUuid: MASTER_2.uuid },
+      { type: 'speedMasters.requestBeat' },
+    ])
+  })
+
+  it('re-requests beats for every subscribed master on reconnect', () => {
+    const { conn, sent, fire } = fakeConnection()
+    const api = createSpeedMastersWsApi(conn)
+    api.subscribeBeat(MASTER_2.uuid, () => {})
+    api.subscribeBeat(null, () => {})
+    sent.length = 0
+
+    fire(InternalEventType.open, new Event('open'))
+
+    // The server's pending-request set is per-connection, so a reconnect drops every
+    // one-shot request; without re-asking, an indicator free-runs at the pre-drop tempo
+    // until the next throttled frame.
+    expect(sent).toEqual([
+      { type: 'speedMasters.state' },
+      { type: 'speedMasters.requestBeat', masterUuid: MASTER_2.uuid },
+      { type: 'speedMasters.requestBeat' },
+    ])
+  })
+
+  it('stops delivering beats after unsubscribe', () => {
+    const { conn, frame } = fakeConnection()
+    const api = createSpeedMastersWsApi(conn)
+    const onBeat = vi.fn()
+    const sub = api.subscribeBeat(MASTER_2.uuid, onBeat)
+
+    sub.unsubscribe()
+    frame({
+      type: 'speedMasters.beat',
+      masterUuid: MASTER_2.uuid,
+      index: 2,
+      beatNumber: 16,
+      bpm: 60,
+      timestampMs: 1,
+    })
+
+    expect(onBeat).not.toHaveBeenCalled()
+  })
+
   it('ignores unrelated frames without parsing trouble', () => {
     const { conn, frame } = fakeConnection()
     const api = createSpeedMastersWsApi(conn)

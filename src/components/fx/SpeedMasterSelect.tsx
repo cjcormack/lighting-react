@@ -24,10 +24,16 @@ import { useSpeedMasterLiveQuery } from '../../store/speedMasters'
 export function SpeedMasterSelect({
   value,
   onChange,
+  label = 'Speed Master',
+  description,
 }: {
   /** The effect's stored master uuid; null/undefined means master 1. */
   value: string | null | undefined
   onChange: (masterUuid: string) => void
+  /** Overridden by the wall-clock rate picker, which is the same control for a different field. */
+  label?: string
+  /** Optional hint below the control — used to explain what a rate master actually does. */
+  description?: string
 }) {
   const { data: masters } = useSpeedMasterLiveQuery()
   const listable = (masters ?? []).filter((m) => m.uuid != null)
@@ -38,7 +44,7 @@ export function SpeedMasterSelect({
 
   return (
     <div>
-      <Label className="text-xs text-muted-foreground mb-1.5 block">Speed Master</Label>
+      <Label className="text-xs text-muted-foreground mb-1.5 block">{label}</Label>
       <Select value={effective} onValueChange={onChange}>
         <SelectTrigger className="h-8 text-xs">
           <SelectValue />
@@ -57,6 +63,7 @@ export function SpeedMasterSelect({
           ))}
         </SelectContent>
       </Select>
+      {description && <p className="mt-1 text-[11px] text-muted-foreground">{description}</p>}
     </div>
   )
 }

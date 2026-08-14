@@ -1,7 +1,7 @@
 import { restApi } from './restApi'
 import { lightingApi } from '../api/lightingApi'
 import { store } from './index'
-import type { SpeedMasterLiveState } from '../api/speedMastersWsApi'
+import type { SpeedMasterBeat, SpeedMasterLiveState } from '../api/speedMastersWsApi'
 import type {
   CreateSpeedMasterRequest,
   SpeedMaster,
@@ -129,6 +129,17 @@ export function setSpeedMasterBpm(masterUuid: string | null, bpm: number) {
 /** Tap one master's tempo over WS (null uuid → master 1). */
 export function tapSpeedMaster(masterUuid: string | null) {
   lightingApi.speedMasters.tap(masterUuid)
+}
+
+/**
+ * Subscribe to one master's beat boundaries (null uuid → master 1). Frames are throttled
+ * server-side, so callers interpolate locally between them — see `BeatIndicator`.
+ */
+export function subscribeToSpeedMasterBeat(
+  masterUuid: string | null,
+  fn: (beat: SpeedMasterBeat) => void,
+) {
+  return lightingApi.speedMasters.subscribeBeat(masterUuid, fn)
 }
 
 export const {

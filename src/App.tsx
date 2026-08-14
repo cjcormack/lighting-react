@@ -21,6 +21,7 @@ import { ProjectFxLibrary, FxLibraryRedirect } from "./routes/FxLibrary";
 
 import { FxRedirect, ProjectFxBusking } from "./routes/FxBusking";
 import { PresetsRedirect, ProjectFxPresets } from "./routes/FxPresets";
+import { SpeedMastersRedirect, ProjectSpeedMasters } from "./routes/SpeedMasters";
 import { PalettesRedirect, PalettesTypeRedirect, ProjectPalettes } from "./routes/Palettes";
 import ProjectOverview, { ProjectOverviewRedirect } from "./routes/ProjectOverview";
 import { PatchesRedirect } from "./routes/Patches";
@@ -113,6 +114,14 @@ function App() {
         {
           path: "presets",
           element: <PresetsRedirect />,
+        },
+        {
+          path: "projects/:projectId/speed-masters",
+          element: <ProjectSpeedMasters />,
+        },
+        {
+          path: "speed-masters",
+          element: <SpeedMastersRedirect />,
         },
         // Palettes: one nav entry, four sibling type routes reached via the in-page switcher.
         // The bare project path belongs to no type — it redirects to the sticky one, which is

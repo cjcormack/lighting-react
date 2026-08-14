@@ -29,6 +29,8 @@ export interface FixtureDirectEffect {
   cueId: number | null
   /** Speed master this effect subscribes to (null → master 1). */
   speedMasterUuid?: string | null
+  /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
+  rateSpeedMasterUuid?: string | null
 }
 
 export interface FixtureIndirectEffect {
@@ -46,6 +48,8 @@ export interface FixtureIndirectEffect {
   stepTiming: boolean
   /** Speed master this effect subscribes to (null → master 1). */
   speedMasterUuid?: string | null
+  /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
+  rateSpeedMasterUuid?: string | null
 }
 
 export interface FixtureEffects {
@@ -65,6 +69,12 @@ export interface EffectLibraryEntry {
   category: string
   outputType: string
   effectMode: string
+  /**
+   * `BEAT` (the default) or `WALL_CLOCK`. Decides which master picker is meaningful and how
+   * the beat-division control is labelled — a wall-clock effect reads its division as cycle
+   * *seconds* and never consults a speed master at all.
+   */
+  timingSource?: string
   description?: string
   parameters: EffectParameterDef[]
   compatibleProperties: string[]
@@ -119,6 +129,11 @@ export interface AddFixtureFxRequest {
   /** Speed master to subscribe to, as the master's uuid (omitted → master 1). */
   speedMasterUuid?: string
   /**
+   * Wall-clock rate master, as the master's uuid (omitted → unscaled). Read only by
+   * WALL_CLOCK effects; it sits alongside `speedMasterUuid` rather than replacing it.
+   */
+  rateSpeedMasterUuid?: string
+  /**
    * Create the effect in the programmer's reserved priority band, so it composes *on top of*
    * programmer values instead of being suppressed by them, and Clear sweeps it with them.
    * Set by the busking pad; cue and script authoring leave it off.
@@ -156,6 +171,8 @@ export interface ActiveEffect {
   intensityMultiplier: number
   /** Speed master this effect subscribes to (null → master 1). */
   speedMasterUuid: string | null
+  /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
+  rateSpeedMasterUuid: string | null
 }
 
 export interface UpdateFxRequest {
@@ -172,6 +189,8 @@ export interface UpdateFxRequest {
    * picker always sends a concrete uuid — master 1's uuid means "back to the default".
    */
   speedMasterUuid?: string
+  /** Reassign the wall-clock rate master; omitted = no change, as above. */
+  rateSpeedMasterUuid?: string
 }
 
 // === RTK Query Endpoints ===

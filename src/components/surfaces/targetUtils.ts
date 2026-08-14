@@ -67,6 +67,15 @@ export function describeTarget(target: BindingTarget): string {
       return "Grand Master"
     case "setBank":
       return `Bank ${target.bank} (${target.deviceTypeKey})`
+    // The uuid is not resolved to a name here: this is a pure function with no access to the
+    // live bank, and a call site that wants "M2 · Chorus" can resolve it via
+    // useSpeedMasterDisplay. `null` is master 1 by the same convention as everywhere else.
+    case "speedMasterBpm":
+      return `Speed master BPM · ${target.minBpm}–${target.maxBpm}${
+        target.masterUuid == null ? " · M1" : ""
+      }`
+    case "speedMasterTap":
+      return `Speed master tap${target.masterUuid == null ? " · M1" : ""}`
   }
 }
 

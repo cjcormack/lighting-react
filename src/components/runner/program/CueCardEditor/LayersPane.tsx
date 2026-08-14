@@ -99,6 +99,7 @@ export function LayersPane({ cue, projectId, mode, targets }: LayersPaneProps) {
     appTargets: CueTarget[],
     timing: { delayMs?: number | null; intervalMs?: number | null; randomWindowMs?: number | null },
     speedMasterUuid?: string | null,
+    rateSpeedMasterUuid?: string | null,
   ) => {
     const next = [
       ...buildCueInput(cue).presetApplications,
@@ -109,6 +110,7 @@ export function LayersPane({ cue, projectId, mode, targets }: LayersPaneProps) {
         intervalMs: timing.intervalMs ?? null,
         randomWindowMs: timing.randomWindowMs ?? null,
         speedMasterUuid: speedMasterUuid ?? null,
+        rateSpeedMasterUuid: rateSpeedMasterUuid ?? null,
       },
     ]
     patchCue({ projectId, cueId: cue.id, presetApplications: next })
@@ -148,8 +150,8 @@ export function LayersPane({ cue, projectId, mode, targets }: LayersPaneProps) {
         }}
         projectId={projectId}
         defaultTarget={addPresetTarget === 'any' ? null : addPresetTarget}
-        onAdd={(presetId, appTargets, timing, speedMasterUuid) => {
-          addPresetApp(presetId, appTargets, timing, speedMasterUuid)
+        onAdd={(presetId, appTargets, timing, speedMasterUuid, rateSpeedMasterUuid) => {
+          addPresetApp(presetId, appTargets, timing, speedMasterUuid, rateSpeedMasterUuid)
           setAddPresetTarget(null)
         }}
       />
@@ -316,6 +318,7 @@ function ByTarget({
                         effects={presetEffects}
                         targets={pa.targets}
                         speedMasterUuid={pa.speedMasterUuid}
+                        rateSpeedMasterUuid={pa.rateSpeedMasterUuid}
                         palette={cue.palette}
                         actions={
                           <>
@@ -443,6 +446,7 @@ function ByLayer({
               effects={presetEffects}
               targets={pa.targets}
               speedMasterUuid={pa.speedMasterUuid}
+              rateSpeedMasterUuid={pa.rateSpeedMasterUuid}
               palette={cue.palette}
               actions={
                 <>

@@ -1,15 +1,42 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
-import { useFxStateQuery, subscribeToBeat, requestBeatSync } from '../store/fx'
+import { subscribeToBeat, requestBeatSync } from '../store/fx'
+import { subscribeToSpeedMasterBeat } from '../store/speedMasters'
 
-export function BeatIndicator({ className }: { className?: string }) {
-  const { data: fxState } = useFxStateQuery()
+/** Which master this dot beats for. Omitted (or master 1) uses the legacy `beatSync` stream. */
+export interface BeatIndicatorMaster {
+  /** Null for master 1 — the same convention the tempo-write messages use. */
+  uuid: string | null
+  index: number
+}
+
+/**
+ * A dot that pulses on the beat.
+ *
+ * Server frames are throttled (one every 16 beats), so the dot free-runs on a local interval
+ * between them and uses each frame to re-align. Until the first frame arrives it renders as
+ * an empty ring — "not synced" is shown rather than guessed.
+ *
+ * Without [master] — or with master 1 — this reads the legacy unkeyed `beatSync` stream,
+ * which is wired to master 1's clock object and cannot speak for any other master. Give it a
+ * master and it reads the keyed `speedMasters.beat` stream instead, so a dot beside a
+ * master-2 effect beats at master 2's tempo.
+ */
+export function BeatIndicator({
+  className,
+  master,
+}: {
+  className?: string
+  master?: BeatIndicatorMaster | null
+}) {
+  // Master 1 stays on the legacy stream: it is the same clock either way, and leaving it
+  // alone means the two existing call sites keep their exact behaviour.
+  const keyedUuid = master != null && master.index !== 1 ? master.uuid : undefined
   const [beat, setBeat] = useState(false)
   const [synced, setSynced] = useState(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastFlashTimeRef = useRef(0)
-  const bpmRef = useRef(fxState?.bpm ?? 120)
 
   const stopInterval = useCallback(() => {
     if (intervalRef.current) {
@@ -39,10 +66,18 @@ export function BeatIndicator({ className }: { className?: string }) {
     }
   }, [synced, stopInterval])
 
-  // Request a beat sync on mount so we don't wait up to 16 beats
+  // Switching which master this dot follows invalidates the local timer — it is still
+  // ticking at the old master's tempo — so drop back to unsynced until the new master's
+  // first frame lands.
   useEffect(() => {
-    requestBeatSync()
-  }, [])
+    setSynced(false)
+  }, [keyedUuid])
+
+  // Request a sync on mount so we don't wait out the throttle. The keyed path does this
+  // inside subscribeBeat, so only the legacy stream needs an explicit nudge here.
+  useEffect(() => {
+    if (keyedUuid === undefined) requestBeatSync()
+  }, [keyedUuid])
 
   // Detect tab visibility changes — mark as unsynced when returning
   // from a hidden state, since the local interval drifts while
@@ -51,35 +86,40 @@ export function BeatIndicator({ className }: { className?: string }) {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         setSynced(false)
-        requestBeatSync()
+        if (keyedUuid === undefined) requestBeatSync()
       }
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [])
+  }, [keyedUuid])
 
-  // Every beatSync (every 16 beats): sync to the server's beat boundary.
+  // Every server frame: re-align to the beat boundary and re-seed the local interval.
+  // Re-subscribing on `keyedUuid` change also re-sends the request, which is what recovers
+  // sync after the visibility reset above.
   useEffect(() => {
-    const subscription = subscribeToBeat((beatSync) => {
-      bpmRef.current = beatSync.bpm
-
+    const onServerBeat = (bpm: number) => {
       const wasSynced = synced
       if (!synced) {
         setSynced(true)
       }
 
       // Flash unless the local timer just flashed for this beat
-      const minGap = (60000 / beatSync.bpm) / 2
+      const minGap = (60000 / bpm) / 2
       if (!wasSynced || Date.now() - lastFlashTimeRef.current > minGap) {
         flash()
       }
 
-      startInterval(beatSync.bpm)
-    })
+      startInterval(bpm)
+    }
+
+    const subscription =
+      keyedUuid === undefined
+        ? subscribeToBeat((beatSync) => onServerBeat(beatSync.bpm))
+        : subscribeToSpeedMasterBeat(keyedUuid, (b) => onServerBeat(b.bpm))
     return () => subscription.unsubscribe()
-  }, [flash, startInterval, synced])
+  }, [flash, startInterval, synced, keyedUuid])
 
   // Cleanup
   useEffect(() => {
