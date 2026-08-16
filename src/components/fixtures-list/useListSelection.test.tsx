@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
+import type { ReactNode } from 'react'
+import { Provider } from 'react-redux'
+import { configureStore } from '@reduxjs/toolkit'
 import {
   applyListSelection,
   listSelectionIntentFor,
@@ -8,11 +11,32 @@ import {
   useListSelection,
   type ListSelectionState,
 } from './useListSelection'
+import { publishTargets, selectionSlice, selectTargetKeys } from '../../store/selectionSlice'
 
 const ORDER = ['g1', 'a', 'b', 'c', 'g2', 'd'] as const
 const order = [...ORDER]
 
 const empty: ListSelectionState = { ids: [], anchor: null }
+
+const makeStore = () => configureStore({ reducer: { selection: selectionSlice.reducer } })
+
+/**
+ * Render the hook against a **fresh** store.
+ *
+ * The selection is store state now, so a shared store would leak one test's selection into the
+ * next — pass a shared `store` explicitly when a test wants two scopes to see each other.
+ */
+function renderSelection(
+  scope: 'fixtures' | 'groups' | 'programmer' = 'programmer',
+  store = makeStore(),
+) {
+  const rendered = renderHook(() => useListSelection(order, scope), {
+    wrapper: ({ children }: { children: ReactNode }) => (
+      <Provider store={store}>{children}</Provider>
+    ),
+  })
+  return { ...rendered, store }
+}
 
 describe('listSelectionIntentFor', () => {
   it('maps modifiers to intents', () => {
@@ -110,7 +134,7 @@ describe('useListSelection', () => {
   it('setSelection replaces the whole selection in one go', () => {
     // "Select Heads on Include" — not a click, so it goes through its own action rather
     // than a loop of toggles.
-    const { result } = renderHook(() => useListSelection(order))
+    const { result } = renderSelection()
     act(() => result.current.select('g1'))
     act(() => result.current.setSelection(['b', 'd']))
     expect(result.current.orderedSelected).toEqual(['b', 'd'])
@@ -118,7 +142,7 @@ describe('useListSelection', () => {
 
   it('setSelection is referentially stable across renders', () => {
     // Keyboard-shortcut effects depend on these callbacks not re-binding per render.
-    const { result, rerender } = renderHook(() => useListSelection(order))
+    const { result, rerender } = renderSelection()
     const before = result.current.setSelection
     rerender()
     expect(result.current.setSelection).toBe(before)
@@ -126,7 +150,7 @@ describe('useListSelection', () => {
 
 
   it('orders selection by visible row order regardless of click order', () => {
-    const { result } = renderHook(() => useListSelection(order))
+    const { result } = renderSelection()
     act(() => result.current.select('d', 'toggle'))
     act(() => result.current.select('a', 'toggle'))
     expect(result.current.orderedSelected).toEqual(['a', 'd'])
@@ -136,7 +160,7 @@ describe('useListSelection', () => {
   })
 
   it('selectAll selects the whole visible order; clear empties', () => {
-    const { result } = renderHook(() => useListSelection(order))
+    const { result } = renderSelection()
     act(() => result.current.selectAll())
     expect(result.current.orderedSelected).toEqual(order)
     act(() => result.current.clear())
@@ -145,12 +169,65 @@ describe('useListSelection', () => {
   })
 
   it('keeps a stable object identity while the selection is unchanged', () => {
-    const { result, rerender } = renderHook(() => useListSelection(order))
+    const { result, rerender } = renderSelection()
     act(() => result.current.select('a'))
     const before = result.current
     rerender()
     expect(result.current).toBe(before)
     act(() => result.current.select('b', 'toggle'))
     expect(result.current).not.toBe(before)
+  })
+
+  it('keeps each list’s selection to itself', () => {
+    // The three lists share one container component but not one selection: `group:front-wash`
+    // is a row in two of them and does not mean the same rows in each.
+    const store = makeStore()
+    const programmer = renderSelection('programmer', store)
+    const groups = renderSelection('groups', store)
+
+    act(() => programmer.result.current.select('a'))
+    expect(programmer.result.current.orderedSelected).toEqual(['a'])
+    expect(groups.result.current.orderedSelected).toEqual([])
+  })
+
+  it('drops the scope when the list unmounts', () => {
+    // Behaviour-neutrality with the old local state: a selection that outlived its list would
+    // let a scoped Record narrow to heads the operator can no longer see.
+    const store = makeStore()
+    const { result, unmount } = renderSelection('programmer', store)
+    act(() => result.current.selectAll())
+    act(() => {
+      store.dispatch(publishTargets({ scope: 'programmer', targetKeys: ['hex-1'] }))
+    })
+    expect(selectTargetKeys(store.getState(), 'programmer')).toEqual(['hex-1'])
+
+    unmount()
+    expect(selectTargetKeys(store.getState(), 'programmer')).toEqual([])
+    expect(store.getState().selection.programmer.ids).toEqual([])
+  })
+})
+
+describe('selectionSlice.publishTargets', () => {
+  it('is idempotent on value, so an unchanged selection does not churn the state', () => {
+    // The container republishes whenever `rows` rebuilds — a filter keystroke, a background
+    // refetch — and most of those produce the same keys. A new array each time would re-render
+    // every subscriber for a selection that never moved.
+    const store = makeStore()
+    store.dispatch(publishTargets({ scope: 'programmer', targetKeys: ['hex-1', 'hex-2'] }))
+    const first = selectTargetKeys(store.getState(), 'programmer')
+
+    store.dispatch(publishTargets({ scope: 'programmer', targetKeys: ['hex-1', 'hex-2'] }))
+    expect(selectTargetKeys(store.getState(), 'programmer')).toBe(first)
+
+    store.dispatch(publishTargets({ scope: 'programmer', targetKeys: ['hex-1'] }))
+    expect(selectTargetKeys(store.getState(), 'programmer')).toEqual(['hex-1'])
+  })
+
+  it('order matters — reordering the same keys is a real change', () => {
+    // The expansion is in visible row order, which is the order fan and batch writes run in.
+    const store = makeStore()
+    store.dispatch(publishTargets({ scope: 'programmer', targetKeys: ['hex-1', 'hex-2'] }))
+    store.dispatch(publishTargets({ scope: 'programmer', targetKeys: ['hex-2', 'hex-1'] }))
+    expect(selectTargetKeys(store.getState(), 'programmer')).toEqual(['hex-2', 'hex-1'])
   })
 })

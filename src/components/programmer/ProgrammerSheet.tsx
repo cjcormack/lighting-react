@@ -22,6 +22,7 @@ export function ProgrammerSheet() {
     <EditorContextProvider value={{ kind: 'live' }}>
       <FixturesListContainer
         grouped={grouped}
+        selectionScope="programmer"
         showOwnership
         // Cmd+K's ?select= links target the fixtures/groups pair; consuming them here would
         // bounce a group select straight back out to /groups/list.

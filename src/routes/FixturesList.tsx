@@ -39,7 +39,9 @@ import { useIncludeSelectionRequest } from '../store/includeSelection'
 import {
   listSelectionIntentFor,
   useListSelection,
+  usePublishSelectionTargets,
 } from '../components/fixtures-list/useListSelection'
+import type { SelectionScope } from '../store/selectionSlice'
 import { applyPlannedWrite, useCellWriters } from '../components/fixtures-list/useCellWriters'
 import { useLitFixtureKeys } from '../components/fixtures-list/useLitFixtureKeys'
 import { FixturesTable } from '../components/fixtures-list/FixturesTable'
@@ -129,7 +131,7 @@ export function ProjectFixturesList() {
         <FixturesViewSwitcher current="list" projectId={projectIdNum} />
       </div>
       <Suspense fallback={<div>Loading...</div>}>
-        <FixturesListContainer grouped={false} />
+        <FixturesListContainer grouped={false} selectionScope="fixtures" />
       </Suspense>
     </Card>
   )
@@ -149,6 +151,14 @@ const EMPTY_GROUPS: GroupSummary[] = []
 export interface FixturesListContainerProps {
   /** Group rows + members + "Ungrouped" (true), or a flat fixture list (false). */
   grouped: boolean
+  /**
+   * Which list's selection this is, in `store/selectionSlice`.
+   *
+   * Required rather than defaulted: the three lists must not share a selection (their row ids
+   * collide without meaning the same rows), and a wrong default would be invisible until two of
+   * them were mounted at once.
+   */
+  selectionScope: SelectionScope
   /** Colour cells by owning layer and show blind-staged values — the programmer sheet. */
   showOwnership?: boolean
   /** Extra controls rendered at the start of the toolbar (the programmer's Clear/Blind row). */
@@ -174,6 +184,7 @@ export interface FixturesListContainerProps {
  */
 export function FixturesListContainer({
   grouped,
+  selectionScope,
   showOwnership = false,
   toolbarExtra,
   enableDeepLinkSelect = true,
@@ -229,7 +240,7 @@ export function FixturesListContainer({
     () => rows.filter((row) => row.kind !== 'divider').map((row) => row.id),
     [rows],
   )
-  const selection = useListSelection(selectableOrder)
+  const selection = useListSelection(selectableOrder, selectionScope)
 
   // Selected ids whose rows are hidden (collapsed group, active filter) are
   // inert everywhere below — every consumer intersects with `rows` — so no
@@ -238,6 +249,15 @@ export function FixturesListContainer({
     () => expandSelectionToTargets(rows, selection.selectedIds),
     [rows, selection.selectedIds],
   )
+
+  // Publish the expansion for consumers outside this container — RecordSheet's "selected
+  // fixtures only". They can't derive it themselves: it needs `rows`, which needs this
+  // component's filter, group-expansion and rollup state.
+  const selectedTargetKeys = useMemo(
+    () => selectedTargets.map((target) => target.key),
+    [selectedTargets],
+  )
+  usePublishSelectionTargets(selectionScope, selectedTargetKeys)
 
   const locateTargets = useMemo<LocateTarget[]>(() => {
     // Deduped by (type, key): a fixture selected via two group memberships
@@ -443,8 +463,8 @@ export function FixturesListContainer({
       },
       { replace: true },
     )
-    // selection.select is referentially stable (useCallback with no deps in
-    // useListSelection); setOnlyLit/setSearchParams are stable setters;
+    // selection.select is referentially stable (a useCallback over dispatch and the scope,
+    // both fixed for the mount); setOnlyLit/setSearchParams are stable setters;
     // navigate/projectId only feed the group-forwarding branch, which leaves
     // this route anyway; groups/fixtures/loading flags/grouped cover
     // everything else read here.
@@ -511,7 +531,8 @@ export function FixturesListContainer({
     setScrollToRowId(wanted[0])
     // `includeSelection` is read fresh rather than depended on: its identity changes with every
     // publish, and the arrays inside it are the same data the nonce already tracks.
-    // `selection.setSelection` and `setOnlyLit` are referentially stable.
+    // `selection.setSelection` and `setOnlyLit` are referentially stable (the former is a
+    // useCallback over dispatch and the scope, both fixed for the mount).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [includeNonce, fixtures, groups, grouped])
 

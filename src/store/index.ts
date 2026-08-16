@@ -4,6 +4,7 @@ import { setupListeners } from "@reduxjs/toolkit/query"
 import { runnerSlice } from './runnerSlice'
 import { errorToastMiddleware } from './errorToastMiddleware'
 import { saveStatusSlice } from './saveStatusSlice'
+import { selectionSlice } from './selectionSlice'
 
 export const store = configureStore({
   reducer: {
@@ -11,6 +12,9 @@ export const store = configureStore({
     runner: runnerSlice.reducer,
     // Matches on RTK Query's mutation lifecycle actions — see saveStatusSlice.
     saveStatus: saveStatusSlice.reducer,
+    // Fixtures-list row selection, keyed by list. In the store so surfaces outside the list
+    // (RecordSheet's "selected fixtures only") can read it — see selectionSlice.
+    selection: selectionSlice.reducer,
   },
 
   middleware: (getDefaultMiddleware) => {

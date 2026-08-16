@@ -81,7 +81,7 @@ export function ProjectGroupsList() {
         <GroupsViewSwitcher current="list" projectId={projectIdNum} />
       </div>
       <Suspense fallback={<div>Loading...</div>}>
-        <FixturesListContainer grouped />
+        <FixturesListContainer grouped selectionScope="groups" />
       </Suspense>
     </Card>
   )

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSelector } from 'react-redux'
 import { Loader2, XCircle } from 'lucide-react'
 import {
   Sheet,
@@ -24,6 +25,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { formatError } from '@/lib/formatError'
 import { useProjectCueStackListQuery } from '@/store/cueStacks'
 import { useRecordProgrammerMutation } from '@/store/programmerOps'
+import { selectTargetKeys } from '@/store/selectionSlice'
 import type {
   ProgrammerConflict,
   PropertyMaskGroup,
@@ -92,10 +94,18 @@ export function RecordSheet({
   const { data: stacks } = useProjectCueStackListQuery(projectId)
   const [record, { isLoading, error, reset }] = useRecordProgrammerMutation()
 
+  // The programmer sheet's selection, published into the store by its list container. Read
+  // from there rather than passed in: this sheet opens from the programmer toolbar and from a
+  // cue card, and neither has a prop path to the list that holds the selection.
+  const selectedKeys = useSelector((s: Parameters<typeof selectTargetKeys>[0]) =>
+    selectTargetKeys(s, 'programmer'),
+  )
+
   const [mode, setMode] = useState<RecordMode>(targetCueId ? 'MERGE' : 'CREATE')
   const [source, setSource] = useState<RecordSource>('TOUCHED')
   const [mask, setMask] = useState<PropertyMaskGroup[]>([])
   const [includeFx, setIncludeFx] = useState(true)
+  const [selectedOnly, setSelectedOnly] = useState(false)
   const [stackId, setStackId] = useState<string>('')
   const [name, setName] = useState('')
   const [cueNumber, setCueNumber] = useState('')
@@ -122,6 +132,9 @@ export function RecordSheet({
     setSource('TOUCHED')
     setMask([])
     setIncludeFx(true)
+    // Off on every open, even with heads selected. Narrowing is the surprising outcome, so it
+    // should be something the operator asked for on this Record, not a setting that persisted.
+    setSelectedOnly(false)
     setName('')
     setCueNumber('')
     setStackId(String(defaultCueStackId ?? recordableStacks[0]?.id ?? ''))
@@ -135,6 +148,9 @@ export function RecordSheet({
 
   const creating = mode === 'CREATE'
   const canSubmit = creating ? stackId !== '' : targetCueId !== undefined
+  // Guarded on the selection as well as the checkbox: the list can unmount (or be deselected)
+  // while this sheet is open, and sending an empty `targets` is a 400, not a whole-rig record.
+  const scoped = selectedOnly && selectedKeys.length > 0
 
   const submit = async (force: boolean) => {
     setConflict(null)
@@ -145,6 +161,9 @@ export function RecordSheet({
         source,
         mask: mask.length > 0 ? mask : undefined,
         includeFx,
+        targets: scoped
+          ? selectedKeys.map((key) => ({ type: 'fixture' as const, key }))
+          : undefined,
         cueStackId: creating ? Number(stackId) : undefined,
         cueId: creating ? undefined : targetCueId,
         name: creating && name.trim() !== '' ? name.trim() : undefined,
@@ -249,6 +268,30 @@ export function RecordSheet({
             </p>
           </div>
 
+          <div className="space-y-1">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={scoped}
+                disabled={selectedKeys.length === 0}
+                onChange={(e) => setSelectedOnly(e.target.checked)}
+                className="size-4"
+              />
+              Selected fixtures only
+              {selectedKeys.length > 0 && (
+                <span className="text-muted-foreground tabular-nums">
+                  ({selectedKeys.length})
+                </span>
+              )}
+            </label>
+            <p className="text-xs text-muted-foreground">
+              {selectedKeys.length === 0
+                ? 'Select fixtures on the programmer sheet to record just those heads.'
+                : 'Record only these heads — the rest of the programmer is left out, and rows ' +
+                  'the cue already holds for other fixtures are kept.'}
+            </p>
+          </div>
+
           <MaskPicker value={mask} onChange={setMask} />
 
           <label className="flex items-center gap-2 text-sm">
@@ -316,6 +359,9 @@ function RecordResult({ result }: { result: RecordResponse }) {
   }
   if (preserved.outOfMaskAssignments > 0) {
     notes.push(`${preserved.outOfMaskAssignments} out-of-mask row(s) kept`)
+  }
+  if (preserved.outOfScopeAssignments > 0) {
+    notes.push(`${preserved.outOfScopeAssignments} out-of-selection row(s) kept`)
   }
   if (result.republishedLive) notes.push('the live cue was republished')
 

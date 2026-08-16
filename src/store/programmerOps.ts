@@ -1,5 +1,5 @@
 import { restApi } from './restApi'
-import type { Cue } from '../api/cuesApi'
+import type { Cue, CueTarget } from '../api/cuesApi'
 import type { PaletteType } from '../api/palettesApi'
 import type { IncludedTarget } from '../api/programmerWsApi'
 
@@ -48,6 +48,8 @@ export interface ProgrammerPreservedCounts {
   timedPresetApplications: number
   timedAdHocEffects: number
   outOfMaskAssignments: number
+  /** Rows left alone because they name a fixture outside the request's `targets`. */
+  outOfScopeAssignments: number
 }
 
 export interface RecordRequest {
@@ -64,6 +66,14 @@ export interface RecordRequest {
   cueNumber?: string
   /** Record anyway when a cue-edit session is open on the target cue. */
   force?: boolean
+  /**
+   * Restrict the record to these fixtures — "put just these heads into this cue". Groups are
+   * expanded server-side.
+   *
+   * Omitted records the whole programmer, which is the right default for a cue: unlike a
+   * palette, capturing everything the operator busked is usually what was meant.
+   */
+  targets?: CueTarget[]
 }
 
 export interface RecordResponse {

@@ -1,93 +1,26 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useDispatch, useSelector } from 'react-redux'
+import {
+  clearSelection as clearSelectionAction,
+  publishTargets as publishTargetsAction,
+  select as selectAction,
+  selectAll as selectAllAction,
+  selectScopeState,
+  setSelection as setSelectionAction,
+  type SelectionScope,
+} from '../../store/selectionSlice'
+import type { ListSelectIntent } from './listSelectionModel'
 import type { RowId } from './rowModel'
 
-export type ListSelectIntent = 'replace' | 'toggle' | 'range' | 'range-add'
-
-/** Shift = range from the anchor, ⌘/Ctrl = toggle, ⌘/Ctrl+Shift = extend the
- *  selection by a range. Range semantics (not stage3d's shift-means-add): this
- *  is a list, and shift-click ranges are the list convention. */
-export function listSelectionIntentFor(
-  e: Pick<MouseEvent, 'shiftKey' | 'metaKey' | 'ctrlKey'>,
-): ListSelectIntent {
-  const cmd = e.metaKey || e.ctrlKey
-  if (cmd && e.shiftKey) return 'range-add'
-  if (e.shiftKey) return 'range'
-  if (cmd) return 'toggle'
-  return 'replace'
-}
-
-export interface ListSelectionState {
-  /** Selected ids, in the order they were added (not display order). */
-  ids: readonly RowId[]
-  /** The range pivot: stays put across successive shift-clicks so the user can
-   *  re-pivot a range from the same starting row. */
-  anchor: RowId | null
-}
-
-/**
- * Pure selection reducer. `visibleOrder` is the current `buildRows` output
- * order — ranges are slices of it. An anchor that's been filtered out of view
- * degrades the range to a plain replace.
- */
-export function applyListSelection(
-  state: ListSelectionState,
-  action: { id: RowId; intent: ListSelectIntent },
-  visibleOrder: readonly RowId[],
-): ListSelectionState {
-  const { id, intent } = action
-
-  if (intent === 'range' || intent === 'range-add') {
-    const anchorIdx = state.anchor === null ? -1 : visibleOrder.indexOf(state.anchor)
-    if (anchorIdx === -1) {
-      return { ids: [id], anchor: id }
-    }
-    const clickedIdx = visibleOrder.indexOf(id)
-    if (clickedIdx === -1) return state
-    const [lo, hi] = anchorIdx <= clickedIdx ? [anchorIdx, clickedIdx] : [clickedIdx, anchorIdx]
-    const slice = visibleOrder.slice(lo, hi + 1)
-    if (intent === 'range') {
-      return { ids: slice, anchor: state.anchor }
-    }
-    const merged = [...state.ids]
-    const present = new Set(state.ids)
-    for (const rangeId of slice) {
-      if (!present.has(rangeId)) {
-        present.add(rangeId)
-        merged.push(rangeId)
-      }
-    }
-    return { ids: merged, anchor: state.anchor }
-  }
-
-  if (intent === 'toggle') {
-    if (state.ids.includes(id)) {
-      const ids = state.ids.filter((existing) => existing !== id)
-      // Anchor falls back to the last remaining selection when the anchor
-      // itself was toggled off.
-      const anchor = state.anchor === id ? (ids[ids.length - 1] ?? null) : state.anchor
-      return { ids, anchor }
-    }
-    return { ids: [...state.ids, id], anchor: id }
-  }
-
-  return { ids: [id], anchor: id }
-}
-
-/**
- * Replace the whole selection with [ids], keeping only those currently in view.
- *
- * Separate from `select(id, 'replace')` because it is not a click: Include hands back a set
- * of fixtures and the sheet selects exactly them. Ids that aren't visible (filtered out, or a
- * group row in the wrong rollup mode) are dropped rather than silently selecting nothing.
- */
-export function setListSelection(
-  ids: readonly RowId[],
-  visibleOrder: readonly RowId[],
-): ListSelectionState {
-  const wanted = new Set(ids)
-  const present = visibleOrder.filter((id) => wanted.has(id))
-  return { ids: present, anchor: present[present.length - 1] ?? null }
-}
+// The pure model lives in ./listSelectionModel so the slice can reduce with it without
+// importing this hook. Re-exported here because this stays the public entry point — callers
+// and tests import `listSelectionIntentFor` / `applyListSelection` from this module.
+export {
+  applyListSelection,
+  listSelectionIntentFor,
+  setListSelection,
+} from './listSelectionModel'
+export type { ListSelectIntent, ListSelectionState } from './listSelectionModel'
 
 export interface ListSelection {
   selectedIds: ReadonlySet<RowId>
@@ -104,10 +37,29 @@ export interface ListSelection {
   setSelection: (ids: readonly RowId[]) => void
 }
 
-export function useListSelection(visibleOrder: readonly RowId[]): ListSelection {
-  const [state, setState] = useState<ListSelectionState>({ ids: [], anchor: null })
+/**
+ * Row selection for one list, backed by `store/selectionSlice`.
+ *
+ * The state moved to Redux so that surfaces outside the list — `RecordSheet`, opened from the
+ * programmer toolbar and from a cue card — can read the selection; see the slice for why. The
+ * returned [ListSelection] is unchanged by that move, which is what kept the keyboard and
+ * range machinery in `FixturesListContainer` untouched: it depends on this shape, not on where
+ * the state lives.
+ *
+ * [scope] names which list this is. Two lists mounted at once (the programmer sheet inside the
+ * Program view, say) must not share a selection — their row ids collide without meaning the
+ * same rows.
+ */
+export function useListSelection(
+  visibleOrder: readonly RowId[],
+  scope: SelectionScope,
+): ListSelection {
+  const dispatch = useDispatch()
+  const state = useSelector((s: Parameters<typeof selectScopeState>[0]) =>
+    selectScopeState(s, scope),
+  )
 
-  // Read through refs so the callbacks stay referentially stable — they're
+  // Read through a ref so the callbacks stay referentially stable — they're
   // dependencies of keyboard-shortcut effects that must not re-bind per render.
   const orderRef = useRef(visibleOrder)
   orderRef.current = visibleOrder
@@ -119,21 +71,46 @@ export function useListSelection(visibleOrder: readonly RowId[]): ListSelection 
     [visibleOrder, selectedIds],
   )
 
-  const select = useCallback((id: RowId, intent: ListSelectIntent = 'replace') => {
-    setState((prev) => applyListSelection(prev, { id, intent }, orderRef.current))
-  }, [])
+  // `dispatch` and `scope` are both stable for the life of the mount, so these keep the
+  // no-rebind property the effects below rely on.
+  const select = useCallback(
+    (id: RowId, intent: ListSelectIntent = 'replace') => {
+      dispatch(selectAction({ scope, id, intent, visibleOrder: orderRef.current }))
+    },
+    [dispatch, scope],
+  )
 
   const selectAll = useCallback(() => {
-    setState((prev) => ({ ids: [...orderRef.current], anchor: prev.anchor }))
-  }, [])
+    dispatch(selectAllAction({ scope, visibleOrder: orderRef.current }))
+  }, [dispatch, scope])
 
-  const clear = useCallback(() => setState({ ids: [], anchor: null }), [])
+  const clear = useCallback(() => {
+    dispatch(clearSelectionAction({ scope }))
+  }, [dispatch, scope])
 
-  const setSelection = useCallback((ids: readonly RowId[]) => {
-    setState(setListSelection(ids, orderRef.current))
-  }, [])
+  const setSelection = useCallback(
+    (ids: readonly RowId[]) => {
+      dispatch(setSelectionAction({ scope, ids, visibleOrder: orderRef.current }))
+    },
+    [dispatch, scope],
+  )
 
   const isSelected = useCallback((id: RowId) => selectedIds.has(id), [selectedIds])
+
+  // Drop the scope when the list goes away. This is what keeps the lift behaviour-neutral —
+  // local state died with the component — and it lives here rather than beside the publish
+  // below so that no list can hold a selection without also releasing it.
+  //
+  // Only one list per scope is ever mounted at a time today (the three scopes belong to
+  // mutually exclusive routes), so a plain teardown clear is enough. If a future surface ever
+  // mounts two lists on the same scope, this needs a mount count — one unmounting would
+  // otherwise clear the other's selection.
+  useEffect(
+    () => () => {
+      dispatch(clearSelectionAction({ scope }))
+    },
+    [dispatch, scope],
+  )
 
   // A stable object identity while the selection is unchanged — consumers
   // hang callbacks and memo deps off `selection`, so a fresh literal per
@@ -162,4 +139,22 @@ export function useListSelection(visibleOrder: readonly RowId[]): ListSelection 
       setSelection,
     ],
   )
+}
+
+/**
+ * Publish the selection's expanded write-target keys for consumers outside the list.
+ *
+ * Paired with [useListSelection], which owns the scope's lifecycle: this only writes the
+ * derived key list. Depending on `targetKeys` by identity is safe because `publishTargets`
+ * compares by value and bails when nothing moved.
+ */
+export function usePublishSelectionTargets(
+  scope: SelectionScope,
+  targetKeys: readonly string[],
+): void {
+  const dispatch = useDispatch()
+
+  useEffect(() => {
+    dispatch(publishTargetsAction({ scope, targetKeys }))
+  }, [dispatch, scope, targetKeys])
 }
