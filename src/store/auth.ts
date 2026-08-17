@@ -25,6 +25,9 @@ export interface AuthStatus {
   user?: AuthUser | null
 }
 
+/** How a session was created. `PASSWORD` for rows predating the column. */
+export type SessionOrigin = 'PASSWORD' | 'QR'
+
 export interface SessionInfo {
   id: number
   createdAtMs: number
@@ -32,6 +35,33 @@ export interface SessionInfo {
   userAgent: string | null
   /** The session this browser is using. It survives "sign out everywhere else". */
   current: boolean
+  createdVia: SessionOrigin
+}
+
+/** A freshly minted device-login QR, as the desk's sheet needs it. */
+export interface DeviceLoginResponse {
+  /** Opaque uuid, for the poll and cancel calls. */
+  id: string
+  /** The URL to render as a QR code. */
+  url: string
+  /** Other addresses the same page answers on, for a phone that can't reach `url`. */
+  alternateUrls: string[]
+  expiresAtMs: number
+  displayName: string
+}
+
+export type DeviceLoginStatus = 'PENDING' | 'USED' | 'EXPIRED' | 'CANCELLED'
+
+export interface DeviceLoginStatusInfo {
+  status: DeviceLoginStatus
+  expiresAtMs: number
+  /**
+   * The phone that took the QR, once one has. There is no confirmation step in this flow, so
+   * this is the desk's only way to notice a *wrong* device took it — paired with `sessionId`
+   * so the sheet can offer to sign that device straight back out.
+   */
+  redeemedByUserAgent?: string | null
+  sessionId?: number | null
 }
 
 export interface LoginRequest {
@@ -124,9 +154,38 @@ export const authApi = restApi.injectEndpoints({
       query: () => 'auth/sessions',
       providesTags: ['AuthSessions'],
     }),
+    // Also retires any live device-login QR for this account, server-side. "Sign out
+    // everywhere else" is what someone presses when they think they've been compromised, and
+    // leaving an exchangeable QR alive through it would defeat the point.
     revokeOtherSessions: build.mutation<void, void>({
       query: () => ({ url: 'auth/sessions', method: 'DELETE' }),
-      invalidatesTags: ['AuthSessions'],
+      invalidatesTags: ['AuthSessions', 'DeviceLogin'],
+    }),
+
+    // ─── Device-login QR (the desk's own side) ───────────────────────────
+    //
+    // Authenticated but open to *any* role — this is "sign my own phone in", not an
+    // administrative act, so it can't live under the admin-only /users subtree. The two
+    // public halves the phone calls are in ./deviceLogin.
+
+    // Always mints for the caller: there is no target parameter, by design, so this can
+    // never become a way to hand somebody else a session.
+    createDeviceLogin: build.mutation<DeviceLoginResponse, void>({
+      query: () => ({ url: 'auth/device-logins', method: 'POST' }),
+    }),
+
+    deviceLoginStatus: build.query<DeviceLoginStatusInfo, { id: string }>({
+      query: ({ id }) => `auth/device-logins/${encodeURIComponent(id)}`,
+      providesTags: (_result, _error, { id }) => [{ type: 'DeviceLogin', id }],
+    }),
+
+    // Fired as the sheet closes — the opposite call from the reset flow's history-and-revoke,
+    // and deliberately so: a reset link can only ever set a password, whereas this one is a
+    // way into the account, so it should not outlive the screen showing it by a second.
+    cancelDeviceLogin: build.mutation<void, { id: string }>({
+      query: ({ id }) => ({ url: `auth/device-logins/${encodeURIComponent(id)}`, method: 'DELETE' }),
+      invalidatesTags: (_result, error, { id }) =>
+        error == null ? [{ type: 'DeviceLogin', id }] : [],
     }),
   }),
   overrideExisting: false,
@@ -140,6 +199,9 @@ export const {
   useChangePasswordMutation,
   useSessionsQuery,
   useRevokeOtherSessionsMutation,
+  useCreateDeviceLoginMutation,
+  useDeviceLoginStatusQuery,
+  useCancelDeviceLoginMutation,
 } = authApi
 
 // The socket was rejected (close code 4401), which means this browser's session is

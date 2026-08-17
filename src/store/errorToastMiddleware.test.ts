@@ -124,6 +124,7 @@ describe('SILENT_ENDPOINTS', () => {
       import('./auth'),
       import('./users'),
       import('./passwordReset'),
+      import('./deviceLogin'),
     ])
 
     const known = new Set(Object.keys(restApi.endpoints))

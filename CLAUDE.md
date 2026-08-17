@@ -215,19 +215,35 @@ recovery. Frontend shape:
   invalidates the `Auth` tag, which is the entire logout mechanism; a WS close with
   code **4401** does the same, because the backend revokes live sockets.
 - `store/users.ts` is admin-only CRUD (`/api/rest/users`); `store/passwordReset.ts`
-  is the two **public** endpoints the phone page uses. They are separate slices
-  because they are separate audiences — cookie-authenticated admin vs. no session
-  at all — not merely separate paths.
-- `routes/ResetPasswordPage.tsx` is a **sibling of `Layout`**, not a child, and is
-  bypassed past both gates via the `publicPath` flag computed at module scope in
-  `App.tsx`. Whoever opens `/reset/<token>` is by definition locked out: no
-  sidebar, no ShowBar, no project context, no session.
+  and `store/deviceLogin.ts` are the **public** endpoint pairs the two phone pages
+  use. They are separate slices because they are separate audiences —
+  cookie-authenticated admin vs. no session at all — not merely separate paths. The
+  *desk* side of the device-login QR lives in `store/auth.ts`, because it is
+  authenticated and open to any role.
+- `routes/ResetPasswordPage.tsx` and `routes/DeviceLoginPage.tsx` are **siblings of
+  `Layout`**, not children, and are bypassed past both gates via the `publicPath`
+  flag computed at module scope in `App.tsx`: no sidebar, no ShowBar, no project
+  context, no session. Whoever opens `/reset/<token>` is by definition locked out;
+  whoever opens `/device/<token>` has no session yet either.
+
+  Two traps there. It matches the **routes**, not a bare prefix — `/device/` with no
+  token would otherwise render blank with both gates off. And because the flag is
+  read once per document, `DeviceLoginPage` finishes with
+  `window.location.assign('/')`: a react-router `navigate('/')` from either page
+  would render the whole app with no auth check and no boot check. A test pins that.
 - `MIN_PASSWORD_LENGTH` lives in `lib/passwordPolicy.ts` and mirrors the backend's
   floor. Five surfaces ask for a password; a form that disagreed with the server
   would read as a bug in that form.
 - 409 responses carrying `LAST_ADMIN` / `SELF_TARGET` are **ordinary flow steps**
-  (you can't demote the last admin or disable yourself), rendered inline in
-  `UserDetailSheet` — which is why those endpoints are in `SILENT_ENDPOINTS`.
+  (you can't demote the last admin, and on your own account you can't disable,
+  delete, re-role, or mint a reset QR), rendered inline in `UserDetailSheet` — which
+  is why those endpoints are in `SILENT_ENDPOINTS`. The self cases are hidden rather
+  than disabled in that sheet: a Password section made of three greyed-out controls
+  reads as breakage.
+- **The two QR sheets make opposite calls on close, on purpose.** `ResetQrSheet`
+  leaves its link alive and `ResetTokenHistory` makes it visible and revocable;
+  `DeviceLoginSheet` cancels its code, because that code *is* a way into the account
+  rather than a way to re-password it. Don't factor them together.
 
 ### Cues, Stacks & Triggers
 Cues bundle palettes, FX preset applications, ad-hoc effects, and **script hooks** into named snapshots. **Every cue belongs to a cue stack** — there are no standalone cues. A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of cues. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). Cues and stacks are authored and run entirely in the **Program** view (`/projects/:projectId/program`, drilling into a stack at `/program/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed.

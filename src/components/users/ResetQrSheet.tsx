@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import QRCode from "react-qr-code"
 import { AlertTriangle, Check, Copy, Loader2, RefreshCw } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -11,9 +11,9 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
+import { formatCountdown } from "@/lib/formatCountdown"
 import { formatError } from "@/lib/formatError"
 import {
-  useCancelResetTokenMutation,
   useCreateResetTokenMutation,
   useResetTokenStatusQuery,
   type DeskUser,
@@ -23,17 +23,21 @@ import {
 /** Matches the sheet's poll cadence to human patience: the admin is watching a phone. */
 const POLL_INTERVAL_MS = 2000
 
-function formatCountdown(msRemaining: number): string {
-  const total = Math.max(0, Math.floor(msRemaining / 1000))
-  const minutes = Math.floor(total / 60)
-  const seconds = total % 60
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`
-}
-
 /**
  * The QR half of the password reset flow: an admin mints a single-use link, the
  * locked-out user scans it on their phone and sets a new password, and this sheet flips to
  * a success state within a poll interval.
+ *
+ * **Closing this sheet no longer cancels the link it was showing.** It used to, so that a QR
+ * on screen for ten seconds didn't stay redeemable for fifteen minutes — but that made the
+ * flow brittle in exactly the situations it exists for: the admin couldn't close the sheet to
+ * go and do something else, and an operator slow to reach their phone lost the link for no
+ * reason. Visibility replaced cancellation: the link lives its full TTL and
+ * `ResetTokenHistory` in `UserDetailSheet` shows that it is live and offers a deliberate
+ * Cancel. See `FU-AUTH-RESET-TOKEN-HISTORY` in lighting7's followups.
+ *
+ * The device-login sheet made the opposite call for the opposite risk profile — it *does*
+ * cancel on close — so resist factoring the two into one component.
  *
  * Polling uses RTK Query's own `pollingInterval` rather than the hand-rolled
  * `setInterval` in `cloudSync/DeviceFlowModal` — that flow polls with a *mutation* (the
@@ -58,18 +62,8 @@ export function ResetQrSheet({
   const [settled, setSettled] = useState(false)
 
   const [createResetToken, { isLoading: isMinting }] = useCreateResetTokenMutation()
-  const [cancelResetToken] = useCancelResetTokenMutation()
 
   const userId = user?.id
-  // Held in a ref as well as in state so the unmount cleanup can cancel the live token
-  // without re-running (and thus cancelling) every time the token changes.
-  const liveToken = useRef<{ userId: number; tokenId: number } | null>(null)
-
-  // Read after an await to tell "still on screen" from "closed while we were minting".
-  // Assigned during render rather than in an effect so it is already correct for a mint
-  // that resolves before effects flush.
-  const openRef = useRef(open)
-  openRef.current = open
 
   const { data: status } = useResetTokenStatusQuery(
     { userId: userId ?? 0, tokenId: token?.id ?? 0 },
@@ -82,11 +76,8 @@ export function ResetQrSheet({
   )
   const tokenStatus = status?.status ?? "PENDING"
 
-  // A terminal status also means there is nothing left to cancel, so drop the ref
-  // immediately — otherwise closing the sheet would fire a pointless DELETE.
   useEffect(() => {
     if (tokenStatus === "PENDING") return
-    liveToken.current = null
     setSettled(true)
   }, [tokenStatus])
 
@@ -96,18 +87,9 @@ export function ResetQrSheet({
     setCopied(false)
     try {
       const minted = await createResetToken({ userId }).unwrap()
-      // The admin can close the sheet while this request is in flight, and the
-      // close-cleanup below only cancels what `liveToken` pointed at *then* — which was
-      // still null. Cancel it here instead: nobody has seen this URL, so a link left live
-      // for fifteen minutes would be one nobody knows exists.
-      if (!openRef.current) {
-        void cancelResetToken({ userId, tokenId: minted.id })
-        return
-      }
       setToken(minted)
       setSettled(false)
       setNow(Date.now())
-      liveToken.current = { userId, tokenId: minted.id }
     } catch (err) {
       setError(formatError(err))
     }
@@ -126,18 +108,15 @@ export function ResetQrSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, userId])
 
-  // A live token outlives the sheet unless we say otherwise: 15 minutes of redeemable
-  // link for a QR that was on screen for ten seconds is not what closing the sheet means.
+  // Clear the sheet's own state on close so reopening doesn't flash the previous QR before
+  // the new one arrives. The token itself is deliberately left alive — see the docblock.
   useEffect(() => {
     if (open) return
-    const outstanding = liveToken.current
-    liveToken.current = null
     setToken(null)
     setError(null)
     setCopied(false)
     setSettled(false)
-    if (outstanding) void cancelResetToken(outstanding)
-  }, [open, cancelResetToken])
+  }, [open])
 
   // Drives the countdown only — the expiry itself is the backend's call, which the poll
   // reports as EXPIRED. A ticking clock with nothing to tick for is just wasted renders.
@@ -212,6 +191,12 @@ export function ResetQrSheet({
                 on the same network. They&apos;ll set the password themselves; you never see
                 it.
               </p>
+              {/* Says the quiet part out loud, because the old behaviour was the opposite and
+                  an admin who learned it here would otherwise assume closing kills the link. */}
+              <p className="text-xs text-muted-foreground">
+                You can close this — the link stays valid until it expires or you cancel it
+                from the user&apos;s Reset links list.
+              </p>
               {/* White plate regardless of theme: a dark-on-dark QR doesn't scan. */}
               <div className="flex justify-center rounded-md bg-white p-4">
                 <QRCode value={token.url} size={192} />
@@ -249,8 +234,11 @@ export function ResetQrSheet({
           )}
         </SheetBody>
         <SheetFooter className="flex-row justify-end gap-2">
+          {/* "Close", never "Cancel": closing this sheet leaves the link live on purpose, and
+              a button labelled Cancel would promise the opposite. Revoking is a deliberate act
+              on the history list in UserDetailSheet. */}
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            {tokenStatus === "USED" ? "Done" : "Cancel"}
+            {tokenStatus === "USED" ? "Done" : "Close"}
           </Button>
         </SheetFooter>
       </SheetContent>

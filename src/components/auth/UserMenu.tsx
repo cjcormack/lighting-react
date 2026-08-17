@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useNavigate } from "react-router"
-import { KeyRound, LogOut, Users } from "lucide-react"
+import { KeyRound, LogOut, Smartphone, Users } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -14,6 +14,7 @@ import {
 import { useAuthStatusQuery, useLogoutMutation } from "@/store/auth"
 import { RoleBadge } from "@/components/users/RoleBadge"
 import { ChangePasswordSheet } from "./ChangePasswordSheet"
+import { DeviceLoginSheet } from "./DeviceLoginSheet"
 
 function initials(displayName: string): string {
   const words = displayName.trim().split(/\s+/).filter(Boolean)
@@ -27,6 +28,7 @@ export function UserMenu() {
   const navigate = useNavigate()
   const [logout] = useLogoutMutation()
   const [changePasswordOpen, setChangePasswordOpen] = useState(false)
+  const [deviceLoginOpen, setDeviceLoginOpen] = useState(false)
 
   const user = data?.user
   // Bootstrap-open: no users exist yet, so there is no identity to show. The setup
@@ -73,6 +75,12 @@ export function UserMenu() {
             <KeyRound className="size-4" />
             Change password…
           </DropdownMenuItem>
+          {/* Every role: signing your own phone in is not an administrative act, which is
+              also why its endpoints live under /auth rather than the admin-only /users. */}
+          <DropdownMenuItem onSelect={() => setDeviceLoginOpen(true)}>
+            <Smartphone className="size-4" />
+            Sign in on a phone…
+          </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => void logout()}>
             <LogOut className="size-4" />
             Log out
@@ -80,6 +88,7 @@ export function UserMenu() {
         </DropdownMenuContent>
       </DropdownMenu>
       <ChangePasswordSheet open={changePasswordOpen} onOpenChange={setChangePasswordOpen} />
+      <DeviceLoginSheet open={deviceLoginOpen} onOpenChange={setDeviceLoginOpen} />
     </>
   )
 }

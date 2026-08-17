@@ -36,6 +36,7 @@ import { CloudSyncHubRedirect } from "./routes/CloudSync";
 import { ProjectSettings, ProjectSettingsRedirect } from "./routes/ProjectSettings";
 import { InstallSettings } from "./routes/InstallSettings";
 import { ResetPasswordPage } from "./routes/ResetPasswordPage";
+import { DeviceLoginPage } from "./routes/DeviceLoginPage";
 import { Stage, StageRedirect } from "./routes/Stage";
 
 function PatchesToSettings() {
@@ -51,12 +52,27 @@ function ProjectSyncToSettings() {
   return <Navigate to={`/projects/${projectId}/settings/sync`} replace />
 }
 
-// Pages reachable without an account, and without the show being up. Session 3's
-// phone-facing /reset/<token> page is the only one — someone locked out of the desk
-// scans a QR on their phone, so neither gate may stand in front of it. Read once at
-// module scope: it can only change via a navigation that reloads the document, since
-// the page is a sibling of the router's Layout rather than a route inside it.
-const publicPath = window.location.pathname.startsWith('/reset/')
+// Pages reachable without an account, and without the show being up: the two phone-facing
+// QR pages. `/reset/<token>` belongs to someone locked out of the desk; `/device/<token>` is
+// a phone being signed in from it. Neither has a session, so neither gate may stand in front
+// of them.
+//
+// Read once at module scope, which is safe only because these pages are siblings of the
+// router's Layout rather than routes inside it, and because the one that finishes with a
+// session (`/device/`) does so with `window.location.assign` — a document load, which
+// re-evaluates this. **A react-router `navigate('/')` from either page would render the whole
+// app with both gates bypassed.** `DeviceLoginPage`'s test pins the document-level navigation
+// for exactly that reason.
+//
+// Matched as routes, not as a bare prefix: `/device/` with no token would otherwise render a
+// blank screen with both gates off.
+//
+// **The `i` flag is not decoration.** React Router matches routes case-insensitively unless a
+// route sets `caseSensitive: true`, which none of ours do — so `/Device/<token>` renders
+// `DeviceLoginPage` either way. A case-sensitive flag here would leave both gates armed in front
+// of it, and a phone keyboard that auto-capitalises the first letter of a hand-typed URL is
+// exactly how that happens.
+const publicPath = /^\/(reset|device)\/[^/]+\/?$/i.test(window.location.pathname)
 
 function App() {
   const router = createBrowserRouter([
@@ -335,12 +351,16 @@ function App() {
         },
       ],
     },
-    // Sibling of Layout, not a child: the phone that scans a reset QR has no session,
-    // no project context, and no business rendering the sidebar or the ShowBar. Paired
-    // with the `publicPath` bypass below, which keeps both gates out of its way.
+    // Siblings of Layout, not children: a phone that scans one of these QRs has no session,
+    // no project context, and no business rendering the sidebar or the ShowBar. Paired with
+    // the `publicPath` bypass above, which keeps both gates out of their way.
     {
       path: "reset/:token",
       element: <ResetPasswordPage />,
+    },
+    {
+      path: "device/:token",
+      element: <DeviceLoginPage />,
     },
   ])
 

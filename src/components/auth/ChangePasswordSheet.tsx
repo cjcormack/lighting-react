@@ -52,6 +52,10 @@ function SessionRow({ session }: { session: SessionInfo }) {
         <p className="truncate text-sm">{describeUserAgent(session.userAgent)}</p>
         <p className="text-xs text-muted-foreground">
           Last active {new Date(session.lastSeenAtMs).toLocaleString()}
+          {/* Named because a QR sign-in is the one entry here nobody typed a password for:
+              if a device you don't recognise came in that way, this row is where you find
+              out. */}
+          {session.createdVia === "QR" && " · signed in by QR from the desk"}
         </p>
       </div>
       {session.current && <Badge variant="secondary">This device</Badge>}

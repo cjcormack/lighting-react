@@ -43,6 +43,7 @@ import {
 } from "@/store/users"
 import { ROLE_DESCRIPTIONS, ROLE_LABELS } from "./RoleBadge"
 import { ResetQrSheet } from "./ResetQrSheet"
+import { ResetTokenHistory } from "./ResetTokenHistory"
 
 const ROLES: UserRole[] = ["OPERATOR", "ADMIN"]
 
@@ -56,7 +57,11 @@ export function UserDetailSheet({
   user: DeskUser | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** Whether this is the signed-in admin's own account — disable/delete are refused for it. */
+  /**
+   * Whether this is the signed-in admin's own account. Disable, delete, role changes and
+   * password resets are all refused for it server-side (409 `SELF_TARGET`); this flag only
+   * keeps the UI from offering actions that can't succeed.
+   */
   isSelf: boolean
 }) {
   const userId = listRow?.id
@@ -202,7 +207,15 @@ export function UserDetailSheet({
             </div>
             <div className="space-y-2">
               <Label htmlFor="user-role">Role</Label>
-              <Select value={role} onValueChange={(next) => setRole(next as UserRole)}>
+              {/* Not editable for your own account: a self-demotion costs you your own
+                  administration surfaces mid-session and needs the *other* admin to undo it.
+                  The backend refuses it outright (409 SELF_TARGET) — this only stops the UI
+                  offering an action that can't succeed. */}
+              <Select
+                value={role}
+                onValueChange={(next) => setRole(next as UserRole)}
+                disabled={isSelf}
+              >
                 <SelectTrigger id="user-role">
                   <SelectValue />
                 </SelectTrigger>
@@ -214,51 +227,69 @@ export function UserDetailSheet({
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">{ROLE_DESCRIPTIONS[role]}</p>
+              <p className="text-xs text-muted-foreground">
+                {isSelf
+                  ? "You can't change your own role — another administrator has to do it."
+                  : ROLE_DESCRIPTIONS[role]}
+              </p>
             </div>
 
             <div className="space-y-2 border-t pt-4">
               <h3 className="text-sm font-medium">Password</h3>
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => setResetOpen(true)}
-              >
-                <QrCode className="size-4" />
-                Reset with a QR code…
-              </Button>
-              <p className="text-xs text-muted-foreground">
-                Sends them to a page on their own phone, where they choose the password. Use
-                the field below instead when they&apos;re standing next to you.
-              </p>
-              {/* Not offered for your own account: setting a password this way revokes
-                  every session for the target, so on yourself it would sign you out of the
-                  desk mid-edit. "Change password…" in the user menu keeps this session. */}
-              <div className="flex items-start gap-2 pt-1">
-                <Input
-                  aria-label="New password"
-                  type="password"
-                  autoComplete="new-password"
-                  placeholder={
-                    isSelf ? "Use the user menu for your own password" : "Set a password directly"
-                  }
-                  disabled={isSelf}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                />
-                <Button
-                  variant="outline"
-                  disabled={isSelf || newPassword.length < MIN_PASSWORD_LENGTH || isSettingPassword}
-                  onClick={() => void handleSetPassword()}
-                >
-                  {isSettingPassword ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <KeyRound className="size-4" />
-                  )}
-                  Set
-                </Button>
-              </div>
+              {/* Neither route to a password is offered for your own account, and hiding them
+                  beats disabling them — three greyed-out controls with a paragraph pointing at
+                  them reads as breakage.
+
+                  The QR would put a link that re-passwords an admin account on the desk's own
+                  screen, where anyone passing can photograph it. Setting a password directly
+                  revokes every session of the target, which on yourself signs you out
+                  mid-edit. "Change password…" in the user menu does neither. Both halves are
+                  enforced server-side (409 SELF_TARGET on the mint; the user menu's own
+                  endpoint for the change) — this is presentation, not the guard. */}
+              {isSelf ? (
+                <p className="text-xs text-muted-foreground">
+                  Change your own password from <strong>Change password…</strong> in the user
+                  menu — it keeps you signed in on this desk.
+                </p>
+              ) : (
+                <>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setResetOpen(true)}
+                  >
+                    <QrCode className="size-4" />
+                    Reset with a QR code…
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Sends them to a page on their own phone, where they choose the password.
+                    Use the field below instead when they&apos;re standing next to you.
+                  </p>
+                  <div className="flex items-start gap-2 pt-1">
+                    <Input
+                      aria-label="New password"
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder="Set a password directly"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                    />
+                    <Button
+                      variant="outline"
+                      disabled={newPassword.length < MIN_PASSWORD_LENGTH || isSettingPassword}
+                      onClick={() => void handleSetPassword()}
+                    >
+                      {isSettingPassword ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <KeyRound className="size-4" />
+                      )}
+                      Set
+                    </Button>
+                  </div>
+                  <ResetTokenHistory userId={user.id} />
+                </>
+              )}
             </div>
 
             <div className="space-y-2 border-t pt-4">

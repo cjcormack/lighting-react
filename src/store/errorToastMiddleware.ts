@@ -44,10 +44,16 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   'updateUser', // src/components/users/UserDetailSheet.tsx
   'deleteUser', // ...same sheet
   // The QR sheet mints on open and shows a failure in place of the code it couldn't
-  // produce. Its sibling `cancelResetToken` is deliberately *not* silenced: it fires in
-  // the background as the sheet closes, and a failure means a reset link is still live —
-  // which the admin needs told about, since no UI is left to say it.
+  // produce. Its sibling `cancelResetToken` is deliberately *not* silenced: a failure there
+  // means a reset link the admin just tried to revoke is still live, and the history row it
+  // fires from can only say "still Live" — which reads as a slow refresh, not a refusal.
   'createResetToken', // src/components/users/ResetQrSheet.tsx
+  // Same shape, one flow along: the device-login sheet mints on open and renders its failure
+  // where the QR would have been. `cancelDeviceLogin` stays noisy for the reason above, and
+  // more so — what is still live there is a way *into* the account, not just a way to
+  // re-password it.
+  'createDeviceLogin', // src/components/auth/DeviceLoginSheet.tsx
+  'redeemDeviceLogin', // src/routes/DeviceLoginPage.tsx
 
 
   // Call site raises its own toast.error()
