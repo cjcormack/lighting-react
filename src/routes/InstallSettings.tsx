@@ -13,8 +13,9 @@ import { formatError } from "@/lib/formatError"
 import { UsersTab } from "@/components/users/UsersTab"
 import { DiagnosticsContent } from "./Diagnostics"
 import { CloudSyncHubBody } from "./CloudSync"
+import { UpdatePanel } from "@/components/updates/UpdatePanel"
 
-const TABS = ["general", "users", "sync", "diagnostics"] as const
+const TABS = ["general", "users", "sync", "updates", "diagnostics"] as const
 type Tab = (typeof TABS)[number]
 
 function isTab(value: string | undefined): value is Tab {
@@ -50,6 +51,10 @@ export function InstallSettings() {
                 the tab is reachable by URL and the backend is the real enforcement. */}
             {isAdmin && <TabsTrigger value="users">Users</TabsTrigger>}
             <TabsTrigger value="sync">Sync</TabsTrigger>
+            {/* Shown to everyone: the version, and whether the desk is about to restart, are
+                things anyone standing at it should be able to read. The actions inside are
+                admin-only, disabled in the panel and enforced per-route by the backend. */}
+            <TabsTrigger value="updates">Updates</TabsTrigger>
             <TabsTrigger value="diagnostics">Diagnostics</TabsTrigger>
           </TabsList>
         </Tabs>
@@ -58,6 +63,7 @@ export function InstallSettings() {
         {activeTab === "general" && <GeneralTab />}
         {activeTab === "users" && <UsersTab />}
         {activeTab === "sync" && <CloudSyncHubBody />}
+        {activeTab === "updates" && <UpdatePanel />}
         {activeTab === "diagnostics" && <DiagnosticsContent />}
       </div>
     </div>

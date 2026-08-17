@@ -321,6 +321,34 @@ A cue without an explicit number gets one derived from its position (`cueNumberA
 
 FX definitions have a `timingSource` field (`BEAT` or `WALL_CLOCK`) controlling whether effects sync to BPM or run on a fixed 50Hz wall-clock timer.
 
+### In-app updates
+
+The **Updates** tab in `InstallSettings` (`components/updates/UpdatePanel.tsx`), backed by
+`store/updates.ts` and `api/updateWsApi.ts`. Windows installer builds only; every other build
+renders a one-line explanation of why it can't update itself. Backend contract and the MSI
+mechanics live in `lighting7/docs/windows-updates.md`.
+
+- **`updateStateChanged` is the one payload-carrying machine-socket frame**, so `updateWsApi` is
+  modelled on `cloudSyncWsApi`, not `installWsApi`. For a several-hundred-megabyte download the
+  frame *is* the progress; a payload-free "refetch" at 2 Hz would mean an HTTP round-trip per
+  tick, which is the traffic the socket exists to avoid.
+- The bridge in `store/updates.ts` splits deliberately: **`updateQueryData` for progress ticks**
+  (zero network), **`invalidateTags` only on a terminal phase** — that's where `latest`, `error`,
+  notes and `lastApplyOutcome` arrive. Invalidating per tick would defeat the whole reason the
+  frame carries a payload. The panel also polls at 5 s **while busy** as a safety net, because
+  `emitMachineEvent` uses `tryEmit` and drops frames when its buffer fills: a dropped progress
+  tick is harmless, a dropped phase transition would strand the panel.
+- The tab is visible to **everyone** with actions disabled for operators — the version, and that
+  the desk is about to restart, are things anyone standing at it should read. **Never toast or
+  modal an available update**: an operator mid-show must not be nagged.
+- Release notes render as **plain text**. They are untrusted text fetched from the internet, and
+  per §Dependencies a sanitising markdown renderer isn't worth adding for this.
+- `ApplyUpdateDialog` requires **type-to-confirm only when the rig is live** (effects running or
+  a stack active). The asymmetry is the point: making every routine update a typing chore trains
+  people to type without reading, destroying the friction exactly when it matters. It also sends
+  `confirmVersion`, so a tab left open across a newer check can't apply something its owner never
+  saw — the backend 409s on a mismatch.
+
 ## API Communication
 
 The app maintains a persistent WebSocket connection to the backend for:

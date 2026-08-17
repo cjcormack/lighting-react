@@ -142,6 +142,11 @@ export const usersWs: { callback: null | (() => void) } = { callback: null }
 // Install-row bridge callback captured from store/installs.ts.
 export const installWs: { callback: null | (() => void) } = { callback: null }
 
+// Update-state bridge callback captured from store/updates.ts. Payload-carrying, unlike every
+// other machine-scoped bridge above — the frame *is* the download progress, so a test needs to
+// hand it a real event rather than a bare notification.
+export const updatesWs: { callback: null | ((e: unknown) => void) } = { callback: null }
+
 const noopSub = () => ({ unsubscribe: () => {} })
 
 export function lightingApiMock() {
@@ -200,6 +205,16 @@ export function lightingApiMock() {
           return {
             unsubscribe: () => {
               installWs.callback = null
+            },
+          }
+        },
+      },
+      updates: {
+        subscribe: (fn: (e: unknown) => void) => {
+          updatesWs.callback = fn
+          return {
+            unsubscribe: () => {
+              updatesWs.callback = null
             },
           }
         },

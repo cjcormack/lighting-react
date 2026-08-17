@@ -27,6 +27,7 @@ import {createSpeedMastersWsApi, SpeedMastersWsApi} from "./speedMastersWsApi";
 import {AuthWsApi, createAuthWsApi} from "./authWsApi";
 import {createUsersWsApi, UsersWsApi} from "./usersWsApi";
 import {createInstallWsApi, InstallWsApi} from "./installWsApi";
+import {createUpdateWsApi, UpdateWsApi} from "./updateWsApi";
 
 interface LightingApi {
   universes: UniversesApi
@@ -36,6 +37,7 @@ interface LightingApi {
   auth: AuthWsApi
   users: UsersWsApi
   install: InstallWsApi
+  updates: UpdateWsApi
 
   fixtures: FixturesApi
   projects: ProjectApi
@@ -82,6 +84,7 @@ function createLightingApi(): LightingApi {
   const authWsApi = createAuthWsApi(connection)
   const usersWsApi = createUsersWsApi(connection)
   const installWsApi = createInstallWsApi(connection)
+  const updateWsApi = createUpdateWsApi(connection)
   const fixtureApi = createFixtureApi(connection)
   const projectApi = createProjectApi(connection)
   const groupsApi = createGroupsApi(connection)
@@ -111,6 +114,7 @@ function createLightingApi(): LightingApi {
     auth: authWsApi,
     users: usersWsApi,
     install: installWsApi,
+    updates: updateWsApi,
 
     fixtures: fixtureApi,
     projects: projectApi,

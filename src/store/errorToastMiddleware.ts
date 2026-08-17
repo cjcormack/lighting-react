@@ -54,6 +54,15 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // re-password it.
   'createDeviceLogin', // src/components/auth/DeviceLoginSection.tsx
   'redeemDeviceLogin', // src/routes/DeviceLoginPage.tsx
+  // The update panel renders every outcome itself, and its 409s are ordinary flow steps rather
+  // than failures: NOTHING_STAGED and DOWNLOAD_IN_PROGRESS mean another tab got there first, and
+  // VERSION_MISMATCH means this page is stale. A toast on top of the inline alert would say the
+  // same thing twice, in a surface the user is already looking at.
+  'checkForUpdate', // src/components/updates/UpdatePanel.tsx
+  'startUpdateDownload', // src/components/updates/UpdatePanel.tsx
+  'cancelUpdateDownload', // src/components/updates/UpdatePanel.tsx
+  'applyUpdate', // src/components/updates/ApplyUpdateDialog.tsx
+  'setUpdateSettings', // src/components/updates/UpdatePanel.tsx
 
 
   // Call site raises its own toast.error()
