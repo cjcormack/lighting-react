@@ -1,4 +1,6 @@
 import { restApi } from "./restApi"
+import { lightingApi } from "../api/lightingApi"
+import { store } from "./index"
 
 export interface Install {
   uuid: string
@@ -32,3 +34,10 @@ export const {
   useInstallQuery,
   useUpdateInstallMutation,
 } = installsApi
+
+// The desk was renamed on another client. Machine-scoped state, so this arrives on the same
+// socket band as the user-list frame rather than on the per-project fixtures bus — see
+// `plugins/MachineSocket.kt`.
+lightingApi.install.subscribe(() => {
+  store.dispatch(restApi.util.invalidateTags(['Install']))
+})

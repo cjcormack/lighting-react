@@ -8,13 +8,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 // `isSelf`, not what any request returns.
 // The factory is hoisted above everything else in this file, so it can't close over a helper
 // declared here — hence the repetition.
+// Hoisted alongside the factory below so the factory can close over it — a plain `let` here
+// would be initialised after the hoisted mock runs. Lets one test hand `useUserQuery` an error.
+const mocks = vi.hoisted(() => ({
+  userQuery: { data: undefined } as { data: undefined; error?: unknown },
+}))
+
 vi.mock('@/store/users', () => {
   const mutation = () => [
     (args: unknown) => ({ unwrap: () => Promise.resolve(args) }),
     { isLoading: false },
   ]
   return {
-    useUserQuery: () => ({ data: undefined }),
+    useUserQuery: () => mocks.userQuery,
     useUpdateUserMutation: mutation,
     useDeleteUserMutation: mutation,
     useSetUserPasswordMutation: mutation,
@@ -41,6 +47,7 @@ const user = {
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  mocks.userQuery = { data: undefined }
 })
 
 function renderSheet(isSelf: boolean) {
@@ -73,6 +80,34 @@ describe('UserDetailSheet', () => {
       expect(screen.getByRole('button', { name: /Reset with a QR code/ })).toBeInTheDocument()
       expect(screen.getByLabelText('New password')).toBeInTheDocument()
       expect(screen.getByRole('combobox')).not.toBeDisabled()
+    })
+  })
+
+  // Now that the user list self-heals over the WebSocket (store/users.ts), another admin's
+  // delete lands here while the sheet is open. Falling back to the stale list row would leave
+  // Save / Delete / Reset buttons on an account that no longer exists, and the list behind the
+  // sheet would visibly disagree with it.
+  describe('when the account is deleted from another client', () => {
+    it('replaces the form with an explanation instead of stale controls', () => {
+      mocks.userQuery = { data: undefined, error: { status: 404 } }
+      renderSheet(false)
+
+      expect(screen.getByText(/no longer exists/)).toBeInTheDocument()
+      expect(screen.queryByLabelText('Display name')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('New password')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /^Save$/ })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /^Delete$/ })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Reset with a QR code/ })).not.toBeInTheDocument()
+    })
+
+    it('keeps rendering normally for a non-404 failure', () => {
+      // A dropped connection is not a deletion. `FETCH_ERROR` carries a *string* status, so a
+      // check loose enough to treat any error as "gone" would blank the sheet on a blip.
+      mocks.userQuery = { data: undefined, error: { status: 'FETCH_ERROR' } }
+      renderSheet(false)
+
+      expect(screen.queryByText(/no longer exists/)).not.toBeInTheDocument()
+      expect(screen.getByLabelText('Display name')).toBeInTheDocument()
     })
   })
 })

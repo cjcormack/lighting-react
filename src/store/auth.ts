@@ -231,3 +231,16 @@ export const {
 lightingApi.auth.subscribeUnauthenticated(() => {
   store.dispatch(restApi.util.invalidateTags(['Auth']))
 })
+
+// Our own account changed — an admin renamed us, or re-roled us. Unlike its neighbour above this
+// is a *change*, not a loss: the session is still good, but the display name, role or
+// `setupRequired` in `auth/status` is stale, and the role drives which nav entries the sidebar
+// offers. Re-reading it is what makes an admin's edit land on the phone or tablet it was about.
+//
+// The backend sends this **only** to sockets belonging to the affected account, so this is not a
+// broadcast — see `plugins/MachineSocket.kt`. Don't be tempted to fold it into the user-list
+// bridge in ./users.ts: every connected client refetching `auth/status` on any admin edit is a
+// thundering herd for no gain.
+lightingApi.auth.subscribeOwnAccountChanged(() => {
+  store.dispatch(restApi.util.invalidateTags(['Auth']))
+})

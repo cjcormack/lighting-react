@@ -1,4 +1,6 @@
 import { restApi } from './restApi'
+import { lightingApi } from '../api/lightingApi'
+import { store } from './index'
 import type { UserRole } from './auth'
 
 // Admin-only desk-account management. Distinct from ./auth: that module is "who am I and
@@ -174,3 +176,21 @@ export const {
   useResetTokenStatusQuery,
   useCancelResetTokenMutation,
 } = usersApi
+
+// A desk account changed on some other client — another admin's browser, a phone signed in by
+// QR, a second desk. Without this the mutation's own `invalidatesTags` reaches only the tab that
+// made the edit, and every other one keeps the old name until it happens to refetch.
+//
+// Bare `'User'` invalidates every id'd entry rather than the one that changed, because the frame
+// deliberately carries no id — see `plugins/MachineSocket.kt` for why nothing about a user may
+// travel over a socket an operator can hold open.
+//
+// **This relies on `UsersTab` being the only caller of `useUsersQuery`.** The backend does not
+// role-filter the frame; it is safe for operators only because that call site passes
+// `skip: !isAdmin`, so a non-admin has no subscriber and this dispatch is a no-op. A second call
+// site without that guard would turn every operator socket into a 403 generator on every user
+// edit. `ResetTokenList` is deliberately absent: the frame fires on account writes, not on token
+// mints, so including it would cover half the staleness and look like it covered all of it.
+lightingApi.users.subscribe(() => {
+  store.dispatch(restApi.util.invalidateTags(['UserList', 'User']))
+})

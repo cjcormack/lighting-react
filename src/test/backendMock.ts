@@ -130,6 +130,18 @@ export const patchesWs: { callback: null | (() => void) } = { callback: null }
 // store/auth.ts, so a test can fire a synthetic session rejection.
 export const authWs: { callback: null | (() => void) } = { callback: null }
 
+// Own-account-changed bridge callback captured from store/auth.ts. Separate from `authWs`
+// because the two mean opposite things — a revoked session vs. a still-valid session whose
+// account was edited elsewhere — and a test needs to fire one without the other.
+export const ownAccountWs: { callback: null | (() => void) } = { callback: null }
+
+// User-list bridge callback captured from store/users.ts, so a test can fire a synthetic
+// `userListChanged`.
+export const usersWs: { callback: null | (() => void) } = { callback: null }
+
+// Install-row bridge callback captured from store/installs.ts.
+export const installWs: { callback: null | (() => void) } = { callback: null }
+
 const noopSub = () => ({ unsubscribe: () => {} })
 
 export function lightingApiMock() {
@@ -160,6 +172,34 @@ export function lightingApiMock() {
           return {
             unsubscribe: () => {
               authWs.callback = null
+            },
+          }
+        },
+        subscribeOwnAccountChanged: (fn: () => void) => {
+          ownAccountWs.callback = fn
+          return {
+            unsubscribe: () => {
+              ownAccountWs.callback = null
+            },
+          }
+        },
+      },
+      users: {
+        subscribe: (fn: () => void) => {
+          usersWs.callback = fn
+          return {
+            unsubscribe: () => {
+              usersWs.callback = null
+            },
+          }
+        },
+      },
+      install: {
+        subscribe: (fn: () => void) => {
+          installWs.callback = fn
+          return {
+            unsubscribe: () => {
+              installWs.callback = null
             },
           }
         },

@@ -33,7 +33,14 @@ export function UsersTab() {
   // reach this tab, because AuthGate puts the setup screen in front of the whole app.
   const isAdmin = role === "ADMIN"
 
-  const { data: users, isLoading } = useUsersQuery(undefined, { skip: !isAdmin })
+  // `refetchOnFocus` is the repair path for the one way the WS bridge in store/users.ts can miss
+  // an edit: `tryEmit` drops a frame if a collector's buffer is full, and there is no replay, so
+  // a dropped frame leaves this list stale until the socket reconnects. Coming back to a settings
+  // tab is the natural gesture for "show me the truth". `useAuthStatusQuery` does the same.
+  const { data: users, isLoading } = useUsersQuery(undefined, {
+    skip: !isAdmin,
+    refetchOnFocus: true,
+  })
   const [createOpen, setCreateOpen] = useState(false)
   const [selected, setSelected] = useState<DeskUser | null>(null)
 

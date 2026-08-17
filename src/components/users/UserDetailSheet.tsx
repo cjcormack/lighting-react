@@ -69,8 +69,17 @@ export function UserDetailSheet({
   // Re-read the row while the sheet is open. The list is fresh enough to render from, but
   // `lastLoginAtMs` moves without any local mutation, and the fetched copy is what makes
   // the `user` endpoint's cache entry (and so this sheet) authoritative after an edit.
-  const { data: fetched } = useUserQuery({ userId: userId ?? 0 }, { skip: !open || userId == null })
-  const user = fetched ?? listRow
+  const { data: fetched, error: fetchError } = useUserQuery(
+    { userId: userId ?? 0 },
+    { skip: !open || userId == null },
+  )
+
+  // Another admin deleted this account while the sheet was open. Falling back to `listRow` here
+  // would keep rendering it with live Save / Delete / Reset controls that can now only 404 —
+  // and since the user list self-heals over the socket (store/users.ts), the row behind this
+  // sheet is already gone, so the list and the sheet would visibly disagree.
+  const deleted = fetchError != null && "status" in fetchError && fetchError.status === 404
+  const user = deleted ? undefined : (fetched ?? listRow)
 
   const [displayName, setDisplayName] = useState("")
   const [role, setRole] = useState<UserRole>("OPERATOR")
@@ -99,6 +108,31 @@ export function UserDetailSheet({
     setResetOpen(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, open])
+
+  if (deleted) {
+    return (
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent className="flex flex-col sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Account deleted</SheetTitle>
+          </SheetHeader>
+          <SheetBody>
+            <Alert>
+              <AlertTriangle className="size-4" />
+              <AlertDescription>
+                This account no longer exists — someone deleted it from another device.
+              </AlertDescription>
+            </Alert>
+          </SheetBody>
+          <SheetFooter className="flex-row justify-end gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Close
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+    )
+  }
 
   if (!user) return null
 

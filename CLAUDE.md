@@ -251,6 +251,21 @@ recovery. Frontend shape:
   deliberately outside the admin-only `/api/rest/users` subtree — a self-exception
   inside a prefix-matched admin gate would mean that prefix list no longer describes
   its own subtree.
+- **Account changes self-heal across clients**, via two frames from one backend flow rather
+  than the show-scoped `FixturesChangeListener` bus every other list rides (users belong to the
+  machine; see `lighting7/docs/desk-accounts.md` → "Account edits reach other clients").
+  `usersWsApi` → `store/users.ts` invalidates `UserList` / `User` on every socket;
+  `authWsApi.subscribeOwnAccountChanged` → `store/auth.ts` invalidates `Auth` on **only** the
+  affected user's sockets. Keep those two apart: folding the `Auth` invalidation into the
+  user-list bridge would make every connected client re-read `auth/status` on any admin edit.
+  The own-account subscriber lives on `authWsApi` for the same reason the 4401 one does — `Auth`
+  is that module's tag.
+
+  One reliance worth knowing before you add a call site: the backend does **not** role-filter
+  `userListChanged`, which is safe only because `UsersTab` is the sole caller of
+  `useUsersQuery` and passes `skip: !isAdmin`, so an operator has no subscriber and the dispatch
+  is a no-op. A second unguarded call site would make every operator socket a 403 generator on
+  every user edit. `store/installs.ts` has the same bridge shape for the install row.
 - **"Manage users" is deliberately not in the user menu.** The `users` nav entry is
   `adminOnly`, so the sidebar and Cmd+K already carry that page; a second entry point
   only meant role-filtering the same destination in two places.
