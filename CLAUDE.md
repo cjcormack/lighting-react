@@ -203,6 +203,32 @@ clock object and cannot speak for any other master. Server frames are throttled 
 16 beats), so the component free-runs a local timer in between — that interpolation is
 load-bearing, not decoration.
 
+### Desk accounts
+
+Login, roles, and user administration for a desk whose accounts live on the
+**machine**, not in a project — see
+`lighting7/docs/desk-accounts.md` for the backend contract and the break-glass
+recovery. Frontend shape:
+
+- `AuthGate` (wrapping `BootGate` in `App.tsx`) decides between `SetupScreen`,
+  `LoginScreen`, and the app from `GET /auth/status`. A 401 from **any** endpoint
+  invalidates the `Auth` tag, which is the entire logout mechanism; a WS close with
+  code **4401** does the same, because the backend revokes live sockets.
+- `store/users.ts` is admin-only CRUD (`/api/rest/users`); `store/passwordReset.ts`
+  is the two **public** endpoints the phone page uses. They are separate slices
+  because they are separate audiences — cookie-authenticated admin vs. no session
+  at all — not merely separate paths.
+- `routes/ResetPasswordPage.tsx` is a **sibling of `Layout`**, not a child, and is
+  bypassed past both gates via the `publicPath` flag computed at module scope in
+  `App.tsx`. Whoever opens `/reset/<token>` is by definition locked out: no
+  sidebar, no ShowBar, no project context, no session.
+- `MIN_PASSWORD_LENGTH` lives in `lib/passwordPolicy.ts` and mirrors the backend's
+  floor. Five surfaces ask for a password; a form that disagreed with the server
+  would read as a bug in that form.
+- 409 responses carrying `LAST_ADMIN` / `SELF_TARGET` are **ordinary flow steps**
+  (you can't demote the last admin or disable yourself), rendered inline in
+  `UserDetailSheet` — which is why those endpoints are in `SILENT_ENDPOINTS`.
+
 ### Cues, Stacks & Triggers
 Cues bundle palettes, FX preset applications, ad-hoc effects, and **script hooks** into named snapshots. **Every cue belongs to a cue stack** — there are no standalone cues. A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of cues. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). Cues and stacks are authored and run entirely in the **Program** view (`/projects/:projectId/program`, drilling into a stack at `/program/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed.
 
@@ -269,6 +295,19 @@ REST API is used for CRUD operations on scripts, scenes, fixtures, etc.
   acyclic — its target is always a different route — so nothing here needs the
   `CARDS_LINK_STATE` escape the cards/list pair does. Three instances now; treat
   it as the rule for sibling views rather than a one-off.
+- **Role filtering**: set `adminOnly: true` on any entry whose destination is
+  behind the backend's admin gate (`ADMIN_ONLY_PREFIXES` / the per-project sync
+  subtree in lighting7's `auth/AuthGate.kt`) — currently `users`, `sync` and
+  `project-sync`. `filterNavItems(items, isViewingActiveProject, isAdmin)` drops
+  them for operators so neither the sidebar nor Cmd+K offers a page that can only
+  answer 403. `useIsNavAdmin()` supplies the flag and treats *anything but a
+  resolved OPERATOR* as admin: during the `auth/status` round-trip, and on a
+  bootstrap-open desk, the API really is reachable, and the backend refuses the
+  call either way. This is presentation, never permission.
+- **Not every nav path is its own route**: `users`' `/install/users` is served by
+  `InstallSettings`' `:tab` route, like `sync` and `diagnostics`. Adding a tab
+  means touching `TABS` + a `TabsTrigger` in `routes/InstallSettings.tsx`, not
+  `App.tsx`.
 
 ### Sheets vs Dialogs
 

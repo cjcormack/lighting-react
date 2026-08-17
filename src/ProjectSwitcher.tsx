@@ -14,6 +14,7 @@ import { useProjectListQuery } from "./store/projects"
 import {
   useNavItems,
   filterNavItems,
+  useIsNavAdmin,
   type NavItem as NavItemDef,
 } from "./navigation"
 
@@ -26,11 +27,12 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
   const location = useLocation()
   const { data: projects, isLoading: projectsLoading } = useProjectListQuery()
   const allNavItems = useNavItems()
+  const isNavAdmin = useIsNavAdmin()
 
   const viewedProject = useViewedProject()
   const activeProject = projects?.find((p) => p.isCurrent)
   const isViewingActiveProject = viewedProject?.id === activeProject?.id
-  const visibleItems = filterNavItems(allNavItems, isViewingActiveProject)
+  const visibleItems = filterNavItems(allNavItems, isViewingActiveProject, isNavAdmin)
 
   if (projectsLoading) {
     return (

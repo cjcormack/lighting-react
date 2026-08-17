@@ -17,6 +17,7 @@ import {
   useUniverseNavItems,
   usePaletteTypeNavItems,
   filterNavItems,
+  useIsNavAdmin,
 } from "@/navigation"
 import { fixtureSelectParam, groupSelectParam } from "@/components/fixtures-list/rowModel"
 import { useViewedProject } from "@/ProjectSwitcher"
@@ -141,6 +142,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   const allNavItems = useNavItems()
   const universeNavItems = useUniverseNavItems()
   const paletteNavItems = usePaletteTypeNavItems()
+  const isNavAdmin = useIsNavAdmin()
 
   const { data: parkStateList } = useGetParkStateListQuery()
   const { data: channelMappings } = useGetChannelMappingListQuery()
@@ -148,7 +150,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
 
   const viewedProject = useViewedProject()
   const isViewingActiveProject = viewedProject?.id === currentProject?.id
-  const visibleItems = filterNavItems(allNavItems, isViewingActiveProject)
+  const visibleItems = filterNavItems(allNavItems, isViewingActiveProject, isNavAdmin)
   const visibleUniverseItems = filterNavItems(universeNavItems, isViewingActiveProject)
   const visiblePaletteItems = filterNavItems(paletteNavItems, isViewingActiveProject)
 

@@ -34,6 +34,20 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // client (the UI disables master 1's delete button).
   'deleteSpeedMaster', // src/components/speedMasters/SpeedMasterDetailSheet.tsx
   'saveSpeedMaster', // ...same sheet: a duplicate name is a 409 rendered inline
+  // These three take a password or a name the user typed and render failures inline in
+  // their own sheet/page, not as a toast.
+  'createUser', // src/components/users/CreateUserSheet.tsx
+  'setUserPassword', // src/components/users/UserDetailSheet.tsx
+  'redeemResetToken', // src/routes/ResetPasswordPage.tsx
+  // 409 LAST_ADMIN/SELF_TARGET are ordinary flow steps rendered inline in
+  // UserDetailSheet; a toast would double-report the same failure.
+  'updateUser', // src/components/users/UserDetailSheet.tsx
+  'deleteUser', // ...same sheet
+  // The QR sheet mints on open and shows a failure in place of the code it couldn't
+  // produce. Its sibling `cancelResetToken` is deliberately *not* silenced: it fires in
+  // the background as the sheet closes, and a failure means a reset link is still live —
+  // which the admin needs told about, since no UI is left to say it.
+  'createResetToken', // src/components/users/ResetQrSheet.tsx
 
 
   // Call site raises its own toast.error()

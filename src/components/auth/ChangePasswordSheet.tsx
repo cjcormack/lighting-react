@@ -21,8 +21,7 @@ import {
   useSessionsQuery,
   type SessionInfo,
 } from "@/store/auth"
-
-const MIN_PASSWORD_LENGTH = 8
+import { MIN_PASSWORD_LENGTH } from "@/lib/passwordPolicy"
 
 // The raw User-Agent is unreadable in a list. Pull out the browser and platform,
 // which is all anyone needs to recognise "that's my laptop" vs "that's the desk".

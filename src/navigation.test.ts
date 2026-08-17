@@ -93,6 +93,35 @@ describe("navItems registry", () => {
   })
 })
 
+describe("admin-only navigation", () => {
+  // Every entry whose destination is behind the backend's admin gate
+  // (ADMIN_ONLY_PREFIXES / the per-project sync subtree in lighting7's auth/AuthGate.kt).
+  const adminOnlyIds = ["users", "sync", "project-sync"]
+
+  it("marks the entries whose APIs are admin-gated", () => {
+    for (const id of adminOnlyIds) {
+      expect(navItems.find((i) => i.id === id)?.adminOnly).toBe(true)
+    }
+  })
+
+  it("hides them from operators and keeps everything else", () => {
+    const ids = filterNavItems(navItems, true, false).map((i) => i.id)
+    for (const id of adminOnlyIds) expect(ids).not.toContain(id)
+    // The parent they hang off stays: an operator can still read install settings.
+    expect(ids).toContain("install-settings")
+    expect(ids).toContain("diagnostics")
+  })
+
+  it("shows them to admins, and to callers that don't pass a role at all", () => {
+    const asAdmin = filterNavItems(navItems, true, true).map((i) => i.id)
+    const roleUnknown = filterNavItems(navItems, true).map((i) => i.id)
+    for (const id of adminOnlyIds) {
+      expect(asAdmin).toContain(id)
+      expect(roleUnknown).toContain(id)
+    }
+  })
+})
+
 describe("palette navigation", () => {
   it("registers exactly one Palettes entry, on the bare path", () => {
     const palettes = navItems.filter((i) => i.pathMatch.startsWith("/palettes"))

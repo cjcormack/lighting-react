@@ -22,8 +22,10 @@ import {
   SlidersVertical,
   SwatchBook,
   Activity,
+  Users,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
+import { useAuthStatusQuery } from "./store/auth"
 import { useGetUniverseQuery } from "./store/universes"
 import { PALETTE_TYPES, PALETTE_TYPE_LABELS, paletteTypeSlug } from "./lib/paletteTypes"
 
@@ -42,6 +44,13 @@ export interface NavItem {
   group: NavGroup
   /** Optional parent item id; sub-items render indented beneath their parent. */
   parent?: string
+  /**
+   * Hidden from OPERATOR accounts. Set it wherever the destination's API is behind the
+   * backend's admin gate (`ADMIN_ONLY_PREFIXES` / the per-project sync subtree in
+   * `auth/AuthGate.kt`), so neither the sidebar nor Cmd+K offers a page that can only
+   * answer 403. Not a permission check — the backend is that.
+   */
+  adminOnly?: boolean
 }
 
 /**
@@ -267,6 +276,7 @@ export const navItems: NavItem[] = [
     pathMatch: "/settings/sync",
     group: "settings",
     parent: "project-settings",
+    adminOnly: true,
   },
 
   // ── Install (no project context) ────────────────────────────────────
@@ -281,6 +291,17 @@ export const navItems: NavItem[] = [
     group: "install",
   },
   {
+    id: "users",
+    label: "Users",
+    icon: Users,
+    path: () => "/install/users",
+    visibility: "always",
+    pathMatch: "/install/users",
+    group: "install",
+    parent: "install-settings",
+    adminOnly: true,
+  },
+  {
     id: "sync",
     label: "Sync",
     icon: Cloud,
@@ -289,6 +310,7 @@ export const navItems: NavItem[] = [
     pathMatch: "/install/sync",
     group: "install",
     parent: "install-settings",
+    adminOnly: true,
   },
   {
     id: "diagnostics",
@@ -355,9 +377,31 @@ export function usePaletteTypeNavItems(): NavItem[] {
   )
 }
 
-/** Filter nav items based on whether the viewed project is the active one. */
-export function filterNavItems(items: NavItem[], isViewingActiveProject: boolean): NavItem[] {
+/**
+ * Whether admin-only nav items should be offered.
+ *
+ * Anything other than a resolved OPERATOR counts as admin: while `auth/status` is still
+ * in flight, and on a bootstrap-open desk with no accounts at all, the API really is
+ * reachable — hiding Sync from an admin for one round-trip would be the more visible bug,
+ * and the backend refuses the call either way.
+ */
+export function useIsNavAdmin(): boolean {
+  const { data } = useAuthStatusQuery()
+  return data?.user?.role !== "OPERATOR"
+}
+
+/**
+ * Filter nav items by project-activity visibility and, for [NavItem.adminOnly] entries,
+ * by role. [isAdmin] defaults to true so callers that predate roles — and tests exercising
+ * visibility alone — keep their existing behaviour.
+ */
+export function filterNavItems(
+  items: NavItem[],
+  isViewingActiveProject: boolean,
+  isAdmin: boolean = true,
+): NavItem[] {
   return items.filter((item) => {
+    if (item.adminOnly && !isAdmin) return false
     if (item.visibility === "always") return true
     if (item.visibility === "active-only") return isViewingActiveProject
     if (item.visibility === "inactive-only") return !isViewingActiveProject

@@ -6,12 +6,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { formatError } from "@/lib/formatError"
 import { useSetupMutation } from "@/store/auth"
+import { MIN_PASSWORD_LENGTH } from "@/lib/passwordPolicy"
 import { AuthScreenLayout } from "./AuthScreenLayout"
-
-// Mirrors the backend's floor (auth/Passwords.kt). The backend also rejects anything
-// over 72 UTF-8 bytes, because bcrypt silently truncates there — that one is rare
-// enough to leave to the server's message rather than duplicate the byte counting.
-const MIN_PASSWORD_LENGTH = 8
 
 export function SetupScreen() {
   const [username, setUsername] = useState("")

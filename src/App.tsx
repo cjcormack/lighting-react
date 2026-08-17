@@ -35,6 +35,7 @@ import { DiagnosticsRedirect } from "./routes/Diagnostics";
 import { CloudSyncHubRedirect } from "./routes/CloudSync";
 import { ProjectSettings, ProjectSettingsRedirect } from "./routes/ProjectSettings";
 import { InstallSettings } from "./routes/InstallSettings";
+import { ResetPasswordPage } from "./routes/ResetPasswordPage";
 import { Stage, StageRedirect } from "./routes/Stage";
 
 function PatchesToSettings() {
@@ -333,6 +334,13 @@ function App() {
           element: <Projects />,
         },
       ],
+    },
+    // Sibling of Layout, not a child: the phone that scans a reset QR has no session,
+    // no project context, and no business rendering the sidebar or the ShowBar. Paired
+    // with the `publicPath` bypass below, which keeps both gates out of its way.
+    {
+      path: "reset/:token",
+      element: <ResetPasswordPage />,
     },
   ])
 

@@ -1,7 +1,7 @@
 import { useState } from "react"
-import { KeyRound, LogOut } from "lucide-react"
+import { useNavigate } from "react-router"
+import { KeyRound, LogOut, Users } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useAuthStatusQuery, useLogoutMutation } from "@/store/auth"
+import { RoleBadge } from "@/components/users/RoleBadge"
 import { ChangePasswordSheet } from "./ChangePasswordSheet"
 
 function initials(displayName: string): string {
@@ -23,6 +24,7 @@ function initials(displayName: string): string {
 
 export function UserMenu() {
   const { data } = useAuthStatusQuery()
+  const navigate = useNavigate()
   const [logout] = useLogoutMutation()
   const [changePasswordOpen, setChangePasswordOpen] = useState(false)
 
@@ -55,14 +57,18 @@ export function UserMenu() {
               <span className="truncate text-xs font-normal text-muted-foreground">
                 {user.username}
               </span>
-              <Badge variant={user.role === "ADMIN" ? "default" : "secondary"}>
-                {user.role === "ADMIN" ? "Admin" : "Operator"}
-              </Badge>
+              <RoleBadge role={user.role} />
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {/* Session 3 adds "Manage users" here, alongside the /install/users route
-              it points at. */}
+          {/* Admins only: every call behind /install/users is admin-gated in the backend,
+              so offering it to an operator would only ever produce a 403. */}
+          {user.role === "ADMIN" && (
+            <DropdownMenuItem onSelect={() => navigate("/install/users")}>
+              <Users className="size-4" />
+              Manage users
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onSelect={() => setChangePasswordOpen(true)}>
             <KeyRound className="size-4" />
             Change password…
