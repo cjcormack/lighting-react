@@ -11,6 +11,7 @@ import { ConnectionStatus } from "./connection"
 import { ProgrammerIndicator } from './components/ProgrammerIndicator'
 import ProjectSwitcher from "./ProjectSwitcher"
 import ThemeToggle from "./ThemeToggle"
+import { UserMenu } from "./components/auth/UserMenu"
 import { FixtureOverviewToggle } from "./components/FixtureOverviewToggle"
 import { FixtureOverviewPanel } from "./components/FixtureOverviewPanel"
 import { StageOverviewToggle } from "./components/StageOverviewToggle"
@@ -186,6 +187,7 @@ export default function Layout() {
                 <EffectsOverviewToggle isVisible={isEffectsVisible} isLocked={isEffectsLocked} onToggle={toggleEffects} />
                 <AiChatToggle isVisible={isAiChatVisible} onToggle={() => setIsAiChatVisible(!isAiChatVisible)} />
                 <ThemeToggle />
+                <UserMenu />
               </div>
             </div>
           </header>

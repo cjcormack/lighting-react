@@ -126,6 +126,10 @@ export const programStateWs: { callback: null | ((e: unknown) => void) } = { cal
 // fire a synthetic `patchListChanged` and assert on invalidation batching.
 export const patchesWs: { callback: null | (() => void) } = { callback: null }
 
+// Unauthenticated-socket (close code 4401) bridge callback captured from
+// store/auth.ts, so a test can fire a synthetic session rejection.
+export const authWs: { callback: null | (() => void) } = { callback: null }
+
 const noopSub = () => ({ unsubscribe: () => {} })
 
 export function lightingApiMock() {
@@ -149,6 +153,25 @@ export function lightingApiMock() {
             },
           }
         },
+      },
+      auth: {
+        subscribeUnauthenticated: (fn: () => void) => {
+          authWs.callback = fn
+          return {
+            unsubscribe: () => {
+              authWs.callback = null
+            },
+          }
+        },
+      },
+      // store/status.ts calls `get()` in its queryFn and the auth endpoints call
+      // `reconnect(true)` from onQueryStarted. The fallback Proxy below returns a
+      // subscriber factory for both — callable, but it would make `get()` answer with
+      // a Subscription. Spell the namespace out instead of relying on that.
+      status: {
+        subscribe: noopSub,
+        get: () => 3, // Status.CLOSED — no socket exists under the mock
+        reconnect: () => {},
       },
       cueStacks: {
         subscribe: noopSub,

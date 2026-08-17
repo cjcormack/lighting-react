@@ -24,12 +24,14 @@ import {createCloudSyncWsApi, CloudSyncWsApi} from "./cloudSyncWsApi";
 import {createProgrammerApi, ProgrammerApi} from "./programmerWsApi";
 import {createPalettesWsApi, PalettesWsApi} from "./palettesWsApi";
 import {createSpeedMastersWsApi, SpeedMastersWsApi} from "./speedMastersWsApi";
+import {AuthWsApi, createAuthWsApi} from "./authWsApi";
 
 interface LightingApi {
   universes: UniversesApi
   channels: ChannelsApi
   channelMapping: ChannelMappingApi
   status: StatusApi
+  auth: AuthWsApi
 
   fixtures: FixturesApi
   projects: ProjectApi
@@ -73,6 +75,7 @@ function createLightingApi(): LightingApi {
   const channelsApi = createChannelsApi(connection)
   const channelMappingApi = createChannelMappingApi(connection)
   const statusApi = createStatusApi(connection)
+  const authWsApi = createAuthWsApi(connection)
   const fixtureApi = createFixtureApi(connection)
   const projectApi = createProjectApi(connection)
   const groupsApi = createGroupsApi(connection)
@@ -99,6 +102,7 @@ function createLightingApi(): LightingApi {
     channels: channelsApi,
     channelMapping: channelMappingApi,
     status: statusApi,
+    auth: authWsApi,
 
     fixtures: fixtureApi,
     projects: projectApi,

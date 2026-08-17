@@ -121,6 +121,7 @@ describe('SILENT_ENDPOINTS', () => {
       import('./programmerOps'),
       import('./palettes'),
       import('./speedMasters'),
+      import('./auth'),
     ])
 
     const known = new Set(Object.keys(restApi.endpoints))

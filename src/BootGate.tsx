@@ -9,12 +9,21 @@ const POLL_MS = 400
 // Full-screen loading gate. The backend serves this frontend before the lighting
 // show is initialised, and show-dependent REST routes return 503 until it's
 // ready. Gating the router here means no domain query fires until the show is up.
-export function BootGate({ children }: { children: React.ReactNode }) {
+export function BootGate({
+  children,
+  bypass = false,
+}: {
+  children: React.ReactNode
+  // Public pages (the phone-facing password reset) are served by this same SPA but
+  // don't touch the show, so they render without waiting on — or polling for — its
+  // readiness.
+  bypass?: boolean
+}) {
   // Poll the (readiness-exempt) status endpoint until ready, then stop. If the
   // show re-enters warm-up (e.g. a runtime project switch), a pushed
   // `bootProgressState` frame flips `ready` back to false and polling resumes.
   const [pollingInterval, setPollingInterval] = useState(POLL_MS)
-  const { data } = useBootStatusQuery(undefined, { pollingInterval })
+  const { data } = useBootStatusQuery(undefined, { pollingInterval, skip: bypass })
 
   const ready = data?.ready ?? false
   const failed = data?.phase === "FAILED"
@@ -27,7 +36,7 @@ export function BootGate({ children }: { children: React.ReactNode }) {
     setPollingInterval(settled ? 0 : POLL_MS)
   }, [settled])
 
-  if (ready) return <>{children}</>
+  if (bypass || ready) return <>{children}</>
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background p-4">

@@ -77,6 +77,14 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   'startGithubDeviceFlow',
   'pollGithubDeviceFlow',
   'disconnectOAuthGithub',
+
+  // Auth forms. Every failure here is something the operator typed — a wrong
+  // password, a name already taken, a password the policy rejects — so it belongs
+  // next to the field, not in a corner toast. Each renders the message itself via
+  // <Alert variant="destructive">.
+  'login', // src/components/auth/LoginScreen.tsx
+  'setup', // src/components/auth/SetupScreen.tsx
+  'changePassword', // src/components/auth/ChangePasswordSheet.tsx
 ])
 
 /**

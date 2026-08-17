@@ -10,7 +10,8 @@ export enum Status {
 
 export interface StatusApi {
     get(): Status
-    reconnect(): void
+    /** `force` re-handshakes even a live socket — see InternalApiConnection.reconnect. */
+    reconnect(force?: boolean): void
     subscribe(fn: ((status: Status) => void)): Subscription
 }
 
@@ -35,8 +36,8 @@ export function createStatusApi(conn: InternalApiConnection): StatusApi {
         get: (): Status => {
             return conn.readyState()
         },
-        reconnect: () => {
-            conn.reconnect()
+        reconnect: (force = false) => {
+            conn.reconnect(force)
             notifyStatusChange(conn.readyState())
         },
         subscribe: (fn: (status: Status) => void): Subscription => {

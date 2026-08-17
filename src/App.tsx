@@ -1,5 +1,6 @@
 import React from "react"
 import { Toaster } from "sonner"
+import { AuthGate } from "./AuthGate"
 import { BootGate } from "./BootGate"
 import Layout from "./Layout"
 import {createBrowserRouter, Navigate, useParams} from "react-router";
@@ -48,6 +49,13 @@ function ProjectSyncToSettings() {
   const { projectId } = useParams()
   return <Navigate to={`/projects/${projectId}/settings/sync`} replace />
 }
+
+// Pages reachable without an account, and without the show being up. Session 3's
+// phone-facing /reset/<token> page is the only one — someone locked out of the desk
+// scans a QR on their phone, so neither gate may stand in front of it. Read once at
+// module scope: it can only change via a navigation that reloads the document, since
+// the page is a sibling of the router's Layout rather than a route inside it.
+const publicPath = window.location.pathname.startsWith('/reset/')
 
 function App() {
   const router = createBrowserRouter([
@@ -330,9 +338,11 @@ function App() {
 
   return (
       <React.StrictMode>
-        <BootGate>
-          <RouterProvider router={router}/>
-        </BootGate>
+        <AuthGate bypass={publicPath}>
+          <BootGate bypass={publicPath}>
+            <RouterProvider router={router}/>
+          </BootGate>
+        </AuthGate>
         <Toaster position="bottom-right" />
       </React.StrictMode>
   )
