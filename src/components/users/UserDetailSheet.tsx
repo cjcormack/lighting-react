@@ -243,13 +243,13 @@ export function UserDetailSheet({
                   The QR would put a link that re-passwords an admin account on the desk's own
                   screen, where anyone passing can photograph it. Setting a password directly
                   revokes every session of the target, which on yourself signs you out
-                  mid-edit. "Change password…" in the user menu does neither. Both halves are
+                  mid-edit. The user menu's Profile sheet does neither. Both halves are
                   enforced server-side (409 SELF_TARGET on the mint; the user menu's own
                   endpoint for the change) — this is presentation, not the guard. */}
               {isSelf ? (
                 <p className="text-xs text-muted-foreground">
-                  Change your own password from <strong>Change password…</strong> in the user
-                  menu — it keeps you signed in on this desk.
+                  Change your own password from <strong>Profile…</strong> in the user menu — it
+                  keeps you signed in on this desk.
                 </p>
               ) : (
                 <>

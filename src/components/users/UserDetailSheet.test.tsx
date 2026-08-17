@@ -57,7 +57,7 @@ describe('UserDetailSheet', () => {
       // Absent, not merely disabled: a QR here would put a link that re-passwords an admin
       // account on the desk's own screen, for anyone passing to photograph.
       expect(screen.queryByLabelText('New password')).not.toBeInTheDocument()
-      expect(screen.getByText(/Change password…/)).toBeInTheDocument()
+      expect(screen.getByText(/Profile…/)).toBeInTheDocument()
     })
 
     it('will not let you change your own role', () => {

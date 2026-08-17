@@ -52,7 +52,7 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // where the QR would have been. `cancelDeviceLogin` stays noisy for the reason above, and
   // more so — what is still live there is a way *into* the account, not just a way to
   // re-password it.
-  'createDeviceLogin', // src/components/auth/DeviceLoginSheet.tsx
+  'createDeviceLogin', // src/components/auth/DeviceLoginSection.tsx
   'redeemDeviceLogin', // src/routes/DeviceLoginPage.tsx
 
 
@@ -104,7 +104,10 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // <Alert variant="destructive">.
   'login', // src/components/auth/LoginScreen.tsx
   'setup', // src/components/auth/SetupScreen.tsx
-  'changePassword', // src/components/auth/ChangePasswordSheet.tsx
+  'changePassword', // src/components/auth/ProfileSheet.tsx
+  // Same sheet, and the same reason twice over: the only thing that fails here is a display
+  // name the user typed, and the field it belongs beside is right there.
+  'updateProfile', // src/components/auth/ProfileSheet.tsx
 ])
 
 /**

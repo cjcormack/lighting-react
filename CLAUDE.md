@@ -233,17 +233,62 @@ recovery. Frontend shape:
   would render the whole app with no auth check and no boot check. A test pins that.
 - `MIN_PASSWORD_LENGTH` lives in `lib/passwordPolicy.ts` and mirrors the backend's
   floor. Five surfaces ask for a password; a form that disagreed with the server
-  would read as a bug in that form.
+  would read as a bug in that form. `MAX_DISPLAY_NAME_LENGTH` in `lib/userPolicy.ts`
+  mirrors the column width the same way, but makes the **weaker** claim: only
+  `ProfileSheet` gates on it today, and `SetupScreen` / `CreateUserSheet` /
+  `UserDetailSheet` still rely on the server's 400. Don't read it as "every
+  display-name field is bounded".
+- **`ProfileSheet` is the only self-service surface**, reached from the user menu,
+  which holds nothing else but Log out. Four tabs — **Profile / Password / Devices /
+  Sign-in** — and **each tab owns its own action button**; the footer is just Close,
+  because a footer Save would have to mean "save the display name" while you were
+  looking at the devices list. Errors are per-tab state for the same reason: one
+  shared alert would follow you to another tab and blame the wrong form.
+  The name and the password are **separate saves and must stay that way**: the
+  password submit needs `currentPassword` and a rename must not, and the two differ in
+  consequence (a password change revokes every other session; a rename revokes
+  nothing). Its route, `PUT /auth/profile`, is authenticated but **any role** and
+  deliberately outside the admin-only `/api/rest/users` subtree — a self-exception
+  inside a prefix-matched admin gate would mean that prefix list no longer describes
+  its own subtree.
+- **"Manage users" is deliberately not in the user menu.** The `users` nav entry is
+  `adminOnly`, so the sidebar and Cmd+K already carry that page; a second entry point
+  only meant role-filtering the same destination in two places.
 - 409 responses carrying `LAST_ADMIN` / `SELF_TARGET` are **ordinary flow steps**
   (you can't demote the last admin, and on your own account you can't disable,
   delete, re-role, or mint a reset QR), rendered inline in `UserDetailSheet` — which
   is why those endpoints are in `SILENT_ENDPOINTS`. The self cases are hidden rather
   than disabled in that sheet: a Password section made of three greyed-out controls
   reads as breakage.
-- **The two QR sheets make opposite calls on close, on purpose.** `ResetQrSheet`
-  leaves its link alive and `ResetTokenHistory` makes it visible and revocable;
-  `DeviceLoginSheet` cancels its code, because that code *is* a way into the account
-  rather than a way to re-password it. Don't factor them together.
+- **The two QR surfaces make opposite calls on the way out, on purpose.**
+  `ResetQrSheet` leaves its link alive and `ResetTokenHistory` makes it visible and
+  revocable; `DeviceLoginSection` cancels its code, because that code *is* a way into
+  the account rather than a way to re-password it. Don't factor them together — and
+  don't turn the section back into a sheet, either: being the body of `ProfileSheet`'s
+  Sign-in tab is what makes "left the tab", "parent closed" and "tree unmounted" one
+  cancel mechanism (the teardown effect, keyed on `active` *and* firing on unmount —
+  both are needed).
+- **The Sign-in tab has no button: arriving mints, leaving cancels.** Radix mounts a
+  tab's content only while it is active, and mounting is what mints — so navigating to
+  a tab named for the thing replaces a press with a navigation, and the tab bar above
+  the code is the way out. What must not regress is the other half: opening the sheet
+  lands on **Profile**, so nothing is minted by opening it, and closing resets `tab` to
+  `profile` via an effect on `open` rather than any close handler — because saving a
+  name closes the sheet without going through one. Treat that reset as a security
+  property, not tidiness.
+- **Minting a device-login code must happen exactly once**, which is why the mint
+  effect carries `mintedRef` and `onScreen()` reads *two* refs. Both exist because of
+  StrictMode's development mount/teardown/remount: a flag only cleared in a teardown
+  is left false while the section is on screen (every code then cancels itself on
+  arrival), and a second POST is not merely wasteful — `AuthService.createDeviceLogin`
+  retires the caller's previous code, so two mints race and resolving them backwards
+  displays a QR the server has already cancelled. **The client cannot repair that
+  afterwards**; it has no way to know which mint the server saw last, so don't reach
+  for a "cancel the displaced code" fix. Two tests in `DeviceLoginSection.test.tsx`
+  render under `StrictMode` for exactly this — plain `render` passes while all of it is
+  broken. `mintedRef` is released again if the mint *fails*, so the "Try again" button
+  is reachable: a failed mint leaves no `code`, so the EXPIRED/CANCELLED retry branch
+  can't render and the tab would otherwise be an error with nothing to press.
 
 ### Cues, Stacks & Triggers
 Cues bundle palettes, FX preset applications, ad-hoc effects, and **script hooks** into named snapshots. **Every cue belongs to a cue stack** — there are no standalone cues. A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of cues. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). Cues and stacks are authored and run entirely in the **Program** view (`/projects/:projectId/program`, drilling into a stack at `/program/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed.

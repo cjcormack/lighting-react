@@ -1,6 +1,5 @@
 import { useState } from "react"
-import { useNavigate } from "react-router"
-import { KeyRound, LogOut, Smartphone, Users } from "lucide-react"
+import { CircleUser, LogOut } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -13,11 +12,18 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useAuthStatusQuery, useLogoutMutation } from "@/store/auth"
 import { RoleBadge } from "@/components/users/RoleBadge"
-import { ChangePasswordSheet } from "./ChangePasswordSheet"
-import { DeviceLoginSheet } from "./DeviceLoginSheet"
+import { ProfileSheet } from "./ProfileSheet"
 
+// Words are filtered to those that *start* with a letter or digit, not merely contain one, so
+// a name like "Chris C (desk)" initials as "CC" rather than "C(" — a parenthesised qualifier
+// is the commonest shape here (a desk, a room, a role) and it should never be what the avatar
+// shows. Anything with no usable word at all falls back to "?" rather than rendering
+// punctuation.
 function initials(displayName: string): string {
-  const words = displayName.trim().split(/\s+/).filter(Boolean)
+  const words = displayName
+    .trim()
+    .split(/\s+/)
+    .filter((word) => /^[\p{L}\p{N}]/u.test(word))
   if (words.length === 0) return "?"
   if (words.length === 1) return words[0].slice(0, 2).toUpperCase()
   return (words[0][0] + words[words.length - 1][0]).toUpperCase()
@@ -25,10 +31,8 @@ function initials(displayName: string): string {
 
 export function UserMenu() {
   const { data } = useAuthStatusQuery()
-  const navigate = useNavigate()
   const [logout] = useLogoutMutation()
-  const [changePasswordOpen, setChangePasswordOpen] = useState(false)
-  const [deviceLoginOpen, setDeviceLoginOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
 
   const user = data?.user
   // Bootstrap-open: no users exist yet, so there is no identity to show. The setup
@@ -63,23 +67,13 @@ export function UserMenu() {
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {/* Admins only: every call behind /install/users is admin-gated in the backend,
-              so offering it to an operator would only ever produce a 403. */}
-          {user.role === "ADMIN" && (
-            <DropdownMenuItem onSelect={() => navigate("/install/users")}>
-              <Users className="size-4" />
-              Manage users
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuItem onSelect={() => setChangePasswordOpen(true)}>
-            <KeyRound className="size-4" />
-            Change password…
-          </DropdownMenuItem>
-          {/* Every role: signing your own phone in is not an administrative act, which is
-              also why its endpoints live under /auth rather than the admin-only /users. */}
-          <DropdownMenuItem onSelect={() => setDeviceLoginOpen(true)}>
-            <Smartphone className="size-4" />
-            Sign in on a phone…
+          {/* Two items, deliberately. Everything self-service — name, password, devices, the
+              sign-in QR — is in the one sheet, and "Manage users" is gone: the `users` nav entry
+              is already `adminOnly`, so the sidebar and Cmd+K carry that page and a second entry
+              point here only meant role-filtering the same destination twice. */}
+          <DropdownMenuItem onSelect={() => setProfileOpen(true)}>
+            <CircleUser className="size-4" />
+            Profile…
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => void logout()}>
             <LogOut className="size-4" />
@@ -87,8 +81,7 @@ export function UserMenu() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <ChangePasswordSheet open={changePasswordOpen} onOpenChange={setChangePasswordOpen} />
-      <DeviceLoginSheet open={deviceLoginOpen} onOpenChange={setDeviceLoginOpen} />
+      <ProfileSheet user={user} open={profileOpen} onOpenChange={setProfileOpen} />
     </>
   )
 }

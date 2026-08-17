@@ -80,6 +80,10 @@ export interface ChangePasswordRequest {
   newPassword: string
 }
 
+export interface UpdateProfileRequest {
+  displayName: string
+}
+
 // Shared by `login` and `setup`: both mint a session cookie, so both have to
 // re-handshake the socket. It may have been opened before we had an identity
 // (bootstrap-open), or closed with 4401 when the previous session died. `force`
@@ -150,6 +154,21 @@ export const authApi = restApi.injectEndpoints({
       invalidatesTags: ['AuthSessions'],
     }),
 
+    // The one thing a user may change about themselves. Authenticated but *any* role
+    // server-side, deliberately outside the admin-only `/users` subtree — the desk's own
+    // account maintenance is not an administrative act.
+    //
+    // Success-only in the `(_result, error)` form `login`/`setup` use above, because RTK
+    // Query applies a static `invalidatesTags` to failed mutations too. `Auth` is what
+    // re-renders the header avatar's initials and the menu's name; `UserList`/`User` cover
+    // an *admin* renaming themselves, whose own row in the users tab would otherwise sit
+    // stale — a bare `'User'` invalidates every id'd entry of that type. Neither users
+    // cache exists unless that tab was visited, so the extra tags cost nothing.
+    updateProfile: build.mutation<AuthUser, UpdateProfileRequest>({
+      query: (body) => ({ url: 'auth/profile', method: 'PUT', body }),
+      invalidatesTags: (_result, error) => (error ? [] : ['Auth', 'UserList', 'User']),
+    }),
+
     sessions: build.query<SessionInfo[], void>({
       query: () => 'auth/sessions',
       providesTags: ['AuthSessions'],
@@ -197,6 +216,7 @@ export const {
   useSetupMutation,
   useLogoutMutation,
   useChangePasswordMutation,
+  useUpdateProfileMutation,
   useSessionsQuery,
   useRevokeOtherSessionsMutation,
   useCreateDeviceLoginMutation,
