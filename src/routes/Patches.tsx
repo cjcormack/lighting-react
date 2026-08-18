@@ -21,6 +21,12 @@ import { AddFixtureSheet } from "@/components/patches/AddFixtureSheet"
 import { EditPatchSheet } from "@/components/patches/EditPatchSheet"
 import { EditGroupSheet } from "@/components/patches/EditGroupSheet"
 import type { FixturePatch, UniverseConfig } from "../api/patchApi"
+import {
+  DEFAULT_REFRESH_INTERVAL_MS,
+  MAX_REFRESH_INTERVAL_MS,
+  MIN_REFRESH_INTERVAL_MS,
+} from "../api/patchApi"
+import { parseNullableNumber } from "@/lib/utils"
 import { findGel } from "@/data/gels"
 
 // ─── Redirect ─────────────────────────────────────────────────────────
@@ -170,21 +176,51 @@ export function PatchListContent({
 function UniverseChip({ config, projectId }: { config: UniverseConfig; projectId: number }) {
   const [editing, setEditing] = useState(false)
   const [address, setAddress] = useState(config.address ?? '')
-  const [runUpdateConfig] = useUpdateUniverseConfigMutation()
+  const [intervalMs, setIntervalMs] = useState(String(config.refreshIntervalMs))
+  const [error, setError] = useState<string | null>(null)
+  const [runUpdateConfig, { isLoading: isSaving }] = useUpdateUniverseConfigMutation()
 
   // Sync local state when config changes from server
   useEffect(() => {
     setAddress(config.address ?? '')
   }, [config.address])
 
-  const handleSave = () => {
-    runUpdateConfig({
-      projectId,
-      configId: config.id,
-      address: address,
-    })
-    setEditing(false)
+  useEffect(() => {
+    setIntervalMs(String(config.refreshIntervalMs))
+  }, [config.refreshIntervalMs])
+
+  // A failed save leaves the popover open showing why. Without this, dismissing it and
+  // reopening re-renders that stale error against fields that no longer match it.
+  useEffect(() => {
+    if (!editing) setError(null)
+  }, [editing])
+
+  const parsedInterval = parseNullableNumber(intervalMs)
+  const intervalValid =
+    parsedInterval !== null &&
+    Number.isInteger(parsedInterval) &&
+    parsedInterval >= MIN_REFRESH_INTERVAL_MS &&
+    parsedInterval <= MAX_REFRESH_INTERVAL_MS
+
+  const save = async (body: { address?: string; refreshIntervalMs?: number; resetRefreshInterval?: boolean }) => {
+    setError(null)
+    try {
+      await runUpdateConfig({ projectId, configId: config.id, ...body }).unwrap()
+      setEditing(false)
+    } catch (e) {
+      // A 400 is reachable now that the interval is bounded, so the popover has to be able
+      // to say why rather than silently discarding the edit.
+      const detail = (e as { data?: { error?: string } })?.data?.error
+      setError(detail ?? 'Could not save universe settings.')
+    }
   }
+
+  const handleSave = () => {
+    if (!intervalValid) return
+    void save({ address, refreshIntervalMs: parsedInterval })
+  }
+
+  const handleUseDefault = () => void save({ address, resetRefreshInterval: true })
 
   return (
     <Popover open={editing} onOpenChange={setEditing}>
@@ -196,14 +232,25 @@ function UniverseChip({ config, projectId }: { config: UniverseConfig; projectId
           ) : (
             <span className="text-muted-foreground/50 italic">no address</span>
           )}
+          {/* Only when pinned on this desk. A machine-local setting that lives behind a
+              popover is one people forget they set — but showing the default on every
+              chip would be noise on every rig that never touches it. */}
+          {config.refreshIntervalOverridden && (
+            <span className="text-muted-foreground font-mono">· {config.refreshIntervalMs}ms</span>
+          )}
           <Pencil className="size-2.5 text-muted-foreground/50" />
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-64 p-3" align="start">
-        <div className="space-y-2">
-          <p className="text-xs font-medium">Universe {config.universe} — ArtNet Address</p>
-          <div className="flex gap-2">
+      <PopoverContent className="w-72 p-3" align="start">
+        <div className="space-y-3">
+          <p className="text-xs font-medium">Universe {config.universe}</p>
+
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground" htmlFor={`u${config.id}-address`}>
+              ArtNet address
+            </label>
             <Input
+              id={`u${config.id}-address`}
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleSave() }}
@@ -211,8 +258,48 @@ function UniverseChip({ config, projectId }: { config: UniverseConfig; projectId
               className="text-xs h-8"
               autoFocus
             />
-            <Button size="sm" className="h-8 px-2" onClick={handleSave}>
-              <Check className="size-3.5" />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground" htmlFor={`u${config.id}-interval`}>
+              Refresh interval (ms)
+            </label>
+            <div className="flex gap-2">
+              <Input
+                id={`u${config.id}-interval`}
+                type="number"
+                min={MIN_REFRESH_INTERVAL_MS}
+                max={MAX_REFRESH_INTERVAL_MS}
+                step={1}
+                value={intervalMs}
+                onChange={(e) => setIntervalMs(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSave() }}
+                onFocus={(e) => e.target.select()}
+                className="text-xs h-8"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 px-2 text-xs whitespace-nowrap"
+                disabled={isSaving || !config.refreshIntervalOverridden}
+                onClick={handleUseDefault}
+              >
+                Use default
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              {config.refreshIntervalOverridden
+                ? `Set on this desk. Default is ${DEFAULT_REFRESH_INTERVAL_MS}ms.`
+                : `Using the ${DEFAULT_REFRESH_INTERVAL_MS}ms default.`}{' '}
+              This machine only — it does not travel with the show.
+            </p>
+          </div>
+
+          {error && <p className="text-xs text-destructive">{error}</p>}
+
+          <div className="flex justify-end">
+            <Button size="sm" className="h-8 px-3" disabled={isSaving || !intervalValid} onClick={handleSave}>
+              <Check className="size-3.5 mr-1" /> Save
             </Button>
           </div>
         </div>

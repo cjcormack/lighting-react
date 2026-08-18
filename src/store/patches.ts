@@ -146,8 +146,8 @@ export const patchesApi = restApi.injectEndpoints({
       providesTags: ['UniverseConfig'],
     }),
 
-    // Update a universe config (address, controller type)
-    updateUniverseConfig: build.mutation<UniverseConfig, { projectId: number; configId: number; address?: string; controllerType?: string }>({
+    // Update a universe config (address, controller type, Art-Net transmit interval)
+    updateUniverseConfig: build.mutation<UniverseConfig, { projectId: number; configId: number; address?: string; controllerType?: string; refreshIntervalMs?: number; resetRefreshInterval?: boolean }>({
       query: ({ projectId, configId, ...body }) => ({
         url: `project/${projectId}/universe-configs/${configId}`,
         method: 'PUT',

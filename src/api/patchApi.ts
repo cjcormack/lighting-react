@@ -33,12 +33,29 @@ export interface FixturePatch {
   stageHidden: boolean;
 }
 
+/**
+ * Default Art-Net transmit interval, mirroring
+ * `ArtNetController.DEFAULT_REFRESH_INTERVAL_MS` in lighting7. Used only to decide whether
+ * to surface the interval on a universe chip; the server is the authority on the value.
+ */
+export const DEFAULT_REFRESH_INTERVAL_MS = 25;
+
+/** Bounds mirroring `ArtNetController.MIN_/MAX_REFRESH_INTERVAL_MS`. A full 513-slot
+ *  DMX512 frame occupies ~22.6 ms on the wire, so a node cannot emit faster than ~44 Hz
+ *  however fast we feed it; the ceiling keeps clear of node data-loss timeouts. */
+export const MIN_REFRESH_INTERVAL_MS = 23;
+export const MAX_REFRESH_INTERVAL_MS = 1000;
+
 export interface UniverseConfig {
   id: number;
   subnet: number;
   universe: number;
   controllerType: string;
   address: string | null;
+  /** Effective Art-Net transmit interval: this machine's override, else the default. */
+  refreshIntervalMs: number;
+  /** False when the interval is simply the default rather than pinned on this desk. */
+  refreshIntervalOverridden: boolean;
   patchCount: number;
 }
 
