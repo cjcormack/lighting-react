@@ -60,7 +60,8 @@ interface ScriptWrapper {
 
 const SCRIPT_WRAPPERS: Record<EditorScriptType, ScriptWrapper> = {
   GENERAL: {
-    prefix: `import uk.me.cormack.lighting7.fixture.*
+    prefix: `//@lighting7-script-type=GENERAL
+import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.dmx.*
 import uk.me.cormack.lighting7.fixture.hue.*
 import uk.me.cormack.lighting7.fixture.group.*
@@ -90,7 +91,8 @@ fun TestScript.test() {
 `,
   },
   FX_DEFINITION: {
-    prefix: `import uk.me.cormack.lighting7.fx.*
+    prefix: `//@lighting7-script-type=FX_DEFINITION
+import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.fx.effects.*
 import java.awt.Color
 
@@ -109,7 +111,8 @@ fun TestFxDef.test() {
 `,
   },
   FX_APPLICATION: {
-    prefix: `import uk.me.cormack.lighting7.fixture.*
+    prefix: `//@lighting7-script-type=FX_APPLICATION
+import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.group.*
 import uk.me.cormack.lighting7.fixture.trait.*
 import uk.me.cormack.lighting7.fx.*
@@ -133,7 +136,8 @@ fun TestFxApp.test() {
 `,
   },
   FX_CALC: {
-    prefix: `import uk.me.cormack.lighting7.fx.*
+    prefix: `//@lighting7-script-type=FX_CALC
+import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.fx.effects.*
 import java.awt.Color
 import kotlin.math.*
@@ -153,7 +157,8 @@ fun TestFxCalc.test() {
 `,
   },
   FX_CALC_STATEFUL: {
-    prefix: `import uk.me.cormack.lighting7.fx.*
+    prefix: `//@lighting7-script-type=FX_CALC_STATEFUL
+import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.fx.effects.*
 import java.awt.Color
 import kotlin.math.*
@@ -175,7 +180,8 @@ fun TestFxStateful.test() {
 `,
   },
   FX_CALC_COMPOSITE: {
-    prefix: `import uk.me.cormack.lighting7.fx.*
+    prefix: `//@lighting7-script-type=FX_CALC_COMPOSITE
+import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.fx.effects.*
 import java.awt.Color
 import kotlin.math.*
@@ -249,7 +255,7 @@ export function ScriptEditor({
 
       {/* Kotlin playground */}
       {compact ? (
-        <div className="overflow-x-auto min-w-0">
+        <div className="kotlin-editor overflow-x-auto min-w-0">
           <ReactKotlinPlayground
             mode="kotlin"
             lines="true"
@@ -265,7 +271,7 @@ export function ScriptEditor({
         </div>
       ) : (
         <Card className="p-4 m-2 flex flex-col overflow-hidden min-w-0">
-          <div className="overflow-x-auto min-w-0">
+          <div className="kotlin-editor overflow-x-auto min-w-0">
             <ReactKotlinPlayground
               mode="kotlin"
               lines="true"

@@ -124,14 +124,32 @@ npm run test:watch   # Run Vitest in watch mode
 
 The Vite dev server proxies API requests:
 - `/api/*` -> `http://localhost:8413/api/`
-- `/kotlin-compiler-server/*` -> `http://localhost:8413/kotlin-compiler-server/`
+- `/script-editor/*` -> `http://localhost:8413/script-editor/`
 
 WebSocket URL is automatically derived from the current host or can be overridden with `VITE_SOCKET_URL`.
 
 ## Key Features
 
 ### Scripts
-Kotlin scripts for lighting automation. Uses an embedded Kotlin playground for editing with syntax highlighting, autocomplete, and in-browser compilation. Scripts can be compiled and run directly from the UI.
+
+Kotlin scripts for lighting automation. Editing uses the embedded `kotlin-playground`
+widget (`src/kotlinScript/`), whose highlighting and autocomplete are served by **lighting7
+itself**, from the same embedded Kotlin compiler that runs the scripts —
+`/script-editor/*`, backed by `routes/scriptEditor.kt` + `scripts/ScriptEditorService.kt`.
+There used to be a bundled `kotlin-compiler-server` fork behind `/kotlin-compiler-server`,
+in a second JVM on port 8321; it is gone.
+
+Two things to keep in step with the backend:
+
+- **`SCRIPT_WRAPPERS` in `components/scripts/ScriptEditor.tsx`** wraps the user's body in a
+  synthetic class so the widget has something to show above `//sampleStart`. It is now
+  **presentation only** — the backend strips it and compiles the body against the real
+  `.kts` template. What *is* load-bearing is the `//@lighting7-script-type=<TYPE>` marker on
+  the first line of each prefix: it is how the backend picks the template. Drop it and that
+  editor silently falls back to GENERAL, losing every FX symbol.
+- **The widget's own Run button is hidden** (`.kotlin-editor .run-button` in `index.css`).
+  Every surface supplies its own Run wired to `/{projectId}/scripts/run`, which runs against
+  the live show; the widget's button was a second, less correct path to the same thing.
 
 ### Scenes & Chases
 - **Scenes**: One-shot lighting configurations that run a script with specific settings

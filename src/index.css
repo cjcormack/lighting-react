@@ -184,3 +184,29 @@
   0%, 100% { opacity: 1; transform: scale(1); }
   50%      { opacity: 0.35; transform: scale(0.7); }
 }
+
+/* Kotlin playground: hide the widget's own Run button.
+ *
+ * Every surface that mounts the editor supplies its own Compile/Run wired to the app's script
+ * engine (POST /{projectId}/scripts/run), which runs against the live show. The widget's button
+ * is a second, less correct path to the same thing — and since the bundled kotlin-compiler-server
+ * was retired there is nothing behind it, so /script-editor answers it with an explanation rather
+ * than executing anything. */
+.kotlin-editor .run-button {
+  display: none;
+}
+
+/* Kotlin playground: lift the autocomplete popup above the sheet it is used inside.
+ *
+ * CodeMirror appends `.CodeMirror-hints` to <body> with `z-index: 10`, while Radix sheets and
+ * their overlay sit at `z-index: 50` — so the popup renders *behind* the sheet. Every surface
+ * that mounts the editor is inside a sheet, so this affected all of them; it only became visible
+ * when completion started returning results (before FU-DIST-KCS-RETIRE the bundled compiler
+ * server answered `/complete` with nothing, so no popup ever appeared).
+ *
+ * Qualified with `body` for specificity, not tidiness: kotlin-playground injects its own
+ * stylesheet at mount, i.e. *after* this file, so a bare `.CodeMirror-hints` ties on specificity
+ * and loses on source order. */
+body .CodeMirror-hints {
+  z-index: 60;
+}

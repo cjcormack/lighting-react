@@ -15,7 +15,7 @@ export default defineConfig({
     open: true,
     proxy: {
       "/api": "http://localhost:8413/",
-      "/kotlin-compiler-server": "http://localhost:8413/",
+      "/script-editor": "http://localhost:8413/",
     },
   },
 })
