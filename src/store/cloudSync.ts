@@ -121,7 +121,11 @@ export interface SyncLogEntry {
   id: number
   tsMs: number
   level: "INFO" | "WARN" | "ERROR"
-  /** Stable code from `SyncLogEvent` — e.g. `RUN_DONE`, `AUTO_SYNC_TICK`. */
+  /**
+   * Stable code from `SyncLogEvent` — e.g. `RUN_DONE`, `AUTO_SYNC_RECOVERED`. Rendered as
+   * an opaque string, so codes retired backend-side (`AUTO_SYNC_TICK`) still display on
+   * rows written before they were.
+   */
   event: string
   message: string
 }

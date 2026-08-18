@@ -83,6 +83,12 @@ export interface OAuthIdentityChangedEvent {
   login?: string | null
   accessExpiresAtMs?: number | null
   refreshExpiresAtMs?: number | null
+  /**
+   * GitHub has rejected the identity. Carried so a listener can react to *becoming* broken,
+   * but the frame is only a nudge — the detail (reason, since when) comes from re-reading
+   * the identity endpoint.
+   */
+  reauthRequired?: boolean
 }
 
 type CloudSyncInMessage =

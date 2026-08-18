@@ -2,7 +2,8 @@ import { useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { LogOut, Loader2 } from "lucide-react"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { AlertTriangle, LogOut, Loader2 } from "lucide-react"
 import { GithubIcon } from "@/components/GithubIcon"
 import {
   useDisconnectOAuthGithubMutation,
@@ -64,6 +65,63 @@ export function IdentityRow({ projectId }: { projectId: number | null }) {
     ? `/api/rest/oauth/github/start?projectId=${encodeURIComponent(String(projectId))}`
     : `/api/rest/oauth/github/start`
 
+  const disconnectButton = (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={handleDisconnect}
+      disabled={isDisconnecting}
+    >
+      <LogOut className="size-3.5 mr-1.5" />
+      {isDisconnecting ? "Disconnecting…" : "Disconnect"}
+    </Button>
+  )
+
+  // Rejected identity: still connected in the sense that we know whose it is, but nothing
+  // will sync until the user reconnects. This case must be checked *before* the healthy
+  // one — it used to fall through to it and render "refreshing soon" indefinitely, because
+  // an access token expired in the past reads as "about to be refreshed".
+  if (identity.connected && identity.reauthRequired) {
+    return (
+      <div className="space-y-3">
+        <Alert variant="destructive">
+          <AlertTriangle className="size-4" />
+          <AlertTitle>Reconnect GitHub</AlertTitle>
+          <AlertDescription>
+            GitHub has rejected this desk&rsquo;s authorisation for{" "}
+            <strong>@{identity.login}</strong>
+            {identity.reauthRequiredAtMs != null && (
+              <> since {new Date(identity.reauthRequiredAtMs).toLocaleString()}</>
+            )}
+            {/* Deliberately not "sync has stopped": this row is install-wide and can't see
+                whether a given project has a PAT to fall back on. */}
+            . Cloud sync can&rsquo;t use this connection until you reconnect.
+            {identity.reauthReason && (
+              <span className="block mt-1 text-xs opacity-90">{identity.reauthReason}</span>
+            )}
+          </AlertDescription>
+        </Alert>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <a href={startUrl}>
+            <Button size="sm">
+              <GithubIcon className="size-3.5 mr-1.5" />
+              Reconnect GitHub
+            </Button>
+          </a>
+          {disconnectButton}
+        </div>
+        <button
+          type="button"
+          onClick={() => setDeviceFlowOpen(true)}
+          className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+        >
+          Can&rsquo;t open a popup? Use a device code
+        </button>
+        <DeviceFlowModal open={deviceFlowOpen} onOpenChange={setDeviceFlowOpen} />
+      </div>
+    )
+  }
+
   if (identity.connected) {
     const expiresIn = identity.accessExpiresAtMs
       ? Math.max(0, identity.accessExpiresAtMs - Date.now())
@@ -81,15 +139,7 @@ export function IdentityRow({ projectId }: { projectId: number | null }) {
             </Badge>
           )}
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleDisconnect}
-          disabled={isDisconnecting}
-        >
-          <LogOut className="size-3.5 mr-1.5" />
-          {isDisconnecting ? "Disconnecting…" : "Disconnect"}
-        </Button>
+        {disconnectButton}
       </div>
     )
   }

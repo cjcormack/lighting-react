@@ -131,16 +131,24 @@ export function CloudSyncHubBody() {
   const [importOpen, setImportOpen] = useState(false)
   const dispatch = useDispatch()
   const isLoading = projectsLoading || configsLoading
-  const oauthConnected = identity?.connected === true
+  // Usable, not merely present: a rejected identity can only 401 the repo-listing call
+  // this button leads to, so it stays disabled until the user reconnects.
+  const oauthConnected = identity?.connected === true && identity.reauthRequired !== true
 
   // Pick up imports done from another tab — the importing tab itself relies on the
   // mutation's invalidatesTags to refresh, but a WS-only listener catches the cross-tab
   // case without polling.
+  //
+  // No identity listener here: the module-scope bridge in `store/oauthGithub` keeps that cache
+  // live for the whole app, which it has to now that the sidebar badge and the global banner
+  // depend on it too.
   useEffect(() => {
-    const sub = lightingApi.cloudSync.subscribeProjectImported(() => {
+    const subImported = lightingApi.cloudSync.subscribeProjectImported(() => {
       dispatch(restApi.util.invalidateTags(['ProjectList', 'CloudSyncConfig']))
     })
-    return () => sub.unsubscribe()
+    return () => {
+      subImported.unsubscribe()
+    }
   }, [dispatch])
 
   return (
@@ -302,24 +310,11 @@ export function ProjectSyncContent({ projectId }: { projectId: number }) {
       // have committed before the network step failed.
       dispatch(restApi.util.invalidateTags(['CloudSyncStatus', 'CloudSyncLog']))
     }
-    let lastConnected: boolean | null = null
-    const onIdentityChanged = (event: { connected: boolean }) => {
-      // Always refresh the identity row (login + expiries change on refresh too);
-      // only bust the repo list when connect-state flips, since a token refresh
-      // doesn't change which repos the App can see.
-      dispatch(restApi.util.invalidateTags(['OAuthIdentity']))
-      if (lastConnected !== null && lastConnected !== event.connected) {
-        dispatch(restApi.util.invalidateTags(['OAuthRepos']))
-      }
-      lastConnected = event.connected
-    }
     const subDone = lightingApi.cloudSync.subscribeDone(onDone)
     const subFailed = lightingApi.cloudSync.subscribeFailed(onFailed)
-    const subIdentity = lightingApi.cloudSync.subscribeOAuthIdentityChanged(onIdentityChanged)
     return () => {
       subDone.unsubscribe()
       subFailed.unsubscribe()
-      subIdentity.unsubscribe()
     }
   }, [dispatch])
 
@@ -383,7 +378,13 @@ function AttachConfigPanel({ projectId, config }: { projectId: number; config: S
   const [reconnect, { isLoading: isReconnecting }] = useCloudSyncReconnectMutation()
   const [runSync] = useCloudSyncRunMutation()
   const [createOpen, setCreateOpen] = useState(false)
-  const oauthConnected = identity?.connected === true
+  // Gates the repo picker and "create repo", both of which go through the GitHub API. With a
+  // rejected identity this panel falls back to the "Previously linked" Reconnect list only —
+  // there is no manual repo-URL entry here, and PatPanel lives in SyncedConfigPanel, so a
+  // never-synced project genuinely cannot attach a repo until GitHub is reconnected. That
+  // limitation predates the re-auth work (the old gate was `connected` alone); it is not
+  // something this flag introduced.
+  const oauthConnected = identity?.connected === true && identity.reauthRequired !== true
 
   // Fire the first push so a freshly-attached repo doesn't sit empty. Non-fatal: if it
   // fails (e.g. the GitHub App can't see the new repo yet) sync is still on and the user
@@ -859,9 +860,16 @@ function StatusPanel({ projectId }: { projectId: number }) {
   // Phase 5: also blocked while a conflict session is open — the user has to resolve
   // (or abort) the existing one first, otherwise the run would 409 SESSION_PENDING.
   const sessionPending = conflictsData?.activeSession === true
-  const hasCredentials = identity?.connected === true || config?.tokenPresent === true
+  // A rejected OAuth identity is not a credential: `connected` alone would enable a
+  // "Sync now" that can only fail. The PAT half still stands on its own — a desk with a
+  // working PAT syncs fine while its OAuth connection is broken.
+  const oauthUsable = identity?.connected === true && identity.reauthRequired !== true
+  const hasCredentials = oauthUsable || config?.tokenPresent === true
   const syncDisabledReason = (() => {
     if (!config?.repoUrl) return "No repository attached — enable cloud sync first"
+    if (identity?.reauthRequired === true && config?.tokenPresent !== true) {
+      return "GitHub rejected this desk's authorisation — reconnect above"
+    }
     if (!hasCredentials) return "Connect GitHub or store a Personal Access Token"
     if (sessionPending) return "Resolve or abort the open conflict session first"
     return null

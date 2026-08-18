@@ -339,6 +339,32 @@ A cue without an explicit number gets one derived from its position (`cueNumberA
 
 FX definitions have a `timingSource` field (`BEAT` or `WALL_CLOCK`) controlling whether effects sync to BPM or run on a fixed 50Hz wall-clock timer.
 
+### Cloud sync — the GitHub identity
+
+Backend contract in `lighting7/docs/sync-engineering.md`. Three traps on this side:
+
+- **`identity.connected === true` does not mean OAuth works.** A rejected identity keeps
+  `connected: true` and gains `reauthRequired` — that conflation is why the desk showed
+  "Connected as @user" plus a permanent "refreshing soon" badge for 25 days while every
+  sync failed. Every gate must read `connected === true && reauthRequired !== true`; the
+  five that do are in `IdentityRow`, `CloudSync.tsx` (×3) and `Projects.tsx`.
+- **`/api/rest/oauth/` is admin-gated**, so every caller of `useOauthGithubIdentityQuery`
+  passes `skip: !isAdmin` — the same reliance `store/users.ts` documents for
+  `useUsersQuery`, and now load-bearing in a new way, because the sidebar badge and the
+  global banner mount the query on *every* page rather than only on the sync pages.
+  `useOAuthReauthState` bakes the guard in; prefer it to the raw query.
+- **`startOAuthIdentityBridge()` is called from `main.tsx`, not on import.** Unlike
+  `store/users.ts`, this slice is imported from the earliest render path (the sidebar), so
+  touching `lightingApi` in its module body throws a TDZ `ReferenceError` and takes every
+  export with it — the sidebar and banner render as "not defined". `tsc`, `vite build` and
+  the unit tests all pass anyway, because the cycle exists only at runtime and the tests
+  mock the module: it shows up **solely** as a broken app in the browser.
+
+The banner is dismissible against the rejection's timestamp (localStorage), so dismissing
+survives reloads but a genuinely new outage still gets seen. It is a banner and not a toast
+or modal for the same reason the update panel never nags: an operator mid-show must not be
+interrupted — and here they are not shown it at all, since they cannot fix it.
+
 ### In-app updates
 
 The **Updates** tab in `InstallSettings` (`components/updates/UpdatePanel.tsx`), backed by

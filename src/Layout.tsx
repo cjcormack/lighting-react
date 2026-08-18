@@ -31,6 +31,7 @@ import CommandPalette from "./components/CommandPalette"
 import { AddEditFxSheet, type FxTarget } from "./components/fx/AddEditFxSheet"
 import { ChannelValueDialog } from "./components/ChannelValueDialog"
 import { SyncNotifications } from "./components/cloudSync/SyncNotifications"
+import { SyncReauthBanner } from "./components/cloudSync/SyncReauthBanner"
 
 const DRAWER_WIDTH = 240
 const DRAWER_COLLAPSED_WIDTH = 64
@@ -213,8 +214,12 @@ export default function Layout() {
             {/* Cue Slot Overview Panel - always rendered for animation */}
             <CueSlotOverviewPanel isVisible={isCueSlotsVisible} />
 
-            {/* Page Content */}
+            {/* Page Content. The re-auth banner sits inside the scroll container's flex
+                column rather than above it so it doesn't shift the ShowBar or the panels;
+                it renders nothing at all unless the desk's GitHub connection is rejected
+                and the viewer is an admin who can act on it. */}
             <main className="flex-1 overflow-auto bg-muted/40 min-w-0">
+              <SyncReauthBanner />
               <Outlet />
             </main>
           </CueSlotDndProvider>

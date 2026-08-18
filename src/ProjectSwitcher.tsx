@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator"
 import { Loader2, FolderOpen } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useProjectListQuery } from "./store/projects"
+import { useOAuthReauthState } from "./store/oauthGithub"
 import {
   useNavItems,
   filterNavItems,
@@ -22,6 +23,18 @@ interface ProjectSwitcherProps {
   collapsed?: boolean
 }
 
+/**
+ * Nav entries that a rejected GitHub authorisation is about. Both, because either is a route to
+ * the fix and which one a person reaches for depends on where they already are.
+ *
+ * Hard-coded ids rather than a field on the registry: this is the only attention source there is,
+ * and inverting it into `navigation.ts` would mean the registry importing a store slice. If a
+ * second source ever appears, that is the point to add a `useNavAttention()` returning a set of
+ * ids and let this read from it.
+ */
+const SYNC_NAV_IDS: ReadonlySet<string> = new Set(["sync", "project-sync"])
+const ATTENTION_LABEL = "GitHub needs reconnecting"
+
 export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
   const navigate = useNavigate()
   const location = useLocation()
@@ -29,10 +42,15 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
   const allNavItems = useNavItems()
   const isNavAdmin = useIsNavAdmin()
 
+  const { reauthRequired } = useOAuthReauthState()
+
   const viewedProject = useViewedProject()
   const activeProject = projects?.find((p) => p.isCurrent)
   const isViewingActiveProject = viewedProject?.id === activeProject?.id
   const visibleItems = filterNavItems(allNavItems, isViewingActiveProject, isNavAdmin)
+  // Operators never see the Sync entries at all (they're adminOnly), and the hook reports
+  // nothing wrong for them regardless — so this is only ever a dot on a row they can act on.
+  const needsAttention = (id: string) => reauthRequired && SYNC_NAV_IDS.has(id)
 
   if (projectsLoading) {
     return (
@@ -81,6 +99,8 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
                 collapsed
                 onClick={() => navigate(item.path(viewedProject.id))}
                 muted={item.group === "install"}
+                attention={needsAttention(item.id)}
+                attentionLabel={ATTENTION_LABEL}
               />
             </React.Fragment>
           ))}
@@ -123,6 +143,8 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
               onClick={() => navigate(item.path(viewedProject.id))}
               muted={item.group === "install"}
               indent={item.parent != null}
+              attention={needsAttention(item.id)}
+              attentionLabel={ATTENTION_LABEL}
             />
           </React.Fragment>
         ))}
@@ -166,9 +188,34 @@ interface NavItemProps {
   onClick: () => void
   muted?: boolean
   indent?: boolean
+  /** Show a destructive dot: this destination has something the user needs to deal with. */
+  attention?: boolean
+  /** Why, for the collapsed tooltip. Ignored unless [attention]. */
+  attentionLabel?: string
 }
 
-export function NavItem({ icon, label, isActive, collapsed, onClick, muted, indent }: NavItemProps) {
+export function NavItem({
+  icon,
+  label,
+  isActive,
+  collapsed,
+  onClick,
+  muted,
+  indent,
+  attention,
+  attentionLabel,
+}: NavItemProps) {
+  // A dot rather than a count: what these carry is "something here needs you", and it has to
+  // read the same collapsed (overlaid on the icon, the only space there is) as expanded.
+  const dot = (
+    <span
+      aria-hidden
+      className={cn(
+        "size-2 rounded-full bg-destructive ring-2 ring-sidebar",
+        collapsed ? "absolute right-1.5 top-1" : "ml-auto mr-0.5 flex-shrink-0"
+      )}
+    />
+  )
   const button = (
     <button
       onClick={onClick}
@@ -177,11 +224,15 @@ export function NavItem({ icon, label, isActive, collapsed, onClick, muted, inde
         "hover:bg-accent hover:text-accent-foreground",
         isActive && "bg-accent text-accent-foreground",
         collapsed ? "justify-center px-2" : (indent ? "pl-7 pr-3" : "px-3"),
-        muted && "text-muted-foreground"
+        muted && "text-muted-foreground",
+        // Only positioned when it has to be — an unconditional `relative` would change
+        // stacking for every row in the sidebar.
+        attention && collapsed && "relative"
       )}
     >
       <span className="flex-shrink-0">{icon}</span>
       {!collapsed && <span className="truncate">{label}</span>}
+      {attention && dot}
     </button>
   )
 
@@ -189,7 +240,11 @@ export function NavItem({ icon, label, isActive, collapsed, onClick, muted, inde
     return (
       <Tooltip>
         <TooltipTrigger asChild>{button}</TooltipTrigger>
-        <TooltipContent side="right">{label}</TooltipContent>
+        {/* Collapsed, the label *is* the tooltip, so the reason has to ride along with it —
+            otherwise a red dot on an icon is a puzzle rather than a warning. */}
+        <TooltipContent side="right">
+          {attention && attentionLabel ? `${label} — ${attentionLabel}` : label}
+        </TooltipContent>
       </Tooltip>
     )
   }

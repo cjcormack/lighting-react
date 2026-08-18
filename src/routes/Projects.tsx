@@ -26,6 +26,7 @@ import {
 } from "../store/projects"
 import { useCloudSyncConfigsQuery, type SyncConfig } from "../store/cloudSync"
 import { useOauthGithubIdentityQuery } from "../store/oauthGithub"
+import { useIsNavAdmin } from "../navigation"
 import { formatRepoUrl } from "./CloudSync"
 import { ProjectSummary } from "../api/projectApi"
 import CreateProjectDialog from "../CreateProjectDialog"
@@ -40,8 +41,14 @@ export default function Projects() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [addRemoteOpen, setAddRemoteOpen] = useState(false)
-  const { data: identity } = useOauthGithubIdentityQuery()
-  const oauthConnected = identity?.connected === true
+  // Skipped for operators: `/api/rest/oauth/` is admin-gated, so their refetch can only 403 —
+  // the same reliance `store/users.ts` documents for `useUsersQuery`. They lose nothing, since
+  // the button it gates is one they cannot use either.
+  const isAdmin = useIsNavAdmin()
+  const { data: identity } = useOauthGithubIdentityQuery(undefined, { skip: !isAdmin })
+  // Usable, not merely present — importing a remote project needs a working token, so a
+  // rejected identity must not offer the flow. See `OAuthIdentity.reauthRequired`.
+  const oauthConnected = identity?.connected === true && identity.reauthRequired !== true
 
   const addRemoteButton = (
     <Button
