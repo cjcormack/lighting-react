@@ -22,6 +22,9 @@
   --accent-foreground: oklch(0.21 0.006 285.885);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
+  /* Warning amber. The app has no warning role of its own; this exists for the script editor's
+     non-error diagnostics, which need a second severity colour that is not `--destructive`. */
+  --editor-warning: oklch(0.68 0.16 70);
   --border: oklch(0.92 0.004 286.32);
   --input: oklch(0.92 0.004 286.32);
   --ring: oklch(0.546 0.245 262.881);
@@ -58,6 +61,7 @@
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
+  --editor-warning: oklch(0.78 0.15 75);
   --border: oklch(0.274 0.006 286.033);
   --input: oklch(0.274 0.006 286.033);
   --ring: oklch(0.623 0.214 259.815);
@@ -209,4 +213,62 @@
  * and loses on source order. */
 body .CodeMirror-hints {
   z-index: 60;
+}
+
+/* Kotlin playground: draw the error and warning marks locally.
+ *
+ * The widget's own stylesheet paints both the squiggle and the gutter icons with images from
+ * `https://try.kotlinlang.org/static/images/…` — a host that stopped serving them when the
+ * playground moved to play.kotlinlang.org, and one a desk on a show LAN has no route to anyway.
+ * Nothing else was wrong: the marks are applied to the right ranges, but their entire appearance
+ * was that missing image, so a script full of errors highlighted as a script with none.
+ *
+ * `text-decoration` needs no asset. `text-decoration-skip-ink: none` keeps the wave running under
+ * descenders, which is what makes it read as a squiggle rather than a dashed line.
+ *
+ * Qualified with `body` for the same reason as the rule above: kotlin-playground injects its
+ * stylesheet at mount, after this file, so equal specificity loses on source order. */
+body .kotlin-editor .cm__red_wavy_line,
+body .kotlin-editor .cm__green_wavy_line {
+  background: none;
+  padding-bottom: 0;
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 3px;
+}
+
+body .kotlin-editor .cm__red_wavy_line {
+  text-decoration-color: var(--destructive);
+}
+
+body .kotlin-editor .cm__green_wavy_line {
+  text-decoration-color: var(--editor-warning);
+}
+
+/* The gutter icons come from the same dead sprite. A dot carries the one thing the icon did:
+ * this line has something on it, in this severity. `INFOgutter` is styled too — the class is
+ * built from the severity we send, so INFO diagnostics would otherwise leave an unstyled 13px
+ * gap in the gutter. */
+body .kotlin-editor .ERRORgutter,
+body .kotlin-editor .WARNINGgutter,
+body .kotlin-editor .INFOgutter {
+  background: none;
+  height: 8px;
+  width: 8px;
+  margin-top: 4px;
+  margin-left: 4px;
+  border-radius: 50%;
+}
+
+body .kotlin-editor .ERRORgutter {
+  background-color: var(--destructive);
+}
+
+body .kotlin-editor .WARNINGgutter {
+  background-color: var(--editor-warning);
+}
+
+body .kotlin-editor .INFOgutter {
+  background-color: var(--muted-foreground);
 }
