@@ -53,153 +53,32 @@ export interface ScriptEditorProps {
   footerActions?: React.ReactNode
 }
 
-interface ScriptWrapper {
-  prefix: string
-  suffix: string
-}
-
-const SCRIPT_WRAPPERS: Record<EditorScriptType, ScriptWrapper> = {
-  GENERAL: {
-    prefix: `//@lighting7-script-type=GENERAL
-import uk.me.cormack.lighting7.fixture.*
-import uk.me.cormack.lighting7.fixture.dmx.*
-import uk.me.cormack.lighting7.fixture.hue.*
-import uk.me.cormack.lighting7.fixture.group.*
-import uk.me.cormack.lighting7.dmx.*
-import uk.me.cormack.lighting7.show.*
-import uk.me.cormack.lighting7.scripts.*
-import uk.me.cormack.lighting7.fx.*
-import uk.me.cormack.lighting7.fx.effects.*
-import java.awt.Color
-import kotlinx.coroutines.*
-
-class TestScript(
-    show: Show,
-    fixtures: Fixtures.FixturesWithTransaction,
-    fxEngine: FxEngine,
-    scriptName: String,
-    step: Int,
-    coroutineScope: CoroutineScope,
-): LightingScript(show, fixtures, fxEngine, scriptName, step, coroutineScope) {}
-
-fun TestScript.test() {
-//sampleStart
-`,
-    suffix: `
-//sampleEnd
-}
-`,
-  },
-  FX_DEFINITION: {
-    prefix: `//@lighting7-script-type=FX_DEFINITION
-import uk.me.cormack.lighting7.fx.*
-import uk.me.cormack.lighting7.fx.effects.*
-import java.awt.Color
-
-class TestFxDef(
-    show: uk.me.cormack.lighting7.show.Show,
-    scriptName: String,
-    scriptId: Int?
-): uk.me.cormack.lighting7.scripts.FxDefinitionScript(show, scriptName, scriptId) {}
-
-fun TestFxDef.test() {
-//sampleStart
-`,
-    suffix: `
-//sampleEnd
-}
-`,
-  },
-  FX_APPLICATION: {
-    prefix: `//@lighting7-script-type=FX_APPLICATION
-import uk.me.cormack.lighting7.fixture.*
-import uk.me.cormack.lighting7.fixture.group.*
-import uk.me.cormack.lighting7.fixture.trait.*
-import uk.me.cormack.lighting7.fx.*
-import uk.me.cormack.lighting7.fx.effects.*
-import uk.me.cormack.lighting7.fx.group.*
-import java.awt.Color
-
-class TestFxApp(
-    show: uk.me.cormack.lighting7.show.Show,
-    fxEngine: FxEngine,
-    scriptName: String,
-    step: Int,
-): uk.me.cormack.lighting7.scripts.FxApplicationScript(show, fxEngine, scriptName, step) {}
-
-fun TestFxApp.test() {
-//sampleStart
-`,
-    suffix: `
-//sampleEnd
-}
-`,
-  },
-  FX_CALC: {
-    prefix: `//@lighting7-script-type=FX_CALC
-import uk.me.cormack.lighting7.fx.*
-import uk.me.cormack.lighting7.fx.effects.*
-import java.awt.Color
-import kotlin.math.*
-
-class TestFxCalc(
-    phase: Double,
-    context: EffectContext,
-    params: TypedParams
-): uk.me.cormack.lighting7.scripts.FxCalcScript(phase, context, params) {}
-
-fun TestFxCalc.test() {
-//sampleStart
-`,
-    suffix: `
-//sampleEnd
-}
-`,
-  },
-  FX_CALC_STATEFUL: {
-    prefix: `//@lighting7-script-type=FX_CALC_STATEFUL
-import uk.me.cormack.lighting7.fx.*
-import uk.me.cormack.lighting7.fx.effects.*
-import java.awt.Color
-import kotlin.math.*
-
-class TestFxStateful(
-    tick: MasterClock.ClockTick,
-    deltaMs: Long,
-    context: EffectContext,
-    params: TypedParams,
-    state: MutableMap<String, Any>
-): uk.me.cormack.lighting7.scripts.FxStatefulCalcScript(tick, deltaMs, context, params, state) {}
-
-fun TestFxStateful.test() {
-//sampleStart
-`,
-    suffix: `
-//sampleEnd
-}
-`,
-  },
-  FX_CALC_COMPOSITE: {
-    prefix: `//@lighting7-script-type=FX_CALC_COMPOSITE
-import uk.me.cormack.lighting7.fx.*
-import uk.me.cormack.lighting7.fx.effects.*
-import java.awt.Color
-import kotlin.math.*
-
-class TestFxComposite(
-    phase: Double,
-    context: EffectContext,
-    params: TypedParams
-): uk.me.cormack.lighting7.scripts.FxCompositeCalcScript(phase, context, params) {}
-
-fun TestFxComposite.test() {
-//sampleStart
-`,
-    suffix: `
-//sampleEnd
-}
-`,
-  },
+/**
+ * What the `kotlin-playground` widget is handed: the script-type marker, then the user's body
+ * between the widget's own fold markers.
+ *
+ * Both kinds of marker are load-bearing, for different consumers:
+ *
+ * - `//sampleStart` / `//sampleEnd` belong to the **widget**. They fold the editor down to the
+ *   body alone, make `onChange` hand back only the body, and offset every position the widget
+ *   reports or asks about. It strips them from the text before it talks to the server, so the
+ *   backend never sees them.
+ * - `//@lighting7-script-type=` belongs to the **backend**. It is the only way the script type can
+ *   reach `/script-editor`: the widget owns the request shape, and its base URL is a module-level
+ *   global that every `playground()` call overwrites, so a per-type endpoint would have two
+ *   editors of different types poisoning each other. It sits above `//sampleStart` so the fold
+ *   hides it from the user, and first in the document so it wins over any line in the body that
+ *   looks like one.
+ *
+ * There used to be a synthetic base class and an import list here, one per script type. They were
+ * not presentation: the widget sends everything outside the fold markers verbatim, so what the
+ * backend actually compiled was that stand-in, and its constructor signature had to be kept in
+ * step with the real base class by hand. With only the marker line, `ScriptSourceWrapper` compiles
+ * the body against the genuine `.kts` template for its type — which is the whole point of serving
+ * the language services from the app's own compiler.
+ */
+function wrapForEditor(scriptType: EditorScriptType, body: string) {
+  return `//@lighting7-script-type=${scriptType}\n//sampleStart\n${body}\n//sampleEnd\n`
 }
 
 export function ScriptEditor({
@@ -260,7 +139,7 @@ export function ScriptEditor({
             mode="kotlin"
             lines="true"
             onChange={readOnly ? undefined : onScriptChange}
-            value={SCRIPT_WRAPPERS[scriptType].prefix + script.script + SCRIPT_WRAPPERS[scriptType].suffix}
+            value={wrapForEditor(scriptType, script.script)}
             highlightOnFly="true"
             autocomplete={readOnly ? undefined : "true"}
             matchBrackets={readOnly ? undefined : "true"}
@@ -276,7 +155,7 @@ export function ScriptEditor({
               mode="kotlin"
               lines="true"
               onChange={readOnly ? undefined : onScriptChange}
-              value={SCRIPT_WRAPPERS[scriptType].prefix + script.script + SCRIPT_WRAPPERS[scriptType].suffix}
+              value={wrapForEditor(scriptType, script.script)}
               highlightOnFly="true"
               autocomplete={readOnly ? undefined : "true"}
               matchBrackets={readOnly ? undefined : "true"}

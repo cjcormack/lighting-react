@@ -141,12 +141,24 @@ in a second JVM on port 8321; it is gone.
 
 Two things to keep in step with the backend:
 
-- **`SCRIPT_WRAPPERS` in `components/scripts/ScriptEditor.tsx`** wraps the user's body in a
-  synthetic class so the widget has something to show above `//sampleStart`. It is now
-  **presentation only** — the backend strips it and compiles the body against the real
-  `.kts` template. What *is* load-bearing is the `//@lighting7-script-type=<TYPE>` marker on
-  the first line of each prefix: it is how the backend picks the template. Drop it and that
-  editor silently falls back to GENERAL, losing every FX symbol.
+- **`wrapForEditor` in `components/scripts/ScriptEditor.tsx`** hands the widget the
+  `//@lighting7-script-type=<TYPE>` marker, then the body between `//sampleStart` and
+  `//sampleEnd`, and nothing else. Both halves are load-bearing, for different consumers, and
+  neither is presentation:
+  - The **fold markers are the widget's**. They fold the editor down to the body, make
+    `onChange` hand back only the body, and offset every position it reports or asks about.
+    The widget then *strips* them and posts `prefix + editorContents + suffix`, so the
+    backend never sees them and `EditorDocument` always takes its no-marker path.
+  - The **type marker is the backend's** — how it picks the template. Drop it and that editor
+    silently falls back to GENERAL, losing every FX symbol. It cannot move into a query
+    param or a per-type base URL: the widget owns the request shape, and its `server` is a
+    module-level global that every `playground()` call overwrites, so two editors of
+    different types would poison each other.
+
+  There used to be a synthetic base class and import list per type here. Because the widget
+  sends everything outside the fold markers verbatim, that stand-in was what the backend
+  actually compiled — its constructor signature had to track the real base class by hand.
+  With just the marker line, the real `.kts` template is what the body is compiled against.
 - **The widget's own Run button is hidden** (`.kotlin-editor .run-button` in `index.css`).
   Every surface supplies its own Run wired to `/{projectId}/scripts/run`, which runs against
   the live show; the widget's button was a second, less correct path to the same thing.
