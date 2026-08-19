@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetHeader,
   SheetTitle,
@@ -91,7 +92,7 @@ export function ScriptForm({
   const [hasEdited, setHasEdited] = useState(false)
 
   // Discard confirmation: what action to take if user confirms
-  const [discardTarget, setDiscardTarget] = useState<'close' | 'back' | null>(null)
+  const [discardTarget, setDiscardTarget] = useState<'back' | null>(null)
 
   // Reset state when sheet opens or script changes
   useEffect(() => {
@@ -202,17 +203,15 @@ export function ScriptForm({
     ? hasEdited
     : view === 'form' && (editName !== '' || editCode !== SCRIPT_TYPE_TEMPLATES[editType])
 
-  const tryDiscard = useCallback((target: 'close' | 'back') => {
+  const tryDiscard = useCallback((target: 'back') => {
     if (!isDirty) return true
     setDiscardTarget(target)
     return false
   }, [isDirty])
 
   const handleConfirmDiscard = () => {
-    const target = discardTarget
     setDiscardTarget(null)
-    if (target === 'close') onOpenChange(false)
-    else if (target === 'back') setView('type-picker')
+    setView('type-picker')
   }
 
   const canCreate = editName !== '' && editCode !== ''
@@ -272,12 +271,9 @@ export function ScriptForm({
         />
       )}
 
-      <Sheet open={open} onOpenChange={(value) => {
-        if (!value) {
-          if (!tryDiscard('close')) return
-        }
-        onOpenChange(value)
-      }}>
+      {/* The sheet asks about the unsaved edit itself; `tryDiscard` is left for the one dismissal
+          it cannot see — stepping *back* to the type picker, which does not close anything. */}
+      <Sheet open={open} onOpenChange={onOpenChange} unsavedChanges={isDirty}>
         <SheetContent className="flex flex-col sm:max-w-2xl">
           {view === 'form' && isCreate ? (
             <div className="flex items-center gap-2 px-4 pt-4 pb-3">
@@ -426,11 +422,11 @@ export function ScriptForm({
                 {/* Create mode */}
                 {isCreate && (
                   <>
-                    <Button variant="outline" onClick={() => {
-                      if (tryDiscard('close')) onOpenChange(false)
-                    }}>
-                      Cancel
-                    </Button>
+                    {/* Through the sheet, not straight to `onOpenChange`: only a close that
+                        Radix drives reaches the unsaved-changes question. */}
+                    <SheetClose asChild>
+                      <Button variant="outline">Cancel</Button>
+                    </SheetClose>
                     <Button disabled={!canCreate || isCreating} onClick={handleCreate}>
                       {isCreating ? 'Creating...' : 'Create'}
                     </Button>

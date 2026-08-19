@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { SheetHeader, SheetTitle, SheetBody } from '@/components/ui/sheet'
+import { SheetClose, SheetHeader, SheetTitle, SheetBody, useUnsavedChanges } from '@/components/ui/sheet'
 import { ChevronLeft, Trash2, Wrench, Play, Loader2 } from 'lucide-react'
 import {
   useProjectScriptsQuery,
@@ -71,6 +71,17 @@ export function CueTriggerEditor({
   const [inlineCode, setInlineCode] = useState(INLINE_TEMPLATE)
   const [isCreating, setIsCreating] = useState(false)
 
+  // Inert in `inline` mode, where there is no sheet to guard — the hook reports to whichever
+  // Sheet encloses it, and to nothing at all when none does.
+  useUnsavedChanges(
+    triggerType !== (trigger?.triggerType ?? 'ACTIVATION') ||
+    delayMs !== (trigger?.delayMs != null ? String(trigger.delayMs) : '') ||
+    intervalMs !== (trigger?.intervalMs != null ? String(trigger.intervalMs) : '') ||
+    randomWindowMs !== (trigger?.randomWindowMs != null ? String(trigger.randomWindowMs) : '') ||
+    scriptId !== (trigger?.scriptId ?? null) ||
+    scriptMode === 'inline' && (inlineName !== '' || inlineCode !== INLINE_TEMPLATE)
+  )
+
   const [createScript] = useCreateProjectScriptMutation()
   const [
     runCompileMutation,
@@ -82,6 +93,15 @@ export function CueTriggerEditor({
   ] = useRunProjectScriptMutation()
 
   const fxApplicationScripts = scripts?.filter((s) => s.scriptType === 'FX_APPLICATION') ?? []
+
+  /**
+   * Backing out of the editor. In a sheet that has to go through the sheet itself, since only a
+   * close Radix drives reaches the unsaved-changes question; inline there is no sheet to ask (and
+   * no Radix context for `SheetClose` to read), so the caller's own handler stands. A plain
+   * function rather than a component, so the button is not a fresh element type every render.
+   */
+  const dismiss = (button: React.ReactElement) =>
+    mode === 'sheet' ? <SheetClose asChild>{button}</SheetClose> : button
 
   // Validation
   const isValid = (() => {
@@ -127,9 +147,13 @@ export function CueTriggerEditor({
     <>
       <SheetHeader>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="size-8" onClick={onCancel}>
-            <ChevronLeft className="size-4" />
-          </Button>
+          {dismiss(
+            // No `onCancel` under a sheet: `asChild` would run it *as well as* the guarded close,
+            // and it closes the parent's state directly.
+            <Button variant="ghost" size="icon" className="size-8" onClick={mode === 'sheet' ? undefined : onCancel}>
+              <ChevronLeft className="size-4" />
+            </Button>
+          )}
           {mode === 'inline' ? (
             <h3 className="text-foreground font-semibold">
               {isEditing ? 'Edit Script Hook' : 'Add Script Hook'}
@@ -308,7 +332,9 @@ export function CueTriggerEditor({
           </Button>
         )}
         <div className="flex-1" />
-        <Button variant="outline" onClick={onCancel}>Cancel</Button>
+        {dismiss(
+          <Button variant="outline" onClick={mode === 'sheet' ? undefined : onCancel}>Cancel</Button>
+        )}
         <Button onClick={handleConfirm} disabled={!isValid || isCreating}>
           {isCreating && <Loader2 className="size-4 mr-2 animate-spin" />}
           {scriptMode === 'inline' && !isEditing ? 'Create & Add' : isEditing ? 'Save' : 'Add'}

@@ -22,11 +22,13 @@ import {
 } from "@/components/ui/table"
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetBody,
   SheetFooter,
   SheetHeader,
   SheetTitle,
+  useUnsavedChanges,
 } from "@/components/ui/sheet"
 import {
   ChevronRight,
@@ -300,7 +302,6 @@ function FxLibraryContent({
         {sheetMode.type === "new" && (
           <SheetContent side="right" className="flex flex-col sm:max-w-lg">
             <NewFxDefinitionSheet
-              onClose={() => setSheetMode({ type: "closed" })}
               onCreated={(id) => setSheetMode({ type: "edit", definitionId: id })}
             />
           </SheetContent>
@@ -492,6 +493,12 @@ function EditFxDefinitionSheet({
     setEdits({})
   }, [definitionId])
 
+  const hasChanged = edits.name !== undefined || edits.script !== undefined
+
+  // Before the early returns: hooks cannot be skipped, and the sheet must know about the edit
+  // whatever the query is doing.
+  useUnsavedChanges(hasChanged)
+
   if (isLoading || isFetching) {
     return (
       <>
@@ -514,7 +521,6 @@ function EditFxDefinitionSheet({
   const currentName = edits.name ?? definition.name
   const currentScript = edits.script ?? definition.script
 
-  const hasChanged = edits.name !== undefined || edits.script !== undefined
   const canSave = hasChanged && currentName !== "" && currentScript !== ""
 
   const handleCompile = () => {
@@ -635,9 +641,11 @@ function EditFxDefinitionSheet({
           {isDeleting ? "Deleting..." : "Delete"}
         </Button>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={onClose} disabled={isSaving}>
-            Cancel
-          </Button>
+          {/* Through the sheet, not straight to `onClose`: only a close that Radix drives
+              reaches the unsaved-changes question. */}
+          <SheetClose asChild>
+            <Button variant="outline" disabled={isSaving}>Cancel</Button>
+          </SheetClose>
           <Button disabled={!canSave || isSaving} onClick={handleSave}>
             {isSaving ? "Saving..." : "Save"}
           </Button>
@@ -659,11 +667,19 @@ val value = (min.toInt() + (max.toInt() - min.toInt()) * sine)
 FxOutput.Slider(value)
 `
 
+const NEW_FX_DEFAULTS = {
+  category: "dimmer",
+  outputType: "SLIDER",
+  effectMode: "STANDARD",
+  parameters: [
+    { name: "min", type: "ubyte", defaultValue: "0", description: "Minimum value" },
+    { name: "max", type: "ubyte", defaultValue: "255", description: "Maximum value" },
+  ] as EffectParameterDef[],
+}
+
 function NewFxDefinitionSheet({
-  onClose,
   onCreated,
 }: {
-  onClose: () => void
   onCreated: (id: number) => void
 }) {
   const { data: currentProject } = useCurrentProjectQuery()
@@ -678,14 +694,22 @@ function NewFxDefinitionSheet({
   ] = useRunProjectScriptMutation()
 
   const [name, setName] = useState("")
-  const [category, setCategory] = useState("dimmer")
-  const [outputType, setOutputType] = useState("SLIDER")
-  const [effectMode, setEffectMode] = useState("STANDARD")
+  const [category, setCategory] = useState(NEW_FX_DEFAULTS.category)
+  const [outputType, setOutputType] = useState(NEW_FX_DEFAULTS.outputType)
+  const [effectMode, setEffectMode] = useState(NEW_FX_DEFAULTS.effectMode)
   const [scriptCode, setScriptCode] = useState(NEW_FX_TEMPLATE)
-  const [parameters, setParameters] = useState<EffectParameterDef[]>([
-    { name: "min", type: "ubyte", defaultValue: "0", description: "Minimum value" },
-    { name: "max", type: "ubyte", defaultValue: "255", description: "Maximum value" },
-  ])
+  const [parameters, setParameters] = useState<EffectParameterDef[]>(NEW_FX_DEFAULTS.parameters)
+
+  // Everything the form starts with is a default nobody chose, so anything moved off one is work
+  // worth asking about before Escape or a stray click outside takes the sheet away.
+  useUnsavedChanges(
+    name !== "" ||
+    category !== NEW_FX_DEFAULTS.category ||
+    outputType !== NEW_FX_DEFAULTS.outputType ||
+    effectMode !== NEW_FX_DEFAULTS.effectMode ||
+    scriptCode !== NEW_FX_TEMPLATE ||
+    JSON.stringify(parameters) !== JSON.stringify(NEW_FX_DEFAULTS.parameters)
+  )
 
   const editorType = effectModeToEditorType(effectMode)
 
@@ -902,9 +926,9 @@ function NewFxDefinitionSheet({
       </SheetBody>
 
       <SheetFooter className="flex-row justify-end gap-2">
-        <Button variant="outline" onClick={onClose}>
-          Cancel
-        </Button>
+        <SheetClose asChild>
+          <Button variant="outline">Cancel</Button>
+        </SheetClose>
         <Button disabled={!canCreate || isCreating} onClick={handleCreate}>
           {isCreating ? "Creating..." : "Create"}
         </Button>

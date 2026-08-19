@@ -505,6 +505,20 @@ All sheets must follow this structure using the shared primitives from `src/comp
 - **Buttons**: Use default size in footers (no `size="sm"`). Cancel is always `variant="outline"`. Delete is `variant="destructive"`.
 - **Multi-step sheets**: Use `p-0 gap-0` on SheetContent when step 1 needs edge-to-edge content (e.g. picker lists). Use SheetBody in subsequent steps for form content.
 - **Sub-view footers** (content embedded inside a parent sheet, e.g. CueEffectFlow): Use `<div className="border-t p-4 flex items-center gap-2">` since SheetFooter can only be a direct child of SheetContent.
+- **Unsaved changes**: a sheet holding a form should call `useUnsavedChanges(isDirty)` from the
+  component that owns the form state. Escape, a click outside and the X then ask
+  *"Discard changes?"* first. Only a close **Radix** drives reaches that question, so a Cancel
+  button must be wrapped in `<SheetClose asChild>` rather than calling the parent's own
+  `setOpen(false)` — and must not also carry an `onClick` that closes, since `asChild` would run
+  both. It reports up through context, so it works from any depth and is a
+  no-op outside a sheet (`CueTriggerEditor` uses the same call in its inline mode). A parent that
+  already tracks dirtiness can pass `<Sheet unsavedChanges={...}>` instead; the two combine.
+  Only controlled sheets can be guarded — an uncontrolled one closes itself inside Radix.
+- **The Kotlin editor's completion popup** is a bare `<ul>` on `<body>`, invisible to Radix's
+  layer stack, so `SheetContent` special-cases it twice: Escape while it is open closes the popup
+  and not the sheet, and clicking a suggestion doesn't count as clicking outside. Both are in the
+  primitive, not in the editor's own sheets, because every sheet that mounts a script editor
+  would otherwise need them.
 
 ### TypeScript
 - Strict mode enabled

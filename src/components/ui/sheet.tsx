@@ -5,9 +5,114 @@ import * as SheetPrimitive from "@radix-ui/react-dialog"
 import { XIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
-function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
-  return <SheetPrimitive.Root data-slot="sheet" {...props} />
+type RegisterUnsaved = (id: symbol, unsaved: boolean) => void
+
+const SheetUnsavedContext = React.createContext<RegisterUnsaved | null>(null)
+
+/**
+ * Declare, from inside a sheet, that there is work in it that closing would throw away.
+ *
+ * Escape, a click on the shaded area outside, and the X then ask before discarding, instead of
+ * taking the sheet — and the edit — with them.
+ *
+ * Only a close that **Radix** drives is seen here. A Cancel button wired straight to the parent's
+ * own `setOpen(false)` closes the sheet without passing through this at all; wrap it in
+ * `SheetClose` (`<SheetClose asChild><Button …/></SheetClose>`) so that it does.
+ *
+ * It reports upwards through context rather than a prop so that the component holding the form
+ * state is the one that answers the question. That is usually several levels below the `Sheet`
+ * itself (the sheet's body is typically its own component), and a `dirty` prop threaded down to
+ * it would have to be threaded back up again.
+ *
+ * Only works on a **controlled** sheet — one with both `open` and `onOpenChange`. An uncontrolled
+ * sheet closes itself inside Radix, where there is nothing to intercept.
+ */
+function useUnsavedChanges(unsaved: boolean) {
+  const register = React.useContext(SheetUnsavedContext)
+  const [id] = React.useState(() => Symbol("sheet-unsaved"))
+
+  React.useEffect(() => {
+    register?.(id, unsaved)
+    // Whatever was unsaved leaves with the component that was holding it.
+    return () => register?.(id, false)
+  }, [register, id, unsaved])
+}
+
+function Sheet({
+  unsavedChanges = false,
+  onOpenChange,
+  children,
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Root> & {
+  /**
+   * Same meaning as [useUnsavedChanges], for a parent that already tracks its own dirty state.
+   * The two combine: the sheet guards if either says there is something to lose.
+   */
+  unsavedChanges?: boolean
+}) {
+  const [unsavedIds, setUnsavedIds] = React.useState<ReadonlySet<symbol>>(() => new Set())
+  const [confirming, setConfirming] = React.useState(false)
+
+  const register = React.useCallback<RegisterUnsaved>((id, unsaved) => {
+    setUnsavedIds((previous) => {
+      if (unsaved === previous.has(id)) return previous
+      const next = new Set(previous)
+      if (unsaved) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }, [])
+
+  const hasUnsaved = unsavedChanges || unsavedIds.size > 0
+
+  const handleOpenChange = (open: boolean) => {
+    if (!open && hasUnsaved) {
+      setConfirming(true)
+      return
+    }
+    onOpenChange?.(open)
+  }
+
+  return (
+    <SheetUnsavedContext.Provider value={register}>
+      <SheetPrimitive.Root data-slot="sheet" onOpenChange={handleOpenChange} {...props}>
+        {children}
+      </SheetPrimitive.Root>
+
+      <AlertDialog open={confirming} onOpenChange={(open) => { if (!open) setConfirming(false) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard changes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved changes that will be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirming(false)
+                onOpenChange?.(false)
+              }}
+            >
+              Discard
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </SheetUnsavedContext.Provider>
+  )
 }
 
 function SheetTrigger({
@@ -44,10 +149,25 @@ function SheetOverlay({
   )
 }
 
+/**
+ * Escape while the Kotlin editor's completion popup is open must close the popup, not the sheet.
+ *
+ * CodeMirror's `.CodeMirror-hints` list is a plain element appended to `<body>`, not a Radix
+ * layer, so it is invisible to the dismissable-layer stack: Escape reached the sheet and threw
+ * away whatever was being edited. Radix listens for Escape in the **capture** phase, so this runs
+ * before CodeMirror removes the popup — looking for it in the DOM here is a reliable test, not a
+ * race with the widget's own handler.
+ */
+function completionPopupIsOpen() {
+  return document.querySelector(".CodeMirror-hints") !== null
+}
+
 function SheetContent({
   className,
   children,
   side = "right",
+  onEscapeKeyDown,
+  onInteractOutside,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
@@ -57,6 +177,22 @@ function SheetContent({
       <SheetOverlay />
       <SheetPrimitive.Content
         data-slot="sheet-content"
+        onEscapeKeyDown={(event) => {
+          if (completionPopupIsOpen()) {
+            event.preventDefault()
+            return
+          }
+          onEscapeKeyDown?.(event)
+        }}
+        onInteractOutside={(event) => {
+          // Same popup, other input: it hangs off <body>, so picking a completion with the mouse
+          // reads as a click outside the sheet.
+          if ((event.target as Element | null)?.closest?.(".CodeMirror-hints")) {
+            event.preventDefault()
+            return
+          }
+          onInteractOutside?.(event)
+        }}
         className={cn(
           "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex flex-col gap-4 shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500",
           side === "right" &&
@@ -147,4 +283,5 @@ export {
   SheetFooter,
   SheetTitle,
   SheetDescription,
+  useUnsavedChanges,
 }
