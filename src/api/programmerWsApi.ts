@@ -64,6 +64,20 @@ export interface ProgrammerEntry {
   owners: string[]
 }
 
+/**
+ * One entry in the backend's channel **sideband** — *not* the programmer's channel output.
+ *
+ * The sideband holds only what the property model can't lift: raw `updateChannel` writes on
+ * channels with no backing property, raw pan/tilt axis writes, and unpark hand-downs. A dimmer or
+ * colour set through `programmer.set` lands in a property entry (`ProgrammerState.entries`) and
+ * never appears here — and `FxEngine.absorbSidebandUnder` actively drops sideband slots beneath a
+ * deliberate property write.
+ *
+ * So `ProgrammerState.channels` is not "what the programmer is holding, as channels". To get that,
+ * resolve the property entries with `lib/programmerChannels.ts` and treat these as a supplement.
+ * The backend DTO says "channel-sideband entry"; the word went missing on the way over here, and
+ * a follow-up was written on the assumption that this field was the whole picture.
+ */
 export interface ProgrammerChannelEntry {
   universe: number
   channel: number

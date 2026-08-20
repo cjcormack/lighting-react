@@ -2,6 +2,12 @@ import { memo, useMemo } from 'react'
 import type { StageRegionDto } from '../../api/stageRegionApi'
 import type { RiggingDto } from '../../api/riggingApi'
 import type { FixturePatch } from '../../api/patchApi'
+import { findGroupColourSource, type Fixture, type FixtureTypeInfo } from '../../store/fixtures'
+import {
+  FixtureAppearanceSource,
+  type PixelSegment,
+} from '../fixtures/fixtureAppearance'
+import { dimCssColour, perceptualBrightness } from '../../lib/colourMath'
 import { worldCornersFor, worldEndpointsFor } from '../../lib/stageGeometry'
 import { project, type ScreenPoint, type StageProjection } from '../../lib/stageProjection'
 
@@ -13,6 +19,20 @@ export const DEGENERATE_LENGTH_M = 1e-6
 const FIXTURE_DOT_PX = 7
 const FIXTURE_HIT_PX = 14
 const LABEL_PX = 11
+/** Per-pixel cell width on a pixel-bar strip. Mirrors the DOM marker's segment sizing. */
+const SEGMENT_PX = 4
+/** A pixel-bar strip is this fraction of the dot's diameter tall — a bar reads as a bar. */
+const STRIP_HEIGHT_RATIO = 0.55
+/**
+ * Brightness floors, so an unlit fixture is still a visible object.
+ *
+ * Without them a dark rig — the normal state while patching, which is what this plot is mostly
+ * for — draws every dot pure black, leaving only a 40%-opacity outline. The DOM marker has the
+ * same floors as `0.3 + lit * 0.7` on its opacity and `0.25 + …` per segment; these are the same
+ * numbers folded into the fill instead.
+ */
+const BODY_FLOOR = 0.3
+const SEGMENT_FLOOR = 0.25
 
 // — regions ————————————————————————————————————————————————————————
 
@@ -260,7 +280,14 @@ interface FixtureShapesProps {
   interactive: boolean
   editMode?: boolean
   onPick?: (patch: FixturePatch, e: React.PointerEvent) => void
-  colourFor: (patch: FixturePatch) => string
+  /**
+   * Fixture and type lookups, for live colour. Each fixture's colour comes from its own
+   * [FixtureShape] rather than from a `colourFor(patch)` callback: reading live values needs
+   * per-fixture hooks, and a callback whose identity changed with the values would defeat this
+   * component's `memo` and re-run the O(n²) label declutter on every DMX frame.
+   */
+  fixtureByKey: ReadonlyMap<string, Fixture>
+  typeByKey: ReadonlyMap<string, FixtureTypeInfo>
 }
 
 /**
@@ -319,10 +346,9 @@ export const FixtureShapes = memo(function FixtureShapes({
   interactive,
   editMode = false,
   onPick,
-  colourFor,
+  fixtureByKey,
+  typeByKey,
 }: FixtureShapesProps) {
-  const r = FIXTURE_DOT_PX * mPerPx
-  const hitR = FIXTURE_HIT_PX * mPerPx
   const labelled = useMemo(
     () => (showLabels ? labelledKeys(fixtures, selectedKey, mPerPx) : null),
     [showLabels, fixtures, selectedKey, mPerPx],
@@ -333,65 +359,244 @@ export const FixtureShapes = memo(function FixtureShapes({
         // The anchor gets the full highlight; other members of a multi-selection
         // get a lighter ring, so it's clear which one the side panel is editing.
         const selected = patch.key === selectedKey
-        const inSelection = selected || (selectedKeys?.has(`patch:${patch.key}`) ?? false)
-        const dimmed = dimmedKeys?.size ? !dimmedKeys.has(patch.key) : false
+        const fixture = fixtureByKey.get(patch.key)
         return (
-          <g key={patch.id} opacity={dimmed ? 0.3 : 1}>
-            {/* Invisible hit target: a 7px dot is far below the ~44px a finger
-                needs, and editing is enabled on tablets. */}
-            {interactive && (
-              <circle
-                cx={screen.h}
-                cy={screen.v}
-                r={hitR}
-                fill="transparent"
-                pointerEvents="all"
-                style={{ cursor: bodyCursor(selected, editMode) }}
-                onPointerDown={onPick ? (e) => onPick(patch, e) : undefined}
-              />
-            )}
-            {/* Outline via a Tailwind class rather than a literal, so a pale
-                tungsten dot stays visible against a light background. CSS beats
-                the presentation attribute, hence the attribute is only set for
-                the selected highlight. */}
-            <circle
-              cx={screen.h}
-              cy={screen.v}
-              r={r}
-              fill={colourFor(patch)}
-              className={inSelection ? undefined : 'stroke-foreground/40'}
-              stroke={selected ? '#ffe082' : inSelection ? '#b08d2e' : undefined}
-              strokeWidth={selected ? 2.5 : inSelection ? 2 : 1}
-              vectorEffect="non-scaling-stroke"
-              pointerEvents="none"
-            />
-            {patch.stageHidden && (
-              <line
-                x1={screen.h - r}
-                y1={screen.v + r}
-                x2={screen.h + r}
-                y2={screen.v - r}
-                stroke="var(--color-background)"
-                strokeWidth={2}
-                vectorEffect="non-scaling-stroke"
-                pointerEvents="none"
-              />
-            )}
-            {labelled?.has(patch.key) && (
-              <text
-                x={screen.h}
-                y={screen.v - r - 2 * mPerPx}
-                fontSize={LABEL_PX * mPerPx}
-                textAnchor="middle"
-                className={selected ? 'fill-foreground' : 'fill-muted-foreground'}
-                pointerEvents="none"
-              >
-                {patch.displayName || patch.key}
-              </text>
-            )}
-          </g>
+          <FixtureShape
+            key={patch.id}
+            patch={patch}
+            screen={screen}
+            fixture={fixture}
+            fixtureType={fixture ? typeByKey.get(fixture.typeKey) : undefined}
+            selected={selected}
+            inSelection={selected || (selectedKeys?.has(`patch:${patch.key}`) ?? false)}
+            dimmed={dimmedKeys?.size ? !dimmedKeys.has(patch.key) : false}
+            labelled={labelled?.has(patch.key) ?? false}
+            mPerPx={mPerPx}
+            interactive={interactive}
+            editMode={editMode}
+            onPick={onPick}
+          />
         )
       })}
     </g>
   )
 })
+
+interface FixtureShapeProps {
+  patch: FixturePatch
+  screen: ScreenPoint
+  fixture: Fixture | undefined
+  fixtureType: FixtureTypeInfo | undefined
+  selected: boolean
+  inSelection: boolean
+  dimmed: boolean
+  labelled: boolean
+  mPerPx: number
+  interactive: boolean
+  editMode: boolean
+  onPick?: (patch: FixturePatch, e: React.PointerEvent) => void
+}
+
+/**
+ * One fixture on the plot.
+ *
+ * Its own component so it can hold the per-fixture hooks live colour needs — `FixtureShapes`
+ * draws them in a loop, and hooks cannot go in a loop body. It also keeps the live values out of
+ * `FixtureShapes`, whose `memo` and O(n²) label declutter must not re-run per DMX frame.
+ */
+function FixtureShape({
+  patch,
+  screen,
+  fixture,
+  fixtureType,
+  selected,
+  inSelection,
+  dimmed,
+  labelled,
+  mPerPx,
+  interactive,
+  editMode,
+  onPick,
+}: FixtureShapeProps) {
+  const r = FIXTURE_DOT_PX * mPerPx
+  // Strip geometry comes from the *descriptor*, not from the live appearance, so the hit target
+  // can be sized to match the body. A pixel bar is drawn several times wider than a dot, and
+  // sizing the hit area off the dot alone left the ends of a long bar unclickable.
+  const strip = stripGeometry(fixture, screen, r, mPerPx)
+  return (
+    <g opacity={dimmed ? 0.3 : 1}>
+      {/* Invisible hit target: a 7px dot is far below the ~44px a finger
+          needs, and editing is enabled on tablets. */}
+      {interactive && (
+        strip ? (
+          <rect
+            x={strip.left - (FIXTURE_HIT_PX - FIXTURE_DOT_PX) * mPerPx}
+            y={strip.top - (FIXTURE_HIT_PX - FIXTURE_DOT_PX) * mPerPx}
+            width={strip.width + 2 * (FIXTURE_HIT_PX - FIXTURE_DOT_PX) * mPerPx}
+            height={strip.height + 2 * (FIXTURE_HIT_PX - FIXTURE_DOT_PX) * mPerPx}
+            fill="transparent"
+            pointerEvents="all"
+            style={{ cursor: bodyCursor(selected, editMode) }}
+            onPointerDown={onPick ? (e) => onPick(patch, e) : undefined}
+          />
+        ) : (
+          <circle
+            cx={screen.h}
+            cy={screen.v}
+            r={FIXTURE_HIT_PX * mPerPx}
+            fill="transparent"
+            pointerEvents="all"
+            style={{ cursor: bodyCursor(selected, editMode) }}
+            onPointerDown={onPick ? (e) => onPick(patch, e) : undefined}
+          />
+        )
+      )}
+      <FixtureAppearanceSource patch={patch} fixture={fixture} fixtureType={fixtureType}>
+        {({ color, intensity, segments }) => (
+          <FixtureBody
+            screen={screen}
+            r={r}
+            strip={strip}
+            color={color}
+            intensity={intensity}
+            segments={segments}
+            selected={selected}
+            inSelection={inSelection}
+          />
+        )}
+      </FixtureAppearanceSource>
+      {patch.stageHidden && (
+        <line
+          x1={screen.h - r}
+          y1={screen.v + r}
+          x2={screen.h + r}
+          y2={screen.v - r}
+          stroke="var(--color-background)"
+          strokeWidth={2}
+          vectorEffect="non-scaling-stroke"
+          pointerEvents="none"
+        />
+      )}
+      {labelled && (
+        <text
+          x={screen.h}
+          y={screen.v - r - 2 * mPerPx}
+          fontSize={LABEL_PX * mPerPx}
+          textAnchor="middle"
+          className={selected ? 'fill-foreground' : 'fill-muted-foreground'}
+          pointerEvents="none"
+        >
+          {patch.displayName || patch.key}
+        </text>
+      )}
+    </g>
+  )
+}
+
+export interface StripGeometry {
+  left: number
+  top: number
+  width: number
+  height: number
+  count: number
+}
+
+/**
+ * Where a pixel bar's strip sits, or null for a fixture that draws as a dot.
+ *
+ * Derived from the fixture's element-group descriptor rather than from a live appearance, so the
+ * hit target and the body agree on the shape without the hit target having to wait on DMX.
+ *
+ * The `count > 1` gate must stay in step with `FixtureAppearanceSource`'s, which is what decides
+ * whether an appearance carries `segments` at all — a disagreement would draw a strip-shaped hit
+ * target over a dot, or vice versa. `Stage2DShapes.test.ts` pins the two together.
+ */
+export function stripGeometry(
+  fixture: Fixture | undefined,
+  screen: ScreenPoint,
+  r: number,
+  mPerPx: number,
+): StripGeometry | null {
+  const count = findGroupColourSource(fixture)?.memberColourChannels.length ?? 0
+  if (count <= 1) return null
+  const width = Math.max(2 * r, count * SEGMENT_PX * mPerPx)
+  const height = 2 * r * STRIP_HEIGHT_RATIO
+  return { left: screen.h - width / 2, top: screen.v - height / 2, width, height, count }
+}
+
+/**
+ * The lit body: a dot, or a segmented strip for a pixel bar.
+ *
+ * Brightness is baked into the fill rather than applied as `fill-opacity`, so it composes with
+ * the group-filter dimming and the selection ring instead of fighting them.
+ */
+function FixtureBody({
+  screen,
+  r,
+  strip,
+  color,
+  intensity,
+  segments,
+  selected,
+  inSelection,
+}: {
+  screen: ScreenPoint
+  r: number
+  strip: StripGeometry | null
+  color: string
+  intensity: number
+  segments?: PixelSegment[]
+  selected: boolean
+  inSelection: boolean
+}) {
+  // Outline via a Tailwind class rather than a literal, so a pale tungsten dot stays visible
+  // against a light background. CSS beats the presentation attribute, hence the attribute is
+  // set *only* for the selection highlight — giving unselected fixtures a `stroke` here would
+  // silently kill that theme-aware outline.
+  const outline = {
+    className: inSelection ? undefined : 'stroke-foreground/40',
+    stroke: selected ? '#ffe082' : inSelection ? '#b08d2e' : undefined,
+    strokeWidth: selected ? 2.5 : inSelection ? 2 : 1,
+    vectorEffect: 'non-scaling-stroke' as const,
+    pointerEvents: 'none' as const,
+  }
+
+  if (strip && segments && segments.length > 1) {
+    const segW = strip.width / segments.length
+    return (
+      <>
+        {segments.map((seg, i) => (
+          <rect
+            key={i}
+            x={strip.left + i * segW}
+            y={strip.top}
+            // A sliver of overlap, so antialiasing doesn't draw a hairline of
+            // background between neighbouring pixels.
+            width={segW * 1.02}
+            height={strip.height}
+            fill={dimCssColour(seg.css, perceptualBrightness(seg.intensity, SEGMENT_FLOOR))}
+            pointerEvents="none"
+          />
+        ))}
+        <rect
+          x={strip.left}
+          y={strip.top}
+          width={strip.width}
+          height={strip.height}
+          fill="none"
+          {...outline}
+        />
+      </>
+    )
+  }
+
+  return (
+    <circle
+      cx={screen.h}
+      cy={screen.v}
+      r={r}
+      fill={dimCssColour(color, perceptualBrightness(intensity, BODY_FLOOR))}
+      {...outline}
+    />
+  )
+}

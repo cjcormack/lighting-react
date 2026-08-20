@@ -51,6 +51,8 @@ import { DEFAULT_STAGE_DIMS } from '../hooks/useProjectedPatches'
 import { DEFAULT_RIGGING_LENGTH_M } from '../components/stage3d/RiggingMeshes'
 import { StageViewMenu } from '../components/stage3d/StageViewMenu'
 import { useStageView } from '../components/stage3d/useStageView'
+import { setVisSource, useVisSource } from '../hooks/useVisSource'
+import { StageChannelSourceProvider } from '../hooks/useChannelSource'
 import { useModifierHeld } from '../components/stage3d/useShiftHeld'
 import { useSnapGrid, SNAP_STEPS_M, type SnapStep } from '../components/stage2d/useSnapGrid'
 import { Stage2DView } from '../components/stage2d/Stage2DView'
@@ -161,6 +163,7 @@ export function Stage() {
   const [panelCollapsed, setPanelCollapsed] = useState(false)
   const [gizmoModeManual, setGizmoModeManual] = useState<GizmoMode>('translate')
   const { flags: viewFlags, setFlag: setViewFlag } = useStageView()
+  const visSource = useVisSource()
   const isTabletOrLarger = useMediaQuery(SM_BREAKPOINT)
   // One snap preference for both views — see useSnapGrid on why Shift now
   // *disables* snapping rather than enabling it.
@@ -803,6 +806,8 @@ export function Stage() {
             flags={viewFlags}
             setFlag={setViewFlag}
             hide={mode === '3d' ? undefined : ['beamCones']}
+            visSource={visSource}
+            setVisSource={setVisSource}
           />
           {showEditToggle && (
             <Tooltip>
@@ -838,44 +843,49 @@ export function Stage() {
         </header>
         <main className="flex flex-1 min-h-0 overflow-hidden">
           <div className="flex flex-1 min-w-0 flex-col">
-            {mode === '3d' ? (
-              <Stage3D
-                projectId={projectId}
-                editMode={editingActive}
-                selection={selection}
-                placing={placing}
-                placementZ={placementZ}
-                view={viewFlags}
-                gizmoMode={gizmoMode}
-                snap={snap}
-                hidePatchSelectionInfo={showControlPanel}
-                onSelectionChange={handleSelectionChange}
-                onPlacementClick={handlePlacementClick}
-                onPatchPlacementChange={handlePatchPlacementChange}
-                onRegionPositionChange={handleRegionPositionChange}
-                onRiggingPositionChange={handleRiggingPositionChange}
-              />
-            ) : (
-              <Stage2DView
-                projectId={projectId}
-                projection={STAGE_PROJECTIONS[mode]}
-                selection={selection}
-                selectedKeys={sel.selectedKeys}
-                editMode={editingActive}
-                view={viewFlags}
-                snap={snap}
-                // A canvas click also lands tray-armed fixtures, so the view must
-                // treat it as a placement click even when no create is armed.
-                placing={placing ?? (armedKeys.size > 0 ? 'region' : null)}
-                placementDefault={placementDefault}
-                onSelectionChange={handleSelectionChange}
-                onMarqueeSelect={(refs, intent) => sel.selectMany(refs, intent)}
-                onPlacementClick={handlePlacementClick}
-                onPatchPlacementChange={handlePatchPlacementChange}
-                onRegionPositionChange={handleRegionPositionChange}
-                onRiggingPositionChange={handleRiggingPositionChange}
-              />
-            )}
+            {/* Only the canvas goes inside the vis-source provider. The docked
+                StageFixtureControlPanel below is a live editing surface and has to keep
+                reading real output whatever the selector is previewing. */}
+            <StageChannelSourceProvider>
+              {mode === '3d' ? (
+                <Stage3D
+                  projectId={projectId}
+                  editMode={editingActive}
+                  selection={selection}
+                  placing={placing}
+                  placementZ={placementZ}
+                  view={viewFlags}
+                  gizmoMode={gizmoMode}
+                  snap={snap}
+                  hidePatchSelectionInfo={showControlPanel}
+                  onSelectionChange={handleSelectionChange}
+                  onPlacementClick={handlePlacementClick}
+                  onPatchPlacementChange={handlePatchPlacementChange}
+                  onRegionPositionChange={handleRegionPositionChange}
+                  onRiggingPositionChange={handleRiggingPositionChange}
+                />
+              ) : (
+                <Stage2DView
+                  projectId={projectId}
+                  projection={STAGE_PROJECTIONS[mode]}
+                  selection={selection}
+                  selectedKeys={sel.selectedKeys}
+                  editMode={editingActive}
+                  view={viewFlags}
+                  snap={snap}
+                  // A canvas click also lands tray-armed fixtures, so the view must
+                  // treat it as a placement click even when no create is armed.
+                  placing={placing ?? (armedKeys.size > 0 ? 'region' : null)}
+                  placementDefault={placementDefault}
+                  onSelectionChange={handleSelectionChange}
+                  onMarqueeSelect={(refs, intent) => sel.selectMany(refs, intent)}
+                  onPlacementClick={handlePlacementClick}
+                  onPatchPlacementChange={handlePatchPlacementChange}
+                  onRegionPositionChange={handleRegionPositionChange}
+                  onRiggingPositionChange={handleRiggingPositionChange}
+                />
+              )}
+            </StageChannelSourceProvider>
             {editingActive && mode !== '3d' && (
               <UnplacedTray
                 unplaced={unplaced}

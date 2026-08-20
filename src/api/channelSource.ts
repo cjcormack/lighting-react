@@ -1,0 +1,202 @@
+import { lightingApi } from './lightingApi'
+import {
+  buildProgrammerChannelMap,
+  type DescriptorsByTarget,
+  type ResolvableEntry,
+  type SidebandChannel,
+} from '../lib/programmerChannels'
+import type { Subscription } from './subscription'
+
+/**
+ * A read-only source of DMX channel values, so a stage view can be pointed at something other
+ * than the wire.
+ *
+ * The stage renders final merged output, which is the wrong picture in Blind — the programmer is
+ * gated out of the merge, so the operator builds a look they cannot see. Rather than teaching every
+ * reader about the programmer, the readers take a `ChannelSource` and the *source* decides what a
+ * channel is worth. See `docs/stage-vis-engineering.md`.
+ *
+ * Deliberately no `getAll()`. `FixtureModel`'s per-frame beam director reads ~13 channels by key,
+ * and a source that had to compose a merged map would allocate one per fixture per frame;
+ * [ChannelSource.getByKey] keeps every source O(1) with no allocation.
+ */
+export interface ChannelSource {
+  get(universe: number, channelNo: number): number
+  /** Value for a `"universe:channelNo"` key; 0 when this source doesn't hold the channel. */
+  getByKey(key: string): number
+  subscribeToChannel(key: string, fn: (value: number) => void): Subscription
+}
+
+/**
+ * The wire: final merged DMX as the desk is transmitting it.
+ *
+ * `channelsApi.getAll()` hands back its own live map rather than a copy, so reading through it per
+ * key is a plain map lookup.
+ */
+export const outputChannelSource: ChannelSource = {
+  get: (universe, channelNo) => lightingApi.channels.get(universe, channelNo),
+  getByKey: (key) => lightingApi.channels.getAll().get(key) ?? 0,
+  subscribeToChannel: (key, fn) => lightingApi.channels.subscribeToChannel(key, fn),
+}
+
+/** A [ChannelSource] backed by a map this module owns, rather than by the wire. */
+export interface DerivedChannelSource extends ChannelSource {
+  /**
+   * Whether this source has an opinion about the channel at all.
+   *
+   * Distinct from `getByKey(key) !== 0`, and the distinction is load-bearing: the programmer
+   * legitimately holds a dimmer *at* 0, and treating that as "no opinion" would let the wire value
+   * show through in exactly the case blind most needs to preview.
+   */
+  holds(key: string): boolean
+  /** Recompute from the underlying state and notify whichever channels changed. */
+  refresh(): void
+  /** Drop upstream subscriptions. */
+  dispose(): void
+}
+
+/**
+ * Per-key fan-out for the derived sources.
+ *
+ * Notifying only the channels whose value actually moved is the whole point: a stage may hold
+ * hundreds of subscriptions, and waking all of them on every programmer event would make the
+ * per-channel split pointless — the same reasoning as `changedKeys` in `programmerWsApi.ts`.
+ */
+function createFanOut() {
+  let nextId = 1
+  const subscribers = new Map<string, Map<number, (value: number) => void>>()
+
+  return {
+    subscribe(key: string, fn: (value: number) => void): Subscription {
+      const id = nextId++
+      let forKey = subscribers.get(key)
+      if (!forKey) {
+        forKey = new Map()
+        subscribers.set(key, forKey)
+      }
+      const map = forKey
+      forKey.set(id, fn)
+      return {
+        unsubscribe: () => {
+          map.delete(id)
+          // Identity-checked before dropping the parent entry: an unsubscribe that runs twice
+          // would otherwise empty its own detached map, still see `size === 0`, and delete
+          // whatever map has since replaced it — silently killing every live subscriber on the
+          // channel, with no error. (`channelsApi.subscribeToChannel` sidesteps this by never
+          // dropping the parent entry at all.)
+          if (map.size === 0 && subscribers.get(key) === map) subscribers.delete(key)
+        },
+      }
+    },
+    /**
+     * Notify every key whose value *or presence* differs between the two maps.
+     *
+     * Presence matters as much as value, because the overlay source dispatches on `holds`, not on
+     * the value: a channel the programmer newly holds **at 0** reads 0 either way in the
+     * programmer-only source, but in the overlay it changes from the wire value to 0. Comparing
+     * values alone treats absent as 0, sees no change, and never wakes anyone — so a cue holding a
+     * dimmer at full would keep painting full after the operator zeroed it in a blind programmer,
+     * which is the exact case this feature exists to preview.
+     */
+    notifyChanged(before: ReadonlyMap<string, number>, after: ReadonlyMap<string, number>) {
+      for (const [key, value] of after) {
+        if (!before.has(key) || before.get(key) !== value) {
+          subscribers.get(key)?.forEach((fn) => fn(value))
+        }
+      }
+      // A key that vanished has dropped to 0. An entry being cleared is exactly as visible a
+      // change as one being set, and a subscriber that never hears about it keeps painting a
+      // value the programmer no longer holds.
+      for (const key of before.keys()) {
+        if (!after.has(key)) subscribers.get(key)?.forEach((fn) => fn(0))
+      }
+    },
+  }
+}
+
+/** The programmer state this module needs — narrowed so tests needn't build a whole api. */
+export interface ProgrammerChannelState {
+  entries: ReadonlyMap<string, ResolvableEntry>
+  channels: readonly SidebandChannel[]
+}
+
+export interface ProgrammerLike {
+  getState(): ProgrammerChannelState
+  subscribe(fn: () => void): Subscription
+}
+
+/**
+ * What the programmer alone is holding, as channel values.
+ *
+ * A channel the programmer doesn't hold reads **0**, which is the agreed reading of "programmer
+ * only": an empty programmer shows an empty stage, and a fixture given intensity but no position
+ * sits at pan/tilt 0 rather than borrowing a position from the wire.
+ *
+ * `getDescriptors` is a callback rather than a value because the patch can change under a live
+ * stage; call [DerivedChannelSource.refresh] once it starts returning something new.
+ *
+ * Latency: `programmer.state` lands on the backend's 100 ms provenance debounce, but the api echoes
+ * our *own* writes into `entries` optimistically (`applyLocalEntry`), so an operator's fader drag
+ * previews at input rate.
+ */
+export function createProgrammerChannelSource(
+  programmer: ProgrammerLike,
+  getDescriptors: () => DescriptorsByTarget,
+): DerivedChannelSource {
+  const fanOut = createFanOut()
+  let values = new Map<string, number>()
+
+  const rebuild = () => {
+    const state = programmer.getState()
+    const next = buildProgrammerChannelMap(state.entries.values(), state.channels, getDescriptors())
+    const before = values
+    values = next
+    fanOut.notifyChanged(before, next)
+  }
+
+  const upstream = programmer.subscribe(rebuild)
+  rebuild()
+
+  return {
+    get: (universe, channelNo) => values.get(`${universe}:${channelNo}`) ?? 0,
+    getByKey: (key) => values.get(key) ?? 0,
+    holds: (key) => values.has(key),
+    subscribeToChannel: fanOut.subscribe,
+    refresh: rebuild,
+    dispose: () => upstream.unsubscribe(),
+  }
+}
+
+/**
+ * `overlay` where it holds a channel, `base` everywhere else.
+ *
+ * This is "Output + Programmer": identical to Output unless Blind is engaged, because outside blind
+ * the programmer's values are already *in* the merged output. Which is why the menu says so —
+ * otherwise it reads as a setting that does nothing.
+ */
+export function createOverlayChannelSource(
+  base: ChannelSource,
+  overlay: Pick<DerivedChannelSource, 'getByKey' | 'holds' | 'subscribeToChannel'>,
+): ChannelSource {
+  const valueFor = (key: string, fallback: () => number) =>
+    overlay.holds(key) ? overlay.getByKey(key) : fallback()
+
+  return {
+    get: (universe, channelNo) =>
+      valueFor(`${universe}:${channelNo}`, () => base.get(universe, channelNo)),
+    getByKey: (key) => valueFor(key, () => base.getByKey(key)),
+    // Both upstreams matter: the overlay changing reveals or hides a value, and the base changing
+    // shows through wherever the overlay is silent.
+    subscribeToChannel: (key, fn) => {
+      const notify = () => fn(valueFor(key, () => base.getByKey(key)))
+      const overlaySub = overlay.subscribeToChannel(key, notify)
+      const baseSub = base.subscribeToChannel(key, notify)
+      return {
+        unsubscribe: () => {
+          overlaySub.unsubscribe()
+          baseSub.unsubscribe()
+        },
+      }
+    },
+  }
+}

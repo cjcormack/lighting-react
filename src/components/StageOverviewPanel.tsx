@@ -7,6 +7,7 @@ import { useViewedProject } from '../ProjectSwitcher'
 import { usePatchListQuery, usePatchGroupListQuery } from '../store/patches'
 import { useFixtureLookup } from '../hooks/useFixtureLookup'
 import { useProjectedPatches } from '../hooks/useProjectedPatches'
+import { StageChannelSourceProvider } from '../hooks/useChannelSource'
 import { StageMarker } from './stage/StageMarker'
 import { StageBackdrop } from './stage/StageBackdrop'
 import { chipButtonClassName } from './patches/chipButton'
@@ -110,37 +111,41 @@ export function StageOverviewPanel({
             ) : placedPatches.length === 0 ? (
               <EmptyState projectId={projectId} />
             ) : (
-              <StageBackdrop className={STAGE_CANVAS_HEIGHT}>
-                {placedPatches.map(({ patch, leftPct, topPct }) => {
-                  const fixture = fixtureByKey.get(patch.key)
-                  const fixtureType = fixture
-                    ? typeByKey.get(fixture.typeKey)
-                    : undefined
-                  const matchesFilter =
-                    groupFilter == null ||
-                    patch.groups.some((g) => g.id === groupFilter)
-                  return (
-                    <button
-                      key={patch.id}
-                      type="button"
-                      onClick={() => onFixtureClick(patch.key)}
-                      className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer focus:outline-none"
-                      style={{
-                        left: `${leftPct}%`,
-                        top: `${topPct}%`,
-                      }}
-                    >
-                      <StageMarker
-                        patch={patch}
-                        fixture={fixture}
-                        fixtureType={fixtureType}
-                        selected={selectedFixtureKey === patch.key}
-                        dimmed={!matchesFilter}
-                      />
-                    </button>
-                  )
-                })}
-              </StageBackdrop>
+              <StageChannelSourceProvider>
+                {/* Follows the same vis source the Stage route's View menu sets, so the two
+                    pictures agree whenever they are on screen together. */}
+                <StageBackdrop className={STAGE_CANVAS_HEIGHT}>
+                  {placedPatches.map(({ patch, leftPct, topPct }) => {
+                    const fixture = fixtureByKey.get(patch.key)
+                    const fixtureType = fixture
+                      ? typeByKey.get(fixture.typeKey)
+                      : undefined
+                    const matchesFilter =
+                      groupFilter == null ||
+                      patch.groups.some((g) => g.id === groupFilter)
+                    return (
+                      <button
+                        key={patch.id}
+                        type="button"
+                        onClick={() => onFixtureClick(patch.key)}
+                        className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer focus:outline-none"
+                        style={{
+                          left: `${leftPct}%`,
+                          top: `${topPct}%`,
+                        }}
+                      >
+                        <StageMarker
+                          patch={patch}
+                          fixture={fixture}
+                          fixtureType={fixtureType}
+                          selected={selectedFixtureKey === patch.key}
+                          dimmed={!matchesFilter}
+                        />
+                      </button>
+                    )
+                  })}
+                </StageBackdrop>
+              </StageChannelSourceProvider>
             )}
           </div>
         </div>

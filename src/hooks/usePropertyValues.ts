@@ -13,6 +13,8 @@ import {
 } from '../components/fx/colourUtils'
 import { computeCombinedCss } from '../lib/colourMath'
 import { serializeLevel } from '../lib/programmerValue'
+import { outputChannelSource, type ChannelSource } from '../api/channelSource'
+import { useChannelSource } from './useChannelSource'
 import type {
   ChannelRef,
   SliderPropertyDescriptor,
@@ -26,19 +28,33 @@ export function channelKey(ref: ChannelRef): string {
   return `${ref.universe}:${ref.channelNo}`
 }
 
-// Get a single channel value
-export function getChannelValue(channel: ChannelRef): number {
-  return lightingApi.channels.get(channel.universe, channel.channelNo)
+/**
+ * Read one channel from `source`.
+ *
+ * The default is the wire, so every caller with no interest in vis sources — the fixtures sheet,
+ * the busking pads, the cue editor — keeps reading real output unchanged. The stage views pass
+ * whatever their [useChannelSource] context gives them. See `docs/stage-vis-engineering.md`.
+ *
+ * This and [subscribeToChannels] are the single home for the two operations: `useGroupPropertyValues`
+ * and `useVirtualDimmer` used to keep private copies, which would have meant three places to thread
+ * a source through.
+ */
+export function getChannelValue(
+  channel: ChannelRef,
+  source: ChannelSource = outputChannelSource
+): number {
+  return source.get(channel.universe, channel.channelNo)
 }
 
 // Subscribe to channel updates for specific channels
 export function subscribeToChannels(
   channels: ChannelRef[],
-  callback: () => void
+  callback: () => void,
+  source: ChannelSource = outputChannelSource
 ): () => void {
   const subscriptions = channels.map((ch) => {
     const key = channelKey(ch)
-    return lightingApi.channels.subscribeToChannel(key, callback)
+    return source.subscribeToChannel(key, callback)
   })
 
   return () => subscriptions.forEach((sub) => sub.unsubscribe())
@@ -68,19 +84,20 @@ function parsePositionCanonical(value: string | undefined): { pan: number; tilt:
 export function useSliderValue(property: SliderPropertyDescriptor): number {
   const ctx = useEditorContext()
   const draftValue = usePresetDraftValue(property.name)
+  const source = useChannelSource()
   // ChannelRef is exactly {universe, channelNo}, so these two fully identify the
   // channel. Keying off them rather than the enclosing descriptor avoids
   // resubscribing every time a caller hands over a fresh property object.
   const { universe, channelNo } = property.channel
 
   const subscribe = useCallback(
-    (callback: () => void) => subscribeToChannels([{ universe, channelNo }], callback),
-    [universe, channelNo]
+    (callback: () => void) => subscribeToChannels([{ universe, channelNo }], callback, source),
+    [universe, channelNo, source]
   )
 
   const getSnapshot = useCallback(
-    () => getChannelValue({ universe, channelNo }),
-    [universe, channelNo]
+    () => getChannelValue({ universe, channelNo }, source),
+    [universe, channelNo, source]
   )
 
   const liveValue = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
@@ -140,6 +157,7 @@ function parseColourFromDraft(
 export function useColourValue(property: ColourPropertyDescriptor): ColourValueResult {
   const ctx = useEditorContext()
   const draftValue = usePresetDraftValue(property.name)
+  const source = useChannelSource()
   const cachedRef = useRef<ColourValueResult | null>(null)
 
   const channels = useMemo(() => {
@@ -155,17 +173,17 @@ export function useColourValue(property: ColourPropertyDescriptor): ColourValueR
   }, [property])
 
   const subscribe = useCallback(
-    (callback: () => void) => subscribeToChannels(channels, callback),
-    [channels]
+    (callback: () => void) => subscribeToChannels(channels, callback, source),
+    [channels, source]
   )
 
   const getSnapshot = useCallback((): ColourValueResult => {
-    const r = getChannelValue(property.redChannel)
-    const g = getChannelValue(property.greenChannel)
-    const b = getChannelValue(property.blueChannel)
-    const w = property.whiteChannel ? getChannelValue(property.whiteChannel) : undefined
-    const a = property.amberChannel ? getChannelValue(property.amberChannel) : undefined
-    const uv = property.uvChannel ? getChannelValue(property.uvChannel) : undefined
+    const r = getChannelValue(property.redChannel, source)
+    const g = getChannelValue(property.greenChannel, source)
+    const b = getChannelValue(property.blueChannel, source)
+    const w = property.whiteChannel ? getChannelValue(property.whiteChannel, source) : undefined
+    const a = property.amberChannel ? getChannelValue(property.amberChannel, source) : undefined
+    const uv = property.uvChannel ? getChannelValue(property.uvChannel, source) : undefined
 
     // Check if values changed
     const cached = cachedRef.current
@@ -187,7 +205,7 @@ export function useColourValue(property: ColourPropertyDescriptor): ColourValueR
     const result = { r, g, b, w, a, uv, css, combinedCss }
     cachedRef.current = result
     return result
-  }, [property])
+  }, [property, source])
 
   const liveResult = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 
@@ -208,6 +226,7 @@ type PositionValueResult = {
 export function usePositionValue(property: PositionPropertyDescriptor): PositionValueResult {
   const ctx = useEditorContext()
   const draftValue = usePresetDraftValue(property.name)
+  const source = useChannelSource()
   const cachedRef = useRef<PositionValueResult | null>(null)
 
   const channels = useMemo(
@@ -216,13 +235,13 @@ export function usePositionValue(property: PositionPropertyDescriptor): Position
   )
 
   const subscribe = useCallback(
-    (callback: () => void) => subscribeToChannels(channels, callback),
-    [channels]
+    (callback: () => void) => subscribeToChannels(channels, callback, source),
+    [channels, source]
   )
 
   const getSnapshot = useCallback((): PositionValueResult => {
-    const pan = getChannelValue(property.panChannel)
-    const tilt = getChannelValue(property.tiltChannel)
+    const pan = getChannelValue(property.panChannel, source)
+    const tilt = getChannelValue(property.tiltChannel, source)
 
     // Check if values changed
     const cached = cachedRef.current
@@ -239,7 +258,7 @@ export function usePositionValue(property: PositionPropertyDescriptor): Position
     const result = { pan, tilt, panNormalized, tiltNormalized }
     cachedRef.current = result
     return result
-  }, [property])
+  }, [property, source])
 
   const liveResult = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 
@@ -283,17 +302,18 @@ export function resolveSettingOption<O extends { level: number }>(
 export function useSettingValue(property: SettingPropertyDescriptor): SettingValueResult {
   const ctx = useEditorContext()
   const draftValue = usePresetDraftValue(property.name)
+  const source = useChannelSource()
   const cachedRef = useRef<SettingValueResult | null>(null)
   // See useSliderValue: the two ChannelRef fields fully identify the channel.
   const { universe, channelNo } = property.channel
 
   const subscribe = useCallback(
-    (callback: () => void) => subscribeToChannels([{ universe, channelNo }], callback),
-    [universe, channelNo]
+    (callback: () => void) => subscribeToChannels([{ universe, channelNo }], callback, source),
+    [universe, channelNo, source]
   )
 
   const getSnapshot = useCallback((): SettingValueResult => {
-    const level = getChannelValue(property.channel)
+    const level = getChannelValue(property.channel, source)
 
     // Check if value changed
     const cached = cachedRef.current
@@ -304,7 +324,7 @@ export function useSettingValue(property: SettingPropertyDescriptor): SettingVal
     const result = { level, option: resolveSettingOption(property.options, level) }
     cachedRef.current = result
     return result
-  }, [property])
+  }, [property, source])
 
   const liveResult = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 

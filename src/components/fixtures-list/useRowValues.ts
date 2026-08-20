@@ -254,7 +254,9 @@ export function useRowValues(cells: readonly RowCell[]): RowValues {
     // resolutions that produced them, so the cache is valid only while both
     // are unchanged — a descriptor change with identical channel values (a
     // repatch while idle) must not serve values computed from old options.
-    const signature = channels.map(getChannelValue)
+    // Wrapped rather than passed point-free: `getChannelValue` takes an optional channel
+    // source second, and `map` would hand it the array index.
+    const signature = channels.map((ch) => getChannelValue(ch))
     const cached = cachedRef.current
     if (cached && cached.cells === cells && signaturesEqual(cached.signature, signature)) {
       return cached.values

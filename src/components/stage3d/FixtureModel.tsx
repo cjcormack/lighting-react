@@ -15,7 +15,6 @@ import {
 } from 'three'
 import type { FixturePatch } from '../../api/patchApi'
 import type { RiggingDto } from '../../api/riggingApi'
-import { lightingApi } from '../../api/lightingApi'
 import {
   findColourSource,
   findDimmerProperty,
@@ -46,6 +45,8 @@ import {
   getChannelValue,
   resolveSettingOption,
 } from '../../hooks/usePropertyValues'
+import { useChannelSource } from '../../hooks/useChannelSource'
+import type { ChannelSource } from '../../api/channelSource'
 import { computeGroupColourValues } from '../../hooks/useGroupPropertyValues'
 import { colourFactor } from '../../hooks/useNormalizedIntensity'
 import {
@@ -494,8 +495,12 @@ const FINE_STEPS = 256
 // frame and this path is deliberately allocation-free (see the SCRATCH_*
 // constants above), so a fresh arrow function here would cost ~3k throwaway
 // closures a second on the 50-fixture profile harness.
-function readChannel(vals: Map<string, number>, key: string | null): number {
-  return key ? vals.get(key) ?? 0 : 0
+//
+// Reads by key off the ChannelSource rather than off a snapshot map, which is why
+// ChannelSource has `getByKey` and no `getAll`: a source that composes layers (Output +
+// Programmer) would have to allocate a merged map per fixture per frame to answer `getAll`.
+function readChannel(source: ChannelSource, key: string | null): number {
+  return key ? source.getByKey(key) : 0
 }
 
 function combineFine(
@@ -538,6 +543,9 @@ function useBeamDirector({
   regionGeometry,
   colorStateRef,
 }: BeamDirectorOpts) {
+  const source = useChannelSource()
+  const sourceRef = useRef(source)
+  sourceRef.current = source
   // Pan/tilt feed geometry that's recomputed every frame anyway (TransformControls
   // can move the group mid-drag), so read them straight from the live channel
   // store in the frame loop rather than via React subscriptions — same reasoning
@@ -593,12 +601,15 @@ function useBeamDirector({
 
   useFrame((state, delta) => {
     const elapsed = state.clock.elapsedTime
-    const vals = lightingApi.channels.getAll()
-    const panRaw = readChannel(vals, beamKeys.pan)
-    const tiltRaw = readChannel(vals, beamKeys.tilt)
+    // Through a ref, not the closed-over value: the frame callback outlives the render that
+    // created it, and flipping the vis source must take effect on the next frame rather than
+    // waiting for whatever re-registers useFrame.
+    const channelSource = sourceRef.current
+    const panRaw = readChannel(channelSource, beamKeys.pan)
+    const tiltRaw = readChannel(channelSource, beamKeys.tilt)
 
-    const panCombined = combineFine(panProp, panRaw, panFineProp, readChannel(vals, beamKeys.panFine))
-    const tiltCombined = combineFine(tiltProp, tiltRaw, tiltFineProp, readChannel(vals, beamKeys.tiltFine))
+    const panCombined = combineFine(panProp, panRaw, panFineProp, readChannel(channelSource, beamKeys.panFine))
+    const tiltCombined = combineFine(tiltProp, tiltRaw, tiltFineProp, readChannel(channelSource, beamKeys.tiltFine))
 
     // Signed about each axis's own centre. No base angles here: baseYaw and
     // basePitch are the body's mount orientation and are carried by the body
@@ -608,7 +619,7 @@ function useBeamDirector({
 
     // A movement macro is an offset on top of the live pan/tilt, so both the
     // head model and the beam pick it up — they read from the same two values.
-    const moveMacro = resolveMacroIndex(moveMacroProp, readChannel(vals, beamKeys.moveMacro))
+    const moveMacro = resolveMacroIndex(moveMacroProp, readChannel(channelSource, beamKeys.moveMacro))
     if (moveMacro > 0) {
       evalMovementMacro(moveMacro, elapsed, SCRATCH_MOVE_MACRO)
       panDeg += SCRATCH_MOVE_MACRO.panDeg
@@ -637,7 +648,7 @@ function useBeamDirector({
     // colour, never back into colorState: that field belongs to ColourSync, and
     // folding the macro in would leave the fixture permanently tinted once the
     // macro stops.
-    const ledMacro = resolveMacroIndex(ledMacroProp, readChannel(vals, beamKeys.ledMacro))
+    const ledMacro = resolveMacroIndex(ledMacroProp, readChannel(channelSource, beamKeys.ledMacro))
     let beamColor = colorState.color
     let poolOpacity = colorState.poolOpacity
     let coneOpacity = colorState.coneOpacity
@@ -674,7 +685,7 @@ function useBeamDirector({
     // as-is: on a ZOOM slider degMin/degMax are the beam angle at each end, and
     // it returns null when the fixture declares no range (Robe, Source 4), which
     // falls back to the patch value.
-    const zoomDeg = zoomProp ? dmxToDegrees(readChannel(vals, beamKeys.zoom), zoomProp) : null
+    const zoomDeg = zoomProp ? dmxToDegrees(readChannel(channelSource, beamKeys.zoom), zoomProp) : null
     const beamDeg = zoomDeg ?? baseBeamDeg
     const geom = geomRef.current
     if (beamDeg !== geom.beamDeg) {
@@ -691,19 +702,19 @@ function useBeamDirector({
     // pools of fixtures nobody touched — a Source 4 in an existing show would
     // render crisper than it did yesterday with no DMX change. beamEdge is
     // documented as anticipatory; switching it on is its own decision.
-    const focusParam = resolveFocusParam(focusProp, readChannel(vals, beamKeys.focus))
+    const focusParam = resolveFocusParam(focusProp, readChannel(channelSource, beamKeys.focus))
     const edge = focusParam ?? 0
     const focusDist = resolveFocusDistance(focusParam, BEAM_LENGTH)
 
     // A fixture can carry two gobo wheels in series (Robe: static + rotating);
     // the renderer projects one pattern, so draw whichever wheel currently
     // selects one — descriptor order decides only the tie when both do.
-    let goboSlot = resolveGoboSlot(goboProp, readChannel(vals, beamKeys.gobo))
+    let goboSlot = resolveGoboSlot(goboProp, readChannel(channelSource, beamKeys.gobo))
     if (goboSlot === 0 && goboProp2) {
-      goboSlot = resolveGoboSlot(goboProp2, readChannel(vals, beamKeys.gobo2))
+      goboSlot = resolveGoboSlot(goboProp2, readChannel(channelSource, beamKeys.gobo2))
     }
     if (goboSlot > 0) {
-      const spin = resolveGoboSpin(goboRotProp, readChannel(vals, beamKeys.goboRot))
+      const spin = resolveGoboSpin(goboRotProp, readChannel(channelSource, beamKeys.goboRot))
       if (spin !== 0) {
         // Wrapped, not free-running: an unbounded accumulator loses float
         // precision within the hour and the pattern starts visibly stepping.
@@ -744,13 +755,13 @@ function useBeamDirector({
     // and all — so each engaged facet takes one lobe of the slot's block and
     // gets the complete write set below. Disengaged, lobe 0 is the beam.
     // resolvePrismFacets clamps to MAX_PRISM_LOBES, so this indexes in-block.
-    const prismFacets = resolvePrismFacets(prismProp, readChannel(vals, beamKeys.prism))
+    const prismFacets = resolvePrismFacets(prismProp, readChannel(channelSource, beamKeys.prism))
     if (prismFacets > 0) {
       const prismSpin = resolvePrismSpin(
         prismRotProp,
-        readChannel(vals, beamKeys.prismRot),
+        readChannel(channelSource, beamKeys.prismRot),
         prismProp,
-        readChannel(vals, beamKeys.prism),
+        readChannel(channelSource, beamKeys.prism),
       )
       if (prismSpin !== 0) {
         prismAngleRef.current =
@@ -1147,18 +1158,24 @@ function applyColour(hex: string, intensity: number, refs: ColourApplyRefs) {
   state.poolOpacity = 0.55 * intensity
 }
 
-// 0..1 dimmer factor from live DMX; 1 when the fixture has no dimmer ("always
-// on"). Mirrors useNormalizedIntensity but reads the store imperatively.
-function liveDimmerFactor(dimmerProp: SliderPropertyDescriptor | undefined): number {
+// 0..1 dimmer factor from the given channel source; 1 when the fixture has no dimmer
+// ("always on"). Mirrors useNormalizedIntensity but reads imperatively.
+function liveDimmerFactor(
+  dimmerProp: SliderPropertyDescriptor | undefined,
+  source: ChannelSource,
+): number {
   if (!dimmerProp) return 1
-  return Math.max(0, Math.min(1, getChannelValue(dimmerProp.channel) / 255))
+  return Math.max(0, Math.min(1, getChannelValue(dimmerProp.channel, source) / 255))
 }
 
-// Subscribe to live DMX for `channels` and run `apply` on every change — plus
-// once on mount and after each (rare) re-render, so descriptor/gel/dimmer-prop
-// changes also take effect. `channels` must be referentially stable across
-// renders or the subscription will thrash.
-function useLiveColour(channels: ChannelRef[], apply: () => void) {
+// Subscribe to `channels` on `source` and run `apply` on every change — plus once on mount
+// and after each (rare) re-render, so descriptor/gel/dimmer-prop changes also take effect.
+// `channels` must be referentially stable across renders or the subscription will thrash.
+//
+// `source` is passed in rather than read here because `apply` has to read the same one this
+// subscribes to, and the caller builds `apply`. A change of source re-subscribes and re-applies,
+// which is what repaints the scene on a vis-source flip.
+function useLiveColour(channels: ChannelRef[], apply: () => void, source: ChannelSource) {
   const applyRef = useRef(apply)
   applyRef.current = apply
   // Re-apply after every render. These components no longer subscribe through
@@ -1171,11 +1188,9 @@ function useLiveColour(channels: ChannelRef[], apply: () => void) {
   // React entirely so beat-rate changes can't be dropped by the reconciler.
   useEffect(() => {
     const cb = () => applyRef.current()
-    const subs = channels.map((ch) =>
-      lightingApi.channels.subscribeToChannel(channelKey(ch), cb),
-    )
+    const subs = channels.map((ch) => source.subscribeToChannel(channelKey(ch), cb))
     return () => subs.forEach((s) => s.unsubscribe())
-  }, [channels])
+  }, [channels, source])
 }
 
 function ColourBeamSync({
@@ -1183,6 +1198,7 @@ function ColourBeamSync({
   dimmerProp,
   ...refs
 }: ColourSyncBaseProps & { colourProp: ColourPropertyDescriptor }) {
+  const source = useChannelSource()
   const channels = useMemo(() => {
     const cs: ChannelRef[] = [
       colourProp.redChannel,
@@ -1196,19 +1212,27 @@ function ColourBeamSync({
     return cs
   }, [colourProp, dimmerProp])
 
-  useLiveColour(channels, () => {
-    const r = getChannelValue(colourProp.redChannel)
-    const g = getChannelValue(colourProp.greenChannel)
-    const b = getChannelValue(colourProp.blueChannel)
-    const w = colourProp.whiteChannel ? getChannelValue(colourProp.whiteChannel) : undefined
-    const a = colourProp.amberChannel ? getChannelValue(colourProp.amberChannel) : undefined
-    const uv = colourProp.uvChannel ? getChannelValue(colourProp.uvChannel) : undefined
-    // Effective intensity = dimmer × colour so a colour-only fixture at RGB 0
-    // reads as dark rather than beaming at full. Hue is normalised to full so a
-    // dimmerless fixture at r:20 shows dim orange (via the level) not near-black.
-    const intensity = liveDimmerFactor(dimmerProp) * colourFactor(r, g, b, w, a, uv)
-    applyColour(computeNormalizedHueCss(r, g, b, w, a, uv), intensity, refs)
-  })
+  useLiveColour(
+    channels,
+    () => {
+      const r = getChannelValue(colourProp.redChannel, source)
+      const g = getChannelValue(colourProp.greenChannel, source)
+      const b = getChannelValue(colourProp.blueChannel, source)
+      const w = colourProp.whiteChannel
+        ? getChannelValue(colourProp.whiteChannel, source)
+        : undefined
+      const a = colourProp.amberChannel
+        ? getChannelValue(colourProp.amberChannel, source)
+        : undefined
+      const uv = colourProp.uvChannel ? getChannelValue(colourProp.uvChannel, source) : undefined
+      // Effective intensity = dimmer × colour so a colour-only fixture at RGB 0
+      // reads as dark rather than beaming at full. Hue is normalised to full so a
+      // dimmerless fixture at r:20 shows dim orange (via the level) not near-black.
+      const intensity = liveDimmerFactor(dimmerProp, source) * colourFactor(r, g, b, w, a, uv)
+      applyColour(computeNormalizedHueCss(r, g, b, w, a, uv), intensity, refs)
+    },
+    source,
+  )
   return null
 }
 
@@ -1217,20 +1241,25 @@ function SettingColourBeamSync({
   dimmerProp,
   ...refs
 }: ColourSyncBaseProps & { settingProp: SettingPropertyDescriptor }) {
+  const source = useChannelSource()
   const channels = useMemo(() => {
     const cs: ChannelRef[] = [settingProp.channel]
     if (dimmerProp) cs.push(dimmerProp.channel)
     return cs
   }, [settingProp, dimmerProp])
 
-  useLiveColour(channels, () => {
-    const level = getChannelValue(settingProp.channel)
-    const preview = resolveSettingOption(settingProp.options, level)?.colourPreview
-    // A selected colour preset reads as fully on; no selection ⇒ dark. A separate
-    // dimmer at 0 still wins via the dimmer factor.
-    const intensity = liveDimmerFactor(dimmerProp) * (preview ? 1 : 0)
-    applyColour(preview ?? '#888888', intensity, refs)
-  })
+  useLiveColour(
+    channels,
+    () => {
+      const level = getChannelValue(settingProp.channel, source)
+      const preview = resolveSettingOption(settingProp.options, level)?.colourPreview
+      // A selected colour preset reads as fully on; no selection ⇒ dark. A separate
+      // dimmer at 0 still wins via the dimmer factor.
+      const intensity = liveDimmerFactor(dimmerProp, source) * (preview ? 1 : 0)
+      applyColour(preview ?? '#888888', intensity, refs)
+    },
+    source,
+  )
   return null
 }
 
@@ -1242,10 +1271,15 @@ function FixedColourBeamSync({
   // No colour channels (gel / dimmer-only), so colourFactor is implicitly 1 —
   // intensity is the dimmer alone. A gel/setting fixture with no dimmer beams
   // full by design (no brightness signal to gate on).
+  const source = useChannelSource()
   const channels = useMemo(() => (dimmerProp ? [dimmerProp.channel] : []), [dimmerProp])
-  useLiveColour(channels, () => {
-    applyColour(hex, liveDimmerFactor(dimmerProp), refs)
-  })
+  useLiveColour(
+    channels,
+    () => {
+      applyColour(hex, liveDimmerFactor(dimmerProp, source), refs)
+    },
+    source,
+  )
   return null
 }
 
@@ -1258,6 +1292,7 @@ function MultiPixelColourSync({
   pixelColorsRef,
   pixelWashStateRef,
 }: ColourSyncBaseProps & { groupColour: GroupColourPropertyDescriptor }) {
+  const source = useChannelSource()
   const channels = useMemo(() => {
     const cs: ChannelRef[] = []
     groupColour.memberColourChannels.forEach((m) => {
@@ -1270,45 +1305,49 @@ function MultiPixelColourSync({
     return cs
   }, [groupColour, dimmerProp])
 
-  useLiveColour(channels, () => {
-    const group = computeGroupColourValues(groupColour)
-    const dimmerFactor = liveDimmerFactor(dimmerProp)
-    const writer = pixelColorsRef.current
-    const wash = pixelWashStateRef?.current ?? null
-    // reset() first so a pixel that just dropped to zero is explicitly driven
-    // dark — imperative material writes get no React default.
-    if (writer) writer.reset()
-    for (let i = 0; i < group.members.length; i++) {
-      const m = group.members[i]
-      // Full-brightness hue so a dim pixel still reads as its colour; the level
-      // stays LINEAR because it feeds the LIGHT_OFF_OPACITY wash cull below.
-      const ci = colourFactor(m.r, m.g, m.b, m.w, m.a, m.uv) * dimmerFactor
-      const hue = computeNormalizedHue(m.r, m.g, m.b, m.w, m.a, m.uv)
-      if (writer) {
-        PIXEL_COLOR.set(`rgb(${hue.r}, ${hue.g}, ${hue.b})`)
-        writer.setPixel(i, PIXEL_COLOR, ci)
+  useLiveColour(
+    channels,
+    () => {
+      const group = computeGroupColourValues(groupColour, source)
+      const dimmerFactor = liveDimmerFactor(dimmerProp, source)
+      const writer = pixelColorsRef.current
+      const wash = pixelWashStateRef?.current ?? null
+      // reset() first so a pixel that just dropped to zero is explicitly driven
+      // dark — imperative material writes get no React default.
+      if (writer) writer.reset()
+      for (let i = 0; i < group.members.length; i++) {
+        const m = group.members[i]
+        // Full-brightness hue so a dim pixel still reads as its colour; the level
+        // stays LINEAR because it feeds the LIGHT_OFF_OPACITY wash cull below.
+        const ci = colourFactor(m.r, m.g, m.b, m.w, m.a, m.uv) * dimmerFactor
+        const hue = computeNormalizedHue(m.r, m.g, m.b, m.w, m.a, m.uv)
+        if (writer) {
+          PIXEL_COLOR.set(`rgb(${hue.r}, ${hue.g}, ${hue.b})`)
+          writer.setPixel(i, PIXEL_COLOR, ci)
+        }
+        if (wash && i < wash.count) {
+          wash.colors[i * 3] = hue.r / 255
+          wash.colors[i * 3 + 1] = hue.g / 255
+          wash.colors[i * 3 + 2] = hue.b / 255
+          wash.intensities[i] = ci
+        }
       }
-      if (wash && i < wash.count) {
-        wash.colors[i * 3] = hue.r / 255
-        wash.colors[i * 3 + 1] = hue.g / 255
-        wash.colors[i * 3 + 2] = hue.b / 255
-        wash.intensities[i] = ci
+      // Zero any wash pixels past the live member count (mode change shrinking it).
+      if (wash) {
+        for (let i = group.members.length; i < wash.count; i++) wash.intensities[i] = 0
       }
-    }
-    // Zero any wash pixels past the live member count (mode change shrinking it).
-    if (wash) {
-      for (let i = group.members.length; i < wash.count; i++) wash.intensities[i] = 0
-    }
-    // Aggregate beam state — only consumed when a multi-element fixture also
-    // projects an emitter beam (beamShape ≠ NONE). Strips render per-head glows
-    // instead, so this is dormant for them.
-    const eff = group.beamIntensity * dimmerFactor
-    const beamHue = computeNormalizedHue(group.beamR, group.beamG, group.beamB)
-    const state = colorStateRef.current
-    state.color.set(`rgb(${beamHue.r}, ${beamHue.g}, ${beamHue.b})`)
-    state.coneOpacity = 0.32 * eff
-    state.poolOpacity = 0.55 * eff
-  })
+      // Aggregate beam state — only consumed when a multi-element fixture also
+      // projects an emitter beam (beamShape ≠ NONE). Strips render per-head glows
+      // instead, so this is dormant for them.
+      const eff = group.beamIntensity * dimmerFactor
+      const beamHue = computeNormalizedHue(group.beamR, group.beamG, group.beamB)
+      const state = colorStateRef.current
+      state.color.set(`rgb(${beamHue.r}, ${beamHue.g}, ${beamHue.b})`)
+      state.coneOpacity = 0.32 * eff
+      state.poolOpacity = 0.55 * eff
+    },
+    source,
+  )
   return null
 }
 

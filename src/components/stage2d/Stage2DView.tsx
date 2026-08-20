@@ -1,8 +1,8 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { findGel } from '@/data/gels'
 import { useStageRegionListQuery } from '../../store/stageRegions'
 import { useRiggingListQuery } from '../../store/riggings'
 import { useProjectedPatches } from '../../hooks/useProjectedPatches'
+import { useFixtureLookup } from '../../hooks/useFixtureLookup'
 import { placementFromWorldLighting, worldPositionLighting } from '../../lib/stageCoords'
 import {
   DEFAULT_RIGGING_LENGTH_M,
@@ -60,8 +60,6 @@ const PAN_THRESHOLD_PX = 4
 const GUIDE_TOLERANCE_PX = 6
 /** How close a dragged fixture must come to a bar before it bolts onto it. */
 const PARENT_SNAP_PX = 12
-/** Warm tungsten — matches the DimmerOnlyMarker / MiniStage default. */
-const DEFAULT_FIXTURE_COLOUR = '#fff8d5'
 /** Stable default so an omitted `placementDefault` doesn't change identity. */
 const ORIGIN: LightingPoint = { x: 0, y: 0, z: 0 }
 
@@ -165,15 +163,10 @@ export function Stage2DView({
     panned: boolean
   } | null>(null)
 
-  const colourFor = useCallback((patch: FixturePatch) => {
-    // Gel colour only: live DMX colour needs StageMarker's per-colour-source hook
-    // dispatch, which can't be collapsed into one hook and so is deferred.
-    if (patch.gelCode) {
-      const gel = findGel(patch.gelCode)
-      if (gel) return gel.color
-    }
-    return DEFAULT_FIXTURE_COLOUR
-  }, [])
+  // Live colour and intensity, rather than the gel-only `colourFor` this used to pass down:
+  // each FixtureShape now resolves its own colour source through FixtureAppearanceSource, the
+  // same dispatch the 3D scene and the overview marker use.
+  const { fixtureByKey, typeByKey } = useFixtureLookup()
 
   const snapPoint = useCallback(
     (p: ScreenPoint): ScreenPoint => ({ h: snap.snapValue(p.h), v: snap.snapValue(p.v) }),
@@ -713,7 +706,8 @@ export function Stage2DView({
             mPerPx={svg.mPerPx}
             interactive
             editMode={editMode}
-            colourFor={colourFor}
+            fixtureByKey={fixtureByKey}
+            typeByKey={typeByKey}
             onPick={onFixturePointerDown}
           />
         )}

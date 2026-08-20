@@ -175,6 +175,20 @@ DMX fixture definitions - describes what channels a fixture uses and how to cont
 ### Channels
 Raw DMX channel control per universe. Shows all 512 channels with current values.
 
+### Stage views
+
+Three surfaces render live fixture state: the 3D canvas, the 2D Plan/Front/Side plot, and the
+`StageOverviewPanel` mini-stage. All three read through a **`ChannelSource`** rather than
+`lightingApi.channels` directly, so the operator can point them at Output / Output + Programmer /
+Programmer only — which is what makes Blind previewable. Colour and intensity come from one shared
+colour-source dispatch (`components/fixtures/fixtureAppearance.tsx`); the 3D path keeps a separate
+imperative copy on purpose.
+
+See [`docs/stage-vis-engineering.md`](docs/stage-vis-engineering.md). Read it before touching a
+stage read path, adding a source, or relying on what `ProgrammerState.channels` means — that field
+is the backend's channel *sideband*, not the programmer's channel output, and mistaking the two is
+the bug that doc exists to prevent.
+
 ### Palettes
 
 Named, typed (INTENSITY / POSITION / COLOUR / BEAM) collections of **per-fixture**

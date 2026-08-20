@@ -3,10 +3,12 @@ import { lightingApi } from '../api/lightingApi'
 import { useEditorContext } from '../components/lighting-editor/EditorContext'
 import { usePresetDraft } from '../components/presets/PresetDraftContext'
 import { rgbToHex, serializeExtendedColour } from '../components/fx/colourUtils'
-import { resolveSettingOption } from './usePropertyValues'
+import { getChannelValue, resolveSettingOption, subscribeToChannels } from './usePropertyValues'
+import { useChannelSource } from './useChannelSource'
 import { colourFactor } from './useNormalizedIntensity'
 import { foldChannels } from '../lib/colourMath'
 import { serializeLevel } from '../lib/programmerValue'
+import { outputChannelSource, type ChannelSource } from '../api/channelSource'
 import type { ChannelRef } from '../store/fixtures'
 import type {
   GroupSliderPropertyDescriptor,
@@ -27,28 +29,9 @@ function cueEditWriteChannel(cueId: number, universe: number, channelNo: number,
   })
 }
 
-// Helper to create channel key
-function channelKey(ref: ChannelRef): string {
-  return `${ref.universe}:${ref.channelNo}`
-}
-
-// Get a single channel value
-function getChannelValue(channel: ChannelRef): number {
-  return lightingApi.channels.get(channel.universe, channel.channelNo)
-}
-
-// Subscribe to channel updates for specific channels
-function subscribeToChannels(
-  channels: ChannelRef[],
-  callback: () => void
-): () => void {
-  const subscriptions = channels.map((ch) => {
-    const key = channelKey(ch)
-    return lightingApi.channels.subscribeToChannel(key, callback)
-  })
-
-  return () => subscriptions.forEach((sub) => sub.unsubscribe())
-}
+// `channelKey` / `getChannelValue` / `subscribeToChannels` used to be private copies here.
+// They now come from usePropertyValues, so there is one place to thread a ChannelSource
+// through rather than three.
 
 // === Slider Group Values ===
 
@@ -68,14 +51,17 @@ export function useGroupSliderValues(
   property: GroupSliderPropertyDescriptor
 ): GroupSliderValueResult {
   const cachedRef = useRef<GroupSliderValueResult | null>(null)
+  const source = useChannelSource()
 
   const subscribe = useCallback(
-    (callback: () => void) => subscribeToChannels(property.memberChannels, callback),
-    [property.memberChannels]
+    (callback: () => void) => subscribeToChannels(property.memberChannels, callback, source),
+    [property.memberChannels, source]
   )
 
   const getSnapshot = useCallback((): GroupSliderValueResult => {
-    const values = property.memberChannels.map(getChannelValue)
+    // Wrapped rather than point-free: `getChannelValue` takes an optional source second and
+    // `map` would hand it the array index.
+    const values = property.memberChannels.map((ch) => getChannelValue(ch, source))
 
     if (values.length === 0) {
       return { min: 0, max: 0, isUniform: true, displayText: '0%', values: [] }
@@ -104,7 +90,7 @@ export function useGroupSliderValues(
     const result = { min, max, isUniform, displayText, values }
     cachedRef.current = result
     return result
-  }, [property.memberChannels])
+  }, [property.memberChannels, source])
 
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
@@ -190,18 +176,22 @@ export type GroupColourValueResult = {
  * member and returns per-member colours plus the aggregate beam hue/level.
  * Exported so the 3D stage can recompute the same values imperatively from its
  * channel subscription, bypassing React render/effect on the hot path.
+ *
+ * `source` defaults to the wire; the stage views pass the source their vis-source
+ * selection resolved to.
  */
 export function computeGroupColourValues(
-  property: GroupColourPropertyDescriptor
+  property: GroupColourPropertyDescriptor,
+  source: ChannelSource = outputChannelSource
 ): GroupColourValueResult {
   const members = property.memberColourChannels.map((m) => ({
     fixtureKey: m.fixtureKey,
-    r: getChannelValue(m.redChannel),
-    g: getChannelValue(m.greenChannel),
-    b: getChannelValue(m.blueChannel),
-    w: m.whiteChannel ? getChannelValue(m.whiteChannel) : undefined,
-    a: m.amberChannel ? getChannelValue(m.amberChannel) : undefined,
-    uv: m.uvChannel ? getChannelValue(m.uvChannel) : undefined,
+    r: getChannelValue(m.redChannel, source),
+    g: getChannelValue(m.greenChannel, source),
+    b: getChannelValue(m.blueChannel, source),
+    w: m.whiteChannel ? getChannelValue(m.whiteChannel, source) : undefined,
+    a: m.amberChannel ? getChannelValue(m.amberChannel, source) : undefined,
+    uv: m.uvChannel ? getChannelValue(m.uvChannel, source) : undefined,
   }))
 
   if (members.length === 0) {
@@ -305,6 +295,7 @@ export function useGroupColourValues(
   property: GroupColourPropertyDescriptor
 ): GroupColourValueResult {
   const cachedRef = useRef<GroupColourValueResult | null>(null)
+  const source = useChannelSource()
 
   const allChannels = useMemo(() => {
     const channels: ChannelRef[] = []
@@ -318,12 +309,12 @@ export function useGroupColourValues(
   }, [property.memberColourChannels])
 
   const subscribe = useCallback(
-    (callback: () => void) => subscribeToChannels(allChannels, callback),
-    [allChannels]
+    (callback: () => void) => subscribeToChannels(allChannels, callback, source),
+    [allChannels, source]
   )
 
   const getSnapshot = useCallback((): GroupColourValueResult => {
-    const result = computeGroupColourValues(property)
+    const result = computeGroupColourValues(property, source)
 
     // Return the cached object identity when nothing observable changed, so
     // useSyncExternalStore doesn't re-render on equal-but-fresh snapshots.
@@ -347,7 +338,7 @@ export function useGroupColourValues(
 
     cachedRef.current = result
     return result
-  }, [property])
+  }, [property, source])
 
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
@@ -447,6 +438,7 @@ export function useGroupPositionValues(
   property: GroupPositionPropertyDescriptor
 ): GroupPositionValueResult {
   const cachedRef = useRef<GroupPositionValueResult | null>(null)
+  const source = useChannelSource()
 
   const allChannels = useMemo(() => {
     const channels: ChannelRef[] = []
@@ -457,15 +449,15 @@ export function useGroupPositionValues(
   }, [property.memberPositionChannels])
 
   const subscribe = useCallback(
-    (callback: () => void) => subscribeToChannels(allChannels, callback),
-    [allChannels]
+    (callback: () => void) => subscribeToChannels(allChannels, callback, source),
+    [allChannels, source]
   )
 
   const getSnapshot = useCallback((): GroupPositionValueResult => {
     const members = property.memberPositionChannels.map((m) => ({
       fixtureKey: m.fixtureKey,
-      pan: getChannelValue(m.panChannel),
-      tilt: getChannelValue(m.tiltChannel),
+      pan: getChannelValue(m.panChannel, source),
+      tilt: getChannelValue(m.tiltChannel, source),
     }))
 
     if (members.length === 0) {
@@ -520,7 +512,7 @@ export function useGroupPositionValues(
     }
     cachedRef.current = result
     return result
-  }, [property.memberPositionChannels])
+  }, [property.memberPositionChannels, source])
 
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
@@ -591,6 +583,7 @@ export function useGroupSettingValues(
   property: GroupSettingPropertyDescriptor
 ): GroupSettingValueResult {
   const cachedRef = useRef<GroupSettingValueResult | null>(null)
+  const source = useChannelSource()
 
   const allChannels = useMemo(
     () => property.memberChannels.map((m) => m.channel),
@@ -598,12 +591,12 @@ export function useGroupSettingValues(
   )
 
   const subscribe = useCallback(
-    (callback: () => void) => subscribeToChannels(allChannels, callback),
-    [allChannels]
+    (callback: () => void) => subscribeToChannels(allChannels, callback, source),
+    [allChannels, source]
   )
 
   const getSnapshot = useCallback((): GroupSettingValueResult => {
-    const values = property.memberChannels.map((m) => getChannelValue(m.channel))
+    const values = property.memberChannels.map((m) => getChannelValue(m.channel, source))
 
     if (values.length === 0) {
       return {
@@ -641,7 +634,7 @@ export function useGroupSettingValues(
     }
     cachedRef.current = result
     return result
-  }, [property.memberChannels, property.options])
+  }, [property.memberChannels, property.options, source])
 
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }

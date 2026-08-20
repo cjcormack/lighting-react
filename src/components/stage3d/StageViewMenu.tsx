@@ -5,9 +5,18 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  VIS_SOURCES,
+  VIS_SOURCE_HINTS,
+  VIS_SOURCE_LABELS,
+  isVisSource,
+  type VisSource,
+} from '@/hooks/useVisSource'
 import type { StageViewFlags } from './useStageView'
 
 interface StageViewMenuProps {
@@ -15,9 +24,18 @@ interface StageViewMenuProps {
   setFlag: <K extends keyof StageViewFlags>(key: K, value: boolean) => void
   /** Flags with no meaning in the current view — e.g. beam cones in a 2D plot. */
   hide?: ReadonlyArray<keyof StageViewFlags>
+  /** Which layer of the lighting cascade the stage draws. */
+  visSource: VisSource
+  setVisSource: (next: VisSource) => void
 }
 
-export function StageViewMenu({ flags, setFlag, hide }: StageViewMenuProps) {
+export function StageViewMenu({
+  flags,
+  setFlag,
+  hide,
+  visSource,
+  setVisSource,
+}: StageViewMenuProps) {
   const hidden = (key: keyof StageViewFlags) => hide?.includes(key) ?? false
   return (
     <DropdownMenu>
@@ -27,7 +45,27 @@ export function StageViewMenu({ flags, setFlag, hide }: StageViewMenuProps) {
           View
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
+      <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuLabel>Source</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuRadioGroup
+          value={visSource}
+          onValueChange={(v) => {
+            if (isVisSource(v)) setVisSource(v)
+          }}
+        >
+          {VIS_SOURCES.map((source) => (
+            <DropdownMenuRadioItem key={source} value={source} className="items-start">
+              <span className="flex flex-col gap-0.5">
+                <span>{VIS_SOURCE_LABELS[source]}</span>
+                {/* Not decoration: "Output + Programmer" is identical to "Output" whenever
+                    Blind is off, so without the hint that option reads as broken. */}
+                <span className="text-xs text-muted-foreground">{VIS_SOURCE_HINTS[source]}</span>
+              </span>
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
         <DropdownMenuLabel>Show</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuCheckboxItem

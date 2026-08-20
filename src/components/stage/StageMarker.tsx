@@ -1,23 +1,9 @@
-import { useMemo } from 'react'
+import type { Fixture, FixtureTypeInfo } from '../../store/fixtures'
 import {
-  findColourSource,
-  findDimmerProperty,
-  findGroupColourSource,
-  type Fixture,
-  type FixtureTypeInfo,
-  type ColourPropertyDescriptor,
-  type SettingPropertyDescriptor,
-  type SliderPropertyDescriptor,
-} from '../../store/fixtures'
-import type { GroupColourPropertyDescriptor } from '../../api/groupsApi'
-import {
-  useColourValue,
-  useSettingColourPreview,
-} from '../../hooks/usePropertyValues'
-import { useGroupColourValues } from '../../hooks/useGroupPropertyValues'
-import { colourFactor, useNormalizedIntensity } from '../../hooks/useNormalizedIntensity'
-import { computeNormalizedHueCss, perceptualBrightness } from '@/lib/colourMath'
-import { findGel } from '../../data/gels'
+  FixtureAppearanceSource,
+  type PixelSegment,
+} from '../fixtures/fixtureAppearance'
+import { parseCssRgb, perceptualBrightness } from '@/lib/colourMath'
 import type { FixturePatch } from '../../api/patchApi'
 import { cn } from '@/lib/utils'
 
@@ -34,21 +20,6 @@ interface StageMarkerProps {
 
 export function StageMarker(props: StageMarkerProps) {
   const { patch, fixture, fixtureType, selected, dimmed, beamScale = 1 } = props
-
-  // Each leaf component below calls the exact hook set its colour-source
-  // variant needs, so the discriminator is resolved here (not via hooks).
-  const colourSource = useMemo(
-    () => (fixture?.properties ? findColourSource(fixture.properties) : undefined),
-    [fixture?.properties],
-  )
-  const groupColour = useMemo(() => findGroupColourSource(fixture), [fixture])
-  const dimmerProp = useMemo(
-    () => findDimmerProperty(fixture?.properties),
-    [fixture?.properties],
-  )
-  const gel = !colourSource && fixtureType?.acceptsGel && patch.gelCode
-    ? findGel(patch.gelCode)
-    : null
 
   const showCone = !!fixtureType?.acceptsBeamAngle
   const beamDeg = patch.beamAngleDeg ?? DEFAULT_BEAM_DEG
@@ -89,59 +60,23 @@ export function StageMarker(props: StageMarkerProps) {
     wrapperStyle,
   }
 
-  if (!fixture) {
-    return <PlaceholderMarker {...commonProps} />
-  }
-
-  if (groupColour && groupColour.memberColourChannels.length > 1) {
-    return (
-      <MultiPixelMarker
-        {...commonProps}
-        groupColourProp={groupColour}
-        dimmerProp={dimmerProp}
-      />
-    )
-  }
-
-  if (colourSource?.type === 'colour') {
-    return (
-      <ColourMarker
-        {...commonProps}
-        colourProp={colourSource.property}
-        dimmerProp={dimmerProp}
-      />
-    )
-  }
-
-  if (colourSource?.type === 'setting') {
-    return (
-      <SettingColourMarker
-        {...commonProps}
-        settingProp={colourSource.property}
-        dimmerProp={dimmerProp}
-      />
-    )
-  }
-
-  if (gel) {
-    return (
-      <GelMarker
-        {...commonProps}
-        gelHex={gel.color}
-        dimmerProp={dimmerProp}
-      />
-    )
-  }
-
+  // The colour-source dispatch that used to live here is now shared with the 2D plot; see
+  // `fixtureAppearance.tsx` for why it has to be a render prop rather than a hook.
   return (
-    <DimmerOnlyMarker
-      {...commonProps}
-      dimmerProp={dimmerProp}
-    />
+    <FixtureAppearanceSource patch={patch} fixture={fixture} fixtureType={fixtureType}>
+      {({ color, intensity, segments }) => (
+        <MarkerVisual
+          {...commonProps}
+          color={color}
+          intensity={intensity}
+          segments={segments}
+        />
+      )}
+    </FixtureAppearanceSource>
   )
 }
 
-interface LeafProps {
+interface MarkerChromeProps {
   selected: boolean
   showCone: boolean
   beamDeg: number
@@ -150,106 +85,16 @@ interface LeafProps {
   wrapperStyle: React.CSSProperties
 }
 
-function ColourMarker({
-  colourProp,
-  dimmerProp,
-  ...rest
-}: LeafProps & {
-  colourProp: ColourPropertyDescriptor
-  dimmerProp?: SliderPropertyDescriptor
-}) {
-  const colour = useColourValue(colourProp)
-  // Effective intensity = dimmer × colour so a colour-only fixture at RGB 0
-  // reads as dark and doesn't beam. Colour drives the hue at full brightness;
-  // `intensity` (curved perceptually in MarkerVisual) drives how lit it looks,
-  // so a dimmerless fixture at r:20 reads as dim orange, not near-black.
-  const intensity =
-    useNormalizedIntensity(dimmerProp) *
-    colourFactor(colour.r, colour.g, colour.b, colour.w, colour.a, colour.uv)
-  const hue = computeNormalizedHueCss(colour.r, colour.g, colour.b, colour.w, colour.a, colour.uv)
-  return <MarkerVisual {...rest} color={hue} intensity={intensity} />
-}
-
-function SettingColourMarker({
-  settingProp,
-  dimmerProp,
-  ...rest
-}: LeafProps & {
-  settingProp: SettingPropertyDescriptor
-  dimmerProp?: SliderPropertyDescriptor
-}) {
-  const preview = useSettingColourPreview(settingProp)
-  const intensity = useNormalizedIntensity(dimmerProp) * (preview ? 1 : 0)
-  return <MarkerVisual {...rest} color={preview ?? '#888888'} intensity={intensity} />
-}
-
-function GelMarker({
-  gelHex,
-  dimmerProp,
-  ...rest
-}: LeafProps & {
-  gelHex: string
-  dimmerProp?: SliderPropertyDescriptor
-}) {
-  const intensity = useNormalizedIntensity(dimmerProp)
-  return <MarkerVisual {...rest} color={gelHex} intensity={intensity} />
-}
-
-function DimmerOnlyMarker({
-  dimmerProp,
-  ...rest
-}: LeafProps & {
-  dimmerProp?: SliderPropertyDescriptor
-}) {
-  const intensity = useNormalizedIntensity(dimmerProp)
-  return <MarkerVisual {...rest} color="#fff8d5" intensity={intensity} />
-}
-
-function PlaceholderMarker(rest: LeafProps) {
-  return <MarkerVisual {...rest} color="#666" intensity={0.2} />
-}
-
-type PixelSegment = { css: string; intensity: number }
-
-// Multi-element fixture: a compact segmented strip (one cell per element)
-// coloured per-pixel, with the aggregate colour driving the glow/beam.
-function MultiPixelMarker({
-  groupColourProp,
-  dimmerProp,
-  ...rest
-}: LeafProps & {
-  groupColourProp: GroupColourPropertyDescriptor
-  dimmerProp?: SliderPropertyDescriptor
-}) {
-  const group = useGroupColourValues(groupColourProp)
-  const dimmerFactor = useNormalizedIntensity(dimmerProp)
-  const intensity = group.beamIntensity * dimmerFactor
-  const aggColor = computeNormalizedHueCss(group.beamR, group.beamG, group.beamB)
-  // Per-pixel: full-brightness hue + its own level, so dim pixels still read as
-  // their colour (MarkerVisual curves the level into the segment opacity).
-  const segments: PixelSegment[] = group.members.map((m) => ({
-    css: computeNormalizedHueCss(m.r, m.g, m.b, m.w, m.a, m.uv),
-    intensity: colourFactor(m.r, m.g, m.b, m.w, m.a, m.uv) * dimmerFactor,
-  }))
-  return <MarkerVisual {...rest} color={aggColor} intensity={intensity} segments={segments} />
-}
-
 /**
- * Apply an alpha to a marker colour. `color` may be a hex (`#fff8d5`, `#666`)
- * from gel/setting/placeholder markers or an `rgb(r, g, b)` string from
+ * Apply an alpha to a marker colour. `FixtureAppearance.color` may be a hex (`#fff8d5`, `#666`)
+ * from the gel / setting / placeholder branches or an `rgb(r, g, b)` string from
  * computeNormalizedHueCss — so a bare hex suffix like `${color}aa` silently
  * produces an invalid token (`rgb(255, 26, 0)aa`) and drops the whole box-shadow
  * / gradient for rgb() markers. Returns an `rgba(...)` string valid for both.
  */
 function withAlpha(color: string, alpha: number): string {
-  if (color.startsWith('#')) {
-    let hex = color.slice(1)
-    if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2]
-    const n = parseInt(hex, 16)
-    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`
-  }
-  const m = color.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/)
-  return m ? `rgba(${m[1]}, ${m[2]}, ${m[3]}, ${alpha})` : color
+  const rgb = parseCssRgb(color)
+  return rgb ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})` : color
 }
 
 function MarkerVisual({
@@ -262,7 +107,7 @@ function MarkerVisual({
   label,
   wrapperStyle,
   segments,
-}: LeafProps & { color: string; intensity: number; segments?: PixelSegment[] }) {
+}: MarkerChromeProps & { color: string; intensity: number; segments?: PixelSegment[] }) {
   const glowSize = 16 * beamScale
   const coneWidth = beamDeg * 1.6 * beamScale
   // Beam-visibility gate stays on the raw level, so a near-off fixture still

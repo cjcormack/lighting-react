@@ -11,31 +11,14 @@ import {
   parseExtendedColour,
   serializeExtendedColour,
 } from '../components/fx/colourUtils'
+import { getChannelValue, subscribeToChannels } from './usePropertyValues'
 import type { ChannelRef, ColourPropertyDescriptor } from '../store/fixtures'
 import type { GroupColourPropertyDescriptor } from '../api/groupsApi'
 
-// Helper to create channel key
-function channelKey(ref: ChannelRef): string {
-  return `${ref.universe}:${ref.channelNo}`
-}
-
-// Get a single channel value
-function getChannelValue(channel: ChannelRef): number {
-  return lightingApi.channels.get(channel.universe, channel.channelNo)
-}
-
-// Subscribe to channel updates for specific channels
-function subscribeToChannels(
-  channels: ChannelRef[],
-  callback: () => void
-): () => void {
-  const subscriptions = channels.map((ch) => {
-    const key = channelKey(ch)
-    return lightingApi.channels.subscribeToChannel(key, callback)
-  })
-
-  return () => subscriptions.forEach((sub) => sub.unsubscribe())
-}
+// The read primitives above used to be private copies here. They now come from
+// usePropertyValues, and are used at their default (output) source on purpose: every consumer
+// of this hook is a live editing control, so it must read and write the real wire whatever a
+// stage view happens to be previewing.
 
 export type VirtualDimmerResult = {
   value: number

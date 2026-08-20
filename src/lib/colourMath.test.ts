@@ -7,6 +7,8 @@ import {
   computeNormalizedHue,
   computeNormalizedHueCss,
   computeAppearanceCss,
+  parseCssRgb,
+  dimCssColour,
 } from "./colourMath"
 
 describe("perceptualBrightness", () => {
@@ -172,5 +174,49 @@ describe("computeAppearanceCss (hue baked at a display brightness)", () => {
     expect(computeAppearanceCss(20, 2, 0, undefined, undefined, undefined, 5)).toBe(
       computeAppearanceCss(20, 2, 0, undefined, undefined, undefined, 1),
     )
+  })
+})
+
+describe("parseCssRgb", () => {
+  it("reads both forms a FixtureAppearance colour can take", () => {
+    // Long hex and shorthand come from gels and wheel previews; rgb() comes from
+    // computeNormalizedHueCss. Any caller that modifies the colour has to handle both.
+    expect(parseCssRgb("#ff8000")).toEqual({ r: 255, g: 128, b: 0 })
+    expect(parseCssRgb("#f80")).toEqual({ r: 255, g: 136, b: 0 })
+    expect(parseCssRgb("rgb(1, 2, 3)")).toEqual({ r: 1, g: 2, b: 3 })
+    expect(parseCssRgb("rgb(  1 ,2,  3 )")).toEqual({ r: 1, g: 2, b: 3 })
+  })
+
+  it("returns null rather than a wrong colour for anything else", () => {
+    expect(parseCssRgb("#12345")).toBeNull()
+    expect(parseCssRgb("#zzzzzz")).toBeNull()
+    expect(parseCssRgb("hotpink")).toBeNull()
+    expect(parseCssRgb("")).toBeNull()
+  })
+})
+
+describe("dimCssColour", () => {
+  it("scales either colour form to a brightness", () => {
+    expect(dimCssColour("#ffffff", 0.5)).toBe("rgb(128, 128, 128)")
+    expect(dimCssColour("rgb(200, 100, 0)", 0.5)).toBe("rgb(100, 50, 0)")
+  })
+
+  it("agrees with computeAppearanceCss on an already-normalised hue", () => {
+    // The two have to match: the 3D and DOM surfaces bake brightness from channels via
+    // computeAppearanceCss, the SVG plot bakes it from the hue string via this.
+    const hue = computeNormalizedHueCss(255, 26, 0)
+    expect(dimCssColour(hue, 0.4)).toBe(
+      computeAppearanceCss(255, 26, 0, undefined, undefined, undefined, 0.4),
+    )
+  })
+
+  it("is black at zero and clamps above one", () => {
+    expect(dimCssColour("#ff0000", 0)).toBe("rgb(0, 0, 0)")
+    expect(dimCssColour("#ff0000", 5)).toBe("rgb(255, 0, 0)")
+  })
+
+  it("passes an unrecognised colour through untouched", () => {
+    // Better a fixture drawn in the wrong brightness than one drawn with an invalid fill.
+    expect(dimCssColour("var(--color-foreground)", 0.5)).toBe("var(--color-foreground)")
   })
 })
