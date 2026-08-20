@@ -21,6 +21,7 @@ function palette(overrides: Partial<Palette> = {}): Palette {
     entries: [],
     referenceCount: 0,
     referencedByCueIds: [],
+    referencedByPresets: [],
     ...overrides,
   }
 }

@@ -68,6 +68,7 @@ import {
 import { buildSyntheticPresetFixture } from './syntheticFixture'
 import { DeadPresetAssignmentsBanner } from './DeadPresetAssignmentsBanner'
 import { PresetLivePreview } from './PresetLivePreview'
+import { PaletteRefPresetAssignmentsBanner } from './PaletteRefPresetAssignmentsBanner'
 
 const CATEGORY_ORDER = ['dimmer', 'colour', 'position', 'controls'] as const
 
@@ -85,6 +86,12 @@ interface PresetEditorProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   preset: FxPreset | null
+  /**
+   * Owning project. Only needed by surfaces that call project-scoped routes directly — today
+   * the palette-reference banner's Make Hard. Optional so a caller that has no id yet still
+   * renders the editor, just without that banner.
+   */
+  projectId?: number
   onSave: (input: FxPresetInput) => Promise<void>
   isSaving: boolean
   /** Pre-populate fixture type when creating a new preset */
@@ -107,6 +114,7 @@ export function PresetEditor({
   open,
   onOpenChange,
   preset,
+  projectId,
   onSave,
   isSaving,
   defaultFixtureType,
@@ -123,6 +131,14 @@ export function PresetEditor({
   const [palette, setPalette] = useState<string[]>([])
   const [effects, setEffects] = useState<FxPresetEffect[]>([])
   const [propertyAssignments, setPropertyAssignments] = useState<FxPresetPropertyAssignment[]>([])
+  /**
+   * The assignments as the server holds them — the baseline `isDirty` measures against.
+   *
+   * Separate from `preset.propertyAssignments` because Make Hard writes rows behind the editor
+   * and hands back the result: without this the post-harden draft would read as unsaved edits
+   * and re-disable the very button that made them.
+   */
+  const [serverAssignments, setServerAssignments] = useState<FxPresetPropertyAssignment[]>([])
 
   const [view, setView] = useState<SheetView>('form')
 
@@ -140,6 +156,7 @@ export function PresetEditor({
     setPalette(preset?.palette ?? [])
     setEffects(preset?.effects ?? [])
     setPropertyAssignments(preset?.propertyAssignments ?? [])
+    setServerAssignments(preset?.propertyAssignments ?? [])
     setView('form')
     setEffectStep('category')
     setEffectCategory(null)
@@ -258,6 +275,26 @@ export function PresetEditor({
 
   const hasEffectErrors = effectErrors.some(Boolean)
   const isValid = name.trim().length > 0 && !!fixtureType && !hasEffectErrors
+
+  /**
+   * Whether the draft has diverged from the stored preset.
+   *
+   * Only consumer is the palette-reference banner's Make Hard gate. Save is a wholesale replace
+   * of the whole preset, so hardening server-side and *then* saving a pre-harden draft would put
+   * the references straight back. A whole-payload comparison rather than an assignments-only one:
+   * the PUT carries every field, so any dirty field is enough to clobber the write.
+   */
+  const isDirty = useMemo(() => {
+    if (!preset) return true
+    return (
+      name.trim() !== preset.name ||
+      (description.trim() || null) !== (preset.description ?? null) ||
+      fixtureType !== preset.fixtureType ||
+      JSON.stringify(palette) !== JSON.stringify(preset.palette) ||
+      JSON.stringify(effects) !== JSON.stringify(preset.effects) ||
+      JSON.stringify(propertyAssignments) !== JSON.stringify(serverAssignments)
+    )
+  }, [preset, name, description, fixtureType, palette, effects, propertyAssignments, serverAssignments])
 
   // `id: 0` for new-draft sessions — the discriminator needs a number, but routing
   // never keys off it (all writes land in PresetDraftContext).
@@ -458,6 +495,24 @@ export function PresetEditor({
               setPropertyAssignments((prev) => prev.filter((_, i) => i !== index))
             }
           />
+
+          {preset != null && projectId != null && preset.canEdit && (
+            <PaletteRefPresetAssignmentsBanner
+              projectId={projectId}
+              presetId={preset.id}
+              presetName={preset.name}
+              assignments={propertyAssignments}
+              blockedReason={
+                isDirty
+                  ? 'Save or discard your changes first — saving afterwards would restore the references.'
+                  : null
+              }
+              onHardened={(hardened) => {
+                setPropertyAssignments(hardened.propertyAssignments)
+                setServerAssignments(hardened.propertyAssignments)
+              }}
+            />
+          )}
 
           <PresetLivePreview
             fixtureType={fixtureType}

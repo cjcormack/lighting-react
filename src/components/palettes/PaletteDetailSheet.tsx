@@ -19,7 +19,8 @@ import { PALETTE_TYPE_LABELS } from '@/lib/paletteTypes'
 import { useDeletePaletteMutation, usePaletteQuery, useSavePaletteMutation } from '@/store/palettes'
 import { useInclude } from '@/components/programmer/useInclude'
 import { PaletteValueChip } from './paletteValue'
-import type { PaletteInUseError, PaletteSummary } from '@/api/palettesApi'
+import { MakeHardDialog } from './MakeHardDialog'
+import type { PaletteInUseError, PaletteRefPreset, PaletteSummary } from '@/api/palettesApi'
 
 export interface PaletteDetailSheetProps {
   open: boolean
@@ -59,6 +60,8 @@ export function PaletteDetailSheet({
   const [name, setName] = useState('')
   const [notes, setNotes] = useState('')
   const [inUse, setInUse] = useState<PaletteInUseError | null>(null)
+  /** The preset whose references the operator chose to harden from the delete guard. */
+  const [hardenPreset, setHardenPreset] = useState<PaletteRefPreset | null>(null)
 
   // Seed the form once per palette, tracked by id in a ref rather than by dependencies.
   //
@@ -78,6 +81,7 @@ export function PaletteDetailSheet({
     setName(palette.name)
     setNotes(palette.notes ?? '')
     setInUse(null)
+    setHardenPreset(null)
   }, [palette])
 
   const entriesByTarget = useMemo(() => {
@@ -93,6 +97,11 @@ export function PaletteDetailSheet({
   if (!palette) return null
 
   const dirty = name.trim() !== palette.name || (notes.trim() || null) !== (palette.notes ?? null)
+
+  // From `detail` where it has loaded, not from the `palette` summary. The summary is a frozen
+  // snapshot taken when the grid row was clicked, so hardening a referring preset from the delete
+  // guard below would leave the header reading its pre-harden count until the sheet is reopened.
+  const referenceCount = detail?.referenceCount ?? palette.referenceCount
 
   const save = async () => {
     if (name.trim() === '') return
@@ -125,8 +134,8 @@ export function PaletteDetailSheet({
           <SheetTitle>{palette.name}</SheetTitle>
           <SheetDescription>
             {PALETTE_TYPE_LABELS[palette.type].singular} palette · {palette.targetCount} fixture
-            {palette.targetCount === 1 ? '' : 's'} · referenced by {palette.referenceCount} row
-            {palette.referenceCount === 1 ? '' : 's'}
+            {palette.targetCount === 1 ? '' : 's'} · referenced by {referenceCount} row
+            {referenceCount === 1 ? '' : 's'}
           </SheetDescription>
         </SheetHeader>
 
@@ -209,11 +218,57 @@ export function PaletteDetailSheet({
                   exists — they will be skipped when their cue next fires. Make those rows hard
                   first if you want to keep their current look.
                 </p>
+                {/* Preset rows are the referrer the operator cannot otherwise reach from here:
+                    a preset has no cue card to open, so without this the only exit from the
+                    guard is a forced delete that strands the row. */}
+                {inUse.presets.length > 0 && (
+                  <ul className="space-y-1">
+                    {inUse.presets.map((p) => (
+                      <li key={p.id} className="flex items-center gap-2 text-xs">
+                        <span className="min-w-0 flex-1 truncate">
+                          {p.name} · {p.referenceCount} row
+                          {p.referenceCount === 1 ? '' : 's'}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 px-1.5 text-[10px]"
+                          onClick={() => setHardenPreset(p)}
+                        >
+                          Make hard
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 <Button size="sm" variant="destructive" onClick={() => remove(true)}>
                   Delete anyway
                 </Button>
               </AlertDescription>
             </Alert>
+          )}
+
+          {hardenPreset && (
+            <MakeHardDialog
+              open
+              onOpenChange={(next) => {
+                if (next) return
+                setHardenPreset(null)
+                // The guard's counts came from the failed delete, so they are stale now. Clear
+                // it rather than render a stale reason: the operator's next Delete re-reads it.
+                setInUse(null)
+              }}
+              projectId={projectId}
+              scope={{
+                kind: 'preset',
+                presetId: hardenPreset.id,
+                presetName: hardenPreset.name,
+                // Scoped to this palette: the preset may reference others the operator did not
+                // ask about, and hardening those would be a side effect of pressing Delete.
+                paletteUuid: palette.uuid,
+                referenceCount: hardenPreset.referenceCount,
+              }}
+            />
           )}
         </SheetBody>
 

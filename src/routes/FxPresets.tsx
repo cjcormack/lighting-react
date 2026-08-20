@@ -388,6 +388,7 @@ export function ProjectFxPresets() {
         open={formOpen}
         onOpenChange={setFormOpen}
         preset={editingPreset}
+        projectId={projectIdNum}
         onSave={handleSave}
         isSaving={isCreating || isSaving}
         onDelete={

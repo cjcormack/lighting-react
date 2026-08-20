@@ -75,6 +75,15 @@ export interface Palette {
   referenceCount: number
   /** Cues holding at least one row that references this palette. */
   referencedByCueIds: number[]
+  /** FX presets holding at least one row that references this palette. */
+  referencedByPresets: PaletteRefPreset[]
+}
+
+/** A preset that references a palette, and how many of its rows do. */
+export interface PaletteRefPreset {
+  id: number
+  name: string
+  referenceCount: number
 }
 
 export interface CreatePaletteRequest {
@@ -99,6 +108,8 @@ export interface PaletteInUseError {
   cueAssignmentCount: number
   presetAssignmentCount: number
   cueIds: number[]
+  /** The referencing presets, so the sheet can offer "make those hard, then delete". */
+  presets: PaletteRefPreset[]
 }
 
 /** `POST /programmer/record-palette`. The palette's type is the mask — there is no mask field. */

@@ -1,5 +1,6 @@
 import { restApi } from './restApi'
 import type { Cue, CueTarget } from '../api/cuesApi'
+import type { FxPreset } from '../api/fxPresetsApi'
 import type { PaletteType } from '../api/palettesApi'
 import type { IncludedTarget } from '../api/programmerWsApi'
 
@@ -243,6 +244,38 @@ export interface MakeCueHardResponse {
   republishedLive: boolean
 }
 
+/** `POST /project/{projectId}/fx-presets/{presetId}/make-hard`. */
+export interface MakeFxPresetHardRequest {
+  projectId: number
+  presetId: number
+  /** Restrict to rows referencing these palettes. Omitted = every reference in the preset. */
+  paletteUuids?: string[]
+  mask?: PropertyMaskGroup[]
+}
+
+/**
+ * One preset row the palette gives more than one answer for.
+ *
+ * A preset row is target-less — it applies wherever the preset is applied — so a palette that
+ * holds different literals for different fixtures has no single literal that can stand in for
+ * the reference. The backend reports rather than guesses.
+ */
+export interface PresetRefAmbiguity {
+  propertyName: string
+  paletteUuid: string
+  paletteName?: string | null
+  variants: { literal: string; fixtureKeys: string[] }[]
+}
+
+export interface MakeFxPresetHardResponse {
+  preset: FxPreset
+  converted: number
+  ambiguous: PresetRefAmbiguity[]
+  /** Rows left as references because nothing resolves at all. */
+  unresolved: number
+  cuesRepublished: number[]
+}
+
 /** The 409 body both Record and Update use, so the caller can offer "do it anyway". */
 export interface ProgrammerConflict {
   error: string
@@ -319,6 +352,32 @@ export const programmerOpsApi = restApi.injectEndpoints({
       query: (body) => ({ url: 'programmer/make-hard', method: 'POST', body }),
     }),
 
+    /**
+     * Stop an FX preset's rows tracking their palettes.
+     *
+     * A partial success is the normal outcome, not an error: rows the palette answers uniformly
+     * harden, rows it disagrees on come back in `ambiguous`. Both halves are in the 200 body, so
+     * this must not be treated as a failure when `converted` is 0.
+     */
+    makeFxPresetHard: build.mutation<MakeFxPresetHardResponse, MakeFxPresetHardRequest>({
+      query: ({ projectId, presetId, ...body }) => ({
+        url: `project/${projectId}/fx-presets/${presetId}/make-hard`,
+        method: 'POST',
+        body,
+      }),
+      // Palette tags too, same reason as makeCueHard: dropping references moves the palette's
+      // "used by" count, and a delete that was blocked a moment ago may now be allowed.
+      invalidatesTags: (result, _error, { projectId }) =>
+        result == null || result.converted === 0
+          ? []
+          : [
+              { type: 'FxPreset', id: projectId },
+              'FxPreset',
+              'Palette',
+              'PaletteList',
+            ],
+    }),
+
     makeCueHard: build.mutation<MakeCueHardResponse, MakeCueHardRequest>({
       query: ({ projectId, cueId, force, ...body }) => ({
         url: `project/${projectId}/cues/${cueId}/make-hard${force ? '?force=true' : ''}`,
@@ -348,4 +407,5 @@ export const {
   useUpdateProgrammerMutation,
   useMakeProgrammerHardMutation,
   useMakeCueHardMutation,
+  useMakeFxPresetHardMutation,
 } = programmerOpsApi

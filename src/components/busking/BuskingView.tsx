@@ -411,6 +411,7 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
         open={presetFormOpen}
         onOpenChange={(open) => { setPresetFormOpen(open); if (!open) setEditingPreset(null) }}
         preset={editingPreset}
+        projectId={currentProject?.id}
         onSave={handleSavePreset}
         isSaving={isCreatingPreset || isSavingPreset}
         defaultFixtureType={editingPreset ? undefined : commonFixtureType}
