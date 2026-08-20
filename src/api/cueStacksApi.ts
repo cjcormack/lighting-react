@@ -42,6 +42,13 @@ export interface CueStack {
   label: string | null
   cues: CueStackCueEntry[]
   activeCueId: number | null
+  /** The cue an operator has explicitly armed as the next GO, if any. Server-owned. */
+  standbyCueId: number | null
+  /**
+   * The cue the next GO fires: `standbyCueId` when set, else the positional next. Computed by
+   * the backend so every session — desk, tablet, MIDI surface — agrees on what is on deck.
+   */
+  nextCueId: number | null
   canEdit: boolean
   canDelete: boolean
 }
@@ -133,4 +140,62 @@ export interface ProgramStateChangedEvent {
   projectId: number
   activeStackId: number | null
   activeStackName: string | null
+}
+
+/**
+ * WebSocket `cueRunStateChanged` payload — a stack's live cue, armed next, or fade progress
+ * moved. One frame per transition, from whichever surface caused it; the fade animates locally
+ * from `fadeElapsedMs` + `fadeDurationMs` rather than being streamed.
+ */
+export interface CueRunStateEvent {
+  projectId: number
+  stackId: number
+  activeCueId: number | null
+  nextCueId: number | null
+  /** True when `nextCueId` is an operator-armed standby rather than the positional next. */
+  nextIsArmed: boolean
+  /**
+   * True when this frame *is* a GO — false for a standby change, a stack stopping, and the
+   * snapshot sent on connect. Only the server can say: a snapshot of a cue that fired an hour
+   * ago is indistinguishable from the cue firing now, so guessing means replaying dead fades.
+   */
+  transition: boolean
+  fadeDurationMs: number | null
+  /**
+   * Null when no fade is running — which is also how a standby-only change is told apart from a
+   * cue transition, so an armed cue doesn't restart someone else's fade. Otherwise how far into
+   * the fade the desk was when the frame was sent: a session joining mid-fade starts there.
+   */
+  fadeElapsedMs: number | null
+  autoAdvance: boolean
+  autoAdvanceDelayMs: number | null
+}
+
+/** Response of `POST /cue-stacks/{stackId}/standby`. */
+export interface CueStackRunState {
+  stackId: number
+  activeCueId: number | null
+  standbyCueId: number | null
+  nextCueId: number | null
+}
+
+/** One channel of a previewed look — `POST /cue-stacks/{stackId}/preview`. */
+export interface PreviewChannel {
+  universe: number
+  channel: number
+  value: number
+}
+
+/**
+ * What a cue *would* look like, composed by the backend's own resolver.
+ *
+ * Layer 4 only: cue-band effects and timed presets aren't previewed, and channels no cue
+ * asserts are absent rather than 0 — fall back to the live output for those. See
+ * `docs/cue-stacks-engineering.md` §"Preview compose".
+ */
+export interface PreviewCueResponse {
+  cueId: number
+  channels: PreviewChannel[]
+  /** `fixtureKey.property` rows that couldn't be resolved to channels. Advisory. */
+  skipped: string[]
 }

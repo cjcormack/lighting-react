@@ -1,6 +1,7 @@
 import { restApi } from './restApi'
 import { lightingApi } from '../api/lightingApi'
 import { store } from './index'
+import { applyServerRunState } from './runnerSlice'
 import type {
   CueStack,
   CueStackInput,
@@ -11,6 +12,9 @@ import type {
   ActivateCueStackRequest,
   AdvanceCueStackRequest,
   GoToCueRequest,
+  CueRunStateEvent,
+  CueStackRunState,
+  PreviewCueResponse,
   CueStackActivateResponse,
   CueStackDeactivateResponse,
   ProgramState,
@@ -336,6 +340,51 @@ export const cueStacksApi = restApi.injectEndpoints({
       ],
     }),
 
+    /**
+     * Arm the next GO. The optimistic patch is only for the row highlight — the server's
+     * `cueRunStateChanged` frame is what every session (this one included) ends up believing.
+     */
+    setCueStackStandby: build.mutation<
+      CueStackRunState,
+      { projectId: number; stackId: number; cueId: number | null }
+    >({
+      query: ({ projectId, stackId, cueId }) => ({
+        url: `project/${projectId}/cue-stacks/${stackId}/standby`,
+        method: 'POST',
+        body: { cueId },
+      }),
+      async onQueryStarted({ projectId, stackId, cueId }, { dispatch, queryFulfilled }) {
+        const patchResult = dispatch(
+          cueStacksApi.util.updateQueryData('projectCueStackList', projectId, (draft) => {
+            const stack = draft.find((s) => s.id === stackId)
+            if (stack) stack.standbyCueId = cueId
+          }),
+        )
+        try {
+          await queryFulfilled
+        } catch {
+          patchResult.undo()
+        }
+      },
+    }),
+
+    /**
+     * What a cue *would* look like on stage, composed by the backend's own resolver. Layer 4
+     * only — see `PreviewCueResponse`. A mutation rather than a query because it is a POST and
+     * its result goes stale the moment the next cue changes; callers re-request on
+     * `cueRunStateChanged`.
+     */
+    previewCueLook: build.mutation<
+      PreviewCueResponse,
+      { projectId: number; stackId: number; cueId?: number | null }
+    >({
+      query: ({ projectId, stackId, cueId }) => ({
+        url: `project/${projectId}/cue-stacks/${stackId}/preview`,
+        method: 'POST',
+        body: { cueId: cueId ?? null },
+      }),
+    }),
+
     sortCueStackByCueNumber: build.mutation<
       SortByCueNumberResponse,
       { projectId: number; stackId: number }
@@ -470,6 +519,22 @@ lightingApi.cueStacks.subscribeToProgramState(function (event) {
   )
 })
 
+// Subscribe to per-stack run state (live cue, armed next, fade). Two jobs: keep the runner
+// slice — which drives the NEXT pill and the fade animation — following whichever surface moved
+// the show, and patch the cached stack so a later refetch doesn't flap back to a stale cue.
+lightingApi.cueStacks.subscribeToRunState(function (event: CueRunStateEvent) {
+  store.dispatch(applyServerRunState(event))
+  store.dispatch(
+    cueStacksApi.util.updateQueryData('projectCueStackList', event.projectId, (draft) => {
+      const stack = draft.find((s) => s.id === event.stackId)
+      if (!stack) return
+      stack.activeCueId = event.activeCueId
+      stack.standbyCueId = event.nextIsArmed ? event.nextCueId : null
+      stack.nextCueId = event.nextCueId
+    }),
+  )
+})
+
 export const {
   useProjectCueStackListQuery,
   useProjectCueStackQuery,
@@ -484,6 +549,8 @@ export const {
   useDeactivateCueStackMutation,
   useAdvanceCueStackMutation,
   useGoToCueInStackMutation,
+  useSetCueStackStandbyMutation,
+  usePreviewCueLookMutation,
   useSortCueStackByCueNumberMutation,
   useActivateProgramMutation,
   useDeactivateProgramMutation,

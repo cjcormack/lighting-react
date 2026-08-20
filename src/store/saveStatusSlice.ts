@@ -21,6 +21,9 @@ export const NON_SAVE_ENDPOINTS: ReadonlySet<string> = new Set([
   'deactivateCueStack',
   'advanceCueStack',
   'goToCueInStack',
+  'setCueStackStandby',
+  // Read-only: composes what a cue *would* look like, persists nothing.
+  'previewCueLook',
   'goToStack',
   'activateProgram',
   'deactivateProgram',

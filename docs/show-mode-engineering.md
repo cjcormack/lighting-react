@@ -239,16 +239,29 @@ interface CueTriggerDetail {
 }
 ```
 
-### Runner State (per-stack, frontend only)
+### Runner State (per-stack, following the server)
 ```typescript
 interface StackRunnerState {
-  activeCueId: number | null      // Cue currently fading in
-  standbyCueId: number | null     // Next cue queued for GO
-  completedCueIds: number[]       // Cues that have finished
-  fadeProgress: number            // 0.0 - 1.0
-  autoProgress: number | null     // 0.0 - 1.0 (auto-advance countdown)
+  activeCueId: number | null       // Cue currently fading in (null once the fade is done)
+  standbyCueId: number | null      // What the next GO fires — the backend's `nextCueId`
+  completedCueIds: number[]        // Cues that have finished
+  fadeProgress: number             // 0.0 - 1.0
+  autoProgress: number | null      // 0.0 - 1.0 (auto-advance countdown)
+  fadeStartElapsedMs: number       // How far in the server already was when it told us
+  serverTransition: number         // Bumped per server transition; part of the animation key
+  serverActiveCueId: number | null // The live cue as the server last reported it
 }
 ```
+
+**Not frontend-only any more.** Standby and the fade used to live purely in this slice, which
+meant each browser computed "next" for itself: a cue armed on a tablet was invisible to the desk,
+and the fade animation only played in the session that pressed GO. The backend now owns both
+(`CueStackManager`, see lighting7 `docs/cue-stacks-engineering.md` §"Standby") and broadcasts
+`cueRunStateChanged`; the slice's `applyServerRunState` adopts it.
+
+`serverActiveCueId` is deliberately separate from `activeCueId`: the latter is *the cue being
+animated* and goes back to null when the fade completes, so it can't be used to tell whether the
+live cue moved. A following session never sets it at all until a frame arrives.
 
 ## Program View
 
@@ -371,9 +384,14 @@ When the Run view's container width drops below **600 px**, the runner swaps fro
 Keyboard: `Space` | Button: `GO`
 
 1. **Normal GO** (standbyCueId exists):
-   - Redux: `go()` -- moves standby to active, computes next standby
-   - Backend: `POST /cue-stacks/{id}/activate` (first GO) or `POST /cue-stacks/{id}/go-to` with the explicit standby cue id (subsequent). Using `go-to` instead of `advance` ensures that a cue re-queued via click-to-requeue fires correctly — the backend jumps to that exact cue rather than computing "next" itself.
-   - Animation starts fade progress from 0
+   - Redux: `go()` -- moves standby to active, guesses the next standby (optimistic only; the
+     server's frame is what both settle on)
+   - Backend: `POST /cue-stacks/{id}/activate` (first GO) or `POST /cue-stacks/{id}/advance`
+     (subsequent). No `go-to`: the backend holds the armed standby and `advance` FORWARD fires
+     it, so a cue re-queued via click-to-requeue fires correctly *and* the MIDI surface's GO
+     fires the same cue the tablet has on deck. Arming itself POSTs
+     `/cue-stacks/{id}/standby`.
+   - Animation starts fade progress from `fadeStartElapsedMs` (0 for a local GO)
 
 2. **Boundary GO** (standbyCueId is null, end of stack):
    - ShowBar shows `-> {nextStackName}` hint in blue
@@ -500,9 +518,26 @@ All optimistic updates are rolled back on server error.
 The `runnerSlice` manages per-stack playback state entirely on the frontend:
 - `go`: moves standby -> active, computes next standby (respects loop flag, skips MARKERs)
 - `back`: reverses cursor (mid-fade: active -> standby; idle: standby -> previous)
-- `setStandby`: re-queues a specific cue as the next GO target (click-to-requeue). Purely local — the backend is told on the next GO via `goToCueInStack`. Clears the cue from `completedCueIds` so the "done" tick doesn't linger.
-- `resetStack`: initializes runner for a stack, optionally restoring from server `activeCueId`
+- `setStandby`: re-queues a specific cue as the next GO target (click-to-requeue). Optimistic — the caller also POSTs `/standby`, and the server's frame is what every session ends up believing. Clears the cue from `completedCueIds` so the "done" tick doesn't linger.
+- `resetStack`: initializes runner for a stack, restoring from the server's `activeCueId` / `nextCueId`
 - `markDone`: marks fade complete, clears active
+- `applyServerRunState`: adopts a `cueRunStateChanged` frame. Always takes the armed next and the
+  done-marking; starts the *animation* only when the frame is a `transition` (a GO just happened)
+  or carries a non-null `fadeElapsedMs` (we joined mid-fade). Without that gate the snapshot sent
+  on connect would replay the live cue's fade from zero every time a page loaded.
+
+### Auto-advance is the server's timer
+
+`useRunnerAnimation`'s auto-advance countdown is a *display* of what the backend is doing —
+`CueStackManager.scheduleAutoAdvance` fires the next cue itself and broadcasts. The client
+deliberately does **not** call the server when its countdown completes: with several sessions
+open, that stepped the stack once per session.
+
+Because it is only a display, the countdown runs off the frame's `autoAdvance`
+(`runner.serverAutoAdvance`), not the cue's own flag — a cue-edit Live session and the surface's
+Pause binding both cancel the server's timer on a cue still configured for one, and a bar
+completing into nothing is worse than no bar. The cue's flag is the fallback until the first
+frame arrives.
 
 ### Effective Active Cue (`effectiveActiveCueId`)
 

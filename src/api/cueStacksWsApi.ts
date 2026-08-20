@@ -1,6 +1,6 @@
 import { InternalApiConnection } from './internalApi'
 import { Subscription } from './subscription'
-import type { ProgramStateChangedEvent } from './cueStacksApi'
+import type { CueRunStateEvent, ProgramStateChangedEvent } from './cueStacksApi'
 import { createWsSubscribable } from './wsSubscriptionFactory'
 
 export interface CueStacksWsApi {
@@ -8,15 +8,23 @@ export interface CueStacksWsApi {
   subscribe(fn: () => void): Subscription
   /** The project playhead moved (activate/deactivate/advance/go-to). */
   subscribeToProgramState(fn: (event: ProgramStateChangedEvent) => void): Subscription
+  /**
+   * A stack's run state changed — live cue, armed next, or a fade starting. Fires for
+   * transitions this session didn't cause: another browser's GO, the MIDI surface, the
+   * backend's auto-advance timer.
+   */
+  subscribeToRunState(fn: (event: CueRunStateEvent) => void): Subscription
 }
 
 type CueStackInMessage =
   | { type: 'cueStackListChanged' }
   | { type: 'showChanged'; projectId: number; activeStackId: number | null; activeStackName: string | null }
+  | ({ type: 'cueRunStateChanged' } & CueRunStateEvent)
 
 export function createCueStacksWsApi(conn: InternalApiConnection): CueStacksWsApi {
   const cueStacksChanged = createWsSubscribable<void>()
   const programStateChanged = createWsSubscribable<ProgramStateChangedEvent>()
+  const runStateChanged = createWsSubscribable<CueRunStateEvent>()
 
   conn.subscribe((evType, ev) => {
     if (evType === 'open') {
@@ -32,6 +40,9 @@ export function createCueStacksWsApi(conn: InternalApiConnection): CueStacksWsAp
           activeStackId: message.activeStackId,
           activeStackName: message.activeStackName,
         })
+      } else if (message.type === 'cueRunStateChanged') {
+        const { type: _type, ...event } = message
+        runStateChanged.notify(event)
       }
     }
   })
@@ -39,5 +50,6 @@ export function createCueStacksWsApi(conn: InternalApiConnection): CueStacksWsAp
   return {
     subscribe: cueStacksChanged.api.subscribe,
     subscribeToProgramState: programStateChanged.api.subscribe,
+    subscribeToRunState: runStateChanged.api.subscribe,
   }
 }

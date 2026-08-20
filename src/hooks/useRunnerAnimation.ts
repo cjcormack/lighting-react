@@ -8,6 +8,17 @@ interface UseRunnerAnimationOptions {
   fadeDurationMs: number | null
   autoAdvance: boolean
   autoAdvanceDelayMs: number | null
+  /**
+   * How far into the fade to start, in ms. Non-zero when the server told us about a fade
+   * already in progress — another surface's GO that reached us a moment late, or a session
+   * that connected mid-fade. Defaults to 0, which is the local-GO case.
+   */
+  startElapsedMs?: number
+  /**
+   * Changes on every server-reported transition. Part of the effect key alongside
+   * `activeCueId`, so re-firing the cue that is already live restarts its fade.
+   */
+  transitionSeq?: number
   onAutoAdvanceComplete: () => void
 }
 
@@ -17,6 +28,8 @@ export function useRunnerAnimation({
   fadeDurationMs,
   autoAdvance,
   autoAdvanceDelayMs,
+  startElapsedMs = 0,
+  transitionSeq = 0,
   onAutoAdvanceComplete,
 }: UseRunnerAnimationOptions) {
   const dispatch = useDispatch()
@@ -35,6 +48,8 @@ export function useRunnerAnimation({
   autoAdvanceDelayRef.current = autoAdvanceDelayMs
   const stackIdRef = useRef(stackId)
   stackIdRef.current = stackId
+  const startElapsedRef = useRef(startElapsedMs)
+  startElapsedRef.current = startElapsedMs
 
   const cancelAnimations = useCallback(() => {
     if (fadeFrameRef.current != null) {
@@ -49,8 +64,9 @@ export function useRunnerAnimation({
     dispatch(setAutoProgress({ stackId: stackIdRef.current, progress: null }))
   }, [dispatch])
 
-  // Start fade animation when activeCueId changes — the only real trigger.
-  // All other values (duration, autoAdvance, etc.) are read from refs.
+  // Start fade animation when activeCueId changes (or the same cue is re-fired, which
+  // `transitionSeq` catches) — the only real trigger. All other values (duration, autoAdvance,
+  // etc.) are read from refs.
   useEffect(() => {
     if (activeCueId == null) return
 
@@ -91,7 +107,9 @@ export function useRunnerAnimation({
     const dur = fadeDurationRef.current ?? 0
 
     if (dur > 0) {
-      const t0 = performance.now()
+      // Rewind the clock by however much of the fade already happened server-side, so a late
+      // frame animates the remainder rather than the whole thing.
+      const t0 = performance.now() - Math.min(startElapsedRef.current, dur)
       const tick = (t: number) => {
         const p = Math.min((t - t0) / dur, 1)
         dispatch(setFadeProgress({ stackId: sid, progress: p }))
@@ -126,7 +144,7 @@ export function useRunnerAnimation({
         autoFrameRef.current = null
       }
     }
-  }, [activeCueId, dispatch])
+  }, [activeCueId, transitionSeq, dispatch])
 
   return { cancelAnimations }
 }

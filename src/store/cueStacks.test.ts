@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  cueRunStateWs,
   installRecordingFetch,
   installRelativeUrlRequest,
 } from '@/test/backendMock'
@@ -11,6 +12,7 @@ vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).li
 import { store } from './index'
 import { restApi } from './restApi'
 import { cueStacksApi } from './cueStacks'
+import { selectStackRunner } from './runnerSlice'
 
 /**
  * Wiring tests for the program-transport endpoints that replaced the old show API. They prove the
@@ -186,4 +188,127 @@ describe('reorderCueStackCues optimistic patch', () => {
 
     expect(cueIdsInCache()).toEqual([10, 11, 12])
   })
+})
+
+/**
+ * Run state is server-owned: a `cueRunStateChanged` frame has to move a session that never
+ * pressed GO. Before this, standby and the fade animation lived only in the browser that fired
+ * the cue, so a prompt book on a tablet showed a different NEXT and no fade at all.
+ */
+describe('cueRunStateChanged', () => {
+  const stackFixture = {
+    id: 7,
+    name: 'Act 1',
+    palette: [],
+    loop: false,
+    sortOrder: 0,
+    type: 'STACK',
+    label: null,
+    activeCueId: 10,
+    standbyCueId: null,
+    nextCueId: 11,
+    canEdit: true,
+    canDelete: true,
+    cues: [],
+  }
+
+  beforeEach(() => {
+    installRelativeUrlRequest()
+    installRecordingFetch({
+      'project/1/cue-stacks/7/standby': { stackId: 7, activeCueId: 10, standbyCueId: 12, nextCueId: 12 },
+      'project/1/cue-stacks': [stackFixture],
+    })
+  })
+
+  afterEach(() => {
+    store.dispatch(restApi.util.resetApiState())
+    vi.unstubAllGlobals()
+  })
+
+  const frame = (over: Record<string, unknown> = {}) => ({
+    projectId: 1,
+    stackId: 7,
+    activeCueId: 11,
+    nextCueId: 12,
+    nextIsArmed: false,
+    transition: true,
+    fadeDurationMs: 2000,
+    fadeElapsedMs: 0,
+    autoAdvance: false,
+    autoAdvanceDelayMs: null,
+    ...over,
+  })
+
+  it('moves the runner slice and starts the fade for a session that did not press GO', () => {
+    cueRunStateWs.callback!(frame())
+
+    const runner = selectStackRunner(store.getState() as never, 7)
+    expect(runner.serverActiveCueId).toBe(11)
+    expect(runner.activeCueId).toBe(11)
+    expect(runner.standbyCueId).toBe(12)
+    expect(runner.serverTransition).toBeGreaterThan(0)
+  })
+
+  it('starts a mid-fade join part-way through', () => {
+    cueRunStateWs.callback!(frame({ activeCueId: 21, fadeElapsedMs: 750 }))
+
+    expect(selectStackRunner(store.getState() as never, 7).fadeStartElapsedMs).toBe(750)
+  })
+
+  it('leaves the animation alone for a standby-only change', () => {
+    cueRunStateWs.callback!(frame({ activeCueId: 31, fadeElapsedMs: 400 }))
+    const before = selectStackRunner(store.getState() as never, 7).serverTransition
+
+    // Same live cue, no fade running: somebody armed a different cue.
+    cueRunStateWs.callback!(
+      frame({ activeCueId: 31, nextCueId: 44, nextIsArmed: true, transition: false, fadeElapsedMs: null }),
+    )
+
+    const after = selectStackRunner(store.getState() as never, 7)
+    expect(after.standbyCueId).toBe(44)
+    expect(after.serverTransition).toBe(before)
+  })
+
+  it('does not replay a settled fade from the connect-time snapshot', () => {
+    const before = selectStackRunner(store.getState() as never, 7).serverTransition
+
+    // Not a transition and no fade running — the cue fired long before we connected.
+    cueRunStateWs.callback!(frame({ activeCueId: 51, transition: false, fadeElapsedMs: null }))
+
+    const runner = selectStackRunner(store.getState() as never, 7)
+    expect(runner.serverActiveCueId).toBe(51)
+    expect(runner.activeCueId).toBeNull()
+    expect(runner.serverTransition).toBe(before)
+  })
+
+  it('patches the cached stack so a refetch does not flap back', async () => {
+    await store.dispatch(cueStacksApi.endpoints.projectCueStackList.initiate(1))
+    cueRunStateWs.callback!(frame({ activeCueId: 11, nextCueId: 12, nextIsArmed: true }))
+
+    await vi.waitFor(() => {
+      const stacks = cueStacksApi.endpoints.projectCueStackList.select(1)(store.getState()).data
+      expect(stacks?.[0].activeCueId).toBe(11)
+      expect(stacks?.[0].standbyCueId).toBe(12)
+      expect(stacks?.[0].nextCueId).toBe(12)
+    })
+  })
+
+  it('setCueStackStandby POSTs the armed cue', async () => {
+    await store.dispatch(
+      cueStacksApi.endpoints.setCueStackStandby.initiate({ projectId: 1, stackId: 7, cueId: 12 }),
+    )
+    const req = lastStandbyRequest()
+    expect(req).toBeDefined()
+    expect(req!.method).toBe('POST')
+    expect(JSON.parse(await req!.clone().text())).toEqual({ cueId: 12 })
+  })
+
+  function lastStandbyRequest(): Request | undefined {
+    const calls = (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls
+    for (let i = calls.length - 1; i >= 0; i--) {
+      const input = calls[i][0] as Request
+      if (input.url.includes('cue-stacks/7/standby')) return input
+    }
+    return undefined
+  }
 })

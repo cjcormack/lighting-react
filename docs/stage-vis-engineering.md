@@ -33,6 +33,21 @@ so two components sharing a key drift apart the moment one writes.
 The stored value is narrowed through `isVisSource` on read. A value written by a later build (a
 fourth source, say) must not reach code that has no case for it.
 
+### The fourth source: Next GO
+
+Previewing the look the next GO would produce is the one source that isn't a merge of what the
+desk already holds — it needs a *hypothetical* cue set composed. The backend does that now:
+`POST /project/{id}/cue-stacks/{stackId}/preview` returns the channel values a cue would produce,
+run through the real `CueAssignmentResolver`, and "next" is a server-owned concept broadcast on
+`cueRunStateChanged` (so which cue is being previewed is no longer a per-session guess). See
+lighting7 `docs/cue-stacks-engineering.md` §"Preview compose" and §"Standby".
+
+What remains is a `ChannelSource` over that response — re-requested on `cueRunStateChanged`,
+since the previewed look changes whenever the next cue does — and a fourth `VisSource` member.
+Two limits shape the UI: the preview is **Layer 4 only** (a cue whose look is carried by an
+effect previews as little or nothing), and channels no cue asserts are **absent** rather than 0,
+so the source must fall back to the wire for them the way `outputProgrammer` overlays.
+
 ### Injection is at channel level
 
 `api/channelSource.ts` defines `ChannelSource` — `get`, `getByKey`, `subscribeToChannel` — and

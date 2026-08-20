@@ -122,6 +122,10 @@ export const bootStatusWs: { callback: null | (() => void) } = { callback: null 
 // can fire a synthetic `showChanged` notification.
 export const programStateWs: { callback: null | ((e: unknown) => void) } = { callback: null }
 
+// Run-state WS bridge callback captured from store/cueStacks.ts, so a test can fire a synthetic
+// `cueRunStateChanged` frame — the desk (or another browser) moving the show.
+export const cueRunStateWs: { callback: null | ((e: unknown) => void) } = { callback: null }
+
 // Patch-list WS bridge callback captured from store/patches.ts, so a test can
 // fire a synthetic `patchListChanged` and assert on invalidation batching.
 export const patchesWs: { callback: null | (() => void) } = { callback: null }
@@ -235,6 +239,14 @@ export function lightingApiMock() {
           return {
             unsubscribe: () => {
               programStateWs.callback = null
+            },
+          }
+        },
+        subscribeToRunState: (fn: (e: unknown) => void) => {
+          cueRunStateWs.callback = fn
+          return {
+            unsubscribe: () => {
+              cueRunStateWs.callback = null
             },
           }
         },

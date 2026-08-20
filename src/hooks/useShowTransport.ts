@@ -4,8 +4,8 @@ import type { CueStack } from '../api/cueStacksApi'
 import {
   useAdvanceCueStackMutation,
   useActivateCueStackMutation,
-  useGoToCueInStackMutation,
   useAdvanceProgramMutation,
+  useSetCueStackStandbyMutation,
 } from '../store/cueStacks'
 import {
   go as goAction,
@@ -64,8 +64,8 @@ export function useShowTransport({
 
   const [advanceCueStack] = useAdvanceCueStackMutation()
   const [activateCueStack] = useActivateCueStackMutation()
-  const [goToCueInStack] = useGoToCueInStackMutation()
   const [advanceProgram] = useAdvanceProgramMutation()
+  const [setCueStackStandby] = useSetCueStackStandbyMutation()
 
   const isShowActive = activeStackId != null
 
@@ -94,6 +94,7 @@ export function useShowTransport({
           stackId: activeStackId,
           cues: activeStack.cues,
           serverActiveCueId: activeStack.activeCueId,
+          serverNextCueId: activeStack.nextCueId,
           loop: activeStack.loop,
         }),
       )
@@ -118,6 +119,7 @@ export function useShowTransport({
           stackId: activeStackId,
           cues: activeStack.cues,
           serverActiveCueId: serverActive,
+          serverNextCueId: activeStack.nextCueId,
           loop: activeStack.loop,
         }),
       )
@@ -131,34 +133,34 @@ export function useShowTransport({
       ? activeStack?.cues.find((c) => c.id === runner.activeCueId)
       : undefined
 
-  // Server call to move the backend cursor.
+  // Server call to move the backend cursor. No standby branch any more: the backend owns the
+  // armed cue, so `advance` FORWARD fires whatever is on deck. A stopped stack still needs
+  // `activate`, which starts on the armed cue too.
   const fireGoServer = useCallback(() => {
     if (activeStackId == null || !activeStack) return
     if (activeStack.activeCueId == null) {
-      activateCueStack({
-        projectId,
-        stackId: activeStackId,
-        cueId: runner.standbyCueId ?? undefined,
-      })
-    } else if (runner.standbyCueId != null) {
-      goToCueInStack({ projectId, stackId: activeStackId, cueId: runner.standbyCueId })
+      activateCueStack({ projectId, stackId: activeStackId })
     } else {
       advanceCueStack({ projectId, stackId: activeStackId, direction: 'FORWARD' })
     }
-  }, [activeStackId, activeStack, activateCueStack, goToCueInStack, advanceCueStack, runner.standbyCueId, projectId])
+  }, [activeStackId, activeStack, activateCueStack, advanceCueStack, projectId])
 
-  const handleAutoAdvanceComplete = useCallback(() => {
-    if (activeStackId == null || !activeStack) return
-    dispatch(goAction({ stackId: activeStackId, cues: activeStack.cues, loop: activeStack.loop }))
-    fireGoServer()
-  }, [activeStackId, activeStack, dispatch, fireGoServer])
+  // The *display* of auto-advance completing. The backend runs its own auto-advance timer and
+  // fires the next cue itself, then broadcasts — so calling the server here as well would step
+  // the stack once per open session.
+  const handleAutoAdvanceComplete = useCallback(() => {}, [])
 
   const { cancelAnimations } = useRunnerAnimation({
     stackId: activeStackId ?? 0,
     activeCueId: runner.activeCueId,
     fadeDurationMs: animCue?.fadeDurationMs ?? null,
-    autoAdvance: animCue?.autoAdvance ?? false,
-    autoAdvanceDelayMs: animCue?.autoAdvanceDelayMs ?? null,
+    // The server's view, not the cue's flag: a paused timer (cue-edit Live session, surface
+    // Pause) leaves a cue configured for auto-advance that will not advance. Falls back to the
+    // cue while no frame has arrived yet.
+    autoAdvance: runner.serverAutoAdvance ?? animCue?.autoAdvance ?? false,
+    autoAdvanceDelayMs: runner.serverAutoAdvanceDelayMs ?? animCue?.autoAdvanceDelayMs ?? null,
+    startElapsedMs: runner.fadeStartElapsedMs,
+    transitionSeq: runner.serverTransition,
     onAutoAdvanceComplete: handleAutoAdvanceComplete,
   })
 
@@ -204,9 +206,12 @@ export function useShowTransport({
   const setStandby = useCallback(
     (cueId: number) => {
       if (activeStackId == null || cueId === activeCueId) return
+      // Local dispatch for an instant highlight; the POST is what makes the desk, the tablet and
+      // the MIDI surface agree on what GO will fire.
       dispatch(setStandbyAction({ stackId: activeStackId, cueId }))
+      setCueStackStandby({ projectId, stackId: activeStackId, cueId })
     },
-    [activeStackId, activeCueId, dispatch],
+    [activeStackId, activeCueId, dispatch, setCueStackStandby, projectId],
   )
 
   const goDisabled = !isShowActive || !(canOperate ?? true)

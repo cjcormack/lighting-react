@@ -13,7 +13,7 @@ import {
   useActivateCueStackMutation,
   useDeactivateCueStackMutation,
   useSortCueStackByCueNumberMutation,
-  useGoToCueInStackMutation,
+  useSetCueStackStandbyMutation,
   useActivateProgramMutation,
   useDeactivateProgramMutation,
   useAdvanceProgramMutation,
@@ -124,7 +124,7 @@ export function RunPage() {
   const [advanceCueStack] = useAdvanceCueStackMutation()
   const [activateCueStack] = useActivateCueStackMutation()
   const [deactivateCueStack] = useDeactivateCueStackMutation()
-  const [goToCueInStack] = useGoToCueInStackMutation()
+  const [setCueStackStandby] = useSetCueStackStandbyMutation()
   const [sortByCueNumber] = useSortCueStackByCueNumberMutation()
 
   const [activateShow] = useActivateProgramMutation()
@@ -192,6 +192,7 @@ export function RunPage() {
         stackId: activeStackId,
         cues,
         serverActiveCueId: serverActive,
+        serverNextCueId: stack.nextCueId,
         loop: stack.loop,
       }))
     }
@@ -214,37 +215,32 @@ export function RunPage() {
     [cues, runner.standbyCueId],
   )
 
+  // The backend owns the armed cue, so `advance` FORWARD fires whatever is on deck — no
+  // standby branch. A stopped stack still needs `activate`, which starts on the armed cue too.
   const fireGo = useCallback(() => {
     if (activeStackId == null || !stack) return
     if (stack.activeCueId == null) {
-      activateCueStack({
-        projectId: projectIdNum,
-        stackId: activeStackId,
-        cueId: runner.standbyCueId ?? undefined,
-      })
-    } else if (runner.standbyCueId != null) {
-      goToCueInStack({
-        projectId: projectIdNum,
-        stackId: activeStackId,
-        cueId: runner.standbyCueId,
-      })
+      activateCueStack({ projectId: projectIdNum, stackId: activeStackId })
     } else {
       advanceCueStack({ projectId: projectIdNum, stackId: activeStackId, direction: 'FORWARD' })
     }
-  }, [activeStackId, stack, runner.standbyCueId, activateCueStack, advanceCueStack, goToCueInStack, projectIdNum])
+  }, [activeStackId, stack, activateCueStack, advanceCueStack, projectIdNum])
 
-  const handleAutoAdvanceComplete = useCallback(() => {
-    if (activeStackId == null || !stack) return
-    dispatch(go({ stackId: activeStackId, cues, loop: stack.loop }))
-    fireGo()
-  }, [activeStackId, stack, cues, dispatch, fireGo])
+  // Display only. The backend runs its own auto-advance timer and fires the next cue itself,
+  // then broadcasts — telling the server again here would step the stack once per open session.
+  const handleAutoAdvanceComplete = useCallback(() => {}, [])
 
   const { cancelAnimations } = useRunnerAnimation({
     stackId: activeStackId ?? 0,
     activeCueId: runner.activeCueId,
     fadeDurationMs: activeCue?.fadeDurationMs ?? null,
-    autoAdvance: activeCue?.autoAdvance ?? false,
-    autoAdvanceDelayMs: activeCue?.autoAdvanceDelayMs ?? null,
+    // The server's view, not the cue's flag: a paused timer (cue-edit Live session, surface
+    // Pause) leaves a cue configured for auto-advance that will not advance. Falls back to the
+    // cue while no frame has arrived yet.
+    autoAdvance: runner.serverAutoAdvance ?? activeCue?.autoAdvance ?? false,
+    autoAdvanceDelayMs: runner.serverAutoAdvanceDelayMs ?? activeCue?.autoAdvanceDelayMs ?? null,
+    startElapsedMs: runner.fadeStartElapsedMs,
+    transitionSeq: runner.serverTransition,
     onAutoAdvanceComplete: handleAutoAdvanceComplete,
   })
 
@@ -408,9 +404,12 @@ export function RunPage() {
     (cueId: number) => {
       if (activeStackId == null) return
       if (cueId === effectiveActiveCueId || cueId === runner.standbyCueId) return
+      // Local dispatch for the instant highlight, POST so the desk and every other session
+      // agree on what GO will fire.
       dispatch(setStandby({ stackId: activeStackId, cueId }))
+      setCueStackStandby({ projectId: projectIdNum, stackId: activeStackId, cueId })
     },
-    [activeStackId, effectiveActiveCueId, runner.standbyCueId, dispatch],
+    [activeStackId, effectiveActiveCueId, runner.standbyCueId, dispatch, setCueStackStandby, projectIdNum],
   )
 
   const toggleExpanded = useCallback((cueId: number) => {

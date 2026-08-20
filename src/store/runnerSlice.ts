@@ -1,5 +1,5 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
-import type { CueStackCueEntry } from '../api/cueStacksApi'
+import type { CueRunStateEvent, CueStackCueEntry } from '../api/cueStacksApi'
 
 interface StackRunnerState {
   activeCueId: number | null
@@ -7,6 +7,31 @@ interface StackRunnerState {
   completedCueIds: number[]
   fadeProgress: number
   autoProgress: number | null
+  /**
+   * How far into the live cue's fade the *server* was when it told us, in ms. The animation
+   * starts there rather than at 0, so a session that joins mid-fade — or one that hears about
+   * another surface's GO a beat late — lands in the right place.
+   */
+  fadeStartElapsedMs: number
+  /**
+   * Bumped on every server cue transition. The animation effect keys off it as well as the
+   * cue id, so re-firing the same cue restarts the fade.
+   */
+  serverTransition: number
+  /**
+   * The live cue as the *server* last reported it. Distinct from `activeCueId`, which is the
+   * cue currently animating and goes back to null when the fade finishes. Used to mark the
+   * outgoing cue done on a session that never pressed GO.
+   */
+  serverActiveCueId: number | null
+  /**
+   * Whether the server will actually roll the stack forward on its own, per the last frame —
+   * null until one arrives. Not the same as the cue's `autoAdvance` flag: a cue-edit Live
+   * session and the surface's Pause binding both cancel the timer on a cue still configured
+   * for it, and a countdown bar completing into nothing is worse than no bar.
+   */
+  serverAutoAdvance: boolean | null
+  serverAutoAdvanceDelayMs: number | null
 }
 
 interface RunnerState {
@@ -25,6 +50,11 @@ function getOrCreate(state: RunnerState, stackId: number): StackRunnerState {
       completedCueIds: [],
       fadeProgress: 0,
       autoProgress: null,
+      fadeStartElapsedMs: 0,
+      serverTransition: 0,
+      serverActiveCueId: null,
+      serverAutoAdvance: null,
+      serverAutoAdvanceDelayMs: null,
     }
   }
   return state.stacks[stackId]
@@ -136,10 +166,12 @@ export const runnerSlice = createSlice({
         stackId: number
         cues: CueStackCueEntry[]
         serverActiveCueId?: number | null
+        /** The backend's `nextCueId` for this stack — an armed standby, or the positional next. */
+        serverNextCueId?: number | null
         loop?: boolean
       }>,
     ) {
-      const { stackId, cues, serverActiveCueId, loop } = action.payload
+      const { stackId, cues, serverActiveCueId, serverNextCueId, loop } = action.payload
       if (serverActiveCueId != null && cues.some((c) => c.id === serverActiveCueId)) {
         // Restore from server state — the cue already ran on the backend,
         // so treat it as completed and queue the next cue as standby.
@@ -150,18 +182,30 @@ export const runnerSlice = createSlice({
           .map((c) => c.id)
         state.stacks[stackId] = {
           activeCueId: null,
-          standbyCueId: nextStandardCue(cues, serverActiveCueId, loop ?? false),
+          // `serverNextCueId` when the caller has it (the backend owns "next"); the local walk
+          // is the fallback for a caller that doesn't, e.g. a stack loaded without run state.
+          standbyCueId: serverNextCueId ?? nextStandardCue(cues, serverActiveCueId, loop ?? false),
           completedCueIds: completed,
           fadeProgress: 0,
           autoProgress: null,
+          fadeStartElapsedMs: 0,
+          serverTransition: 0,
+          serverActiveCueId,
+          serverAutoAdvance: null,
+          serverAutoAdvanceDelayMs: null,
         }
       } else {
         state.stacks[stackId] = {
           activeCueId: null,
-          standbyCueId: firstStandardCue(cues),
+          standbyCueId: serverNextCueId ?? firstStandardCue(cues),
           completedCueIds: [],
           fadeProgress: 0,
           autoProgress: null,
+          fadeStartElapsedMs: 0,
+          serverTransition: 0,
+          serverActiveCueId: null,
+          serverAutoAdvance: null,
+          serverAutoAdvanceDelayMs: null,
         }
       }
     },
@@ -171,12 +215,65 @@ export const runnerSlice = createSlice({
       action: PayloadAction<{ stackId: number; cueId: number }>,
     ) {
       // Re-queue: user clicked a cue to set it as the next GO target.
-      // Purely local — the backend is told on the next GO (handleGo calls
-      // goToCueInStack with this id). Clearing the target from completedCueIds
-      // so the "done" tick doesn't stick around for a cue we just cued up again.
+      // Optimistic only — the caller POSTs `/standby` and the server's `cueRunStateChanged`
+      // frame confirms it here (and tells every other session). Clearing the target from
+      // completedCueIds so the "done" tick doesn't stick around for a cue we just cued up again.
       const s = getOrCreate(state, action.payload.stackId)
       s.standbyCueId = action.payload.cueId
       s.completedCueIds = s.completedCueIds.filter((id) => id !== action.payload.cueId)
+    },
+
+    /**
+     * Adopt a `cueRunStateChanged` frame. This is how a session that didn't press GO follows the
+     * desk: the armed next, the live cue, and the fade all come from the server.
+     *
+     * The animation only starts when there is genuinely a fade to draw — `transition` (a GO just
+     * happened) or a non-null `fadeElapsedMs` (we joined mid-fade). A settled snapshot moves the
+     * state without replaying a fade that finished long ago.
+     */
+    applyServerRunState(state, action: PayloadAction<CueRunStateEvent>) {
+      const { stackId, activeCueId, nextCueId, transition, fadeElapsedMs } = action.payload
+      const s = getOrCreate(state, stackId)
+
+      const previous = s.serverActiveCueId
+      s.serverActiveCueId = activeCueId
+      s.serverAutoAdvance = action.payload.autoAdvance
+      s.serverAutoAdvanceDelayMs = action.payload.autoAdvanceDelayMs
+      s.standbyCueId = nextCueId
+      if (nextCueId != null) {
+        s.completedCueIds = s.completedCueIds.filter((id) => id !== nextCueId)
+      }
+      // Independent of the local animation: a following session never had `activeCueId` set,
+      // so without this the outgoing cue would never get its "done" tick.
+      if (previous != null && previous !== activeCueId && !s.completedCueIds.includes(previous)) {
+        s.completedCueIds.push(previous)
+      }
+
+      if (activeCueId == null) {
+        // Stack stopped.
+        s.activeCueId = null
+        s.fadeProgress = 0
+        s.autoProgress = null
+        return
+      }
+
+      if (!transition && fadeElapsedMs == null) {
+        // Nothing to animate — a settled snapshot (the cue fired before we connected) or a
+        // standby-only change. Stand the animation down only if the live cue actually moved,
+        // or an arming frame would kill a fade this session is legitimately drawing.
+        if (previous !== activeCueId) {
+          s.activeCueId = null
+          s.fadeProgress = 0
+          s.autoProgress = null
+        }
+        return
+      }
+
+      s.activeCueId = activeCueId
+      s.fadeStartElapsedMs = fadeElapsedMs ?? 0
+      s.fadeProgress = 0
+      s.autoProgress = null
+      s.serverTransition += 1
     },
   },
 })
@@ -189,6 +286,7 @@ export const {
   markDone,
   resetStack,
   setStandby,
+  applyServerRunState,
 } = runnerSlice.actions
 
 // Selectors
@@ -202,6 +300,11 @@ const EMPTY_STACK_RUNNER: StackRunnerState = {
   completedCueIds: [],
   fadeProgress: 0,
   autoProgress: null,
+  fadeStartElapsedMs: 0,
+  serverTransition: 0,
+  serverActiveCueId: null,
+  serverAutoAdvance: null,
+  serverAutoAdvanceDelayMs: null,
 }
 
 export function selectStackRunner(state: { runner: RunnerState }, stackId: number): StackRunnerState {

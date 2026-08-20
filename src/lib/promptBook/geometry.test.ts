@@ -178,11 +178,11 @@ describe('flattenCueOrder', () => {
   }
 
   function stack(id: number, name: string, cues: CueStackCueEntry[], sortOrder = 0): CueStack {
-    return { id, name, palette: [], loop: false, sortOrder, type: 'STACK', label: null, cues, activeCueId: null, canEdit: true, canDelete: true }
+    return { id, name, palette: [], loop: false, sortOrder, type: 'STACK', label: null, cues, activeCueId: null, standbyCueId: null, nextCueId: null, canEdit: true, canDelete: true }
   }
 
   function separator(id: number, label: string, sortOrder: number): CueStack {
-    return { id, name: label, palette: [], loop: false, sortOrder, type: 'SEPARATOR', label, cues: [], activeCueId: null, canEdit: true, canDelete: true }
+    return { id, name: label, palette: [], loop: false, sortOrder, type: 'SEPARATOR', label, cues: [], activeCueId: null, standbyCueId: null, nextCueId: null, canEdit: true, canDelete: true }
   }
 
   it('flattens runnable stacks in show order, skipping separators', () => {
@@ -229,11 +229,11 @@ describe('flattenShowRows', () => {
   }
 
   function stack(id: number, name: string, cues: CueStackCueEntry[], sortOrder = 0): CueStack {
-    return { id, name, palette: [], loop: false, sortOrder, type: 'STACK', label: null, cues, activeCueId: null, canEdit: true, canDelete: true }
+    return { id, name, palette: [], loop: false, sortOrder, type: 'STACK', label: null, cues, activeCueId: null, standbyCueId: null, nextCueId: null, canEdit: true, canDelete: true }
   }
 
   function separator(id: number, label: string, sortOrder: number): CueStack {
-    return { id, name: label, palette: [], loop: false, sortOrder, type: 'SEPARATOR', label, cues: [], activeCueId: null, canEdit: true, canDelete: true }
+    return { id, name: label, palette: [], loop: false, sortOrder, type: 'SEPARATOR', label, cues: [], activeCueId: null, standbyCueId: null, nextCueId: null, canEdit: true, canDelete: true }
   }
 
   it('keeps in-stack MARKER cues as separator rows and (single stack) emits no stack header', () => {
@@ -370,7 +370,7 @@ describe('orderedCueIdsForInsert', () => {
     }
   }
   function stack(cues: CueStackCueEntry[]): CueStack {
-    return { id: 1, name: 'S', palette: [], loop: false, sortOrder: 0, type: 'STACK', label: null, cues, activeCueId: null, canEdit: true, canDelete: true }
+    return { id: 1, name: 'S', palette: [], loop: false, sortOrder: 0, type: 'STACK', label: null, cues, activeCueId: null, standbyCueId: null, nextCueId: null, canEdit: true, canDelete: true }
   }
 
   it('inserts between two anchored cues by reading position', () => {
