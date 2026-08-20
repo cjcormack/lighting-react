@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createOverlayChannelSource,
   createProgrammerChannelSource,
+  createPushChannelSource,
   type ChannelSource,
   type ProgrammerChannelState,
   type ProgrammerLike,
@@ -243,6 +244,75 @@ describe('createOverlayChannelSource', () => {
 
     // Released: the wire value must come back rather than the channel sticking at 0.
     fake.set({ entries: new Map() })
+    expect(listener).toHaveBeenLastCalledWith(100)
+  })
+})
+
+describe('createPushChannelSource', () => {
+  const ch = (universe: number, channel: number, value: number) => ({ universe, channel, value })
+
+  it('reads 0 for a channel it was never given', () => {
+    const source = createPushChannelSource()
+    expect(source.getByKey('0:1')).toBe(0)
+    expect(source.get(0, 1)).toBe(0)
+    expect(source.holds('0:1')).toBe(false)
+  })
+
+  it('distinguishes "pushed at zero" from "not pushed"', () => {
+    // The preview endpoint omits channels no cue asserts, so `holds` is the only thing standing
+    // between a cue that deliberately darkens a fixture and one that simply says nothing about it.
+    const source = createPushChannelSource()
+    source.setChannels([ch(0, 1, 0)])
+    expect(source.getByKey('0:1')).toBe(0)
+    expect(source.holds('0:1')).toBe(true)
+    expect(source.holds('0:2')).toBe(false)
+  })
+
+  it('notifies only the channels that changed', () => {
+    const source = createPushChannelSource()
+    source.setChannels([ch(0, 1, 10), ch(0, 2, 20)])
+
+    const one = vi.fn()
+    const two = vi.fn()
+    source.subscribeToChannel('0:1', one)
+    source.subscribeToChannel('0:2', two)
+
+    source.setChannels([ch(0, 1, 10), ch(0, 2, 25)])
+
+    expect(one).not.toHaveBeenCalled()
+    expect(two).toHaveBeenCalledExactlyOnceWith(25)
+  })
+
+  it('notifies 0 when a channel drops out of the look', () => {
+    const source = createPushChannelSource()
+    source.setChannels([ch(0, 1, 10)])
+
+    const listener = vi.fn()
+    source.subscribeToChannel('0:1', listener)
+    source.setChannels([])
+
+    expect(listener).toHaveBeenCalledExactlyOnceWith(0)
+    expect(source.holds('0:1')).toBe(false)
+  })
+
+  it('overlays the wire, falling back for channels the look is silent about', () => {
+    // The Next GO composition: the preview asserts channel 1, so the stage draws the cue's value
+    // there and the desk's live value everywhere else.
+    const base = fixedSource({ '0:1': 100, '0:2': 200 })
+    const preview = createPushChannelSource()
+    const merged = createOverlayChannelSource(base, preview)
+
+    const listener = vi.fn()
+    merged.subscribeToChannel('0:1', listener)
+
+    preview.setChannels([ch(0, 1, 255)])
+    expect(merged.getByKey('0:1')).toBe(255)
+    expect(merged.getByKey('0:2')).toBe(200)
+    expect(listener).toHaveBeenLastCalledWith(255)
+
+    // Nothing on deck: the wire has to come back rather than the channel sticking at 0.
+    preview.setChannels([])
+    expect(merged.getByKey('0:1')).toBe(100)
     expect(listener).toHaveBeenLastCalledWith(100)
   })
 })

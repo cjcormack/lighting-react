@@ -25,7 +25,7 @@ describe('isVisSource', () => {
   it('rejects anything else', () => {
     // The guard is what stops a value written by a later build (or junk) from reaching code
     // that has no case for it — `usePersistentState`'s unchecked cast is the trap being avoided.
-    expect(isVisSource('nextGo')).toBe(false)
+    expect(isVisSource('cueOnly')).toBe(false)
     expect(isVisSource('')).toBe(false)
     expect(isVisSource(null)).toBe(false)
     expect(isVisSource(3)).toBe(false)
@@ -46,7 +46,7 @@ describe('useVisSource', () => {
   })
 
   it('falls back to the default for an unrecognised stored value', () => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify('nextGo'))
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify('cueOnly'))
     expect(renderHook(() => useVisSource()).result.current).toBe('output')
 
     resetVisSourceStore()

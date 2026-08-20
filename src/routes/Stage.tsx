@@ -52,6 +52,7 @@ import { DEFAULT_RIGGING_LENGTH_M } from '../components/stage3d/RiggingMeshes'
 import { StageViewMenu } from '../components/stage3d/StageViewMenu'
 import { useStageView } from '../components/stage3d/useStageView'
 import { setVisSource, useVisSource } from '../hooks/useVisSource'
+import { useNextGoStatus } from '../hooks/useNextGoPreview'
 import { StageChannelSourceProvider } from '../hooks/useChannelSource'
 import { useModifierHeld } from '../components/stage3d/useShiftHeld'
 import { useSnapGrid, SNAP_STEPS_M, type SnapStep } from '../components/stage2d/useSnapGrid'
@@ -164,6 +165,8 @@ export function Stage() {
   const [gizmoModeManual, setGizmoModeManual] = useState<GizmoMode>('translate')
   const { flags: viewFlags, setFlag: setViewFlag } = useStageView()
   const visSource = useVisSource()
+  // Reads the same cached queries the Next GO source does, so it costs no extra request.
+  const nextGoStatus = useNextGoStatus(visSource === 'nextGo')
   const isTabletOrLarger = useMediaQuery(SM_BREAKPOINT)
   // One snap preference for both views — see useSnapGrid on why Shift now
   // *disables* snapping rather than enabling it.
@@ -808,6 +811,7 @@ export function Stage() {
             hide={mode === '3d' ? undefined : ['beamCones']}
             visSource={visSource}
             setVisSource={setVisSource}
+            sourceStatus={{ nextGo: nextGoStatus }}
           />
           {showEditToggle && (
             <Tooltip>

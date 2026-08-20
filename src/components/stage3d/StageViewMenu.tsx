@@ -27,6 +27,11 @@ interface StageViewMenuProps {
   /** Which layer of the lighting cascade the stage draws. */
   visSource: VisSource
   setVisSource: (next: VisSource) => void
+  /**
+   * A live second line for a source whose hint alone can't say what it is showing — Next GO falls
+   * back to plain output when nothing is on deck, and the operator has to be told.
+   */
+  sourceStatus?: Partial<Record<VisSource, string | null>>
 }
 
 export function StageViewMenu({
@@ -35,6 +40,7 @@ export function StageViewMenu({
   hide,
   visSource,
   setVisSource,
+  sourceStatus,
 }: StageViewMenuProps) {
   const hidden = (key: keyof StageViewFlags) => hide?.includes(key) ?? false
   return (
@@ -61,6 +67,9 @@ export function StageViewMenu({
                 {/* Not decoration: "Output + Programmer" is identical to "Output" whenever
                     Blind is off, so without the hint that option reads as broken. */}
                 <span className="text-xs text-muted-foreground">{VIS_SOURCE_HINTS[source]}</span>
+                {sourceStatus?.[source] && (
+                  <span className="text-xs text-foreground/70">{sourceStatus[source]}</span>
+                )}
               </span>
             </DropdownMenuRadioItem>
           ))}

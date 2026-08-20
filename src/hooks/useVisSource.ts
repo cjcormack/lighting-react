@@ -9,9 +9,14 @@ import { useSyncExternalStore } from 'react'
  * key would drift apart the moment one of them wrote. Same shape as the programmer revision store
  * in `store/programmer.ts`.
  */
-export type VisSource = 'output' | 'outputProgrammer' | 'programmer'
+export type VisSource = 'output' | 'outputProgrammer' | 'programmer' | 'nextGo'
 
-export const VIS_SOURCES: readonly VisSource[] = ['output', 'outputProgrammer', 'programmer']
+export const VIS_SOURCES: readonly VisSource[] = [
+  'output',
+  'outputProgrammer',
+  'programmer',
+  'nextGo',
+]
 
 export const DEFAULT_VIS_SOURCE: VisSource = 'output'
 
@@ -19,6 +24,7 @@ export const VIS_SOURCE_LABELS: Record<VisSource, string> = {
   output: 'Output',
   outputProgrammer: 'Output + Programmer',
   programmer: 'Programmer only',
+  nextGo: 'Next GO',
 }
 
 export const VIS_SOURCE_HINTS: Record<VisSource, string> = {
@@ -27,6 +33,10 @@ export const VIS_SOURCE_HINTS: Record<VisSource, string> = {
   // setting looks broken unless the operator knows when it bites.
   outputProgrammer: 'Output with the programmer laid over it. Same as Output unless Blind is on.',
   programmer: 'Only what the programmer holds. Everything else reads zero.',
+  // "Cue values only" is the caveat an operator would otherwise read as a bug: a cue whose look
+  // is carried by an effect previews as nothing. The other one — nothing is previewed at all
+  // unless the show is running — is live state, so it comes from `useNextGoStatus` instead.
+  nextGo: 'What the next GO would look like, over live output. Cue values only.',
 }
 
 const STORAGE_KEY = 'stageVisSource'

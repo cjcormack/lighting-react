@@ -14,13 +14,14 @@ keeps showing the pre-blind look while the operator builds a cue they cannot see
 sheet already solved this at cell granularity (`fixtures-list/ownership.ts::applyStagedValue`); the
 stage did not.
 
-`hooks/useVisSource.ts` holds the operator's choice of three:
+`hooks/useVisSource.ts` holds the operator's choice of four:
 
 | Source | What it draws |
 |---|---|
 | `output` | Final merged DMX — what the desk is transmitting. |
 | `outputProgrammer` | Output with the programmer laid over it. Identical to `output` unless Blind is on. |
 | `programmer` | Only what the programmer holds; every other channel reads 0. |
+| `nextGo` | The look the next GO would produce, over live output. |
 
 `programmer` is literal on purpose: an empty programmer shows an empty stage, and a fixture given
 intensity but no position sits at pan/tilt 0 rather than borrowing a position from the wire.
@@ -30,23 +31,79 @@ read it — the Stage route's View menu and the globally-mounted `StageOverviewP
 `usePersistentState` reads its key once in a `useState` initialiser and never listens for changes,
 so two components sharing a key drift apart the moment one writes.
 
-The stored value is narrowed through `isVisSource` on read. A value written by a later build (a
-fourth source, say) must not reach code that has no case for it.
+The stored value is narrowed through `isVisSource` on read. A value written by a later build must
+not reach code that has no case for it.
 
 ### The fourth source: Next GO
 
-Previewing the look the next GO would produce is the one source that isn't a merge of what the
-desk already holds — it needs a *hypothetical* cue set composed. The backend does that now:
+Previewing the look the next GO would produce is the one source that isn't a merge of what the desk
+already holds — it needs a *hypothetical* cue set composed. The backend does that:
 `POST /project/{id}/cue-stacks/{stackId}/preview` returns the channel values a cue would produce,
 run through the real `CueAssignmentResolver`, and "next" is a server-owned concept broadcast on
-`cueRunStateChanged` (so which cue is being previewed is no longer a per-session guess). See
-lighting7 `docs/cue-stacks-engineering.md` §"Preview compose" and §"Standby".
+`cueRunStateChanged`. See lighting7 `docs/cue-stacks-engineering.md` §"Preview compose" and
+§"Standby".
 
-What remains is a `ChannelSource` over that response — re-requested on `cueRunStateChanged`,
-since the previewed look changes whenever the next cue does — and a fourth `VisSource` member.
-Two limits shape the UI: the preview is **Layer 4 only** (a cue whose look is carried by an
-effect previews as little or nothing), and channels no cue asserts are **absent** rather than 0,
-so the source must fall back to the wire for them the way `outputProgrammer` overlays.
+`hooks/useNextGoPreview.ts` is the client half. Four decisions in it:
+
+**It is pushed, not derived.** `createPushChannelSource` (`api/channelSource.ts`) is a channel
+source whose map is *handed to it*, so it is deliberately **not** a `DerivedChannelSource` — there
+is no upstream to subscribe to and `refresh`/`dispose` would mean nothing. It carries `holds`
+because that is all `createOverlayChannelSource` structurally needs, and it reuses the same
+`createFanOut` as the programmer source, so a channel dropping *out* of a look notifies exactly
+like one changing value.
+
+**It overlays the wire, and that is not cosmetic.** The endpoint reports only the channels the cue
+asserts; everything else is *absent*, not 0. Reading absent as 0 would black out every fixture the
+next cue doesn't touch. So `nextGo` resolves to
+`createOverlayChannelSource(outputChannelSource, preview)`, exactly as `outputProgrammer` does, and
+"nothing to preview" is expressed by emptying the source rather than by a special case.
+
+**"Which cue" is read out of the RTK cache, not off the socket.** The target is the *current*
+project (the route sits behind `withCurrentProject` and 409s otherwise), the project playhead's
+stack (`projectProgramState.activeStackId` — the stack the Runner's GO fires), and that stack's
+`nextCueId` from `projectCueStackList`. The global `cueRunStateChanged` subscriber in
+`store/cueStacks.ts` already patches `nextCueId` into that cache, so reading it here *is* following
+the run state: no second socket listener, and no re-request on a standby-only or connect-snapshot
+frame that left the next cue where it was. The request names the cue id explicitly rather than
+sending `null`, so the response can't answer a different cue than the effect keyed on; a superseded
+response is dropped by an `ignore` flag in the effect cleanup.
+
+**The request is a query, not a mutation, despite being a POST.** Two things follow from that, and
+both are load-bearing. Several stage surfaces can be mounted at once — the Stage route's canvas and
+the globally-mounted `StageOverviewPanel`, which renders whether or not it is expanded — and RTK
+Query collapses their identical args into one request and one cache entry, so a collapsed panel
+costs nothing and a GO produces one POST rather than one per surface. And every subscriber sees the
+same `isError`, which is what lets the status line report the *request* rather than the target.
+`refetchOnMountOrArgChange` is set, so re-selecting the source recomposes instead of replaying a
+cached look. `cueId` is a required arg rather than "null means the effective next", because under a
+query the arg *is* the cache key: a key meaning "whatever the server currently thinks" would serve
+one cue's look under another cue's identity. Being a query also puts it outside
+`errorToastMiddleware` and `saveStatusSlice` entirely, both of which only see mutations.
+
+Four limits shape what the source can promise. The first two the View menu states outright,
+because an operator would otherwise read them as bugs; the last two it does not:
+
+* **Layer 4 only.** A cue whose look is carried by a cue-band effect or a timed preset previews as
+  little or nothing. The menu hint says "cue values only".
+* **No show running, no preview.** With no active stack — or at the end of a non-looping stack,
+  where the backend answers **400** — the source empties and the stage shows plain output. That is
+  indistinguishable from a working preview unless it is stated, so `useNextGoStatus` puts "No cue on
+  deck — showing output." under the menu entry, and "Preview unavailable — showing output." when
+  the request itself fails. The status is read off the shared query's `isError`/`isSuccess` rather
+  than off the target, so it can never name a cue the stage isn't actually drawing — there is no
+  toast to fall back on, since a 400 here is an ordinary state and queries don't reach
+  `errorToastMiddleware` anyway.
+* **Another stack's GO doesn't refresh it.** The preview composes against every *other* stack's
+  live rows, so a GO elsewhere changes the answer — but the refresh is keyed on the previewed
+  stack's own `nextCueId`, which such a GO leaves alone. Within the previewed stack it is exact.
+  Deliberate: the alternative is re-requesting on every run-state frame from every stack.
+* **Editing the cue on deck doesn't refresh it either.** Same cause: the request effect is keyed on
+  `projectId`/`stackId`/`cueId` alone, so changing the *contents* of the previewed cue — a level, a
+  preset, a palette ref — leaves the previously composed look on the stage until the desk moves the
+  next cue on. `projectCueStackList` carries no revision that moves when a cue assignment changes,
+  so fixing this needs one; a partial key off `presetCount`/`paletteSize` would refresh for some
+  edits and silently not for others, which is worse than the known limit. The operator's handle in
+  the meantime is to reselect the source, which `refetchOnMountOrArgChange` makes recompose.
 
 ### Injection is at channel level
 

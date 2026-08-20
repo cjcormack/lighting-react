@@ -9,6 +9,7 @@ import {
 } from '../api/channelSource'
 import { descriptorsByTarget, type DescriptorsByTarget } from '../lib/programmerChannels'
 import { useFixtureLookup } from './useFixtureLookup'
+import { useNextGoSource } from './useNextGoPreview'
 import { useVisSource, type VisSource } from './useVisSource'
 
 /**
@@ -88,22 +89,34 @@ function useProgrammerSource(enabled: boolean): DerivedChannelSource | null {
 /**
  * Resolve a [VisSource] to the channel source that renders it.
  *
- * Falls back to output while the programmer source is still being built, which costs one frame
- * after a selector flip and nothing at all in steady state.
+ * Falls back to output while a derived source is still being built, which costs one frame after a
+ * selector flip and nothing at all in steady state. Each case falls back on its *own* source
+ * being absent — a single early-out would pin `nextGo` to the wire, since it never builds a
+ * programmer source at all.
  */
 export function useResolvedChannelSource(visSource: VisSource): ChannelSource {
-  const programmer = useProgrammerSource(visSource !== 'output')
+  const programmer = useProgrammerSource(
+    visSource === 'outputProgrammer' || visSource === 'programmer',
+  )
+  const nextGo = useNextGoSource(visSource === 'nextGo')
   return useMemo(() => {
-    if (!programmer) return outputChannelSource
     switch (visSource) {
       case 'output':
         return outputChannelSource
       case 'outputProgrammer':
-        return createOverlayChannelSource(outputChannelSource, programmer)
-      case 'programmer':
         return programmer
+          ? createOverlayChannelSource(outputChannelSource, programmer)
+          : outputChannelSource
+      case 'programmer':
+        return programmer ?? outputChannelSource
+      case 'nextGo':
+        // Overlaid, not literal: the preview reports only the channels the cue asserts, so
+        // everything it is silent about has to show the wire through.
+        return nextGo
+          ? createOverlayChannelSource(outputChannelSource, nextGo)
+          : outputChannelSource
     }
-  }, [visSource, programmer])
+  }, [visSource, programmer, nextGo])
 }
 
 /**

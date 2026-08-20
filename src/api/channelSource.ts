@@ -167,6 +167,50 @@ export function createProgrammerChannelSource(
   }
 }
 
+/** One channel of a pushed look, as the preview endpoint reports it. */
+export interface PushedChannel {
+  universe: number
+  channel: number
+  value: number
+}
+
+/** A [ChannelSource] whose values are handed to it, rather than derived from a subscription. */
+export interface PushChannelSource extends ChannelSource {
+  /** Whether this source has an opinion about the channel — see [DerivedChannelSource.holds]. */
+  holds(key: string): boolean
+  /** Replace the whole map, notifying every channel whose value *or presence* moved. */
+  setChannels(channels: Iterable<PushedChannel>): void
+}
+
+/**
+ * A source fed from outside — the Next GO preview.
+ *
+ * Not a [DerivedChannelSource]: there is no upstream to subscribe to and nothing to recompute, so
+ * `refresh` and `dispose` would be meaningless. It carries `holds` because that is what
+ * [createOverlayChannelSource] dispatches on, and the distinction matters more here than anywhere:
+ * the preview endpoint omits channels no cue asserts rather than reporting them as 0, so a channel
+ * this source doesn't hold must fall back to the wire. Treating absent as 0 would black out every
+ * fixture the next cue doesn't touch.
+ */
+export function createPushChannelSource(): PushChannelSource {
+  const fanOut = createFanOut()
+  let values = new Map<string, number>()
+
+  return {
+    get: (universe, channelNo) => values.get(`${universe}:${channelNo}`) ?? 0,
+    getByKey: (key) => values.get(key) ?? 0,
+    holds: (key) => values.has(key),
+    subscribeToChannel: fanOut.subscribe,
+    setChannels(channels) {
+      const next = new Map<string, number>()
+      for (const c of channels) next.set(`${c.universe}:${c.channel}`, c.value)
+      const before = values
+      values = next
+      fanOut.notifyChanged(before, next)
+    },
+  }
+}
+
 /**
  * `overlay` where it holds a channel, `base` everywhere else.
  *
