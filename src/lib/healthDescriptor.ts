@@ -18,11 +18,12 @@ export function describeHealth(health: BindingHealth | undefined): string | null
     case "missingProperty":
       return `Property '${health.propertyName}' is not defined on '${health.targetKey}'`
     case "missingPalette":
-      return "The palette this references no longer exists"
+      return "The look this references no longer exists"
+    // The only diagnosis a failed reference gets. There used to be a `paletteTypeMismatch` case
+    // naming a wrong-type reference as the cause; a Look declares no attribute type, so that
+    // complaint stopped being coherent and the arm has no producer.
     case "missingPaletteEntry":
-      return `The referenced palette has no ${health.propertyName} for '${health.targetKey}'`
-    case "paletteTypeMismatch":
-      return `A ${health.paletteType.toLowerCase()} palette can't cover a ${health.propertyGroup.toLowerCase()} property`
+      return `The referenced look has no ${health.propertyName} for '${health.targetKey}'`
     case "missingStack":
       return `Cue stack #${health.stackId} no longer exists`
     case "missingCue":

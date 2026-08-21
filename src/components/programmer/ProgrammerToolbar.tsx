@@ -28,8 +28,8 @@ import { useActiveEffectsQuery } from '../../store/fixtureFx'
 import { IncludeSheet } from './IncludeSheet'
 import { RecordSheet } from './RecordSheet'
 import { UpdateDialog } from './UpdateDialog'
-import { MakeHardDialog } from '../palettes/MakeHardDialog'
-import { describeIncludedTarget } from '@/lib/includedTarget'
+import { MakeHardDialog } from './MakeHardDialog'
+import { describeIncludedTarget, includedTargetIsReadOnly } from '@/lib/includedTarget'
 
 /** Fade options for Clear and for entering/leaving Blind, in milliseconds. */
 const FADE_OPTIONS = [
@@ -60,6 +60,7 @@ export function ProgrammerToolbar() {
   const blind = summary?.blind ?? false
   const entryCount = summary?.entryCount ?? 0
   const includeTarget = summary?.lastIncluded ?? null
+  const includeTargetReadOnly = includedTargetIsReadOnly(includeTarget)
   const referenceCount = summary?.referenceCount ?? 0
   const fade = Number(fadeMs) || 0
 
@@ -89,18 +90,24 @@ export function ProgrammerToolbar() {
       label: 'Include',
       Icon: Download,
       disabled: !projectId,
-      tooltip: 'Load a cue or a palette into the programmer to edit it',
+      tooltip: 'Load a cue or a look into the programmer to edit it',
       onSelect: () => setIncludeOpen(true),
     },
     {
       label: 'Update',
       Icon: Upload,
-      disabled: !hasContent || !projectId,
-      tooltip: includeTarget
-        ? `Write your changes back into ${describeIncludedTarget(includeTarget)}`
-        : hasContent
-          ? 'Show the cues the programmer is overriding'
-          : 'The programmer is empty — nothing to update',
+      // A Look include is one-way: the write-back path still targets the retired palette tables, so
+      // Update would report success over rows no consumer reads. Disabled with the reason rather
+      // than hidden — the operator needs to know the Include itself worked.
+      disabled: !hasContent || !projectId || includeTargetReadOnly,
+      tooltip: includeTargetReadOnly
+        ? `Writing back into ${describeIncludedTarget(includeTarget!)} isn’t available yet — ` +
+          'a look include is read-only for now'
+        : includeTarget
+          ? `Write your changes back into ${describeIncludedTarget(includeTarget)}`
+          : hasContent
+            ? 'Show the cues the programmer is overriding'
+            : 'The programmer is empty — nothing to update',
       onSelect: () => setUpdateOpen(true),
     },
     {
@@ -260,8 +267,7 @@ export function ProgrammerToolbar() {
           <MakeHardDialog
             open={makeHardOpen}
             onOpenChange={setMakeHardOpen}
-            projectId={projectId}
-            scope={{ kind: 'programmer', referenceCount }}
+            referenceCount={referenceCount}
           />
         </>
       )}

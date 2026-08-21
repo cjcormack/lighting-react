@@ -189,29 +189,65 @@ stage read path, adding a source, or relying on what `ProgrammerState.channels` 
 is the backend's channel *sideband*, not the programmer's channel output, and mistaking the two is
 the bug that doc exists to prevent.
 
-### Palettes
+### Looks and layers
 
-Named, typed (INTENSITY / POSITION / COLOUR / BEAM) collections of **per-fixture**
-property values that cues, FX preset rows and programmer entries reference by
-identity rather than by value. The stored value is `ref:{paletteUuid}` — a uuid,
-not the int id, because int primary keys never appear in the backend's sync
-export and are re-minted on import, so `ref:12` would dangle after any import or
-clone. Use `id` for REST paths and `uuid` for anything naming a palette inside a
-value; `src/lib/programmerValue.ts` owns that grammar.
+One library entity — a **Look** — replacing what used to be two (FX presets and named
+palettes), and one reference mechanism: a **Layer** applies a Look inside a cue at a
+declared position in that cue's stack. Backend contract in
+`lighting7/docs/lighting-composition-model.md` §"Looks and layers"; the migration plan and
+its remaining sessions are `lighting7/docs/plans/looks-and-layers-plan.md`.
 
-Editing a palette republishes every live consumer — one edit moves every look
-that references it, which is the point of the feature. There is deliberately **no
-per-cell palette editor**: you Record from the programmer, or Include → edit on
-stage → Update. **Make Hard** (programmer-wide or per cue) is the escape hatch,
-replacing references with the literals they currently resolve to.
+A Look's rows are either **bound** (naming their own fixture or group) or **deferred**
+(taking their targets from the layer applying them), and that distinction is what makes one
+entity serve both old jobs: a bound Look behaves like a palette, a fully-deferred one like a
+preset. `LookSummary.hasDeferredRows` tells them apart, and it decides which editor a
+library row opens — a template gets `LookEditor`'s value grid against a synthetic fixture
+built from `editorFixtureType`, a recorded Look gets `LookDetailSheet`, which is read-only
+about values on purpose. Read that sheet's doc comment before adding a value grid to it.
 
-Two unrelated things are called "palette" in the lighting world, so this repo
-qualifies the older one: the positional ordered colour list that FX parameters
-index as `P1`/`P2`/`P*` is labelled **"Colour List"** in the UI. Its helpers
-(`isPaletteRef` / `parsePaletteIndex` in `components/fx/colourUtils.ts`) mean that
-form; the named-palette ones (`isPaletteRefValue` / `parsePaletteRefUuid`) mean
-this one. **Never mint a `P<n>` short code for a named palette** — display its
-name.
+There is **no stored attribute type**. `LookSummary.families` is derived server-side from the
+rows, so a Look spanning colour and position reports both — which is why `/looks` is **one
+route with a sticky in-page family filter** rather than four sibling routes like the palette
+banks it replaces. That is a deliberate departure from the sibling-route rule in §Navigation
+Registry: a derived family cannot own a path. `?family=colour` deep-links from Cmd+K.
+
+`src/lib/attributeFamily.ts` owns the family vocabulary and mirrors the backend's
+`PropertyMaskGroup`; `maskPicker.test.ts` pins the two lists against each other.
+
+**Within a cue, later layers win — for every attribute, intensity included**, and the cue's
+own `propertyAssignments` are the last layer and beat all of them. Across cues, HTP still
+governs intensity. That flip is the change an operator coming from presets is most likely to
+be surprised by, so `LayersPane` says it in the section body rather than leaving it implied.
+A layer's `sortOrder` is authoritative, not its array position — `reorderCueLayers` in
+`lib/cueUtils.ts` renumbers the whole list on every drag for that reason.
+
+`buildCueInput` rebuilds `layers` **field by field**, and its comment says why. A field
+missing from that rebuild is dropped on every inline cue edit; `cueUtils.test.ts` pins all
+thirteen individually rather than by deep-equal.
+
+**The `ref:{uuid}` value grammar still resolves** (a uuid, not the int id: int primary keys
+never appear in the backend's sync export and are re-minted on import, so `ref:12` would
+dangle after any import or clone — use `id` for REST paths and layer `lookId`s, `uuid` only
+inside a value). But **nothing authors one any more**: a layer with a `propertyMask` is what
+replaces it, and session 3 retires the grammar. `LookRefBadge` renders the rows that already
+hold one, name-only — no swatch and no family colour, because a Look has no type to colour
+by. **Never mint a `P<n>` short code for a Look**; display its name.
+
+"Palette" now means exactly one thing in this codebase: the positional ordered colour list
+that FX parameters index as `P1`/`P2`/`P*`, whose helpers are `isPaletteRef` /
+`parsePaletteIndex` in `components/fx/colourUtils.ts`. It is still labelled "Colour List" in
+the UI; dropping that qualifier is a session-4 tidy-up.
+
+Two things are **not** available yet, both waiting on session 3's programmer rewrite, and
+both stated in the UI rather than left to be discovered:
+
+- **Creating a bound Look.** It needs the server-side record, which still writes the retired
+  palette tables. The library's Recorded section says so.
+- **Update-back after Include.** Include-a-Look stages its literals so they can be seen and
+  busked from, and is deliberately one-way — `includedTargetIsReadOnly` is what the
+  programmer gates Update on, rather than letting the write-back path put rows into tables no
+  consumer reads. Per-cue and per-preset **Make Hard** are gone with their routes; the
+  programmer-wide one survives, because references still exist on migrated cues.
 
 ### Speed Masters
 
@@ -350,13 +386,13 @@ recovery. Frontend shape:
   can't render and the tab would otherwise be an error with nothing to press.
 
 ### Cues, Stacks & Triggers
-Cues bundle palettes, FX preset applications, ad-hoc effects, and **script hooks** into named snapshots. **Every cue belongs to a cue stack** — there are no standalone cues. A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of cues. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). Cues and stacks are authored and run entirely in the **Program** view (`/projects/:projectId/program`, drilling into a stack at `/program/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed.
+Cues bundle an ordered stack of **Look layers** (see §Looks and layers), their own property assignments, ad-hoc effects, and **script hooks** into named snapshots. **Every cue belongs to a cue stack** — there are no standalone cues. A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of cues. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). Cues and stacks are authored and run entirely in the **Program** view (`/projects/:projectId/program`, drilling into a stack at `/program/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed.
 
 **Cue numbers** are free-form display labels (`sortOrder` is the authoritative playback order). They are parsed as **prefix + decimal run + suffix** (`S1-3.1` → `("S1-", [3,1], "")`) and only ever compared *within a prefix group*, so `Pre-show 1, Pre-show 2, T2-1, S-1, S-2` is correctly ordered. `src/lib/cueNumber.ts` holds that model and drives the "Fix Order" banner; it mirrors `routes/cueNumbering.kt` in lighting7, which performs the fix — **keep the two in step**.
 
 A cue without an explicit number gets one derived from its position (`cueNumberAuto: true`), recomputed by the backend whenever the stack changes. Auto numbers render dimmed via `AUTO_CUE_NUMBER_CLASS`; clearing the `Cue #` field returns a cue to auto.
 
-**Timed effects**: Preset applications and ad-hoc effects can have optional timing (delayMs, intervalMs, randomWindowMs) to fire after a delay or on a recurring interval. Immediate (no timing) is the default.
+**Timed effects**: Layers and ad-hoc effects can have optional timing (delayMs, intervalMs, randomWindowMs) to fire after a delay or on a recurring interval. Immediate (no timing) is the default. A timed layer re-cooks the whole cue when it fires rather than appending its rows, so an in-flight crossfade weight survives.
 
 **Script hooks** (triggers) automate FX_APPLICATION script execution on cue lifecycle events:
 - **ACTIVATION** / **DEACTIVATION** — fire when the cue starts/stops
@@ -459,16 +495,17 @@ REST API is used for CRUD operations on scripts, scenes, fixtures, etc.
   FX sheet is a diagnostic read of what is running, so landing there because you
   last looked at it — rather than on the values you came to edit — would be the
   wrong default.
-- **Same exception — the palette type pages**: `/palettes` has one `navItems`
-  entry; the four type routes (`/palettes/colour`, `/palettes/position`,
-  `/palettes/intensity`, `/palettes/beam`) do not. They're reached via
-  `PaletteTypeSwitcher`, which **is** sticky (unlike Values/FX — the four types
-  are peers, not an editor and a diagnostic), plus four Cmd+K deep links from
-  `usePaletteTypeNavItems()`. Note **no type owns the bare `/palettes` path**: it
-  is its own redirect route to the sticky type. That is what keeps the redirect
-  acyclic — its target is always a different route — so nothing here needs the
-  `CARDS_LINK_STATE` escape the cards/list pair does. Three instances now; treat
-  it as the rule for sibling views rather than a one-off.
+- **Where sibling routes do *not* apply — the Look library.** `/looks` is one
+  `navItems` entry and **one route**, with a sticky in-page family filter
+  (`LookFamilyFilterBar`) rather than the four sibling routes the palette banks it
+  replaces had. Not a style choice: a Look's families are *derived* from its rows,
+  so one covering colour and position would have to live in two routes at once.
+  `useLookFamilyNavItems()` still gives Cmd+K five deep links, but as `?family=`
+  query params on the one route, with `pathMatch` left as the bare `/looks` so the
+  sidebar highlights its single row whichever family you arrived in — asserted in
+  `navigation.test.ts`. Reach for sibling routes when the sub-views partition the
+  resource (cards/list, an editor and its diagnostic); reach for a filter when a
+  record can be in more than one bucket.
 - **Role filtering**: set `adminOnly: true` on any entry whose destination is
   behind the backend's admin gate (`ADMIN_ONLY_PREFIXES` / the per-project sync
   subtree in lighting7's `auth/AuthGate.kt`) — currently `users`, `sync` and

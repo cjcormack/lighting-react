@@ -15,26 +15,29 @@ export interface UseIncludeOptions {
 }
 
 /**
- * What to load into the programmer. A discriminated union rather than two optional ids: the
- * backend accepts exactly one of `cueId` / `paletteId` and 400s otherwise, and
+ * What to load into the programmer. A discriminated union rather than optional ids: the backend
+ * accepts exactly one of `cueId` / `lookId` and 400s otherwise, and
  * `ProgrammerStore.lastIncludedTarget` is single-valued, so "both" has no meaning to express.
  */
 export type IncludeTargetRequest =
   | { kind: 'CUE'; cueId: number }
-  | { kind: 'PALETTE'; paletteId: number }
+  | { kind: 'LOOK'; lookId: number }
 
 /**
- * Include a cue *or a palette* into the programmer and hand its fixtures to the sheet's
- * selection.
+ * Include a cue *or a Look* into the programmer and hand its fixtures to the sheet's selection.
  *
  * Shared by the toolbar's picker and the Program view's per-cue Include, so the auto-select and
  * the warning surfacing can't drift between the entry points.
  *
  * The two kinds differ in what they stage, and the difference is the point: including a **cue**
  * writes reference slots for its reference rows, so an untouched reference survives the Update
- * round trip; including a **palette** writes plain literals, because you are editing that
- * palette's contents and a slot referencing the thing it is about to overwrite is meaningless.
- * Both of those are the backend's call — this hook just names the target.
+ * round trip; including a **Look** writes plain literals, because you are looking at that Look's
+ * own contents and a slot referencing the thing it describes would mean nothing. Both of those are
+ * the backend's call — this hook just names the target.
+ *
+ * A Look include is **one-way this session**: Update-back still writes through the retired palette
+ * tables, so the toolbar disables Update while a Look is the include target rather than let it
+ * write rows no consumer reads.
  */
 export function useInclude(projectId: number, options: UseIncludeOptions = {}) {
   const { toastErrors = true } = options
@@ -46,7 +49,7 @@ export function useInclude(projectId: number, options: UseIncludeOptions = {}) {
       try {
         const response = await includeIntoProgrammer({
           projectId,
-          ...(target.kind === 'CUE' ? { cueId: target.cueId } : { paletteId: target.paletteId }),
+          ...(target.kind === 'CUE' ? { cueId: target.cueId } : { lookId: target.lookId }),
           mask: mask && mask.length > 0 ? mask : undefined,
         }).unwrap()
         setResult(response)

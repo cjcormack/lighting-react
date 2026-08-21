@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils'
 import { useFixtureListQuery } from '@/store/fixtures'
 import { useGroupListQuery, useGroupQuery } from '@/store/groups'
 import { usePatchProjectCueMutation } from '@/store/cues'
-import { buildCueInput } from '@/lib/cueUtils'
+import { buildCueInput, reorderCueLayers } from '@/lib/cueUtils'
 import { MiniStage } from './MiniStage'
 import { AddTargetSheet } from './AddTargetSheet'
 import type { Cue, CueTarget } from '@/api/cuesApi'
@@ -51,18 +51,31 @@ export function TargetsPane({ cue, projectId, targets }: TargetsPaneProps) {
       input.adHocEffects = input.adHocEffects.filter(
         (e) => !(e.targetType === target.type && e.targetKey === target.key),
       )
-      input.presetApplications = input.presetApplications
-        .map((pa) => ({
-          ...pa,
-          targets: pa.targets.filter((t) => !targetEquals(t, target)),
-        }))
-        .filter((pa) => pa.targets.length > 0)
+      // A layer that named only this target goes; one that named several is narrowed. A layer
+      // that named *none* is left alone — it uses the Look's own targets, so this target was
+      // never its doing, and dropping it would silently delete an unrelated part of the
+      // composition. That is why the emptiness test is on the layer as it arrived, not on the
+      // filtered result.
+      //
+      // Re-densified through `reorderCueLayers`: dropping a layer from the middle would otherwise
+      // leave a gap in `sortOrder`, and `LayersPane`'s `addLayer` numbers the next one from
+      // `layers.length` — so the following Add would collide with a surviving layer's sortOrder,
+      // which is exactly the tie the layer model exists to remove.
+      input.layers = reorderCueLayers(
+        input.layers.flatMap((layer) => {
+          if (layer.targets.length === 0) return [layer]
+          const kept = layer.targets.filter((t) => !targetEquals(t, target))
+          return kept.length > 0 ? [{ ...layer, targets: kept }] : []
+        }),
+        0,
+        0,
+      )
       patchCue({
         projectId,
         cueId: cue.id,
         propertyAssignments: input.propertyAssignments,
         adHocEffects: input.adHocEffects,
-        presetApplications: input.presetApplications,
+        layers: input.layers,
       })
     },
     [cue, projectId, patchCue],

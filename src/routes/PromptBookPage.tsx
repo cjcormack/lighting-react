@@ -586,7 +586,7 @@ export function PromptBookViewerPage() {
           notes,
           palette: [],
           updateGlobalPalette: false,
-          presetApplications: [],
+          layers: [],
           adHocEffects: [],
           triggers: [],
           fadeDurationMs: 3000,

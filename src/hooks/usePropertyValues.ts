@@ -2,9 +2,9 @@ import { useRef, useMemo, useSyncExternalStore, useCallback } from 'react'
 import { lightingApi } from '../api/lightingApi'
 import { useEditorContext } from '../components/lighting-editor/EditorContext'
 import {
-  usePresetDraft,
-  usePresetDraftValue,
-} from '../components/presets/PresetDraftContext'
+  useLookDraft,
+  useLookDraftValue,
+} from '../components/looks/LookDraftContext'
 import {
   rgbToHex,
   hexToRgb,
@@ -83,7 +83,7 @@ function parsePositionCanonical(value: string | undefined): { pan: number; tilt:
  */
 export function useSliderValue(property: SliderPropertyDescriptor): number {
   const ctx = useEditorContext()
-  const draftValue = usePresetDraftValue(property.name)
+  const draftValue = useLookDraftValue(property.name)
   const source = useChannelSource()
   // ChannelRef is exactly {universe, channelNo}, so these two fully identify the
   // channel. Keying off them rather than the enclosing descriptor avoids
@@ -102,7 +102,7 @@ export function useSliderValue(property: SliderPropertyDescriptor): number {
 
   const liveValue = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 
-  if (ctx.kind === 'preset') return parseSliderCanonical(draftValue)
+  if (ctx.kind === 'look') return parseSliderCanonical(draftValue)
   return liveValue
 }
 
@@ -156,7 +156,7 @@ function parseColourFromDraft(
  */
 export function useColourValue(property: ColourPropertyDescriptor): ColourValueResult {
   const ctx = useEditorContext()
-  const draftValue = usePresetDraftValue(property.name)
+  const draftValue = useLookDraftValue(property.name)
   const source = useChannelSource()
   const cachedRef = useRef<ColourValueResult | null>(null)
 
@@ -209,7 +209,7 @@ export function useColourValue(property: ColourPropertyDescriptor): ColourValueR
 
   const liveResult = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 
-  if (ctx.kind === 'preset') return parseColourFromDraft(property, draftValue)
+  if (ctx.kind === 'look') return parseColourFromDraft(property, draftValue)
   return liveResult
 }
 
@@ -225,7 +225,7 @@ type PositionValueResult = {
  */
 export function usePositionValue(property: PositionPropertyDescriptor): PositionValueResult {
   const ctx = useEditorContext()
-  const draftValue = usePresetDraftValue(property.name)
+  const draftValue = useLookDraftValue(property.name)
   const source = useChannelSource()
   const cachedRef = useRef<PositionValueResult | null>(null)
 
@@ -262,7 +262,7 @@ export function usePositionValue(property: PositionPropertyDescriptor): Position
 
   const liveResult = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 
-  if (ctx.kind === 'preset') {
+  if (ctx.kind === 'look') {
     const { pan, tilt } = parsePositionCanonical(draftValue)
     const panRange = property.panMax - property.panMin
     const tiltRange = property.tiltMax - property.tiltMin
@@ -301,7 +301,7 @@ export function resolveSettingOption<O extends { level: number }>(
  */
 export function useSettingValue(property: SettingPropertyDescriptor): SettingValueResult {
   const ctx = useEditorContext()
-  const draftValue = usePresetDraftValue(property.name)
+  const draftValue = useLookDraftValue(property.name)
   const source = useChannelSource()
   const cachedRef = useRef<SettingValueResult | null>(null)
   // See useSliderValue: the two ChannelRef fields fully identify the channel.
@@ -328,7 +328,7 @@ export function useSettingValue(property: SettingPropertyDescriptor): SettingVal
 
   const liveResult = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 
-  if (ctx.kind === 'preset') {
+  if (ctx.kind === 'look') {
     const level = parseSliderCanonical(draftValue)
     return { level, option: resolveSettingOption(property.options, level) }
   }
@@ -346,8 +346,8 @@ export interface PropertyWriteTarget {
 
 /**
  * Hook to update a channel value. Routes through `cueEdit.setChannel` when the surrounding
- * [EditorContext] is `kind: 'cue'`; in `kind: 'preset'` mode channel-level writes are a
- * no-op — preset assignments are property-keyed, not channel-keyed, and the synthetic
+ * [EditorContext] is `kind: 'cue'`; in `kind: 'look'` mode channel-level writes are a
+ * no-op — Look rows are property-keyed, not channel-keyed, and the synthetic
  * fixture's channel refs don't map to real DMX anyway.
  *
  * Live writes go to the **programmer** (Layer 2). Pass [target] whenever the caller knows
@@ -375,7 +375,7 @@ export function useUpdateChannel() {
         })
         return
       }
-      if (ctx.kind === 'preset') return
+      if (ctx.kind === 'look') return
       if (target) {
         lightingApi.programmer.set(
           'fixture',
@@ -418,7 +418,7 @@ export function useUpdateFixturePosition(
         })
         return
       }
-      if (ctx.kind === 'preset') return
+      if (ctx.kind === 'look') return
       if (!fixtureKey) {
         lightingApi.channels.update(property.panChannel.universe, property.panChannel.channelNo, pan)
         lightingApi.channels.update(property.tiltChannel.universe, property.tiltChannel.channelNo, tilt)
@@ -433,7 +433,7 @@ export function useUpdateFixturePosition(
 /**
  * Update all colour channels of a fixture-level colour property. In cue mode RGB routes
  * through one `cueEdit.setProperty { rgbColour }` (the backend rejects R/G/B sub-channels);
- * W/A/UV stay on `setChannel`. In preset mode writes go to the local draft keyed by
+ * W/A/UV stay on `setChannel`. In look mode writes go to the local draft keyed by
  * `property.name`, with W/A/UV serialised into the extended-colour suffix. Mirrors
  * [useUpdateGroupColour].
  */
@@ -442,7 +442,7 @@ export function useUpdateFixtureColour(
   fixtureKey: string | undefined,
 ) {
   const ctx = useEditorContext()
-  const draft = usePresetDraft()
+  const draft = useLookDraft()
   return useCallback(
     (r: number, g: number, b: number, w?: number, a?: number, uv?: number) => {
       if (ctx.kind === 'cue' && fixtureKey) {
@@ -483,7 +483,7 @@ export function useUpdateFixtureColour(
         }
         return
       }
-      if (ctx.kind === 'preset' && draft) {
+      if (ctx.kind === 'look' && draft) {
         const value = serializeExtendedColour({
           hex: rgbToHex(r, g, b),
           white: property.whiteChannel ? w ?? 0 : 0,

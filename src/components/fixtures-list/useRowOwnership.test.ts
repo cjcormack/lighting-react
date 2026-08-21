@@ -190,7 +190,7 @@ describe('aggregateCellOwnership', () => {
     })
   })
 
-  it('reports the referenced palette when every covered property names the same one', () => {
+  it('reports the referenced look when every covered property names the same one', () => {
     const keys: CellPropertyKey[] = [
       { targetKey: 'f1', propertyName: 'rgbColour' },
       { targetKey: 'f2', propertyName: 'rgbColour' },
@@ -200,7 +200,6 @@ describe('aggregateCellOwnership', () => {
       paletteUuid: '11111111-2222-3333-4444-555555555555',
       paletteId: 7,
       paletteName: 'Warm Amber',
-      paletteType: 'COLOUR' as const,
       resolvedValue: '#ff8800',
     }
     const result = aggregateCellOwnership(
@@ -211,11 +210,12 @@ describe('aggregateCellOwnership', () => {
         'f2|rgbColour': { entry: entry({ targetKey: 'f2', propertyName: 'rgbColour', ...ref }) },
       }),
     )
+    // No `type`: a Look declares no attribute type, so a reference cannot report one. The name and
+    // the resolve state are what the cell actually needs.
     expect(result?.paletteRef).toEqual({
       uuid: '11111111-2222-3333-4444-555555555555',
       id: 7,
       name: 'Warm Amber',
-      type: 'COLOUR',
       resolved: true,
       mixed: false,
     })

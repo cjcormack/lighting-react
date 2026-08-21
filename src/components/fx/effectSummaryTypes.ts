@@ -1,7 +1,7 @@
 /**
  * Normalised effect data and adapter functions for the unified EffectSummary component.
  */
-import type { FxPresetEffect } from '@/api/fxPresetsApi'
+import type { LookEffect } from '@/api/looksApi'
 import type { CueAdHocEffect } from '@/api/cuesApi'
 import type {
   FixtureDirectEffect,
@@ -79,21 +79,18 @@ function lookupParameterDefs(
 
 // ─── Adapter functions ─────────────────────────────────────────────────────
 
-export function fromPresetEffect(
-  e: FxPresetEffect,
-  library?: EffectLibraryEntry[],
-): EffectSummaryData {
+export function fromLookEffect(e: LookEffect, library?: EffectLibraryEntry[]): EffectSummaryData {
   return {
     effectType: e.effectType,
     category: e.category,
-    propertyName: e.propertyName,
+    propertyName: e.propertyName ?? null,
     beatDivision: e.beatDivision,
     blendMode: e.blendMode,
     distribution: e.distribution,
-    phaseOffset: e.phaseOffset,
-    stepTiming: e.stepTiming,
-    elementMode: e.elementMode,
-    elementFilter: e.elementFilter,
+    phaseOffset: e.phaseOffset ?? 0,
+    stepTiming: e.stepTiming ?? null,
+    elementMode: e.elementMode ?? null,
+    elementFilter: e.elementFilter ?? null,
     parameters: e.parameters,
     parameterDefs: lookupParameterDefs(e.effectType, library),
     speedMasterUuid: e.speedMasterUuid ?? null,

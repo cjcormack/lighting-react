@@ -5,11 +5,15 @@ import { lightingApi } from '../../api/lightingApi'
  * `kind: 'live'` writes go to Layer 4 (direct stage); `kind: 'cue'` writes route through
  * `cueEdit.*` so the backend persists them as Layer 3 property assignments on the active
  * edit session. `mode` distinguishes stage-synced (`live`) from persist-only (`blind`).
+ *
+ * `kind: 'look'` writes reach neither: they land in `LookDraftContext`, because the Look editor
+ * works against a synthetic fixture and its rows are deferred — there is no head on stage to
+ * write to until a layer supplies one.
  */
 export type EditorContextValue =
   | { kind: 'live' }
   | { kind: 'cue'; id: number; mode: 'live' | 'blind' }
-  | { kind: 'preset'; id: number }
+  | { kind: 'look'; id: number }
 
 const defaultValue: EditorContextValue = { kind: 'live' }
 
@@ -27,11 +31,11 @@ export function EditorContextProvider({
   const kind = value.kind
   const cueId = value.kind === 'cue' ? value.id : null
   const cueMode = value.kind === 'cue' ? value.mode : null
-  const presetId = value.kind === 'preset' ? value.id : null
+  const lookId = value.kind === 'look' ? value.id : null
   // `value` is deliberately not a dependency: depending on it is exactly the
   // per-render rebroadcast this memo exists to absorb.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const stable = useMemo(() => value, [kind, cueId, cueMode, presetId])
+  const stable = useMemo(() => value, [kind, cueId, cueMode, lookId])
   return <EditorContext.Provider value={stable}>{children}</EditorContext.Provider>
 }
 

@@ -269,7 +269,12 @@ export type Fixture = {
   mode?: ModeInfo
   capabilities: string[]
   groups: string[]
-  compatiblePresetIds: number[]
+  /**
+   * Ids of the Looks that can be pointed at this fixture — deferred Looks matching its type and
+   * capabilities. Bound Looks are absent by design: they name their own targets, so
+   * "is this compatible?" is not a question about them.
+   */
+  compatibleLookIds: number[]
   gelCode?: string | null
 }
 

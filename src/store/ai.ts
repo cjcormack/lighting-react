@@ -54,7 +54,8 @@ export const aiApi = restApi.injectEndpoints({
       }),
       // AI actions may create presets, change effects, etc.
       invalidatesTags: [
-        'FxPreset',
+        'Look',
+        'LookList',
         'GroupActiveEffects',
         'FixtureEffects',
         'AiConversation',

@@ -16,10 +16,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { formatError } from '@/lib/formatError'
 import { useProjectCueStackListQuery } from '@/store/cueStacks'
-import { usePaletteListQuery } from '@/store/palettes'
+import { useLookListQuery } from '@/store/looks'
 import { AUTO_CUE_NUMBER_CLASS } from '@/lib/cueNumber'
-import { PALETTE_TYPE_LABELS, PALETTE_TYPES } from '@/lib/paletteTypes'
-import { PalettePreviewRow } from '@/components/palettes/paletteValue'
+import { ATTRIBUTE_FAMILIES, FAMILY_LABELS } from '@/lib/attributeFamily'
+import { LookPreviewSwatches } from '@/components/looks/lookRefValue'
 import { useInclude } from './useInclude'
 import { MaskPicker } from './maskPicker'
 import type { PropertyMaskGroup } from '@/store/programmerOps'
@@ -31,16 +31,16 @@ export interface IncludeSheetProps {
 }
 
 /**
- * Pick a cue *or a palette* to Include. Reached from the programmer toolbar; the Program view
+ * Pick a cue *or a look* to Include. Reached from the programmer toolbar; the Program view
  * includes straight from the cue row it is already showing, so it doesn't need this picker.
  *
  * One sheet with two tabs rather than two sheets, because the programmer has exactly one include
- * target: including a palette replaces an included cue, and a single picker is the honest shape
+ * target: including a look replaces an included cue, and a single picker is the honest shape
  * for a single-valued destination.
  */
 export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProps) {
   const { data: stacks } = useProjectCueStackListQuery(projectId)
-  const { data: palettes } = usePaletteListQuery({ projectId })
+  const { data: looks } = useLookListQuery({ projectId })
   const { include, isLoading, error, result, resetInclude } = useInclude(projectId, {
     toastErrors: false,
   })
@@ -82,17 +82,25 @@ export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProp
       .filter((entry) => entry.cues.length > 0)
   }, [stacks, needle])
 
-  const paletteGroups = useMemo(
+  /**
+   * Only **bound** Looks are offered. A fully-deferred one names no fixture, so there is nothing to
+   * stage — the programmer has no layer to take targets from until it becomes a layer stack.
+   *
+   * Grouped by family, and a Look spanning two appears under both: its families are derived, so
+   * filing it under a single primary one would be a guess.
+   */
+  const lookGroups = useMemo(
     () =>
-      PALETTE_TYPES.map((type) => ({
-        type,
-        palettes: (palettes ?? []).filter(
-          (palette) =>
-            palette.type === type &&
-            (needle === '' || palette.name.toLowerCase().includes(needle)),
+      ATTRIBUTE_FAMILIES.map((family) => ({
+        family,
+        looks: (looks ?? []).filter(
+          (look) =>
+            !look.hasDeferredRows &&
+            look.families.includes(family) &&
+            (needle === '' || look.name.toLowerCase().includes(needle)),
         ),
-      })).filter((group) => group.palettes.length > 0),
-    [palettes, needle],
+      })).filter((group) => group.looks.length > 0),
+    [looks, needle],
   )
 
   return (
@@ -101,7 +109,7 @@ export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProp
         <SheetHeader>
           <SheetTitle>Include</SheetTitle>
           <SheetDescription>
-            Load a cue’s values and effects, or a palette’s contents, into the programmer — then
+            Load a cue’s values and effects, or a look’s contents, into the programmer — then
             edit them on stage and press Update.
           </SheetDescription>
         </SheetHeader>
@@ -139,7 +147,7 @@ export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProp
           <Tabs defaultValue="cues">
             <TabsList className="w-full">
               <TabsTrigger value="cues">Cues</TabsTrigger>
-              <TabsTrigger value="palettes">Palettes</TabsTrigger>
+              <TabsTrigger value="looks">Looks</TabsTrigger>
             </TabsList>
 
             <TabsContent value="cues" className="space-y-3">
@@ -172,40 +180,39 @@ export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProp
               {matches.length === 0 && <p className="text-sm text-muted-foreground">No cues match.</p>}
             </TabsContent>
 
-            <TabsContent value="palettes" className="space-y-3">
-              {/* Including a palette stages plain literals, not references — you are editing the
-                  palette's own contents, and a slot referencing the thing it is about to
-                  overwrite would mean nothing. The mask still applies on top of the palette's
-                  type, which is itself a mask. */}
-              {paletteGroups.map(({ type, palettes: group }) => (
-                <div key={type} className="space-y-1">
+            <TabsContent value="looks" className="space-y-3">
+              {/* Including a look stages plain literals, not references — you are looking at that
+                  look's own contents, and a slot referencing the thing it describes would mean
+                  nothing. The mask still applies on top.
+
+                  One-way for now: Update writes back through the retired palette tables, so it is
+                  disabled while a look is the include target. Staging it to busk from still works,
+                  which is what this tab is for. */}
+              {lookGroups.map(({ family, looks: group }) => (
+                <div key={family} className="space-y-1">
                   <p className="text-xs font-medium text-muted-foreground">
-                    {PALETTE_TYPE_LABELS[type].plural}
+                    {FAMILY_LABELS[family].plural}
                   </p>
-                  {group.map((palette) => (
+                  {group.map((look) => (
                     <button
-                      key={palette.id}
+                      key={look.id}
                       type="button"
                       disabled={isLoading}
-                      onClick={() => include({ kind: 'PALETTE', paletteId: palette.id }, mask)}
+                      onClick={() => include({ kind: 'LOOK', lookId: look.id }, mask)}
                       className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-50"
                     >
-                      <span className="min-w-0 flex-1 truncate">{palette.name}</span>
-                      <PalettePreviewRow
-                        type={palette.type}
-                        preview={palette.preview.slice(0, 4)}
-                        className="shrink-0"
-                      />
+                      <span className="min-w-0 flex-1 truncate">{look.name}</span>
+                      <LookPreviewSwatches preview={look.preview.slice(0, 4)} className="shrink-0" />
                       <span className="w-16 shrink-0 text-right text-xs text-muted-foreground">
-                        {palette.targetCount} fx
+                        {look.targetCount} fx
                       </span>
                     </button>
                   ))}
                 </div>
               ))}
-              {paletteGroups.length === 0 && (
+              {lookGroups.length === 0 && (
                 <p className="text-sm text-muted-foreground">
-                  No palettes match. Record one from the programmer to get started.
+                  No looks match. Only looks that name their own fixtures can be included.
                 </p>
               )}
             </TabsContent>

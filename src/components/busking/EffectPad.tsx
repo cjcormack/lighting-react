@@ -1,6 +1,6 @@
 import React, { useRef } from 'react'
 import { useNavigate } from 'react-router'
-import { Crosshair, Bookmark, Plus, Clock } from 'lucide-react'
+import { Crosshair, SwatchBook, Plus, Clock } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { cn } from '@/lib/utils'
@@ -10,9 +10,9 @@ import { EffectPadButton } from './EffectPadButton'
 import { PropertyPadButton } from './PropertyPadButton'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
 import type { EffectPresence, PropertyButton } from './buskingTypes'
-import type { FxPreset } from '@/api/fxPresetsApi'
+import type { LookSummary } from '@/api/looksApi'
 
-const CATEGORY_ORDER = ['presets', 'dimmer', 'colour', 'position', 'controls'] as const
+const CATEGORY_ORDER = ['looks', 'dimmer', 'colour', 'position', 'controls'] as const
 
 interface EffectPadProps {
   effectsByCategory: Record<string, EffectLibraryEntry[]>
@@ -22,9 +22,14 @@ interface EffectPadProps {
   hasSelection: boolean
   /** Content rendered at the top of the scrollable area (e.g. selected target summary) */
   headerContent?: React.ReactNode
-  presets: FxPreset[]
-  onApplyPreset: (preset: FxPreset) => Promise<void>
-  getPresetPresence: (preset: FxPreset) => EffectPresence
+  /**
+   * The Looks a pad can toggle — **deferred ones only**, filtered by the caller. A bound Look names
+   * its own fixtures, so the toggle route offers none of its rows and a pad for it would fire
+   * nothing.
+   */
+  looks: LookSummary[]
+  onApplyLook: (look: LookSummary) => Promise<void>
+  getLookPresence: (look: LookSummary) => EffectPresence
   currentProjectId: number | undefined
   // Beat division
   defaultBeatDivision: number
@@ -38,8 +43,8 @@ interface EffectPadProps {
   onPropertyToggle: (button: PropertyButton, settingLevel?: number) => void
   onPropertyLongPress: (button: PropertyButton) => void
   getPropertyValue: (button: PropertyButton) => string | null
-  onCreatePreset: () => void
-  onEditPreset: (preset: FxPreset) => void
+  onCreateLook: () => void
+  onEditLook: (look: LookSummary) => void
 }
 
 export function EffectPad({
@@ -49,9 +54,9 @@ export function EffectPad({
   onLongPress,
   hasSelection,
   headerContent,
-  presets,
-  onApplyPreset,
-  getPresetPresence,
+  looks,
+  onApplyLook,
+  getLookPresence,
   currentProjectId,
   defaultBeatDivision,
   onBeatDivisionChange,
@@ -62,8 +67,8 @@ export function EffectPad({
   onPropertyToggle,
   onPropertyLongPress,
   getPropertyValue,
-  onCreatePreset,
-  onEditPreset,
+  onCreateLook,
+  onEditLook,
 }: EffectPadProps) {
   if (!hasSelection) {
     return (
@@ -78,17 +83,17 @@ export function EffectPad({
     <div className="@container flex flex-col h-full overflow-y-auto px-2 pb-2">
       {headerContent}
       {CATEGORY_ORDER.map((cat) => {
-        if (cat === 'presets') {
+        if (cat === 'looks') {
           return (
             <React.Fragment key={cat}>
-              <CategorySection label="Presets" icon={Bookmark}>
-                <PresetGrid
-                  presets={presets}
-                  onApplyPreset={onApplyPreset}
-                  onEditPreset={onEditPreset}
-                  getPresetPresence={getPresetPresence}
+              <CategorySection label="Looks" icon={SwatchBook}>
+                <LookGrid
+                  looks={looks}
+                  onApplyLook={onApplyLook}
+                  onEditLook={onEditLook}
+                  getLookPresence={getLookPresence}
                   currentProjectId={currentProjectId}
-                  onCreatePreset={onCreatePreset}
+                  onCreateLook={onCreateLook}
                 />
               </CategorySection>
               <hr className="border-border mt-3 mb-0" />
@@ -195,38 +200,38 @@ function CategorySection({
 
 const MOVE_THRESHOLD = 10
 
-function PresetGrid({
-  presets,
-  onApplyPreset,
-  onEditPreset,
-  getPresetPresence,
+function LookGrid({
+  looks,
+  onApplyLook,
+  onEditLook,
+  getLookPresence,
   currentProjectId,
-  onCreatePreset,
+  onCreateLook,
 }: {
-  presets: FxPreset[]
-  onApplyPreset: (preset: FxPreset) => Promise<void>
-  onEditPreset: (preset: FxPreset) => void
-  getPresetPresence: (preset: FxPreset) => EffectPresence
+  looks: LookSummary[]
+  onApplyLook: (look: LookSummary) => Promise<void>
+  onEditLook: (look: LookSummary) => void
+  getLookPresence: (look: LookSummary) => EffectPresence
   currentProjectId: number | undefined
-  onCreatePreset: () => void
+  onCreateLook: () => void
 }) {
   const navigate = useNavigate()
 
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-1 @[20rem]:grid-cols-2 @[28rem]:grid-cols-3 @[48rem]:grid-cols-4 gap-2">
-        {presets.map((preset) => (
-          <PresetPadButton
-            key={preset.id}
-            preset={preset}
-            presence={getPresetPresence(preset)}
-            onToggle={() => onApplyPreset(preset)}
-            onLongPress={() => onEditPreset(preset)}
+        {looks.map((look) => (
+          <LookPadButton
+            key={look.id}
+            look={look}
+            presence={getLookPresence(look)}
+            onToggle={() => onApplyLook(look)}
+            onLongPress={() => onEditLook(look)}
           />
         ))}
         {currentProjectId && (
           <button
-            onClick={onCreatePreset}
+            onClick={onCreateLook}
             className={cn(
               'flex flex-col items-center justify-center rounded-lg border border-dashed px-2 py-3 text-center transition-all',
               'min-h-[64px] select-none touch-manipulation',
@@ -235,17 +240,17 @@ function PresetGrid({
             )}
           >
             <Plus className="size-5 text-muted-foreground mb-0.5" />
-            <span className="text-xs text-muted-foreground">New Preset</span>
+            <span className="text-xs text-muted-foreground">New Look</span>
           </button>
         )}
       </div>
-      {currentProjectId && presets.length > 0 && (
+      {currentProjectId && looks.length > 0 && (
         <div className="text-center pt-1">
           <button
             className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-            onClick={() => navigate(`/projects/${currentProjectId}/presets`)}
+            onClick={() => navigate(`/projects/${currentProjectId}/looks`)}
           >
-            Manage presets →
+            Manage looks →
           </button>
         </div>
       )}
@@ -253,13 +258,13 @@ function PresetGrid({
   )
 }
 
-function PresetPadButton({
-  preset,
+function LookPadButton({
+  look,
   presence,
   onToggle,
   onLongPress,
 }: {
-  preset: FxPreset
+  look: LookSummary
   presence: EffectPresence
   onToggle: () => void
   onLongPress: () => void
@@ -335,15 +340,15 @@ function PresetPadButton({
           presence !== 'none' ? 'text-primary' : 'text-foreground',
         )}
       >
-        {preset.name}
+        {look.name}
       </span>
-      {preset.description && (
+      {look.notes && (
         <span className="mt-0.5 text-[10px] leading-tight text-muted-foreground line-clamp-1">
-          {preset.description}
+          {look.notes}
         </span>
       )}
       <Badge variant="secondary" className="mt-1 text-[9px] px-1.5 py-0 leading-tight">
-        {preset.effects.length} {preset.effects.length === 1 ? 'effect' : 'effects'}
+        {describeLookContents(look)}
       </Badge>
       {presence !== 'none' && (
         <div
@@ -355,4 +360,24 @@ function PresetPadButton({
       )}
     </button>
   )
+}
+
+/**
+ * What a Look holds, in a badge's worth of text.
+ *
+ * Effects and rows are counted apart because they behave differently on a pad: an effect keeps
+ * running until the pad is pressed again, while a static row is a value the toggle writes and holds.
+ * A Look with no effects at all also never lights the pad's active ring — presence is read from the
+ * running effects — so saying "2 values" rather than "0 effects" is the difference between a pad
+ * that looks broken and one that looks like what it is.
+ */
+function describeLookContents(look: LookSummary): string {
+  const parts: string[] = []
+  if (look.effectCount > 0) {
+    parts.push(`${look.effectCount} ${look.effectCount === 1 ? 'effect' : 'effects'}`)
+  }
+  if (look.rowCount > 0) {
+    parts.push(`${look.rowCount} ${look.rowCount === 1 ? 'value' : 'values'}`)
+  }
+  return parts.length === 0 ? 'empty' : parts.join(' · ')
 }

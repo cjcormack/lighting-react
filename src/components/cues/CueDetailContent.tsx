@@ -2,7 +2,7 @@ import { memo, type ComponentType } from 'react'
 import { Badge } from '@/components/ui/badge'
 import {
   Palette,
-  Bookmark,
+  Layers,
   AudioWaveform,
   Zap,
   Hash,
@@ -13,12 +13,11 @@ import { formatFadeText } from '@/lib/cueUtils'
 import { formatMs } from '@/lib/formatMs'
 import { resolveColourToHex } from '@/components/fx/colourUtils'
 import { useEffectLibraryQuery } from '@/store/fixtureFx'
-import { useProjectPresetListQuery } from '@/store/fxPresets'
+import { useLookListQuery } from '@/store/looks'
 import { EffectSummary } from '@/components/fx/EffectSummary'
-import { PresetApplicationSummary } from '@/components/fx/PresetApplicationSummary'
 import { TriggerSummary } from './TriggerSummary'
 import { TimingBadge } from './TimingBadge'
-import { fromPresetEffect, fromCueAdHocEffect } from '@/components/fx/effectSummaryTypes'
+import { fromCueAdHocEffect } from '@/components/fx/effectSummaryTypes'
 import type { Cue } from '@/api/cuesApi'
 
 // ── Section header (shared across all detail sections) ────────────────
@@ -65,10 +64,10 @@ export const CueDetailContent = memo(function CueDetailContent({
   enabled = true,
 }: CueDetailContentProps) {
   const { data: library } = useEffectLibraryQuery(undefined, { skip: !enabled })
-  const { data: presets } = useProjectPresetListQuery(projectId, { skip: !enabled })
+  const { data: looks } = useLookListQuery({ projectId }, { skip: !enabled })
 
   const palette = cue?.palette ?? []
-  const presetApps = cue?.presetApplications ?? []
+  const layers = cue?.layers ?? []
   const adHocEffects = cue?.adHocEffects ?? []
   const triggers = cue?.triggers ?? []
 
@@ -128,33 +127,67 @@ export const CueDetailContent = memo(function CueDetailContent({
         </div>
       )}
 
-      {/* ── Preset Applications ── */}
+      {/* ── Layers ──
+          A read surface, and deliberately shallow: it names each layer in order with its targets
+          and timing, and does not expand the Look's own rows or effects. Rendering a full layer
+          stack here is the read-renderer pass, along with the Run and Prompt Book cards. */}
       <div className="space-y-1.5">
-        <SectionHeader icon={Bookmark} label="Presets" count={presetApps.length} />
-        {presetApps.length === 0 ? (
+        <SectionHeader icon={Layers} label="Layers" count={layers.length} />
+        {layers.length === 0 ? (
           <p className="text-[11px] text-muted-foreground">None.</p>
         ) : (
-          presetApps.map((pa, index) => {
-            const fullPreset = presets?.find((p) => p.id === pa.presetId)
-            const presetEffects = fullPreset?.effects ?? []
+          layers.map((layer, index) => {
+            const look = looks?.find((l) => l.id === layer.lookId)
+            const enabledLayer = layer.enabled !== false
+            const amount = Math.round((layer.amount ?? 1) * 100)
             return (
-              <PresetApplicationSummary
-                key={`preset-${index}`}
-                presetName={pa.presetName}
-                presetId={pa.presetId}
-                effects={presetEffects.map((e) => fromPresetEffect(e, library))}
-                targets={pa.targets}
-                speedMasterUuid={pa.speedMasterUuid}
-                rateSpeedMasterUuid={pa.rateSpeedMasterUuid}
-                palette={palette}
-                actions={
-                  <TimingBadge
-                    delayMs={pa.delayMs}
-                    intervalMs={pa.intervalMs}
-                    randomWindowMs={pa.randomWindowMs}
-                  />
-                }
-              />
+              <div
+                key={`layer-${index}`}
+                className={`flex flex-wrap items-center gap-1.5 rounded border bg-card p-2 text-xs${
+                  enabledLayer ? '' : ' opacity-60'
+                }`}
+              >
+                <Badge variant="secondary" className="px-1.5 py-0 text-[10px] font-mono">
+                  {index + 1}
+                </Badge>
+                <span className="truncate font-medium">
+                  {layer.lookName ?? look?.name ?? 'Look'}
+                </span>
+                {layer.propertyMask && (
+                  <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                    [{layer.propertyMask}]
+                  </Badge>
+                )}
+                {amount !== 100 && (
+                  <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                    {amount}%
+                  </Badge>
+                )}
+                {!enabledLayer && (
+                  <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                    off
+                  </Badge>
+                )}
+                {layer.targets.length === 0 ? (
+                  <span className="text-[10px] text-muted-foreground">look&rsquo;s own targets</span>
+                ) : (
+                  layer.targets.map((t) => (
+                    <Badge
+                      key={`${t.type}:${t.key}`}
+                      variant="outline"
+                      className="px-1.5 py-0 text-[10px]"
+                    >
+                      {t.key}
+                    </Badge>
+                  ))
+                )}
+                <span className="flex-1" />
+                <TimingBadge
+                  delayMs={layer.delayMs}
+                  intervalMs={layer.intervalMs}
+                  randomWindowMs={layer.randomWindowMs}
+                />
+              </div>
             )
           })
         )}

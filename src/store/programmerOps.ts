@@ -1,7 +1,5 @@
 import { restApi } from './restApi'
 import type { Cue, CueTarget } from '../api/cuesApi'
-import type { FxPreset } from '../api/fxPresetsApi'
-import type { PaletteType } from '../api/palettesApi'
 import type { IncludedTarget } from '../api/programmerWsApi'
 
 /**
@@ -92,23 +90,27 @@ export interface RecordResponse {
 
 export interface IncludeRequest {
   projectId: number
-  /** Exactly one of `cueId` / `paletteId`. The backend 400s on both or neither. */
+  /** Exactly one of `cueId` / `lookId`. The backend 400s on both or neither. */
   cueId?: number
-  paletteId?: number
+  lookId?: number
   mask?: PropertyMaskGroup[]
   includeFx?: boolean
   fadeMs?: number
 }
 
 export interface IncludeResponse {
-  kind: 'CUE' | 'PALETTE'
-  /** Null when a palette was included. */
+  /**
+   * `PALETTE` is still in the union because the backend arm still exists, but nothing here sends
+   * a `paletteId` any more — the palette route reads tables no consumer resolves through.
+   */
+  kind: 'CUE' | 'PALETTE' | 'LOOK'
+  /** Null unless a cue was included. */
   cueId?: number
   cueStackId?: number
-  paletteId?: number
+  lookId?: number
   /**
-   * The cue's *or* the palette's name — `name` rather than `cueName` because it is now either,
-   * and a field called `cueName` holding a palette name is a lie. Renamed on the wire too.
+   * The cue's *or* the Look's name — `name` rather than `cueName` because it is now either, and a
+   * field called `cueName` holding a Look name is a lie. Named the same on the wire.
    */
   name: string
   entriesWritten: number
@@ -184,11 +186,14 @@ export interface UpdateResult {
  *
  * A separate field from `results` rather than a nullable `cueId` on `UpdateResult`, matching the
  * backend: everything that already reads `results` for cue counts keeps working untouched.
+ *
+ * Unreachable from this client — nothing includes a palette any more, and a Look include disables
+ * Update — but the field is still on the wire, so the shape stays until the record rewrite retires
+ * the route. It no longer carries an attribute type: a Look declares none.
  */
 export interface PaletteUpdateResult {
   paletteId: number
   paletteName: string
-  paletteType: PaletteType
   entriesWritten: number
   /** What the re-resolve moved — the live consumers of the palette. */
   programmerKeysRefreshed: number
@@ -220,66 +225,16 @@ export interface MakeProgrammerHardResponse {
   skipped: number
 }
 
-/** `POST /project/{projectId}/cues/{cueId}/make-hard`. */
-export interface MakeCueHardRequest {
-  projectId: number
-  cueId: number
-  /** Restrict to rows referencing these palettes. Omitted = every reference in the cue. */
-  paletteUuids?: string[]
-  mask?: PropertyMaskGroup[]
-  /** Harden anyway when a cue-edit session is open on the cue. */
-  force?: boolean
-}
-
-export interface MakeCueHardResponse {
-  cue: Cue
-  converted: number
-  /**
-   * Group rows replaced by one row per member, because the members resolved to different
-   * literals. The cue's row count grows, and the operator is told rather than surprised.
-   */
-  groupRowsExpanded: number
-  /** Rows left as references because they don't currently resolve. */
-  unresolved: number
-  republishedLive: boolean
-}
-
-/** `POST /project/{projectId}/fx-presets/{presetId}/make-hard`. */
-export interface MakeFxPresetHardRequest {
-  projectId: number
-  presetId: number
-  /** Restrict to rows referencing these palettes. Omitted = every reference in the preset. */
-  paletteUuids?: string[]
-  mask?: PropertyMaskGroup[]
-}
-
-/**
- * One preset row the palette gives more than one answer for.
- *
- * A preset row is target-less — it applies wherever the preset is applied — so a palette that
- * holds different literals for different fixtures has no single literal that can stand in for
- * the reference. The backend reports rather than guesses.
- */
-export interface PresetRefAmbiguity {
-  propertyName: string
-  paletteUuid: string
-  paletteName?: string | null
-  variants: { literal: string; fixtureKeys: string[] }[]
-}
-
-export interface MakeFxPresetHardResponse {
-  preset: FxPreset
-  converted: number
-  ambiguous: PresetRefAmbiguity[]
-  /** Rows left as references because nothing resolves at all. */
-  unresolved: number
-  cuesRepublished: number[]
-}
-
 /** The 409 body both Record and Update use, so the caller can offer "do it anyway". */
 export interface ProgrammerConflict {
   error: string
-  code: 'CUE_EDIT_SESSION_OPEN' | 'INCLUDE_TARGET_GONE'
+  /**
+   * `INCLUDE_TARGET_READ_ONLY` means the target is fine but Update cannot write to it — today, a
+   * Look. Deliberately not `INCLUDE_TARGET_GONE`: nothing is missing, so "gone" would send the
+   * operator looking for a problem that isn't there. The toolbar disables Update for such a
+   * target, so reaching this is a stale tab or a direct caller.
+   */
+  code: 'CUE_EDIT_SESSION_OPEN' | 'INCLUDE_TARGET_GONE' | 'INCLUDE_TARGET_READ_ONLY'
   cueId?: number
 }
 
@@ -307,9 +262,9 @@ export const programmerOpsApi = restApi.injectEndpoints({
     }),
 
     /**
-     * Named `includeIntoProgrammer`, not `includeCue`: the same route now loads a palette's
-     * contents as well, and `ProgrammerStore.lastIncludedTarget` is single-valued so the two
-     * could not have been separate endpoints anyway.
+     * Named `includeIntoProgrammer`, not `includeCue`: the same route also loads a Look's bound
+     * rows, and `ProgrammerStore.lastIncludedTarget` is single-valued so the two could not have
+     * been separate endpoints anyway.
      */
     includeIntoProgrammer: build.mutation<IncludeResponse, IncludeRequest>({
       query: ({ projectId, ...body }) => ({
@@ -335,8 +290,9 @@ export const programmerOpsApi = restApi.injectEndpoints({
               { type: 'CueList', id: projectId },
               'CueList',
               // Mode A can write a palette instead of a cue, which changes what every
-              // referencing row resolves to.
-              ...(result.paletteResult ? (['Palette', 'PaletteList'] as const) : []),
+              // referencing row resolves to. Unreachable from this client today (see
+              // PaletteUpdateResult) but the tag stays with the field.
+              ...(result.paletteResult ? (['Look', 'LookList'] as const) : []),
             ]
           : [],
     }),
@@ -352,51 +308,6 @@ export const programmerOpsApi = restApi.injectEndpoints({
       query: (body) => ({ url: 'programmer/make-hard', method: 'POST', body }),
     }),
 
-    /**
-     * Stop an FX preset's rows tracking their palettes.
-     *
-     * A partial success is the normal outcome, not an error: rows the palette answers uniformly
-     * harden, rows it disagrees on come back in `ambiguous`. Both halves are in the 200 body, so
-     * this must not be treated as a failure when `converted` is 0.
-     */
-    makeFxPresetHard: build.mutation<MakeFxPresetHardResponse, MakeFxPresetHardRequest>({
-      query: ({ projectId, presetId, ...body }) => ({
-        url: `project/${projectId}/fx-presets/${presetId}/make-hard`,
-        method: 'POST',
-        body,
-      }),
-      // Palette tags too, same reason as makeCueHard: dropping references moves the palette's
-      // "used by" count, and a delete that was blocked a moment ago may now be allowed.
-      invalidatesTags: (result, _error, { projectId }) =>
-        result == null || result.converted === 0
-          ? []
-          : [
-              { type: 'FxPreset', id: projectId },
-              'FxPreset',
-              'Palette',
-              'PaletteList',
-            ],
-    }),
-
-    makeCueHard: build.mutation<MakeCueHardResponse, MakeCueHardRequest>({
-      query: ({ projectId, cueId, force, ...body }) => ({
-        url: `project/${projectId}/cues/${cueId}/make-hard${force ? '?force=true' : ''}`,
-        method: 'POST',
-        body,
-      }),
-      // Palette tags too: hardening drops references, so the palette's "used by" count moves and
-      // a delete that was blocked a moment ago may now be allowed.
-      invalidatesTags: (result, _error, { projectId, cueId }) =>
-        result == null
-          ? []
-          : [
-              { type: 'Cue', id: cueId },
-              { type: 'CueList', id: projectId },
-              'CueList',
-              'Palette',
-              'PaletteList',
-            ],
-    }),
   }),
   overrideExisting: false,
 })
@@ -406,6 +317,4 @@ export const {
   useIncludeIntoProgrammerMutation,
   useUpdateProgrammerMutation,
   useMakeProgrammerHardMutation,
-  useMakeCueHardMutation,
-  useMakeFxPresetHardMutation,
 } = programmerOpsApi

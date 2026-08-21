@@ -4,9 +4,9 @@ import {
   fromFixtureDirectEffect,
   fromFixtureIndirectEffect,
   fromGroupActiveEffect,
-  fromPresetEffect,
+  fromLookEffect,
 } from './effectSummaryTypes'
-import type { FxPresetEffect } from '@/api/fxPresetsApi'
+import type { LookEffect } from '@/api/looksApi'
 import type { CueAdHocEffect } from '@/api/cuesApi'
 import type { FixtureDirectEffect, FixtureIndirectEffect } from '@/store/fixtureFx'
 import type { GroupActiveEffect } from '@/api/groupsApi'
@@ -19,14 +19,16 @@ const MASTER = 'aaaaaaaa-0000-0000-0000-000000000002'
  * is precisely the quiet-display-lie the M-chip exists to prevent.
  */
 describe('effectSummaryTypes speed-master threading', () => {
-  it('fromPresetEffect carries it', () => {
-    const e: FxPresetEffect = {
+  it('fromLookEffect carries it', () => {
+    const e: LookEffect = {
+      targetType: 'deferred',
+      targetKey: '',
       effectType: 'Pulse', category: 'dimmer', propertyName: 'dimmer',
       beatDivision: 1, blendMode: 'OVERRIDE', distribution: 'LINEAR',
       phaseOffset: 0, elementMode: null, elementFilter: null, stepTiming: null,
       parameters: {}, speedMasterUuid: MASTER,
     }
-    expect(fromPresetEffect(e).speedMasterUuid).toBe(MASTER)
+    expect(fromLookEffect(e).speedMasterUuid).toBe(MASTER)
   })
 
   it('fromCueAdHocEffect carries it', () => {
@@ -71,13 +73,15 @@ describe('effectSummaryTypes speed-master threading', () => {
   })
 
   it('an absent reference normalises to null, the master-1 default', () => {
-    const e: FxPresetEffect = {
+    const e: LookEffect = {
+      targetType: 'deferred',
+      targetKey: '',
       effectType: 'Pulse', category: 'dimmer', propertyName: 'dimmer',
       beatDivision: 1, blendMode: 'OVERRIDE', distribution: 'LINEAR',
       phaseOffset: 0, elementMode: null, elementFilter: null, stepTiming: null,
       parameters: {},
     }
-    expect(fromPresetEffect(e).speedMasterUuid).toBeNull()
+    expect(fromLookEffect(e).speedMasterUuid).toBeNull()
   })
 })
 
@@ -89,14 +93,16 @@ describe('effectSummaryTypes speed-master threading', () => {
 describe('effectSummaryTypes rate-master threading', () => {
   const RATE = 'aaaaaaaa-0000-0000-0000-000000000003'
 
-  it('fromPresetEffect carries it independently of the speed master', () => {
-    const e: FxPresetEffect = {
+  it('fromLookEffect carries it independently of the speed master', () => {
+    const e: LookEffect = {
+      targetType: 'deferred',
+      targetKey: '',
       effectType: 'CandleFlicker', category: 'dimmer', propertyName: 'dimmer',
       beatDivision: 4, blendMode: 'OVERRIDE', distribution: 'LINEAR',
       phaseOffset: 0, elementMode: null, elementFilter: null, stepTiming: null,
       parameters: {}, speedMasterUuid: MASTER, rateSpeedMasterUuid: RATE,
     }
-    const summary = fromPresetEffect(e)
+    const summary = fromLookEffect(e)
     expect(summary.speedMasterUuid).toBe(MASTER)
     expect(summary.rateSpeedMasterUuid).toBe(RATE)
   })
@@ -113,12 +119,14 @@ describe('effectSummaryTypes rate-master threading', () => {
   })
 
   it('an absent rate reference normalises to null, meaning unscaled', () => {
-    const e: FxPresetEffect = {
+    const e: LookEffect = {
+      targetType: 'deferred',
+      targetKey: '',
       effectType: 'Pulse', category: 'dimmer', propertyName: 'dimmer',
       beatDivision: 1, blendMode: 'OVERRIDE', distribution: 'LINEAR',
       phaseOffset: 0, elementMode: null, elementFilter: null, stepTiming: null,
       parameters: {},
     }
-    expect(fromPresetEffect(e).rateSpeedMasterUuid).toBeNull()
+    expect(fromLookEffect(e).rateSpeedMasterUuid).toBeNull()
   })
 })

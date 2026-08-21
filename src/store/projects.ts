@@ -33,7 +33,8 @@ lightingApi.projects.subscribeToSwitch(function() {
     'Project',
     'Script',
     'Fixture',
-    'FxPreset',
+    'Look',
+    'LookList',
     // Locate state is in-memory on the backend and dies with the old Show — a stale
     // "located" button would APPLY a locate instead of releasing one.
     'Locate',

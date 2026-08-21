@@ -1,7 +1,7 @@
 import { useRef, useMemo, useSyncExternalStore, useCallback } from 'react'
 import { lightingApi } from '../api/lightingApi'
 import { useEditorContext } from '../components/lighting-editor/EditorContext'
-import { usePresetDraft } from '../components/presets/PresetDraftContext'
+import { useLookDraft } from '../components/looks/LookDraftContext'
 import { rgbToHex, serializeExtendedColour } from '../components/fx/colourUtils'
 import { getChannelValue, resolveSettingOption, subscribeToChannels } from './usePropertyValues'
 import { useChannelSource } from './useChannelSource'
@@ -113,7 +113,7 @@ export function useUpdateGroupSlider(
   groupName?: string,
 ) {
   const ctx = useEditorContext()
-  const draft = usePresetDraft()
+  const draft = useLookDraft()
   return useCallback(
     (value: number) => {
       if (ctx.kind === 'cue') {
@@ -122,7 +122,7 @@ export function useUpdateGroupSlider(
         }
         return
       }
-      if (ctx.kind === 'preset' && draft) {
+      if (ctx.kind === 'look' && draft) {
         draft.onSetProperty(property.name, String(value))
         return
       }
@@ -354,7 +354,7 @@ export function useUpdateGroupColour(
   groupName?: string,
 ) {
   const ctx = useEditorContext()
-  const draft = usePresetDraft()
+  const draft = useLookDraft()
   return useCallback(
     (r: number, g: number, b: number, w?: number, a?: number, uv?: number) => {
       if (ctx.kind === 'cue') {
@@ -380,7 +380,7 @@ export function useUpdateGroupColour(
         }
         return
       }
-      if (ctx.kind === 'preset' && draft) {
+      if (ctx.kind === 'look' && draft) {
         const hasWhite = property.memberColourChannels.some((m) => m.whiteChannel)
         const hasAmber = property.memberColourChannels.some((m) => m.amberChannel)
         const hasUv = property.memberColourChannels.some((m) => m.uvChannel)
@@ -529,7 +529,7 @@ export function useUpdateGroupPosition(
   groupName?: string,
 ) {
   const ctx = useEditorContext()
-  const draft = usePresetDraft()
+  const draft = useLookDraft()
   return useCallback(
     (pan: number, tilt: number) => {
       if (ctx.kind === 'cue') {
@@ -546,7 +546,7 @@ export function useUpdateGroupPosition(
         }
         return
       }
-      if (ctx.kind === 'preset' && draft) {
+      if (ctx.kind === 'look' && draft) {
         draft.onSetProperty(property.name, `${pan},${tilt}`)
         return
       }
@@ -647,7 +647,7 @@ export function useUpdateGroupSetting(
   groupName?: string,
 ) {
   const ctx = useEditorContext()
-  const draft = usePresetDraft()
+  const draft = useLookDraft()
   return useCallback(
     (level: number) => {
       if (ctx.kind === 'cue') {
@@ -656,7 +656,7 @@ export function useUpdateGroupSetting(
         }
         return
       }
-      if (ctx.kind === 'preset' && draft) {
+      if (ctx.kind === 'look' && draft) {
         draft.onSetProperty(property.name, String(level))
         return
       }

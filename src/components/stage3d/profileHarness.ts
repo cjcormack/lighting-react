@@ -123,7 +123,7 @@ export function buildHarness(stageW: number, stageD: number, stageH: number): Ha
     properties: beamShaping,
     capabilities: [],
     groups: [],
-    compatiblePresetIds: [],
+    compatibleLookIds: [],
   }
   return { patches, regions, riggings, syntheticFixture, syntheticType }
 }

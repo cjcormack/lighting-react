@@ -3,6 +3,7 @@ import {
   Aperture,
   AudioWaveform,
   BookOpenText,
+  Layers,
   LayoutGrid,
   Move,
   Palette,
@@ -14,12 +15,11 @@ import {
 import { Link } from 'react-router'
 import { cn } from '@/lib/utils'
 import {
-  PALETTE_TYPES,
-  PALETTE_TYPE_LABELS,
-  paletteTypeSlug,
-  parsePaletteTypeSlug,
-} from '@/lib/paletteTypes'
-import type { PaletteType } from '@/api/palettesApi'
+  ATTRIBUTE_FAMILIES,
+  FAMILY_LABELS,
+  parseFamilySlug,
+  type AttributeFamily,
+} from '@/lib/attributeFamily'
 
 export type ShowView = 'program' | 'run' | 'prompt-book'
 
@@ -203,64 +203,78 @@ export function ProgrammerViewSwitcher({
 }
 
 /**
- * localStorage key remembering which palette type was last open, so the sidebar's single
- * "Palettes" row lands where you left it.
+ * localStorage key remembering which attribute family the Look library was last filtered to, so
+ * the sidebar's single "Looks" row lands where you left it.
  */
-export const PALETTE_TYPE_KEY = 'palettes.type'
+export const LOOK_FAMILY_KEY = 'looks.family'
 
-export function setStoredPaletteType(type: PaletteType) {
+/**
+ * The library's filter value. `'ALL'` is a first-class choice rather than "no filter": a Look's
+ * families are *derived* and one may span several, so unlike the four palette banks this replaces,
+ * the unfiltered list is a genuinely useful default rather than a fallback.
+ */
+export type LookFamilyFilter = AttributeFamily | 'ALL'
+
+export function setStoredLookFamily(family: LookFamilyFilter) {
   try {
-    localStorage.setItem(PALETTE_TYPE_KEY, JSON.stringify(type))
+    localStorage.setItem(LOOK_FAMILY_KEY, JSON.stringify(family))
   } catch {
     // Storage unavailable (private mode, quota) — stickiness just degrades.
   }
 }
 
 /**
- * Read-only counterpart for the bare `/palettes` route's sticky redirect. Deliberately not
- * `usePersistentState`, for the same reason as [getStoredCardsListView]: the redirect is a
- * one-shot read, and a hook that writes back on mount would make the *arrival* the choice.
+ * Read-only counterpart, for the library's initial state. Deliberately not `usePersistentState`,
+ * for the same reason as [getStoredCardsListView]: this is a one-shot read, and a hook that wrote
+ * back on mount would make the *arrival* the choice.
  *
- * Defaults to COLOUR — the type an operator reaches for first, and the only one of the four
- * that is useful before the rig has any moving heads in it.
+ * Defaults to ALL. The palette banks defaulted to COLOUR because there was no "all" to default to;
+ * there is now, and a library you cannot see the whole of is a worse first impression than a long
+ * list.
  */
-export function getStoredPaletteType(): PaletteType {
+export function getStoredLookFamily(): LookFamilyFilter {
   try {
-    return parsePaletteTypeSlug(
-      String(JSON.parse(localStorage.getItem(PALETTE_TYPE_KEY) ?? '""')).toLowerCase(),
-    ) ?? 'COLOUR'
+    const raw = String(JSON.parse(localStorage.getItem(LOOK_FAMILY_KEY) ?? '""'))
+    if (raw.toUpperCase() === 'ALL') return 'ALL'
+    return parseFamilySlug(raw.toLowerCase()) ?? 'ALL'
   } catch {
-    return 'COLOUR'
+    return 'ALL'
   }
 }
 
 /**
- * The four palette-type sibling routes, switched in-page.
+ * The Look library's attribute-family filter.
  *
- * Sticky, unlike the programmer's Values/FX pair: the four types are peers rather than an editor
- * and a diagnostic read, so returning to the one you were working in is the right default. No
- * type owns the bare `/palettes` path — that redirects here — which is what keeps the
- * redirect-loop that `CARDS_LINK_STATE` exists to break from being reachable at all.
+ * Buttons rather than links, unlike every other switcher in this file, and that is the shape of the
+ * thing rather than an inconsistency: the four palette types were four *routes*, so a Look spanning
+ * colour and position would have had to live in two of them. One route with a filter is what lets
+ * derived families be several at once. Cmd+K still deep-links via `?family=`, which the library
+ * reads on arrival.
  */
-export function PaletteTypeSwitcher({
+export function LookFamilyFilterBar({
   current,
-  projectId,
+  onChange,
 }: {
-  current: PaletteType
-  projectId: number
+  current: LookFamilyFilter
+  onChange: (family: LookFamilyFilter) => void
 }) {
   return (
     <nav className="inline-flex items-center gap-0.5 rounded-lg border bg-card p-0.5">
-      {PALETTE_TYPES.map((type) => {
-        const Icon = PALETTE_TYPE_ICONS[type]
+      <FilterSegment
+        active={current === 'ALL'}
+        label="All"
+        icon={<Layers className="size-3.5" />}
+        onClick={() => onChange('ALL')}
+      />
+      {ATTRIBUTE_FAMILIES.map((family) => {
+        const Icon = FAMILY_ICONS[family]
         return (
-          <Segment
-            key={type}
-            active={current === type}
-            to={`/projects/${projectId}/palettes/${paletteTypeSlug(type)}`}
+          <FilterSegment
+            key={family}
+            active={current === family}
+            label={FAMILY_LABELS[family].singular}
             icon={<Icon className="size-3.5" />}
-            label={PALETTE_TYPE_LABELS[type].singular}
-            onClick={() => setStoredPaletteType(type)}
+            onClick={() => onChange(family)}
           />
         )
       })}
@@ -268,11 +282,39 @@ export function PaletteTypeSwitcher({
   )
 }
 
-const PALETTE_TYPE_ICONS: Record<PaletteType, typeof Sun> = {
+const FAMILY_ICONS: Record<AttributeFamily, typeof Sun> = {
   INTENSITY: Sun,
   POSITION: Move,
   COLOUR: Palette,
   BEAM: Aperture,
+}
+
+function FilterSegment({
+  active,
+  label,
+  icon,
+  onClick,
+}: {
+  active: boolean
+  label: string
+  icon: ReactNode
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      aria-label={label}
+      onClick={onClick}
+      className={cn(
+        ITEM,
+        active ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground',
+      )}
+    >
+      {icon}
+      <span className="hidden sm:inline">{label}</span>
+    </button>
+  )
 }
 
 function Segment({

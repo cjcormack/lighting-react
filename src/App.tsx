@@ -21,9 +21,8 @@ import ProjectScripts, { ScriptsRedirect } from "./routes/ProjectScripts";
 import { ProjectFxLibrary, FxLibraryRedirect } from "./routes/FxLibrary";
 
 import { FxRedirect, ProjectFxBusking } from "./routes/FxBusking";
-import { PresetsRedirect, ProjectFxPresets } from "./routes/FxPresets";
+import { LooksRedirect, ProjectLooks } from "./routes/Looks";
 import { SpeedMastersRedirect, ProjectSpeedMasters } from "./routes/SpeedMasters";
-import { PalettesRedirect, PalettesTypeRedirect, ProjectPalettes } from "./routes/Palettes";
 import ProjectOverview, { ProjectOverviewRedirect } from "./routes/ProjectOverview";
 import { PatchesRedirect } from "./routes/Patches";
 import { ProgramPage, ProgramRedirect, CuesLegacyRedirect } from "./routes/ProgramPage";
@@ -132,13 +131,16 @@ function App() {
           path: "fx",
           element: <FxRedirect />,
         },
+        // The Look library: **one route**, with a sticky in-page family filter rather than the
+        // four sibling routes the palette banks had. A Look's families are derived from its rows,
+        // so one covering colour and position cannot own a single path — see the `looks` nav entry.
         {
-          path: "projects/:projectId/presets",
-          element: <ProjectFxPresets />,
+          path: "projects/:projectId/looks",
+          element: <ProjectLooks />,
         },
         {
-          path: "presets",
-          element: <PresetsRedirect />,
+          path: "looks",
+          element: <LooksRedirect />,
         },
         {
           path: "projects/:projectId/speed-masters",
@@ -147,21 +149,6 @@ function App() {
         {
           path: "speed-masters",
           element: <SpeedMastersRedirect />,
-        },
-        // Palettes: one nav entry, four sibling type routes reached via the in-page switcher.
-        // The bare project path belongs to no type — it redirects to the sticky one, which is
-        // what keeps the redirect acyclic.
-        {
-          path: "projects/:projectId/palettes/:type",
-          element: <ProjectPalettes />,
-        },
-        {
-          path: "projects/:projectId/palettes",
-          element: <PalettesTypeRedirect />,
-        },
-        {
-          path: "palettes",
-          element: <PalettesRedirect />,
         },
         // Legacy FX Cues routes — the view was folded into Program. Redirect to keep bookmarks alive.
         {

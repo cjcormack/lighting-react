@@ -18,7 +18,7 @@ import { useVisSource, type VisSource } from './useVisSource'
  * Defaults to the wire, so every surface that doesn't opt in — the fixtures sheet, the busking
  * pads, `FixtureDetailView` — keeps showing real output with no change. Only the stage canvases
  * mount a provider. Same shape as `EditorContext`, which already switches these hooks between live
- * and preset-draft values.
+ * and Look-draft values.
  */
 const ChannelSourceContext = createContext<ChannelSource>(outputChannelSource)
 

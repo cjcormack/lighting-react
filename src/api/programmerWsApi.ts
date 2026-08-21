@@ -1,7 +1,6 @@
 import { parsePaletteRefUuid } from '../lib/programmerValue'
 import type { InternalApiConnection } from './internalApi'
 import type { Subscription } from './subscription'
-import type { PaletteType } from './palettesApi'
 
 /**
  * Client for the backend's Layer-2 programmer (`programmer.*` WS ops plus the
@@ -43,11 +42,17 @@ export interface ProgrammerEntry {
    * a different value, so there is no single resolved literal for a reference.
    */
   resolvedValue?: string
-  /** Set on a `ref:` entry: the referenced palette, denormalised so a cell needs no join. */
+  /**
+   * Set on a `ref:` entry: the referenced **Look**, denormalised so a cell needs no join.
+   *
+   * Still spelled `palette*`, matching the wire, which still does: the field names outlive the
+   * entity because the `ref:` grammar itself is on its way out and renaming them would be churn on
+   * something being deleted. There is no `paletteType` any more — a Look declares no attribute
+   * type, and the server sends null unconditionally.
+   */
   paletteUuid?: string
   paletteId?: number
   paletteName?: string
-  paletteType?: PaletteType
   /**
    * False when the palette exists but no longer covers this target. The entry keeps its last
    * resolved value — silently dropping an operator's programmer entry mid-show would be worse —
@@ -116,7 +121,16 @@ export type IncludedTarget =
       kind: 'PALETTE'
       paletteId: number
       paletteName?: string
-      paletteType?: PaletteType
+    }
+  | {
+      /**
+       * A Look was included. Update is **not** available for this target: the write-back path still
+       * targets the retired palette tables, so the toolbar disables it rather than write rows no
+       * consumer reads.
+       */
+      kind: 'LOOK'
+      lookId: number
+      lookName?: string
     }
 
 /** The client-side view of the programmer, rebuilt from each `programmer.state` snapshot. */
@@ -426,7 +440,6 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
       e.resolvedValue ?? null,
       e.paletteUuid ?? null,
       e.paletteName ?? null,
-      e.paletteType ?? null,
       e.paletteResolved ?? null,
       e.owner,
       e.touched,
@@ -509,7 +522,6 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
       paletteUuid,
       paletteId: samePalette ? existing?.paletteId : undefined,
       paletteName: samePalette ? existing?.paletteName : undefined,
-      paletteType: samePalette ? existing?.paletteType : undefined,
       resolvedValue: samePalette ? existing?.resolvedValue : undefined,
       owner: 'web',
       touched: true,

@@ -6,7 +6,6 @@ import {
   LayoutGrid,
   Layers,
   AudioWaveform,
-  Bookmark,
   Gauge,
   BookOpenText,
   Box,
@@ -27,7 +26,7 @@ import {
 import type { LucideIcon } from "lucide-react"
 import { useAuthStatusQuery } from "./store/auth"
 import { useGetUniverseQuery } from "./store/universes"
-import { PALETTE_TYPES, PALETTE_TYPE_LABELS, paletteTypeSlug } from "./lib/paletteTypes"
+import { ATTRIBUTE_FAMILIES, FAMILY_LABELS, familySlug } from "./lib/attributeFamily"
 
 export type NavGroup = "setup" | "program" | "live" | "settings" | "install"
 
@@ -103,31 +102,21 @@ export const navItems: NavItem[] = [
     group: "program",
   },
   {
-    id: "presets",
-    label: "FX Presets",
-    icon: Bookmark,
-    path: (p) => `/projects/${p}/presets`,
-    visibility: "always",
-    pathMatch: "/presets",
-    group: "program",
-  },
-  {
-    id: "palettes",
-    // Named palettes — the typed, per-fixture entity a cue row references as `ref:{uuid}`,
-    // not the positional colour list the busking bar calls a Colour List.
+    id: "looks",
+    // The library entity cues layer and `ref:{uuid}` rows name — not the positional colour list
+    // the busking bar calls a Colour List, which is now the only other thing called a palette.
     //
-    // One entry for four sibling routes (`/palettes/colour`, `/palettes/position`, …), which
-    // are reached through the in-page type switcher. That is the *third* instance of the
-    // sibling-route exception documented in CLAUDE.md, after Fixtures/Groups cards-vs-list and
-    // the programmer's Values/FX — one sidebar row per resource, and the in-page switcher owns
-    // the sub-view. Note the bare `/palettes` path deliberately belongs to no type: it
-    // redirects to the sticky one, so no type's own route can be the redirect's target and
-    // loop.
-    label: "Palettes",
+    // **One entry, one route**, unlike the four palette banks it replaces. Those were four
+    // sibling routes with a sticky type, which is the exception CLAUDE.md documents for
+    // Fixtures/Groups and the programmer's Values/FX — but it cannot work here: a Look's families
+    // are *derived* from its rows, so one covering colour and position would have to live in two
+    // routes at once. The library takes a sticky in-page family filter instead, and
+    // `useLookFamilyNavItems` deep-links to it via `?family=`.
+    label: "Looks",
     icon: SwatchBook,
-    path: (p) => `/projects/${p}/palettes`,
+    path: (p) => `/projects/${p}/looks`,
     visibility: "always",
-    pathMatch: "/palettes",
+    pathMatch: "/looks",
     group: "program",
   },
   {
@@ -354,27 +343,31 @@ export function useUniverseNavItems(): NavItem[] {
 }
 
 /**
- * Returns one item per palette type ("Colour Palettes", "Position Palettes", …).
+ * Returns one item per attribute family ("Colour Looks", "Position Looks", …).
  *
- * Cmd+K only, on the [useUniverseNavItems] precedent: the sidebar keeps its single "Palettes"
- * row and the in-page switcher moves between types, but jumping straight to the position bank
- * is exactly the kind of thing the command palette is for.
+ * Cmd+K only, on the [useUniverseNavItems] precedent: the sidebar keeps its single "Looks" row and
+ * the in-page filter moves between families, but jumping straight to the position bank is exactly
+ * the kind of thing the command palette is for.
+ *
+ * These are **query params on one route**, not four routes — see the `looks` nav entry for why a
+ * derived family cannot own a path. `pathMatch` is still the bare `/looks`, so the sidebar
+ * highlights the one row whichever family you arrived in.
  */
-export function usePaletteTypeNavItems(): NavItem[] {
-  return useMemo(
-    () =>
-      PALETTE_TYPES.map((type) => ({
-        // Prefixed rather than bare, so these can never collide with the static `palettes` id.
-        id: `palettes-${paletteTypeSlug(type)}`,
-        label: `${PALETTE_TYPE_LABELS[type].singular} Palettes`,
-        icon: SwatchBook,
-        path: (p: number) => `/projects/${p}/palettes/${paletteTypeSlug(type)}`,
-        visibility: "always" as const,
-        pathMatch: `/palettes/${paletteTypeSlug(type)}`,
-        group: "program" as const,
-      })),
-    [],
-  )
+export const lookFamilyNavItems: NavItem[] = ATTRIBUTE_FAMILIES.map((family) => ({
+  // Prefixed rather than bare, so these can never collide with the static `looks` id.
+  id: `looks-${familySlug(family)}`,
+  label: `${FAMILY_LABELS[family].singular} Looks`,
+  icon: SwatchBook,
+  path: (p: number) => `/projects/${p}/looks?family=${familySlug(family)}`,
+  visibility: "always" as const,
+  // The bare path, not `/looks/${slug}` — see above. `navigation.test.ts` asserts this against
+  // the real array, which is why the array is module-scope rather than built inside the hook.
+  pathMatch: "/looks",
+  group: "program" as const,
+}))
+
+export function useLookFamilyNavItems(): NavItem[] {
+  return lookFamilyNavItems
 }
 
 /**

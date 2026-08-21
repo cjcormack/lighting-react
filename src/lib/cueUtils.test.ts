@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { buildCueInput, formatFadeDuration, parseFadeDuration } from './cueUtils'
+import {
+  buildCueInput,
+  formatFadeDuration,
+  parseFadeDuration,
+  reorderCueLayers,
+} from './cueUtils'
 import type { Cue } from '@/api/cuesApi'
 
 describe('parseFadeDuration', () => {
@@ -50,58 +55,119 @@ describe('parseFadeDuration', () => {
 
 describe('buildCueInput', () => {
   /**
-   * `buildCueInput` rebuilds `presetApplications` and `triggers` field-by-field (to strip
-   * response-only fields like `presetName`), which means a field missing from that rebuild
-   * is silently dropped on *every inline cue edit* — the change appears to save and the
-   * data quietly vanishes. This pins the speed-master override against that failure mode.
+   * `buildCueInput` rebuilds `layers` and `triggers` field-by-field (to strip response-only fields
+   * like `lookName`), which means a field missing from that rebuild is silently dropped on *every
+   * inline cue edit* — the change appears to save and the data quietly vanishes. Every field is
+   * pinned individually rather than by a deep-equal, because a deep-equal against a fixture built in
+   * this file would pass just as happily if both sides were missing the same field.
    */
-  it('carries a preset application speed-master override through the rebuild', () => {
-    const cue: Cue = {
-      id: 1,
-      name: 'open',
-      palette: [],
-      updateGlobalPalette: false,
-      presetApplications: [
-        {
-          presetId: 7,
-          presetName: 'warm-pulse',
-          targets: [{ type: 'group', key: 'front-wash' }],
-          delayMs: null,
-          intervalMs: null,
-          randomWindowMs: null,
-          sortOrder: 0,
-          speedMasterUuid: 'aaaaaaaa-0000-0000-0000-000000000002',
-          rateSpeedMasterUuid: 'aaaaaaaa-0000-0000-0000-000000000003',
-        },
-      ],
-      adHocEffects: [],
-      propertyAssignments: [],
-      triggers: [],
-      cueStackId: 1,
-      cueStackName: 'show',
-      sortOrder: 0,
-      autoAdvance: false,
-      autoAdvanceDelayMs: null,
-      fadeDurationMs: null,
-      fadeCurve: 'LINEAR',
-      cueNumber: null,
-      cueNumberAuto: true,
-      notes: null,
-      cueType: 'STANDARD',
-      canEdit: true,
-      canDelete: true,
-    }
+  it('carries every layer field through the rebuild', () => {
+    const input = buildCueInput(cueWithOneLayer())
+    const layer = input.layers[0]
 
-    const input = buildCueInput(cue)
-    expect(input.presetApplications[0].speedMasterUuid).toBe(
-      'aaaaaaaa-0000-0000-0000-000000000002',
-    )
-    // The rate override is a second field on the same hand-enumerated rebuild, and so has
-    // exactly the same way of silently vanishing on an inline cue edit.
-    expect(input.presetApplications[0].rateSpeedMasterUuid).toBe(
-      'aaaaaaaa-0000-0000-0000-000000000003',
-    )
-    // And the response-only field is stripped, which is why the rebuild exists at all.
-    expect('presetName' in input.presetApplications[0]).toBe(false)
+    expect(layer.lookId).toBe(7)
+    expect(layer.sortOrder).toBe(3)
+    expect(layer.enabled).toBe(false)
+    expect(layer.targets).toEqual([{ type: 'group', key: 'front-wash' }])
+    expect(layer.propertyMask).toBe('COLOUR,POSITION')
+    expect(layer.blendMode).toBe('MULTIPLY')
+    expect(layer.amount).toBe(0.5)
+    expect(layer.stomp).toBe(true)
+    expect(layer.speedMasterUuid).toBe('aaaaaaaa-0000-0000-0000-000000000002')
+    expect(layer.rateSpeedMasterUuid).toBe('aaaaaaaa-0000-0000-0000-000000000003')
+    expect(layer.delayMs).toBe(1500)
+    expect(layer.intervalMs).toBe(4000)
+    expect(layer.randomWindowMs).toBe(250)
+  })
+
+  it('strips the response-only look name, which is why the rebuild exists at all', () => {
+    const input = buildCueInput(cueWithOneLayer())
+    expect('lookName' in input.layers[0]).toBe(false)
+  })
+
+  /**
+   * The cue wire shape still carries `presetApplications` — the table survives until the retirement
+   * pass — but nothing composes from them, and a PUT that echoed them back would resurrect dead
+   * rows the migration already copied into `layers`.
+   */
+  it('does not send preset applications', () => {
+    expect('presetApplications' in buildCueInput(cueWithOneLayer())).toBe(false)
   })
 })
+
+describe('reorderCueLayers', () => {
+  const layers = [
+    { lookId: 1, targets: [], sortOrder: 0 },
+    { lookId: 2, targets: [], sortOrder: 1 },
+    { lookId: 3, targets: [], sortOrder: 2 },
+  ]
+
+  it('moves the layer and renumbers every sortOrder from its position', () => {
+    // Dragging the first layer to the end must leave 1, 2, 3 → 2, 3, 1 *and* sortOrder 0, 1, 2.
+    // Leaving the old numbers behind would make the cook step resolve the stack in the order the
+    // operator just dragged away from.
+    const next = reorderCueLayers(layers, 0, 2)
+    expect(next.map((l) => l.lookId)).toEqual([2, 3, 1])
+    expect(next.map((l) => l.sortOrder)).toEqual([0, 1, 2])
+  })
+
+  it('renumbers even when nothing moved', () => {
+    // A list that arrived with gaps — a removed layer, an old import — is densified by any drag,
+    // including one that lands where it started. Two layers sharing a sortOrder would leave the
+    // tie to insertion order in the cook step, which is the accident layers exist to remove.
+    const gappy = [
+      { lookId: 1, targets: [], sortOrder: 0 },
+      { lookId: 2, targets: [], sortOrder: 5 },
+    ]
+    expect(reorderCueLayers(gappy, 1, 1).map((l) => l.sortOrder)).toEqual([0, 1])
+  })
+
+  it('ignores an out-of-range index rather than dropping a layer', () => {
+    const next = reorderCueLayers(layers, 0, 9)
+    expect(next.map((l) => l.lookId)).toEqual([1, 2, 3])
+  })
+})
+
+/** One cue holding a single layer with every optional field set to a non-default. */
+function cueWithOneLayer(): Cue {
+  return {
+    id: 1,
+    name: 'open',
+    palette: [],
+    updateGlobalPalette: false,
+    layers: [
+      {
+        lookId: 7,
+        lookName: 'warm-pulse',
+        sortOrder: 3,
+        enabled: false,
+        targets: [{ type: 'group', key: 'front-wash' }],
+        propertyMask: 'COLOUR,POSITION',
+        blendMode: 'MULTIPLY',
+        amount: 0.5,
+        stomp: true,
+        speedMasterUuid: 'aaaaaaaa-0000-0000-0000-000000000002',
+        rateSpeedMasterUuid: 'aaaaaaaa-0000-0000-0000-000000000003',
+        delayMs: 1500,
+        intervalMs: 4000,
+        randomWindowMs: 250,
+      },
+    ],
+    adHocEffects: [],
+    propertyAssignments: [],
+    triggers: [],
+    cueStackId: 1,
+    cueStackName: 'show',
+    sortOrder: 0,
+    autoAdvance: false,
+    autoAdvanceDelayMs: null,
+    fadeDurationMs: null,
+    fadeCurve: 'LINEAR',
+    cueNumber: null,
+    cueNumberAuto: true,
+    notes: null,
+    cueType: 'STANDARD',
+    canEdit: true,
+    canDelete: true,
+  }
+}

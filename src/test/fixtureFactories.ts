@@ -114,7 +114,7 @@ export function makeFixture(
     properties,
     capabilities: [],
     groups: [],
-    compatiblePresetIds: [],
+    compatibleLookIds: [],
     ...over,
   }
 }
@@ -126,7 +126,7 @@ export function groupSummary(name: string, memberCount = 0): GroupSummary {
     capabilities: [],
     symmetricMode: 'NONE',
     defaultDistribution: 'LINEAR',
-    compatiblePresetIds: [],
+    compatibleLookIds: [],
   }
 }
 

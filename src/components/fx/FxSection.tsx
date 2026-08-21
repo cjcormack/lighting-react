@@ -23,7 +23,7 @@ import { fromFixtureDirectEffect, fromFixtureIndirectEffect, fromGroupActiveEffe
 import type { Fixture } from '@/store/fixtures'
 import type { GroupSummary } from '@/api/groupsApi'
 import { AddEditFxSheet, type SheetMode } from './AddEditFxSheet'
-import { PresetPicker } from './PresetPicker'
+import { LookTogglePicker } from './LookTogglePicker'
 
 // ─── Public API ────────────────────────────────────────────────────────────
 
@@ -36,7 +36,7 @@ export function FxSection(props: FxSectionProps) {
   // In preset mode the host fixture is synthetic — its key doesn't resolve in fx/group
   // queries and there's no stage surface to apply to. Effects live on the preset editor's
   // own Effects tab. Suppress this whole panel.
-  if (ctx.kind === 'preset') return null
+  if (ctx.kind === 'look') return null
   if ('fixture' in props && props.fixture) {
     return <FixtureFxSection fixture={props.fixture} />
   }
@@ -76,10 +76,10 @@ function FixtureFxSection({ fixture }: { fixture: Fixture }) {
         setSheetState({ mode: 'add' })
       }}
       presetPicker={
-        <PresetPicker
+        <LookTogglePicker
           targetType="fixture"
           targetKey={fixture.key}
-          compatiblePresetIds={fixture.compatiblePresetIds}
+          compatibleLookIds={fixture.compatibleLookIds}
         />
       }
     >
@@ -171,10 +171,10 @@ function GroupFxSection({ group }: { group: GroupSummary }) {
         setSheetState({ mode: 'add' })
       }}
       presetPicker={
-        <PresetPicker
+        <LookTogglePicker
           targetType="group"
           targetKey={group.name}
-          compatiblePresetIds={group.compatiblePresetIds}
+          compatibleLookIds={group.compatibleLookIds}
         />
       }
     >

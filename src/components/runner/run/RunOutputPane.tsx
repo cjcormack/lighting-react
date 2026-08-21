@@ -40,7 +40,7 @@ export function RunOutputPane({
 
   const assignmentCount = cue?.propertyAssignments.length ?? 0
   const effectCount = cue?.adHocEffects.length ?? 0
-  const presetCount = cue?.presetApplications.length ?? 0
+  const layerCount = cue?.layers.length ?? 0
 
   return (
     <div className="space-y-3">
@@ -62,9 +62,9 @@ export function RunOutputPane({
         <span className="inline-flex items-center rounded border border-border bg-muted/30 px-2 py-0.5 text-[11px] text-muted-foreground">
           {effectCount} effect{effectCount !== 1 ? 's' : ''}
         </span>
-        {presetCount > 0 && (
+        {layerCount > 0 && (
           <span className="inline-flex items-center rounded border border-border bg-muted/30 px-2 py-0.5 text-[11px] text-muted-foreground">
-            {presetCount} preset{presetCount !== 1 ? 's' : ''}
+            {layerCount} layer{layerCount !== 1 ? 's' : ''}
           </span>
         )}
       </div>

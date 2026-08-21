@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react'
 import { lightingApi } from '../../api/lightingApi'
 import { parseProgrammerValue } from '../../lib/programmerValue'
-import type { PaletteType } from '../../api/palettesApi'
 import type { ProgrammerEntry, ProgrammerKeyState, ProvenanceSource } from '../../api/programmerWsApi'
 import type { CellPropertyKey, RowCell } from './useRowValues'
 import type { ColumnKey } from './columns'
@@ -51,7 +50,6 @@ export interface CellPaletteRef {
   uuid?: string
   id?: number
   name?: string
-  type?: PaletteType
   /**
    * False when at least one covered property's reference no longer resolves: the palette was
    * deleted, or it no longer covers that fixture. The entry keeps its last resolved value, so
@@ -192,7 +190,6 @@ export function aggregateCellOwnership(
           uuid: refMixed ? undefined : refUuid,
           id: refMixed ? undefined : refEntry?.paletteId,
           name: refMixed ? undefined : refEntry?.paletteName,
-          type: refMixed ? undefined : refEntry?.paletteType,
           resolved: refResolved,
           mixed,
         }

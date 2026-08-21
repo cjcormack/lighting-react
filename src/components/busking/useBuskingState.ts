@@ -3,12 +3,11 @@ import { useEffectLibraryQuery, useAddFixtureFxMutation, useRemoveFxMutation } f
 import { useApplyGroupFxMutation, useRemoveGroupFxMutation } from '@/store/groups'
 import { useFixtureListQuery } from '@/store/fixtures'
 import { useCurrentProjectQuery } from '@/store/projects'
-import { useTogglePresetMutation } from '@/store/fxPresets'
+import { useToggleLookMutation } from '@/store/looks'
 import type { SettingPropertyDescriptor, SliderPropertyDescriptor } from '@/store/fixtures'
 import type { EffectLibraryEntry, FixtureDirectEffect } from '@/store/fixtureFx'
 import type { GroupActiveEffect, BlendMode, DistributionStrategy, EffectType, ElementMode } from '@/api/groupsApi'
-import type { FxPreset } from '@/api/fxPresetsApi'
-import type { TogglePresetTarget } from '@/api/fxPresetsApi'
+import type { LookSummary, ToggleLookTarget } from '@/api/looksApi'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import { lightingApi } from '@/api/lightingApi'
 import { programmerClearEntry, programmerSet } from '@/store/programmer'
@@ -56,7 +55,7 @@ export function useBuskingState() {
   const [removeFx] = useRemoveFxMutation()
   const [applyGroupFx] = useApplyGroupFxMutation()
   const [removeGroupFx] = useRemoveGroupFxMutation()
-  const [togglePresetMutation] = useTogglePresetMutation()
+  const [toggleLookMutation] = useToggleLookMutation()
 
   const selectTarget = useCallback((target: BuskingTarget) => {
     setSelectedTargets(new Map([[targetKey(target), target]]))
@@ -226,7 +225,7 @@ export function useBuskingState() {
    * The programmer entry a property pad represents on one target, if it holds one.
    *
    * Only entries the *pad* could have made count — those whose winning owner is `web`. A
-   * property held by a Locate, a preset toggle or a MIDI fader is somebody else's, and
+   * property held by a Locate, a Look toggle or a MIDI fader is somebody else's, and
    * treating it as the pad's would light the pad and, worse, arm its off-tap: `clearEntry`
    * releases **every** owner on the property, so tapping a pad that looked lit because of a
    * Locate would silently drop the Locate too.
@@ -527,43 +526,51 @@ export function useBuskingState() {
     [resolveProperty, addFixtureFx, applyGroupFx],
   )
 
-  const applyPreset = useCallback(
-    async (preset: FxPreset, _presence: EffectPresence, targetEffectsData: TargetEffectsData[]) => {
+  const applyLook = useCallback(
+    async (look: LookSummary, _presence: EffectPresence, targetEffectsData: TargetEffectsData[]) => {
       const projectId = currentProject?.id
       if (!projectId || targetEffectsData.length === 0) return
 
-      const targets: TogglePresetTarget[] = targetEffectsData.map((data) => ({
+      const targets: ToggleLookTarget[] = targetEffectsData.map((data) => ({
         type: data.target.type,
         key: data.target.type === 'group' ? data.target.name : data.target.key,
       }))
 
-      await togglePresetMutation({
+      await toggleLookMutation({
         projectId,
-        presetId: preset.id,
+        lookId: look.id,
         targets,
       })
         .unwrap()
         .catch(ignoreReportedError)
     },
-    [currentProject?.id, togglePresetMutation],
+    [currentProject?.id, toggleLookMutation],
   )
 
-  // Check whether a preset is active on all targets by looking for effects
-  // tagged with the preset's ID. This is deterministic — only effects applied
-  // via the toggle endpoint will match.
-  const computePresetPresence = useCallback(
-    (preset: FxPreset, targetEffectsData: TargetEffectsData[]): EffectPresence => {
-      if (targetEffectsData.length === 0 || preset.effects.length === 0) return 'none'
+  /**
+   * Whether a Look is on, from the effects tagged with its id.
+   *
+   * `presetId` is the right field to match, counter-intuitive as the name is: the toggle route
+   * passes the *Look* id into `togglePresetOnTargets`, which keys its bookkeeping and stamps its
+   * instances on that field. `FxInstance.lookId` exists but is set only by the cue-layer paths.
+   * When the pads become programmer layers the whole question goes away.
+   *
+   * A Look made only of static rows shows `'none'`: it spawns no effects, so there is nothing here
+   * to find. The server's programmer-write bookkeeping is not exposed to the pad.
+   */
+  const computeLookPresence = useCallback(
+    (look: LookSummary, targetEffectsData: TargetEffectsData[]): EffectPresence => {
+      if (targetEffectsData.length === 0 || look.effectCount === 0) return 'none'
 
       let activeCount = 0
       for (const data of targetEffectsData) {
-        let hasPreset = false
+        let hasLook = false
         if (data.target.type === 'group' && data.groupEffects) {
-          hasPreset = data.groupEffects.some((e) => e.presetId === preset.id)
+          hasLook = data.groupEffects.some((e) => e.presetId === look.id)
         } else if (data.target.type === 'fixture' && data.fixtureDirectEffects) {
-          hasPreset = data.fixtureDirectEffects.some((e) => e.presetId === preset.id)
+          hasLook = data.fixtureDirectEffects.some((e) => e.presetId === look.id)
         }
-        if (hasPreset) activeCount++
+        if (hasLook) activeCount++
       }
 
       if (activeCount === 0) return 'none'
@@ -604,9 +611,9 @@ export function useBuskingState() {
     // Apply with custom params
     applyEffectWithParams,
 
-    // Presets
-    applyPreset,
-    computePresetPresence,
+    // Looks
+    applyLook,
+    computeLookPresence,
 
     // Bottom sheet
     editingEffect,

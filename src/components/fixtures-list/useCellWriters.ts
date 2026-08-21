@@ -129,7 +129,7 @@ export function useCellWriters(): CellWriters {
         })
         return
       }
-      if (ctx.kind === 'preset') return
+      if (ctx.kind === 'look') return
       lightingApi.programmer.set('fixture', fixtureKey, propertyName, serializeLevel(value))
     }
 
@@ -138,7 +138,7 @@ export function useCellWriters(): CellWriters {
       writeSetting: writeChannelValue,
 
       writeColour(fixtureKey, property, r, g, b, w, a, uv) {
-        if (ctx.kind === 'preset') return
+        if (ctx.kind === 'look') return
         // A batch commit's white component was chosen against a fixture that
         // HAS a white channel (the picker's pure-white branch emits
         // 0,0,0,w=255). A target without one would otherwise get its RGB
@@ -189,7 +189,7 @@ export function useCellWriters(): CellWriters {
       },
 
       writePosition(fixtureKey, pan, tilt, panValue, tiltValue, axisProperties) {
-        if (ctx.kind === 'preset') return
+        if (ctx.kind === 'look') return
         if (panValue === undefined && tiltValue === undefined) return
         if (ctx.kind === 'cue') {
           // setProperty('position') takes both axes; fill an omitted one from

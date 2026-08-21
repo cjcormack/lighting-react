@@ -5,13 +5,13 @@ import { useGroupActiveEffectsQuery } from '@/store/groups'
 import { useFixtureEffectsQuery } from '@/store/fixtureFx'
 import { useFixtureListQuery } from '@/store/fixtures'
 import { useCurrentProjectQuery } from '@/store/projects'
-import { useProjectPresetListQuery, useCreateProjectPresetMutation, useSaveProjectPresetMutation, useDeleteProjectPresetMutation } from '@/store/fxPresets'
+import { useLookListQuery, useLookQuery, useCreateLookMutation, useSaveLookMutation, useDeleteLookMutation } from '@/store/looks'
 import { TargetList } from './TargetList'
 import { EffectPad } from './EffectPad'
 import { SelectedTargetSummary } from './SelectedTargetSummary'
 import { ActiveEffectSheet } from './ActiveEffectSheet'
 import { ConfigureEffectSheet } from './ConfigureEffectSheet'
-import { PresetEditor } from '@/components/presets/PresetEditor'
+import { LookEditor } from '@/components/looks/LookEditor'
 import { FixtureDetailModal } from '@/components/groups/FixtureDetailModal'
 import { useBuskingState, type TargetEffectsData } from './useBuskingState'
 import { programmerClearEntry, useProgrammerRevision } from '@/store/programmer'
@@ -23,10 +23,11 @@ import {
   targetKey,
   normalizeEffectName,
 } from './buskingTypes'
-import { inferPresetCapabilities, inferPresetExtendedChannels } from '@/api/fxPresetsApi'
 import { detectExtendedChannels } from '@/components/fx/colourUtils'
+import { toast } from 'sonner'
+import { formatError } from '@/lib/formatError'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
-import type { FxPreset, FxPresetInput } from '@/api/fxPresetsApi'
+import type { LookInput, LookSummary } from '@/api/looksApi'
 
 interface BuskingViewProps {
   /** Called whenever the set of selected targets changes, with control functions */
@@ -53,27 +54,33 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
     computePropertyPresence,
     togglePropertyEffect,
     getActivePropertyValue,
-    applyPreset,
-    computePresetPresence,
+    applyLook,
+    computeLookPresence,
     applyEffectWithParams,
     editingEffect,
     setEditingEffect,
   } = useBuskingState()
 
   const [configuringEffect, setConfiguringEffect] = useState<EffectLibraryEntry | null>(null)
-  const [presetFormOpen, setPresetFormOpen] = useState(false)
-  const [editingPreset, setEditingPreset] = useState<FxPreset | null>(null)
+  const [lookFormOpen, setLookFormOpen] = useState(false)
+  const [editingLookId, setEditingLookId] = useState<number | null>(null)
   const [detailFixtureKey, setDetailFixtureKey] = useState<string | null>(null)
 
-  // Fetch presets for the current project
+  // Fetch looks for the current project
   const { data: currentProject } = useCurrentProjectQuery()
-  const { data: presets } = useProjectPresetListQuery(currentProject?.id ?? 0, {
-    skip: !currentProject,
-  })
+  const { data: looks } = useLookListQuery(
+    { projectId: currentProject?.id ?? 0 },
+    { skip: !currentProject },
+  )
+  // The editor needs rows and effects, which the library list does not carry.
+  const { data: editingLook } = useLookQuery(
+    { projectId: currentProject?.id ?? 0, lookId: editingLookId ?? 0 },
+    { skip: !currentProject || editingLookId == null },
+  )
   const { data: fixtureList } = useFixtureListQuery()
-  const [createPreset, { isLoading: isCreatingPreset }] = useCreateProjectPresetMutation()
-  const [savePreset, { isLoading: isSavingPreset }] = useSaveProjectPresetMutation()
-  const [deletePreset, { isLoading: isDeletingPreset }] = useDeleteProjectPresetMutation()
+  const [createLook, { isLoading: isCreatingLook }] = useCreateLookMutation()
+  const [saveLook, { isLoading: isSavingLook }] = useSaveLookMutation()
+  const [deleteLook, { isLoading: isDeletingLook }] = useDeleteLookMutation()
 
   // On mobile, close the target sheet when a target is selected
   const handleSelectTarget = useCallback(
@@ -171,16 +178,27 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
     return detectExtendedChannels(propertySets)
   }, [selectedArray, fixtureList])
 
-  // Filter presets to those compatible with selected targets
-  const filteredPresets = useMemo(() => {
-    if (!presets || selectedArray.length === 0) return presets ?? []
-    // Collect capabilities and fixture type keys from selected targets
+  /**
+   * The Looks a pad can put on the current selection.
+   *
+   * **Deferred Looks only.** A bound Look names its own fixtures, so toggling it onto whatever
+   * happens to be selected would apply rows meant for other heads; it reaches the stage through a
+   * cue layer or Include instead. The toggle route offers only a Look's deferred rows for exactly
+   * the same reason, so a bound Look on a pad would fire nothing at all.
+   *
+   * Filtering is by derived **family** and by `editorFixtureType`, both of which the summary
+   * carries. It no longer checks extended colour channels (W/A/UV): that needs the effects'
+   * parameters, which only the detail carries, and fetching every Look to draw a pad grid is not
+   * worth it — the backend already skips a channel a fixture does not have.
+   */
+  const filteredLooks = useMemo(() => {
+    const deferred = (looks ?? []).filter((look) => look.hasDeferredRows)
+    if (selectedArray.length === 0) return deferred
     const targetCaps = new Set<string>()
     const targetTypeKeys = new Set<string>()
     for (const target of selectedArray) {
       if (target.type === 'group') {
         target.group.capabilities.forEach((c) => targetCaps.add(c))
-        // Collect typeKeys of member fixtures
         if (fixtureList) {
           fixtureList
             .filter((f) => f.groups.includes(target.name))
@@ -191,34 +209,29 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
         targetTypeKeys.add(target.fixture.typeKey)
       }
     }
-    return presets.filter((preset) => {
-      // Check capability compatibility
-      const requiredCaps = inferPresetCapabilities(preset.effects)
-      if (!requiredCaps.every((cap) => targetCaps.has(cap))) return false
-      // Check fixture type if set on preset
-      if (preset.fixtureType && !targetTypeKeys.has(preset.fixtureType)) return false
-      // Check extended colour channel compatibility
-      const requiredExt = inferPresetExtendedChannels(preset.effects)
-      if (requiredExt && extendedChannels) {
-        if (requiredExt.white && !extendedChannels.white) return false
-        if (requiredExt.amber && !extendedChannels.amber) return false
-        if (requiredExt.uv && !extendedChannels.uv) return false
-      } else if (requiredExt && !extendedChannels) {
-        // Preset needs extended channels but target has none
-        return false
+    return deferred.filter((look) => {
+      const requiredCaps: string[] = []
+      for (const family of look.families) {
+        if (family === 'INTENSITY') requiredCaps.push('dimmer')
+        else if (family === 'COLOUR') requiredCaps.push('colour')
+        else if (family === 'POSITION') requiredCaps.push('position')
+        // BEAM has no single capability flag — a gobo wheel and a zoom are separate channels, and
+        // the backend skips a property the fixture lacks. Nothing to filter on.
       }
+      if (!requiredCaps.every((cap) => targetCaps.has(cap))) return false
+      if (look.editorFixtureType && !targetTypeKeys.has(look.editorFixtureType)) return false
       return true
     })
-  }, [presets, selectedArray, fixtureList, extendedChannels])
+  }, [looks, selectedArray, fixtureList])
 
-  const handleApplyPreset = useCallback(
-    (preset: FxPreset) => {
-      return applyPreset(preset, 'none', targetEffectsData)
+  const handleApplyLook = useCallback(
+    (look: LookSummary) => {
+      return applyLook(look, 'none', targetEffectsData)
     },
-    [applyPreset, targetEffectsData],
+    [applyLook, targetEffectsData],
   )
 
-  // Determine common fixture type from selected targets for preset pre-population
+  // Determine common fixture type from selected targets, to pre-populate a new Look's editor hint
   const commonFixtureType = useMemo(() => {
     if (selectedArray.length === 0 || !fixtureList) return null
     const typeKeys = new Set<string>()
@@ -254,35 +267,37 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
     })
   }, [selectedArray])
 
-  const handleSavePreset = useCallback(
-    async (input: FxPresetInput) => {
+  const handleSaveLook = useCallback(
+    async (input: LookInput) => {
       if (!currentProject) return
-      if (editingPreset) {
-        await savePreset({ projectId: currentProject.id, presetId: editingPreset.id, ...input }).unwrap()
+      if (editingLookId != null) {
+        await saveLook({ projectId: currentProject.id, lookId: editingLookId, ...input }).unwrap()
       } else {
-        await createPreset({ projectId: currentProject.id, ...input }).unwrap()
+        await createLook({ projectId: currentProject.id, ...input }).unwrap()
       }
     },
-    [currentProject, createPreset, savePreset, editingPreset],
+    [currentProject, createLook, saveLook, editingLookId],
   )
 
-  const handleEditPreset = useCallback((preset: FxPreset) => {
-    setEditingPreset(preset)
-    setPresetFormOpen(true)
+  const handleEditLook = useCallback((look: LookSummary) => {
+    setEditingLookId(look.id)
+    setLookFormOpen(true)
   }, [])
 
-  const handleDeletePreset = useCallback(async () => {
-    if (!currentProject || !editingPreset) return
-    // PresetEditor invokes onDelete fire-and-forget, so nothing downstream catches this.
-    // Reported by errorToastMiddleware; leave the editor open on a delete that didn't land.
+  const handleDeleteLook = useCallback(async () => {
+    if (!currentProject || editingLookId == null) return
+    // LookEditor invokes onDelete fire-and-forget, so nothing downstream catches this — and
+    // `deleteLook` is in `SILENT_ENDPOINTS`, so nothing toasts for it either. Report it here and
+    // leave the editor open on a delete that didn't land.
     try {
-      await deletePreset({ projectId: currentProject.id, presetId: editingPreset.id }).unwrap()
-    } catch {
+      await deleteLook({ projectId: currentProject.id, lookId: editingLookId }).unwrap()
+    } catch (err) {
+      toast.error(formatError(err))
       return
     }
-    setPresetFormOpen(false)
-    setEditingPreset(null)
-  }, [currentProject, editingPreset, deletePreset])
+    setLookFormOpen(false)
+    setEditingLookId(null)
+  }, [currentProject, editingLookId, deleteLook])
 
   return (
     <div className="flex flex-col h-full">
@@ -312,12 +327,12 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
               getActivePropertyValue={getActivePropertyValue}
               setEditingEffect={setEditingEffect}
               setConfiguringEffect={setConfiguringEffect}
-              presets={filteredPresets}
-              onApplyPreset={handleApplyPreset}
-              computePresetPresence={computePresetPresence}
+              looks={filteredLooks}
+              onApplyLook={handleApplyLook}
+              computeLookPresence={computeLookPresence}
               currentProjectId={currentProject?.id}
-              onCreatePreset={() => { setEditingPreset(null); setPresetFormOpen(true) }}
-              onEditPreset={handleEditPreset}
+              onCreateLook={() => { setEditingLookId(null); setLookFormOpen(true) }}
+              onEditLook={handleEditLook}
               headerContent={
                 <SelectedTargetSummary
                   targets={selectedArray}
@@ -358,12 +373,12 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
             getActivePropertyValue={getActivePropertyValue}
             setEditingEffect={setEditingEffect}
             setConfiguringEffect={setConfiguringEffect}
-            presets={filteredPresets}
-            onApplyPreset={handleApplyPreset}
-            computePresetPresence={computePresetPresence}
+            looks={filteredLooks}
+            onApplyLook={handleApplyLook}
+            computeLookPresence={computeLookPresence}
             currentProjectId={currentProject?.id}
-            onCreatePreset={() => { setEditingPreset(null); setPresetFormOpen(true) }}
-            onEditPreset={handleEditPreset}
+            onCreateLook={() => { setEditingLookId(null); setLookFormOpen(true) }}
+            onEditLook={handleEditLook}
             headerContent={
               <SelectedTargetSummary
                 targets={selectedArray}
@@ -407,16 +422,15 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
         }}
         onClose={() => setConfiguringEffect(null)}
       />
-      <PresetEditor
-        open={presetFormOpen}
-        onOpenChange={(open) => { setPresetFormOpen(open); if (!open) setEditingPreset(null) }}
-        preset={editingPreset}
-        projectId={currentProject?.id}
-        onSave={handleSavePreset}
-        isSaving={isCreatingPreset || isSavingPreset}
-        defaultFixtureType={editingPreset ? undefined : commonFixtureType}
-        onDelete={editingPreset ? handleDeletePreset : undefined}
-        isDeleting={isDeletingPreset}
+      <LookEditor
+        open={lookFormOpen}
+        onOpenChange={(open) => { setLookFormOpen(open); if (!open) setEditingLookId(null) }}
+        look={editingLookId == null ? null : (editingLook ?? null)}
+        onSave={handleSaveLook}
+        isSaving={isCreatingLook || isSavingLook}
+        defaultEditorFixtureType={editingLookId == null ? commonFixtureType : undefined}
+        onDelete={editingLookId != null ? handleDeleteLook : undefined}
+        isDeleting={isDeletingLook}
       />
       <FixtureDetailModal
         fixtureKey={detailFixtureKey}
@@ -445,12 +459,12 @@ function EffectPadWrapper({
   getActivePropertyValue,
   setEditingEffect,
   setConfiguringEffect,
-  presets,
-  onApplyPreset,
-  computePresetPresence,
+  looks,
+  onApplyLook,
+  computeLookPresence,
   currentProjectId,
-  onCreatePreset,
-  onEditPreset,
+  onCreateLook,
+  onEditLook,
   headerContent,
 }: {
   selectedTargets: BuskingTarget[]
@@ -468,12 +482,12 @@ function EffectPadWrapper({
   getActivePropertyValue: (button: PropertyButton, data: TargetEffectsData[]) => string | null
   setEditingEffect: (ctx: ActiveEffectContext | null) => void
   setConfiguringEffect: (effect: EffectLibraryEntry | null) => void
-  presets: FxPreset[]
-  onApplyPreset: (preset: FxPreset) => Promise<void>
-  computePresetPresence: (preset: FxPreset, data: TargetEffectsData[]) => EffectPresence
+  looks: LookSummary[]
+  onApplyLook: (look: LookSummary) => Promise<void>
+  computeLookPresence: (look: LookSummary, data: TargetEffectsData[]) => EffectPresence
   currentProjectId: number | undefined
-  onCreatePreset: () => void
-  onEditPreset: (preset: FxPreset) => void
+  onCreateLook: () => void
+  onEditLook: (look: LookSummary) => void
   headerContent?: React.ReactNode
 }) {
   const getPresence = useCallback(
@@ -572,11 +586,11 @@ function EffectPadWrapper({
     [getActivePropertyValue, targetEffectsData],
   )
 
-  const getPresetPresence = useCallback(
-    (preset: FxPreset): EffectPresence => {
-      return computePresetPresence(preset, targetEffectsData)
+  const getLookPresence = useCallback(
+    (look: LookSummary): EffectPresence => {
+      return computeLookPresence(look, targetEffectsData)
     },
-    [computePresetPresence, targetEffectsData],
+    [computeLookPresence, targetEffectsData],
   )
 
   return (
@@ -587,9 +601,9 @@ function EffectPadWrapper({
       onLongPress={handleLongPress}
       hasSelection={selectedTargets.length > 0}
       headerContent={headerContent}
-      presets={presets}
-      onApplyPreset={onApplyPreset}
-      getPresetPresence={getPresetPresence}
+      looks={looks}
+      onApplyLook={onApplyLook}
+      getLookPresence={getLookPresence}
       currentProjectId={currentProjectId}
       defaultBeatDivision={defaultBeatDivision}
       onBeatDivisionChange={onBeatDivisionChange}
@@ -600,8 +614,8 @@ function EffectPadWrapper({
       onPropertyToggle={handlePropertyToggle}
       onPropertyLongPress={handlePropertyLongPress}
       getPropertyValue={getPropertyValue}
-      onCreatePreset={onCreatePreset}
-      onEditPreset={onEditPreset}
+      onCreateLook={onCreateLook}
+      onEditLook={onEditLook}
     />
   )
 }

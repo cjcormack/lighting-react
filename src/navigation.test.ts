@@ -3,8 +3,8 @@
 // store/universes → api/lightingApi (it reads window.location at import time).
 import { describe, it, expect } from "vitest"
 import { Box } from "lucide-react"
-import { navItems, filterNavItems, type NavItem } from "./navigation"
-import { PALETTE_TYPES, paletteTypeSlug } from "./lib/paletteTypes"
+import { navItems, lookFamilyNavItems, filterNavItems, type NavItem } from "./navigation"
+import { ATTRIBUTE_FAMILIES, familySlug } from "./lib/attributeFamily"
 
 /** Minimal NavItem factory for exercising filterNavItems in isolation. */
 function makeItem(id: string, visibility: NavItem["visibility"]): NavItem {
@@ -122,26 +122,40 @@ describe("admin-only navigation", () => {
   })
 })
 
-describe("palette navigation", () => {
-  it("registers exactly one Palettes entry, on the bare path", () => {
-    const palettes = navItems.filter((i) => i.pathMatch.startsWith("/palettes"))
-    expect(palettes.map((i) => i.id)).toEqual(["palettes"])
-    expect(palettes[0].pathMatch).toBe("/palettes")
+describe("look navigation", () => {
+  it("registers exactly one Looks entry, on the bare path", () => {
+    const looks = navItems.filter((i) => i.pathMatch.startsWith("/looks"))
+    expect(looks.map((i) => i.id)).toEqual(["looks"])
+    expect(looks[0].pathMatch).toBe("/looks")
   })
 
-  it("registers no per-type entry in the sidebar registry", () => {
-    // The four type routes are sibling views reached through the in-page switcher — the same
-    // exception the cards/list pair and the programmer's Values/FX make. A second sidebar row
-    // per type would put five Palettes entries in a nine-item group.
-    expect(navItems.filter((i) => i.pathMatch.includes("/palettes/"))).toEqual([])
+  it("registers no per-family route in the sidebar registry", () => {
+    // A Look's families are *derived* and one may span several, so a family cannot own a path at
+    // all — the library takes one route with an in-page filter. Anything matching `/looks/`
+    // here would be a sub-route that cannot exist.
+    expect(navItems.filter((i) => i.pathMatch.includes("/looks/"))).toEqual([])
   })
 
-  it("gives the Cmd+K per-type items ids that can't collide with the sidebar entry", () => {
-    // `usePaletteTypeNavItems` is a hook, but its items are static — build the ids the same way
-    // it does rather than rendering, so this stays a plain unit test.
-    const ids = PALETTE_TYPES.map((type) => `palettes-${paletteTypeSlug(type)}`)
+  it("gives the Cmd+K per-family items ids that can't collide with the sidebar entry", () => {
+    // Asserted against the real array, not against ids rebuilt here: an assertion that
+    // reconstructs what it is checking passes just as happily when the source is wrong.
+    const ids = lookFamilyNavItems.map((i) => i.id)
+    expect(ids).toEqual(ATTRIBUTE_FAMILIES.map((family) => `looks-${familySlug(family)}`))
     expect(new Set(ids).size).toBe(ids.length)
     const staticIds = new Set(navItems.map((i) => i.id))
     for (const id of ids) expect(staticIds.has(id)).toBe(false)
+  })
+
+  it("keeps the family deep links on the one route, as query params", () => {
+    // They are `?family=` on `/looks`, not `/looks/colour`. `pathMatch` therefore stays the bare
+    // path so the sidebar highlights its single row whichever family you arrived in — which is
+    // what the second half of this pins, and what the `/looks/` test above would not catch,
+    // because these items are not in `navItems`.
+    expect(lookFamilyNavItems).toHaveLength(ATTRIBUTE_FAMILIES.length)
+    for (const [index, family] of ATTRIBUTE_FAMILIES.entries()) {
+      const item = lookFamilyNavItems[index]
+      expect(item.path(1)).toBe(`/projects/1/looks?family=${familySlug(family)}`)
+      expect(item.pathMatch).toBe("/looks")
+    }
   })
 })

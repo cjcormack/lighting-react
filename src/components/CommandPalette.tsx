@@ -15,7 +15,7 @@ import type { GroupSummary } from "@/api/groupsApi"
 import {
   useNavItems,
   useUniverseNavItems,
-  usePaletteTypeNavItems,
+  useLookFamilyNavItems,
   filterNavItems,
   useIsNavAdmin,
 } from "@/navigation"
@@ -141,7 +141,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   const { data: groups } = useGroupListQuery()
   const allNavItems = useNavItems()
   const universeNavItems = useUniverseNavItems()
-  const paletteNavItems = usePaletteTypeNavItems()
+  const lookFamilyNavItems = useLookFamilyNavItems()
   const isNavAdmin = useIsNavAdmin()
 
   const { data: parkStateList } = useGetParkStateListQuery()
@@ -152,7 +152,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   const isViewingActiveProject = viewedProject?.id === currentProject?.id
   const visibleItems = filterNavItems(allNavItems, isViewingActiveProject, isNavAdmin)
   const visibleUniverseItems = filterNavItems(universeNavItems, isViewingActiveProject)
-  const visiblePaletteItems = filterNavItems(paletteNavItems, isViewingActiveProject)
+  const visibleLookFamilyItems = filterNavItems(lookFamilyNavItems, isViewingActiveProject)
 
   const activePage = pages[pages.length - 1] ?? "root"
 
@@ -238,7 +238,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
             {/* Navigation */}
             {viewedProject && (
               <Command.Group heading="Navigation" className={groupClassName}>
-                {[...visibleItems, ...visibleUniverseItems, ...visiblePaletteItems].map((item) => (
+                {[...visibleItems, ...visibleUniverseItems, ...visibleLookFamilyItems].map((item) => (
                   <Command.Item
                     key={item.id}
                     value={item.label}

@@ -6,33 +6,55 @@ export interface CueTarget {
   key: string
 }
 
-// Preset application within a cue (with optional timing)
-export interface CuePresetApplication {
-  presetId: number
-  targets: CueTarget[]
-  delayMs?: number | null
-  intervalMs?: number | null
-  randomWindowMs?: number | null
+/**
+ * One line of a cue's ordered Look composition.
+ *
+ * The cue's layers are cooked down — in `sortOrder`, later winning — to exactly one contributor per
+ * (fixture, property) before the resolver ever sees them, and the cue's own `propertyAssignments`
+ * are the last layer and beat all of them. That holds for *every* attribute, intensity included:
+ * within a cue, layering a dim look over a bright one really does dim. Across cues, HTP still
+ * applies. See `lighting7/docs/lighting-composition-model.md` §"Looks and layers".
+ */
+export interface CueLayer {
+  lookId: number
   sortOrder?: number
-  /** Per-application speed-master override (null → each preset effect's own → master 1). */
+  enabled?: boolean
+  /**
+   * The target set this layer operates over. One meaning, two jobs: it **supplies** targets to the
+   * Look's deferred rows and **filters** its bound ones. Empty means the Look's own targets, so a
+   * fully-deferred Look with no targets contributes nothing.
+   */
+  targets: CueTarget[]
+  /**
+   * Comma-separated `PropertyMaskGroup` names; null/absent = every property. This is what replaces
+   * value-level references: "this cue's colour comes from Warm, everything else local" is one
+   * COLOUR-masked layer rather than a separate feature.
+   */
+  propertyMask?: string | null
+  /** `OVERRIDE` | `MAX` | `MIN` | `MULTIPLY` | `ADDITIVE`. Editing this is a later session. */
+  blendMode?: string
+  /** Mix of this layer over what has accumulated beneath it, in [0, 1]. */
+  amount?: number
+  /** Within-cue stomp. Editing this is a later session. */
+  stomp?: boolean
+  /** Per-layer speed-master override (null → each Look effect's own → master 1). */
   speedMasterUuid?: string | null
   /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
   rateSpeedMasterUuid?: string | null
+  delayMs?: number | null
+  intervalMs?: number | null
+  randomWindowMs?: number | null
 }
 
-// Resolved preset application with name (from API response)
-export interface CuePresetApplicationDetail {
-  presetId: number
-  presetName: string | null
-  targets: CueTarget[]
-  delayMs?: number | null
-  intervalMs?: number | null
-  randomWindowMs?: number | null
-  sortOrder?: number
-  /** Per-application speed-master override (null → each preset effect's own → master 1). */
-  speedMasterUuid?: string | null
-  /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
-  rateSpeedMasterUuid?: string | null
+/**
+ * A layer as the server reads it back, carrying the Look's name so a cue card can label the line
+ * without a second fetch.
+ *
+ * `lookName` is **read-only** and must never be sent back — same contract as `presetName` was and
+ * as `health` is on an assignment. `buildCueInput` strips it, and a regression test pins that.
+ */
+export interface CueLayerDetail extends CueLayer {
+  lookName: string | null
 }
 
 // Ad-hoc effect stored inline in a cue (with optional timing)
@@ -71,16 +93,20 @@ export type AssignmentHealth =
   | { type: 'missingFixture'; fixtureKey: string }
   | { type: 'missingGroup'; groupName: string }
   | { type: 'missingProperty'; targetKey: string; propertyName: string }
-  // ── Named-palette references ──
-  /** The row's value is `ref:{uuid}` and no palette with that uuid exists (a forced delete,
-   *  or an import whose palette folder was incomplete). The row is skipped at apply. */
+  // ── `ref:{uuid}` references, which name a Look. Still spelled `palette*` on the wire. ──
+  /** The row's value is `ref:{uuid}` and no Look with that uuid exists (a forced delete, or an
+   *  import whose look folder was incomplete). The row is skipped at apply. */
   | { type: 'missingPalette'; paletteUuid: string }
-  /** The palette exists but holds nothing for this target and property, so there is nothing
-   *  to resolve to — an honest gap, or a type mismatch. */
+  /**
+   * The Look exists but holds no row for this target and property, so there is nothing to resolve
+   * to.
+   *
+   * The only diagnosis a failed reference gets now. There used to be a `paletteTypeMismatch` arm
+   * naming a wrong-type reference as the cause; a Look declares no attribute type — its families
+   * are derived, and one spanning colour and position is legitimate — so that complaint stopped
+   * being coherent and the arm has no producer.
+   */
   | { type: 'missingPaletteEntry'; paletteUuid: string; targetKey: string; propertyName: string }
-  /** A COLOUR palette referenced from a `position` row: it can never cover this property.
-   *  Read-path only — resolution reports the same case as `missingPaletteEntry`. */
-  | { type: 'paletteTypeMismatch'; paletteUuid: string; paletteType: string; propertyGroup: string }
 
 // Layer 3 property assignment on a cue.
 export interface CuePropertyAssignment {
@@ -136,7 +162,8 @@ export interface Cue {
   name: string
   palette: string[]
   updateGlobalPalette: boolean
-  presetApplications: CuePresetApplicationDetail[]
+  /** The cue's ordered Look composition, in `sortOrder`. */
+  layers: CueLayerDetail[]
   adHocEffects: CueAdHocEffect[]
   propertyAssignments: CuePropertyAssignment[]
   triggers: CueTriggerDetail[]
@@ -162,7 +189,7 @@ export interface CueInput {
   name: string
   palette: string[]
   updateGlobalPalette: boolean
-  presetApplications: CuePresetApplication[]
+  layers: CueLayer[]
   adHocEffects: CueAdHocEffect[]
   propertyAssignments?: CuePropertyAssignment[]
   triggers?: CueTrigger[]
@@ -214,6 +241,11 @@ export interface StopCueResponse {
 // Current lighting state snapshot (palette + active effects)
 export interface CueCurrentState {
   palette: string[]
-  presetApplications: CuePresetApplicationDetail[]
+  /**
+   * Still `presetApplications` on the wire: `captureCurrentState` reconstructs them from the live
+   * FX instances' `presetId`, which the layer rewrite has not reached. Nothing composes from them,
+   * so this is a snapshot of what is running rather than something to write back.
+   */
+  presetApplications: { presetId: number; presetName: string | null; targets: CueTarget[] }[]
   adHocEffects: CueAdHocEffect[]
 }

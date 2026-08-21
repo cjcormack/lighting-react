@@ -189,7 +189,7 @@ describe('NON_SAVE_ENDPOINTS', () => {
       import('./fx'),
       import('./fixtureFx'),
       import('./groups'),
-      import('./fxPresets'),
+      import('./looks'),
       import('./fxDefinitions'),
       import('./scripts'),
       import('./projects'),
@@ -197,7 +197,6 @@ describe('NON_SAVE_ENDPOINTS', () => {
       import('./oauthGithub'),
       import('./ai'),
       import('./programmerOps'),
-      import('./palettes'),
       import('./perf'),
       import('./status'),
     ])

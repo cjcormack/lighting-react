@@ -2,9 +2,9 @@ import { useRef, useMemo, useSyncExternalStore, useCallback } from 'react'
 import { lightingApi } from '../api/lightingApi'
 import { useEditorContext } from '../components/lighting-editor/EditorContext'
 import {
-  usePresetDraft,
-  usePresetDraftValue,
-} from '../components/presets/PresetDraftContext'
+  useLookDraft,
+  useLookDraftValue,
+} from '../components/looks/LookDraftContext'
 import {
   rgbToHex,
   hexToRgb,
@@ -38,8 +38,8 @@ export function useVirtualDimmer(
   fixtureKey?: string,
 ): VirtualDimmerResult {
   const ctx = useEditorContext()
-  const draft = usePresetDraft()
-  const draftValue = usePresetDraftValue(colourProp.name)
+  const draft = useLookDraft()
+  const draftValue = useLookDraftValue(colourProp.name)
 
   // Store colour ratios for restoring hue when raising from zero
   const lastRatiosRef = useRef<{ r: number; g: number; b: number }>({
@@ -83,8 +83,8 @@ export function useVirtualDimmer(
 
   const live = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 
-  const presetLive = useMemo(() => {
-    if (ctx.kind !== 'preset') return null
+  const lookDraftLive = useMemo(() => {
+    if (ctx.kind !== 'look') return null
     if (!draftValue) return { value: 0, percentage: 0 }
     const { r, g, b } = hexToRgb(parseExtendedColour(draftValue).hex)
     const value = Math.max(r, g, b)
@@ -94,7 +94,7 @@ export function useVirtualDimmer(
     return { value, percentage: Math.round((value / 255) * 100) }
   }, [ctx.kind, draftValue])
 
-  const { value, percentage } = presetLive ?? live
+  const { value, percentage } = lookDraftLive ?? live
 
   const setValue = useCallback(
     (newValue: number) => {
@@ -105,7 +105,7 @@ export function useVirtualDimmer(
       let existingAmber = 0
       let existingUv = 0
 
-      if (ctx.kind === 'preset') {
+      if (ctx.kind === 'look') {
         // Read the current draft value directly so rapid drags scale against the latest
         // canonical state, not a stale snapshot captured at hook-call time.
         const current = draft?.getValue(colourProp.name)
@@ -161,7 +161,7 @@ export function useVirtualDimmer(
         return
       }
 
-      if (ctx.kind === 'preset' && draft) {
+      if (ctx.kind === 'look' && draft) {
         const value = serializeExtendedColour({
           hex: rgbToHex(newR, newG, newB),
           white: existingWhite,

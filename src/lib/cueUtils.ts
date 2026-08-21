@@ -1,4 +1,4 @@
-import type { Cue, CueInput } from '@/api/cuesApi'
+import type { Cue, CueInput, CueLayer } from '@/api/cuesApi'
 import { formatMs } from './formatMs'
 
 const CURVE_LABELS: Record<string, string> = {
@@ -73,19 +73,24 @@ export function buildCueInput(cue: Cue): CueInput {
     name: cue.name,
     palette: cue.palette,
     updateGlobalPalette: cue.updateGlobalPalette,
-    presetApplications: cue.presetApplications.map((pa) => ({
-      presetId: pa.presetId,
-      targets: pa.targets,
-      delayMs: pa.delayMs,
-      intervalMs: pa.intervalMs,
-      randomWindowMs: pa.randomWindowMs,
-      sortOrder: pa.sortOrder,
+    layers: cue.layers.map((layer) => ({
+      lookId: layer.lookId,
+      sortOrder: layer.sortOrder,
+      enabled: layer.enabled,
+      targets: layer.targets,
+      propertyMask: layer.propertyMask,
+      blendMode: layer.blendMode,
+      amount: layer.amount,
+      stomp: layer.stomp,
       // Rebuilt field-by-field (unlike adHocEffects' spread) because the detail row carries
-      // presetName, which the input type must not. The cost of that shape is that every new
-      // field must be added HERE too, or every inline cue edit silently strips it — exactly
-      // what happened to nothing yet, and what a regression test now pins for this one.
-      speedMasterUuid: pa.speedMasterUuid,
-      rateSpeedMasterUuid: pa.rateSpeedMasterUuid,
+      // lookName, which the input type must not. The cost of that shape is that every new field
+      // must be added HERE too, or every inline cue edit silently strips it — which is what a
+      // regression test in cueUtils.test.ts pins, field by field.
+      speedMasterUuid: layer.speedMasterUuid,
+      rateSpeedMasterUuid: layer.rateSpeedMasterUuid,
+      delayMs: layer.delayMs,
+      intervalMs: layer.intervalMs,
+      randomWindowMs: layer.randomWindowMs,
     })),
     adHocEffects: cue.adHocEffects.map((e) => ({ ...e })),
     propertyAssignments: cue.propertyAssignments.map((a) => ({ ...a })),
@@ -109,4 +114,37 @@ export function buildCueInput(cue: Cue): CueInput {
     // cueType on PUT, but sending the truth keeps the payload honest if that ever changes.)
     cueType: cue.cueType,
   }
+}
+
+/**
+ * Move a layer within a cue's ordered composition and restate every `sortOrder` from its position.
+ *
+ * Rewriting the whole list rather than the two moved entries is what keeps the order dense and
+ * gap-free, and `sortOrder` is the authoritative playback order — the array position is only how
+ * this client happens to hold it. A stale gap would resolve fine, but two layers sharing a
+ * `sortOrder` would leave the tie to insertion order in the cook step, which is exactly the
+ * accident the layer model exists to remove.
+ *
+ * Pure, and separate from the component, because dnd-kit's pointer sequence is not drivable with
+ * `fireEvent` — this is the half that can be tested directly.
+ */
+export function reorderCueLayers<T extends CueLayer>(
+  layers: readonly T[],
+  oldIndex: number,
+  newIndex: number,
+): T[] {
+  const next = [...layers]
+  if (
+    oldIndex < 0 ||
+    newIndex < 0 ||
+    oldIndex >= next.length ||
+    newIndex >= next.length ||
+    oldIndex === newIndex
+  ) {
+    // Still restate sortOrder: a no-op drag on a list that arrived with gaps should not leave them.
+    return next.map((layer, index) => ({ ...layer, sortOrder: index }))
+  }
+  const [moved] = next.splice(oldIndex, 1)
+  next.splice(newIndex, 0, moved)
+  return next.map((layer, index) => ({ ...layer, sortOrder: index }))
 }

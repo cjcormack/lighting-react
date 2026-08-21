@@ -14,7 +14,7 @@ import {
   LayoutGrid,
   SlidersHorizontal,
   AudioWaveform,
-  Bookmark,
+  SwatchBook,
   Clapperboard,
   TableProperties,
   Sliders,
@@ -23,7 +23,7 @@ import { Breadcrumbs } from "@/components/Breadcrumbs"
 import { useProjectQuery, useCurrentProjectQuery } from "../store/projects"
 import { useFixtureListQuery } from "../store/fixtures"
 import { usePatchListQuery } from "../store/patches"
-import { useProjectPresetListQuery } from "../store/fxPresets"
+import { useLookListQuery } from "../store/looks"
 import { useGroupListQuery } from "../store/groups"
 import { useGetUniverseQuery } from "../store/universes"
 import { useSurfaceBindingsQuery, useSurfaceDevices } from "../store/surfaces"
@@ -47,9 +47,10 @@ export default function ProjectOverview() {
   const { data: universes } = useGetUniverseQuery(undefined, {
     skip: !project?.isCurrent,
   })
-  const { data: presets } = useProjectPresetListQuery(Number(projectId), {
-    skip: !project?.isCurrent,
-  })
+  const { data: looks } = useLookListQuery(
+    { projectId: Number(projectId) },
+    { skip: !project?.isCurrent },
+  )
   const { data: patches } = usePatchListQuery(Number(projectId), {
     skip: !project,
   })
@@ -163,11 +164,11 @@ export default function ProjectOverview() {
                 onClick={() => navigate(`/projects/${project.id}/fx`)}
               />
               <QuickNavCard
-                title="FX Presets"
-                count={presets?.length}
-                icon={<Bookmark className="size-5" />}
-                description="Saved effect preset bundles"
-                onClick={() => navigate(`/projects/${project.id}/presets`)}
+                title="Looks"
+                count={looks?.length}
+                icon={<SwatchBook className="size-5" />}
+                description="Reusable bundles of values and effects"
+                onClick={() => navigate(`/projects/${project.id}/looks`)}
               />
               <QuickNavCard
                 title="Cues"

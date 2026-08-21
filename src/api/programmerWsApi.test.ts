@@ -291,7 +291,6 @@ describe('createProgrammerApi', () => {
           paletteUuid: uuid,
           paletteId: 7,
           paletteName: 'Warm Amber',
-          paletteType: 'COLOUR',
         },
       ]),
     )

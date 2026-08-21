@@ -16,8 +16,10 @@ export function collectCueTargets(cue: Cue): CueTarget[] {
 
   for (const a of cue.propertyAssignments) push({ type: a.targetType, key: a.targetKey })
   for (const e of cue.adHocEffects) push({ type: e.targetType, key: e.targetKey })
-  for (const p of cue.presetApplications) {
-    for (const t of p.targets) push(t)
+  // A layer with no targets of its own contributes none here: it uses the Look's targets, which
+  // this client cannot expand without fetching every Look's rows.
+  for (const layer of cue.layers) {
+    for (const t of layer.targets) push(t)
   }
 
   return out

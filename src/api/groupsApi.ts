@@ -10,7 +10,12 @@ export interface GroupSummary {
   capabilities: string[]
   symmetricMode: string
   defaultDistribution: string
-  compatiblePresetIds: number[]
+  /**
+   * Ids of the Looks that can be pointed at this group — deferred Looks matching its type and
+   * capabilities. Bound Looks are absent by design: they name their own targets, so
+   * "is this compatible?" is not a question about them.
+   */
+  compatibleLookIds: number[]
 }
 
 export interface GroupMember {

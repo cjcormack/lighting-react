@@ -7,7 +7,6 @@ import {
   EyeOff,
   GripVertical,
   Layers,
-  Link2Off,
   ListChecks,
   Loader2,
   Play,
@@ -47,8 +46,6 @@ import { SaveStatusIndicator } from '@/components/SaveStatusIndicator'
 import { TargetsPane } from './TargetsPane'
 import { CuePropsPane } from './CuePropsPane'
 import { LayersPane, type LayersMode } from './LayersPane'
-import { MakeHardDialog } from '@/components/palettes/MakeHardDialog'
-import { isPaletteRefValue } from '@/lib/programmerValue'
 import { collectCueTargets } from './targetUtils'
 
 export type { LayersMode }
@@ -110,7 +107,6 @@ export function CueCardEditor({
   const [activeTab, setActiveTab] = useState<'targets' | 'props' | 'layers'>('layers')
 
   const [editMode, setEditMode] = useState<CueEditMode>('live')
-  const [makeHardOpen, setMakeHardOpen] = useState(false)
 
   const { data: fullCue, isFetching } = useProjectCueQuery(
     { projectId, cueId: cue.id },
@@ -172,16 +168,10 @@ export function CueCardEditor({
     [cueData],
   )
   const targetCount = targets.length
-  // Counted from the stored rows rather than from health: a *resolving* reference is healthy and
-  // still worth being able to harden, which is the whole point of the escape hatch.
-  const referenceCount = useMemo(
-    () => (cueData?.propertyAssignments ?? []).filter((a) => isPaletteRefValue(a.value)).length,
-    [cueData],
-  )
   const layersCount =
     (cueData?.propertyAssignments.length ?? 0) +
     (cueData?.adHocEffects.length ?? 0) +
-    (cueData?.presetApplications.length ?? 0)
+    (cueData?.layers.length ?? 0)
 
   // Inline edits from the collapsed row. Same PATCH-on-commit contract as the expanded
   // card's Properties pane, so the two stay consistent — every field auto-saves.
@@ -518,37 +508,12 @@ export function CueCardEditor({
                         Record
                       </Button>
                     )}
-                    {/* Only when the cue actually holds references. Hidden rather than
-                        disabled, unlike the programmer's: this footer is already five buttons
-                        wide, and a cue with no palette references has nothing this could ever
-                        apply to. */}
-                    {referenceCount > 0 && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs gap-1"
-                        onClick={() => setMakeHardOpen(true)}
-                        title={`Stop ${referenceCount} row(s) tracking their palettes`}
-                      >
-                        <Link2Off className="size-3.5" />
-                        Make hard
-                      </Button>
-                    )}
+                    {/* No per-cue "Make hard" any more: the route is retired along with
+                        value-level references, and "flatten this layer into local rows" is the
+                        gesture that replaces it. It arrives with the programmer rewrite; until
+                        then the programmer-wide Make hard in the programmer toolbar is the only
+                        way out of a reference. */}
                   </div>
-                  <MakeHardDialog
-                    open={makeHardOpen}
-                    onOpenChange={setMakeHardOpen}
-                    projectId={projectId}
-                    scope={{
-                      kind: 'cue',
-                      cueId: cue.id,
-                      cueName: cueData.name,
-                      referenceCount,
-                      // This footer only renders while the card is expanded, and expanding it is
-                      // what opened the edit session — so the guard would always fire.
-                      editSessionOpen: true,
-                    }}
-                  />
                 </>
               )}
             </div>

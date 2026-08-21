@@ -14,7 +14,6 @@ import { SliderCell } from './cells/SliderCell'
 import { ColourCell } from './cells/ColourCell'
 import { PositionCell } from './cells/PositionCell'
 import { SettingCell } from './cells/SettingCell'
-import type { PaletteType } from '@/api/palettesApi'
 import type { ColumnKey } from './columns'
 import type { CellCommit, FixtureRow, GroupRow, InfoRow, Row, RowId } from './rowModel'
 import type { CellPaletteRef } from './useRowOwnership'
@@ -23,18 +22,14 @@ import type { RowCell } from './useRowValues'
 const ROW_HEIGHT = 36
 
 /**
- * Left-edge bar colour per palette type — a quiet type cue, not a fifth ownership colour.
+ * Left-edge bar marking a cell whose value is a reference — a quiet cue, not a fifth ownership
+ * colour.
  *
- * `MIXED` covers a cell whose covered properties reference more than one palette, which has no
- * single type to tint by.
+ * One colour, where there used to be one per palette type. A Look declares no attribute type: its
+ * families are derived from its rows and one may span several, so there is nothing here to tint by.
+ * What the bar still says — "this cell tracks something else" — is the part that mattered.
  */
-const PALETTE_REF_BAR_CLASS: Record<PaletteType | 'MIXED', string> = {
-  INTENSITY: 'bg-zinc-400',
-  POSITION: 'bg-emerald-500',
-  COLOUR: 'bg-fuchsia-500',
-  BEAM: 'bg-cyan-500',
-  MIXED: 'bg-muted-foreground',
-}
+const REF_BAR_CLASS = 'bg-muted-foreground'
 
 /** Sticky name column: 260px on a desktop, but never more than 45% of a narrow viewport. */
 const NAME_COLUMN_WIDTH = 'min(45vw, 260px)'
@@ -361,7 +356,7 @@ const RowView = React.memo(function RowView({
             {paletteRef && (
               <span
                 className={`pointer-events-none absolute inset-y-0.5 left-0 w-0.5 rounded-full ${
-                  paletteRef.resolved ? PALETTE_REF_BAR_CLASS[paletteRef.type ?? 'MIXED'] : 'bg-destructive'
+                  paletteRef.resolved ? REF_BAR_CLASS : 'bg-destructive'
                 }`}
               />
             )}

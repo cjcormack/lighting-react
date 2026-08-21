@@ -15,8 +15,8 @@ import { toast } from 'sonner'
 import { useFixtureTypeListQuery } from '@/store/fixtures'
 import { useCreatePatchMutation, usePatchGroupListQuery } from '@/store/patches'
 import { GroupComboInput } from './GroupComboInput'
-import { FixtureTypePickerContent, type FixtureCountMap } from '@/components/presets/FixtureTypePicker'
-import { buildFixtureTypeHierarchy, type FixtureTypeHierarchy } from '@/api/fxPresetsApi'
+import { FixtureTypePickerContent, type FixtureCountMap } from '@/components/fixtures/FixtureTypePicker'
+import { buildFixtureTypeHierarchy, type FixtureTypeHierarchy } from '@/api/fixtureTypeHierarchy'
 import type { FixturePatch } from '@/api/patchApi'
 
 interface AddFixtureSheetProps {

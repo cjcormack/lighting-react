@@ -1,12 +1,8 @@
-import { useCallback, useState } from 'react'
-import { useParams } from 'react-router'
-import { Crosshair, Flashlight, SwatchBook, X } from 'lucide-react'
+import { useCallback } from 'react'
+import { Crosshair, Flashlight, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useLocateStateQuery, useToggleLocateMutation } from '../../store/locate'
-import { ApplyPalettePopover } from '../palettes/ApplyPalettePopover'
-import { RecordPaletteSheet } from '../palettes/RecordPaletteSheet'
-import { getStoredPaletteType } from '../ViewSwitcher'
 import { FanPopover } from './FanPopover'
 import { useHighlight } from './useHighlight'
 import type { LocateTarget } from '../../store/locate'
@@ -25,8 +21,6 @@ export interface SelectionToolbarProps {
 export function SelectionToolbar({ locateTargets, targets, onClear }: SelectionToolbarProps) {
   const { data: locateState } = useLocateStateQuery()
   const [toggleLocate] = useToggleLocateMutation()
-  const { projectId } = useParams()
-  const [recordPaletteOpen, setRecordPaletteOpen] = useState(false)
   const getTargets = useCallback(() => [...targets], [targets])
   const highlight = useHighlight(getTargets)
 
@@ -53,21 +47,11 @@ export function SelectionToolbar({ locateTargets, targets, onClear }: SelectionT
         <span className="hidden sm:inline"> selected</span>
       </span>
       <FanPopover targets={targets} />
-      {/* Palette actions live here rather than in ProgrammerToolbar: both are definitionally
-          selection-scoped, and a toolbar-wide "Apply palette" would sit permanently disabled
-          whenever nothing is selected. */}
-      <ApplyPalettePopover targets={targets} />
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button variant="outline" size="sm" onClick={() => setRecordPaletteOpen(true)}>
-            <SwatchBook className="size-3.5" />
-            <span className="hidden sm:inline">Record palette</span>
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>
-          Save the selection’s programmer values as a named palette
-        </TooltipContent>
-      </Tooltip>
+      {/* No "Apply palette" or "Record palette" here any more. Both authored value-level
+          references, which layers replace: applying a look to a cue is a layer, and recording the
+          programmer into a look is the record rewrite. Leaving Record in place would have been
+          worse than removing it — its route still answers 200 while writing rows no consumer
+          reads. */}
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
@@ -107,16 +91,6 @@ export function SelectionToolbar({ locateTargets, targets, onClear }: SelectionT
         <X className="size-3.5" />
         <span className="hidden sm:inline">Deselect</span>
       </Button>
-
-      <RecordPaletteSheet
-        open={recordPaletteOpen}
-        onOpenChange={setRecordPaletteOpen}
-        projectId={Number(projectId)}
-        // The type the operator last worked in, so recording a second colour palette straight
-        // after a first doesn't ask the same question twice.
-        defaultType={getStoredPaletteType()}
-        targets={targets.map((target) => ({ type: 'fixture' as const, key: target.key }))}
-      />
     </div>
   )
 }

@@ -109,7 +109,7 @@ describe('SILENT_ENDPOINTS', () => {
     await Promise.all([
       import('./cues'),
       import('./cueStacks'),
-      import('./fxPresets'),
+      import('./looks'),
       import('./scripts'),
       import('./projects'),
       import('./cloudSync'),
@@ -119,7 +119,6 @@ describe('SILENT_ENDPOINTS', () => {
       import('./riggings'),
       import('./patches'),
       import('./programmerOps'),
-      import('./palettes'),
       import('./speedMasters'),
       import('./auth'),
       import('./users'),

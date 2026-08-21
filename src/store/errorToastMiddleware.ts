@@ -18,7 +18,7 @@ import { formatError } from '../lib/formatError'
 export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // Inline <Alert variant="destructive"> rendered from the mutation's own `error` state
   'copyCue', // src/components/cues/CopyCueDialog.tsx
-  'copyPreset', // src/components/presets/CopyPresetDialog.tsx
+  'copyLook', // src/components/looks/CopyLookDialog.tsx
   'copyScript', // src/CopyScriptDialog.tsx
   'cloneProject', // src/CloneProjectDialog.tsx
   'importProject', // src/ImportProjectDialog.tsx
@@ -27,9 +27,16 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   'recordProgrammer', // src/components/programmer/RecordSheet.tsx
   'includeIntoProgrammer', // src/components/programmer/IncludeSheet.tsx
   'updateProgrammer', // src/components/programmer/UpdateDialog.tsx
-  'recordPalette', // src/components/palettes/RecordPaletteSheet.tsx
-  'makeCueHard', // src/components/palettes/MakeHardDialog.tsx
-  'makeFxPresetHard', // ...same dialog, preset scope: ambiguity is reported inline, not toasted
+  // The LOOK_IN_USE 409 is an ordinary step in the delete flow, not a failure: it opens the
+  // "delete anyway" confirmation, which names the cues that lose a layer. A duplicate-name 409 on
+  // create/save is likewise rendered beside the field the operator has to change.
+  //
+  // NB: `deleteLook` has three call sites and only the 409 is a flow step — every *other* failure
+  // has to be reported by hand, or a delete that quietly did nothing looks like a success. All
+  // three do (LookDetailSheet inline, Looks.tsx and BuskingView by toast); a fourth must too.
+  'deleteLook', // src/components/looks/LookDetailSheet.tsx, routes/Looks.tsx, busking/BuskingView.tsx
+  'saveLook', // ...same sheet, and LookEditor's own inline alert
+  'createLook', // src/components/looks/LookEditor.tsx, via the library route and busking
   // The 409s are ordinary steps in this flow, not failures: SPEED_MASTER_IN_USE opens the
   // "delete anyway" confirmation, and SPEED_MASTER_PROTECTED can only be reached by a stale
   // client (the UI disables master 1's delete button).

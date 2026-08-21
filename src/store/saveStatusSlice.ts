@@ -52,9 +52,9 @@ export const NON_SAVE_ENDPOINTS: ReadonlySet<string> = new Set([
   'pauseGroupFx',
   'resumeGroupFx',
   'clearGroupFx',
-  'previewPreset',
-  'clearPresetPreview',
-  'togglePreset',
+  'previewLook',
+  'clearLookPreview',
+  'toggleLook',
 
   // ── Compile / run / chat: long-running, and each already reports its own outcome ──
   'compileProjectScript',
