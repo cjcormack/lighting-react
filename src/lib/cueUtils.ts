@@ -148,3 +148,16 @@ export function reorderCueLayers<T extends CueLayer>(
   next.splice(newIndex, 0, moved)
   return next.map((layer, index) => ({ ...layer, sortOrder: index }))
 }
+
+/**
+ * Restate every `sortOrder` from array position without moving anything.
+ *
+ * The insert and remove paths need exactly this — a list that arrived with gaps (a migrated cue, an
+ * older client's edit) must not hand the appended layer a `sortOrder` another layer already holds,
+ * and removing the middle of three must not leave 0 and 2 for a later insert to land in. Named,
+ * because expressing it as `reorderCueLayers(layers, 0, 0)` reads as a move and relies on that
+ * function's guard clause to mean "renumber".
+ */
+export function densifyCueLayerOrder<T extends CueLayer>(layers: readonly T[]): T[] {
+  return layers.map((layer, index) => ({ ...layer, sortOrder: index }))
+}

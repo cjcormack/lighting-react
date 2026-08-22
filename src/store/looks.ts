@@ -26,7 +26,13 @@ import type {
  */
 export function startLooksBridge() {
   lightingApi.looks.subscribe(function () {
-    store.dispatch(restApi.util.invalidateTags(['Look', 'LookList']))
+    // `Fixture` and `GroupList` for the same reason the CRUD mutations carry them:
+    // `compatibleLookIds` rides on the fixture and group summaries, so a Look created, copied or
+    // deleted on **another** client would otherwise exist here and be offered nowhere —
+    // `LookTogglePicker` omits it and `LayerPicker` disables every head for it. Affordable
+    // precisely because `lookListChanged` is CRUD-only: a contents edit does not fire it (see
+    // `looksWsApi`), so this is not on the per-resolution path.
+    store.dispatch(restApi.util.invalidateTags(['Look', 'LookList', 'Fixture', 'GroupList']))
   })
 }
 
@@ -133,15 +139,18 @@ export const looksApi = restApi.injectEndpoints({
         method: 'POST',
         body,
       }),
-      // The copy lands in the *target* project's library, which may not be the one on screen.
-      // When it *is* — the library's Duplicate copies into this same project — the new Look also
-      // has to appear in every `compatibleLookIds`, exactly as a create does.
-      invalidatesTags: (result, _error, { projectId }) =>
+      // The copy lands in the *target* project's library, which may not be the one on screen — so
+      // the list tag is scoped to that project. `Fixture`/`GroupList` are **not** conditional on
+      // the target, though, and comparing it against the *source* project would be the wrong test:
+      // those two lists belong to the **active** project (`fixture/list` and `groups` take no
+      // project), which this mutation cannot see. Copying from another project's library *into* the
+      // active one — the main "Copy to Project" flow — is exactly the case a source==target check
+      // skips, and it is the case that most needs the refresh: the new Look would exist and be
+      // offered nowhere. Always invalidating costs one refetch of two lists, as a create does.
+      invalidatesTags: (result) =>
         result == null
           ? []
-          : result.targetProjectId === projectId
-            ? [{ type: 'LookList', id: result.targetProjectId }, 'Fixture', 'GroupList']
-            : [{ type: 'LookList', id: result.targetProjectId }],
+          : [{ type: 'LookList', id: result.targetProjectId }, 'Fixture', 'GroupList'],
     }),
 
     /**

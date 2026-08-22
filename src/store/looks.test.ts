@@ -201,6 +201,27 @@ describe('looks endpoints', () => {
 
     sub.unsubscribe()
   })
+
+  /**
+   * And a copy does too, **whichever project it lands in**. Gating this on
+   * `targetProjectId === projectId` looks like the right economy and is not: `fixture/list` and
+   * `groups` are the *active* project's, which the mutation cannot see, so the case that check skips
+   * — copying out of another project's library into the active one, which is what "Copy to Project"
+   * is for — is exactly the case that needs the refresh. This copy is cross-project (source 1,
+   * target 2) precisely so the mistake would show.
+   */
+  it('copyLook refetches the compatibility lists even when the target is another project', async () => {
+    const sub = store.dispatch(fixturesApi.endpoints.fixtureList.initiate())
+    await sub
+    const before = countRequestsTo('fixture/list')
+
+    await store.dispatch(
+      looksApi.endpoints.copyLook.initiate({ projectId: 1, lookId: 4, targetProjectId: 2 }),
+    )
+    await vi.waitFor(() => expect(countRequestsTo('fixture/list')).toBeGreaterThan(before))
+
+    sub.unsubscribe()
+  })
 })
 
 /** The guard half: a failed mutation must not invalidate, so nothing refetches to learn nothing. */

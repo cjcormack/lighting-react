@@ -31,7 +31,7 @@ import { fromCueAdHocEffect } from '@/components/fx/effectSummaryTypes'
 import { useEffectLibraryQuery, type EffectLibraryEntry } from '@/store/fixtureFx'
 import { useLookListQuery } from '@/store/looks'
 import { usePatchProjectCueMutation } from '@/store/cues'
-import { buildCueInput, reorderCueLayers } from '@/lib/cueUtils'
+import { buildCueInput, densifyCueLayerOrder, reorderCueLayers } from '@/lib/cueUtils'
 import { FAMILY_LABELS } from '@/lib/attributeFamily'
 import { LookRefBadge } from '@/components/looks/LookRefBadge'
 import { LookPreviewSwatches } from '@/components/looks/lookRefValue'
@@ -127,15 +127,15 @@ export function LayersPane({ cue, projectId, mode, targets }: LayersPaneProps) {
   const removeLayer = (index: number) => {
     // Re-densify: removing layer 1 of three must not leave sortOrder 0 and 2 behind, or a later
     // insert lands in the gap rather than at the end.
-    patchLayers(reorderCueLayers(buildCueInput(cue).layers.filter((_, i) => i !== index), 0, 0))
+    patchLayers(densifyCueLayerOrder(buildCueInput(cue).layers.filter((_, i) => i !== index)))
   }
 
   const addLayer = (layer: CueLayer) => {
-    // Through `reorderCueLayers` rather than `sortOrder: existing.length`, which is only correct
-    // when the list arrived dense: a stack that came back as 0, 2 — a migrated cue, or an older
-    // client's edit — would give the new layer sortOrder 2 as well, and two layers sharing one
-    // leaves the tie to insertion order in the cook step.
-    patchLayers(reorderCueLayers([...buildCueInput(cue).layers, layer], 0, 0))
+    // Renumbered rather than given `sortOrder: existing.length`, which is only correct when the list
+    // arrived dense: a stack that came back as 0, 2 — a migrated cue, or an older client's edit —
+    // would give the new layer sortOrder 2 as well, and two layers sharing one leaves the tie to
+    // insertion order in the cook step.
+    patchLayers(densifyCueLayerOrder([...buildCueInput(cue).layers, layer]))
   }
 
   const moveLayer = (oldIndex: number, newIndex: number) => {

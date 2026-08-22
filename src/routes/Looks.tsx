@@ -172,6 +172,14 @@ export function ProjectLooks() {
     [looks, detailLookId],
   )
 
+  // Holding the id means `open` and `look` can now disagree, and `LookDetailSheet` renders nothing
+  // without a Look — so a Look that leaves the list under an open sheet (deleted from another
+  // client) would leave Radix mounted-but-blank: no close transition, and focus never handed back
+  // to the row that opened it. Close it for real instead.
+  useEffect(() => {
+    if (detailLookId != null && looks != null && detailLook == null) setDetailLookId(null)
+  }, [detailLookId, looks, detailLook])
+
   const visible = useMemo(() => {
     let list = looks ?? []
     if (family !== 'ALL') list = list.filter((look) => look.families.includes(family))
