@@ -69,7 +69,12 @@ export const looksApi = restApi.injectEndpoints({
       }),
       // Guarded on the result: a create can fail on a blank name (400) or a duplicate name (409),
       // and invalidating then refetches the library to learn nothing changed.
-      invalidatesTags: (result) => (result == null ? [] : ['LookList']),
+      //
+      // `Fixture` and `GroupList` too, and they are not incidental: `compatibleLookIds` is computed
+      // server-side and rides on the fixture and group summaries, so without these a Look created
+      // here is missing from every compatibility list — `LookTogglePicker` doesn't offer it and
+      // `LayerPicker` disables every head for it — until something else refetches those lists.
+      invalidatesTags: (result) => (result == null ? [] : ['LookList', 'Fixture', 'GroupList']),
     }),
 
     /**
@@ -87,11 +92,13 @@ export const looksApi = restApi.injectEndpoints({
         body,
       }),
       // A rename can collide (409) and a bad row can 400; nothing moved when either happens.
-      // Cues are invalidated because a contents edit republishes every cue layering this Look.
+      // Cues are invalidated because a contents edit republishes every cue layering this Look, and
+      // `Fixture`/`GroupList` because an edit can move `compatibleLookIds` — changing the editor
+      // fixture type, or adding the first effect of a family, changes which heads the Look fits.
       invalidatesTags: (result, _error, { lookId }) =>
         result == null
           ? []
-          : [{ type: 'Look', id: lookId }, 'LookList', 'Cue', 'CueList'],
+          : [{ type: 'Look', id: lookId }, 'LookList', 'Cue', 'CueList', 'Fixture', 'GroupList'],
     }),
 
     deleteLook: build.mutation<void, { projectId: number; lookId: number; force?: boolean }>({
@@ -106,7 +113,15 @@ export const looksApi = restApi.injectEndpoints({
       invalidatesTags: (_result, error, { lookId }) =>
         error != null
           ? []
-          : ['LookList', { type: 'Look', id: lookId }, 'CueList', 'Cue'],
+          : [
+              'LookList',
+              { type: 'Look', id: lookId },
+              'CueList',
+              'Cue',
+              // Same reason as create: the deleted Look has to leave every `compatibleLookIds`.
+              'Fixture',
+              'GroupList',
+            ],
     }),
 
     copyLook: build.mutation<
@@ -119,8 +134,14 @@ export const looksApi = restApi.injectEndpoints({
         body,
       }),
       // The copy lands in the *target* project's library, which may not be the one on screen.
-      invalidatesTags: (result) =>
-        result == null ? [] : [{ type: 'LookList', id: result.targetProjectId }],
+      // When it *is* — the library's Duplicate copies into this same project — the new Look also
+      // has to appear in every `compatibleLookIds`, exactly as a create does.
+      invalidatesTags: (result, _error, { projectId }) =>
+        result == null
+          ? []
+          : result.targetProjectId === projectId
+            ? [{ type: 'LookList', id: result.targetProjectId }, 'Fixture', 'GroupList']
+            : [{ type: 'LookList', id: result.targetProjectId }],
     }),
 
     /**

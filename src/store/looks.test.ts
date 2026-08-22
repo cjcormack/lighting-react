@@ -9,6 +9,8 @@ vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).li
 import { store } from './index'
 import { restApi } from './restApi'
 import { looksApi } from './looks'
+import { fixturesApi } from './fixtures'
+import { groupsApi } from './groups'
 
 /**
  * Wiring tests for the Look library's endpoints: the URL/method contract with the backend, and the
@@ -36,6 +38,8 @@ describe('looks endpoints', () => {
       'project/1/looks/4': { id: 4, uuid: 'u4', name: 'Warm', rows: [], effects: [] },
       'project/1/looks?family=COLOUR': [],
       'project/1/looks': [],
+      'fixture/list': [],
+      groups: [],
     })
   })
 
@@ -43,6 +47,12 @@ describe('looks endpoints', () => {
     store.dispatch(restApi.util.resetApiState())
     vi.unstubAllGlobals()
   })
+
+  function countRequestsTo(fragment: string): number {
+    return fetchMock.mock.calls.filter((call) =>
+      (call[0] as Request).url.includes(fragment),
+    ).length
+  }
 
   function lastRequestTo(fragment: string): Request | undefined {
     for (let i = fetchMock.mock.calls.length - 1; i >= 0; i--) {
@@ -147,6 +157,49 @@ describe('looks endpoints', () => {
     const req = lastRequestTo('looks/4/copy')
     expect(req).toBeDefined()
     expect(JSON.parse(await req!.clone().text())).toEqual({ targetProjectId: 2 })
+  })
+
+  /**
+   * `compatibleLookIds` is computed server-side and rides on the **fixture and group summaries**,
+   * not on the Look. So a library mutation that doesn't invalidate those two lists leaves a Look
+   * that exists but is offered nowhere: `LookTogglePicker` omits it and `LayerPicker` disables every
+   * head for it, until something unrelated happens to refetch. The retired `store/fxPresets.ts`
+   * invalidated both for exactly this reason, and the tags were dropped in the port.
+   *
+   * Asserted behaviourally — a live subscriber refetching — rather than by reading `invalidatesTags`,
+   * because a tag that no query provides would still look right in the source.
+   */
+  it('createLook refetches the fixture list, so the new Look is offerable', async () => {
+    const sub = store.dispatch(fixturesApi.endpoints.fixtureList.initiate())
+    await sub
+    const before = countRequestsTo('fixture/list')
+
+    await store.dispatch(looksApi.endpoints.createLook.initiate({ projectId: 1, name: 'Warm' }))
+    await vi.waitFor(() => expect(countRequestsTo('fixture/list')).toBeGreaterThan(before))
+
+    sub.unsubscribe()
+  })
+
+  it('createLook refetches the group list too', async () => {
+    const sub = store.dispatch(groupsApi.endpoints.groupList.initiate())
+    await sub
+    const before = countRequestsTo('groups')
+
+    await store.dispatch(looksApi.endpoints.createLook.initiate({ projectId: 1, name: 'Warm' }))
+    await vi.waitFor(() => expect(countRequestsTo('groups')).toBeGreaterThan(before))
+
+    sub.unsubscribe()
+  })
+
+  it('deleteLook refetches them too, so the dead id leaves every compatibility list', async () => {
+    const sub = store.dispatch(fixturesApi.endpoints.fixtureList.initiate())
+    await sub
+    const before = countRequestsTo('fixture/list')
+
+    await store.dispatch(looksApi.endpoints.deleteLook.initiate({ projectId: 1, lookId: 4 }))
+    await vi.waitFor(() => expect(countRequestsTo('fixture/list')).toBeGreaterThan(before))
+
+    sub.unsubscribe()
   })
 })
 

@@ -202,61 +202,6 @@ export interface LookPreviewResponse {
   writeCount: number
 }
 
-/** Maps effect category to the fixture capability it requires. */
-const CATEGORY_TO_CAPABILITY: Record<string, string> = {
-  dimmer: 'dimmer',
-  colour: 'colour',
-  position: 'position',
-}
-
-/** Infer required capabilities from a Look's effects. */
-export function inferLookCapabilities(effects: LookEffect[]): string[] {
-  const caps = new Set<string>()
-  for (const e of effects) {
-    const cap = CATEGORY_TO_CAPABILITY[e.category]
-    if (cap) caps.add(cap)
-  }
-  return [...caps]
-}
-
-/**
- * Detect which extended colour channels (W/A/UV) a Look's effects use.
- *
- * Scans parameter values in colour-category effects for the extended format (`;wNNN`, `;aNNN`,
- * `;uvNNN`). Returns flags for which channels have non-zero values, or undefined if none are used.
- */
-export function inferLookExtendedChannels(
-  effects: LookEffect[],
-): { white: boolean; amber: boolean; uv: boolean } | undefined {
-  let white = false
-  let amber = false
-  let uv = false
-
-  for (const e of effects) {
-    if (e.category !== 'colour') continue
-    for (const val of Object.values(e.parameters)) {
-      if (!val.includes(';')) continue
-      const parts = val.split(';')
-      for (let i = 1; i < parts.length; i++) {
-        const part = parts[i].trim().toLowerCase()
-        if (part.startsWith('uv')) {
-          const n = parseInt(part.slice(2), 10)
-          if (n > 0) uv = true
-        } else if (part.startsWith('w')) {
-          const n = parseInt(part.slice(1), 10)
-          if (n > 0) white = true
-        } else if (part.startsWith('a')) {
-          const n = parseInt(part.slice(1), 10)
-          if (n > 0) amber = true
-        }
-      }
-    }
-  }
-
-  if (!white && !amber && !uv) return undefined
-  return { white, amber, uv }
-}
-
 /** True when a row or effect takes its targets from the layer rather than naming one. */
 export function isDeferred(row: { targetType: string }): boolean {
   return row.targetType === DEFERRED_TARGET_TYPE

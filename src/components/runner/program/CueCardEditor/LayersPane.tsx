@@ -131,8 +131,11 @@ export function LayersPane({ cue, projectId, mode, targets }: LayersPaneProps) {
   }
 
   const addLayer = (layer: CueLayer) => {
-    const existing = buildCueInput(cue).layers
-    patchLayers([...existing, { ...layer, sortOrder: existing.length }])
+    // Through `reorderCueLayers` rather than `sortOrder: existing.length`, which is only correct
+    // when the list arrived dense: a stack that came back as 0, 2 — a migrated cue, or an older
+    // client's edit — would give the new layer sortOrder 2 as well, and two layers sharing one
+    // leaves the tie to insertion order in the cook step.
+    patchLayers(reorderCueLayers([...buildCueInput(cue).layers, layer], 0, 0))
   }
 
   const moveLayer = (oldIndex: number, newIndex: number) => {

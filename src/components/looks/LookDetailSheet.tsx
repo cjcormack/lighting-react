@@ -242,9 +242,11 @@ export function LookDetailSheet({
                   <div key={bucket.targetKey} className="flex items-center gap-2 px-2 py-1.5">
                     <span className="min-w-0 flex-1 truncate text-sm">{bucket.targetKey}</span>
                     <div className="flex flex-wrap items-center justify-end gap-1">
-                      {bucket.values.map((v) => (
+                      {/* Keyed by index as well as property: a multi-element fixture holds one row
+                          per element for the same property, so the property alone is not unique. */}
+                      {bucket.values.map((v, index) => (
                         <LookValueChip
-                          key={`${bucket.targetKey}-${v.property}`}
+                          key={`${bucket.targetKey}-${v.property}-${index}`}
                           value={v.value}
                         />
                       ))}

@@ -271,12 +271,18 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
     async (input: LookInput) => {
       if (!currentProject) return
       if (editingLookId != null) {
+        // The editor seeds itself from `editingLook`, so until that detail lands it is showing an
+        // *empty* draft of an existing Look — and `input.rows` would then be `[]`, which a PUT
+        // reads as "clear them". Throwing keeps the sheet open and shows the reason inline.
+        if (editingLook == null) {
+          throw new Error("This look hasn't finished loading yet — try again in a moment.")
+        }
         await saveLook({ projectId: currentProject.id, lookId: editingLookId, ...input }).unwrap()
       } else {
         await createLook({ projectId: currentProject.id, ...input }).unwrap()
       }
     },
-    [currentProject, createLook, saveLook, editingLookId],
+    [currentProject, createLook, saveLook, editingLookId, editingLook],
   )
 
   const handleEditLook = useCallback((look: LookSummary) => {

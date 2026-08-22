@@ -96,7 +96,15 @@ export function ProjectLooks() {
   const [family, setFamily] = useState<LookFamilyFilter>(() => getStoredLookFamily())
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingLookId, setEditingLookId] = useState<number | null>(null)
-  const [detailLook, setDetailLook] = useState<LookSummary | null>(null)
+  /**
+   * The Look the detail sheet is open on, held **by id** and re-read from the list.
+   *
+   * Holding the summary object itself would freeze it at the moment the row was clicked, and the
+   * sheet edits name and notes: after a successful save the sheet would still be measuring `dirty`
+   * against the pre-save name, leaving Save enabled, the title stale, and Escape asking to discard
+   * changes that were already written.
+   */
+  const [detailLookId, setDetailLookId] = useState<number | null>(null)
   const [copyingLook, setCopyingLook] = useState<LookSummary | null>(null)
   /** A refused delete, held so the guard can name the cues and offer "delete anyway". */
   const [inUse, setInUse] = useState<{ lookId: number; body: LookInUseError } | null>(null)
@@ -157,6 +165,13 @@ export function ProjectLooks() {
     [fixtureList],
   )
 
+  // Re-read rather than remembered — see `detailLookId`. Null once the Look is gone, which is what
+  // a delete from another client should do to an open sheet.
+  const detailLook = useMemo(
+    () => (detailLookId == null ? null : (looks?.find((l) => l.id === detailLookId) ?? null)),
+    [looks, detailLookId],
+  )
+
   const visible = useMemo(() => {
     let list = looks ?? []
     if (family !== 'ALL') list = list.filter((look) => look.families.includes(family))
@@ -190,7 +205,7 @@ export function ProjectLooks() {
       setEditingLookId(look.id)
       setEditorOpen(true)
     } else {
-      setDetailLook(look)
+      setDetailLookId(look.id)
     }
   }
 
@@ -241,6 +256,13 @@ export function ProjectLooks() {
 
   const handleSave = async (input: LookInput) => {
     if (editingLookId != null) {
+      // The editor seeds itself from `editingLook`, so until that detail lands it is showing an
+      // *empty* draft of an existing Look — and `input.rows` would then be `[]`, which a PUT reads
+      // as "clear them", out from under every cue resolving through this Look. Throwing keeps the
+      // sheet open and puts the reason in its inline alert.
+      if (editingLook == null) {
+        throw new Error("This look hasn't finished loading yet — try again in a moment.")
+      }
       await saveLook({ projectId: projectIdNum, lookId: editingLookId, ...input }).unwrap()
     } else {
       await createLook({ projectId: projectIdNum, ...input }).unwrap()
@@ -444,14 +466,14 @@ export function ProjectLooks() {
       </Dialog>
 
       <LookDetailSheet
-        open={detailLook != null}
+        open={detailLookId != null}
         onOpenChange={(next) => {
-          if (!next) setDetailLook(null)
+          if (!next) setDetailLookId(null)
         }}
         projectId={projectIdNum}
         look={detailLook}
         onDuplicate={(look) => {
-          setDetailLook(null)
+          setDetailLookId(null)
           handleDuplicate(look)
         }}
       />

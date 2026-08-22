@@ -1,3 +1,4 @@
+import type { MouseEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -101,25 +102,25 @@ export function LookListRow({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               {onEdit && (
-                <DropdownMenuItem onClick={onEdit}>
+                <DropdownMenuItem onClick={menuAction(onEdit)}>
                   <Pencil className="size-4 mr-2" />
                   Edit
                 </DropdownMenuItem>
               )}
               {onDuplicate && (
-                <DropdownMenuItem onClick={onDuplicate}>
+                <DropdownMenuItem onClick={menuAction(onDuplicate)}>
                   <CopyPlus className="size-4 mr-2" />
                   Duplicate
                 </DropdownMenuItem>
               )}
               {onCopy && (
-                <DropdownMenuItem onClick={onCopy}>
+                <DropdownMenuItem onClick={menuAction(onCopy)}>
                   <Copy className="size-4 mr-2" />
                   Copy to Project
                 </DropdownMenuItem>
               )}
               {onDelete && (
-                <DropdownMenuItem onClick={onDelete} className="text-destructive">
+                <DropdownMenuItem onClick={menuAction(onDelete)} className="text-destructive">
                   <Trash2 className="size-4 mr-2" />
                   Delete
                 </DropdownMenuItem>
@@ -130,6 +131,20 @@ export function LookListRow({
       </div>
     </div>
   )
+}
+
+/**
+ * Run a row-menu action without also running the row's own `onClick`.
+ *
+ * The menu content is portalled, but React events still bubble through the *component* tree, so a
+ * bare handler here would fire the row click too — pressing Delete would open the confirmation and
+ * the editor behind it.
+ */
+function menuAction(fn: () => void) {
+  return (e: MouseEvent) => {
+    e.stopPropagation()
+    fn()
+  }
 }
 
 /** The fallback subtitle when a Look has no notes: what it covers, in one line. */
