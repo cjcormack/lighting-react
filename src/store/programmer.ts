@@ -1,12 +1,18 @@
 import { useSyncExternalStore } from 'react'
 import { restApi } from './restApi'
 import { lightingApi } from '../api/lightingApi'
-import type { IncludedTarget, ProgrammerTargetType } from '../api/programmerWsApi'
+import type { CueTarget } from '../api/cuesApi'
+import type {
+  IncludedTarget,
+  ProgrammerLayer,
+  ProgrammerTargetType,
+} from '../api/programmerWsApi'
 
 export type {
   IncludedTarget,
   ProgrammerEntry,
   ProgrammerKeyState,
+  ProgrammerLayer,
   ProgrammerState,
   ProgrammerTargetType,
   ProvenanceEntry,
@@ -77,6 +83,42 @@ export const programmerApi = restApi.injectEndpoints({
 })
 
 export const { useProgrammerSummaryQuery } = programmerApi
+
+/**
+ * The programmer's Look-layer stack.
+ *
+ * A **separate** cache entry from [ProgrammerSummary] rather than a field on it, and the reason is
+ * the summary's own: it is read by the always-visible `ProgrammerIndicator`, so folding the stack in
+ * would re-render that on every layer event. This entry is subscribed only by the surfaces that
+ * draw layers — the Program pane's Layers tab and the busking pads' active ring.
+ */
+export const programmerLayersApi = restApi.injectEndpoints({
+  endpoints: (build) => ({
+    programmerLayers: build.query<ProgrammerLayer[], void>({
+      queryFn: () => ({ data: [...lightingApi.programmer.layers()] }),
+      async onCacheEntryAdded(_, { updateCachedData, cacheEntryRemoved }) {
+        // `subscribe` fires on every provenance push too, so compare before writing: an
+        // untouched stack must not wake the pads on each 50 Hz-adjacent layer event.
+        let signature = layerSignature(lightingApi.programmer.layers())
+        const subscription = lightingApi.programmer.subscribe((state) => {
+          const next = layerSignature(state.layers)
+          if (next === signature) return
+          signature = next
+          updateCachedData(() => [...state.layers])
+        })
+        await cacheEntryRemoved
+        subscription.unsubscribe()
+      },
+    }),
+  }),
+  overrideExisting: false,
+})
+
+function layerSignature(layers: readonly ProgrammerLayer[]): string {
+  return JSON.stringify(layers)
+}
+
+export const { useProgrammerLayersQuery } = programmerLayersApi
 
 /**
  * Re-render on *any* programmer change, including a value edit that leaves the entry count
@@ -166,4 +208,46 @@ export function programmerClearAll(fadeMs?: number) {
 
 export function programmerSetBlind(blind: boolean, fadeMs?: number) {
   lightingApi.programmer.setBlind(blind, fadeMs)
+}
+
+// ── Layer ops ───────────────────────────────────────────────────────────────
+// Plain functions for the same reason as the writers above, plus one of their own: the server
+// answers every one of these with the whole `programmer.layerState` broadcast, so there is no
+// per-call reply for a mutation to await. `patchLayer` is also on a drag/typing path.
+
+export function programmerAddLayer(input: {
+  lookId: number
+  targets?: CueTarget[]
+  propertyMask?: string
+  blendMode?: string
+  amount?: number
+  speedMasterUuid?: string
+  rateSpeedMasterUuid?: string
+  fadeMs?: number
+}) {
+  lightingApi.programmer.addLayer(input)
+}
+
+export function programmerRemoveLayer(layerId: number, fadeMs?: number) {
+  lightingApi.programmer.removeLayer(layerId, fadeMs)
+}
+
+/** [toIndex] counts non-preview layers — the preview always sorts last, server-side. */
+export function programmerMoveLayer(layerId: number, toIndex: number) {
+  lightingApi.programmer.moveLayer(layerId, toIndex)
+}
+
+export function programmerPatchLayer(
+  layerId: number,
+  patch: {
+    enabled?: boolean
+    amount?: number
+    propertyMask?: string
+    blendMode?: string
+    targets?: CueTarget[]
+    stomp?: boolean
+    fadeMs?: number
+  },
+) {
+  lightingApi.programmer.patchLayer(layerId, patch)
 }

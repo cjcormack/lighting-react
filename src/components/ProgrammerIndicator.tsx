@@ -23,8 +23,15 @@ export function ProgrammerIndicator({ className }: { className?: string }) {
   const blind = summary?.blind ?? false
   if (entryCount === 0 && !blind) return null
 
-  const programmerPath = currentProject ? `/projects/${currentProject.id}/programmer` : null
-  const onProgrammer = programmerPath != null && location.pathname.startsWith(programmerPath)
+  // Program hosts the programmer now, so the link goes there — and the "am I already there?" test
+  // can no longer be `startsWith`. `/projects/1/programmer` starts with `/projects/1/program`, so a
+  // stale link or an in-flight legacy redirect would suppress the link on the one page that needs
+  // it. This is the segment-aware idiom `ProjectSwitcher.mostSpecificActiveId` uses; a drilled stack
+  // (`/program/stacks/5`) still counts as "already there", because the pane is on that page too.
+  const programmerPath = currentProject ? `/projects/${currentProject.id}/program` : null
+  const onProgrammer =
+    programmerPath != null &&
+    (location.pathname === programmerPath || location.pathname.startsWith(`${programmerPath}/`))
 
   const body = (
     <span

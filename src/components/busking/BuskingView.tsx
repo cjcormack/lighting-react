@@ -12,6 +12,7 @@ import { SelectedTargetSummary } from './SelectedTargetSummary'
 import { ActiveEffectSheet } from './ActiveEffectSheet'
 import { ConfigureEffectSheet } from './ConfigureEffectSheet'
 import { LookEditor } from '@/components/looks/LookEditor'
+import { assertLookLoaded } from '@/lib/lookSaveGuard'
 import { FixtureDetailModal } from '@/components/groups/FixtureDetailModal'
 import { useBuskingState, type TargetEffectsData } from './useBuskingState'
 import { programmerClearEntry, useProgrammerRevision } from '@/store/programmer'
@@ -73,7 +74,15 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
     { skip: !currentProject },
   )
   // The editor needs rows and effects, which the library list does not carry.
-  const { data: editingLook } = useLookQuery(
+  //
+  // `currentData`, **not** `data` — see the same read in `routes/Looks.tsx`: `data` falls back to
+  // the previous arg's result while a new one is in flight (and `isLoading` is false whenever it
+  // does), so editing one Look then opening another would seed the editor from the first and let
+  // Save write its rows into the second.
+  const {
+    currentData: editingLook,
+    isError: editingLookFailed,
+  } = useLookQuery(
     { projectId: currentProject?.id ?? 0, lookId: editingLookId ?? 0 },
     { skip: !currentProject || editingLookId == null },
   )
@@ -271,18 +280,14 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
     async (input: LookInput) => {
       if (!currentProject) return
       if (editingLookId != null) {
-        // The editor seeds itself from `editingLook`, so until that detail lands it is showing an
-        // *empty* draft of an existing Look — and `input.rows` would then be `[]`, which a PUT
-        // reads as "clear them". Throwing keeps the sheet open and shows the reason inline.
-        if (editingLook == null) {
-          throw new Error("This look hasn't finished loading yet — try again in a moment.")
-        }
+        // Backstop behind the editor's own `isLoading` gate — see `assertLookLoaded`.
+        assertLookLoaded(editingLook, { failed: editingLookFailed })
         await saveLook({ projectId: currentProject.id, lookId: editingLookId, ...input }).unwrap()
       } else {
         await createLook({ projectId: currentProject.id, ...input }).unwrap()
       }
     },
-    [currentProject, createLook, saveLook, editingLookId, editingLook],
+    [currentProject, createLook, saveLook, editingLookId, editingLook, editingLookFailed],
   )
 
   const handleEditLook = useCallback((look: LookSummary) => {
@@ -432,6 +437,10 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
         open={lookFormOpen}
         onOpenChange={(open) => { setLookFormOpen(open); if (!open) setEditingLookId(null) }}
         look={editingLookId == null ? null : (editingLook ?? null)}
+        // "No detail yet" rather than `isFetching`, so there is no frame between picking a Look and
+        // the request starting in which the form is offered as an empty draft. A failed fetch drops
+        // out of it on purpose — `assertLookLoaded` explains that case inline.
+        isLoading={editingLookId != null && editingLook == null && !editingLookFailed}
         onSave={handleSaveLook}
         isSaving={isCreatingLook || isSavingLook}
         defaultEditorFixtureType={editingLookId == null ? commonFixtureType : undefined}

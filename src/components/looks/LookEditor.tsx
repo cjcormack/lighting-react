@@ -94,6 +94,17 @@ interface LookEditorProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   look: LookDetails | null
+  /**
+   * True while [look] is still being fetched for an existing Look.
+   *
+   * Load-bearing, not cosmetic. The editor seeds its form from [look] **once per id**, so before
+   * the detail lands an existing Look shows as an *empty create draft*: Save would PUT `rows: []`,
+   * which the backend reads as "clear them", and the late re-seed would silently discard anything
+   * typed in the meantime with `isDirty` still reading false. Both halves go away if the form is
+   * simply not offered yet. The route handlers keep their own guard as the backstop —
+   * `assertLookLoaded` — because this prop is theirs to pass and a caller can forget.
+   */
+  isLoading?: boolean
   onSave: (input: LookInput) => Promise<void>
   isSaving: boolean
   /** Pre-populate the editor fixture type when creating. */
@@ -124,6 +135,7 @@ export function LookEditor({
   open,
   onOpenChange,
   look,
+  isLoading = false,
   onSave,
   isSaving,
   defaultEditorFixtureType,
@@ -492,6 +504,17 @@ export function LookEditor({
         </SheetHeader>
 
         <SheetBody>
+          {isLoading && (
+            // The form below is a blank draft until the detail lands, so it is covered rather than
+            // shown: an operator typing into it would have their work thrown away by the re-seed.
+            <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" />
+              Loading this look&rsquo;s contents…
+            </div>
+          )}
+          {/* `space-y-4` restated: it comes from SheetBody, and this wrapper would otherwise
+              collapse every gap between the fields into one. */}
+          <div className={cn('space-y-4', isLoading && 'pointer-events-none opacity-40')}>
           <div className="space-y-1.5">
             <Label htmlFor="look-name">Name *</Label>
             <Input
@@ -688,6 +711,7 @@ export function LookEditor({
               <AlertDescription>{formatError(saveError)}</AlertDescription>
             </Alert>
           )}
+          </div>
         </SheetBody>
 
         <SheetFooter className="flex-row justify-end gap-2">
@@ -709,7 +733,7 @@ export function LookEditor({
               Cancel
             </Button>
           </SheetClose>
-          <Button onClick={handleSave} disabled={!isValid || isSaving || isDeleting}>
+          <Button onClick={handleSave} disabled={!isValid || isSaving || isDeleting || isLoading}>
             {isSaving && <Loader2 className="size-4 mr-2 animate-spin" />}
             {look ? 'Update' : 'Create'}
           </Button>
@@ -919,7 +943,7 @@ function BoundRowsNotice({ count }: { count: number }) {
         ? 'This look also holds 1 row naming its own fixture or group.'
         : `This look also holds ${count} rows naming their own fixtures or groups.`}{' '}
       They are kept as they are and are not shown here. Include the look to see them on the heads
-      they name; writing edits back arrives with the record rewrite.
+      they name, edit them there, and Update to write your changes back.
     </p>
   )
 }

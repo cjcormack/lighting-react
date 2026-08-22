@@ -1,7 +1,6 @@
 import { type ReactNode } from 'react'
 import {
   Aperture,
-  AudioWaveform,
   BookOpenText,
   Layers,
   LayoutGrid,
@@ -167,38 +166,6 @@ export function GroupsViewSwitcher({
       listTo={`/projects/${projectId}/groups/list`}
       storageKey={GROUPS_VIEW_KEY}
     />
-  )
-}
-
-/**
- * Values · FX switcher for the programmer sheet's two sibling views.
- *
- * Same shape as [CardsListSwitcher] but deliberately **not** sticky: the FX sheet is a
- * diagnostic read of what is running, and landing there because you last looked at it —
- * rather than on the values you came to edit — would be the wrong default.
- */
-export function ProgrammerViewSwitcher({
-  current,
-  projectId,
-}: {
-  current: 'values' | 'fx'
-  projectId: number
-}) {
-  return (
-    <nav className="inline-flex items-center gap-0.5 rounded-lg border bg-card p-0.5">
-      <Segment
-        active={current === 'values'}
-        to={`/projects/${projectId}/programmer`}
-        icon={<TableProperties className="size-3.5" />}
-        label="Values"
-      />
-      <Segment
-        active={current === 'fx'}
-        to={`/projects/${projectId}/programmer/fx`}
-        icon={<AudioWaveform className="size-3.5" />}
-        label="FX"
-      />
-    </nav>
   )
 }
 

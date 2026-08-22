@@ -1,12 +1,6 @@
-import { describe, expect, it, vi } from 'vitest'
-
-// columns.ts transitively reaches the store, and lightingApi opens a real WebSocket at import.
-vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
-
-import { COLUMN_DEFS } from '@/components/fixtures-list/columns'
+import { describe, expect, it } from 'vitest'
 import {
   ATTRIBUTE_FAMILIES,
-  FAMILY_COLUMNS,
   familyForCategory,
   familySlug,
   parseFamilySlug,
@@ -23,30 +17,6 @@ describe('attribute family slugs', () => {
     for (const raw of ['COLOUR', 'colours', 'Colour', '', 'gobo', undefined]) {
       expect(parseFamilySlug(raw), String(raw)).toBeNull()
     }
-  })
-})
-
-describe('FAMILY_COLUMNS', () => {
-  it('assigns every sheet column to exactly one attribute family', () => {
-    // The invariant that stops a column being editable from two palette pages, or from none.
-    const seen = new Map<string, string[]>()
-    for (const type of ATTRIBUTE_FAMILIES) {
-      for (const column of FAMILY_COLUMNS[type]) {
-        seen.set(column, [...(seen.get(column) ?? []), type])
-      }
-    }
-    const duplicated = [...seen].filter(([, types]) => types.length > 1)
-    expect(duplicated).toEqual([])
-
-    const allColumns = COLUMN_DEFS.map((def) => def.key).sort()
-    expect([...seen.keys()].sort()).toEqual(allColumns)
-  })
-
-  it('classifies strobe as intensity, matching the backend mask groups', () => {
-    // Strobe is an intensity modulation (HTP, like dimmer), not a beam attribute. The backend's
-    // PropertyCategory.maskGroup() is the authority; this mirrors it rather than guessing.
-    expect(FAMILY_COLUMNS.INTENSITY).toContain('strobe')
-    expect(FAMILY_COLUMNS.BEAM).not.toContain('strobe')
   })
 })
 

@@ -26,7 +26,7 @@ import { SpeedMastersRedirect, ProjectSpeedMasters } from "./routes/SpeedMasters
 import ProjectOverview, { ProjectOverviewRedirect } from "./routes/ProjectOverview";
 import { PatchesRedirect } from "./routes/Patches";
 import { ProgramPage, ProgramRedirect, CuesLegacyRedirect } from "./routes/ProgramPage";
-import { ProgrammerPage, ProgrammerRedirect } from "./routes/Programmer";
+import { ProgrammerLegacyRedirect } from "./routes/Programmer";
 import { RunPage, RunRedirect, LegacyShowRedirect } from "./routes/RunPage";
 import { PromptBookViewerPage, PromptBookRedirect } from "./routes/PromptBookPage";
 import { SurfacesRedirect } from "./routes/Surfaces";
@@ -281,19 +281,20 @@ function App() {
           path: "program",
           element: <ProgramRedirect />,
         },
-        // Programmer: one nav entry (Values); the FX sibling is reached via the in-page
-        // switcher, following the cards/list precedent.
+        // The programmer is no longer its own page: `ProgrammerPane` in the Program view carries
+        // Values / Layers / FX as tabs, so it has no nav entry either and these three paths exist
+        // purely so old links land. See `ProgrammerLegacyRedirect`.
         {
           path: "projects/:projectId/programmer",
-          element: <ProgrammerPage view="values" />,
+          element: <ProgrammerLegacyRedirect />,
         },
         {
           path: "projects/:projectId/programmer/fx",
-          element: <ProgrammerPage view="fx" />,
+          element: <ProgrammerLegacyRedirect />,
         },
         {
           path: "programmer",
-          element: <ProgrammerRedirect />,
+          element: <ProgramRedirect />,
         },
         {
           path: "projects/:projectId/run",

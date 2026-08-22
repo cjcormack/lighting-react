@@ -2,7 +2,7 @@ import { computeCombinedCss } from '../../lib/colourMath'
 import { resolveSettingOption } from '../../hooks/usePropertyValues'
 import type { CellResolution } from './columns'
 import type { CellValue } from './useRowValues'
-import type { CellOwnership, CellPaletteRef, StagedValue } from './useRowOwnership'
+import type { CellLayer, CellOwnership, CellPaletteRef, StagedValue } from './useRowOwnership'
 
 /**
  * Ownership styling for a programmer-sheet cell.
@@ -68,7 +68,25 @@ export function ownershipTitle(ownership?: CellOwnership): string | undefined {
   if (!ownership.isUniform) parts.push('mixed across this row')
   const ref = ownership.paletteRef
   if (ref) parts.push(describePaletteRef(ref))
+  const layer = ownership.layer
+  if (layer) parts.push(describeCellLayer(layer))
   return parts.join(' · ')
+}
+
+/**
+ * One clause naming the Look layer that won a cell.
+ *
+ * This is the sentence `source` cannot say. "Cue" answers *which layer of the engine*; an operator
+ * asking why a fixture is this colour wants the name of the look they built it from, and the cook
+ * step knows it. Kept beside [describePaletteRef] so the hover text words the two the same way.
+ */
+export function describeCellLayer(layer: CellLayer): string {
+  if (layer.mixed) {
+    return layer.name
+      ? `partly from layer “${layer.name}” across this row`
+      : 'from more than one look layer across this row'
+  }
+  return layer.name ? `from layer “${layer.name}”` : 'from a look layer'
 }
 
 /**

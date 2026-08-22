@@ -1,5 +1,6 @@
 import { restApi } from './restApi'
 import type { Cue, CueTarget } from '../api/cuesApi'
+import type { LookDetails } from '../api/looksApi'
 import type { IncludedTarget } from '../api/programmerWsApi'
 
 /**
@@ -86,6 +87,48 @@ export interface RecordResponse {
   republishedLive: boolean
   skipped: ProgrammerSkip[]
   warnings: string[]
+}
+
+// ── Record into a Look ──────────────────────────────────────────────────────
+
+export interface RecordLookRequest {
+  projectId: number
+  /** CREATE mints a new Look; the other three need [lookId]. */
+  mode: RecordMode
+  lookId?: number
+  name?: string
+  notes?: string
+  source?: RecordSource
+  /**
+   * Which attribute families to record. Explicit because a Look has **no type to imply it** —
+   * unlike the palette banks this replaces, where the bank you were recording into said so.
+   */
+  mask?: PropertyMaskGroup[]
+  /**
+   * The operator's selection. Groups are expanded server-side.
+   *
+   * Strongly recommended rather than optional in practice: a Look recorded from the whole
+   * programmer captures every head the programmer happens to hold, which is almost never what
+   * "Warm Amber" is meant to mean.
+   */
+  targets?: CueTarget[]
+}
+
+export interface RecordLookResponse {
+  look: LookDetails
+  created: boolean
+  rowsWritten: number
+  rowsRemoved: number
+  groupRowsEmitted: number
+  /**
+   * Programmer entries that were themselves references — flattened, since Looks don't nest.
+   * Retires with the `ref:` grammar; until then it is real and worth reporting.
+   */
+  refsFlattened: number
+  skipped: ProgrammerSkip[]
+  /** Set when the Look was already live: what the re-resolve moved. */
+  programmerKeysRefreshed: number
+  cuesRepublished: number[]
 }
 
 export interface IncludeRequest {
@@ -200,12 +243,30 @@ export interface PaletteUpdateResult {
   cuesRepublished: number[]
 }
 
+/**
+ * Mode A written back into a **Look** rather than a cue.
+ *
+ * Separate from [PaletteUpdateResult] rather than replacing it, matching the backend: the palette
+ * arm is still mounted and retires with its tables, and the two write through different code into
+ * different tables. Collapsing them would make one field mean two destinations.
+ */
+export interface LookUpdateResult {
+  lookId: number
+  lookName: string
+  rowsWritten: number
+  /** What the re-resolve moved: the live consumers of the Look. */
+  programmerKeysRefreshed: number
+  cuesRepublished: number[]
+}
+
 export interface UpdateResponse {
   applied: boolean
   mode: 'A' | 'B' | 'CHECKLIST'
   results: UpdateResult[]
   /** Set when Mode A's include target was a palette. Mode B is cue-only, by design. */
   paletteResult?: PaletteUpdateResult
+  /** Set when Mode A's include target was a Look. */
+  lookResult?: LookUpdateResult
   checklist?: UpdateChecklist
   skipped: ProgrammerSkip[]
   warnings: string[]
@@ -229,12 +290,12 @@ export interface MakeProgrammerHardResponse {
 export interface ProgrammerConflict {
   error: string
   /**
-   * `INCLUDE_TARGET_READ_ONLY` means the target is fine but Update cannot write to it — today, a
-   * Look. Deliberately not `INCLUDE_TARGET_GONE`: nothing is missing, so "gone" would send the
-   * operator looking for a problem that isn't there. The toolbar disables Update for such a
-   * target, so reaching this is a stale tab or a direct caller.
+   * `INCLUDE_TARGET_GONE` means the cue or look Include staged has been deleted since. There was
+   * a third arm, `INCLUDE_TARGET_READ_ONLY`, for a Look target Update could not write back to;
+   * both halves of that guard went when the write-back path stopped leading into the retired
+   * palette tables. It was never handled here — only declared.
    */
-  code: 'CUE_EDIT_SESSION_OPEN' | 'INCLUDE_TARGET_GONE' | 'INCLUDE_TARGET_READ_ONLY'
+  code: 'CUE_EDIT_SESSION_OPEN' | 'INCLUDE_TARGET_GONE'
   cueId?: number
 }
 
@@ -258,6 +319,37 @@ export const programmerOpsApi = restApi.injectEndpoints({
               'CueList',
               // Only a CREATE changes stack membership.
               ...(result.created ? (['CueStackList'] as const) : []),
+            ],
+    }),
+
+    /**
+     * `POST /programmer/record-look` — the gesture that creates a **bound** Look, which nothing
+     * could do while the only record destination was the retired palette tables.
+     *
+     * Invalidating the cue tags is not defensive: writing a Look's contents ends in a republish, so
+     * re-recording one that cues already layer moves them immediately, and their read is stale.
+     */
+    recordLook: build.mutation<RecordLookResponse, RecordLookRequest>({
+      query: ({ projectId, ...body }) => ({
+        url: 'programmer/record-look',
+        method: 'POST',
+        body: { ...body, projectId: String(projectId) },
+      }),
+      invalidatesTags: (result) =>
+        result == null
+          ? []
+          : [
+              'LookList',
+              { type: 'Look' as const, id: result.look.id },
+              // A Look's rows resolve per fixture, so the fixture and group reads carry them.
+              'Fixture',
+              'GroupList',
+              ...(result.cuesRepublished.length > 0
+                ? ([
+                    'CueList' as const,
+                    ...result.cuesRepublished.map((id) => ({ type: 'Cue' as const, id })),
+                  ])
+                : []),
             ],
     }),
 
@@ -314,6 +406,7 @@ export const programmerOpsApi = restApi.injectEndpoints({
 
 export const {
   useRecordProgrammerMutation,
+  useRecordLookMutation,
   useIncludeIntoProgrammerMutation,
   useUpdateProgrammerMutation,
   useMakeProgrammerHardMutation,

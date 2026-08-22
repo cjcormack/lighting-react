@@ -35,17 +35,6 @@ export function includedTargetKey(target: IncludedTarget | null): string {
   return `A:C:${target.cueId}`
 }
 
-/**
- * True when Update cannot write back to this target.
- *
- * A Look include is one-way: the write-back path still targets the retired palette tables, so
- * offering Update would report success and write rows no consumer reads. The button is disabled
- * with that reason rather than hidden, because the operator needs to know the Include *worked*.
- */
-export function includedTargetIsReadOnly(target: IncludedTarget | null): boolean {
-  return target?.kind === 'LOOK'
-}
-
 /** The cue id when a cue is included, else null. Narrows the union at read sites. */
 export function includedCueId(target: IncludedTarget | null): number | null {
   return target?.kind === 'CUE' ? target.cueId : null

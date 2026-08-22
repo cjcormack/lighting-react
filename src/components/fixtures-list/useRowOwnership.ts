@@ -1,7 +1,12 @@
 import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react'
 import { lightingApi } from '../../api/lightingApi'
 import { parseProgrammerValue } from '../../lib/programmerValue'
-import type { ProgrammerEntry, ProgrammerKeyState, ProvenanceSource } from '../../api/programmerWsApi'
+import type {
+  ProgrammerEntry,
+  ProgrammerKeyState,
+  ProvenanceEntry,
+  ProvenanceSource,
+} from '../../api/programmerWsApi'
 import type { CellPropertyKey, RowCell } from './useRowValues'
 import type { ColumnKey } from './columns'
 
@@ -36,6 +41,29 @@ export interface CellOwnership {
    * paints a reference marker; editing it replaces the reference with a fixed value.
    */
   paletteRef?: CellPaletteRef
+  /**
+   * Set when a **Look layer** produced this cell's winning value — in a cue or in the programmer.
+   *
+   * The answer to "why is this fixture this colour?", which `source` alone can only answer with
+   * *a cue*. Independent of [paletteRef]: that names a value-level reference on the operator's own
+   * entry, this names the layer that won the composition, and a cell can carry both.
+   */
+  layer?: CellLayer
+}
+
+/**
+ * The Look layer that won a cell.
+ *
+ * One object for the whole cell, for the same reason [CellPaletteRef] is: a cell can cover twelve
+ * properties and the operator needs one answer. `mixed` is the honest form of "they don't agree" —
+ * naming one layer over a cell where half the heads came from another would be a confident lie.
+ */
+export interface CellLayer {
+  /** Undefined when the covered properties were won by *different* layers — see `mixed`. */
+  layerId?: number
+  lookId?: number
+  name?: string
+  mixed: boolean
 }
 
 /**
@@ -134,6 +162,13 @@ export function aggregateCellOwnership(
   let refMixed = false
   let refResolved = true
 
+  // The winning layer, tracked the same way and for the same reason: it is a property of
+  // provenance rather than of the operator's entry, so it agrees with neither of the above.
+  let layerId: number | undefined
+  let layerEntry: ProvenanceEntry | undefined
+  let layerCount = 0
+  let layerMixed = false
+
   keys.forEach((key, index) => {
     const state = lookup(key.targetKey, key.propertyName)
     const keySource = sourceFor(state)
@@ -141,6 +176,17 @@ export function aggregateCellOwnership(
     else if (keySource !== source) {
       uniform = false
       if (SOURCE_RANK[keySource] > SOURCE_RANK[source]) source = keySource
+    }
+
+    const layer = state.provenance
+    if (layer?.layerId != null) {
+      layerCount += 1
+      if (layerId === undefined) {
+        layerId = layer.layerId
+        layerEntry = layer
+      } else if (layerId !== layer.layerId) {
+        layerMixed = true
+      }
     }
 
     if (state.entry) {
@@ -194,7 +240,26 @@ export function aggregateCellOwnership(
           mixed,
         }
 
-  return { source, touched, isUniform: uniform, owners, sourceGroup, staged, paletteRef }
+  const cellLayer: CellLayer | undefined =
+    layerCount === 0
+      ? undefined
+      : {
+          layerId: layerMixed ? undefined : layerId,
+          lookId: layerMixed ? undefined : layerEntry?.lookId,
+          name: layerMixed ? undefined : layerEntry?.lookName,
+          mixed: layerMixed || layerCount !== keys.length,
+        }
+
+  return {
+    source,
+    touched,
+    isUniform: uniform,
+    owners,
+    sourceGroup,
+    staged,
+    paletteRef,
+    layer: cellLayer,
+  }
 }
 
 /**

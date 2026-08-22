@@ -151,6 +151,55 @@ export const installWs: { callback: null | (() => void) } = { callback: null }
 // hand it a real event rather than a bare notification.
 export const updatesWs: { callback: null | ((e: unknown) => void) } = { callback: null }
 
+/**
+ * Programmer bridge, captured from `store/programmer.ts`.
+ *
+ * Unlike every holder above this one is **stateful**, because the programmer's client is: consumers
+ * read `getState()` / `layers()` synchronously and then wait to be told it changed. A bare callback
+ * holder would let a test fire a notification carrying nothing the component could read.
+ *
+ * `push` sets the state and notifies, which is the shape a real frame has — `programmer.layerState`
+ * and `provenanceState` both mutate the snapshot before calling subscribers.
+ */
+export const programmerWs: {
+  callbacks: ((state: unknown) => void)[]
+  state: {
+    blind: boolean
+    entries: Map<string, unknown>
+    channels: unknown[]
+    provenance: Map<string, unknown>
+    lastIncluded: unknown
+    layers: unknown[]
+  }
+  push: (patch: Partial<typeof programmerWs.state>) => void
+  reset: () => void
+} = {
+  callbacks: [],
+  state: {
+    blind: false,
+    entries: new Map(),
+    channels: [],
+    provenance: new Map(),
+    lastIncluded: null,
+    layers: [],
+  },
+  push(patch) {
+    programmerWs.state = { ...programmerWs.state, ...patch }
+    for (const fn of programmerWs.callbacks) fn(programmerWs.state)
+  },
+  reset() {
+    programmerWs.callbacks = []
+    programmerWs.state = {
+      blind: false,
+      entries: new Map(),
+      channels: [],
+      provenance: new Map(),
+      lastIncluded: null,
+      layers: [],
+    }
+  },
+}
+
 const noopSub = () => ({ unsubscribe: () => {} })
 
 export function lightingApiMock() {
@@ -231,6 +280,45 @@ export function lightingApiMock() {
         subscribe: noopSub,
         get: () => 3, // Status.CLOSED — no socket exists under the mock
         reconnect: () => {},
+      },
+      // Spelled out rather than left to the fallback Proxy for the reason `status` is: the
+      // programmer's consumers *read* before they subscribe, and the Proxy would hand `getState()`
+      // back a Subscription.
+      programmer: {
+        getState: () => programmerWs.state,
+        layers: () => programmerWs.state.layers,
+        isBlind: () => programmerWs.state.blind,
+        entryCount: () => programmerWs.state.entries.size,
+        lastIncluded: () => programmerWs.state.lastIncluded,
+        getKeyState: (targetKey: string, propertyName: string) => ({
+          entry: programmerWs.state.entries.get(`${targetKey}|${propertyName}`),
+          provenance: programmerWs.state.provenance.get(`${targetKey}|${propertyName}`),
+        }),
+        subscribe: (fn: (state: unknown) => void) => {
+          programmerWs.callbacks.push(fn)
+          return {
+            unsubscribe: () => {
+              programmerWs.callbacks = programmerWs.callbacks.filter((cb) => cb !== fn)
+            },
+          }
+        },
+        subscribeToKey: noopSub,
+        subscribeToErrors: noopSub,
+        // The writers have to be spelled out too, and this is the cost of not being the Proxy any
+        // more: it answered every unknown member, so a surface that merely *called* `programmerSet`
+        // used to be safe under the mock. Without these, rendering one throws
+        // "programmer.set is not a function" — in a test about something else entirely.
+        set: () => {},
+        setColour: () => {},
+        setPosition: () => {},
+        clearEntry: () => {},
+        clearAll: () => {},
+        setBlind: () => {},
+        requestState: () => {},
+        addLayer: () => {},
+        removeLayer: () => {},
+        moveLayer: () => {},
+        patchLayer: () => {},
       },
       cueStacks: {
         subscribe: noopSub,

@@ -1,45 +1,23 @@
 import { useCallback, useMemo, useState } from 'react'
-import {
-  DndContext,
-  KeyboardSensor,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core'
-import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
-import {
-  AudioWaveform,
-  Ban,
-  Eye,
-  GripVertical,
-  Layers,
-  ListChecks,
-  Plus,
-  Sliders,
-  X,
-} from 'lucide-react'
+import { AudioWaveform, Layers, ListChecks, Sliders } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { EffectSummary } from '@/components/fx/EffectSummary'
 import { TimingBadge } from '@/components/cues/TimingBadge'
+import { AddBtn, RemoveBtn, Section } from '@/components/cues/paneChrome'
+import { LayerRow, LookStack, type LayerHandlers } from '@/components/looks/LookStack'
 import { fromCueAdHocEffect } from '@/components/fx/effectSummaryTypes'
 import { useEffectLibraryQuery, type EffectLibraryEntry } from '@/store/fixtureFx'
 import { useLookListQuery } from '@/store/looks'
 import { usePatchProjectCueMutation } from '@/store/cues'
 import { buildCueInput, densifyCueLayerOrder, reorderCueLayers } from '@/lib/cueUtils'
-import { FAMILY_LABELS } from '@/lib/attributeFamily'
 import { LookRefBadge } from '@/components/looks/LookRefBadge'
 import { LookPreviewSwatches } from '@/components/looks/lookRefValue'
 import { parsePaletteRefUuid } from '@/lib/programmerValue'
 import { describeHealth } from '@/lib/healthDescriptor'
 import { AddAssignmentSheet } from './AddAssignmentSheet'
 import { AddEffectSheet } from './AddEffectSheet'
-import { AddLayerSheet } from './AddLayerSheet'
+import { AddLayerSheet } from '@/components/cues/editor/AddLayerSheet'
 import type {
   Cue,
   CueAdHocEffect,
@@ -237,14 +215,6 @@ export function LayersPane({ cue, projectId, mode, targets }: LayersPaneProps) {
       {sheets}
     </>
   )
-}
-
-/** The four layer mutations, bundled so both arrangements take one prop rather than four. */
-interface LayerHandlers {
-  onRemove: (index: number) => void
-  onMove: (oldIndex: number, newIndex: number) => void
-  onSetEnabled: (index: number, enabled: boolean) => void
-  onSetAmount: (index: number, amount: number) => void
 }
 
 interface LookIndexes {
@@ -460,72 +430,22 @@ function ByLayer({
   onAddEffect: () => void
   onAddLayer: () => void
 }) {
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor),
-  )
-
-  // Index-derived ids. They only have to be stable for the duration of one drag, and the list
-  // cannot change mid-drag; a layer carries no uuid on the wire, and `lookId` is not unique —
-  // one cue may legitimately layer the same Look twice, at two delays.
-  const ids = useMemo(() => cue.layers.map((_, i) => `layer-${i}`), [cue.layers])
-
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      const { active, over } = event
-      if (!over || active.id === over.id) return
-      const oldIndex = ids.indexOf(String(active.id))
-      const newIndex = ids.indexOf(String(over.id))
-      if (oldIndex === -1 || newIndex === -1) return
-      layerHandlers.onMove(oldIndex, newIndex)
-    },
-    [ids, layerHandlers],
-  )
-
   return (
     <div className="space-y-4">
-      <Section
-        title="Layers"
-        icon={<Layers className="size-3.5" />}
-        count={cue.layers.length}
-        action={<AddBtn label="Add" onClick={onAddLayer} />}
-      >
-        {cue.layers.length === 0 ? (
-          <p className="text-xs text-muted-foreground py-2">
-            No layers. A layer applies a look at a position in this cue&rsquo;s stack.
-          </p>
-        ) : (
+      <LookStack
+        layers={cue.layers}
+        looksById={looksById}
+        looksLoaded={looksLoaded}
+        handlers={layerHandlers}
+        onAdd={onAddLayer}
+        emptyNote="No layers. A layer applies a look at a position in this cue’s stack."
+        precedenceNote={
           <>
-            {/* Stated, not implied: the order is the composition, and it is the same rule for
-                intensity as for colour. Operators arriving from presets expect HTP here. */}
-            <p className="text-[11px] text-muted-foreground">
-              Later layers win, and this cue&rsquo;s own assignments win over all of them — for
-              every attribute, intensity included.
-            </p>
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-            >
-              <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-                {cue.layers.map((layer, i) => (
-                  <LayerRow
-                    key={ids[i]}
-                    sortableId={ids[i]}
-                    layer={layer}
-                    index={i}
-                    look={looksById.get(layer.lookId)}
-                    looksLoaded={looksLoaded}
-                    handlers={layerHandlers}
-                    sortable
-                    showTargets
-                  />
-                ))}
-              </SortableContext>
-            </DndContext>
+            Later layers win, and this cue&rsquo;s own assignments win over all of them &mdash; for
+            every attribute, intensity included.
           </>
-        )}
-      </Section>
+        }
+      />
 
       <Section
         title="Assignments"
@@ -581,271 +501,6 @@ function ByLayer({
           />
         ))}
       </Section>
-    </div>
-  )
-}
-
-/**
- * One line of the cue's Look composition.
- *
- * Editable here: order, enabled, amount. `propertyMask`, `blendMode` and `stomp` render read-only
- * — the migration sets a mask on every layer folded from a value-level reference, so hiding it
- * would leave an operator unable to see why a layer only moves colour, but the controls for
- * editing them are a later session.
- */
-function LayerRow({
-  layer,
-  index,
-  look,
-  looksLoaded,
-  handlers,
-  sortable,
-  sortableId,
-  showTargets,
-}: {
-  layer: CueLayerDetail
-  index: number
-  look: LookSummary | undefined
-  looksLoaded: boolean
-  handlers: LayerHandlers
-  sortable: boolean
-  sortableId?: string
-  showTargets?: boolean
-}) {
-  const enabled = layer.enabled !== false
-  // `lookName` comes with the read, so a layer is labelled even before the library list lands. The
-  // local lookup only adds the families and the deleted-since-read case.
-  const name = layer.lookName ?? look?.name
-  const missing = looksLoaded && look == null
-
-  return (
-    <SortableShell sortable={sortable} sortableId={sortableId}>
-      {(dragHandle) => (
-        <div
-          className={cn(
-            'flex flex-wrap items-center gap-2 rounded border bg-card p-2 text-xs',
-            !enabled && 'opacity-60',
-          )}
-        >
-          {dragHandle}
-          <Badge variant="secondary" className="shrink-0 px-1.5 py-0 text-[10px] font-mono">
-            {index + 1}
-          </Badge>
-          <LookRefBadge name={name} missing={missing} />
-
-          {look?.families.map((family) => (
-            <Badge key={family} variant="outline" className="shrink-0 px-1.5 py-0 text-[10px]">
-              {FAMILY_LABELS[family].singular}
-            </Badge>
-          ))}
-
-          {layer.propertyMask && (
-            <Badge
-              variant="outline"
-              className="shrink-0 px-1.5 py-0 text-[10px]"
-              title="This layer only asserts these attribute families"
-            >
-              [{layer.propertyMask}]
-            </Badge>
-          )}
-
-          {layer.blendMode && layer.blendMode !== 'OVERRIDE' && (
-            <Badge variant="outline" className="shrink-0 px-1.5 py-0 text-[10px]">
-              {layer.blendMode}
-            </Badge>
-          )}
-
-          {layer.stomp && (
-            <Badge variant="outline" className="shrink-0 px-1.5 py-0 text-[10px]" title="Stomps other effects">
-              STOMP
-            </Badge>
-          )}
-
-          {showTargets && (
-            <span className="flex min-w-0 flex-wrap items-center gap-1">
-              {layer.targets.length === 0 ? (
-                <span
-                  className="text-[10px] text-muted-foreground"
-                  title="No targets on the layer, so the look's own rows decide where it lands"
-                >
-                  look&rsquo;s own targets
-                </span>
-              ) : (
-                layer.targets.map((t) => (
-                  <Badge
-                    key={`${t.type}:${t.key}`}
-                    variant="outline"
-                    className="shrink-0 px-1.5 py-0 text-[10px]"
-                  >
-                    {t.key}
-                  </Badge>
-                ))
-              )}
-            </span>
-          )}
-
-          <span className="flex-1" />
-
-          <AmountInput
-            value={layer.amount ?? 1}
-            onCommit={(amount) => handlers.onSetAmount(index, amount)}
-          />
-          <TimingBadge
-            delayMs={layer.delayMs}
-            intervalMs={layer.intervalMs}
-            randomWindowMs={layer.randomWindowMs}
-          />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-6 shrink-0 text-muted-foreground"
-            aria-label={enabled ? 'Disable layer' : 'Enable layer'}
-            aria-pressed={!enabled}
-            title={enabled ? 'Disable this layer' : 'Enable this layer'}
-            onClick={() => handlers.onSetEnabled(index, !enabled)}
-          >
-            {enabled ? <Eye className="size-3.5" /> : <Ban className="size-3.5" />}
-          </Button>
-          <RemoveBtn onClick={() => handlers.onRemove(index)} />
-        </div>
-      )}
-    </SortableShell>
-  )
-}
-
-/**
- * Wraps a row in `useSortable` when it is orderable, and in nothing when it isn't.
- *
- * A component rather than a conditional call, because `useSortable` is a hook: calling it only in
- * the by-layer arrangement would break the rules of hooks, and calling it always would register
- * by-target rows with a `SortableContext` that isn't there.
- */
-function SortableShell({
-  sortable,
-  sortableId,
-  children,
-}: {
-  sortable: boolean
-  sortableId?: string
-  children: (dragHandle: React.ReactNode) => React.ReactNode
-}) {
-  if (!sortable || sortableId == null) return <>{children(null)}</>
-  return <SortableRow sortableId={sortableId}>{children}</SortableRow>
-}
-
-function SortableRow({
-  sortableId,
-  children,
-}: {
-  sortableId: string
-  children: (dragHandle: React.ReactNode) => React.ReactNode
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: sortableId,
-  })
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    zIndex: isDragging ? 50 : undefined,
-    opacity: isDragging ? 0.5 : undefined,
-  }
-  // Listeners go on the handle only, never the row: the row carries controls, and a drag that
-  // starts on the amount field would make it un-typeable.
-  const handle = (
-    <button
-      type="button"
-      className="shrink-0 cursor-grab text-muted-foreground hover:text-foreground"
-      aria-label="Reorder layer"
-      onClick={(e) => e.stopPropagation()}
-      {...listeners}
-    >
-      <GripVertical className="size-3.5" />
-    </button>
-  )
-  return (
-    <div ref={setNodeRef} style={style} {...attributes}>
-      {children(handle)}
-    </div>
-  )
-}
-
-/**
- * A layer's amount, as a percentage.
- *
- * Held as local draft text and committed on blur or Enter rather than per keystroke: every commit
- * is a PATCH of the whole cue, and typing "50" would otherwise fire one for "5" on the way.
- */
-function AmountInput({
-  value,
-  onCommit,
-}: {
-  value: number
-  onCommit: (amount: number) => void
-}) {
-  const asPercent = Math.round(value * 100)
-  const [draft, setDraft] = useState<string | null>(null)
-
-  const commit = () => {
-    if (draft == null) return
-    const parsed = Number(draft)
-    setDraft(null)
-    // `Number('')` is 0, so a blank field would commit 0% and silently mute the layer. An emptied
-    // box means "I haven't decided", not "none of it".
-    if (draft.trim() === '' || !Number.isFinite(parsed)) return
-    const clamped = Math.min(100, Math.max(0, Math.round(parsed))) / 100
-    if (clamped === value) return
-    onCommit(clamped)
-  }
-
-  return (
-    <span className="flex shrink-0 items-center gap-0.5">
-      <Input
-        type="number"
-        min={0}
-        max={100}
-        aria-label="Layer amount (%)"
-        className="h-6 w-14 px-1 text-right text-[11px]"
-        value={draft ?? String(asPercent)}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') commit()
-          if (e.key === 'Escape') setDraft(null)
-        }}
-      />
-      <span className="text-[10px] text-muted-foreground">%</span>
-    </span>
-  )
-}
-
-function Section({
-  title,
-  icon,
-  count,
-  action,
-  children,
-}: {
-  title: string
-  icon?: React.ReactNode
-  count?: number
-  action?: React.ReactNode
-  children: React.ReactNode
-}) {
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        {icon}
-        <span>{title}</span>
-        {count != null && count > 0 && (
-          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-            {count}
-          </Badge>
-        )}
-        <span className="flex-1" />
-        {action}
-      </div>
-      <div className="space-y-1.5">{children}</div>
     </div>
   )
 }
@@ -940,38 +595,5 @@ function AssignmentValue({
         <LookPreviewSwatches preview={look.preview.slice(0, 3)} className="shrink-0" />
       )}
     </span>
-  )
-}
-
-function AddBtn({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="sm"
-      className="h-6 px-2 text-[11px] gap-0.5"
-      onClick={onClick}
-    >
-      <Plus className="size-3" />
-      {label}
-    </Button>
-  )
-}
-
-function RemoveBtn({ onClick }: { onClick: () => void }) {
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      className="size-6 text-muted-foreground hover:text-destructive shrink-0"
-      onClick={(e) => {
-        e.stopPropagation()
-        onClick()
-      }}
-      aria-label="Remove"
-    >
-      <X className="size-3.5" />
-    </Button>
   )
 }

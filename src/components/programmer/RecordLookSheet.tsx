@@ -1,0 +1,407 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSelector } from 'react-redux'
+import { Loader2, XCircle } from 'lucide-react'
+import {
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { formatError } from '@/lib/formatError'
+import { familyForCategory, type AttributeFamily } from '@/lib/attributeFamily'
+import { useFixtureListQuery } from '@/store/fixtures'
+import { useLookListQuery } from '@/store/looks'
+import { useRecordLookMutation } from '@/store/programmerOps'
+import { useProgrammerRevision } from '@/store/programmer'
+import { lightingApi } from '@/api/lightingApi'
+import { selectTargetKeys } from '@/store/selectionSlice'
+import type {
+  PropertyMaskGroup,
+  RecordLookResponse,
+  RecordMode,
+  RecordSource,
+} from '@/store/programmerOps'
+import { MaskPicker, describeSkips } from './maskPicker'
+
+export interface RecordLookSheetProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  projectId: number
+  /** Preselect a Look to write into — set when opened from a library row. */
+  targetLookId?: number
+}
+
+const SOURCES: { value: RecordSource; label: string; hint: string }[] = [
+  {
+    value: 'TOUCHED',
+    label: 'Programmer',
+    hint: 'What you busked — the programmer values you edited.',
+  },
+  {
+    value: 'ALL',
+    label: 'Programmer + hand-downs',
+    hint: 'Also captures unpark hand-downs the programmer is holding.',
+  },
+  {
+    value: 'STAGE_SNAPSHOT',
+    label: 'Whole stage',
+    hint: 'Everything on stage, including values from other cues and running effects.',
+  },
+]
+
+const MODES: { value: RecordMode; label: string; hint: string }[] = [
+  { value: 'CREATE', label: 'New look', hint: 'Create a look from what the programmer holds.' },
+  { value: 'MERGE', label: 'Merge', hint: 'Add to the look, keeping the rows it already has.' },
+  {
+    value: 'UPDATE_EXISTING',
+    label: 'Replace',
+    hint: 'Replace the look’s rows for these fixtures and attributes.',
+  },
+  { value: 'REMOVE', label: 'Remove', hint: 'Delete the look’s rows these fixtures name.' },
+]
+
+/**
+ * Record the programmer into a Look — **the gesture that creates a bound Look**, which nothing in
+ * this client could do while the only record destination was the retired palette tables. The
+ * library's Recorded section said so in place of a button.
+ *
+ * Modelled on `RecordSheet` deliberately, down to the mode and source vocabulary: recording into a
+ * cue and recording into a look are the same operation with a different destination, and an operator
+ * who has learned one should not have to learn the other. Two things genuinely differ.
+ *
+ * The **mask is prominent rather than incidental**. A palette bank implied its own attribute — you
+ * recorded a colour palette into the colour bank — and a Look has no type to imply it, so an
+ * unmasked record of a busked state captures position and beam alongside the colour you meant. The
+ * per-family counts are there to make that visible before it happens.
+ *
+ * And the **selection is the recommended path, not the exception**. A Look recorded from the whole
+ * programmer names every head the programmer happens to hold, which is almost never what "Warm
+ * Amber" means; a cue, by contrast, usually does want everything you busked.
+ */
+export function RecordLookSheet({
+  open,
+  onOpenChange,
+  projectId,
+  targetLookId,
+}: RecordLookSheetProps) {
+  const { data: looks } = useLookListQuery({ projectId }, { skip: !projectId })
+  const [record, { isLoading, error, reset }] = useRecordLookMutation()
+
+  // The programmer sheet's selection, published into the store by its list container — the same
+  // read `RecordSheet` makes, and for the same reason: this sheet opens from the toolbar and from
+  // the library, and neither has a prop path to the list holding the selection.
+  const selectedKeys = useSelector((s: Parameters<typeof selectTargetKeys>[0]) =>
+    selectTargetKeys(s, 'programmer'),
+  )
+
+  const [mode, setMode] = useState<RecordMode>(targetLookId ? 'MERGE' : 'CREATE')
+  const [source, setSource] = useState<RecordSource>('TOUCHED')
+  const [mask, setMask] = useState<PropertyMaskGroup[]>([])
+  const [selectedOnly, setSelectedOnly] = useState(true)
+  const [lookId, setLookId] = useState<string>('')
+  const [name, setName] = useState('')
+  const [notes, setNotes] = useState('')
+  const [result, setResult] = useState<RecordLookResponse | null>(null)
+
+  // Once per open. RTK Query's `reset` changes identity whenever the mutation's state does, so an
+  // effect depending on it *and* calling it re-fires — here that would wipe the result panel and
+  // the operator's form the instant a Record completed.
+  const openedRef = useRef(false)
+  useEffect(() => {
+    if (!open) {
+      openedRef.current = false
+      return
+    }
+    if (openedRef.current) return
+    openedRef.current = true
+    setMode(targetLookId ? 'MERGE' : 'CREATE')
+    setSource('TOUCHED')
+    setMask([])
+    // On by default here, unlike `RecordSheet`: see the class doc. Still guarded by `scoped`, so
+    // an empty selection falls back to the whole programmer rather than sending a 400.
+    setSelectedOnly(true)
+    setLookId(targetLookId != null ? String(targetLookId) : '')
+    setName('')
+    setNotes('')
+    setResult(null)
+    reset()
+  }, [open, targetLookId, reset])
+
+  const creating = mode === 'CREATE'
+  const canSubmit = creating ? name.trim() !== '' : lookId !== ''
+  // Guarded on the selection as well as the checkbox: the list can unmount (or be deselected) while
+  // this sheet is open, and sending an empty `targets` is a 400, not a whole-rig record.
+  const scoped = selectedOnly && selectedKeys.length > 0
+
+  const submit = async () => {
+    try {
+      const response = await record({
+        projectId,
+        mode,
+        source,
+        mask: mask.length > 0 ? mask : undefined,
+        lookId: creating ? undefined : Number(lookId),
+        name: creating ? name.trim() : undefined,
+        notes: creating && notes.trim() !== '' ? notes.trim() : undefined,
+        targets: scoped
+          ? selectedKeys.map((key) => ({ type: 'fixture' as const, key }))
+          : undefined,
+      }).unwrap()
+      setResult(response)
+    } catch {
+      // Rendered inline from the mutation's own `error` — `recordLook` is in SILENT_ENDPOINTS.
+    }
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={(next) => !isLoading && onOpenChange(next)}>
+      <SheetContent className="flex flex-col sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>Record look</SheetTitle>
+          <SheetDescription>
+            Write the programmer into a look that names its own fixtures.
+          </SheetDescription>
+        </SheetHeader>
+
+        <SheetBody>
+          <div className="space-y-2">
+            <Label>Mode</Label>
+            <ToggleGroup
+              type="single"
+              value={mode}
+              onValueChange={(next) => next && setMode(next as RecordMode)}
+              className="flex-wrap justify-start"
+            >
+              {MODES.map((m) => (
+                <ToggleGroupItem key={m.value} value={m.value} className="text-xs">
+                  {m.label}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+            <p className="text-xs text-muted-foreground">
+              {MODES.find((m) => m.value === mode)?.hint}
+            </p>
+          </div>
+
+          {creating ? (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="record-look-name">Name</Label>
+                <Input
+                  id="record-look-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Warm Amber"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="record-look-notes">Notes</Label>
+                <Textarea
+                  id="record-look-notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  rows={2}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="record-look-target">Look</Label>
+              <Select value={lookId} onValueChange={setLookId}>
+                <SelectTrigger id="record-look-target">
+                  <SelectValue placeholder="Choose a look" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(looks ?? []).map((look) => (
+                    <SelectItem key={look.id} value={String(look.id)}>
+                      {look.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label>Source</Label>
+            <Select value={source} onValueChange={(next) => setSource(next as RecordSource)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SOURCES.map((s) => (
+                  <SelectItem key={s.value} value={s.value}>
+                    {s.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {SOURCES.find((s) => s.value === source)?.hint}
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={scoped}
+                disabled={selectedKeys.length === 0}
+                onChange={(e) => setSelectedOnly(e.target.checked)}
+                className="size-4"
+              />
+              Selected fixtures only
+              {selectedKeys.length > 0 && (
+                <span className="text-muted-foreground tabular-nums">({selectedKeys.length})</span>
+              )}
+            </label>
+            <p className="text-xs text-muted-foreground">
+              {selectedKeys.length === 0
+                ? 'Select fixtures on the values sheet to record just those heads — recommended, ' +
+                  'or the look names every head the programmer is holding.'
+                : 'Record only these heads. A look names its own fixtures, so this is what decides ' +
+                  'where recalling it lands.'}
+            </p>
+          </div>
+
+          <MaskedAttributes value={mask} onChange={setMask} />
+
+          {error != null && (
+            <Alert variant="destructive">
+              <XCircle className="size-4" />
+              <AlertDescription>{formatError(error)}</AlertDescription>
+            </Alert>
+          )}
+
+          {result && <RecordLookResult result={result} />}
+        </SheetBody>
+
+        <SheetFooter className="flex-row justify-end gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
+            {result ? 'Close' : 'Cancel'}
+          </Button>
+          <Button onClick={submit} disabled={!canSubmit || isLoading}>
+            {isLoading && <Loader2 className="size-4 animate-spin" />}
+            {isLoading ? 'Recording…' : 'Record'}
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+/**
+ * The mask picker plus the per-family counts of what the programmer is holding.
+ *
+ * A child component rather than a hook in the sheet, because the counts subscribe to
+ * `useProgrammerRevision` — which wakes on *any* programmer change, a slider drag included. Radix
+ * mounts a sheet's body only while it is open, so putting the subscription down here is what keeps
+ * an always-mounted-but-closed sheet from re-rendering on every programmer event. The sheet's own
+ * toolbar sits on every page.
+ */
+function MaskedAttributes({
+  value,
+  onChange,
+}: {
+  value: PropertyMaskGroup[]
+  onChange: (next: PropertyMaskGroup[]) => void
+}) {
+  return <MaskPicker value={value} onChange={onChange} counts={useProgrammerFamilyCounts()} />
+}
+
+/**
+ * How many programmer entries fall in each attribute family, so an unmasked record isn't a
+ * surprise — and the family the operator means is visibly the one carrying the values.
+ *
+ * Counts the **whole programmer**, not what this record will write — the selection narrows the
+ * write and group expansion is server-side, so a client-side filter would drop group entries
+ * rather than narrow honestly. `MaskPicker` labels them as such. Which families are in play is the
+ * signal that matters and it survives the narrowing; the magnitude does not.
+ *
+ * The category comes from the fixture list's property descriptors, indexed by **property name
+ * across the whole rig** rather than per target. That is a deliberate simplification: a group
+ * entry's `colour` is written through the members' own property, so it classifies the same way,
+ * and looking a group up properly would mean fetching every group's detail to serve a hint.
+ * Where two fixtures disagree on a name's category the first wins — and `familyForCategory`'s
+ * catch-all means the answer is still a family, never a blank.
+ */
+function useProgrammerFamilyCounts(): Partial<Record<AttributeFamily, number>> {
+  const { data: fixtures } = useFixtureListQuery()
+  // The entry map lives outside Redux, so a revision tick is how a component knows to re-read it.
+  const revision = useProgrammerRevision()
+
+  const categoryByProperty = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const fixture of fixtures ?? []) {
+      for (const property of fixture.properties) {
+        if (!map.has(property.name)) map.set(property.name, property.category)
+      }
+    }
+    return map
+  }, [fixtures])
+
+  return useMemo(() => {
+    void revision
+    const counts: Partial<Record<AttributeFamily, number>> = {}
+    for (const entry of lightingApi.programmer.getState().entries.values()) {
+      const category = categoryByProperty.get(entry.propertyName) ?? entry.propertyName
+      const family = familyForCategory(category)
+      counts[family] = (counts[family] ?? 0) + 1
+    }
+    return counts
+  }, [categoryByProperty, revision])
+}
+
+/**
+ * What actually landed. Reported rather than assumed: a silent Record reads as "everything went
+ * in", which is exactly the impression the old lossy snapshot gave.
+ */
+function RecordLookResult({ result }: { result: RecordLookResponse }) {
+  const notes: string[] = []
+  if (result.groupRowsEmitted > 0) {
+    notes.push(`${result.groupRowsEmitted} group row${result.groupRowsEmitted === 1 ? '' : 's'}`)
+  }
+  if (result.refsFlattened > 0) {
+    // Looks don't nest, so a referencing entry was resolved to its literal on the way in. Worth
+    // saying: the recorded row will not follow the look it was taken from.
+    notes.push(`${result.refsFlattened} reference(s) flattened`)
+  }
+  if (result.programmerKeysRefreshed > 0) {
+    notes.push(`${result.programmerKeysRefreshed} live programmer value(s) re-resolved`)
+  }
+  if (result.cuesRepublished.length > 0) {
+    notes.push(`${result.cuesRepublished.length} live cue(s) moved with it`)
+  }
+
+  const skipNote = describeSkips(result.skipped)
+
+  return (
+    <Alert>
+      <AlertDescription className="space-y-1">
+        <p className="font-medium">
+          {result.created ? 'Created' : 'Updated'} “{result.look.name}” — {result.rowsWritten} row
+          {result.rowsWritten === 1 ? '' : 's'} written
+          {result.rowsRemoved > 0 ? `, ${result.rowsRemoved} removed` : ''}.
+        </p>
+        {notes.length > 0 && <p className="text-xs text-muted-foreground">{notes.join(' · ')}</p>}
+        {skipNote && <p className="text-xs text-amber-600 dark:text-amber-500">{skipNote}</p>}
+      </AlertDescription>
+    </Alert>
+  )
+}

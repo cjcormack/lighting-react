@@ -34,6 +34,62 @@ function provenance(source: ProvenanceSource): ProgrammerKeyState {
 
 const KEY: CellPropertyKey[] = [{ targetKey: 'f1', propertyName: 'dimmer' }]
 
+function layerProvenance(
+  layerId: number,
+  lookName: string,
+  propertyName = 'dimmer',
+  targetKey = 'f1',
+): ProgrammerKeyState {
+  return {
+    provenance: { targetKey, propertyName, source: 'CUE', cueId: 4, layerId, lookId: layerId + 100, lookName },
+  }
+}
+
+describe('aggregateCellOwnership — the winning layer', () => {
+  it('names the layer that won the cell', () => {
+    // The answer `source` alone cannot give: "Cue" says which layer of the engine, and the
+    // operator asking why a fixture is this colour wants the look they built it from.
+    const result = aggregateCellOwnership(KEY, false, lookupFrom({
+      'f1|dimmer': layerProvenance(1, 'Warm Wash'),
+    }))
+    expect(result?.layer).toEqual({ layerId: 1, lookId: 101, name: 'Warm Wash', mixed: false })
+    // Independent of `source`, which still reports the engine layer.
+    expect(result?.source).toBe('cue')
+  })
+
+  it('leaves the layer unset when no provenance names one', () => {
+    expect(aggregateCellOwnership(KEY, false, lookupFrom({ 'f1|dimmer': provenance('CUE') }))?.layer)
+      .toBeUndefined()
+  })
+
+  it('drops the name when the covered properties were won by different layers', () => {
+    // Naming one layer over a group row where half the heads came from another is a confident lie
+    // about what the cell is showing — the same rule `paletteRef` follows.
+    const keys: CellPropertyKey[] = [
+      { targetKey: 'f1', propertyName: 'dimmer' },
+      { targetKey: 'f2', propertyName: 'dimmer' },
+    ]
+    const result = aggregateCellOwnership(keys, false, lookupFrom({
+      'f1|dimmer': layerProvenance(1, 'Warm Wash'),
+      'f2|dimmer': layerProvenance(2, 'Cool Wash', 'dimmer', 'f2'),
+    }))
+    expect(result?.layer).toEqual({ layerId: undefined, lookId: undefined, name: undefined, mixed: true })
+  })
+
+  it('counts some-but-not-all as mixed, keeping the name', () => {
+    // One layer, but only covering half the cell. The name is still true; the claim that it
+    // explains the whole cell is not.
+    const keys: CellPropertyKey[] = [
+      { targetKey: 'f1', propertyName: 'dimmer' },
+      { targetKey: 'f2', propertyName: 'dimmer' },
+    ]
+    const result = aggregateCellOwnership(keys, false, lookupFrom({
+      'f1|dimmer': layerProvenance(1, 'Warm Wash'),
+    }))
+    expect(result?.layer).toMatchObject({ name: 'Warm Wash', mixed: true })
+  })
+})
+
 describe('aggregateCellOwnership', () => {
   it('returns undefined for a cell backing no properties', () => {
     expect(aggregateCellOwnership([], false, lookupFrom({}))).toBeUndefined()

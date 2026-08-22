@@ -238,16 +238,49 @@ that FX parameters index as `P1`/`P2`/`P*`, whose helpers are `isPaletteRef` /
 `parsePaletteIndex` in `components/fx/colourUtils.ts`. It is still labelled "Colour List" in
 the UI; dropping that qualifier is a session-4 tidy-up.
 
-Two things are **not** available yet, both waiting on session 3's programmer rewrite, and
-both stated in the UI rather than left to be discovered:
+**The programmer is a layer stack too**, and `LookStack` (`components/looks/LookStack.tsx`) is
+the one component that draws both — that sharing is the point rather than a saving, because a
+cue *is* a saved programmer stack. Its seam is `LayerHandlers`, which is **index-based on
+purpose**: the rows render a list and the operator acts on a position in it, so translating
+index → whatever addresses a layer in that world is the host's job. The cue's host PATCHes
+whole arrays through `buildCueInput`; `ProgrammerLookStack`'s maps index → `layerId` and sends
+`programmer.addLayer` / `removeLayer` / `moveLayer` / `patchLayer`. It must not renumber
+`sortOrder` client-side the way the cue path does — the server renumbers the stack and re-ranks
+the running effects **in place**, so a drag doesn't restart any effect's phase.
 
-- **Creating a bound Look.** It needs the server-side record, which still writes the retired
-  palette tables. The library's Recorded section says so.
-- **Update-back after Include.** Include-a-Look stages its literals so they can be seen and
-  busked from, and is deliberately one-way — `includedTargetIsReadOnly` is what the
-  programmer gates Update on, rather than letting the write-back path put rows into tables no
-  consumer reads. Per-cue and per-preset **Make Hard** are gone with their routes; the
-  programmer-wide one survives, because references still exist on migrated cues.
+`programmer.layerState` is the **third broadcast** frame (after `provenanceState` and
+`programmer.includeTarget`), because the programmer is shared and a second tab's reorder must
+not leave this one showing a stale order. Its handler calls `notifyState()` only and
+deliberately *not* `scheduleStateRefetch()`: every layer mutation also emits `provenanceState`,
+which already schedules the value re-read. Layers ride a **separate** cache entry
+(`useProgrammerLayersQuery`) rather than joining `ProgrammerSummary`, which the always-visible
+`ProgrammerIndicator` reads.
+
+Creating a **bound** Look and **update-back after Include** both work now —
+`RecordLookSheet` (`POST /programmer/record-look`) and `updateIncludedLook`. `includedTargetIsReadOnly`
+and the `INCLUDE_TARGET_READ_ONLY` conflict arm are gone with them. Per-cue and per-preset
+**Make Hard** are gone with their routes; the programmer-wide one survives, because references
+still exist on migrated cues.
+
+Two things about the record sheet that are not arbitrary. The **mask is prominent** rather than
+incidental — a palette bank implied its attribute, a Look has no type, so an unmasked record of
+a busked state quietly captures position and beam alongside the colour that was meant; the
+per-family counts (`familyForCategory`, at last with a caller) exist to make that visible
+*before* it happens. And the **selection defaults on**, the opposite of `RecordSheet`: a cue
+usually does want everything you busked, a Look named "Warm Amber" almost never does.
+
+**Provenance names the winning layer.** `ProvenanceEntry` gained `layerId`/`lookId`/`lookName`,
+which `useRowOwnership` aggregates into `CellOwnership.layer` — so "why is this fixture this
+colour?" answers *Warm Wash* rather than *a cue*. Those fields **must stay in
+`provenanceSignature`**: a key can move from the cue to one of the cue's layers with `source`
+unchanged, and a cell that didn't wake would keep naming the old answer.
+
+**The pads still go through `POST /looks/{id}/toggle`**, which is `programmerLayerStack.toggle`
+server-side — it adds or removes a layer, matching on `lookId` + exact `targets`. Keeping one
+owner for that match rule is why they weren't moved to the explicit ops. What did change is the
+ring: `lookLayerPresence` reads the **layer stack**, not the effect list. The old match was
+`FxInstance.presetId === lookId`, which worked by accident (the Look id in a field naming a
+`DaoFxPreset`) and could never see a rows-only Look at all.
 
 ### Speed Masters
 
@@ -488,13 +521,23 @@ REST API is used for CRUD operations on scripts, scenes, fixtures, etc.
   sidebar keeps one entry per resource; the cards route redirects to the list
   when the sticky view preference says so. Follow that pattern for any new
   cards/list pair instead of adding a second sidebar row.
-- **Same exception — the programmer's sibling views**: `/programmer` (Values) has
-  a `navItems` entry, `/programmer/fx` (FX) deliberately does not. It is reached
-  via `ProgrammerViewSwitcher` in `src/components/ViewSwitcher.tsx`. Unlike the
-  cards/list pair this switcher is **not** sticky and there is no redirect: the
-  FX sheet is a diagnostic read of what is running, so landing there because you
-  last looked at it — rather than on the values you came to edit — would be the
-  wrong default.
+- **Where a route was removed rather than kept — the programmer.** `/programmer`
+  and `/programmer/fx` are `ProgrammerLegacyRedirect` into `/program`, and there is
+  **no `programmer` navItems entry at all**. The whole programmer is
+  `ProgrammerPane` in the Program view, whose three tabs (Values / Layers / FX) are
+  what those two routes used to be plus the layer stack. Tabs and not sibling routes
+  because they are three readings of *one live object* — the values it holds, the
+  looks it is composed from, the effects running over it — rather than three
+  destinations. Dropping the sidebar row was the point, not a side effect: two rows
+  leading to one page is what the collision between `pathMatch: "/program"` and
+  `"/programmer"` was. The cost is that Cmd+K no longer carries the word
+  "Programmer"; that was accepted deliberately.
+
+  The FX tab keeps its old rationale in a new form: it is a diagnostic read, so the
+  persisted tab is **reset to Values on mount** rather than restored. And
+  `ProgrammerIndicator` must not test "am I already there?" with `startsWith` — a
+  stale `/programmer` URL starts with `/program`. It uses the segment-aware idiom
+  from `ProjectSwitcher.mostSpecificActiveId`.
 - **Where sibling routes do *not* apply — the Look library.** `/looks` is one
   `navItems` entry and **one route**, with a sticky in-page family filter
   (`LookFamilyFilterBar`) rather than the four sibling routes the palette banks it

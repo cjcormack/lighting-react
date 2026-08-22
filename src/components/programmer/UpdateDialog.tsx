@@ -199,6 +199,19 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
                     .
                   </p>
                 )}
+                {/* The Look arm of the same field. What it moves is every cue layering the Look,
+                    which is the number that matters most here — it is the rest of the show
+                    changing, and it is the payoff of a look being a reference at all. */}
+                {result.lookResult && (
+                  <p>
+                    Updated “{result.lookResult.lookName}” — {result.lookResult.rowsWritten} row
+                    {result.lookResult.rowsWritten === 1 ? '' : 's'} written
+                    {result.lookResult.cuesRepublished.length > 0
+                      ? `, ${result.lookResult.cuesRepublished.length} live cue(s) moved with it`
+                      : ''}
+                    .
+                  </p>
+                )}
                 {result.warnings.map((warning) => (
                   <p key={warning} className="text-xs text-amber-600 dark:text-amber-500">
                     {warning}

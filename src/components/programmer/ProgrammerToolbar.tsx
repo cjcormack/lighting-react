@@ -1,6 +1,15 @@
 import { useState } from 'react'
 import { useParams } from 'react-router'
-import { Circle, Download, Eraser, EyeOff, Link2Off, MoreHorizontal, Upload } from 'lucide-react'
+import {
+  Circle,
+  Download,
+  Eraser,
+  EyeOff,
+  Link2Off,
+  MoreHorizontal,
+  SwatchBook,
+  Upload,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -27,9 +36,10 @@ import {
 import { useActiveEffectsQuery } from '../../store/fixtureFx'
 import { IncludeSheet } from './IncludeSheet'
 import { RecordSheet } from './RecordSheet'
+import { RecordLookSheet } from './RecordLookSheet'
 import { UpdateDialog } from './UpdateDialog'
 import { MakeHardDialog } from './MakeHardDialog'
-import { describeIncludedTarget, includedTargetIsReadOnly } from '@/lib/includedTarget'
+import { describeIncludedTarget } from '@/lib/includedTarget'
 
 /** Fade options for Clear and for entering/leaving Blind, in milliseconds. */
 const FADE_OPTIONS = [
@@ -53,6 +63,7 @@ export function ProgrammerToolbar() {
   const projectId = Number(projectIdParam)
 
   const [recordOpen, setRecordOpen] = useState(false)
+  const [recordLookOpen, setRecordLookOpen] = useState(false)
   const [includeOpen, setIncludeOpen] = useState(false)
   const [updateOpen, setUpdateOpen] = useState(false)
   const [makeHardOpen, setMakeHardOpen] = useState(false)
@@ -60,7 +71,6 @@ export function ProgrammerToolbar() {
   const blind = summary?.blind ?? false
   const entryCount = summary?.entryCount ?? 0
   const includeTarget = summary?.lastIncluded ?? null
-  const includeTargetReadOnly = includedTargetIsReadOnly(includeTarget)
   const referenceCount = summary?.referenceCount ?? 0
   const fade = Number(fadeMs) || 0
 
@@ -87,6 +97,15 @@ export function ProgrammerToolbar() {
       onSelect: () => setRecordOpen(true),
     },
     {
+      label: 'Record look',
+      Icon: SwatchBook,
+      disabled: !hasContent || !projectId,
+      tooltip: hasContent
+        ? 'Write the programmer into a look that names its own fixtures'
+        : 'The programmer is empty — nothing to record',
+      onSelect: () => setRecordLookOpen(true),
+    },
+    {
       label: 'Include',
       Icon: Download,
       disabled: !projectId,
@@ -96,18 +115,16 @@ export function ProgrammerToolbar() {
     {
       label: 'Update',
       Icon: Upload,
-      // A Look include is one-way: the write-back path still targets the retired palette tables, so
-      // Update would report success over rows no consumer reads. Disabled with the reason rather
-      // than hidden — the operator needs to know the Include itself worked.
-      disabled: !hasContent || !projectId || includeTargetReadOnly,
-      tooltip: includeTargetReadOnly
-        ? `Writing back into ${describeIncludedTarget(includeTarget!)} isn’t available yet — ` +
-          'a look include is read-only for now'
-        : includeTarget
-          ? `Write your changes back into ${describeIncludedTarget(includeTarget)}`
-          : hasContent
-            ? 'Show the cues the programmer is overriding'
-            : 'The programmer is empty — nothing to update',
+      // A Look target is writable now: `updateIncludedLook` MERGEs whatever changed since Include
+      // into the Look's own rows, so Include → edit → Update is a round trip for a look exactly as
+      // it is for a cue. It used to be disabled here, because the only write-back path led into the
+      // retired palette tables.
+      disabled: !hasContent || !projectId,
+      tooltip: includeTarget
+        ? `Write your changes back into ${describeIncludedTarget(includeTarget)}`
+        : hasContent
+          ? 'Show the cues the programmer is overriding'
+          : 'The programmer is empty — nothing to update',
       onSelect: () => setUpdateOpen(true),
     },
     {
@@ -253,6 +270,11 @@ export function ProgrammerToolbar() {
       {projectId > 0 && (
         <>
           <RecordSheet open={recordOpen} onOpenChange={setRecordOpen} projectId={projectId} />
+          <RecordLookSheet
+            open={recordLookOpen}
+            onOpenChange={setRecordLookOpen}
+            projectId={projectId}
+          />
           <IncludeSheet
             open={includeOpen}
             onOpenChange={setIncludeOpen}

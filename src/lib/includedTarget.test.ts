@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   describeIncludedTarget,
   includedCueId,
-  includedTargetIsReadOnly,
   includedTargetKey,
 } from './includedTarget'
 import type { IncludedTarget } from '@/api/programmerWsApi'
@@ -45,19 +44,6 @@ describe('includedTargetKey', () => {
     expect(includedTargetKey({ kind: 'CUE', cueId: 3 })).not.toBe(
       includedTargetKey({ kind: 'LOOK', lookId: 3 }),
     )
-  })
-})
-
-describe('includedTargetIsReadOnly', () => {
-  it('marks a look target as one Update cannot write back to', () => {
-    // Update still writes through the retired palette tables, so offering it for a Look would
-    // report success and write rows no consumer reads.
-    expect(includedTargetIsReadOnly(LOOK)).toBe(true)
-  })
-
-  it('leaves a cue target writable', () => {
-    expect(includedTargetIsReadOnly(CUE)).toBe(false)
-    expect(includedTargetIsReadOnly(null)).toBe(false)
   })
 })
 

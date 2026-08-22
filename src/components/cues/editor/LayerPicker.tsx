@@ -25,6 +25,15 @@ interface LayerPickerProps {
   onCancel: () => void
   /** Pre-selected target — the layer skips the target step and lands on this one. */
   preselectedTarget?: CueTarget | null
+  /**
+   * Whether the host can honour a layer's timing.
+   *
+   * False for the programmer, which has no playback to delay against: a programmer layer fires now,
+   * by definition, and `ProgrammerLookStack` drops `delayMs` / `intervalMs` / `randomWindowMs` on
+   * the way out. Offering the fields there would take an operator's "in 3 seconds" and silently
+   * ignore it, so they are not offered.
+   */
+  allowTiming?: boolean
 }
 
 type Step = 'look' | 'targets' | 'timing'
@@ -43,6 +52,7 @@ export function LayerPicker({
   onConfirm,
   onCancel,
   preselectedTarget,
+  allowTiming = true,
 }: LayerPickerProps) {
   const { data: looks } = useLookListQuery({ projectId })
   const { data: groups } = useGroupListQuery()
@@ -229,7 +239,7 @@ export function LayerPicker({
           </div>
 
           <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-4">
-            <TimingFields values={timingValues} onChange={setTimingValues} />
+            {allowTiming && <TimingFields values={timingValues} onChange={setTimingValues} />}
 
             {/* Per-layer speed master. Opt-in: unset means every effect in the look follows its
                 own master, and most layers want exactly that. Opening seeds master 1's concrete

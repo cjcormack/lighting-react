@@ -1,4 +1,3 @@
-import type { ColumnKey } from '@/components/fixtures-list/columns'
 import type { PropertyCategory } from '@/store/fixtures'
 
 /**
@@ -19,30 +18,6 @@ export const FAMILY_LABELS: Record<AttributeFamily, { singular: string; plural: 
   POSITION: { singular: 'Position', plural: 'Positions' },
   COLOUR: { singular: 'Colour', plural: 'Colours' },
   BEAM: { singular: 'Beam', plural: 'Beams' },
-}
-
-/**
- * Which sheet columns each attribute family covers.
- *
- * **Derived from the backend's `PropertyCategory.maskGroup()`, not guessed.** The non-obvious one
- * is `strobe`: it sits in INTENSITY rather than BEAM, because it is an intensity modulation (HTP,
- * like dimmer) and operators reach for it alongside level. Getting this wrong would make a column
- * editable from the wrong family filter — or from none.
- *
- * Invariant, asserted in `attributeFamily.test.ts`: every `ColumnKey` appears in exactly one
- * family.
- *
- * **No production caller today.** Its two — `applyPalette.ts` and the cue-assignment sheet's
- * reference picker — went with the value-level reference surfaces they belonged to. Kept, rather
- * than deleted with them, because the mapping mirrors the backend and the programmer rewrite wants
- * exactly this question answered; but do not read its existence as evidence that something depends
- * on it.
- */
-export const FAMILY_COLUMNS: Record<AttributeFamily, readonly ColumnKey[]> = {
-  INTENSITY: ['dimmer', 'strobe'],
-  POSITION: ['position'],
-  COLOUR: ['colour'],
-  BEAM: ['gobo', 'zoom', 'focus', 'iris', 'prism', 'speed'],
 }
 
 /**
@@ -85,7 +60,16 @@ const FAMILY_BY_CATEGORY: Record<PropertyCategory, AttributeFamily> = {
   other: 'BEAM',
 }
 
-/** Also has **no production caller today** — see the note on [FAMILY_COLUMNS]. */
+/**
+ * Its caller is `RecordLookSheet`'s per-family counts: a Look has no declared type, so an unmasked
+ * record captures whatever the programmer holds, and this is what lets the mask picker say what
+ * that is before the operator finds out afterwards.
+ *
+ * There was a sibling constant here, `FAMILY_COLUMNS`, mapping a family to the sheet columns it
+ * covers. It was deleted rather than kept a third time: its two callers went with the value-level
+ * reference surfaces they belonged to, and the programmer rewrite that was supposed to want it
+ * needed the question the other way round — from an entry's category to a family, which is this.
+ */
 export function familyForCategory(category: string): AttributeFamily {
   // `position` is the synthetic pan/tilt pair. It has no entry in `PropertyCategory` — the
   // backend answers it before its own category lookup for the same reason — but it does appear

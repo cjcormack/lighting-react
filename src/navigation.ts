@@ -18,7 +18,6 @@ import {
   Computer,
   TableProperties,
   Sliders,
-  SlidersVertical,
   SwatchBook,
   Activity,
   Users,
@@ -152,25 +151,15 @@ export const navItems: NavItem[] = [
   },
   {
     id: "program",
-    // Program is the single cue/stack authoring + running surface (it absorbed the FX Cues view).
+    // Program is the single cue/stack authoring + running surface (it absorbed the FX Cues view,
+    // and then the Programmer: `ProgrammerPane` carries Values / Layers / FX as tabs, so there is
+    // deliberately no second entry pointing at the same page).
     // Scoped to the active project — running cues from Program needs the project live.
     label: "Program",
     icon: Theater,
     path: (p) => `/projects/${p}/program`,
     visibility: "active-only",
     pathMatch: "/program",
-    group: "live",
-  },
-  {
-    id: "programmer",
-    // The busking / manual-override surface (Layer 2). Only the Values view is registered —
-    // the FX sibling (`/programmer/fx`) is reached via the in-page switcher, matching the
-    // cards/list exception documented in CLAUDE.md.
-    label: "Programmer",
-    icon: SlidersVertical,
-    path: (p) => `/projects/${p}/programmer`,
-    visibility: "active-only",
-    pathMatch: "/programmer",
     group: "live",
   },
   {

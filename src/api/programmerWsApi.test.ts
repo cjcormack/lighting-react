@@ -4,6 +4,7 @@ import {
   createProgrammerApi,
   programmerKey,
   type ProgrammerEntry,
+  type ProgrammerLayer,
   type ProvenanceEntry,
 } from './programmerWsApi'
 
@@ -50,6 +51,18 @@ const PROV: ProvenanceEntry = {
   targetKey: 'hex-1',
   propertyName: 'dimmer',
   source: 'PROGRAMMER',
+}
+
+const LAYER: ProgrammerLayer = {
+  layerId: 1,
+  lookId: 7,
+  lookName: 'Warm Wash',
+  sortOrder: 0,
+  enabled: true,
+  targets: [{ type: 'group', key: 'front-wash' }],
+  blendMode: 'OVERRIDE',
+  amount: 1,
+  stomp: false,
 }
 
 function stateFrame(entries: ProgrammerEntry[] = [ENTRY], blind = false) {
@@ -441,6 +454,40 @@ describe('createProgrammerApi', () => {
     ])
   })
 
+  it('sends the documented layer wire shapes', () => {
+    const { conn, sent } = fakeConnection()
+    const api = createProgrammerApi(conn)
+
+    api.addLayer({ lookId: 7, targets: [{ type: 'group', key: 'front-wash' }], amount: 0.5 })
+    api.addLayer({ lookId: 8 })
+    api.removeLayer(3, 500)
+    api.moveLayer(3, 0)
+    api.patchLayer(3, { enabled: false, amount: 0.25 })
+
+    expect(sent).toEqual([
+      {
+        type: 'programmer.addLayer',
+        lookId: 7,
+        targets: [{ type: 'group', key: 'front-wash' }],
+        amount: 0.5,
+      },
+      // Targets default to `[]` rather than being omitted: an absent list and an empty one mean
+      // the same thing to the server, and always sending the field keeps the shape one shape.
+      { type: 'programmer.addLayer', lookId: 8, targets: [] },
+      { type: 'programmer.removeLayer', layerId: 3, fadeMs: 500 },
+      { type: 'programmer.moveLayer', layerId: 3, toIndex: 0 },
+      { type: 'programmer.patchLayer', layerId: 3, enabled: false, amount: 0.25 },
+    ])
+  })
+
+  it('never sends a look uuid on addLayer', () => {
+    // The backend resolves the Look from its int id. A uuid here would be a second address for the
+    // same thing, and the two are minted differently across a sync import.
+    const { conn, sent } = fakeConnection()
+    createProgrammerApi(conn).addLayer({ lookId: 7 })
+    expect(JSON.stringify(sent[0])).not.toMatch(/uuid/i)
+  })
+
   it('carries an optional sourceGroup on the set ops', () => {
     // For fan-outs that can't send targetType:'group' — a group virtual dimmer over
     // heterogeneous members, a Highlight release restoring per-fixture values.
@@ -497,6 +544,82 @@ describe('createProgrammerApi', () => {
     frame({ type: 'programmer.includeTarget', target: { kind: 'CUE', cueId: 42 } })
 
     expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  it('takes the layer stack from a broadcast layerState frame', () => {
+    // Broadcast, so this arrives for another tab's reorder as well as our own mutation — which is
+    // the whole reason the server sends it rather than replying to the caller.
+    const { conn, frame } = fakeConnection()
+    const api = createProgrammerApi(conn)
+    expect(api.layers()).toEqual([])
+
+    frame({ type: 'programmer.layerState', layers: [LAYER] })
+
+    expect(api.layers()).toEqual([LAYER])
+    expect(api.getState().layers).toEqual([LAYER])
+  })
+
+  it('does not wake per-key subscribers when only the layer stack changed', () => {
+    // Same argument as the include target: the stack is the cue-level composition, not per-cell
+    // state, and a reorder must not re-render every cell in a few-hundred-row sheet.
+    const { conn, frame } = fakeConnection()
+    const api = createProgrammerApi(conn)
+    const spy = vi.fn()
+    api.subscribeToKey('hex-1', 'dimmer', spy)
+    frame(stateFrame())
+    expect(spy).toHaveBeenCalledTimes(1)
+
+    frame({ type: 'programmer.layerState', layers: [LAYER] })
+
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  it('wakes coarse subscribers on a layerState frame', () => {
+    const { conn, frame } = fakeConnection()
+    const api = createProgrammerApi(conn)
+    const spy = vi.fn()
+    api.subscribe(spy)
+
+    frame({ type: 'programmer.layerState', layers: [LAYER] })
+
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(spy.mock.calls[0][0].layers).toEqual([LAYER])
+  })
+
+  it('takes the layer stack from a state snapshot, and keeps it when one omits the field', () => {
+    // `layers` rides `programmer.state` so a fresh connection needs no second round trip. It is
+    // optional on the wire, and an absent field means an older server — not an empty stack, which
+    // would blank the pane on every refetch.
+    const { conn, frame } = fakeConnection()
+    const api = createProgrammerApi(conn)
+
+    frame({ ...stateFrame(), layers: [LAYER] })
+    expect(api.layers()).toEqual([LAYER])
+
+    frame(stateFrame())
+    expect(api.layers()).toEqual([LAYER])
+  })
+
+  it('wakes a cell when only the winning layer changed', () => {
+    // `source` stays `CUE` when a cue's value starts coming from one of its layers, so leaving the
+    // layer fields out of the provenance signature would leave the cell naming the old answer.
+    const { conn, frame } = fakeConnection()
+    const api = createProgrammerApi(conn)
+    const spy = vi.fn()
+    api.subscribeToKey('hex-1', 'dimmer', spy)
+
+    frame({
+      type: 'provenanceState',
+      entries: [{ ...PROV, source: 'CUE', cueId: 4, layerId: 1, lookId: 7, lookName: 'Warm' }],
+    })
+    expect(spy).toHaveBeenCalledTimes(1)
+
+    frame({
+      type: 'provenanceState',
+      entries: [{ ...PROV, source: 'CUE', cueId: 4, layerId: 2, lookId: 8, lookName: 'Cool' }],
+    })
+    expect(spy).toHaveBeenCalledTimes(2)
+    expect(spy.mock.calls[1][0].provenance.lookName).toBe('Cool')
   })
 
   it('stops delivering to a key subscriber after it unsubscribes', () => {

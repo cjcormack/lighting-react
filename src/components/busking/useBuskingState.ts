@@ -10,7 +10,11 @@ import type { GroupActiveEffect, BlendMode, DistributionStrategy, EffectType, El
 import type { LookSummary, ToggleLookTarget } from '@/api/looksApi'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import { lightingApi } from '@/api/lightingApi'
-import { programmerClearEntry, programmerSet } from '@/store/programmer'
+import {
+  programmerClearEntry,
+  programmerSet,
+  useProgrammerLayersQuery,
+} from '@/store/programmer'
 import { parseProgrammerValue, serializeLevel } from '@/lib/programmerValue'
 import type { ProgrammerTargetType } from '@/store/programmer'
 import {
@@ -21,6 +25,7 @@ import {
   targetKey,
   normalizeEffectName,
 } from './buskingTypes'
+import { lookLayerPresence } from './lookPresence'
 
 /** A busking target as the programmer addresses it. */
 function programmerTarget(target: BuskingTarget): {
@@ -56,6 +61,7 @@ export function useBuskingState() {
   const [applyGroupFx] = useApplyGroupFxMutation()
   const [removeGroupFx] = useRemoveGroupFxMutation()
   const [toggleLookMutation] = useToggleLookMutation()
+  const { data: programmerLayers } = useProgrammerLayersQuery()
 
   const selectTarget = useCallback((target: BuskingTarget) => {
     setSelectedTargets(new Map([[targetKey(target), target]]))
@@ -548,36 +554,25 @@ export function useBuskingState() {
   )
 
   /**
-   * Whether a Look is on, from the effects tagged with its id.
+   * Whether a Look is on, from the programmer's **layer stack** rather than the effect list.
    *
-   * `presetId` is the right field to match, counter-intuitive as the name is: the toggle route
-   * passes the *Look* id into `togglePresetOnTargets`, which keys its bookkeeping and stamps its
-   * instances on that field. `FxInstance.lookId` exists but is set only by the cue-layer paths.
-   * When the pads become programmer layers the whole question goes away.
-   *
-   * A Look made only of static rows shows `'none'`: it spawns no effects, so there is nothing here
-   * to find. The server's programmer-write bookkeeping is not exposed to the pad.
+   * A tap adds or removes a layer (the toggle route is `programmerLayerStack.toggle`), so the stack
+   * is what the ring should read — and it is the only thing that can answer for a Look made purely
+   * of static rows, which spawns no effect to find. The rule itself lives in `lookLayerPresence`,
+   * unit-tested there; this only maps the pad's targets onto the layer target shape, with the same
+   * group-name convention `applyLook` sends.
    */
   const computeLookPresence = useCallback(
-    (look: LookSummary, targetEffectsData: TargetEffectsData[]): EffectPresence => {
-      if (targetEffectsData.length === 0 || look.effectCount === 0) return 'none'
-
-      let activeCount = 0
-      for (const data of targetEffectsData) {
-        let hasLook = false
-        if (data.target.type === 'group' && data.groupEffects) {
-          hasLook = data.groupEffects.some((e) => e.presetId === look.id)
-        } else if (data.target.type === 'fixture' && data.fixtureDirectEffects) {
-          hasLook = data.fixtureDirectEffects.some((e) => e.presetId === look.id)
-        }
-        if (hasLook) activeCount++
-      }
-
-      if (activeCount === 0) return 'none'
-      if (activeCount === targetEffectsData.length) return 'all'
-      return 'some'
-    },
-    [],
+    (look: LookSummary, targetEffectsData: TargetEffectsData[]): EffectPresence =>
+      lookLayerPresence(
+        programmerLayers ?? [],
+        targetEffectsData.map((data) => ({
+          type: data.target.type,
+          key: data.target.type === 'group' ? data.target.name : data.target.key,
+        })),
+        look.id,
+      ),
+    [programmerLayers],
   )
 
   return {

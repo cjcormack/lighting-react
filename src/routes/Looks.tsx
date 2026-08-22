@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Layers, Loader2, Plus, TriangleAlert } from 'lucide-react'
+import { Circle, Layers, Loader2, Plus, TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import {
@@ -25,6 +25,7 @@ import { useFixtureListQuery } from '../store/fixtures'
 import { LookListRow } from '../components/looks/LookListRow'
 import { LookEditor } from '../components/looks/LookEditor'
 import { LookDetailSheet } from '../components/looks/LookDetailSheet'
+import { RecordLookSheet } from '../components/programmer/RecordLookSheet'
 import { CopyLookDialog } from '../components/looks/CopyLookDialog'
 import {
   LookFamilyFilterBar,
@@ -36,6 +37,8 @@ import { buildFixtureTypeHierarchy, resolveFixtureTypeLabel } from '../api/fixtu
 import type { FixtureTypeHierarchy } from '../api/fixtureTypeHierarchy'
 import type { LookInUseError, LookInput, LookSummary } from '../api/looksApi'
 import { parseFamilySlug, familySlug } from '../lib/attributeFamily'
+import { assertLookLoaded } from '../lib/lookSaveGuard'
+import { useProgrammerSummaryQuery } from '../store/programmer'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { formatError } from '../lib/formatError'
 
@@ -116,11 +119,28 @@ export function ProjectLooks() {
    * confirm step for the same reason, so this is the row menu's.
    */
   const [confirmDelete, setConfirmDelete] = useState<LookSummary | null>(null)
+  /** Record-from-programmer, which is the only way to create a **bound** look. */
+  const [recordOpen, setRecordOpen] = useState(false)
 
   const isCurrentProject = currentProject?.id === projectIdNum
 
+  // Gates the Record button. The programmer is machine-wide rather than per-project, so this is
+  // read here as well as in its own toolbar — recording an empty programmer would make a look with
+  // no rows, which reads as a broken save rather than as "there was nothing to record".
+  const { data: programmerSummary } = useProgrammerSummaryQuery()
+  const programmerEntryCount = programmerSummary?.entryCount ?? 0
+
   // The editor takes full details (rows, effects, colour list), which the list does not carry.
-  const { data: editingLook } = useLookQuery(
+  //
+  // `currentData`, **not** `data`. RTK Query's `data` falls back to the previous arg's result while
+  // a new one is in flight, and `isLoading` is false whenever it does — so editing Look A, closing,
+  // then opening Look B would hand the editor A's name and rows under B's id, with neither the
+  // loading gate nor `assertLookLoaded` able to see it, and Update would write A's rows into B.
+  // `currentData` is this arg's own data or nothing at all.
+  const {
+    currentData: editingLook,
+    isError: editingLookFailed,
+  } = useLookQuery(
     { projectId: projectIdNum, lookId: editingLookId ?? 0 },
     { skip: editingLookId == null },
   )
@@ -264,13 +284,9 @@ export function ProjectLooks() {
 
   const handleSave = async (input: LookInput) => {
     if (editingLookId != null) {
-      // The editor seeds itself from `editingLook`, so until that detail lands it is showing an
-      // *empty* draft of an existing Look — and `input.rows` would then be `[]`, which a PUT reads
-      // as "clear them", out from under every cue resolving through this Look. Throwing keeps the
-      // sheet open and puts the reason in its inline alert.
-      if (editingLook == null) {
-        throw new Error("This look hasn't finished loading yet — try again in a moment.")
-      }
+      // Backstop behind the editor's own `isLoading` gate: a save against a Look whose rows this
+      // client has never seen would clear them. See `assertLookLoaded`.
+      assertLookLoaded(editingLook, { failed: editingLookFailed })
       await saveLook({ projectId: projectIdNum, lookId: editingLookId, ...input }).unwrap()
     } else {
       await createLook({ projectId: projectIdNum, ...input }).unwrap()
@@ -357,13 +373,35 @@ export function ProjectLooks() {
           <div className="space-y-4">
             <LookSection
               title="Recorded looks"
-              hint="These name their own fixtures. Include one to stage its values and busk from them — writing edits back arrives with the record rewrite."
+              hint="These name their own fixtures. Include one to stage its values, busk, and Update to write your changes back."
               looks={recorded}
               render={rowFor}
               emptyHint={
                 isCurrentProject
-                  ? 'Recording a look from the programmer arrives with the programmer rewrite.'
+                  ? 'None yet. Busk a state in the programmer, then Record it here.'
                   : undefined
+              }
+              action={
+                // `undefined`, not `&&`: a `false` here is not `== null`, so `LookSection`'s
+                // "nothing to show" early return would stop firing and another project's empty
+                // Recorded section would render as a header over a blank line.
+                isCurrentProject ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 gap-1.5"
+                    disabled={programmerEntryCount === 0}
+                    title={
+                      programmerEntryCount === 0
+                        ? 'The programmer is empty — busk a state first'
+                        : 'Write the programmer into a look'
+                    }
+                    onClick={() => setRecordOpen(true)}
+                  >
+                    <Circle className="size-3.5" />
+                    Record
+                  </Button>
+                ) : undefined
               }
             />
             <LookSection
@@ -389,6 +427,13 @@ export function ProjectLooks() {
           if (!next) setEditingLookId(null)
         }}
         look={editingLookId == null ? null : (editingLook ?? null)}
+        // Only ever true for an *existing* Look: a create draft has no detail to wait for, and
+        // gating on the query alone would leave New Look permanently loading. Derived from
+        // "no detail yet" rather than from `isFetching`, so there is no frame between setting the
+        // id and the request starting in which the form is offered as an empty draft. A failed
+        // fetch drops out of it deliberately: `assertLookLoaded` then explains itself inline,
+        // which a permanent spinner could not.
+        isLoading={editingLookId != null && editingLook == null && !editingLookFailed}
         onSave={handleSave}
         isSaving={isCreating || isSaving}
         onDelete={
@@ -497,6 +542,12 @@ export function ProjectLooks() {
           lookName={copyingLook.name}
         />
       )}
+
+      <RecordLookSheet
+        open={recordOpen}
+        onOpenChange={setRecordOpen}
+        projectId={projectIdNum}
+      />
     </div>
   )
 }
@@ -507,22 +558,27 @@ function LookSection({
   looks,
   render,
   emptyHint,
+  action,
 }: {
   title: string
   hint: string
   looks: LookSummary[]
   render: (look: LookSummary) => React.ReactNode
   emptyHint?: string
+  action?: React.ReactNode
 }) {
-  if (looks.length === 0 && emptyHint == null) return null
+  if (looks.length === 0 && emptyHint == null && action == null) return null
   return (
     <div className="space-y-1">
-      <div>
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          {title}
-          {looks.length > 0 && <span className="ml-1 font-normal">({looks.length})</span>}
-        </p>
-        <p className="text-[11px] text-muted-foreground">{hint}</p>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {title}
+            {looks.length > 0 && <span className="ml-1 font-normal">({looks.length})</span>}
+          </p>
+          <p className="text-[11px] text-muted-foreground">{hint}</p>
+        </div>
+        {action}
       </div>
       {looks.length === 0 ? (
         <p className="py-2 text-[11px] text-muted-foreground">{emptyHint}</p>

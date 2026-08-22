@@ -1,4 +1,5 @@
 import { parsePaletteRefUuid } from '../lib/programmerValue'
+import type { CueTarget } from './cuesApi'
 import type { InternalApiConnection } from './internalApi'
 import type { Subscription } from './subscription'
 
@@ -13,8 +14,10 @@ import type { Subscription } from './subscription'
  *    `blindState` / `state` come back only to the connection that asked. Writes made by
  *    MIDI surfaces, locate, preset toggles or another browser tab never produce a reply
  *    we can see.
- * 2. **`provenanceState` is the only broadcast**, and it fires on every layer event —
- *    including every programmer mutation, whoever made it.
+ * 2. **Three frames are broadcast**: `provenanceState`, which fires on every layer event
+ *    including every programmer mutation whoever made it, plus `programmer.includeTarget`
+ *    and `programmer.layerState`. All three are shared state — the programmer is one
+ *    object, so a second tab must not show a stale include target or a stale layer order.
  *
  * So provenance doubles as the invalidation signal: on receipt we debounce briefly and
  * re-request `programmer.state`. Own-connection replies are additionally applied straight
@@ -98,6 +101,46 @@ export interface ProvenanceEntry {
   cueId?: number
   cueStackId?: number
   effectId?: number
+  /**
+   * The Look layer that won this key, when one did.
+   *
+   * Deliberately **not** a new `source` value on the backend either, so every existing read of
+   * `source` is untouched: this is the extra sentence, not a different answer. It is what lets the
+   * sheet answer "why is this fixture this colour?" with *Warm Wash* rather than *a cue*, and it is
+   * present for a cue's layers as well as the programmer's.
+   */
+  layerId?: number
+  lookId?: number
+  lookName?: string
+}
+
+/**
+ * One layer of the programmer's Look stack, in `sortOrder` — most significant last.
+ *
+ * The programmer holds the same structure a cue does (see `CueLayer`), which is what makes
+ * `LookStack` render both. It has no timing fields: a programmer layer fires now, by definition.
+ */
+export interface ProgrammerLayer {
+  /** The stack's own id for this layer. Every mutation op addresses a layer by it. */
+  layerId: number
+  lookId: number
+  lookName: string
+  sortOrder: number
+  enabled: boolean
+  targets: CueTarget[]
+  propertyMask?: string | null
+  blendMode: string
+  amount: number
+  stomp: boolean
+  speedMasterUuid?: string | null
+  rateSpeedMasterUuid?: string | null
+  /** Set when Include minted this from a cue's layer — Update's diff key. */
+  sourceCueLayerId?: number | null
+  /**
+   * The Look editor's live preview. Always last, never recorded, and not reorderable — the server
+   * renumbers it to the tail regardless of what the client asks for.
+   */
+  isPreview?: boolean
 }
 
 /**
@@ -124,9 +167,9 @@ export type IncludedTarget =
     }
   | {
       /**
-       * A Look was included. Update is **not** available for this target: the write-back path still
-       * targets the retired palette tables, so the toolbar disables it rather than write rows no
-       * consumer reads.
+       * A Look was included, and Update writes back into it — `updateIncludedLook` MERGEs whatever
+       * changed since Include, leaving the Look's untouched rows alone. It was one-way until the
+       * record rewrite landed, because the only write-back path led into the retired palette tables.
        */
       kind: 'LOOK'
       lookId: number
@@ -142,6 +185,8 @@ export interface ProgrammerState {
   /** Keyed by [programmerKey]. A key absent here is baseline-owned. */
   provenance: ReadonlyMap<string, ProvenanceEntry>
   lastIncluded: IncludedTarget | null
+  /** The Look-layer stack, most significant last. */
+  layers: readonly ProgrammerLayer[]
 }
 
 /** Per-cell lookup result: what the programmer and the cascade say about one property. */
@@ -210,6 +255,51 @@ interface ProgrammerStateOutgoing {
   type: 'programmer.state'
 }
 
+/**
+ * Put a Look on the stack as a layer, on top.
+ *
+ * No uuid: the backend resolves the Look itself from [lookId]. Unlike the retired preset toggle
+ * this carries the whole Look, so a **bound** row lands on the fixture it names — a layer has
+ * somewhere to put a target set, which is what the old path lacked.
+ */
+interface ProgrammerAddLayerOutgoing {
+  type: 'programmer.addLayer'
+  lookId: number
+  targets: CueTarget[]
+  propertyMask?: string
+  blendMode?: string
+  amount?: number
+  speedMasterUuid?: string
+  rateSpeedMasterUuid?: string
+  fadeMs?: number
+}
+
+interface ProgrammerRemoveLayerOutgoing {
+  type: 'programmer.removeLayer'
+  layerId: number
+  fadeMs?: number
+}
+
+/** Move a layer to [toIndex] among the non-preview layers. The server renumbers the whole list. */
+interface ProgrammerMoveLayerOutgoing {
+  type: 'programmer.moveLayer'
+  layerId: number
+  toIndex: number
+}
+
+/** Change one layer's fields. An omitted field means "leave alone", not "clear". */
+interface ProgrammerPatchLayerOutgoing {
+  type: 'programmer.patchLayer'
+  layerId: number
+  enabled?: boolean
+  amount?: number
+  propertyMask?: string
+  blendMode?: string
+  targets?: CueTarget[]
+  stomp?: boolean
+  fadeMs?: number
+}
+
 export type ProgrammerOutgoingMessage =
   | ProgrammerSetOutgoing
   | ProgrammerSetColourOutgoing
@@ -218,6 +308,10 @@ export type ProgrammerOutgoingMessage =
   | ProgrammerClearAllOutgoing
   | ProgrammerSetBlindOutgoing
   | ProgrammerStateOutgoing
+  | ProgrammerAddLayerOutgoing
+  | ProgrammerRemoveLayerOutgoing
+  | ProgrammerMoveLayerOutgoing
+  | ProgrammerPatchLayerOutgoing
 
 // ── Incoming ────────────────────────────────────────────────────────────────
 
@@ -227,11 +321,22 @@ interface ProgrammerStateIncoming {
   entries: ProgrammerEntry[]
   channels: ProgrammerChannelEntry[]
   lastIncluded?: IncludedTarget | null
+  /**
+   * Additive and defaulted on the wire, so a fresh connection gets the stack without a second
+   * round trip. The layers' *values* already arrive through [entries], attributed to the `layers`
+   * owner; this is the structure behind them.
+   */
+  layers?: ProgrammerLayer[]
 }
 
 interface ProgrammerIncludeTargetIncoming {
   type: 'programmer.includeTarget'
   target?: IncludedTarget | null
+}
+
+interface ProgrammerLayerStateIncoming {
+  type: 'programmer.layerState'
+  layers: ProgrammerLayer[]
 }
 
 interface ProgrammerEntryChangedIncoming {
@@ -274,6 +379,7 @@ interface ProvenanceStateIncoming {
 type ProgrammerIncomingMessage =
   | ProgrammerStateIncoming
   | ProgrammerIncludeTargetIncoming
+  | ProgrammerLayerStateIncoming
   | ProgrammerEntryChangedIncoming
   | ProgrammerEntryClearedIncoming
   | ProgrammerClearedIncoming
@@ -292,6 +398,8 @@ export interface ProgrammerApi {
   entryCount(): number
   /** What Include last loaded, or null. Drives the Update button's label and target. */
   lastIncluded(): IncludedTarget | null
+  /** The Look-layer stack, most significant last. */
+  layers(): readonly ProgrammerLayer[]
 
   set(
     targetType: ProgrammerTargetType,
@@ -333,6 +441,32 @@ export interface ProgrammerApi {
   setBlind(blind: boolean, fadeMs?: number): void
   requestState(): void
 
+  addLayer(input: {
+    lookId: number
+    targets?: CueTarget[]
+    propertyMask?: string
+    blendMode?: string
+    amount?: number
+    speedMasterUuid?: string
+    rateSpeedMasterUuid?: string
+    fadeMs?: number
+  }): void
+  removeLayer(layerId: number, fadeMs?: number): void
+  /** [toIndex] counts non-preview layers, which is what the server's own move does. */
+  moveLayer(layerId: number, toIndex: number): void
+  patchLayer(
+    layerId: number,
+    patch: {
+      enabled?: boolean
+      amount?: number
+      propertyMask?: string
+      blendMode?: string
+      targets?: CueTarget[]
+      stomp?: boolean
+      fadeMs?: number
+    },
+  ): void
+
   /** Fires on any change to the programmer or provenance. Drives coarse consumers. */
   subscribe(fn: (state: ProgrammerState) => void): Subscription
   /**
@@ -369,10 +503,11 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
   let channels: ProgrammerChannelEntry[] = []
   let provenance = new Map<string, ProvenanceEntry>()
   let lastIncluded: IncludedTarget | null = null
+  let layers: readonly ProgrammerLayer[] = []
 
-  let snapshot: ProgrammerState = { blind, entries, channels, provenance, lastIncluded }
+  let snapshot: ProgrammerState = { blind, entries, channels, provenance, lastIncluded, layers }
   const rebuildSnapshot = () => {
-    snapshot = { blind, entries, channels, provenance, lastIncluded }
+    snapshot = { blind, entries, channels, provenance, lastIncluded, layers }
   }
 
   let nextSubscriptionId = 1
@@ -447,8 +582,18 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
       e.owners,
     ])
 
+  // The layer fields belong here: a key can move from "the cue" to "the cue's Warm Wash layer"
+  // with `source` unchanged, and leaving them out would leave the cell showing the old answer.
   const provenanceSignature = (p: ProvenanceEntry) =>
-    JSON.stringify([p.source, p.cueId ?? null, p.cueStackId ?? null, p.effectId ?? null])
+    JSON.stringify([
+      p.source,
+      p.cueId ?? null,
+      p.cueStackId ?? null,
+      p.effectId ?? null,
+      p.layerId ?? null,
+      p.lookId ?? null,
+      p.lookName ?? null,
+    ])
 
   // Bare `setTimeout`, not `window.setTimeout`: this module is exercised by unit tests that
   // run without a DOM, and nothing here needs the window-typed handle.
@@ -474,6 +619,9 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     // *not* part of `entrySignature` — including it there would wake every cell whenever the
     // operator included a different cue.
     lastIncluded = message.lastIncluded ?? null
+    // Same argument for the layer stack: it is per-cue-composition, not per-cell. An absent
+    // `layers` is an older server, so leave what we have rather than blanking the pane.
+    if (message.layers) layers = message.layers
     notifyKeys(touched)
     notifyState()
   }
@@ -553,6 +701,18 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
         lastIncluded = message.target ?? null
         notifyState()
         break
+      case 'programmer.layerState':
+        // Broadcast for the same reason, and handled the same way: a second tab reordering the
+        // stack must not leave this one showing a stale order.
+        //
+        // `notifyState` only — the stack is not per-cell state, and waking every cell on a
+        // reorder is exactly what the key/state split exists to avoid. Deliberately no
+        // `scheduleStateRefetch()` either: every layer mutation also emits `provenanceState`,
+        // which already schedules the value re-read. A second call here would be redundant
+        // rather than wrong (the timer guard swallows it), but it would read as the mechanism.
+        layers = message.layers
+        notifyState()
+        break
       case 'provenanceState':
         applyProvenance(message)
         break
@@ -615,6 +775,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     isBlind: () => blind,
     entryCount: () => entries.size,
     lastIncluded: () => lastIncluded,
+    layers: () => layers,
 
     set(targetType, targetKey, propertyName, value, fadeMs, sourceGroup) {
       send({
@@ -652,6 +813,29 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     },
     requestState() {
       send({ type: 'programmer.state' })
+    },
+
+    addLayer({ lookId, targets, propertyMask, blendMode, amount, speedMasterUuid, rateSpeedMasterUuid, fadeMs }) {
+      send({
+        type: 'programmer.addLayer',
+        lookId,
+        targets: targets ?? [],
+        propertyMask,
+        blendMode,
+        amount,
+        speedMasterUuid,
+        rateSpeedMasterUuid,
+        fadeMs,
+      })
+    },
+    removeLayer(layerId, fadeMs) {
+      send({ type: 'programmer.removeLayer', layerId, fadeMs })
+    },
+    moveLayer(layerId, toIndex) {
+      send({ type: 'programmer.moveLayer', layerId, toIndex })
+    },
+    patchLayer(layerId, patch) {
+      send({ type: 'programmer.patchLayer', layerId, ...patch })
     },
 
     subscribe(fn) {

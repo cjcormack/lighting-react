@@ -25,6 +25,7 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   'exportProject', // src/ExportProjectDialog.tsx
   'deleteProject', // src/routes/Projects.tsx
   'recordProgrammer', // src/components/programmer/RecordSheet.tsx
+  'recordLook', // src/components/programmer/RecordLookSheet.tsx
   'includeIntoProgrammer', // src/components/programmer/IncludeSheet.tsx
   'updateProgrammer', // src/components/programmer/UpdateDialog.tsx
   // The LOOK_IN_USE 409 is an ordinary step in the delete flow, not a failure: it opens the

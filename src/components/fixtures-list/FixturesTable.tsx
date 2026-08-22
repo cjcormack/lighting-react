@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { ChevronDown, ChevronRight, Info, Link2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Info, Layers, Link2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -344,6 +344,7 @@ const RowView = React.memo(function RowView({
         }
         const owned = ownership[col]
         const paletteRef = owned?.paletteRef
+        const layer = owned?.layer
         return (
           <div
             key={col}
@@ -364,6 +365,17 @@ const RowView = React.memo(function RowView({
               <Link2
                 className={`pointer-events-none absolute right-0.5 top-0.5 size-2.5 ${
                   paletteRef.resolved ? 'text-muted-foreground' : 'text-destructive'
+                }`}
+              />
+            )}
+            {/* The winning Look layer, in the *opposite* corner from the reference marker: a cell
+                can be both a reference the operator typed and a layer's output, and stacking the
+                two icons would make each one unreadable. Title-only detail — the hover text names
+                the look, and a name would not fit here at this density. */}
+            {layer && (
+              <Layers
+                className={`pointer-events-none absolute bottom-0.5 right-0.5 size-2.5 ${
+                  layer.mixed ? 'text-muted-foreground/50' : 'text-muted-foreground'
                 }`}
               />
             )}

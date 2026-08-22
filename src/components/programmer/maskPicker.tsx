@@ -19,10 +19,25 @@ export const MASK_GROUPS: { value: PropertyMaskGroup; label: string }[] = [
 export interface MaskPickerProps {
   value: PropertyMaskGroup[]
   onChange: (next: PropertyMaskGroup[]) => void
+  /**
+   * How many values the **whole programmer** holds per family, when the caller can say.
+   *
+   * Optional because only `RecordLookSheet` needs it: a cue or palette record had its attribute
+   * implied by its destination, but a Look has no type, so an unmasked record of a busked state
+   * quietly captures position and beam alongside the colour that was meant. Showing the counts is
+   * how that becomes visible before it happens rather than after.
+   *
+   * **Not a count of what the record will write**, and the label below says so. They cannot be:
+   * the selection narrows the write, and a group-addressed entry's expansion into fixtures is
+   * server-side, so a client-side filter would silently drop those entries rather than narrow
+   * honestly. Which *families* are in play is the signal that matters here, and it survives the
+   * narrowing; the magnitude does not.
+   */
+  counts?: Partial<Record<PropertyMaskGroup, number>>
 }
 
 /** An empty selection means "everything" — the same thing the server does with an empty mask. */
-export function MaskPicker({ value, onChange }: MaskPickerProps) {
+export function MaskPicker({ value, onChange, counts }: MaskPickerProps) {
   const toggle = (group: PropertyMaskGroup) => {
     onChange(value.includes(group) ? value.filter((g) => g !== group) : [...value, group])
   }
@@ -40,11 +55,19 @@ export function MaskPicker({ value, onChange }: MaskPickerProps) {
               className="size-4"
             />
             {group.label}
+            {counts && (
+              // Shown as 0 rather than hidden: "this family has nothing in it" is the useful
+              // half of the answer, and an absent number reads as "not counted".
+              <span className="tabular-nums text-xs text-muted-foreground">
+                ({counts[group.value] ?? 0})
+              </span>
+            )}
           </label>
         ))}
       </div>
       <p className="text-xs text-muted-foreground">
         {value.length === 0 ? 'All attributes.' : `Only ${value.length} of 4 attribute groups.`}
+        {counts && ' Counts are what the programmer holds, before the selection narrows it.'}
       </p>
     </div>
   )
