@@ -84,6 +84,10 @@ export function ProgrammerLookStack() {
         // as "no mask". Sending `undefined` would make clearing a mask a silent no-op.
         if (layer) programmerPatchLayer(layer.layerId, { propertyMask: propertyMask ?? '' })
       },
+      onSetStomp: (index, stomp) => {
+        const layer = layers[index]
+        if (layer) programmerPatchLayer(layer.layerId, { stomp })
+      },
     }),
     [layers],
   )

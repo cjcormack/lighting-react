@@ -58,6 +58,7 @@ function handlers() {
     onSetAmount: vi.fn(),
     onSetBlendMode: vi.fn(),
     onSetPropertyMask: vi.fn(),
+    onSetStomp: vi.fn(),
   }
 }
 
@@ -179,14 +180,50 @@ describe('LookStack', () => {
     expect(h.onSetAmount).not.toHaveBeenCalled()
   })
 
-  it('reads a layer’s mask and blend off the trigger, and keeps STOMP as a badge', () => {
+  it('reads a layer’s mask and blend off the trigger', () => {
     // The mask and blend became editable in session 4, so the trigger *is* the read-out — an
-    // operator who cannot see the mask cannot explain why a layer only moves colour. STOMP stays a
-    // read-only badge because nothing reads the field yet; see `LayerHandlers`.
-    renderStack([layer({ propertyMask: 'COLOUR', blendMode: 'MAX', stomp: true })])
+    // operator who cannot see the mask cannot explain why a layer only moves colour.
+    renderStack([layer({ propertyMask: 'COLOUR', blendMode: 'MAX' })])
     expect(screen.getByText('[Colour]')).toBeInTheDocument()
     expect(screen.getByText('MAX')).toBeInTheDocument()
+  })
+
+  it('toggles stomp by index, and renders the control in both states', () => {
+    // Unlike the mask and blend badges beside it, the stomp control has to render when the flag is
+    // *off* too — otherwise there is no way to switch it on. `aria-pressed` is the read-out.
+    const { handlers: off } = renderStack([layer({ stomp: false })])
+    const on = screen.getByRole('button', { name: 'Stomp lower layers' })
+    expect(on).toHaveAttribute('aria-pressed', 'false')
+    fireEvent.click(on)
+    expect(off.onSetStomp).toHaveBeenCalledWith(0, true)
+
+    cleanup()
+
+    const { handlers: h } = renderStack([layer({ stomp: true })])
+    const stomping = screen.getByRole('button', { name: 'Stop stomping lower layers' })
+    expect(stomping).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(stomping)
+    expect(h.onSetStomp).toHaveBeenCalledWith(0, false)
+  })
+
+  it('keeps STOMP a read-only badge on a read-only row', () => {
+    // The preview layer and a cue's detail sheet get facts, not controls — a toggle there would
+    // write to a layer the operator does not own.
+    render(
+      <LayerRow
+        layer={layer({ stomp: true })}
+        index={0}
+        look={LOOKS.get(7)}
+        looksLoaded
+        // Handed the full handler set on purpose: what suppresses the toggle has to be `readOnly`
+        // itself, not the absence of something to call.
+        handlers={handlers()}
+        sortable={false}
+        readOnly
+      />,
+    )
     expect(screen.getByText('STOMP')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /stomp/i })).not.toBeInTheDocument()
   })
 
   it('reports a mask change by index, normalising all-four to no mask', async () => {

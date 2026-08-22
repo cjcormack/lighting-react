@@ -10,7 +10,7 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Ban, Eye, GripVertical, Layers } from 'lucide-react'
+import { Ban, Eye, Footprints, GripVertical, Layers } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -60,16 +60,19 @@ export interface LookStackLayer {
 }
 
 /**
- * The layer mutations, bundled so a consumer passes one prop rather than six.
+ * The layer mutations, bundled so a consumer passes one prop rather than seven.
  *
  * **Index-based on purpose**, even though the programmer's ops address a layer by `layerId`: the
  * rows render a list and the operator acts on a position in it. Translating index → id is the
  * consumer's job, and it is the consumer that knows whether its list was filtered.
  *
- * `onSetStomp` is deliberately absent. The wire carries `stomp` and has since session 3a, but
- * nothing *reads* it — within-cue stomp needs an `FxInstance` layer id, a suppression channel out of
- * the cook step and per-tick suppression at four spawn sites, none of which exist. A toggle here
- * would write a field the engine ignores, so the badge stays read-only until the engine honours it.
+ * `onSetStomp` is the escape hatch for the one thing layer order cannot express: effects are
+ * Layer 3 and values are Layer 4, so a lower layer's colour effect beats a higher layer's static
+ * colour whatever the order says. Setting it makes this layer switch off the layers *below* it on
+ * every property it asserts — coarse on purpose, and suppression rather than removal, so clearing
+ * it brings those effects back with their phase intact. It was read-only until the engine honoured
+ * the field; both halves landed together, because a toggle writing a field the engine ignores is
+ * worse than no toggle.
  */
 export interface LayerHandlers {
   onRemove: (index: number) => void
@@ -78,6 +81,7 @@ export interface LayerHandlers {
   onSetAmount: (index: number, amount: number) => void
   onSetBlendMode: (index: number, blendMode: string) => void
   onSetPropertyMask: (index: number, propertyMask: string | null) => void
+  onSetStomp: (index: number, stomp: boolean) => void
 }
 
 interface LookStackProps<T extends LookStackLayer> {
@@ -114,8 +118,10 @@ interface LookStackProps<T extends LookStackLayer> {
  * That sharing is the point rather than a saving: a cue *is* a saved programmer stack, so a layer
  * list that looked different in the two places would be describing one structure twice.
  *
- * Editable here: order, enabled, amount, blend mode and property mask. `stomp` still renders
- * read-only — see [LayerHandlers] for why a toggle would be a lie.
+ * Editable here: order, enabled, amount, blend mode, property mask and stomp. A read-only row
+ * (the Look editor's live preview, a cue's detail sheet) drops the amount field, the enable toggle
+ * and the remove button, and redraws mask, blend and stomp as badges — see [LayerHandlers] for what
+ * stomp means.
  *
  * Blend and mask sit behind a per-row popover rather than inline. The row is a `text-xs` flex line of
  * `size-6` controls; an `h-8` select plus four checkboxes would not fit beside them, and a layer's
@@ -283,11 +289,52 @@ export function LayerRow({
             />
           )}
 
-          {layer.stomp && (
-            <Badge variant="outline" className="shrink-0 px-1.5 py-0 text-[10px]" title="Stomps other effects">
-              STOMP
-            </Badge>
-          )}
+          {/* A badge when the row can't be edited, a toggle when it can — and the toggle has to
+              render in both states, unlike the mask and blend badges beside it, or there would be
+              no way to switch stomp *on*. */}
+          {readOnly
+            ? layer.stomp && (
+                <Badge
+                  variant="outline"
+                  className="shrink-0 px-1.5 py-0 text-[10px]"
+                  title="Switches off the effects of every layer below this one"
+                >
+                  STOMP
+                </Badge>
+              )
+            : (
+                <Button
+                  type="button"
+                  variant={layer.stomp ? 'secondary' : 'ghost'}
+                  size="icon"
+                  className={cn(
+                    'size-6 shrink-0',
+                    layer.stomp ? 'text-foreground' : 'text-muted-foreground',
+                  )}
+                  aria-label={layer.stomp ? 'Stop stomping lower layers' : 'Stomp lower layers'}
+                  aria-pressed={layer.stomp === true}
+                  // Nothing sits below the bottom layer, so its stomp suppresses nothing — the
+                  // server's suppression is built from the layers *strictly* below the stomper, and
+                  // at rank 0 that set is empty. Said in the tooltip rather than by disabling the
+                  // control: a layer that was stomping and is then dragged to the bottom must still
+                  // be clearable, and the flag becomes live again the moment it is reordered.
+                  title={
+                    index === 0
+                      ? 'Stomp lower layers — no layer is below this one, so it suppresses nothing until this layer is moved up the stack'
+                      : layer.stomp
+                        ? 'Stomping: the effects of every layer below this one are switched off on the properties it sets'
+                        : 'Stomp lower layers — switches off their effects on the properties this layer sets. Use it when an effect below is fighting a value here.'
+                  }
+                  onClick={() => handlers?.onSetStomp(index, !layer.stomp)}
+                >
+                  {/* Not `Zap`, which already means *script hooks* in `CuePropsPane`,
+                      `CueCardEditor` and `CueDetailContent` — the same cue editor that now draws one
+                      of these per layer row, so it would be one glyph for two unrelated things on
+                      one screen. `Footprints` is the metaphor the feature is named after and is
+                      unused elsewhere. */}
+                  <Footprints className="size-3.5" />
+                </Button>
+              )}
 
           {showTargets && (
             <span className="flex min-w-0 flex-wrap items-center gap-1">

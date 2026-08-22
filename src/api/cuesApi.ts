@@ -31,11 +31,17 @@ export interface CueLayer {
    * COLOUR-masked layer rather than a separate feature.
    */
   propertyMask?: string | null
-  /** `OVERRIDE` | `MAX` | `MIN` | `MULTIPLY` | `ADDITIVE`. Editing this is a later session. */
+  /** `OVERRIDE` | `MAX` | `MIN` | `MULTIPLY` | `ADDITIVE`. */
   blendMode?: string
   /** Mix of this layer over what has accumulated beneath it, in [0, 1]. */
   amount?: number
-  /** Within-cue stomp. Editing this is a later session. */
+  /**
+   * Switch off the effects of every layer *below* this one, on every property this layer asserts.
+   *
+   * The escape hatch for the one thing layer order cannot express: effects are Layer 3 and values
+   * Layer 4, so a lower layer's colour effect beats a higher layer's static colour whatever the
+   * order says. Suppression rather than removal — clearing it brings those effects back mid-phase.
+   */
   stomp?: boolean
   /** Per-layer speed-master override (null → each Look effect's own → master 1). */
   speedMasterUuid?: string | null

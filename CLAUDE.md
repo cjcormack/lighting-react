@@ -221,6 +221,16 @@ be surprised by, so `LayersPane` says it in the section body rather than leaving
 A layer's `sortOrder` is authoritative, not its array position — `reorderCueLayers` in
 `lib/cueUtils.ts` renumbers the whole list on every drag for that reason.
 
+**Layer order does not govern the value/effect boundary**, and per-layer `stomp` is the escape
+hatch. Effects are Layer 3 and values Layer 4, so a lower layer's colour *effect* beats a higher
+layer's static colour whatever the order says; `stomp` on the higher layer switches off the effects
+of every layer below it, on every property it asserts. It is **suppression, not removal** — the
+instance keeps running, so clearing the stomp brings it back mid-phase — and it applies to the
+programmer stack as well as to a cue. `LookStack`'s `onSetStomp` is the toggle; the badge is what a
+read-only row draws instead. Backend contract in `lighting7/docs/lighting-composition-model.md`
+§Stomp, which is also where the *other* stomp lives — the cue-level, cross-cue, removing one. Don't
+conflate them.
+
 `buildCueInput` rebuilds `layers` **field by field**, and its comment says why. A field
 missing from that rebuild is dropped on every inline cue edit; `cueUtils.test.ts` pins all
 thirteen individually rather than by deep-equal.

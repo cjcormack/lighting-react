@@ -83,6 +83,17 @@ describe('ProgrammerLookStack', () => {
     expect(mocks.removeLayer).toHaveBeenCalledWith(40)
   })
 
+  it('toggles stomp against the layer id', () => {
+    // Stomp is the programmer's escape hatch from the Layer 3/4 boundary: a busking effect below
+    // fighting a value a Look above sets. It goes through `patchLayer` like every other field —
+    // deliberately *not* through the pads' `looks/{id}/toggle`, which owns add/remove only.
+    mocks.layers = [layer({ layerId: 40 }), layer({ layerId: 12, lookId: 8, lookName: 'Slow Pulse' })]
+    render(<ProgrammerLookStack />)
+
+    fireEvent.click(screen.getAllByLabelText('Stomp lower layers')[1])
+    expect(mocks.patchLayer).toHaveBeenCalledWith(12, { stomp: true })
+  })
+
   it('commits an amount against the layer id', () => {
     mocks.layers = [layer({ layerId: 40, amount: 1 })]
     render(<ProgrammerLookStack />)

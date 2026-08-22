@@ -156,6 +156,16 @@ describe('LayersPane layer list', () => {
     expect(patchCue.mock.calls[0][0].layers[0].enabled).toBe(true)
   })
 
+  it('toggling stomp PATCHes the whole array with that one flag flipped', () => {
+    renderPane([layer(), layer({ lookId: 8, lookName: 'Slow Pulse', sortOrder: 1 })])
+    fireEvent.click(screen.getAllByLabelText('Stomp lower layers')[1])
+
+    const payload = patchCue.mock.calls[0][0]
+    expect(payload.layers).toHaveLength(2)
+    expect(payload.layers[0].stomp).toBe(false)
+    expect(payload.layers[1].stomp).toBe(true)
+  })
+
   it('strips the read-only look name from every PATCHed layer', () => {
     // `lookName` is populated server-side on read and ignored on write. Echoing it back is the
     // same class of mistake as sending `presetName` was, and `buildCueInput` is what prevents it.

@@ -136,6 +136,12 @@ export function LayersPane({ cue, projectId, mode, targets }: LayersPaneProps) {
     )
   }
 
+  const setLayerStomp = (index: number, stomp: boolean) => {
+    patchLayers(
+      buildCueInput(cue).layers.map((layer, i) => (i === index ? { ...layer, stomp } : layer)),
+    )
+  }
+
   const layerHandlers: LayerHandlers = {
     onRemove: removeLayer,
     onMove: moveLayer,
@@ -143,6 +149,7 @@ export function LayersPane({ cue, projectId, mode, targets }: LayersPaneProps) {
     onSetAmount: setLayerAmount,
     onSetBlendMode: setLayerBlendMode,
     onSetPropertyMask: setLayerPropertyMask,
+    onSetStomp: setLayerStomp,
   }
 
   const sheets = (
