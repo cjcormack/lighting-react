@@ -59,7 +59,14 @@ export function LookDetailSheet({
   onDuplicate,
 }: LookDetailSheetProps) {
   const lookId = look?.id ?? 0
-  const { data: detail, isFetching } = useLookQuery(
+  // `currentData`, **not** `data`. RTK Query's `data` falls back to the previous argument's result
+  // while a new one is in flight, so opening one Look after another would render the first one's
+  // rows under the second one's name — and the `isFetching && !detail` branch below, which was
+  // written on the assumption that `detail` is *this* Look's, would never fire. Nothing destructive
+  // (`save` sends only metadata, and reads the name from the summary), but this sheet exists to say
+  // what a Look contains. `currentData` is this argument's own data or nothing, which is what makes
+  // both the loading branch and the `?? look.…` summary fallbacks below do their job.
+  const { currentData: detail, isFetching } = useLookQuery(
     { projectId, lookId },
     { skip: !open || lookId === 0 },
   )
