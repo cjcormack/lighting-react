@@ -272,19 +272,10 @@ export interface UpdateResponse {
   warnings: string[]
 }
 
-/** `POST /programmer/make-hard` — stop the programmer's references tracking their palettes. */
-export interface MakeProgrammerHardRequest {
-  /** Restrict to these programmer targets. Omitted = every reference the programmer holds. */
-  targetKeys?: string[]
-  mask?: PropertyMaskGroup[]
-}
-
-export interface MakeProgrammerHardResponse {
-  /** References replaced by the literal they currently resolve to. */
-  converted: number
-  /** References left alone because they fell outside the scope or mask. */
-  skipped: number
-}
+// `POST /programmer/make-hard` and its request/response pair stood here. The route replaced the
+// programmer's `ref:` slots with the literals they resolved to; the grammar retired in session 4, so
+// there is no longer such a slot to harden. Detaching a *cue* from the library is
+// `POST /{projectId}/cues/{cueId}/flatten`.
 
 /** The 409 body both Record and Update use, so the caller can offer "do it anyway". */
 export interface ProgrammerConflict {
@@ -389,16 +380,6 @@ export const programmerOpsApi = restApi.injectEndpoints({
           : [],
     }),
 
-    /**
-     * Stop the programmer's references tracking their palettes.
-     *
-     * Nothing on stage moves — a hardened slot keeps the value it already resolved to — so this
-     * invalidates nothing. The refreshed entries arrive over the programmer WS channel, which the
-     * backend pokes with a provenance push precisely so a second tab's badges don't go stale.
-     */
-    makeProgrammerHard: build.mutation<MakeProgrammerHardResponse, MakeProgrammerHardRequest>({
-      query: (body) => ({ url: 'programmer/make-hard', method: 'POST', body }),
-    }),
 
   }),
   overrideExisting: false,
@@ -409,5 +390,4 @@ export const {
   useRecordLookMutation,
   useIncludeIntoProgrammerMutation,
   useUpdateProgrammerMutation,
-  useMakeProgrammerHardMutation,
 } = programmerOpsApi

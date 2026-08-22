@@ -96,9 +96,9 @@ describe('SpeedMasterDetailSheet', () => {
         error: 'in use',
         code: 'SPEED_MASTER_IN_USE',
         referenceCount: 3,
-        presetEffectCount: 1,
+        lookEffectCount: 1,
         cueAdHocEffectCount: 2,
-        cuePresetApplicationCount: 0,
+        cueLayerCount: 0,
         cueIds: [84, 91],
       },
     })
@@ -107,7 +107,7 @@ describe('SpeedMasterDetailSheet', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => expect(screen.getByText(/still point at this master/)).toBeInTheDocument())
-    expect(screen.getByText(/1 preset effect/)).toBeInTheDocument()
+    expect(screen.getByText(/1 look effect/)).toBeInTheDocument()
     expect(screen.getByText(/2 cue effect/)).toBeInTheDocument()
     expect(screen.getByText(/cues 84, 91/)).toBeInTheDocument()
 

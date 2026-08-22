@@ -1,4 +1,4 @@
-import { memo, type ComponentType } from 'react'
+import { memo, useMemo, type ComponentType } from 'react'
 import { Badge } from '@/components/ui/badge'
 import {
   Palette,
@@ -15,6 +15,7 @@ import { resolveColourToHex } from '@/components/fx/colourUtils'
 import { useEffectLibraryQuery } from '@/store/fixtureFx'
 import { useLookListQuery } from '@/store/looks'
 import { EffectSummary } from '@/components/fx/EffectSummary'
+import { LayerRow } from '@/components/looks/LookStack'
 import { TriggerSummary } from './TriggerSummary'
 import { TimingBadge } from './TimingBadge'
 import { fromCueAdHocEffect } from '@/components/fx/effectSummaryTypes'
@@ -54,9 +55,16 @@ interface CueDetailContentProps {
 }
 
 /**
- * Reusable read-only detail body for a cue. Renders transition, notes,
- * palette, presets, effects, and script hooks sections. Used both in the
- * CueDetailSheet (slide-over) and the inline detail panel in Run view.
+ * Reusable read-only detail body for a cue: transition, notes, palette, **layers**, ad-hoc effects
+ * and script hooks.
+ *
+ * **This is the cue read surface, all of it.** Four component trees reach it and none of them render
+ * cue content themselves: `RunCueCard` → `RunOutputPane` → here, and `RunMobileCueCard` and
+ * `PromptBookCueCard` → `CueCardBody` → here. Deepening a section here therefore lights up all four,
+ * which is why the plan's estimate of "four independent read renderers" turned out to be one file.
+ *
+ * The doc used to say "presets" and name a `CueDetailSheet` that no longer exists: presets became
+ * Looks applied through layers, and the sheet was folded into the Run card's inline panel.
  */
 export const CueDetailContent = memo(function CueDetailContent({
   cue,
@@ -68,6 +76,12 @@ export const CueDetailContent = memo(function CueDetailContent({
 
   const palette = cue?.palette ?? []
   const layers = cue?.layers ?? []
+  // Built once rather than a `.find` per layer: a cue with a dozen layers over a library of a
+  // hundred Looks was doing twelve hundred comparisons per render.
+  const looksById = useMemo(
+    () => new Map((looks ?? []).map((look) => [look.id, look])),
+    [looks],
+  )
   const adHocEffects = cue?.adHocEffects ?? []
   const triggers = cue?.triggers ?? []
 
@@ -106,11 +120,11 @@ export const CueDetailContent = memo(function CueDetailContent({
         </div>
       )}
 
-      {/* ── Colour List ── (the cue-scoped positional list FX params index as `P1`, not a
-          named Palette entity — see PalettePanel for why the word is qualified.) */}
+      {/* ── Palette ── (the cue-scoped positional list FX parameters index as `P1` — see
+          PalettePanel.) */}
       {palette.length > 0 && (
         <div className="space-y-1.5">
-          <SectionHeader icon={Palette} label="Colour List" count={palette.length} />
+          <SectionHeader icon={Palette} label="Palette" count={palette.length} />
           <div className="flex flex-wrap gap-1.5">
             {palette.map((raw, i) => {
               const hex = resolveColourToHex(raw)
@@ -128,68 +142,32 @@ export const CueDetailContent = memo(function CueDetailContent({
       )}
 
       {/* ── Layers ──
-          A read surface, and deliberately shallow: it names each layer in order with its targets
-          and timing, and does not expand the Look's own rows or effects. Rendering a full layer
-          stack here is the read-renderer pass, along with the Run and Prompt Book cards. */}
+          The same `LayerRow` the cue editor and the programmer draw, with `readOnly` and
+          `sortable={false}`. It used to be a hand-rolled shallow copy — ordinal, name, mask, amount,
+          off, targets, timing — which meant the read surface and the authoring surface drifted apart
+          the moment either grew a field. Sharing the row is the same argument `LookStack` makes for
+          serving both the cue editor and the programmer: a cue *is* a saved programmer stack, so a
+          layer that looked different here would be describing one structure twice.
+
+          This is the whole read surface: `RunCueCard` reaches it through `RunOutputPane`, and
+          `RunMobileCueCard` and `PromptBookCueCard` through `CueCardBody`. */}
       <div className="space-y-1.5">
         <SectionHeader icon={Layers} label="Layers" count={layers.length} />
         {layers.length === 0 ? (
           <p className="text-[11px] text-muted-foreground">None.</p>
         ) : (
-          layers.map((layer, index) => {
-            const look = looks?.find((l) => l.id === layer.lookId)
-            const enabledLayer = layer.enabled !== false
-            const amount = Math.round((layer.amount ?? 1) * 100)
-            return (
-              <div
-                key={`layer-${index}`}
-                className={`flex flex-wrap items-center gap-1.5 rounded border bg-card p-2 text-xs${
-                  enabledLayer ? '' : ' opacity-60'
-                }`}
-              >
-                <Badge variant="secondary" className="px-1.5 py-0 text-[10px] font-mono">
-                  {index + 1}
-                </Badge>
-                <span className="truncate font-medium">
-                  {layer.lookName ?? look?.name ?? 'Look'}
-                </span>
-                {layer.propertyMask && (
-                  <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
-                    [{layer.propertyMask}]
-                  </Badge>
-                )}
-                {amount !== 100 && (
-                  <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
-                    {amount}%
-                  </Badge>
-                )}
-                {!enabledLayer && (
-                  <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
-                    off
-                  </Badge>
-                )}
-                {layer.targets.length === 0 ? (
-                  <span className="text-[10px] text-muted-foreground">look&rsquo;s own targets</span>
-                ) : (
-                  layer.targets.map((t) => (
-                    <Badge
-                      key={`${t.type}:${t.key}`}
-                      variant="outline"
-                      className="px-1.5 py-0 text-[10px]"
-                    >
-                      {t.key}
-                    </Badge>
-                  ))
-                )}
-                <span className="flex-1" />
-                <TimingBadge
-                  delayMs={layer.delayMs}
-                  intervalMs={layer.intervalMs}
-                  randomWindowMs={layer.randomWindowMs}
-                />
-              </div>
-            )
-          })
+          layers.map((layer, index) => (
+            <LayerRow
+              key={`layer-${index}`}
+              layer={layer}
+              index={index}
+              look={looksById.get(layer.lookId)}
+              looksLoaded={looks != null}
+              sortable={false}
+              showTargets
+              readOnly
+            />
+          ))
         )}
       </div>
 

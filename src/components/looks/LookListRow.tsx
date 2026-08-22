@@ -77,14 +77,14 @@ export function LookListRow({
           </Badge>
         )}
 
-        {look.layerCount + look.refRowCount > 0 && (
+        {look.layerCount > 0 && (
           <Badge
             variant="outline"
             className="text-[10px] px-1.5 py-0 shrink-0 gap-1"
             title={describeUsage(look)}
           >
             <Clapperboard className="size-3" />
-            {look.layerCount + look.refRowCount}
+            {look.layerCount}
           </Badge>
         )}
 
@@ -159,16 +159,9 @@ function describeContents(look: LookSummary, fixtureTypeLabel?: string | null): 
 }
 
 /**
- * Layers and `ref:` rows are counted together in the badge but named apart here — they are two
- * different reference mechanisms, and only one of them has a future.
+ * Layers used to be counted here alongside `ref:` rows — two different reference mechanisms, named
+ * apart in the tooltip even though the badge summed them. Only layers remain.
  */
 function describeUsage(look: LookSummary): string {
-  const parts: string[] = []
-  if (look.layerCount > 0) {
-    parts.push(`${look.layerCount} cue ${look.layerCount === 1 ? 'layer' : 'layers'}`)
-  }
-  if (look.refRowCount > 0) {
-    parts.push(`${look.refRowCount} cue ${look.refRowCount === 1 ? 'row' : 'rows'} by reference`)
-  }
-  return `Used by ${parts.join(' and ')}`
+  return `Used by ${look.layerCount} cue ${look.layerCount === 1 ? 'layer' : 'layers'}`
 }

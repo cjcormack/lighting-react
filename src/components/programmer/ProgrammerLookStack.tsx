@@ -73,6 +73,17 @@ export function ProgrammerLookStack() {
         const layer = layers[index]
         if (layer) programmerPatchLayer(layer.layerId, { amount })
       },
+      onSetBlendMode: (index, blendMode) => {
+        const layer = layers[index]
+        if (layer) programmerPatchLayer(layer.layerId, { blendMode })
+      },
+      onSetPropertyMask: (index, propertyMask) => {
+        const layer = layers[index]
+        // `propertyMask` is `string | undefined` on the patch, and an omitted field means "leave
+        // alone" — so a null (unmasked) has to travel as the empty string, which the server reads
+        // as "no mask". Sending `undefined` would make clearing a mask a silent no-op.
+        if (layer) programmerPatchLayer(layer.layerId, { propertyMask: propertyMask ?? '' })
+      },
     }),
     [layers],
   )

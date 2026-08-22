@@ -94,11 +94,11 @@ export function CueStackForm({
             />
           </div>
 
-          {/* Colour List — the positional form, not a named Palette entity. */}
+          {/* The positional colour list — see PalettePanel. */}
           <div className="space-y-1.5">
-            <Label>Stack Colour List</Label>
+            <Label>Stack Palette</Label>
             <p className="text-xs text-muted-foreground">
-              Base colour list for cues in this stack. A cue’s own list overrides it when set.
+              Base palette for cues in this stack. A cue’s own palette overrides it when set.
             </p>
             <CuePaletteEditor palette={palette} onChange={setPalette} />
           </div>

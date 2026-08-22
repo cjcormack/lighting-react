@@ -1,4 +1,3 @@
-import { parsePaletteRefUuid } from '../lib/programmerValue'
 import type { CueTarget } from './cuesApi'
 import type { InternalApiConnection } from './internalApi'
 import type { Subscription } from './subscription'
@@ -33,36 +32,16 @@ export interface ProgrammerEntry {
   targetKey: string
   propertyName: string
   /**
-   * Canonical assignment string, **or** `ref:{paletteUuid}` when this entry references a named
-   * palette — the same grammar a stored cue row uses. See `src/lib/programmerValue.ts`.
+   * Canonical assignment string. See `src/lib/programmerValue.ts`.
+   *
+   * Until session 4 this could instead be `ref:{paletteUuid}`, with `resolvedValue`,
+   * `paletteUuid`, `paletteId`, `paletteName` and `paletteResolved` beside it describing the
+   * referenced Look and whether it still covered this target. The `ref:` value grammar retired; the
+   * programmer reports its Look **layers** separately (`programmer.layerState`), and a layer's
+   * `propertyMask` is what says "this property comes from that Look".
    */
   value: string
-  /**
-   * For a `ref:` entry, the literal it currently resolves to **for this target and property**.
-   * Undefined otherwise, and also when the palette no longer covers this target.
-   *
-   * Per-target rather than per-palette, which is load-bearing: a position palette gives every head
-   * a different value, so there is no single resolved literal for a reference.
-   */
-  resolvedValue?: string
-  /**
-   * Set on a `ref:` entry: the referenced **Look**, denormalised so a cell needs no join.
-   *
-   * Still spelled `palette*`, matching the wire, which still does: the field names outlive the
-   * entity because the `ref:` grammar itself is on its way out and renaming them would be churn on
-   * something being deleted. There is no `paletteType` any more — a Look declares no attribute
-   * type, and the server sends null unconditionally.
-   */
-  paletteUuid?: string
-  paletteId?: number
-  paletteName?: string
-  /**
-   * False when the palette exists but no longer covers this target. The entry keeps its last
-   * resolved value — silently dropping an operator's programmer entry mid-show would be worse —
-   * and the sheet marks it broken.
-   */
-  paletteResolved?: boolean
-  /** Winning slot's owner: `web` | `surface` | `flash` | `locate` | `unpark` | `preset:{id}`. */
+  /** Winning slot's owner: `web` | `surface` | `flash` | `locate` | `unpark` | `layers`. */
   owner: string
   /** Sticky operator-edit flag. False marks a mechanical hand-down (unpark). */
   touched: boolean
@@ -572,10 +551,6 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
   const entrySignature = (e: ProgrammerEntry) =>
     JSON.stringify([
       e.value,
-      e.resolvedValue ?? null,
-      e.paletteUuid ?? null,
-      e.paletteName ?? null,
-      e.paletteResolved ?? null,
       e.owner,
       e.touched,
       e.sourceGroup ?? null,
@@ -655,22 +630,14 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     // thing driving it until the refetch lands. `sourceGroup` is dropped for the same reason:
     // a direct write did not come through a group control.
     const owners = ['web', ...(existing?.owners ?? []).filter((o) => o !== 'web')]
-    // The echo carries only the value, so a write of a `ref:` string would otherwise land
-    // locally as a *reference-less* entry until the refetch corrected it — and Apply Palette
-    // writes exactly that. For the ~100 ms in between, every cell it just touched would drop its
-    // reference badge and (in blind) blank its staged preview. Recover the identity from the
-    // value, and carry the palette's metadata forward when it is the same palette as before;
-    // the name and the freshly resolved literal arrive with the authoritative refetch.
-    const paletteUuid = parsePaletteRefUuid(message.value) ?? undefined
-    const samePalette = paletteUuid !== undefined && paletteUuid === existing?.paletteUuid
+    // There was a reference-recovery step here: the echo carries only the value, so a write of a
+    // `ref:` string landed locally as a reference-*less* entry until the refetch corrected it, and
+    // every cell Apply Palette touched dropped its badge for ~100 ms. Nothing writes a `ref:` any
+    // more, so the echo is the whole entry.
     next.set(key, {
       targetKey: message.targetKey,
       propertyName: message.propertyName,
       value: message.value,
-      paletteUuid,
-      paletteId: samePalette ? existing?.paletteId : undefined,
-      paletteName: samePalette ? existing?.paletteName : undefined,
-      resolvedValue: samePalette ? existing?.resolvedValue : undefined,
       owner: 'web',
       touched: true,
       owners,

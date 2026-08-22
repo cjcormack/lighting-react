@@ -33,7 +33,6 @@ function look(overrides: Partial<LookDetails> = {}): LookDetails {
     rows: [],
     effects: [],
     layerCount: 0,
-    refRowCount: 0,
     usedByCueIds: [],
     usedByCueNames: [],
     ...overrides,

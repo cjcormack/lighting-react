@@ -287,74 +287,12 @@ describe('createProgrammerApi', () => {
     expect(api.entryCount()).toBe(1)
   })
 
-  it('keeps the reference identity when the echoed write is itself a palette reference', () => {
-    // Apply Palette writes `ref:{uuid}` through the ordinary `programmer.set` path, and the echo
-    // carries only the value. Without recovering the uuid from it, every cell the operator just
-    // applied to would drop its reference badge — and blank its blind preview — until the
-    // authoritative refetch landed ~100ms later.
-    const { conn, frame } = fakeConnection()
-    const api = createProgrammerApi(conn)
-    const uuid = '11111111-2222-3333-4444-555555555555'
-    frame(
-      stateFrame([
-        {
-          ...ENTRY,
-          value: `ref:${uuid}`,
-          resolvedValue: '120',
-          paletteUuid: uuid,
-          paletteId: 7,
-          paletteName: 'Warm Amber',
-        },
-      ]),
-    )
-
-    frame({
-      type: 'programmer.entryChanged',
-      targetType: 'fixture',
-      targetKey: 'hex-1',
-      propertyName: 'dimmer',
-      value: `ref:${uuid}`,
-    })
-
-    const entry = api.getKeyState('hex-1', 'dimmer').entry
-    expect(entry?.paletteUuid).toBe(uuid)
-    // Same palette as before, so its name and resolved literal carry forward rather than
-    // blanking for a frame.
-    expect(entry?.paletteName).toBe('Warm Amber')
-    expect(entry?.resolvedValue).toBe('120')
-  })
-
-  it('drops the palette fields when a write replaces a reference with a literal', () => {
-    // The other half of the same rule: dragging a slider on a referencing cell breaks the
-    // reference, and the cell must stop claiming to track a palette immediately.
-    const { conn, frame } = fakeConnection()
-    const api = createProgrammerApi(conn)
-    const uuid = '11111111-2222-3333-4444-555555555555'
-    frame(
-      stateFrame([
-        {
-          ...ENTRY,
-          value: `ref:${uuid}`,
-          resolvedValue: '120',
-          paletteUuid: uuid,
-          paletteName: 'Warm Amber',
-        },
-      ]),
-    )
-
-    frame({
-      type: 'programmer.entryChanged',
-      targetType: 'fixture',
-      targetKey: 'hex-1',
-      propertyName: 'dimmer',
-      value: '200',
-    })
-
-    const entry = api.getKeyState('hex-1', 'dimmer').entry
-    expect(entry?.paletteUuid).toBeUndefined()
-    expect(entry?.paletteName).toBeUndefined()
-    expect(entry?.resolvedValue).toBeUndefined()
-  })
+  // Two tests stood here about the local echo and `ref:` values: that applying a palette recovered
+  // the reference uuid from the echoed value (the echo carries only the value, so without it every
+  // cell dropped its badge and blanked its blind preview for ~100 ms until the authoritative refetch
+  // landed), and that a plain literal write *cleared* the reference metadata rather than carrying a
+  // stale palette forward. Both retired with the `ref:` grammar in session 4 — the echo is the whole
+  // entry now.
 
   it('drops the entry on an own-connection clear', () => {
     const { conn, frame } = fakeConnection()
@@ -636,59 +574,12 @@ describe('createProgrammerApi', () => {
     expect(spy).toHaveBeenCalledTimes(1)
   })
 
-  it('notifies a key when only the palette name changed', () => {
-    // Guards the entrySignature fields. A palette rename or re-record moves nothing else on the
-    // entry, so if the signature ignores them changedKeys reports nothing and the cell keeps
-    // painting its old value — stale, and indistinguishable from correct.
-    const { conn, frame } = fakeConnection()
-    const api = createProgrammerApi(conn)
-    const seen: string[][] = []
-    api.subscribeToKey('hex-1', 'rgbColour', () => seen.push(['hex-1|rgbColour']))
-
-    const entry = (paletteName: string) => ({
-      targetKey: 'hex-1',
-      propertyName: 'rgbColour',
-      value: 'ref:2f1c9a54-8d3b-4f7e-9a11-6c0de5b47a02',
-      resolvedValue: '#ff8800',
-      paletteUuid: '2f1c9a54-8d3b-4f7e-9a11-6c0de5b47a02',
-      paletteName,
-      paletteResolved: true,
-      owner: 'web',
-      touched: true,
-      owners: ['web'],
-    })
-
-    frame({ type: 'programmer.state', blind: false, entries: [entry('Warm Amber')], channels: [] })
-    const before = seen.length
-    frame({ type: 'programmer.state', blind: false, entries: [entry('Warm Amber 2')], channels: [] })
-    expect(seen.length).toBeGreaterThan(before)
-  })
-
-  it('notifies a key when a reference stops resolving', () => {
-    const { conn, frame } = fakeConnection()
-    const api = createProgrammerApi(conn)
-    let notifications = 0
-    api.subscribeToKey('hex-1', 'rgbColour', () => {
-      notifications += 1
-    })
-
-    const entry = (resolved: boolean) => ({
-      targetKey: 'hex-1',
-      propertyName: 'rgbColour',
-      value: 'ref:2f1c9a54-8d3b-4f7e-9a11-6c0de5b47a02',
-      resolvedValue: resolved ? '#ff8800' : undefined,
-      paletteUuid: '2f1c9a54-8d3b-4f7e-9a11-6c0de5b47a02',
-      paletteResolved: resolved,
-      owner: 'web',
-      touched: true,
-      owners: ['web'],
-    })
-
-    frame({ type: 'programmer.state', blind: false, entries: [entry(true)], channels: [] })
-    const before = notifications
-    frame({ type: 'programmer.state', blind: false, entries: [entry(false)], channels: [] })
-    expect(notifications).toBeGreaterThan(before)
-  })
+  // Two `entrySignature` guards stood here, both keyed on palette fields: that a palette *rename*
+  // woke the cell (it moves nothing else on the entry, so a signature ignoring it left the cell
+  // painting a stale value indistinguishable from a correct one) and that a reference *ceasing to
+  // resolve* did too. Those fields left `ProgrammerEntry` with the `ref:` grammar in session 4. The
+  // same class of bug is still guarded — see the provenance-signature test below, which is the live
+  // instance of it now that a key can move from a cue to one of the cue's layers.
 
   it('accepts a PALETTE include target', () => {
     const { conn, frame } = fakeConnection()

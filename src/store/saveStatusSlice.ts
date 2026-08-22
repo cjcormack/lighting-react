@@ -36,7 +36,6 @@ export const NON_SAVE_ENDPOINTS: ReadonlySet<string> = new Set([
   'updateProgrammer',
   // Make Hard at *programmer* level writes only live programmer state — no persisted row moves,
   // so a "Saved" flash would be a lie. The cue-level one really does save, and is absent here.
-  'makeProgrammerHard',
 
   // ── Live output: DMX and effects state, none of it persisted ──
   'updateChannel',

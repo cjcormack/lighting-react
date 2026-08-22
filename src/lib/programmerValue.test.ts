@@ -1,12 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
-  isPaletteRefValue,
-  parsePaletteRefUuid,
   parseProgrammerEntryValue,
   parseProgrammerValue,
   serializeColour,
   serializeLevel,
-  serializePaletteRef,
   serializePosition,
 } from './programmerValue'
 
@@ -133,49 +130,22 @@ describe('serialization round-trips', () => {
   })
 })
 
-describe('named-palette references', () => {
-  it('parses a reference to its palette uuid', () => {
-    expect(parsePaletteRefUuid(`ref:${PALETTE_UUID}`)).toBe(PALETTE_UUID)
-    expect(isPaletteRefValue(`ref:${PALETTE_UUID}`)).toBe(true)
-    expect(serializePaletteRef(PALETTE_UUID)).toBe(`ref:${PALETTE_UUID}`)
-  })
-
-  it('tolerates surrounding whitespace and upper-case uuids', () => {
-    expect(parsePaletteRefUuid(`  ref:${PALETTE_UUID.toUpperCase()}  `)).toBe(PALETTE_UUID)
-  })
-
-  it('rejects anything that is not a well-formed reference', () => {
-    // Strict on purpose: a corrupt value must read as "not a reference" rather than as a
-    // reference to nothing, which would render a broken badge instead of falling back.
-    for (const value of ['ref:', 'ref:12', 'ref:not-a-uuid', 'P1', 'P*', '#ff8800', '200', '120,64']) {
-      expect(parsePaletteRefUuid(value), value).toBeNull()
-      expect(isPaletteRefValue(value), value).toBe(false)
-    }
-  })
-
-  it('is not confused with the positional colour-list ref helpers', () => {
-    // colourUtils.isPaletteRef matches `P1`; these two are easy to mix up and impossible to
-    // interchange, which is why they are named differently.
-    expect(isPaletteRefValue('P1')).toBe(false)
-  })
-})
-
 describe('parseProgrammerEntryValue', () => {
+  // A `describe('named-palette references')` block of four tests stood above this one, covering
+  // `parsePaletteRefUuid` / `isPaletteRefValue` / `serializePaletteRef` — including that they were
+  // strict about the uuid shape (a corrupt value had to read as "not a reference" rather than as a
+  // reference to nothing) and that they were never confused with `colourUtils.isPaletteRef`, which
+  // matches the positional `P1`. The `ref:` grammar retired in session 4; the positional one did
+  // not, and its own tests live in `colourUtils`.
   it('reads a literal entry directly', () => {
     expect(parseProgrammerEntryValue({ value: '200' })).toEqual({ kind: 'level', value: 200 })
   })
 
-  it('reads a reference through its resolved literal', () => {
-    // Per target and property — a position palette gives every head a different value, so the
-    // resolved literal cannot be shared across an entry set.
-    expect(
-      parseProgrammerEntryValue({ value: `ref:${PALETTE_UUID}`, resolvedValue: '120,64' }),
-    ).toEqual({ kind: 'position', pan: 120, tilt: 64 })
-  })
-
-  it('returns null for a reference with nothing resolved', () => {
-    // The palette no longer covers this target. Callers fall back to the live wire value rather
-    // than rendering a guess.
-    expect(parseProgrammerEntryValue({ value: `ref:${PALETTE_UUID}` })).toBeNull()
+  it('reads each of the four value shapes', () => {
+    expect(parseProgrammerEntryValue({ value: '120,64' })).toEqual({
+      kind: 'position',
+      pan: 120,
+      tilt: 64,
+    })
   })
 })

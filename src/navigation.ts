@@ -102,8 +102,8 @@ export const navItems: NavItem[] = [
   },
   {
     id: "looks",
-    // The library entity cues layer and `ref:{uuid}` rows name — not the positional colour list
-    // the busking bar calls a Colour List, which is now the only other thing called a palette.
+    // The library entity a cue's layers name. Not the positional colour list the busking bar
+    // labels "Palette", which since session 4 is the only other thing that word means.
     //
     // **One entry, one route**, unlike the four palette banks it replaces. Those were four
     // sibling routes with a sticky type, which is the exception CLAUDE.md documents for

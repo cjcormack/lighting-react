@@ -98,3 +98,38 @@ export function parseFamilySlug(raw: string | undefined): AttributeFamily | null
   if (!raw) return null
   return ATTRIBUTE_FAMILIES.find((type) => familySlug(type) === raw) ?? null
 }
+
+/**
+ * Parse a layer's `propertyMask` — the comma-separated wire form — into families.
+ *
+ * `null` / `undefined` / empty means **no mask**, i.e. every family, and this returns `[]` for all
+ * three. That is the same convention `MaskPicker` uses (an empty selection is "All attributes") and
+ * the same one the backend applies, so the three agree without a translation step.
+ *
+ * Unrecognised names are dropped rather than rejected: the mask is a display and editing input, and
+ * a stored value naming a family this client has never heard of should still let the operator edit
+ * the ones it does know instead of rendering nothing.
+ */
+export function parsePropertyMask(mask: string | null | undefined): AttributeFamily[] {
+  if (!mask) return []
+  const names = mask.split(',').map((part) => part.trim().toUpperCase())
+  return ATTRIBUTE_FAMILIES.filter((family) => names.includes(family))
+}
+
+/**
+ * The wire form for a set of families, or `null` for "no mask".
+ *
+ * **Both an empty selection and a complete one serialize to `null`**, and that is the load-bearing
+ * part. A mask naming all four families composes identically to no mask at all, but it is not the
+ * same value: `propertyMask` distinguishes null from a string, so storing `"INTENSITY,POSITION,
+ * COLOUR,BEAM"` would make the row render a four-family badge that says nothing and would survive
+ * as noise if a fifth family were ever added. Normalising to null keeps "unmasked" one value.
+ *
+ * Output is in [ATTRIBUTE_FAMILIES] order regardless of selection order, so a mask has one
+ * canonical spelling and re-selecting the same families is not a change.
+ */
+export function serializePropertyMask(families: readonly AttributeFamily[]): string | null {
+  const selected = ATTRIBUTE_FAMILIES.filter((family) => families.includes(family))
+  if (selected.length === 0 || selected.length === ATTRIBUTE_FAMILIES.length) return null
+  return selected.join(',')
+}

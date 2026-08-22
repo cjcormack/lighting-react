@@ -17,7 +17,8 @@ export interface ProjectDetail {
   description: string | null;
   isCurrent: boolean;
   scriptCount: number;
-  fxPresetCount: number;
+  /** Looks in the project. Was `fxPresetCount`, over the retired FX presets. */
+  lookCount: number;
   cueCount: number;
   cueStackCount: number;
   stageWidthM: number | null;

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { ChevronDown, ChevronRight, Info, Layers, Link2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Info, Layers } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -16,20 +16,10 @@ import { PositionCell } from './cells/PositionCell'
 import { SettingCell } from './cells/SettingCell'
 import type { ColumnKey } from './columns'
 import type { CellCommit, FixtureRow, GroupRow, InfoRow, Row, RowId } from './rowModel'
-import type { CellPaletteRef } from './useRowOwnership'
 import type { RowCell } from './useRowValues'
 
 const ROW_HEIGHT = 36
 
-/**
- * Left-edge bar marking a cell whose value is a reference — a quiet cue, not a fifth ownership
- * colour.
- *
- * One colour, where there used to be one per palette type. A Look declares no attribute type: its
- * families are derived from its rows and one may span several, so there is nothing here to tint by.
- * What the bar still says — "this cell tracks something else" — is the part that mattered.
- */
-const REF_BAR_CLASS = 'bg-muted-foreground'
 
 /** Sticky name column: 260px on a desktop, but never more than 45% of a narrow viewport. */
 const NAME_COLUMN_WIDTH = 'min(45vw, 260px)'
@@ -343,7 +333,6 @@ const RowView = React.memo(function RowView({
           return <div key={col} className="h-full" />
         }
         const owned = ownership[col]
-        const paletteRef = owned?.paletteRef
         const layer = owned?.layer
         return (
           <div
@@ -351,27 +340,13 @@ const RowView = React.memo(function RowView({
             className={`relative h-full min-w-0 py-0.5 ${ownershipCellClass(owned)}`}
             title={ownershipTitle(owned)}
           >
-            {/* Reference marker, layered around the cell rather than inside it — the same choice
-                `ownershipCellClass` documents. The four cell editors already encode value shape,
-                and a marker drawn inside one of them would have to be drawn four times. */}
-            {paletteRef && (
-              <span
-                className={`pointer-events-none absolute inset-y-0.5 left-0 w-0.5 rounded-full ${
-                  paletteRef.resolved ? REF_BAR_CLASS : 'bg-destructive'
-                }`}
-              />
-            )}
-            {paletteRef && (
-              <Link2
-                className={`pointer-events-none absolute right-0.5 top-0.5 size-2.5 ${
-                  paletteRef.resolved ? 'text-muted-foreground' : 'text-destructive'
-                }`}
-              />
-            )}
-            {/* The winning Look layer, in the *opposite* corner from the reference marker: a cell
-                can be both a reference the operator typed and a layer's output, and stacking the
-                two icons would make each one unreadable. Title-only detail — the hover text names
-                the look, and a name would not fit here at this density. */}
+            {/* The winning Look layer, layered around the cell rather than inside it — the same
+                choice `ownershipCellClass` documents. The four cell editors already encode value
+                shape, and a marker drawn inside one of them would have to be drawn four times.
+                It used to share the cell with a `ref:` marker (a left rail plus a `Link2` in the
+                *opposite* corner, so the two icons stayed readable together); that retired with the
+                grammar in session 4, so this glyph now has the cell to itself. Title-only detail —
+                the hover text names the look, and a name would not fit here at this density. */}
             {layer && (
               <Layers
                 className={`pointer-events-none absolute bottom-0.5 right-0.5 size-2.5 ${
@@ -383,7 +358,6 @@ const RowView = React.memo(function RowView({
               cell={cell}
               value={applyStagedValue(value, owned?.staged, cell.resolutions)}
               batchCount={batchCountFor(row, col)}
-              paletteRef={paletteRef}
               onBeginEdit={() => onBeginCellEdit(row)}
               onCommit={(commit) => onCellCommit(row, col, commit)}
             />
@@ -398,14 +372,12 @@ function PropertyCell({
   cell,
   value,
   batchCount,
-  paletteRef,
   onBeginEdit,
   onCommit,
 }: {
   cell: RowCell
   value: NonNullable<ReturnType<typeof useRowValues>[ColumnKey]>
   batchCount: number
-  paletteRef?: CellPaletteRef
   onBeginEdit: () => void
   onCommit: (commit: CellCommit) => void
 }) {
@@ -416,7 +388,6 @@ function PropertyCell({
           value={value}
           resolutions={cell.resolutions}
           batchCount={batchCount}
-          paletteRef={paletteRef}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
         />
@@ -427,7 +398,6 @@ function PropertyCell({
           value={value}
           resolutions={cell.resolutions}
           batchCount={batchCount}
-          paletteRef={paletteRef}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
         />
@@ -438,7 +408,6 @@ function PropertyCell({
           value={value}
           resolutions={cell.resolutions}
           batchCount={batchCount}
-          paletteRef={paletteRef}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
         />
@@ -449,7 +418,6 @@ function PropertyCell({
           value={value}
           resolutions={cell.resolutions}
           batchCount={batchCount}
-          paletteRef={paletteRef}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
         />

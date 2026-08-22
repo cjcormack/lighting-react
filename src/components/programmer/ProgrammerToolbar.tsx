@@ -5,7 +5,6 @@ import {
   Download,
   Eraser,
   EyeOff,
-  Link2Off,
   MoreHorizontal,
   SwatchBook,
   Upload,
@@ -38,7 +37,6 @@ import { IncludeSheet } from './IncludeSheet'
 import { RecordSheet } from './RecordSheet'
 import { RecordLookSheet } from './RecordLookSheet'
 import { UpdateDialog } from './UpdateDialog'
-import { MakeHardDialog } from './MakeHardDialog'
 import { describeIncludedTarget } from '@/lib/includedTarget'
 
 /** Fade options for Clear and for entering/leaving Blind, in milliseconds. */
@@ -66,12 +64,10 @@ export function ProgrammerToolbar() {
   const [recordLookOpen, setRecordLookOpen] = useState(false)
   const [includeOpen, setIncludeOpen] = useState(false)
   const [updateOpen, setUpdateOpen] = useState(false)
-  const [makeHardOpen, setMakeHardOpen] = useState(false)
 
   const blind = summary?.blind ?? false
   const entryCount = summary?.entryCount ?? 0
   const includeTarget = summary?.lastIncluded ?? null
-  const referenceCount = summary?.referenceCount ?? 0
   const fade = Number(fadeMs) || 0
 
   // Clear releases programmer values *and* programmer-band FX, and the two are independent:
@@ -127,19 +123,10 @@ export function ProgrammerToolbar() {
           : 'The programmer is empty — nothing to update',
       onSelect: () => setUpdateOpen(true),
     },
-    {
-      label: 'Make hard',
-      Icon: Link2Off,
-      // Programmer-wide, so it belongs here rather than in the selection toolbar — and it is
-      // disabled rather than hidden when there is nothing referencing a palette, so the escape
-      // hatch is discoverable before you need it.
-      disabled: referenceCount === 0,
-      tooltip:
-        referenceCount > 0
-          ? `Stop ${referenceCount} programmer value(s) tracking their palettes`
-          : 'The programmer holds no palette references',
-      onSelect: () => setMakeHardOpen(true),
-    },
+    // A programmer-wide "Make hard" stood here, disabled rather than hidden so the escape hatch
+    // was discoverable before you needed it. It stopped the programmer's `ref:` slots tracking
+    // their palettes; with the grammar retired the programmer holds nothing but literals, so
+    // there is nothing to harden. Detaching a *cue* from the library is the flatten-layer route.
   ] as const
 
   return (
@@ -285,11 +272,6 @@ export function ProgrammerToolbar() {
             onOpenChange={setUpdateOpen}
             projectId={projectId}
             includeTarget={includeTarget}
-          />
-          <MakeHardDialog
-            open={makeHardOpen}
-            onOpenChange={setMakeHardOpen}
-            referenceCount={referenceCount}
           />
         </>
       )}

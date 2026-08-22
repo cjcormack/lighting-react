@@ -40,9 +40,11 @@ export interface SpeedMasterInUseResponse {
   error: string
   code: string
   referenceCount: number
-  presetEffectCount: number
+  /** Effects stored on a Look. Was `presetEffectCount`, over the retired FX presets. */
+  lookEffectCount: number
   cueAdHocEffectCount: number
-  cuePresetApplicationCount: number
+  /** Per-layer speed-master overrides. Was `cuePresetApplicationCount`. */
+  cueLayerCount: number
   cueIds: number[]
 }
 

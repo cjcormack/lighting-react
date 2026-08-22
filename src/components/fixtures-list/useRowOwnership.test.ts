@@ -216,119 +216,14 @@ describe('aggregateCellOwnership', () => {
     expect(aggregateCellOwnership(keys, true, disagreeing)?.staged).toBeUndefined()
   })
 
-  it('stages the RESOLVED literal of a reference, not the reference string', () => {
-    // A group row on a POSITION palette holds the identical `ref:` value on every head but
-    // resolves to a different pan/tilt for each. Comparing `value` reports the cell uniform and
-    // paints one head's crosshair for all of them; comparing `resolvedValue` reports the truth.
-    const keys: CellPropertyKey[] = [
-      { targetKey: 'f1', propertyName: 'position' },
-      { targetKey: 'f2', propertyName: 'position' },
-    ]
-    const ref = { value: 'ref:11111111-2222-3333-4444-555555555555', paletteUuid: '11111111-2222-3333-4444-555555555555' }
-    const perHead = lookupFrom({
-      'f1|position': { entry: entry({ propertyName: 'position', ...ref, resolvedValue: '10,20' }) },
-      'f2|position': {
-        entry: entry({ targetKey: 'f2', propertyName: 'position', ...ref, resolvedValue: '200,40' }),
-      },
-    })
-    expect(aggregateCellOwnership(keys, true, perHead)?.staged).toBeUndefined()
-
-    const agreeing = lookupFrom({
-      'f1|position': { entry: entry({ propertyName: 'position', ...ref, resolvedValue: '10,20' }) },
-      'f2|position': {
-        entry: entry({ targetKey: 'f2', propertyName: 'position', ...ref, resolvedValue: '10,20' }),
-      },
-    })
-    expect(aggregateCellOwnership(keys, true, agreeing)?.staged).toEqual({
-      kind: 'position',
-      pan: 10,
-      tilt: 20,
-    })
-  })
-
-  it('reports the referenced look when every covered property names the same one', () => {
-    const keys: CellPropertyKey[] = [
-      { targetKey: 'f1', propertyName: 'rgbColour' },
-      { targetKey: 'f2', propertyName: 'rgbColour' },
-    ]
-    const ref = {
-      value: 'ref:11111111-2222-3333-4444-555555555555',
-      paletteUuid: '11111111-2222-3333-4444-555555555555',
-      paletteId: 7,
-      paletteName: 'Warm Amber',
-      resolvedValue: '#ff8800',
-    }
-    const result = aggregateCellOwnership(
-      keys,
-      false,
-      lookupFrom({
-        'f1|rgbColour': { entry: entry({ propertyName: 'rgbColour', ...ref }) },
-        'f2|rgbColour': { entry: entry({ targetKey: 'f2', propertyName: 'rgbColour', ...ref }) },
-      }),
-    )
-    // No `type`: a Look declares no attribute type, so a reference cannot report one. The name and
-    // the resolve state are what the cell actually needs.
-    expect(result?.paletteRef).toEqual({
-      uuid: '11111111-2222-3333-4444-555555555555',
-      id: 7,
-      name: 'Warm Amber',
-      resolved: true,
-      mixed: false,
-    })
-  })
-
-  it('calls the reference mixed when only some covered properties hold one', () => {
-    // The badge claims "this cell references Warm Amber". With four of twelve heads holding a
-    // hand-typed literal that is a confident lie about what Record would capture.
-    const keys: CellPropertyKey[] = [
-      { targetKey: 'f1', propertyName: 'dimmer' },
-      { targetKey: 'f2', propertyName: 'dimmer' },
-    ]
-    const result = aggregateCellOwnership(
-      keys,
-      false,
-      lookupFrom({
-        'f1|dimmer': {
-          entry: entry({
-            value: 'ref:11111111-2222-3333-4444-555555555555',
-            paletteUuid: '11111111-2222-3333-4444-555555555555',
-            paletteName: 'Half',
-            resolvedValue: '128',
-          }),
-        },
-        'f2|dimmer': { entry: entry({ targetKey: 'f2', value: '128' }) },
-      }),
-    )
-    expect(result?.paletteRef?.mixed).toBe(true)
-    // Still uniform by *ownership* — both are programmer-owned. The two flags are independent.
-    expect(result?.isUniform).toBe(true)
-  })
-
-  it('marks a reference unresolved when the palette no longer covers a target', () => {
-    const result = aggregateCellOwnership(
-      [{ targetKey: 'f1', propertyName: 'dimmer' }],
-      false,
-      lookupFrom({
-        'f1|dimmer': {
-          entry: entry({
-            value: 'ref:11111111-2222-3333-4444-555555555555',
-            paletteUuid: '11111111-2222-3333-4444-555555555555',
-            paletteName: 'Half',
-            // Keeps its last resolved value — dropping an operator's entry mid-show would be
-            // worse — so `paletteResolved` is the only signal that it has gone stale.
-            resolvedValue: '128',
-            paletteResolved: false,
-          }),
-        },
-      }),
-    )
-    expect(result?.paletteRef?.resolved).toBe(false)
-  })
-
-  it('leaves paletteRef undefined for a cell holding only literals', () => {
-    const result = aggregateCellOwnership(KEY, false, lookupFrom({ 'f1|dimmer': { entry: entry() } }))
-    expect(result?.paletteRef).toBeUndefined()
-  })
+  // Five tests stood here, all about `paletteRef`: that the *resolved* literal was staged rather
+  // than the `ref:` string (a group row on a POSITION palette holds the identical reference on every
+  // head while resolving to a different pan/tilt for each, so comparing `value` reported the cell
+  // uniform and painted one head's crosshair for all of them); that the referenced look was named
+  // when every covered property agreed; that the cell was called *mixed* when only some held one;
+  // that an unresolved reference was marked; and that a literal-only cell reported no reference at
+  // all. The `ref:` value grammar retired in session 4 — an entry's `value` *is* its literal — and
+  // `CellLayer` answers "where did this come from" instead, covered above.
 
   it('does not stage when only some covered properties are held', () => {
     const keys: CellPropertyKey[] = [

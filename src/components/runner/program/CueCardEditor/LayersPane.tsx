@@ -11,10 +11,6 @@ import { useEffectLibraryQuery, type EffectLibraryEntry } from '@/store/fixtureF
 import { useLookListQuery } from '@/store/looks'
 import { usePatchProjectCueMutation } from '@/store/cues'
 import { buildCueInput, densifyCueLayerOrder, reorderCueLayers } from '@/lib/cueUtils'
-import { LookRefBadge } from '@/components/looks/LookRefBadge'
-import { LookPreviewSwatches } from '@/components/looks/lookRefValue'
-import { parsePaletteRefUuid } from '@/lib/programmerValue'
-import { describeHealth } from '@/lib/healthDescriptor'
 import { AddAssignmentSheet } from './AddAssignmentSheet'
 import { AddEffectSheet } from './AddEffectSheet'
 import { AddLayerSheet } from '@/components/cues/editor/AddLayerSheet'
@@ -54,17 +50,13 @@ export function LayersPane({ cue, projectId, mode, targets }: LayersPaneProps) {
   const { data: lookList } = useLookListQuery({ projectId })
   const [patchCue] = usePatchProjectCueMutation()
 
-  // Both indexes are built once for the whole pane and threaded to both arrangements. A per-row
-  // lookup would mean one subscription per row, and a cue with forty rows referencing four Looks
-  // would fetch the library forty times.
+  // Built once for the whole pane and threaded to both arrangements. A per-row lookup would mean
+  // one subscription per row, and a cue with forty rows referencing four Looks would fetch the
+  // library forty times.
   //
-  // Two maps because the two reference mechanisms address a Look differently: a **layer** names it
-  // by int id, while a stored `ref:` value names it by uuid (int PKs are re-minted on sync import,
-  // so a value can never hold one).
-  const looksByUuid = useMemo(
-    () => new Map((lookList ?? []).map((look) => [look.uuid, look])),
-    [lookList],
-  )
+  // There were two maps here until session 4, because the two reference mechanisms addressed a Look
+  // differently: a **layer** names it by int id, while a stored `ref:` value named it by uuid. The
+  // `ref:` grammar retired, so only the layer's id remains.
   const looksById = useMemo(
     () => new Map((lookList ?? []).map((look) => [look.id, look])),
     [lookList],
@@ -132,11 +124,25 @@ export function LayersPane({ cue, projectId, mode, targets }: LayersPaneProps) {
     )
   }
 
+  const setLayerBlendMode = (index: number, blendMode: string) => {
+    patchLayers(
+      buildCueInput(cue).layers.map((layer, i) => (i === index ? { ...layer, blendMode } : layer)),
+    )
+  }
+
+  const setLayerPropertyMask = (index: number, propertyMask: string | null) => {
+    patchLayers(
+      buildCueInput(cue).layers.map((layer, i) => (i === index ? { ...layer, propertyMask } : layer)),
+    )
+  }
+
   const layerHandlers: LayerHandlers = {
     onRemove: removeLayer,
     onMove: moveLayer,
     onSetEnabled: setLayerEnabled,
     onSetAmount: setLayerAmount,
+    onSetBlendMode: setLayerBlendMode,
+    onSetPropertyMask: setLayerPropertyMask,
   }
 
   const sheets = (
@@ -187,7 +193,6 @@ export function LayersPane({ cue, projectId, mode, targets }: LayersPaneProps) {
           cue={cue}
           targets={targets}
           looksById={looksById}
-          looksByUuid={looksByUuid}
           looksLoaded={looksLoaded}
           library={library}
           layerHandlers={layerHandlers}
@@ -201,7 +206,6 @@ export function LayersPane({ cue, projectId, mode, targets }: LayersPaneProps) {
         <ByLayer
           cue={cue}
           looksById={looksById}
-          looksByUuid={looksByUuid}
           looksLoaded={looksLoaded}
           library={library}
           layerHandlers={layerHandlers}
@@ -220,8 +224,6 @@ export function LayersPane({ cue, projectId, mode, targets }: LayersPaneProps) {
 interface LookIndexes {
   /** Keyed by int id — how a **layer** names its Look. */
   looksById: ReadonlyMap<number, LookSummary>
-  /** Keyed by uuid — how a stored `ref:` value names one. */
-  looksByUuid: ReadonlyMap<string, LookSummary>
   looksLoaded: boolean
 }
 
@@ -229,7 +231,6 @@ function ByTarget({
   cue,
   targets,
   looksById,
-  looksByUuid,
   looksLoaded,
   library,
   layerHandlers,
@@ -365,8 +366,6 @@ function ByTarget({
                     <AssignmentRow
                       key={`a-${i}`}
                       assignment={a}
-                      looksByUuid={looksByUuid}
-                      looksLoaded={looksLoaded}
                       onRemove={() => onRemoveAssignment(i)}
                     />
                   ))
@@ -411,7 +410,6 @@ function ByTarget({
 function ByLayer({
   cue,
   looksById,
-  looksByUuid,
   looksLoaded,
   library,
   layerHandlers,
@@ -463,8 +461,6 @@ function ByLayer({
           <AssignmentRow
             key={`a-${i}`}
             assignment={a}
-            looksByUuid={looksByUuid}
-            looksLoaded={looksLoaded}
             showTarget
             onRemove={() => onRemoveAssignment(i)}
           />
@@ -507,14 +503,10 @@ function ByLayer({
 
 function AssignmentRow({
   assignment,
-  looksByUuid,
-  looksLoaded,
   showTarget,
   onRemove,
 }: {
   assignment: CuePropertyAssignment
-  looksByUuid: ReadonlyMap<string, LookSummary>
-  looksLoaded: boolean
   showTarget?: boolean
   onRemove: () => void
 }) {
@@ -529,11 +521,7 @@ function AssignmentRow({
         {assignment.propertyName}
       </Badge>
       <span className="text-muted-foreground">=</span>
-      <AssignmentValue
-        assignment={assignment}
-        looksByUuid={looksByUuid}
-        looksLoaded={looksLoaded}
-      />
+      <AssignmentValue assignment={assignment} />
       {assignment.fadeDurationMs != null && (
         <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
           {(assignment.fadeDurationMs / 1000).toFixed(1)}s
@@ -550,50 +538,15 @@ function AssignmentRow({
 }
 
 /**
- * A stored assignment's value: a literal, or the Look it references.
+ * A stored assignment's value.
  *
- * The second form of the `value` column, and the one that has to be *un*-encoded for the operator —
- * `ref:8f3c…` on a cue card is a diagnostic string, not a value. A reference whose Look is missing
- * renders as broken rather than as its raw uuid, because the row will be silently skipped when the
- * cue fires and this card is where that has to be visible.
- *
- * Nothing authors one of these any more; a layer with a `propertyMask` is what replaces it. This
- * renders the rows that already exist.
+ * Always a literal now, so this is a one-line render. It used to un-encode the *other* form of the
+ * `value` column for the operator: `ref:8f3c…` is a diagnostic string rather than a value, so a
+ * reference rendered as its Look's name plus a few preview swatches, and as broken when the Look had
+ * been deleted since the cue was read. The `ref:` value grammar retired in session 4, and a layer
+ * with a `propertyMask` is what expresses "this property comes from that Look" instead — which the
+ * Layers section above renders.
  */
-function AssignmentValue({
-  assignment,
-  looksByUuid,
-  looksLoaded,
-}: {
-  assignment: CuePropertyAssignment
-  looksByUuid: ReadonlyMap<string, LookSummary>
-  /** False while the look list is still in flight — see `broken` below. */
-  looksLoaded: boolean
-}) {
-  const uuid = parsePaletteRefUuid(assignment.value)
-  if (uuid == null) {
-    return <span className="font-mono truncate flex-1 min-w-0">{assignment.value}</span>
-  }
-  const look = looksByUuid.get(uuid)
-  const healthNote = describeHealth(assignment.health)
-  const health = assignment.health?.type
-  // `health` is the server's verdict and leads; the local lookup only adds the case where the Look
-  // was deleted since this cue was read. It must be gated on the list having *loaded* — an
-  // in-flight query leaves the map empty, and treating that as "missing" paints every healthy
-  // reference in the cue destructive-red for as long as the fetch takes.
-  const broken =
-    health === 'missingPalette' ||
-    health === 'missingPaletteEntry' ||
-    (looksLoaded && look == null)
-  return (
-    <span className="flex min-w-0 flex-1 items-center gap-1" title={healthNote ?? undefined}>
-      <LookRefBadge name={look?.name} missing={broken} />
-      {/* The Look's own preview, not a resolved value: the cue read has no per-fixture resolution,
-          and a single swatch here would claim to be this row's colour when a Look legitimately
-          gives every head a different one. Several chips read as "what's in it", which is true. */}
-      {look && !broken && (
-        <LookPreviewSwatches preview={look.preview.slice(0, 3)} className="shrink-0" />
-      )}
-    </span>
-  )
+function AssignmentValue({ assignment }: { assignment: CuePropertyAssignment }) {
+  return <span className="font-mono truncate flex-1 min-w-0">{assignment.value}</span>
 }

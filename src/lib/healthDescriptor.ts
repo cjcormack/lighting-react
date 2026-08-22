@@ -17,13 +17,10 @@ export function describeHealth(health: BindingHealth | undefined): string | null
       return `Group '${health.groupName}' no longer exists`
     case "missingProperty":
       return `Property '${health.propertyName}' is not defined on '${health.targetKey}'`
-    case "missingPalette":
-      return "The look this references no longer exists"
-    // The only diagnosis a failed reference gets. There used to be a `paletteTypeMismatch` case
-    // naming a wrong-type reference as the cause; a Look declares no attribute type, so that
-    // complaint stopped being coherent and the arm has no producer.
-    case "missingPaletteEntry":
-      return `The referenced look has no ${health.propertyName} for '${health.targetKey}'`
+    // Three reference cases stood here — `missingPalette`, `missingPaletteEntry`, and before them
+    // `paletteTypeMismatch`. All retired with the `ref:` value grammar (session 4): a row cannot
+    // hold a reference, so a reference that resolves to nothing is not a state to describe. Note
+    // the `default` arm below still catches them if an older server sends one.
     case "missingStack":
       return `Cue stack #${health.stackId} no longer exists`
     case "missingCue":

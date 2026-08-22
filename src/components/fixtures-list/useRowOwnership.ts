@@ -2,7 +2,6 @@ import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react'
 import { lightingApi } from '../../api/lightingApi'
 import { parseProgrammerValue } from '../../lib/programmerValue'
 import type {
-  ProgrammerEntry,
   ProgrammerKeyState,
   ProvenanceEntry,
   ProvenanceSource,
@@ -37,16 +36,11 @@ export interface CellOwnership {
    */
   staged?: StagedValue
   /**
-   * Set when at least one of the cell's covered properties references a named palette. The cell
-   * paints a reference marker; editing it replaces the reference with a fixed value.
-   */
-  paletteRef?: CellPaletteRef
-  /**
    * Set when a **Look layer** produced this cell's winning value — in a cue or in the programmer.
    *
    * The answer to "why is this fixture this colour?", which `source` alone can only answer with
-   * *a cue*. Independent of [paletteRef]: that names a value-level reference on the operator's own
-   * entry, this names the layer that won the composition, and a cell can carry both.
+   * *a cue*. This is the survivor of a pair: `paletteRef` named a value-level `ref:` on the
+   * operator's own entry, and retired with that grammar in session 4.
    */
   layer?: CellLayer
 }
@@ -54,8 +48,9 @@ export interface CellOwnership {
 /**
  * The Look layer that won a cell.
  *
- * One object for the whole cell, for the same reason [CellPaletteRef] is: a cell can cover twelve
- * properties and the operator needs one answer. `mixed` is the honest form of "they don't agree" —
+ * One object for the whole cell: a cell can cover twelve properties (every member of a group row,
+ * both axes of a pan/tilt pair, every head of a collapsed multi-head fixture) and the operator needs
+ * one answer, not twelve. `mixed` is the honest form of "they don't agree" —
  * naming one layer over a cell where half the heads came from another would be a confident lie.
  */
 export interface CellLayer {
@@ -66,38 +61,12 @@ export interface CellLayer {
   mixed: boolean
 }
 
-/**
- * The named palette a cell's programmer entries reference.
- *
- * One object for the whole cell, because a cell can cover many properties (every member of a
- * group row, both axes of a pan/tilt slider pair, every head of a collapsed multi-head fixture)
- * and the operator needs one answer, not twelve.
- */
-export interface CellPaletteRef {
-  /** Undefined when the covered properties reference *different* palettes — see `mixed`. */
-  uuid?: string
-  id?: number
-  name?: string
-  /**
-   * False when at least one covered property's reference no longer resolves: the palette was
-   * deleted, or it no longer covers that fixture. The entry keeps its last resolved value, so
-   * the only signal the operator gets is this one.
-   */
-  resolved: boolean
-  /** The covered properties don't all reference the same palette (or some hold literals). */
-  mixed: boolean
-}
-
-/**
- * The literal an entry currently *means*, which for a reference is what it resolved to.
- *
- * Comparing `value` instead is the trap: on a POSITION palette every head of a group row holds
- * the identical `ref:{uuid}` string but resolves to a different pan/tilt, so a `value` comparison
- * reports the cell uniform and paints one head's crosshair for all twelve.
- */
-function resolvedLiteralOf(entry: ProgrammerEntry): string | undefined {
-  return entry.paletteUuid ? entry.resolvedValue : entry.value
-}
+// `CellPaletteRef` and its `resolvedLiteralOf` helper stood here until session 4. They described
+// the named palette a cell's entries referenced, as one verdict for the whole cell, and
+// `resolvedLiteralOf` existed because on a POSITION palette every head of a group row held the
+// identical `ref:{uuid}` string while resolving to a different pan/tilt — so comparing `value`
+// reported the cell uniform and painted one head's crosshair for all twelve. With the `ref:` grammar
+// gone an entry's `value` *is* its literal, and [CellLayer] answers "where did this come from".
 
 export type StagedValue =
   | { kind: 'level'; value: number }
@@ -153,17 +122,8 @@ export function aggregateCellOwnership(
   let stagedValue: string | undefined
   let stagedUniform = true
 
-  // Reference state, tracked separately from ownership: the two disagree routinely. Every head
-  // of a group row can be programmer-owned and uniform (one `isUniform`) while only half of them
-  // are covered by the palette (the other).
-  let refUuid: string | undefined
-  let refEntry: ProgrammerEntry | undefined
-  let refCount = 0
-  let refMixed = false
-  let refResolved = true
-
-  // The winning layer, tracked the same way and for the same reason: it is a property of
-  // provenance rather than of the operator's entry, so it agrees with neither of the above.
+  // The winning layer, tracked separately from ownership because the two disagree routinely: it is
+  // a property of provenance rather than of the operator's entry.
   let layerId: number | undefined
   let layerEntry: ProvenanceEntry | undefined
   let layerCount = 0
@@ -195,24 +155,9 @@ export function aggregateCellOwnership(
       for (const owner of state.entry.owners) {
         if (!owners.includes(owner)) owners.push(owner)
       }
-      const literal = resolvedLiteralOf(state.entry)
+      const literal = state.entry.value
       if (index === 0) stagedValue = literal
       else if (literal !== stagedValue) stagedUniform = false
-
-      const uuid = state.entry.paletteUuid
-      if (uuid) {
-        refCount += 1
-        if (refUuid === undefined) {
-          refUuid = uuid
-          refEntry = state.entry
-        } else if (refUuid !== uuid) {
-          refMixed = true
-        }
-        // `paletteResolved` is only sent as `false`; a resolving reference omits it entirely.
-        if (state.entry.paletteResolved === false || state.entry.resolvedValue === undefined) {
-          refResolved = false
-        }
-      }
     } else if (index === 0) {
       stagedValue = undefined
     } else {
@@ -224,21 +169,6 @@ export function aggregateCellOwnership(
     blind && stagedUniform && stagedValue !== undefined
       ? (parseProgrammerValue(stagedValue) ?? undefined)
       : undefined
-
-  // Some-but-not-all counts as mixed too: a badge saying "references Warm Amber" over a cell where
-  // four of twelve heads hold a hand-typed literal would be a confident lie about what Record
-  // will capture.
-  const mixed = refMixed || refCount !== keys.length
-  const paletteRef: CellPaletteRef | undefined =
-    refCount === 0
-      ? undefined
-      : {
-          uuid: refMixed ? undefined : refUuid,
-          id: refMixed ? undefined : refEntry?.paletteId,
-          name: refMixed ? undefined : refEntry?.paletteName,
-          resolved: refResolved,
-          mixed,
-        }
 
   const cellLayer: CellLayer | undefined =
     layerCount === 0
@@ -257,7 +187,6 @@ export function aggregateCellOwnership(
     owners,
     sourceGroup,
     staged,
-    paletteRef,
     layer: cellLayer,
   }
 }

@@ -162,8 +162,8 @@ export function SpeedMasterDetailSheet({
           {master.referenceCount > 0 && (
             <p className="text-xs text-muted-foreground">
               {master.referenceCount} saved{' '}
-              {master.referenceCount === 1 ? 'reference' : 'references'} — preset effects, cue
-              effects and per-cue overrides that follow this master.
+              {master.referenceCount === 1 ? 'reference' : 'references'} — look effects, cue
+              effects and per-layer overrides that follow this master.
             </p>
           )}
 
@@ -183,10 +183,9 @@ export function SpeedMasterDetailSheet({
                   {inUse.referenceCount} saved{' '}
                   {inUse.referenceCount === 1 ? 'reference still points' : 'references still point'}{' '}
                   at this master
-                  {inUse.presetEffectCount > 0 && ` · ${inUse.presetEffectCount} preset effect(s)`}
+                  {inUse.lookEffectCount > 0 && ` · ${inUse.lookEffectCount} look effect(s)`}
                   {inUse.cueAdHocEffectCount > 0 && ` · ${inUse.cueAdHocEffectCount} cue effect(s)`}
-                  {inUse.cuePresetApplicationCount > 0 &&
-                    ` · ${inUse.cuePresetApplicationCount} cue preset application(s)`}
+                  {inUse.cueLayerCount > 0 && ` · ${inUse.cueLayerCount} cue layer(s)`}
                   {inUse.cueIds.length > 0 && ` (cues ${inUse.cueIds.join(', ')})`}.
                 </p>
                 <p>

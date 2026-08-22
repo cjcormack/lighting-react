@@ -451,7 +451,7 @@ export function ProjectLooks() {
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             Delete &ldquo;{confirmDelete?.name}&rdquo;? This cannot be undone.
-            {confirmDelete != null && confirmDelete.layerCount + confirmDelete.refRowCount > 0 && (
+            {confirmDelete != null && confirmDelete.layerCount > 0 && (
               <> Cues reference it, so you will be asked to confirm again.</>
             )}
           </p>
@@ -489,12 +489,8 @@ export function ProjectLooks() {
               <AlertDescription className="space-y-2">
                 <p>
                   {inUse.body.error} Deleting it anyway drops {inUse.body.layerCount} cue layer
-                  {inUse.body.layerCount === 1 ? '' : 's'}
-                  {inUse.body.refRowCount > 0 &&
-                    ` and leaves ${inUse.body.refRowCount} row${
-                      inUse.body.refRowCount === 1 ? '' : 's'
-                    } referencing a look that no longer exists`}
-                  . Those cues will fire without this look&rsquo;s contribution.
+                  {inUse.body.layerCount === 1 ? '' : 's'}. Those cues will fire without this
+                  look&rsquo;s contribution.
                 </p>
                 {inUse.body.cueNames.length > 0 && (
                   <p className="text-xs">Affected cues: {inUse.body.cueNames.join(', ')}</p>

@@ -54,6 +54,15 @@ export interface CueLayer {
  * as `health` is on an assignment. `buildCueInput` strips it, and a regression test pins that.
  */
 export interface CueLayerDetail extends CueLayer {
+  /**
+   * The layer row's id, on read only.
+   *
+   * The only way to address one layer: `lookId` is not unique (a cue may layer the same Look twice)
+   * and array position is not identity when `sortOrder` is authoritative. Needed by
+   * `POST /{projectId}/cues/{cueId}/flatten`'s single-layer mode. Deliberately absent from
+   * `buildCueInput`'s rebuild, like `lookName`.
+   */
+  id?: number
   lookName: string | null
 }
 
@@ -93,20 +102,11 @@ export type AssignmentHealth =
   | { type: 'missingFixture'; fixtureKey: string }
   | { type: 'missingGroup'; groupName: string }
   | { type: 'missingProperty'; targetKey: string; propertyName: string }
-  // ── `ref:{uuid}` references, which name a Look. Still spelled `palette*` on the wire. ──
-  /** The row's value is `ref:{uuid}` and no Look with that uuid exists (a forced delete, or an
-   *  import whose look folder was incomplete). The row is skipped at apply. */
-  | { type: 'missingPalette'; paletteUuid: string }
-  /**
-   * The Look exists but holds no row for this target and property, so there is nothing to resolve
-   * to.
-   *
-   * The only diagnosis a failed reference gets now. There used to be a `paletteTypeMismatch` arm
-   * naming a wrong-type reference as the cause; a Look declares no attribute type — its families
-   * are derived, and one spanning colour and position is legitimate — so that complaint stopped
-   * being coherent and the arm has no producer.
-   */
-  | { type: 'missingPaletteEntry'; paletteUuid: string; targetKey: string; propertyName: string }
+// Four arms, down from seven. `missingPalette` / `missingPaletteEntry` described a row whose value
+// was `ref:{uuid}` and whose Look was gone or no longer covered the target, and `paletteTypeMismatch`
+// before them named a wrong-type reference. All three retired with the `ref:` value grammar in
+// session 4: a row's value is always a literal, so a cue's only remaining dependency on a Look is a
+// layer — guarded by an indexed FK rather than by a health diagnosis.
 
 // Layer 3 property assignment on a cue.
 export interface CuePropertyAssignment {

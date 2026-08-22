@@ -117,7 +117,6 @@ export function LookDetailSheet({
   // From `detail` where it has loaded, not from the `look` summary: the summary is a frozen
   // snapshot taken when the library row was clicked.
   const layerCount = detail?.layerCount ?? look.layerCount
-  const refRowCount = detail?.refRowCount ?? look.refRowCount
   const families = detail?.families ?? look.families
 
   const save = async () => {
@@ -167,8 +166,6 @@ export function LookDetailSheet({
           <SheetDescription>
             {look.targetCount} fixture{look.targetCount === 1 ? '' : 's'} · used by {layerCount} cue
             layer{layerCount === 1 ? '' : 's'}
-            {refRowCount > 0 &&
-              ` · ${refRowCount} cue row${refRowCount === 1 ? '' : 's'} by reference`}
           </SheetDescription>
         </SheetHeader>
 
@@ -270,12 +267,8 @@ export function LookDetailSheet({
               <AlertDescription className="space-y-2">
                 <p>
                   {inUse.error} Deleting it anyway drops {inUse.layerCount} cue layer
-                  {inUse.layerCount === 1 ? '' : 's'}
-                  {inUse.refRowCount > 0 &&
-                    ` and leaves ${inUse.refRowCount} row${
-                      inUse.refRowCount === 1 ? '' : 's'
-                    } referencing a look that no longer exists`}
-                  . Those cues will fire without this look&rsquo;s contribution.
+                  {inUse.layerCount === 1 ? '' : 's'}. Those cues will fire without this
+                  look&rsquo;s contribution.
                 </p>
                 {inUse.cueNames.length > 0 && (
                   <p className="text-xs">Affected cues: {inUse.cueNames.join(', ')}</p>

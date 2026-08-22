@@ -17,8 +17,23 @@ import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { TimingBadge } from '@/components/cues/TimingBadge'
 import { AddBtn, RemoveBtn, Section } from '@/components/cues/paneChrome'
-import { FAMILY_LABELS } from '@/lib/attributeFamily'
-import { LookRefBadge } from '@/components/looks/LookRefBadge'
+import { Label } from '@/components/ui/label'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { BLEND_MODE_OPTIONS } from '@/components/fx/fxConstants'
+import { MaskPicker } from '@/components/programmer/maskPicker'
+import {
+  FAMILY_LABELS,
+  parsePropertyMask,
+  serializePropertyMask,
+} from '@/lib/attributeFamily'
+import { LookNameBadge } from '@/components/looks/LookNameBadge'
 import type { CueTarget } from '@/api/cuesApi'
 import type { LookSummary } from '@/api/looksApi'
 
@@ -45,17 +60,24 @@ export interface LookStackLayer {
 }
 
 /**
- * The four layer mutations, bundled so a consumer passes one prop rather than four.
+ * The layer mutations, bundled so a consumer passes one prop rather than six.
  *
  * **Index-based on purpose**, even though the programmer's ops address a layer by `layerId`: the
  * rows render a list and the operator acts on a position in it. Translating index → id is the
  * consumer's job, and it is the consumer that knows whether its list was filtered.
+ *
+ * `onSetStomp` is deliberately absent. The wire carries `stomp` and has since session 3a, but
+ * nothing *reads* it — within-cue stomp needs an `FxInstance` layer id, a suppression channel out of
+ * the cook step and per-tick suppression at four spawn sites, none of which exist. A toggle here
+ * would write a field the engine ignores, so the badge stays read-only until the engine honours it.
  */
 export interface LayerHandlers {
   onRemove: (index: number) => void
   onMove: (oldIndex: number, newIndex: number) => void
   onSetEnabled: (index: number, enabled: boolean) => void
   onSetAmount: (index: number, amount: number) => void
+  onSetBlendMode: (index: number, blendMode: string) => void
+  onSetPropertyMask: (index: number, propertyMask: string | null) => void
 }
 
 interface LookStackProps<T extends LookStackLayer> {
@@ -92,10 +114,12 @@ interface LookStackProps<T extends LookStackLayer> {
  * That sharing is the point rather than a saving: a cue *is* a saved programmer stack, so a layer
  * list that looked different in the two places would be describing one structure twice.
  *
- * Editable here: order, enabled, amount. `propertyMask`, `blendMode` and `stomp` render read-only —
- * the migration sets a mask on every layer folded from a value-level reference, so hiding it would
- * leave an operator unable to see why a layer only moves colour, but the controls for editing them
- * are a later session.
+ * Editable here: order, enabled, amount, blend mode and property mask. `stomp` still renders
+ * read-only — see [LayerHandlers] for why a toggle would be a lie.
+ *
+ * Blend and mask sit behind a per-row popover rather than inline. The row is a `text-xs` flex line of
+ * `size-6` controls; an `h-8` select plus four checkboxes would not fit beside them, and a layer's
+ * blend is set once and then read many times, unlike its amount.
  */
 export function LookStack<T extends LookStackLayer>({
   layers,
@@ -190,7 +214,11 @@ export function LayerRow({
   index: number
   look: LookSummary | undefined
   looksLoaded: boolean
-  handlers: LayerHandlers
+  /**
+   * Optional so a `readOnly` caller doesn't have to invent four no-ops it can never call — the read
+   * surface (`CueDetailContent`) renders these rows and has nothing to mutate.
+   */
+  handlers?: LayerHandlers
   sortable: boolean
   sortableId?: string
   showTargets?: boolean
@@ -216,7 +244,7 @@ export function LayerRow({
           <Badge variant="secondary" className="shrink-0 px-1.5 py-0 text-[10px] font-mono">
             {index + 1}
           </Badge>
-          <LookRefBadge name={name} missing={missing} />
+          <LookNameBadge name={name} missing={missing} />
 
           {look?.families.map((family) => (
             <Badge key={family} variant="outline" className="shrink-0 px-1.5 py-0 text-[10px]">
@@ -224,20 +252,35 @@ export function LayerRow({
             </Badge>
           ))}
 
-          {layer.propertyMask && (
-            <Badge
-              variant="outline"
-              className="shrink-0 px-1.5 py-0 text-[10px]"
-              title="This layer only asserts these attribute families"
-            >
-              [{layer.propertyMask}]
-            </Badge>
-          )}
-
-          {layer.blendMode && layer.blendMode !== 'OVERRIDE' && (
-            <Badge variant="outline" className="shrink-0 px-1.5 py-0 text-[10px]">
-              {layer.blendMode}
-            </Badge>
+          {readOnly ? (
+            <>
+              {layer.propertyMask && (
+                <Badge
+                  variant="outline"
+                  className="shrink-0 px-1.5 py-0 text-[10px]"
+                  title="This layer only asserts these attribute families"
+                >
+                  {/* The same label the editable trigger shows, not the raw wire string. Wording one
+                      surface `[COLOUR]` and the other `[Colour]` would undo the reason this row is
+                      shared between them. */}
+                  [{parsePropertyMask(layer.propertyMask)
+                    .map((f) => FAMILY_LABELS[f].singular)
+                    .join(', ')}]
+                </Badge>
+              )}
+              {layer.blendMode && layer.blendMode !== 'OVERRIDE' && (
+                <Badge variant="outline" className="shrink-0 px-1.5 py-0 text-[10px]">
+                  {layer.blendMode}
+                </Badge>
+              )}
+            </>
+          ) : (
+            <LayerBlendMaskPopover
+              blendMode={layer.blendMode ?? 'OVERRIDE'}
+              propertyMask={layer.propertyMask ?? null}
+              onSetBlendMode={(mode) => handlers?.onSetBlendMode(index, mode)}
+              onSetPropertyMask={(mask) => handlers?.onSetPropertyMask(index, mask)}
+            />
           )}
 
           {layer.stomp && (
@@ -274,7 +317,7 @@ export function LayerRow({
           {!readOnly && (
             <AmountInput
               value={layer.amount ?? 1}
-              onCommit={(amount) => handlers.onSetAmount(index, amount)}
+              onCommit={(amount) => handlers?.onSetAmount(index, amount)}
             />
           )}
           <TimingBadge
@@ -292,11 +335,11 @@ export function LayerRow({
                 aria-label={enabled ? 'Disable layer' : 'Enable layer'}
                 aria-pressed={!enabled}
                 title={enabled ? 'Disable this layer' : 'Enable this layer'}
-                onClick={() => handlers.onSetEnabled(index, !enabled)}
+                onClick={() => handlers?.onSetEnabled(index, !enabled)}
               >
                 {enabled ? <Eye className="size-3.5" /> : <Ban className="size-3.5" />}
               </Button>
-              <RemoveBtn onClick={() => handlers.onRemove(index)} />
+              <RemoveBtn onClick={() => handlers?.onRemove(index)} />
             </>
           )}
         </div>
@@ -358,6 +401,88 @@ function SortableRow({
     <div ref={setNodeRef} style={style} {...attributes}>
       {children(handle)}
     </div>
+  )
+}
+
+/**
+ * A layer's blend mode and property mask, behind one trigger.
+ *
+ * Grouped rather than inline, and grouped *together* rather than as two triggers, because they are
+ * the two answers to "how does this layer combine": the mask says which attributes it touches at
+ * all, the blend says what it does with them. Amount stays on the row because it is the one an
+ * operator reaches for repeatedly, and it already has a control shaped for a `text-xs` line.
+ *
+ * The trigger doubles as the read-out, so a masked or non-default layer still explains itself at a
+ * glance — that was the whole reason the badges it replaces rendered read-only.
+ */
+function LayerBlendMaskPopover({
+  blendMode,
+  propertyMask,
+  onSetBlendMode,
+  onSetPropertyMask,
+}: {
+  blendMode: string
+  propertyMask: string | null
+  onSetBlendMode: (blendMode: string) => void
+  onSetPropertyMask: (propertyMask: string | null) => void
+}) {
+  const families = parsePropertyMask(propertyMask)
+  const masked = families.length > 0
+  const nonDefaultBlend = blendMode !== 'OVERRIDE'
+  const label = masked
+    ? `[${families.map((f) => FAMILY_LABELS[f].singular).join(', ')}]`
+    : nonDefaultBlend
+      ? blendMode
+      : 'Mix'
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className={cn(
+            'h-6 shrink-0 px-1.5 text-[10px]',
+            masked || nonDefaultBlend ? 'text-foreground' : 'text-muted-foreground',
+          )}
+          title="How this layer combines: which attribute families it asserts, and its blend mode"
+        >
+          {label}
+          {masked && nonDefaultBlend && <span className="ml-1 opacity-70">{blendMode}</span>}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-64 space-y-4">
+        <div className="space-y-1.5">
+          <Label className="text-xs">Blend mode</Label>
+          <Select value={blendMode} onValueChange={onSetBlendMode}>
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {BLEND_MODE_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  <span className="flex flex-col">
+                    <span>{option.label}</span>
+                    <span className="text-xs text-muted-foreground">{option.description}</span>
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Asserts</Label>
+          {/* `MaskPicker` speaks families and the wire speaks a comma-separated string; the
+              adapter normalises both "none selected" and "all four selected" to null, so an
+              unmasked layer has exactly one representation. */}
+          <MaskPicker
+            value={families}
+            onChange={(next) => onSetPropertyMask(serializePropertyMask(next))}
+          />
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }
 

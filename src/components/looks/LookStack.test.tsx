@@ -27,7 +27,6 @@ function look(overrides: Partial<LookSummary> = {}): LookSummary {
     editorFixtureType: null,
     preview: [],
     layerCount: 1,
-    refRowCount: 0,
     ...overrides,
   }
 }
@@ -57,6 +56,8 @@ function handlers() {
     onMove: vi.fn(),
     onSetEnabled: vi.fn(),
     onSetAmount: vi.fn(),
+    onSetBlendMode: vi.fn(),
+    onSetPropertyMask: vi.fn(),
   }
 }
 
@@ -178,13 +179,34 @@ describe('LookStack', () => {
     expect(h.onSetAmount).not.toHaveBeenCalled()
   })
 
-  it('shows the read-only mask, blend and stomp badges', () => {
-    // Read-only for now, but never hidden: the migration sets a mask on every layer folded from a
-    // value-level reference, and an operator who cannot see it cannot explain the cue.
+  it('reads a layer’s mask and blend off the trigger, and keeps STOMP as a badge', () => {
+    // The mask and blend became editable in session 4, so the trigger *is* the read-out — an
+    // operator who cannot see the mask cannot explain why a layer only moves colour. STOMP stays a
+    // read-only badge because nothing reads the field yet; see `LayerHandlers`.
     renderStack([layer({ propertyMask: 'COLOUR', blendMode: 'MAX', stomp: true })])
-    expect(screen.getByText('[COLOUR]')).toBeInTheDocument()
+    expect(screen.getByText('[Colour]')).toBeInTheDocument()
     expect(screen.getByText('MAX')).toBeInTheDocument()
     expect(screen.getByText('STOMP')).toBeInTheDocument()
+  })
+
+  it('reports a mask change by index, normalising all-four to no mask', async () => {
+    // The load-bearing half of `serializePropertyMask`: a mask naming all four families composes
+    // identically to no mask, so storing one would render a badge that says nothing.
+    //
+    // Only the *mask* half of the popover is driven here. `MaskPicker` is plain checkboxes, but the
+    // blend control is a portalled Radix Select, and nothing in this repo opens one — the same call
+    // dnd-kit gets, where the pointer sequence isn't drivable so the handle and the pure helper are
+    // asserted instead. Here that means the trigger's read-out below plus `attributeFamily`'s own
+    // round-trip tests, rather than a fake select that would only prove the mock works.
+    const { handlers: h } = renderStack([layer({ propertyMask: 'INTENSITY,POSITION,COLOUR' })])
+    fireEvent.click(screen.getByTitle(/How this layer combines/))
+    fireEvent.click(await screen.findByLabelText('Beam'))
+    expect(h.onSetPropertyMask).toHaveBeenCalledWith(0, null)
+  })
+
+  it('offers the combine control once per row, addressed by index', () => {
+    renderStack([layer(), layer({ lookId: 8 })])
+    expect(screen.getAllByTitle(/How this layer combines/)).toHaveLength(2)
   })
 
   it('says a layer with no targets uses the look’s own', () => {
@@ -247,5 +269,6 @@ describe('LookStack', () => {
     expect(screen.queryByLabelText('Disable layer')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Remove')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Reorder layer')).not.toBeInTheDocument()
+    expect(screen.queryByTitle(/How this layer combines/)).not.toBeInTheDocument()
   })
 })

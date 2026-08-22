@@ -17,10 +17,12 @@ interface RunOutputPaneProps {
 }
 
 /**
- * Output pane for the expanded Run cue card. Headline status pill ("Outputting
- * now" / "Queued — next GO" / "Played" / "Idle") plus the same read-only
- * summary used by `CueDetailSheet` (transition, palette, presets, effects,
- * triggers).
+ * Output pane for the expanded Run cue card. Headline status pill ("Outputting now" / "Queued —
+ * next GO" / "Played" / "Idle") plus [CueDetailContent], which is the shared cue read surface —
+ * transition, palette, layers, ad-hoc effects and triggers.
+ *
+ * The doc used to name a `CueDetailSheet` that no longer exists, and "presets" where it now means
+ * Look layers.
  */
 export function RunOutputPane({
   cue,

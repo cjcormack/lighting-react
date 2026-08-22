@@ -156,12 +156,13 @@ export function PalettePanel({ label, compact }: { label?: string; compact?: boo
     <div className={cn("flex items-center gap-2", compact && "shrink-0")}>
       <div className={cn("flex items-center text-muted-foreground shrink-0", compact ? "gap-1" : "gap-1.5")}>
         <Palette className={compact ? "size-3" : "size-3.5"} />
-        {/* "Colour List", not "Palette": a named Palette is now a separate entity (typed,
-            per-fixture, referenced by a `ref:` value). This is the old positional ordered list
-            that FX params index as `P1`/`P2`/`P*`, and the two would otherwise share a word
-            three inches apart in the same sidebar. */}
+        {/* "Palette" here means the positional ordered colour list FX
+            parameters index as `P1`/`P2`/`P*`. It was labelled "Colour List" while a *named*
+            palette was a separate entity a value could reference; the `ref:` grammar retired in
+            session 4, the entity became a Look, and the word is free again.
+            This is the canonical statement of that; the other four labels point at it. */}
         {!compact && (
-          <Label className="text-xs">{label ? `${label} Colour List` : 'Colour List'}</Label>
+          <Label className="text-xs">{label ? `${label} Palette` : 'Palette'}</Label>
         )}
       </div>
       <div className={cn("flex items-center gap-1", compact ? "flex-nowrap" : "flex-wrap")}>

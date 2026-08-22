@@ -38,7 +38,6 @@ const LOOKS: LookSummary[] = [
     editorFixtureType: null,
     preview: [],
     layerCount: 1,
-    refRowCount: 0,
   },
   {
     id: 8,
@@ -54,7 +53,6 @@ const LOOKS: LookSummary[] = [
     editorFixtureType: 'mh-spot',
     preview: [],
     layerCount: 1,
-    refRowCount: 0,
   },
 ]
 
@@ -239,12 +237,26 @@ describe('LayersPane layer list', () => {
     expect(payload.layers.map((l: { lookId: number }) => l.lookId)).toEqual([8, 7])
   })
 
-  it('shows a mask read-only, so a colour-only layer explains itself', () => {
+  it('shows a mask on the combine control, so a colour-only layer explains itself', () => {
     // The migration sets a mask on every layer folded from a value-level reference, so this is the
-    // common case rather than an exotic one. Editing it is a later session; hiding it would leave
-    // an operator unable to see why a layer only moves colour.
+    // common case rather than an exotic one. It became editable in session 4, and the control's
+    // label is the read-out — hiding it would leave an operator unable to see why a layer only
+    // moves colour.
     renderPane([layer({ propertyMask: 'COLOUR' })])
-    expect(screen.getByText('[COLOUR]')).toBeTruthy()
+    expect(screen.getByText('[Colour]')).toBeTruthy()
+  })
+
+  it('PATCHes the whole layer array when a mask changes', async () => {
+    // The cue host's contract, which the shared component's test cannot assert: layers are replaced
+    // wholesale, so a mask edit resends every layer — and must not lose the others' fields.
+    renderPane([layer({ propertyMask: 'COLOUR' }), layer({ lookId: 8, blendMode: 'MAX' })])
+    fireEvent.click(screen.getAllByTitle(/How this layer combines/)[0])
+    fireEvent.click(await screen.findByLabelText('Position'))
+
+    const payload = patchCue.mock.calls.at(-1)![0]
+    expect(payload.layers).toHaveLength(2)
+    expect(payload.layers[0].propertyMask).toBe('POSITION,COLOUR')
+    expect(payload.layers[1].blendMode).toBe('MAX')
   })
 
   it('names a layer that takes its targets from the look', () => {

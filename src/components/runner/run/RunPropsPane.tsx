@@ -38,8 +38,8 @@ export function RunPropsPane({ cue, location }: RunPropsPaneProps) {
           )}
         </PropRow>
         <PropRow k="Name">{cue.name}</PropRow>
-        {/* Positional ordered colour list, not a named Palette entity — see PalettePanel. */}
-        <PropRow k="Colour List">
+        {/* The positional ordered colour list — see PalettePanel. */}
+        <PropRow k="Palette">
           {cue.palette.length === 0 ? (
             <span className="text-muted-foreground">none</span>
           ) : (

@@ -43,7 +43,6 @@ function look(id: number, name: string): LookSummary {
     editorFixtureType: null,
     preview: [],
     layerCount: 1,
-    refRowCount: 0,
   }
 }
 
@@ -119,6 +118,31 @@ describe('ProgrammerLookStack', () => {
 
     fireEvent.click(screen.getAllByLabelText('Disable layer')[0])
     expect(mocks.patchLayer).toHaveBeenCalledWith(40, { enabled: false })
+  })
+
+  it('addresses a blend or mask change by layerId, not by index', async () => {
+    // Same index→id translation the other ops get, and the same reason: the rendered list is
+    // filtered, so position N is not layer N.
+    mocks.layers = [
+      layer({ layerId: 99, lookId: 9, lookName: 'Draft', isPreview: true }),
+      layer({ layerId: 40 }),
+    ]
+    render(<ProgrammerLookStack />)
+
+    fireEvent.click(screen.getByTitle(/How this layer combines/))
+    fireEvent.click(await screen.findByLabelText('Colour'))
+    expect(mocks.patchLayer).toHaveBeenCalledWith(40, { propertyMask: 'COLOUR' })
+  })
+
+  it('clears a mask with an empty string, because an omitted field means leave alone', async () => {
+    // `programmer.patchLayer` treats a missing field as "don't touch". Sending `undefined` for a
+    // cleared mask would make un-masking a silent no-op, so null has to travel as ''.
+    mocks.layers = [layer({ layerId: 40, propertyMask: 'COLOUR' })]
+    render(<ProgrammerLookStack />)
+
+    fireEvent.click(screen.getByTitle(/How this layer combines/))
+    fireEvent.click(await screen.findByLabelText('Colour'))
+    expect(mocks.patchLayer).toHaveBeenCalledWith(40, { propertyMask: '' })
   })
 
   it('says the operator’s own values beat every layer', () => {

@@ -194,8 +194,8 @@ the bug that doc exists to prevent.
 One library entity — a **Look** — replacing what used to be two (FX presets and named
 palettes), and one reference mechanism: a **Layer** applies a Look inside a cue at a
 declared position in that cue's stack. Backend contract in
-`lighting7/docs/lighting-composition-model.md` §"Looks and layers"; the migration plan and
-its remaining sessions are `lighting7/docs/plans/looks-and-layers-plan.md`.
+`lighting7/docs/lighting-composition-model.md` §"Looks and layers"; the completed five-session
+record is `lighting7/docs/plans/completed/looks-and-layers-plan.md`.
 
 A Look's rows are either **bound** (naming their own fixture or group) or **deferred**
 (taking their targets from the layer applying them), and that distinction is what makes one
@@ -225,18 +225,32 @@ A layer's `sortOrder` is authoritative, not its array position — `reorderCueLa
 missing from that rebuild is dropped on every inline cue edit; `cueUtils.test.ts` pins all
 thirteen individually rather than by deep-equal.
 
-**The `ref:{uuid}` value grammar still resolves** (a uuid, not the int id: int primary keys
-never appear in the backend's sync export and are re-minted on import, so `ref:12` would
-dangle after any import or clone — use `id` for REST paths and layer `lookId`s, `uuid` only
-inside a value). But **nothing authors one any more**: a layer with a `propertyMask` is what
-replaces it, and session 3 retires the grammar. `LookRefBadge` renders the rows that already
-hold one, name-only — no swatch and no family colour, because a Look has no type to colour
-by. **Never mint a `P<n>` short code for a Look**; display its name.
+**The `ref:{uuid}` value grammar is gone** — retired in session 4, on both sides at once,
+because a client cannot render rows a server still produces. A cue or the programmer depends on
+a Look through a **layer**, which names it by FK, and a layer's `propertyMask` is what expresses
+"this property comes from that Look". What went with it: `parsePaletteRefUuid` /
+`isPaletteRefValue` / `serializePaletteRef`, `ProgrammerEntry`'s five `palette*` fields,
+`CellPaletteRef` and `describePaletteRef`, `PaletteRefNotice` and the four cell editors' notices,
+the `FixturesTable` reference rail and its `Link2` corner glyph (the `Layers` glyph beside it
+stays), the two `missingPalette*` health arms on both `AssignmentHealth` and `BindingHealth`,
+`refRowCount`, and the programmer-wide Make Hard with its dialog.
+
+Two things survived it on purpose. **`validateLookRows` still rejects a `ref:`-shaped value** at
+the Look write boundary, as an inlined shape check with its own local constant — that rejection
+*is* `FU-LOOK-NESTED`'s non-recursion guarantee, and it must not be deleted along with the last
+reader of the grammar. And **`StateMigrations`' `removePrefix("ref:")` is the upgrade path**, not
+dead code: it folds a v4 database's ref rows into layers. `LooksMigrationTest` spells the old
+form out locally for the same reason.
+
+`LookRefBadge` became **`LookNameBadge`** and changed more than its name: chain iconography and
+"References …" titles both misdescribe a layer, so it draws `Layers` and names the Look plainly.
+**Never mint a `P<n>` short code for a Look**; display its name.
 
 "Palette" now means exactly one thing in this codebase: the positional ordered colour list
 that FX parameters index as `P1`/`P2`/`P*`, whose helpers are `isPaletteRef` /
-`parsePaletteIndex` in `components/fx/colourUtils.ts`. It is still labelled "Colour List" in
-the UI; dropping that qualifier is a session-4 tidy-up.
+`parsePaletteIndex` in `components/fx/colourUtils.ts`. Session 4 dropped the "Colour List"
+qualifier from all five labels that carried it, since the entity competing for the word is now a
+Look.
 
 **The programmer is a layer stack too**, and `LookStack` (`components/looks/LookStack.tsx`) is
 the one component that draws both — that sharing is the point rather than a saving, because a
@@ -250,17 +264,34 @@ the running effects **in place**, so a drag doesn't restart any effect's phase.
 
 `programmer.layerState` is the **third broadcast** frame (after `provenanceState` and
 `programmer.includeTarget`), because the programmer is shared and a second tab's reorder must
-not leave this one showing a stale order. Its handler calls `notifyState()` only and
-deliberately *not* `scheduleStateRefetch()`: every layer mutation also emits `provenanceState`,
-which already schedules the value re-read. Layers ride a **separate** cache entry
+not leave this one showing a stale order. It arrives two ways, and both are needed: as a
+**unicast reply** to whichever socket sent the layer op (the acting tab's fast path), and as a
+**broadcast** to every socket from `ProgrammerStore.layersFlow`. The broadcast was missing until
+session 4, on the reasoning that "every layer mutation also emits `provenanceState`, which
+already schedules the value re-read" — which is false for a mutation that moves no value. A
+layer whose `targets` don't match its bound Look's rows asserts nothing, so adding, reordering
+or disabling it emitted no provenance and left every other tab on a stale layer list. Found on
+a desk, not by a test. The flow is emitted from `mutateLayers` rather than from `recook`,
+because `reset()` bypasses the recook path and a full programmer clear must reach other tabs
+too. Its handler still calls `notifyState()` only and deliberately *not*
+`scheduleStateRefetch()` — the frame carries the whole stack, so there is nothing to re-read.
+Layers ride a **separate** cache entry
 (`useProgrammerLayersQuery`) rather than joining `ProgrammerSummary`, which the always-visible
 `ProgrammerIndicator` reads.
 
 Creating a **bound** Look and **update-back after Include** both work now —
 `RecordLookSheet` (`POST /programmer/record-look`) and `updateIncludedLook`. `includedTargetIsReadOnly`
-and the `INCLUDE_TARGET_READ_ONLY` conflict arm are gone with them. Per-cue and per-preset
-**Make Hard** are gone with their routes; the programmer-wide one survives, because references
-still exist on migrated cues.
+and the `INCLUDE_TARGET_READ_ONLY` conflict arm are gone with them.
+
+**All three Make Hard routes are gone**, replaced by one flatten-layer route:
+`POST /{projectId}/cues/{cueId}/flatten`. It writes the *cooked* result as local rows and deletes
+the layers, so what it stores is what the rig is showing. Two consequences to know before using
+it. Rows come out **fixture-targeted, never group-targeted** — cook's output is per fixture by
+construction and carries no group name, so the old route's "keep a group row when every member
+agrees" cannot be reproduced without guessing which of several overlapping groups to name. And a
+**single `layerId` is refused unless it is the last enabled layer**, because local rows beat every
+layer: promoting a middle layer's values would make them win over the layers above and change the
+cue's output, which is the opposite of what flattening promises.
 
 Two things about the record sheet that are not arbitrary. The **mask is prominent** rather than
 incidental — a palette bank implied its attribute, a Look has no type, so an unmasked record of
@@ -274,6 +305,15 @@ which `useRowOwnership` aggregates into `CellOwnership.layer` — so "why is thi
 colour?" answers *Warm Wash* rather than *a cue*. Those fields **must stay in
 `provenanceSignature`**: a key can move from the cue to one of the cue's layers with `source`
 unchanged, and a cell that didn't wake would keep naming the old answer.
+
+Both branches fill them in, and the `PROGRAMMER` one only since session 4: session 3a wired the
+`CUE` branch from `cueLayerLayerWinners` and left the programmer branch building a bare entry, so
+a cell lit by a busking pad answered *the programmer* and the layer-aware hover never appeared
+there. The programmer branch has no resolver to ask, so it recovers the winning layer's **rank**
+from the reserved `seq` band that `putLayerSlots` stamps
+(`ProgrammerStore.layerWinnerRankByKey`), and reports only keys whose *winning* slot is the
+layer's — a local busk sits above the layer slot, and naming the Look there would credit a Look
+for the operator's own hand.
 
 **The pads still go through `POST /looks/{id}/toggle`**, which is `programmerLayerStack.toggle`
 server-side — it adds or removes a layer, matching on `lookId` + exact `targets`. Keeping one

@@ -6,7 +6,7 @@ import {
   resolveEntryChannels,
   type ResolvableEntry,
 } from './programmerChannels'
-import { serializeColour, serializePaletteRef } from './programmerValue'
+import { serializeColour } from './programmerValue'
 import {
   chan,
   colourProp,
@@ -18,7 +18,6 @@ import {
   sliderProp,
 } from '../test/fixtureFactories'
 
-const PALETTE_UUID = '3f2b1c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d'
 
 /** Resolved channels as a plain object, so assertions read as key → value. */
 function asMap(channels: { key: string; value: number }[]): Record<string, number> {
@@ -92,22 +91,9 @@ describe('resolveEntryChannels', () => {
     })
   })
 
-  it('resolves a palette reference through resolvedValue', () => {
-    const colour = colourProp('rgbColour', chan(2), chan(3), chan(4))
-    const ref = entry('rgbColour', serializePaletteRef(PALETTE_UUID), {
-      resolvedValue: serializeColour(9, 8, 7),
-    })
-    expect(asMap(resolveEntryChannels([colour], ref))).toEqual({ '0:2': 9, '0:3': 8, '0:4': 7 })
-  })
-
-  it('yields nothing for a palette reference with no resolved value', () => {
-    // The palette no longer covers this target. Falling through to nothing is right: the
-    // alternative is rendering a guess.
-    const colour = colourProp('rgbColour', chan(2), chan(3), chan(4))
-    const ref = entry('rgbColour', serializePaletteRef(PALETTE_UUID))
-    expect(resolveEntryChannels([colour], ref)).toEqual([])
-  })
-
+  // Two tests stood here: a palette reference resolving through its `resolvedValue`, and one with
+  // nothing resolved yielding no channels rather than a guess. Both retired with the `ref:` grammar
+  // in session 4 — an entry's `value` is now always the literal.
   it('yields nothing when the parsed shape does not match the descriptor', () => {
     const dimmer = sliderProp('dimmer', 'dimmer', chan(1))
     const colour = colourProp('rgbColour', chan(2), chan(3), chan(4))

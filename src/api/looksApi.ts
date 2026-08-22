@@ -96,10 +96,14 @@ export interface LookSummary {
   editorFixtureType: string | null
   /** Up to 8 distinct literals, most-frequent first, so a row can preview without a detail fetch. */
   preview: string[]
-  /** How many cue layers reference this Look. Gates delete together with `refRowCount`. */
+  /**
+   * How many cue layers reference this Look. Gates delete.
+   *
+   * There was a sibling `refRowCount` beside it — cue rows whose value was `ref:{uuid}`, a second
+   * reference mechanism gating the same delete. It retired with the `ref:` grammar in session 4, so
+   * a layer's FK is the only dependency a Look can have.
+   */
   layerCount: number
-  /** How many cue rows still hold a `ref:{uuid}` naming this Look. A different mechanism, same gate. */
-  refRowCount: number
 }
 
 /**
@@ -125,7 +129,6 @@ export interface LookDetails {
   rows: LookRow[]
   effects: LookEffect[]
   layerCount: number
-  refRowCount: number
   usedByCueIds: number[]
   usedByCueNames: string[]
 }
@@ -165,7 +168,6 @@ export interface LookInUseError {
   error: string
   code: 'LOOK_IN_USE'
   layerCount: number
-  refRowCount: number
   cueIds: number[]
   cueNames: string[]
 }

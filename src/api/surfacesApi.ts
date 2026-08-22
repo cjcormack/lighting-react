@@ -112,10 +112,9 @@ export type BindingHealth =
   | { type: "missingFixture"; fixtureKey: string }
   | { type: "missingGroup"; groupName: string }
   | { type: "missingProperty"; targetKey: string; propertyName: string }
-  // `ref:` variants, which name a Look. Control surfaces can't hold a reference value themselves,
-  // but this type is the superset `describeHealth` switches over, so it carries them.
-  | { type: "missingPalette"; paletteUuid: string }
-  | { type: "missingPaletteEntry"; paletteUuid: string; targetKey: string; propertyName: string }
+  // Two `ref:` variants used to sit here — carried not because a control surface could hold a
+  // reference value, but because this type is the superset `describeHealth` switches over. They
+  // retired with the grammar in session 4.
   | { type: "missingStack"; stackId: number }
   | { type: "missingCue"; cueId: number }
   | { type: "unknownBank"; deviceTypeKey: string; bankId: string }

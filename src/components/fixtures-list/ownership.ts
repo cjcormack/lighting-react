@@ -2,7 +2,7 @@ import { computeCombinedCss } from '../../lib/colourMath'
 import { resolveSettingOption } from '../../hooks/usePropertyValues'
 import type { CellResolution } from './columns'
 import type { CellValue } from './useRowValues'
-import type { CellLayer, CellOwnership, CellPaletteRef, StagedValue } from './useRowOwnership'
+import type { CellLayer, CellOwnership, StagedValue } from './useRowOwnership'
 
 /**
  * Ownership styling for a programmer-sheet cell.
@@ -20,13 +20,10 @@ import type { CellLayer, CellOwnership, CellPaletteRef, StagedValue } from './us
  */
 export function ownershipCellClass(ownership?: CellOwnership): string {
   if (!ownership) return ''
-  // A *broken* reference overrides the ownership colour: the cell is showing the last value the
-  // palette resolved to, which is indistinguishable from a healthy one until something says so.
-  // A healthy reference deliberately gets no new colour — the four ownership colours are already
-  // a learned vocabulary, and the reference marker is a separate, additive signal.
-  if (ownership.paletteRef && !ownership.paletteRef.resolved) {
-    return 'rounded-sm ring-1 ring-inset ring-destructive bg-destructive/10'
-  }
+  // A destructive ring used to override the ownership colour when a cell's `ref:` no longer
+  // resolved — the cell was showing the last literal the palette gave it, indistinguishable from a
+  // healthy one until something said so. The `ref:` grammar retired in session 4; a layer naming a
+  // deleted Look simply contributes nothing, so there is no stale-but-plausible value to warn about.
   const mixed = ownership.isUniform ? '' : ' border-dashed'
   switch (ownership.source) {
     case 'parked':
@@ -66,8 +63,6 @@ export function ownershipTitle(ownership?: CellOwnership): string | undefined {
   const parts = [base]
   if (ownership.sourceGroup) parts.push(`via group ${ownership.sourceGroup}`)
   if (!ownership.isUniform) parts.push('mixed across this row')
-  const ref = ownership.paletteRef
-  if (ref) parts.push(describePaletteRef(ref))
   const layer = ownership.layer
   if (layer) parts.push(describeCellLayer(layer))
   return parts.join(' · ')
@@ -78,7 +73,9 @@ export function ownershipTitle(ownership?: CellOwnership): string | undefined {
  *
  * This is the sentence `source` cannot say. "Cue" answers *which layer of the engine*; an operator
  * asking why a fixture is this colour wants the name of the look they built it from, and the cook
- * step knows it. Kept beside [describePaletteRef] so the hover text words the two the same way.
+ * step knows it. It used to sit beside a `describePaletteRef` clause, worded to match, so a cell
+ * could report both a value-level reference and the layer that won it; the reference half retired
+ * with the `ref:` grammar in session 4.
  */
 export function describeCellLayer(layer: CellLayer): string {
   if (layer.mixed) {
@@ -90,20 +87,6 @@ export function describeCellLayer(layer: CellLayer): string {
 }
 
 /**
- * One clause naming what a cell's reference is doing. Shared by the hover title and the editor
- * popover so the two can't word it differently.
- */
-export function describePaletteRef(ref: CellPaletteRef): string {
-  if (!ref.resolved) {
-    return ref.name
-      ? `references “${ref.name}”, which no longer covers this — showing the last value it resolved to`
-      : 'references a palette that no longer resolves — showing the last value it resolved to'
-  }
-  if (ref.mixed) return 'references more than one palette across this row'
-  return ref.name ? `references “${ref.name}”` : 'references a palette'
-}
-
-/**
  * Substitute the programmer's staged value while blind is engaged.
  *
  * Blind gates the programmer out of the merge, so the live DMX the sheet normally shows is
@@ -111,10 +94,10 @@ export function describePaletteRef(ref: CellPaletteRef): string {
  * Without this, blind busking in the sheet would be invisible, which is the whole point of
  * the gesture.
  *
- * A palette reference needs no case here, and that is the design: a reference always resolves to
- * one of the same four literal shapes, so `useRowOwnership` stages the *resolved* literal and this
- * switch stays exhaustive over the four value kinds. There is deliberately no fifth `kind: 'ref'`
- * — references are decoration on a value, not a value.
+ * The switch is exhaustive over the four value kinds, and stays that way: there was never a fifth
+ * `kind: 'ref'`, because a reference was decoration on a value rather than a value — it resolved to
+ * one of the same four shapes and `useRowOwnership` staged the resolved literal. Moot since the
+ * `ref:` grammar retired, but the reasoning is why the switch is shaped as it is.
  *
  * Only shapes that match the cell's own kind are substituted; a mismatch (which would mean
  * the programmer holds something the column doesn't render) falls through to the live value.
