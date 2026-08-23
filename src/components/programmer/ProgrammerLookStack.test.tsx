@@ -22,6 +22,11 @@ vi.mock('@/store/programmer', () => ({
 vi.mock('@/store/looks', () => ({
   useLookListQuery: () => ({ data: LOOKS }),
 }))
+// The stack loads both libraries now, because a layer can apply either. Mocked as loaded-and-empty:
+// these tests are about layer *addressing*, and an unmocked query has no Provider to read.
+vi.mock('@/store/templates', () => ({
+  useTemplateListQuery: () => ({ data: [] }),
+}))
 vi.mock('react-router', () => ({ useParams: () => ({ projectId: '1' }) }))
 // The picker drags in the whole look/target/timing wizard, and nothing here presses Add.
 vi.mock('@/components/cues/editor/AddLayerSheet', () => ({ AddLayerSheet: () => null }))
@@ -39,8 +44,7 @@ function look(id: number, name: string): LookSummary {
     rowCount: 1,
     effectCount: 0,
     targetCount: 1,
-    hasDeferredRows: false,
-    editorFixtureType: null,
+    hasDeferredEffects: false,
     preview: [],
     layerCount: 1,
   }
@@ -51,8 +55,7 @@ const LOOKS = [look(7, 'Warm Wash'), look(8, 'Slow Pulse'), look(9, 'Draft')]
 function layer(overrides: Partial<ProgrammerLayer> = {}): ProgrammerLayer {
   return {
     layerId: 1,
-    lookId: 7,
-    lookName: 'Warm Wash',
+    source: { kind: 'LOOK', id: 7, uuid: 'u7', name: 'Warm Wash' },
     sortOrder: 0,
     enabled: true,
     targets: [{ type: 'group', key: 'front-wash' }],
@@ -73,7 +76,7 @@ describe('ProgrammerLookStack', () => {
   it('addresses a layer by its id, not by the row it was drawn at', () => {
     // The whole point of the index → `layerId` translation: `layerId`s are not positions and are
     // not dense, so acting on the array index would hit the wrong layer.
-    mocks.layers = [layer({ layerId: 40 }), layer({ layerId: 12, lookId: 8, lookName: 'Slow Pulse' })]
+    mocks.layers = [layer({ layerId: 40 }), layer({ layerId: 12, source: { kind: 'LOOK', id: 8, uuid: 'u8', name: 'Slow Pulse' } })]
     render(<ProgrammerLookStack />)
 
     fireEvent.click(screen.getAllByLabelText('Disable layer')[1])
@@ -87,7 +90,7 @@ describe('ProgrammerLookStack', () => {
     // Stomp is the programmer's escape hatch from the Layer 3/4 boundary: a busking effect below
     // fighting a value a Look above sets. It goes through `patchLayer` like every other field —
     // deliberately *not* through the pads' `looks/{id}/toggle`, which owns add/remove only.
-    mocks.layers = [layer({ layerId: 40 }), layer({ layerId: 12, lookId: 8, lookName: 'Slow Pulse' })]
+    mocks.layers = [layer({ layerId: 40 }), layer({ layerId: 12, source: { kind: 'LOOK', id: 8, uuid: 'u8', name: 'Slow Pulse' } })]
     render(<ProgrammerLookStack />)
 
     fireEvent.click(screen.getAllByLabelText('Stomp lower layers')[1])
@@ -108,7 +111,7 @@ describe('ProgrammerLookStack', () => {
   it('keeps the preview layer out of the reorderable stack', () => {
     // It holds an unsaved draft, is never recorded, and the server pins it to the tail whatever
     // index a move asks for — so a drag handle, an amount field and a remove button would all lie.
-    mocks.layers = [layer({ layerId: 40 }), layer({ layerId: 99, lookId: 9, lookName: 'Draft', isPreview: true })]
+    mocks.layers = [layer({ layerId: 40 }), layer({ layerId: 99, source: { kind: 'LOOK', id: 9, uuid: 'u9', name: 'Draft' }, isPreview: true })]
     render(<ProgrammerLookStack />)
 
     expect(screen.getAllByLabelText('Reorder layer')).toHaveLength(1)
@@ -121,9 +124,9 @@ describe('ProgrammerLookStack', () => {
     // The server sorts the preview last, but a client that filtered *after* indexing would map row
     // 1 onto it. This is the failure that would silently retarget every control by one.
     mocks.layers = [
-      layer({ layerId: 99, lookId: 9, lookName: 'Draft', isPreview: true }),
+      layer({ layerId: 99, source: { kind: 'LOOK', id: 9, uuid: 'u9', name: 'Draft' }, isPreview: true }),
       layer({ layerId: 40 }),
-      layer({ layerId: 41, lookId: 8, lookName: 'Slow Pulse' }),
+      layer({ layerId: 41, source: { kind: 'LOOK', id: 8, uuid: 'u8', name: 'Slow Pulse' } }),
     ]
     render(<ProgrammerLookStack />)
 
@@ -135,7 +138,7 @@ describe('ProgrammerLookStack', () => {
     // Same index→id translation the other ops get, and the same reason: the rendered list is
     // filtered, so position N is not layer N.
     mocks.layers = [
-      layer({ layerId: 99, lookId: 9, lookName: 'Draft', isPreview: true }),
+      layer({ layerId: 99, source: { kind: 'LOOK', id: 9, uuid: 'u9', name: 'Draft' }, isPreview: true }),
       layer({ layerId: 40 }),
     ]
     render(<ProgrammerLookStack />)

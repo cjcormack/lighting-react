@@ -52,9 +52,14 @@ export const NON_SAVE_ENDPOINTS: ReadonlySet<string> = new Set([
   'pauseGroupFx',
   'resumeGroupFx',
   'clearGroupFx',
-  'previewLook',
-  'clearLookPreview',
+  // `previewLook` / `clearLookPreview` stood here. They drove the Look editor's rig preview, which
+  // went with the editor in session 3; the routes remain server-side but nothing sends them.
   'toggleLook',
+  // The template gestures, for the same reason `toggleLook` is here: they land on the rig and the
+  // strip reports what happened itself, so a save-status spinner would be describing a press.
+  'applyTemplate',
+  'toggleTemplate',
+  'resolveTemplate',
 
   // ── Compile / run / chat: long-running, and each already reports its own outcome ──
   'compileProjectScript',

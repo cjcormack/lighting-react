@@ -33,7 +33,7 @@ export function ProgrammerFxList() {
       new Map(
         (layers ?? [])
           .filter((l) => !l.isPreview)
-          .map((l, i) => [l.layerId, { name: l.lookName, position: i + 1 }]),
+          .map((l, i) => [l.layerId, { name: l.source.name, position: i + 1 }]),
       ),
     [layers],
   )

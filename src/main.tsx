@@ -7,6 +7,7 @@ import { store } from "./store"
 import { applyThemeClass, getInitialTheme } from "./lib/theme"
 import { startOAuthIdentityBridge } from "./store/oauthGithub"
 import { startLooksBridge } from "./store/looks"
+import { startTemplatesBridge } from "./store/templates"
 
 // Apply the stored (or system-preferred) theme before React mounts. The boot
 // loading overlay renders before Layout's ThemeToggle effect runs, so without
@@ -23,6 +24,7 @@ startOAuthIdentityBridge()
 // Same reason, one slice along: store/looks is imported from the sidebar's nav registry and from
 // pickers that mount everywhere, so its WS bridge cannot run at module-eval time either.
 startLooksBridge()
+startTemplatesBridge()
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement

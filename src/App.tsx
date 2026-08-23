@@ -22,6 +22,7 @@ import { ProjectFxLibrary, FxLibraryRedirect } from "./routes/FxLibrary";
 
 import { FxRedirect, ProjectFxBusking } from "./routes/FxBusking";
 import { LooksRedirect, ProjectLooks } from "./routes/Looks";
+import { TemplatesRedirect, ProjectTemplates } from "./routes/Templates";
 import { SpeedMastersRedirect, ProjectSpeedMasters } from "./routes/SpeedMasters";
 import ProjectOverview, { ProjectOverviewRedirect } from "./routes/ProjectOverview";
 import { PatchesRedirect } from "./routes/Patches";
@@ -136,9 +137,8 @@ function App() {
           path: "fx",
           element: <FxRedirect />,
         },
-        // The Look library: **one route**, with a sticky in-page family filter rather than the
-        // four sibling routes the palette banks had. A Look's families are derived from its rows,
-        // so one covering colour and position cannot own a single path — see the `looks` nav entry.
+        // The Look library: **one route, no filter**. Recorded states over named fixtures; a Look
+        // spans families by nature, so there is nothing here for a family filter to partition.
         {
           path: "projects/:projectId/looks",
           element: <ProjectLooks />,
@@ -146,6 +146,17 @@ function App() {
         {
           path: "looks",
           element: <LooksRedirect />,
+        },
+        // The template library: **one route**, with the sticky in-page family filter that used to
+        // live on `/looks`. Here a family really is an exact partition — a template is in exactly
+        // one — so `?family=` deep-links from Cmd+K land on a filtered view of one page.
+        {
+          path: "projects/:projectId/templates",
+          element: <ProjectTemplates />,
+        },
+        {
+          path: "templates",
+          element: <TemplatesRedirect />,
         },
         {
           path: "projects/:projectId/speed-masters",

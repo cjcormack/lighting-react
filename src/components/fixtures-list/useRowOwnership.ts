@@ -1,3 +1,4 @@
+import type { LayerSource } from '@/api/cuesApi'
 import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react'
 import { lightingApi } from '../../api/lightingApi'
 import { parseProgrammerValue } from '../../lib/programmerValue'
@@ -56,7 +57,8 @@ export interface CellOwnership {
 export interface CellLayer {
   /** Undefined when the covered properties were won by *different* layers — see `mixed`. */
   layerId?: number
-  lookId?: number
+  /** What that layer applies — a Look or a template. Undefined when `mixed`. */
+  source?: LayerSource
   name?: string
   mixed: boolean
 }
@@ -175,8 +177,8 @@ export function aggregateCellOwnership(
       ? undefined
       : {
           layerId: layerMixed ? undefined : layerId,
-          lookId: layerMixed ? undefined : layerEntry?.lookId,
-          name: layerMixed ? undefined : layerEntry?.lookName,
+          source: layerMixed ? undefined : layerEntry?.layerSource,
+          name: layerMixed ? undefined : layerEntry?.layerSource?.name,
           mixed: layerMixed || layerCount !== keys.length,
         }
 

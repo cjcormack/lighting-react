@@ -66,6 +66,10 @@ describe('buildCueInput', () => {
     const layer = input.layers[0]
 
     expect(layer.lookId).toBe(7)
+    // Session 3: a layer applies a Look **or** a template, so `templateId` is a field too. Missing
+    // from the rebuild it would be dropped on every inline cue edit — and because both ids are
+    // optional, the compiler would not have said a word.
+    expect('templateId' in layer).toBe(true)
     expect(layer.sortOrder).toBe(3)
     expect(layer.enabled).toBe(false)
     expect(layer.targets).toEqual([{ type: 'group', key: 'front-wash' }])
@@ -80,9 +84,25 @@ describe('buildCueInput', () => {
     expect(layer.randomWindowMs).toBe(250)
   })
 
-  it('strips the response-only look name, which is why the rebuild exists at all', () => {
+  it('strips the response-only source, which is why the rebuild exists at all', () => {
+    // `source` is what the server resolved the layer's referent to — kind, id, uuid and name. It is
+    // read-only: `lookId` / `templateId` are the write fields, and echoing the resolved object back
+    // would invite the server to trust a client's idea of a record's identity.
     const input = buildCueInput(cueWithOneLayer())
-    expect('lookName' in input.layers[0]).toBe(false)
+    expect('source' in input.layers[0]).toBe(false)
+  })
+
+  it('carries a template layer’s id, not just a Look’s', () => {
+    // The other half of the polymorphic referent. A cue that layers a template must survive an
+    // inline edit of any other field on the cue.
+    const cue = cueWithOneLayer()
+    const templated = {
+      ...cue,
+      layers: [{ ...cue.layers[0], lookId: undefined, templateId: 11 }],
+    }
+    const layer = buildCueInput(templated).layers[0]
+    expect(layer.templateId).toBe(11)
+    expect(layer.lookId).toBeUndefined()
   })
 
   /**
@@ -138,7 +158,7 @@ function cueWithOneLayer(): Cue {
     layers: [
       {
         lookId: 7,
-        lookName: 'warm-pulse',
+        source: { kind: 'LOOK', id: 7, uuid: 'u7', name: 'warm-pulse' },
         sortOrder: 3,
         enabled: false,
         targets: [{ type: 'group', key: 'front-wash' }],

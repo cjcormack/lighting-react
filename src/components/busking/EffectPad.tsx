@@ -1,6 +1,6 @@
 import React, { useRef } from 'react'
 import { useNavigate } from 'react-router'
-import { Crosshair, SwatchBook, Plus, Clock } from 'lucide-react'
+import { Crosshair, SwatchBook, Clock } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { cn } from '@/lib/utils'
@@ -27,9 +27,8 @@ interface EffectPadProps {
    * its own fixtures, so the toggle route offers none of its rows and a pad for it would fire
    * nothing.
    */
-  looks: LookSummary[]
-  onApplyLook: (look: LookSummary) => Promise<void>
-  getLookPresence: (look: LookSummary) => EffectPresence
+  /** The named things a pad can toggle onto the selection — Looks and templates in one grid. */
+  padItems: PadItem[]
   currentProjectId: number | undefined
   // Beat division
   defaultBeatDivision: number
@@ -43,8 +42,6 @@ interface EffectPadProps {
   onPropertyToggle: (button: PropertyButton, settingLevel?: number) => void
   onPropertyLongPress: (button: PropertyButton) => void
   getPropertyValue: (button: PropertyButton) => string | null
-  onCreateLook: () => void
-  onEditLook: (look: LookSummary) => void
 }
 
 export function EffectPad({
@@ -54,9 +51,7 @@ export function EffectPad({
   onLongPress,
   hasSelection,
   headerContent,
-  looks,
-  onApplyLook,
-  getLookPresence,
+  padItems,
   currentProjectId,
   defaultBeatDivision,
   onBeatDivisionChange,
@@ -67,8 +62,6 @@ export function EffectPad({
   onPropertyToggle,
   onPropertyLongPress,
   getPropertyValue,
-  onCreateLook,
-  onEditLook,
 }: EffectPadProps) {
   if (!hasSelection) {
     return (
@@ -86,15 +79,8 @@ export function EffectPad({
         if (cat === 'looks') {
           return (
             <React.Fragment key={cat}>
-              <CategorySection label="Looks" icon={SwatchBook}>
-                <LookGrid
-                  looks={looks}
-                  onApplyLook={onApplyLook}
-                  onEditLook={onEditLook}
-                  getLookPresence={getLookPresence}
-                  currentProjectId={currentProjectId}
-                  onCreateLook={onCreateLook}
-                />
+              <CategorySection label="Looks &amp; templates" icon={SwatchBook}>
+                <LookGrid items={padItems} currentProjectId={currentProjectId} />
               </CategorySection>
               <hr className="border-border mt-3 mb-0" />
               <CategorySection label="Time" icon={Clock}>
@@ -200,52 +186,59 @@ function CategorySection({
 
 const MOVE_THRESHOLD = 10
 
+/**
+ * One pad: a named thing you toggle onto the current selection.
+ *
+ * Deliberately not "a Look" any more. Session 3 split the library in two and **both halves belong on
+ * a pad** — a template is a named value, which is exactly what a palette bank was, and a Look with
+ * deferred effects is a chase you point at a selection. They share one grid because they are one
+ * gesture from the operator's side; only the badge says which.
+ */
+export interface PadItem {
+  key: string
+  name: string
+  notes: string | null
+  /** What it holds, in a badge's worth of text. */
+  detail: string
+  kind: 'look' | 'template'
+  presence: EffectPresence
+  onToggle: () => void
+  onEdit: () => void
+}
+
 function LookGrid({
-  looks,
-  onApplyLook,
-  onEditLook,
-  getLookPresence,
+  items,
   currentProjectId,
-  onCreateLook,
 }: {
-  looks: LookSummary[]
-  onApplyLook: (look: LookSummary) => Promise<void>
-  onEditLook: (look: LookSummary) => void
-  getLookPresence: (look: LookSummary) => EffectPresence
+  items: PadItem[]
   currentProjectId: number | undefined
-  onCreateLook: () => void
 }) {
   const navigate = useNavigate()
 
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-1 @[20rem]:grid-cols-2 @[28rem]:grid-cols-3 @[48rem]:grid-cols-4 gap-2">
-        {looks.map((look) => (
+        {items.map((item) => (
           <LookPadButton
-            key={look.id}
-            look={look}
-            presence={getLookPresence(look)}
-            onToggle={() => onApplyLook(look)}
-            onLongPress={() => onEditLook(look)}
+            key={item.key}
+            item={item}
+            presence={item.presence}
+            onToggle={item.onToggle}
+            onLongPress={item.onEdit}
           />
         ))}
-        {currentProjectId && (
-          <button
-            onClick={onCreateLook}
-            className={cn(
-              'flex flex-col items-center justify-center rounded-lg border border-dashed px-2 py-3 text-center transition-all',
-              'min-h-[64px] select-none touch-manipulation',
-              'border-border hover:bg-accent/50 hover:border-muted-foreground/50',
-              'active:scale-95',
-            )}
-          >
-            <Plus className="size-5 text-muted-foreground mb-0.5" />
-            <span className="text-xs text-muted-foreground">New Look</span>
-          </button>
-        )}
       </div>
-      {currentProjectId && looks.length > 0 && (
-        <div className="text-center pt-1">
+      {/* Links out rather than a "New" pad. Neither entity is authored from a pad grid: a Look is
+          recorded from the programmer, and a template has a family-native editor of its own. A create
+          affordance here would have to pick one, and would be the worse of two places to do it. */}
+      {currentProjectId && (
+        <div className="flex items-center justify-center gap-3 pt-1">
+          <button
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            onClick={() => navigate(`/projects/${currentProjectId}/templates`)}
+          >
+            Manage templates →
+          </button>
           <button
             className="text-xs text-muted-foreground hover:text-foreground transition-colors"
             onClick={() => navigate(`/projects/${currentProjectId}/looks`)}
@@ -259,12 +252,12 @@ function LookGrid({
 }
 
 function LookPadButton({
-  look,
+  item,
   presence,
   onToggle,
   onLongPress,
 }: {
-  look: LookSummary
+  item: PadItem
   presence: EffectPresence
   onToggle: () => void
   onLongPress: () => void
@@ -340,15 +333,15 @@ function LookPadButton({
           presence !== 'none' ? 'text-primary' : 'text-foreground',
         )}
       >
-        {look.name}
+        {item.name}
       </span>
-      {look.notes && (
+      {item.notes && (
         <span className="mt-0.5 text-[10px] leading-tight text-muted-foreground line-clamp-1">
-          {look.notes}
+          {item.notes}
         </span>
       )}
       <Badge variant="secondary" className="mt-1 text-[9px] px-1.5 py-0 leading-tight">
-        {describeLookContents(look)}
+        {item.detail}
       </Badge>
       {presence !== 'none' && (
         <div
@@ -371,7 +364,7 @@ function LookPadButton({
  * running effects — so saying "2 values" rather than "0 effects" is the difference between a pad
  * that looks broken and one that looks like what it is.
  */
-function describeLookContents(look: LookSummary): string {
+export function describeLookContents(look: LookSummary): string {
   const parts: string[] = []
   if (look.effectCount > 0) {
     parts.push(`${look.effectCount} ${look.effectCount === 1 ? 'effect' : 'effects'}`)

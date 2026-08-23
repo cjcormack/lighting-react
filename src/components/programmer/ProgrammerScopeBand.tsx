@@ -108,7 +108,11 @@ export function ProgrammerScopeBand() {
       )}
       {scope.kind === 'layer' && (
         <>
-          <LookNameBadge name={layer?.lookName} missing={layers != null && layer == null} />
+          <LookNameBadge
+            name={layer?.source.name}
+            missing={layers != null && layer == null}
+            isTemplate={layer?.source.kind === 'TEMPLATE'}
+          />
           <span className="text-muted-foreground">
             {mask.length === 0
               ? 'asserts every attribute'

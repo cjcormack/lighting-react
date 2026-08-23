@@ -201,7 +201,9 @@ export function programmerSetBlind(blind: boolean, fadeMs?: number) {
 // per-call reply for a mutation to await. `patchLayer` is also on a drag/typing path.
 
 export function programmerAddLayer(input: {
-  lookId: number
+  /** Exactly one of these — a layer applies a Look or a template. */
+  lookId?: number
+  templateId?: number
   targets?: CueTarget[]
   propertyMask?: string
   blendMode?: string

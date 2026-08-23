@@ -36,8 +36,21 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // has to be reported by hand, or a delete that quietly did nothing looks like a success. All
   // three do (LookDetailSheet inline, Looks.tsx and BuskingView by toast); a fourth must too.
   'deleteLook', // src/components/looks/LookDetailSheet.tsx, routes/Looks.tsx, busking/BuskingView.tsx
-  'saveLook', // ...same sheet, and LookEditor's own inline alert
-  'createLook', // src/components/looks/LookEditor.tsx, via the library route and busking
+  'saveLook', // ...same sheet, and LookRowStore's layer-scope write
+  // `createLook` stood here. It went with the endpoint in session 3: a Look is recorded now, never
+  // hand-authored, so no client sends `POST /looks`. `errorToastMiddleware.test.ts` is what caught
+  // the stale name — it asserts every entry names an endpoint that exists.
+  //
+  // The template trio, for exactly the reasons above one entity along. `TEMPLATE_IN_USE` opens the
+  // same "delete anyway" guard; a duplicate name and each of the four write-boundary rules (one
+  // family, closed vocabulary, right intent shape, no group rows) are 400s the editor renders beside
+  // the field. `routes/Templates.tsx` toasts anything else on delete, as its Look counterpart does.
+  'deleteTemplate', // src/routes/Templates.tsx
+  'createTemplate', // src/components/templates/TemplateEditor.tsx — inline alert
+  'saveTemplate', // ...same editor
+  // Silent too: its sheet stays open on failure and renders the error inline (the strip's chip is
+  // what opens it), so a toast beside that alert would say the same thing twice.
+  'createTemplateFromProgrammer', // src/components/programmer/NewTemplateFromSelectionSheet.tsx
   // The 409s are ordinary steps in this flow, not failures: SPEED_MASTER_IN_USE opens the
   // "delete anyway" confirmation, and SPEED_MASTER_PROTECTED can only be reached by a stale
   // client (the UI disables master 1's delete button).

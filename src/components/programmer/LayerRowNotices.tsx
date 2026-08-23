@@ -1,29 +1,64 @@
+import { Link } from 'react-router'
 import { Badge } from '@/components/ui/badge'
+import { useProgrammerLayersQuery } from '@/store/programmer'
 import { useLookRowStore } from './LookRowStore'
-import { useProgrammerScope } from './ProgrammerScope'
+import { focusedLayerId, useProgrammerScope } from './ProgrammerScope'
 
 /**
  * What the focused layer holds that a per-fixture grid cannot draw.
  *
- * Two kinds of row, and both are stated rather than silently missing — a Look that looks empty
- * because the grid can't render it is the worst of the available answers.
+ * Three cases, and all three are *stated* rather than silently missing — a layer that looks empty
+ * because the grid cannot render it is the worst of the available answers.
  *
- * **Deferred rows** name no target of their own: they land on whatever the applying layer targets,
- * so they belong to no one fixture's row. Projecting them onto every targeted row was considered
- * and rejected: the first edit would silently convert a deferred row into a bound one, which is a
- * change to what the Look *is*, made by someone who was only adjusting a value. They are listed
- * read-only instead, and edited where they make sense — the Look editor.
+ * **A focused template layer shows no rows at all**, which is the session-3 case and the one an
+ * operator is most likely to meet. A template is one family of intents, resolved per head at cook;
+ * projecting its generic row onto every targeted row would silently convert it to a per-fixture one
+ * on the first edit — a change to what the template *is*, made by someone who was only adjusting a
+ * value. That is the same argument the deferred-row case below already made, and it is why a template
+ * is edited in its own family-native editor instead. The notice links there.
+ *
+ * **Deferred rows** on a *Look* are the legacy of that split: a Look row cannot be deferred any more,
+ * so this arm only fires for a row an older database left behind. Kept because such a row still
+ * *applies*, and an operator looking at a grid that does not show it deserves to know.
  *
  * **Element rows** address one element of a multi-element fixture, and compose nowhere:
  * `CueComposer.applyLayer` drops them, so they contribute nothing to a cue that layers this Look
- * (`FU-LOOK-ELEMENT-ROWS`). The client cannot even author one — `LookRow.elementKey` is an
- * element-*local* suffix and `syntheticFixture.ts` records that element keys must never be parsed.
- * Saying so is the honest position until that follow-up lands.
+ * (`FU-LOOK-ELEMENT-ROWS`). Saying so is the honest position until that follow-up lands.
  */
-export function LayerRowNotices() {
+export function LayerRowNotices({ projectId }: { projectId: number }) {
   const scope = useProgrammerScope()
   const store = useLookRowStore()
-  if (scope?.kind !== 'layer' || !store) return null
+  const { data: layers } = useProgrammerLayersQuery()
+  const layerId = focusedLayerId(scope)
+  const layer = layerId == null ? undefined : layers?.find((l) => l.layerId === layerId)
+
+  if (scope?.kind !== 'layer') return null
+
+  // A template layer has no `LookRowStore` at all — the store only engages for a LOOK source — so
+  // this arm has to come before the store check below.
+  if (layer?.source.kind === 'TEMPLATE') {
+    return (
+      <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/40 px-2 py-1.5 text-xs">
+        <Badge variant="outline" className="shrink-0 px-1.5 py-0 text-[10px]">
+          template
+        </Badge>
+        <span className="text-muted-foreground">
+          “{layer.source.name}” holds one value for the whole family, resolved per head — so there is
+          nothing to show per fixture.
+        </span>
+        {/* `projectId` from the host, not from the row store: the store does not engage for a
+            template layer at all, so reading it here would build `/projects//templates`. */}
+        <Link
+          to={`/projects/${projectId}/templates`}
+          className="underline underline-offset-2 hover:text-foreground"
+        >
+          Edit template
+        </Link>
+      </div>
+    )
+  }
+
+  if (!store) return null
 
   const { deferredRows, elementRows, serverRows, loaded } = store
   const boundRowCount = serverRows.size
@@ -40,8 +75,8 @@ export function LayerRowNotices() {
           </Badge>
           <span className="text-muted-foreground">
             {fullyDeferred
-              ? 'Every row in this look takes its target from the layer, so there is nothing to show per fixture. Edit it in the look editor.'
-              : 'Rows that take their target from the layer. They apply, but belong to no one head — edit them in the look editor.'}
+              ? 'Every row in this look takes its target from the layer, so there is nothing to show per fixture. A value you point at a selection is a template now — re-create it there.'
+              : 'Rows that take their target from the layer. They apply, but belong to no one head; a value like this belongs in a template.'}
           </span>
         </>
       )}

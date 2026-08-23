@@ -126,7 +126,6 @@ export function useCellWriters(): CellWriters {
       ref: ChannelRef,
       value: number,
     ) => {
-      if (ctx.kind === 'look') return
       if (setLookValue) {
         setLookValue(fixtureKey, propertyName, serializeLevel(value))
         return
@@ -139,7 +138,6 @@ export function useCellWriters(): CellWriters {
       writeSetting: writeChannelValue,
 
       writeColour(fixtureKey, property, r, g, b, w, a, uv) {
-        if (ctx.kind === 'look') return
         if (setLookValue) {
           // **No wire sampling here**, unlike the live branch below. A stored Look row must not
           // bake in the current stage state of a fixture the layer may not even target: an
@@ -178,7 +176,6 @@ export function useCellWriters(): CellWriters {
       },
 
       writePosition(fixtureKey, pan, tilt, panValue, tiltValue, axisProperties) {
-        if (ctx.kind === 'look') return
         if (panValue === undefined && tiltValue === undefined) return
         if (setLookValue) {
           // Separate axis sliders write the axis that moved and leave the other row alone; a real
@@ -251,7 +248,7 @@ export function useCellWriters(): CellWriters {
         )
       },
     }
-  }, [ctx, lookStore, setLookValue])
+  }, [lookStore, setLookValue])
 }
 
 /** A committed Look row value, in canonical string form, or undefined. */

@@ -75,6 +75,10 @@ export function buildCueInput(cue: Cue): CueInput {
     updateGlobalPalette: cue.updateGlobalPalette,
     layers: cue.layers.map((layer) => ({
       lookId: layer.lookId,
+      // Session 3: a layer applies a Look **or** a template. Missing from this rebuild it would be
+      // dropped on every inline cue edit — and because both ids are optional now, the compiler would
+      // not have said a word. Exactly the failure the comment below describes.
+      templateId: layer.templateId,
       sortOrder: layer.sortOrder,
       enabled: layer.enabled,
       targets: layer.targets,
@@ -83,7 +87,7 @@ export function buildCueInput(cue: Cue): CueInput {
       amount: layer.amount,
       stomp: layer.stomp,
       // Rebuilt field-by-field (unlike adHocEffects' spread) because the detail row carries
-      // lookName, which the input type must not. The cost of that shape is that every new field
+      // `source`, which the input type must not. The cost of that shape is that every new field
       // must be added HERE too, or every inline cue edit silently strips it — which is what a
       // regression test in cueUtils.test.ts pins, field by field.
       speedMasterUuid: layer.speedMasterUuid,

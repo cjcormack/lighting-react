@@ -17,7 +17,7 @@ import { resolveColourToHex } from '@/components/fx/colourUtils'
 import { useEffectLibraryQuery } from '@/store/fixtureFx'
 import { useLookListQuery } from '@/store/looks'
 import { EffectSummary } from '@/components/fx/EffectSummary'
-import { LayerRow } from '@/components/looks/LookStack'
+import { LayerRow, describeStackSource } from '@/components/looks/LookStack'
 import { CueValueGrid } from './CueValueGrid'
 import { MiniStage } from './MiniStage'
 import { collectCueTargets } from '@/components/runner/program/CueCardEditor/targetUtils'
@@ -196,8 +196,10 @@ export const CueDetailContent = memo(function CueDetailContent({
               key={`layer-${index}`}
               layer={layer}
               index={index}
-              look={looksById.get(layer.lookId)}
-              looksLoaded={looks != null}
+              // No `templatesById`: this read surface does not load the template library, and
+              // `describeStackSource` deliberately declines to paint a template layer as missing on
+              // that account. The layer's own `source.name` labels it either way.
+              info={describeStackSource(layer.source, looksById, undefined, looks != null)}
               sortable={false}
               showTargets
               readOnly

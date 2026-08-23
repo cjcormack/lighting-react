@@ -31,8 +31,7 @@ const LOOKS: LookSummary[] = [
     rowCount: 3,
     effectCount: 0,
     targetCount: 3,
-    hasDeferredRows: false,
-    editorFixtureType: null,
+    hasDeferredEffects: false,
     preview: [],
     layerCount: 1,
   },
@@ -41,7 +40,7 @@ const LOOKS: LookSummary[] = [
 function layer(over: Partial<CueLayerDetail> = {}): CueLayerDetail {
   return {
     lookId: 7,
-    lookName: 'Warm Wash',
+    source: { kind: 'LOOK', id: 7, uuid: 'u7', name: 'Warm Wash' },
     sortOrder: 0,
     enabled: true,
     targets: [{ type: 'fixture', key: 'hex-1' }],
@@ -86,7 +85,7 @@ describe('CueDetailContent', () => {
   it('renders each layer in order, named and with its targets', () => {
     render(
       <CueDetailContent
-        cue={cue({ layers: [layer(), layer({ lookName: 'Second', sortOrder: 1 })] })}
+        cue={cue({ layers: [layer(), layer({ source: { kind: 'LOOK', id: 8, uuid: 'u8', name: 'Second' }, sortOrder: 1 })] })}
         projectId={1}
       />,
     )

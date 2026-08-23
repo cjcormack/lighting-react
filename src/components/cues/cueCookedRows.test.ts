@@ -51,7 +51,7 @@ describe('buildStaticRows', () => {
     // credits a look for a value the operator set on the cue itself.
     const built = buildStaticRows(
       [
-        row({ targetType: 'group', targetKey: 'Washes', layerId: 4, lookName: 'Warm Wash' }),
+        row({ targetType: 'group', targetKey: 'Washes', layerId: 4, layerSource: { kind: 'LOOK', id: 4, uuid: 'u4', name: 'Warm Wash' } }),
         row({ targetKey: 'a', value: '200' }),
       ],
       FIXTURES,

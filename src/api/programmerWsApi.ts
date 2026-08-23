@@ -1,4 +1,4 @@
-import type { CueTarget } from './cuesApi'
+import type { CueTarget, LayerSource } from './cuesApi'
 import type { InternalApiConnection } from './internalApi'
 import type { Subscription } from './subscription'
 
@@ -89,12 +89,12 @@ export interface ProvenanceEntry {
    * present for a cue's layers as well as the programmer's.
    */
   layerId?: number
-  lookId?: number
-  lookName?: string
+  /** What that layer applies — a Look or a template, named. */
+  layerSource?: LayerSource
 }
 
 /**
- * One layer of the programmer's Look stack, in `sortOrder` — most significant last.
+ * One layer of the programmer's stack, in `sortOrder` — most significant last.
  *
  * The programmer holds the same structure a cue does (see `CueLayer`), which is what makes
  * `LookStack` render both. It has no timing fields: a programmer layer fires now, by definition.
@@ -102,8 +102,8 @@ export interface ProvenanceEntry {
 export interface ProgrammerLayer {
   /** The stack's own id for this layer. Every mutation op addresses a layer by it. */
   layerId: number
-  lookId: number
-  lookName: string
+  /** What this layer applies — a Look or a template. */
+  source: LayerSource
   sortOrder: number
   enabled: boolean
   targets: CueTarget[]
@@ -235,15 +235,18 @@ interface ProgrammerStateOutgoing {
 }
 
 /**
- * Put a Look on the stack as a layer, on top.
+ * Put a Look **or a template** on the stack as a layer, on top.
  *
- * No uuid: the backend resolves the Look itself from [lookId]. Unlike the retired preset toggle
- * this carries the whole Look, so a **bound** row lands on the fixture it names — a layer has
- * somewhere to put a target set, which is what the old path lacked.
+ * No uuid: the backend resolves the record itself from the id, and reads its name and uuid in the
+ * same breath — a client that supplied both could make the two disagree. Unlike the retired preset
+ * toggle this carries the whole source, so a Look's **bound** row lands on the fixture it names — a
+ * layer has somewhere to put a target set, which is what the old path lacked.
  */
 interface ProgrammerAddLayerOutgoing {
   type: 'programmer.addLayer'
-  lookId: number
+  /** Exactly one of these. The server refuses both and neither. */
+  lookId?: number
+  templateId?: number
   targets: CueTarget[]
   propertyMask?: string
   blendMode?: string
@@ -421,7 +424,9 @@ export interface ProgrammerApi {
   requestState(): void
 
   addLayer(input: {
-    lookId: number
+    /** Exactly one of these — a layer applies a Look or a template. */
+    lookId?: number
+    templateId?: number
     targets?: CueTarget[]
     propertyMask?: string
     blendMode?: string
@@ -566,8 +571,11 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
       p.cueStackId ?? null,
       p.effectId ?? null,
       p.layerId ?? null,
-      p.lookId ?? null,
-      p.lookName ?? null,
+      // The whole source object, not just its id: a key can move between a Look layer and a
+      // template layer that happen to share an int PK, and the cell would keep naming the old one.
+      p.layerSource?.kind ?? null,
+      p.layerSource?.id ?? null,
+      p.layerSource?.name ?? null,
     ])
 
   // Bare `setTimeout`, not `window.setTimeout`: this module is exercised by unit tests that
@@ -782,10 +790,11 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
       send({ type: 'programmer.state' })
     },
 
-    addLayer({ lookId, targets, propertyMask, blendMode, amount, speedMasterUuid, rateSpeedMasterUuid, fadeMs }) {
+    addLayer({ lookId, templateId, targets, propertyMask, blendMode, amount, speedMasterUuid, rateSpeedMasterUuid, fadeMs }) {
       send({
         type: 'programmer.addLayer',
         lookId,
+        templateId,
         targets: targets ?? [],
         propertyMask,
         blendMode,

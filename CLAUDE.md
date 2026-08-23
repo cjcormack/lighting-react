@@ -189,30 +189,58 @@ stage read path, adding a source, or relying on what `ProgrammerState.channels` 
 is the backend's channel *sideband*, not the programmer's channel output, and mistaking the two is
 the bug that doc exists to prevent.
 
-### Looks and layers
+### Looks, templates and layers
 
-One library entity — a **Look** — replacing what used to be two (FX presets and named
-palettes), and one reference mechanism: a **Layer** applies a Look inside a cue at a
-declared position in that cue's stack. Backend contract in
-`lighting7/docs/lighting-composition-model.md` §"Looks and layers"; the completed five-session
-record is `lighting7/docs/plans/completed/looks-and-layers-plan.md`.
+**Two library entities, and a Layer applies either.** A **Look** composes cues: any families, its
+own fixtures, its own effects, added to a cue's stack at a declared position. A **Template**
+composes values: exactly one attribute family, no targets of its own, no effects, applied to a
+selection. Backend contract in `lighting7/docs/lighting-composition-model.md` §"Looks and layers"
+and `models/templates.kt`; the completed records are
+`lighting7/docs/plans/completed/looks-and-layers-plan.md` and
+`desk-simplification-plan.md` §Session 3.
 
-A Look's rows are either **bound** (naming their own fixture or group) or **deferred**
-(taking their targets from the layer applying them), and that distinction is what makes one
-entity serve both old jobs: a bound Look behaves like a palette, a fully-deferred one like a
-preset. `LookSummary.hasDeferredRows` tells them apart, and it decides which editor a
-library row opens — a template gets `LookEditor`'s value grid against a synthetic fixture
-built from `editorFixtureType`, a recorded Look gets `LookDetailSheet`, which is read-only
-about values on purpose. Read that sheet's doc comment before adding a value grid to it.
+They were one entity until session 3, split on the row's targeting mode: a **bound** Look behaved
+like a palette, a fully-**deferred** one like a preset. That is now two tables, and the reason it
+had to be is the design's own best example — a *per-fixture* template (eight heads aimed at one
+spot hold eight different pan/tilts) has only bound rows, so `hasDeferredRows` could never have
+told the two apart. What the split deleted: `editorFixtureType`, `LookEditor`'s synthetic-fixture
+value grid, `LookDraftContext`, `LookLivePreview`, `syntheticFixture.ts`, `EditorContextValue`'s
+`look` arm, and the type gate in `compatibleIdsFor`.
 
-There is **no stored attribute type**. `LookSummary.families` is derived server-side from the
-rows, so a Look spanning colour and position reports both — which is why `/looks` is **one
-route with a sticky in-page family filter** rather than four sibling routes like the palette
-banks it replaces. That is a deliberate departure from the sibling-route rule in §Navigation
-Registry: a derived family cannot own a path. `?family=colour` deep-links from Cmd+K.
+**A Look row is always bound** — `validateLookRows` refuses `deferred` — and a Look is always
+*recorded*, from the programmer or by promoting a selection, which is why `/looks` has no New
+button and one editor (`LookDetailSheet`, read-only about values on purpose; read its doc comment
+before adding a value grid). A Look **effect** may still be deferred, and
+`LookSummary.hasDeferredEffects` is what says so: that is what makes a Look eligible for a busking
+pad, since a pad supplies the targets on the press.
+
+**A template stores an intent, not a literal**, resolved per head at cook: a colour plus a
+white/amber policy, a level or beam role as a percentage of each head's own range, a position in
+**degrees**. `fx/TemplateIntent.kt` owns the grammar and `lib/templateIntent.ts` mirrors it — the
+client half serialises and parses only, and **never resolves**, because
+`fx/TemplateResolver.kt` must be the single answer to what the rig will do (§6 of the plan). All
+three consumers go through it: cook, `POST /templates/{id}/apply`, and the editor's resolves-to
+panel via `POST /templates/resolve`. Two deliberate degradations in that grammar are documented in
+`TemplateIntent.kt`; do not "fix" either by teaching the literal parsers about intents.
+
+**A template's property vocabulary is closed** (`TemplateProperty`), and that is where "a template
+cannot carry a gobo" actually lives: gobo, colour-wheel and macro slots are per-model, so they are
+refused by name at the write boundary and shown *disabled with the reason* in the beam editor
+rather than omitted. Compatibility is **capability-only** (D6): "does this head have colour at
+all", never "was this authored against that model".
+
+There is **no stored attribute type on either**. `LookSummary.families` is derived server-side from
+the rows, so a Look spanning colour and position reports both. A template's single family is derived
+the same way and validated to be exactly one at the write boundary. That is why the **family filter
+lives on `/templates`, not `/looks`**: a template is in exactly one family, so a family is an exact
+partition; a Look spans families by nature, so filtering by one would hide most of the library from
+most filters.
 
 `src/lib/attributeFamily.ts` owns the family vocabulary and mirrors the backend's
-`PropertyMaskGroup`; `maskPicker.test.ts` pins the two lists against each other.
+`PropertyMaskGroup`; `maskPicker.test.ts` pins the two lists against each other, and
+`templateIntent.test.ts` pins the template vocabulary the same way. It caught a real divergence
+already: `Number('')` is 0 where Kotlin's `toDoubleOrNull()` is null, so the client read `pct:` as
+0% while the server rejected the row.
 
 **Within a cue, later layers win — for every attribute, intensity included**, and the cue's
 own `propertyAssignments` are the last layer and beat all of them. Across cues, HTP still
@@ -254,8 +282,10 @@ dead code: it folds a v4 database's ref rows into layers. `LooksMigrationTest` s
 form out locally for the same reason.
 
 `LookRefBadge` became **`LookNameBadge`** and changed more than its name: chain iconography and
-"References …" titles both misdescribe a layer, so it draws `Layers` and names the Look plainly.
-**Never mint a `P<n>` short code for a Look**; display its name.
+"References …" titles both misdescribe a layer, so it draws `Layers` and names the Look plainly. It
+takes an `isTemplate` flag since session 3 and swaps the glyph for `Palette` — same size, same
+shape, because the two sit in the same list at the same rank and a louder chip would make one look
+more important. **Never mint a `P<n>` short code for either**; display the name.
 
 "Palette" now means exactly one thing in this codebase: the positional ordered colour list
 that FX parameters index as `P1`/`P2`/`P*`, whose helpers are `isPaletteRef` /
@@ -327,11 +357,45 @@ layer's — a local busk sits above the layer slot, and naming the Look there wo
 for the operator's own hand.
 
 **The pads still go through `POST /looks/{id}/toggle`**, which is `programmerLayerStack.toggle`
-server-side — it adds or removes a layer, matching on `lookId` + exact `targets`. Keeping one
-owner for that match rule is why they weren't moved to the explicit ops. What did change is the
-ring: `lookLayerPresence` reads the **layer stack**, not the effect list. The old match was
+server-side — it adds or removes a layer, matching on the **whole `LayerSource`** + exact `targets`
+(matching on an id alone would let a Look and a template that share an int PK cancel each other).
+Keeping one owner for that match rule is why they weren't moved to the explicit ops. What did change
+is the ring: `lookLayerPresence` reads the **layer stack**, not the effect list. The old match was
 `FxInstance.presetId === lookId`, which worked by accident (the Look id in a field naming a
-`DaoFxPreset`) and could never see a rows-only Look at all.
+`DaoFxPreset`) and could never see a rows-only Look at all. `templateLayerPresence` is its twin for
+templates, and it is the *only* way a template pad can light: a template holds no effects.
+
+`/fx-busking`'s pad grid takes both — Looks with deferred **effects** (a chase you point at a
+selection) and every template — and it has no create affordance, because neither entity is authored
+from a pad grid. It is also off-nav and reachable only by URL.
+
+### The two apply gestures
+
+A template has **two** presses, and the difference is invisible on screen — only the route called
+says which happened, so both are stated on the chip's title:
+
+- **click** → `POST /templates/{id}/apply`. Sets **literal** values in Local. Retuning the template
+  later does not move them; this is the busking gesture, and it is why the retired `ref:` grammar is
+  not missed.
+- **⌥click** → `POST /templates/{id}/toggle`. Adds a layer that **tracks** it, targeted at the
+  selection and masked to the template's family (the client states the mask, so the layer row shows
+  what it asserts). Retune the template and every layer moves. The layer *is* the dependency
+  mechanism — it already was, for Looks — so "a colour I can change everywhere later" and "a colour I
+  want right now" are two gestures on one chip rather than two kinds of template.
+
+`TemplateStrip` lives in `ProgrammerGrid`'s `renderToolbar`, which already hands down the marquee's
+`cells` — so **the selection is the filter** with no new plumbing: select colour cells and only
+colour templates are offered, and there is no picker to open or family dropdown to get wrong. Rows
+selected but no cells means the gesture names no attribute, so everything is offered rather than a
+family being guessed. `TemplateStrip.test.tsx` pins the filter and the click/⌥click split.
+
+**New from selection** is server-side (`POST /templates/from-programmer`), for the same reason apply
+is: converting a recorded *literal* back into an **intent** is per-head arithmetic that has to agree
+with the resolver. It also decides **generic vs per fixture from the data** — one row per property
+where every selected head agrees, one row per head where they do not — rather than from a toggle,
+because the operator already said which they meant by putting the heads where they are. The
+colour inverse is a documented heuristic (fold the emitters back into RGB, policy `extract` when
+either was driven); it lives in one place, `templateRecord.kt`.
 
 ### The programmer's scoped grid
 
@@ -372,9 +436,12 @@ Things that will bite:
   share neither length nor indices. Ownership never noticed because it collapses to one verdict.
 - **Widening a layer's targets is always explicit** — the `AddToTargetsButton` on the row, never a
   side effect of dragging a marquee across the grid.
-- **Deferred and per-element Look rows stay out of the grid** and are named in `LayerRowNotices`
-  instead. Projecting a deferred row onto every targeted row would silently convert it to a bound
-  one on the first edit; element rows compose nowhere at all (`FU-LOOK-ELEMENT-ROWS`).
+- **A focused template layer shows no rows at all**, and per-element Look rows stay out too — both
+  are named in `LayerRowNotices` instead. Projecting a template's generic row onto every targeted row
+  would silently convert it to a per-fixture one on the first edit, which is a change to what the
+  template *is* made by someone adjusting a value; element rows compose nowhere at all
+  (`FU-LOOK-ELEMENT-ROWS`). `LookRowStore` therefore engages **only for a LOOK layer**, and
+  `+ Effect` is disabled on a focused template (D7 — a template holds no effects).
 - **In Output scope every tint is a destination**: clicking a cell jumps the scope to whatever won
   it. Three guards, and the middle one bites — `ProvenanceEntry.layerId` is present for a **cue's**
   layers too, so `focusLayer` checks membership in the programmer's own stack and reports failure.
@@ -775,17 +842,25 @@ REST API is used for CRUD operations on scripts, scenes, fixtures, etc.
   the diagnostic-read argument lives on as `FxSheet` being a collapsible under
   `ProgrammerFxList`, closed by default and **mounted only when open**, because it
   builds a second full fixture row model and re-renders on every programmer event.
-- **Where sibling routes do *not* apply — the Look library.** `/looks` is one
-  `navItems` entry and **one route**, with a sticky in-page family filter
-  (`LookFamilyFilterBar`) rather than the four sibling routes the palette banks it
-  replaces had. Not a style choice: a Look's families are *derived* from its rows,
-  so one covering colour and position would have to live in two routes at once.
-  `useLookFamilyNavItems()` still gives Cmd+K five deep links, but as `?family=`
-  query params on the one route, with `pathMatch` left as the bare `/looks` so the
-  sidebar highlights its single row whichever family you arrived in — asserted in
-  `navigation.test.ts`. Reach for sibling routes when the sub-views partition the
-  resource (cards/list, an editor and its diagnostic); reach for a filter when a
-  record can be in more than one bucket.
+- **Two libraries, two entries, and the filter is on the other one now.** `/looks`
+  and `/templates` are separate `navItems` entries and separate routes, because they
+  are separate entities (see §Looks, templates and layers). `/looks` has **no family
+  filter at all**: a Look's families are *derived* from its rows, so one covering
+  colour and position belongs to two banks at once and filtering by one would hide
+  most of the library from most filters. `/templates` has the sticky filter
+  (`LookFamilyFilterBar`, kept under its old name — a private storage key nobody reads
+  by name), and there a family **is** an exact partition: a template holds exactly one.
+  `useTemplateFamilyNavItems()` gives Cmd+K four deep links as `?family=` query params
+  on the one route, with `pathMatch` the bare `/templates` so the sidebar highlights its
+  single row whichever family you arrived in — asserted in `navigation.test.ts`, which
+  also pins the two `pathMatch`es apart.
+
+  Note this is no longer the "where sibling routes do not apply" exception it was
+  written as: on `/templates` sibling routes *would* partition cleanly, and it is still
+  one route because the filter is a **view** of a small library rather than a division
+  of it. Reach for sibling routes when the sub-views partition the resource *and* the
+  operator navigates between them (cards/list, an editor and its diagnostic); reach for
+  a filter when the whole library is worth seeing at once.
 - **Role filtering**: set `adminOnly: true` on any entry whose destination is
   behind the backend's admin gate (`ADMIN_ONLY_PREFIXES` / the per-project sync
   subtree in lighting7's `auth/AuthGate.kt`) — currently `users`, `sync` and

@@ -10,7 +10,6 @@ import { store } from './index'
 import { restApi } from './restApi'
 import { looksApi } from './looks'
 import { fixturesApi } from './fixtures'
-import { groupsApi } from './groups'
 
 /**
  * Wiring tests for the Look library's endpoints: the URL/method contract with the backend, and the
@@ -121,33 +120,6 @@ describe('looks endpoints', () => {
     })
   })
 
-  it('POST previewLook sends the rows under the wire name the preview slot expects', async () => {
-    // `propertyAssignments`, not `rows`: the backend reuses the preset editor's preview slot
-    // verbatim, which is exactly why that route needed no new logic.
-    await store.dispatch(
-      looksApi.endpoints.previewLook.initiate({
-        projectId: 1,
-        propertyAssignments: [{ propertyName: 'dimmer', value: '255' }],
-        palette: [],
-        targets: [],
-      }),
-    )
-    const req = lastRequestTo('looks/preview')
-    expect(req).toBeDefined()
-    expect(req!.method).toBe('POST')
-    expect(JSON.parse(await req!.clone().text())).toEqual({
-      propertyAssignments: [{ propertyName: 'dimmer', value: '255' }],
-      palette: [],
-      targets: [],
-    })
-  })
-
-  it('DELETE clearLookPreview hits the same path', async () => {
-    await store.dispatch(looksApi.endpoints.clearLookPreview.initiate({ projectId: 1 }))
-    const req = lastRequestTo('looks/preview')
-    expect(req!.method).toBe('DELETE')
-  })
-
   it('copyLook invalidates the *target* project’s library, not this one', async () => {
     // The copy lands in whichever project was named, which may not be the one on screen. Keying
     // the tag on `projectId` would leave the target project's library stale.
@@ -169,27 +141,9 @@ describe('looks endpoints', () => {
    * Asserted behaviourally — a live subscriber refetching — rather than by reading `invalidatesTags`,
    * because a tag that no query provides would still look right in the source.
    */
-  it('createLook refetches the fixture list, so the new Look is offerable', async () => {
-    const sub = store.dispatch(fixturesApi.endpoints.fixtureList.initiate())
-    await sub
-    const before = countRequestsTo('fixture/list')
-
-    await store.dispatch(looksApi.endpoints.createLook.initiate({ projectId: 1, name: 'Warm' }))
-    await vi.waitFor(() => expect(countRequestsTo('fixture/list')).toBeGreaterThan(before))
-
-    sub.unsubscribe()
-  })
-
-  it('createLook refetches the group list too', async () => {
-    const sub = store.dispatch(groupsApi.endpoints.groupList.initiate())
-    await sub
-    const before = countRequestsTo('groups')
-
-    await store.dispatch(looksApi.endpoints.createLook.initiate({ projectId: 1, name: 'Warm' }))
-    await vi.waitFor(() => expect(countRequestsTo('groups')).toBeGreaterThan(before))
-
-    sub.unsubscribe()
-  })
+  // The two `createLook` cases that stood here went with the endpoint in session 3: a Look is
+  // recorded now, never hand-authored, so no client sends `POST /looks`. `deleteLook` below is the
+  // surviving mutation that has to refresh those lists, and it makes the same claim.
 
   it('deleteLook refetches them too, so the dead id leaves every compatibility list', async () => {
     const sub = store.dispatch(fixturesApi.endpoints.fixtureList.initiate())
@@ -255,10 +209,4 @@ describe('looks invalidation guards', () => {
     expect((error as { data?: { code?: string } })?.data?.code).toBe('LOOK_IN_USE')
   })
 
-  it('reports a duplicate-name create as an error rather than a silent no-op', async () => {
-    const result = await store.dispatch(
-      looksApi.endpoints.createLook.initiate({ projectId: 1, name: 'Warm' }),
-    )
-    expect('error' in result).toBe(true)
-  })
 })

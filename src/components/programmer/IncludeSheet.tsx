@@ -93,9 +93,11 @@ export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProp
     () =>
       ATTRIBUTE_FAMILIES.map((family) => ({
         family,
+        // No bound/deferred filter any more: every Look names its own fixtures, which is exactly
+        // what Include needs — it loads a Look's rows onto the heads they name. The deferred half of
+        // the old library is a template, and a template is applied rather than included.
         looks: (looks ?? []).filter(
           (look) =>
-            !look.hasDeferredRows &&
             look.families.includes(family) &&
             (needle === '' || look.name.toLowerCase().includes(needle)),
         ),

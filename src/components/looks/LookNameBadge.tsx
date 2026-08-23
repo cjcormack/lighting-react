@@ -1,11 +1,20 @@
-import { Layers } from 'lucide-react'
+import { Layers, Palette } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export interface LookNameBadgeProps {
-  /** The Look's name, or undefined when it can't be found — which is what "missing" means. */
+  /** The name, or undefined when it can't be found — which is what "missing" means. */
   name?: string
-  /** Renders as broken: the Look this names is gone. */
+  /** Renders as broken: the thing this names is gone. */
   missing?: boolean
+  /**
+   * True when this names a **template** rather than a Look.
+   *
+   * Only the glyph and the wording change, not the shape. The two are different entities and a row
+   * should say which — an operator wanting to retune "Amber Key" needs to know it lives at
+   * `/templates` — but they occupy the same position in the same list, so a differently-sized or
+   * differently-coloured chip would make one look more important than the other.
+   */
+  isTemplate?: boolean
   className?: string
 }
 
@@ -18,7 +27,8 @@ export interface LookNameBadgeProps {
  *
  * Name-only, with no swatch and no attribute-family styling, and both absences are deliberate: a
  * Look declares no type — its families are derived and one may span several — so there is no family
- * to colour the chip by.
+ * to colour the chip by. A template *is* one family, but it sits in the same list at the same size,
+ * so it gets a different glyph rather than a different treatment.
  *
  * This was `LookRefBadge`, and it changed in more than name. It rendered a stored `ref:{uuid}` with
  * chain iconography (`Link2` / `Link2Off`), titles reading "References …", and a `resolvedValue`
@@ -27,7 +37,9 @@ export interface LookNameBadgeProps {
  * the word "references" both misdescribe what a layer is — so the iconography is `Layers` and the
  * titles name the Look plainly.
  */
-export function LookNameBadge({ name, missing, className }: LookNameBadgeProps) {
+export function LookNameBadge({ name, missing, isTemplate, className }: LookNameBadgeProps) {
+  const noun = isTemplate === true ? 'template' : 'look'
+  const Glyph = isTemplate === true ? Palette : Layers
   // `missing` alone, not `name == null`: a caller can legitimately know a layer names a Look while
   // not yet knowing which one (the list is still loading). Painting that destructive-red would
   // claim a healthy layer is broken for as long as the fetch takes.
@@ -45,18 +57,20 @@ export function LookNameBadge({ name, missing, className }: LookNameBadgeProps) 
       title={
         broken
           ? name
-            ? `The look “${name}” no longer exists`
-            : 'This names a look that no longer exists'
+            ? `The ${noun} “${name}” no longer exists`
+            : `This names a ${noun} that no longer exists`
           : name
-            ? `Look “${name}”`
-            : 'A look'
+            ? `${isTemplate === true ? 'Template' : 'Look'} “${name}”`
+            : `A ${noun}`
       }
     >
       {/* One glyph for both states — the destructive colouring carries "broken". The old badge
           swapped `Link2` for `Link2Off`, which read as "the link is severed"; a layer naming a
           deleted Look is not a severed link, it is a layer pointing at nothing. */}
-      <Layers className={cn('size-3 shrink-0', broken ? undefined : 'text-muted-foreground')} />
-      <span className="truncate">{name ?? (broken ? 'Look missing' : 'Look')}</span>
+      <Glyph className={cn('size-3 shrink-0', broken ? undefined : 'text-muted-foreground')} />
+      <span className="truncate">
+        {name ?? (broken ? `${isTemplate === true ? 'Template' : 'Look'} missing` : isTemplate === true ? 'Template' : 'Look')}
+      </span>
     </span>
   )
 }

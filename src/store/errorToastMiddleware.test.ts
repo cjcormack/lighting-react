@@ -110,6 +110,7 @@ describe('SILENT_ENDPOINTS', () => {
       import('./cues'),
       import('./cueStacks'),
       import('./looks'),
+      import('./templates'),
       import('./scripts'),
       import('./projects'),
       import('./cloudSync'),

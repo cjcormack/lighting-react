@@ -3,7 +3,7 @@
 // store/universes → api/lightingApi (it reads window.location at import time).
 import { describe, it, expect } from "vitest"
 import { Box } from "lucide-react"
-import { navItems, lookFamilyNavItems, filterNavItems, type NavItem } from "./navigation"
+import { navItems, templateFamilyNavItems, filterNavItems, type NavItem } from "./navigation"
 import { ATTRIBUTE_FAMILIES, familySlug } from "./lib/attributeFamily"
 
 /** Minimal NavItem factory for exercising filterNavItems in isolation. */
@@ -122,7 +122,7 @@ describe("admin-only navigation", () => {
   })
 })
 
-describe("look navigation", () => {
+describe("look and template navigation", () => {
   it("registers exactly one Looks entry, on the bare path", () => {
     const looks = navItems.filter((i) => i.pathMatch.startsWith("/looks"))
     expect(looks.map((i) => i.id)).toEqual(["looks"])
@@ -139,24 +139,38 @@ describe("look navigation", () => {
   it("gives the Cmd+K per-family items ids that can't collide with the sidebar entry", () => {
     // Asserted against the real array, not against ids rebuilt here: an assertion that
     // reconstructs what it is checking passes just as happily when the source is wrong.
-    const ids = lookFamilyNavItems.map((i) => i.id)
-    expect(ids).toEqual(ATTRIBUTE_FAMILIES.map((family) => `looks-${familySlug(family)}`))
+    const ids = templateFamilyNavItems.map((i) => i.id)
+    expect(ids).toEqual(ATTRIBUTE_FAMILIES.map((family) => `templates-${familySlug(family)}`))
     expect(new Set(ids).size).toBe(ids.length)
     const staticIds = new Set(navItems.map((i) => i.id))
     for (const id of ids) expect(staticIds.has(id)).toBe(false)
   })
 
   it("keeps the family deep links on the one route, as query params", () => {
-    // They are `?family=` on `/looks`, not `/looks/colour`. `pathMatch` therefore stays the bare
-    // path so the sidebar highlights its single row whichever family you arrived in — which is
-    // what the second half of this pins, and what the `/looks/` test above would not catch,
-    // because these items are not in `navItems`.
-    expect(lookFamilyNavItems).toHaveLength(ATTRIBUTE_FAMILIES.length)
+    // They are `?family=` on `/templates`, not `/templates/colour`. `pathMatch` therefore stays the
+    // bare path so the sidebar highlights its single row whichever family you arrived in — which is
+    // what the second half of this pins.
+    //
+    // The filter and these links moved here from `/looks` in session 3, following the argument that
+    // justifies one: a template is in exactly one family, so a family is an exact partition, while a
+    // Look spans families and would be hidden from most filters.
+    expect(templateFamilyNavItems).toHaveLength(ATTRIBUTE_FAMILIES.length)
     for (const [index, family] of ATTRIBUTE_FAMILIES.entries()) {
-      const item = lookFamilyNavItems[index]
-      expect(item.path(1)).toBe(`/projects/1/looks?family=${familySlug(family)}`)
-      expect(item.pathMatch).toBe("/looks")
+      const item = templateFamilyNavItems[index]
+      expect(item.path(1)).toBe(`/projects/1/templates?family=${familySlug(family)}`)
+      expect(item.pathMatch).toBe("/templates")
     }
+  })
+
+  it("gives Looks and Templates separate entries that can't shadow each other", () => {
+    // The two libraries are two entities, and their paths are siblings — `/looks` must not match a
+    // template route or vice versa. `lib/navMatch.test.ts` pins the matcher itself.
+    const looks = navItems.find((i) => i.id === "looks")
+    const templates = navItems.find((i) => i.id === "templates")
+    expect(looks?.pathMatch).toBe("/looks")
+    expect(templates?.pathMatch).toBe("/templates")
+    expect(looks?.path(1)).toBe("/projects/1/looks")
+    expect(templates?.path(1)).toBe("/projects/1/templates")
   })
 
   it("gives the programmer and Show separate entries that can't shadow each other", () => {

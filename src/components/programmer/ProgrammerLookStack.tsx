@@ -1,9 +1,10 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useParams } from 'react-router'
 import { Badge } from '@/components/ui/badge'
-import { LayerRow, LookStack, type LayerHandlers } from '@/components/looks/LookStack'
+import { LayerRow, LookStack, describeStackSource, type LayerHandlers } from '@/components/looks/LookStack'
 import { AddLayerSheet } from '@/components/cues/editor/AddLayerSheet'
 import { useLookListQuery } from '@/store/looks'
+import { useTemplateListQuery } from '@/store/templates'
 import { useProgrammerScope, useProgrammerScopeActions } from './ProgrammerScope'
 import {
   programmerAddLayer,
@@ -32,6 +33,9 @@ export function ProgrammerLookStack() {
   const projectId = Number(projectIdParam)
   const { data: allLayers } = useProgrammerLayersQuery()
   const { data: lookList } = useLookListQuery({ projectId }, { skip: !projectId })
+  // Both libraries, because a layer can apply either — and a row that could not find its entry
+  // paints as missing, so loading only one would slander every template layer in the stack.
+  const { data: templateList } = useTemplateListQuery({ projectId }, { skip: !projectId })
   const [addOpen, setAddOpen] = useState(false)
   // Null outside the programmer page. The stack is also rendered by surfaces with no grid beside
   // it, and there the name badge stays a plain badge rather than a dead button.
@@ -42,7 +46,11 @@ export function ProgrammerLookStack() {
     () => new Map((lookList ?? []).map((look) => [look.id, look])),
     [lookList],
   )
-  const looksLoaded = lookList != null
+  const templatesById = useMemo(
+    () => new Map((templateList ?? []).map((t) => [t.id, t])),
+    [templateList],
+  )
+  const looksLoaded = lookList != null && templateList != null
 
   // The Look editor's live preview is a layer too, but it is not part of the composition an
   // operator authors: it holds an unsaved draft, it is never recorded, and the server pins it to
@@ -110,7 +118,8 @@ export function ProgrammerLookStack() {
     // picker is told so via `allowTiming={false}`, so they are not offered either — a field the
     // operator can fill in and this call then ignores is worse than no field.
     programmerAddLayer({
-      lookId: layer.lookId,
+      lookId: layer.lookId ?? undefined,
+      templateId: layer.templateId ?? undefined,
       targets: layer.targets,
       speedMasterUuid: layer.speedMasterUuid ?? undefined,
       rateSpeedMasterUuid: layer.rateSpeedMasterUuid ?? undefined,
@@ -123,6 +132,7 @@ export function ProgrammerLookStack() {
       <LookStack
         layers={layers}
         looksById={looksById}
+        templatesById={templatesById}
         looksLoaded={looksLoaded}
         handlers={handlers}
         onAdd={() => setAddOpen(true)}
@@ -151,8 +161,7 @@ export function ProgrammerLookStack() {
               <LayerRow
                 layer={preview}
                 index={layers.length}
-                look={looksById.get(preview.lookId)}
-                looksLoaded={looksLoaded}
+                info={describeStackSource(preview.source, looksById, templatesById, looksLoaded)}
                 handlers={handlers}
                 sortable={false}
                 showTargets

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { LayerRow, LookStack, type LookStackLayer } from './LookStack'
+import { LayerRow, LookStack, describeStackSource, type LookStackLayer } from './LookStack'
 import type { LookSummary } from '@/api/looksApi'
 
 /**
@@ -23,8 +23,7 @@ function look(overrides: Partial<LookSummary> = {}): LookSummary {
     rowCount: 3,
     effectCount: 0,
     targetCount: 3,
-    hasDeferredRows: false,
-    editorFixtureType: null,
+    hasDeferredEffects: false,
     preview: [],
     layerCount: 1,
     ...overrides,
@@ -38,8 +37,7 @@ const LOOKS = new Map([
 
 function layer(overrides: Partial<LookStackLayer> = {}): LookStackLayer {
   return {
-    lookId: 7,
-    lookName: 'Warm Wash',
+    source: { kind: 'LOOK', id: 7, uuid: 'u7', name: 'Warm Wash' },
     enabled: true,
     targets: [{ type: 'group', key: 'front-wash' }],
     propertyMask: null,
@@ -87,7 +85,7 @@ afterEach(() => {
 
 describe('LookStack', () => {
   it('renders the layers in order, labelled and numbered', () => {
-    renderStack([layer(), layer({ lookId: 8, lookName: 'Slow Pulse' })])
+    renderStack([layer(), layer({ source: { kind: 'LOOK', id: 8, uuid: 'u8', name: 'Slow Pulse' } })])
 
     const warm = screen.getByText('Warm Wash')
     const pulse = screen.getByText('Slow Pulse')
@@ -119,7 +117,7 @@ describe('LookStack', () => {
   it('reports the index it was rendered at, not the layer', () => {
     // The host maps index → whatever addresses a layer in its own world (a cue array position, a
     // programmer `layerId`). Getting this wrong disables or removes the wrong row.
-    const { handlers: h } = renderStack([layer(), layer({ lookId: 8, lookName: 'Slow Pulse' })])
+    const { handlers: h } = renderStack([layer(), layer({ source: { kind: 'LOOK', id: 8, uuid: 'u8', name: 'Slow Pulse' } })])
 
     fireEvent.click(screen.getAllByLabelText('Disable layer')[1])
     expect(h.onSetEnabled).toHaveBeenCalledWith(1, false)
@@ -213,8 +211,12 @@ describe('LookStack', () => {
       <LayerRow
         layer={layer({ stomp: true })}
         index={0}
-        look={LOOKS.get(7)}
-        looksLoaded
+        info={describeStackSource(
+          { kind: 'LOOK', id: 7, uuid: 'u7', name: 'Warm Wash' },
+          LOOKS,
+          undefined,
+          true,
+        )}
         // Handed the full handler set on purpose: what suppresses the toggle has to be `readOnly`
         // itself, not the absence of something to call.
         handlers={handlers()}
@@ -242,7 +244,7 @@ describe('LookStack', () => {
   })
 
   it('offers the combine control once per row, addressed by index', () => {
-    renderStack([layer(), layer({ lookId: 8 })])
+    renderStack([layer(), layer({ source: { kind: 'LOOK', id: 8, uuid: 'u8', name: 'Slow Pulse' } })])
     expect(screen.getAllByTitle(/How this layer combines/)).toHaveLength(2)
   })
 
@@ -255,7 +257,7 @@ describe('LookStack', () => {
     // dnd-kit's pointer sequence isn't drivable with fireEvent and nothing in this repo drives
     // one, so the drag itself is covered by the pure reorder helper in `cueUtils.test.ts`. What
     // this pins is that the affordance exists once per row.
-    renderStack([layer(), layer({ lookId: 8 }), layer()])
+    renderStack([layer(), layer({ source: { kind: 'LOOK', id: 8, uuid: 'u8', name: 'Slow Pulse' } }), layer()])
     expect(screen.getAllByLabelText('Reorder layer')).toHaveLength(3)
   })
 
@@ -264,7 +266,7 @@ describe('LookStack', () => {
     // layer in the cue as broken for as long as the fetch takes.
     const { unmount } = render(
       <LookStack
-        layers={[layer({ lookId: 99, lookName: null })]}
+        layers={[layer({ source: { kind: 'LOOK', id: 99, uuid: 'u99', name: 'Gone' } })]}
         looksById={new Map()}
         looksLoaded={false}
         handlers={handlers()}
@@ -273,11 +275,15 @@ describe('LookStack', () => {
         precedenceNote="order"
       />,
     )
-    expect(screen.queryByText(/missing/i)).not.toBeInTheDocument()
+    // Asserted on the **title**, not on the word "missing" in the label. Since a layer carries its
+    // source's name with the read, the badge shows that name — "Gone" — and says it is broken
+    // through the destructive styling and this title. That is strictly better than the old
+    // name-less rendering, and it is what the title exists to carry.
+    expect(screen.queryByTitle(/no longer exists/i)).not.toBeInTheDocument()
     unmount()
 
-    renderStack([layer({ lookId: 99, lookName: null })])
-    expect(screen.getByText(/missing/i)).toBeInTheDocument()
+    renderStack([layer({ source: { kind: 'LOOK', id: 99, uuid: 'u99', name: 'Gone' } })])
+    expect(screen.getByTitle(/no longer exists/i)).toBeInTheDocument()
   })
 
   it('renders a footer under the list, for a host with something to add', () => {
@@ -291,10 +297,14 @@ describe('LookStack', () => {
     // never recorded, and is pinned to the tail server-side, so all three controls would lie.
     render(
       <LayerRow
-        layer={layer({ lookName: 'Draft' })}
+        layer={layer({ source: { kind: 'LOOK', id: 7, uuid: 'u7', name: 'Draft' } })}
         index={0}
-        look={LOOKS.get(7)}
-        looksLoaded
+        info={describeStackSource(
+          { kind: 'LOOK', id: 7, uuid: 'u7', name: 'Draft' },
+          LOOKS,
+          undefined,
+          true,
+        )}
         handlers={handlers()}
         sortable={false}
         showTargets

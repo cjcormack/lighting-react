@@ -45,6 +45,6 @@ const baseQueryWithAuthCheck: BaseQueryFn<string | FetchArgs, unknown, FetchBase
 
 export const restApi = createApi({
   baseQuery: baseQueryWithAuthCheck,
-  tagTypes: ['Channel', 'Fixture', 'Script', 'Project', 'ProjectList', 'GroupList', 'GroupActiveEffects', 'FixtureEffects', 'FxLibrary', 'Look', 'LookList', 'SpeedMaster', 'SpeedMasterList', 'Cue', 'CueList', 'CueStackList', 'CueSlotList', 'AiConversation', 'Patch', 'UniverseConfig', 'ProgramState', 'ControlSurfaceType', 'SurfaceBinding', 'PerfMidi', 'Install', 'CloudSyncConfig', 'CloudSyncStatus', 'CloudSyncLog', 'CloudSyncActivity', 'CloudSyncConflicts', 'OAuthIdentity', 'OAuthRepos', 'Rigging', 'StageRegion', 'PromptBook', 'BootStatus', 'Locate', 'Auth', 'AuthSessions', 'UserList', 'User', 'ResetToken', 'ResetTokenList', 'DeviceLogin', 'Update'],
+  tagTypes: ['Channel', 'Fixture', 'Script', 'Project', 'ProjectList', 'GroupList', 'GroupActiveEffects', 'FixtureEffects', 'FxLibrary', 'Look', 'LookList', 'Template', 'TemplateList', 'SpeedMaster', 'SpeedMasterList', 'Cue', 'CueList', 'CueStackList', 'CueSlotList', 'AiConversation', 'Patch', 'UniverseConfig', 'ProgramState', 'ControlSurfaceType', 'SurfaceBinding', 'PerfMidi', 'Install', 'CloudSyncConfig', 'CloudSyncStatus', 'CloudSyncLog', 'CloudSyncActivity', 'CloudSyncConflicts', 'OAuthIdentity', 'OAuthRepos', 'Rigging', 'StageRegion', 'PromptBook', 'BootStatus', 'Locate', 'Auth', 'AuthSessions', 'UserList', 'User', 'ResetToken', 'ResetTokenList', 'DeviceLogin', 'Update'],
   endpoints: () => ({}),
 })

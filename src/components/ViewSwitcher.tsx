@@ -205,15 +205,22 @@ export function GroupsViewSwitcher({
 }
 
 /**
- * localStorage key remembering which attribute family the Look library was last filtered to, so
- * the sidebar's single "Looks" row lands where you left it.
+ * localStorage key remembering which attribute family the **template** library was last filtered to,
+ * so the sidebar's single "Templates" row lands where you left it.
+ *
+ * The value is still `looks.family`, deliberately: it is a private storage key, nobody reads it by
+ * name, and renaming it would silently reset every desk's remembered filter for no gain.
  */
 export const LOOK_FAMILY_KEY = 'looks.family'
 
 /**
- * The library's filter value. `'ALL'` is a first-class choice rather than "no filter": a Look's
- * families are *derived* and one may span several, so unlike the four palette banks this replaces,
- * the unfiltered list is a genuinely useful default rather than a fallback.
+ * The library's filter value. `'ALL'` is a first-class choice rather than "no filter" — an operator
+ * building a state wants to see every named value they have, not one attribute's worth.
+ */
+/**
+ * The family filter's value. Named for the family rather than for a library, because the same shape
+ * now serves the **template** library — where a family is an exact partition, which is the case this
+ * control was always the right shape for.
  */
 export type LookFamilyFilter = AttributeFamily | 'ALL'
 
@@ -245,13 +252,14 @@ export function getStoredLookFamily(): LookFamilyFilter {
 }
 
 /**
- * The Look library's attribute-family filter.
+ * The **template** library's attribute-family filter.
  *
- * Buttons rather than links, unlike every other switcher in this file, and that is the shape of the
- * thing rather than an inconsistency: the four palette types were four *routes*, so a Look spanning
- * colour and position would have had to live in two of them. One route with a filter is what lets
- * derived families be several at once. Cmd+K still deep-links via `?family=`, which the library
- * reads on arrival.
+ * Buttons rather than links, unlike every other switcher in this file. It arrived on `/looks`, where
+ * the argument was that a Look spanning colour and position could not live in one of four routes —
+ * and session 3 moved it here, where the argument is stronger the other way: a template is in
+ * exactly one family, so this really is an exact partition of the library. `/looks` has no filter at
+ * all now, because a Look spans families by nature and filtering by one would hide most of them from
+ * most filters. Cmd+K still deep-links via `?family=`, which the library reads on arrival.
  */
 export function LookFamilyFilterBar({
   current,

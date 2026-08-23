@@ -16,8 +16,6 @@ import { LookPreviewSwatches } from './lookRefValue'
 interface LookListRowProps {
   look: LookSummary
   selected?: boolean
-  /** Resolved label for `editorFixtureType`, when there is one. */
-  fixtureTypeLabel?: string | null
   onClick?: () => void
   onEdit?: () => void
   onDelete?: () => void
@@ -36,7 +34,6 @@ interface LookListRowProps {
 export function LookListRow({
   look,
   selected,
-  fixtureTypeLabel,
   onClick,
   onEdit,
   onDelete,
@@ -55,7 +52,7 @@ export function LookListRow({
         <div className="min-w-0 flex-1">
           <div className="font-medium text-sm truncate">{look.name}</div>
           <div className="text-[11px] text-muted-foreground truncate mt-0.5">
-            {look.notes ?? describeContents(look, fixtureTypeLabel)}
+            {look.notes ?? describeContents(look)}
           </div>
         </div>
 
@@ -147,15 +144,23 @@ function menuAction(fn: () => void) {
   }
 }
 
-/** The fallback subtitle when a Look has no notes: what it covers, in one line. */
-function describeContents(look: LookSummary, fixtureTypeLabel?: string | null): string {
+/**
+ * The fallback subtitle when a Look has no notes: what it covers, in one line.
+ *
+ * There was a branch here for a Look with deferred rows — "authored against `<fixture type>`" — and
+ * both halves of it are gone: a Look row is always bound now, and the editor hint it named went with
+ * the type gate (D6). A Look with deferred *effects* is noted instead, because that is what makes it
+ * eligible for a busking pad.
+ */
+function describeContents(look: LookSummary): string {
   const rows = `${look.rowCount} ${look.rowCount === 1 ? 'row' : 'rows'}`
-  if (look.hasDeferredRows) {
-    const where = fixtureTypeLabel ?? look.editorFixtureType
-    return where ? `${rows} · authored against ${where}` : `${rows} · no editor fixture type`
-  }
-  if (look.targetCount === 0) return 'Empty'
-  return `${look.targetCount} ${look.targetCount === 1 ? 'fixture' : 'fixtures'} · ${rows}`
+  if (look.targetCount === 0 && look.effectCount === 0) return 'Empty'
+  const targets =
+    look.targetCount === 0
+      ? null
+      : `${look.targetCount} ${look.targetCount === 1 ? 'fixture' : 'fixtures'}`
+  const pointable = look.hasDeferredEffects ? 'effects follow the layer' : null
+  return [targets, rows, pointable].filter((p) => p != null).join(' · ')
 }
 
 /**

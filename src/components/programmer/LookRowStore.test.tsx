@@ -19,12 +19,21 @@ const focused = vi.hoisted(() => ({ current: 7 }))
 vi.mock('@/store/programmer', () => ({
   useProgrammerLayersQuery: () => ({
     data: [
-      { layerId: 7, lookId: 3, lookName: 'Warm Wash', targets: [], propertyMask: null },
-      { layerId: 8, lookId: 4, lookName: 'Cold Wash', targets: [], propertyMask: null },
+      {
+        layerId: 7,
+        source: { kind: 'LOOK', id: 3, uuid: 'u3', name: 'Warm Wash' },
+        targets: [],
+        propertyMask: null,
+      },
+      {
+        layerId: 8,
+        source: { kind: 'LOOK', id: 4, uuid: 'u4', name: 'Cold Wash' },
+        targets: [],
+        propertyMask: null,
+      },
       {
         layerId: 9,
-        lookId: 4,
-        lookName: 'Cold Wash',
+        source: { kind: 'LOOK', id: 4, uuid: 'u4', name: 'Cold Wash' },
         targets: [{ type: 'fixture', key: 'b' }],
         propertyMask: null,
       },

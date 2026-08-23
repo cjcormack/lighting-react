@@ -205,6 +205,7 @@ function ProgrammerBody({ projectId }: { projectId: number }) {
           <ProgrammerWorkspace
             grid={
               <ProgrammerGrid
+                projectId={projectId}
                 grouped={grouped}
                 columnVisibility={columnVisibility}
                 onColumnVisibilityChange={setColumnVisibility}

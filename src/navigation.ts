@@ -19,6 +19,7 @@ import {
   TableProperties,
   Sliders,
   SwatchBook,
+  Palette,
   Activity,
   Users,
 } from "lucide-react"
@@ -102,20 +103,34 @@ export const navItems: NavItem[] = [
   },
   {
     id: "looks",
-    // The library entity a cue's layers name. Not the positional colour list the busking bar
-    // labels "Palette", which since session 4 is the only other thing that word means.
+    // Named states over named fixtures, applied to a cue as layers. Every one is **recorded** — from
+    // the programmer, or by promoting a selection — which is why the page has no New button.
     //
-    // **One entry, one route**, unlike the four palette banks it replaces. Those were four
-    // sibling routes with a sticky type, which is the exception CLAUDE.md documents for
-    // Fixtures/Groups and the programmer's Values/FX — but it cannot work here: a Look's families
-    // are *derived* from its rows, so one covering colour and position would have to live in two
-    // routes at once. The library takes a sticky in-page family filter instead, and
-    // `useLookFamilyNavItems` deep-links to it via `?family=`.
+    // **One entry, one route, and no family filter.** The filter that used to live here moved to
+    // `/templates` in session 3, where a family really is an exact partition; a Look spans families
+    // by nature, so filtering by one would hide most of the library from most filters.
     label: "Looks",
     icon: SwatchBook,
     path: (p) => `/projects/${p}/looks`,
     visibility: "always",
     pathMatch: "/looks",
+    group: "program",
+  },
+  {
+    id: "templates",
+    // Named values you build looks and cues out of: one attribute family each, no targets of their
+    // own, applied to a selection. The other half of what `/looks` used to hold — see
+    // `models/templates.kt` for why the two are separate entities rather than one with a flag.
+    //
+    // **One entry, one route, with a sticky family filter.** Sibling routes would now be legitimate
+    // (a template is in exactly one family, so they would partition it exactly), and this is still
+    // one route: the filter is a *view* of a small library rather than a division of it, and
+    // `useTemplateFamilyNavItems` gives Cmd+K the four deep links as `?family=` params either way.
+    label: "Templates",
+    icon: Palette,
+    path: (p) => `/projects/${p}/templates`,
+    visibility: "always",
+    pathMatch: "/templates",
     group: "program",
   },
   {
@@ -339,31 +354,31 @@ export function useUniverseNavItems(): NavItem[] {
 }
 
 /**
- * Returns one item per attribute family ("Colour Looks", "Position Looks", …).
+ * Returns one item per attribute family ("Colour Templates", "Position Templates", …).
  *
- * Cmd+K only, on the [useUniverseNavItems] precedent: the sidebar keeps its single "Looks" row and
- * the in-page filter moves between families, but jumping straight to the position bank is exactly
+ * Cmd+K only, on the [useUniverseNavItems] precedent: the sidebar keeps its single "Templates" row
+ * and the in-page filter moves between families, but jumping straight to the position bank is exactly
  * the kind of thing the command palette is for.
  *
- * These are **query params on one route**, not four routes — see the `looks` nav entry for why a
- * derived family cannot own a path. `pathMatch` is still the bare `/looks`, so the sidebar
+ * These moved here from `/looks` in session 3, following the filter itself. They are **query params
+ * on one route**, not four routes, and `pathMatch` is the bare `/templates`, so the sidebar
  * highlights the one row whichever family you arrived in.
  */
-export const lookFamilyNavItems: NavItem[] = ATTRIBUTE_FAMILIES.map((family) => ({
-  // Prefixed rather than bare, so these can never collide with the static `looks` id.
-  id: `looks-${familySlug(family)}`,
-  label: `${FAMILY_LABELS[family].singular} Looks`,
-  icon: SwatchBook,
-  path: (p: number) => `/projects/${p}/looks?family=${familySlug(family)}`,
+export const templateFamilyNavItems: NavItem[] = ATTRIBUTE_FAMILIES.map((family) => ({
+  // Prefixed rather than bare, so these can never collide with the static `templates` id.
+  id: `templates-${familySlug(family)}`,
+  label: `${FAMILY_LABELS[family].singular} Templates`,
+  icon: Palette,
+  path: (p: number) => `/projects/${p}/templates?family=${familySlug(family)}`,
   visibility: "always" as const,
-  // The bare path, not `/looks/${slug}` — see above. `navigation.test.ts` asserts this against
+  // The bare path, not `/templates/${slug}` — see above. `navigation.test.ts` asserts this against
   // the real array, which is why the array is module-scope rather than built inside the hook.
-  pathMatch: "/looks",
+  pathMatch: "/templates",
   group: "program" as const,
 }))
 
-export function useLookFamilyNavItems(): NavItem[] {
-  return lookFamilyNavItems
+export function useTemplateFamilyNavItems(): NavItem[] {
+  return templateFamilyNavItems
 }
 
 /**

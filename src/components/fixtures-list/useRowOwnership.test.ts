@@ -41,7 +41,14 @@ function layerProvenance(
   targetKey = 'f1',
 ): ProgrammerKeyState {
   return {
-    provenance: { targetKey, propertyName, source: 'CUE', cueId: 4, layerId, lookId: layerId + 100, lookName },
+    provenance: {
+      targetKey,
+      propertyName,
+      source: 'CUE',
+      cueId: 4,
+      layerId,
+      layerSource: { kind: 'LOOK', id: layerId + 100, uuid: `u${layerId}`, name: lookName },
+    },
   }
 }
 
@@ -52,7 +59,12 @@ describe('aggregateCellOwnership — the winning layer', () => {
     const result = aggregateCellOwnership(KEY, false, lookupFrom({
       'f1|dimmer': layerProvenance(1, 'Warm Wash'),
     }))
-    expect(result?.layer).toEqual({ layerId: 1, lookId: 101, name: 'Warm Wash', mixed: false })
+    expect(result?.layer).toEqual({
+      layerId: 1,
+      source: { kind: 'LOOK', id: 101, uuid: 'u1', name: 'Warm Wash' },
+      name: 'Warm Wash',
+      mixed: false,
+    })
     // Independent of `source`, which still reports the engine layer.
     expect(result?.source).toBe('cue')
   })

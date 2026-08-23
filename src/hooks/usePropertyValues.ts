@@ -1,16 +1,5 @@
 import { useRef, useMemo, useSyncExternalStore, useCallback } from 'react'
 import { lightingApi } from '../api/lightingApi'
-import { useEditorContext } from '../components/lighting-editor/EditorContext'
-import {
-  useLookDraft,
-  useLookDraftValue,
-} from '../components/looks/LookDraftContext'
-import {
-  rgbToHex,
-  hexToRgb,
-  parseExtendedColour,
-  serializeExtendedColour,
-} from '../components/fx/colourUtils'
 import { computeCombinedCss } from '../lib/colourMath'
 import { serializeLevel } from '../lib/programmerValue'
 import { outputChannelSource, type ChannelSource } from '../api/channelSource'
@@ -60,30 +49,10 @@ export function subscribeToChannels(
   return () => subscriptions.forEach((sub) => sub.unsubscribe())
 }
 
-function parseSliderCanonical(value: string | undefined): number {
-  if (value === undefined) return 0
-  const n = Number(value)
-  if (!Number.isFinite(n)) return 0
-  return Math.max(0, Math.min(255, Math.round(n)))
-}
-
-function parsePositionCanonical(value: string | undefined): { pan: number; tilt: number } {
-  if (!value) return { pan: 0, tilt: 0 }
-  const [panStr, tiltStr] = value.split(',')
-  const pan = Number(panStr)
-  const tilt = Number(tiltStr)
-  return {
-    pan: Number.isFinite(pan) ? pan : 0,
-    tilt: Number.isFinite(tilt) ? tilt : 0,
-  }
-}
-
 /**
  * Hook to get a slider property's current value
  */
 export function useSliderValue(property: SliderPropertyDescriptor): number {
-  const ctx = useEditorContext()
-  const draftValue = useLookDraftValue(property.name)
   const source = useChannelSource()
   // ChannelRef is exactly {universe, channelNo}, so these two fully identify the
   // channel. Keying off them rather than the enclosing descriptor avoids
@@ -102,7 +71,6 @@ export function useSliderValue(property: SliderPropertyDescriptor): number {
 
   const liveValue = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 
-  if (ctx.kind === 'look') return parseSliderCanonical(draftValue)
   return liveValue
 }
 
@@ -117,46 +85,11 @@ type ColourValueResult = {
   combinedCss: string
 }
 
-function parseColourFromDraft(
-  property: ColourPropertyDescriptor,
-  draftValue: string | undefined,
-): ColourValueResult {
-  if (!draftValue) {
-    const zero: ColourValueResult = {
-      r: 0,
-      g: 0,
-      b: 0,
-      w: property.whiteChannel ? 0 : undefined,
-      a: property.amberChannel ? 0 : undefined,
-      uv: property.uvChannel ? 0 : undefined,
-      css: 'rgb(0, 0, 0)',
-      combinedCss: 'rgb(0, 0, 0)',
-    }
-    return zero
-  }
-  const ext = parseExtendedColour(draftValue)
-  const { r, g, b } = hexToRgb(ext.hex)
-  const w = property.whiteChannel ? ext.white : undefined
-  const a = property.amberChannel ? ext.amber : undefined
-  const uv = property.uvChannel ? ext.uv : undefined
-  return {
-    r,
-    g,
-    b,
-    w,
-    a,
-    uv,
-    css: `rgb(${r}, ${g}, ${b})`,
-    combinedCss: computeCombinedCss(r, g, b, w, a, uv),
-  }
-}
 
 /**
  * Hook to get a colour property's RGB values
  */
 export function useColourValue(property: ColourPropertyDescriptor): ColourValueResult {
-  const ctx = useEditorContext()
-  const draftValue = useLookDraftValue(property.name)
   const source = useChannelSource()
   const cachedRef = useRef<ColourValueResult | null>(null)
 
@@ -209,7 +142,6 @@ export function useColourValue(property: ColourPropertyDescriptor): ColourValueR
 
   const liveResult = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 
-  if (ctx.kind === 'look') return parseColourFromDraft(property, draftValue)
   return liveResult
 }
 
@@ -224,8 +156,6 @@ type PositionValueResult = {
  * Hook to get a position property's pan/tilt values
  */
 export function usePositionValue(property: PositionPropertyDescriptor): PositionValueResult {
-  const ctx = useEditorContext()
-  const draftValue = useLookDraftValue(property.name)
   const source = useChannelSource()
   const cachedRef = useRef<PositionValueResult | null>(null)
 
@@ -262,14 +192,6 @@ export function usePositionValue(property: PositionPropertyDescriptor): Position
 
   const liveResult = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 
-  if (ctx.kind === 'look') {
-    const { pan, tilt } = parsePositionCanonical(draftValue)
-    const panRange = property.panMax - property.panMin
-    const tiltRange = property.tiltMax - property.tiltMin
-    const panNormalized = panRange > 0 ? (pan - property.panMin) / panRange : 0.5
-    const tiltNormalized = tiltRange > 0 ? (tilt - property.tiltMin) / tiltRange : 0.5
-    return { pan, tilt, panNormalized, tiltNormalized }
-  }
   return liveResult
 }
 
@@ -300,8 +222,6 @@ export function resolveSettingOption<O extends { level: number }>(
  * Hook to get a setting property's current option
  */
 export function useSettingValue(property: SettingPropertyDescriptor): SettingValueResult {
-  const ctx = useEditorContext()
-  const draftValue = useLookDraftValue(property.name)
   const source = useChannelSource()
   const cachedRef = useRef<SettingValueResult | null>(null)
   // See useSliderValue: the two ChannelRef fields fully identify the channel.
@@ -328,10 +248,6 @@ export function useSettingValue(property: SettingPropertyDescriptor): SettingVal
 
   const liveResult = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 
-  if (ctx.kind === 'look') {
-    const level = parseSliderCanonical(draftValue)
-    return { level, option: resolveSettingOption(property.options, level) }
-  }
   return liveResult
 }
 
@@ -361,10 +277,8 @@ export interface PropertyWriteTarget {
  * where there genuinely is no single owning property, such as the raw Channels view.
  */
 export function useUpdateChannel() {
-  const ctx = useEditorContext()
   return useCallback(
     (channel: ChannelRef, value: number, target?: PropertyWriteTarget) => {
-      if (ctx.kind === 'look') return
       if (target) {
         lightingApi.programmer.set(
           'fixture',
@@ -376,7 +290,7 @@ export function useUpdateChannel() {
       }
       lightingApi.channels.update(channel.universe, channel.channelNo, value)
     },
-    [ctx]
+    []
   )
 }
 
@@ -393,10 +307,8 @@ export function useUpdateFixturePosition(
   property: PositionPropertyDescriptor,
   fixtureKey: string | undefined,
 ) {
-  const ctx = useEditorContext()
   return useCallback(
     (pan: number, tilt: number) => {
-      if (ctx.kind === 'look') return
       if (!fixtureKey) {
         lightingApi.channels.update(property.panChannel.universe, property.panChannel.channelNo, pan)
         lightingApi.channels.update(property.tiltChannel.universe, property.tiltChannel.channelNo, tilt)
@@ -404,7 +316,7 @@ export function useUpdateFixturePosition(
       }
       lightingApi.programmer.setPosition('fixture', fixtureKey, Math.round(pan), Math.round(tilt))
     },
-    [ctx, fixtureKey, property]
+    [fixtureKey, property]
   )
 }
 
@@ -417,20 +329,8 @@ export function useUpdateFixtureColour(
   property: ColourPropertyDescriptor,
   fixtureKey: string | undefined,
 ) {
-  const ctx = useEditorContext()
-  const draft = useLookDraft()
   return useCallback(
     (r: number, g: number, b: number, w?: number, a?: number, uv?: number) => {
-      if (ctx.kind === 'look' && draft) {
-        const value = serializeExtendedColour({
-          hex: rgbToHex(r, g, b),
-          white: property.whiteChannel ? w ?? 0 : 0,
-          amber: property.amberChannel ? a ?? 0 : 0,
-          uv: property.uvChannel ? uv ?? 0 : 0,
-        })
-        draft.onSetProperty(property.name, value)
-        return
-      }
       if (fixtureKey) {
         // One programmer entry for the whole colour, extended channels included. Writing
         // the components separately would make each one a distinct write that freezes its
@@ -458,7 +358,7 @@ export function useUpdateFixtureColour(
         lightingApi.channels.update(property.uvChannel.universe, property.uvChannel.channelNo, uv)
       }
     },
-    [ctx, draft, fixtureKey, property]
+    [fixtureKey, property]
   )
 }
 

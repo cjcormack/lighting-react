@@ -2,8 +2,12 @@ import type { AttributeFamily } from '@/lib/attributeFamily'
 import type { AssignmentHealth } from './cuesApi'
 
 /**
- * The `targetType` discriminator marking a row or effect as **deferred**: it names no target of its
- * own and takes its targets from the cue layer referencing the Look.
+ * The `targetType` discriminator marking an **effect** as deferred: it names no target of its own and
+ * takes its targets from the layer referencing the Look.
+ *
+ * A *row* can no longer carry it — the write boundary refuses one, because a value you point at a
+ * selection is a template now (`templatesApi.ts`). Effects keep it, because fanning an effect over
+ * the layer's targets is a different thing from holding a value for nobody.
  *
  * Deliberately a magic string rather than an arm of the fixture/group union, mirroring the
  * backend's `DEFERRED_TARGET_TYPE` — a deferred row reaching code that expects a resolvable target
@@ -20,7 +24,8 @@ export type LookTargetType = 'fixture' | 'group' | typeof DEFERRED_TARGET_TYPE
  * for position, `"0".."255"` for slider/setting). A `ref:` is rejected at the backend's write
  * boundary, which is what keeps Looks from nesting.
  *
- * `targetKey` is the empty string when `targetType` is `deferred`.
+ * **Always bound**: a Look row names a fixture or a group. `deferred` is refused at the write
+ * boundary — see [DEFERRED_TARGET_TYPE].
  */
 export interface LookRow {
   targetType: LookTargetType
@@ -87,13 +92,20 @@ export interface LookSummary {
   rowCount: number
   effectCount: number
   targetCount: number
-  /** True when any row or effect is deferred, i.e. takes its targets from the layer. */
-  hasDeferredRows: boolean
   /**
-   * Which fixture type the *form editor* builds a synthetic fixture for. An editor affordance, not
-   * a data constraint, and non-null only for a Look with deferred rows.
+   * True when any **effect** takes its targets from the layer applying this Look rather than naming
+   * one.
+   *
+   * Rows can no longer be deferred at all — session 3 moved that half of the entity out to
+   * templates — so this is now only about effects, where a deferred target still means "fan over
+   * whatever the layer points at". It is what makes a Look eligible for a busking pad: a pad
+   * supplies the targets on the press.
+   *
+   * There was an `editorFixtureType` beside it, naming the type the form editor built a synthetic
+   * fixture from. It went with the deferred rows, and with it the compatibility gate that refused
+   * "Amber Key" to every head it was not authored against (D6).
    */
-  editorFixtureType: string | null
+  hasDeferredEffects: boolean
   /** Up to 8 distinct literals, most-frequent first, so a row can preview without a detail fetch. */
   preview: string[]
   /**
@@ -119,7 +131,6 @@ export interface LookDetails {
   notes: string | null
   sortOrder: number
   families: AttributeFamily[]
-  editorFixtureType: string | null
   /**
    * The **positional** colour list (`P1` / `P2` / `P*`) that FX parameters index — a third,
    * unrelated thing historically also called "palette". It parameterises effects rather than
@@ -144,7 +155,6 @@ export interface LookInput {
   name?: string
   notes?: string | null
   sortOrder?: number
-  editorFixtureType?: string | null
   palette?: string[]
   rows?: LookRow[]
   effects?: LookEffect[]

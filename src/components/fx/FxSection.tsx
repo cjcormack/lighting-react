@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { useEditorContext } from '@/components/lighting-editor/EditorContext'
 import { AudioWaveform, ChevronDown, ChevronRight, Pause, Pencil, Play, Plus, X } from 'lucide-react'
 import {
   useFixtureEffectsQuery,
@@ -32,11 +31,9 @@ type FxSectionProps =
   | { group: GroupSummary; fixture?: never }
 
 export function FxSection(props: FxSectionProps) {
-  const ctx = useEditorContext()
   // In preset mode the host fixture is synthetic — its key doesn't resolve in fx/group
   // queries and there's no stage surface to apply to. Effects live on the preset editor's
   // own Effects tab. Suppress this whole panel.
-  if (ctx.kind === 'look') return null
   if ('fixture' in props && props.fixture) {
     return <FixtureFxSection fixture={props.fixture} />
   }

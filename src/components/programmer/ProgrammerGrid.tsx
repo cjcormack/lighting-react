@@ -6,6 +6,7 @@ import type { ColumnVisibility } from '@/components/fixtures-list/ColumnsMenu'
 import { FixturesListContainer } from '@/routes/FixturesList'
 import { EditorContextProvider } from '@/components/lighting-editor/EditorContext'
 import { LayerRowNotices } from './LayerRowNotices'
+import { TemplateStrip } from './TemplateStrip'
 import { useLookRowStore } from './LookRowStore'
 import { useProgrammerScope } from './ProgrammerScope'
 import type { EditorContextValue } from '@/components/lighting-editor/EditorContext'
@@ -33,10 +34,12 @@ const COLUMN_LABELS = new Map(COLUMN_DEFS.map((d) => [d.key, d.label]))
 const columnLabel = (col: ColumnKey) => COLUMN_LABELS.get(col) ?? col
 
 export function ProgrammerGrid({
+  projectId,
   grouped,
   columnVisibility,
   onColumnVisibilityChange,
 }: {
+  projectId: number
   grouped: boolean
   columnVisibility: ColumnVisibility
   onColumnVisibilityChange: (next: ColumnVisibility) => void
@@ -54,6 +57,7 @@ export function ProgrammerGrid({
   return (
     <EditorContextProvider value={editorContext}>
       <ProgrammerGridBody
+        projectId={projectId}
         grouped={grouped}
         columnVisibility={columnVisibility}
         onColumnVisibilityChange={onColumnVisibilityChange}
@@ -63,10 +67,12 @@ export function ProgrammerGrid({
 }
 
 function ProgrammerGridBody({
+  projectId,
   grouped,
   columnVisibility,
   onColumnVisibilityChange,
 }: {
+  projectId: number
   grouped: boolean
   columnVisibility: ColumnVisibility
   onColumnVisibilityChange: (next: ColumnVisibility) => void
@@ -91,7 +97,11 @@ function ProgrammerGridBody({
               {filter}
               {lit}
             </div>
-            <LayerRowNotices />
+            <LayerRowNotices projectId={projectId} />
+            {/* The template strip, above the grid and below the filter. It reads the *cell*
+                selection — which `renderToolbar` already hands down, so the strip needs no new
+                plumbing into the table's own state — and the selection is what filters it. */}
+            <TemplateStrip projectId={projectId} cells={cells} />
             {/* Two selections, both live at once, so both are named. FIXTURE selection is what
                 Record scopes on; CELL selection is a transient edit scope that only says where the
                 next value goes. Leaving either to be inferred from the buttons beside it is how an

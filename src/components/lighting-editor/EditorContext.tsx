@@ -15,20 +15,22 @@ import { createContext, useContext, useMemo, type ReactNode } from 'react'
  * `store/programmerOps.ts`. The backend protocol is still live and another client can hold a
  * session, so that response is a real thing this client must handle; it simply never *opens* one.
  *
- * `kind: 'look'` writes reach neither: they land in `LookDraftContext`, because the Look editor
- * works against a synthetic fixture and its rows are deferred — there is no head on stage to
- * write to until a layer supplies one.
+ * There was a `kind: 'look'` arm, whose writes reached neither: they landed in `LookDraftContext`,
+ * because the library's Look editor worked against a *synthetic fixture* built from
+ * `editorFixtureType` and its rows were deferred — there was no head on stage to write to until a
+ * layer supplied one. Session 3 deleted all of it. Removing the fixture type removes the thing that
+ * grid was built out of, and what it was really editing is a **template**, which now has its own
+ * family-native editor and no property grid at all.
  *
- * `kind: 'lookLayer'` is the programmer grid focused on one of its Look layers. **Not the same as
- * `look`**, and the two must not be merged: `look` is the library editor's draft over *deferred*
- * rows keyed by property name alone, while this writes *bound* rows keyed by (fixture, property)
- * and does so live — the save republishes every cue layering that Look, which is the entire point
- * of composing in place. It carries both ids because the layer says which stack line is focused
- * and the Look says what gets written.
+ * `kind: 'lookLayer'` is the programmer grid focused on one of its Look layers. It writes *bound*
+ * rows keyed by (fixture, property) and does so live — the save republishes every cue layering that
+ * Look, which is the entire point of composing in place. It carries both ids because the layer says
+ * which stack line is focused and the Look says what gets written. A focused **template** layer has
+ * no arm here on purpose: a template is one family of intents, and projecting its generic row onto
+ * every targeted row would silently convert it to a per-fixture one on the first edit.
  */
 export type EditorContextValue =
   | { kind: 'live' }
-  | { kind: 'look'; id: number }
   | { kind: 'lookLayer'; layerId: number; lookId: number }
 
 const defaultValue: EditorContextValue = { kind: 'live' }
@@ -45,7 +47,7 @@ export function EditorContextProvider({
   // Tolerate callers that pass a fresh object literal on every render — only rebroadcast
   // when a field consumers actually care about changes.
   const kind = value.kind
-  const lookId = value.kind === 'look' ? value.id : value.kind === 'lookLayer' ? value.lookId : null
+  const lookId = value.kind === 'lookLayer' ? value.lookId : null
   const layerId = value.kind === 'lookLayer' ? value.layerId : null
   // `value` is deliberately not a dependency: depending on it is exactly the
   // per-render rebroadcast this memo exists to absorb.

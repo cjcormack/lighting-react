@@ -101,7 +101,12 @@ export function LookRowStoreProvider({
   const layerId = focusedLayerId(scope)
   const { data: layers } = useProgrammerLayersQuery()
   const layer = layerId == null ? undefined : layers?.find((l) => l.layerId === layerId)
-  const lookId = layer?.lookId
+  // **Only a LOOK layer has editable rows here.** A focused *template* layer deliberately shows no
+  // rows in the grid: a template is one family of intents edited in its own family-native editor, and
+  // projecting its generic row onto every targeted row would silently convert it to a per-fixture one
+  // on the first edit — the same argument 2a made for deferred Look rows. `LayerRowNotices` names it
+  // and points at `/templates` instead.
+  const lookId = layer?.source.kind === 'LOOK' ? layer.source.id : undefined
   const { data: look, isSuccess } = useLookQuery(
     { projectId, lookId: lookId ?? 0 },
     { skip: lookId == null },
@@ -225,7 +230,7 @@ export function LookRowStoreProvider({
       projectId,
       layerId: layer.layerId,
       lookId,
-      lookName: layer.lookName,
+      lookName: layer.source.name,
       serverRows: buildServerRows(look?.rows, fixtures),
       draft,
       setValue,

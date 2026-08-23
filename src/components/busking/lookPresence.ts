@@ -23,7 +23,11 @@ export function lookLayerPresence(
 ): EffectPresence {
   if (targets.length === 0) return 'none'
 
-  const covering = layers.filter((layer) => !layer.isPreview && layer.lookId === lookId)
+  // Matched on the source being a **Look** with this id, not on the id alone: a template layer can
+  // carry the same int PK from the other table, and a pad would then light for someone else's row.
+  const covering = layers.filter(
+    (layer) => !layer.isPreview && layer.source.kind === 'LOOK' && layer.source.id === lookId,
+  )
   if (covering.length === 0) return 'none'
 
   let covered = 0
@@ -34,6 +38,40 @@ export function lookLayerPresence(
     if (hit) covered++
   }
 
+  if (covered === 0) return 'none'
+  return covered === targets.length ? 'all' : 'some'
+}
+
+/**
+ * The same question for a **template** pad: does a layer applying this template cover the selection?
+ *
+ * A separate function rather than a parameter on [lookLayerPresence], because the two match on
+ * different things: a Look layer is found by `source.id` *within the LOOK arm*, a template layer
+ * within the TEMPLATE arm, and the two id spaces are different tables that can collide. Folding them
+ * into one would need a kind argument at every call site to avoid exactly that.
+ *
+ * A template holds no effects, so this is the *only* way its pad can light: the running-effect
+ * presence a Look's ring is read from has nothing to say about one.
+ */
+export function templateLayerPresence(
+  layers: readonly ProgrammerLayer[],
+  targets: readonly CueTarget[],
+  templateId: number,
+): EffectPresence {
+  if (targets.length === 0) return 'none'
+
+  const covering = layers.filter(
+    (layer) => !layer.isPreview && layer.source.kind === 'TEMPLATE' && layer.source.id === templateId,
+  )
+  if (covering.length === 0) return 'none'
+
+  let covered = 0
+  for (const target of targets) {
+    const hit = covering.some((layer) =>
+      layer.targets.some((t) => t.type === target.type && t.key === target.key),
+    )
+    if (hit) covered++
+  }
   if (covered === 0) return 'none'
   return covered === targets.length ? 'all' : 'some'
 }

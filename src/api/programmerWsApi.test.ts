@@ -55,8 +55,7 @@ const PROV: ProvenanceEntry = {
 
 const LAYER: ProgrammerLayer = {
   layerId: 1,
-  lookId: 7,
-  lookName: 'Warm Wash',
+  source: { kind: 'LOOK', id: 7, uuid: 'u7', name: 'Warm Wash' },
   sortOrder: 0,
   enabled: true,
   targets: [{ type: 'group', key: 'front-wash' }],

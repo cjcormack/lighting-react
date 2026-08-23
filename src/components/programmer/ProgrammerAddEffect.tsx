@@ -44,6 +44,12 @@ export function ProgrammerAddEffect() {
 
   if (!scope) return null
 
+  // A **template layer takes no effect**, and the reason is D7 rather than a missing feature:
+  // effects live in a Look or on a cue, never in the thing a layer tracks. A focused template layer
+  // has no `LookRowStore` either, so without this the button would offer to absorb an effect into
+  // nothing at all.
+  const templateFocused = scope.kind === 'layer' && store == null
+
   // An effect needs one target to be authored against. The selection is the operator's own answer
   // to "which heads?", and `AddEditFxSheet` offers the distribution controls once it knows whether
   // that target is multi-head — so a group beats a fixture where the selection is a group.
@@ -58,12 +64,14 @@ export function ProgrammerAddEffect() {
   const reason =
     scope.kind === 'output'
       ? 'Output is a read of everything composed together, so it owns nothing. Switch to Local for an effect on this cue, or focus a layer to put one in its look.'
-      : target == null
-        ? 'Select the heads the effect should drive first.'
-        : scope.kind === 'layer'
-          ? `Add an effect to ${store?.lookName ?? 'this look'} — every layer using it will run it`
-          : 'Add an effect to the programmer. Record writes it onto the cue.'
-  const disabled = scope.kind === 'output' || target == null
+      : templateFocused
+        ? 'A template holds one value, never an effect. Switch to Local for an effect on this cue, or focus a look layer to put one in its look.'
+        : target == null
+          ? 'Select the heads the effect should drive first.'
+          : scope.kind === 'layer'
+            ? `Add an effect to ${store?.lookName ?? 'this look'} — every layer using it will run it`
+            : 'Add an effect to the programmer. Record writes it onto the cue.'
+  const disabled = scope.kind === 'output' || templateFocused || target == null
 
   return (
     <>

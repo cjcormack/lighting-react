@@ -6,8 +6,7 @@ import type { CueTarget } from '@/api/cuesApi'
 function layer(overrides: Partial<ProgrammerLayer> = {}): ProgrammerLayer {
   return {
     layerId: 1,
-    lookId: 7,
-    lookName: 'Warm Wash',
+    source: { kind: 'LOOK', id: 7, uuid: 'u7', name: 'Warm Wash' },
     sortOrder: 0,
     enabled: true,
     targets: [{ type: 'group', key: 'front-wash' }],
@@ -29,7 +28,7 @@ describe('lookLayerPresence', () => {
   })
 
   it('reads none when no layer names this Look', () => {
-    expect(lookLayerPresence([layer({ lookId: 8 })], [FRONT], 7)).toBe('none')
+    expect(lookLayerPresence([layer({ source: { kind: 'LOOK', id: 8, uuid: 'u8', name: 'Cool' } })], [FRONT], 7)).toBe('none')
     expect(lookLayerPresence([], [FRONT], 7)).toBe('none')
   })
 

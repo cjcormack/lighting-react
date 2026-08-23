@@ -1,8 +1,5 @@
 import { useRef, useMemo, useSyncExternalStore, useCallback } from 'react'
 import { lightingApi } from '../api/lightingApi'
-import { useEditorContext } from '../components/lighting-editor/EditorContext'
-import { useLookDraft } from '../components/looks/LookDraftContext'
-import { rgbToHex, serializeExtendedColour } from '../components/fx/colourUtils'
 import { getChannelValue, resolveSettingOption, subscribeToChannels } from './usePropertyValues'
 import { useChannelSource } from './useChannelSource'
 import { colourFactor } from './useNormalizedIntensity'
@@ -100,14 +97,8 @@ export function useUpdateGroupSlider(
   property: GroupSliderPropertyDescriptor,
   groupName?: string,
 ) {
-  const ctx = useEditorContext()
-  const draft = useLookDraft()
   return useCallback(
     (value: number) => {
-      if (ctx.kind === 'look' && draft) {
-        draft.onSetProperty(property.name, String(value))
-        return
-      }
       if (groupName) {
         lightingApi.programmer.set('group', groupName, property.name, serializeLevel(value))
         return
@@ -116,7 +107,7 @@ export function useUpdateGroupSlider(
         lightingApi.channels.update(channel.universe, channel.channelNo, value)
       })
     },
-    [ctx, draft, groupName, property.memberChannels, property.name]
+    [groupName, property.memberChannels, property.name]
   )
 }
 
@@ -335,23 +326,8 @@ export function useUpdateGroupColour(
   property: GroupColourPropertyDescriptor,
   groupName?: string,
 ) {
-  const ctx = useEditorContext()
-  const draft = useLookDraft()
   return useCallback(
     (r: number, g: number, b: number, w?: number, a?: number, uv?: number) => {
-      if (ctx.kind === 'look' && draft) {
-        const hasWhite = property.memberColourChannels.some((m) => m.whiteChannel)
-        const hasAmber = property.memberColourChannels.some((m) => m.amberChannel)
-        const hasUv = property.memberColourChannels.some((m) => m.uvChannel)
-        const value = serializeExtendedColour({
-          hex: rgbToHex(r, g, b),
-          white: hasWhite ? w ?? 0 : 0,
-          amber: hasAmber ? a ?? 0 : 0,
-          uv: hasUv ? uv ?? 0 : 0,
-        })
-        draft.onSetProperty(property.name, value)
-        return
-      }
       if (groupName) {
         lightingApi.programmer.setColour('group', groupName, property.name, { r, g, b, w, a, uv })
         return
@@ -370,7 +346,7 @@ export function useUpdateGroupColour(
         })
       })
     },
-    [ctx, draft, groupName, property.memberColourChannels, property.name]
+    [groupName, property.memberColourChannels, property.name]
   )
 }
 
@@ -487,14 +463,8 @@ export function useUpdateGroupPosition(
   property: GroupPositionPropertyDescriptor,
   groupName?: string,
 ) {
-  const ctx = useEditorContext()
-  const draft = useLookDraft()
   return useCallback(
     (pan: number, tilt: number) => {
-      if (ctx.kind === 'look' && draft) {
-        draft.onSetProperty(property.name, `${pan},${tilt}`)
-        return
-      }
       if (groupName) {
         lightingApi.programmer.setPosition('group', groupName, Math.round(pan), Math.round(tilt))
         return
@@ -508,7 +478,7 @@ export function useUpdateGroupPosition(
         )
       })
     },
-    [ctx, draft, groupName, property.memberPositionChannels, property.name]
+    [groupName, property.memberPositionChannels]
   )
 }
 
@@ -591,14 +561,8 @@ export function useUpdateGroupSetting(
   property: GroupSettingPropertyDescriptor,
   groupName?: string,
 ) {
-  const ctx = useEditorContext()
-  const draft = useLookDraft()
   return useCallback(
     (level: number) => {
-      if (ctx.kind === 'look' && draft) {
-        draft.onSetProperty(property.name, String(level))
-        return
-      }
       if (groupName) {
         lightingApi.programmer.set('group', groupName, property.name, serializeLevel(level))
         return
@@ -607,6 +571,6 @@ export function useUpdateGroupSetting(
         lightingApi.programmer.set('fixture', m.fixtureKey, property.name, serializeLevel(level))
       })
     },
-    [ctx, draft, groupName, property.memberChannels, property.name]
+    [groupName, property.memberChannels, property.name]
   )
 }

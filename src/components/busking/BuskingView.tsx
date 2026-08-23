@@ -5,14 +5,20 @@ import { useGroupActiveEffectsQuery } from '@/store/groups'
 import { useFixtureEffectsQuery } from '@/store/fixtureFx'
 import { useFixtureListQuery } from '@/store/fixtures'
 import { useCurrentProjectQuery } from '@/store/projects'
-import { useLookListQuery, useLookQuery, useCreateLookMutation, useSaveLookMutation, useDeleteLookMutation } from '@/store/looks'
+import { useLookListQuery } from '@/store/looks'
+import { useTemplateListQuery, useToggleTemplateMutation } from '@/store/templates'
+import { useNavigate } from 'react-router'
+import { FAMILY_LABELS } from '@/lib/attributeFamily'
+import { templateLayerPresence } from './lookPresence'
+import { useProgrammerLayersQuery } from '@/store/programmer'
+import { describeLookContents, type PadItem } from './EffectPad'
+import type { AttributeFamily } from '@/lib/attributeFamily'
+import type { CueTarget } from '@/api/cuesApi'
 import { TargetList } from './TargetList'
 import { EffectPad } from './EffectPad'
 import { SelectedTargetSummary } from './SelectedTargetSummary'
 import { ActiveEffectSheet } from './ActiveEffectSheet'
 import { ConfigureEffectSheet } from './ConfigureEffectSheet'
-import { LookEditor } from '@/components/looks/LookEditor'
-import { assertLookLoaded } from '@/lib/lookSaveGuard'
 import { FixtureDetailModal } from '@/components/groups/FixtureDetailModal'
 import { useBuskingState, type TargetEffectsData } from './useBuskingState'
 import { programmerClearEntry, useProgrammerRevision } from '@/store/programmer'
@@ -28,7 +34,6 @@ import { detectExtendedChannels } from '@/components/fx/colourUtils'
 import { toast } from 'sonner'
 import { formatError } from '@/lib/formatError'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
-import type { LookInput, LookSummary } from '@/api/looksApi'
 
 interface BuskingViewProps {
   /** Called whenever the set of selected targets changes, with control functions */
@@ -63,8 +68,6 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
   } = useBuskingState()
 
   const [configuringEffect, setConfiguringEffect] = useState<EffectLibraryEntry | null>(null)
-  const [lookFormOpen, setLookFormOpen] = useState(false)
-  const [editingLookId, setEditingLookId] = useState<number | null>(null)
   const [detailFixtureKey, setDetailFixtureKey] = useState<string | null>(null)
 
   // Fetch looks for the current project
@@ -73,23 +76,22 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
     { projectId: currentProject?.id ?? 0 },
     { skip: !currentProject },
   )
+  const { data: templates } = useTemplateListQuery(
+    { projectId: currentProject?.id ?? 0 },
+    { skip: !currentProject },
+  )
+  // The layer stack, because a template pad's ring can only be read from it: a template holds no
+  // effects, so the running-effect presence a Look's ring uses has nothing to say about one.
+  const { data: programmerLayers } = useProgrammerLayersQuery()
+  const [toggleTemplate] = useToggleTemplateMutation()
+  const navigate = useNavigate()
   // The editor needs rows and effects, which the library list does not carry.
   //
   // `currentData`, **not** `data` — see the same read in `routes/Looks.tsx`: `data` falls back to
   // the previous arg's result while a new one is in flight (and `isLoading` is false whenever it
   // does), so editing one Look then opening another would seed the editor from the first and let
   // Save write its rows into the second.
-  const {
-    currentData: editingLook,
-    isError: editingLookFailed,
-  } = useLookQuery(
-    { projectId: currentProject?.id ?? 0, lookId: editingLookId ?? 0 },
-    { skip: !currentProject || editingLookId == null },
-  )
   const { data: fixtureList } = useFixtureListQuery()
-  const [createLook, { isLoading: isCreatingLook }] = useCreateLookMutation()
-  const [saveLook, { isLoading: isSavingLook }] = useSaveLookMutation()
-  const [deleteLook, { isLoading: isDeletingLook }] = useDeleteLookMutation()
 
   // On mobile, close the target sheet when a target is selected
   const handleSelectTarget = useCallback(
@@ -188,73 +190,118 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
   }, [selectedArray, fixtureList])
 
   /**
-   * The Looks a pad can put on the current selection.
-   *
-   * **Deferred Looks only.** A bound Look names its own fixtures, so toggling it onto whatever
-   * happens to be selected would apply rows meant for other heads; it reaches the stage through a
-   * cue layer or Include instead. The toggle route offers only a Look's deferred rows for exactly
-   * the same reason, so a bound Look on a pad would fire nothing at all.
-   *
-   * Filtering is by derived **family** and by `editorFixtureType`, both of which the summary
-   * carries. It no longer checks extended colour channels (W/A/UV): that needs the effects'
-   * parameters, which only the detail carries, and fetching every Look to draw a pad grid is not
-   * worth it — the backend already skips a channel a fixture does not have.
+   * The selection in the layer/toggle target shape, with the same group-name convention `applyLook`
+   * sends: a group is named by its *name*, a fixture by its key.
    */
-  const filteredLooks = useMemo(() => {
-    const deferred = (looks ?? []).filter((look) => look.hasDeferredRows)
-    if (selectedArray.length === 0) return deferred
-    const targetCaps = new Set<string>()
-    const targetTypeKeys = new Set<string>()
-    for (const target of selectedArray) {
-      if (target.type === 'group') {
-        target.group.capabilities.forEach((c) => targetCaps.add(c))
-        if (fixtureList) {
-          fixtureList
-            .filter((f) => f.groups.includes(target.name))
-            .forEach((f) => targetTypeKeys.add(f.typeKey))
-        }
-      } else {
-        target.fixture.capabilities.forEach((c) => targetCaps.add(c))
-        targetTypeKeys.add(target.fixture.typeKey)
-      }
-    }
-    return deferred.filter((look) => {
-      const requiredCaps: string[] = []
-      for (const family of look.families) {
-        if (family === 'INTENSITY') requiredCaps.push('dimmer')
-        else if (family === 'COLOUR') requiredCaps.push('colour')
-        else if (family === 'POSITION') requiredCaps.push('position')
-        // BEAM has no single capability flag — a gobo wheel and a zoom are separate channels, and
-        // the backend skips a property the fixture lacks. Nothing to filter on.
-      }
-      if (!requiredCaps.every((cap) => targetCaps.has(cap))) return false
-      if (look.editorFixtureType && !targetTypeKeys.has(look.editorFixtureType)) return false
-      return true
-    })
-  }, [looks, selectedArray, fixtureList])
-
-  const handleApplyLook = useCallback(
-    (look: LookSummary) => {
-      return applyLook(look, 'none', targetEffectsData)
-    },
-    [applyLook, targetEffectsData],
+  const selectedCueTargets = useMemo<CueTarget[]>(
+    () =>
+      selectedArray.map((target) => ({
+        type: target.type,
+        key: target.type === 'group' ? target.name : target.key,
+      })),
+    [selectedArray],
   )
 
-  // Determine common fixture type from selected targets, to pre-populate a new Look's editor hint
-  const commonFixtureType = useMemo(() => {
-    if (selectedArray.length === 0 || !fixtureList) return null
-    const typeKeys = new Set<string>()
+  /**
+   * What the selection can actually take, in capability terms: the union over the selected targets.
+   *
+   * The **only** filter left. There used to be a second one on `editorFixtureType` — a Look was
+   * refused unless it had been authored against one of the selected fixtures' types — and that gate
+   * is precisely what made "Amber Key" a MAC Aura's colour rather than a colour (D6). It went with
+   * the column.
+   */
+  const targetCapabilities = useMemo(() => {
+    const caps = new Set<string>()
     for (const target of selectedArray) {
-      if (target.type === 'fixture') {
-        typeKeys.add(target.fixture.typeKey)
-      } else {
-        const members = fixtureList.filter((f) => f.groups.includes(target.name))
-        members.forEach((f) => typeKeys.add(f.typeKey))
-      }
+      if (target.type === 'group') target.group.capabilities.forEach((c) => caps.add(c))
+      else target.fixture.capabilities.forEach((c) => caps.add(c))
     }
-    if (typeKeys.size === 1) return [...typeKeys][0]
-    return null
-  }, [selectedArray, fixtureList])
+    return caps
+  }, [selectedArray])
+
+  /**
+   * The pads: Looks with **deferred effects**, plus every template.
+   *
+   * Both belong here and for the same reason — a pad puts a named thing on whatever is selected, so
+   * the thing has to be one that takes its targets from the press. For a Look that means a deferred
+   * *effect* (a chase you point somewhere); its bound rows name their own heads and reach the stage
+   * through a cue layer or Include instead. A template is target-less by definition, which is what
+   * made a palette bank a pad grid in the first place.
+   */
+  const padItems = useMemo<PadItem[]>(() => {
+    /**
+     * Does every family this thing touches have a capability the selection can answer?
+     *
+     * BEAM is deliberately unfiltered: a gobo wheel and a zoom are separate channels with no single
+     * capability flag, and the backend skips a property a fixture lacks. Nothing to filter on.
+     */
+    const familiesFit = (families: readonly AttributeFamily[]) => {
+      if (selectedArray.length === 0) return true
+      return families.every((family) => {
+        if (family === 'INTENSITY') return targetCapabilities.has('dimmer')
+        if (family === 'COLOUR') return targetCapabilities.has('colour')
+        if (family === 'POSITION') return targetCapabilities.has('position')
+        return true
+      })
+    }
+
+    const lookPads: PadItem[] = (looks ?? [])
+      .filter((look) => look.hasDeferredEffects)
+      .filter((look) => familiesFit(look.families))
+      .map((look) => ({
+        key: `look-${look.id}`,
+        name: look.name,
+        notes: look.notes,
+        detail: describeLookContents(look),
+        kind: 'look' as const,
+        presence: computeLookPresence(look, targetEffectsData),
+        onToggle: () => void applyLook(look, 'none', targetEffectsData),
+        onEdit: () => navigate(`/projects/${currentProject?.id ?? 0}/looks`),
+      }))
+
+    const templatePads: PadItem[] = (templates ?? [])
+      .filter((t) => t.family == null || familiesFit([t.family]))
+      .map((template) => ({
+        key: `template-${template.id}`,
+        name: template.name,
+        notes: template.notes,
+        detail: template.isGeneric
+          ? (template.family != null ? FAMILY_LABELS[template.family].singular : 'value')
+          : `${template.rows.length} heads`,
+        kind: 'template' as const,
+        // A template holds no effects, so the running-effect presence a Look's ring is read from
+        // cannot answer for one. The layer stack can: `templateLayerPresence` asks whether a layer
+        // applying this template covers the selection, which is the same question one press ago.
+        presence: templateLayerPresence(programmerLayers ?? [], selectedCueTargets, template.id),
+        onToggle: () => {
+          if (currentProject == null) return
+          void toggleTemplate({
+            projectId: currentProject.id,
+            templateId: template.id,
+            targets: selectedCueTargets,
+            propertyMask: template.family ?? undefined,
+          })
+            .unwrap()
+            .catch((err) => toast.error(formatError(err)))
+        },
+        onEdit: () => navigate(`/projects/${currentProject?.id ?? 0}/templates`),
+      }))
+
+    return [...templatePads, ...lookPads]
+  }, [
+    looks,
+    templates,
+    targetCapabilities,
+    selectedArray.length,
+    computeLookPresence,
+    targetEffectsData,
+    applyLook,
+    navigate,
+    currentProject,
+    programmerLayers,
+    selectedCueTargets,
+    toggleTemplate,
+  ])
 
   // Detect whether any selected GROUP target has multi-element (multi-head) fixtures.
   // Element Mode is a group-only concept (PER_FIXTURE vs FLAT across the group),
@@ -275,40 +322,6 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
       return (target.fixture.elementGroupProperties?.length ?? 0) > 0
     })
   }, [selectedArray])
-
-  const handleSaveLook = useCallback(
-    async (input: LookInput) => {
-      if (!currentProject) return
-      if (editingLookId != null) {
-        // Backstop behind the editor's own `isLoading` gate — see `assertLookLoaded`.
-        assertLookLoaded(editingLook, { failed: editingLookFailed })
-        await saveLook({ projectId: currentProject.id, lookId: editingLookId, ...input }).unwrap()
-      } else {
-        await createLook({ projectId: currentProject.id, ...input }).unwrap()
-      }
-    },
-    [currentProject, createLook, saveLook, editingLookId, editingLook, editingLookFailed],
-  )
-
-  const handleEditLook = useCallback((look: LookSummary) => {
-    setEditingLookId(look.id)
-    setLookFormOpen(true)
-  }, [])
-
-  const handleDeleteLook = useCallback(async () => {
-    if (!currentProject || editingLookId == null) return
-    // LookEditor invokes onDelete fire-and-forget, so nothing downstream catches this — and
-    // `deleteLook` is in `SILENT_ENDPOINTS`, so nothing toasts for it either. Report it here and
-    // leave the editor open on a delete that didn't land.
-    try {
-      await deleteLook({ projectId: currentProject.id, lookId: editingLookId }).unwrap()
-    } catch (err) {
-      toast.error(formatError(err))
-      return
-    }
-    setLookFormOpen(false)
-    setEditingLookId(null)
-  }, [currentProject, editingLookId, deleteLook])
 
   return (
     <div className="flex flex-col h-full">
@@ -338,12 +351,8 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
               getActivePropertyValue={getActivePropertyValue}
               setEditingEffect={setEditingEffect}
               setConfiguringEffect={setConfiguringEffect}
-              looks={filteredLooks}
-              onApplyLook={handleApplyLook}
-              computeLookPresence={computeLookPresence}
+              padItems={padItems}
               currentProjectId={currentProject?.id}
-              onCreateLook={() => { setEditingLookId(null); setLookFormOpen(true) }}
-              onEditLook={handleEditLook}
               headerContent={
                 <SelectedTargetSummary
                   targets={selectedArray}
@@ -384,12 +393,8 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
             getActivePropertyValue={getActivePropertyValue}
             setEditingEffect={setEditingEffect}
             setConfiguringEffect={setConfiguringEffect}
-            looks={filteredLooks}
-            onApplyLook={handleApplyLook}
-            computeLookPresence={computeLookPresence}
+            padItems={padItems}
             currentProjectId={currentProject?.id}
-            onCreateLook={() => { setEditingLookId(null); setLookFormOpen(true) }}
-            onEditLook={handleEditLook}
             headerContent={
               <SelectedTargetSummary
                 targets={selectedArray}
@@ -433,20 +438,6 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
         }}
         onClose={() => setConfiguringEffect(null)}
       />
-      <LookEditor
-        open={lookFormOpen}
-        onOpenChange={(open) => { setLookFormOpen(open); if (!open) setEditingLookId(null) }}
-        look={editingLookId == null ? null : (editingLook ?? null)}
-        // "No detail yet" rather than `isFetching`, so there is no frame between picking a Look and
-        // the request starting in which the form is offered as an empty draft. A failed fetch drops
-        // out of it on purpose — `assertLookLoaded` explains that case inline.
-        isLoading={editingLookId != null && editingLook == null && !editingLookFailed}
-        onSave={handleSaveLook}
-        isSaving={isCreatingLook || isSavingLook}
-        defaultEditorFixtureType={editingLookId == null ? commonFixtureType : undefined}
-        onDelete={editingLookId != null ? handleDeleteLook : undefined}
-        isDeleting={isDeletingLook}
-      />
       <FixtureDetailModal
         fixtureKey={detailFixtureKey}
         onClose={() => setDetailFixtureKey(null)}
@@ -474,12 +465,8 @@ function EffectPadWrapper({
   getActivePropertyValue,
   setEditingEffect,
   setConfiguringEffect,
-  looks,
-  onApplyLook,
-  computeLookPresence,
+  padItems,
   currentProjectId,
-  onCreateLook,
-  onEditLook,
   headerContent,
 }: {
   selectedTargets: BuskingTarget[]
@@ -497,12 +484,8 @@ function EffectPadWrapper({
   getActivePropertyValue: (button: PropertyButton, data: TargetEffectsData[]) => string | null
   setEditingEffect: (ctx: ActiveEffectContext | null) => void
   setConfiguringEffect: (effect: EffectLibraryEntry | null) => void
-  looks: LookSummary[]
-  onApplyLook: (look: LookSummary) => Promise<void>
-  computeLookPresence: (look: LookSummary, data: TargetEffectsData[]) => EffectPresence
+  padItems: PadItem[]
   currentProjectId: number | undefined
-  onCreateLook: () => void
-  onEditLook: (look: LookSummary) => void
   headerContent?: React.ReactNode
 }) {
   const getPresence = useCallback(
@@ -601,13 +584,6 @@ function EffectPadWrapper({
     [getActivePropertyValue, targetEffectsData],
   )
 
-  const getLookPresence = useCallback(
-    (look: LookSummary): EffectPresence => {
-      return computeLookPresence(look, targetEffectsData)
-    },
-    [computeLookPresence, targetEffectsData],
-  )
-
   return (
     <EffectPad
       effectsByCategory={effectsByCategory}
@@ -616,9 +592,7 @@ function EffectPadWrapper({
       onLongPress={handleLongPress}
       hasSelection={selectedTargets.length > 0}
       headerContent={headerContent}
-      looks={looks}
-      onApplyLook={onApplyLook}
-      getLookPresence={getLookPresence}
+      padItems={padItems}
       currentProjectId={currentProjectId}
       defaultBeatDivision={defaultBeatDivision}
       onBeatDivisionChange={onBeatDivisionChange}
@@ -629,8 +603,6 @@ function EffectPadWrapper({
       onPropertyToggle={handlePropertyToggle}
       onPropertyLongPress={handlePropertyLongPress}
       getPropertyValue={getPropertyValue}
-      onCreateLook={onCreateLook}
-      onEditLook={onEditLook}
     />
   )
 }

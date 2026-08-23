@@ -36,6 +36,9 @@ import {
 import { LookNameBadge } from '@/components/looks/LookNameBadge'
 import type { CueTarget } from '@/api/cuesApi'
 import type { LookSummary } from '@/api/looksApi'
+import type { TemplateSummary } from '@/api/templatesApi'
+import type { LayerSource } from '@/api/cuesApi'
+import type { AttributeFamily } from '@/lib/attributeFamily'
 
 /**
  * One line of a Look composition, in the shape both consumers already have.
@@ -46,8 +49,14 @@ import type { LookSummary } from '@/api/looksApi'
  * while a cue layer can be delayed or recurring.
  */
 export interface LookStackLayer {
-  lookId: number
-  lookName?: string | null
+  /**
+   * What this layer applies — a Look or a template.
+   *
+   * Null only for a row the server could not resolve, which the row draws as missing. It replaces
+   * the `lookId` / `lookName` pair: a layer's referent is polymorphic since session 3, and the two
+   * kinds want different iconography and a different library to look up.
+   */
+  source?: LayerSource | null
   enabled?: boolean
   targets: CueTarget[]
   propertyMask?: string | null
@@ -97,7 +106,13 @@ interface LookStackProps<T extends LookStackLayer> {
   layers: readonly T[]
   /** Keyed by int id — how a layer names its Look. Adds the families and the deleted-since case. */
   looksById: ReadonlyMap<number, LookSummary>
-  /** False while the look list is in flight, so a layer is never painted as missing mid-fetch. */
+  /**
+   * The same, for template layers. Separate maps rather than one keyed by `${kind}:${id}` because
+   * the two ids come from different tables and can collide — and because a caller that has only one
+   * library loaded should not have to fake the other.
+   */
+  templatesById?: ReadonlyMap<number, TemplateSummary>
+  /** False while the libraries are in flight, so a layer is never painted as missing mid-fetch. */
   looksLoaded: boolean
   handlers: LayerHandlers
   onAdd: () => void
@@ -141,6 +156,7 @@ interface LookStackProps<T extends LookStackLayer> {
 export function LookStack<T extends LookStackLayer>({
   layers,
   looksById,
+  templatesById,
   looksLoaded,
   handlers,
   onAdd,
@@ -194,8 +210,7 @@ export function LookStack<T extends LookStackLayer>({
                   sortableId={ids[i]}
                   layer={layer}
                   index={i}
-                  look={looksById.get(layer.lookId)}
-                  looksLoaded={looksLoaded}
+                  info={describeStackSource(layer.source, looksById, templatesById, looksLoaded)}
                   handlers={handlers}
                   sortable
                   showTargets
@@ -212,7 +227,55 @@ export function LookStack<T extends LookStackLayer>({
 }
 
 /**
- * One line of a Look composition.
+ * What a row needs to know about the thing its layer applies.
+ *
+ * Resolved once, in one place, because the answer comes from two different libraries and three
+ * different sources: the layer's own `source.name` (which arrives with the read, so a row is
+ * labelled before either library lands), the library entry (which adds the families and the
+ * deleted-since case) and the kind (which decides the badge).
+ */
+export interface StackSourceInfo {
+  name: string | undefined
+  families: readonly AttributeFamily[]
+  /** The library has loaded and does not hold it — the row draws as missing. */
+  missing: boolean
+  isTemplate: boolean
+}
+
+export function describeStackSource(
+  source: LayerSource | null | undefined,
+  looksById: ReadonlyMap<number, LookSummary>,
+  templatesById: ReadonlyMap<number, TemplateSummary> | undefined,
+  librariesLoaded: boolean,
+): StackSourceInfo {
+  if (source == null) {
+    return { name: undefined, families: [], missing: librariesLoaded, isTemplate: false }
+  }
+  if (source.kind === 'TEMPLATE') {
+    const template = templatesById?.get(source.id)
+    return {
+      name: source.name ?? template?.name,
+      // A template is in exactly one family, and it is derived from its rows the same way a Look's
+      // are — so the row shows one badge where a Look may show several.
+      families: template?.family != null ? [template.family] : [],
+      // Only claimable when this caller actually has the template library: a cue's read surface may
+      // not, and painting a layer as missing because the *caller* did not load a list would be a
+      // lie about the data.
+      missing: librariesLoaded && templatesById != null && template == null,
+      isTemplate: true,
+    }
+  }
+  const look = looksById.get(source.id)
+  return {
+    name: source.name ?? look?.name,
+    families: look?.families ?? [],
+    missing: librariesLoaded && look == null,
+    isTemplate: false,
+  }
+}
+
+/**
+ * One line of a layer composition.
  *
  * Exported because the cue editor's by-target arrangement renders these outside a stack, with
  * `sortable={false}`: the order is a property of the cue, not of one target, and a list filtered to
@@ -221,8 +284,7 @@ export function LookStack<T extends LookStackLayer>({
 export function LayerRow({
   layer,
   index,
-  look,
-  looksLoaded,
+  info,
   handlers,
   sortable,
   sortableId,
@@ -232,8 +294,7 @@ export function LayerRow({
 }: {
   layer: LookStackLayer
   index: number
-  look: LookSummary | undefined
-  looksLoaded: boolean
+  info: StackSourceInfo
   /**
    * Optional so a `readOnly` caller doesn't have to invent four no-ops it can never call — the read
    * surface (`CueDetailContent`) renders these rows and has nothing to mutate.
@@ -248,10 +309,10 @@ export function LayerRow({
   focused?: boolean
 }) {
   const enabled = layer.enabled !== false
-  // `lookName` comes with the read, so a layer is labelled even before the library list lands. The
-  // local lookup only adds the families and the deleted-since-read case.
-  const name = layer.lookName ?? look?.name
-  const missing = looksLoaded && look == null
+  // Resolved by `describeStackSource`: the layer's own `source.name` arrives with the read, so a row
+  // is labelled before either library lands; the library lookup only adds the families and the
+  // deleted-since-read case.
+  const { name, missing, isTemplate } = info
 
   return (
     <SortableShell sortable={sortable} sortableId={sortableId}>
@@ -288,13 +349,13 @@ export function LayerRow({
               aria-pressed={focused === true}
               title={focused ? 'The grid is showing this look' : 'Show this look in the grid'}
             >
-              <LookNameBadge name={name} missing={missing} />
+              <LookNameBadge name={name} missing={missing} isTemplate={isTemplate} />
             </button>
           ) : (
-            <LookNameBadge name={name} missing={missing} />
+            <LookNameBadge name={name} missing={missing} isTemplate={isTemplate} />
           )}
 
-          {look?.families.map((family) => (
+          {info.families.map((family) => (
             <Badge key={family} variant="outline" className="shrink-0 px-1.5 py-0 text-[10px]">
               {FAMILY_LABELS[family].singular}
             </Badge>

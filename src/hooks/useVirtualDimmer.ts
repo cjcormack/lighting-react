@@ -1,16 +1,5 @@
 import { useRef, useMemo, useSyncExternalStore, useCallback } from 'react'
 import { lightingApi } from '../api/lightingApi'
-import { useEditorContext } from '../components/lighting-editor/EditorContext'
-import {
-  useLookDraft,
-  useLookDraftValue,
-} from '../components/looks/LookDraftContext'
-import {
-  rgbToHex,
-  hexToRgb,
-  parseExtendedColour,
-  serializeExtendedColour,
-} from '../components/fx/colourUtils'
 import { getChannelValue, subscribeToChannels } from './usePropertyValues'
 import type { ChannelRef, ColourPropertyDescriptor } from '../store/fixtures'
 import type { GroupColourPropertyDescriptor } from '../api/groupsApi'
@@ -37,10 +26,6 @@ export function useVirtualDimmer(
   colourProp: ColourPropertyDescriptor,
   fixtureKey?: string,
 ): VirtualDimmerResult {
-  const ctx = useEditorContext()
-  const draft = useLookDraft()
-  const draftValue = useLookDraftValue(colourProp.name)
-
   // Store colour ratios for restoring hue when raising from zero
   const lastRatiosRef = useRef<{ r: number; g: number; b: number }>({
     r: 1 / 3,
@@ -83,18 +68,7 @@ export function useVirtualDimmer(
 
   const live = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 
-  const lookDraftLive = useMemo(() => {
-    if (ctx.kind !== 'look') return null
-    if (!draftValue) return { value: 0, percentage: 0 }
-    const { r, g, b } = hexToRgb(parseExtendedColour(draftValue).hex)
-    const value = Math.max(r, g, b)
-    if (value > 0) {
-      lastRatiosRef.current = { r: r / value, g: g / value, b: b / value }
-    }
-    return { value, percentage: Math.round((value / 255) * 100) }
-  }, [ctx.kind, draftValue])
-
-  const { value, percentage } = lookDraftLive ?? live
+  const { value, percentage } = live
 
   const setValue = useCallback(
     (newValue: number) => {
@@ -105,18 +79,7 @@ export function useVirtualDimmer(
       let existingAmber = 0
       let existingUv = 0
 
-      if (ctx.kind === 'look') {
-        // Read the current draft value directly so rapid drags scale against the latest
-        // canonical state, not a stale snapshot captured at hook-call time.
-        const current = draft?.getValue(colourProp.name)
-        const ext = current
-          ? parseExtendedColour(current)
-          : { hex: '#000000', white: 0, amber: 0, uv: 0 }
-        ;({ r, g, b } = hexToRgb(ext.hex))
-        existingWhite = ext.white
-        existingAmber = ext.amber
-        existingUv = ext.uv
-      } else {
+      {
         r = getChannelValue(colourProp.redChannel)
         g = getChannelValue(colourProp.greenChannel)
         b = getChannelValue(colourProp.blueChannel)
@@ -149,17 +112,6 @@ export function useVirtualDimmer(
       newG = Math.min(255, newG)
       newB = Math.min(255, newB)
 
-      if (ctx.kind === 'look' && draft) {
-        const value = serializeExtendedColour({
-          hex: rgbToHex(newR, newG, newB),
-          white: existingWhite,
-          amber: existingAmber,
-          uv: existingUv,
-        })
-        draft.onSetProperty(colourProp.name, value)
-        return
-      }
-
       if (fixtureKey) {
         // One programmer entry for the scaled colour, carrying the W/A/UV read above.
         lightingApi.programmer.setColour('fixture', fixtureKey, colourProp.name, {
@@ -180,7 +132,7 @@ export function useVirtualDimmer(
     },
     // The whole descriptor is read now (extended channels included), so depend on it rather
     // than picking out individual channel refs.
-    [ctx, draft, fixtureKey, colourProp]
+    [fixtureKey, colourProp]
   )
 
   return { value, percentage, setValue }

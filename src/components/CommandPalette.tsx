@@ -15,7 +15,7 @@ import type { GroupSummary } from "@/api/groupsApi"
 import {
   useNavItems,
   useUniverseNavItems,
-  useLookFamilyNavItems,
+  useTemplateFamilyNavItems,
   filterNavItems,
   useIsNavAdmin,
 } from "@/navigation"
@@ -141,7 +141,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   const { data: groups } = useGroupListQuery()
   const allNavItems = useNavItems()
   const universeNavItems = useUniverseNavItems()
-  const lookFamilyNavItems = useLookFamilyNavItems()
+  const templateFamilyNavItems = useTemplateFamilyNavItems()
   const isNavAdmin = useIsNavAdmin()
 
   const { data: parkStateList } = useGetParkStateListQuery()
@@ -152,7 +152,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   const isViewingActiveProject = viewedProject?.id === currentProject?.id
   const visibleItems = filterNavItems(allNavItems, isViewingActiveProject, isNavAdmin)
   const visibleUniverseItems = filterNavItems(universeNavItems, isViewingActiveProject)
-  const visibleLookFamilyItems = filterNavItems(lookFamilyNavItems, isViewingActiveProject)
+  const visibleTemplateFamilyItems = filterNavItems(templateFamilyNavItems, isViewingActiveProject)
 
   const activePage = pages[pages.length - 1] ?? "root"
 
@@ -238,7 +238,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
             {/* Navigation */}
             {viewedProject && (
               <Command.Group heading="Navigation" className={groupClassName}>
-                {[...visibleItems, ...visibleUniverseItems, ...visibleLookFamilyItems].map((item) => (
+                {[...visibleItems, ...visibleUniverseItems, ...visibleTemplateFamilyItems].map((item) => (
                   <Command.Item
                     key={item.id}
                     value={item.label}
@@ -276,14 +276,18 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
                     <TableProperties className="size-4 text-muted-foreground" />
                     New Patch
                   </Command.Item>
+                  {/* Was "New FX Preset", pointing at `/presets?action=new` — a route retired with
+                      the preset tables two sessions ago, so the entry had been dead. A template is
+                      what that gesture means now: a named value, authored rather than captured,
+                      which is why it has a create entry at all where a Look does not. */}
                   <Command.Item
-                    value="New FX Preset"
-                    keywords={["preset", "effect", "create"]}
-                    onSelect={() => runAction(() => navigate(`/projects/${viewedProject.id}/presets?action=new`))}
+                    value="New Template"
+                    keywords={["template", "value", "colour", "palette", "create"]}
+                    onSelect={() => runAction(() => navigate(`/projects/${viewedProject.id}/templates?action=new`))}
                     className={itemClassName}
                   >
                     <Bookmark className="size-4 text-muted-foreground" />
-                    New FX Preset
+                    New Template
                   </Command.Item>
                   <Command.Item
                     value="New Cue Stack"

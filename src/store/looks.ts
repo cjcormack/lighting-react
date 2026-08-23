@@ -7,8 +7,6 @@ import type {
   CopyLookResponse,
   LookDetails,
   LookInput,
-  LookPreviewRequest,
-  LookPreviewResponse,
   LookSummary,
   ToggleLookRequest,
   ToggleLookResponse,
@@ -36,6 +34,15 @@ export function startLooksBridge() {
   })
 }
 
+/**
+ * Three endpoints were deleted here in session 3, each because its only caller went:
+ *
+ * - **`createLook`** — a Look is *recorded* now (D9), never hand-authored, so the create form that
+ *   called this does not exist. `POST /looks` stays server-side; nothing on the desk sends it.
+ * - **`previewLook` / `clearLookPreview`** — they drove `LookLivePreview`, the Look editor's rig
+ *   preview, which went with the editor. The route and `ProgrammerLayerStack.installPreview` remain
+ *   and still work; see `FU-TMPL-EDITOR-PREVIEW` for whether the template editor should use them.
+ */
 export const looksApi = restApi.injectEndpoints({
   endpoints: (build) => ({
     /**
@@ -65,22 +72,6 @@ export const looksApi = restApi.injectEndpoints({
     look: build.query<LookDetails, { projectId: number; lookId: number }>({
       query: ({ projectId, lookId }) => `project/${projectId}/looks/${lookId}`,
       providesTags: (_result, _error, { lookId }) => [{ type: 'Look', id: lookId }],
-    }),
-
-    createLook: build.mutation<LookDetails, { projectId: number } & LookInput>({
-      query: ({ projectId, ...body }) => ({
-        url: `project/${projectId}/looks`,
-        method: 'POST',
-        body,
-      }),
-      // Guarded on the result: a create can fail on a blank name (400) or a duplicate name (409),
-      // and invalidating then refetches the library to learn nothing changed.
-      //
-      // `Fixture` and `GroupList` too, and they are not incidental: `compatibleLookIds` is computed
-      // server-side and rides on the fixture and group summaries, so without these a Look created
-      // here is missing from every compatibility list — `LookTogglePicker` doesn't offer it and
-      // `LayerPicker` disables every head for it — until something else refetches those lists.
-      invalidatesTags: (result) => (result == null ? [] : ['LookList', 'Fixture', 'GroupList']),
     }),
 
     /**
@@ -207,22 +198,6 @@ export const looksApi = restApi.injectEndpoints({
       },
     }),
 
-    // No cache invalidation — preview lands on Layer 4 and surfaces through the existing
-    // channel-state WS stream that other consumers already subscribe to.
-    previewLook: build.mutation<LookPreviewResponse, { projectId: number } & LookPreviewRequest>({
-      query: ({ projectId, ...body }) => ({
-        url: `project/${projectId}/looks/preview`,
-        method: 'POST',
-        body,
-      }),
-    }),
-
-    clearLookPreview: build.mutation<void, { projectId: number }>({
-      query: ({ projectId }) => ({
-        url: `project/${projectId}/looks/preview`,
-        method: 'DELETE',
-      }),
-    }),
   }),
   overrideExisting: false,
 })
@@ -230,12 +205,9 @@ export const looksApi = restApi.injectEndpoints({
 export const {
   useLookListQuery,
   useLookQuery,
-  useCreateLookMutation,
   useSaveLookMutation,
   useDeleteLookMutation,
   useCopyLookMutation,
   useAbsorbLookEffectsMutation,
   useToggleLookMutation,
-  usePreviewLookMutation,
-  useClearLookPreviewMutation,
 } = looksApi

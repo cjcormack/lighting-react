@@ -15,14 +15,41 @@ export interface CueTarget {
  * within a cue, layering a dim look over a bright one really does dim. Across cues, HTP still
  * applies. See `lighting7/docs/lighting-composition-model.md` §"Looks and layers".
  */
+/**
+ * What a layer applies — a **Look** or a **template**.
+ *
+ * One nested value rather than the `lookId`/`lookName` pair it replaces, and that was the point of
+ * shaping it this way: a layer's referent became polymorphic in session 3, and a field called
+ * `lookName` holding a template's name is a lie no compiler can find. Collapsing the three fields
+ * into one object made every reader visit exactly once.
+ *
+ * All three identifiers earn their place: `id` addresses REST paths, `uuid` is the portable identity
+ * (int PKs are re-minted on sync import) and `name` is what an operator reads when asking why a
+ * fixture is the colour it is.
+ */
+export interface LayerSource {
+  kind: 'LOOK' | 'TEMPLATE'
+  id: number
+  uuid: string
+  name: string
+}
+
 export interface CueLayer {
-  lookId: number
+  /**
+   * What this layer applies: **exactly one** of `lookId` / `templateId`.
+   *
+   * Two ids rather than a `(kind, id)` pair, because that is what a client has in hand — it picked a
+   * row out of one library or the other — and because a request naming both is then a shape error
+   * the route refuses rather than a discriminator it has to trust.
+   */
+  lookId?: number | null
+  templateId?: number | null
   sortOrder?: number
   enabled?: boolean
   /**
-   * The target set this layer operates over. One meaning, two jobs: it **supplies** targets to the
-   * Look's deferred rows and **filters** its bound ones. Empty means the Look's own targets, so a
-   * fully-deferred Look with no targets contributes nothing.
+   * The target set this layer operates over. One meaning, two jobs: it **supplies** targets to a
+   * template's generic rows and **filters** a Look's bound ones. Empty means the source's own
+   * targets, so a template layer with no targets contributes nothing.
    */
   targets: CueTarget[]
   /**
@@ -53,23 +80,24 @@ export interface CueLayer {
 }
 
 /**
- * A layer as the server reads it back, carrying the Look's name so a cue card can label the line
- * without a second fetch.
+ * A layer as the server reads it back, carrying what it applies — kind, id, uuid and name — so a cue
+ * card can label the line without a second fetch.
  *
- * `lookName` is **read-only** and must never be sent back — same contract as `presetName` was and
- * as `health` is on an assignment. `buildCueInput` strips it, and a regression test pins that.
+ * `source` is **read-only** and must never be sent back: `lookId` / `templateId` are the write
+ * fields. Same contract as `presetName` was and as `health` is on an assignment. `buildCueInput`
+ * strips it, and a regression test pins that.
  */
 export interface CueLayerDetail extends CueLayer {
   /**
    * The layer row's id, on read only.
    *
-   * The only way to address one layer: `lookId` is not unique (a cue may layer the same Look twice)
-   * and array position is not identity when `sortOrder` is authoritative. Needed by
+   * The only way to address one layer: the source id is not unique (a cue may layer the same Look
+   * twice) and array position is not identity when `sortOrder` is authoritative. Needed by
    * `POST /{projectId}/cues/{cueId}/flatten`'s single-layer mode. Deliberately absent from
-   * `buildCueInput`'s rebuild, like `lookName`.
+   * `buildCueInput`'s rebuild, like `source`.
    */
   id?: number
-  lookName: string | null
+  source: LayerSource | null
 }
 
 // Ad-hoc effect stored inline in a cue (with optional timing)
@@ -266,12 +294,11 @@ export interface CookedRow {
   propertyName: string
   value: string
   /**
-   * The Look layer that won this key, when one did. Null for the cue's **own** rows, which belong
-   * to no layer — the distinction the grid draws as "the cue set this" versus "Warm Wash set this".
+   * The layer that won this key, when one did. Null for the cue's **own** rows, which belong to no
+   * layer — the distinction the grid draws as "the cue set this" versus "Warm Wash set this".
    */
   layerId?: number | null
-  lookId?: number | null
-  lookName?: string | null
+  layerSource?: LayerSource | null
 }
 
 export interface CueCookedResponse {

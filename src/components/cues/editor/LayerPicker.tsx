@@ -1,17 +1,20 @@
 import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { ChevronLeft, ChevronRight, Layers } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Layers, Palette } from 'lucide-react'
 import { useLookListQuery } from '@/store/looks'
+import { useTemplateListQuery } from '@/store/templates'
 import { useGroupListQuery } from '@/store/groups'
 import { useFixtureListQuery } from '@/store/fixtures'
 import { CueTargetPicker } from '../CueTargetPicker'
 import { TimingFields } from '../TimingEditor'
 import { SpeedMasterSelect } from '@/components/fx/SpeedMasterSelect'
 import { useSpeedMasterLiveQuery } from '@/store/speedMasters'
-import { FAMILY_LABELS } from '@/lib/attributeFamily'
+import { FAMILY_LABELS, type AttributeFamily } from '@/lib/attributeFamily'
+import { describeTemplateIntent } from '@/lib/templateIntent'
 import type { CueLayer, CueTarget } from '@/api/cuesApi'
 import type { LookSummary } from '@/api/looksApi'
+import type { TemplateSummary } from '@/api/templatesApi'
 
 interface TimingValues {
   delayMs?: number | null
@@ -41,11 +44,15 @@ type Step = 'look' | 'targets' | 'timing'
 /**
  * Build one cue layer: which Look, over which targets, with what timing.
  *
- * **Look first, then targets**, which is the reverse of the preset picker this replaces, and the
- * reason is the targeting mode. A deferred Look needs targets — it names none — so the target step
- * can usefully disable the heads it cannot drive. A *bound* Look already names its own, so the
- * target set becomes a filter rather than a requirement, and "all of them" has to be offerable.
- * Asking for targets first cannot express either.
+ * **Source first, then targets**, which is the reverse of the preset picker this replaces, and the
+ * reason is the targeting mode. A *template* needs targets — it names none — so the target step can
+ * usefully disable the heads it cannot drive. A *Look* already names its own, so the target set
+ * becomes a filter rather than a requirement, and "all of them" has to be offerable. Asking for
+ * targets first cannot express either.
+ *
+ * Both libraries are offered here, because both are things a layer can apply. The sections are the
+ * two entities rather than the old bound/deferred split of one — which is the same split, now that
+ * the two halves have their own tables.
  */
 export function LayerPicker({
   projectId,
@@ -55,12 +62,21 @@ export function LayerPicker({
   allowTiming = true,
 }: LayerPickerProps) {
   const { data: looks } = useLookListQuery({ projectId })
+  const { data: templates } = useTemplateListQuery({ projectId })
   const { data: groups } = useGroupListQuery()
   const { data: fixtures } = useFixtureListQuery()
   const { data: liveMasters } = useSpeedMasterLiveQuery()
 
   const [step, setStep] = useState<Step>('look')
-  const [look, setLook] = useState<LookSummary | null>(null)
+  /**
+   * What this layer will apply — a Look or a template, never both.
+   *
+   * One state rather than two, so "which did they pick?" has one answer and the steps after it do not
+   * have to agree about precedence.
+   */
+  const [source, setSource] = useState<
+    { kind: 'look'; look: LookSummary } | { kind: 'template'; template: TemplateSummary } | null
+  >(null)
   const [targets, setTargets] = useState<CueTarget[]>(
     preselectedTarget ? [preselectedTarget] : [],
   )
@@ -80,42 +96,62 @@ export function LayerPicker({
   // about the other.
   const [rateSpeedMasterUuid, setRateSpeedMasterUuid] = useState<string | null>(null)
 
-  const { bound, templates } = useMemo(() => {
-    const all = looks ?? []
-    return {
-      bound: all.filter((l) => !l.hasDeferredRows),
-      templates: all.filter((l) => l.hasDeferredRows),
-    }
-  }, [looks])
-
   /**
-   * Targets the chosen Look cannot drive.
+   * Targets the chosen source cannot drive.
    *
-   * Only meaningful for a **deferred** Look: `compatibleLookIds` is computed from
-   * `editorFixtureType` and inferred capability, and the backend deliberately leaves bound Looks
-   * out of it entirely — they name their own targets, so the question does not apply. Filtering a
-   * bound Look by it would disable every head.
+   * Two different questions, answered two different ways, and that is the point:
+   *
+   *  - a **Look** is filtered on `compatibleLookIds`, which is now **capability-only** (D6): "does
+   *    this head have colour at all", never "was this authored against that model". It only matters
+   *    for a Look whose *effects* are deferred, since those are what the layer's targets supply; a
+   *    Look with no deferred effects names its own heads and the question does not apply.
+   *  - a **template** is filtered from the target's own `capabilities`, with no server list at all.
+   *    A template's family is derived and exact, so the client can answer this itself — which is why
+   *    there is no `compatibleTemplateIds` to keep in step.
    */
   const disabledKeys = useMemo(() => {
     const disabled = new Map<string, string>()
-    if (look == null || !look.hasDeferredRows) return disabled
+    if (source == null) return disabled
+
+    if (source.kind === 'look') {
+      if (!source.look.hasDeferredEffects) return disabled
+      for (const group of groups ?? []) {
+        if (!group.compatibleLookIds.includes(source.look.id)) {
+          disabled.set(`group:${group.name}`, 'not compatible')
+        }
+      }
+      for (const fixture of fixtures ?? []) {
+        if (!fixture.compatibleLookIds.includes(source.look.id)) {
+          disabled.set(`fixture:${fixture.key}`, 'not compatible')
+        }
+      }
+      return disabled
+    }
+
+    const required = capabilityForFamily(source.template.family)
+    if (required == null) return disabled
     for (const group of groups ?? []) {
-      if (!group.compatibleLookIds.includes(look.id)) {
-        disabled.set(`group:${group.name}`, 'not compatible')
+      if (!group.capabilities.includes(required)) {
+        disabled.set(`group:${group.name}`, `no ${required}`)
       }
     }
     for (const fixture of fixtures ?? []) {
-      if (!fixture.compatibleLookIds.includes(look.id)) {
-        disabled.set(`fixture:${fixture.key}`, 'not compatible')
+      if (!fixture.capabilities.includes(required)) {
+        disabled.set(`fixture:${fixture.key}`, `no ${required}`)
       }
     }
     return disabled
-  }, [look, groups, fixtures])
+  }, [source, groups, fixtures])
 
   const handleSelectLook = (next: LookSummary) => {
-    setLook(next)
+    setSource({ kind: 'look', look: next })
     // A preselected target means the operator came from that target's card and has already said
     // where this goes.
+    setStep(preselectedTarget ? 'timing' : 'targets')
+  }
+
+  const handleSelectTemplate = (next: TemplateSummary) => {
+    setSource({ kind: 'template', template: next })
     setStep(preselectedTarget ? 'timing' : 'targets')
   }
 
@@ -130,9 +166,15 @@ export function LayerPicker({
   }
 
   const handleConfirm = () => {
-    if (look == null) return
+    if (source == null) return
     onConfirm({
-      lookId: look.id,
+      // Exactly one, which is the DTO's write contract.
+      lookId: source.kind === 'look' ? source.look.id : undefined,
+      templateId: source.kind === 'template' ? source.template.id : undefined,
+      // A template layer is masked to its own family, so it asserts nothing outside it. Stated here
+      // rather than left to the server: the layer row shows the mask, and an unmasked template layer
+      // would read as "this could touch anything".
+      propertyMask: source.kind === 'template' ? (source.template.family ?? undefined) : undefined,
       targets,
       delayMs: timingValues.delayMs,
       intervalMs: timingValues.intervalMs,
@@ -160,34 +202,34 @@ export function LayerPicker({
 
           <div className="flex-1 overflow-y-auto">
             <div className="flex flex-col gap-1 p-4 pt-0">
-              {(looks?.length ?? 0) === 0 && (
+              {(looks?.length ?? 0) === 0 && (templates?.length ?? 0) === 0 && (
                 <div className="py-8 text-center text-sm text-muted-foreground">
-                  No looks in this project yet.
+                  Nothing to layer yet. Record a look from the programmer, or create a template.
                 </div>
               )}
               <LookGroup
-                title="Recorded looks"
+                title="Looks"
                 hint="These name their own fixtures. Targets narrow them."
-                looks={bound}
+                looks={looks ?? []}
                 onSelect={handleSelectLook}
               />
-              <LookGroup
+              <TemplateGroup
                 title="Templates"
-                hint="These take their fixtures from the layer."
-                looks={templates}
-                onSelect={handleSelectLook}
+                hint="One value each. These take their fixtures from the layer."
+                templates={templates ?? []}
+                onSelect={handleSelectTemplate}
               />
             </div>
           </div>
         </>
       )}
 
-      {step === 'targets' && look && (
+      {step === 'targets' && source && (
         <>
           <div className="flex items-center gap-2 px-4 pt-4 pb-2">
             <button
               onClick={() => {
-                setLook(null)
+                setSource(null)
                 setStep('look')
               }}
               className="hover:bg-accent rounded p-0.5 -ml-1"
@@ -195,20 +237,20 @@ export function LayerPicker({
               <ChevronLeft className="size-5" />
             </button>
             <div>
-              <h3 className="font-medium text-sm">{look.name}</h3>
+              <h3 className="font-medium text-sm">{sourceName(source)}</h3>
               <p className="text-xs text-muted-foreground">
-                {look.hasDeferredRows
-                  ? 'Choose the fixture or group this look should land on.'
+                {source.kind === 'template'
+                  ? 'Choose the fixture or group this template should land on.'
                   : 'Narrow this look to one fixture or group, or use the ones it already names.'}
               </p>
             </div>
           </div>
 
-          {!look.hasDeferredRows && (
+          {source.kind === 'look' && (
             <div className="px-4 pb-2">
               <Button variant="outline" size="sm" className="w-full" onClick={useLooksOwnTargets}>
-                Use the look&rsquo;s own {look.targetCount} fixture
-                {look.targetCount === 1 ? '' : 's'}
+                Use the look&rsquo;s own {source.look.targetCount} fixture
+                {source.look.targetCount === 1 ? '' : 's'}
               </Button>
             </div>
           )}
@@ -219,7 +261,7 @@ export function LayerPicker({
         </>
       )}
 
-      {step === 'timing' && look && (
+      {step === 'timing' && source && (
         <>
           <div className="flex items-center gap-2 px-4 pt-4 pb-2">
             <button
@@ -229,7 +271,7 @@ export function LayerPicker({
               <ChevronLeft className="size-5" />
             </button>
             <div>
-              <h3 className="font-medium text-sm">{look.name}</h3>
+              <h3 className="font-medium text-sm">{sourceName(source)}</h3>
               <p className="text-xs text-muted-foreground">
                 {targets.length === 0
                   ? 'On the fixtures the look itself names.'
@@ -364,4 +406,91 @@ function LookGroup({
       ))}
     </div>
   )
+}
+
+/**
+ * The template half of the source list.
+ *
+ * A separate component rather than a generic one over both, because the two rows show different
+ * things: a Look shows its families (several, derived) and its counts, a template shows its one
+ * family, its actual value and whether it is generic or per fixture. A shared row would have to
+ * render the union and mean less in both places.
+ */
+function TemplateGroup({
+  title,
+  hint,
+  templates,
+  onSelect,
+}: {
+  title: string
+  hint: string
+  templates: TemplateSummary[]
+  onSelect: (template: TemplateSummary) => void
+}) {
+  if (templates.length === 0) return null
+  return (
+    <div className="space-y-1">
+      <div className="pt-2">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {title}
+        </p>
+        <p className="text-[11px] text-muted-foreground">{hint}</p>
+      </div>
+      {templates.map((template) => (
+        <button
+          key={template.id}
+          onClick={() => onSelect(template)}
+          className="flex items-center gap-2 p-3 rounded-md border text-left hover:bg-accent/50 transition-colors"
+        >
+          <Palette className="size-4 text-muted-foreground shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-medium truncate">{template.name}</div>
+            <div className="mt-0.5 flex flex-wrap items-center gap-1">
+              {template.family != null && (
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                  {FAMILY_LABELS[template.family].singular}
+                </Badge>
+              )}
+              <span className="text-[11px] text-muted-foreground">
+                {template.isGeneric ? 'Generic' : `Per fixture · ${template.rows.length}`}
+              </span>
+              {template.rows[0] != null && (
+                <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+                  {describeTemplateIntent(template.rows[0].value)}
+                </span>
+              )}
+            </div>
+          </div>
+          <ChevronRight className="size-4 text-muted-foreground shrink-0" />
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** The chosen source's operator-facing name, whichever kind it is. */
+function sourceName(
+  source: { kind: 'look'; look: LookSummary } | { kind: 'template'; template: TemplateSummary },
+): string {
+  return source.kind === 'look' ? source.look.name : source.template.name
+}
+
+/**
+ * The one capability a family needs, or null when there is nothing to check.
+ *
+ * BEAM answers null deliberately: a gobo wheel and a zoom are separate channels with no single
+ * capability flag between them, and the backend skips a property a fixture lacks. Disabling a head
+ * for "beam" would refuse heads that can do the specific role the template holds.
+ */
+function capabilityForFamily(family: AttributeFamily | null): string | null {
+  switch (family) {
+    case 'INTENSITY':
+      return 'dimmer'
+    case 'COLOUR':
+      return 'colour'
+    case 'POSITION':
+      return 'position'
+    default:
+      return null
+  }
 }

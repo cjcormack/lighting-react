@@ -42,7 +42,9 @@ export function buildStaticRows(
     // Set *or cleared*: a fixture row from the cue's own assignments overriding a group row a
     // layer won must also drop the layer attribution, or the cell would credit a look for a value
     // the cue set itself.
-    if (row.layerId != null) layerByKey.set(key, { layerId: row.layerId, name: row.lookName })
+    if (row.layerId != null) {
+      layerByKey.set(key, { layerId: row.layerId, name: row.layerSource?.name ?? null })
+    }
     else layerByKey.delete(key)
   }
 

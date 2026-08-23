@@ -9,6 +9,7 @@ import {createProjectApi, ProjectApi} from "./projectApi";
 import {createGroupsApi, GroupsApi} from "./groupsApi";
 import {createFxApi, FxApi} from "./fxApi";
 import {createLooksWsApi, LooksWsApi} from "./looksWsApi";
+import {createTemplatesWsApi, TemplatesWsApi} from "./templatesWsApi";
 import {createCuesWsApi, CuesWsApi} from "./cuesWsApi";
 import {createCueStacksWsApi, CueStacksWsApi} from "./cueStacksWsApi";
 import {createCueSlotsWsApi, CueSlotsWsApi} from "./cueSlotsWsApi";
@@ -42,6 +43,7 @@ interface LightingApi {
   groups: GroupsApi
   fx: FxApi
   looks: LooksWsApi
+  templates: TemplatesWsApi
   speedMasters: SpeedMastersWsApi
   cues: CuesWsApi
   cueStacks: CueStacksWsApi
@@ -86,6 +88,7 @@ function createLightingApi(): LightingApi {
   const groupsApi = createGroupsApi(connection)
   const fxApi = createFxApi(connection)
   const looksWsApi = createLooksWsApi(connection)
+  const templatesWsApi = createTemplatesWsApi(connection)
   const cuesWsApi = createCuesWsApi(connection)
   const cueStacksWsApi = createCueStacksWsApi(connection)
   const cueSlotsWsApi = createCueSlotsWsApi(connection)
@@ -115,6 +118,7 @@ function createLightingApi(): LightingApi {
     groups: groupsApi,
     fx: fxApi,
     looks: looksWsApi,
+    templates: templatesWsApi,
     speedMasters: speedMastersWsApi,
     cues: cuesWsApi,
     cueStacks: cueStacksWsApi,
