@@ -17,8 +17,10 @@ interface RunPropsPaneProps {
  * Read-only summary of cue properties. Mirrors the prototype's "Cue properties"
  * pane: a small card with Number / Name / Palette / optional note, then
  * Transition rows (fade in/out, ease, auto-advance), then script hooks if any.
- * No editing affordances — to change anything the operator clicks "Edit Cue"
- * in the breadcrumb actions to jump to Program.
+ * No editing affordances. To change anything the operator opens the cue in Show and presses
+ * **Edit in Programmer**, which Includes it — since session 2a there is exactly one place cue
+ * values are set, and it is the programmer. (This comment used to name an "Edit Cue" button in the
+ * breadcrumb actions, which had already been removed; the route it described did not exist.)
  */
 export function RunPropsPane({ cue, location }: RunPropsPaneProps) {
   const fadeText = formatFadeText(cue.fadeDurationMs, cue.fadeCurve)

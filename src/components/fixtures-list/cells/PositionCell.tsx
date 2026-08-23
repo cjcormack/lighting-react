@@ -4,11 +4,14 @@ import { Slider } from '@/components/ui/slider'
 import type { CellResolution } from '../columns'
 import type { CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
+import { UNSET_CELL_TITLE, UnsetCellMark } from './UnsetCellMark'
 
 interface PositionCellProps {
   value: Extract<CellValue, { kind: 'position' }>
   resolutions: NonNullable<CellResolution>[]
   batchCount: number
+  /** No value in the current scope — see `UnsetCellMark`. */
+  placeholder?: boolean
   onCommit: (commit: CellCommit) => void
   onBeginEdit: () => void
 }
@@ -22,6 +25,7 @@ export const PositionCell = memo(function PositionCell({
   value,
   resolutions,
   batchCount,
+  placeholder,
   onCommit,
   onBeginEdit,
 }: PositionCellProps) {
@@ -36,20 +40,27 @@ export const PositionCell = memo(function PositionCell({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="flex h-full w-full items-center gap-1.5 rounded px-1.5 text-left hover:bg-accent/50"
+          className="flex h-full w-full items-center gap-1.5 rounded text-left hover:bg-accent/50"
+          title={placeholder ? UNSET_CELL_TITLE : undefined}
         >
-          <span className="relative size-4 shrink-0 rounded-sm border border-border bg-muted/50">
-            <span
-              className="absolute size-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary"
-              style={{
-                left: `${value.panNormalized * 100}%`,
-                top: `${(1 - value.tiltNormalized) * 100}%`,
-              }}
-            />
-          </span>
-          <span className="truncate text-xs tabular-nums text-muted-foreground">
-            {value.isUniform ? `${value.pan},${value.tilt}` : 'Mixed'}
-          </span>
+          {placeholder ? (
+            <UnsetCellMark />
+          ) : (
+            <>
+              <span className="relative ml-1.5 size-4 shrink-0 rounded-sm border border-border bg-muted/50">
+                <span
+                  className="absolute size-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary"
+                  style={{
+                    left: `${value.panNormalized * 100}%`,
+                    top: `${(1 - value.tiltNormalized) * 100}%`,
+                  }}
+                />
+              </span>
+              <span className="mr-1.5 truncate text-xs tabular-nums text-muted-foreground">
+                {value.isUniform ? `${value.pan},${value.tilt}` : 'Mixed'}
+              </span>
+            </>
+          )}
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-64 space-y-3" align="start">

@@ -16,6 +16,7 @@ import { useFixtureListQuery } from '../store/fixtures'
 import { useGroupListQuery } from '../store/groups'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { useCellSelection } from '../components/fixtures-list/useCellSelection'
+import { useProgrammerScope } from '../components/programmer/ProgrammerScope'
 import type { CellRef } from '../components/fixtures-list/cellSelectionModel'
 import {
   ColumnsMenu,
@@ -278,6 +279,16 @@ export function FixturesListContainer({
   const visibleRowIds = useMemo(() => new Set(rows.map((r) => r.id)), [rows])
   const cellSelection = useCellSelection(visibleRowIds)
   const { count: cellCount, clear: clearCells } = cellSelection
+
+  // Null outside the programmer, so the plain fixtures and groups lists are unaffected.
+  const scope = useProgrammerScope()
+  // A marquee is a scope-local edit target: "these eight cells" means eight of *your* values in
+  // Local and eight of a Look's rows in a layer, so carrying one across a switch would aim the
+  // next edit at cells the operator picked while looking at something else. The row selection is
+  // deliberately *not* cleared — that is what Record scopes on, and it survives everything.
+  useEffect(() => {
+    clearCells()
+  }, [scope, clearCells])
 
   // Selected ids whose rows are hidden (collapsed group, active filter) are
   // inert everywhere below — every consumer intersects with `rows` — so no

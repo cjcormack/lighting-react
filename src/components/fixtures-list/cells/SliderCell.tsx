@@ -5,12 +5,18 @@ import { Input } from '@/components/ui/input'
 import type { CellResolution } from '../columns'
 import type { CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
+import { UNSET_CELL_TITLE, UnsetCellMark } from './UnsetCellMark'
 
 interface SliderCellProps {
   value: Extract<CellValue, { kind: 'slider' }>
   resolutions: NonNullable<CellResolution>[]
   /** How many fixtures a commit from this cell will write to. */
   batchCount: number
+  /**
+   * The current scope holds no value here: draw an em-dash instead of the fill bar, but keep
+   * `value` as the editor's starting point so a busk begins where the rig is. See `UnsetCellMark`.
+   */
+  placeholder?: boolean
   onCommit: (commit: CellCommit) => void
   onBeginEdit: () => void
 }
@@ -28,6 +34,7 @@ export const SliderCell = memo(function SliderCell({
   value,
   resolutions,
   batchCount,
+  placeholder,
   onCommit,
   onBeginEdit,
 }: SliderCellProps) {
@@ -59,21 +66,28 @@ export const SliderCell = memo(function SliderCell({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="flex h-full w-full items-center gap-1.5 rounded px-1.5 text-left hover:bg-accent/50"
+          className="flex h-full w-full items-center gap-1.5 rounded text-left hover:bg-accent/50"
+          title={placeholder ? UNSET_CELL_TITLE : undefined}
         >
-          <span className="relative h-1.5 min-w-6 flex-1 overflow-hidden rounded-full bg-muted">
-            <span
-              className="absolute inset-y-0 rounded-full bg-primary"
-              style={
-                value.isUniform
-                  ? { left: 0, width: `${toPct(value.min)}%` }
-                  : { left: `${toPct(value.min)}%`, width: `${Math.max(toPct(value.max) - toPct(value.min), 2)}%` }
-              }
-            />
-          </span>
-          <span className="w-12 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-            {display}
-          </span>
+          {placeholder ? (
+            <UnsetCellMark />
+          ) : (
+            <>
+              <span className="relative ml-1.5 h-1.5 min-w-6 flex-1 overflow-hidden rounded-full bg-muted">
+                <span
+                  className="absolute inset-y-0 rounded-full bg-primary"
+                  style={
+                    value.isUniform
+                      ? { left: 0, width: `${toPct(value.min)}%` }
+                      : { left: `${toPct(value.min)}%`, width: `${Math.max(toPct(value.max) - toPct(value.min), 2)}%` }
+                  }
+                />
+              </span>
+              <span className="mr-1.5 w-12 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                {display}
+              </span>
+            </>
+          )}
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-64 space-y-3" align="start">

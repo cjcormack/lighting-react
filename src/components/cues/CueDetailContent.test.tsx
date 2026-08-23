@@ -11,6 +11,10 @@ vi.mock('@/store/looks', () => ({
   useLookListQuery: () => ({ data: LOOKS }),
 }))
 
+// The Values section fetches the cue's cook. Stubbed out: what this suite is about is the read
+// surface's *structure*, and `cueCookedRows.test.ts` covers the mapping behind that grid.
+vi.mock('./CueValueGrid', () => ({ CueValueGrid: () => <div data-testid="cue-values" /> }))
+
 import { CueDetailContent } from './CueDetailContent'
 
 const LOOKS: LookSummary[] = [

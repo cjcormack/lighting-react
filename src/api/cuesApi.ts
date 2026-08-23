@@ -255,3 +255,26 @@ export interface CueCurrentState {
   presetApplications: { presetId: number; presetName: string | null; targets: CueTarget[] }[]
   adHocEffects: CueAdHocEffect[]
 }
+
+/**
+ * One composed value from `GET /cues/{id}/cooked`, in the canonical assignment grammar
+ * `parseProgrammerValue` already reads.
+ */
+export interface CookedRow {
+  targetType: 'fixture' | 'group'
+  targetKey: string
+  propertyName: string
+  value: string
+  /**
+   * The Look layer that won this key, when one did. Null for the cue's **own** rows, which belong
+   * to no layer — the distinction the grid draws as "the cue set this" versus "Warm Wash set this".
+   */
+  layerId?: number | null
+  lookId?: number | null
+  lookName?: string | null
+}
+
+export interface CueCookedResponse {
+  cueId: number
+  rows: CookedRow[]
+}

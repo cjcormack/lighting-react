@@ -27,3 +27,28 @@ export const LEGEND_ORDER: readonly CellOwnershipSource[] = [
   'parked',
   'baseline',
 ]
+
+/**
+ * The key for **layer scope**, where the ownership colours are switched off entirely.
+ *
+ * A separate list rather than extra entries in the one above, because it describes a different
+ * subject: the ownership vocabulary answers "which part of the engine is painting the rig", and in
+ * layer scope the grid is showing a Look's stored rows, which the rig has no opinion about. Leaving
+ * the six-colour key under a grid drawing none of them would be a legend for something not on
+ * screen.
+ */
+export type LayerLegendKey = 'set' | 'unset' | 'inert' | 'untargeted'
+
+export const LAYER_LEGEND_GLOSS: Record<LayerLegendKey, string> = {
+  set: 'This look sets it',
+  unset: 'Not in this look',
+  inert: 'Outside the mask',
+  untargeted: 'Outside the targets',
+}
+
+export const LAYER_LEGEND_ORDER: readonly LayerLegendKey[] = [
+  'set',
+  'unset',
+  'inert',
+  'untargeted',
+]

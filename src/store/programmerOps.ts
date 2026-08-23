@@ -112,6 +112,22 @@ export interface RecordLookRequest {
    * "Warm Amber" is meant to mean.
    */
   targets?: CueTarget[]
+  /**
+   * Running programmer-band effects to fold into the Look, by `ActiveEffect.id`.
+   *
+   * **Explicit ids, not an `includeFx` flag** — unlike `RecordRequest`. Which effects belong in a
+   * Look is a per-effect judgement ("the colour chase is the look; the tilt sine was me looking at
+   * it"), and a boolean cannot say that.
+   *
+   * A ticked effect is **moved**: the server removes it from the programmer band, because the layer
+   * this Look is applied through starts running it immediately and two copies would beat against
+   * each other. An unticked effect **keeps running** — leaving one out of a Look is not the same as
+   * stopping it, which is exactly why these are checkboxes.
+   *
+   * Timing does not travel: `LookEffect` has no delay/interval fields, so a busked "fire after 3s"
+   * becomes the *layer's* delay rather than something baked into the Look.
+   */
+  effectIds?: number[]
 }
 
 export interface RecordLookResponse {
@@ -120,6 +136,8 @@ export interface RecordLookResponse {
   rowsWritten: number
   rowsRemoved: number
   groupRowsEmitted: number
+  /** Programmer-band effects folded in, and so removed from the band. */
+  effectsWritten?: number
   /**
    * Programmer entries that were themselves references — flattened, since Looks don't nest.
    * Retires with the `ref:` grammar; until then it is real and worth reporting.

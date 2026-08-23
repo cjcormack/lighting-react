@@ -1,0 +1,292 @@
+import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react'
+import { lightingApi } from '../../api/lightingApi'
+import { familyForCategory, parsePropertyMask } from '../../lib/attributeFamily'
+import { columnFamily, resolutionPropertyNames } from './columns'
+import { cellValueFromParts, isLocalEntry, stagedPartFor } from './scopedCellValue'
+import { parseProgrammerEntryValue, parseProgrammerValue } from '../../lib/programmerValue'
+import { useProgrammerScope } from '../programmer/ProgrammerScope'
+import { lookRowKey, useLookRowStore } from '../programmer/LookRowStore'
+import { useRowValues } from './useRowValues'
+import type { AttributeFamily } from '../../lib/attributeFamily'
+import type { CellState, RowCellStates, StagedPart } from './scopedCellValue'
+import type { CellPropertyKey, RowCell } from './useRowValues'
+import type { LookRowStoreValue } from '../programmer/LookRowStore'
+import type { StagedValue } from './useRowOwnership'
+
+/**
+ * One row's cells, read through whatever the programmer's grid is currently pointed at.
+ *
+ * Three sources, and all three hooks are called on **every** row unconditionally — the two that
+ * are off are handed an empty cell list, which the existing "empty cells = off" contract turns
+ * into no subscriptions and a frozen empty result. Three cheap no-ops per row beats one
+ * polymorphic value-source interface: each scope stays independently testable, and there is no
+ * per-row `deps` memo to get wrong and churn subscriptions with.
+ *
+ * `null` scope — the plain `/fixtures` and `/groups` lists — is Output, exactly as before.
+ */
+export function useScopedRowValues(
+  cells: readonly RowCell[],
+  /**
+   * The row's live wire read, which the caller already holds — it is what the cell editor opens at
+   * whatever the scope. Passed in rather than read again here: Output *is* that read, and a second
+   * `useRowValues(cells)` would register a duplicate channel subscription per cell on the one scope
+   * where the grid is at its widest.
+   */
+  live: ReturnType<typeof useRowValues>,
+): RowCellStates {
+  const scope = useProgrammerScope()
+  const store = useLookRowStore()
+
+  // **`null` is not `output`.** No scope at all means the plain `/fixtures` and `/groups` lists,
+  // which have no scope concept and must behave exactly as they did before this existed: live
+  // values, editable cells, no em-dashes. Only an *explicit* Output scope is a read of the cook.
+  const kind = scope?.kind
+  const localCells = kind === 'local' ? cells : EMPTY_CELLS
+  const layerCells = kind === 'layer' ? cells : EMPTY_CELLS
+
+  const local = useLocalRowValues(localCells)
+  const layer = useLayerRowValues(layerCells, store)
+
+  return useMemo(() => {
+    if (kind === undefined) return EMPTY_STATES
+    if (kind === 'local') return local
+    if (kind === 'layer') return layer
+    // Output is a read of the cook: every cell has a value and none of them is editable here.
+    // Editing "the output" would have to pick a destination, and the point of the scope switcher
+    // is that the operator says which.
+    const states: RowCellStates = {}
+    for (const cell of cells) {
+      const value = live[cell.col]
+      if (value) states[cell.col] = { value, editable: false }
+    }
+    return states
+  }, [kind, cells, live, local, layer])
+}
+
+const EMPTY_CELLS: readonly RowCell[] = []
+const EMPTY_STATES: RowCellStates = {}
+/** Joins a *list* of row keys, which are themselves NUL-joined — so this must be something else. */
+const KEY_LIST_SEP = '\u0001'
+
+
+/**
+ * What the **operator** set, and nothing else.
+ *
+ * Modelled on `useRowOwnership` rather than on `useRowValues`, because the question is keyed by
+ * `(target, property)` and not by channel: per-key subscriptions, a version counter in place of a
+ * numeric channel signature, and the same blind-transition filter.
+ *
+ * The values themselves come from the programmer's own entries rather than from the wire. That is
+ * not an optimisation — under blind the programmer is gated out of the merge, so the wire shows
+ * what is *underneath* while the entries are still what the operator is editing and what Record
+ * will take.
+ */
+function useLocalRowValues(cells: readonly RowCell[]): RowCellStates {
+  const keysSignature = useMemo(() => signatureOf(cells), [cells])
+
+  const subscribedKeys = useMemo<CellPropertyKey[]>(
+    () => dedupeKeys(cells),
+    // Keyed on the signature, not `cells`: buildRows mints fresh Row objects on every filter
+    // keystroke, and re-registering every subscription for every mounted row would make typing
+    // in the filter box quadratic. Same reasoning as `useRowOwnership`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [keysSignature],
+  )
+
+  const cachedRef = useRef<{ cells: readonly RowCell[]; version: number; states: RowCellStates } | null>(
+    null,
+  )
+  const versionRef = useRef(0)
+
+  const subscribe = useCallback(
+    (callback: () => void) => {
+      if (subscribedKeys.length === 0) return () => {}
+      const bump = () => {
+        versionRef.current += 1
+        callback()
+      }
+      const subscriptions = subscribedKeys.map((key) =>
+        lightingApi.programmer.subscribeToKey(key.targetKey, key.propertyName, bump),
+      )
+      // Blind is global, and flipping it does not change what Local holds — but it does change
+      // whether the row is showing a staged value, and the ownership rings beside it move. Track
+      // just that transition; reacting to every provenance push would undo the per-key split.
+      let lastBlind = lightingApi.programmer.isBlind()
+      subscriptions.push(
+        lightingApi.programmer.subscribe((state) => {
+          if (state.blind === lastBlind) return
+          lastBlind = state.blind
+          bump()
+        }),
+      )
+      return () => subscriptions.forEach((s) => s.unsubscribe())
+    },
+    [subscribedKeys],
+  )
+
+  const getSnapshot = useCallback((): RowCellStates => {
+    if (subscribedKeys.length === 0) return EMPTY_STATES
+    const cached = cachedRef.current
+    if (cached && cached.cells === cells && cached.version === versionRef.current) {
+      return cached.states
+    }
+
+    const lookup = (targetKey: string, propertyName: string): StagedValue | undefined => {
+      const state = lightingApi.programmer.getKeyState(targetKey, propertyName)
+      if (!isLocalEntry(state)) return undefined
+      return parseProgrammerEntryValue(state.entry!) ?? undefined
+    }
+
+    const states: RowCellStates = {}
+    for (const cell of cells) {
+      const parts = cell.resolutions.map((res, i) =>
+        stagedPartFor(res, cell.targetKeys[i], lookup),
+      )
+      // Every cell is editable in Local, set or not — an em-dash is where you *start* a value.
+      states[cell.col] = { value: cellValueFromParts(cell.resolutions, parts), editable: true }
+    }
+    cachedRef.current = { cells, version: versionRef.current, states }
+    return states
+  }, [cells, subscribedKeys])
+
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+}
+
+/**
+ * One layer's Look, read as its stored rows with any pending edit overlaid.
+ *
+ * Subscribed per key to the draft rather than re-derived from a version counter: a cell drag
+ * commits at ~30 Hz, and waking every visible row on each tick is the cost `useRowOwnership`
+ * splits its own subscriptions to avoid. Committed rows arrive as a plain context value instead,
+ * because they only change when someone saves — and then every row genuinely should re-render.
+ */
+function useLayerRowValues(
+  cells: readonly RowCell[],
+  store: LookRowStoreValue | null,
+): RowCellStates {
+  const draft = store?.draft
+  // Signature first, array derived from it — the same shape `useRowValues` uses for its channel
+  // list, and for the same reason: `buildRows` mints fresh Row objects on every filter keystroke,
+  // so keying the subscription on the *identity* of a per-render array would re-register every
+  // listener for every mounted row and make typing in the filter box quadratic. Going through the
+  // string makes `draftKeys` genuinely stable, so it can be an honest dependency below.
+  const draftKeysSignature = useMemo(
+    () =>
+      cells
+        .flatMap((cell) =>
+          cell.resolutions.flatMap((res, i) =>
+            resolutionPropertyNames(res).map((name) => lookRowKey(cell.targetKeys[i], name)),
+          ),
+        )
+        .join(KEY_LIST_SEP),
+    [cells],
+  )
+  const draftKeys = useMemo(
+    () => (draftKeysSignature === '' ? [] : draftKeysSignature.split(KEY_LIST_SEP)),
+    [draftKeysSignature],
+  )
+
+  const versionRef = useRef(0)
+  const subscribe = useCallback(
+    (callback: () => void) => {
+      if (!draft || draftKeys.length === 0) return () => {}
+      // The counter moves on *notification*, not on read: `useSyncExternalStore` compares
+      // snapshots, and a draft value is not a number it can compare. Same `bump` shape as
+      // `useRowOwnership`.
+      return draft.subscribe(draftKeys, () => {
+        versionRef.current += 1
+        callback()
+      })
+    },
+    [draft, draftKeys],
+  )
+  const getVersion = useCallback(() => versionRef.current, [])
+  const draftVersion = useSyncExternalStore(subscribe, getVersion, getVersion)
+
+  return useMemo(() => {
+    // A dependency, not a read: the counter is what re-derives the cells after a draft write.
+    void draftVersion
+    if (cells.length === 0 || !store) return EMPTY_STATES
+    const mask = parsePropertyMask(store.propertyMask)
+    const lookup = (targetKey: string, propertyName: string): StagedValue | undefined => {
+      const pending = store.draft.get(targetKey, propertyName)
+      if (pending !== undefined) return parseProgrammerValue(pending) ?? undefined
+      return store.serverRows.get(lookRowKey(targetKey, propertyName))
+    }
+
+    const states: RowCellStates = {}
+    for (const cell of cells) {
+      const tone = layerCellTone(cell, store, mask)
+      const parts: (StagedPart | undefined)[] = cell.resolutions.map((res, i) =>
+        stagedPartFor(res, cell.targetKeys[i], lookup),
+      )
+      const state: CellState = {
+        value: cellValueFromParts(cell.resolutions, parts),
+        // A cell an untargeted fixture would receive is shown but not editable, and a masked-out
+        // column is inert. Widening a layer's targets is always the explicit affordance on the
+        // row — never a side effect of dragging a marquee across the grid.
+        editable: tone === undefined,
+      }
+      if (tone) state.tone = tone
+      states[cell.col] = state
+    }
+    return states
+  }, [cells, store, draftVersion])
+}
+
+/**
+ * Why a cell in layer scope is not editable, if it isn't.
+ *
+ * `inert` wins over `untargeted`: a column the layer does not assert at all is the more
+ * fundamental fact, and saying "outside this layer's targets" about a property it would never
+ * write either way sends the operator to fix the wrong thing.
+ */
+function layerCellTone(
+  cell: RowCell,
+  store: LookRowStoreValue,
+  mask: readonly AttributeFamily[],
+): 'inert' | 'untargeted' | undefined {
+  if (mask.length > 0 && !mask.includes(cellFamily(cell))) return 'inert'
+  const targeted = store.targetedKeys
+  if (targeted && cell.targetKeys.some((key) => !targeted.has(key))) return 'untargeted'
+  return undefined
+}
+
+/**
+ * The family a cell belongs to.
+ *
+ * Read from the resolution's own descriptor where there is one, so a column carrying different
+ * property kinds across fixture types still classifies per fixture; the column's declared family
+ * is the fallback for a cell with nothing to ask.
+ */
+function cellFamily(cell: RowCell): AttributeFamily {
+  const first = cell.resolutions[0]
+  if (first) {
+    if (first.kind === 'position') return 'POSITION'
+    return familyForCategory(first.property.category)
+  }
+  return columnFamily(cell.col)
+}
+
+function signatureOf(cells: readonly RowCell[]): string {
+  return cells
+    .map(
+      (cell) =>
+        `${cell.col}=${cell.keys.map((k) => `${k.targetKey}|${k.propertyName}`).join(',')}`,
+    )
+    .join(';')
+}
+
+function dedupeKeys(cells: readonly RowCell[]): CellPropertyKey[] {
+  const seen = new Set<string>()
+  const out: CellPropertyKey[] = []
+  for (const cell of cells) {
+    for (const key of cell.keys) {
+      const id = `${key.targetKey}|${key.propertyName}`
+      if (seen.has(id)) continue
+      seen.add(id)
+      out.push(key)
+    }
+  }
+  return out
+}

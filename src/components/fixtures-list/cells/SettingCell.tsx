@@ -4,11 +4,14 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import type { CellResolution } from '../columns'
 import type { CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
+import { UNSET_CELL_TITLE, UnsetCellMark } from './UnsetCellMark'
 
 interface SettingCellProps {
   value: Extract<CellValue, { kind: 'setting' }>
   resolutions: NonNullable<CellResolution>[]
   batchCount: number
+  /** No value in the current scope — see `UnsetCellMark`. */
+  placeholder?: boolean
   onCommit: (commit: CellCommit) => void
   onBeginEdit: () => void
 }
@@ -24,6 +27,7 @@ export const SettingCell = memo(function SettingCell({
   value,
   resolutions,
   batchCount,
+  placeholder,
   onCommit,
   onBeginEdit,
 }: SettingCellProps) {
@@ -42,17 +46,24 @@ export const SettingCell = memo(function SettingCell({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="flex h-full w-full items-center gap-1.5 rounded px-1.5 text-left hover:bg-accent/50"
+          className="flex h-full w-full items-center gap-1.5 rounded text-left hover:bg-accent/50"
+          title={placeholder ? UNSET_CELL_TITLE : undefined}
         >
-          {value.option?.colourPreview && (
-            <span
-              className="size-3 shrink-0 rounded-sm border border-border"
-              style={{ backgroundColor: value.option.colourPreview }}
-            />
+          {placeholder ? (
+            <UnsetCellMark />
+          ) : (
+            <>
+              {value.option?.colourPreview && (
+                <span
+                  className="ml-1.5 size-3 shrink-0 rounded-sm border border-border"
+                  style={{ backgroundColor: value.option.colourPreview }}
+                />
+              )}
+              <span className="mx-1.5 truncate text-xs text-muted-foreground">
+                {value.isUniform ? (value.option?.displayName ?? '—') : 'Mixed'}
+              </span>
+            </>
           )}
-          <span className="truncate text-xs text-muted-foreground">
-            {value.isUniform ? (value.option?.displayName ?? '—') : 'Mixed'}
-          </span>
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-56 p-1" align="start">

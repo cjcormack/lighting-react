@@ -82,6 +82,15 @@ export interface LayerHandlers {
   onSetBlendMode: (index: number, blendMode: string) => void
   onSetPropertyMask: (index: number, propertyMask: string | null) => void
   onSetStomp: (index: number, stomp: boolean) => void
+  /**
+   * Point the value grid at this layer's Look.
+   *
+   * **Optional**, unlike the seven above, and the asymmetry is deliberate: focusing is a property
+   * of the *programmer*, which has a grid beside the stack to point somewhere. The cue editor's
+   * rows and the Look editor's preview row have nothing to focus, and giving them a no-op to pass
+   * would put a dead affordance on every read-only surface that renders a `LayerRow`.
+   */
+  onFocus?: (index: number) => void
 }
 
 interface LookStackProps<T extends LookStackLayer> {
@@ -109,6 +118,8 @@ interface LookStackProps<T extends LookStackLayer> {
    * index-derived ids would reshuffle underneath the drag.
    */
   keyFor?: (layer: T, index: number) => string
+  /** Which row the value grid is pointed at, if any. Ringed rather than selected-looking. */
+  focusedIndex?: number | null
 }
 
 /**
@@ -137,6 +148,7 @@ export function LookStack<T extends LookStackLayer>({
   emptyNote,
   footer,
   keyFor,
+  focusedIndex,
 }: LookStackProps<T>) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -187,6 +199,7 @@ export function LookStack<T extends LookStackLayer>({
                   handlers={handlers}
                   sortable
                   showTargets
+                  focused={focusedIndex === i}
                 />
               ))}
             </SortableContext>
@@ -215,6 +228,7 @@ export function LayerRow({
   sortableId,
   showTargets,
   readOnly,
+  focused,
 }: {
   layer: LookStackLayer
   index: number
@@ -230,6 +244,8 @@ export function LayerRow({
   showTargets?: boolean
   /** Renders the row without its amount field, enable toggle or remove button. */
   readOnly?: boolean
+  /** The value grid is pointed at this layer. */
+  focused?: boolean
 }) {
   const enabled = layer.enabled !== false
   // `lookName` comes with the read, so a layer is labelled even before the library list lands. The
@@ -244,13 +260,39 @@ export function LayerRow({
           className={cn(
             'flex flex-wrap items-center gap-2 rounded border bg-card p-2 text-xs',
             !enabled && 'opacity-60',
+            // A ring rather than a filled "selected" row: the operator is still looking at the
+            // stack, and a highlight loud enough to read as a selection would compete with the
+            // ownership colours in the grid this focus is driving.
+            focused && 'ring-1 ring-primary',
           )}
         >
           {dragHandle}
           <Badge variant="secondary" className="shrink-0 px-1.5 py-0 text-[10px] font-mono">
             {index + 1}
           </Badge>
-          <LookNameBadge name={name} missing={missing} />
+          {/* The name badge *is* the focus control where there is a grid to focus. A separate
+              button would be a second thing to learn for what reads as "look at this one", and
+              the badge is already the row's subject. Absent the handler it stays a plain badge —
+              a cue's rows and the Look editor's preview have nothing to point anywhere.
+
+              `readOnly` gates it for the same reason it gates the amount field and the remove
+              button. `ProgrammerLookStack` renders the preview row *outside* its filtered list, at
+              `index === layers.length`, and passes the same `handlers` — so without this the preview
+              got a badge that looked pressable and resolved to `layers[layers.length]`, i.e. did
+              nothing at all. */}
+          {handlers?.onFocus && !readOnly ? (
+            <button
+              type="button"
+              onClick={() => handlers.onFocus?.(index)}
+              className="min-w-0 rounded focus-visible:ring-1 focus-visible:ring-ring"
+              aria-pressed={focused === true}
+              title={focused ? 'The grid is showing this look' : 'Show this look in the grid'}
+            >
+              <LookNameBadge name={name} missing={missing} />
+            </button>
+          ) : (
+            <LookNameBadge name={name} missing={missing} />
+          )}
 
           {look?.families.map((family) => (
             <Badge key={family} variant="outline" className="shrink-0 px-1.5 py-0 text-[10px]">

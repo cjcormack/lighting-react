@@ -4,7 +4,15 @@ import { describe, expect, it, vi } from 'vitest'
 // WebSocket at import time — replace it before anything imports it.
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
-import { resolveCell, resolutionChannels, resolutionPropertyNames } from './columns'
+import {
+  COLUMN_CATEGORY,
+  COLUMN_DEFS,
+  columnFamily,
+  resolveCell,
+  resolutionChannels,
+  resolutionPropertyNames,
+} from './columns'
+import { familyForCategory } from '@/lib/attributeFamily'
 import { chan, colourProp, positionProp, settingProp, sliderProp } from '@/test/fixtureFactories'
 
 describe('resolveCell', () => {
@@ -110,5 +118,32 @@ describe('resolutionPropertyNames', () => {
     const pan = sliderProp('pan', 'pan', chan(3), { axis: 'PAN' })
     const tilt = sliderProp('tilt', 'tilt', chan(4), { axis: 'TILT' })
     expect(resolutionPropertyNames(resolveCell([pan, tilt], 'position'))).toEqual(['pan', 'tilt'])
+  })
+})
+
+describe('COLUMN_CATEGORY', () => {
+  it('covers every column exactly once', () => {
+    expect(Object.keys(COLUMN_CATEGORY).sort()).toEqual(COLUMN_DEFS.map((d) => d.key).sort())
+  })
+
+  it('agrees with familyForCategory on every column', () => {
+    // `attributeFamily.ts` records that a `FAMILY_COLUMNS` constant here was deliberately deleted
+    // once, for being a second place that stated which columns exist. This map goes the other way —
+    // column to the category it already is — and this test is what stops the two drifting: change
+    // `familyForCategory` and the column families move with it, or this fails.
+    for (const { key } of COLUMN_DEFS) {
+      expect(columnFamily(key)).toBe(familyForCategory(COLUMN_CATEGORY[key]))
+    }
+  })
+
+  it('classifies the four families the way an operator would expect', () => {
+    expect(columnFamily('dimmer')).toBe('INTENSITY')
+    expect(columnFamily('strobe')).toBe('INTENSITY')
+    expect(columnFamily('colour')).toBe('COLOUR')
+    // The synthetic pan/tilt pair, which has no `PropertyCategory` entry of its own.
+    expect(columnFamily('position')).toBe('POSITION')
+    expect(columnFamily('gobo')).toBe('BEAM')
+    expect(columnFamily('zoom')).toBe('BEAM')
+    expect(columnFamily('prism')).toBe('BEAM')
   })
 })

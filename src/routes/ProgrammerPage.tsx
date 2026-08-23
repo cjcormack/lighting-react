@@ -9,7 +9,10 @@ import { EditorContextProvider } from '@/components/lighting-editor/EditorContex
 import { ProgrammerActionBar } from '@/components/programmer/ProgrammerActionBar'
 import { ColumnsMenu, useColumnVisibility } from '@/components/fixtures-list/ColumnsMenu'
 import { ProgrammerGrid } from '@/components/programmer/ProgrammerGrid'
+import { LookRowStoreProvider } from '@/components/programmer/LookRowStore'
 import { ProgrammerRail } from '@/components/programmer/ProgrammerRail'
+import { ProgrammerScopeProvider } from '@/components/programmer/ProgrammerScope'
+import { ProgrammerScopeBand } from '@/components/programmer/ProgrammerScopeBand'
 import {
   ProgrammerSheetsProvider,
   useProgrammerSheets,
@@ -156,7 +159,7 @@ function ProgrammerBody({ projectId }: { projectId: number }) {
   }
 
   return (
-    <>
+    <ProgrammerScopeProvider>
       <ProgrammerSourceStrip
         projectId={projectId}
         onUpdate={sheets.openUpdate}
@@ -183,21 +186,31 @@ function ProgrammerBody({ projectId }: { projectId: number }) {
         }
       />
 
-      {/* Session 2 inserts the scope band and the contextual template strip here, between the
-          action bar and the workspace. */}
+      {/* The outer editor context stays `live` for the *rail* — its FX controls write the
+          programmer whatever the grid is pointed at. `ProgrammerGrid` provides its own inner
+          context derived from the scope. */}
+      {/* Above the workspace, not inside the grid: the rail's own layer chrome reads the same
+          store, and one fetch per focused layer is the point of it living here. The **scope band is
+          inside it too**, and must stay there: it reads `useLookSaveState()`, which outside the
+          provider silently answers the context default — so "Unsaved", "Saving…" and, worst of the
+          three, "Save failed" could never appear. */}
+      <LookRowStoreProvider projectId={projectId}>
+        {/* Session 2's scope band. The template strip is still to come (session 3). */}
+        <ProgrammerScopeBand />
 
-      <EditorContextProvider value={{ kind: 'live' }}>
-        <ProgrammerWorkspace
-          grid={
-            <ProgrammerGrid
-              grouped={grouped}
-              columnVisibility={columnVisibility}
-              onColumnVisibilityChange={setColumnVisibility}
-            />
-          }
-          rail={<ProgrammerRail />}
-        />
-      </EditorContextProvider>
-    </>
+        <EditorContextProvider value={{ kind: 'live' }}>
+          <ProgrammerWorkspace
+            grid={
+              <ProgrammerGrid
+                grouped={grouped}
+                columnVisibility={columnVisibility}
+                onColumnVisibilityChange={setColumnVisibility}
+              />
+            }
+            rail={<ProgrammerRail />}
+          />
+        </EditorContextProvider>
+      </LookRowStoreProvider>
+    </ProgrammerScopeProvider>
   )
 }

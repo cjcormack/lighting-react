@@ -1,8 +1,11 @@
+import { useMemo } from 'react'
 import { AudioWaveform } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { SpeedMasterChip } from '@/components/fx/SpeedMasterChip'
 import { getBeatDivisionLabel } from '@/components/fx/fxConstants'
 import { useActiveEffectsQuery } from '@/store/fixtureFx'
+import { useProgrammerLayersQuery } from '@/store/programmer'
+import { ProgrammerAddEffect } from './ProgrammerAddEffect'
 import type { ActiveEffect } from '@/store/fixtureFx'
 
 /**
@@ -21,7 +24,19 @@ import type { ActiveEffect } from '@/store/fixtureFx'
  */
 export function ProgrammerFxList() {
   const { data: effects } = useActiveEffectsQuery()
+  const { data: layers } = useProgrammerLayersQuery()
   const running = effects ?? []
+  // Named from the same broadcast the stack rail draws, so a row cannot claim a layer the list
+  // beside it does not show.
+  const layerHomes = useMemo(
+    () =>
+      new Map(
+        (layers ?? [])
+          .filter((l) => !l.isPreview)
+          .map((l, i) => [l.layerId, { name: l.lookName, position: i + 1 }]),
+      ),
+    [layers],
+  )
 
   return (
     <div className="flex min-h-0 flex-col">
@@ -31,6 +46,8 @@ export function ProgrammerFxList() {
         <Badge variant="secondary" className="px-1.5 text-[10px] tabular-nums">
           {running.length}
         </Badge>
+        <span className="flex-1" />
+        <ProgrammerAddEffect />
       </div>
       {running.length === 0 ? (
         <p className="px-1 text-[11px] text-muted-foreground">
@@ -39,7 +56,7 @@ export function ProgrammerFxList() {
       ) : (
         <div className="flex min-h-0 flex-col gap-1 overflow-y-auto">
           {running.map((effect) => (
-            <FxRow key={effect.id} effect={effect} />
+            <FxRow key={effect.id} effect={effect} home={homeOf(effect, layerHomes)} />
           ))}
         </div>
       )}
@@ -47,7 +64,31 @@ export function ProgrammerFxList() {
   )
 }
 
-function FxRow({ effect }: { effect: ActiveEffect }) {
+/**
+ * Where an effect lives, in the words the design asks for.
+ *
+ * The answer to "why can't I delete this?" and to "what will editing it break?". An effect is
+ * never *on* a layer — it is **in a Look** (and travels with it, so every other layer applying
+ * that Look runs it too) or **on the cue** (this once, belonging to nothing else) or loose in the
+ * programmer band, which is what a busked effect is until something records it.
+ */
+function homeOf(
+  effect: ActiveEffect,
+  layerHomes: ReadonlyMap<number, { name: string; position: number }>,
+): { label: string; detail?: string } {
+  if (effect.programmerLayerId != null) {
+    const home = layerHomes.get(effect.programmerLayerId)
+    return {
+      label: home ? `in ${home.name}` : 'in a look',
+      detail: home ? `layer ${home.position}` : undefined,
+    }
+  }
+  if (effect.cueId != null) return { label: 'on this cue', detail: 'ad-hoc' }
+  if (effect.programmerOwned) return { label: 'programmer band', detail: 'yours until recorded' }
+  return { label: 'base' }
+}
+
+function FxRow({ effect, home }: { effect: ActiveEffect; home: ReturnType<typeof homeOf> }) {
   return (
     <div className="flex items-center gap-2 rounded-md border bg-card px-2 py-1.5 text-xs">
       <span className="size-1.5 shrink-0 rounded-full bg-violet-500" />
@@ -72,9 +113,15 @@ function FxRow({ effect }: { effect: ActiveEffect }) {
       <Badge
         variant={effect.programmerOwned ? 'default' : 'secondary'}
         className="shrink-0 text-[10px]"
+        title={[home.label, home.detail].filter(Boolean).join(' · ')}
       >
-        {effect.programmerOwned ? 'programmer' : effect.cueId != null ? 'cue' : 'base'}
+        {home.label}
       </Badge>
+      {home.detail && (
+        <span className="hidden shrink-0 text-[10px] text-muted-foreground @[320px]:inline">
+          {home.detail}
+        </span>
+      )}
     </div>
   )
 }

@@ -26,6 +26,8 @@ interface ProgramViewProps {
   onRecordInto?: (cueId: number) => void
   /** Load this cue into the programmer to edit it on stage. */
   onIncludeCue?: (cueId: number) => void
+  /** Record the programmer into a new cue in this stack — what replaced "Add Cue". */
+  onRecordIntoStack?: (stackId: number) => void
   includePending?: boolean
 }
 
@@ -45,6 +47,7 @@ export const ProgramView = memo(function ProgramView({
   onDuplicate,
   onRecordInto,
   onIncludeCue,
+  onRecordIntoStack,
   includePending,
 }: ProgramViewProps) {
   const [createCue] = useCreateProjectCueMutation()
@@ -58,27 +61,6 @@ export const ProgramView = memo(function ProgramView({
     () => new Set((allCues ?? []).map((c) => c.name)),
     [allCues],
   )
-
-  const handleAddCue = useCallback(async () => {
-    if (drillStackId == null) return
-    try {
-      const result = await createCue({
-        projectId,
-        name: nextAvailableName('New Cue', existingCueNames),
-        palette: [],
-        updateGlobalPalette: false,
-        layers: [],
-        adHocEffects: [],
-        triggers: [],
-        fadeDurationMs: 3000,
-        fadeCurve: 'LINEAR',
-        cueStackId: drillStackId,
-      }).unwrap()
-      onExpandedCueChange(result.id)
-    } catch {
-      // Reported by errorToastMiddleware; caught here only to stop the unhandled rejection.
-    }
-  }, [drillStackId, projectId, createCue, existingCueNames, onExpandedCueChange])
 
   const handleAddMarker = useCallback(async () => {
     if (drillStackId == null) return
@@ -124,7 +106,7 @@ export const ProgramView = memo(function ProgramView({
         expandedCueId={expandedCueId}
         onExpandedCueChange={onExpandedCueChange}
         onBack={() => onDrillStack(null)}
-        onAddCue={handleAddCue}
+        onRecordIntoStack={onRecordIntoStack}
         onAddMarker={handleAddMarker}
         onMarkerRename={handleMarkerRename}
         onMarkerDelete={handleMarkerDelete}

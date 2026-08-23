@@ -3,11 +3,14 @@ import { ColourPickerPopover } from '../../fixtures/ColourPickerPopover'
 import type { CellResolution } from '../columns'
 import type { CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
+import { UNSET_CELL_TITLE, UnsetCellMark } from './UnsetCellMark'
 
 interface ColourCellProps {
   value: Extract<CellValue, { kind: 'colour' }>
   resolutions: NonNullable<CellResolution>[]
   batchCount: number
+  /** No value in the current scope — see `UnsetCellMark`. */
+  placeholder?: boolean
   onCommit: (commit: CellCommit) => void
   onBeginEdit: () => void
 }
@@ -21,6 +24,7 @@ export const ColourCell = memo(function ColourCell({
   value,
   resolutions,
   batchCount,
+  placeholder,
   onCommit,
   onBeginEdit,
 }: ColourCellProps) {
@@ -48,21 +52,33 @@ export const ColourCell = memo(function ColourCell({
       <button
         type="button"
         onClick={onBeginEdit}
-        className="flex h-full w-full items-center gap-1.5 rounded px-1.5 text-left hover:bg-accent/50"
-        title={batchCount > 1 ? `Applying to ${batchCount} targets` : undefined}
+        className="flex h-full w-full items-center gap-1.5 rounded text-left hover:bg-accent/50"
+        title={
+          placeholder
+            ? UNSET_CELL_TITLE
+            : batchCount > 1
+              ? `Applying to ${batchCount} targets`
+              : undefined
+        }
       >
         {/* A `Link2` glyph used to sit on top of this swatch when the cell's entries held a
             `ref:{uuid}`, and the palette's *name* replaced the RGB readout below when the row
             agreed on one colour. Both went with the `ref:` grammar in session 4; a cell lit by a
             Look layer is marked by the `Layers` corner glyph in `FixturesTable` instead, which is
             about composition rather than about the operator's own entry. */}
-        <span
-          className="size-4 shrink-0 overflow-hidden rounded-sm border border-border"
-          style={{ backgroundColor: value.combinedCss }}
-        />
-        <span className="truncate text-xs tabular-nums text-muted-foreground">
-          {value.isUniform ? `${value.r},${value.g},${value.b}` : 'Mixed'}
-        </span>
+        {placeholder ? (
+          <UnsetCellMark />
+        ) : (
+          <>
+            <span
+              className="ml-1.5 size-4 shrink-0 overflow-hidden rounded-sm border border-border"
+              style={{ backgroundColor: value.combinedCss }}
+            />
+            <span className="mr-1.5 truncate text-xs tabular-nums text-muted-foreground">
+              {value.isUniform ? `${value.r},${value.g},${value.b}` : 'Mixed'}
+            </span>
+          </>
+        )}
       </button>
     </ColourPickerPopover>
   )

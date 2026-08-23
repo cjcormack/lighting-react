@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
 import { IncludeSheet } from './IncludeSheet'
+import { MakeLayerSheet } from './MakeLayerSheet'
 import { RecordLookSheet } from './RecordLookSheet'
 import { RecordSheet } from './RecordSheet'
 import { UpdateDialog } from './UpdateDialog'
@@ -19,12 +20,14 @@ interface ProgrammerSheetsValue {
   openRecordLook: () => void
   openInclude: () => void
   openUpdate: () => void
+  /** Promote a Local selection into a shared Look, applied here as a layer. */
+  openMakeLayer: () => void
 }
 
 const Ctx = createContext<ProgrammerSheetsValue | null>(null)
 
 /**
- * The programmer's four modal surfaces, mounted **once** for the whole page.
+ * The programmer's modal surfaces, mounted **once** for the whole page.
  *
  * They used to live inside the toolbar, which was fine while the toolbar was the only thing that
  * opened them. It is not: the source strip owns Update and offers Record, the action bar owns
@@ -43,6 +46,7 @@ export function ProgrammerSheetsProvider({
   const [recordLook, setRecordLook] = useState(false)
   const [include, setInclude] = useState(false)
   const [update, setUpdate] = useState(false)
+  const [makeLayer, setMakeLayer] = useState(false)
   const { data: summary } = useProgrammerSummaryQuery()
 
   const openRecord = useCallback((preset?: RecordPreset) => setRecord(preset ?? {}), [])
@@ -52,6 +56,7 @@ export function ProgrammerSheetsProvider({
       openRecordLook: () => setRecordLook(true),
       openInclude: () => setInclude(true),
       openUpdate: () => setUpdate(true),
+      openMakeLayer: () => setMakeLayer(true),
     }),
     [openRecord],
   )
@@ -82,6 +87,7 @@ export function ProgrammerSheetsProvider({
         />
       )}
       <RecordLookSheet open={recordLook} onOpenChange={setRecordLook} projectId={projectId} />
+      <MakeLayerSheet open={makeLayer} onOpenChange={setMakeLayer} projectId={projectId} />
       <IncludeSheet open={include} onOpenChange={setInclude} projectId={projectId} />
       <UpdateDialog
         open={update}

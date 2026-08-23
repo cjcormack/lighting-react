@@ -217,7 +217,8 @@ Registry: a derived family cannot own a path. `?family=colour` deep-links from C
 **Within a cue, later layers win — for every attribute, intensity included**, and the cue's
 own `propertyAssignments` are the last layer and beat all of them. Across cues, HTP still
 governs intensity. That flip is the change an operator coming from presets is most likely to
-be surprised by, so `LayersPane` says it in the section body rather than leaving it implied.
+be surprised by, so `LookStack`'s `precedenceNote` says it in the section body rather than leaving
+it implied (it was `LayersPane` that said so until session 2a deleted that pane).
 A layer's `sortOrder` is authoritative, not its array position — `reorderCueLayers` in
 `lib/cueUtils.ts` renumbers the whole list on every drag for that reason.
 
@@ -331,6 +332,59 @@ owner for that match rule is why they weren't moved to the explicit ops. What di
 ring: `lookLayerPresence` reads the **layer stack**, not the effect list. The old match was
 `FxInstance.presetId === lookId`, which worked by accident (the Look id in a field naming a
 `DaoFxPreset`) and could never see a rows-only Look at all.
+
+### The programmer's scoped grid
+
+Session 2a gave the programmer's value grid a **scope**, and it is the mechanism most of the session
+rests on: Output (the cook, read-only), Local (what *you* set, and nothing else), or one focused Look
+layer. Same grid, same cell editors, same drag-select in all three — that sameness is the point,
+because it is what makes editing a Look feel local rather than like a trip to the library.
+`components/programmer/ProgrammerScope.tsx` owns it; the band above the grid is
+`ProgrammerScopeBand`, and a layer is focused by clicking its name badge in the stack rail.
+
+Things that will bite:
+
+- **The grid must never remount on a scope change.** `useListSelection` clears its Redux scope on
+  unmount, so a conditional mount or a `key` per scope silently discards the fixture selection
+  Record scopes on. `ProgrammerPage.test.tsx` asserts `gridMounts` across a switch; that is the
+  load-bearing test of the whole session.
+- **`null` scope is not Output.** `/fixtures` and `/groups` mount the same table with no scope above
+  them and must behave exactly as before — live values, editable cells, no em-dashes. Only an
+  *explicit* Output scope is read-only. Pinned in `FixturesTable.test.tsx`.
+- **`ChannelSource` is the wrong abstraction here** and was rejected: everything a derived source
+  doesn't hold reads 0, and `holds()` is on `DerivedChannelSource` rather than `ChannelSource`, so it
+  cannot express *unset* — which is the entire point of Local. A Look row can also name a group,
+  which has no channel. `scopedCellValue.ts` instead feeds the *same* `aggregateCellValue` a lookup
+  built from entries or rows, so the maths behind a cell is identical in every scope.
+- **The Local predicate is `entry.owner !== 'layers'`**, not provenance: under blind, provenance
+  reports what is *underneath* the programmer, and a parked property reports `PARKED` while still
+  holding the operator's entry that Record would take.
+- **An un-busked Local cell shows an em-dash but its editor opens at the live value** (`placeholder`
+  on the four cells, `UnsetCellMark`). Local has to answer "what will Record take?" by itself, and a
+  busk still has to start from where the rig is.
+- **A layer-scope edit is a live write.** It goes through `PUT /looks/{id}`, which republishes every
+  cue layering that Look — the point of composing in place. `LookRowDraft` coalesces at 400 ms with
+  a 2 s ceiling, and **flush cadence is stage-update cadence**: a colour drag steps the rig rather
+  than gliding, which the band says out loud. There is no smooth-preview escape hatch —
+  `LookPreviewRequest` is deferred-only and cannot preview a bound-row edit.
+- **`RowCell.targetKeys` is index-parallel to `resolutions`** and `keys` is not: one resolution can
+  contribute two keys (a position paired from pan/tilt sliders), so for a group row the two arrays
+  share neither length nor indices. Ownership never noticed because it collapses to one verdict.
+- **Widening a layer's targets is always explicit** — the `AddToTargetsButton` on the row, never a
+  side effect of dragging a marquee across the grid.
+- **Deferred and per-element Look rows stay out of the grid** and are named in `LayerRowNotices`
+  instead. Projecting a deferred row onto every targeted row would silently convert it to a bound
+  one on the first edit; element rows compose nowhere at all (`FU-LOOK-ELEMENT-ROWS`).
+- **In Output scope every tint is a destination**: clicking a cell jumps the scope to whatever won
+  it. Three guards, and the middle one bites — `ProvenanceEntry.layerId` is present for a **cue's**
+  layers too, so `focusLayer` checks membership in the programmer's own stack and reports failure.
+
+`+ Effect` follows the same rule as a value edit: focused layer → into that Look (via
+`POST /looks/{id}/absorb-effects`, which *moves* the running instance); Local → the programmer band,
+which Record writes onto the cue; Output → disabled, naming the two places that can take one.
+**Make layer** promotes a Local selection into a named Look applied here — record-look, then
+`addLayer`, then `clearEntry` per row taken, so what you promoted leaves Local and the rest stays
+yours. It is a sequence, so a failure part-way leaves the Look and says so.
 
 ### Speed Masters
 
@@ -474,6 +528,30 @@ Cues bundle an ordered stack of **Look layers** (see §Looks and layers), their 
 **Cue numbers** are free-form display labels (`sortOrder` is the authoritative playback order). They are parsed as **prefix + decimal run + suffix** (`S1-3.1` → `("S1-", [3,1], "")`) and only ever compared *within a prefix group*, so `Pre-show 1, Pre-show 2, T2-1, S-1, S-2` is correctly ordered. `src/lib/cueNumber.ts` holds that model and drives the "Fix Order" banner; it mirrors `routes/cueNumbering.kt` in lighting7, which performs the fix — **keep the two in step**.
 
 A cue without an explicit number gets one derived from its position (`cueNumberAuto: true`), recomputed by the backend whenever the stack changes. Auto numbers render dimmed via `AUTO_CUE_NUMBER_CLASS`; clearing the `Cue #` field returns a cue to auto.
+
+**A cue is read-only, and edited by Include.** Session 2a deleted the three-pane inline editor
+(Targets · Cue properties · Layers) and its tab chrome: those panes restated, in a different shape,
+what a value grid and a layer stack already say, and two renderings of one state do not stay in step.
+An expanded cue row now shows `CueDetailContent` — transition, notes, palette, **its composed
+values** (`CueValueGrid`), layers, effects, hooks — all read-only, with **Edit in Programmer** (which
+Includes it) and **Cue properties…** (`CuePropertiesSheet`). Consequences worth knowing:
+
+- **`CueValueGrid` reads `GET /{projectId}/cues/{cueId}/cooked`**, which wraps the same
+  `buildCombinedCueLayerRows` the GO path runs. Do **not** compose a cue's values client-side —
+  layer order, masks, per-layer amount and blend, group expansion and specificity would all have to
+  be reimplemented, and each is a place for the desk and the display to disagree. It borrows the
+  four cell components rather than mounting `FixturesListContainer`: that container owns a filter,
+  checkboxes and a marquee, and its selection is Redux-scoped to one of three scopes.
+- **"Add Cue" is gone.** A cue is a captured state, so recording is the only way one is made;
+  `StackDetail` offers *Record into `<stack>`*. Separators and stacks keep their create buttons —
+  neither is a captured state, and that is the line rather than "no new buttons". The Prompt Book's
+  `CueAnchorPickerSheet` also still creates a cue at an anchor, deliberately.
+- **`CuePropsPane` survived, relocated.** It was not the problem with the three-pane editor, and a
+  per-field autosaving form is right for cue metadata; it is now the body of the properties drawer.
+- **Nothing provides `EditorContextValue`'s `cue` arm any more**, so the `cueEdit.*` session is never
+  opened from this client. The arm and its branches are kept — see the note in `EditorContext.tsx` —
+  because the backend protocol is live (so the `409 CUE_EDIT_SESSION_OPEN` handling is *not* dead)
+  and session 2b decides whether an unlocked cue row gets editable cells back.
 
 **Timed effects**: Layers and ad-hoc effects can have optional timing (delayMs, intervalMs, randomWindowMs) to fire after a delay or on a recurring interval. Immediate (no timing) is the default. A timed layer re-cooks the whole cue when it fires rather than appending its rows, so an in-flight crossfade weight survives.
 

@@ -1,15 +1,24 @@
 import { MousePointerSquareDashed } from 'lucide-react'
-import { OwnershipLegend } from '@/components/fixtures-list/OwnershipLegend'
+import { LayerLegend, OwnershipLegend } from '@/components/fixtures-list/OwnershipLegend'
 import { describeCellScope } from '@/components/fixtures-list/cellSelectionModel'
 import { COLUMN_DEFS, type ColumnKey } from '@/components/fixtures-list/columns'
 import type { ColumnVisibility } from '@/components/fixtures-list/ColumnsMenu'
 import { FixturesListContainer } from '@/routes/FixturesList'
+import { EditorContextProvider } from '@/components/lighting-editor/EditorContext'
+import { LayerRowNotices } from './LayerRowNotices'
+import { useLookRowStore } from './LookRowStore'
+import { useProgrammerScope } from './ProgrammerScope'
+import type { EditorContextValue } from '@/components/lighting-editor/EditorContext'
 
 /**
- * The programmer's value grid: the fixtures-list spreadsheet with per-cell ownership colouring.
- * Every edit routes through `EditorContext { kind: 'live' }` — supplied by the page, which wraps
- * the workspace rather than the rail — which since the programmer redesign means "write the
- * programmer", not "write DMX".
+ * The programmer's value grid: the fixtures-list spreadsheet with per-cell ownership colouring,
+ * pointed at whatever the scope band above says.
+ *
+ * Writes route through an `EditorContext` this component supplies itself, derived from the scope:
+ * `live` for Output and Local — which since the programmer redesign means "write the programmer",
+ * not "write DMX" — and `lookLayer` when a Look layer is focused. The page keeps its own outer
+ * `live` provider for the *rail*, whose FX controls write the programmer whatever the grid is
+ * looking at.
  *
  * **Unconditionally mounted, and that is load-bearing.** `useListSelection` clears its Redux scope
  * on unmount, so anything that mounts this conditionally — a tab, a collapse, an `{open && …}` —
@@ -24,6 +33,36 @@ const COLUMN_LABELS = new Map(COLUMN_DEFS.map((d) => [d.key, d.label]))
 const columnLabel = (col: ColumnKey) => COLUMN_LABELS.get(col) ?? col
 
 export function ProgrammerGrid({
+  grouped,
+  columnVisibility,
+  onColumnVisibilityChange,
+}: {
+  grouped: boolean
+  columnVisibility: ColumnVisibility
+  onColumnVisibilityChange: (next: ColumnVisibility) => void
+}) {
+  const scope = useProgrammerScope()
+  const store = useLookRowStore()
+  // Derived from the scope, and provided **unconditionally** — only the value varies, so the tree
+  // shape never changes and the container below never unmounts. Rendering a different provider
+  // (or a different grid) per scope is the exact hazard the doc comment above describes.
+  const editorContext: EditorContextValue =
+    scope?.kind === 'layer' && store
+      ? { kind: 'lookLayer', layerId: scope.layerId, lookId: store.lookId }
+      : { kind: 'live' }
+
+  return (
+    <EditorContextProvider value={editorContext}>
+      <ProgrammerGridBody
+        grouped={grouped}
+        columnVisibility={columnVisibility}
+        onColumnVisibilityChange={onColumnVisibilityChange}
+      />
+    </EditorContextProvider>
+  )
+}
+
+function ProgrammerGridBody({
   grouped,
   columnVisibility,
   onColumnVisibilityChange,
@@ -52,6 +91,7 @@ export function ProgrammerGrid({
               {filter}
               {lit}
             </div>
+            <LayerRowNotices />
             {/* Two selections, both live at once, so both are named. FIXTURE selection is what
                 Record scopes on; CELL selection is a transient edit scope that only says where the
                 next value goes. Leaving either to be inferred from the buttons beside it is how an
@@ -78,7 +118,18 @@ export function ProgrammerGrid({
           </div>
         )}
       />
-      <OwnershipLegend />
+      <ScopedLegend />
     </div>
   )
+}
+
+/**
+ * The key that matches what the grid is actually drawing.
+ *
+ * Layer scope switches the ownership rings off — the engine has no opinion about a Look's stored
+ * rows — so leaving the six-colour key underneath would document colours that are not on screen.
+ */
+function ScopedLegend() {
+  const scope = useProgrammerScope()
+  return scope?.kind === 'layer' ? <LayerLegend /> : <OwnershipLegend />
 }

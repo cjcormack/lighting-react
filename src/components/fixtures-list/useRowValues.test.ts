@@ -66,3 +66,42 @@ describe('buildRowCells with multi-head fixtures', () => {
     expect(buildRowCells(groupRow, ['dimmer'])[0].resolutions).toHaveLength(1)
   })
 })
+
+describe('buildRowCells targetKeys', () => {
+  it('pairs one target key with each resolution on a group row', () => {
+    const fixtures = [
+      makeFixture('a', [sliderProp('dimmer', 'dimmer', chan(10))], { groups: ['A'] }),
+      makeFixture('b', [sliderProp('dimmer', 'dimmer', chan(20))], { groups: ['A'] }),
+    ]
+    const rows = buildRows({
+      fixtures,
+      groups: [groupSummary('A', 2)],
+      expandedGroups: new Set(),
+      textFilter: '',
+    })
+    const cell = buildRowCells(rows[0], ['dimmer'])[0]
+    expect(cell.targetKeys).toEqual(['a', 'b'])
+    expect(cell.targetKeys).toHaveLength(cell.resolutions.length)
+  })
+
+  it('names the element, not the parent, where a multi-head row falls back', () => {
+    const bar = makePixelBar('bar', 3)
+    const [row] = soloRow([bar])
+    const cell = buildRowCells(row, ['colour'])[0]
+    expect(cell.targetKeys).toEqual(['bar.pixel-0', 'bar.pixel-1', 'bar.pixel-2'])
+  })
+
+  it('stays index-parallel where `keys` cannot — a position paired from two sliders', () => {
+    const mover = makeFixture('m', [
+      sliderProp('pan', 'pan', chan(1), { axis: 'PAN' }),
+      sliderProp('tilt', 'tilt', chan(2), { axis: 'TILT' }),
+    ])
+    const [row] = soloRow([mover])
+    const cell = buildRowCells(row, ['position'])[0]
+    // One resolution, one target key — but *two* keys. This mismatch is why `targetKeys` exists
+    // rather than being derived from `keys`.
+    expect(cell.resolutions).toHaveLength(1)
+    expect(cell.targetKeys).toEqual(['m'])
+    expect(cell.keys.map((k) => k.propertyName)).toEqual(['pan', 'tilt'])
+  })
+})

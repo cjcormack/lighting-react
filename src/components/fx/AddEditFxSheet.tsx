@@ -44,11 +44,28 @@ interface AddEditFxSheetProps {
   target: FxTarget
   mode: SheetMode | undefined
   onClose: () => void
+  /**
+   * Create the effect in the programmer's reserved priority band, so it composes on top of the
+   * cues underneath rather than beside them. What the programmer's own `+ Effect` wants; the
+   * fixture and group detail surfaces leave it off and write at base priority as they always have.
+   */
+  programmerOwned?: boolean
+  /**
+   * The instance that was just created, for a caller that needs to do something with it.
+   *
+   * Exists so the programmer can honour "an effect lands wherever the focused scope's values go":
+   * with a layer focused it moves the new instance into that layer's Look. Reported rather than
+   * inferred — diffing the running-effect list before and after would race with anything else
+   * starting an effect, including another desk.
+   *
+   * Not called for an edit, and not called when the create failed.
+   */
+  onCreated?: (effectId: number) => void
 }
 
 type Step = 'category' | 'effect' | 'configure'
 
-export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
+export function AddEditFxSheet({ target, mode, onClose, programmerOwned, onCreated }: AddEditFxSheetProps) {
   const isOpen = mode !== undefined
   const isEdit = mode?.mode === 'edit'
 
@@ -325,9 +342,10 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
           },
         })
       } else if (selectedEffect && targetPropertyName) {
-        await addFixtureFx({
+        const created = await addFixtureFx({
           effectType: selectedEffect.name,
           fixtureKey: fixture.key,
+          ...(programmerOwned ? { programmerOwned } : {}),
           propertyName: targetPropertyName,
           beatDivision,
           blendMode: blendMode as BlendMode,
@@ -340,6 +358,13 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
           ...(fixtureIsMultiHead ? { distributionStrategy } : {}),
           ...filterPayload,
         })
+          .unwrap()
+          // `.unwrap()` is here only so `onCreated` gets a real id — but it also makes a failed
+          // create *throw*, which from an `onClick` is an unhandled rejection that skips `onClose`.
+          // Swallowed rather than surfaced: `errorToastMiddleware` already reports it, and the
+          // sheet's own behaviour on failure is unchanged from before the id was needed.
+          .catch(() => null)
+        if (created) onCreated?.(created.effectId)
       }
     } else {
       const group = target.group
@@ -365,8 +390,9 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
           },
         })
       } else if (selectedEffect && targetPropertyName) {
-        await applyGroupFx({
+        const created = await applyGroupFx({
           groupName: group.name,
+          ...(programmerOwned ? { programmerOwned } : {}),
           effectType: selectedEffect.name as never,
           propertyName: targetPropertyName,
           beatDivision,
@@ -380,6 +406,11 @@ export function AddEditFxSheet({ target, mode, onClose }: AddEditFxSheetProps) {
           ...(hasMultiElementMembers ? { elementMode } : {}),
           ...filterPayload,
         })
+          .unwrap()
+          // See the fixture branch above: a rejected `.unwrap()` from an `onClick` is an unhandled
+          // rejection, and it would also stop the sheet closing.
+          .catch(() => null)
+        if (created) onCreated?.(created.effectId)
       }
     }
     onClose()

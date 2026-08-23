@@ -1,6 +1,7 @@
 import { computeCombinedCss } from '../../lib/colourMath'
 import { resolveSettingOption } from '../../hooks/usePropertyValues'
 import type { CellResolution } from './columns'
+import type { CellState } from './scopedCellValue'
 import type { CellValue } from './useRowValues'
 import type {
   CellLayer,
@@ -44,6 +45,33 @@ export function ownershipCellClass(ownership?: CellOwnership): string {
     case 'baseline':
       return 'opacity-55'
   }
+}
+
+/**
+ * Cell styling for **layer scope**, where the ownership vocabulary above does not apply.
+ *
+ * A sibling function rather than a branch inside `ownershipCellClass`, and rather than a fork of
+ * `useRowOwnership`: what changes between scopes is only how a cell is *painted*, so that is the
+ * one place the fork belongs. The subscription machinery stays single-implementation.
+ *
+ * Three states, and none of them is about the rig — they are about this layer:
+ * - **inert**: the column's family sits outside the layer's `propertyMask`, so the layer would
+ *   never write it whatever the Look holds;
+ * - **untargeted**: the fixture sits outside the layer's `targets`. The value still shows when the
+ *   Look has one, because "this Look has a value for it, this layer filters it out" is the useful
+ *   reading — but the cell is not editable, and widening the targets is an explicit affordance on
+ *   the row rather than a side effect of an edit;
+ * - **set here**: the accent ring, the same signal `programmer` carries in Output — this value is
+ *   the one you are editing.
+ *
+ * An unset, in-mask, targeted cell gets nothing: the em-dash carries it on its own.
+ */
+export function layerCellClass(state: CellState | undefined): string {
+  if (!state) return ''
+  if (state.tone === 'inert') return 'opacity-40'
+  if (state.tone === 'untargeted') return 'rounded-sm border border-dashed border-border opacity-55'
+  if (state.value) return 'rounded-sm ring-1 ring-inset ring-primary/70 bg-primary/10'
+  return ''
 }
 
 /**

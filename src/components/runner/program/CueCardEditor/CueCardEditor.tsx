@@ -1,13 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import {
   ChevronRight,
   Copy,
   Download,
-  Eye,
-  EyeOff,
   GripVertical,
-  Layers,
-  ListChecks,
   Loader2,
   Play,
   Sliders,
@@ -19,20 +15,12 @@ import { CSS } from '@dnd-kit/utilities'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { useNarrowContainer } from '@/hooks/useNarrowContainer'
 import {
   useProjectCueQuery,
   useDeleteProjectCueMutation,
   usePatchProjectCueMutation,
 } from '@/store/cues'
 import { InlineEditField } from '@/components/InlineEditField'
-import {
-  EditorContextProvider,
-  beginCueEditSession,
-  endCueEditSession,
-  setCueEditMode as sendSetCueEditMode,
-} from '@/components/lighting-editor/EditorContext'
-import type { CueEditMode } from '@/api/cueEditWsApi'
 import type { Cue, CueTarget } from '@/api/cuesApi'
 import type { CueStackCueEntry } from '@/api/cueStacksApi'
 import {
@@ -43,15 +31,10 @@ import {
 import { AUTO_CUE_NUMBER_CLASS, cueNumberCellWidth } from '@/lib/cueNumber'
 import { TruncateStart } from '@/components/TruncateStart'
 import { SaveStatusIndicator } from '@/components/SaveStatusIndicator'
-import { TargetsPane } from './TargetsPane'
-import { CuePropsPane } from './CuePropsPane'
-import { LayersPane, type LayersMode } from './LayersPane'
+import { resolveColourToHex } from '@/components/fx/colourUtils'
+import { CueDetailContent } from '@/components/cues/CueDetailContent'
+import { CuePropertiesSheet } from '@/components/cues/CuePropertiesSheet'
 import { collectCueTargets } from './targetUtils'
-
-export type { LayersMode }
-
-const LIVE_CTX = { kind: 'live' as const }
-
 interface CueCardEditorProps {
   cue: CueStackCueEntry
   projectId: number
@@ -59,25 +42,27 @@ interface CueCardEditorProps {
   onToggleExpanded: () => void
   isActive?: boolean
   isStandby?: boolean
-  layersMode: LayersMode
   onDuplicate?: (cue: Cue) => void
   /** Record the programmer into this cue — opens the Record sheet targeting it. */
   onRecordInto?: (cueId: number) => void
   /** Load this cue into the programmer to edit it on stage. */
   onIncludeCue?: (cueId: number) => void
   includePending?: boolean
-  /** Stack header sets this — width threshold (px) below which the body uses tabs. */
-  tabsBreakpoint?: number
 }
 
 /**
- * Inline-expanding cue card. The collapsed row is the cue summary (Q# · palette
- * · name · target chips · fade); clicking expands the card to a 3-pane editor
- * (Targets · Properties · Layers). Below `tabsBreakpoint` (default 1000px of
- * card width) the panes collapse to a tab bar with one active pane.
+ * Inline-expanding cue card. The collapsed row is the cue summary (Q# · palette · name · target
+ * chips · fade); expanding it shows the cue **read-only** — the same value grid the programmer
+ * draws, its layer stack, its effects and its hooks — with two ways out: *Edit in Programmer*,
+ * which Includes it, and *Cue properties…*, which opens the drawer for everything a value grid
+ * cannot express.
  *
- * Each expanded card opens its own `cueEdit` WS session so live property edits
- * route through cueEdit.* and persist to the cue. Edits auto-save (PATCH).
+ * **It used to be a three-pane editor** (Targets · Properties · Layers), collapsing to tabs below
+ * 1000px, and each expanded card opened its own `cueEdit` WS session. All of that went in session
+ * 2a. Targets and Layers were a second, differently-shaped restatement of what a value grid and a
+ * layer stack already say, and keeping two renderings of one state in step is a losing game; the
+ * session went with them, because a cue is now edited in exactly one place. The tab machinery went
+ * too — there is one body, so there is nothing to switch between.
  */
 export function CueCardEditor({
   cue,
@@ -86,12 +71,10 @@ export function CueCardEditor({
   onToggleExpanded,
   isActive = false,
   isStandby = false,
-  layersMode,
   onDuplicate,
   onRecordInto,
   onIncludeCue,
   includePending = false,
-  tabsBreakpoint = 1000,
 }: CueCardEditorProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: cue.id })
@@ -103,10 +86,7 @@ export function CueCardEditor({
     opacity: isDragging ? 0.5 : undefined,
   }
 
-  const [bodyRef, narrow] = useNarrowContainer(tabsBreakpoint)
-  const [activeTab, setActiveTab] = useState<'targets' | 'props' | 'layers'>('layers')
-
-  const [editMode, setEditMode] = useState<CueEditMode>('live')
+  const [propsOpen, setPropsOpen] = useState(false)
 
   const { data: fullCue, isFetching } = useProjectCueQuery(
     { projectId, cueId: cue.id },
@@ -127,51 +107,11 @@ export function CueCardEditor({
   if (fullCue) lastCueRef.current = fullCue
   const cueData = fullCue ?? lastCueRef.current
 
-  const sessionRef = useRef<number | null>(null)
-  useEffect(() => {
-    if (!expanded) {
-      if (sessionRef.current != null) {
-        endCueEditSession(sessionRef.current)
-        sessionRef.current = null
-      }
-      return
-    }
-    if (sessionRef.current === cue.id) return
-    if (sessionRef.current != null) endCueEditSession(sessionRef.current)
-    beginCueEditSession(cue.id, editMode)
-    sessionRef.current = cue.id
-    return () => {
-      if (sessionRef.current != null) {
-        endCueEditSession(sessionRef.current)
-        sessionRef.current = null
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expanded, cue.id])
-
-  const toggleEditMode = () => {
-    const next: CueEditMode = editMode === 'live' ? 'blind' : 'live'
-    setEditMode(next)
-    if (sessionRef.current === cue.id) sendSetCueEditMode(cue.id, next)
-  }
-
-  const editorContextValue = useMemo(
-    () =>
-      expanded && cueData
-        ? ({ kind: 'cue' as const, id: cueData.id, mode: editMode })
-        : LIVE_CTX,
-    [expanded, cueData, editMode],
-  )
-
   const targets: CueTarget[] = useMemo(
     () => (cueData ? collectCueTargets(cueData) : []),
     [cueData],
   )
   const targetCount = targets.length
-  const layersCount =
-    (cueData?.propertyAssignments.length ?? 0) +
-    (cueData?.adHocEffects.length ?? 0) +
-    (cueData?.layers.length ?? 0)
 
   // Inline edits from the collapsed row. Same PATCH-on-commit contract as the expanded
   // card's Properties pane, so the two stay consistent — every field auto-saves.
@@ -332,8 +272,7 @@ export function CueCardEditor({
         </div>
 
         {expanded && (
-          <EditorContextProvider value={editorContextValue}>
-            <div ref={bodyRef} className="border-t bg-background">
+          <div className="border-t bg-background">
               {!cueData ? (
                 <div className="flex items-center justify-center py-12 text-muted-foreground">
                   {isFetching ? (
@@ -344,116 +283,32 @@ export function CueCardEditor({
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center justify-between gap-2 px-3 py-2 border-b bg-muted/20">
-                    {/* Scoped to this cue: the show-wide pill in the header reports any write in
-                        the project, which is no use when you want to know that the field you
-                        just left actually landed. */}
+                  {/* Scoped to this cue: the show-wide pill in the header reports any write in the
+                      project, which is no use when you want to know that the field you just left
+                      actually landed. The Live / Preview-edit toggle that stood beside it went with
+                      the `cueEdit` session it switched — with the cue read-only there is nothing
+                      here for it to gate, and the programmer's own Blind is the gate that matters. */}
+                  <div className="flex items-center justify-between gap-2 border-b bg-muted/20 px-3 py-2">
                     <SaveStatusIndicator cueId={cue.id} className="justify-start" />
                     <Button
-                      type="button"
                       variant="outline"
                       size="sm"
-                      onClick={toggleEditMode}
-                      className={cn(
-                        'h-7 gap-1.5 text-xs',
-                        editMode === 'live'
-                          ? 'border-primary text-primary'
-                          : 'border-amber-500 text-amber-600 bg-amber-50 dark:bg-amber-950/30',
-                      )}
-                      // "Preview edit", not "Blind": the programmer has its own Blind gate
-                      // (which excludes it from the stage merge) and the two now coexist in
-                      // the same session. Same word, different mechanism — so this one gets
-                      // a different name.
-                      title={
-                        editMode === 'live'
-                          ? 'Live — edits apply to the stage'
-                          : 'Preview edit — edits persist to the cue only; stage untouched'
-                      }
+                      className="h-7 gap-1.5 text-xs"
+                      onClick={() => setPropsOpen(true)}
                     >
-                      {editMode === 'live' ? (
-                        <>
-                          <Eye className="size-3.5" />
-                          Live
-                        </>
-                      ) : (
-                        <>
-                          <EyeOff className="size-3.5" />
-                          Preview edit
-                        </>
-                      )}
+                      <Sliders className="size-3.5" />
+                      Cue properties…
                     </Button>
                   </div>
 
-                  {narrow && (
-                    <div className="flex items-stretch border-b bg-muted/20 px-1">
-                      <TabButton
-                        active={activeTab === 'targets'}
-                        onClick={() => setActiveTab('targets')}
-                        icon={<Layers className="size-3.5" />}
-                        label="Targets"
-                        count={targetCount}
-                      />
-                      <TabButton
-                        active={activeTab === 'props'}
-                        onClick={() => setActiveTab('props')}
-                        icon={<Sliders className="size-3.5" />}
-                        label="Properties"
-                      />
-                      <TabButton
-                        active={activeTab === 'layers'}
-                        onClick={() => setActiveTab('layers')}
-                        icon={<ListChecks className="size-3.5" />}
-                        label="Layers"
-                        count={layersCount}
-                      />
-                    </div>
-                  )}
-
-                  <div
-                    className={cn(
-                      narrow
-                        ? 'block'
-                        : 'grid grid-cols-3 divide-x',
-                      'min-h-[360px] max-h-[min(720px,calc(100vh-12rem))]',
-                    )}
-                  >
-                    <PaneShell
-                      title="Targets"
-                      count={targetCount}
-                      icon={<Layers className="size-3.5" />}
-                      active={!narrow || activeTab === 'targets'}
-                      hideTitleInTabs={narrow}
-                    >
-                      <TargetsPane
-                        cue={cueData}
-                        projectId={projectId}
-                        targets={targets}
-                      />
-                    </PaneShell>
-
-                    <PaneShell
-                      title="Cue properties"
-                      icon={<Sliders className="size-3.5" />}
-                      active={!narrow || activeTab === 'props'}
-                      hideTitleInTabs={narrow}
-                    >
-                      <CuePropsPane cue={cueData} projectId={projectId} />
-                    </PaneShell>
-
-                    <PaneShell
-                      title="Layer 2 + 3 — what plays"
-                      count={layersCount}
-                      icon={<ListChecks className="size-3.5" />}
-                      active={!narrow || activeTab === 'layers'}
-                      hideTitleInTabs={narrow}
-                    >
-                      <LayersPane
-                        cue={cueData}
-                        projectId={projectId}
-                        mode={layersMode}
-                        targets={targets}
-                      />
-                    </PaneShell>
+                  {/* The cue read surface — the same value grid the programmer draws, plus its
+                      layer stack and its effects, all read-only. Session 2a deleted the three-pane
+                      editor that stood here: Targets and Layers were a second, differently-shaped
+                      way to express what a value grid and a layer stack already say, and two
+                      renderings of one thing do not stay in step. Editing a cue is Include -> the
+                      programmer, which is what makes there be exactly one place values are set. */}
+                  <div className="space-y-3 px-3 py-3">
+                    <CueDetailContent cue={cueData} projectId={projectId} />
                   </div>
 
                   <div className="flex items-center gap-2 px-3 py-2 border-t bg-muted/20">
@@ -486,18 +341,24 @@ export function CueCardEditor({
                         rather than the only (and lossiest) way in. */}
                     {onIncludeCue && (
                       <Button
-                        variant="outline"
+                        variant="default"
                         size="sm"
-                        className="h-7 text-xs gap-1"
+                        className="h-7 gap-1 text-xs"
                         onClick={() => onIncludeCue(cue.id)}
                         disabled={includePending}
+                        // Named for where it takes you rather than for the verb it sends. "Include"
+                        // is the right word for the operation and the wrong word for the only route
+                        // from a cue to changing it: an operator looking for "edit" would not guess
+                        // it. Blind stays theirs to set first — the desk does not infer it, which is
+                        // why the ShowBar carries the switch.
+                        title="Load this cue into the programmer to change it"
                       >
                         {includePending ? (
                           <Loader2 className="size-3.5 animate-spin" />
                         ) : (
                           <Download className="size-3.5" />
                         )}
-                        Include
+                        Edit in Programmer
                       </Button>
                     )}
                     {onRecordInto && (
@@ -519,91 +380,42 @@ export function CueCardEditor({
                   </div>
                 </>
               )}
-            </div>
-          </EditorContextProvider>
+          </div>
         )}
       </div>
+      <CuePropertiesSheet
+        cue={cueData}
+        projectId={projectId}
+        open={propsOpen}
+        onOpenChange={setPropsOpen}
+      />
     </div>
   )
 }
 
-function TabButton({
-  active,
-  onClick,
-  icon,
-  label,
-  count,
-}: {
-  active: boolean
-  onClick: () => void
-  icon: React.ReactNode
-  label: string
-  count?: number
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors -mb-px',
-        active
-          ? 'border-primary text-foreground'
-          : 'border-transparent text-muted-foreground hover:text-foreground',
-      )}
-    >
-      {icon}
-      {label}
-      {count != null && count > 0 && (
-        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 ml-0.5">
-          {count}
-        </Badge>
-      )}
-    </button>
-  )
-}
-
-function PaneShell({
-  title,
-  count,
-  icon,
-  active,
-  hideTitleInTabs,
-  children,
-}: {
-  title: string
-  count?: number
-  icon?: React.ReactNode
-  active: boolean
-  hideTitleInTabs?: boolean
-  children: React.ReactNode
-}) {
-  if (!active) return null
-  return (
-    <div className="flex flex-col min-h-0 overflow-hidden">
-      {!hideTitleInTabs && (
-        <div className="flex items-center gap-1.5 px-3 py-2 border-b bg-muted/10 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sticky top-0 z-10">
-          {icon}
-          <span>{title}</span>
-          {count != null && count > 0 && (
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 ml-1">
-              {count}
-            </Badge>
-          )}
-        </div>
-      )}
-      <div className="flex-1 overflow-y-auto p-3">{children}</div>
-    </div>
-  )
-}
-
+/**
+ * The cue's positional colour list, as swatches.
+ *
+ * **Resolved, not assigned raw.** This used to set `background: c` directly, which works for a hex
+ * and renders nothing at all for one of the backend's gel names — so the same cue's palette looked
+ * different here and in Run, whose copy has always resolved. Two renderings of one list, disagreeing
+ * about a value neither of them owns.
+ *
+ * Keyed by `${c}-${i}` for the same reason as Run's: a bare index makes React reuse a swatch across
+ * a reorder and animate the wrong colour into place.
+ */
 function PaletteBar({ palette }: { palette: string[] }) {
   if (palette.length === 0) {
-    return <div className="w-12 h-full bg-muted/30" />
+    return <div className="h-full w-12 bg-muted/30" />
   }
   return (
     <div className="flex h-full w-20">
       {palette.slice(0, 6).map((c, i) => (
-        <span key={i} className="flex-1 min-w-[4px]" style={{ background: c }} />
+        <span
+          key={`${c}-${i}`}
+          className="min-w-[4px] flex-1"
+          style={{ background: resolveColourToHex(c) }}
+        />
       ))}
     </div>
   )

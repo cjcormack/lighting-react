@@ -1,9 +1,6 @@
 import type { CueStackCueEntry } from '@/api/cueStacksApi'
 import type { Cue } from '@/api/cuesApi'
-import {
-  CueCardEditor,
-  type LayersMode,
-} from './CueCardEditor/CueCardEditor'
+import { CueCardEditor } from './CueCardEditor/CueCardEditor'
 
 interface ProgramCueRowProps {
   cue: CueStackCueEntry
@@ -14,11 +11,8 @@ interface ProgramCueRowProps {
   isActive?: boolean
   /** Cue will fire on the next GO — rendered with the blue "next" accent. */
   isStandby?: boolean
-  /** Layers pane arrangement (passed down from the stack header). */
-  layersMode: LayersMode
   /** Open Duplicate flow with the freshly fetched full cue. */
   onDuplicate?: (cue: Cue) => void
-  /** Open Grab-live confirmation. */
   /** Record the programmer into this cue — opens the Record sheet targeting it. */
   onRecordInto?: (cueId: number) => void
   /** Load this cue into the programmer to edit it on stage. */

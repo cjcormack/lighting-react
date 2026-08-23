@@ -62,6 +62,17 @@ export interface RowCell {
    *  element for a multi-head fixture row whose parent lacks the property,
    *  one per member-with-the-property for a group row. */
   resolutions: NonNullable<CellResolution>[]
+  /**
+   * **Index-parallel to [resolutions]**: the target each one resolved against.
+   *
+   * Not derivable from [keys], which is flat and deliberately so — one resolution can
+   * contribute two keys (a position paired from pan/tilt sliders), so for a twelve-member group
+   * row the two arrays have neither the same length nor any index correspondence. Ownership
+   * never noticed, because it collapses every key to a single verdict; a value built from
+   * programmer entries or Look rows *does* care, because it needs one value per resolution to
+   * compute uniformity and the colour average.
+   */
+  targetKeys: string[]
   /** Every (target, property) the cell covers — the programmer's key space. */
   keys: CellPropertyKey[]
 }
@@ -80,18 +91,20 @@ export function buildRowCells(row: Row, visibleColumns: readonly ColumnKey[]): R
   const cells: RowCell[] = []
   for (const col of visibleColumns) {
     const resolutions: NonNullable<CellResolution>[] = []
+    const targetKeys: string[] = []
     const keys: CellPropertyKey[] = []
     for (const target of targets) {
       for (const { target: resolved, resolution } of resolveTargetCells(target, col)) {
         resolutions.push(resolution)
         // `resolved` is the element for a multi-head fallback, the target itself otherwise —
         // exactly the key the backend stores the programmer entry under.
+        targetKeys.push(resolved.key)
         for (const propertyName of resolutionPropertyNames(resolution)) {
           keys.push({ targetKey: resolved.key, propertyName })
         }
       }
     }
-    if (resolutions.length > 0) cells.push({ col, resolutions, keys })
+    if (resolutions.length > 0) cells.push({ col, resolutions, targetKeys, keys })
   }
   return cells
 }
@@ -102,9 +115,16 @@ export function buildRowCells(row: Row, visibleColumns: readonly ColumnKey[]): R
  * colour property on some, a colour wheel on others), only members matching
  * the *first* member's kind participate — a single cell can't meaningfully
  * blend RGB values with wheel positions.
+ *
+ * [readChannel] exists so the *same* aggregation — min/max, component averaging, uniformity,
+ * the combined CSS swatch, the normalised pad axes, the resolved wheel option — serves values
+ * that never came off the wire at all. `scopedCellValue.ts` feeds it a lookup built from
+ * programmer entries or a Look's stored rows; nothing about the maths differs, and duplicating
+ * it for each scope is how the four kinds drift apart.
  */
 export function aggregateCellValue(
   resolutions: readonly NonNullable<CellResolution>[],
+  readChannel: (ref: ChannelRef) => number = getChannelValue,
 ): CellValue | undefined {
   const first = resolutions[0]
   if (!first) return undefined
@@ -113,7 +133,7 @@ export function aggregateCellValue(
     case 'slider': {
       const values = resolutions
         .filter((r) => r.kind === 'slider')
-        .map((r) => getChannelValue(r.property.channel))
+        .map((r) => readChannel(r.property.channel))
       const min = Math.min(...values)
       const max = Math.max(...values)
       return { kind: 'slider', min, max, isUniform: min === max }
@@ -122,12 +142,12 @@ export function aggregateCellValue(
       const members = resolutions
         .filter((r) => r.kind === 'colour')
         .map((r) => ({
-          r: getChannelValue(r.property.redChannel),
-          g: getChannelValue(r.property.greenChannel),
-          b: getChannelValue(r.property.blueChannel),
-          w: r.property.whiteChannel ? getChannelValue(r.property.whiteChannel) : undefined,
-          a: r.property.amberChannel ? getChannelValue(r.property.amberChannel) : undefined,
-          uv: r.property.uvChannel ? getChannelValue(r.property.uvChannel) : undefined,
+          r: readChannel(r.property.redChannel),
+          g: readChannel(r.property.greenChannel),
+          b: readChannel(r.property.blueChannel),
+          w: r.property.whiteChannel ? readChannel(r.property.whiteChannel) : undefined,
+          a: r.property.amberChannel ? readChannel(r.property.amberChannel) : undefined,
+          uv: r.property.uvChannel ? readChannel(r.property.uvChannel) : undefined,
         }))
       const head = members[0]
       const isUniform = members.every(
@@ -165,7 +185,7 @@ export function aggregateCellValue(
     case 'position': {
       const members = resolutions
         .filter((r) => r.kind === 'position')
-        .map((r) => ({ pan: getChannelValue(r.pan), tilt: getChannelValue(r.tilt) }))
+        .map((r) => ({ pan: readChannel(r.pan), tilt: readChannel(r.tilt) }))
       const pan = Math.round(members.reduce((sum, m) => sum + m.pan, 0) / members.length)
       const tilt = Math.round(members.reduce((sum, m) => sum + m.tilt, 0) / members.length)
       const isUniform = members.every((m) => m.pan === members[0].pan && m.tilt === members[0].tilt)
@@ -184,7 +204,7 @@ export function aggregateCellValue(
     case 'colour-setting': {
       const levels = resolutions
         .filter((r) => r.kind === 'setting' || r.kind === 'colour-setting')
-        .map((r) => getChannelValue(r.property.channel))
+        .map((r) => readChannel(r.property.channel))
       const isUniform = levels.every((level) => level === levels[0])
       return {
         kind: 'setting',

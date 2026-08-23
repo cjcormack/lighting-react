@@ -154,6 +154,29 @@ export const looksApi = restApi.injectEndpoints({
     }),
 
     /**
+     * Move running programmer-band effects into a Look — what `+ Effect` does with a layer focused.
+     *
+     * MERGE on the server: the Look keeps the effects it has and gains these, because the operator
+     * asked to add one. Invalidates the effect tags as well as the Look, since the instances leave
+     * the programmer band and come back through the layer.
+     */
+    absorbLookEffects: build.mutation<
+      { look: LookDetails; absorbed: number },
+      { projectId: number; lookId: number; effectIds: number[] }
+    >({
+      query: ({ projectId, lookId, effectIds }) => ({
+        url: `project/${projectId}/looks/${lookId}/absorb-effects`,
+        method: 'POST',
+        body: { effectIds },
+      }),
+      invalidatesTags: (_result, _error, { lookId }) => [
+        { type: 'Look' as const, id: lookId },
+        'LookList' as const,
+        'FixtureEffects' as const,
+      ],
+    }),
+
+    /**
      * Put a Look on these targets, or take it off again — the busking pad's path.
      *
      * Only the Look's **deferred** rows and effects are applied: the pad supplies the targets, so a
@@ -211,6 +234,7 @@ export const {
   useSaveLookMutation,
   useDeleteLookMutation,
   useCopyLookMutation,
+  useAbsorbLookEffectsMutation,
   useToggleLookMutation,
   usePreviewLookMutation,
   useClearLookPreviewMutation,

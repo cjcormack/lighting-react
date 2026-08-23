@@ -7,6 +7,7 @@ import {
   Zap,
   Hash,
   Clock,
+  SlidersHorizontal,
   type LucideProps,
 } from 'lucide-react'
 import { formatFadeText } from '@/lib/cueUtils'
@@ -16,6 +17,7 @@ import { useEffectLibraryQuery } from '@/store/fixtureFx'
 import { useLookListQuery } from '@/store/looks'
 import { EffectSummary } from '@/components/fx/EffectSummary'
 import { LayerRow } from '@/components/looks/LookStack'
+import { CueValueGrid } from './CueValueGrid'
 import { TriggerSummary } from './TriggerSummary'
 import { TimingBadge } from './TimingBadge'
 import { fromCueAdHocEffect } from '@/components/fx/effectSummaryTypes'
@@ -55,8 +57,8 @@ interface CueDetailContentProps {
 }
 
 /**
- * Reusable read-only detail body for a cue: transition, notes, palette, **layers**, ad-hoc effects
- * and script hooks.
+ * Reusable read-only detail body for a cue: transition, notes, palette, **its composed values**,
+ * layers, ad-hoc effects and script hooks.
  *
  * **This is the cue read surface, all of it.** Four component trees reach it and none of them render
  * cue content themselves: `RunCueCard` → `RunOutputPane` → here, and `RunMobileCueCard` and
@@ -140,6 +142,18 @@ export const CueDetailContent = memo(function CueDetailContent({
           </div>
         </div>
       )}
+
+      {/* ── Values ──
+          The cue's composed output, drawn with the *same* cells as the programmer's grid. Session
+          2a's answer to "a cue looks nothing like the programmer that made it": there is now one
+          value language, and this is a read of it rather than a second editor.
+
+          Above Layers deliberately — the values are what the operator is looking for, and the stack
+          is the explanation for them. */}
+      <div className="space-y-1.5">
+        <SectionHeader icon={SlidersHorizontal} label="Values" />
+        <CueValueGrid projectId={projectId} cueId={cue.id} enabled={enabled} />
+      </div>
 
       {/* ── Layers ──
           The same `LayerRow` the cue editor and the programmer draw, with `readOnly` and

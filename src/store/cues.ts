@@ -12,6 +12,7 @@ import type {
   ApplyCueResponse,
   StopCueResponse,
   CueCurrentState,
+  CueCookedResponse,
 } from '../api/cuesApi'
 
 // Subscribe to WebSocket cue list changes - invalidate all cue caches
@@ -31,6 +32,26 @@ export const cuesApi = restApi.injectEndpoints({
 
     projectCue: build.query<Cue, { projectId: number; cueId: number }>({
       query: ({ projectId, cueId }) => `project/${projectId}/cues/${cueId}`,
+      providesTags: (_result, _error, { cueId }) => [{ type: 'Cue', id: cueId }],
+    }),
+
+    /**
+     * What a cue actually asserts, per (target, property), and which layer won each value.
+     *
+     * The read behind the cue surface: since session 2a a cue is drawn as the *same* value grid the
+     * programmer uses, drawn read-only, so there is no second way to express a cue's values and
+     * nothing to keep in step.
+     *
+     * Server-side, and that is the point — composing this here would mean reimplementing layer
+     * order, masks, per-layer amount and blend, group expansion and specificity in the browser,
+     * and every one of those is a place for the desk and the display to disagree. Tagged `Cue` so a
+     * PATCH to the cue, or a Look edit that republishes it, refetches this too.
+     *
+     * Effects are **not** here: an effect has no static value to report, so a cue whose look is
+     * carried by a chase reads as whatever its values say. They are listed separately.
+     */
+    projectCueCooked: build.query<CueCookedResponse, { projectId: number; cueId: number }>({
+      query: ({ projectId, cueId }) => `project/${projectId}/cues/${cueId}/cooked`,
       providesTags: (_result, _error, { cueId }) => [{ type: 'Cue', id: cueId }],
     }),
 
@@ -154,6 +175,7 @@ export const cuesApi = restApi.injectEndpoints({
 export const {
   useProjectCueListQuery,
   useProjectCueQuery,
+  useProjectCueCookedQuery,
   useLazyProjectCueQuery,
   useCreateProjectCueMutation,
   useSaveProjectCueMutation,

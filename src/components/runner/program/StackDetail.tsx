@@ -1,17 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import {
-  ArrowLeft,
-  Layers,
-  ListChecks,
-  Plus,
-  SeparatorHorizontal,
-} from 'lucide-react'
+import { ArrowLeft, SeparatorHorizontal, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
 import {
   DndContext,
   closestCenter,
@@ -36,8 +25,6 @@ import { ProgramCueRow } from './ProgramCueRow'
 import { ProgramMarkerRow } from './ProgramMarkerRow'
 import { OutOfOrderBanner } from '@/components/runner/OutOfOrderBanner'
 import { cueNumberColumnChars, detectOutOfOrder } from '@/lib/cueNumber'
-import { cn } from '@/lib/utils'
-import type { LayersMode } from './CueCardEditor/CueCardEditor'
 
 interface StackDetailProps {
   stack: CueStack
@@ -49,7 +36,14 @@ interface StackDetailProps {
   expandedCueId: number | null
   onExpandedCueChange: (cueId: number | null) => void
   onBack: () => void
-  onAddCue: () => void
+  /**
+   * Record the programmer into a new cue in this stack — what replaced "Add Cue".
+   *
+   * Optional so the surface still renders where nothing can record (a stack list read while the
+   * programmer sheets are not mounted); the button disables itself rather than vanishing, so the
+   * route in is still discoverable.
+   */
+  onRecordIntoStack?: (stackId: number) => void
   onAddMarker: () => void
   onMarkerRename: (cueId: number, name: string) => void
   onMarkerDelete: (cueId: number) => void
@@ -69,7 +63,7 @@ export function StackDetail({
   expandedCueId,
   onExpandedCueChange,
   onBack,
-  onAddCue,
+  onRecordIntoStack,
   onAddMarker,
   onMarkerRename,
   onMarkerDelete,
@@ -80,7 +74,6 @@ export function StackDetail({
 }: StackDetailProps) {
   const [reorderCues] = useReorderCueStackCuesMutation()
   const [sortByCueNumber] = useSortCueStackByCueNumberMutation()
-  const [layersMode, setLayersMode] = useState<LayersMode>('by-target')
 
   // Offer to fix the order when a cue-number group descends against itself. Dismissal is scoped
   // to the stack so drilling into another one asks again.
@@ -172,57 +165,23 @@ export function StackDetail({
         </span>
         <div className="flex-1" />
 
-        {/* By-target / By-layer toggle */}
-        <div
-          className="hidden @[680px]:inline-flex items-center rounded-md border bg-muted/30 p-0.5 mr-1"
-          role="group"
-          aria-label="Layers arrangement"
-        >
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={() => setLayersMode('by-target')}
-                className={cn(
-                  'inline-flex items-center gap-1.5 h-7 px-2 rounded text-xs transition-colors',
-                  layersMode === 'by-target'
-                    ? 'bg-background shadow-sm text-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                <Layers className="size-3.5" />
-                By target
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              Group every assignment / effect / preset by its target.
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={() => setLayersMode('by-layer')}
-                className={cn(
-                  'inline-flex items-center gap-1.5 h-7 px-2 rounded text-xs transition-colors',
-                  layersMode === 'by-layer'
-                    ? 'bg-background shadow-sm text-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                <ListChecks className="size-3.5" />
-                By layer
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              Top-level Presets · Assignments · Effects sections.
-            </TooltipContent>
-          </Tooltip>
-        </div>
+        {/* **Recording is the only way in.** "Add Cue" made an empty cue and opened an editor
+            on it, which is backwards: a cue is a captured state, so the thing that makes one is the
+            state you captured. An empty cue was a container asking to be filled by hand, which is
+            what the three-pane editor existed to do — and it is gone.
 
-        <Button variant="outline" size="sm" onClick={onAddCue} aria-label="Add cue">
-          <Plus className="size-3.5" />
-          <span className="ml-1.5 hidden @[600px]:inline">Add Cue</span>
+            Separators keep their button, and so do stacks: neither is a captured state. That is the
+            line, not "no new buttons". */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onRecordIntoStack?.(stack.id)}
+          disabled={!onRecordIntoStack}
+          aria-label={`Record the programmer into ${stack.name}`}
+          title="Record what the programmer is holding as a new cue in this stack"
+        >
+          <Zap className="size-3.5" />
+          <span className="ml-1.5 hidden @[600px]:inline">Record into {stack.name}</span>
         </Button>
         <Button variant="outline" size="sm" onClick={onAddMarker} aria-label="Add separator">
           <SeparatorHorizontal className="size-3.5" />
@@ -275,7 +234,6 @@ export function StackDetail({
                   }
                   isActive={cue.id === activeCueId}
                   isStandby={cue.id === standbyCueId}
-                  layersMode={layersMode}
                   onDuplicate={onDuplicate}
                   onRecordInto={onRecordInto}
                   onIncludeCue={onIncludeCue}

@@ -66,12 +66,22 @@ vi.mock('@/hooks/useShowBarProps', () => ({
 }))
 vi.mock('@/store/programmer', () => ({
   useProgrammerSummaryQuery: () => ({ data: { blind: false, entryCount: 0, lastIncluded: null } }),
+  useProgrammerLayersQuery: () => ({ data: [] }),
+  useProgrammerRevision: () => 0,
   programmerClearAll: vi.fn(),
 }))
 vi.mock('@/store/projects', () => ({
   useCurrentProjectQuery: () => ({ data: { id: 1 }, isLoading: false }),
   useProjectQuery: () => ({ data: { id: 1, name: 'Hamlet' }, isLoading: false }),
 }))
+// `LookRowStoreProvider` is mounted unconditionally so the tree shape never changes with the
+// scope — which means its queries run here even with nothing focused.
+vi.mock('@/store/looks', () => ({
+  useLookQuery: () => ({ data: undefined, isSuccess: false }),
+  useSaveLookMutation: () => [vi.fn()],
+}))
+vi.mock('@/store/fixtures', () => ({ useFixtureListQuery: () => ({ data: [] }) }))
+vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
 import { ProgrammerPage } from './ProgrammerPage'
 
@@ -123,5 +133,36 @@ describe('ProgrammerPage', () => {
 
     fireEvent.click(screen.getByTitle('Show group rows with their members'))
     expect(gridMounts).toHaveBeenCalledTimes(1)
+  })
+
+  it('mounts the value grid exactly once across a scope change', () => {
+    // The same rule, for the thing session 2a adds. Switching Output/Local/one layer must be a
+    // re-render of one grid, never a swap between per-scope grids — the moment it becomes a
+    // conditional mount or a `key`, the fixture selection is silently gone.
+    draw()
+    expect(gridMounts).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(screen.getByLabelText('Show the composed output'))
+    fireEvent.click(screen.getByLabelText('Show only the values you set'))
+    expect(gridMounts).toHaveBeenCalledTimes(1)
+  })
+
+  it('names what the grid is pointed at', () => {
+    draw()
+    // Local is the landing scope: the programmer opens on what you are about to busk, not on a
+    // read-only view of the cook.
+    expect(screen.getByLabelText('Show only the values you set')).toHaveAttribute(
+      'data-state',
+      'on',
+    )
+    fireEvent.click(screen.getByLabelText('Show the composed output'))
+    expect(screen.getByLabelText('Show the composed output')).toHaveAttribute('data-state', 'on')
+  })
+
+  it('offers no layer segment while no layer is focused', () => {
+    // Focusing happens on the stack row in the rail. A picker here would be a second way to say
+    // the same thing, and this segment is a read-out of that choice.
+    draw()
+    expect(screen.queryByLabelText('Show the focused layer')).toBeNull()
   })
 })

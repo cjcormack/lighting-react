@@ -163,6 +163,20 @@ export interface ActiveEffect {
   elementFilter: string | null
   stepTiming: boolean
   presetId: number | null
+  /**
+   * The Look this effect came out of, when it came out of one.
+   *
+   * Both this and [programmerLayerId] have been on the wire since the layer model landed and were
+   * simply never declared here. They are what lets the programmer's effect band say where an effect
+   * *lives* — "in Storm Wash · layer 2" rather than an unattributed row — which is the answer to
+   * "why can't I delete this?".
+   *
+   * Not interchangeable with [presetId], and not with each other: one Look may be applied by two
+   * layers, so the Look says what the effect is and the layer says which stack line spawned it.
+   */
+  lookId: number | null
+  /** The programmer layer that spawned it. Null for an effect the operator busked directly. */
+  programmerLayerId: number | null
   cueId: number | null
   timingSource: string
   /** True when the effect sits in the programmer's priority band. */

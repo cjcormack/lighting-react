@@ -1,8 +1,29 @@
 # Show Mode: Programming & Running
 
+> **Partly stale — read the banner before the body.** Two reworks have landed since most of this was
+> written, and only the first half has been brought up to date.
+>
+> **Current** (rewritten for desk-simplification sessions 1 and 2a): the routes, the cue surface and
+> the component map's `program/` rows.
+>
+> **Stale, deliberately not rewritten yet**: everything about the **Run** view and the transport —
+> the runner sections, the deep-link narrative, the two active-cue cursors, the mobile layouts. That
+> half is what session **2b** merges into `/show` under the Prompt Book's lock, which will rewrite
+> it wholesale; correcting it now would mean writing it twice. Where the body describes
+> `ProgramPage`, `ShowRunnerMobile`, `CueEditor`, `CueDetailSheet`, `activeEntryId` or a Theatre/Band
+> toggle, it is describing code that no longer exists.
+>
+> The plan is `lighting7/docs/plans/desk-simplification-plan.md`.
+
 Show Mode is the production show programming and playback system. It's split across two sibling routes, each with its own sidebar entry:
 
-- `/projects/:projectId/program` — the **Program view**: show assembly (ordering stacks, editing cues, tech-run detours). Start the show from the header Start button.
+- `/projects/:projectId/show` — the **Show view**: cue and stack authoring. Renamed from `/program`
+  in session 1, path and all, because the programmer became `/projects/:projectId/programmer` and two
+  live views one letter apart was the collision that had kept the programmer out of the nav.
+  `/program*` redirects, carrying the search string.
+- `/projects/:projectId/programmer` — the **Programmer**: the live value grid, its Look-layer stack
+  and its effects, all on one screen. Since session 2a its grid has a **scope** — Output / Local /
+  one layer — so the same cells serve the rig, your own busk, and a Look's stored rows.
 - `/projects/:projectId/run` — the **Run view**: keyboard-driven cue runner. When the show isn't running, this view shows a large Start CTA hero instead of the runner; when it is running, it shows the runner with a Stop button in the header.
 
 Splitting the two surfaces (rather than toggling between them via tabs on a single `/show` route) makes the running/stopped state obvious at a glance, puts the Start control where it's easy to find, and lets each view have its own primary action without conditional UI in the header.
@@ -40,12 +61,12 @@ The **Program view** is the single surface for authoring *and* assembling cues: 
 
 **Cue types**: `STANDARD` (a real cue) or `MARKER` (a visual separator *within* a stack — distinct from a SEPARATOR *stack* between stacks).
 
-## Program URLs
+## Show URLs
 
-- Overview (the ordered stack list): `/projects/:projectId/program`
-- Drilled into a stack: `/projects/:projectId/program/stacks/:stackId`
+- Overview (the ordered stack list): `/projects/:projectId/show`
+- Drilled into a stack: `/projects/:projectId/show/stacks/:stackId`
 - Expanded cue card (transient): `?cue=:cueId` on the stack path
-- Legacy `/cues`, `/cues/all`, `/cues/standalone` → `/program`; `/cues/stacks/:stackId` → `/program/stacks/:stackId`. The old `/program?stack=X&cue=Y` deep-link (from Run / Prompt Book "Edit Cue") is normalized to the path form on load.
+- Legacy `/cues`, `/cues/all`, `/cues/standalone` → `/show`; `/cues/stacks/:stackId` → `/show/stacks/:stackId`. The old `?stack=X&cue=Y` query form is normalized to the path form on load. `?cue=` itself is an external contract — the Prompt Book's rail card mints it.
 
 ## Architecture
 
@@ -84,7 +105,8 @@ API Layer          Type definitions + WebSocket subscription factories
 #### Component Layer (UI)
 | File | Purpose |
 |------|---------|
-| `src/routes/ProgramPage.tsx` | Route for `/projects/:projectId/program`. Hosts the show assembly surface: breadcrumb (`Program`), header Start Show button (or muted "Show running" chip when active), body = `ProgramView` (ShowOverview / StackDetail) with drill state, shared CueEditor sheet. Start Show navigates to `/run` on success. |
+| `src/routes/ShowPage.tsx` | Route for `/projects/:projectId/show` (and `/show/stacks/:stackId`). Header + `ShowBar`, body = `ProgramView` (ShowOverview / StackDetail) with drill state, plus the two `RecordSheet` mounts — one targeting a cue, one targeting a stack. |
+| `src/routes/ProgrammerPage.tsx` | Route for `/projects/:projectId/programmer`, and the `/program*` → `/show*` redirect. Source strip · action bar · **scope band** · workspace (grid + layer/FX rail). |
 | `src/routes/RunPage.tsx` | Route for `/projects/:projectId/run`. Breadcrumb (`Run`), header Stop button (when active), body = a Start CTA hero when inactive, or the runner when active. The runner swaps to `ShowRunnerMobile` when the runner container width drops below 600px. Owns keyboard handler, runner animation, entry switching, and a CueEditor sheet used by the mobile cue-list edit flow. |
 | `src/components/runner/ShowBar.tsx` | Top control bar: DBO, BPM/TAP, cue info, GO/BACK buttons (desktop runner) |
 | `src/components/runner/CueRow.tsx` | Cue list row with status icons, fade progress bars, click-to-requeue, and eye-icon detail view (desktop runner) |
@@ -96,20 +118,23 @@ API Layer          Type definitions + WebSocket subscription factories
 | `src/components/runner/MobileCueRow.tsx` | Lean cue row used inside `MobileCueListSheet` (no fixed notes/auto-pill columns) |
 | `src/components/runner/program/ProgramView.tsx` | Program body: routes between ShowOverview and StackDetail based on `drillStackId` |
 | `src/components/runner/program/ShowOverview.tsx` | The project's ordered stack list: drag reorder, **Create Stack** (in place) + **Add Separator**, per-stack actions menu (edit settings / sort-by-cue-number / delete). Activation controls live in `ProgramPage`'s header, not here. |
-| `src/components/runner/program/StackDetail.tsx` | Cue list within a stack, dnd-kit reorder, add cue/marker, "Stacks" back button |
+| `src/components/runner/program/StackDetail.tsx` | Cue list within a stack, dnd-kit reorder, **Record into `<stack>`** + Separator, "Stacks" back button. There is no "Add Cue": a cue is a captured state, so recording is the only way one is made (session 2a). |
 | `src/components/runner/program/ProgramCueRow.tsx` | Expandable cue row with inline-editable Q/Name/Fade cells, CueFxTable, count badges |
 | `src/components/runner/program/ProgramMarkerRow.tsx` | Interactive marker with inline rename/delete |
-| `src/components/runner/program/CueCardEditor/` | Inline cue editor (palette, presets, ad-hoc effects, triggers, properties) used by the expandable Program cue rows. Replaced the standalone FX-Cues `CueEditor`. |
+| `src/components/runner/program/CueCardEditor/` | The expandable cue row. **No longer an editor**: session 2a deleted its three panes (Targets · Cue properties · Layers) and their tab chrome, and the expanded body is now the read-only cue surface — `CueDetailContent`, which includes `CueValueGrid`, the same cells the programmer's grid draws. Two ways out: **Edit in Programmer** (Includes the cue) and **Cue properties…** (`CuePropertiesSheet`, which reuses the surviving `CuePropsPane`). |
+| `src/components/cues/CueValueGrid.tsx` | What a cue asserts, per head and property, read-only — built from `GET /cues/{id}/cooked` so the composition is the server's, not a second implementation of it. |
 | `src/hooks/useRunnerAnimation.ts` | requestAnimationFrame hook for fade/auto-advance progress |
 | `src/hooks/useNarrowContainer.ts` | ResizeObserver hook that returns `true` while a container's width is below a threshold. Used by `RunPage` to switch between desktop and mobile runner layouts. |
 | `src/lib/cueUtils.ts` | `buildCueInput()` -- converts a Cue to CueInput for mutations |
 
 #### Navigation
-Both views are registered in `src/navigation.ts` with `visibility: "active-only"` and `group: "live"`:
-- `program` → `/projects/${p}/program`
-- `run` → `/projects/${p}/run`
+Registered in `src/navigation.ts` with `visibility: "active-only"` and `group: "live"` — four entries
+in switcher order: `programmer`, `program` (**labelled "Show"**, id kept for stability), `run`,
+`prompt-book`. `/program*` redirects to `/show*` with the search string preserved; `/cue-stacks`
+redirects to `/run`.
 
-Legacy routes (`/show`, `/cue-stacks`, `/projects/:id/show`, `/projects/:id/cue-stacks`) redirect to `/run` so bookmarks still resolve.
+Note `/show` is no longer a legacy alias for `/run`: it was the old name for the *playback* view, and
+now names cue authoring, so an old bookmark lands on the better of the two answers.
 
 ## Data Model
 

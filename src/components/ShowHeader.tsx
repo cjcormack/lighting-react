@@ -36,8 +36,14 @@ interface ShowHeaderProps {
   onStart: () => void
   /** Awaited on confirm; the dialog closes on resolve and stays open on throw. */
   onStop: () => Promise<void>
-  /** View-specific buttons (e.g. Run's "Edit Cue"). Rendered to the LEFT of the switcher
-   *  so it never shifts the common controls' positions between views. */
+  /**
+   * View-specific buttons, rendered to the LEFT of the switcher so an appearing one never shifts
+   * the common controls between views.
+   *
+   * **No caller passes this today.** It was for Run's "Edit Cue", which is gone. Kept because the
+   * position rule above is the useful part and session 2b's merged view is the obvious next
+   * claimant; delete it if that lands without needing it.
+   */
   actions?: ReactNode
 }
 

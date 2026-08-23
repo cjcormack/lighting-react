@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { LayerRow, LookStack, type LayerHandlers } from '@/components/looks/LookStack'
 import { AddLayerSheet } from '@/components/cues/editor/AddLayerSheet'
 import { useLookListQuery } from '@/store/looks'
+import { useProgrammerScope, useProgrammerScopeActions } from './ProgrammerScope'
 import {
   programmerAddLayer,
   programmerMoveLayer,
@@ -32,6 +33,10 @@ export function ProgrammerLookStack() {
   const { data: allLayers } = useProgrammerLayersQuery()
   const { data: lookList } = useLookListQuery({ projectId }, { skip: !projectId })
   const [addOpen, setAddOpen] = useState(false)
+  // Null outside the programmer page. The stack is also rendered by surfaces with no grid beside
+  // it, and there the name badge stays a plain badge rather than a dead button.
+  const scope = useProgrammerScope()
+  const scopeActions = useProgrammerScopeActions()
 
   const looksById = useMemo(
     () => new Map((lookList ?? []).map((look) => [look.id, look])),
@@ -88,8 +93,15 @@ export function ProgrammerLookStack() {
         const layer = layers[index]
         if (layer) programmerPatchLayer(layer.layerId, { stomp })
       },
+      // The only handler that touches nothing on the server. Focus is a property of *this*
+      // client's grid: a second desk looking at the same programmer is entitled to be reading a
+      // different layer, and broadcasting a focus would drag its grid around under its hands.
+      onFocus: (index) => {
+        const layer = layers[index]
+        if (layer) scopeActions?.setScope({ kind: 'layer', layerId: layer.layerId })
+      },
     }),
-    [layers],
+    [layers, scopeActions],
   )
 
   const handleAdd = useCallback((layer: CueLayer) => {
@@ -123,6 +135,9 @@ export function ProgrammerLookStack() {
           </>
         }
         keyFor={keyFor}
+        focusedIndex={
+          scope?.kind === 'layer' ? layers.findIndex((l) => l.layerId === scope.layerId) : null
+        }
         footer={
           preview && (
             <div className="space-y-1.5">

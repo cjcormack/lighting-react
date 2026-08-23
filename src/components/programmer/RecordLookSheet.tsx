@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSelector } from 'react-redux'
 import { Loader2, XCircle } from 'lucide-react'
 import {
@@ -24,12 +24,8 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { formatError } from '@/lib/formatError'
-import { familyForCategory, type AttributeFamily } from '@/lib/attributeFamily'
-import { useFixtureListQuery } from '@/store/fixtures'
 import { useLookListQuery } from '@/store/looks'
 import { useRecordLookMutation } from '@/store/programmerOps'
-import { useProgrammerRevision } from '@/store/programmer'
-import { lightingApi } from '@/api/lightingApi'
 import { selectTargetKeys } from '@/store/selectionSlice'
 import type {
   PropertyMaskGroup,
@@ -38,6 +34,9 @@ import type {
   RecordSource,
 } from '@/store/programmerOps'
 import { MaskPicker, describeSkips } from './maskPicker'
+import { useLocalFamilyCounts } from './useLocalFamilyCounts'
+import { Badge } from '@/components/ui/badge'
+import { useActiveEffectsQuery } from '@/store/fixtureFx'
 
 export interface RecordLookSheetProps {
   open: boolean
@@ -114,6 +113,7 @@ export function RecordLookSheet({
   const [source, setSource] = useState<RecordSource>('TOUCHED')
   const [mask, setMask] = useState<PropertyMaskGroup[]>([])
   const [selectedOnly, setSelectedOnly] = useState(true)
+  const [effectIds, setEffectIds] = useState<number[]>([])
   const [lookId, setLookId] = useState<string>('')
   const [name, setName] = useState('')
   const [notes, setNotes] = useState('')
@@ -136,6 +136,10 @@ export function RecordLookSheet({
     // On by default here, unlike `RecordSheet`: see the class doc. Still guarded by `scoped`, so
     // an empty selection falls back to the whole programmer rather than sending a 400.
     setSelectedOnly(true)
+    // Effects default **off**, unlike the fixture selection. A value the operator busked is almost
+    // certainly part of the look; a chase they started to see what it looked like very often is not,
+    // and folding one in moves a running effect out of their hands.
+    setEffectIds([])
     setLookId(targetLookId != null ? String(targetLookId) : '')
     setName('')
     setNotes('')
@@ -162,6 +166,7 @@ export function RecordLookSheet({
         targets: scoped
           ? selectedKeys.map((key) => ({ type: 'fixture' as const, key }))
           : undefined,
+        effectIds: effectIds.length > 0 ? effectIds : undefined,
       }).unwrap()
       setResult(response)
     } catch {
@@ -282,6 +287,8 @@ export function RecordLookSheet({
 
           <MaskedAttributes value={mask} onChange={setMask} />
 
+          <RecordableEffects value={effectIds} onChange={setEffectIds} />
+
           {error != null && (
             <Alert variant="destructive">
               <XCircle className="size-4" />
@@ -322,50 +329,77 @@ function MaskedAttributes({
   value: PropertyMaskGroup[]
   onChange: (next: PropertyMaskGroup[]) => void
 }) {
-  return <MaskPicker value={value} onChange={onChange} counts={useProgrammerFamilyCounts()} />
+  return <MaskPicker value={value} onChange={onChange} counts={useLocalFamilyCounts()} />
 }
 
 /**
- * How many programmer entries fall in each attribute family, so an unmasked record isn't a
- * surprise — and the family the operator means is visibly the one carrying the values.
+ * The running programmer-band effects, tickable.
  *
- * Counts the **whole programmer**, not what this record will write — the selection narrows the
- * write and group expansion is server-side, so a client-side filter would drop group entries
- * rather than narrow honestly. `MaskPicker` labels them as such. Which families are in play is the
- * signal that matters and it survives the narrowing; the magnitude does not.
+ * Beside the per-family value counts because they are the *other* half of what a busked state is —
+ * `RecordLookSheet` had no notion of effects at all, so a look whose whole character was a chase
+ * recorded as a set of static values and quietly lost it.
  *
- * The category comes from the fixture list's property descriptors, indexed by **property name
- * across the whole rig** rather than per target. That is a deliberate simplification: a group
- * entry's `colour` is written through the members' own property, so it classifies the same way,
- * and looking a group up properly would mean fetching every group's detail to serve a hint.
- * Where two fixtures disagree on a name's category the first wins — and `familyForCategory`'s
- * catch-all means the answer is still a family, never a blank.
+ * Three things here surprise people, and all three are stated on screen rather than left to be
+ * discovered:
+ *
+ * - an **unticked effect keeps running**. Leaving one out of a look is not the same as stopping it,
+ *   which is exactly why these are checkboxes and not a "take everything" toggle;
+ * - **the tempo travels, the timing does not**. `LookEffect` has speed-master fields and no
+ *   delay/interval, so a busked "fire after 3s" becomes the *layer's* delay — per-use rather than
+ *   baked in;
+ * - a ticked effect is **moved**, not copied: the server takes it out of the band, because the
+ *   layer applying this look starts running it and two copies would beat against each other.
+ *
+ * Only loose band effects are offered. One already owned by a layer belongs to that Look already,
+ * and recording it into a second would duplicate a running instance rather than move it.
  */
-function useProgrammerFamilyCounts(): Partial<Record<AttributeFamily, number>> {
-  const { data: fixtures } = useFixtureListQuery()
-  // The entry map lives outside Redux, so a revision tick is how a component knows to re-read it.
-  const revision = useProgrammerRevision()
+function RecordableEffects({
+  value,
+  onChange,
+}: {
+  value: number[]
+  onChange: (next: number[]) => void
+}) {
+  const { data: effects } = useActiveEffectsQuery()
+  const candidates = (effects ?? []).filter(
+    (e) => e.programmerOwned && e.programmerLayerId == null,
+  )
+  if (candidates.length === 0) return null
 
-  const categoryByProperty = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const fixture of fixtures ?? []) {
-      for (const property of fixture.properties) {
-        if (!map.has(property.name)) map.set(property.name, property.category)
-      }
-    }
-    return map
-  }, [fixtures])
-
-  return useMemo(() => {
-    void revision
-    const counts: Partial<Record<AttributeFamily, number>> = {}
-    for (const entry of lightingApi.programmer.getState().entries.values()) {
-      const category = categoryByProperty.get(entry.propertyName) ?? entry.propertyName
-      const family = familyForCategory(category)
-      counts[family] = (counts[family] ?? 0) + 1
-    }
-    return counts
-  }, [categoryByProperty, revision])
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-medium">Effects</span>
+        <Badge variant="secondary" className="px-1.5 text-[10px] tabular-nums">
+          {candidates.length}
+        </Badge>
+        <span className="text-xs text-muted-foreground">tempo travels, timing does not</span>
+      </div>
+      {candidates.map((effect) => (
+        <label key={effect.id} className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="size-4"
+            checked={value.includes(effect.id)}
+            onChange={(e) =>
+              onChange(
+                e.target.checked
+                  ? [...value, effect.id]
+                  : value.filter((id) => id !== effect.id),
+              )
+            }
+          />
+          <span className="truncate">{effect.effectType}</span>
+          <span className="shrink-0 font-mono text-xs text-muted-foreground">
+            → {effect.propertyName}
+          </span>
+        </label>
+      ))}
+      <p className="text-xs text-muted-foreground">
+        An effect you leave out keeps running in the programmer — leaving it out is not stopping it.
+      </p>
+    </div>
+  )
 }
 
 /**
@@ -397,7 +431,10 @@ function RecordLookResult({ result }: { result: RecordLookResponse }) {
         <p className="font-medium">
           {result.created ? 'Created' : 'Updated'} “{result.look.name}” — {result.rowsWritten} row
           {result.rowsWritten === 1 ? '' : 's'} written
-          {result.rowsRemoved > 0 ? `, ${result.rowsRemoved} removed` : ''}.
+          {result.rowsRemoved > 0 ? `, ${result.rowsRemoved} removed` : ''}
+          {result.effectsWritten
+            ? `, ${result.effectsWritten} effect${result.effectsWritten === 1 ? '' : 's'} moved in`
+            : ''}.
         </p>
         {notes.length > 0 && <p className="text-xs text-muted-foreground">{notes.join(' · ')}</p>}
         {skipNote && <p className="text-xs text-amber-600 dark:text-amber-500">{skipNote}</p>}

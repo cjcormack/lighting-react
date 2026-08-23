@@ -107,6 +107,14 @@ export function ShowPage() {
   // the stage into a cue, and it was the lossy one.
   const { includeCue, isLoading: includePending } = useInclude(projectIdNum)
   const [recordCueId, setRecordCueId] = useState<number | null>(null)
+  /**
+   * Record into a *new* cue in this stack — what replaced "Add Cue".
+   *
+   * A separate piece of state from `recordCueId` rather than a union, because the two name ids from
+   * different tables: a cue id and a stack id collide freely, and `RecordSheet` keys its draft on
+   * which one it was given. Folding them together is exactly the bug `ProgrammerSheets` documents.
+   */
+  const [recordStackId, setRecordStackId] = useState<number | null>(null)
 
   // Set/clear the `?cue=` modifier without touching the stack path (replace: no history spam).
   const setExpandedCueId = useCallback(
@@ -189,10 +197,13 @@ export function ShowPage() {
 
   const handleRecordInto = useCallback((cueId: number) => setRecordCueId(cueId), [])
 
+  const handleRecordIntoStack = useCallback((stackId: number) => setRecordStackId(stackId), [])
+
   const handleIncludeCue = useCallback((cueId: number) => void includeCue(cueId), [includeCue])
 
   // ── Deep-link normalizer + auto-drill ──
-  // - Legacy `/show?stack=X&cue=Y` links (from Run / Prompt Book "Edit Cue") are rewritten to
+  // - Legacy `/show?stack=X&cue=Y` links (the Prompt Book's "Edit cue" mints the path form now)
+  //   are rewritten to
   //   the new path scheme `/show/stacks/X?cue=Y`.
   // - Otherwise, when the show is running, drill into the active stack on first mount so the
   //   operator lands where the action is.
@@ -291,6 +302,7 @@ export function ShowPage() {
               onExpandedCueChange={setExpandedCueId}
               onDuplicate={handleDuplicate}
               onRecordInto={handleRecordInto}
+              onRecordIntoStack={handleRecordIntoStack}
               onIncludeCue={handleIncludeCue}
               includePending={includePending}
             />
@@ -305,6 +317,14 @@ export function ShowPage() {
           projectId={projectIdNum}
           targetCueId={recordCueId}
           targetCueName={cueNameFor(stacks, recordCueId)}
+        />
+      )}
+      {recordStackId != null && (
+        <RecordSheet
+          open
+          onOpenChange={(open) => !open && setRecordStackId(null)}
+          projectId={projectIdNum}
+          defaultCueStackId={recordStackId}
         />
       )}
     </div>

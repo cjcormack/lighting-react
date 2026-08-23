@@ -10,6 +10,8 @@ import {
   findWheel,
   findZoomProperty,
 } from '../../store/fixtures'
+import { familyForCategory } from '../../lib/attributeFamily'
+import type { AttributeFamily } from '../../lib/attributeFamily'
 import type {
   ChannelRef,
   ColourPropertyDescriptor,
@@ -59,6 +61,40 @@ export const COLUMN_DEFS: ColumnDef[] = [
 export const DEFAULT_COLUMN_VISIBILITY: Record<ColumnKey, boolean> = Object.fromEntries(
   COLUMN_DEFS.map((d) => [d.key, d.defaultVisible]),
 ) as Record<ColumnKey, boolean>
+
+/**
+ * The canonical property category behind each column — the cross-type vocabulary the column was
+ * built from in the first place (see this file's header).
+ *
+ * Exists so a column *header* can be classified without a fixture to ask, which is what layer
+ * scope needs to grey out the columns outside a layer's `propertyMask`. Per-cell classification
+ * still goes through the resolution's own descriptor, because one column can carry different
+ * property kinds across fixture types.
+ *
+ * `attributeFamily.ts` records that a `FAMILY_COLUMNS` constant here was deliberately **deleted**
+ * once, so this deserves a word on why it is back and different. That one mapped a family to its
+ * columns — the wrong direction, and a second place to state which columns exist. This maps a
+ * column to the category it already is, and `columns.test.ts` pins it against `familyForCategory`
+ * so the two cannot drift.
+ */
+export const COLUMN_CATEGORY: Record<ColumnKey, PropertyCategory> = {
+  dimmer: 'dimmer',
+  colour: 'colour',
+  // The synthetic pan/tilt pair; `familyForCategory` answers it ahead of its own lookup.
+  position: 'position' as PropertyCategory,
+  gobo: 'gobo',
+  zoom: 'zoom',
+  focus: 'focus',
+  iris: 'iris',
+  prism: 'prism',
+  strobe: 'strobe',
+  speed: 'speed',
+}
+
+/** The attribute family a column belongs to, for a header with no fixture to classify against. */
+export function columnFamily(col: ColumnKey): AttributeFamily {
+  return familyForCategory(COLUMN_CATEGORY[col])
+}
 
 /**
  * How one fixture's descriptors satisfy one column. Position is synthesised to

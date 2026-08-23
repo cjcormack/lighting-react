@@ -305,8 +305,8 @@ function App() {
           path: "projects/:projectId/programmer/fx",
           element: <ProgrammerFxRedirect />,
         },
-        // Legacy `/program*` → `/show*`, search preserved (`?cue=` deep links from Run and the
-        // Prompt Book's "Edit Cue").
+        // Legacy `/program*` → `/show*`, search preserved: `?cue=` is an external contract, minted
+        // by the Prompt Book's "Edit cue" (its rail card — the only live producer of one).
         {
           path: "projects/:projectId/program",
           element: <LegacyProgramRedirect />,

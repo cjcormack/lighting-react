@@ -7,11 +7,16 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { LocateButton } from '../fixtures/LocateButton'
-import { COLUMN_DEFS } from './columns'
+import { COLUMN_DEFS, columnFamily } from './columns'
 import { rowLocateTarget } from './rowModel'
 import { buildRowCells, useRowValues } from './useRowValues'
+import { useScopedRowValues } from './useScopedRowValues'
+import { parsePropertyMask } from '../../lib/attributeFamily'
+import { AddToTargetsButton } from '../programmer/AddToTargetsButton'
+import { useLookRowStore } from '../programmer/LookRowStore'
+import { useProgrammerScope, useProgrammerScopeActions } from '../programmer/ProgrammerScope'
 import { useRowOwnership } from './useRowOwnership'
-import { applyStagedValue, ownershipCellClass, ownershipTitle } from './ownership'
+import { applyStagedValue, layerCellClass, ownershipCellClass, ownershipTitle } from './ownership'
 import { cellSelectionClass } from './cellSelection'
 import { columnRange, rectFrom, rowIndexRange, type ColumnBand } from './cellMarquee'
 import { listSelectionIntentFor } from './listSelectionModel'
@@ -24,6 +29,7 @@ import { SettingCell } from './cells/SettingCell'
 import type { ColumnKey } from './columns'
 import type { CellCommit, FixtureRow, GroupRow, InfoRow, Row, RowId } from './rowModel'
 import type { RowCell } from './useRowValues'
+import type { CellOwnership } from './useRowOwnership'
 
 const ROW_HEIGHT = 36
 
@@ -148,6 +154,8 @@ export function FixturesTable({
     [],
   )
 
+  const inertColumns = useInertColumns(visibleColumns)
+
   return (
     <div
       ref={scrollRef}
@@ -174,7 +182,14 @@ export function FixturesTable({
               key={col}
               // The marquee measures its column bands from these — see `useCellMarquee`.
               data-column-header={col}
-              className="px-1.5 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
+              className={cn(
+                'px-1.5 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground',
+                // Greyed rather than hidden: an operator looking for Colour in a
+                // POSITION-masked layer needs to learn *why* it is unavailable, and a column that
+                // vanished would read as a broken grid. The cells beneath say the same thing.
+                inertColumns.has(col) && 'opacity-40',
+              )}
+              title={inertColumns.has(col) ? 'Outside this layer’s mask' : undefined}
             >
               {label}
             </div>
@@ -523,6 +538,30 @@ interface RowViewProps {
   cellSelection?: CellSelection
 }
 
+const NO_INERT_COLUMNS: ReadonlySet<ColumnKey> = new Set()
+
+/**
+ * Which column *headers* the focused layer does not assert.
+ *
+ * Derived from the layer's `propertyMask` and the column's own canonical category, because a header
+ * has no fixture to classify against — the cells beneath it still use each resolution's real
+ * descriptor, so one column carrying different property kinds across fixture types is classified
+ * per fixture where it matters. Empty outside layer scope, so the two plain list routes are
+ * untouched.
+ */
+function useInertColumns(visibleColumns: readonly ColumnKey[]): ReadonlySet<ColumnKey> {
+  const scope = useProgrammerScope()
+  const store = useLookRowStore()
+  const mask = store?.propertyMask
+  const inLayerScope = scope?.kind === 'layer'
+  return useMemo(() => {
+    if (!inLayerScope) return NO_INERT_COLUMNS
+    const families = parsePropertyMask(mask)
+    if (families.length === 0) return NO_INERT_COLUMNS
+    return new Set(visibleColumns.filter((col) => !families.includes(columnFamily(col))))
+  }, [inLayerScope, mask, visibleColumns])
+}
+
 /** Checkbox indent per nesting depth (member rows 1, element rows 2). */
 const INDENT_CLASS = ['', 'ml-5', 'ml-10']
 
@@ -545,12 +584,29 @@ const RowView = React.memo(function RowView({
 }: RowViewProps) {
   // Hooks run unconditionally; divider rows just have no cells.
   const cells = useMemo(() => buildRowCells(row, visibleColumns), [row, visibleColumns])
-  const values = useRowValues(cells)
+  // Always the live wire read: it is what the editor opens at, so a busk begins where the rig is
+  // even in a scope that displays an em-dash. Free when the scope is Output, which reads the same
+  // values through this same hook.
+  const liveValues = useRowValues(cells)
+  const scoped = useScopedRowValues(cells, liveValues)
+  const scope = useProgrammerScope()
   // Passing an empty cell list is the "off" state: useRowOwnership then registers no
   // subscriptions and returns a constant, so the plain list views pay nothing for this.
-  const ownershipCells = showOwnership ? cells : EMPTY_CELLS
+  //
+  // Layer scope switches it off too, and for a different reason: the engine's provenance describes
+  // the *rig*, and what is on screen there is a Look's stored rows. A cue-blue ring around a row
+  // in a library entity would be answering a question nobody asked. Its own tones say what matters
+  // — outside the mask, outside the targets — via `layerCellClass`.
+  const ownershipCells = showOwnership && scope?.kind !== 'layer' ? cells : EMPTY_CELLS
   const ownership = useRowOwnership(ownershipCells)
   const cellByCol = useMemo(() => new Map(cells.map((cell) => [cell.col, cell])), [cells])
+  // Every fixture this row covers — a group row's members, a fixture row's own key. The same
+  // expansion the cells were resolved through, so "is this row in the layer's targets?" and "what
+  // would an edit here write?" cannot disagree.
+  const rowTargetKeys = useMemo(
+    () => [...new Set(cells.flatMap((cell) => cell.targetKeys))],
+    [cells],
+  )
 
   if (row.kind === 'divider') {
     return (
@@ -667,6 +723,16 @@ const RowView = React.memo(function RowView({
               <TooltipContent>Details for {qualifiedName}</TooltipContent>
             </Tooltip>
             <LocateButton type={locate.type} targetKey={locate.key} name={qualifiedName} iconOnly />
+            {/* Renders nothing outside layer scope, and nothing for a row the layer already
+                targets — so this span is unchanged on the two plain list routes. Element rows are
+                left out: a Look row addresses the fixture, not one of its elements. */}
+            {!isElement && (
+              <AddToTargetsButton
+                target={locate}
+                fixtureKeys={rowTargetKeys}
+                name={qualifiedName}
+              />
+            )}
           </span>
         )}
       </div>
@@ -674,8 +740,12 @@ const RowView = React.memo(function RowView({
       {/* Property cells */}
       {visibleColumns.map((col) => {
         const cell = cellByCol.get(col)
-        const value = values[col]
-        if (!cell || !value) {
+        // The live value is what the editor opens at; `state.value` is what the cell displays.
+        // No live value means the column resolves to nothing on this fixture — a blank, not an
+        // em-dash, because there is nothing here to set.
+        const live = liveValues[col]
+        const state = scoped[col]
+        if (!cell || !live) {
           return <div key={col} className="h-full" />
         }
         const owned = ownership[col]
@@ -690,7 +760,12 @@ const RowView = React.memo(function RowView({
             className={cn(
               'relative h-full min-w-0 py-0.5',
               ownershipCellClass(owned),
+              layerCellClass(scope?.kind === 'layer' ? state : undefined),
               cellSelectionClass(selectedCell === true),
+              // Output is a read of the cook. Editing it would have to pick a destination, and
+              // choosing one is what the scope switcher is for — so the cell reads and the
+              // overlay button below takes the click instead.
+              state?.editable === false && 'pointer-events-none',
             )}
             title={ownershipTitle(owned)}
           >
@@ -710,11 +785,24 @@ const RowView = React.memo(function RowView({
             )}
             <PropertyCell
               cell={cell}
-              value={applyStagedValue(value, owned?.staged, cell.resolutions)}
+              // The staged overlay is applied to whatever the scope resolved, not only to the live
+              // read: in Output — where `state.value` is always set — short-circuiting past
+              // `applyStagedValue` dropped the optimistic feedback for a write still in flight, and
+              // that cell then sat on its old value until the wire caught up. In layer scope
+              // ownership is switched off, so `owned` is undefined there and this is a no-op.
+              value={applyStagedValue(
+                state?.value ?? live,
+                owned?.staged,
+                cell.resolutions,
+              )}
+              // Not `state == null`: a divider or a scope with no opinion is not the same as a
+              // scope that has one and says "nothing here".
+              placeholder={state !== undefined && state.value === undefined}
               batchCount={batchCountFor(row, col)}
               onBeginEdit={() => onBeginCellEdit(row, col)}
               onCommit={(commit) => onCellCommit(row, col, commit)}
             />
+            {scope?.kind === 'output' && <OwnerJumpOverlay owned={owned} />}
           </div>
         )
       })}
@@ -722,15 +810,68 @@ const RowView = React.memo(function RowView({
   )
 })
 
+/**
+ * In Output scope, a cell's tint is a *destination*: clicking it points the grid at whatever won
+ * the cell. That is what finally makes the ownership colours navigational rather than decorative,
+ * and it is why they were worth making learnable.
+ *
+ * An overlay rather than a change to the four cell editors. All four are Popover triggers, and the
+ * marquee's whole design turns on click-versus-drag (`useCellMarquee`); pressing the jump into each
+ * of them would mean four chances to break that. `pointer-events-none` on the cell content above
+ * makes this the only thing under the cursor, while `pointerdown` still bubbles to the rows wrapper
+ * so drag-select is untouched.
+ *
+ * **`pointer-events-auto` is mandatory here**, and its absence is invisible to a test.
+ * `pointer-events` is an *inherited* property, so the wrapper's `pointer-events-none` — the very
+ * thing that clears the cursor's path to this overlay — reaches this button too and made the jump
+ * inert in a real browser. `fireEvent.click` dispatches straight at the node and never consults it,
+ * so the suite passed throughout.
+ *
+ * Renders nothing when there is nowhere to go, so the cursor never promises a jump it won't make:
+ * a `mixed` cell has no single owner to name, and a `layerId` belonging to a **cue's** layer is not
+ * in this programmer's stack — `focusLayer` reports that and the click falls through.
+ */
+function OwnerJumpOverlay({ owned }: { owned?: CellOwnership }) {
+  const actions = useProgrammerScopeActions()
+  const layer = owned?.layer
+  const layerId = layer && !layer.mixed ? layer.layerId : undefined
+  const toLocal = layerId == null && owned?.source === 'programmer'
+  if (!actions || (layerId == null && !toLocal)) return null
+
+  const label = toLocal
+    ? 'Show your own values'
+    : `Show the look layer that set this${layer?.name ? ` — ${layer.name}` : ''}`
+
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      className="pointer-events-auto absolute inset-0 cursor-zoom-in rounded-sm focus-visible:ring-1 focus-visible:ring-ring"
+      onClick={() => {
+        if (layerId != null && actions.focusLayer(layerId)) return
+        if (toLocal) actions.setScope({ kind: 'local' })
+      }}
+    />
+  )
+}
+
 function PropertyCell({
   cell,
   value,
+  placeholder,
   batchCount,
   onBeginEdit,
   onCommit,
 }: {
   cell: RowCell
+  /**
+   * What the editor opens at. In a scope that holds nothing here this is still the *live* value,
+   * with [placeholder] suppressing its display — so clicking an em-dash starts the slider where
+   * the rig is rather than at zero.
+   */
   value: NonNullable<ReturnType<typeof useRowValues>[ColumnKey]>
+  placeholder?: boolean
   batchCount: number
   onBeginEdit: () => void
   onCommit: (commit: CellCommit) => void
@@ -742,6 +883,7 @@ function PropertyCell({
           value={value}
           resolutions={cell.resolutions}
           batchCount={batchCount}
+          placeholder={placeholder}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
         />
@@ -752,6 +894,7 @@ function PropertyCell({
           value={value}
           resolutions={cell.resolutions}
           batchCount={batchCount}
+          placeholder={placeholder}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
         />
@@ -762,6 +905,7 @@ function PropertyCell({
           value={value}
           resolutions={cell.resolutions}
           batchCount={batchCount}
+          placeholder={placeholder}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
         />
@@ -772,6 +916,7 @@ function PropertyCell({
           value={value}
           resolutions={cell.resolutions}
           batchCount={batchCount}
+          placeholder={placeholder}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
         />

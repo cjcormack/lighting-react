@@ -2,7 +2,14 @@ import { useMemo } from 'react'
 import { lightingApi } from '../../api/lightingApi'
 import { useEditorContext } from '../../components/lighting-editor/EditorContext'
 import { rgbToHex } from '../../components/fx/colourUtils'
-import { parseProgrammerEntryValue, serializeLevel } from '../../lib/programmerValue'
+import {
+  parseProgrammerEntryValue,
+  parseProgrammerValue,
+  serializeColour,
+  serializeLevel,
+  serializePosition,
+} from '../../lib/programmerValue'
+import { lookRowKey, useLookRowStore } from '../programmer/LookRowStore'
 import type { PlannedWrite } from './rowModel'
 import type { ChannelRef, ColourPropertyDescriptor } from '../../store/fixtures'
 
@@ -111,6 +118,10 @@ export function applyPlannedWrite(writers: CellWriters, planned: PlannedWrite): 
 
 export function useCellWriters(): CellWriters {
   const ctx = useEditorContext()
+  // Null outside the programmer, and null in the programmer's other two scopes. Read
+  // unconditionally — a hook cannot be called behind the `ctx.kind` test below.
+  const lookStore = useLookRowStore()
+  const setLookValue = ctx.kind === 'lookLayer' ? lookStore?.setValue : undefined
 
   return useMemo<CellWriters>(() => {
     const writeChannelValue = (
@@ -130,6 +141,10 @@ export function useCellWriters(): CellWriters {
         return
       }
       if (ctx.kind === 'look') return
+      if (setLookValue) {
+        setLookValue(fixtureKey, propertyName, serializeLevel(value))
+        return
+      }
       lightingApi.programmer.set('fixture', fixtureKey, propertyName, serializeLevel(value))
     }
 
@@ -139,6 +154,14 @@ export function useCellWriters(): CellWriters {
 
       writeColour(fixtureKey, property, r, g, b, w, a, uv) {
         if (ctx.kind === 'look') return
+        if (setLookValue) {
+          // **No wire sampling here**, unlike the live branch below. A stored Look row must not
+          // bake in the current stage state of a fixture the layer may not even target: an
+          // undefined component is one the caller did not set, and `serializeColour` elides a
+          // zero, so the row stays as narrow as the edit was.
+          setLookValue(fixtureKey, property.name, serializeColour(r, g, b, w, a, uv))
+          return
+        }
         // A batch commit's white component was chosen against a fixture that
         // HAS a white channel (the picker's pure-white branch emits
         // 0,0,0,w=255). A target without one would otherwise get its RGB
@@ -191,6 +214,31 @@ export function useCellWriters(): CellWriters {
       writePosition(fixtureKey, pan, tilt, panValue, tiltValue, axisProperties) {
         if (ctx.kind === 'look') return
         if (panValue === undefined && tiltValue === undefined) return
+        if (setLookValue) {
+          // Separate axis sliders write the axis that moved and leave the other row alone; a real
+          // `position` descriptor is one atomic row, so a single-axis nudge has to supply both —
+          // and takes the other from the *draft or the Look*, never from the wire, for the reason
+          // `writeColour` gives above.
+          if (axisProperties) {
+            if (panValue !== undefined && axisProperties.pan) {
+              setLookValue(fixtureKey, axisProperties.pan, serializeLevel(panValue))
+            }
+            if (tiltValue !== undefined && axisProperties.tilt) {
+              setLookValue(fixtureKey, axisProperties.tilt, serializeLevel(tiltValue))
+            }
+            return
+          }
+          const held = lookStore?.draft.get(fixtureKey, 'position')
+          const stored = held ?? lookRowValueOf(lookStore, fixtureKey, 'position')
+          const parsed = stored ? parseProgrammerValue(stored) : null
+          const base = parsed?.kind === 'position' ? parsed : { pan: 0, tilt: 0 }
+          setLookValue(
+            fixtureKey,
+            'position',
+            serializePosition(panValue ?? base.pan, tiltValue ?? base.tilt),
+          )
+          return
+        }
         if (ctx.kind === 'cue') {
           // setProperty('position') takes both axes; fill an omitted one from
           // the fixture's own current value so a pan-only nudge doesn't
@@ -253,5 +301,16 @@ export function useCellWriters(): CellWriters {
         )
       },
     }
-  }, [ctx])
+  }, [ctx, lookStore, setLookValue])
+}
+
+/** A committed Look row value, in canonical string form, or undefined. */
+function lookRowValueOf(
+  store: ReturnType<typeof useLookRowStore>,
+  targetKey: string,
+  propertyName: string,
+): string | undefined {
+  const staged = store?.serverRows.get(lookRowKey(targetKey, propertyName))
+  if (!staged) return undefined
+  return staged.kind === 'position' ? serializePosition(staged.pan, staged.tilt) : undefined
 }
