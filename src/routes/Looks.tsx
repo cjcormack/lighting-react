@@ -327,7 +327,9 @@ export function ProjectLooks() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="p-4 space-y-4">
+      {/* `@container`: the family filter's labels are a container query, and a missing ancestor
+          would drop them silently. See ViewSwitcher's LABEL_AT_* constants. */}
+      <div className="@container p-4 space-y-4">
         <Breadcrumbs projectName={project.name} currentPage="Looks" />
         <div className="flex items-center justify-between">
           <div>

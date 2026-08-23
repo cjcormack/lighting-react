@@ -31,7 +31,7 @@ export interface IncludeSheetProps {
 }
 
 /**
- * Pick a cue *or a look* to Include. Reached from the programmer toolbar; the Program view
+ * Pick a cue *or a look* to Include. Reached from the programmer action bar; the Show view
  * includes straight from the cue row it is already showing, so it doesn't need this picker.
  *
  * One sheet with two tabs rather than two sheets, because the programmer has exactly one include

@@ -3,8 +3,7 @@ import { useParams, useNavigate, Navigate, Link } from 'react-router'
 import { useSelector, useDispatch } from 'react-redux'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Loader2, RotateCcw, Play } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { Loader2, Play } from 'lucide-react'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import {
   useProjectCueStackListQuery,
@@ -19,10 +18,8 @@ import {
   useAdvanceProgramMutation,
   useGoToStackMutation,
 } from '../store/cueStacks'
-import { useFxStateQuery } from '../store/fx'
 import { useProjectCueLocationsQuery, useProjectPromptBookQuery } from '../store/promptBooks'
 import { positionLabelFor } from '../lib/promptBook/geometry'
-import { lightingApi } from '../api/lightingApi'
 import {
   go,
   back,
@@ -37,6 +34,7 @@ import { OutOfOrderBanner } from '../components/runner/OutOfOrderBanner'
 import { cueNumberColumnChars, detectOutOfOrder } from '@/lib/cueNumber'
 import { ShowBar } from '../components/ShowBar'
 import { RunCueCard } from '../components/runner/run/RunCueCard'
+import { StackTabStrip } from '../components/runner/run/StackTabStrip'
 import {
   RunMobile,
   type RunnerDisplayState,
@@ -70,9 +68,15 @@ export function RunRedirect() {
   return null
 }
 
-// Legacy redirects (/show, /projects/:id/show, /cue-stacks, /projects/:id/cue-stacks)
-// all land on /run — Run is the default landing whether or not the show is active.
-export function LegacyShowRedirect() {
+/**
+ * Legacy `/cue-stacks` and `/projects/:id/cue-stacks` → `/run`. Run is the default landing whether
+ * or not the show is active.
+ *
+ * `/show` and `/projects/:id/show` used to redirect here as well — the *playback* view was called
+ * Show before it became Run. That name now belongs to the cue-authoring view, so those two paths
+ * are real routes again and this handler no longer claims them.
+ */
+export function LegacyCueStacksRedirect() {
   const { projectId } = useParams()
   if (projectId) {
     return <Navigate to={`/projects/${projectId}/run`} replace />
@@ -88,7 +92,6 @@ export function RunPage() {
   const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
   const { data: stacks, isLoading: stacksLoading } = useProjectCueStackListQuery(projectIdNum)
-  const { data: fxState } = useFxStateQuery()
   const { data: programState } = useProjectProgramStateQuery(projectIdNum)
   const { data: cueLocations } = useProjectCueLocationsQuery(projectIdNum)
   // The book carries coverPages — the front-matter offset applied to each cue's page label.
@@ -311,10 +314,6 @@ export function RunPage() {
     setDbo((d) => !d)
   }, [])
 
-  const handleTap = useCallback(() => {
-    lightingApi.fx.tap()
-  }, [])
-
   // Keyboard handler — Space=GO, Backspace=BACK. Only mounted on Run so no mode guard needed.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -491,7 +490,7 @@ export function RunPage() {
                   Create at least one cue stack before starting.
                 </p>
                 <Button asChild variant="outline">
-                  <Link to={`/projects/${projectIdNum}/program`}>Go to Program</Link>
+                  <Link to={`/projects/${projectIdNum}/show`}>Go to Show</Link>
                 </Button>
               </>
             ) : (
@@ -526,12 +525,10 @@ export function RunPage() {
               stack={stack}
               multiStack={runnableStackCount > 1}
               display={runnerDisplay}
-              bpm={fxState?.bpm ?? null}
               dbo={dbo}
               onGo={handleGo}
               onBack={handleBack}
               onDbo={handleDbo}
-              onTap={handleTap}
               onSwitchToStack={handleSwitchToStack}
               onRequeueCue={handleCueRequeue}
               projectId={projectIdNum}
@@ -546,8 +543,6 @@ export function RunPage() {
                 stackName={runnableStackCount > 1 ? undefined : (stack?.name ?? null)}
                 dbo={dbo}
                 onDbo={handleDbo}
-                bpm={fxState?.bpm ?? null}
-                onTap={handleTap}
                 activeNumber={activeCue?.cueNumber ? `Q${activeCue.cueNumber}` : null}
                 activeName={activeCue?.name ?? null}
                 standbyNumber={standbyCue?.cueNumber ? `Q${standbyCue.cueNumber}` : null}
@@ -561,52 +556,14 @@ export function RunPage() {
                 showShortcuts
               />
 
-              {/* Stack tabs — hidden when the show has a single stack (nothing to switch to). */}
-              {runnableStackCount > 1 && (
-              <div className="flex h-12 shrink-0 items-stretch border-b overflow-x-auto">
-                {stacks.map((s) => {
-                  if (s.type === 'SEPARATOR') {
-                    return (
-                      <div
-                        key={s.id}
-                        className="flex items-center h-full px-2 gap-1.5 shrink-0 pointer-events-none"
-                      >
-                        <div className="w-px h-4 bg-border" />
-                        <span className="text-xs font-medium uppercase text-muted-foreground whitespace-nowrap">
-                          {s.label ?? s.name}
-                        </span>
-                        <div className="w-px h-4 bg-border" />
-                      </div>
-                    )
-                  }
-                  const standardCount = s.cues.filter((c) => c.cueType === 'STANDARD').length
-                  return (
-                    <Button
-                      key={s.id}
-                      variant="ghost"
-                      onClick={() => handleSwitchToStack(s)}
-                      className={cn(
-                        'flex items-center gap-2 px-5 h-full rounded-none border-r text-xs font-medium text-muted-foreground relative shrink-0',
-                        'hover:text-foreground hover:bg-muted/10',
-                        s.id === activeStackId &&
-                          'text-foreground bg-muted/20 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary',
-                      )}
-                    >
-                      {s.id !== activeStackId && s.activeCueId != null && (
-                        <span className="size-1.5 rounded-full bg-green-500 shadow-[0_0_6px_currentColor]" />
-                      )}
-                      {s.name}
-                      {s.loop && (
-                        <RotateCcw className="size-3 text-muted-foreground" />
-                      )}
-                      <span className="font-mono text-[9.5px] rounded-full border bg-muted/40 px-1.5 text-muted-foreground/80 ml-0.5">
-                        {standardCount}
-                      </span>
-                    </Button>
-                  )
-                })}
-              </div>
-              )}
+              {/* Stack tabs — renders nothing for a single-stack show (nothing to switch to);
+                  the ShowBar carries the stack name in that case. */}
+              <StackTabStrip
+                stacks={stacks}
+                activeStackId={activeStackId}
+                runnableStackCount={runnableStackCount}
+                onSwitchToStack={handleSwitchToStack}
+              />
 
               {/* OOO banner */}
               {ooo && (

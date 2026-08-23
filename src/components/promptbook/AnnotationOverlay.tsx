@@ -315,7 +315,7 @@ const cueNoteStyle: BubbleStyle = {
 /**
  * Cue note in the right gutter, positioned like {@link NoteCallout} — top-aligned to the cue's
  * anchored text, tail against the text's right edge. Editable in place when the book is
- * unlocked, so a note can be written without leaving for the Program editor.
+ * unlocked, so a note can be written without leaving for the Show editor.
  */
 export function CueNoteCallout({
   label,

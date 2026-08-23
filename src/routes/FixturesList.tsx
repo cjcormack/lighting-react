@@ -3,13 +3,8 @@ import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from '
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Columns3, Lightbulb, Loader2, Search } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { Lightbulb, Loader2, Search } from 'lucide-react'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import {
   FIXTURES_VIEW_KEY,
@@ -20,7 +15,14 @@ import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import { useFixtureListQuery } from '../store/fixtures'
 import { useGroupListQuery } from '../store/groups'
 import { usePersistentState } from '../hooks/usePersistentState'
-import { COLUMN_DEFS, DEFAULT_COLUMN_VISIBILITY } from '../components/fixtures-list/columns'
+import { useCellSelection } from '../components/fixtures-list/useCellSelection'
+import type { CellRef } from '../components/fixtures-list/cellSelectionModel'
+import {
+  ColumnsMenu,
+  useColumnVisibility,
+  visibleColumnsFrom,
+  type ColumnVisibility,
+} from '../components/fixtures-list/ColumnsMenu'
 import {
   buildRows,
   coveredFixtureKeys,
@@ -126,7 +128,8 @@ export function ProjectFixturesList() {
 
   return (
     <Card className={LIST_PAGE_CARD_CLASS}>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      {/* `@container` — see ViewSwitcher's LABEL_AT_* constants. */}
+      <div className="@container mb-4 flex flex-wrap items-center justify-between gap-3">
         <Breadcrumbs projectName={project.name} currentPage="Fixtures" />
         <FixturesViewSwitcher current="list" projectId={projectIdNum} />
       </div>
@@ -161,8 +164,6 @@ export interface FixturesListContainerProps {
   selectionScope: SelectionScope
   /** Colour cells by owning layer and show blind-staged values — the programmer sheet. */
   showOwnership?: boolean
-  /** Extra controls rendered at the start of the toolbar (the programmer's Clear/Blind row). */
-  toolbarExtra?: React.ReactNode
   /**
    * Consume the `?select=` deep-link param. Off for the programmer sheet: those links are
    * minted by Cmd+K for the fixtures/groups pair, and the forwarding branch here would bounce
@@ -175,6 +176,33 @@ export interface FixturesListContainerProps {
    * programmer action happening elsewhere.
    */
   respondToIncludeSelection?: boolean
+  /**
+   * Replace the built-in toolbar row, receiving the controls this container owns as ready-made
+   * nodes so a caller can re-arrange them without re-implementing their state.
+   *
+   * Exists because the programmer view scatters them: Columns joins the action bar's Sheet zone,
+   * the filter sits above the grid, and the selection actions get a bar of their own. Absent — the
+   * two plain list routes — keeps today's single row exactly.
+   */
+  /** Take ownership of the column menu's state — see `useColumnVisibility`. Pass both or neither. */
+  columnVisibility?: ColumnVisibility
+  onColumnVisibilityChange?: (next: ColumnVisibility) => void
+  renderToolbar?: (parts: {
+    filter: React.ReactNode
+    lit: React.ReactNode
+    columns: React.ReactNode
+    /** Null when nothing *visible* is selected; the caller should render nothing rather than a shell. */
+    selection: React.ReactNode | null
+    /** The marquee's cells, for a scope label beside the fixture count. Empty when none. */
+    cells: readonly CellRef[]
+  }) => React.ReactNode
+  /**
+   * Let the table fill its flex parent instead of capping at `calc(100vh - 14rem)`.
+   *
+   * That cap is tuned for a list embedded in a scrolling page. The programmer is a full-height
+   * view whose grid owns the remaining space, and the cap there leaves dead air below the rows.
+   */
+  fill?: boolean
 }
 
 /**
@@ -186,9 +214,12 @@ export function FixturesListContainer({
   grouped,
   selectionScope,
   showOwnership = false,
-  toolbarExtra,
   enableDeepLinkSelect = true,
   respondToIncludeSelection = false,
+  columnVisibility: controlledColumnVisibility,
+  onColumnVisibilityChange,
+  renderToolbar,
+  fill = false,
 }: FixturesListContainerProps) {
   const { data: maybeFixtures, isLoading: fixturesLoading } = useFixtureListQuery()
   const { data: maybeGroups, isLoading: groupsLoading } = useGroupListQuery()
@@ -202,11 +233,11 @@ export function FixturesListContainer({
 
   const [filter, setFilter] = useState('')
   const [onlyLit, setOnlyLit] = usePersistentState('fixturesList.onlyLit', false)
-  const [columnVisibility, setColumnVisibility] = usePersistentState<Record<ColumnKey, boolean>>(
-    'fixturesList.columns',
-    DEFAULT_COLUMN_VISIBILITY,
-    { merge: true },
-  )
+  // Controlled when the caller owns the menu (the programmer renders it in a band above this
+  // component); otherwise this owns both, and the two paths share one persisted key either way.
+  const ownColumns = useColumnVisibility()
+  const columnVisibility = controlledColumnVisibility ?? ownColumns[0]
+  const setColumnVisibility = onColumnVisibilityChange ?? ownColumns[1]
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(new Set<string>())
   const [expandedFixtures, setExpandedFixtures] = useState<ReadonlySet<string>>(new Set<string>())
   const [scrollToRowId, setScrollToRowId] = useState<RowId | null>(null)
@@ -214,7 +245,7 @@ export function FixturesListContainer({
   const [infoGroupName, setInfoGroupName] = useState<string | null>(null)
 
   const visibleColumns = useMemo(
-    () => COLUMN_DEFS.filter((d) => columnVisibility[d.key]).map((d) => d.key),
+    () => visibleColumnsFrom(columnVisibility),
     [columnVisibility],
   )
 
@@ -241,6 +272,12 @@ export function FixturesListContainer({
     [rows],
   )
   const selection = useListSelection(selectableOrder, selectionScope)
+  // Cell selection is a transient EDIT SCOPE and is orthogonal to fixture selection, which keeps
+  // its checkboxes and keeps driving Record. Enabled only where a scope narrower than a row means
+  // something — the programmer.
+  const visibleRowIds = useMemo(() => new Set(rows.map((r) => r.id)), [rows])
+  const cellSelection = useCellSelection(visibleRowIds)
+  const { count: cellCount, clear: clearCells } = cellSelection
 
   // Selected ids whose rows are hidden (collapsed group, active filter) are
   // inert everywhere below — every consumer intersects with `rows` — so no
@@ -310,20 +347,42 @@ export function FixturesListContainer({
     else setExpandedFixtures((prev) => toggled(prev, row.fixture.key))
   }, [])
 
-  // Opening an editor on an unselected row targets just that row (and the
-  // selection follows, standard spreadsheet feel); on a selected row the whole
-  // selection is the target.
+  // Opening an editor on an unselected row targets just that row (and the selection follows,
+  // standard spreadsheet feel); on a selected row the whole selection is the target.
   const handleBeginCellEdit = useCallback(
-    (row: Row) => {
+    (row: Row, col: ColumnKey) => {
+      // A cell inside the marquee is the WHOLE marquee's editor, so neither selection moves.
+      // Without this, clicking one of your own selected cells would collapse the row selection to
+      // that single row and the commit would write only it — silently discarding the marquee.
+      if (cellSelection.isSelected(row.id, col)) return
+      // A click outside it abandons the marquee, the way a click outside a spreadsheet range does,
+      // and the row rule then applies unchanged.
+      cellSelection.clear()
       if (row.kind !== 'divider' && !selection.isSelected(row.id)) {
         selection.select(row.id, 'replace')
       }
     },
-    [selection],
+    [cellSelection, selection],
   )
 
   const commitNow = useCallback(
     (row: Row, col: ColumnKey, commit: CellCommit) => {
+      // Three scopes, most specific first. The marquee wins over the row selection because it is
+      // the narrower, more deliberate statement of what this edit is for.
+      if (cellSelection.isSelected(row.id, col)) {
+        // Grouped BY COLUMN so each column is exactly one `planBatchWrites` call, keeping
+        // `resolveTargetCells`' parent-first precedence and per-target clamping intact. A commit
+        // whose shape doesn't fit a column (a colour dragged across Colour and Position) is
+        // filtered out inside `planBatchWrites` — so the chip's cell count is an upper bound on
+        // what any ONE commit writes, which the design's wording already allows for.
+        for (const { col: c, rowIds } of cellSelection.byColumn()) {
+          const targets = expandSelectionToTargets(rows, new Set(rowIds))
+          for (const planned of planBatchWrites(targets, c, commit)) {
+            applyPlannedWrite(writers, planned)
+          }
+        }
+        return
+      }
       const targets =
         row.kind !== 'divider' && selection.isSelected(row.id)
           ? selectedTargets
@@ -333,7 +392,7 @@ export function FixturesListContainer({
         applyPlannedWrite(writers, planned)
       }
     },
-    [selectedTargets, selection, writers],
+    [cellSelection, rows, selectedTargets, selection, writers],
   )
 
   // Continuous drag commits (slider/colour/position editors fire per pointer
@@ -404,11 +463,20 @@ export function FixturesListContainer({
   const batchCountFor = useCallback(
     (row: Row, col: ColumnKey): number => {
       if (row.kind === 'divider') return 0
+      // The marquee has to be counted, or the popover says "Applying to 1" while the commit writes
+      // six hundred. An upper bound: cross-column commits are shape-filtered at write time, so a
+      // colour edit over a Colour+Position marquee reaches fewer than this says.
+      if (cellSelection.isSelected(row.id, col)) {
+        return cellSelection.byColumn().reduce((n, group) => {
+          const targets = expandSelectionToTargets(rows, new Set(group.rowIds))
+          return n + targets.reduce((m, t) => m + resolveTargetCells(t, group.col).length, 0)
+        }, 0)
+      }
       const targets =
         selection.isSelected(row.id) ? selectedTargets : rowWriteTargets(row)
       return targets.reduce((n, target) => n + resolveTargetCells(target, col).length, 0)
     },
-    [selection, selectedTargets],
+    [cellSelection, rows, selection, selectedTargets],
   )
 
   // ?select=fixture:<key> / ?select=group:<name> deep-link (Cmd+K lands here):
@@ -545,7 +613,11 @@ export function FixturesListContainer({
       if (e.target instanceof HTMLElement && e.target.closest('[role="dialog"]')) return
 
       if (e.key === 'Escape') {
-        selection.clear()
+        // Cells first, rows second. Spreadsheet convention, and it stops one keystroke destroying
+        // two independent states — an operator dismissing a marquee rarely means "and deselect
+        // every fixture too".
+        if (cellCount > 0) clearCells()
+        else selection.clear()
         return
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
@@ -582,73 +654,79 @@ export function FixturesListContainer({
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [selection, selectableOrder])
+    // Narrowed to the two fields this reads rather than the whole `cellSelection`: its identity
+    // changes with the selection, and re-binding a window listener on every marquee tick is a cost
+    // with no payoff. `clearCells` is stable; `cellCount` is the only value that has to be fresh.
+  }, [selection, selectableOrder, cellCount, clearCells])
 
   if (fixturesLoading || groupsLoading) {
     return <div>Loading...</div>
   }
 
+  // The container owns these controls' state, so a caller re-arranging the toolbar gets them as
+  // ready-made nodes rather than re-implementing them. See `renderToolbar`.
+  const filterControl = (
+    <div className="relative w-full min-w-48 sm:w-auto sm:flex-1">
+      <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+      <Input
+        placeholder="Filter fixtures by name, manufacturer, or type..."
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+        className="h-8 pl-9"
+      />
+    </div>
+  )
+
+  const litControl = (
+    <Button
+      variant={onlyLit ? 'default' : 'outline'}
+      size="sm"
+      onClick={() => setOnlyLit(!onlyLit)}
+      title="Show only fixtures with intensity above zero"
+    >
+      <Lightbulb className="size-3.5" />
+      {/* Icon-only on phones: the toolbar is already several rows deep there, and both of these
+          carry a title/tooltip. */}
+      <span className="hidden sm:inline">Lit</span>
+    </Button>
+  )
+
+  const columnsControl = (
+    <ColumnsMenu visibility={columnVisibility} onChange={setColumnVisibility} />
+  )
+
+  // Gate on VISIBLE selected rows, not the raw selection count — filtering away every selected row
+  // must not leave a live toolbar acting on an empty set.
+  const selectionControl =
+    locateTargets.length > 0 ? (
+      <SelectionToolbar
+        locateTargets={locateTargets}
+        targets={selectedTargets}
+        onClear={selection.clear}
+      />
+    ) : null
+
   return (
-    <div className="space-y-3">
-      {/* Toolbar. At phone widths the filter takes a full row of its own — sharing one with
-          the buttons squeezes it to a few characters, and it is the control most likely to be
-          reached for on a small screen. */}
-      <div className="flex flex-wrap items-center gap-2">
-        {toolbarExtra}
-        <div className="relative w-full min-w-48 sm:w-auto sm:flex-1">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Filter fixtures by name, manufacturer, or type..."
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            className="h-8 pl-9"
-          />
+    <div className={cn('space-y-3', fill && 'flex min-h-0 flex-1 flex-col')}>
+      {renderToolbar ? (
+        renderToolbar({
+          filter: filterControl,
+          lit: litControl,
+          columns: columnsControl,
+          selection: selectionControl,
+          cells: cellSelection.cells,
+        })
+      ) : (
+        /* Default toolbar. At phone widths the filter takes a full row of its own — sharing one
+           with the buttons squeezes it to a few characters, and it is the control most likely to
+           be reached for on a small screen. */
+        <div className="flex flex-wrap items-center gap-2">
+          {filterControl}
+          {litControl}
+          {columnsControl}
+          {selectionControl}
         </div>
-        <Button
-          variant={onlyLit ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setOnlyLit(!onlyLit)}
-          title="Show only fixtures with intensity above zero"
-        >
-          <Lightbulb className="size-3.5" />
-          {/* Icon-only on phones: the toolbar is already several rows deep there, and both
-              of these carry a title/tooltip. */}
-          <span className="hidden sm:inline">Lit</span>
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" title="Choose visible columns">
-              <Columns3 className="size-3.5" />
-              <span className="hidden sm:inline">Columns</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {COLUMN_DEFS.map((def) => (
-              <DropdownMenuCheckboxItem
-                key={def.key}
-                checked={columnVisibility[def.key]}
-                onCheckedChange={(checked) =>
-                  setColumnVisibility((prev) => ({ ...prev, [def.key]: checked === true }))
-                }
-                // Keep the menu open while toggling several columns.
-                onSelect={(e) => e.preventDefault()}
-              >
-                {def.label}
-              </DropdownMenuCheckboxItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        {/* Gate on VISIBLE selected rows, not raw selection count — filtering
-            away every selected row must not leave a live toolbar acting on an
-            empty set. */}
-        {locateTargets.length > 0 && (
-          <SelectionToolbar
-            locateTargets={locateTargets}
-            targets={selectedTargets}
-            onClear={selection.clear}
-          />
-        )}
-      </div>
+      )}
 
       {rows.length === 0 ? (
         <p className="py-8 text-center text-muted-foreground">
@@ -672,6 +750,8 @@ export function FixturesListContainer({
           scrollToRowId={scrollToRowId}
           onScrolledToRow={() => setScrollToRowId(null)}
           showOwnership={showOwnership}
+          fill={fill}
+          cellSelection={showOwnership ? cellSelection : undefined}
         />
       )}
 

@@ -8,16 +8,37 @@ import type { IncludedTarget } from '@/api/programmerWsApi'
  * moment a second kind was added.
  */
 export function describeIncludedTarget(target: IncludedTarget): string {
+  const { number, name } = includedTargetParts(target)
+  return [number, name].filter(Boolean).join(' · ')
+}
+
+/**
+ * The same target, split, for surfaces that lay the parts out themselves.
+ *
+ * The source strip sets a cue's number in mono beside its name in body text, so it needs the halves
+ * rather than the joined string — but it must not format them itself, or the two spellings drift
+ * the way the three call sites above drifted before `describeIncludedTarget` existed. One
+ * implementation, two shapes: the joined form is built from this one.
+ */
+export function includedTargetParts(target: IncludedTarget): {
+  number?: string
+  /** Absent for a cue that has a number but no name — the number alone identifies it. */
+  name?: string
+} {
   if (target.kind === 'LOOK') {
-    return target.lookName ?? `Look ${target.lookId}`
+    return { name: target.lookName ?? `Look ${target.lookId}` }
   }
   if (target.kind === 'PALETTE') {
     // Unreachable from this client — nothing includes a palette any more — but the arm is still on
     // the wire, so a stale target from another client still gets a name rather than "Cue undefined".
-    return target.paletteName ?? `Palette ${target.paletteId}`
+    return { name: target.paletteName ?? `Palette ${target.paletteId}` }
   }
-  const label = [target.cueNumber, target.cueName].filter(Boolean).join(' · ')
-  return label || `Cue ${target.cueId}`
+  return {
+    number: target.cueNumber || undefined,
+    // The id fallback only stands in when there is no number either: "Q3 · Cue 5" would name the
+    // same cue twice, and worse, in two different vocabularies.
+    name: target.cueName || (target.cueNumber ? undefined : `Cue ${target.cueId}`),
+  }
 }
 
 /**

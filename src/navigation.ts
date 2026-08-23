@@ -11,6 +11,7 @@ import {
   Box,
   Boxes,
   SlidersHorizontal,
+  SlidersVertical,
   Theater,
   Play,
   Cloud,
@@ -150,16 +151,32 @@ export const navItems: NavItem[] = [
     group: "live",
   },
   {
-    id: "program",
-    // Program is the single cue/stack authoring + running surface (it absorbed the FX Cues view,
-    // and then the Programmer: `ProgrammerPane` carries Values / Layers / FX as tabs, so there is
-    // deliberately no second entry pointing at the same page).
-    // Scoped to the active project — running cues from Program needs the project live.
-    label: "Program",
-    icon: Theater,
-    path: (p) => `/projects/${p}/program`,
+    id: "programmer",
+    // The programmer: values, layers and effects on ONE screen. It was a page, then three tabs of
+    // a collapsed pane inside Program with no nav entry of its own, and is a page again — three
+    // readings of one live object that could never be seen together is the problem that move
+    // solved. The `/program` vs `/programmer` near-collision that argued against a second entry
+    // last time went away when Program was renamed to Show.
+    label: "Programmer",
+    icon: SlidersVertical,
+    path: (p) => `/projects/${p}/programmer`,
     visibility: "active-only",
-    pathMatch: "/program",
+    pathMatch: "/programmer",
+    group: "live",
+  },
+  {
+    // `id` stays "program" — it is the stable handle, and `navigation.test.ts` looks entries up by
+    // it. Only the name, the path and the match moved.
+    id: "program",
+    // Show is the cue/stack authoring + running surface (it absorbed the FX Cues view). It was
+    // called Program until the programmer moved out of it; two live views one letter apart was
+    // exactly the collision that kept the programmer out of this list.
+    // Scoped to the active project — running cues from here needs the project live.
+    label: "Show",
+    icon: Theater,
+    path: (p) => `/projects/${p}/show`,
+    visibility: "active-only",
+    pathMatch: "/show",
     group: "live",
   },
   {

@@ -203,7 +203,10 @@ export function CueCardEditor({
     <div ref={setNodeRef} style={sortableStyle} {...attributes} data-cue-row={cue.id}>
       <div
         className={cn(
-          'rounded-lg border bg-muted overflow-hidden transition-colors mx-2 my-1',
+          // `@container`: the header's columns below query THIS box, which is also what `bodyRef`
+          // measures for `tabsBreakpoint`. They used to be viewport `max-[…]:` against a
+          // container-measured body, and the two disagree by exactly the sidebar width.
+          '@container rounded-lg border bg-muted overflow-hidden transition-colors mx-2 my-1',
           isActive && 'border-green-500/70 shadow-[0_0_0_1px_rgba(34,197,94,0.3)]',
           isStandby && !isActive && 'border-blue-500/60',
           expanded && !isActive && !isStandby && 'border-primary/40',
@@ -216,7 +219,7 @@ export function CueCardEditor({
             // `cueNumberCellWidth`. Every row in a stack resolves the same width, so the column
             // still lines up, but a stack of "Q1"–"Q40" no longer reserves room it never uses.
             'grid-cols-[16px_auto_minmax(0,80px)_minmax(0,1fr)_auto_auto_18px]',
-            'max-[800px]:grid-cols-[16px_auto_minmax(0,1fr)_auto_18px] max-[800px]:gap-2',
+            '@max-[800px]:grid-cols-[16px_auto_minmax(0,1fr)_auto_18px] @max-[800px]:gap-2',
           )}
           onClick={onToggleExpanded}
         >
@@ -261,7 +264,7 @@ export function CueCardEditor({
             />
           </div>
 
-          <div className="h-5 rounded overflow-hidden flex max-[800px]:hidden">
+          <div className="h-5 rounded overflow-hidden flex @max-[800px]:hidden">
             <PaletteBar palette={cueData?.palette ?? []} />
           </div>
 
@@ -279,7 +282,7 @@ export function CueCardEditor({
             )}
           />
 
-          <div className="flex items-center gap-1 flex-nowrap max-[1000px]:hidden">
+          <div className="flex items-center gap-1 flex-nowrap @max-[1000px]:hidden">
             {targets.slice(0, 4).map((t) => (
               <TargetChip key={`${t.type}:${t.key}`} target={t} />
             ))}

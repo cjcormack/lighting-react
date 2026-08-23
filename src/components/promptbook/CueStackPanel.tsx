@@ -1,6 +1,7 @@
 import { useMemo, type CSSProperties } from 'react'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { SpeedMastersChip } from '@/components/SpeedMasters'
 import { cn } from '@/lib/utils'
 import { cueNumberColumnChars } from '@/lib/cueNumber'
 import { MarkerRow } from '@/components/runner/MarkerRow'
@@ -59,8 +60,6 @@ interface CueStackPanelProps {
   /** Whether the show is running — drives the drawer header dot colour + a "Stopped" label. */
   showActive: boolean
   stackName: string | null
-  bpm: number | null
-  onTap: () => void
   dbo: boolean
   onDbo: () => void
   projectId: number
@@ -110,8 +109,6 @@ export function CueStackPanel({
   goDisabled,
   showActive,
   stackName,
-  bpm,
-  onTap,
   dbo,
   onDbo,
   projectId,
@@ -157,17 +154,10 @@ export function CueStackPanel({
             </span>
           )}
           <span className="flex-1" />
-          <span className="min-w-8 text-right font-mono text-xs text-muted-foreground tabular-nums">
-            {bpm ?? '—'}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onTap}
-            className="h-8 px-2 text-xs font-bold tracking-wider"
-          >
-            TAP
-          </Button>
+          {/* Every master, master 1 included — this was a bare M1 readout + TAP, so the drawer
+              could neither see nor tap any other master. No `@container` ancestor here, so the
+              phone-width arm is asked for by name. */}
+          <SpeedMastersChip />
           <Button
             variant={dbo ? 'destructive' : 'outline'}
             size="sm"

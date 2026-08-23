@@ -315,7 +315,7 @@ export function CueCardBody({
 
           {/* Notes — amber "Trigger" callout on the armed next, subtle italic otherwise.
               Editable hosts (the unlocked Prompt Book) get click-to-edit here, plus a placeholder
-              on a cue with no note, so writing one never means leaving for the Program editor. */}
+              on a cue with no note, so writing one never means leaving for the Show editor. */}
           {onNotesCommit && kind !== 'nxt' && (
             <div className="mx-3 mb-3">
               <InlineEditField
@@ -346,7 +346,7 @@ export function CueCardBody({
               <span />
               <span />
               {/* The armed cue's note is the one the operator is about to act on, so it has to be
-                  as editable as the rest — a late change can't mean a trip to the Program view. */}
+                  as editable as the rest — a late change can't mean a trip to the Show view. */}
               {onNotesCommit ? (
                 <InlineEditField
                   value={cue.notes ?? ''}

@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo } from 'react'
 import { ArrowLeft, ChevronDown, List, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { SpeedMastersStrip } from '../../SpeedMastersStrip'
+import { SpeedMastersChip } from '../../SpeedMasters'
 import { StackPickerSheet } from '../StackPickerSheet'
 import { MobileCueListSheet } from '../MobileCueListSheet'
 import { RunMobileCueCard, type MobileExpansion } from './RunMobileCueCard'
@@ -27,12 +27,10 @@ interface RunMobileProps {
   /** When false (single-stack show), the stack name is a plain label — no picker. */
   multiStack: boolean
   display: RunnerDisplayState
-  bpm: number | null
   dbo: boolean
   onGo: () => void
   onBack: () => void
   onDbo: () => void
-  onTap: () => void
   onSwitchToStack: (stack: CueStack) => void
   onRequeueCue: (cueId: number) => void
   projectId: number
@@ -55,12 +53,10 @@ export function RunMobile({
   stack,
   multiStack,
   display,
-  bpm,
   dbo,
   onGo,
   onBack,
   onDbo,
-  onTap,
   onSwitchToStack,
   onRequeueCue,
   projectId,
@@ -139,21 +135,11 @@ export function RunMobile({
 
         <div className="flex-1" />
 
-        <div className="flex items-center gap-1">
-          <span className="font-mono text-xs text-muted-foreground tabular-nums min-w-8 text-right">
-            {bpm ?? '—'}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onTap}
-            className="h-8 px-2 text-xs font-bold tracking-wider"
-          >
-            TAP
-          </Button>
-          {/* Masters 2..N as a single sticky-selected tile; the readout above stays M1. */}
-          <SpeedMastersStrip compact />
-        </div>
+        {/* Every master, master 1 included. This used to be a hand-rolled M1 readout + TAP beside
+            a strip that deliberately excluded M1, so the two disagreed about what "the tempo" meant
+            and neither could tap anything but master 1. Asked for by name rather than by a `compact`
+            prop because RunMobile has no `@container` ancestor for the chip to choose itself. */}
+        <SpeedMastersChip />
 
         <Button
           variant={dbo ? 'destructive' : 'outline'}

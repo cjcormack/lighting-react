@@ -118,7 +118,8 @@ export function ProgrammerLookStack() {
         precedenceNote={
           <>
             Later layers win, and the values you set yourself win over all of them &mdash; for every
-            attribute, intensity included. Record writes this stack into a cue as its layers.
+            attribute, intensity included. Across cues, HTP still governs intensity. Record writes
+            this stack into a cue as its layers.
           </>
         }
         keyFor={keyFor}

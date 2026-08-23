@@ -8,6 +8,7 @@ import {
   Palette,
   Pencil,
   Play,
+  SlidersVertical,
   Sun,
   TableProperties,
 } from 'lucide-react'
@@ -20,32 +21,67 @@ import {
   type AttributeFamily,
 } from '@/lib/attributeFamily'
 
-export type ShowView = 'program' | 'run' | 'prompt-book'
+export type ShowView = 'programmer' | 'show' | 'run' | 'prompt-book'
 
 const ITEM = 'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold'
 
 /**
- * Program · Run · Prompt Book switcher shared across the three live-show views. The
- * `current` view renders as a static pill; the other two are links. Icons show at
- * every width — only the text labels collapse below `sm` — so the switch stays
- * usable on phones (the sole in-view way to move between the three on a narrow screen).
+ * When a segment's text label appears, as a **container** query.
+ *
+ * Every switcher in this file therefore REQUIRES a `@container` ancestor — see `Breadcrumbs.tsx`
+ * for the same contract. An unnamed `@[NNpx]:` with no container above it never matches, so a host
+ * that forgets it loses its labels permanently and silently, and no test can see that. The hosts
+ * are `ShowHeader`, `Fixtures`, `FixturesList`, `Groups`, `GroupsList` and `Looks`.
+ *
+ * These used to be one viewport `sm:`, which was wrong twice over: the app sidebar insets the
+ * content region, so viewport width is not the width these sit in; and one number cannot serve a
+ * two-pill switcher and a five-pill one. Written out per switcher rather than computed, because a
+ * template literal produces no CSS — the scanner only reads whole class strings.
+ */
+const LABEL_AT_560 = 'hidden @[560px]:inline' // Cards · List — two pills
+const LABEL_AT_720 = 'hidden @[720px]:inline' // Look families — five pills
+/**
+ * Four pills in a header that also carries a breadcrumb trail (~220-320px above 640), the save
+ * indicator, per-page actions, Start/Stop and the live dot: roughly 570px is spoken for before any
+ * label, and four labels add ~230.
+ */
+const LABEL_AT_820 = 'hidden @[820px]:inline' // Programmer · Show · Run · Prompt Book
+
+/**
+ * Programmer · Show · Run · Prompt Book switcher, shared across the four live views. The `current`
+ * view renders as a static pill; the others are links. Icons show at every width — only the text
+ * labels collapse, at `LABEL_AT_820` — so the switch stays usable on phones (the sole in-view way
+ * to move between the views on a narrow screen).
+ *
+ * Programmer comes first because it is where values are edited and Show is where they are arranged:
+ * the pills run in the order the work does.
  */
 export function ViewSwitcher({ current, projectId }: { current: ShowView; projectId: number }) {
   return (
     <nav className="inline-flex items-center gap-0.5 rounded-lg border bg-card p-0.5">
       <Segment
-        active={current === 'program'}
-        to={`/projects/${projectId}/program`}
-        icon={<Pencil className="size-3.5" />}
-        label="Program"
+        labelClass={LABEL_AT_820}
+        active={current === 'programmer'}
+        to={`/projects/${projectId}/programmer`}
+        icon={<SlidersVertical className="size-3.5" />}
+        label="Programmer"
       />
       <Segment
+        labelClass={LABEL_AT_820}
+        active={current === 'show'}
+        to={`/projects/${projectId}/show`}
+        icon={<Pencil className="size-3.5" />}
+        label="Show"
+      />
+      <Segment
+        labelClass={LABEL_AT_820}
         active={current === 'run'}
         to={`/projects/${projectId}/run`}
         icon={<Play className="size-3.5" />}
         label="Run"
       />
       <Segment
+        labelClass={LABEL_AT_820}
         active={current === 'prompt-book'}
         to={`/projects/${projectId}/prompt-book`}
         icon={<BookOpenText className="size-3.5" />}
@@ -228,6 +264,7 @@ export function LookFamilyFilterBar({
   return (
     <nav className="inline-flex items-center gap-0.5 rounded-lg border bg-card p-0.5">
       <FilterSegment
+        labelClass={LABEL_AT_720}
         active={current === 'ALL'}
         label="All"
         icon={<Layers className="size-3.5" />}
@@ -238,6 +275,7 @@ export function LookFamilyFilterBar({
         return (
           <FilterSegment
             key={family}
+            labelClass={LABEL_AT_720}
             active={current === family}
             label={FAMILY_LABELS[family].singular}
             icon={<Icon className="size-3.5" />}
@@ -261,11 +299,13 @@ function FilterSegment({
   label,
   icon,
   onClick,
+  labelClass = LABEL_AT_560,
 }: {
   active: boolean
   label: string
   icon: ReactNode
   onClick: () => void
+  labelClass?: string
 }) {
   return (
     <button
@@ -279,7 +319,7 @@ function FilterSegment({
       )}
     >
       {icon}
-      <span className="hidden sm:inline">{label}</span>
+      <span className={labelClass}>{label}</span>
     </button>
   )
 }
@@ -291,6 +331,7 @@ function Segment({
   label,
   state,
   onClick,
+  labelClass = LABEL_AT_560,
 }: {
   active: boolean
   to: string
@@ -298,12 +339,13 @@ function Segment({
   label: string
   state?: unknown
   onClick?: () => void
+  labelClass?: string
 }) {
   if (active) {
     return (
       <span className={cn(ITEM, 'bg-muted text-foreground')} aria-current="page" aria-label={label}>
         {icon}
-        <span className="hidden sm:inline">{label}</span>
+        <span className={labelClass}>{label}</span>
       </span>
     )
   }
@@ -316,7 +358,7 @@ function Segment({
       className={cn(ITEM, 'text-muted-foreground hover:text-foreground')}
     >
       {icon}
-      <span className="hidden sm:inline">{label}</span>
+      <span className={labelClass}>{label}</span>
     </Link>
   )
 }

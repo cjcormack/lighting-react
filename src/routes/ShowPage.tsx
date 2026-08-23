@@ -12,12 +12,10 @@ import {
 } from '../store/cueStacks'
 import type { Cue } from '../api/cuesApi'
 import { buildCueInput } from '../lib/cueUtils'
-import { useFxStateQuery, tapTempo } from '../store/fx'
-import { useShowTransport } from '../hooks/useShowTransport'
+import { useShowBarProps } from '../hooks/useShowBarProps'
 import { ShowHeader } from '../components/ShowHeader'
 import { ShowBar } from '../components/ShowBar'
 import { ProgramView } from '../components/runner/program/ProgramView'
-import { ProgrammerPane } from '../components/programmer/ProgrammerPane'
 import { RecordSheet } from '../components/programmer/RecordSheet'
 import { useInclude } from '../components/programmer/useInclude'
 import type { CueStack } from '../api/cueStacksApi'
@@ -31,13 +29,13 @@ function cueNameFor(stacks: CueStack[] | undefined, cueId: number): string | und
   return undefined
 }
 
-export function ProgramRedirect() {
+export function ShowRedirect() {
   const { data: currentProject, isLoading } = useCurrentProjectQuery()
   const navigate = useNavigate()
 
   useEffect(() => {
     if (!isLoading && currentProject) {
-      navigate(`/projects/${currentProject.id}/program`, { replace: true })
+      navigate(`/projects/${currentProject.id}/show`, { replace: true })
     }
   }, [currentProject, isLoading, navigate])
 
@@ -54,17 +52,17 @@ export function ProgramRedirect() {
 
 /**
  * Back-compat for the removed FX Cues view. `/cues`, `/cues/all`, `/cues/standalone` →
- * `/program`; `/cues/stacks/:stackId` → `/program/stacks/:stackId`.
+ * `/show`; `/cues/stacks/:stackId` → `/show/stacks/:stackId`.
  */
 export function CuesLegacyRedirect() {
   const { projectId, stackId } = useParams()
   const target = stackId
-    ? `/projects/${projectId}/program/stacks/${stackId}`
-    : `/projects/${projectId}/program`
+    ? `/projects/${projectId}/show/stacks/${stackId}`
+    : `/projects/${projectId}/show`
   return <Navigate to={target} replace />
 }
 
-export function ProgramPage() {
+export function ShowPage() {
   const { projectId, stackId } = useParams()
   const projectIdNum = Number(projectId)
   const navigate = useNavigate()
@@ -84,7 +82,7 @@ export function ProgramPage() {
   )
 
   // ── URL-derived navigation state ──
-  // The drilled stack lives in the path (`/program/stacks/:stackId`); the inline-expanded cue is a
+  // The drilled stack lives in the path (`/show/stacks/:stackId`); the inline-expanded cue is a
   // transient `?cue=` modifier. This mirrors how the (removed) FX Cues view derived its view from
   // the URL, and makes both deep-linkable / refresh-stable.
   const drillStackId = stackId ? Number(stackId) : null
@@ -95,14 +93,10 @@ export function ProgramPage() {
   const cueParam = searchParams.get('cue')
   const expandedCueId = cueParam ? Number(cueParam) : null
 
-  // Row 3 (show bar) — functional transport in the Program view (no keyboard shortcuts). Shown at
-  // every width (it collapses responsively) whenever the show is running.
-  const { data: fxState } = useFxStateQuery()
-  const transport = useShowTransport({ projectId: projectIdNum, activeStackId, stacks })
-  const [dbo, setDbo] = useState(false)
-  const barActiveCue = transport.activeStack?.cues.find((c) => c.id === transport.activeCueId) ?? null
-  const barStandbyCue =
-    transport.activeStack?.cues.find((c) => c.id === transport.standbyCueId) ?? null
+  // Row 3 (show bar) — a functional transport here, without Run's keyboard shortcuts. Shown at every
+  // width (it collapses responsively) whenever the show is running. Shared with the Programmer view,
+  // which mounts the same bar from the same wiring.
+  const { showBarProps } = useShowBarProps(projectIdNum)
 
   const [createCue] = useCreateProjectCueMutation()
   const [activateShow] = useActivateProgramMutation()
@@ -132,20 +126,20 @@ export function ProgramPage() {
 
   const handleDrillStack = useCallback(
     (id: number | null) => {
-      if (id == null) navigate(`/projects/${projectIdNum}/program`)
-      else navigate(`/projects/${projectIdNum}/program/stacks/${id}`)
+      if (id == null) navigate(`/projects/${projectIdNum}/show`)
+      else navigate(`/projects/${projectIdNum}/show/stacks/${id}`)
     },
     [navigate, projectIdNum],
   )
 
   const handleBreadcrumbCurrentPageClick = useCallback(() => {
-    navigate(`/projects/${projectIdNum}/program`)
+    navigate(`/projects/${projectIdNum}/show`)
   }, [navigate, projectIdNum])
 
   const initialDrillDoneRef = useRef(false)
 
-  // Start/Stop the show in place — the header flips to the running state and the
-  // operator stays in Program (the view switcher is one click to Run).
+  // Start/Stop the show in place — the header flips to the running state and the operator stays
+  // on Show (the view switcher is one click to Run).
   const runnableStackCount = stacks?.filter((s) => s.type === 'STACK').length ?? 0
   const canStart = !isShowActive && runnableStackCount > 0
 
@@ -198,8 +192,8 @@ export function ProgramPage() {
   const handleIncludeCue = useCallback((cueId: number) => void includeCue(cueId), [includeCue])
 
   // ── Deep-link normalizer + auto-drill ──
-  // - Legacy `/program?stack=X&cue=Y` links (from Run / Prompt Book "Edit Cue") are rewritten to
-  //   the new path scheme `/program/stacks/X?cue=Y`.
+  // - Legacy `/show?stack=X&cue=Y` links (from Run / Prompt Book "Edit Cue") are rewritten to
+  //   the new path scheme `/show/stacks/X?cue=Y`.
   // - Otherwise, when the show is running, drill into the active stack on first mount so the
   //   operator lands where the action is.
   useEffect(() => {
@@ -213,18 +207,18 @@ export function ProgramPage() {
       if (Number.isFinite(sid) && stacks.some((s) => s.id === sid)) {
         const cue = searchParams.get('cue')
         navigate(
-          `/projects/${projectIdNum}/program/stacks/${sid}${cue ? `?cue=${cue}` : ''}`,
+          `/projects/${projectIdNum}/show/stacks/${sid}${cue ? `?cue=${cue}` : ''}`,
           { replace: true },
         )
       } else {
-        navigate(`/projects/${projectIdNum}/program`, { replace: true })
+        navigate(`/projects/${projectIdNum}/show`, { replace: true })
       }
       return
     }
 
     if (drillStackId == null && isShowActive && activeStackId != null) {
       initialDrillDoneRef.current = true
-      navigate(`/projects/${projectIdNum}/program/stacks/${activeStackId}`, { replace: true })
+      navigate(`/projects/${projectIdNum}/show/stacks/${activeStackId}`, { replace: true })
     }
   }, [stacks, isShowActive, activeStackId, drillStackId, searchParams, navigate, projectIdNum])
 
@@ -238,13 +232,13 @@ export function ProgramPage() {
       !stacksFetching &&
       !stacks.some((s) => s.id === drillStackId)
     ) {
-      navigate(`/projects/${projectIdNum}/program`, { replace: true })
+      navigate(`/projects/${projectIdNum}/show`, { replace: true })
     }
   }, [drillStackId, stacks, stacksFetching, navigate, projectIdNum])
 
   // Loading / redirect guards
   if (!currentLoading && currentProject && projectIdNum !== currentProject.id) {
-    return <Navigate to={`/projects/${currentProject.id}/program`} replace />
+    return <Navigate to={`/projects/${currentProject.id}/show`} replace />
   }
 
   if (projectLoading || currentLoading || stacksLoading) {
@@ -266,7 +260,7 @@ export function ProgramPage() {
   return (
     <div className="flex flex-col h-full">
       <ShowHeader
-        view="program"
+        view="show"
         projectId={projectIdNum}
         projectName={project.name}
         extra={drillStack ? [drillStack.name] : undefined}
@@ -278,24 +272,8 @@ export function ProgramPage() {
       />
 
       {isShowActive && (
-        <ShowBar
-          stackName={transport.activeStack?.name ?? null}
-          dbo={dbo}
-          onDbo={() => setDbo((d) => !d)}
-          bpm={fxState?.bpm ?? null}
-          onTap={tapTempo}
-          activeNumber={barActiveCue?.cueNumber ? `Q${barActiveCue.cueNumber}` : null}
-          activeName={barActiveCue?.name ?? null}
-          standbyNumber={barStandbyCue?.cueNumber ? `Q${barStandbyCue.cueNumber}` : null}
-          standbyName={barStandbyCue?.name ?? null}
-          fadeRemainMs={transport.fadeRemainMs}
-          onGo={transport.go}
-          onBack={transport.back}
-          goDisabled={transport.goDisabled}
-        />
+        <ShowBar {...showBarProps} />
       )}
-
-      <ProgrammerPane />
 
       {(
         <div className="flex-1 flex min-h-0">

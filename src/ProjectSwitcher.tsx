@@ -10,14 +10,10 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Loader2, FolderOpen } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { mostSpecificActiveId } from './lib/navMatch'
 import { useProjectListQuery } from "./store/projects"
 import { useOAuthReauthState } from "./store/oauthGithub"
-import {
-  useNavItems,
-  filterNavItems,
-  useIsNavAdmin,
-  type NavItem as NavItemDef,
-} from "./navigation"
+import { useNavItems, filterNavItems, useIsNavAdmin } from "./navigation"
 
 interface ProjectSwitcherProps {
   collapsed?: boolean
@@ -151,22 +147,6 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
       </div>
     </div>
   )
-}
-
-/**
- * Among all visible nav items whose pathMatch prefixes the current pathname,
- * return the id of the most specific one (longest pathMatch wins). This keeps
- * a parent like "Project Settings" from staying active when the user is on
- * one of its child tabs (e.g. "Patch List").
- */
-function mostSpecificActiveId(items: NavItemDef[], pathname: string): string | null {
-  let winner: NavItemDef | null = null
-  for (const item of items) {
-    const m = item.pathMatch
-    if (!pathname.endsWith(m) && !pathname.includes(m + '/')) continue
-    if (!winner || m.length > winner.pathMatch.length) winner = item
-  }
-  return winner?.id ?? null
 }
 
 /** Hook to get the currently viewed project. */

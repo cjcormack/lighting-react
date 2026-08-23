@@ -1,9 +1,8 @@
 import { ArrowRight, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { BeatIndicator } from './BeatIndicator'
 import { ProgrammerIndicator } from './ProgrammerIndicator'
-import { SpeedMastersStrip } from './SpeedMastersStrip'
+import { SpeedMasters } from './SpeedMasters'
 
 interface ShowBarProps {
   /** Leading "current stack" segment. Rendered only when non-null — Run passes it only when
@@ -11,8 +10,6 @@ interface ShowBarProps {
   stackName?: string | null
   dbo: boolean
   onDbo: () => void
-  bpm: number | null
-  onTap: () => void
   /** The cue currently outputting on stage. */
   activeNumber: string | null
   activeName: string | null
@@ -30,23 +27,51 @@ interface ShowBarProps {
 }
 
 /**
- * Universal "show bar" (Row 3) shared across the three live-show views:
- * current stack · BLACKOUT · BPM/TAP · active → Next · (Run-only kbd hint) · BACK · GO.
- * GO is the largest, most prominent affordance. It reflects show state, not mode state, so
- * it renders identically in Program, Run, and Prompt Book.
+ * Universal "show bar" (Row 3) shared across the live-show views:
+ * BLACKOUT · speed masters · programmer · active → Next · BACK · GO.
+ * GO is the largest, most prominent affordance. It reflects show state, not mode state, so it
+ * renders identically in Programmer, Show, Run and Prompt Book.
  *
- * Responsive collapse is driven by the bar's OWN width via container queries (`@container`
- * + `@[NNpx]:`), not the viewport — the app sidebar insets the content region, so viewport
- * width ≠ content width. As the bar narrows it drops, in order: the kbd hint (@[1100px]),
- * cue NAMES keeping the Q-numbers (@[900px]), then secondary labels + the stack name and
- * looser gaps (@[720px]).
+ * ## The rungs
+ *
+ * Collapse is driven by the bar's OWN width via container queries (`@container` + `@[NNpx]:` and
+ * its exact complement `@max-[NNpx]:`), not the viewport — the app sidebar insets the content
+ * region, so viewport width ≠ content width. Four rungs on three numbers:
+ *
+ * | Width      | Masters                        | Rows | GO                        |
+ * |------------|--------------------------------|------|---------------------------|
+ * | ≥1000      | a tile each, named*            | 1    | `min-w-[120px]`           |
+ * | 700–1000   | one railed tile                | 1    | `min-w-[100px]`           |
+ * | 440–700    | one railed tile, compact       | 2    | `flex-1`, h-10            |
+ * | <440       | a chip + popover               | 2    | `flex-1`, h-[52px], 22px  |
+ *
+ * \* The masters column is the one thing here that is not purely a width decision: a tile each is
+ * only affordable if the bank is small, so `SpeedMasters` raises its own threshold with the count
+ * and falls back to the railed tile. See `TILED_ARM`.
+ *
+ * **The bar wraps rather than deleting.** It used to hide the live-state block below 560px, and
+ * four *width-adding* rules fired at that same boundary in the other direction — so in the 560–900
+ * band roughly 470px of `shrink-0` tiles left the `flex-1` live block nothing, and because every
+ * child still visible inside it was itself `shrink-0` the cue numbers spilled out of its border.
+ * Now nothing is gated on the bar being wide: the transport takes `basis-full` below 700 and drops
+ * onto its own line, which is deterministic rather than hoping items wrap nicely, and the live
+ * block cannot wrap at all because its `flex-1 basis-0` hypothetical size is zero. `overflow-hidden`
+ * makes it clip rather than spill in the tightest band. Cue *numbers* stay `shrink-0` — a truncated
+ * Q number is worse than a truncated name, so names go first.
+ *
+ * GO gets **wider** as the bar narrows, which is the right way round for a control pressed in the
+ * dark: below 700 it is a `flex-1` item sharing a line with nothing but BACK.
+ *
+ * Two thresholds here are deliberately not rungs. `ProgrammerIndicator` queries `@[760px]`, which is
+ * the *app header's* number (it is shared with `connection.tsx`); it lands mid-band here and that is
+ * tolerated rather than re-owned for one caller's sake. And the kbd hint's `@[1100px]` asks a
+ * different question in kind — "is there slack left over" rather than "which rung" — so folding it
+ * into 1000 would put it in the band where the live block is tightest.
  */
 export function ShowBar({
   stackName,
   dbo,
   onDbo,
-  bpm,
-  onTap,
   activeNumber,
   activeName,
   standbyNumber,
@@ -60,24 +85,24 @@ export function ShowBar({
   const isFading = fadeRemainMs != null && fadeRemainMs > 0
 
   return (
-    <div className="@container flex items-stretch gap-2 px-4 py-2 border-b">
-      {/* DBO tile.
-          Tiles use `justify-start` (not `justify-center`) so the labels in
-          DBO + BPM share the same y-baseline regardless of value font size. */}
+    <div className="@container flex flex-wrap items-stretch gap-1.5 border-b px-2.5 py-1.5 @[440px]:gap-2 @[440px]:px-4 @[440px]:py-2">
+      {/* DBO tile. Tiles use `justify-start` (not `justify-center`) so the labels share the same
+          y-baseline regardless of value font size. It steps its own chrome down the rungs rather
+          than swapping to a second element. */}
       <button
         type="button"
         onClick={onDbo}
         aria-pressed={dbo}
         title="Toggle blackout"
         className={cn(
-          'flex shrink-0 flex-col justify-start items-start gap-px rounded-md border px-3 py-1.5 transition-colors',
+          'flex shrink-0 flex-col items-start justify-start gap-px rounded-md border px-2 py-1 transition-colors @[440px]:px-2.5 @[700px]:px-3 @[700px]:py-1.5',
           'bg-card hover:bg-muted/40',
           dbo && 'border-red-700 bg-red-950/40 hover:bg-red-950/50 shadow-[0_0_12px_rgba(239,68,68,0.25)]',
         )}
       >
         <span
           className={cn(
-            'text-[9px] font-bold uppercase tracking-[0.08em] text-muted-foreground',
+            'hidden text-[9px] font-bold uppercase tracking-[0.08em] text-muted-foreground @[440px]:block',
             dbo && 'text-red-300',
           )}
         >
@@ -85,7 +110,7 @@ export function ShowBar({
         </span>
         <span
           className={cn(
-            'font-mono text-lg font-bold tracking-wider leading-none',
+            'font-mono text-[11px] font-bold leading-none tracking-wider @[440px]:text-base @[700px]:text-lg',
             dbo ? 'text-red-300' : 'text-foreground',
           )}
         >
@@ -93,96 +118,76 @@ export function ShowBar({
         </span>
       </button>
 
-      {/* BPM tile — master 1, the global tempo. The strip beside it renders masters 2..N;
-          this tile is deliberately the M1 readout rather than duplicating it there. */}
-      <div className="flex shrink-0 items-stretch rounded-md border bg-card overflow-hidden">
-        <div className="flex flex-col justify-start gap-px px-3 py-1.5">
-          <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
-            <BeatIndicator className="size-1.5 shrink-0" />
-            M1 · BPM
-          </span>
-          <span className="font-mono text-lg font-bold leading-none text-foreground">
-            {bpm ?? '—'}
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={onTap}
-          className="flex items-center justify-center px-3 text-xs font-bold tracking-[0.08em] uppercase border-l hover:bg-primary hover:text-primary-foreground transition-colors active:bg-primary active:text-primary-foreground"
-        >
-          TAP
-        </button>
-      </div>
+      {/* Every speed master, master 1 included. Self-contained; picks its own arm from the width
+          above. The ShowBar used to own an M1 readout beside this, which is the split that made the
+          560px band unwinnable. */}
+      <SpeedMasters />
 
-      {/* Speed masters 2..N — self-contained like the programmer tile below; degrades to a
-          single sticky-selected tile at mid widths and disappears at phone widths (the M1
-          tile above survives everywhere). */}
-      <SpeedMastersStrip />
+      {/* Programmer tile — renders itself only when the programmer holds something or blind is
+          engaged, so it costs no width during a clean show. It reads its own state, which is why it
+          takes no props from here. It is a direct child rather than living in a wrapper div: a
+          wrapper always rendered, and so always ate a gap, even when the indicator drew nothing. */}
+      <ProgrammerIndicator className="px-2.5 py-2" />
 
-      {/* Programmer tile — renders itself only when the programmer holds something or blind
-          is engaged, so it costs no width during a clean show. It reads its own state, which
-          is why it takes no props from here. */}
-      <div className="flex shrink-0 items-center">
-        <ProgrammerIndicator className="px-2.5 py-2" />
-      </div>
-
-      {/* Live state — flexes to fill. Dropped entirely at phone widths (the live cue is visible
-          in the cue list below); `ml-auto` on the transport keeps it right-aligned there. */}
-      <div className="hidden @[560px]:flex flex-1 items-center gap-2 @[720px]:gap-3.5 min-w-0 rounded-md border bg-card px-3 py-1.5">
+      {/* Live state — flexes to fill, and is never hidden. `overflow-hidden` is load-bearing: every
+          child below is `shrink-0`, so without it they escape the border rather than clipping. */}
+      <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 overflow-hidden rounded-md @[440px]:justify-start @[440px]:gap-2 @[440px]:border @[440px]:bg-card @[440px]:px-3 @[440px]:py-1.5 @[700px]:gap-3.5">
         {stackName && (
           <>
-            <span className="hidden @[720px]:block truncate max-w-[160px] text-sm font-medium shrink-0">
+            <span className="hidden max-w-[160px] shrink-0 truncate text-sm font-medium @[700px]:block">
               {stackName}
             </span>
-            <span className="hidden @[720px]:block text-muted-foreground/40 shrink-0">·</span>
+            <span className="hidden shrink-0 text-muted-foreground/40 @[700px]:block">·</span>
           </>
         )}
         {activeNumber || activeName ? (
           <>
-            <div className="flex items-center gap-2 min-w-0">
+            <div className="flex min-w-0 items-center gap-2">
               <span
-                className="size-[22px] rounded-full grid place-items-center bg-green-950 border border-green-900 text-green-400 shrink-0"
+                className="hidden size-[22px] shrink-0 place-items-center rounded-full border border-green-900 bg-green-950 text-green-400 @[440px]:grid"
                 style={{ animation: 'r-live-pulse 1.6s ease-in-out infinite' }}
               >
                 <Play className="size-2.5 fill-current" strokeWidth={0} />
               </span>
               {activeNumber && (
-                <span className="font-mono text-sm font-bold text-green-400 shrink-0">
+                <span className="shrink-0 font-mono text-sm font-bold text-green-400">
                   {activeNumber}
                 </span>
               )}
               <span
                 className={cn(
-                  'hidden @[900px]:block text-sm truncate min-w-0',
-                  isFading ? 'text-amber-400 font-medium' : 'text-foreground font-medium',
+                  'hidden min-w-0 truncate text-sm @[700px]:block',
+                  isFading ? 'font-medium text-amber-400' : 'font-medium text-foreground',
                 )}
               >
                 {activeName ?? 'No cue running'}
               </span>
               {isFading && (
-                <span className="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-[0.08em] uppercase text-amber-400 bg-amber-950/40 border border-amber-900 rounded-full px-2 py-px shrink-0">
+                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-900 bg-amber-950/40 px-2 py-px font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-amber-400">
                   <span
                     className="size-1.5 rounded-full bg-amber-400"
                     style={{ animation: 'r-fade-pulse 0.9s ease-in-out infinite' }}
                   />
-                  <span className="hidden @[720px]:inline">FADING · </span>
+                  <span className="hidden @[700px]:inline">FADING · </span>
                   {(fadeRemainMs! / 1000).toFixed(1)}s
                 </span>
               )}
             </div>
 
-            <ArrowRight className="size-3.5 text-muted-foreground shrink-0" />
+            <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
 
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="hidden @[720px]:inline text-[9px] font-bold uppercase tracking-[0.08em] text-muted-foreground shrink-0">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="hidden shrink-0 text-[9px] font-bold uppercase tracking-[0.08em] text-muted-foreground @[700px]:inline">
                 Next
               </span>
               {standbyNumber && (
-                <span className="font-mono text-xs font-bold text-blue-400 shrink-0">
+                <span className="shrink-0 font-mono text-xs font-bold text-blue-400">
                   {standbyNumber}
                 </span>
               )}
-              <span className="hidden @[900px]:inline text-xs text-muted-foreground truncate">
+              {/* The standby NAME is the last thing to arrive: at 700–1000 the active cue keeps its
+                  name and this one does not, which is the mockup's rung 2. */}
+              <span className="hidden truncate text-xs text-muted-foreground @[1000px]:inline">
                 {standbyName ?? 'end of stack'}
               </span>
             </div>
@@ -191,37 +196,40 @@ export function ShowBar({
           <span className="text-sm text-muted-foreground">No cue running</span>
         )}
 
-        <span className="flex-1" />
+        <span className="hidden flex-1 @[440px]:block" />
 
         {showShortcuts && (
-          <span className="hidden @[1100px]:inline-flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground shrink-0">
+          <span className="hidden shrink-0 items-center gap-1.5 font-mono text-[10px] text-muted-foreground @[1100px]:inline-flex">
             <kbd className="rounded border bg-muted/50 px-1.5 py-px text-[9.5px]">space</kbd>
             go
-            <kbd className="rounded border bg-muted/50 px-1.5 py-px text-[9.5px] ml-1">⌫</kbd>
+            <kbd className="ml-1 rounded border bg-muted/50 px-1.5 py-px text-[9.5px]">⌫</kbd>
             back
           </span>
         )}
       </div>
 
-      {/* Transport. h-auto + items-stretch on the parent makes BACK/GO match
-          the tile heights — overrides Button's default h-10. `ml-auto` right-aligns it at
-          phone widths where the flex-1 live block is hidden. */}
-      <div className="flex items-stretch gap-2 shrink-0 ml-auto">
+      {/* Transport. `basis-full` below 700 puts it on its own line deterministically, and GO takes
+          the whole width that buys — the inversion the ladder exists for. `h-auto` above 700 lets it
+          match the tile heights, overriding Button's default h-10. */}
+      <div className="flex shrink-0 basis-full items-stretch gap-2 @[700px]:ml-auto @[700px]:basis-auto">
         <Button
           variant="outline"
           onClick={onBack}
           disabled={goDisabled}
           aria-label="Back"
-          className="h-auto px-4 @[720px]:px-5 text-sm font-semibold tracking-wider uppercase"
+          className="h-[52px] px-4 text-sm font-semibold uppercase tracking-wider @[440px]:h-10 @[700px]:h-auto @[1000px]:px-5"
         >
           <span aria-hidden="true">◀</span>
-          <span className="hidden @[560px]:inline">BACK</span>
+          <span className="hidden @[440px]:inline">BACK</span>
         </Button>
         <Button
           onClick={onGo}
           disabled={goDisabled}
           className={cn(
-            'h-auto px-5 @[560px]:px-6 @[720px]:px-8 text-base font-bold tracking-[0.16em] uppercase min-w-[80px] @[560px]:min-w-[92px] @[720px]:min-w-[120px]',
+            'h-[52px] flex-1 text-[22px] font-bold uppercase tracking-[0.16em]',
+            '@[440px]:h-10 @[440px]:text-base',
+            '@[700px]:h-auto @[700px]:flex-none @[700px]:px-6 @[700px]:min-w-[100px]',
+            '@[1000px]:px-8 @[1000px]:min-w-[120px]',
             !goDisabled && 'shadow-[0_6px_14px_rgba(59,130,246,0.35)]',
           )}
         >

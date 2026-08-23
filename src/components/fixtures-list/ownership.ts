@@ -2,7 +2,12 @@ import { computeCombinedCss } from '../../lib/colourMath'
 import { resolveSettingOption } from '../../hooks/usePropertyValues'
 import type { CellResolution } from './columns'
 import type { CellValue } from './useRowValues'
-import type { CellLayer, CellOwnership, StagedValue } from './useRowOwnership'
+import type {
+  CellLayer,
+  CellOwnership,
+  CellOwnershipSource,
+  StagedValue,
+} from './useRowOwnership'
 
 /**
  * Ownership styling for a programmer-sheet cell.
@@ -41,25 +46,29 @@ export function ownershipCellClass(ownership?: CellOwnership): string {
   }
 }
 
+/**
+ * The one name for each ownership source.
+ *
+ * `ownershipTitle` below and the on-screen legend (`OwnershipLegend`) both read this table, so a
+ * colour can never end up labelled two different ways in the hover text and the key beneath the
+ * grid. Bare nouns: the hover appends context (the group, the layer, "mixed across this row") and
+ * the legend glosses them for an operator meeting the colours for the first time.
+ */
+export const OWNERSHIP_LABELS: Record<CellOwnershipSource, string> = {
+  parked: 'Parked — the rig ignores every layer here',
+  programmer: 'Programmer',
+  effect: 'Effect',
+  cue: 'Cue',
+  baseline: 'Baseline — nothing asserts this',
+}
+
 /** Hover text naming the owner, so the colours are learnable rather than decorative. */
 export function ownershipTitle(ownership?: CellOwnership): string | undefined {
   if (!ownership) return undefined
-  const base = (() => {
-    switch (ownership.source) {
-      case 'parked':
-        return 'Parked — the rig ignores every layer here'
-      case 'programmer':
-        return ownership.owners.length > 0
-          ? `Programmer (${ownership.owners.join(', ')})`
-          : 'Programmer'
-      case 'effect':
-        return 'Effect'
-      case 'cue':
-        return 'Cue'
-      case 'baseline':
-        return 'Baseline — nothing asserts this'
-    }
-  })()
+  const base =
+    ownership.source === 'programmer' && ownership.owners.length > 0
+      ? `${OWNERSHIP_LABELS.programmer} (${ownership.owners.join(', ')})`
+      : OWNERSHIP_LABELS[ownership.source]
   const parts = [base]
   if (ownership.sourceGroup) parts.push(`via group ${ownership.sourceGroup}`)
   if (!ownership.isUniform) parts.push('mixed across this row')

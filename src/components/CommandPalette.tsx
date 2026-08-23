@@ -288,7 +288,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
                   <Command.Item
                     value="New Cue Stack"
                     keywords={["cue", "stack", "effect", "create", "program"]}
-                    onSelect={() => runAction(() => navigate(`/projects/${viewedProject.id}/program`))}
+                    onSelect={() => runAction(() => navigate(`/projects/${viewedProject.id}/show`))}
                     className={itemClassName}
                   >
                     <Clapperboard className="size-4 text-muted-foreground" />

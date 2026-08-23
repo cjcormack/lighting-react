@@ -8,7 +8,7 @@ import { publishIncludeSelection } from '@/store/includeSelection'
 export interface UseIncludeOptions {
   /**
    * Raise a toast when the Include fails. Callers that render the returned `error` inline
-   * (the picker sheet) pass false; callers with nowhere to put it (the Program view's
+   * (the picker sheet) pass false; callers with nowhere to put it (the Show view's
    * per-cue button) leave it on, or a failed Include is completely silent.
    */
   toastErrors?: boolean
@@ -26,7 +26,7 @@ export type IncludeTargetRequest =
 /**
  * Include a cue *or a Look* into the programmer and hand its fixtures to the sheet's selection.
  *
- * Shared by the toolbar's picker and the Program view's per-cue Include, so the auto-select and
+ * Shared by the action bar's picker and the Show view's per-cue Include, so the auto-select and
  * the warning surfacing can't drift between the entry points.
  *
  * The two kinds differ in what they stage, and the difference is the point: including a **cue**
@@ -35,9 +35,10 @@ export type IncludeTargetRequest =
  * own contents and a slot referencing the thing it describes would mean nothing. Both of those are
  * the backend's call — this hook just names the target.
  *
- * A Look include is **one-way this session**: Update-back still writes through the retired palette
- * tables, so the toolbar disables Update while a Look is the include target rather than let it
- * write rows no consumer reads.
+ * A Look include is **not** one-way, though it was: `updateIncludedLook` MERGEs whatever changed
+ * since Include into the Look's own rows, so Include → edit → Update is a round trip for a Look
+ * exactly as it is for a cue. It was disabled while the only write-back path led into the retired
+ * palette tables.
  */
 export function useInclude(projectId: number, options: UseIncludeOptions = {}) {
   const { toastErrors = true } = options

@@ -13,9 +13,13 @@ import type { RowId } from '../components/fixtures-list/rowModel'
  *
  * Selection used to be `useState` inside the container, which meant only components rendered
  * *inside* that container could see it — `SelectionToolbar` could (hence "Record palette" is
- * selection-scoped), but `ProgrammerToolbar` could not, because it arrives as the
- * `toolbarExtra` prop. That is why cue Record had no "selected fixtures only": the sheet it
- * opens has no prop path to the selection.
+ * selection-scoped), but the programmer's own controls could not, because they were injected from
+ * outside. That is why cue Record had no "selected fixtures only": the sheet it opens has no prop
+ * path to the selection. Those controls are now a band of their own on the programmer page, which
+ * is further outside still — so the store is what makes Record's scope work at all.
+ *
+ * Cell selection deliberately does **not** live here — see `useCellSelection`. Nothing outside the
+ * grid reads it, and the reason above is the only reason row selection had to be lifted.
  *
  * ## Scoping
  *

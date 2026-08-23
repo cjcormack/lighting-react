@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  describeIncludedTarget,
-  includedCueId,
-  includedTargetKey,
-} from './includedTarget'
+import { describeIncludedTarget, includedCueId, includedTargetKey, includedTargetParts } from './includedTarget'
 import type { IncludedTarget } from '@/api/programmerWsApi'
 
 const CUE: IncludedTarget = { kind: 'CUE', cueId: 4, cueNumber: '2.1', cueName: 'Warm wash' }
@@ -52,5 +48,33 @@ describe('includedCueId', () => {
     expect(includedCueId(CUE)).toBe(4)
     expect(includedCueId(LOOK)).toBeNull()
     expect(includedCueId(null)).toBeNull()
+  })
+})
+
+describe('includedTargetParts', () => {
+  it('splits a cue into its number and its name', () => {
+    expect(includedTargetParts({ kind: 'CUE', cueId: 5, cueNumber: 'Q3', cueName: 'Warm Wash' }))
+      .toEqual({ number: 'Q3', name: 'Warm Wash' })
+  })
+
+  it('omits the name for a numbered cue that has none', () => {
+    // Not `Cue 5`: "Q3 · Cue 5" would name one cue twice, in two vocabularies. This is the case
+    // that makes `describeIncludedTarget` a join of the parts rather than a template.
+    expect(includedTargetParts({ kind: 'CUE', cueId: 5, cueNumber: 'Q3' }))
+      .toEqual({ number: 'Q3', name: undefined })
+    expect(describeIncludedTarget({ kind: 'CUE', cueId: 5, cueNumber: 'Q3' })).toBe('Q3')
+  })
+
+  it('falls back to the id only when there is nothing else', () => {
+    expect(includedTargetParts({ kind: 'CUE', cueId: 5 })).toEqual({
+      number: undefined,
+      name: 'Cue 5',
+    })
+  })
+
+  it('gives a Look its name and no number', () => {
+    expect(includedTargetParts({ kind: 'LOOK', lookId: 2, lookName: 'Amber Key' })).toEqual({
+      name: 'Amber Key',
+    })
   })
 })

@@ -23,7 +23,36 @@ import { RunOutputPane } from './RunOutputPane'
 import { RunTargetsPane } from './RunTargetsPane'
 import { RunPropsPane } from './RunPropsPane'
 
+/**
+ * Where the expanded body switches from three side-by-side panes to tabs.
+ *
+ * This number and `HEADER_GRID` below are the same threshold in two languages — JS for the
+ * pane/tab swap (which must be a real branch: `PaneShell` returns null when inactive, so a
+ * CSS-only version would mount three panes of live data to show one), CSS for the header's
+ * columns. They MUST stay equal. They were not: the header used viewport `max-[999px]:` while the
+ * body measured the card's own width, and the two disagree by exactly the sidebar (240px open,
+ * 64px collapsed) — so between roughly 1000 and 1256px of viewport you got the wide header's
+ * target chips sitting above tabbed panes.
+ */
 const TABS_BREAKPOINT = 1000
+
+/**
+ * The header's column tracks at each width, as **container** queries against the card itself.
+ *
+ * Seven tracks: pip · Q# · palette · name · chips · fade · chevron. Each arm drops the track whose
+ * child hides at the same width, and that coupling is the thing to keep in step — the 1000 arm
+ * loses the chips track because `@max-[1000px]:hidden` on the chips div takes them away, and the
+ * 700 arm loses the palette track for the same reason. Changing one without the other silently
+ * shifts every column.
+ *
+ * The Q# track is `auto`, sized by the fixed-width cell inside it (`cueNumberCellWidth`) so the
+ * column fits the longest cue number in the show rather than a flat 56px.
+ */
+const HEADER_GRID = [
+  'grid-cols-[22px_auto_80px_minmax(0,1fr)_auto_auto_28px]',
+  '@max-[1000px]:grid-cols-[22px_auto_70px_minmax(0,1fr)_auto_28px]',
+  '@max-[700px]:grid-cols-[22px_auto_minmax(0,1fr)_auto_28px]',
+].join(' ')
 
 interface RunCueCardProps {
   cue: CueStackCueEntry
@@ -119,7 +148,9 @@ export function RunCueCard({
     <div
       data-cue-row={cue.id}
       className={cn(
-        'mx-2 my-1 rounded-lg border bg-muted overflow-hidden transition-colors',
+        // `@container`: the header's columns query THIS box, the same one `bodyRef` measures for
+        // TABS_BREAKPOINT, so the two can no longer disagree.
+        '@container mx-2 my-1 rounded-lg border bg-muted overflow-hidden transition-colors',
         isActive && 'border-green-500/70 bg-green-950/15',
         isStandby && !isActive && 'border-blue-500/60',
         isActive && isFading && 'border-amber-700/70 bg-amber-950/10',
@@ -136,12 +167,8 @@ export function RunCueCard({
             : 'Click to queue as next · chevron to expand'
         }
         className={cn(
-          'grid items-center gap-3 px-3.5 py-2.5 cursor-pointer relative',
-          // The Q# track is `auto`, sized by the fixed-width cell inside it (`cueNumberCellWidth`)
-          // so the column fits the longest number in the show instead of a flat 56px.
-          'grid-cols-[22px_auto_80px_minmax(0,1fr)_auto_auto_28px]',
-          'max-[999px]:grid-cols-[22px_auto_70px_minmax(0,1fr)_auto_28px]',
-          'max-[699px]:grid-cols-[22px_auto_minmax(0,1fr)_auto_28px]',
+          'grid items-center gap-x-3 gap-y-1 px-3.5 py-2.5 cursor-pointer relative',
+          HEADER_GRID,
           isActive && 'hover:bg-green-500/[0.04]',
           !isActive && 'hover:bg-blue-500/[0.04]',
         )}
@@ -176,7 +203,7 @@ export function RunCueCard({
         />
 
         {/* Palette bar — hidden on narrow */}
-        <div className="h-[22px] rounded overflow-hidden flex max-[699px]:hidden">
+        <div className="h-[22px] rounded overflow-hidden flex @max-[700px]:hidden">
           <PaletteBar palette={cueData?.palette ?? []} />
         </div>
 
@@ -196,7 +223,7 @@ export function RunCueCard({
         </div>
 
         {/* Targets / FX / hook chips — hidden on compact widths */}
-        <div className="flex items-center gap-1 flex-nowrap shrink-0 max-[999px]:hidden">
+        <div className="flex items-center gap-1 flex-nowrap shrink-0 @max-[1000px]:hidden">
           {targets.slice(0, 3).map((t) => (
             <TargetChip key={`${t.type}:${t.key}`} target={t} />
           ))}
@@ -258,6 +285,20 @@ export function RunCueCard({
             className={cn('size-4 transition-transform', expanded && 'rotate-90')}
           />
         </button>
+
+        {/* Inline note when collapsed — a second row of the SAME grid, starting in the name
+            column. It used to be a sibling div indented by a hardcoded `pl-[92px]`, which implied
+            a 32px Q# cell: below even `cueNumberCellWidth`'s 4rem floor, so it always
+            under-indented, by 32px on a `Q1` stack and up to 160px on a `QS1-3.2.10` one. No
+            literal could be right, because the correct offset also changes per arm. Placing it in
+            the grid inherits the computed column for free. It is inside the header, so clicking it
+            queues the cue — consistent with the rest of the row. */}
+        {!expanded && cue.notes && (
+          <div className="col-start-4 col-end-[-1] font-mono text-[10.5px] italic text-muted-foreground @max-[700px]:col-start-3">
+            {'// '}
+            {cue.notes}
+          </div>
+        )}
       </div>
 
       {/* Fade progress bar — pinned under the header while fading */}
@@ -270,14 +311,6 @@ export function RunCueCard({
               transition: 'width 80ms linear',
             }}
           />
-        </div>
-      )}
-
-      {/* Inline note when collapsed */}
-      {!expanded && cue.notes && (
-        <div className="px-3.5 pb-2 -mt-1.5 pl-[92px] font-mono text-[10.5px] italic text-muted-foreground">
-          {'// '}
-          {cue.notes}
         </div>
       )}
 

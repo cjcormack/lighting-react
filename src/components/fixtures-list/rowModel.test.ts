@@ -11,8 +11,11 @@ import {
   groupSelectParam,
   parseSelectParam,
   planBatchWrites,
+  type RowId,
 } from './rowModel'
 import { resolveCell } from './columns'
+import type { ColumnKey } from './columns'
+import { cellKey, cellsByColumn } from './cellSelectionModel'
 import {
   chan,
   colourProp,
@@ -453,6 +456,61 @@ describe('batch write planning', () => {
       pan: 540,
       tilt: undefined,
     })
+  })
+})
+
+/**
+ * The marquee's write path, end to end at the model level.
+ *
+ * A drag across two columns is grouped by column and each group becomes one `planBatchWrites` call.
+ * The consequence worth pinning is that a commit of one shape reaches only the column that can take
+ * it — so the "8 cells" the drag chip reports is an upper bound on what any single commit writes,
+ * not a promise. Constraining the marquee to one family instead would throw away the multi-column
+ * selection the design draws.
+ */
+describe('a multi-column marquee, grouped and planned', () => {
+  const rgb = makeFixture('rgb', [
+    sliderProp('dimmer', 'dimmer', chan(1)),
+    colourProp('rgbColour', chan(2), chan(3), chan(4)),
+  ])
+
+  it('sends a colour commit to the colour cells only', () => {
+    const rows = buildRows({ fixtures: [rgb], groups: [], expandedGroups: new Set(), textFilter: '' })
+    // What a drag across Dimmer and Colour on one row leaves selected.
+    const selected = new Set([
+      cellKey('fixture:rgb' as RowId, 'dimmer' as ColumnKey),
+      cellKey('fixture:rgb' as RowId, 'colour' as ColumnKey),
+    ])
+
+    const written = cellsByColumn(selected).flatMap(({ col, rowIds }) =>
+      planBatchWrites(expandSelectionToTargets(rows, new Set(rowIds)), col, {
+        kind: 'colour',
+        r: 255,
+        g: 0,
+        b: 0,
+      }),
+    )
+
+    expect(written).toHaveLength(1)
+    expect(written[0].resolution?.kind).toBe('colour')
+  })
+
+  it('sends a level commit to the dimmer cell only', () => {
+    const rows = buildRows({ fixtures: [rgb], groups: [], expandedGroups: new Set(), textFilter: '' })
+    const selected = new Set([
+      cellKey('fixture:rgb' as RowId, 'dimmer' as ColumnKey),
+      cellKey('fixture:rgb' as RowId, 'colour' as ColumnKey),
+    ])
+
+    const written = cellsByColumn(selected).flatMap(({ col, rowIds }) =>
+      planBatchWrites(expandSelectionToTargets(rows, new Set(rowIds)), col, {
+        kind: 'slider',
+        value: 128,
+      }),
+    )
+
+    expect(written).toHaveLength(1)
+    expect(written[0].resolution?.kind).toBe('slider')
   })
 })
 

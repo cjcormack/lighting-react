@@ -16,7 +16,8 @@ import { SaveStatusIndicator } from './SaveStatusIndicator'
 import { ViewSwitcher, type ShowView } from './ViewSwitcher'
 
 const PAGE_LABEL: Record<ShowView, string> = {
-  program: 'Program',
+  programmer: 'Programmer',
+  show: 'Show',
   run: 'Run',
   'prompt-book': 'Prompt Book',
 }
@@ -26,7 +27,7 @@ interface ShowHeaderProps {
   view: ShowView
   projectId: number
   projectName: string
-  /** Breadcrumb drill segments (e.g. Program's drilled-into stack name). */
+  /** Breadcrumb drill segments (e.g. Show's drilled-into stack name). */
   extra?: string[]
   onCurrentPageClick?: () => void
   isShowActive: boolean
@@ -102,7 +103,7 @@ export function ShowHeader({
                 aria-label="Stop show"
               >
                 <Square className="size-3.5" />
-                <span className="hidden min-[420px]:inline">Stop</span>
+                <span className="hidden @[420px]:inline">Stop</span>
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">Stop show</TooltipContent>
@@ -112,7 +113,7 @@ export function ShowHeader({
             <TooltipTrigger asChild>
               <Button size="sm" onClick={onStart} disabled={!canStart} aria-label="Start show">
                 <Play className="size-3.5" />
-                <span className="hidden min-[420px]:inline">Start</span>
+                <span className="hidden @[420px]:inline">Start</span>
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">Start show</TooltipContent>

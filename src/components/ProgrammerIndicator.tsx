@@ -23,12 +23,12 @@ export function ProgrammerIndicator({ className }: { className?: string }) {
   const blind = summary?.blind ?? false
   if (entryCount === 0 && !blind) return null
 
-  // Program hosts the programmer now, so the link goes there — and the "am I already there?" test
-  // can no longer be `startsWith`. `/projects/1/programmer` starts with `/projects/1/program`, so a
-  // stale link or an in-flight legacy redirect would suppress the link on the one page that needs
-  // it. This is the segment-aware idiom `ProjectSwitcher.mostSpecificActiveId` uses; a drilled stack
-  // (`/program/stacks/5`) still counts as "already there", because the pane is on that page too.
-  const programmerPath = currentProject ? `/projects/${currentProject.id}/program` : null
+  // The programmer is its own page again, so the link goes there. The "am I already there?" test
+  // stays segment-aware rather than a bare `startsWith`, which is a trap in both directions: while
+  // this pointed at `/program`, the sibling `/projects/1/programmer` DID start with it — and would
+  // have read as "already there" on the one page that needed the link least, and as "not there" the
+  // other way round. Same idiom as `mostSpecificActiveId`; a subroute still counts as being here.
+  const programmerPath = currentProject ? `/projects/${currentProject.id}/programmer` : null
   const onProgrammer =
     programmerPath != null &&
     (location.pathname === programmerPath || location.pathname.startsWith(`${programmerPath}/`))
@@ -66,12 +66,16 @@ export function ProgrammerIndicator({ className }: { className?: string }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
+        {/* `shrink-0` on the OUTER element: `className` lands on the inner body span, so without
+            it the ShowBar can squeeze this to nothing while the badge inside keeps its width. */}
         {programmerPath && !onProgrammer ? (
-          <Link to={programmerPath} aria-label={tip}>
+          <Link to={programmerPath} aria-label={tip} className="flex shrink-0 items-center">
             {body}
           </Link>
         ) : (
-          <div aria-label={tip}>{body}</div>
+          <div aria-label={tip} className="flex shrink-0 items-center">
+            {body}
+          </div>
         )}
       </TooltipTrigger>
       <TooltipContent>{tip}</TooltipContent>

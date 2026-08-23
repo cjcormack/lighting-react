@@ -25,9 +25,14 @@ import { LooksRedirect, ProjectLooks } from "./routes/Looks";
 import { SpeedMastersRedirect, ProjectSpeedMasters } from "./routes/SpeedMasters";
 import ProjectOverview, { ProjectOverviewRedirect } from "./routes/ProjectOverview";
 import { PatchesRedirect } from "./routes/Patches";
-import { ProgramPage, ProgramRedirect, CuesLegacyRedirect } from "./routes/ProgramPage";
-import { ProgrammerLegacyRedirect } from "./routes/Programmer";
-import { RunPage, RunRedirect, LegacyShowRedirect } from "./routes/RunPage";
+import { ShowPage, ShowRedirect, CuesLegacyRedirect } from "./routes/ShowPage";
+import {
+  ProgrammerPage,
+  ProgrammerRedirect,
+  ProgrammerFxRedirect,
+  LegacyProgramRedirect,
+} from "./routes/ProgrammerPage";
+import { RunPage, RunRedirect, LegacyCueStacksRedirect } from "./routes/RunPage";
 import { PromptBookViewerPage, PromptBookRedirect } from "./routes/PromptBookPage";
 import { SurfacesRedirect } from "./routes/Surfaces";
 import { DiagnosticsRedirect } from "./routes/Diagnostics";
@@ -169,7 +174,7 @@ function App() {
         },
         {
           path: "cues",
-          element: <ProgramRedirect />,
+          element: <ShowRedirect />,
         },
         {
           path: "projects/:projectId/settings",
@@ -269,32 +274,50 @@ function App() {
           element: <ProjectFxLibrary />,
         },
 
+        // Show — the cue/stack authoring surface. It was `/program` until the programmer moved out
+        // of it into a page of its own; `/program*` below keeps every existing link alive.
         {
-          path: "projects/:projectId/program",
-          element: <ProgramPage />,
+          path: "projects/:projectId/show",
+          element: <ShowPage />,
         },
         {
-          path: "projects/:projectId/program/stacks/:stackId",
-          element: <ProgramPage />,
+          path: "projects/:projectId/show/stacks/:stackId",
+          element: <ShowPage />,
         },
         {
-          path: "program",
-          element: <ProgramRedirect />,
+          path: "show",
+          element: <ShowRedirect />,
         },
-        // The programmer is no longer its own page: `ProgrammerPane` in the Program view carries
-        // Values / Layers / FX as tabs, so it has no nav entry either and these three paths exist
-        // purely so old links land. See `ProgrammerLegacyRedirect`.
+        // The programmer: values, layers and effects on one screen. It WAS its own page, then
+        // became three tabs of a pane inside Program, and is a page again — the tabs were three
+        // readings of one live object and could never be seen together, which is the whole point.
         {
           path: "projects/:projectId/programmer",
-          element: <ProgrammerLegacyRedirect />,
-        },
-        {
-          path: "projects/:projectId/programmer/fx",
-          element: <ProgrammerLegacyRedirect />,
+          element: <ProgrammerPage />,
         },
         {
           path: "programmer",
-          element: <ProgramRedirect />,
+          element: <ProgrammerRedirect />,
+        },
+        // `/programmer/fx` was a route when the FX sheet was a destination. It is a section of the
+        // page now, so the path survives only to land a bookmark.
+        {
+          path: "projects/:projectId/programmer/fx",
+          element: <ProgrammerFxRedirect />,
+        },
+        // Legacy `/program*` → `/show*`, search preserved (`?cue=` deep links from Run and the
+        // Prompt Book's "Edit Cue").
+        {
+          path: "projects/:projectId/program",
+          element: <LegacyProgramRedirect />,
+        },
+        {
+          path: "projects/:projectId/program/stacks/:stackId",
+          element: <LegacyProgramRedirect />,
+        },
+        {
+          path: "program",
+          element: <ShowRedirect />,
         },
         {
           path: "projects/:projectId/run",
@@ -312,22 +335,17 @@ function App() {
           path: "prompt-book",
           element: <PromptBookRedirect />,
         },
-        // Legacy redirects — all former Show routes land on /run
-        {
-          path: "projects/:projectId/show",
-          element: <LegacyShowRedirect />,
-        },
-        {
-          path: "show",
-          element: <LegacyShowRedirect />,
-        },
+        // Legacy `/cue-stacks` → /run. `/show` used to live here too, back when the PLAYBACK view
+        // was called Show; it now names the authoring view, so those two paths moved above. An old
+        // `/show` bookmark therefore lands on cue authoring rather than on Run — unavoidable under
+        // the rename, and the better answer of the two.
         {
           path: "projects/:projectId/cue-stacks",
-          element: <LegacyShowRedirect />,
+          element: <LegacyCueStacksRedirect />,
         },
         {
           path: "cue-stacks",
-          element: <LegacyShowRedirect />,
+          element: <LegacyCueStacksRedirect />,
         },
         {
           path: "fixtures",

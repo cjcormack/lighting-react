@@ -29,7 +29,6 @@ import {
 } from '../store/cueStacks'
 import { useCreateProjectCueMutation, usePatchProjectCueMutation } from '../store/cues'
 import type { CueStackCueEntry } from '../api/cueStacksApi'
-import { useFxStateQuery, tapTempo } from '../store/fx'
 import { useNarrowContainer } from '../hooks/useNarrowContainer'
 import { useShowTransport } from '../hooks/useShowTransport'
 import {
@@ -99,7 +98,6 @@ export function PromptBookViewerPage() {
   const { data: project } = useProjectQuery(projectIdNum)
   const { data: programState } = useProjectProgramStateQuery(projectIdNum)
   const { data: stacks } = useProjectCueStackListQuery(projectIdNum)
-  const { data: fxState } = useFxStateQuery()
 
   const [activateShow] = useActivateProgramMutation()
   const [deactivateShow] = useDeactivateProgramMutation()
@@ -402,9 +400,9 @@ export function PromptBookViewerPage() {
     (cueId: number) => {
       const flat = cueOrder[cueOrderIndex.get(cueId) ?? -1]
       if (flat?.stackId != null) {
-        navigate(`/projects/${projectIdNum}/program/stacks/${flat.stackId}?cue=${cueId}`)
+        navigate(`/projects/${projectIdNum}/show/stacks/${flat.stackId}?cue=${cueId}`)
       } else {
-        navigate(`/projects/${projectIdNum}/program`)
+        navigate(`/projects/${projectIdNum}/show`)
       }
     },
     [cueOrder, cueOrderIndex, navigate, projectIdNum],
@@ -862,8 +860,6 @@ export function PromptBookViewerPage() {
     goDisabled,
     showActive: isShowActive,
     stackName: railStackName,
-    bpm: fxState?.bpm ?? null,
-    onTap: tapTempo,
     dbo,
     onDbo: () => setDbo((d) => !d),
     projectId: projectIdNum,
@@ -902,8 +898,6 @@ export function PromptBookViewerPage() {
           stackName={railStackName}
           dbo={dbo}
           onDbo={() => setDbo((d) => !d)}
-          bpm={fxState?.bpm ?? null}
-          onTap={tapTempo}
           activeNumber={liveEntry?.cueNumber ? `Q${liveEntry.cueNumber}` : null}
           activeName={liveCue?.name ?? null}
           standbyNumber={nextEntry?.cueNumber ? `Q${nextEntry.cueNumber}` : null}

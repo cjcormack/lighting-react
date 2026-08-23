@@ -89,7 +89,9 @@ export function ProjectFixtures() {
 
   return (
     <Card className="m-4 p-4">
-      <div className="mb-4 flex items-center justify-between gap-3">
+      {/* `@container`: the view switcher's labels are a container query, and a missing ancestor
+          would drop them silently. See ViewSwitcher's LABEL_AT_* constants. */}
+      <div className="@container mb-4 flex items-center justify-between gap-3">
         <Breadcrumbs projectName={project.name} currentPage="Fixtures" />
         <FixturesViewSwitcher current="cards" projectId={projectIdNum} />
       </div>

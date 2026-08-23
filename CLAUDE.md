@@ -469,7 +469,7 @@ recovery. Frontend shape:
   can't render and the tab would otherwise be an error with nothing to press.
 
 ### Cues, Stacks & Triggers
-Cues bundle an ordered stack of **Look layers** (see §Looks and layers), their own property assignments, ad-hoc effects, and **script hooks** into named snapshots. **Every cue belongs to a cue stack** — there are no standalone cues. A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of cues. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). Cues and stacks are authored and run entirely in the **Program** view (`/projects/:projectId/program`, drilling into a stack at `/program/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed.
+Cues bundle an ordered stack of **Look layers** (see §Looks and layers), their own property assignments, ad-hoc effects, and **script hooks** into named snapshots. **Every cue belongs to a cue stack** — there are no standalone cues. A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of cues. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). Cues and stacks are authored and run entirely in the **Show** view (`/projects/:projectId/show`, drilling into a stack at `/show/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed, and Show was itself called Program until the programmer moved out of it into `/programmer` (see §Navigation Registry).
 
 **Cue numbers** are free-form display labels (`sortOrder` is the authoritative playback order). They are parsed as **prefix + decimal run + suffix** (`S1-3.1` → `("S1-", [3,1], "")`) and only ever compared *within a prefix group*, so `Pre-show 1, Pre-show 2, T2-1, S-1, S-2` is correctly ordered. `src/lib/cueNumber.ts` holds that model and drives the "Fix Order" banner; it mirrors `routes/cueNumbering.kt` in lighting7, which performs the fix — **keep the two in step**.
 
@@ -571,23 +571,38 @@ REST API is used for CRUD operations on scripts, scenes, fixtures, etc.
   sidebar keeps one entry per resource; the cards route redirects to the list
   when the sticky view preference says so. Follow that pattern for any new
   cards/list pair instead of adding a second sidebar row.
-- **Where a route was removed rather than kept — the programmer.** `/programmer`
-  and `/programmer/fx` are `ProgrammerLegacyRedirect` into `/program`, and there is
-  **no `programmer` navItems entry at all**. The whole programmer is
-  `ProgrammerPane` in the Program view, whose three tabs (Values / Layers / FX) are
-  what those two routes used to be plus the layer stack. Tabs and not sibling routes
-  because they are three readings of *one live object* — the values it holds, the
-  looks it is composed from, the effects running over it — rather than three
-  destinations. Dropping the sidebar row was the point, not a side effect: two rows
-  leading to one page is what the collision between `pathMatch: "/program"` and
-  `"/programmer"` was. The cost is that Cmd+K no longer carries the word
-  "Programmer"; that was accepted deliberately.
+- **Programmer and Show are siblings, and Program is gone as a name.** The
+  cue/stack authoring surface is `/show` (`ShowPage`), and the programmer is
+  `/projects/:id/programmer` (`ProgrammerPage`) — two `navItems` entries, two
+  `ShowView` pills, in that order. `/program*` redirects to the `/show` equivalent
+  **carrying the search string**, because `?cue=` deep links are how Run and the
+  Prompt Book's "Edit Cue" reach a cue.
 
-  The FX tab keeps its old rationale in a new form: it is a diagnostic read, so the
-  persisted tab is **reset to Values on mount** rather than restored. And
-  `ProgrammerIndicator` must not test "am I already there?" with `startsWith` — a
-  stale `/programmer` URL starts with `/program`. It uses the segment-aware idiom
-  from `ProjectSwitcher.mostSpecificActiveId`.
+  This is the third arrangement, and the reasoning for the second is what makes the
+  third safe to state. The programmer was once its own page, then three tabs of a
+  collapsed pane inside Program with no nav entry — the argument being that Values /
+  Layers / FX are three readings of *one live object* rather than three destinations,
+  and that a second sidebar row pointing at one page was the `"/program"` vs
+  `"/programmer"` collision. The tabs premise held; the *pane* did not. Three readings
+  of one object is an argument for showing them **together**, not for a switcher, and
+  a collapsed pane could never do that. So: no tabs, and a page with room. Renaming
+  Program to Show removes the near-collision outright.
+
+  Two traps that survive the rename:
+
+  - **`pathMatch` never uses `startsWith`.** `mostSpecificActiveId` now lives in
+    `lib/navMatch.ts` and matches whole trailing segments (`endsWith(m) ||
+    includes(m + '/')`), longest wins. `navMatch.test.ts` pins `/programmer` and
+    `/show` apart so the collision cannot come back by accident.
+  - **`ProgrammerIndicator` does the same test by hand** and must keep the
+    segment-aware form. It is a trap in both directions: while it pointed at
+    `/program`, the sibling `/projects/1/programmer` *did* start with it.
+
+  `/programmer/fx` still redirects — FX was a route, then a tab, and is now a band of
+  the page. The old "reset the FX tab to Values on mount" rule retired with the tabs;
+  the diagnostic-read argument lives on as `FxSheet` being a collapsible under
+  `ProgrammerFxList`, closed by default and **mounted only when open**, because it
+  builds a second full fixture row model and re-renders on every programmer event.
 - **Where sibling routes do *not* apply — the Look library.** `/looks` is one
   `navItems` entry and **one route**, with a sticky in-page family filter
   (`LookFamilyFilterBar`) rather than the four sibling routes the palette banks it

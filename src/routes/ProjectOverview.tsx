@@ -175,7 +175,7 @@ export default function ProjectOverview() {
                 count={project.cueCount}
                 icon={<Clapperboard className="size-5" />}
                 description={`${project.cueStackCount} stack${project.cueStackCount !== 1 ? 's' : ''}, ${project.cueCount} cue${project.cueCount !== 1 ? 's' : ''}`}
-                onClick={() => navigate(`/projects/${project.id}/program`)}
+                onClick={() => navigate(`/projects/${project.id}/show`)}
               />
               {universes && universes.length >= 1 && (
                 <QuickNavCard

@@ -158,4 +158,19 @@ describe("look navigation", () => {
       expect(item.pathMatch).toBe("/looks")
     }
   })
+
+  it("gives the programmer and Show separate entries that can't shadow each other", () => {
+    // A `programmer` entry was left out of the sidebar once because `/program` and `/programmer`
+    // would have collided. Renaming Program to Show removed the collision; these two assertions and
+    // `lib/navMatch.test.ts` are what keep it removed.
+    const programmer = navItems.find((i) => i.id === "programmer")
+    const show = navItems.find((i) => i.id === "program")
+    expect(programmer?.pathMatch).toBe("/programmer")
+    expect(programmer?.path(7)).toBe("/projects/7/programmer")
+    expect(show?.label).toBe("Show")
+    expect(show?.pathMatch).toBe("/show")
+    expect(show?.path(7)).toBe("/projects/7/show")
+    // Neither pathMatch may be a whole-segment suffix of the other.
+    expect(programmer!.pathMatch.endsWith(show!.pathMatch)).toBe(false)
+  })
 })

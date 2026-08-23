@@ -75,7 +75,8 @@ export function ProjectGroups() {
 
   return (
     <Card className="m-4 p-4">
-      <div className="mb-4 flex items-center justify-between gap-3">
+      {/* `@container` — see ViewSwitcher's LABEL_AT_* constants. */}
+      <div className="@container mb-4 flex items-center justify-between gap-3">
         <Breadcrumbs projectName={project.name} currentPage="Groups" />
         <GroupsViewSwitcher current="cards" projectId={projectIdNum} />
       </div>
