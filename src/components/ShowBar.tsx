@@ -1,6 +1,7 @@
 import { ArrowRight, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { UNLOCKED_WARNING_CLASS } from '@/lib/lockChrome'
 import { ProgrammerIndicator } from './ProgrammerIndicator'
 import { SpeedMasters } from './SpeedMasters'
 
@@ -22,8 +23,28 @@ interface ShowBarProps {
   onBack: () => void
   /** Disables + mutes BACK/GO (e.g. Prompt Book when the operator can't edit). Default false. */
   goDisabled?: boolean
-  /** The on-screen `space`/`⌫` keyboard hint. Default false — only Run passes true. */
+  /**
+   * The on-screen `space`/`⌫` keyboard hint. Default false.
+   *
+   * Only shown where those keys actually act: the merged Show view binds them while **locked** and
+   * withholds them while unlocked, so the hint tracks the lock rather than the view.
+   */
   showShortcuts?: boolean
+  /**
+   * Whether the programmer is gated out of the stage output.
+   *
+   * The tile appears only when `onBlind` is supplied, so a host that merely wants to *read* the
+   * state uses `ProgrammerIndicator` instead. Do not make that indicator the toggle: it is also the
+   * link to the programmer, and one control cannot be both without one of the two jobs becoming a
+   * surprise.
+   */
+  blind?: boolean
+  onBlind?: () => void
+  /**
+   * A running show is unlocked. Washes the bar amber to match the header above it — the chrome has
+   * to tint as one band, or it reads as stripes.
+   */
+  unlockedWarning?: boolean
 }
 
 /**
@@ -81,11 +102,19 @@ export function ShowBar({
   onBack,
   goDisabled = false,
   showShortcuts = false,
+  blind,
+  onBlind,
+  unlockedWarning = false,
 }: ShowBarProps) {
   const isFading = fadeRemainMs != null && fadeRemainMs > 0
 
   return (
-    <div className="@container flex flex-wrap items-stretch gap-1.5 border-b px-2.5 py-1.5 @[440px]:gap-2 @[440px]:px-4 @[440px]:py-2">
+    <div
+      className={cn(
+        '@container flex flex-wrap items-stretch gap-1.5 border-b px-2.5 py-1.5 transition-colors @[440px]:gap-2 @[440px]:px-4 @[440px]:py-2',
+        unlockedWarning && UNLOCKED_WARNING_CLASS,
+      )}
+    >
       {/* DBO tile. Tiles use `justify-start` (not `justify-center`) so the labels share the same
           y-baseline regardless of value font size. It steps its own chrome down the rungs rather
           than swapping to a second element. */}
@@ -118,6 +147,49 @@ export function ShowBar({
         </span>
       </button>
 
+      {/* Blind, beside blackout because they are the same class of thing: a gate on what reaches
+          the rig. Rendered only when a host supplies the handler — the merged Show view does, and
+          only while unlocked; the Programmer does not, because its action bar already owns the
+          toggle, and two controls for one state is how they come to disagree.
+
+          Note for whoever wires blackout up: DBO above is currently local state with no side
+          effect, so these two look like peers while only one of them does anything. */}
+      {onBlind && (
+        <button
+          type="button"
+          onClick={onBlind}
+          aria-pressed={blind ?? false}
+          title={
+            blind
+              ? 'Blind is on — programmer values are gated out of the stage output'
+              : 'Blind — edit without the rig showing it'
+          }
+          className={cn(
+            'flex shrink-0 flex-col items-start justify-start gap-px rounded-md border px-2 py-1 transition-colors @[440px]:px-2.5 @[700px]:px-3 @[700px]:py-1.5',
+            'bg-card hover:bg-muted/40',
+            blind &&
+              'border-amber-600 bg-amber-950/40 hover:bg-amber-950/50 shadow-[0_0_12px_rgba(245,158,11,0.25)]',
+          )}
+        >
+          <span
+            className={cn(
+              'hidden text-[9px] font-bold uppercase tracking-[0.08em] text-muted-foreground @[440px]:block',
+              blind && 'text-amber-300',
+            )}
+          >
+            Stage
+          </span>
+          <span
+            className={cn(
+              'font-mono text-[11px] font-bold leading-none tracking-wider @[440px]:text-base @[700px]:text-lg',
+              blind ? 'text-amber-300' : 'text-foreground',
+            )}
+          >
+            BLIND
+          </span>
+        </button>
+      )}
+
       {/* Every speed master, master 1 included. Self-contained; picks its own arm from the width
           above. The ShowBar used to own an M1 readout beside this, which is the split that made the
           560px band unwinnable. */}
@@ -127,7 +199,11 @@ export function ShowBar({
           engaged, so it costs no width during a clean show. It reads its own state, which is why it
           takes no props from here. It is a direct child rather than living in a wrapper div: a
           wrapper always rendered, and so always ate a gap, even when the indicator drew nothing. */}
-      <ProgrammerIndicator className="px-2.5 py-2" />
+      {/* `blindShownSeparately`: the BLIND tile above is this bar's blind signal, so the indicator
+          reports only the value count here. Two amber badges saying the same word is worse than
+          one. Conditional on the tile actually being drawn — a host that supplies no `onBlind` gets
+          no tile, and hardcoding the flag would leave blind reported nowhere in this bar. */}
+      <ProgrammerIndicator className="px-2.5 py-2" blindShownSeparately={onBlind != null} />
 
       {/* Live state — flexes to fill, and is never hidden. `overflow-hidden` is load-bearing: every
           child below is `shrink-0`, so without it they escape the border rather than clipping. */}

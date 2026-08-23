@@ -7,7 +7,6 @@ import {
   Move,
   Palette,
   Pencil,
-  Play,
   SlidersVertical,
   Sun,
   TableProperties,
@@ -21,7 +20,7 @@ import {
   type AttributeFamily,
 } from '@/lib/attributeFamily'
 
-export type ShowView = 'programmer' | 'show' | 'run' | 'prompt-book'
+export type ShowView = 'programmer' | 'show' | 'prompt-book'
 
 const ITEM = 'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold'
 
@@ -41,16 +40,23 @@ const ITEM = 'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs fo
 const LABEL_AT_560 = 'hidden @[560px]:inline' // Cards · List — two pills
 const LABEL_AT_720 = 'hidden @[720px]:inline' // Look families — five pills
 /**
- * Four pills in a header that also carries a breadcrumb trail (~220-320px above 640), the save
+ * Three pills in a header that also carries a breadcrumb trail (~220-320px above 640), the save
  * indicator, per-page actions, Start/Stop and the live dot: roughly 570px is spoken for before any
- * label, and four labels add ~230.
+ * label, and three labels add ~175.
+ *
+ * Was `@[820px]` for four pills, sized when Run was still a view of its own; session 2b merged it
+ * into Show. Recomputed rather than left alone — the threshold has to track the pill count or the
+ * labels collapse earlier than they need to. Written out in full because a template literal
+ * produces no CSS: the scanner only reads whole class strings.
  */
-const LABEL_AT_820 = 'hidden @[820px]:inline' // Programmer · Show · Run · Prompt Book
+const LABEL_AT_760 = 'hidden @[760px]:inline' // Programmer · Show · Prompt Book
 
 /**
- * Programmer · Show · Run · Prompt Book switcher, shared across the four live views. The `current`
+ * Programmer · Show · Prompt Book switcher, shared across the three live views. Run used to sit
+ * between Show and the Prompt Book; session 2b folded it into Show, because the two were one
+ * destination in two modes rather than two destinations. The `current`
  * view renders as a static pill; the others are links. Icons show at every width — only the text
- * labels collapse, at `LABEL_AT_820` — so the switch stays usable on phones (the sole in-view way
+ * labels collapse, at `LABEL_AT_760` — so the switch stays usable on phones (the sole in-view way
  * to move between the views on a narrow screen).
  *
  * Programmer comes first because it is where values are edited and Show is where they are arranged:
@@ -60,28 +66,21 @@ export function ViewSwitcher({ current, projectId }: { current: ShowView; projec
   return (
     <nav className="inline-flex items-center gap-0.5 rounded-lg border bg-card p-0.5">
       <Segment
-        labelClass={LABEL_AT_820}
+        labelClass={LABEL_AT_760}
         active={current === 'programmer'}
         to={`/projects/${projectId}/programmer`}
         icon={<SlidersVertical className="size-3.5" />}
         label="Programmer"
       />
       <Segment
-        labelClass={LABEL_AT_820}
+        labelClass={LABEL_AT_760}
         active={current === 'show'}
         to={`/projects/${projectId}/show`}
         icon={<Pencil className="size-3.5" />}
         label="Show"
       />
       <Segment
-        labelClass={LABEL_AT_820}
-        active={current === 'run'}
-        to={`/projects/${projectId}/run`}
-        icon={<Play className="size-3.5" />}
-        label="Run"
-      />
-      <Segment
-        labelClass={LABEL_AT_820}
+        labelClass={LABEL_AT_760}
         active={current === 'prompt-book'}
         to={`/projects/${projectId}/prompt-book`}
         icon={<BookOpenText className="size-3.5" />}

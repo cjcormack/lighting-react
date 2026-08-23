@@ -523,7 +523,93 @@ recovery. Frontend shape:
   can't render and the tab would otherwise be an error with nothing to press.
 
 ### Cues, Stacks & Triggers
-Cues bundle an ordered stack of **Look layers** (see §Looks and layers), their own property assignments, ad-hoc effects, and **script hooks** into named snapshots. **Every cue belongs to a cue stack** — there are no standalone cues. A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of cues. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). Cues and stacks are authored and run entirely in the **Show** view (`/projects/:projectId/show`, drilling into a stack at `/show/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed, and Show was itself called Program until the programmer moved out of it into `/programmer` (see §Navigation Registry).
+Cues bundle an ordered stack of **Look layers** (see §Looks and layers), their own property assignments, ad-hoc effects, and **script hooks** into named snapshots. **Every cue belongs to a cue stack** — there are no standalone cues. A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of cues. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). Cues and stacks are authored **and run** entirely in the **Show** view (`/projects/:projectId/show`, drilling into a stack at `/show/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed, Show was itself called Program until the programmer moved out of it into `/programmer`, and the separate **Run** view folded into it in session 2b (see §Navigation Registry and §The show-editing lock).
+
+#### The show-editing lock
+
+**`/show` is the runner and the editor, separated by a lock rather than a route.** `useEditLock`
+derives it:
+
+```
+locked = !canEdit || (isShowActive && lockRequested)
+```
+
+Six things about it are load-bearing:
+
+- **It is a stray-click guard, not access control.** The backend has no notion of it and no route
+  refuses a write on its account, so a second client can edit a "locked" show. Dressing it as
+  permission would be worse than not having it. `canEdit` is not a role either — the backend
+  computes it as "is this the current project".
+- **It is not the transport gate.** GO must work while locked; locked *is* the normal running state.
+  `canOperate` on `useShowTransport` is a different question and must never be handed `locked`.
+- **A stopped show is simply editable**, with no lock chrome at all — there is nothing to protect,
+  so there is nothing to warn about. `lockRelevant` gates the chrome.
+- **`lockRequested` lives in a Redux slice** (`store/editLockSlice.ts`), shared with the Prompt Book,
+  because "I am in a fix-it session" is one fact about the operator and one GO should end it
+  everywhere. It is **never persisted**: a running show always opens locked. The re-arm effect
+  therefore fires on the stopped→running *transition* and not on mount, or navigating between the two
+  surfaces would re-lock and the sharing would be pointless — `useEditLock.test.tsx` pins that.
+- **Dragging is disabled through dnd-kit's own `disabled`**, per sortable, never by unmounting the
+  `DndContext` — `useSortable` needs that ancestor, so removing it breaks every row. Affordances are
+  **hidden rather than greyed out**: a row of disabled destructive buttons reads as breakage.
+- **Transport shortcuts act only while locked**, via `useTransportKeys`, on **both** lock surfaces;
+  `L` stays bound in both states so there is always a keyboard way back to a safe desk. Unlocked, the
+  row's cue number, name and fade are live text fields, and in an editing surface Space is a space.
+  That handler took the *union* of the two it replaced — a focused button must not fire GO as well as
+  activating itself, which is a double advance the old Run handler allowed.
+- **Unlocked-while-running washes the header amber** — `ShowHeader`'s `unlockedWarning`, on both lock
+  surfaces. The signal is for the *unlocked* state, not the locked one: locked is the quiet default,
+  and believing you are locked when you are not is how a show gets edited by accident. A stopped show
+  is simply editable, so there is nothing to warn about and no wash. The border is always present and
+  transparent, so colouring it cannot shift the layout as the lock flips. The Prompt Book's toolbar
+  drew this itself until 2b; two adjacent amber bars said it twice.
+- **The lock control is `ShowLockControl` in `ShowHeader`'s `actions` slot**, on Show *and* the Prompt
+  Book. The Prompt Book used to draw its own in its toolbar, so one control sat in two places
+  depending on the view. It carries the Prompt Book's extra case: where the backend will not accept
+  edits, the control is shown but **inert**, because it is the only thing saying why.
+
+**One `ShowBar`, identical on all three live views.** Every host spreads `showBarProps` from
+`useShowBarProps` and overrides exactly one prop — `showShortcuts`, which advertises keys and so can
+only be answered by the host that binds them. Everything else comes from the hook, which is what
+stops the bar drifting into three near-copies: it previously had no Blind on the Prompt Book, a
+different stack-name rule on Show, and a hand-wired transport on the Prompt Book that gave that page
+two transport instances.
+
+- **The bar is not gated on the show running.** It carries blackout, Blind, the speed masters and the
+  programmer chip, all of which mean something with the show down, and `goDisabled` already mutes
+  BACK/GO. Gating it was what made **Blind's location depend on the show's state**.
+- **Blind lives in the bar, beside blackout** — the same class of thing (a gate on what reaches the
+  rig) in the one piece of chrome every live view shares. It was in the programmer's action-bar Stage
+  zone, which meant the same control was in one place on the Programmer and another on Show. It still
+  fades by the programmer's own fade time: `useShowBarProps` reads `PROGRAMMER_FADE_KEY`, the same
+  persisted value the action bar's picker writes, so moving the button did not turn a fade into a
+  snap. Do **not** make `ProgrammerIndicator` the toggle — it is also the link to the programmer, and
+  one control cannot be both without one of the two jobs becoming a surprise. That indicator instead
+  takes `blindShownSeparately` in the bar, so it reports only the value count there: it normally
+  draws its own amber Blind badge, which beside the tile was the same word twice.
+- **DBO beside it is still inert** in every host — local state, no side effect
+  ([`FU-FE-DBO-INERT`](../lighting7/docs/plans/followups.md)). Two identically-styled adjacent tiles
+  of which one works is the part that must not stand.
+
+**Browsing a stack never moves the playhead.** A tab click used to run
+`deactivate(old) → goToStack → deactivate(target)`, so one unconfirmed press took the live cue off
+stage and repositioned every other client. `StackTabStrip` now takes `selectedStackId` (the underline)
+and `liveStackId` (the green pip) as separate props, and arming is an explicit, confirm-gated control
+in `OffPlayheadBanner`. The confirmation is not ceremony: `POST /show/go-to` deactivates the stack
+being left and then calls `activateAtFirstCue` on the target, so the target's first cue genuinely
+fires and the desk darkens it again — a visible blip on top of losing the current cue.
+
+**Two cursors reach a cue row, and neither is a mode.** `serverActiveCueId` places the stable
+"on stage" marker; `activeCueId` (the optimistic runner cursor) says which row owns the fade chrome.
+During a crossfade those are different rows, so one value cannot serve both. The fade *value* is
+never a prop — each row reads its own through `useCueFade`, because `ProgramView` is memoized
+specifically to stop several hundred rows reconciling at frame rate, and passing `fadeProgress` down
+would defeat that with the memo still in place, looking effective.
+
+**Expansion is one addressed card plus the live one, derived.** `?cue=` holds the operator's card;
+the cue on stage is expanded on top of it by `useCueExpansion`. So a GO opens the new live card and
+cannot take away the one being read. Run kept a `Set` and never removed from it (five GOs, five open
+cards); Show kept a bare scalar a GO would overwrite.
 
 **Cue numbers** are free-form display labels (`sortOrder` is the authoritative playback order). They are parsed as **prefix + decimal run + suffix** (`S1-3.1` → `("S1-", [3,1], "")`) and only ever compared *within a prefix group*, so `Pre-show 1, Pre-show 2, T2-1, S-1, S-2` is correctly ordered. `src/lib/cueNumber.ts` holds that model and drives the "Fix Order" banner; it mirrors `routes/cueNumbering.kt` in lighting7, which performs the fix — **keep the two in step**.
 
@@ -649,15 +735,23 @@ REST API is used for CRUD operations on scripts, scenes, fixtures, etc.
   sidebar keeps one entry per resource; the cards route redirects to the list
   when the sticky view preference says so. Follow that pattern for any new
   cards/list pair instead of adding a second sidebar row.
-- **Programmer and Show are siblings, and Program is gone as a name.** The
-  cue/stack authoring surface is `/show` (`ShowPage`), and the programmer is
-  `/projects/:id/programmer` (`ProgrammerPage`) — two `navItems` entries, two
-  `ShowView` pills, in that order. `/program*` redirects to the `/show` equivalent
-  **carrying the search string**, because `?cue=` deep links are how Run and the
-  Prompt Book's "Edit Cue" reach a cue.
+- **There are three live views: Programmer · Show · Prompt Book.** The programmer is
+  `/projects/:id/programmer` (`ProgrammerPage`); `/show` (`ShowPage`) is *both* the
+  cue/stack authoring surface and the runner. `/program*` and `/run*` both redirect to
+  the `/show` equivalent, and `/program*` **carries the search string**, because
+  `?cue=` deep links are how the Prompt Book's "Edit cue" reaches a cue.
 
-  This is the third arrangement, and the reasoning for the second is what makes the
-  third safe to state. The programmer was once its own page, then three tabs of a
+  **Run is gone as a route, replaced by a mode.** Run and Show were never different
+  destinations — the only real distinction was whether a stray click can change the
+  show, which is a *mode*, and one the Prompt Book already modelled. So the lock came
+  across instead of the route (see §The show-editing lock). Both levels of the view
+  survive in both modes: locked, `/show` is the runner with a state pip, fade chrome
+  and click-to-arm; unlocked, it is the same list plus drag, inline edit and the
+  create/delete affordances. Two layouts under one switch would have been two views
+  with extra steps.
+
+  The programmer's own arrangement is the third it has had, and the reasoning for the
+  second is what makes the third safe to state. The programmer was once its own page, then three tabs of a
   collapsed pane inside Program with no nav entry — the argument being that Values /
   Layers / FX are three readings of *one live object* rather than three destinations,
   and that a second sidebar row pointing at one page was the `"/program"` vs
@@ -666,7 +760,7 @@ REST API is used for CRUD operations on scripts, scenes, fixtures, etc.
   a collapsed pane could never do that. So: no tabs, and a page with room. Renaming
   Program to Show removes the near-collision outright.
 
-  Two traps that survive the rename:
+  Two traps that survive both the rename and the merge:
 
   - **`pathMatch` never uses `startsWith`.** `mostSpecificActiveId` now lives in
     `lib/navMatch.ts` and matches whole trailing segments (`endsWith(m) ||

@@ -33,7 +33,20 @@ export interface ShowTransport {
   activeStack: CueStack | undefined
   /** Effective active cue: the optimistic runner cursor during a fade, else the server's active cue. */
   activeCueId: number | null
+  /**
+   * The live cue as the *server* reports it — what is actually on stage.
+   *
+   * Both cursors are returned because a cue row needs both and they answer different questions:
+   * this one places the stable marker (it must not jitter to the incoming cue mid-fade), while
+   * `activeCueId` above says which row owns the fade chrome. Kept as two values rather than one
+   * chosen by a mode, so identical data never renders differently depending on ambient state.
+   */
+  serverActiveCueId: number | null
   standbyCueId: number | null
+  /** Cues this session has run on this stack — the "done" tick. */
+  completedCueIds: number[]
+  /** 0..1 while an auto-advance timer runs, else null. */
+  autoProgress: number | null
   /** 0..1 while the live cue fades in, else null. */
   fadeProgress: number | null
   fadeRemainMs: number | null
@@ -50,8 +63,15 @@ export interface ShowTransport {
  * active stack is the project playhead (`activeStackId`, passed in from `projectProgramState`),
  * GO advances across stack boundaries via `advanceProgram`, and the optimistic runner slice
  * drives the fade animation. This is a hook-ified lift of the block that previously lived inline
- * in PromptBookPage. The Run view deliberately does NOT use this — its manual stack-tab browsing
- * model is different code, not duplication.
+ * in PromptBookPage.
+ *
+ * **Every surface uses it**, reached through `useShowBarProps`. This docblock used to say the Run
+ * view "deliberately does NOT use this — its manual stack-tab browsing model is different code, not
+ * duplication", which was true only because browsing and the playhead were one variable there.
+ * Session 2b split them, and the difference went with it: Run had been restating this block for
+ * block, and its version carried two defects this one does not — it keyed `resetStack` on the stack
+ * id alone, so its own "Fix Order" never recomputed the done/next cursors, and its reset payload
+ * omitted `serverNextCueId`, which the backend owns.
  */
 export function useShowTransport({
   projectId,
@@ -87,20 +107,42 @@ export function useShowTransport({
   // switch, AND on a cue reorder/add/remove (sig changes) — but NOT on an unrelated refetch or
   // mid-fade re-render, so a user-armed standby and an in-flight fade are preserved. ──
   const stackCueSig = activeStack ? activeStack.cues.map((c) => c.id).join(',') : ''
+  /**
+   * What the runner was last initialised against. These two refs are what let the effect depend on
+   * `runner.activeCueId` honestly rather than carrying a disabled lint rule: "is there anything to
+   * do?" becomes a comparison instead of an inference from the dependency list.
+   *
+   * They also fix a real defect. A cue reorder that lands *mid-fade* changes the signature, and
+   * resetting then nulls the optimistic cursor — so the fade the operator is watching stops dead.
+   * (`sortByCueNumber` from the out-of-order banner is a one-press way to cause exactly that.) The
+   * reset is therefore deferred while a fade is in flight and applied when it completes; the effect
+   * re-runs at that point because the cursor it depends on has gone back to null.
+   *
+   * A *stack switch* mid-fade still resets immediately — that fade belongs to the stack being left.
+   */
+  const appliedStackRef = useRef<number | null>(null)
+  const appliedSigRef = useRef<string | null>(null)
   useEffect(() => {
-    if (activeStackId != null && activeStack && activeStack.cues.length > 0) {
-      dispatch(
-        resetStack({
-          stackId: activeStackId,
-          cues: activeStack.cues,
-          serverActiveCueId: activeStack.activeCueId,
-          serverNextCueId: activeStack.nextCueId,
-          loop: activeStack.loop,
-        }),
-      )
-    }
+    if (activeStackId == null || !activeStack || activeStack.cues.length === 0) return
+    const sameStack = appliedStackRef.current === activeStackId
+    if (sameStack && appliedSigRef.current === stackCueSig) return
+    if (sameStack && runner.activeCueId != null) return
+    dispatch(
+      resetStack({
+        stackId: activeStackId,
+        cues: activeStack.cues,
+        serverActiveCueId: activeStack.activeCueId,
+        serverNextCueId: activeStack.nextCueId,
+        loop: activeStack.loop,
+      }),
+    )
+    appliedStackRef.current = activeStackId
+    appliedSigRef.current = stackCueSig
+    // `activeStack` is read for its cues/cursors only when one of the two refs says a reset is
+    // due, so it is deliberately not a dependency — a new object with the same ids must not
+    // re-run this.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeStackId, stackCueSig, dispatch])
+  }, [activeStackId, stackCueSig, runner.activeCueId, dispatch])
 
   const prevServerActiveCueRef = useRef<number | null | undefined>(undefined)
   useEffect(() => {
@@ -220,7 +262,10 @@ export function useShowTransport({
     activeStackId,
     activeStack,
     activeCueId,
+    serverActiveCueId: activeStack?.activeCueId ?? null,
     standbyCueId: runner.standbyCueId,
+    completedCueIds: runner.completedCueIds,
+    autoProgress: runner.autoProgress,
     fadeProgress,
     fadeRemainMs,
     goDisabled,

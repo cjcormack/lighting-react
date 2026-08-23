@@ -5,8 +5,6 @@ import { PromptBookToolbar } from './PromptBookToolbar'
 
 const base = {
   scriptFileName: 'script.pdf',
-  canEdit: true,
-  onToggleLock: () => {},
   canUndo: false,
   onUndo: () => {},
   coverPages: 0,
@@ -16,38 +14,52 @@ const base = {
   onJumpToLive: () => {},
   warningCount: 0,
   onToggleWarnings: () => {},
-  relockCountdown: null,
-  onStayUnlocked: () => {},
 }
 
-/** The bar's own amber wash — the "you unlocked a running show" signal. */
-const isWashedAmber = (container: HTMLElement) =>
-  container.firstElementChild!.className.includes('bg-amber-400/15')
-
+/**
+ * This bar used to own the lock chrome: the toggle, the pulsing EDITING badge and an amber wash for
+ * "you unlocked a running show". All of it moved in session 2b — the control and badge into
+ * `ShowLockControl`, the wash into `ShowHeader`'s `unlockedWarning` — so the signal sits in the same
+ * place on Show as on the Prompt Book instead of in this page's own chrome. What is left here is the
+ * document chrome, plus the affordances the bar genuinely owns.
+ */
 describe('PromptBookToolbar', () => {
-  it('shows the lock control while the show is running', () => {
-    render(<PromptBookToolbar {...base} showActive locked />)
-    expect(screen.getByRole('button', { name: 'Unlock for editing' })).toBeTruthy()
+  it('draws no lock control, in any state', () => {
+    render(<PromptBookToolbar {...base} locked />)
+    expect(screen.queryByRole('button', { name: /lock/i })).toBeNull()
+
+    render(<PromptBookToolbar {...base} locked={false} />)
+    expect(screen.queryByRole('button', { name: /lock/i })).toBeNull()
   })
 
-  it('warns in amber when a running show is unlocked', () => {
-    const { container } = render(<PromptBookToolbar {...base} showActive locked={false} />)
-    expect(isWashedAmber(container)).toBe(true)
-    expect(screen.getByRole('button', { name: 'Lock the prompt book' })).toBeTruthy()
+  it('washes amber when told the show is unlocked, and not on its own account', () => {
+    // The flag comes from the page, not from `locked`: a *stopped* show is unlocked too and
+    // warrants no warning. Every bar in the band takes the same flag, or the result is a stripe of
+    // amber, a stripe of standard, a stripe of amber.
+    const unlockedStopped = render(<PromptBookToolbar {...base} locked={false} />)
+    expect(unlockedStopped.container.firstElementChild!.className).not.toContain('amber')
+    unlockedStopped.unmount()
+
+    const running = render(<PromptBookToolbar {...base} locked={false} unlockedWarning />)
+    expect(running.container.firstElementChild!.className).toContain('bg-amber-400/15')
   })
 
-  it('drops the lock control and the amber chrome when the show is stopped', () => {
-    // Stopped, the book is unconditionally editable: there is no lock to toggle and
-    // nothing to warn about, so the bar is plain document chrome.
-    const { container } = render(<PromptBookToolbar {...base} showActive={false} locked={false} />)
-    expect(isWashedAmber(container)).toBe(false)
-    expect(screen.queryByRole('button', { name: 'Unlock for editing' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Lock the prompt book' })).toBeNull()
+  it('offers the cover-page control only while unlocked', () => {
+    // One of the affordances this bar does own — it shifts every cue's page label, so it is an edit.
+    const { unmount } = render(<PromptBookToolbar {...base} locked />)
+    expect(screen.queryByLabelText('More front-matter pages')).toBeNull()
+    unmount()
+
+    render(<PromptBookToolbar {...base} locked={false} />)
+    expect(screen.getByLabelText('More front-matter pages')).toBeTruthy()
   })
 
-  it('keeps the disabled lock control for a book that cannot be edited', () => {
-    render(<PromptBookToolbar {...base} canEdit={false} showActive={false} locked />)
-    const button = screen.getByRole('button', { name: 'Unlock for editing' }) as HTMLButtonElement
-    expect(button.disabled).toBe(true)
+  it('offers Undo only while unlocked and there is something to undo', () => {
+    const { unmount } = render(<PromptBookToolbar {...base} locked canUndo />)
+    expect(screen.queryByText(/Undo/)).toBeNull()
+    unmount()
+
+    render(<PromptBookToolbar {...base} locked={false} canUndo />)
+    expect(screen.getByText(/Undo/)).toBeTruthy()
   })
 })

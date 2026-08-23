@@ -73,3 +73,18 @@ describe('ShowBar', () => {
     expect(onDbo).toHaveBeenCalled()
   })
 })
+
+describe('ShowBar unlocked warning', () => {
+  it('washes amber with the rest of the chrome band', () => {
+    // Every bar in the band takes the same flag and the same class, or the header tints and the
+    // rows below it do not — which reads as stripes rather than as one state.
+    const { container } = render(<ShowBar {...PROPS} unlockedWarning />)
+    expect(container.firstElementChild!.className).toContain('bg-amber-400/15')
+    expect(container.firstElementChild!.className).toContain('border-amber-500/50')
+  })
+
+  it('stays quiet by default', () => {
+    const { container } = render(<ShowBar {...PROPS} />)
+    expect(container.firstElementChild!.className).not.toContain('amber')
+  })
+})

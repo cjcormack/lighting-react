@@ -10,7 +10,6 @@ import {createGroupsApi, GroupsApi} from "./groupsApi";
 import {createFxApi, FxApi} from "./fxApi";
 import {createLooksWsApi, LooksWsApi} from "./looksWsApi";
 import {createCuesWsApi, CuesWsApi} from "./cuesWsApi";
-import {createCueEditWsApi, CueEditWsApi} from "./cueEditWsApi";
 import {createCueStacksWsApi, CueStacksWsApi} from "./cueStacksWsApi";
 import {createCueSlotsWsApi, CueSlotsWsApi} from "./cueSlotsWsApi";
 import {createPatchApi, PatchApi} from "./patchApi";
@@ -45,7 +44,6 @@ interface LightingApi {
   looks: LooksWsApi
   speedMasters: SpeedMastersWsApi
   cues: CuesWsApi
-  cueEdit: CueEditWsApi
   cueStacks: CueStacksWsApi
   cueSlots: CueSlotsWsApi
   patches: PatchApi
@@ -89,7 +87,6 @@ function createLightingApi(): LightingApi {
   const fxApi = createFxApi(connection)
   const looksWsApi = createLooksWsApi(connection)
   const cuesWsApi = createCuesWsApi(connection)
-  const cueEditWsApi = createCueEditWsApi(connection)
   const cueStacksWsApi = createCueStacksWsApi(connection)
   const cueSlotsWsApi = createCueSlotsWsApi(connection)
   const patchApi = createPatchApi(connection)
@@ -120,7 +117,6 @@ function createLightingApi(): LightingApi {
     looks: looksWsApi,
     speedMasters: speedMastersWsApi,
     cues: cuesWsApi,
-    cueEdit: cueEditWsApi,
     cueStacks: cueStacksWsApi,
     cueSlots: cueSlotsWsApi,
     patches: patchApi,

@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { UNLOCKED_WARNING_CLASS } from '@/lib/lockChrome'
 import { Breadcrumbs } from './Breadcrumbs'
 import { SaveStatusIndicator } from './SaveStatusIndicator'
 import { ViewSwitcher, type ShowView } from './ViewSwitcher'
@@ -18,7 +19,6 @@ import { ViewSwitcher, type ShowView } from './ViewSwitcher'
 const PAGE_LABEL: Record<ShowView, string> = {
   programmer: 'Programmer',
   show: 'Show',
-  run: 'Run',
   'prompt-book': 'Prompt Book',
 }
 
@@ -27,8 +27,15 @@ interface ShowHeaderProps {
   view: ShowView
   projectId: number
   projectName: string
-  /** Breadcrumb drill segments (e.g. Show's drilled-into stack name). */
-  extra?: string[]
+  /**
+   * Called when the current-page segment is clicked — Show uses it to leave a drilled stack for the
+   * stack list.
+   *
+   * There used to be an `extra` prop for breadcrumb drill segments, which only Show passed and only
+   * to append the drilled stack's name. It was dropped so the three live views read identically:
+   * `Projects > Project > <View>` everywhere. `Breadcrumbs` still supports `extra` for `FxBusking`,
+   * which uses it directly.
+   */
   onCurrentPageClick?: () => void
   isShowActive: boolean
   /** Only consulted when the show is stopped — gates the Start button. */
@@ -40,15 +47,24 @@ interface ShowHeaderProps {
    * View-specific buttons, rendered to the LEFT of the switcher so an appearing one never shifts
    * the common controls between views.
    *
-   * **No caller passes this today.** It was for Run's "Edit Cue", which is gone. Kept because the
-   * position rule above is the useful part and session 2b's merged view is the obvious next
-   * claimant; delete it if that lands without needing it.
+   * Held open through two sessions for exactly this: the merged Show view puts its edit-lock toggle
+   * and re-lock countdown here (`ShowLockControl`). The lock belongs beside the view switcher rather
+   * than in the page body because it changes what the whole view will accept.
    */
   actions?: ReactNode
+  /**
+   * The show is running and the operator has unlocked it.
+   *
+   * Washes the header amber, matching what the Prompt Book's toolbar used to do on its own. The
+   * signal is for the *unlocked* state, not the locked one: locked is the quiet default, and
+   * believing you are locked when you are not is how a show gets edited by accident. With the show
+   * stopped there is no lock to be wrong about, so no wash.
+   */
+  unlockedWarning?: boolean
 }
 
 /**
- * Shared header for the three live-show views (Program · Run · Prompt Book): breadcrumbs
+ * Shared header for the three live-show views (Programmer · Show · Prompt Book): breadcrumbs
  * on the left, then any view-specific actions, the view switcher, a single Start/Stop
  * button, and an always-visible status dot. The switcher, Start/Stop button, and dot are
  * right-anchored so they hold the same position across views regardless of which view
@@ -58,13 +74,13 @@ export function ShowHeader({
   view,
   projectId,
   projectName,
-  extra,
   onCurrentPageClick,
   isShowActive,
   canStart,
   onStart,
   onStop,
   actions,
+  unlockedWarning = false,
 }: ShowHeaderProps) {
   const [stopConfirmOpen, setStopConfirmOpen] = useState(false)
   const [stopping, setStopping] = useState(false)
@@ -82,13 +98,19 @@ export function ShowHeader({
   }
 
   return (
-    <div className="@container flex items-center p-4 gap-3">
+    // The transparent border is always present so colouring it cannot shift the layout by a pixel
+    // when the lock flips.
+    <div
+      className={cn(
+        '@container flex items-center gap-3 border-b border-transparent p-4 transition-colors',
+        unlockedWarning && UNLOCKED_WARNING_CLASS,
+      )}
+    >
       <div className="flex-1 min-w-0">
         <Breadcrumbs
           projectName={projectName}
           currentPage={PAGE_LABEL[view]}
           collapsedLabel={PAGE_LABEL[view]}
-          extra={extra}
           onCurrentPageClick={onCurrentPageClick}
         />
       </div>

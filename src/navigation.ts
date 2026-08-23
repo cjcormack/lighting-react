@@ -13,7 +13,6 @@ import {
   SlidersHorizontal,
   SlidersVertical,
   Theater,
-  Play,
   Cloud,
   Settings,
   Computer,
@@ -177,15 +176,6 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/show`,
     visibility: "active-only",
     pathMatch: "/show",
-    group: "live",
-  },
-  {
-    id: "run",
-    label: "Run",
-    icon: Play,
-    path: (p) => `/projects/${p}/run`,
-    visibility: "active-only",
-    pathMatch: "/run",
     group: "live",
   },
   {

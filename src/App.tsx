@@ -32,7 +32,7 @@ import {
   ProgrammerFxRedirect,
   LegacyProgramRedirect,
 } from "./routes/ProgrammerPage";
-import { RunPage, RunRedirect, LegacyCueStacksRedirect } from "./routes/RunPage";
+import { LegacyRunRedirect, LegacyCueStacksRedirect } from "./routes/RunPage";
 import { PromptBookViewerPage, PromptBookRedirect } from "./routes/PromptBookPage";
 import { SurfacesRedirect } from "./routes/Surfaces";
 import { DiagnosticsRedirect } from "./routes/Diagnostics";
@@ -319,13 +319,17 @@ function App() {
           path: "program",
           element: <ShowRedirect />,
         },
+        // Legacy `/run` → `/show`. Run folded into Show in session 2b: the two were never different
+        // destinations, only different answers to "can a stray click change the show", which is a
+        // mode. `/run` is an internal path rather than an external contract like `?cue=`, but a
+        // redirect costs nothing and Cmd+K deep links and bookmarks both exist.
         {
           path: "projects/:projectId/run",
-          element: <RunPage />,
+          element: <LegacyRunRedirect />,
         },
         {
           path: "run",
-          element: <RunRedirect />,
+          element: <ShowRedirect />,
         },
         {
           path: "projects/:projectId/prompt-book",
@@ -335,10 +339,9 @@ function App() {
           path: "prompt-book",
           element: <PromptBookRedirect />,
         },
-        // Legacy `/cue-stacks` → /run. `/show` used to live here too, back when the PLAYBACK view
-        // was called Show; it now names the authoring view, so those two paths moved above. An old
-        // `/show` bookmark therefore lands on cue authoring rather than on Run — unavoidable under
-        // the rename, and the better answer of the two.
+        // Legacy `/cue-stacks` → `/show`. `/show` used to live here too, back when the PLAYBACK
+        // view was called Show; it now names the one merged view, so there is no longer a
+        // distinction for an old bookmark to land on the wrong side of.
         {
           path: "projects/:projectId/cue-stacks",
           element: <LegacyCueStacksRedirect />,

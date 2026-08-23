@@ -1,15 +1,14 @@
-import { ListChecks, Lock, LockOpen, Minus, Play, Plus, TriangleAlert, Undo2 } from 'lucide-react'
+import { ListChecks, Minus, Play, Plus, TriangleAlert, Undo2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { UNLOCKED_WARNING_CLASS } from '@/lib/lockChrome'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 interface PromptBookToolbarProps {
   scriptFileName: string | null
   locked: boolean
-  /** Show running. Off, the book is unconditionally editable — no lock, no warning chrome. */
-  showActive: boolean
-  canEdit: boolean
-  onToggleLock: () => void
+  /** A running show is unlocked — tint with the header and show bar above. */
+  unlockedWarning?: boolean
   canUndo: boolean
   onUndo: () => void
   /** Leading front-matter (cover/title) pages — offsets cue page labels to the script's numbering. */
@@ -23,27 +22,25 @@ interface PromptBookToolbarProps {
   warningCount: number
   onToggleWarnings: () => void
   /** Idle re-lock countdown (seconds); null unless the countdown is running. */
-  relockCountdown: number | null
-  onStayUnlocked: () => void
   /** Opens the cue-list drawer. Passed only on narrow, where the side rail is a drawer. */
   onOpenCues?: () => void
 }
 
 /**
- * Header bar over the script pane. While the show RUNS the lock state is deliberately
- * unmistakable: locked is the app's quiet default chrome; unlocked shifts the whole bar
- * amber with a pulsing EDITING badge (thinking you're locked when you're not can corrupt
- * the prompt-book mid-show).
+ * Header bar over the script pane.
  *
- * With the show stopped there is no lock to be wrong about — the button and all of the
- * amber chrome drop away, and the bar is the plain header of an editable document.
+ * The lock *control* used to live here — a pulsing EDITING badge — and moved into
+ * `ShowLockControl` in session 2b so it sits in the same place on Show as here.
+ *
+ * The amber wash stayed, and takes its cue from the caller now rather than deriving it. The chrome
+ * band is made of siblings — header, show bar, this bar — and every one of them has to tint, or the
+ * result is a stripe of amber, a stripe of standard, a stripe of amber. Same class, from
+ * `UNLOCKED_WARNING_CLASS`, so they cannot drift apart.
  */
 export function PromptBookToolbar({
   scriptFileName,
   locked,
-  showActive,
-  canEdit,
-  onToggleLock,
+  unlockedWarning = false,
   canUndo,
   onUndo,
   coverPages,
@@ -53,17 +50,14 @@ export function PromptBookToolbar({
   onJumpToLive,
   warningCount,
   onToggleWarnings,
-  relockCountdown,
-  onStayUnlocked,
   onOpenCues,
 }: PromptBookToolbarProps) {
   // Unlocked mid-show is the only state worth shouting about.
-  const warn = !locked && showActive
   return (
     <div
       className={cn(
         'flex shrink-0 items-center gap-3 border-b px-4 py-2 transition-colors',
-        warn ? 'border-amber-500/50 bg-amber-400/15' : 'bg-background',
+        unlockedWarning ? UNLOCKED_WARNING_CLASS : 'bg-background',
       )}
     >
       <span className="hidden shrink-0 text-[11px] tracking-widest text-muted-foreground uppercase sm:inline">
@@ -94,15 +88,6 @@ export function PromptBookToolbar({
           <ListChecks className="size-3.5" />
           Cues
         </Button>
-      )}
-
-      {relockCountdown != null && (
-        <span className="flex items-center gap-2 rounded-md border border-amber-500 bg-amber-400/20 px-2 py-1 text-xs font-medium whitespace-nowrap text-amber-600">
-          Re-locking in {relockCountdown}s
-          <Button size="sm" variant="outline" className="h-6 px-2 text-xs" onClick={onStayUnlocked}>
-            Stay unlocked
-          </Button>
-        </span>
       )}
 
       {warningCount > 0 && (
@@ -161,39 +146,6 @@ export function PromptBookToolbar({
         </Button>
       )}
 
-      {/* Nothing to lock while the show is stopped — the book is already editable. The
-          exception is a book we aren't allowed to edit: there the disabled control is the
-          only thing saying why nothing can be changed. */}
-      {(showActive || !canEdit) && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant={locked ? 'outline' : 'default'}
-              size="sm"
-              onClick={onToggleLock}
-              disabled={!canEdit}
-              aria-label={locked ? 'Unlock for editing' : 'Lock the prompt book'}
-              className={cn(
-                !locked &&
-                  'animate-pulse bg-amber-500 font-bold text-amber-950 [animation-duration:2.5s] hover:bg-amber-400',
-              )}
-            >
-              {locked ? (
-                <>
-                  <Lock className="size-3.5" /> Locked
-                </>
-              ) : (
-                <>
-                  <LockOpen className="size-3.5" /> EDITING — tap to lock
-                </>
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">
-            {locked ? 'Unlock to edit anchors & annotations (L)' : 'Lock the prompt book (L)'}
-          </TooltipContent>
-        </Tooltip>
-      )}
     </div>
   )
 }

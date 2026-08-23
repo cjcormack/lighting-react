@@ -1,34 +1,137 @@
 # Show Mode: Programming & Running
 
-> **Partly stale — read the banner before the body.** Two reworks have landed since most of this was
-> written, and only the first half has been brought up to date.
+> **Rewritten for desk-simplification sessions 1, 2a and 2b.** The routes, the cue surface, the
+> transport and the lock are current.
 >
-> **Current** (rewritten for desk-simplification sessions 1 and 2a): the routes, the cue surface and
-> the component map's `program/` rows.
->
-> **Stale, deliberately not rewritten yet**: everything about the **Run** view and the transport —
-> the runner sections, the deep-link narrative, the two active-cue cursors, the mobile layouts. That
-> half is what session **2b** merges into `/show` under the Prompt Book's lock, which will rewrite
-> it wholesale; correcting it now would mean writing it twice. Where the body describes
-> `ProgramPage`, `ShowRunnerMobile`, `CueEditor`, `CueDetailSheet`, `activeEntryId` or a Theatre/Band
-> toggle, it is describing code that no longer exists.
+> A few paragraphs in the Playback Flow and Data Model sections still say `activeEntryId` where the
+> field is now `activeStackId`, and name a `CueEditor` sheet that no longer exists. Those are
+> pre-existing drift rather than anything 2b introduced; where they disagree with "Show Mode, in one
+> view" or "The Show view", those two are the authority.
 >
 > The plan is `lighting7/docs/plans/desk-simplification-plan.md`.
 
-Show Mode is the production show programming and playback system. It's split across two sibling routes, each with its own sidebar entry:
+Show Mode is the production show programming and playback system. It lives in **two** routes, each
+with its own sidebar entry:
 
-- `/projects/:projectId/show` — the **Show view**: cue and stack authoring. Renamed from `/program`
-  in session 1, path and all, because the programmer became `/projects/:projectId/programmer` and two
-  live views one letter apart was the collision that had kept the programmer out of the nav.
-  `/program*` redirects, carrying the search string.
+- `/projects/:projectId/show` — the **Show view**: cue and stack authoring **and** playback. Renamed
+  from `/program` in session 1, path and all, because the programmer became
+  `/projects/:projectId/programmer` and two live views one letter apart was the collision that had
+  kept the programmer out of the nav. `/program*` redirects, carrying the search string.
 - `/projects/:projectId/programmer` — the **Programmer**: the live value grid, its Look-layer stack
   and its effects, all on one screen. Since session 2a its grid has a **scope** — Output / Local /
   one layer — so the same cells serve the rig, your own busk, and a Look's stored rows.
-- `/projects/:projectId/run` — the **Run view**: keyboard-driven cue runner. When the show isn't running, this view shows a large Start CTA hero instead of the runner; when it is running, it shows the runner with a Stop button in the header.
 
-Splitting the two surfaces (rather than toggling between them via tabs on a single `/show` route) makes the running/stopped state obvious at a glance, puts the Start control where it's easy to find, and lets each view have its own primary action without conditional UI in the header.
+There used to be a third, `/projects/:projectId/run`, and the argument for it was that splitting
+running from authoring "makes the running/stopped state obvious at a glance, puts the Start control
+where it's easy to find, and lets each view have its own primary action without conditional UI in
+the header". Two thirds of that lapsed on its own: `ShowHeader` came to render identical Start/Stop
+and live-dot chrome on both views — which *is* the conditional-header duplication the split existed
+to avoid — and Show grew a fully working GO transport, so "Run is where you fire cues" was already
+false. `/run*` now redirects to `/show`.
 
-**A project IS a show.** There is no separate ShowSession concept — show entries belong directly to the project. The show is "running" when the project's `activeEntryId` is non-null, broadcast via WebSocket so reloads and other browser tabs see the same state automatically.
+**A project IS a show.** There is no separate ShowSession concept — show entries belong directly to
+the project. The show is "running" when the project's `activeStackId` is non-null, broadcast via
+WebSocket so reloads and other browser tabs see the same state automatically.
+
+## Show Mode, in one view
+
+What remained of the Run/Show distinction was never a destination: it was **whether a stray click
+can change the show**. That is a mode, and one the Prompt Book already modelled well, so session 2b
+took the lock instead of the route.
+
+```
+locked = !canEdit || (isShowActive && lockRequested)      // useEditLock
+```
+
+| | Locked (default while running) | Unlocked (default while stopped) |
+|---|---|---|
+| `/show` | the stack list, read-only | plus reorder / create / rename / delete |
+| `/show/stacks/:id` | one stack's cues, plus the sibling tab strip | the same, plus drag and inline edits |
+| A cue row | state pip, fade chrome, click-to-arm | plus grip, inline fields, Remove, Duplicate |
+| Transport | Space / Backspace live | off — the operator is typing; `L` still toggles |
+| Phone | the phone runner (`RunMobile`) | — always locked |
+
+Both levels of the view survive in both modes on purpose. Two layouts under one switch would be two
+views with extra steps, which is what was just deleted.
+
+**The lock is a stray-click guard, not access control.** No backend route refuses a write on its
+account, so a second client can edit a "locked" show. `canEdit` is not a role either — the backend
+computes it as "is this the current project". And it is emphatically **not** the transport gate: GO
+must work while locked, because locked is the normal running state.
+
+**Unlocked mid-show is the one state the chrome shouts about.** `ShowHeader` washes amber via
+`unlockedWarning` and `ShowLockControl` pulses beside it — because believing you are locked when you
+are not is how a show gets edited by accident. Both are on Show *and* the Prompt Book, which drew its
+own wash and badge in its toolbar until 2b. Locked is the quiet default, and a stopped show gets no
+chrome at all: there is no lock to be wrong about.
+
+`lockRequested` is a Redux slice (`store/editLockSlice.ts`) shared with the Prompt Book, so a fix-it
+session is one fact about the operator and one GO ends it everywhere. It is never persisted, and the
+re-arm fires on the stopped→running *transition* rather than on mount — re-arming on mount would
+re-lock on every navigation between the two surfaces, defeating the point of sharing it.
+
+### Browsing versus arming
+
+Selecting a stack **never** moves the playhead. It used to: a tab click ran
+`deactivate(old) → goToStack(target) → deactivate(target)`, so one unconfirmed press took the live
+cue off stage and repositioned every other client via `showChanged`. That is indefensible on a
+surface whose whole point is now that a stray click cannot change the show.
+
+- `StackTabStrip` takes `selectedStackId` (owns the underline and the scroll-into-view) and
+  `liveStackId` (owns the green pip) as **separate** props. They were one value, which is why the pip
+  used to be drawn only on *unselected* tabs — selected-==-live made the two indistinguishable.
+- The browse cursor is the **URL** (`/show/stacks/:stackId`), which is deep-linkable and needs no
+  reconciliation. Run's local cursor and its `manualSwitchRef` are both gone; the ref existed only to
+  suppress one `resetStack` in the stale-cache window the destructive click opened.
+- Arming is `OffPlayheadBanner`'s **Make this stack live**, confirm-gated while a cue is on stage.
+  The confirmation is not ceremony: `POST /show/go-to` deactivates the stack being left and then
+  calls `activateAtFirstCue` on the target, so the target's first cue genuinely fires and the desk
+  darkens it again to arrive armed. Mid-show that is a visible blip on top of losing the current cue.
+- The **playhead is followed only while standing on it**: a boundary GO brings the view along for an
+  operator who was watching the show, and leaves an operator reading elsewhere where they were.
+
+### The two active-cue cursors
+
+Both come from `useShowTransport`, and neither is selected by a mode:
+
+- `serverActiveCueId` — what is on stage. Places the stable marker, so it cannot jitter to the
+  incoming cue and back mid-crossfade.
+- `activeCueId` — the optimistic runner cursor, set the instant GO is pressed. Says which row owns
+  the fade chrome.
+
+During a crossfade those are different rows, which is why one value cannot serve both.
+
+**No fade *value* is ever a prop.** `ProgramView` is memoized precisely to stop several hundred cue
+rows reconciling at frame rate; threading `fadeProgress` down would defeat that with the memo still
+in place, looking effective. Each row reads its own via `useCueFade`, whose selector returns `null`
+for every row that is not fading — and a `null` that stays `null` is reference-equal, so those rows
+never re-render.
+
+### Expansion
+
+At most two cards are open: the one the operator addressed via `?cue=`, and the one on stage, which
+is **derived** on top of it (`useCueExpansion`). So a GO opens the new live card and can never take
+away the card being read, because it does not write `?cue=` at all.
+
+Both predecessors got this wrong in opposite directions. Run kept a `Set` and added every live cue to
+it without ever removing one, so after five GOs five cards were open — and it needed two effects
+whose *declaration order* was load-bearing to maintain. Show kept a bare scalar that a GO would
+overwrite. The only stored piece left is `collapsedLiveCueId`, because closing a derived card cannot
+be a deletion from a set; it self-clears when the show moves on.
+
+### Where the transport lives
+
+`useShowTransport` is the single follow-server transport for every surface — Show, the Programmer and
+the Prompt Book. Its docblock used to claim Run's "manual stack-tab browsing model is different code,
+not duplication"; that was true only because browsing and the playhead were one variable. Splitting
+them removed the difference, and with it the justification for the second copy: Run had restated the
+hook block for block, and its version carried two latent defects the shared one does not (it keyed
+`resetStack` on the stack id alone, so its own "Fix Order" never recomputed the done/next cursors, and
+its reset payload omitted `serverNextCueId`, which the backend owns).
+
+One guard is worth knowing: a cue reorder landing **mid-fade** used to null the optimistic cursor and
+stop the fade dead — reachable in one press from the out-of-order banner. The reset is now deferred
+until the fade completes, tracked by two refs rather than a disabled lint rule.
 
 ## Design Model: Four Phases of Show Programming
 
@@ -105,26 +208,37 @@ API Layer          Type definitions + WebSocket subscription factories
 #### Component Layer (UI)
 | File | Purpose |
 |------|---------|
-| `src/routes/ShowPage.tsx` | Route for `/projects/:projectId/show` (and `/show/stacks/:stackId`). Header + `ShowBar`, body = `ProgramView` (ShowOverview / StackDetail) with drill state, plus the two `RecordSheet` mounts — one targeting a cue, one targeting a stack. |
+| `src/routes/ShowPage.tsx` | Route for `/projects/:projectId/show` (and `/show/stacks/:stackId`) — **the whole of Show Mode's UI since the Run merge**. Header (with the lock control) + `ShowBar`, then either the phone runner or the tab strip / off-playhead banner / `ProgramView`. Owns the drill state, the `?cue=` contract, the playhead follow, the edit lock, the transport keyboard, Blind, make-live, and the two `RecordSheet` mounts. |
 | `src/routes/ProgrammerPage.tsx` | Route for `/projects/:projectId/programmer`, and the `/program*` → `/show*` redirect. Source strip · action bar · **scope band** · workspace (grid + layer/FX rail). |
-| `src/routes/RunPage.tsx` | Route for `/projects/:projectId/run`. Breadcrumb (`Run`), header Stop button (when active), body = a Start CTA hero when inactive, or the runner when active. The runner swaps to `ShowRunnerMobile` when the runner container width drops below 600px. Owns keyboard handler, runner animation, entry switching, and a CueEditor sheet used by the mobile cue-list edit flow. |
-| `src/components/runner/ShowBar.tsx` | Top control bar: DBO, BPM/TAP, cue info, GO/BACK buttons (desktop runner) |
-| `src/components/runner/CueRow.tsx` | Cue list row with status icons, fade progress bars, click-to-requeue, and eye-icon detail view (desktop runner) |
-| `src/components/runner/MarkerRow.tsx` | Marker separator row (shared desktop + mobile) |
-| `src/components/runner/OutOfOrderBanner.tsx` | Warning when cue numbers are not ascending |
-| `src/components/runner/ShowRunnerMobile.tsx` | Remote-control layout for narrow containers: top strip, active-cue hero, standby card, GO/BACK footer with safe-area padding |
+| `src/routes/RunPage.tsx` | **Redirects only.** `/projects/:id/run` and the legacy `/cue-stacks` paths → `/show`. |
+| `src/components/ShowBar.tsx` | Row 3, **identical on all three live views**: DBO, **BLIND**, speed masters, programmer chip, active→next, BACK/GO. Every host spreads `showBarProps`; only `showShortcuts` is overridden. |
+| `src/lib/programmerFade.ts` | `PROGRAMMER_FADE_KEY` — the programmer's fade time, shared because the action bar's picker writes it and the bar's Blind reads it. |
+| `src/components/runner/StackTabStrip.tsx` | Sibling-stack switcher. `selectedStackId` owns the underline, `liveStackId` the green pip — **selecting never moves the playhead**. |
+| `src/components/runner/OffPlayheadBanner.tsx` | Shown while reading a stack that is not the playhead: *Jump to live* (navigation) and *Make this stack live* (confirm-gated `go-to`). |
+| `src/components/runner/ShowLockControl.tsx` | The lock toggle and its re-lock countdown, for `ShowHeader`'s `actions` slot. |
+| `src/components/runner/MarkerRow.tsx` | Separator row (shared desktop + mobile) |
+| `src/components/runner/OutOfOrderBanner.tsx` | Warning when cue numbers are not ascending. Withheld while locked — "Fix Order" re-sorts a whole stack in one press. |
+| `src/components/runner/run/RunMobile.tsx` | The **phone runner**: top strip, active-cue hero, standby card, GO/BACK footer with safe-area padding. Always locked. What is left of `runner/run/`. |
 | `src/components/runner/StackPickerSheet.tsx` | Bottom sheet listing show entries for mobile stack switching |
 | `src/components/runner/MobileCueListSheet.tsx` | Bottom sheet exposing the full cue list on mobile; tapping a cue opens CueEditor |
 | `src/components/runner/MobileCueRow.tsx` | Lean cue row used inside `MobileCueListSheet` (no fixed notes/auto-pill columns) |
-| `src/components/runner/program/ProgramView.tsx` | Program body: routes between ShowOverview and StackDetail based on `drillStackId` |
-| `src/components/runner/program/ShowOverview.tsx` | The project's ordered stack list: drag reorder, **Create Stack** (in place) + **Add Separator**, per-stack actions menu (edit settings / sort-by-cue-number / delete). Activation controls live in `ProgramPage`'s header, not here. |
+| `src/components/runner/program/ProgramView.tsx` | Show body: routes between ShowOverview and StackDetail on `drillStackId`. **Memoized**, which is why no fade *value* passes through it — only `fadeStackId`; see `useCueFade`. |
+| `src/components/runner/program/ShowOverview.tsx` | The project's ordered stack list: drag reorder, **Create Stack** (in place) + **Add Separator**, per-stack actions menu (edit settings / sort-by-cue-number / delete). Activation controls live in `ShowHeader`, not here; every edit affordance is hidden while locked. |
 | `src/components/runner/program/StackDetail.tsx` | Cue list within a stack, dnd-kit reorder, **Record into `<stack>`** + Separator, "Stacks" back button. There is no "Add Cue": a cue is a captured state, so recording is the only way one is made (session 2a). |
-| `src/components/runner/program/ProgramCueRow.tsx` | Expandable cue row with inline-editable Q/Name/Fade cells, CueFxTable, count badges |
+| `src/components/runner/program/ProgramCueRow.tsx` | Thin pass-through to `CueCardEditor`. Its props are **derived** from that component rather than re-declared, so a new row prop cannot be silently dropped here. |
 | `src/components/runner/program/ProgramMarkerRow.tsx` | Interactive marker with inline rename/delete |
 | `src/components/runner/program/CueCardEditor/` | The expandable cue row. **No longer an editor**: session 2a deleted its three panes (Targets · Cue properties · Layers) and their tab chrome, and the expanded body is now the read-only cue surface — `CueDetailContent`, which includes `CueValueGrid`, the same cells the programmer's grid draws. Two ways out: **Edit in Programmer** (Includes the cue) and **Cue properties…** (`CuePropertiesSheet`, which reuses the surviving `CuePropsPane`). |
 | `src/components/cues/CueValueGrid.tsx` | What a cue asserts, per head and property, read-only — built from `GET /cues/{id}/cooked` so the composition is the server's, not a second implementation of it. |
 | `src/hooks/useRunnerAnimation.ts` | requestAnimationFrame hook for fade/auto-advance progress |
-| `src/hooks/useNarrowContainer.ts` | ResizeObserver hook that returns `true` while a container's width is below a threshold. Used by `RunPage` to switch between desktop and mobile runner layouts. |
+| `src/hooks/useNarrowContainer.ts` | ResizeObserver hook, true while a container is below a threshold. `ShowPage` uses it at 600px to switch to the phone runner. |
+| `src/hooks/useShowTransport.ts` | The one follow-server transport, for Show, the Programmer and the Prompt Book. Returns **both** cue cursors (`serverActiveCueId` and `activeCueId`) plus the fade, completions and auto-advance progress. |
+| `src/hooks/useShowBarProps.ts` | Everything `ShowBar` and `ShowHeader` need from a project id, including the boundary-GO hint (`→ Act 2`) and the resolved live/armed cue entries. |
+| `src/hooks/useEditLock.ts` | The show-editing lock, shared with the Prompt Book. State in `store/editLockSlice.ts`. |
+| `src/hooks/useAutoRelock.ts` | The idle re-lock: 2-minute fallback, 10-second visible countdown, "stay unlocked", and GO re-locks at once. |
+| `src/hooks/useTransportKeys.ts` | Space/Backspace/L, with the union of the guards the two hand-rolled handlers used to have between them. |
+| `src/hooks/useCueExpansion.ts` | One addressed card (`?cue=`) plus the live one, derived. |
+| `src/hooks/useCueFade.ts` | A single row's fade, read from the runner so animating one row does not re-render the stack. |
+| `src/components/cues/CueRowParts.tsx` | The collapsed row's shared pieces — palette swatches, target chip, state pip — and `useExpandedCue`, the skip-while-collapsed cue fetch. Show and Run each had their own copies and they had drifted. |
 | `src/lib/cueUtils.ts` | `buildCueInput()` -- converts a Cue to CueInput for mutations |
 
 #### Navigation
@@ -288,120 +402,121 @@ and the fade animation only played in the session that pressed GO. The backend n
 animated* and goes back to null when the fade completes, so it can't be used to tell whether the
 live cue moved. A following session never sets it at all until a frame arrives.
 
-## Program View
+## The Show view
 
-The Program view is the show assembly surface. It has two levels:
+Two levels, both of which survive in both lock modes (see the mode table above).
 
-**Show Overview** (`ShowOverview.tsx`) -- shown when no stack is drilled into:
-- Ordered entry list with drag-to-reorder (dnd-kit)
-- STACK entries: show cue count, loop/sequential badge, drill chevron, remove button
-- MARKER entries: inline-editable label, remove button
-- "Add Stack" opens a slide-in stack picker overlay with search filtering
-- "Add Marker" appends a new marker entry
-- Activation controls live in `ProgramPage`'s page header (see next section), not in ShowOverview
+**Show Overview** (`ShowOverview.tsx`) — the ordered stack list, shown when no stack is drilled into:
+- STACK rows: cue count, loop badge, live pill, drill chevron
+- SEPARATOR rows: a labelled divider
+- Unlocked it adds drag-to-reorder (dnd-kit), inline rename, **Create Stack**, **Add Separator**, and a
+  per-stack menu (settings / fix order / delete). Locked, all of that is *absent* rather than greyed
+  out — a row of disabled destructive buttons reads as breakage.
 
-**Stack Detail** (`StackDetail.tsx`) -- shown when drilling into a specific stack:
-- Full cue list with drag-to-reorder
-- Each row shows cue number, name, fade info, count badges (presets, effects, triggers)
-- **Inline editing**: Q number, Name, and Fade/Snap columns are click-to-edit. Clicking them enters an inline text input; the edit is debounced (300ms) and saved via the full-cue `saveCue` mutation. Active (green) and standby (blue) styling is preserved on the Name cell. The Fade input shows a placeholder hint ("e.g. 3s, 500ms") for supported formats.
-- **Row click expands** the cue to show CueFxTable inline (with optional inline timing editing via pencil toggle). An expand/collapse chevron sits to the left of the Q column (after the drag handle) as a visual affordance.
-- A **pencil icon** on the right side of each row opens the CueEditor sheet for full editing
-- "+ Add Cue" creates a blank cue and opens CueEditor
-- "+ Add Separator" creates a MARKER cue
-- "Stacks" back button returns to show overview
+**Stack Detail** (`StackDetail.tsx`) — one stack's cues, plus the sibling `StackTabStrip` and, when
+reading a stack that is not the playhead, the `OffPlayheadBanner`:
+- Each row is `CueCardEditor`: state pip, Q number, palette swatches, name, target chips, fade.
+- **Running** it shows a fade countdown, a played tick, a blue armed accent, and the prompt-book
+  reading position; the row body arms the cue as next GO and the chevron expands it.
+- **Unlocked** the body expands instead, the pip's cell reveals a drag grip on hover, the Q number /
+  name / fade become inline editable, and the expanded card gains Remove and Duplicate. Arming is
+  deliberately not offered unlocked: it changes what GO fires, which is the show.
+- Expanding shows `CueDetailContent` — read-only, always. A cue is edited by Include (D2).
+- **"Add Cue" does not exist.** A cue is a captured state, so recording is the only way one is made:
+  *Record into &lt;stack&gt;*. Separators and stacks keep their create buttons — neither is a captured
+  state, and that is the line rather than "no new buttons".
 
 ### Page header
 
-`ProgramPage` renders a breadcrumb (`Projects > Project > Program`, plus the drilled stack name when one is open) and one of:
+`ShowHeader` renders a breadcrumb (`Projects > Project > Show`), the save indicator, the view
+switcher, one Start/Stop button and a live dot. The breadcrumb reads identically on all three live
+views — Show used to append the drilled stack's name via an `extra` prop, which no other view had;
+the stack's name is on its navigation row and in the tab strip, so the trail said it a third time. Its `actions` slot — held
+open across two sessions for exactly this — carries the merged view's **lock toggle and re-lock
+countdown** (`ShowLockControl`), shown only while the lock is a live concern.
 
-- **Start Show button** when the show isn't running. Disabled when the show has no STACK entries. Clicking activates the show and then navigates to `/projects/:id/run` so the operator lands on the runner. The activate mutation patches the `projectShow` cache as soon as the server responds (`onQueryStarted` in `store/show.ts`), so Run mounts already seeing `isShowActive: true` and the Start CTA hero never flashes during the transition.
-- **Go to Run button** when the show is active. Clicking jumps to `/projects/:id/run`. Symmetric placement to Start Show — same visual weight in the same slot — so re-finding the runner from Program is a single deliberate click.
-
-Stopping the show happens from Run, not here.
+Start and Stop both live here, and neither navigates anywhere: there is nowhere else to go.
 
 ### Auto-drill and deep links
 
-`ProgramPage` mounts with one of three drill states:
+`ShowPage` resolves its drill state from the URL, in this order:
 
-1. **`?stack=<id>&cue=<id>` query params present** — drill into that stack and open `CueEditor` for that cue. Used by Run's "Edit Cue" header button so the operator can detour into editing the live cue without manually navigating. The params are stripped from the URL after the first read so a refresh doesn't re-open the sheet.
-2. **Show is running, no params** — drill into the active stack on first mount. The operator lands where the action is. Tracked via `initialDrillDoneRef` so the drill fires once per mount; clicking "Stacks" or the breadcrumb afterwards reverts to Show Overview without us re-drilling them.
-3. **Show is stopped, no params** — start at Show Overview. Standard pre-show prep flow.
+1. **Legacy `?stack=<id>&cue=<id>`** — rewritten to the path form `/show/stacks/<id>?cue=<id>`. This
+   must run before any playhead follow, which is why it is a separate effect.
+2. **Show running, no `:stackId`** — drill into the live stack on first mount, so the operator lands
+   where the action is. Tracked via `initialDrillDoneRef` so it fires once; navigating back to the
+   overview afterwards is not undone.
+3. **Show stopped, no `:stackId`** — start at the overview. Standard pre-show prep.
+
+Thereafter the **playhead follow** takes over: when the live stack changes and the operator was
+standing on the old one, the view comes along (`replace: true`). An operator who had navigated
+elsewhere is left where they were.
+
+A stale `:stackId` redirects to the overview — but **not while the stack list is refetching**, or the
+refetch that follows creating a stack would bounce the operator straight back out of it.
 
 ### Sync with runner state
 
-The Program view mirrors the runner so the operator can edit during a tech run at a glance:
+- **Live pill on the active stack** in the overview — findable at a glance.
+- **Active-cue marker** in `StackDetail`, gated on `drillStackId === activeStackId` so it never
+  lights up on a stack that is merely being read. It reads the *server* cursor, so it holds on the
+  outgoing cue through a crossfade while the fade chrome moves to the incoming one.
+- **Armed-cue accent** — blue. `CueCardEditor` had drawn this since 2a and `StackDetail` had accepted
+  the prop, but nothing supplied it, so the affordance was unreachable in Show until the transport
+  merged.
 
-- **"Live" badge on the active stack** in Show Overview — a green pill with a pulsing dot, plus a green left border accent and green-toned name. Makes the running stack instantly findable.
-- **Active-cue marker** in StackDetail — the live cue's row gets a green left-border accent, the drag-handle is replaced with the green `Play` glyph, and the name turns green-bold. Only the cue currently on stage in the *active* stack is marked; other stacks show no marker even when drilled into. Program intentionally does **not** show the standby/next marker — the operator is focused on editing here, not on playback sequencing.
-- **Active state derivation.** No new server fields. `ProgramPage` derives `activeStackId` from `show.activeEntryId` (read via `useProjectShowQuery`). The active-cue marker is gated on `drillStackId === activeStackId` so it never lights up on a non-running stack.
 
-## Run View
+## The runner, inside Show
 
-The Run view is the production playback surface. When the show isn't running, `RunPage` renders a centred Start CTA hero — a "Show is not running" heading, brief sub-copy, and a `size="lg"` Start Show button. If the show has no STACK entries, the CTA is replaced with a link to Program so the operator can add one.
+Since session 2b there is no separate Run view. `/show` is the runner whenever the lock is engaged;
+see "Show Mode, in one view" above for the mode table and "Browsing versus arming" for the tab strip.
+What follows is only what is specific to *running* rather than to the merge.
 
-When the show is running, the header carries:
+**When the show is stopped** there is no Start hero any more — the stack list is simply editable, and
+Start lives in `ShowHeader` like Stop. The hero existed because `/run` had nothing else to show with
+the show down; the merged view always has the show to show.
 
-- An **Edit Cue** button that navigates to `/projects/:id/program?stack=<activeStackId>&cue=<activeCueId>`. ProgramPage drills into the active stack and opens `CueEditor` for the live cue (see "Auto-drill and deep links" above). Disabled when no stack is selected.
-- A green-dot indicator + **Stop** button. Stop opens a confirmation Dialog ("Stop the show?") to guard against accidental clicks during a live performance — accidental cancellation of cue state mid-show is more disruptive than the extra click costs. Confirm fires `/deactivate`; the page stays on `/run` and flips to the Start CTA. The deactivate mutation, like activate, patches the `projectShow` cache on success so the transition is flicker-free.
+**Stop is confirmed** ("Stop the show?"), owned by `ShowHeader` so every surface gets the same guard:
+accidentally cancelling cue state mid-show is more disruptive than the extra click costs. The
+deactivate mutation patches the playhead cache on success, so the transition is flicker-free.
 
-Below the header, the runner body. Layout from top to bottom:
+**The phone runner** is `RunMobile`, swapped in below **600 px** of *container* width — not viewport
+width, so side panels opened on desktop (effects overview, AI chat, cue slot overview) that squeeze
+the body below the threshold also flip the view. It replaces the ShowBar entirely, carrying its own
+transport footer, and it is **always locked**: it is a running surface with no room for editing
+chrome, so there is nothing an unlocked state could reveal. Its `MobileExpansion` model
+(`{card, mode}` across two hero cards) is untouched by the desktop expansion rules — it is not a
+cue-list model at all.
 
-### ShowBar
-Top control surface with:
-- **DBO** (Dead Blackout) toggle
-- **BPM display** + **TAP** button for tempo
-- **Cue info**: active cue name (green), standby cue (blue), next stack hint
-- **Keyboard hints**: `<- back`, `space: go`
-- **BACK** button
-- **GO** button (large, green)
+**The ShowBar** (Row 3) is **identical on all three live views**. Every host spreads
+`showBarProps` from `useShowBarProps` and overrides exactly one prop — `showShortcuts`, which
+advertises keys and can only be answered by the host that binds them.
 
-### Show Entry Strip
-Horizontal tab bar mapping `show.entries`:
-- STACK entries render as clickable tabs (active state from `activeEntryId`)
-- MARKER entries render as non-interactive dividers (vertical lines + label)
-- Loop indicator icon on looping stacks
-- Theatre/Band context toggle on the right
+That uniformity is the point rather than a saving. Each host used to wire the bar itself, and the
+result drifted: the Prompt Book's copy had no Blind tile and derived the stack name its own way, Show
+suppressed the stack name beside the tab strip, and the Prompt Book called `useShowTransport`
+directly — so adopting the hook there also collapsed that page from two transport instances to one.
+`canOperate` and `onBeforeGo` are hook parameters for the two things that genuinely are per-host:
+book-level permission, and re-locking on GO.
 
-### Cue List
-Scrollable list of cues in the active stack:
-- Status icons: play (active/green), circle (standby/blue), check (done/greyed)
-- **Click-to-requeue**: clicking a non-active cue dispatches `setStandby`, making it the next target for GO. The standby moves immediately; no backend call until the next GO fires.
-- **Click active cue**: opens the read-only CueDetailSheet (since re-queuing the active cue is a no-op)
-- **Eye icon**: every row has an eye button that opens `CueDetailSheet` — a read-only view of the cue's composition (palette, presets, effects, triggers, timing). The sheet has an Edit button that deep-links into Program's CueEditor.
-- Fade progress bar (green) on active cue
-- Auto-advance countdown bar (blue) on active cue
+Two 2b changes worth knowing:
 
-### Theatre vs Band Mode
-A per-stack toggle on the entry strip controls the display density:
-- **Theatre**: shows Q number column, notes column, detailed fade info -- designed for scripted shows with numbered cues
-- **Band**: minimal display, hides Q numbers and notes -- designed for live performance where cue names and effect counts are sufficient
+- **It is no longer gated on the show running.** It carries blackout, Blind, the speed masters and
+  the programmer chip, all of which mean something with the show down, and `goDisabled` already mutes
+  BACK/GO. Gating it was what made Blind's *location* depend on the show's state.
+- **Blind moved into it**, beside blackout, out of the programmer's action-bar Stage zone — so one
+  control is in one place on every view instead of one place on the Programmer and another on Show.
+  It still fades by the programmer's own fade time, read from the same persisted key
+  (`PROGRAMMER_FADE_KEY`) the action bar's picker writes; without that, moving the button would have
+  turned a fade into a snap. `ProgrammerIndicator` sits two elements along and normally draws its own
+  amber "Blind" badge, so the bar passes it `blindShownSeparately` and it reports only the value count
+  there — the tile is the louder and the actionable one. The app-header mount keeps its badge, because
+  there is no tile there and blind has to be visible from `/fixtures`.
 
-### Mobile Remote Control
+> Note for whoever wires blackout up: **DBO is currently local state with no side effect** in every
+> host. After 2b a functional Blind tile sits immediately beside a cosmetic DBO and the two read as
+> peers — `FU-FE-DBO-INERT`.
 
-When the Run view's container width drops below **600 px**, the runner swaps from the desktop ShowBar + cue-list layout to a dedicated remote-control surface (`ShowRunnerMobile`). The switch is **container-width based, not viewport-based** — side panels opened on desktop (effects overview, AI chat, cue slot overview) that squeeze the runner below the threshold also flip the view. The `useNarrowContainer` hook observes the runner container and `RunPage` conditionally renders the mobile or desktop subtree; only one tree is mounted at a time.
-
-**Layout (top → bottom):**
-
-- **Top strip** (`h-12`): stack-name button (opens `StackPickerSheet`) · cue-list icon (opens `MobileCueListSheet`) · spacer · BPM value + TAP · DBO toggle · Theatre/Band pill (`T`/`B`). The T/B toggle is preserved on mobile so operators retain the same context control they have on desktop.
-- **Active-cue hero** (`flex-1`): centred Q number (theatre only) + cue name (green, large) + fade-progress bar + fade info badge + auto-advance countdown bar + optional notes.
-- **Standby card**: Q + name in blue when a standby cue exists, "→ NextStackName" (with arrow) at a stack boundary, "End of show" when neither is available.
-- **GO/BACK footer**: `grid grid-cols-[1fr_2fr]`, `h-14` buttons. Padding uses `calc(0.75rem + env(safe-area-inset-bottom, 0px))` so the GO button clears the iOS home indicator. The label changes to "END" (disabled) when both standby and next-stack are null.
-
-**Hero states** — the `activeCueId` transient clears on `markDone` (e.g. SNAP fades), so the hero has three states:
-
-1. `activeCue` set → name + Q + fade progress + auto countdown.
-2. `activeCue` null, `standbyCue` set → "Ready — Press GO to fire" placeholder.
-3. Both null → "Idle — End of stack".
-
-**Bottom sheets** use `Sheet side="bottom"` from `src/components/ui/sheet.tsx`. Both are controlled (stay mounted) so scroll position survives reopen. `MobileCueListSheet` caps at `max-h-[70dvh]` with its own overflow.
-
-**Cue edit transition** — tapping a cue in `MobileCueListSheet` closes the sheet, then calls `openCueEditor` on a 320 ms timeout (matching the Sheet's 300 ms close animation). This avoids two Dialogs trapping focus simultaneously.
-
-**Keyboard listener** stays registered unconditionally so tablets with Bluetooth keyboards still respond to Space/ArrowLeft regardless of container width.
-
-**Prerequisite**: `viewport-fit=cover` is set in `index.html` so `env(safe-area-inset-bottom)` resolves correctly on iOS; without it the footer would not clear the home indicator.
-
-**Not migrated to mobile**: the OOO (out-of-order) banner, the 7-column cue list (use `MobileCueListSheet` instead), the horizontal show entry strip (use `StackPickerSheet`). The Program view has no mobile treatment yet — editing flows remain desktop-first.
 
 ## Playback Flow
 
@@ -453,7 +568,7 @@ When a cue has `autoAdvance: true`:
 2. **Show active**:
    - Program header shows a "Go to Run" button (green dot + arrow). Auto-drills into the active stack on mount so editing detours land where the live cue is.
    - Run header shows the Edit Cue button + green dot + Stop. Body is the runner.
-3. **Stop / Deactivate**: clicking Stop on Run opens a "Stop the show?" confirmation Dialog. On confirm, backend `/deactivate` runs; the server clears `activeEntryId` and broadcasts; the show data refetch updates `isShowActive`. The Run body flips back to the Start CTA hero; the user stays on `/run` and can re-start with one click.
+3. **Stop / Deactivate**: clicking Stop opens a "Stop the show?" confirmation Dialog, owned by `ShowHeader`. On confirm, backend `/deactivate` runs; the server clears the playhead and broadcasts; the refetch updates `isShowActive`. The view stays where it is and becomes simply editable — a stopped show has nothing to protect, so the lock chrome disappears with it.
 4. **Activate details**: backend short-circuits if already active (no cue stack reset on repeat activates). On first activate, picks the first STACK entry and starts its cue stack at the first STANDARD cue.
 
 ### No-flicker activate / deactivate

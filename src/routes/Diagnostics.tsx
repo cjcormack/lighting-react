@@ -105,6 +105,12 @@ function UniverseRow({ universe }: { universe: UniversePacketStats }) {
 }
 
 // ─── cueEdit panel ────────────────────────────────────────────────────
+//
+// The histogram is REST-backed and server-side, so the panel survives session 2b even though this
+// client no longer opens a cueEdit session: a cue is read-only and edited by Include. What it now
+// reports is *another* client's session — a second desk, or a MIDI surface harness — which is still
+// worth being able to see. The empty state says so rather than telling the operator to open an
+// editor that no longer exists.
 
 function CueEditPanel() {
   const { data, isLoading } = useGetCueEditHistogramQuery(undefined, {
@@ -136,7 +142,7 @@ function CueEditPanel() {
       ) : (
         <EmptyState
           title="No cueEdit observations yet"
-          body="No cueEdit session has run since startup. Open a cue editor in Live mode and adjust a bound fader (or run MidiFloodHarness) to populate this panel."
+          body="No cueEdit session has run since startup. This desk no longer opens one — a cue is read-only and edited by Include — so this fills in only for a session held by another client or by MidiFloodHarness."
         />
       )}
     </Card>

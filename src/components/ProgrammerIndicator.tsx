@@ -13,15 +13,31 @@ import { useCurrentProjectQuery } from '../store/projects'
  * Silent when there is nothing to say: no entries and not blind. Blind alone is worth
  * shouting about, because a blind programmer looks *exactly* like a working one until you
  * notice the stage never changed.
+ *
+ * — unless something beside it already says so. `blindShownSeparately` is for exactly one host: the
+ * `ShowBar`, which since session 2b carries its own amber **BLIND** tile a couple of elements away.
+ * Two amber badges saying the same word is worse than one, and the tile is both louder and
+ * actionable. The app-header mount passes nothing, because there is no tile there and blind must
+ * still be visible from `/fixtures`.
  */
-export function ProgrammerIndicator({ className }: { className?: string }) {
+export function ProgrammerIndicator({
+  className,
+  blindShownSeparately = false,
+}: {
+  className?: string
+  /** A dedicated Blind control sits next to this one, so don't report blind here as well. */
+  blindShownSeparately?: boolean
+}) {
   const { data: summary } = useProgrammerSummaryQuery()
   const { data: currentProject } = useCurrentProjectQuery()
   const location = useLocation()
 
   const entryCount = summary?.entryCount ?? 0
   const blind = summary?.blind ?? false
-  if (entryCount === 0 && !blind) return null
+  /** Whether *this* badge is the one drawing the blind state. */
+  const reportBlind = blind && !blindShownSeparately
+  // With blind reported elsewhere, an empty programmer leaves nothing at all to say.
+  if (entryCount === 0 && !reportBlind) return null
 
   // The programmer is its own page again, so the link goes there. The "am I already there?" test
   // stays segment-aware rather than a bare `startsWith`, which is a trap in both directions: while
@@ -37,17 +53,17 @@ export function ProgrammerIndicator({ className }: { className?: string }) {
     <span
       className={cn(
         'flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium tabular-nums',
-        blind
+        reportBlind
           ? 'border-amber-500/60 bg-amber-500/15 text-amber-700 dark:text-amber-300'
           : 'border-primary/50 bg-primary/10 text-primary',
         className,
       )}
     >
-      {blind ? <EyeOff className="size-3.5" /> : <SlidersHorizontal className="size-3.5" />}
+      {reportBlind ? <EyeOff className="size-3.5" /> : <SlidersHorizontal className="size-3.5" />}
       {/* The eye-off icon already says "blind"; spelling it out as well is what tips the
           app header onto a third row at phone widths. Keep the count, drop the word. */}
-      {blind && <span className="hidden @[760px]:inline">Blind</span>}
-      {blind && entryCount > 0 && <span className="hidden @[760px]:inline">·</span>}
+      {reportBlind && <span className="hidden @[760px]:inline">Blind</span>}
+      {reportBlind && entryCount > 0 && <span className="hidden @[760px]:inline">·</span>}
       {entryCount > 0 && <span>{entryCount}</span>}
     </span>
   )
@@ -56,6 +72,8 @@ export function ProgrammerIndicator({ className }: { className?: string }) {
     entryCount > 0
       ? `Programmer holds ${entryCount} value${entryCount === 1 ? '' : 's'}`
       : 'Programmer is empty',
+    // Kept even where the badge itself stays quiet: "5 values, and none of them reaching the
+    // stage" is the useful sentence, and a tooltip costs no width beside the tile.
     blind ? 'Blind — the programmer is gated out of the stage output' : null,
     // Only offer the trip if we aren't already there.
     programmerPath && !onProgrammer ? 'Go to the programmer to clear or edit' : null,

@@ -5,6 +5,7 @@ import { runnerSlice } from './runnerSlice'
 import { errorToastMiddleware } from './errorToastMiddleware'
 import { saveStatusSlice } from './saveStatusSlice'
 import { selectionSlice } from './selectionSlice'
+import { editLockSlice } from './editLockSlice'
 
 export const store = configureStore({
   reducer: {
@@ -15,6 +16,9 @@ export const store = configureStore({
     // Fixtures-list row selection, keyed by list. In the store so surfaces outside the list
     // (RecordSheet's "selected fixtures only") can read it — see selectionSlice.
     selection: selectionSlice.reducer,
+    // The show-editing lock, shared between Show and the Prompt Book so one GO ends a fix-it
+    // session everywhere. Deliberately not persisted — see editLockSlice.
+    editLock: editLockSlice.reducer,
   },
 
   middleware: (getDefaultMiddleware) => {

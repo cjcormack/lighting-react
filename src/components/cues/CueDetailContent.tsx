@@ -2,6 +2,7 @@ import { memo, useMemo, type ComponentType } from 'react'
 import { Badge } from '@/components/ui/badge'
 import {
   Palette,
+  Theater,
   Layers,
   AudioWaveform,
   Zap,
@@ -18,6 +19,8 @@ import { useLookListQuery } from '@/store/looks'
 import { EffectSummary } from '@/components/fx/EffectSummary'
 import { LayerRow } from '@/components/looks/LookStack'
 import { CueValueGrid } from './CueValueGrid'
+import { MiniStage } from './MiniStage'
+import { collectCueTargets } from '@/components/runner/program/CueCardEditor/targetUtils'
 import { TriggerSummary } from './TriggerSummary'
 import { TimingBadge } from './TimingBadge'
 import { fromCueAdHocEffect } from '@/components/fx/effectSummaryTypes'
@@ -61,7 +64,7 @@ interface CueDetailContentProps {
  * layers, ad-hoc effects and script hooks.
  *
  * **This is the cue read surface, all of it.** Four component trees reach it and none of them render
- * cue content themselves: `RunCueCard` → `RunOutputPane` → here, and `RunMobileCueCard` and
+ * cue content themselves: the cue card → here, and `RunMobileCueCard` and
  * `PromptBookCueCard` → `CueCardBody` → here. Deepening a section here therefore lights up all four,
  * which is why the plan's estimate of "four independent read renderers" turned out to be one file.
  *
@@ -77,6 +80,9 @@ export const CueDetailContent = memo(function CueDetailContent({
   const { data: looks } = useLookListQuery({ projectId }, { skip: !enabled })
 
   const palette = cue?.palette ?? []
+  // Same derivation the collapsed row uses for its target chips, so the two cannot disagree about
+  // what the cue touches.
+  const targets = useMemo(() => (cue ? collectCueTargets(cue) : []), [cue])
   const layers = cue?.layers ?? []
   // Built once rather than a `.find` per layer: a cue with a dozen layers over a library of a
   // hundred Looks was doing twelve hundred comparisons per render.
@@ -143,6 +149,21 @@ export const CueDetailContent = memo(function CueDetailContent({
         </div>
       )}
 
+      {/* ── Stage ──
+          A picture of which heads this cue touches, over the real patch.
+
+          Only Run's Targets pane drew this, and session 2b deleted that pane — so it is here or
+          nowhere. It belongs here rather than in a pane of its own: "which heads" is a reading of
+          the cue, like the values and the layers below, and the chip list that used to sit beside it
+          is already on the collapsed row. Rendered only when the cue actually targets something,
+          because an empty stage map is a large grey rectangle that says nothing. */}
+      {targets.length > 0 && (
+        <div className="space-y-1.5">
+          <SectionHeader icon={Theater} label="Stage" count={targets.length} />
+          <MiniStage projectId={projectId} targets={targets} heightClass="h-32" />
+        </div>
+      )}
+
       {/* ── Values ──
           The cue's composed output, drawn with the *same* cells as the programmer's grid. Session
           2a's answer to "a cue looks nothing like the programmer that made it": there is now one
@@ -163,7 +184,7 @@ export const CueDetailContent = memo(function CueDetailContent({
           serving both the cue editor and the programmer: a cue *is* a saved programmer stack, so a
           layer that looked different here would be describing one structure twice.
 
-          This is the whole read surface: `RunCueCard` reaches it through `RunOutputPane`, and
+          This is the whole read surface: the expanded cue card renders it directly, and
           `RunMobileCueCard` and `PromptBookCueCard` through `CueCardBody`. */}
       <div className="space-y-1.5">
         <SectionHeader icon={Layers} label="Layers" count={layers.length} />

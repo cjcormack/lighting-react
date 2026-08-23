@@ -47,17 +47,18 @@ describe('StackTabStrip', () => {
     const { container } = render(
       <StackTabStrip
         stacks={[stack(1)]}
-        activeStackId={1}
+        selectedStackId={1}
+        liveStackId={1}
         runnableStackCount={1}
-        onSwitchToStack={() => {}}
+        onSelectStack={() => {}}
       />,
     )
     expect(container.innerHTML).toBe('')
   })
 
-  it('scrolls the active tab into view when the server moves it', () => {
-    // `activeStackId` changes from the server — another desk, a surface, a script — and the strip
-    // used to select a tab that could be off the right-hand edge with nothing indicating it.
+  it('scrolls the selected tab into view when something else moves it', () => {
+    // The selection changes without a click — a playhead follow, a deep link, another desk — and
+    // the strip used to select a tab that could be off the right-hand edge with nothing saying so.
     const scrollIntoView = vi.fn()
     Element.prototype.scrollIntoView = scrollIntoView
 
@@ -65,9 +66,10 @@ describe('StackTabStrip', () => {
     const { rerender } = render(
       <StackTabStrip
         stacks={stacks}
-        activeStackId={1}
+        selectedStackId={1}
+        liveStackId={1}
         runnableStackCount={3}
-        onSwitchToStack={() => {}}
+        onSelectStack={() => {}}
       />,
     )
     scrollIntoView.mockClear()
@@ -75,9 +77,10 @@ describe('StackTabStrip', () => {
     rerender(
       <StackTabStrip
         stacks={stacks}
-        activeStackId={3}
+        selectedStackId={3}
+        liveStackId={3}
         runnableStackCount={3}
-        onSwitchToStack={() => {}}
+        onSelectStack={() => {}}
       />,
     )
 
@@ -91,8 +94,8 @@ describe('StackTabStrip', () => {
     )
   })
 
-  it('switches stacks on click, and draws separators as non-interactive', () => {
-    const onSwitchToStack = vi.fn()
+  it('selects a stack on click, and draws separators as non-interactive', () => {
+    const onSelectStack = vi.fn()
     const stacks = [
       stack(1),
       stack(2, { type: 'SEPARATOR', label: 'INTERVAL' }),
@@ -101,15 +104,82 @@ describe('StackTabStrip', () => {
     render(
       <StackTabStrip
         stacks={stacks}
-        activeStackId={1}
+        selectedStackId={1}
+        liveStackId={1}
         runnableStackCount={2}
-        onSwitchToStack={onSwitchToStack}
+        onSelectStack={onSelectStack}
       />,
     )
 
     expect(screen.getByText('INTERVAL')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /Act 3/ }))
-    expect(onSwitchToStack).toHaveBeenCalledWith(stacks[2])
+    expect(onSelectStack).toHaveBeenCalledWith(stacks[2])
+  })
+
+  it('marks the live stack even while a different one is selected', () => {
+    // The whole point of the prop split. Browsing off the playhead is now possible, so the strip
+    // has to say where the show actually is — GO acts there, not on what you are reading.
+    render(
+      <StackTabStrip
+        stacks={[stack(1), stack(2)]}
+        selectedStackId={2}
+        liveStackId={1}
+        runnableStackCount={2}
+        onSelectStack={() => {}}
+      />,
+    )
+    const live = screen.getByRole('button', { name: /Act 1/ })
+    const selected = screen.getByRole('button', { name: /Act 2/ })
+    expect(live.querySelector('[aria-label="Live"]')).toBeTruthy()
+    expect(selected.querySelector('[aria-label="Live"]')).toBeNull()
+    expect(selected.getAttribute('aria-current')).toBe('page')
+    expect(live.getAttribute('aria-current')).toBeNull()
+  })
+
+  it('marks the live stack when it is also the one selected', () => {
+    // Previously impossible to express: the pip was drawn only on UNselected tabs, because
+    // selected-==-live was an invariant. On the playhead both marks must show.
+    render(
+      <StackTabStrip
+        stacks={[stack(1), stack(2)]}
+        selectedStackId={1}
+        liveStackId={1}
+        runnableStackCount={2}
+        onSelectStack={() => {}}
+      />,
+    )
+    const tab = screen.getByRole('button', { name: /Act 1/ })
+    expect(tab.querySelector('[aria-label="Live"]')).toBeTruthy()
+    expect(tab.getAttribute('aria-current')).toBe('page')
+  })
+
+  it('draws no live mark while the show is stopped', () => {
+    render(
+      <StackTabStrip
+        stacks={[stack(1), stack(2)]}
+        selectedStackId={1}
+        liveStackId={null}
+        runnableStackCount={2}
+        onSelectStack={() => {}}
+      />,
+    )
+    expect(document.querySelector('[aria-label="Live"]')).toBeNull()
+  })
+
+  it('washes amber with the rest of the chrome band', () => {
+    // The strip sits between the show bar and the stack's navigation row, all of which tint
+    // together — tinting only the header above them reads as stripes.
+    const { container } = render(
+      <StackTabStrip
+        stacks={[stack(1), stack(2)]}
+        selectedStackId={1}
+        liveStackId={1}
+        runnableStackCount={2}
+        onSelectStack={() => {}}
+        unlockedWarning
+      />,
+    )
+    expect(container.firstElementChild!.className).toContain('bg-amber-400/15')
   })
 
   it('offers a scroll affordance only on the side that has more', () => {
@@ -117,9 +187,10 @@ describe('StackTabStrip', () => {
     render(
       <StackTabStrip
         stacks={stacks}
-        activeStackId={1}
+        selectedStackId={1}
+        liveStackId={1}
         runnableStackCount={3}
-        onSwitchToStack={() => {}}
+        onSelectStack={() => {}}
       />,
     )
     const scroller = document.querySelector('[aria-label="Stack tabs"]') as HTMLElement

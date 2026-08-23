@@ -14,6 +14,9 @@ vi.mock('@/store/looks', () => ({
 // The Values section fetches the cue's cook. Stubbed out: what this suite is about is the read
 // surface's *structure*, and `cueCookedRows.test.ts` covers the mapping behind that grid.
 vi.mock('./CueValueGrid', () => ({ CueValueGrid: () => <div data-testid="cue-values" /> }))
+// The stage map reads the projected patch and the fixture lookup, neither of which this suite is
+// about — and both of which need the store.
+vi.mock('./MiniStage', () => ({ MiniStage: () => <div data-testid="mini-stage" /> }))
 
 import { CueDetailContent } from './CueDetailContent'
 
@@ -74,7 +77,7 @@ afterEach(() => {
 /**
  * The first test in this tree, and it covers more than one component's worth of surface.
  *
- * `CueDetailContent` **is** the cue read surface: `RunCueCard` reaches it through `RunOutputPane`,
+ * `CueDetailContent` **is** the cue read surface: the expanded cue card renders it directly,
  * and `RunMobileCueCard` and the Prompt Book rail through `CueCardBody`. None of those four render
  * cue content of their own, so what is asserted here is what all four show — which is why plan §4.5's
  * "four independent read renderers" collapsed to one file.

@@ -19,12 +19,14 @@ import {
   useReorderCueStackCuesMutation,
   useSortCueStackByCueNumberMutation,
 } from '@/store/cueStacks'
+import { cn } from '@/lib/utils'
 import type { CueStack } from '@/api/cueStacksApi'
 import type { Cue } from '@/api/cuesApi'
 import { ProgramCueRow } from './ProgramCueRow'
 import { ProgramMarkerRow } from './ProgramMarkerRow'
 import { OutOfOrderBanner } from '@/components/runner/OutOfOrderBanner'
 import { cueNumberColumnChars, detectOutOfOrder } from '@/lib/cueNumber'
+import { UNLOCKED_WARNING_CLASS } from '@/lib/lockChrome'
 
 interface StackDetailProps {
   stack: CueStack
@@ -32,9 +34,33 @@ interface StackDetailProps {
   activeCueId: number | null
   /** Cue queued to fire on the next GO. Only meaningful when drilled into the active stack. */
   standbyCueId?: number | null
-  /** Cue id whose card is currently expanded inline. */
-  expandedCueId: number | null
-  onExpandedCueChange: (cueId: number | null) => void
+  /**
+   * The playhead's stack id, or null when this stack is not the one running — the rows use it to
+   * read their own fade. Deliberately not a fade *value*: see `useCueFade` for why a 60Hz number
+   * must not travel down through a memoized subtree.
+   */
+  fadeStackId?: number | null
+  /** Cues this session has already run, for the "played" tick. */
+  completedCueIds?: number[]
+  /** Prompt-book reading position per cue, e.g. "top of p. 9". */
+  locationByCue?: Map<number, string>
+  /** Arm a cue as the next GO. Absent where there is no transport. */
+  onSetStandby?: (cueId: number) => void
+  /** Show-safe mode: no dragging, no inline edits, no destructive actions. */
+  locked?: boolean
+  /**
+   * A running show is unlocked. Tints the navigation row with the header, bar and tab strip above
+   * it — distinct from `locked`, because a *stopped* show is unlocked too and warrants no warning.
+   */
+  unlockedWarning?: boolean
+  /**
+   * Whether a cue's card is open. A predicate rather than an id because two cards can be: the one
+   * the operator opened (`?cue=`) and the one on stage, which is derived — see `useCueExpansion`.
+   */
+  isExpanded: (cueId: number) => boolean
+  onToggleExpanded: (cueId: number) => void
+  /** The cue named in the URL, if any — the one worth scrolling to. */
+  openedCueId?: number | null
   onBack: () => void
   /**
    * Record the programmer into a new cue in this stack — what replaced "Add Cue".
@@ -60,8 +86,15 @@ export function StackDetail({
   projectId,
   activeCueId,
   standbyCueId,
-  expandedCueId,
-  onExpandedCueChange,
+  fadeStackId,
+  completedCueIds,
+  locationByCue,
+  onSetStandby,
+  locked = false,
+  unlockedWarning = false,
+  isExpanded,
+  onToggleExpanded,
+  openedCueId,
   onBack,
   onRecordIntoStack,
   onAddMarker,
@@ -92,14 +125,16 @@ export function StackDetail({
     }
   }, [stack.id, activeCueId])
 
-  // Scroll an expanded card into view so the operator sees the editor body.
+  // Scroll a card the operator just opened into view. Keyed on the *addressed* cue rather than on
+  // every open card: the derived live card opens on its own as the show advances, and scrolling to
+  // it would drag the operator off whatever they were reading.
   useEffect(() => {
-    if (expandedCueId == null || !listRef.current) return
-    const row = listRef.current.querySelector(`[data-cue-row="${expandedCueId}"]`)
+    if (openedCueId == null || !listRef.current) return
+    const row = listRef.current.querySelector(`[data-cue-row="${openedCueId}"]`)
     if (row instanceof HTMLElement) {
       row.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
     }
-  }, [expandedCueId])
+  }, [openedCueId])
 
   const standardCount = useMemo(
     () => stack.cues.filter((c) => c.cueType === 'STANDARD').length,
@@ -117,6 +152,9 @@ export function StackDetail({
   )
 
   // dnd-kit sensors
+  // `DndContext` stays mounted in both modes: `useSortable` needs its ancestor, and unmounting it
+  // to disable dragging breaks every row. The disabling happens per-row via dnd-kit's own
+  // `disabled`, which makes a drag genuinely impossible rather than merely discouraged.
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor),
@@ -146,7 +184,12 @@ export function StackDetail({
       {/* Header — controls drop their text labels progressively as the content area narrows
           (container-query, sidebar-aware); everything stays reachable as an icon button down
           to phone widths. */}
-      <div className="flex items-center h-12 px-4 border-b gap-3 shrink-0">
+      <div
+        className={cn(
+          'flex h-12 shrink-0 items-center gap-3 border-b px-4 transition-colors',
+          unlockedWarning && UNLOCKED_WARNING_CLASS,
+        )}
+      >
         <Button
           variant="outline"
           size="sm"
@@ -172,24 +215,28 @@ export function StackDetail({
 
             Separators keep their button, and so do stacks: neither is a captured state. That is the
             line, not "no new buttons". */}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onRecordIntoStack?.(stack.id)}
-          disabled={!onRecordIntoStack}
-          aria-label={`Record the programmer into ${stack.name}`}
-          title="Record what the programmer is holding as a new cue in this stack"
-        >
-          <Zap className="size-3.5" />
-          <span className="ml-1.5 hidden @[600px]:inline">Record into {stack.name}</span>
-        </Button>
-        <Button variant="outline" size="sm" onClick={onAddMarker} aria-label="Add separator">
-          <SeparatorHorizontal className="size-3.5" />
-          <span className="ml-1.5 hidden @[600px]:inline">Separator</span>
-        </Button>
+        {!locked && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onRecordIntoStack?.(stack.id)}
+              disabled={!onRecordIntoStack}
+              aria-label={`Record the programmer into ${stack.name}`}
+              title="Record what the programmer is holding as a new cue in this stack"
+            >
+              <Zap className="size-3.5" />
+              <span className="ml-1.5 hidden @[600px]:inline">Record into {stack.name}</span>
+            </Button>
+            <Button variant="outline" size="sm" onClick={onAddMarker} aria-label="Add separator">
+              <SeparatorHorizontal className="size-3.5" />
+              <span className="ml-1.5 hidden @[600px]:inline">Separator</span>
+            </Button>
+          </>
+        )}
       </div>
 
-      {showOutOfOrder && (
+      {showOutOfOrder && !locked && (
         <OutOfOrderBanner
           onFixOrder={() => sortByCueNumber({ projectId, stackId: stack.id })}
           onDismiss={() => setDismissedFor(stack.id)}
@@ -220,6 +267,7 @@ export function StackDetail({
                     name={cue.name}
                     onRename={(name) => onMarkerRename(cue.id, name)}
                     onDelete={() => onMarkerDelete(cue.id)}
+                    locked={locked}
                   />
                 )
               }
@@ -228,12 +276,15 @@ export function StackDetail({
                   key={cue.id}
                   cue={cue}
                   projectId={projectId}
-                  expanded={expandedCueId === cue.id}
-                  onToggleExpanded={() =>
-                    onExpandedCueChange(expandedCueId === cue.id ? null : cue.id)
-                  }
+                  expanded={isExpanded(cue.id)}
+                  onToggleExpanded={() => onToggleExpanded(cue.id)}
                   isActive={cue.id === activeCueId}
                   isStandby={cue.id === standbyCueId}
+                  isDone={completedCueIds?.includes(cue.id) ?? false}
+                  fadeStackId={fadeStackId}
+                  location={locationByCue?.get(cue.id) ?? null}
+                  onSetStandby={onSetStandby ? () => onSetStandby(cue.id) : undefined}
+                  locked={locked}
                   onDuplicate={onDuplicate}
                   onRecordInto={onRecordInto}
                   onIncludeCue={onIncludeCue}

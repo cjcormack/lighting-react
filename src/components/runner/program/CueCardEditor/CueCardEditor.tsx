@@ -1,11 +1,11 @@
-import { useMemo, useRef, useState } from 'react'
+import { useState } from 'react'
 import {
   ChevronRight,
+  Check,
   Copy,
   Download,
   GripVertical,
   Loader2,
-  Play,
   Sliders,
   Trash2,
   Zap,
@@ -16,25 +16,29 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
-  useProjectCueQuery,
   useDeleteProjectCueMutation,
   usePatchProjectCueMutation,
 } from '@/store/cues'
 import { InlineEditField } from '@/components/InlineEditField'
-import type { Cue, CueTarget } from '@/api/cuesApi'
+import type { Cue } from '@/api/cuesApi'
 import type { CueStackCueEntry } from '@/api/cueStacksApi'
 import {
   formatFadeCurve,
   formatFadeDuration,
   parseFadeDuration,
 } from '@/lib/cueUtils'
+import {
+  CuePaletteBar,
+  CueStatePip,
+  CueTargetChip,
+  useExpandedCue,
+} from '@/components/cues/CueRowParts'
 import { AUTO_CUE_NUMBER_CLASS, cueNumberCellWidth } from '@/lib/cueNumber'
 import { TruncateStart } from '@/components/TruncateStart'
 import { SaveStatusIndicator } from '@/components/SaveStatusIndicator'
-import { resolveColourToHex } from '@/components/fx/colourUtils'
 import { CueDetailContent } from '@/components/cues/CueDetailContent'
 import { CuePropertiesSheet } from '@/components/cues/CuePropertiesSheet'
-import { collectCueTargets } from './targetUtils'
+import { useCueFade } from '@/hooks/useCueFade'
 interface CueCardEditorProps {
   cue: CueStackCueEntry
   projectId: number
@@ -42,6 +46,29 @@ interface CueCardEditorProps {
   onToggleExpanded: () => void
   isActive?: boolean
   isStandby?: boolean
+  /** This session has already run the cue — the "done" tick. */
+  isDone?: boolean
+  /**
+   * The stack whose runner owns this row's fade — the project playhead, or null when this stack is
+   * not the one running.
+   *
+   * The row reads its own fade from that rather than being handed one: the fade is the only
+   * frame-rate value on a cue row, and passing it down would re-render every row in the stack to
+   * animate one. See `useCueFade`.
+   */
+  fadeStackId?: number | null
+  /** Prompt-book reading position, e.g. "top of p. 9". */
+  location?: string | null
+  /** Arm this cue as the next GO. Absent where there is no transport to arm against. */
+  onSetStandby?: () => void
+  /**
+   * Show-safe mode: no dragging, no inline edits, no destructive actions.
+   *
+   * Passed `disabled` straight into `useSortable` rather than unmounting the dnd context — the row
+   * needs its `SortableContext` ancestor either way, and dnd-kit's own `disabled` makes a drag
+   * genuinely impossible rather than merely discouraged.
+   */
+  locked?: boolean
   onDuplicate?: (cue: Cue) => void
   /** Record the programmer into this cue — opens the Record sheet targeting it. */
   onRecordInto?: (cueId: number) => void
@@ -71,13 +98,20 @@ export function CueCardEditor({
   onToggleExpanded,
   isActive = false,
   isStandby = false,
+  isDone = false,
+  fadeStackId = null,
+  location = null,
+  onSetStandby,
+  locked = false,
   onDuplicate,
   onRecordInto,
   onIncludeCue,
   includePending = false,
 }: CueCardEditorProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: cue.id })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: cue.id,
+    disabled: locked,
+  })
 
   const sortableStyle = {
     transform: CSS.Transform.toString(transform),
@@ -88,29 +122,11 @@ export function CueCardEditor({
 
   const [propsOpen, setPropsOpen] = useState(false)
 
-  const { data: fullCue, isFetching } = useProjectCueQuery(
-    { projectId, cueId: cue.id },
-    { skip: !expanded },
-  )
+  const { cueData, targets, isFetching } = useExpandedCue(projectId, cue.id, expanded)
   const [deleteCue] = useDeleteProjectCueMutation()
   const [patchCue] = usePatchProjectCueMutation()
 
-  // Sticky placeholder so a PATCH-driven refetch doesn't flash an empty body.
-  // Cleared on cue-id change so a recycled component slot doesn't show a stale
-  // prior cue for one render.
-  const lastCueRef = useRef<Cue | null>(null)
-  const lastCueIdRef = useRef<number>(cue.id)
-  if (lastCueIdRef.current !== cue.id) {
-    lastCueRef.current = null
-    lastCueIdRef.current = cue.id
-  }
-  if (fullCue) lastCueRef.current = fullCue
-  const cueData = fullCue ?? lastCueRef.current
 
-  const targets: CueTarget[] = useMemo(
-    () => (cueData ? collectCueTargets(cueData) : []),
-    [cueData],
-  )
   const targetCount = targets.length
 
   // Inline edits from the collapsed row. Same PATCH-on-commit contract as the expanded
@@ -139,6 +155,27 @@ export function CueCardEditor({
   const fadeCurveLabel =
     cue.fadeDurationMs != null && cue.fadeDurationMs > 0 ? formatFadeCurve(cue.fadeCurve) : ''
 
+  const { fadeProgress, fadeRemainMs } = useCueFade(fadeStackId, cue.id, cue.fadeDurationMs)
+  const isFading = fadeProgress != null
+
+  /**
+   * The row body and the chevron do different things, which is what lets one row serve a show being
+   * run and a show being edited.
+   *
+   * The chevron always expands. The body **arms the cue for the next GO while locked** — locked is
+   * the running state, where reaching for a cue means "go there next" — and expands while unlocked,
+   * where reaching for a cue means "let me look at it". Arming is deliberately not available
+   * unlocked: it changes what GO fires, which is the show, and not letting a stray click do that is
+   * the entire point of the lock.
+   */
+  const handleBodyClick = () => {
+    if (locked && onSetStandby && !isActive) {
+      onSetStandby()
+      return
+    }
+    onToggleExpanded()
+  }
+
   return (
     <div ref={setNodeRef} style={sortableStyle} {...attributes} data-cue-row={cue.id}>
       <div
@@ -158,17 +195,28 @@ export function CueCardEditor({
             // The Q# track is `auto`, sized by the fixed-width cell inside it — see
             // `cueNumberCellWidth`. Every row in a stack resolves the same width, so the column
             // still lines up, but a stack of "Q1"–"Q40" no longer reserves room it never uses.
-            'grid-cols-[16px_auto_minmax(0,80px)_minmax(0,1fr)_auto_auto_18px]',
-            '@max-[800px]:grid-cols-[16px_auto_minmax(0,1fr)_auto_18px] @max-[800px]:gap-2',
+            'group/cue',
+            'grid-cols-[22px_auto_minmax(0,80px)_minmax(0,1fr)_auto_auto_18px]',
+            '@max-[800px]:grid-cols-[22px_auto_minmax(0,1fr)_auto_18px] @max-[800px]:gap-2',
           )}
-          onClick={onToggleExpanded}
+          onClick={handleBodyClick}
         >
-          <div
-            className="flex items-center justify-center text-muted-foreground hover:text-foreground cursor-grab"
-            {...listeners}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <GripVertical className="size-4" />
+          {/* One cell, two jobs. The pip is a read-out and must be visible mid-show; the grip is
+              an action and only exists while unlocked. Stacking them costs no width, and hiding
+              the pip under the pointer is free — you are not reading it while you drag. */}
+          <div className="relative grid size-[22px] place-items-center">
+            <span className={cn('transition-opacity', !locked && 'group-hover/cue:opacity-0')}>
+              <CueStatePip isActive={isActive} isStandby={isStandby} />
+            </span>
+            {!locked && (
+              <div
+                className="absolute inset-0 grid place-items-center text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/cue:opacity-100 cursor-grab"
+                {...listeners}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <GripVertical className="size-4" />
+              </div>
+            )}
           </div>
 
           <div
@@ -176,11 +224,8 @@ export function CueCardEditor({
             // Play icon (12px) + gap (6px) + the inline field's border/padding (6px).
             style={cueNumberCellWidth('1.5rem')}
           >
-            {isActive && (
-              <Play
-                className="size-3 fill-green-400 text-green-400 shrink-0"
-                aria-label="Live"
-              />
+            {isDone && !isActive && (
+              <Check className="size-3 shrink-0 text-muted-foreground/60" aria-label="Played" />
             )}
             <InlineEditField
               value={cue.cueNumber ?? ''}
@@ -189,6 +234,7 @@ export function CueCardEditor({
               formatDisplay={(v) => <TruncateStart text={v ? `Q${v}` : '—'} />}
               onCommit={commitCueNumber}
               ariaLabel="cue number"
+              disabled={locked}
               placeholder="14A"
               title={
                 cue.cueNumberAuto
@@ -205,13 +251,14 @@ export function CueCardEditor({
           </div>
 
           <div className="h-5 rounded overflow-hidden flex @max-[800px]:hidden">
-            <PaletteBar palette={cueData?.palette ?? []} />
+            <CuePaletteBar palette={cueData?.palette ?? []} />
           </div>
 
           <InlineEditField
             value={cue.name}
             onCommit={commitName}
             ariaLabel="cue name"
+            disabled={locked}
             title="Click to rename"
             // `justify-self-start` keeps the field the width of the name it holds. Left to
             // stretch (the grid default) it would cover the whole 1fr column, so clicking the
@@ -223,8 +270,15 @@ export function CueCardEditor({
           />
 
           <div className="flex items-center gap-1 flex-nowrap @max-[1000px]:hidden">
+            {/* Prompt-book reading position — where in the script this cue is called. Sits with the
+                other row metadata rather than beside the name, which is an edit field. */}
+            {location && (
+              <span className="shrink-0 font-mono text-[10px] text-muted-foreground/70">
+                {location}
+              </span>
+            )}
             {targets.slice(0, 4).map((t) => (
-              <TargetChip key={`${t.type}:${t.key}`} target={t} />
+              <CueTargetChip key={`${t.type}:${t.key}`} target={t} />
             ))}
             {targetCount > 4 && (
               <Badge variant="outline" className="text-[10px] px-1.5 py-0">
@@ -242,6 +296,15 @@ export function CueCardEditor({
           </div>
 
           <div className="flex flex-col items-end font-mono text-xs gap-0 leading-tight shrink-0">
+            {isFading ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-900 bg-amber-950/40 px-2 py-px font-mono text-[10px] font-bold tracking-[0.08em] uppercase text-amber-400">
+                <span
+                  className="size-1.5 rounded-full bg-amber-400"
+                  style={{ animation: 'r-fade-pulse 0.9s ease-in-out infinite' }}
+                />
+                {((fadeRemainMs ?? 0) / 1000).toFixed(1)}s
+              </span>
+            ) : (
             <span className="flex items-center gap-1 text-foreground">
               <InlineEditField
                 value={formatFadeDuration(cue.fadeDurationMs)}
@@ -251,11 +314,13 @@ export function CueCardEditor({
                 placeholder="2s"
                 title="Fade duration — e.g. 2s, 500ms (a bare number is seconds)"
                 className="w-14 text-right"
+                disabled={locked}
               />
               {fadeCurveLabel && (
                 <span className="text-muted-foreground">{fadeCurveLabel}</span>
               )}
             </span>
+            )}
             {cue.autoAdvance && (
               <span className="text-[9px] text-blue-500 uppercase tracking-wide">
                 auto
@@ -263,12 +328,23 @@ export function CueCardEditor({
             )}
           </div>
 
-          <ChevronRight
-            className={cn(
-              'size-4 text-muted-foreground transition-transform',
-              expanded && 'rotate-90',
-            )}
-          />
+          {/* The chevron is its own target and always expands, in both lock modes. It has to be:
+              while locked the row body arms the cue instead of expanding, so without this there is
+              no way to open a card at all during a show. */}
+          <button
+            type="button"
+            aria-label={expanded ? 'Collapse cue' : 'Expand cue'}
+            aria-expanded={expanded}
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleExpanded()
+            }}
+            className="flex items-center justify-center text-muted-foreground hover:text-foreground"
+          >
+            <ChevronRight
+              className={cn('size-4 transition-transform', expanded && 'rotate-90')}
+            />
+          </button>
         </div>
 
         {expanded && (
@@ -287,19 +363,25 @@ export function CueCardEditor({
                       project, which is no use when you want to know that the field you just left
                       actually landed. The Live / Preview-edit toggle that stood beside it went with
                       the `cueEdit` session it switched — with the cue read-only there is nothing
-                      here for it to gate, and the programmer's own Blind is the gate that matters. */}
-                  <div className="flex items-center justify-between gap-2 border-b bg-muted/20 px-3 py-2">
-                    <SaveStatusIndicator cueId={cue.id} className="justify-start" />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 gap-1.5 text-xs"
-                      onClick={() => setPropsOpen(true)}
-                    >
-                      <Sliders className="size-3.5" />
-                      Cue properties…
-                    </Button>
-                  </div>
+                      here for it to gate, and the programmer's own Blind is the gate that matters.
+
+                      The whole strip is withheld while locked. The properties drawer is an editing
+                      form, and with it gone the row would hold only a save indicator for writes that
+                      cannot happen from here. */}
+                  {!locked && (
+                    <div className="flex items-center justify-between gap-2 border-b bg-muted/20 px-3 py-2">
+                      <SaveStatusIndicator cueId={cue.id} className="justify-start" />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 gap-1.5 text-xs"
+                        onClick={() => setPropsOpen(true)}
+                      >
+                        <Sliders className="size-3.5" />
+                        Cue properties…
+                      </Button>
+                    </div>
+                  )}
 
                   {/* The cue read surface — the same value grid the programmer draws, plus its
                       layer stack and its effects, all read-only. Session 2a deleted the three-pane
@@ -311,6 +393,17 @@ export function CueCardEditor({
                     <CueDetailContent cue={cueData} projectId={projectId} />
                   </div>
 
+                  {/* The action row, absent in its entirety while locked — hidden rather than
+                      disabled, because a row of greyed-out buttons reads as breakage where absence
+                      reads as "not now".
+
+                      Every one of these changes the show or reaches the stage, which is why none of
+                      them survives the lock. Remove and Duplicate edit the stack. **Edit in
+                      Programmer Includes the cue, and Include goes live** (D2 of the plan: the desk
+                      does not auto-blind, so opening a cue puts it on stage). Record writes the cue
+                      from whatever the programmer is holding. Reading a cue is the only thing this
+                      card does while the show is locked. */}
+                  {!locked && (
                   <div className="flex items-center gap-2 px-3 py-2 border-t bg-muted/20">
                     <Button
                       variant="ghost"
@@ -378,6 +471,7 @@ export function CueCardEditor({
                         then the programmer-wide Make hard in the programmer toolbar is the only
                         way out of a reference. */}
                   </div>
+                  )}
                 </>
               )}
           </div>
@@ -393,46 +487,3 @@ export function CueCardEditor({
   )
 }
 
-/**
- * The cue's positional colour list, as swatches.
- *
- * **Resolved, not assigned raw.** This used to set `background: c` directly, which works for a hex
- * and renders nothing at all for one of the backend's gel names — so the same cue's palette looked
- * different here and in Run, whose copy has always resolved. Two renderings of one list, disagreeing
- * about a value neither of them owns.
- *
- * Keyed by `${c}-${i}` for the same reason as Run's: a bare index makes React reuse a swatch across
- * a reorder and animate the wrong colour into place.
- */
-function PaletteBar({ palette }: { palette: string[] }) {
-  if (palette.length === 0) {
-    return <div className="h-full w-12 bg-muted/30" />
-  }
-  return (
-    <div className="flex h-full w-20">
-      {palette.slice(0, 6).map((c, i) => (
-        <span
-          key={`${c}-${i}`}
-          className="min-w-[4px] flex-1"
-          style={{ background: resolveColourToHex(c) }}
-        />
-      ))}
-    </div>
-  )
-}
-
-function TargetChip({ target }: { target: CueTarget }) {
-  return (
-    <Badge
-      variant="outline"
-      className={cn(
-        'text-[10px] px-1.5 py-0 gap-1 max-w-[120px]',
-        target.type === 'fixture'
-          ? 'border-amber-500/40 text-amber-500 bg-amber-500/10'
-          : 'border-blue-500/40 text-blue-300 bg-blue-500/10',
-      )}
-    >
-      <span className="truncate">{target.key}</span>
-    </Badge>
-  )
-}

@@ -345,8 +345,7 @@ export interface PropertyWriteTarget {
 }
 
 /**
- * Hook to update a channel value. Routes through `cueEdit.setChannel` when the surrounding
- * [EditorContext] is `kind: 'cue'`; in `kind: 'look'` mode channel-level writes are a
+ * Hook to update a channel value. In `kind: 'look'` mode channel-level writes are a
  * no-op — Look rows are property-keyed, not channel-keyed, and the synthetic
  * fixture's channel refs don't map to real DMX anyway.
  *
@@ -365,16 +364,6 @@ export function useUpdateChannel() {
   const ctx = useEditorContext()
   return useCallback(
     (channel: ChannelRef, value: number, target?: PropertyWriteTarget) => {
-      if (ctx.kind === 'cue') {
-        lightingApi.cueEdit.send({
-          type: 'cueEdit.setChannel',
-          cueId: ctx.id,
-          universe: channel.universe,
-          channel: channel.channelNo,
-          level: value,
-        })
-        return
-      }
       if (ctx.kind === 'look') return
       if (target) {
         lightingApi.programmer.set(
@@ -407,17 +396,6 @@ export function useUpdateFixturePosition(
   const ctx = useEditorContext()
   return useCallback(
     (pan: number, tilt: number) => {
-      if (ctx.kind === 'cue' && fixtureKey) {
-        lightingApi.cueEdit.send({
-          type: 'cueEdit.setProperty',
-          cueId: ctx.id,
-          targetType: 'fixture',
-          targetKey: fixtureKey,
-          propertyName: property.name,
-          value: `${Math.round(pan)},${Math.round(tilt)}`,
-        })
-        return
-      }
       if (ctx.kind === 'look') return
       if (!fixtureKey) {
         lightingApi.channels.update(property.panChannel.universe, property.panChannel.channelNo, pan)
@@ -431,11 +409,9 @@ export function useUpdateFixturePosition(
 }
 
 /**
- * Update all colour channels of a fixture-level colour property. In cue mode RGB routes
- * through one `cueEdit.setProperty { rgbColour }` (the backend rejects R/G/B sub-channels);
- * W/A/UV stay on `setChannel`. In look mode writes go to the local draft keyed by
- * `property.name`, with W/A/UV serialised into the extended-colour suffix. Mirrors
- * [useUpdateGroupColour].
+ * Update all colour channels of a fixture-level colour property. In look mode writes go to the
+ * local draft keyed by `property.name`, with W/A/UV serialised into the extended-colour suffix.
+ * Mirrors [useUpdateGroupColour].
  */
 export function useUpdateFixtureColour(
   property: ColourPropertyDescriptor,
@@ -445,44 +421,6 @@ export function useUpdateFixtureColour(
   const draft = useLookDraft()
   return useCallback(
     (r: number, g: number, b: number, w?: number, a?: number, uv?: number) => {
-      if (ctx.kind === 'cue' && fixtureKey) {
-        lightingApi.cueEdit.send({
-          type: 'cueEdit.setProperty',
-          cueId: ctx.id,
-          targetType: 'fixture',
-          targetKey: fixtureKey,
-          propertyName: 'rgbColour',
-          value: rgbToHex(r, g, b),
-        })
-        if (property.whiteChannel && w !== undefined) {
-          lightingApi.cueEdit.send({
-            type: 'cueEdit.setChannel',
-            cueId: ctx.id,
-            universe: property.whiteChannel.universe,
-            channel: property.whiteChannel.channelNo,
-            level: w,
-          })
-        }
-        if (property.amberChannel && a !== undefined) {
-          lightingApi.cueEdit.send({
-            type: 'cueEdit.setChannel',
-            cueId: ctx.id,
-            universe: property.amberChannel.universe,
-            channel: property.amberChannel.channelNo,
-            level: a,
-          })
-        }
-        if (property.uvChannel && uv !== undefined) {
-          lightingApi.cueEdit.send({
-            type: 'cueEdit.setChannel',
-            cueId: ctx.id,
-            universe: property.uvChannel.universe,
-            channel: property.uvChannel.channelNo,
-            level: uv,
-          })
-        }
-        return
-      }
       if (ctx.kind === 'look' && draft) {
         const value = serializeExtendedColour({
           hex: rgbToHex(r, g, b),

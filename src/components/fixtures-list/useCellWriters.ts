@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { lightingApi } from '../../api/lightingApi'
 import { useEditorContext } from '../../components/lighting-editor/EditorContext'
-import { rgbToHex } from '../../components/fx/colourUtils'
 import {
   parseProgrammerEntryValue,
   parseProgrammerValue,
@@ -46,16 +45,13 @@ export interface CellWriters {
  * target as an argument so a single hook instance serves every cell in the
  * table — batch apply is a loop over these calls.
  *
- * Routing: live → the **programmer** (Layer 2) at property level; cue →
- * cueEdit.setChannel, except RGB (one setProperty('rgbColour') per fixture — the backend
- * rejects per-channel writes on RGB sub-channels) and position (setProperty('position'),
- * matching useUpdateGroupPosition). Preset contexts are a no-op: the list view only ships on
- * the live route, and preset drafts are property-name-keyed, which this channel-level layer
- * doesn't carry.
+ * Routing: live → the **programmer** (Layer 2) at property level. Look contexts are a no-op or go
+ * to the row draft: Look rows are property-name-keyed, which this channel-level layer doesn't
+ * carry. Both a channel ref and a property name are passed so neither branch has to
+ * reverse-engineer the other.
  *
- * The cue branch still works in channel refs because that is what `cueEdit.setChannel`
- * takes; the live branch works in property names because that is the programmer's key space.
- * Both are passed so neither has to reverse-engineer the other.
+ * There was a third route until session 2b — `cueEdit.*`, for a cue being edited in place. A cue is
+ * read-only now and edited by Include, so there is exactly one place values are set.
  */
 /**
  * Dispatch one planned write to the matching writer. The single place that maps a
@@ -130,16 +126,6 @@ export function useCellWriters(): CellWriters {
       ref: ChannelRef,
       value: number,
     ) => {
-      if (ctx.kind === 'cue') {
-        lightingApi.cueEdit.send({
-          type: 'cueEdit.setChannel',
-          cueId: ctx.id,
-          universe: ref.universe,
-          channel: ref.channelNo,
-          level: value,
-        })
-        return
-      }
       if (ctx.kind === 'look') return
       if (setLookValue) {
         setLookValue(fixtureKey, propertyName, serializeLevel(value))
@@ -171,26 +157,6 @@ export function useCellWriters(): CellWriters {
           r = Math.max(r, w)
           g = Math.max(g, w)
           b = Math.max(b, w)
-        }
-        if (ctx.kind === 'cue') {
-          lightingApi.cueEdit.send({
-            type: 'cueEdit.setProperty',
-            cueId: ctx.id,
-            targetType: 'fixture',
-            targetKey: fixtureKey,
-            propertyName: 'rgbColour',
-            value: rgbToHex(r, g, b),
-          })
-          if (property.whiteChannel && w !== undefined) {
-            writeChannelValue(fixtureKey, property.name, property.whiteChannel, w)
-          }
-          if (property.amberChannel && a !== undefined) {
-            writeChannelValue(fixtureKey, property.name, property.amberChannel, a)
-          }
-          if (property.uvChannel && uv !== undefined) {
-            writeChannelValue(fixtureKey, property.name, property.uvChannel, uv)
-          }
-          return
         }
         // Live: one entry for the whole colour, extended components included.
         //
@@ -237,22 +203,6 @@ export function useCellWriters(): CellWriters {
             'position',
             serializePosition(panValue ?? base.pan, tiltValue ?? base.tilt),
           )
-          return
-        }
-        if (ctx.kind === 'cue') {
-          // setProperty('position') takes both axes; fill an omitted one from
-          // the fixture's own current value so a pan-only nudge doesn't
-          // rewrite tilt.
-          const effectivePan = panValue ?? lightingApi.channels.get(pan.universe, pan.channelNo)
-          const effectiveTilt = tiltValue ?? lightingApi.channels.get(tilt.universe, tilt.channelNo)
-          lightingApi.cueEdit.send({
-            type: 'cueEdit.setProperty',
-            cueId: ctx.id,
-            targetType: 'fixture',
-            targetKey: fixtureKey,
-            propertyName: 'position',
-            value: `${effectivePan},${effectiveTilt}`,
-          })
           return
         }
         if (axisProperties) {

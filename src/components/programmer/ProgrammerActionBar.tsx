@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react'
-import { ChevronDown, Circle, Download, Eraser, EyeOff, Layers, Plus, Upload } from 'lucide-react'
+import { ChevronDown, Circle, Download, Eraser, Layers, Plus, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -17,11 +17,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { cn } from '@/lib/utils'
 import { usePersistentState } from '@/hooks/usePersistentState'
+import { PROGRAMMER_FADE_KEY } from '@/lib/programmerFade'
 import {
   programmerClearAll,
-  programmerSetBlind,
   useProgrammerSummaryQuery,
 } from '@/store/programmer'
 import { useActiveEffectsQuery } from '@/store/fixtureFx'
@@ -38,7 +37,6 @@ const FADE_OPTIONS = [
   { value: '3000', label: '3s' },
 ]
 
-const FADE_KEY = 'programmer.fadeMs'
 
 /**
  * The programmer's verbs, in three labelled zones.
@@ -48,7 +46,9 @@ const FADE_KEY = 'programmer.fadeMs'
  * *stages* from what *writes*, and "Record" and "Record look" read as a pair when they are two
  * destinations for one act. Now:
  *
- *  - **Stage** changes what the rig is doing right now.
+ *  - **Stage** changes what the rig is doing right now. Blind used to sit here too; session 2b
+ *    moved it into the `ShowBar` beside blackout, so there is one Blind in one place on every
+ *    view rather than one location on the Programmer and another on Show.
  *  - **Load** is the only way in, and the only control never disabled.
  *  - **Save** is one primary button with a destination menu.
  *
@@ -69,10 +69,9 @@ export function ProgrammerActionBar({
   const { data: summary } = useProgrammerSummaryQuery()
   const { data: activeEffects } = useActiveEffectsQuery()
   const { data: stacks } = useProjectCueStackListQuery(projectId)
-  const [fadeMs, setFadeMs] = usePersistentState<string>(FADE_KEY, '0')
+  const [fadeMs, setFadeMs] = usePersistentState<string>(PROGRAMMER_FADE_KEY, '0')
   const sheets = useProgrammerSheets()
 
-  const blind = summary?.blind ?? false
   const entryCount = summary?.entryCount ?? 0
   const target = summary?.lastIncluded ?? null
   const fade = Number(fadeMs) || 0
@@ -146,25 +145,6 @@ export function ProgrammerActionBar({
           </TooltipContent>
         </Tooltip>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant={blind ? 'default' : 'outline'}
-              size="sm"
-              aria-pressed={blind}
-              onClick={() => programmerSetBlind(!blind, fade)}
-              className={cn(blind && 'bg-amber-500 text-white hover:bg-amber-600')}
-            >
-              <EyeOff className="size-3.5" />
-              Blind
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            {blind
-              ? 'Blind is on — programmer values are gated out of the stage output'
-              : 'Edit without the rig showing it — the programmer is gated out of the stage output'}
-          </TooltipContent>
-        </Tooltip>
       </ActionZone>
 
       <Divider />

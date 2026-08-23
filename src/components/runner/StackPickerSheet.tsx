@@ -13,16 +13,16 @@ interface StackPickerSheetProps {
   onOpenChange: (open: boolean) => void
   /** The project's ordered stacks + separators. */
   stacks: CueStack[]
-  activeStackId: number | null
-  onSwitchToStack: (stack: CueStack) => void
+  selectedStackId: number | null
+  onSelectStack: (stack: CueStack) => void
 }
 
 export function StackPickerSheet({
   open,
   onOpenChange,
   stacks,
-  activeStackId,
-  onSwitchToStack,
+  selectedStackId,
+  onSelectStack,
 }: StackPickerSheetProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -54,25 +54,25 @@ export function StackPickerSheet({
                   </div>
                 )
               }
-              const isActive = stack.id === activeStackId
+              const isSelected = stack.id === selectedStackId
               return (
                 <button
                   key={stack.id}
                   type="button"
                   onClick={() => {
-                    onSwitchToStack(stack)
+                    onSelectStack(stack)
                     onOpenChange(false)
                   }}
                   className={cn(
                     'flex w-full items-center gap-2 h-12 px-4 border-b text-left transition-colors hover:bg-muted/40',
-                    isActive &&
+                    isSelected &&
                       'bg-primary/10 border-l-[3px] border-l-primary',
                   )}
                 >
                   <span
                     className={cn(
                       'flex-1 text-sm font-medium truncate',
-                      isActive && 'text-primary',
+                      isSelected && 'text-primary',
                     )}
                   >
                     {stack.name}
@@ -80,7 +80,7 @@ export function StackPickerSheet({
                   {stack.loop && (
                     <RotateCcw className="size-3.5 text-muted-foreground shrink-0" />
                   )}
-                  {stack.activeCueId != null && !isActive && (
+                  {stack.activeCueId != null && (
                     <span className="text-[10px] font-medium uppercase tracking-wide text-green-500 shrink-0">
                       Live
                     </span>

@@ -17,18 +17,6 @@ import type {
   GroupSettingPropertyDescriptor,
 } from '../api/groupsApi'
 
-// Group writes persist as per-fixture rows in cue mode — GroupPropertyDescriptor doesn't
-// carry the group name, so we can't emit a group-level setProperty from here.
-function cueEditWriteChannel(cueId: number, universe: number, channelNo: number, value: number) {
-  lightingApi.cueEdit.send({
-    type: 'cueEdit.setChannel',
-    cueId,
-    universe,
-    channel: channelNo,
-    level: value,
-  })
-}
-
 // `channelKey` / `getChannelValue` / `subscribeToChannels` used to be private copies here.
 // They now come from usePropertyValues, so there is one place to thread a ChannelSource
 // through rather than three.
@@ -116,12 +104,6 @@ export function useUpdateGroupSlider(
   const draft = useLookDraft()
   return useCallback(
     (value: number) => {
-      if (ctx.kind === 'cue') {
-        for (const ch of property.memberChannels) {
-          cueEditWriteChannel(ctx.id, ch.universe, ch.channelNo, value)
-        }
-        return
-      }
       if (ctx.kind === 'look' && draft) {
         draft.onSetProperty(property.name, String(value))
         return
@@ -357,29 +339,6 @@ export function useUpdateGroupColour(
   const draft = useLookDraft()
   return useCallback(
     (r: number, g: number, b: number, w?: number, a?: number, uv?: number) => {
-      if (ctx.kind === 'cue') {
-        const hex = rgbToHex(r, g, b)
-        for (const m of property.memberColourChannels) {
-          lightingApi.cueEdit.send({
-            type: 'cueEdit.setProperty',
-            cueId: ctx.id,
-            targetType: 'fixture',
-            targetKey: m.fixtureKey,
-            propertyName: 'rgbColour',
-            value: hex,
-          })
-          if (m.whiteChannel && w !== undefined) {
-            cueEditWriteChannel(ctx.id, m.whiteChannel.universe, m.whiteChannel.channelNo, w)
-          }
-          if (m.amberChannel && a !== undefined) {
-            cueEditWriteChannel(ctx.id, m.amberChannel.universe, m.amberChannel.channelNo, a)
-          }
-          if (m.uvChannel && uv !== undefined) {
-            cueEditWriteChannel(ctx.id, m.uvChannel.universe, m.uvChannel.channelNo, uv)
-          }
-        }
-        return
-      }
       if (ctx.kind === 'look' && draft) {
         const hasWhite = property.memberColourChannels.some((m) => m.whiteChannel)
         const hasAmber = property.memberColourChannels.some((m) => m.amberChannel)
@@ -532,20 +491,6 @@ export function useUpdateGroupPosition(
   const draft = useLookDraft()
   return useCallback(
     (pan: number, tilt: number) => {
-      if (ctx.kind === 'cue') {
-        const value = `${pan},${tilt}`
-        for (const m of property.memberPositionChannels) {
-          lightingApi.cueEdit.send({
-            type: 'cueEdit.setProperty',
-            cueId: ctx.id,
-            targetType: 'fixture',
-            targetKey: m.fixtureKey,
-            propertyName: 'position',
-            value,
-          })
-        }
-        return
-      }
       if (ctx.kind === 'look' && draft) {
         draft.onSetProperty(property.name, `${pan},${tilt}`)
         return
@@ -650,12 +595,6 @@ export function useUpdateGroupSetting(
   const draft = useLookDraft()
   return useCallback(
     (level: number) => {
-      if (ctx.kind === 'cue') {
-        for (const m of property.memberChannels) {
-          cueEditWriteChannel(ctx.id, m.channel.universe, m.channel.channelNo, level)
-        }
-        return
-      }
       if (ctx.kind === 'look' && draft) {
         draft.onSetProperty(property.name, String(level))
         return

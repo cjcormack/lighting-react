@@ -1,27 +1,16 @@
-import type { CueStackCueEntry } from '@/api/cueStacksApi'
-import type { Cue } from '@/api/cuesApi'
+import type { ComponentProps } from 'react'
 import { CueCardEditor } from './CueCardEditor/CueCardEditor'
 
-interface ProgramCueRowProps {
-  cue: CueStackCueEntry
-  projectId: number
-  expanded: boolean
-  onToggleExpanded: () => void
-  /** Cue is currently on stage — rendered with the green "live" accent. */
-  isActive?: boolean
-  /** Cue will fire on the next GO — rendered with the blue "next" accent. */
-  isStandby?: boolean
-  /** Open Duplicate flow with the freshly fetched full cue. */
-  onDuplicate?: (cue: Cue) => void
-  /** Record the programmer into this cue — opens the Record sheet targeting it. */
-  onRecordInto?: (cueId: number) => void
-  /** Load this cue into the programmer to edit it on stage. */
-  onIncludeCue?: (cueId: number) => void
-  includePending?: boolean
-}
+/**
+ * Thin wrapper around `CueCardEditor` — kept so `StackDetail` doesn't have to reach across the
+ * whole `CueCardEditor` directory tree.
+ *
+ * Its props are *derived* rather than re-declared. They used to be a hand-copied interface, which
+ * is a second declaration of one contract: session 2b added six props to the row and every one of
+ * them would have had to be typed here too, with a silent drop for any that wasn't.
+ */
+export type ProgramCueRowProps = ComponentProps<typeof CueCardEditor>
 
-/** Thin wrapper around `CueCardEditor` — kept so `StackDetail` doesn't have to
- *  reach across the whole `CueCardEditor` directory tree. */
 export function ProgramCueRow(props: ProgramCueRowProps) {
   return <CueCardEditor {...props} />
 }

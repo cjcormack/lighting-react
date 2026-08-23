@@ -30,7 +30,7 @@ import {
 import { useCreateProjectCueMutation, usePatchProjectCueMutation } from '../store/cues'
 import type { CueStackCueEntry } from '../api/cueStacksApi'
 import { useNarrowContainer } from '../hooks/useNarrowContainer'
-import { useShowTransport } from '../hooks/useShowTransport'
+import { useShowBarProps } from '../hooks/useShowBarProps'
 import {
   useProjectPromptBookQuery,
   useSetPromptBookMutation,
@@ -56,11 +56,13 @@ import { CueAnchorPickerSheet, type NewCueStackChoice } from '../components/prom
 import { ShowHeader } from '../components/ShowHeader'
 import { ShowBar } from '../components/ShowBar'
 import { PromptBookToolbar } from '../components/promptbook/PromptBookToolbar'
+import { ShowLockControl } from '../components/runner/ShowLockControl'
 import { ToolPalette, type PromptBookTool } from '../components/promptbook/ToolPalette'
 import { CueStackPanel } from '../components/promptbook/CueStackPanel'
 import type { ExpansionMode } from '../components/runner/run/CueCardBody'
 import { ScriptUploadCard, type PickedScript } from '../components/promptbook/ScriptUploadCard'
-import { useAutoRelock } from '../components/promptbook/hooks/useAutoRelock'
+import { useEditLock } from '../hooks/useEditLock'
+import { useTransportKeys } from '../hooks/useTransportKeys'
 import type { CueRunStatus } from '../components/promptbook/AnchorOverlay'
 
 export function PromptBookRedirect() {
@@ -117,9 +119,9 @@ export function PromptBookViewerPage() {
   const [reorderCues] = useReorderCueStackCuesMutation()
   const [createStack] = useCreateProjectCueStackMutation()
 
-  // ── Runtime view state — NEVER persisted. A running show always opens locked. ──
-  // Only consulted while the show is running — see the derived `locked` below.
-  const [lockRequested, setLockRequested] = useState(true)
+  // ── Runtime view state — NEVER persisted. ──
+  // The lock itself moved to `useEditLock` (a store slice) in session 2b, so that unlocking here
+  // and stepping over to Show does not silently re-lock: one fix-it session, one fact.
   const [tool, setTool] = useState<PromptBookTool>('move')
   const [placingCueId, setPlacingCueId] = useState<number | null>(null)
   // Region awaiting a cue choice — set when "Anchor cue" is clicked on a selection.
@@ -180,35 +182,21 @@ export function PromptBookViewerPage() {
 
   const canEdit = book?.canEdit ?? false
 
-  // The lock exists for one reason: a stray click mid-show must not corrupt the book the
-  // operator is running from. With the show stopped there is nothing to protect, so the
-  // book is simply editable — and none of the editing chrome (amber wash, lock button,
-  // re-lock countdown) is shown, because there is no state to warn about. A book the
-  // backend won't let us edit stays locked either way.
-  const locked = !canEdit || (isShowActive && lockRequested)
-
-  const lock = useCallback(() => {
-    setLockRequested(true)
-    setTool('move')
-    setPlacingCueId(null)
-  }, [])
-
-  // Starting the show re-arms the lock, so an edit session begun while stopped can't
-  // silently carry into the running show.
-  useEffect(() => {
-    if (isShowActive) lock()
-  }, [isShowActive, lock])
-
-  // Auto-relock is a mid-show safety net; disarm it whenever the show isn't running,
-  // or its countdown would fire at an operator who never asked to be unlocked.
-  const relock = useAutoRelock({ locked: locked || !isShowActive, onRelock: lock })
-  const { noteEdit, noteGo } = relock
-
-  const toggleLock = useCallback(() => {
-    if (!canEdit || !isShowActive) return
-    if (locked) setLockRequested(false)
-    else lock()
-  }, [canEdit, isShowActive, locked, lock])
+  /**
+   * The shared show-editing lock. `onLock` stands the annotation tools down with it — a selected
+   * tool that cannot be used reads as breakage rather than as protection.
+   */
+  const relock = useEditLock({
+    canEdit,
+    isShowActive,
+    onLock: () => {
+      setTool('move')
+      setPlacingCueId(null)
+    },
+  })
+  const { locked, toggleLock, noteEdit, noteGo } = relock
+  /** See the note in `ShowPage`: the whole chrome band tints, or it reads as stripes. */
+  const unlockedWarning = !locked && isShowActive
 
   // ── Upstream running state — subscribed, never owned. ──
   const cueOrder: FlatCue[] = useMemo(() => flattenCueOrder(stacks), [stacks])
@@ -222,10 +210,15 @@ export function PromptBookViewerPage() {
   // Row 3 (show bar) + rail transport — the follow-server runner shared with the Edit view.
   // `onBeforeGo: noteGo` preserves relock-on-GO; `canOperate: canEdit` gates GO exactly as the
   // old inline `goDisabled` did. Aliased to fireGo/fireBack so the rest of the page is unchanged.
-  const transport = useShowTransport({
-    projectId: projectIdNum,
-    activeStackId,
-    stacks,
+  /**
+   * One transport and one show bar, from the same hook every other live view uses.
+   *
+   * This page used to call `useShowTransport` directly and hand-wire twelve `ShowBar` props, which
+   * is how it ended up as the only view whose bar had no Blind tile and the only one deriving the
+   * stack name differently. `canOperate` and `onBeforeGo` are the two things that are genuinely
+   * this page's — book-level permission, and re-locking on GO.
+   */
+  const { transport, showBarProps } = useShowBarProps(projectIdNum, {
     canOperate: canEdit,
     onBeforeGo: noteGo,
   })
@@ -395,7 +388,7 @@ export function PromptBookViewerPage() {
   )
 
   // Jump to the cue's editor in Program, deep-linking to the exact cue (mirrors Run's
-  // "Edit Cue"). Program's ?stack=&cue= handler requires the stack, so resolve it first.
+  // "Edit cue"). Show's ?stack=&cue= handler requires the stack, so resolve it first.
   const handleEditCue = useCallback(
     (cueId: number) => {
       const flat = cueOrder[cueOrderIndex.get(cueId) ?? -1]
@@ -457,32 +450,21 @@ export function PromptBookViewerPage() {
     if (region) viewerRef.current?.scrollToRegion(region)
   }, [activeCueId])
 
-  // Keyboard: Space=GO, Backspace=Back (parity with Run), L toggles lock.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      // Browser/system shortcuts (Cmd+L, Cmd+Backspace, …) are not ours.
-      if (e.metaKey || e.ctrlKey || e.altKey) return
-      const tag = (e.target as HTMLElement).tagName
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return
-      // A focused button owns Space/Enter activation (dialog buttons, lock
-      // toggle, "stay unlocked") — stealing Space here would advance the show.
-      if (tag === 'BUTTON') return
-      if (e.code === 'Space' && !goDisabled) {
-        e.preventDefault()
-        fireGo()
-      }
-      if (e.code === 'Backspace' && !goDisabled) {
-        e.preventDefault()
-        fireBack()
-      }
-      if (e.code === 'KeyL') {
-        e.preventDefault()
-        toggleLock()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [fireGo, fireBack, toggleLock, goDisabled])
+  /**
+   * Space=GO, Backspace=Back, L toggles the lock — see `useTransportKeys` for the guards, three of
+   * which this page used to carry inline and one of which it was missing.
+   *
+   * Gated on `locked`, matching Show. Unlocked means the operator is editing — anchors, annotations,
+   * inline cue identities — and in an editing surface Space is a space. `L` stays bound either way,
+   * so there is always a keyboard route back to a safe desk. The two surfaces share one lock, so
+   * they had better agree about what it does to the keyboard.
+   */
+  useTransportKeys({
+    enabled: locked && !goDisabled,
+    onGo: fireGo,
+    onBack: fireBack,
+    onToggleLock: toggleLock,
+  })
 
   // ── Edit operations ──
 
@@ -822,13 +804,7 @@ export function PromptBookViewerPage() {
   // O(1) lookups via the existing cueOrderIndex map (this render path runs every fade frame).
   const liveCue = activeCueId != null ? (cueOrder[cueOrderIndex.get(activeCueId) ?? -1] ?? null) : null
   const activeCueLabel = liveCue?.label ?? null
-  const nextCue = nextCueId != null ? (cueOrder[cueOrderIndex.get(nextCueId) ?? -1] ?? null) : null
   const railStackName = activeStack?.name ?? cueOrder[0]?.stackName ?? null
-  // The show bar wants the Q-number and name as separate fields — FlatCue.label folds the
-  // name in for numberless cues, so pull the real cueNumber from the stack entry instead.
-  const liveEntry = liveCue ? cueEntryByCue.get(liveCue.cueId) : undefined
-  const nextEntry = nextCue ? cueEntryByCue.get(nextCue.cueId) : undefined
-
   // Shared rail props — the same panel serves the desktop side rail and the drawer.
   const railProps = {
     rows: railRows,
@@ -892,28 +868,29 @@ export function PromptBookViewerPage() {
         canStart={canStart}
         onStart={handleStartShow}
         onStop={handleStopShow}
+        unlockedWarning={unlockedWarning}
+        // Same slot, same control, same position as Show — the lock is shared between the two
+        // views, so having it in two different places was the inconsistency.
+        actions={
+          isShowActive || !canEdit ? (
+            <ShowLockControl
+              locked={locked}
+              onToggle={toggleLock}
+              countdownSecondsLeft={relock.countdownSecondsLeft}
+              onStayUnlocked={relock.stayUnlocked}
+              disabled={!canEdit}
+            />
+          ) : undefined
+        }
       />
-      {isShowActive && (
-        <ShowBar
-          stackName={railStackName}
-          dbo={dbo}
-          onDbo={() => setDbo((d) => !d)}
-          activeNumber={liveEntry?.cueNumber ? `Q${liveEntry.cueNumber}` : null}
-          activeName={liveCue?.name ?? null}
-          standbyNumber={nextEntry?.cueNumber ? `Q${nextEntry.cueNumber}` : null}
-          standbyName={nextCue?.name ?? null}
-          fadeRemainMs={fadeRemainMs}
-          onGo={fireGo}
-          onBack={fireBack}
-          goDisabled={goDisabled}
-        />
-      )}
+      {/* Not gated on the show running, and not hand-wired: the same bar the other two views get,
+          from the same hook. It carries blackout, Blind, the speed masters and the programmer chip,
+          all of which mean something with the show down. */}
+      <ShowBar {...showBarProps} showShortcuts={locked} unlockedWarning={unlockedWarning} />
       <PromptBookToolbar
         scriptFileName={book.scriptFileName}
         locked={locked}
-        showActive={isShowActive}
-        canEdit={canEdit}
-        onToggleLock={toggleLock}
+        unlockedWarning={unlockedWarning}
         canUndo={undoSnapshot != null}
         onUndo={handleUndo}
         coverPages={book.coverPages}
@@ -923,8 +900,6 @@ export function PromptBookViewerPage() {
         onJumpToLive={jumpToLive}
         warningCount={warnings.length}
         onToggleWarnings={() => setShowWarnings((s) => !s)}
-        relockCountdown={relock.countdownSecondsLeft}
-        onStayUnlocked={relock.stayUnlocked}
         onOpenCues={isNarrow ? () => setDrawerOpen((o) => !o) : undefined}
       />
 

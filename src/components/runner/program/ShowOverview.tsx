@@ -54,6 +54,7 @@ import {
 } from '@/store/cueStacks'
 import { CueStackForm } from '@/components/cues/CueStackForm'
 import { InlineEditField } from '@/components/InlineEditField'
+import { UNLOCKED_WARNING_CLASS } from '@/lib/lockChrome'
 import type { CueStack, CueStackInput } from '@/api/cueStacksApi'
 
 // ── Sortable STACK entry row ────────────────────────────────────────────────
@@ -67,6 +68,7 @@ interface SortableStackEntryProps {
   onRename: (stack: CueStack, name: string) => void
   onSort: (stackId: number) => void
   onRemove: (stack: CueStack) => void
+  locked: boolean
 }
 
 function SortableStackEntry({
@@ -78,9 +80,11 @@ function SortableStackEntry({
   onRename,
   onSort,
   onRemove,
+  locked,
 }: SortableStackEntryProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: stack.id,
+    disabled: locked,
   })
 
   const style = {
@@ -103,13 +107,18 @@ function SortableStackEntry({
       )}
       onClick={() => onDrill(stack.id)}
     >
-      <div
-        {...listeners}
-        className="flex items-center justify-center text-muted-foreground hover:text-foreground cursor-grab"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <GripVertical className="size-4" />
-      </div>
+      {locked ? (
+        // Keeps the column, drops the affordance — the rows must not shift when the lock changes.
+        <div className="size-4" />
+      ) : (
+        <div
+          {...listeners}
+          className="flex items-center justify-center text-muted-foreground hover:text-foreground cursor-grab"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <GripVertical className="size-4" />
+        </div>
+      )}
       <span className="hidden @[560px]:block w-6 text-center font-mono text-xs text-muted-foreground shrink-0">
         {index + 1}
       </span>
@@ -124,8 +133,8 @@ function SortableStackEntry({
             onRename(stack, trimmed)
           }}
           ariaLabel="stack name"
-          disabled={!stack.canEdit}
-          title={stack.canEdit ? 'Click to rename' : undefined}
+          disabled={locked || !stack.canEdit}
+          title={!locked && stack.canEdit ? 'Click to rename' : undefined}
           className={cn(
             'min-w-0 max-w-full truncate text-sm font-medium text-foreground',
             isActive && 'text-green-300 font-semibold',
@@ -150,6 +159,7 @@ function SortableStackEntry({
           Loop
         </Badge>
       )}
+      {!locked && (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -177,6 +187,7 @@ function SortableStackEntry({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      )}
       <ArrowRight className="size-4 text-muted-foreground shrink-0" />
     </div>
   )
@@ -188,11 +199,18 @@ interface SortableSeparatorEntryProps {
   stack: CueStack
   projectId: number
   onRemove: (stack: CueStack) => void
+  locked: boolean
 }
 
-function SortableSeparatorEntry({ stack, projectId, onRemove }: SortableSeparatorEntryProps) {
+function SortableSeparatorEntry({
+  stack,
+  projectId,
+  onRemove,
+  locked,
+}: SortableSeparatorEntryProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: stack.id,
+    disabled: locked,
   })
   const [saveStack] = useSaveProjectCueStackMutation()
 
@@ -241,28 +259,43 @@ function SortableSeparatorEntry({ stack, projectId, onRemove }: SortableSeparato
       {...attributes}
       className="flex items-center gap-2.5 py-1.5 px-4"
     >
-      <div
-        {...listeners}
-        className="flex items-center justify-center text-muted-foreground hover:text-foreground cursor-grab"
-      >
-        <GripVertical className="size-4" />
-      </div>
+      {locked ? (
+        <div className="size-4" />
+      ) : (
+        <div
+          {...listeners}
+          className="flex items-center justify-center text-muted-foreground hover:text-foreground cursor-grab"
+        >
+          <GripVertical className="size-4" />
+        </div>
+      )}
       <div className="flex-1 h-px bg-border" />
-      <Input
-        value={localLabel}
-        onChange={(e) => handleChange(e.target.value)}
-        onClick={(e) => e.stopPropagation()}
-        className="h-7 w-auto min-w-[120px] max-w-[200px] text-center text-xs font-medium text-muted-foreground bg-card border-border"
-      />
+      {/* Locked, a separator is just a labelled divider — same rule as the stack row above and as
+          `ProgramMarkerRow`. Leaving the field and the delete live made this the one row a stray
+          click could still rename or remove from a running show. */}
+      {locked ? (
+        <span className="px-2 text-center text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          {localLabel}
+        </span>
+      ) : (
+        <Input
+          value={localLabel}
+          onChange={(e) => handleChange(e.target.value)}
+          onClick={(e) => e.stopPropagation()}
+          className="h-7 w-auto min-w-[120px] max-w-[200px] text-center text-xs font-medium text-muted-foreground bg-card border-border"
+        />
+      )}
       <div className="flex-1 h-px bg-border" />
-      <Button
-        variant="ghost"
-        size="icon"
-        className="size-5 text-muted-foreground hover:text-destructive shrink-0"
-        onClick={() => onRemove(stack)}
-      >
-        <X className="size-3.5" />
-      </Button>
+      {!locked && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-5 text-muted-foreground hover:text-destructive shrink-0"
+          onClick={() => onRemove(stack)}
+        >
+          <X className="size-3.5" />
+        </Button>
+      )}
     </div>
   )
 }
@@ -274,9 +307,30 @@ interface ShowOverviewProps {
   stacks: CueStack[]
   activeStackId: number | null
   onDrillStack: (stackId: number) => void
+  /**
+   * Show-safe mode: no reordering, no creating, no renaming, no deleting.
+   *
+   * Dragging is switched off through dnd-kit's own `disabled` on each sortable rather than by
+   * unmounting the `DndContext` — `useSortable` needs that ancestor, so removing it to disable
+   * dragging breaks every row. The affordances are hidden rather than disabled: a list of
+   * greyed-out buttons reads as breakage, absence reads as "not now".
+   */
+  locked?: boolean
+  /**
+   * A running show is unlocked. Tints this header with the chrome above it — the overview's header
+   * is the same row as the drill-down's navigation row, one level up.
+   */
+  unlockedWarning?: boolean
 }
 
-export function ShowOverview({ projectId, stacks, activeStackId, onDrillStack }: ShowOverviewProps) {
+export function ShowOverview({
+  projectId,
+  stacks,
+  activeStackId,
+  onDrillStack,
+  locked = false,
+  unlockedWarning = false,
+}: ShowOverviewProps) {
   const stackRows = stacks.filter((s) => s.type === 'STACK')
   const totalCues = stackRows.reduce(
     (n, s) => n + s.cues.filter((c) => c.cueType === 'STANDARD').length,
@@ -380,20 +434,36 @@ export function ShowOverview({ projectId, stacks, activeStackId, onDrillStack }:
 
   return (
     <div className="@container flex-1 flex flex-col overflow-hidden">
-      <div className="flex items-center h-12 px-4 border-b gap-4 shrink-0">
+      <div
+        className={cn(
+          'flex h-12 shrink-0 items-center gap-4 border-b px-4 transition-colors',
+          unlockedWarning && UNLOCKED_WARNING_CLASS,
+        )}
+      >
         <span className="text-lg font-semibold">Show</span>
         <span className="hidden @[420px]:inline text-sm text-muted-foreground">
           {stackRows.length} stacks &middot; {totalCues} cues
         </span>
         <div className="flex-1" />
-        <Button variant="outline" size="sm" onClick={handleAddSeparator} aria-label="Add separator">
-          <SeparatorHorizontal className="size-3.5" />
-          <span className="ml-1.5 hidden @[600px]:inline">Add Separator</span>
-        </Button>
-        <Button size="sm" onClick={handleCreateStack} aria-label="Create stack">
-          <Plus className="size-3.5" />
-          <span className="ml-1.5 hidden @[600px]:inline">Create Stack</span>
-        </Button>
+        {/* Neither a stack nor a separator is a captured state, so both keep their create buttons
+            (D9) — but only where creating is allowed at all. */}
+        {!locked && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleAddSeparator}
+              aria-label="Add separator"
+            >
+              <SeparatorHorizontal className="size-3.5" />
+              <span className="ml-1.5 hidden @[600px]:inline">Add Separator</span>
+            </Button>
+            <Button size="sm" onClick={handleCreateStack} aria-label="Create stack">
+              <Plus className="size-3.5" />
+              <span className="ml-1.5 hidden @[600px]:inline">Create Stack</span>
+            </Button>
+          </>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-1.5">
@@ -407,6 +477,7 @@ export function ShowOverview({ projectId, stacks, activeStackId, onDrillStack }:
                     stack={stack}
                     projectId={projectId}
                     onRemove={handleRemove}
+                    locked={locked}
                   />
                 )
               }
@@ -421,6 +492,7 @@ export function ShowOverview({ projectId, stacks, activeStackId, onDrillStack }:
                   onRename={handleRenameStack}
                   onSort={(stackId) => sortByCueNumber({ projectId, stackId })}
                   onRemove={handleRemove}
+                  locked={locked}
                 />
               )
             })}

@@ -8,6 +8,12 @@ import { MobileCueListSheet } from '../MobileCueListSheet'
 import { RunMobileCueCard, type MobileExpansion } from './RunMobileCueCard'
 import type { CueStack, CueStackCueEntry } from '@/api/cueStacksApi'
 
+/**
+ * Note on this directory: `runner/run/` used to be "the Run view's components". Run folded into
+ * Show in session 2b, and what is left here is the **phone runner** — the takeover layout Show
+ * swaps to below 600px, which is always locked. Everything shared with the desktop view moved up
+ * into `runner/`.
+ */
 export interface RunnerDisplayState {
   activeCue: CueStackCueEntry | null
   standbyCue: CueStackCueEntry | null
@@ -22,7 +28,7 @@ export interface RunnerDisplayState {
 
 interface RunMobileProps {
   stacks: CueStack[]
-  activeStackId: number | null
+  selectedStackId: number | null
   stack: CueStack | undefined
   /** When false (single-stack show), the stack name is a plain label — no picker. */
   multiStack: boolean
@@ -31,7 +37,7 @@ interface RunMobileProps {
   onGo: () => void
   onBack: () => void
   onDbo: () => void
-  onSwitchToStack: (stack: CueStack) => void
+  onSelectStack: (stack: CueStack) => void
   onRequeueCue: (cueId: number) => void
   projectId: number
   /** ms remaining for the active cue's fade-in. null when not fading. */
@@ -49,7 +55,7 @@ interface RunMobileProps {
  */
 export function RunMobile({
   stacks,
-  activeStackId,
+  selectedStackId,
   stack,
   multiStack,
   display,
@@ -57,7 +63,7 @@ export function RunMobile({
   onGo,
   onBack,
   onDbo,
-  onSwitchToStack,
+  onSelectStack,
   onRequeueCue,
   projectId,
   fadeRemainMs,
@@ -212,8 +218,8 @@ export function RunMobile({
           open={stackPickerOpen}
           onOpenChange={setStackPickerOpen}
           stacks={stacks}
-          activeStackId={activeStackId}
-          onSwitchToStack={onSwitchToStack}
+          selectedStackId={selectedStackId}
+          onSelectStack={onSelectStack}
         />
       )}
       <MobileCueListSheet

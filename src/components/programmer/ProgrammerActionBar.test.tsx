@@ -70,7 +70,6 @@ describe('ProgrammerActionBar', () => {
     // to be used standing up.
     render(<ProgrammerActionBar projectId={1} />)
     expect(screen.getByText('Clear')).toBeTruthy()
-    expect(screen.getByText('Blind')).toBeTruthy()
     expect(screen.getByText('Include…')).toBeTruthy()
     expect(screen.getByText('Record')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /more/i })).toBeNull()
@@ -129,9 +128,13 @@ describe('ProgrammerActionBar', () => {
     expect(screen.getByText('A new Look')).toBeTruthy()
   })
 
-  it('toggles blind with the current fade', () => {
+  it('has no Blind — that moved to the ShowBar, beside blackout', () => {
+    // Blind sat in the Stage zone here, which meant the same control was in one place on the
+    // Programmer and another on Show. It is the same class of thing as blackout (a gate on what
+    // reaches the rig) and belongs in the one piece of chrome every live view shares. It still
+    // fades by *this* bar's fade time — `useShowBarProps` reads the same persisted key.
     render(<ProgrammerActionBar projectId={1} />)
-    fireEvent.click(screen.getByText('Blind').closest('button')!)
-    expect(programmerSetBlind).toHaveBeenCalledWith(true, 0)
+    expect(screen.queryByText('Blind')).toBeNull()
+    expect(programmerSetBlind).not.toHaveBeenCalled()
   })
 })

@@ -149,18 +149,6 @@ export function useVirtualDimmer(
       newG = Math.min(255, newG)
       newB = Math.min(255, newB)
 
-      if (ctx.kind === 'cue' && fixtureKey) {
-        lightingApi.cueEdit.send({
-          type: 'cueEdit.setProperty',
-          cueId: ctx.id,
-          targetType: 'fixture',
-          targetKey: fixtureKey,
-          propertyName: 'rgbColour',
-          value: rgbToHex(newR, newG, newB),
-        })
-        return
-      }
-
       if (ctx.kind === 'look' && draft) {
         const value = serializeExtendedColour({
           hex: rgbToHex(newR, newG, newB),

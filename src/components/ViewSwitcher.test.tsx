@@ -19,16 +19,16 @@ describe('ViewSwitcher labels', () => {
   it('collapse on a container query, never the viewport', () => {
     render(
       <MemoryRouter>
-        <ViewSwitcher current="run" projectId={1} />
+        <ViewSwitcher current="show" projectId={1} />
       </MemoryRouter>,
     )
-    const label = screen.getByText('Run')
-    expect(label.className).toContain('@[820px]:inline')
+    const label = screen.getByText('Show')
+    expect(label.className).toContain('@[760px]:inline')
     expect(label.className).not.toMatch(/\bsm:/)
   })
 
   it('use a threshold that suits the number of pills', () => {
-    // Five family pills need room four view pills do not.
+    // Five family pills need room three view pills do not.
     render(<LookFamilyFilterBar current="ALL" onChange={() => {}} />)
     expect(screen.getByText('All').className).toContain('@[720px]:inline')
   })

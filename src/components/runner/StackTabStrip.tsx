@@ -2,41 +2,63 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { UNLOCKED_WARNING_CLASS } from '@/lib/lockChrome'
 import type { CueStack } from '@/api/cueStacksApi'
 
 /** How much of the visible width a chevron press moves. */
 const PAGE_FRACTION = 0.8
 
 /**
- * The Run view's stack switcher: one tab per runnable stack, separators drawn inline.
+ * The stack switcher: one tab per runnable stack, separators drawn inline.
+ *
+ * **Selecting a tab does not move the playhead.** It used to: the click ran
+ * `deactivate(old) → goToStack(target) → deactivate(target)`, so one unconfirmed press took the
+ * live cue off stage and repositioned every other client. That is indefensible on a surface whose
+ * whole point is now that a stray click cannot change the show, so browsing and arming were split
+ * (desk-simplification session 2b). Arming lives in `OffPlayheadBanner`, behind a labelled,
+ * confirm-gated control; this strip only chooses what you are *looking at*.
+ *
+ * The split is why there are two ids rather than one. `selectedStackId` is what you are reading and
+ * owns the underline; `liveStackId` is where the show actually is and owns the green pip. They used
+ * to be the same value, which is why the pip was drawn only on *unselected* tabs — selected-==-live
+ * made "the live tab" and "the selected tab" indistinguishable. Now the live tab can also be the
+ * selected one, and must show both.
  *
  * Lifted out of `RunPage` to give it the two things it was missing, both of which matter most on
  * exactly the shows that have enough stacks to overflow:
  *
- *  - **The active tab is scrolled into view.** `activeStackId` can change from the *server* — a
- *    second desk, a surface, a script — and before this the strip would silently select a tab that
- *    was off the right-hand edge, so the operator saw no change at all. `behavior: 'auto'` rather
+ *  - **The selected tab is scrolled into view.** The selection can change without a click — a
+ *    playhead follow, a deep link, a second desk — and before this the strip would silently select
+ *    a tab off the right-hand edge, so the operator saw no change at all. `behavior: 'auto'` rather
  *    than smooth: mid-show a determinate jump beats an animation, and `inline: 'nearest'` already
  *    no-ops when the tab is fully visible.
  *  - **An overflow affordance.** Every child is `shrink-0` and a tab runs 110-160px, so eight
  *    stacks overflow a 900px strip with nothing whatsoever saying so.
  *
- * Deliberately not `role="tablist"`: these buttons move the server's playhead, they do not reveal
- * a local panel. And deliberately no scroll-snap — it fights the programmatic `scrollIntoView`
- * above, and the items are variable-width so it would land off-centre anyway.
+ * Deliberately not `role="tablist"`: a tab here navigates rather than revealing a local panel, and
+ * `aria-current` says which one you are on. And deliberately no scroll-snap — it fights the
+ * programmatic `scrollIntoView` above, and the items are variable-width so it would land
+ * off-centre anyway.
  *
  * Renders nothing for a single-stack show; the ShowBar carries the stack name in that case.
  */
 export function StackTabStrip({
   stacks,
-  activeStackId,
+  selectedStackId,
+  liveStackId,
   runnableStackCount,
-  onSwitchToStack,
+  onSelectStack,
+  unlockedWarning = false,
 }: {
   stacks: CueStack[]
-  activeStackId: number | null
+  /** The stack being read. Owns the underline and the scroll-into-view. */
+  selectedStackId: number | null
+  /** The project playhead — where GO acts, whether or not you are looking at it. */
+  liveStackId: number | null
   runnableStackCount: number
-  onSwitchToStack: (stack: CueStack) => void
+  onSelectStack: (stack: CueStack) => void
+  /** A running show is unlocked — tint with the rest of the chrome band. */
+  unlockedWarning?: boolean
 }) {
   const scrollerRef = useRef<HTMLDivElement>(null)
   const [overflow, setOverflow] = useState({ left: false, right: false })
@@ -61,12 +83,12 @@ export function StackTabStrip({
     return () => observer.disconnect()
   }, [measure, stacks])
 
-  // Reveal the active tab, including when the *server* moved it.
+  // Reveal the selected tab, including when something other than a click moved it.
   useEffect(() => {
-    if (activeStackId == null) return
-    const el = scrollerRef.current?.querySelector(`[data-stack-id="${activeStackId}"]`)
+    if (selectedStackId == null) return
+    const el = scrollerRef.current?.querySelector(`[data-stack-id="${selectedStackId}"]`)
     el?.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'auto' })
-  }, [activeStackId])
+  }, [selectedStackId])
 
   const page = (direction: -1 | 1) => {
     const el = scrollerRef.current
@@ -77,7 +99,12 @@ export function StackTabStrip({
   if (runnableStackCount <= 1) return null
 
   return (
-    <div className="relative flex h-12 shrink-0 items-stretch border-b">
+    <div
+      className={cn(
+        'relative flex h-12 shrink-0 items-stretch border-b transition-colors',
+        unlockedWarning && UNLOCKED_WARNING_CLASS,
+      )}
+    >
       <div
         ref={scrollerRef}
         onScroll={measure}
@@ -105,16 +132,20 @@ export function StackTabStrip({
               key={s.id}
               data-stack-id={s.id}
               variant="ghost"
-              onClick={() => onSwitchToStack(s)}
+              onClick={() => onSelectStack(s)}
+              aria-current={s.id === selectedStackId ? 'page' : undefined}
               className={cn(
                 'flex items-center gap-2 px-5 h-full rounded-none border-r text-xs font-medium text-muted-foreground relative shrink-0',
                 'hover:text-foreground hover:bg-muted/10',
-                s.id === activeStackId &&
+                s.id === selectedStackId &&
                   'text-foreground bg-muted/20 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary',
               )}
             >
-              {s.id !== activeStackId && s.activeCueId != null && (
-                <span className="size-1.5 rounded-full bg-green-500 shadow-[0_0_6px_currentColor]" />
+              {s.id === liveStackId && (
+                <span
+                  aria-label="Live"
+                  className="size-1.5 rounded-full bg-green-500 shadow-[0_0_6px_currentColor]"
+                />
               )}
               {s.name}
               {s.loop && <RotateCcw className="size-3 text-muted-foreground" />}

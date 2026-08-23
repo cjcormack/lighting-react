@@ -66,7 +66,7 @@ export function ProgrammerFxRedirect() {
  *
  * Program was renamed to Show when the programmer became a page of its own — two live views one
  * letter apart was the collision that kept the programmer out of the nav last time. The search
- * string is carried across because `?cue=` deep links are how Run and the Prompt Book's "Edit Cue"
+ * string is carried across because `?cue=` deep links are how the Prompt Book's "Edit cue"
  * reach a specific cue.
  */
 export function LegacyProgramRedirect() {
@@ -94,7 +94,7 @@ export function ProgrammerPage() {
   const projectIdNum = Number(projectId)
   const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
-  const { isShowActive, showBarProps, showHeaderProps } = useShowBarProps(projectIdNum)
+  const { showBarProps, showHeaderProps } = useShowBarProps(projectIdNum)
 
   if (currentLoading || projectLoading) {
     return (
@@ -127,7 +127,10 @@ export function ProgrammerPage() {
           projectName={project.name}
           {...showHeaderProps}
         />
-        {isShowActive && <ShowBar {...showBarProps} />}
+        {/* Not gated on the show running — see the note in `ShowPage`. Blind lives in this bar
+            now, and a programmer with no Blind before the show starts is the gap that gating it
+            created. */}
+        <ShowBar {...showBarProps} />
         <ProgrammerBody projectId={projectIdNum} />
       </div>
     </ProgrammerSheetsProvider>
