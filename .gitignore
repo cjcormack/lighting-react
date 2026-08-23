@@ -26,3 +26,7 @@ yarn-rror.log*
 # Spector.js captures from Stage 3D profileHarness runs
 capture*.json
 /.claude/launch.json
+
+# Design canvas working copy — the committed design lives in
+# lighting7/docs/plans/desk-simplification-design/ beside its plan.
+.design/
