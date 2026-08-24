@@ -12,7 +12,6 @@ import {
   SheetFooter,
 } from '@/components/ui/sheet'
 import { Loader2 } from 'lucide-react'
-import { CuePaletteEditor } from './CuePaletteEditor'
 import type { CueStack, CueStackInput } from '@/api/cueStacksApi'
 
 interface CueStackFormProps {
@@ -31,18 +30,15 @@ export function CueStackForm({
   isSaving,
 }: CueStackFormProps) {
   const [name, setName] = useState('')
-  const [palette, setPalette] = useState<string[]>([])
   const [loop, setLoop] = useState(false)
 
   useEffect(() => {
     if (open) {
       if (stack) {
         setName(stack.name)
-        setPalette([...stack.palette])
         setLoop(stack.loop)
       } else {
         setName('')
-        setPalette([])
         setLoop(false)
       }
     }
@@ -51,7 +47,6 @@ export function CueStackForm({
   const handleSave = async () => {
     const input: CueStackInput = {
       name: name.trim(),
-      palette,
       loop,
     }
     // Keep the sheet open if the save failed — errorToastMiddleware says what went wrong, and
@@ -92,15 +87,6 @@ export function CueStackForm({
                 if (e.key === 'Enter' && isValid) handleSave()
               }}
             />
-          </div>
-
-          {/* The positional colour list — see PalettePanel. */}
-          <div className="space-y-1.5">
-            <Label>Stack Palette</Label>
-            <p className="text-xs text-muted-foreground">
-              Base palette for cues in this stack. A cue’s own palette overrides it when set.
-            </p>
-            <CuePaletteEditor palette={palette} onChange={setPalette} />
           </div>
 
           {/* Loop */}

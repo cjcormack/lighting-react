@@ -36,7 +36,6 @@ const cue = (id: number, over: Partial<CueStackCueEntry> = {}): CueStackCueEntry
   id,
   name: `Q${id}`,
   sortOrder: id,
-  paletteSize: 0,
   presetCount: 0,
   adHocEffectCount: 0,
   autoAdvance: false,
@@ -53,7 +52,6 @@ const cue = (id: number, over: Partial<CueStackCueEntry> = {}): CueStackCueEntry
 const mkStack = (over: Partial<CueStack> = {}): CueStack => ({
   id: 10,
   name: 'Act 1',
-  palette: [],
   loop: false,
   sortOrder: 0,
   type: 'STACK',

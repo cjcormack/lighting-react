@@ -2,7 +2,6 @@ import type { KeyboardEvent, ReactNode } from 'react'
 import { Anchor } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useProjectCueQuery } from '@/store/cues'
-import { resolveColourToHex } from '@/components/fx/colourUtils'
 import { MiniStage } from '@/components/cues/MiniStage'
 import { CueDetailContent } from '@/components/cues/CueDetailContent'
 import { collectCueTargets } from '@/components/runner/program/CueCardEditor/targetUtils'
@@ -57,7 +56,7 @@ interface CueCardBodyProps {
  * Shared presentational cue card — the Run redesign's card visuals, reused by the
  * Run mobile view (`RunMobileCueCard`) and the Prompt Book rail (`PromptBookCueCard`).
  * Green "Now playing" (cur), blue "Up next" (nxt), blue unlabelled (other): hero Q +
- * name + palette, an optional position line, a Stage / Details toggle, meta strip,
+ * name, an optional position line, a Stage / Details toggle, meta strip,
  * notes, and slots for host-specific chrome. The parent owns the expansion state.
  *
  * `[container-type:inline-size]` scopes the hero Q's `16cqw` to the card width, so it
@@ -209,7 +208,7 @@ export function CueCardBody({
         </div>
       ) : (
         <>
-          {/* Q + name + palette + reading position — an optional click target that
+          {/* Q + name + reading position — an optional click target that
               scrolls the book to this cue (Prompt Book); inert otherwise (Run). */}
           <div
             className={cn(onBodyClick && 'cursor-pointer')}
@@ -241,10 +240,9 @@ export function CueCardBody({
                 <div className="mt-1 text-[15px] font-semibold text-foreground">
                   {cueNameNode}
                 </div>
-                <CardPalette cue={cue} projectId={projectId} variant="centered" />
               </div>
             ) : (
-              <div className="px-3 py-2 grid grid-cols-[auto_1fr_auto] items-center gap-2.5">
+              <div className="px-3 py-2 grid grid-cols-[auto_1fr] items-center gap-2.5">
                 <span
                   className={cn(
                     // Capped so an outsized number can't starve the name beside it.
@@ -257,7 +255,6 @@ export function CueCardBody({
                 <span className="min-w-0 truncate text-[13px] font-semibold text-foreground">
                   {cueNameNode}
                 </span>
-                <CardPalette cue={cue} projectId={projectId} variant="inline" />
               </div>
             )}
 
@@ -409,49 +406,6 @@ function Cell({ label, value }: { label: string; value: string }) {
         {label}
       </span>
       <span className="text-[11.5px] text-foreground">{value}</span>
-    </span>
-  )
-}
-
-/**
- * Palette swatches for the card. Lazy-loads the full cue (palette isn't on
- * `CueStackCueEntry`), but only triggers the query when the cue id is set.
- */
-function CardPalette({
-  cue,
-  projectId,
-  variant,
-}: {
-  cue: CueStackCueEntry
-  projectId: number
-  variant: 'centered' | 'inline'
-}) {
-  const { data } = useProjectCueQuery({ projectId, cueId: cue.id })
-  const palette = data?.palette ?? []
-  if (palette.length === 0) return null
-
-  if (variant === 'centered') {
-    return (
-      <div className="mx-auto mt-2.5 flex h-1 w-[70%] max-w-[200px] overflow-hidden rounded-full border border-border/40">
-        {palette.map((c, i) => (
-          <i
-            key={`${c}-${i}`}
-            className="block flex-1"
-            style={{ background: resolveColourToHex(c) }}
-          />
-        ))}
-      </div>
-    )
-  }
-  return (
-    <span className="flex h-1 w-14 overflow-hidden rounded-full border border-border/40">
-      {palette.map((c, i) => (
-        <i
-          key={`${c}-${i}`}
-          className="block flex-1"
-          style={{ background: resolveColourToHex(c) }}
-        />
-      ))}
     </span>
   )
 }

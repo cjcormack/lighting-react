@@ -90,7 +90,6 @@ describe('reorderCueStackCues optimistic patch', () => {
     id,
     name: `cue-${id}`,
     sortOrder,
-    paletteSize: 0,
     presetCount: 0,
     adHocEffectCount: 0,
     autoAdvance: false,
@@ -111,7 +110,6 @@ describe('reorderCueStackCues optimistic patch', () => {
         {
           id: 7,
           name: 'Act 1',
-          palette: [],
           loop: false,
           sortOrder: 0,
           type: 'STACK',
@@ -199,7 +197,6 @@ describe('cueRunStateChanged', () => {
   const stackFixture = {
     id: 7,
     name: 'Act 1',
-    palette: [],
     loop: false,
     sortOrder: 0,
     type: 'STACK',

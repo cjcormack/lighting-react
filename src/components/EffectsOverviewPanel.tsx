@@ -5,8 +5,6 @@ import { cn } from '@/lib/utils'
 import { useFxStateQuery, tapTempo } from '@/store/fx'
 import { useRemoveFxMutation } from '@/store/fixtureFx'
 import { BeatIndicator } from './BeatIndicator'
-import { PalettePanel } from './busking/PalettePanel'
-import { ActiveStackPalettes } from './ActiveStackPalettes'
 
 interface EffectsOverviewPanelProps {
   isVisible: boolean
@@ -73,10 +71,6 @@ export function EffectsOverviewPanel({ isVisible, isLocked, isDesktop }: Effects
                 </span>
               </div>
 
-              {/* Palette — global, then active cue stack palettes inline */}
-              <PalettePanel label="Global" />
-              <ActiveStackPalettes />
-
               {/* Kill All - shown when in FX view (locked), pushed to end */}
               {isLocked && (
                 <Button
@@ -92,38 +86,31 @@ export function EffectsOverviewPanel({ isVisible, isLocked, isDesktop }: Effects
               )}
             </div>
           ) : (
-            /* MOBILE: two-row compact layout */
-            <div className="space-y-2">
-              {/* Row 1: Controls */}
-              <div className="flex items-center gap-3">
-                <BeatIndicator />
-                <span className="text-lg font-bold tabular-nums min-w-[4ch] text-right">
-                  {fxState?.bpm.toFixed(1) ?? '—'}
-                </span>
-                <Button variant="outline" size="sm" onClick={handleTap} className="px-2 h-7">
-                  Tap
+            /* MOBILE: one compact row of controls. It was two until the palette strip below it
+               went; the wrapper went with it. */
+            <div className="flex items-center gap-3">
+              <BeatIndicator />
+              <span className="text-lg font-bold tabular-nums min-w-[4ch] text-right">
+                {fxState?.bpm.toFixed(1) ?? '—'}
+              </span>
+              <Button variant="outline" size="sm" onClick={handleTap} className="px-2 h-7">
+                Tap
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                {totalCount === 0 ? 'No FX' : `${runningCount}/${totalCount} FX`}
+              </span>
+              {isLocked && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleKillAll}
+                  disabled={totalCount === 0}
+                  className="ml-auto h-7 px-2"
+                  title="Kill All"
+                >
+                  <OctagonX className="size-3.5" />
                 </Button>
-                <span className="text-xs text-muted-foreground">
-                  {totalCount === 0 ? 'No FX' : `${runningCount}/${totalCount} FX`}
-                </span>
-                {isLocked && (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={handleKillAll}
-                    disabled={totalCount === 0}
-                    className="ml-auto h-7 px-2"
-                    title="Kill All"
-                  >
-                    <OctagonX className="size-3.5" />
-                  </Button>
-                )}
-              </div>
-              {/* Row 2: Palette strip (horizontal scroll) */}
-              <div className="flex items-center gap-2 overflow-x-auto -mx-4 px-4 pb-1 scrollbar-thin">
-                <PalettePanel label="Global" compact />
-                <ActiveStackPalettes compact />
-              </div>
+              )}
             </div>
           )}
         </div>

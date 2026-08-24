@@ -146,16 +146,16 @@ The UI is structured around four distinct phases a lighting operator works throu
 
 A key insight: **tech runs live on the Run view, not the Program view**. A tech run is a running phase that occasionally requires a programming detour (switch to Program via the sidebar, edit in the CueEditor sheet, come back), not a programming phase that happens to involve running.
 
-The **Program view** is the single surface for authoring *and* assembling cues: it creates stacks, edits cues (palette, presets, ad-hoc effects, triggers), reorders the show, and runs it. It has fully **absorbed the old "FX Cues" view**, which no longer exists — `/cues/*` URLs redirect to `/program`. There are no longer any standalone cues: **every cue belongs to a stack**.
+The **Program view** is the single surface for authoring *and* assembling cues: it creates stacks, edits cues (values, layers, ad-hoc effects, triggers), reorders the show, and runs it. It has fully **absorbed the old "FX Cues" view**, which no longer exists — `/cues/*` URLs redirect to `/program`. There are no longer any standalone cues: **every cue belongs to a stack**.
 
 ## Concepts
 
 **Show** -- the project's *ordered list of cue stacks* (there is no separate entries table). Each row is either a runnable **STACK** or a **SEPARATOR** (a label-only divider between stacks). Ordering is `cue_stacks.sortOrder`; the show is running when the project has an `activeStackId` set (the playhead).
 
-**Cue Stack** -- an ordered sequence of cues. Has a `type` (`STACK` | `SEPARATOR`), a project-level `sortOrder`, an optional separator `label`, a `loop` flag (repeat after last cue) and a `palette` (inherited by all cues). STACK rows are the playable unit -- the runner steps through one stack at a time; SEPARATOR rows are skipped by activate/advance/go-to.
+**Cue Stack** -- an ordered sequence of cues. Has a `type` (`STACK` | `SEPARATOR`), a project-level `sortOrder`, an optional separator `label` and a `loop` flag (repeat after last cue). STACK rows are the playable unit -- the runner steps through one stack at a time; SEPARATOR rows are skipped by activate/advance/go-to.
 
 **Cue** -- a single lighting state, always belonging to a stack (`cueStackId` is non-null). Consists of:
-- A palette snapshot (DMX channel values)
+- Its own property assignments (the local layer)
 - Preset applications (named FX presets applied to fixture groups)
 - Ad-hoc effects (inline effects not from the library)
 - Triggers (scripts that run on cue activation/deactivation)
@@ -238,7 +238,7 @@ API Layer          Type definitions + WebSocket subscription factories
 | `src/hooks/useTransportKeys.ts` | Space/Backspace/L, with the union of the guards the two hand-rolled handlers used to have between them. |
 | `src/hooks/useCueExpansion.ts` | One addressed card (`?cue=`) plus the live one, derived. |
 | `src/hooks/useCueFade.ts` | A single row's fade, read from the runner so animating one row does not re-render the stack. |
-| `src/components/cues/CueRowParts.tsx` | The collapsed row's shared pieces — palette swatches, target chip, state pip — and `useExpandedCue`, the skip-while-collapsed cue fetch. Show and Run each had their own copies and they had drifted. |
+| `src/components/cues/CueRowParts.tsx` | The collapsed row's shared pieces — target chip, state pip — and `useExpandedCue`, the skip-while-collapsed cue fetch. Show and Run each had their own copies and they had drifted. |
 | `src/lib/cueUtils.ts` | `buildCueInput()` -- converts a Cue to CueInput for mutations |
 
 #### Navigation
@@ -276,7 +276,6 @@ interface ShowEntryDto {
 interface CueStack {
   id: number
   name: string
-  palette: string[]
   loop: boolean
   cues: CueStackCueEntry[]
   activeCueId: number | null      // Server-tracked active cue
@@ -288,7 +287,6 @@ interface CueStackCueEntry {
   id: number
   name: string
   sortOrder: number
-  paletteSize: number
   presetCount: number
   adHocEffectCount: number
   autoAdvance: boolean
@@ -306,8 +304,6 @@ interface CueStackCueEntry {
 interface Cue {
   id: number
   name: string
-  palette: string[]
-  updateGlobalPalette: boolean
   presetApplications: CuePresetApplicationDetail[]
   adHocEffects: CueAdHocEffect[]
   triggers: CueTriggerDetail[]
@@ -415,7 +411,7 @@ Two levels, both of which survive in both lock modes (see the mode table above).
 
 **Stack Detail** (`StackDetail.tsx`) — one stack's cues, plus the sibling `StackTabStrip` and, when
 reading a stack that is not the playhead, the `OffPlayheadBanner`:
-- Each row is `CueCardEditor`: state pip, Q number, palette swatches, name, target chips, fade.
+- Each row is `CueCardEditor`: state pip, Q number, name, target chips, fade.
 - **Running** it shows a fade countdown, a played tick, a blue armed accent, and the prompt-book
   reading position; the row body arms the cue as next GO and the chevron expands it.
 - **Unlocked** the body expands instead, the pip's cell reveals a drag grip on hover, the Q number /

@@ -32,7 +32,6 @@ import { ProgramView } from './ProgramView'
 const mkStack = (over: Partial<CueStack> = {}): CueStack => ({
   id: 10,
   name: 'Act 1',
-  palette: [],
   loop: false,
   sortOrder: 0,
   type: 'STACK',

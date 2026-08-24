@@ -151,42 +151,6 @@ export type ExtendedChannelFlags = {
  *
  * Returns undefined if no extended channels are available.
  */
-// --- Palette reference support ---
-
-/** Regex for palette references: P followed by digits (1-indexed) */
-const PALETTE_REF_REGEX = /^P(\d+)$/i
-
-/** Check if a colour string is a palette reference (e.g., "P1", "P2") or the all-palette wildcard "P*". */
-export function isPaletteRef(value: string): boolean {
-  const trimmed = value.trim()
-  return PALETTE_REF_REGEX.test(trimmed) || trimmed.toUpperCase() === 'P*'
-}
-
-/** Check if a colour string is the "all palette colours" wildcard ("P*"). */
-export function isAllPaletteRef(value: string): boolean {
-  return value.trim().toUpperCase() === 'P*'
-}
-
-/** Extract the 1-based index from a palette reference. Returns null if not a palette ref. */
-export function parsePaletteIndex(value: string): number | null {
-  const match = value.trim().match(PALETTE_REF_REGEX)
-  return match ? parseInt(match[1], 10) : null
-}
-
-/**
- * Resolve a colour string against a palette, returning a plain hex string for display.
- * - Palette refs ("P1", "P2") resolve to the palette colour (with wrapping)
- * - Normal colour strings pass through to resolveColourToHex
- */
-export function resolveColourWithPalette(value: string, palette: string[]): string {
-  if (isPaletteRef(value) && palette.length > 0) {
-    const index = parsePaletteIndex(value)!
-    const wrappedIndex = ((index - 1) % palette.length + palette.length) % palette.length
-    return resolveColourToHex(palette[wrappedIndex])
-  }
-  return resolveColourToHex(value)
-}
-
 export function detectExtendedChannels(
   propertySets: ReadonlyArray<ReadonlyArray<{ type: string; category?: string; whiteChannel?: unknown; amberChannel?: unknown; uvChannel?: unknown }>>,
 ): ExtendedChannelFlags | undefined {
@@ -209,4 +173,43 @@ export function detectExtendedChannels(
   if (!white && !amber && !uv) return undefined
 
   return { white, amber, uv }
+}
+
+// --- Template reference support ---
+
+/**
+ * The grammar an **FX colour parameter** uses to name a colour template instead of stating a colour.
+ *
+ * Mirrors `fx/TemplateColourSource.kt`, which owns it. Two things about the split are deliberate:
+ * this half **serialises and parses only** — resolving a reference to a colour is per-head
+ * arithmetic that `TemplateResolver` must be the single answer to — and the prefix is `tmpl:`
+ * rather than `ref:`, because `ref:{uuid}` is retired *and* still actively rejected at the Look
+ * write boundary as the no-nesting guarantee.
+ *
+ * It replaced the positional colour list (`P1` / `P2` / `P*`), which was the last thing the word
+ * "palette" meant in this codebase.
+ */
+const TEMPLATE_REF_PREFIX = 'tmpl:'
+
+/** Is this colour string a template reference? Shape only — says nothing about the template existing. */
+export function isTemplateRef(value: string): boolean {
+  return value.trim().toLowerCase().startsWith(TEMPLATE_REF_PREFIX)
+}
+
+/**
+ * The uuid a reference names, or null when the string is not a reference.
+ *
+ * A malformed uuid comes back as whatever followed the prefix rather than null, because the caller's
+ * question is "which template is this row pointing at" — and an unmatched uuid needs to render as a
+ * *missing* template, not as a literal colour.
+ */
+export function parseTemplateRefUuid(value: string): string | null {
+  const trimmed = value.trim()
+  if (!isTemplateRef(trimmed)) return null
+  return trimmed.slice(TEMPLATE_REF_PREFIX.length).trim() || null
+}
+
+/** Serialise a reference to `templateUuid`. */
+export function serializeTemplateRef(templateUuid: string): string {
+  return `${TEMPLATE_REF_PREFIX}${templateUuid}`
 }

@@ -99,13 +99,10 @@ export function useCueSlotDnd() {
 export function SlotItemContent({
   name,
   itemType,
-  palette,
 }: {
   name: string
   itemType: 'cue' | 'cue_stack'
-  palette: string[]
 }) {
-  const swatches = palette.slice(0, 6)
   return (
     <>
       <span className="text-xs font-medium leading-tight text-center line-clamp-2 w-full">
@@ -116,17 +113,6 @@ export function SlotItemContent({
           <Layers className="size-3 text-muted-foreground shrink-0" />
         ) : (
           <ListMusic className="size-3 text-muted-foreground shrink-0" />
-        )}
-        {swatches.length > 0 && (
-          <div className="flex gap-px">
-            {swatches.map((color, i) => (
-              <div
-                key={i}
-                className="size-2.5 rounded-full border border-background"
-                style={{ backgroundColor: color }}
-              />
-            ))}
-          </div>
         )}
       </div>
     </>
@@ -796,7 +782,7 @@ function CueSlotCell({
             </button>
           )}
 
-          <SlotItemContent name={slot.itemName} itemType={slot.itemType} palette={slot.palette} />
+          <SlotItemContent name={slot.itemName} itemType={slot.itemType} />
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent>

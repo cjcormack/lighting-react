@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { HexColorPicker } from 'react-colorful'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Slider } from '@/components/ui/slider'
@@ -23,14 +23,12 @@ import {
   parseExtendedColour,
   serializeExtendedColour,
   isValidHexColour,
-  isPaletteRef,
-  isAllPaletteRef,
-  resolveColourToHex,
-  resolveColourWithPalette,
+  isTemplateRef,
+  parseTemplateRefUuid,
   COLOUR_PRESETS,
   type ExtendedColour,
 } from './colourUtils'
-import { useFxStateQuery } from '@/store/fx'
+import { FxColourTemplateRow, useColourTemplates, type ColourTemplates } from './FxColourTemplates'
 
 interface FxColourListPickerProps {
   value: string
@@ -42,8 +40,6 @@ interface FxColourListPickerProps {
     amber?: boolean
     uv?: boolean
   }
-  /** Override palette (e.g. cue palette). Falls back to global FxState palette. */
-  palette?: string[]
 }
 
 interface ColourItem {
@@ -63,26 +59,19 @@ export function FxColourListPicker({
   label,
   description,
   extendedChannels,
-  palette: paletteProp,
 }: FxColourListPickerProps) {
-  const useAllPalette = isAllPaletteRef(value.trim())
-  const [items, setItems] = useState<ColourItem[]>(() =>
-    useAllPalette ? [] : parseColourList(value),
-  )
+  const colourTemplates = useColourTemplates()
+  const [items, setItems] = useState<ColourItem[]>(() => parseColourList(value))
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
-  // Store the previous non-P* value so we can restore when unchecking
-  const [savedValue, setSavedValue] = useState<string>(() =>
-    useAllPalette ? 'P1,P2,P3' : value,
-  )
 
   // The last string this picker pushed up, used to tell "the parent echoed our
   // own edit back" from "the parent handed us a different list". It can't be
-  // re-derived from `items`: emitChange keeps a palette ref as `P1` while the
-  // parsed item carries a #000000 placeholder, so an items-vs-value comparison
-  // never matches on a palette list and re-parses on every edit. The colours
-  // would survive that (parse/serialize round-trips) but the item ids would
-  // not, and SortableColourSwatch keys on them while owning the hex field's
-  // state — so the swatch being typed into would remount mid-keystroke.
+  // re-derived from `items`: emitChange keeps a template reference as `tmpl:…`
+  // while the parsed item carries a #000000 placeholder, so an items-vs-value
+  // comparison never matches on a list holding one and re-parses on every edit.
+  // The colours would survive that (parse/serialize round-trips) but the item
+  // ids would not, and SortableColourSwatch keys on them while owning the hex
+  // field's state — so the swatch being typed into would remount mid-keystroke.
   const lastEmitted = useRef(value)
 
   // `items` is otherwise seeded only at mount, but this instance can outlive the
@@ -93,9 +82,7 @@ export function FxColourListPicker({
   useEffect(() => {
     if (value === lastEmitted.current) return
     lastEmitted.current = value
-    const allPalette = isAllPaletteRef(value.trim())
-    setItems(allPalette ? [] : parseColourList(value))
-    setSavedValue(allPalette ? 'P1,P2,P3' : value)
+    setItems(parseColourList(value))
     setEditingIndex(null)
   }, [value])
 
@@ -109,10 +96,9 @@ export function FxColourListPicker({
       setItems(newItems)
       const newValue = newItems
         .map((i) =>
-          isPaletteRef(i.raw) ? i.raw : serializeExtendedColour(i.colour),
+          isTemplateRef(i.raw) ? i.raw : serializeExtendedColour(i.colour),
         )
         .join(',')
-      setSavedValue(newValue)
       lastEmitted.current = newValue
       onChange(newValue)
     },
@@ -162,74 +148,49 @@ export function FxColourListPicker({
     [items, emitChange, editingIndex]
   )
 
-  const handleToggleAllPalette = useCallback(
-    (checked: boolean) => {
-      if (checked) {
-        setEditingIndex(null)
-        lastEmitted.current = 'P*'
-        onChange('P*')
-      } else {
-        const restored = parseColourList(savedValue)
-        setItems(restored)
-        lastEmitted.current = savedValue
-        onChange(savedValue)
-      }
-    },
-    [onChange, savedValue],
-  )
-
   return (
     <div>
       {label && <Label className="text-xs mb-1.5 block">{label}</Label>}
       {description && (
         <p className="text-[11px] text-muted-foreground mb-1">{description}</p>
       )}
-      <label className="flex items-center gap-1.5 mb-1.5 cursor-pointer select-none">
-        <input
-          type="checkbox"
-          checked={useAllPalette}
-          onChange={(e) => handleToggleAllPalette(e.target.checked)}
-          className="rounded border-border"
-        />
-        <span className="text-[11px] text-muted-foreground">
-          Use entire palette
-        </span>
-      </label>
-      {!useAllPalette && (
-        <div className="flex items-center gap-1 flex-wrap">
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
+      {/* An explicit ordered list, every entry a literal or a `tmpl:` reference.
+          There is deliberately no successor to the old "use entire palette" (`P*`) checkbox: a
+          template holds one colour, so there is no set to expand, and naming the colours a cycle
+          steps through is what makes it readable. */}
+      <div className="flex items-center gap-1 flex-wrap">
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={items.map((i) => i.id)}
+            strategy={horizontalListSortingStrategy}
           >
-            <SortableContext
-              items={items.map((i) => i.id)}
-              strategy={horizontalListSortingStrategy}
-            >
-              {items.map((item, index) => (
-                <SortableColourSwatch
-                  key={item.id}
-                  item={item}
-                  isEditing={editingIndex === index}
-                  onEdit={() => setEditingIndex(editingIndex === index ? null : index)}
-                  onRemove={() => handleRemove(index)}
-                  onColourChange={(colour, raw) => handleColourChange(index, colour, raw)}
-                  extendedChannels={extendedChannels}
-                  palette={paletteProp}
-                />
-              ))}
-            </SortableContext>
-          </DndContext>
-          <button
-            type="button"
-            onClick={handleAdd}
-            className="w-7 h-7 rounded border border-dashed border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-foreground/50 transition-colors text-sm"
-            title="Add colour"
-          >
-            +
-          </button>
-        </div>
-      )}
+            {items.map((item, index) => (
+              <SortableColourSwatch
+                key={item.id}
+                item={item}
+                isEditing={editingIndex === index}
+                onEdit={() => setEditingIndex(editingIndex === index ? null : index)}
+                onRemove={() => handleRemove(index)}
+                onColourChange={(colour, raw) => handleColourChange(index, colour, raw)}
+                extendedChannels={extendedChannels}
+                colourTemplates={colourTemplates}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
+        <button
+          type="button"
+          onClick={handleAdd}
+          className="w-7 h-7 rounded border border-dashed border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-foreground/50 transition-colors text-sm"
+          title="Add colour"
+        >
+          +
+        </button>
+      </div>
     </div>
   )
 }
@@ -241,7 +202,7 @@ function SortableColourSwatch({
   onRemove,
   onColourChange,
   extendedChannels,
-  palette: paletteProp,
+  colourTemplates,
 }: {
   item: ColourItem
   isEditing: boolean
@@ -253,11 +214,23 @@ function SortableColourSwatch({
     amber?: boolean
     uv?: boolean
   }
-  palette?: string[]
+  /** Lifted to the parent so one query serves every swatch in the list. */
+  colourTemplates: ColourTemplates
 }) {
-  const { data: fxState } = useFxStateQuery()
-  const palette = paletteProp ?? fxState?.palette ?? []
-  const isPalRef = isPaletteRef(item.raw)
+  const isRef = isTemplateRef(item.raw)
+  const refSwatch = isRef ? colourTemplates.swatchFor(item.raw) : null
+
+  // What the editor opens on, and what an edit starts from. A referencing item's own `colour` is the
+  // `#000000` placeholder `parseColourList` gives it, so everything inside the popover — the wheel,
+  // the hex field, the "save this as a template" offer — has to read the *resolved* colour instead,
+  // or a reference opens at black and the first drag jumps the colour rather than nudging it. Same
+  // rule `FxColourPicker` follows for the single-colour parameter.
+  // Memoised: three callbacks and the open-editor effect depend on it, and a fresh object per render
+  // would give them a new identity on every render (the `?? []` trap in CLAUDE.md, one type up).
+  const effectiveColour = useMemo(
+    () => (refSwatch ? { ...item.colour, hex: refSwatch } : item.colour),
+    [refSwatch, item.colour],
+  )
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: item.id })
@@ -269,38 +242,41 @@ function SortableColourSwatch({
     opacity: isDragging ? 0.5 : undefined,
   }
 
-  const [hexInput, setHexInput] = useState(isPalRef ? item.raw : item.colour.hex)
+  const [hexInput, setHexInput] = useState(effectiveColour.hex)
+
+  // Re-seed when the editor opens, not only at mount. The swatch is mounted for the whole list's
+  // lifetime while its popover is not, so a reference seeded before the template list arrived would
+  // show `#000000` in the hex field for the rest of the session — the swatch itself is fine, since
+  // it paints from `refSwatch` on every render.
+  useEffect(() => {
+    if (isEditing) setHexInput(effectiveColour.hex)
+  }, [isEditing, effectiveColour.hex])
 
   const handleHexChange = useCallback(
     (hex: string) => {
       setHexInput(hex)
-      // Check for palette ref input
-      if (isPaletteRef(hex)) {
-        onColourChange(item.colour, hex.trim().toUpperCase())
-        return
-      }
       const normalized = hex.startsWith('#') ? hex : `#${hex}`
       if (isValidHexColour(normalized)) {
-        onColourChange({ ...item.colour, hex: normalized.toLowerCase() })
+        onColourChange({ ...effectiveColour, hex: normalized.toLowerCase() })
       }
     },
-    [onColourChange, item.colour]
+    [onColourChange, effectiveColour]
   )
 
   const handlePickerChange = useCallback(
     (hex: string) => {
       const lower = hex.toLowerCase()
       setHexInput(lower)
-      onColourChange({ ...item.colour, hex: lower })
+      onColourChange({ ...effectiveColour, hex: lower })
     },
-    [onColourChange, item.colour]
+    [onColourChange, effectiveColour]
   )
 
   const handleExtendedChange = useCallback(
     (channel: 'white' | 'amber' | 'uv', val: number) => {
-      onColourChange({ ...item.colour, [channel]: val })
+      onColourChange({ ...effectiveColour, [channel]: val })
     },
-    [onColourChange, item.colour]
+    [onColourChange, effectiveColour]
   )
 
   const hasExtended =
@@ -318,19 +294,17 @@ function SortableColourSwatch({
           <button
             type="button"
             className="w-7 h-7 rounded border border-border cursor-grab active:cursor-grabbing relative overflow-hidden"
-            style={{
-              backgroundColor: isPalRef
-                ? resolveColourWithPalette(item.raw, palette)
-                : item.colour.hex,
-            }}
+            style={{ backgroundColor: effectiveColour.hex }}
+            title={isRef ? colourTemplates.labelFor(item.raw) : item.colour.hex}
             onClick={onEdit}
             {...attributes}
             {...listeners}
           >
-            {isPalRef && (
-              <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold text-white drop-shadow-[0_0_2px_rgba(0,0,0,0.8)] pointer-events-none">
-                {item.raw.toUpperCase()}
-              </span>
+            {/* A referencing swatch gets a corner dot rather than a code across its face: the name
+                does not fit in 28px, and a two-character code is exactly what this change set out to
+                stop showing. The name is on hover and in the popover. */}
+            {isRef && (
+              <span className="absolute bottom-0 right-0 size-1.5 rounded-full bg-white/90 ring-1 ring-black/40 pointer-events-none" />
             )}
           </button>
         </PopoverTrigger>
@@ -349,7 +323,7 @@ function SortableColourSwatch({
       </div>
       <PopoverContent className="w-auto p-3" align="start" side="right">
         <div className="space-y-3">
-          <HexColorPicker color={item.colour.hex} onChange={handlePickerChange} />
+          <HexColorPicker color={effectiveColour.hex} onChange={handlePickerChange} />
 
           {/* Hex input */}
           <input
@@ -371,37 +345,18 @@ function SortableColourSwatch({
                 style={{ backgroundColor: preset.hex }}
                 onClick={() => {
                   setHexInput(preset.hex)
-                  onColourChange({ ...item.colour, hex: preset.hex })
+                  onColourChange({ ...effectiveColour, hex: preset.hex })
                 }}
               />
             ))}
           </div>
 
-          {/* Palette references */}
-          {palette.length > 0 && (
-            <div className="flex gap-1 flex-wrap">
-              {palette.map((colour, i) => {
-                const ref = `P${i + 1}`
-                return (
-                  <button
-                    key={ref}
-                    type="button"
-                    title={ref}
-                    className="w-5 h-5 rounded border border-border hover:scale-110 transition-transform relative overflow-hidden"
-                    style={{ backgroundColor: resolveColourToHex(colour) }}
-                    onClick={() => {
-                      setHexInput(ref)
-                      onColourChange(item.colour, ref)
-                    }}
-                  >
-                    <span className="absolute inset-0 flex items-center justify-center text-[7px] font-bold text-white drop-shadow-[0_0_2px_rgba(0,0,0,0.8)]">
-                      {ref}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          )}
+          <FxColourTemplateRow
+            templates={colourTemplates.templates}
+            currentHex={effectiveColour.hex}
+            selectedUuid={parseTemplateRefUuid(item.raw)}
+            onPick={(ref) => onColourChange(item.colour, ref)}
+          />
 
           {/* Extended channels */}
           {hasExtended && (
@@ -409,7 +364,7 @@ function SortableColourSwatch({
               {extendedChannels?.white && (
                 <ExtendedSlider
                   label="White"
-                  value={item.colour.white}
+                  value={effectiveColour.white}
                   onChange={(v) => handleExtendedChange('white', v)}
                   color="#fffbe6"
                 />
@@ -417,7 +372,7 @@ function SortableColourSwatch({
               {extendedChannels?.amber && (
                 <ExtendedSlider
                   label="Amber"
-                  value={item.colour.amber}
+                  value={effectiveColour.amber}
                   onChange={(v) => handleExtendedChange('amber', v)}
                   color="#ffbf00"
                 />
@@ -425,7 +380,7 @@ function SortableColourSwatch({
               {extendedChannels?.uv && (
                 <ExtendedSlider
                   label="UV"
-                  value={item.colour.uv}
+                  value={effectiveColour.uv}
                   onChange={(v) => handleExtendedChange('uv', v)}
                   color="#7f00ff"
                 />
@@ -480,7 +435,9 @@ function parseColourList(value: string): ColourItem[] {
     return {
       id: makeId(),
       raw: trimmed,
-      colour: isPaletteRef(trimmed)
+      // A reference carries a placeholder colour: the real one comes from the template at render
+      // time, and baking it in here would make an edit elsewhere invisible until a remount.
+      colour: isTemplateRef(trimmed)
         ? { hex: '#000000', white: 0, amber: 0, uv: 0 }
         : parseExtendedColour(trimmed),
     }

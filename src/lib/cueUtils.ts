@@ -71,8 +71,6 @@ export function nextAvailableName(base: string, taken: Set<string>): string {
 export function buildCueInput(cue: Cue): CueInput {
   return {
     name: cue.name,
-    palette: cue.palette,
-    updateGlobalPalette: cue.updateGlobalPalette,
     layers: cue.layers.map((layer) => ({
       lookId: layer.lookId,
       // Session 3: a layer applies a Look **or** a template. Missing from this rebuild it would be

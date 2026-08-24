@@ -13,7 +13,6 @@ export interface CueStackCueEntry {
   id: number
   name: string
   sortOrder: number
-  paletteSize: number
   presetCount: number
   adHocEffectCount: number
   autoAdvance: boolean
@@ -33,7 +32,6 @@ export interface CueStackCueEntry {
 export interface CueStack {
   id: number
   name: string
-  palette: string[]
   loop: boolean
   /** Position within the project's ordered stack list (the show order). */
   sortOrder: number
@@ -55,7 +53,6 @@ export interface CueStack {
 
 export interface CueStackInput {
   name: string
-  palette: string[]
   loop: boolean
   /** `SEPARATOR` to create a divider row; omit/`STACK` for a runnable stack. */
   type?: StackType

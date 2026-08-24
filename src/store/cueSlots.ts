@@ -11,7 +11,6 @@ export interface CueSlot {
   itemType: 'cue' | 'cue_stack'
   itemId: number
   itemName: string
-  palette: string[]
 }
 
 export interface AssignCueSlotRequest {
@@ -68,7 +67,6 @@ export const cueSlotsApi = restApi.injectEndpoints({
               itemType: input.cueId != null ? 'cue' : 'cue_stack',
               itemId: (input.cueId ?? input.cueStackId)!,
               itemName: '...',
-              palette: [],
             }
             if (idx >= 0) draft[idx] = placeholder
             else draft.push(placeholder)

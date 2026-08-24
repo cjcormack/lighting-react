@@ -1,7 +1,6 @@
 import { memo, useMemo, type ComponentType } from 'react'
 import { Badge } from '@/components/ui/badge'
 import {
-  Palette,
   Theater,
   Layers,
   AudioWaveform,
@@ -13,7 +12,6 @@ import {
 } from 'lucide-react'
 import { formatFadeText } from '@/lib/cueUtils'
 import { formatMs } from '@/lib/formatMs'
-import { resolveColourToHex } from '@/components/fx/colourUtils'
 import { useEffectLibraryQuery } from '@/store/fixtureFx'
 import { useLookListQuery } from '@/store/looks'
 import { EffectSummary } from '@/components/fx/EffectSummary'
@@ -79,7 +77,6 @@ export const CueDetailContent = memo(function CueDetailContent({
   const { data: library } = useEffectLibraryQuery(undefined, { skip: !enabled })
   const { data: looks } = useLookListQuery({ projectId }, { skip: !enabled })
 
-  const palette = cue?.palette ?? []
   // Same derivation the collapsed row uses for its target chips, so the two cannot disagree about
   // what the cue touches.
   const targets = useMemo(() => (cue ? collectCueTargets(cue) : []), [cue])
@@ -125,27 +122,6 @@ export const CueDetailContent = memo(function CueDetailContent({
           <p className="text-sm italic text-muted-foreground whitespace-pre-wrap">
             {cue.notes}
           </p>
-        </div>
-      )}
-
-      {/* ── Palette ── (the cue-scoped positional list FX parameters index as `P1` — see
-          PalettePanel.) */}
-      {palette.length > 0 && (
-        <div className="space-y-1.5">
-          <SectionHeader icon={Palette} label="Palette" count={palette.length} />
-          <div className="flex flex-wrap gap-1.5">
-            {palette.map((raw, i) => {
-              const hex = resolveColourToHex(raw)
-              return (
-                <div
-                  key={`${raw}-${i}`}
-                  title={raw}
-                  className="size-7 rounded border border-border"
-                  style={{ backgroundColor: hex }}
-                />
-              )
-            })}
-          </div>
         </div>
       )}
 
@@ -219,7 +195,6 @@ export const CueDetailContent = memo(function CueDetailContent({
               key={`effect-${index}`}
               effect={fromCueAdHocEffect(effect, library)}
               target={{ type: effect.targetType, key: effect.targetKey }}
-              palette={palette}
               actions={
                 <TimingBadge
                   delayMs={effect.delayMs}

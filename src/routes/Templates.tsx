@@ -328,11 +328,27 @@ export function ProjectTemplates() {
             <Alert variant="destructive">
               <TriangleAlert className="size-4" />
               <AlertDescription className="space-y-2">
-                <p>
-                  {inUse.body.error} Deleting it anyway drops {inUse.body.layerCount} layer
-                  {inUse.body.layerCount === 1 ? '' : 's'}. Those cues will fire without this
-                  template&rsquo;s contribution.
-                </p>
+                <p>{inUse.body.error}</p>
+                {inUse.body.layerCount > 0 && (
+                  <p>
+                    Deleting it anyway drops {inUse.body.layerCount} layer
+                    {inUse.body.layerCount === 1 ? '' : 's'}. Those cues will fire without this
+                    template&rsquo;s contribution.
+                  </p>
+                )}
+                {/* Stated separately because it fails differently: `force` removes the layers, but
+                    nothing rewrites an effect parameter, so a reference left behind resolves to
+                    nothing — and an unresolvable colour reads as white rather than as absent. */}
+                {(inUse.body.fxReferenceCount ?? 0) > 0 && (
+                  <p>
+                    {inUse.body.fxReferenceCount} effect parameter
+                    {inUse.body.fxReferenceCount === 1 ? '' : 's'} still name
+                    {inUse.body.fxReferenceCount === 1 ? 's' : ''} it. Deleting it leaves
+                    {inUse.body.fxReferenceCount === 1 ? ' that one' : ' those'} pointing at
+                    nothing, and an unresolved colour runs as white — repoint
+                    {inUse.body.fxReferenceCount === 1 ? ' it' : ' them'} first.
+                  </p>
+                )}
                 {inUse.body.cueNames.length > 0 && (
                   <p className="text-xs">Affected cues: {inUse.body.cueNames.join(', ')}</p>
                 )}

@@ -40,18 +40,3 @@ export function requestBeatSync() {
   lightingApi.fx.requestBeatSync()
 }
 
-export function setPalette(colours: string[]) {
-  lightingApi.fx.setPalette(colours)
-}
-
-export function setPaletteColour(index: number, colour: string) {
-  lightingApi.fx.setPaletteColour(index, colour)
-}
-
-export function addPaletteColour(colour: string) {
-  lightingApi.fx.addPaletteColour(colour)
-}
-
-export function removePaletteColour(index: number) {
-  lightingApi.fx.removePaletteColour(index)
-}

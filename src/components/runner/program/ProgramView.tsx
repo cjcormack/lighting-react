@@ -102,8 +102,6 @@ export const ProgramView = memo(function ProgramView({
       await createCue({
         projectId,
         name: nextAvailableName('New Separator', existingCueNames),
-        palette: [],
-        updateGlobalPalette: false,
         layers: [],
         adHocEffects: [],
         cueStackId: drillStackId,

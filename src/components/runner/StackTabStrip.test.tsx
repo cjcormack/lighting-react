@@ -26,7 +26,6 @@ function stack(id: number, overrides: Partial<CueStack> = {}): CueStack {
   return {
     id,
     name: `Act ${id}`,
-    palette: [],
     loop: false,
     sortOrder: id,
     type: 'STACK',

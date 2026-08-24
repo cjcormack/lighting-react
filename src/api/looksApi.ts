@@ -131,12 +131,6 @@ export interface LookDetails {
   notes: string | null
   sortOrder: number
   families: AttributeFamily[]
-  /**
-   * The **positional** colour list (`P1` / `P2` / `P*`) that FX parameters index — a third,
-   * unrelated thing historically also called "palette". It parameterises effects rather than
-   * describing a look, and survives this merge untouched.
-   */
-  palette: string[]
   rows: LookRow[]
   effects: LookEffect[]
   layerCount: number
@@ -155,7 +149,6 @@ export interface LookInput {
   name?: string
   notes?: string | null
   sortOrder?: number
-  palette?: string[]
   rows?: LookRow[]
   effects?: LookEffect[]
 }
@@ -206,7 +199,6 @@ export interface ToggleLookResponse {
  */
 export interface LookPreviewRequest {
   propertyAssignments: { propertyName: string; value: string; fadeDurationMs?: number | null; sortOrder?: number; elementKey?: string | null }[]
-  palette: string[]
   targets: ToggleLookTarget[]
 }
 

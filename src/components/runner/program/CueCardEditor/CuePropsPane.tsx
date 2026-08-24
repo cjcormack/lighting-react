@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useFieldAutosave } from '@/hooks/useFieldAutosave'
-import { ChevronDown, Palette, Plus, Zap } from 'lucide-react'
+import { ChevronDown, Plus, Zap } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,14 +20,11 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
-import { CuePaletteEditor } from '@/components/cues/CuePaletteEditor'
 import { CueTriggerEditor } from '@/components/cues/CueTriggerEditor'
 import { TriggerSummary } from '@/components/cues/TriggerSummary'
 import {
   usePatchProjectCueMutation,
-  useSaveProjectCueMutation,
 } from '@/store/cues'
-import { buildCueInput } from '@/lib/cueUtils'
 import type { Cue, CueTrigger, CueTriggerDetail } from '@/api/cuesApi'
 
 interface CuePropsPaneProps {
@@ -36,7 +33,7 @@ interface CuePropsPaneProps {
 }
 
 /**
- * Properties pane: name, cue#, fade in/out, easing, palette, notes,
+ * Properties pane: name, cue#, fade in/out, easing, notes,
  * auto-advance, script hooks. Every field auto-saves via PATCH — selects and
  * toggles on change, text fields on blur, on Enter, and a beat after typing
  * stops (`useFieldAutosave`). There is no Save button and none is wanted.
@@ -47,7 +44,6 @@ interface CuePropsPaneProps {
  */
 export function CuePropsPane({ cue, projectId }: CuePropsPaneProps) {
   const [patchCue] = usePatchProjectCueMutation()
-  const [saveCue] = useSaveProjectCueMutation()
 
   const [name, setName] = useState(cue.name)
   const [cueNumber, setCueNumber] = useState(cue.cueNumber ?? '')
@@ -152,17 +148,6 @@ export function CuePropsPane({ cue, projectId }: CuePropsPaneProps) {
     [cue.autoAdvance, cue.id, patchCue, projectId],
   )
 
-  const setPalette = useCallback(
-    (next: string[]) => {
-      // CuePatchInput excludes palette (so PATCH callers can't accidentally blank it),
-      // so palette edits must round-trip through PUT.
-      const input = buildCueInput(cue)
-      input.palette = next
-      saveCue({ projectId, cueId: cue.id, ...input })
-    },
-    [cue, saveCue, projectId],
-  )
-
   const [hooksExpanded, setHooksExpanded] = useState((cue.triggers ?? []).length > 0)
   const [editingHook, setEditingHook] = useState<
     { kind: 'add' } | { kind: 'edit'; index: number } | null
@@ -237,23 +222,6 @@ export function CuePropsPane({ cue, projectId }: CuePropsPaneProps) {
             className={cn('h-9', cue.cueNumberAuto && 'text-muted-foreground')}
           />
         </div>
-      </div>
-
-      <div className="space-y-1.5">
-        {/* The cue's own palette — the positional ordered colour list FX
-            parameters index as `P1`/`P2`/`P*`. It was labelled "Colour List" while a *named*
-            palette was a separate entity a value could reference; the `ref:` grammar retired in
-            session 4, the entity became a Look, and the word is free again. */}
-        <Label className="flex items-center gap-1.5">
-          <Palette className="size-3.5" />
-          Palette
-          {cue.palette.length > 0 && (
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 ml-1">
-              {cue.palette.length}
-            </Badge>
-          )}
-        </Label>
-        <CuePaletteEditor palette={cue.palette} onChange={setPalette} />
       </div>
 
       <div className="space-y-1.5">

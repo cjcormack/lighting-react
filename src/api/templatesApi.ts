@@ -93,6 +93,14 @@ export interface TemplateInUseError {
   layerCount: number
   cueIds: number[]
   cueNames: string[]
+  /**
+   * Effect parameters holding a `tmpl:{uuid}` reference to this template.
+   *
+   * A second kind of usage, and it fails differently from a layer: `force` deletes the *layers* but
+   * cannot rewrite a parameter, so a forced delete leaves those effects naming nothing — and an
+   * unresolvable reference reads as **white**. The guard has to say so.
+   */
+  fxReferenceCount?: number
 }
 
 /** What `click` reports: literals written, and the heads it could not reach. */

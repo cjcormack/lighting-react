@@ -236,7 +236,6 @@ function SortableSeparatorEntry({
           projectId,
           stackId: stack.id,
           name: value.trim(),
-          palette: [],
           loop: false,
           type: 'SEPARATOR',
           label: value.trim(),
@@ -373,7 +372,7 @@ export function ShowOverview({
   )
 
   // Inline rename from the table row. PUT is the only stack write route, so echo back the
-  // fields it rewrites (palette/loop) unchanged; sortOrder and type it leaves alone.
+  // fields it rewrites (`loop`) unchanged; sortOrder and type it leaves alone.
   const handleRenameStack = useCallback(
     (stack: CueStack, name: string) => {
       if (name === stack.name) return
@@ -381,7 +380,6 @@ export function ShowOverview({
         projectId,
         stackId: stack.id,
         name,
-        palette: stack.palette,
         loop: stack.loop,
       })
     },
@@ -389,7 +387,7 @@ export function ShowOverview({
   )
 
   const handleAddSeparator = useCallback(() => {
-    createStack({ projectId, name: 'New Separator', palette: [], loop: false, type: 'SEPARATOR', label: 'New Separator' })
+    createStack({ projectId, name: 'New Separator', loop: false, type: 'SEPARATOR', label: 'New Separator' })
   }, [createStack, projectId])
 
   const handleRemove = useCallback((stack: CueStack) => {

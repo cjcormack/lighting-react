@@ -44,7 +44,7 @@ adding a dependency changes when an effect re-runs, so decide deliberately:
   fields the hook actually uses and depend on those (see `useSliderValue` in
   `src/hooks/usePropertyValues.ts`).
 - **Memoise the input** when a `?? []` fallback hands out a fresh identity
-  every render (see `serverPalette` in `components/busking/PalettePanel.tsx`).
+  every render (see `templates` in `components/fx/FxColourTemplates.tsx`).
 - **Disable with a reason** only when the narrow deps are provably complete —
   say *why* they're complete, naming the callee whose fields you checked (see
   `rigEuler` in `components/stage3d/Stage3D.tsx`).
@@ -287,11 +287,46 @@ takes an `isTemplate` flag since session 3 and swaps the glyph for `Palette` —
 shape, because the two sit in the same list at the same rank and a louder chip would make one look
 more important. **Never mint a `P<n>` short code for either**; display the name.
 
-"Palette" now means exactly one thing in this codebase: the positional ordered colour list
-that FX parameters index as `P1`/`P2`/`P*`, whose helpers are `isPaletteRef` /
-`parsePaletteIndex` in `components/fx/colourUtils.ts`. Session 4 dropped the "Colour List"
-qualifier from all five labels that carried it, since the entity competing for the word is now a
-Look.
+"Palette" now means **nothing at all** in this codebase, and that is the point. The word's last
+sense — the positional ordered colour list FX parameters indexed as `P1`/`P2`/`P*`, scoped
+`look > cue > global` — is gone, along with `PalettePanel`, `CuePaletteEditor`,
+`ActiveStackPalettes`, `CuePaletteBar`, the `palette` column on cues / stacks / Looks,
+`Cue.updateGlobalPalette`, `FxState.palette` / `stackPalettes`, the whole `PaletteSocket`, the
+`set_palette` AI tool and `isPaletteRef` / `parsePaletteIndex` / `resolveColourWithPalette`. Any
+remaining occurrence is a lucide icon, a 3D material list, or a comment about the *named* palette
+entity that became a Look in session 4. **Don't reintroduce it in either sense.**
+
+**An FX colour parameter names a template instead** — `tmpl:{uuid}`, whose helpers are
+`isTemplateRef` / `parseTemplateRefUuid` / `serializeTemplateRef` in
+`components/fx/colourUtils.ts`, mirroring `fx/TemplateColourSource.kt`. Five things about it:
+
+- **This half serialises and parses only, and never resolves.** Same rule as `templateIntent.ts`,
+  for the same reason: `TemplateResolver` must be the single answer to what the rig will do. The
+  backend's `resolveColourGeneric` resolves a colour intent *without a head*, because an effect's
+  output is one colour applied to every head it targets — so it resolves as though the head were
+  RGBW, which makes an FX-referenced template identical to the same template applied as a layer on
+  any RGBW/RGBWA head. **A head with no white emitter pays for that**, and by more than a stop:
+  the neutral is already out of RGB and its white byte is dropped, so `#FF9D4A` arrives as
+  `#B55300` — dimmer *and* more saturated, which is worse than the RGB-only reading rather than
+  equal to it. Accepted trade, documented at `resolveColourGeneric`, one line to invert.
+- **A reference is legal only in an effect parameter.** A cue row, a Look row and a programmer entry
+  are literals; the dependency mechanism for a *value* is a layer. `validateLookRows` refuses a
+  `tmpl:`-shaped value beside its `ref:` refusal, and `parseAssignmentValue` returns null for one
+  rather than letting `parseExtendedColour` answer white.
+- **Only generic colour templates are offerable** (`family === 'COLOUR' && isGeneric`), on both
+  sides. A per-fixture template holds no single colour, so there is nothing for a fixture-agnostic
+  output to take.
+- **There is no successor to `P*`.** A template holds one colour, so there is no set to expand; a
+  colour list is an explicit ordered mix of literals and references. `FxColourListPicker`'s
+  "Use entire palette" checkbox and its `savedValue` machinery went with it.
+- **`tmpl:` rather than `ref:`** because `ref:{uuid}` is retired *and* still actively rejected at
+  the Look write boundary — reusing it would collide with a live check.
+
+`FxColourTemplates.tsx` owns both halves of the UI: `useColourTemplates()` (the offerable list plus
+the three lookups a picker needs to draw a reference) and `FxColourTemplateRow` (the chips, plus
+**Save `<hex>` as template…**, which fills the library the way `TemplateStrip`'s
+new-from-selection chip does). Both pickers read `projectId` from the **route**, not a prop — the
+FX library page has no project, and there the row simply offers nothing and still edits literals.
 
 **The programmer is a layer stack too**, and `LookStack` (`components/looks/LookStack.tsx`) is
 the one component that draws both — that sharing is the point rather than a saving, because a
@@ -685,7 +720,7 @@ A cue without an explicit number gets one derived from its position (`cueNumberA
 **A cue is read-only, and edited by Include.** Session 2a deleted the three-pane inline editor
 (Targets · Cue properties · Layers) and its tab chrome: those panes restated, in a different shape,
 what a value grid and a layer stack already say, and two renderings of one state do not stay in step.
-An expanded cue row now shows `CueDetailContent` — transition, notes, palette, **its composed
+An expanded cue row now shows `CueDetailContent` — transition, notes, **its composed
 values** (`CueValueGrid`), layers, effects, hooks — all read-only, with **Edit in Programmer** (which
 Includes it) and **Cue properties…** (`CuePropertiesSheet`). Consequences worth knowing:
 

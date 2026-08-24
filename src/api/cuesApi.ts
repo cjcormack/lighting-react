@@ -194,8 +194,6 @@ export interface CueTriggerDetail {
 export interface Cue {
   id: number
   name: string
-  palette: string[]
-  updateGlobalPalette: boolean
   /** The cue's ordered Look composition, in `sortOrder`. */
   layers: CueLayerDetail[]
   adHocEffects: CueAdHocEffect[]
@@ -221,8 +219,6 @@ export interface Cue {
 // Input for create/update
 export interface CueInput {
   name: string
-  palette: string[]
-  updateGlobalPalette: boolean
   layers: CueLayer[]
   adHocEffects: CueAdHocEffect[]
   propertyAssignments?: CuePropertyAssignment[]
@@ -241,9 +237,9 @@ export interface CueInput {
 }
 
 // Partial input for PATCH (inline edits — only send changed fields).
-// Excludes palette/updateGlobalPalette/cueStackId/sortOrder which should only change via full PUT.
+// Excludes cueStackId/sortOrder which should only change via full PUT.
 export type CuePatchInput = Partial<
-  Omit<CueInput, 'palette' | 'updateGlobalPalette' | 'cueStackId' | 'sortOrder' | 'cueType'>
+  Omit<CueInput, 'cueStackId' | 'sortOrder' | 'cueType'>
 >
 
 // Copy request/response
@@ -272,9 +268,8 @@ export interface StopCueResponse {
   cueId: number
 }
 
-// Current lighting state snapshot (palette + active effects)
+// Current lighting state snapshot (the running effects)
 export interface CueCurrentState {
-  palette: string[]
   /**
    * Still `presetApplications` on the wire: `captureCurrentState` reconstructs them from the live
    * FX instances' `presetId`, which the layer rewrite has not reached. Nothing composes from them,

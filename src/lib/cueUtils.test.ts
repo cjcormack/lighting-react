@@ -153,8 +153,6 @@ function cueWithOneLayer(): Cue {
   return {
     id: 1,
     name: 'open',
-    palette: [],
-    updateGlobalPalette: false,
     layers: [
       {
         lookId: 7,

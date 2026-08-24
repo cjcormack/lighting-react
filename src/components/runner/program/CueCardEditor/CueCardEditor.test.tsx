@@ -29,11 +29,10 @@ vi.mock('@/store/cues', () => ({
   usePatchProjectCueMutation: () => [vi.fn()],
 }))
 vi.mock('@/components/cues/CueRowParts', () => ({
-  CuePaletteBar: () => <div />,
   CueStatePip: () => <div data-testid="pip" />,
   CueTargetChip: () => <div />,
   useExpandedCue: () => ({
-    cueData: { id: 1, name: 'Q1', palette: [], adHocEffects: [], triggers: [], layers: [] },
+    cueData: { id: 1, name: 'Q1', adHocEffects: [], triggers: [], layers: [] },
     targets: [],
     isFetching: false,
   }),
@@ -53,7 +52,6 @@ const cue: CueStackCueEntry = {
   id: 1,
   name: 'Q1',
   sortOrder: 1,
-  paletteSize: 0,
   presetCount: 0,
   adHocEffectCount: 0,
   autoAdvance: false,

@@ -48,7 +48,6 @@ export function EditModeAssignPanel({ projectId }: EditModeAssignPanelProps) {
                     key={stack.id}
                     stackId={stack.id}
                     name={stack.name}
-                    palette={stack.palette}
                     cueCount={cueCount}
                     isExpanded={expandedStackId === stack.id}
                     onToggleExpand={() =>
@@ -71,7 +70,6 @@ export function EditModeAssignPanel({ projectId }: EditModeAssignPanelProps) {
                       key={cue.id}
                       id={cue.id}
                       name={cue.name}
-                      palette={[]}
                       itemType="cue"
                     />
                   ))}
@@ -90,11 +88,10 @@ export function EditModeAssignPanel({ projectId }: EditModeAssignPanelProps) {
 interface DraggableAssignCardProps {
   id: number
   name: string
-  palette: string[]
   itemType: 'cue' | 'cue_stack'
 }
 
-function DraggableAssignCard({ id, name, palette, itemType }: DraggableAssignCardProps) {
+function DraggableAssignCard({ id, name, itemType }: DraggableAssignCardProps) {
   const {
     attributes,
     listeners,
@@ -120,7 +117,7 @@ function DraggableAssignCard({ id, name, palette, itemType }: DraggableAssignCar
         isDragging && 'opacity-40',
       )}
     >
-      <SlotItemContent name={name} itemType={itemType} palette={palette} />
+      <SlotItemContent name={name} itemType={itemType} />
     </div>
   )
 }
@@ -130,7 +127,6 @@ function DraggableAssignCard({ id, name, palette, itemType }: DraggableAssignCar
 interface DraggableStackCardProps {
   stackId: number
   name: string
-  palette: string[]
   cueCount: number
   isExpanded: boolean
   onToggleExpand: () => void
@@ -139,7 +135,6 @@ interface DraggableStackCardProps {
 function DraggableStackCard({
   stackId,
   name,
-  palette,
   cueCount,
   isExpanded,
   onToggleExpand,
@@ -170,7 +165,7 @@ function DraggableStackCard({
         isExpanded && 'ring-1 ring-primary/30',
       )}
     >
-      <SlotItemContent name={name} itemType="cue_stack" palette={palette} />
+      <SlotItemContent name={name} itemType="cue_stack" />
       {cueCount > 0 && (
         <button
           className="absolute bottom-0 right-0 size-5 flex items-center justify-center text-muted-foreground hover:text-foreground"

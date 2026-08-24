@@ -59,7 +59,6 @@ function cue(over: Partial<Cue> = {}): Cue {
     cueNumber: '1',
     cueNumberAuto: false,
     sortOrder: 0,
-    palette: [],
     layers: [],
     adHocEffects: [],
     propertyAssignments: [],

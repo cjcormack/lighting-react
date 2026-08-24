@@ -15,7 +15,6 @@ import {
   useResumeGroupFxMutation,
   useRemoveGroupFxMutation,
 } from '@/store/groups'
-import { useFxStateQuery } from '@/store/fx'
 import { getElementModeLabel } from './fxConstants'
 import { EffectSummary } from './EffectSummary'
 import { fromFixtureDirectEffect, fromFixtureIndirectEffect, fromGroupActiveEffect } from './effectSummaryTypes'
@@ -48,7 +47,6 @@ export function FxSection(props: FxSectionProps) {
 function FixtureFxSection({ fixture }: { fixture: Fixture }) {
   const { data: effects, isLoading } = useFixtureEffectsQuery(fixture.key)
   const { data: library } = useEffectLibraryQuery()
-  const { data: fxState } = useFxStateQuery()
   const [isExpanded, setIsExpanded] = useState(false)
   const [sheetState, setSheetState] = useState<SheetMode | undefined>(undefined)
 
@@ -59,7 +57,6 @@ function FixtureFxSection({ fixture }: { fixture: Fixture }) {
   const directEffects = effects?.direct ?? []
   const indirectEffects = effects?.indirect ?? []
   const totalCount = directEffects.length + indirectEffects.length
-  const palette = fxState?.palette
 
   if (isLoading) return null
 
@@ -85,7 +82,6 @@ function FixtureFxSection({ fixture }: { fixture: Fixture }) {
           key={effect.id}
           effect={fromFixtureDirectEffect(effect, library)}
           isRunning={effect.isRunning}
-          palette={palette}
           actions={
             <>
               <Button
@@ -127,7 +123,6 @@ function FixtureFxSection({ fixture }: { fixture: Fixture }) {
           effect={fromFixtureIndirectEffect(effect, library)}
           isRunning={effect.isRunning}
           badge={`via ${effect.groupName}`}
-          palette={palette}
         />
       ))}
 
@@ -145,7 +140,6 @@ function FixtureFxSection({ fixture }: { fixture: Fixture }) {
 function GroupFxSection({ group }: { group: GroupSummary }) {
   const { data: effects, isLoading } = useGroupActiveEffectsQuery(group.name)
   const { data: library } = useEffectLibraryQuery()
-  const { data: fxState } = useFxStateQuery()
   const [isExpanded, setIsExpanded] = useState(false)
   const [sheetState, setSheetState] = useState<SheetMode | undefined>(undefined)
 
@@ -154,7 +148,6 @@ function GroupFxSection({ group }: { group: GroupSummary }) {
   const [removeFx] = useRemoveGroupFxMutation()
 
   const totalCount = effects?.length ?? 0
-  const palette = fxState?.palette
 
   if (isLoading) return null
 
@@ -181,7 +174,6 @@ function GroupFxSection({ group }: { group: GroupSummary }) {
           effect={fromGroupActiveEffect(effect, library)}
           isRunning={effect.isRunning}
           badge={effect.elementMode ? getElementModeLabel(effect.elementMode) : undefined}
-          palette={palette}
           actions={
             <>
               <Button

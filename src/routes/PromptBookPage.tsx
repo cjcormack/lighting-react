@@ -551,7 +551,6 @@ export function PromptBookViewerPage() {
           const created = await createStack({
             projectId: projectIdNum,
             name: stack.name,
-            palette: [],
             loop: false,
             type: 'STACK',
           }).unwrap()
@@ -564,8 +563,6 @@ export function PromptBookViewerPage() {
           name,
           cueNumber,
           notes,
-          palette: [],
-          updateGlobalPalette: false,
           layers: [],
           adHocEffects: [],
           triggers: [],

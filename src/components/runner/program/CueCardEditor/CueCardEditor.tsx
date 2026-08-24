@@ -28,7 +28,6 @@ import {
   parseFadeDuration,
 } from '@/lib/cueUtils'
 import {
-  CuePaletteBar,
   CueStatePip,
   CueTargetChip,
   useExpandedCue,
@@ -78,7 +77,7 @@ interface CueCardEditorProps {
 }
 
 /**
- * Inline-expanding cue card. The collapsed row is the cue summary (Q# · palette · name · target
+ * Inline-expanding cue card. The collapsed row is the cue summary (Q# · name · target
  * chips · fade); expanding it shows the cue **read-only** — the same value grid the programmer
  * draws, its layer stack, its effects and its hooks — with two ways out: *Edit in Programmer*,
  * which Includes it, and *Cue properties…*, which opens the drawer for everything a value grid
@@ -196,7 +195,12 @@ export function CueCardEditor({
             // `cueNumberCellWidth`. Every row in a stack resolves the same width, so the column
             // still lines up, but a stack of "Q1"–"Q40" no longer reserves room it never uses.
             'group/cue',
-            'grid-cols-[22px_auto_minmax(0,80px)_minmax(0,1fr)_auto_auto_18px]',
+            // One track per child, and the child list changes with the width: the target chips are
+            // hidden at/below 1000px, so that range needs its own five-track template. A template
+            // with more tracks than children slides every cell one column left — which is what a
+            // stale track did to the cue name when the palette bar was removed from this row.
+            'grid-cols-[22px_auto_minmax(0,1fr)_auto_auto_18px]',
+            '@max-[1000px]:grid-cols-[22px_auto_minmax(0,1fr)_auto_18px]',
             '@max-[800px]:grid-cols-[22px_auto_minmax(0,1fr)_auto_18px] @max-[800px]:gap-2',
           )}
           onClick={handleBodyClick}
@@ -248,10 +252,6 @@ export function CueCardEditor({
                 cue.cueNumberAuto && AUTO_CUE_NUMBER_CLASS,
               )}
             />
-          </div>
-
-          <div className="h-5 rounded overflow-hidden flex @max-[800px]:hidden">
-            <CuePaletteBar palette={cueData?.palette ?? []} />
           </div>
 
           <InlineEditField

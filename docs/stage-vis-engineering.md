@@ -99,9 +99,9 @@ because an operator would otherwise read them as bugs; the last two it does not:
   Deliberate: the alternative is re-requesting on every run-state frame from every stack.
 * **Editing the cue on deck doesn't refresh it either.** Same cause: the request effect is keyed on
   `projectId`/`stackId`/`cueId` alone, so changing the *contents* of the previewed cue — a level, a
-  preset, a palette ref — leaves the previously composed look on the stage until the desk moves the
+  layer, a colour — leaves the previously composed look on the stage until the desk moves the
   next cue on. `projectCueStackList` carries no revision that moves when a cue assignment changes,
-  so fixing this needs one; a partial key off `presetCount`/`paletteSize` would refresh for some
+  so fixing this needs one; a partial key off `presetCount` would refresh for some
   edits and silently not for others, which is worse than the known limit. The operator's handle in
   the meantime is to reselect the source, which `refetchOnMountOrArgChange` makes recompose.
 

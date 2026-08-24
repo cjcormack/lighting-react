@@ -58,8 +58,6 @@ interface EffectParameterFormProps {
   extendedChannels?: { white?: boolean; amber?: boolean; uv?: boolean }
   stepTiming?: boolean
   onStepTimingChange?: (v: boolean) => void
-  /** Override palette for colour pickers (e.g. cue palette). */
-  palette?: string[]
   /**
    * The effect's speed master (uuid; null → master 1). The picker renders only when the
    * change callback is supplied — surfaces that can't persist the field don't show it.
@@ -109,7 +107,6 @@ export function EffectParameterForm({
   extendedChannels,
   stepTiming,
   onStepTimingChange,
-  palette,
   speedMasterUuid,
   onSpeedMasterChange,
   rateSpeedMasterUuid,
@@ -367,7 +364,6 @@ export function EffectParameterForm({
               value={parameters[param.name] ?? param.defaultValue}
               onChange={(v) => handleParameterChange(param.name, v)}
               extendedChannels={extendedChannels}
-              palette={palette}
             />
           ))}
         </div>
@@ -444,13 +440,11 @@ function ParameterInput({
   value,
   onChange,
   extendedChannels,
-  palette,
 }: {
   param: EffectParameterDef
   value: string
   onChange: (v: string) => void
   extendedChannels?: { white?: boolean; amber?: boolean; uv?: boolean }
-  palette?: string[]
 }) {
   const paramType = param.type.toLowerCase()
 
@@ -590,7 +584,6 @@ function ParameterInput({
         label={formatParamName(param.name)}
         description={param.description}
         extendedChannels={extendedChannels}
-        palette={palette}
       />
     )
   }
@@ -604,7 +597,6 @@ function ParameterInput({
         label={formatParamName(param.name)}
         description={param.description}
         extendedChannels={extendedChannels}
-        palette={palette}
       />
     )
   }

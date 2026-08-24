@@ -31,7 +31,6 @@ const CUES = [
 const stack = (nextCueId: number | null) => ({
   id: 7,
   name: 'Act 1',
-  palette: [],
   loop: false,
   sortOrder: 0,
   type: 'STACK',

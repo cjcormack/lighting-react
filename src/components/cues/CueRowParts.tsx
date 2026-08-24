@@ -2,7 +2,6 @@ import { useMemo, useRef } from 'react'
 import { Circle, Play } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { resolveColourToHex } from '@/components/fx/colourUtils'
 import { useProjectCueQuery } from '@/store/cues'
 import type { Cue, CueTarget } from '@/api/cuesApi'
 import { collectCueTargets } from '@/components/runner/program/CueCardEditor/targetUtils'
@@ -10,43 +9,13 @@ import { collectCueTargets } from '@/components/runner/program/CueCardEditor/tar
 /**
  * The pieces a collapsed cue row is made of, in one place.
  *
- * Show and Run grew their own copies of every one of these, and they drifted: the palette swatches
+ * Show and Run grew their own copies of every one of these, and they drifted: the swatches
  * assigned the stored string straight to `background` on one side and resolved gel names on the
  * other, so the same cue's colours rendered differently depending on which view you were in. The
  * target chips disagreed on a shade. Session 2b merges the two views, so the duplication has no
  * remaining excuse — and de-duplicating is a better fix than correcting one of two copies, which is
  * how they came to disagree in the first place.
  */
-
-/**
- * The cue's positional colour list, as swatches.
- *
- * **Resolved, not assigned raw.** A backend gel name is not a CSS colour, so assigning it directly
- * renders nothing at all.
- *
- * Keyed by `${c}-${i}` rather than by index: a bare index makes React reuse a swatch across a
- * reorder and animate the wrong colour into place.
- *
- * Fills its container in both states, including empty. Show's copy used to be narrower when empty
- * than the 80px grid track it sat in, so an empty palette read as a different kind of cell rather
- * than an empty one.
- */
-export function CuePaletteBar({ palette }: { palette: string[] }) {
-  if (palette.length === 0) {
-    return <div className="h-full w-full bg-muted/30" />
-  }
-  return (
-    <div className="flex h-full w-full">
-      {palette.slice(0, 6).map((c, i) => (
-        <span
-          key={`${c}-${i}`}
-          className="min-w-[4px] flex-1"
-          style={{ background: resolveColourToHex(c) }}
-        />
-      ))}
-    </div>
-  )
-}
 
 /** A fixture or group the cue asserts something about. Amber for a head, blue for a group. */
 export function CueTargetChip({ target }: { target: CueTarget }) {

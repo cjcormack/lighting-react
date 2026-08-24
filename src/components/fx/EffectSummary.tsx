@@ -8,7 +8,8 @@ import {
   getElementModeLabel,
   getElementFilterLabel,
 } from './fxConstants'
-import { resolveColourToHex, resolveColourWithPalette } from './colourUtils'
+import { resolveColourToHex, isTemplateRef } from './colourUtils'
+import { useColourTemplates, type ColourTemplates } from './FxColourTemplates'
 import { SpeedMasterChip } from './SpeedMasterChip'
 import type { EffectSummaryData } from './effectSummaryTypes'
 
@@ -25,8 +26,6 @@ export interface EffectSummaryProps {
   onClick?: () => void
   /** Slot for action buttons rendered on the right side */
   actions?: React.ReactNode
-  /** Palette for resolving palette colour refs (P1, P2, P*) */
-  palette?: string[]
   className?: string
 }
 
@@ -37,13 +36,13 @@ export function EffectSummary({
   isRunning,
   onClick,
   actions,
-  palette,
   className,
 }: EffectSummaryProps) {
+  const colourTemplates = useColourTemplates()
   const categoryInfo = EFFECT_CATEGORY_INFO[effect.category]
   const CategoryIcon = categoryInfo?.icon
   const speedLabel = getBeatDivisionLabel(effect.beatDivision)
-  const { colourSwatches, textParams } = getCustomParams(effect, palette)
+  const { colourSwatches, textParams } = getCustomParams(effect, colourTemplates)
 
   return (
     <div
@@ -111,8 +110,8 @@ export function EffectSummary({
             <>
               <Dot />
               <span className="flex items-center gap-0.5">
-                {colourSwatches.map((hex, i) => (
-                  <ColourDot key={i} hex={hex} />
+                {colourSwatches.map((swatch, i) => (
+                  <ColourDot key={i} hex={swatch.hex} title={swatch.title} />
                 ))}
               </span>
             </>
@@ -154,9 +153,10 @@ function Dot() {
   return <span className="text-muted-foreground/50">&middot;</span>
 }
 
-function ColourDot({ hex }: { hex: string }) {
+function ColourDot({ hex, title }: { hex: string; title?: string }) {
   return (
     <span
+      title={title}
       className="inline-block size-2.5 rounded-full border border-border shrink-0"
       style={{ backgroundColor: hex }}
     />
@@ -170,18 +170,36 @@ interface TextParam {
   value: string
 }
 
+interface Swatch {
+  hex: string
+  /** Hover text: the template's name where the value names one, the literal otherwise. */
+  title: string
+}
+
 /**
  * Extract custom parameters for display.
- * Colour/ColourList params → flat array of hex swatches.
+ * Colour/ColourList params → flat array of swatches.
  * Other params → labelled text values.
+ *
+ * A `tmpl:` value resolves through [ColourTemplates] rather than the literal parser, so a summary
+ * shows the colour the template *currently* holds — and names it on hover, because the whole reason
+ * to reference one is that it has a name.
  */
 function getCustomParams(
   effect: EffectSummaryData,
-  palette?: string[],
-): { colourSwatches: string[]; textParams: TextParam[] } {
-  const colourSwatches: string[] = []
+  colourTemplates: ColourTemplates,
+): { colourSwatches: Swatch[]; textParams: TextParam[] } {
+  const colourSwatches: Swatch[] = []
   const textParams: TextParam[] = []
   const maxSwatches = 8
+
+  const swatchFor = (raw: string): Swatch =>
+    isTemplateRef(raw)
+      ? {
+          hex: colourTemplates.swatchFor(raw) ?? 'transparent',
+          title: colourTemplates.labelFor(raw),
+        }
+      : { hex: resolveColourToHex(raw), title: raw }
 
   for (const [name, value] of Object.entries(effect.parameters)) {
     if (!value) continue
@@ -191,15 +209,13 @@ function getCustomParams(
 
     if (paramType === 'colour') {
       if (colourSwatches.length < maxSwatches) {
-        const hex = palette ? resolveColourWithPalette(value, palette) : resolveColourToHex(value)
-        colourSwatches.push(hex)
+        colourSwatches.push(swatchFor(value))
       }
     } else if (paramType === 'colourlist') {
       const colours = value.split(',').map((c) => c.trim()).filter(Boolean)
       for (const c of colours) {
         if (colourSwatches.length >= maxSwatches) break
-        const hex = palette ? resolveColourWithPalette(c, palette) : resolveColourToHex(c)
-        colourSwatches.push(hex)
+        colourSwatches.push(swatchFor(c))
       }
     } else {
       const label = name

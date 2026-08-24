@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { HexColorPicker } from 'react-colorful'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Label } from '@/components/ui/label'
@@ -8,12 +8,12 @@ import {
   parseExtendedColour,
   serializeExtendedColour,
   isValidHexColour,
-  isPaletteRef,
-  resolveColourWithPalette,
+  isTemplateRef,
+  parseTemplateRefUuid,
   COLOUR_PRESETS,
   type ExtendedColour,
 } from './colourUtils'
-import { useFxStateQuery } from '@/store/fx'
+import { FxColourTemplateRow, useColourTemplates } from './FxColourTemplates'
 
 interface FxColourPickerProps {
   value: string
@@ -26,8 +26,6 @@ interface FxColourPickerProps {
     amber?: boolean
     uv?: boolean
   }
-  /** Override palette (e.g. cue palette). Falls back to global FxState palette. */
-  palette?: string[]
 }
 
 export function FxColourPicker({
@@ -36,37 +34,31 @@ export function FxColourPicker({
   label,
   description,
   extendedChannels,
-  palette: paletteProp,
 }: FxColourPickerProps) {
-  const { data: fxState } = useFxStateQuery()
-  // Memoised: the sync effect below depends on this and writes fresh objects
-  // into state, so a new `[]` each render would re-run it on every render and
-  // overwrite whatever the user is typing into the open picker.
-  const palette = useMemo(
-    () => paletteProp ?? fxState?.palette ?? [],
-    [paletteProp, fxState?.palette],
-  )
-  const isPalRef = isPaletteRef(value)
+  const { templates, labelFor, swatchFor } = useColourTemplates()
+  const isRef = isTemplateRef(value)
 
   const [isOpen, setIsOpen] = useState(false)
   const [localColour, setLocalColour] = useState<ExtendedColour>(() => parseExtendedColour(value))
-  const [hexInput, setHexInput] = useState(() => isPaletteRef(value) ? value.trim() : resolveColourToHex(value))
+  // A reference has no literal to read at mount and the template list has not arrived yet, so this
+  // seeds to black either way; the open effect below re-seeds from the resolved colour, and the
+  // field is only rendered inside the popover.
+  const [hexInput, setHexInput] = useState(() => resolveColourToHex(value))
 
-  // Sync from parent value when popover opens
+  // Sync from parent value when the popover opens.
+  //
+  // A reference opens at the colour the template *currently* resolves to, so dragging the picker
+  // starts from where the rig is rather than from black — the same rule Local's unset cells follow.
+  // Touching the picker then replaces the reference with a literal, which is the honest reading of
+  // "I want this colour, not that template".
   useEffect(() => {
     if (isOpen) {
-      if (isPaletteRef(value)) {
-        setHexInput(value.trim())
-        // Resolve palette ref for the picker display
-        const resolved = resolveColourWithPalette(value, palette)
-        setLocalColour(parseExtendedColour(resolved))
-      } else {
-        const parsed = parseExtendedColour(value)
-        setLocalColour(parsed)
-        setHexInput(parsed.hex)
-      }
+      const resolved = isTemplateRef(value) ? swatchFor(value) : null
+      const parsed = parseExtendedColour(resolved ?? value)
+      setLocalColour(parsed)
+      setHexInput(parsed.hex)
     }
-  }, [isOpen, value, palette])
+  }, [isOpen, value, swatchFor])
 
   const emitChange = useCallback(
     (colour: ExtendedColour) => {
@@ -79,18 +71,13 @@ export function FxColourPicker({
   const handleHexChange = useCallback(
     (hex: string) => {
       setHexInput(hex)
-      // Check for palette ref input (e.g., "P1", "P2")
-      if (isPaletteRef(hex)) {
-        onChange(hex.trim().toUpperCase())
-        return
-      }
       // Only emit when valid to avoid intermediate states
       const normalized = hex.startsWith('#') ? hex : `#${hex}`
       if (isValidHexColour(normalized)) {
         emitChange({ ...localColour, hex: normalized.toLowerCase() })
       }
     },
-    [emitChange, localColour, onChange]
+    [emitChange, localColour]
   )
 
   const handlePickerChange = useCallback(
@@ -120,7 +107,9 @@ export function FxColourPicker({
   const hasExtended =
     extendedChannels?.white || extendedChannels?.amber || extendedChannels?.uv
 
-  const displayHex = isPalRef ? resolveColourWithPalette(value, palette) : resolveColourToHex(value)
+  const refSwatch = isRef ? swatchFor(value) : null
+  const displayHex = refSwatch ?? resolveColourToHex(value)
+  const refLabel = isRef ? labelFor(value) : null
 
   return (
     <div>
@@ -135,17 +124,13 @@ export function FxColourPicker({
             className="flex items-center gap-2 h-8 px-2 rounded-md border border-input bg-background text-xs hover:bg-accent/50 transition-colors"
           >
             <span
-              className="w-5 h-5 rounded border border-border shrink-0 relative"
+              className="w-5 h-5 rounded border border-border shrink-0"
               style={{ backgroundColor: displayHex }}
-            >
-              {isPalRef && (
-                <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold text-white drop-shadow-[0_0_2px_rgba(0,0,0,0.8)]">
-                  {value.trim().toUpperCase()}
-                </span>
-              )}
-            </span>
-            <span className="font-mono text-muted-foreground">
-              {isPalRef ? value.trim().toUpperCase() : displayHex}
+            />
+            {/* A reference shows the template's **name**, never a short code — same rule as
+                `LookNameBadge`. The name is the whole point of referencing one. */}
+            <span className={refLabel ? 'truncate max-w-[9rem]' : 'font-mono text-muted-foreground'}>
+              {refLabel ?? displayHex}
             </span>
           </button>
         </PopoverTrigger>
@@ -177,31 +162,12 @@ export function FxColourPicker({
               ))}
             </div>
 
-            {/* Palette references */}
-            {palette.length > 0 && (
-              <div className="flex gap-1 flex-wrap">
-                {palette.map((colour, i) => {
-                  const ref = `P${i + 1}`
-                  return (
-                    <button
-                      key={ref}
-                      type="button"
-                      title={ref}
-                      className="w-5 h-5 rounded border border-border hover:scale-110 transition-transform relative overflow-hidden"
-                      style={{ backgroundColor: resolveColourToHex(colour) }}
-                      onClick={() => {
-                        setHexInput(ref)
-                        onChange(ref)
-                      }}
-                    >
-                      <span className="absolute inset-0 flex items-center justify-center text-[7px] font-bold text-white drop-shadow-[0_0_2px_rgba(0,0,0,0.8)]">
-                        {ref}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-            )}
+            <FxColourTemplateRow
+              templates={templates}
+              currentHex={localColour.hex}
+              selectedUuid={parseTemplateRefUuid(value)}
+              onPick={onChange}
+            />
 
             {/* Extended channels (W/A/UV) */}
             {hasExtended && (
