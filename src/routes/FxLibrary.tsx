@@ -713,11 +713,19 @@ function NewFxDefinitionSheet({
 
   const editorType = effectModeToEditorType(effectMode)
 
+  // Keyed off `outputType`, not `category`: the two are independent selects, and it is the output
+  // type that decides which properties can actually take the effect's output. Deriving from the
+  // category let Category = Position + the default Output Type = Slider (or Category = Colour with
+  // any other output type) write a list the effect could never drive — the backend now rejects
+  // that with a 400 naming `compatibleProperties`, a field this form doesn't expose.
+  //
+  // `position` rather than `["pan", "tilt"]`: a POSITION effect emits both axes at once, and an
+  // axis by name resolves to a slider target that discards the pair — no light, no error. That
+  // was backend sweep item A11, which narrowed the seven built-in position effects the same way.
   const compatibleProperties = (() => {
-    switch (category) {
-      case "dimmer": return ["dimmer"]
-      case "colour": return ["rgbColour"]
-      case "position": return ["pan", "tilt"]
+    switch (outputType) {
+      case "COLOUR": return ["rgbColour"]
+      case "POSITION": return ["position"]
       default: return ["dimmer"]
     }
   })()
