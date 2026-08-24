@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { restApi } from './restApi'
 import { lightingApi } from '../api/lightingApi'
 import { store } from './index'
-import { useFxStateQuery } from './fx'
+import { useProjectCueStackListQuery } from './cueStacks'
 import type {
   Cue,
   CueInput,
@@ -187,52 +187,40 @@ export const {
   useLazyCurrentCueStateQuery,
 } = cuesApi
 
-/** Derive active cue IDs from the real-time FxState WebSocket stream. */
-export function useActiveCueIds(): Set<number> {
-  const { data: fxState } = useFxStateQuery()
+/**
+ * The cue ids currently on stage, read from the playhead (`CueStack.activeCueId`, seeded by the
+ * stack-list fetch and kept live by `cueRunStateChanged`) — never from the FX effect stream. A cue
+ * made of property assignments and effect-free Look layers spawns no `FxInstance` at all, so any
+ * surface answering "is it on stage?" from `activeEffects` reads a rows-only cue as never running.
+ * Static cues are the common case, and a pad that can't see one re-fires instead of stopping.
+ */
+export function useActiveCueIds(projectId: number | undefined): Set<number> {
+  const { data: stacks } = useProjectCueStackListQuery(projectId!, { skip: !projectId })
   return useMemo(() => {
     const ids = new Set<number>()
-    for (const effect of fxState?.activeEffects ?? []) {
-      if (effect.cueId != null) ids.add(effect.cueId)
+    for (const stack of stacks ?? []) {
+      if (stack.activeCueId != null) ids.add(stack.activeCueId)
     }
     return ids
-  }, [fxState])
-}
-
-/** Derive active cue stack IDs from the real-time FxState WebSocket stream. */
-export function useActiveCueStackIds(): Set<number> {
-  const { data: fxState } = useFxStateQuery()
-  return useMemo(() => {
-    const ids = new Set<number>()
-    for (const effect of fxState?.activeEffects ?? []) {
-      if (effect.cueStackId != null) ids.add(effect.cueStackId)
-    }
-    return ids
-  }, [fxState])
+  }, [stacks])
 }
 
 /**
- * Derive which cue is the "active" one per stack from the real-time FxState.
+ * The stack ids currently on stage — a stack is live exactly when it holds an active cue.
  *
- * During crossfades both the outgoing and incoming cue have effects running.
- * We pick the cue whose effects were added most recently (highest effect id)
- * as the authoritative active cue for display purposes.
+ * Not `projectProgramState.activeStackId`: that is the show transport's playhead, a field only
+ * the `/show/*` routes set. A stack activated directly (a slot pad, another client) is live in
+ * the engine without ever being the playhead, and reading the playhead here would leave its pad
+ * unlit — so the next tap re-activates, and `POST /cue-stacks/{id}/activate` rewinds a running
+ * stack to its first cue.
  */
-export function useStackActiveCueIds(): Map<number, number> {
-  const { data: fxState } = useFxStateQuery()
+export function useActiveCueStackIds(projectId: number | undefined): Set<number> {
+  const { data: stacks } = useProjectCueStackListQuery(projectId!, { skip: !projectId })
   return useMemo(() => {
-    const map = new Map<number, { cueId: number; maxEffectId: number }>()
-    for (const effect of fxState?.activeEffects ?? []) {
-      if (effect.cueStackId == null || effect.cueId == null) continue
-      const current = map.get(effect.cueStackId)
-      if (!current || effect.id > current.maxEffectId) {
-        map.set(effect.cueStackId, { cueId: effect.cueId, maxEffectId: effect.id })
-      }
+    const ids = new Set<number>()
+    for (const stack of stacks ?? []) {
+      if (stack.activeCueId != null) ids.add(stack.id)
     }
-    const result = new Map<number, number>()
-    for (const [stackId, { cueId }] of map) {
-      result.set(stackId, cueId)
-    }
-    return result
-  }, [fxState])
+    return ids
+  }, [stacks])
 }

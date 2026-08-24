@@ -230,8 +230,8 @@ export function CueSlotOverviewPanel({ isVisible }: CueSlotOverviewPanelProps) {
 
   const [page, setPage] = useState(getInitialPage)
 
-  const activeCueIds = useActiveCueIds()
-  const activeCueStackIds = useActiveCueStackIds()
+  const activeCueIds = useActiveCueIds(projectId)
+  const activeCueStackIds = useActiveCueStackIds(projectId)
 
   const [applyCue] = useApplyCueMutation()
   const [stopCue] = useStopCueMutation()
