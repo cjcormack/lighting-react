@@ -2,8 +2,9 @@ import { useCallback } from 'react'
 import { Loader2, OctagonX } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { useFxStateQuery, tapTempo } from '@/store/fx'
+import { useFxStateQuery } from '@/store/fx'
 import { useRemoveFxMutation } from '@/store/fixtureFx'
+import { tapSpeedMaster, useSpeedMasterLiveQuery } from '@/store/speedMasters'
 import { BeatIndicator } from './BeatIndicator'
 
 interface EffectsOverviewPanelProps {
@@ -16,10 +17,20 @@ interface EffectsOverviewPanelProps {
 export function EffectsOverviewPanel({ isVisible, isLocked, isDesktop }: EffectsOverviewPanelProps) {
   const { data: fxState, isLoading } = useFxStateQuery()
   const [removeFx] = useRemoveFxMutation()
+  // Tempo comes from the speed-master bank, not from the fx frame: `fxState` carried master
+  // 1's bpm only because it predates the bank, and its seeded default made this panel state
+  // a tempo nobody had set until the first frame — the same reason the ShowBar moved off it.
+  //
+  // Narrowed with selectFromResult, as `useSpeedMasterDisplay` and `useMaster1Uuid` are: the
+  // live-bank array is rebuilt on every master's tempo push, so selecting the whole thing
+  // would re-render this whole panel while an unrelated master's knob is being dragged.
+  const { master1 } = useSpeedMasterLiveQuery(undefined, {
+    selectFromResult: ({ data }) => ({ master1: data?.find((m) => m.index === 1) }),
+  })
 
   const handleTap = useCallback(() => {
-    tapTempo()
-  }, [])
+    tapSpeedMaster(master1?.uuid ?? null)
+  }, [master1?.uuid])
 
   const handleKillAll = useCallback(async () => {
     if (!fxState?.activeEffects.length) return
@@ -53,7 +64,7 @@ export function EffectsOverviewPanel({ isVisible, isLocked, isDesktop }: Effects
                 <BeatIndicator />
                 <span className="text-sm font-medium text-muted-foreground">BPM</span>
                 <span className="min-w-[5ch] text-right text-2xl font-bold tabular-nums">
-                  {fxState?.bpm.toFixed(1) ?? '—'}
+                  {master1?.bpm.toFixed(1) ?? '—'}
                 </span>
               </div>
 
@@ -91,7 +102,7 @@ export function EffectsOverviewPanel({ isVisible, isLocked, isDesktop }: Effects
             <div className="flex items-center gap-3">
               <BeatIndicator />
               <span className="text-lg font-bold tabular-nums min-w-[4ch] text-right">
-                {fxState?.bpm.toFixed(1) ?? '—'}
+                {master1?.bpm.toFixed(1) ?? '—'}
               </span>
               <Button variant="outline" size="sm" onClick={handleTap} className="px-2 h-7">
                 Tap

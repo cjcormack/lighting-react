@@ -1,9 +1,9 @@
 /**
  * REST types for speed masters — the named tempo buses effects subscribe to.
  *
- * Master 1 (`masterIndex === 1`) is the protected global master: every legacy tempo
- * surface (`setFxBpm`, `tapTempo`, the ShowBar BPM tile) means it, and every effect with
- * no explicit master resolves to it. The stored `bpm` here is the *starting* tempo — the
+ * Master 1 (`masterIndex === 1`) is the protected global master: a null uuid on a
+ * `speedMasters.*` write means it, and every effect with no explicit master resolves to it.
+ * The stored `bpm` here is the *starting* tempo — the
  * live value streams over the `speedMasters.*` WS family (see `speedMastersWsApi.ts`).
  */
 export interface SpeedMaster {

@@ -1,28 +1,24 @@
 // @vitest-environment jsdom
-import { cleanup, render } from '@testing-library/react'
+import { act, cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-// Both beat sources are mocked so this stays a component test and never reaches the real
-// WebSocket. The point of the suite is *which* source a given master resolves to.
-const subscribeToBeat = vi.fn((_fn: (beat: { bpm: number }) => void) => ({
-  unsubscribe: vi.fn(),
-}))
-const requestBeatSync = vi.fn()
+// The beat source is mocked so this stays a component test and never reaches the real
+// WebSocket. The point of the suite is *which master* a given prop shape resolves to.
 const subscribeToSpeedMasterBeat = vi.fn(
   (_masterUuid: string | null, _fn: (beat: { bpm: number }) => void) => ({
     unsubscribe: vi.fn(),
   }),
 )
+const requestSpeedMasterBeat = vi.fn()
+const MASTER_1_UUID = 'aaaa-1'
 
-// The factories are hoisted above the consts above, so they have to call through lazily
-// rather than referencing them directly.
-vi.mock('../store/fx', () => ({
-  subscribeToBeat: (fn: (beat: { bpm: number }) => void) => subscribeToBeat(fn),
-  requestBeatSync: () => requestBeatSync(),
-}))
+// The factory is hoisted above the consts above, so it has to call through lazily rather
+// than referencing them directly.
 vi.mock('../store/speedMasters', () => ({
   subscribeToSpeedMasterBeat: (masterUuid: string | null, fn: (beat: { bpm: number }) => void) =>
     subscribeToSpeedMasterBeat(masterUuid, fn),
+  requestSpeedMasterBeat: (masterUuid: string | null) => requestSpeedMasterBeat(masterUuid),
+  useMaster1Uuid: () => MASTER_1_UUID,
 }))
 
 import { BeatIndicator } from './BeatIndicator'
@@ -33,32 +29,23 @@ afterEach(() => {
 })
 
 describe('BeatIndicator', () => {
-  it('uses the legacy unkeyed stream when given no master', () => {
-    render(<BeatIndicator />)
+  // Master 1's beat frames carry its real uuid, so a dot standing in for master 1 has to
+  // resolve it — subscribing with the write-side `null` would never match a frame.
+  it.each([
+    ['given no master', undefined],
+    ['given master 1 with a null uuid', { uuid: null, index: 1 } as const],
+  ])("resolves master 1's real uuid when %s", (_label, master) => {
+    render(<BeatIndicator master={master} />)
 
-    expect(subscribeToBeat).toHaveBeenCalledTimes(1)
-    expect(subscribeToSpeedMasterBeat).not.toHaveBeenCalled()
-    // The legacy stream needs an explicit nudge; the keyed one requests on subscribe.
-    expect(requestBeatSync).toHaveBeenCalledTimes(1)
+    expect(subscribeToSpeedMasterBeat).toHaveBeenCalledTimes(1)
+    expect(subscribeToSpeedMasterBeat.mock.calls[0][0]).toBe(MASTER_1_UUID)
   })
 
-  it('keeps master 1 on the legacy stream', () => {
-    // Master 1 is the same clock either way, and `beatSync` is the compatibility surface —
-    // there is nothing to gain from moving it and a wire promise to lose.
-    render(<BeatIndicator master={{ uuid: null, index: 1 }} />)
-
-    expect(subscribeToBeat).toHaveBeenCalledTimes(1)
-    expect(subscribeToSpeedMasterBeat).not.toHaveBeenCalled()
-  })
-
-  it('uses the keyed stream for masters beyond the first', () => {
+  it('uses the master it was given for masters beyond the first', () => {
     render(<BeatIndicator master={{ uuid: 'aaaa-2', index: 2 }} />)
 
     expect(subscribeToSpeedMasterBeat).toHaveBeenCalledTimes(1)
     expect(subscribeToSpeedMasterBeat.mock.calls[0][0]).toBe('aaaa-2')
-    expect(subscribeToBeat).not.toHaveBeenCalled()
-    // No unkeyed request — that would ask master 1 for a beat this dot does not want.
-    expect(requestBeatSync).not.toHaveBeenCalled()
   })
 
   it('resubscribes when the master it follows changes', () => {
@@ -70,6 +57,35 @@ describe('BeatIndicator', () => {
     // The local interval is still ticking at the old master's tempo, so it has to re-bind
     // (and drop back to unsynced) rather than keep flashing at the wrong rate.
     expect(subscribeToSpeedMasterBeat.mock.calls.at(-1)?.[0]).toBe('aaaa-3')
+  })
+
+  it('does not resubscribe when it regains sync', () => {
+    const { container } = render(<BeatIndicator master={{ uuid: 'aaaa-2', index: 2 }} />)
+    const onBeat = subscribeToSpeedMasterBeat.mock.calls[0][1]
+
+    act(() => onBeat({ bpm: 120 }))
+
+    // Gaining sync re-renders, but the subscription is keyed on the master alone — re-binding
+    // would send a redundant requestBeat every time the dot recovers.
+    expect(subscribeToSpeedMasterBeat).toHaveBeenCalledTimes(1)
+    expect((container.firstElementChild as HTMLElement).className).toContain('bg-primary')
+  })
+
+  it('asks for a frame when the tab comes back, without resubscribing', () => {
+    render(<BeatIndicator master={{ uuid: 'aaaa-2', index: 2 }} />)
+    const onBeat = subscribeToSpeedMasterBeat.mock.calls[0][1]
+    act(() => onBeat({ bpm: 120 }))
+    requestSpeedMasterBeat.mockClear()
+
+    // The local interval drifted while backgrounded, so the dot drops to unsynced — and has
+    // to ask, or it waits out the throttle (up to 16 beats) showing an empty ring. jsdom
+    // reports `visible` by default, which is the returning-to-the-tab case.
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+
+    expect(requestSpeedMasterBeat).toHaveBeenCalledWith('aaaa-2')
+    expect(subscribeToSpeedMasterBeat).toHaveBeenCalledTimes(1)
   })
 
   it('renders an unsynced ring until the first frame arrives', () => {

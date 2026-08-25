@@ -150,7 +150,9 @@ describe('createSpeedMastersWsApi', () => {
 
     const onM1 = vi.fn()
     const onM2 = vi.fn()
-    api.subscribeBeat(null, onM1)
+    // Master 1 by its real uuid: that is what its frames carry once the bank has loaded.
+    // (The null key is only reachable pre-load — see the case below.)
+    api.subscribeBeat(MASTER_1.uuid, onM1)
     api.subscribeBeat(MASTER_2.uuid, onM2)
 
     frame({
@@ -162,15 +164,14 @@ describe('createSpeedMastersWsApi', () => {
       timestampMs: 1,
     })
 
-    // The whole point of keying: a master-2 beat must not pulse a master-1 indicator, which
-    // is exactly what the unkeyed `beatSync` stream would have done.
+    // The whole point of keying: a master-2 beat must not pulse a master-1 indicator.
     expect(onM2).toHaveBeenCalledTimes(1)
     expect(onM2.mock.calls[0][0]).toMatchObject({ index: 2, beatNumber: 16, bpm: 60 })
     expect(onM1).not.toHaveBeenCalled()
 
     frame({
       type: 'speedMasters.beat',
-      masterUuid: null,
+      masterUuid: MASTER_1.uuid,
       index: 1,
       beatNumber: 32,
       bpm: 120,
@@ -178,6 +179,27 @@ describe('createSpeedMastersWsApi', () => {
     })
     expect(onM1).toHaveBeenCalledTimes(1)
     expect(onM2).toHaveBeenCalledTimes(1)
+  })
+
+  it('routes the pre-load master 1 frame, which carries no uuid, to the null key', () => {
+    const { conn, frame } = fakeConnection()
+    const api = createSpeedMastersWsApi(conn)
+
+    // Before the bank loads, slot 0 is the synthetic master 1 and has no row to name it. An
+    // indicator that mounted that early subscribed with null, and must still be pulsed.
+    const onM1 = vi.fn()
+    api.subscribeBeat(null, onM1)
+
+    frame({
+      type: 'speedMasters.beat',
+      masterUuid: null,
+      index: 1,
+      beatNumber: 16,
+      bpm: 120,
+      timestampMs: 1,
+    })
+
+    expect(onM1).toHaveBeenCalledTimes(1)
   })
 
   it('requests an immediate beat when a subscriber attaches', () => {
@@ -193,6 +215,18 @@ describe('createSpeedMastersWsApi', () => {
       { type: 'speedMasters.requestBeat', masterUuid: MASTER_2.uuid },
       { type: 'speedMasters.requestBeat' },
     ])
+  })
+
+  it('requests a beat without resubscribing', () => {
+    const { conn, sent } = fakeConnection()
+    const api = createSpeedMastersWsApi(conn)
+
+    // For a subscriber whose local timer went stale (a backgrounded tab) but whose
+    // subscription is still good — re-subscribing to get the frame would be the long way
+    // round, and re-binds a subscription that was never the problem.
+    api.requestBeat(MASTER_2.uuid)
+
+    expect(sent).toEqual([{ type: 'speedMasters.requestBeat', masterUuid: MASTER_2.uuid }])
   })
 
   it('re-requests beats for every subscribed master on reconnect', () => {
@@ -239,7 +273,7 @@ describe('createSpeedMastersWsApi', () => {
     frame(stateFrame())
 
     frame({ type: 'channelState', changes: [] })
-    frame({ type: 'fxState', bpm: 999, isClockRunning: true, activeEffects: [] })
+    frame({ type: 'fxState', activeEffects: [] })
 
     expect(api.getState()).toEqual([MASTER_1, MASTER_2])
   })

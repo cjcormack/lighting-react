@@ -20,11 +20,8 @@ vi.mock('../store/speedMasters', () => ({
   // Each tile carries a BeatIndicator keyed to its own master.
   subscribeToSpeedMasterBeat: (masterUuid: string | null, fn: (beat: { bpm: number }) => void) =>
     subscribeToSpeedMasterBeat(masterUuid, fn),
-}))
-// ...which also reaches the legacy beat stream for master 1.
-vi.mock('../store/fx', () => ({
-  subscribeToBeat: () => ({ unsubscribe: () => {} }),
-  requestBeatSync: () => {},
+  useMaster1Uuid: () => liveMasters.find((m) => m.index === 1)?.uuid ?? null,
+  requestSpeedMasterBeat: () => {},
 }))
 
 import { SpeedMasters, SpeedMastersChip } from './SpeedMasters'
@@ -131,8 +128,9 @@ describe('SpeedMasters — the tile arms', () => {
   })
 
   it('shows an em dash rather than a fabricated tempo before the first frame', () => {
-    // The ShowBar used to read `fxState.bpm`, which defaults to a hardcoded 120, so for a frame or
-    // two at boot the desk stated a tempo nobody had set.
+    // The ShowBar used to read `fxState.bpm`, which defaulted to a hardcoded 120, so for a frame
+    // or two at boot the desk stated a tempo nobody had set. (That field is gone now — the FX
+    // panel's readout was the last consumer and moved here too.)
     liveMasters = []
     render(<SpeedMasters />)
     expect(screen.getAllByText('—').length).toBeGreaterThan(0)

@@ -121,6 +121,28 @@ export function useSpeedMasterDisplay(speedMasterUuid: string | null | undefined
   return master && master.index !== 1 ? master : null
 }
 
+/**
+ * Master 1's uuid, or null before the first live frame.
+ *
+ * Needed because the read streams and the write messages address master 1 differently: a null
+ * uuid *writes* to master 1, but `speedMasters.beat` tags master 1's frames with its real uuid
+ * once the bank has loaded (`SpeedMasterBank.emitBeat`), and null only for the synthetic
+ * pre-load master. So anything *subscribing* on master 1's behalf has to resolve the real one
+ * — subscribing with null would silently never match a frame. Null while unresolved is exactly
+ * right: that is the pre-load master 1, which really does emit null.
+ *
+ * `selectFromResult` like [useSpeedMasterDisplay], so a consumer re-renders only when master
+ * 1's identity moves rather than on every tap of every master.
+ */
+export function useMaster1Uuid(): string | null {
+  const { uuid } = useSpeedMasterLiveQuery(undefined, {
+    selectFromResult: ({ data }) => ({
+      uuid: data?.find((m) => m.index === 1)?.uuid ?? null,
+    }),
+  })
+  return uuid
+}
+
 /** Set one master's live BPM over WS (null uuid → master 1). */
 export function setSpeedMasterBpm(masterUuid: string | null, bpm: number) {
   lightingApi.speedMasters.setBpm(masterUuid, bpm)
@@ -140,6 +162,14 @@ export function subscribeToSpeedMasterBeat(
   fn: (beat: SpeedMasterBeat) => void,
 ) {
   return lightingApi.speedMasters.subscribeBeat(masterUuid, fn)
+}
+
+/**
+ * Ask for one immediate beat frame for a master already subscribed to. For recovering from a
+ * stale local timer without re-subscribing — see `BeatIndicator`'s visibility handler.
+ */
+export function requestSpeedMasterBeat(masterUuid: string | null) {
+  lightingApi.speedMasters.requestBeat(masterUuid)
 }
 
 export const {

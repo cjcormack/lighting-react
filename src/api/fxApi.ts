@@ -21,21 +21,17 @@ export interface FxEffectState {
   speedMasterIndex?: number
 }
 
+/**
+ * The active-effect list. Carries no tempo: it used to report master 1's bpm because it
+ * predates the speed-master bank — tempo now lives on the `speedMasters.*` family, per
+ * master (see `store/speedMasters.ts`).
+ */
 export interface FxState {
-  bpm: number
-  isClockRunning: boolean
   activeEffects: FxEffectState[]
 }
 
-export interface BeatSync {
-  beatNumber: number
-  bpm: number
-  timestampMs: number
-}
-
 type FxMessage =
-  | { type: 'fxState'; bpm: number; isClockRunning: boolean; activeEffects: FxEffectState[] }
-  | { type: 'beatSync'; beatNumber: number; bpm: number; timestampMs: number }
+  | { type: 'fxState'; activeEffects: FxEffectState[] }
   | { type: 'fxChanged'; changeType: string; effectId?: number }
 
 // === API Interface ===
@@ -43,29 +39,16 @@ type FxMessage =
 export interface FxApi {
   get(): FxState
   subscribe(fn: (state: FxState) => void): Subscription
-  subscribeToBeat(fn: (beat: BeatSync) => void): Subscription
-  requestBeatSync(): void
-  setBpm(bpm: number): void
-  tap(): void
 }
 
 export function createFxApi(conn: InternalApiConnection): FxApi {
   let nextSubscriptionId = 1
   const stateSubscriptions = new Map<number, (state: FxState) => void>()
-  const beatSubscriptions = new Map<number, (beat: BeatSync) => void>()
 
-  let currentState: FxState = {
-    bpm: 120,
-    isClockRunning: false,
-    activeEffects: [],
-  }
+  let currentState: FxState = { activeEffects: [] }
 
   const notifyState = (state: FxState) => {
     stateSubscriptions.forEach((fn) => fn(state))
-  }
-
-  const notifyBeat = (beat: BeatSync) => {
-    beatSubscriptions.forEach((fn) => fn(beat))
   }
 
   conn.subscribe((evType, ev) => {
@@ -74,31 +57,14 @@ export function createFxApi(conn: InternalApiConnection): FxApi {
       if (message == null) return
 
       if (message.type === 'fxState') {
-        currentState = {
-          bpm: message.bpm,
-          isClockRunning: message.isClockRunning,
-          activeEffects: message.activeEffects,
-        }
+        currentState = { activeEffects: message.activeEffects }
         notifyState(currentState)
-      } else if (message.type === 'beatSync') {
-        // Update BPM from beat sync (always reflects the latest tempo)
-        if (currentState.bpm !== message.bpm) {
-          currentState = { ...currentState, bpm: message.bpm }
-          notifyState(currentState)
-        }
-        notifyBeat({
-          beatNumber: message.beatNumber,
-          bpm: message.bpm,
-          timestampMs: message.timestampMs,
-        })
       } else if (message.type === 'fxChanged') {
         // Re-request full state to get updated effect list
         conn.send(JSON.stringify({ type: 'fxState' }))
       }
     } else if (evType === 'open') {
-      // Request initial FX state and beat sync on connection
       conn.send(JSON.stringify({ type: 'fxState' }))
-      conn.send(JSON.stringify({ type: 'requestBeatSync' }))
     }
   })
 
@@ -115,28 +81,6 @@ export function createFxApi(conn: InternalApiConnection): FxApi {
           stateSubscriptions.delete(thisId)
         },
       }
-    },
-
-    subscribeToBeat(fn: (beat: BeatSync) => void): Subscription {
-      const thisId = nextSubscriptionId++
-      beatSubscriptions.set(thisId, fn)
-      return {
-        unsubscribe: () => {
-          beatSubscriptions.delete(thisId)
-        },
-      }
-    },
-
-    requestBeatSync(): void {
-      conn.send(JSON.stringify({ type: 'requestBeatSync' }))
-    },
-
-    setBpm(bpm: number): void {
-      conn.send(JSON.stringify({ type: 'setFxBpm', bpm }))
-    },
-
-    tap(): void {
-      conn.send(JSON.stringify({ type: 'tapTempo' }))
     },
   }
 }

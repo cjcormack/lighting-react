@@ -2,7 +2,7 @@ import { restApi } from './restApi'
 import { lightingApi } from '../api/lightingApi'
 import type { FxState } from '../api/fxApi'
 
-export type { FxState, FxEffectState, BeatSync } from '../api/fxApi'
+export type { FxState, FxEffectState } from '../api/fxApi'
 
 export const fxApi = restApi.injectEndpoints({
   endpoints: (build) => ({
@@ -24,19 +24,6 @@ export const fxApi = restApi.injectEndpoints({
 
 export const { useFxStateQuery } = fxApi
 
-export function setBpm(bpm: number) {
-  lightingApi.fx.setBpm(bpm)
-}
-
-export function tapTempo() {
-  lightingApi.fx.tap()
-}
-
-export function subscribeToBeat(fn: (beat: import('../api/fxApi').BeatSync) => void) {
-  return lightingApi.fx.subscribeToBeat(fn)
-}
-
-export function requestBeatSync() {
-  lightingApi.fx.requestBeatSync()
-}
-
+// Tempo used to live here too (`setBpm`, `tapTempo`, `subscribeToBeat`, `requestBeatSync`,
+// over the unkeyed master-1 messages). It is all in `store/speedMasters.ts` now, keyed per
+// master; this module is the effect list only.

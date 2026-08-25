@@ -63,8 +63,8 @@ const PENDING_MASTER_1: TileMaster = {
  * was the width problem: two thresholds fired at 560px in opposite directions, so between 560 and
  * 900px the M1 tile, the strip's single tile and the transport together left the live-state block
  * nothing, and its cue numbers spilled. One tile that speaks for the whole bank frees that room and
- * removes the split brain, at the cost of nothing — master 1 is still what a null uuid means on the
- * wire, so TAP and setBpm are unchanged.
+ * removes the split brain, at the cost of nothing — master 1 is still what a null uuid means on a
+ * tempo write, so TAP and setBpm are unchanged.
  *
  * Self-contained like `ProgrammerIndicator`: reads its own state and takes no data props. Three
  * arms, chosen by the ShowBar's `@container` width *and* by how many masters there are:
@@ -76,9 +76,8 @@ const PENDING_MASTER_1: TileMaster = {
  *  - **<440px** — `SpeedMastersChip`, a single readout that opens every master in a popover.
  *
  * Every arm that can render is in the DOM at once. That is deliberate and cheap: `BeatIndicator`
- * for master 1 uses the legacy *unkeyed* `beatSync` stream, so duplicating it costs one shared
- * subscription, the keyed subscriptions total N−1 whichever arms are visible, and an unopened Radix
- * popover mounts only its trigger.
+ * subscribables are shared per master, so the total is N however many arms are mounted, and an
+ * unopened Radix popover mounts only its trigger.
  */
 export function SpeedMasters() {
   const { data: live } = useSpeedMasterLiveQuery()

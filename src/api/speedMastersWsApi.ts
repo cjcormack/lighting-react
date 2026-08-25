@@ -17,7 +17,12 @@ export interface SpeedMasterLiveState {
 
 /** One master crossing a beat boundary, as streamed by `speedMasters.beat`. */
 export interface SpeedMasterBeat {
-  /** Null for master 1, matching the write messages' convention. */
+  /**
+   * The master's uuid — master 1 included. Null ONLY for the synthetic pre-load master 1,
+   * the same rule as `SpeedMasterLiveState.uuid`; this is *not* the write messages'
+   * null-means-master-1 convention, so a subscriber standing in for master 1 has to resolve
+   * its real uuid (`useMaster1Uuid`) rather than pass null.
+   */
   masterUuid: string | null
   index: number
   beatNumber: number
@@ -37,17 +42,22 @@ export interface SpeedMastersWsApi {
   /** Latest known bank, slot order (master 1 first). Empty before the first state frame. */
   getState(): SpeedMasterLiveState[]
   /**
-   * Beat boundaries for **one** master (null uuid → master 1). Keyed so an indicator beside
-   * a master-2 effect pulses at master 2's tempo, which the unkeyed `beatSync` can never do
-   * — it is wired to master 1's clock object rather than addressed by uuid.
+   * Beat boundaries for **one** master, addressed by the uuid its frames carry (see
+   * [SpeedMasterBeat.masterUuid] — for master 1 that is its real uuid, not null). Keyed so an
+   * indicator beside a master-2 effect pulses at master 2's tempo.
    *
-   * Server frames are throttled (every 16 beats, as `beatSync` is), so subscribers are
-   * expected to free-run a local timer in between and use these to correct drift.
-   * Subscribing sends a `requestBeat` so a freshly-mounted indicator locks phase promptly
-   * instead of waiting out the throttle.
+   * Server frames are throttled (every 16 beats), so subscribers are expected to free-run a
+   * local timer in between and use these to correct drift. Subscribing sends a `requestBeat`
+   * so a freshly-mounted indicator locks phase promptly instead of waiting out the throttle.
    */
   subscribeBeat(masterUuid: string | null, fn: (beat: SpeedMasterBeat) => void): Subscription
-  /** Set one master's BPM (null uuid → master 1). Fire-and-forget, like `setFxBpm`. */
+  /**
+   * Ask for one immediate beat frame without re-subscribing. For a subscriber that knows its
+   * local timer has gone stale — a backgrounded tab, whose interval drifted while it was
+   * hidden — but whose subscription is still perfectly good.
+   */
+  requestBeat(masterUuid: string | null): void
+  /** Set one master's BPM (null uuid → master 1). Fire-and-forget. */
   setBpm(masterUuid: string | null, bpm: number): void
   /** Tap one master's tempo (null uuid → master 1). */
   tap(masterUuid: string | null): void
@@ -75,10 +85,11 @@ export function createSpeedMastersWsApi(conn: InternalApiConnection): SpeedMaste
   // indicator on every master's beat only to discard it is exactly the re-render pattern
   // `useSpeedMasterDisplay`'s selectFromResult exists to avoid.
   const beatByMaster = new Map<string, ReturnType<typeof createWsSubscribable<SpeedMasterBeat>>>()
+  /** Only reachable before the bank has loaded — after that master 1 keys by its real uuid. */
   const MASTER_1_KEY = ''
   const beatKey = (masterUuid: string | null) => masterUuid ?? MASTER_1_KEY
 
-  /** Ask for an immediate beat frame for each key — `''` is master 1's omitted uuid. */
+  /** Ask for an immediate beat frame for each key — `''` sends an omitted uuid (master 1). */
   const requestBeatsFor = (keys: Iterable<string>) => {
     for (const key of keys) {
       conn.send(
@@ -145,6 +156,9 @@ export function createSpeedMastersWsApi(conn: InternalApiConnection): SpeedMaste
       const subscription = entry.api.subscribe(fn)
       requestBeatsFor([key])
       return subscription
+    },
+    requestBeat(masterUuid) {
+      requestBeatsFor([beatKey(masterUuid)])
     },
     setBpm(masterUuid, bpm) {
       conn.send(
