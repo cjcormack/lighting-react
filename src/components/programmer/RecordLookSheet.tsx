@@ -411,11 +411,6 @@ function RecordLookResult({ result }: { result: RecordLookResponse }) {
   if (result.groupRowsEmitted > 0) {
     notes.push(`${result.groupRowsEmitted} group row${result.groupRowsEmitted === 1 ? '' : 's'}`)
   }
-  if (result.refsFlattened > 0) {
-    // Looks don't nest, so a referencing entry was resolved to its literal on the way in. Worth
-    // saying: the recorded row will not follow the look it was taken from.
-    notes.push(`${result.refsFlattened} reference(s) flattened`)
-  }
   if (result.programmerKeysRefreshed > 0) {
     notes.push(`${result.programmerKeysRefreshed} live programmer value(s) re-resolved`)
   }

@@ -138,11 +138,6 @@ export interface RecordLookResponse {
   groupRowsEmitted: number
   /** Programmer-band effects folded in, and so removed from the band. */
   effectsWritten?: number
-  /**
-   * Programmer entries that were themselves references — flattened, since Looks don't nest.
-   * Retires with the `ref:` grammar; until then it is real and worth reporting.
-   */
-  refsFlattened: number
   skipped: ProgrammerSkip[]
   /** Set when the Look was already live: what the re-resolve moved. */
   programmerKeysRefreshed: number
