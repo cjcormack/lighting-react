@@ -313,7 +313,7 @@ describe('createProgrammerApi', () => {
     const api = createProgrammerApi(conn)
     frame(stateFrame())
 
-    frame({ type: 'programmer.cleared', entryCount: 1, effectsCleared: 2 })
+    frame({ type: 'programmer.cleared', cleared: 1, effectsCleared: 2 })
 
     expect(api.entryCount()).toBe(0)
   })
@@ -463,7 +463,7 @@ describe('createProgrammerApi', () => {
     const api = createProgrammerApi(conn)
     frame({ ...stateFrame(), lastIncluded: { kind: 'CUE', cueId: 42 } })
 
-    frame({ type: 'programmer.cleared', entryCount: 1 })
+    frame({ type: 'programmer.cleared', cleared: 1 })
 
     expect(api.lastIncluded()).toBeNull()
   })

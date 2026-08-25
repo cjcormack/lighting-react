@@ -338,7 +338,7 @@ interface ProgrammerEntryClearedIncoming {
 
 interface ProgrammerClearedIncoming {
   type: 'programmer.cleared'
-  entryCount: number
+  cleared: number
   /** Programmer-band FX swept alongside the values. Omitted by the server when 0. */
   effectsCleared?: number
 }

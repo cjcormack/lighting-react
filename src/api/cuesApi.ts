@@ -88,15 +88,6 @@ export interface CueLayer {
  * strips it, and a regression test pins that.
  */
 export interface CueLayerDetail extends CueLayer {
-  /**
-   * The layer row's id, on read only.
-   *
-   * The only way to address one layer: the source id is not unique (a cue may layer the same Look
-   * twice) and array position is not identity when `sortOrder` is authoritative. Needed by
-   * `POST /{projectId}/cues/{cueId}/flatten`'s single-layer mode. Deliberately absent from
-   * `buildCueInput`'s rebuild, like `source`.
-   */
-  id?: number
   source: LayerSource | null
 }
 

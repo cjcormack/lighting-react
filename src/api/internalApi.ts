@@ -80,12 +80,6 @@ export function createInternalApiConnection(baseUrl: string, wsUrl: string): Int
 
   let ws = connect()
 
-  window.setInterval(() => {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({type: "ping"}))
-    }
-  }, 10_000)
-
   return {
     baseUrl: baseUrl,
     readyState(): number {
