@@ -14,8 +14,8 @@ export default defineConfig({
   server: {
     open: true,
     proxy: {
+      // Covers /api/rest, the WebSocket, and /api/script-editor.
       "/api": "http://localhost:8413/",
-      "/script-editor": "http://localhost:8413/",
     },
   },
 })

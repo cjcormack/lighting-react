@@ -194,7 +194,7 @@
  * Every surface that mounts the editor supplies its own Compile/Run wired to the app's script
  * engine (POST /{projectId}/scripts/run), which runs against the live show. The widget's button
  * is a second, less correct path to the same thing — and since the bundled kotlin-compiler-server
- * was retired there is nothing behind it, so /script-editor answers it with an explanation rather
+ * was retired there is nothing behind it, so /api/script-editor answers it with an explanation rather
  * than executing anything. */
 .kotlin-editor .run-button {
   display: none;

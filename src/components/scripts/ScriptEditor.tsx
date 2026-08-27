@@ -64,7 +64,7 @@ export interface ScriptEditorProps {
  *   reports or asks about. It strips them from the text before it talks to the server, so the
  *   backend never sees them.
  * - `//@lighting7-script-type=` belongs to the **backend**. It is the only way the script type can
- *   reach `/script-editor`: the widget owns the request shape, and its base URL is a module-level
+ *   reach `/api/script-editor`: the widget owns the request shape, and its base URL is a module-level
  *   global that every `playground()` call overwrites, so a per-type endpoint would have two
  *   editors of different types poisoning each other. It sits above `//sampleStart` so the fold
  *   hides it from the user, and first in the document so it wins over any line in the body that

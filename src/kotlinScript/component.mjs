@@ -73,7 +73,11 @@ class ReactKotlinPlayground extends Component {
             // Highlighting and completion are served by lighting7 itself (routes/scriptEditor.kt),
             // from the same embedded Kotlin compiler that runs the scripts. There used to be a
             // bundled kotlin-compiler-server here, on its own port, in its own JVM.
-            eventFunctions.server = "/script-editor";
+            //
+            // This must match where the backend mounts the subtree. A mismatch is silent: the
+            // widget fetches `/versions` once per page and, on any failure, drops every editor on
+            // the page to read-only with highlighting off, logging only a console warning.
+            eventFunctions.server = "/api/script-editor";
             eventFunctions.getInstance = (instance) => {
                 this.instance = instance;
                 window.playgroundInstance = instance;
