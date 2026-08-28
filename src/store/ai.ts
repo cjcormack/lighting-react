@@ -63,12 +63,14 @@ export const aiApi = restApi.injectEndpoints({
     }),
 
     aiConversations: build.query<AiConversationSummary[], void>({
-      query: () => 'ai/conversations',
+      // `current` rather than a threaded projectId: the panel follows whatever show is
+      // loaded, and `POST ai/chat` (a live-runtime surface) can only ever mean that project.
+      query: () => 'projects/current/ai/conversations',
       providesTags: ['AiConversation'],
     }),
 
     aiConversation: build.query<AiConversationDetail, number>({
-      query: (id) => `ai/conversations/${id}`,
+      query: (id) => `projects/current/ai/conversations/${id}`,
       providesTags: (_result, _error, id) => [
         { type: 'AiConversation', id },
       ],
@@ -76,7 +78,7 @@ export const aiApi = restApi.injectEndpoints({
 
     deleteAiConversation: build.mutation<void, number>({
       query: (id) => ({
-        url: `ai/conversations/${id}`,
+        url: `projects/current/ai/conversations/${id}`,
         method: 'DELETE',
       }),
       invalidatesTags: ['AiConversation'],

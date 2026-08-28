@@ -118,7 +118,7 @@ export function AiChatPanel({ isOpen, onClose }: AiChatPanelProps) {
   const handleSelectConversation = async (id: number) => {
     // Load conversation from the list - we fetch the full detail
     try {
-      const response = await fetch(`/api/rest/ai/conversations/${id}`)
+      const response = await fetch(`/api/rest/projects/current/ai/conversations/${id}`)
       if (response.ok) {
         const detail = await response.json()
         setConversationId(detail.id)
