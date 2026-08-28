@@ -49,14 +49,14 @@ function wrapper({ children }: { children: ReactNode }) {
 
 function routes(over: Record<string, unknown> = {}) {
   return {
-    'project/1/cue-stacks/7/preview': {
+    'projects/1/cue-stacks/7/preview': {
       cueId: 11,
       channels: [{ universe: 0, channel: 1, value: 255 }],
       skipped: [],
     },
-    'project/1/cue-stacks': [stack(11)],
-    'project/1/show': { projectId: 1, activeStackId: 7, canEdit: true },
-    'project/current': { id: 1, name: 'Show', isCurrent: true },
+    'projects/1/cue-stacks': [stack(11)],
+    'projects/1/show': { projectId: 1, activeStackId: 7, canEdit: true },
+    'projects/current': { id: 1, name: 'Show', isCurrent: true },
     ...over,
   }
 }
@@ -123,7 +123,7 @@ describe('useNextGoSource', () => {
   it('empties rather than blacks out when there is no next cue', async () => {
     vi.unstubAllGlobals()
     installRelativeUrlRequest()
-    installRecordingFetch(routes({ 'project/1/cue-stacks': [stack(null)] }))
+    installRecordingFetch(routes({ 'projects/1/cue-stacks': [stack(null)] }))
 
     const { result } = renderHook(() => useNextGoSource(true), { wrapper })
 
@@ -153,7 +153,7 @@ describe('useNextGoSource', () => {
     vi.unstubAllGlobals()
     installRelativeUrlRequest()
     installRecordingFetch(
-      routes({ 'project/1/cue-stacks/7/preview': failWith(400, { error: 'Nothing to preview' }) }),
+      routes({ 'projects/1/cue-stacks/7/preview': failWith(400, { error: 'Nothing to preview' }) }),
     )
 
     const { result } = renderHook(() => useNextGoSource(true), { wrapper })
@@ -183,7 +183,7 @@ describe('useNextGoStatus', () => {
     vi.unstubAllGlobals()
     installRelativeUrlRequest()
     installRecordingFetch(
-      routes({ 'project/1/show': { projectId: 1, activeStackId: null, canEdit: true } }),
+      routes({ 'projects/1/show': { projectId: 1, activeStackId: null, canEdit: true } }),
     )
 
     const { result } = renderHook(() => useNextGoStatus(true), { wrapper })
@@ -197,7 +197,7 @@ describe('useNextGoStatus', () => {
     vi.unstubAllGlobals()
     installRelativeUrlRequest()
     installRecordingFetch(
-      routes({ 'project/1/cue-stacks/7/preview': failWith(400, { error: 'Nothing to preview' }) }),
+      routes({ 'projects/1/cue-stacks/7/preview': failWith(400, { error: 'Nothing to preview' }) }),
     )
 
     const { result } = renderHook(() => useNextGoStatus(true), { wrapper })

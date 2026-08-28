@@ -12,19 +12,19 @@ export const fixturesApi = restApi.injectEndpoints({
     return {
       fixtureList: build.query<Array<Fixture>, void>({
         query: () => {
-          return 'fixture/list'
+          return 'fixtures'
         },
         providesTags: ['Fixture'],
       }),
       fixture: build.query<Fixture, number>({
         query: (id) => {
-          return `fixture/${id}`
+          return `fixtures/${id}`
         },
         providesTags: ['Fixture'],
       }),
       fixtureTypeList: build.query<Array<FixtureTypeInfo>, void>({
         query: () => {
-          return 'fixture/types'
+          return 'fixture-types'
         },
         providesTags: ['Fixture'],
       }),

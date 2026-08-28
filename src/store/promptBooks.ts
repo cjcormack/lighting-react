@@ -32,7 +32,7 @@ export const promptBooksApi = restApi.injectEndpoints({
     // The project's single prompt book. A 404 means "no book imported yet" — the
     // viewer treats that as its empty/import state.
     projectPromptBook: build.query<PromptBookDetails, number>({
-      query: (projectId) => `project/${projectId}/prompt-book`,
+      query: (projectId) => `projects/${projectId}/prompt-book`,
       providesTags: ['PromptBook'],
     }),
 
@@ -40,14 +40,14 @@ export const promptBooksApi = restApi.injectEndpoints({
     // Tagged PromptBook so it rides the same invalidation as anchor edits (both the
     // anchor mutations and the WS promptBookChanged echo refresh it).
     projectCueLocations: build.query<CueLocationDto[], number>({
-      query: (projectId) => `project/${projectId}/cue-locations`,
+      query: (projectId) => `projects/${projectId}/cue-locations`,
       providesTags: ['PromptBook'],
     }),
 
     // Create or replace the project's prompt book (idempotent PUT — the show has one).
     setPromptBook: build.mutation<PromptBookDetails, { projectId: number } & NewPromptBookRequest>({
       query: ({ projectId, ...body }) => ({
-        url: `project/${projectId}/prompt-book`,
+        url: `projects/${projectId}/prompt-book`,
         method: 'PUT',
         body,
       }),
@@ -72,7 +72,7 @@ export const promptBooksApi = restApi.injectEndpoints({
 
     uploadScriptDoc: build.mutation<ScriptUploadResponse, { projectId: number; bytes: ArrayBuffer }>({
       query: ({ projectId, bytes }) => ({
-        url: `project/${projectId}/prompt-book/scripts`,
+        url: `projects/${projectId}/prompt-book/scripts`,
         method: 'POST',
         body: bytes,
         headers: { 'Content-Type': 'application/octet-stream' },
@@ -84,7 +84,7 @@ export const promptBooksApi = restApi.injectEndpoints({
       { projectId: number; cueId: number } & UpsertAnchorRequest
     >({
       query: ({ projectId, cueId, ...body }) => ({
-        url: `project/${projectId}/prompt-book/anchors/${cueId}`,
+        url: `projects/${projectId}/prompt-book/anchors/${cueId}`,
         method: 'PUT',
         body,
       }),
@@ -113,7 +113,7 @@ export const promptBooksApi = restApi.injectEndpoints({
 
     deleteAnchor: build.mutation<void, { projectId: number; cueId: number }>({
       query: ({ projectId, cueId }) => ({
-        url: `project/${projectId}/prompt-book/anchors/${cueId}`,
+        url: `projects/${projectId}/prompt-book/anchors/${cueId}`,
         method: 'DELETE',
       }),
       async onQueryStarted({ projectId, cueId }, { dispatch, queryFulfilled }) {
@@ -136,7 +136,7 @@ export const promptBooksApi = restApi.injectEndpoints({
       { projectId: number } & AnnotationRequest
     >({
       query: ({ projectId, ...body }) => ({
-        url: `project/${projectId}/prompt-book/annotations`,
+        url: `projects/${projectId}/prompt-book/annotations`,
         method: 'POST',
         body,
       }),
@@ -148,7 +148,7 @@ export const promptBooksApi = restApi.injectEndpoints({
       { projectId: number; annotationId: number } & AnnotationRequest
     >({
       query: ({ projectId, annotationId, ...body }) => ({
-        url: `project/${projectId}/prompt-book/annotations/${annotationId}`,
+        url: `projects/${projectId}/prompt-book/annotations/${annotationId}`,
         method: 'PUT',
         body,
       }),
@@ -157,7 +157,7 @@ export const promptBooksApi = restApi.injectEndpoints({
 
     deleteAnnotation: build.mutation<void, { projectId: number; annotationId: number }>({
       query: ({ projectId, annotationId }) => ({
-        url: `project/${projectId}/prompt-book/annotations/${annotationId}`,
+        url: `projects/${projectId}/prompt-book/annotations/${annotationId}`,
         method: 'DELETE',
       }),
       async onQueryStarted({ projectId, annotationId }, { dispatch, queryFulfilled }) {

@@ -34,7 +34,7 @@ lightingApi.cueStacks.subscribe(function () {
 export const cueStacksApi = restApi.injectEndpoints({
   endpoints: (build) => ({
     projectCueStackList: build.query<CueStack[], number>({
-      query: (projectId) => `project/${projectId}/cue-stacks`,
+      query: (projectId) => `projects/${projectId}/cue-stacks`,
       providesTags: (_result, _error, projectId) => [
         { type: 'CueStackList', id: projectId },
         'CueStackList',
@@ -42,7 +42,7 @@ export const cueStacksApi = restApi.injectEndpoints({
     }),
 
     projectCueStack: build.query<CueStack, { projectId: number; stackId: number }>({
-      query: ({ projectId, stackId }) => `project/${projectId}/cue-stacks/${stackId}`,
+      query: ({ projectId, stackId }) => `projects/${projectId}/cue-stacks/${stackId}`,
       providesTags: (_result, _error, { projectId }) => [
         { type: 'CueStackList', id: projectId },
       ],
@@ -51,13 +51,13 @@ export const cueStacksApi = restApi.injectEndpoints({
     // The project's playhead — which stack is currently live. The ordered stack list itself
     // comes from projectCueStackList; this is just the transport state.
     projectProgramState: build.query<ProgramState, number>({
-      query: (projectId) => `project/${projectId}/show`,
+      query: (projectId) => `projects/${projectId}/show`,
       providesTags: (_result, _error, projectId) => [{ type: 'ProgramState', id: projectId }],
     }),
 
     createProjectCueStack: build.mutation<CueStack, { projectId: number } & CueStackInput>({
       query: ({ projectId, ...body }) => ({
-        url: `project/${projectId}/cue-stacks`,
+        url: `projects/${projectId}/cue-stacks`,
         method: 'POST',
         body,
       }),
@@ -72,7 +72,7 @@ export const cueStacksApi = restApi.injectEndpoints({
       { projectId: number; stackId: number } & CueStackInput
     >({
       query: ({ projectId, stackId, ...body }) => ({
-        url: `project/${projectId}/cue-stacks/${stackId}`,
+        url: `projects/${projectId}/cue-stacks/${stackId}`,
         method: 'PUT',
         body,
       }),
@@ -89,7 +89,7 @@ export const cueStacksApi = restApi.injectEndpoints({
       { projectId: number; stackId: number }
     >({
       query: ({ projectId, stackId }) => ({
-        url: `project/${projectId}/cue-stacks/${stackId}`,
+        url: `projects/${projectId}/cue-stacks/${stackId}`,
         method: 'DELETE',
       }),
       invalidatesTags: (_result, _error, { projectId }) => [
@@ -106,7 +106,7 @@ export const cueStacksApi = restApi.injectEndpoints({
       { projectId: number } & ReorderCueStacksRequest
     >({
       query: ({ projectId, ...body }) => ({
-        url: `project/${projectId}/cue-stacks/reorder`,
+        url: `projects/${projectId}/cue-stacks/reorder`,
         method: 'POST',
         body,
       }),
@@ -138,7 +138,7 @@ export const cueStacksApi = restApi.injectEndpoints({
       { projectId: number; stackId: number } & ReorderCuesRequest
     >({
       query: ({ projectId, stackId, ...body }) => ({
-        url: `project/${projectId}/cue-stacks/${stackId}/reorder`,
+        url: `projects/${projectId}/cue-stacks/${stackId}/reorder`,
         method: 'POST',
         body,
       }),
@@ -190,7 +190,7 @@ export const cueStacksApi = restApi.injectEndpoints({
       { projectId: number; stackId: number } & AddCueToStackRequest
     >({
       query: ({ projectId, stackId, ...body }) => ({
-        url: `project/${projectId}/cue-stacks/${stackId}/add-cue`,
+        url: `projects/${projectId}/cue-stacks/${stackId}/add-cue`,
         method: 'POST',
         body,
       }),
@@ -207,7 +207,7 @@ export const cueStacksApi = restApi.injectEndpoints({
       { projectId: number; stackId: number } & ActivateCueStackRequest
     >({
       query: ({ projectId, stackId, ...body }) => ({
-        url: `project/${projectId}/cue-stacks/${stackId}/activate`,
+        url: `projects/${projectId}/cue-stacks/${stackId}/activate`,
         method: 'POST',
         body,
       }),
@@ -244,7 +244,7 @@ export const cueStacksApi = restApi.injectEndpoints({
       { projectId: number; stackId: number }
     >({
       query: ({ projectId, stackId }) => ({
-        url: `project/${projectId}/cue-stacks/${stackId}/deactivate`,
+        url: `projects/${projectId}/cue-stacks/${stackId}/deactivate`,
         method: 'POST',
       }),
       // Optimistic update: clear activeCueId immediately
@@ -272,7 +272,7 @@ export const cueStacksApi = restApi.injectEndpoints({
       { projectId: number; stackId: number } & AdvanceCueStackRequest
     >({
       query: ({ projectId, stackId, ...body }) => ({
-        url: `project/${projectId}/cue-stacks/${stackId}/advance`,
+        url: `projects/${projectId}/cue-stacks/${stackId}/advance`,
         method: 'POST',
         body,
       }),
@@ -316,7 +316,7 @@ export const cueStacksApi = restApi.injectEndpoints({
       { projectId: number; stackId: number } & GoToCueRequest
     >({
       query: ({ projectId, stackId, ...body }) => ({
-        url: `project/${projectId}/cue-stacks/${stackId}/go-to`,
+        url: `projects/${projectId}/cue-stacks/${stackId}/go-to`,
         method: 'POST',
         body,
       }),
@@ -349,7 +349,7 @@ export const cueStacksApi = restApi.injectEndpoints({
       { projectId: number; stackId: number; cueId: number | null }
     >({
       query: ({ projectId, stackId, cueId }) => ({
-        url: `project/${projectId}/cue-stacks/${stackId}/standby`,
+        url: `projects/${projectId}/cue-stacks/${stackId}/standby`,
         method: 'POST',
         body: { cueId },
       }),
@@ -387,7 +387,7 @@ export const cueStacksApi = restApi.injectEndpoints({
       { projectId: number; stackId: number; cueId: number }
     >({
       query: ({ projectId, stackId, cueId }) => ({
-        url: `project/${projectId}/cue-stacks/${stackId}/preview`,
+        url: `projects/${projectId}/cue-stacks/${stackId}/preview`,
         method: 'POST',
         body: { cueId },
       }),
@@ -398,7 +398,7 @@ export const cueStacksApi = restApi.injectEndpoints({
       { projectId: number; stackId: number }
     >({
       query: ({ projectId, stackId }) => ({
-        url: `project/${projectId}/cue-stacks/${stackId}/sort-by-cue-number`,
+        url: `projects/${projectId}/cue-stacks/${stackId}/sort-by-cue-number`,
         method: 'POST',
       }),
       invalidatesTags: (_result, _error, { projectId }) => [
@@ -412,7 +412,7 @@ export const cueStacksApi = restApi.injectEndpoints({
     // ─── Program transport (project playhead over the ordered stacks) ─────────
 
     activateProgram: build.mutation<ProgramActivateResponse, { projectId: number }>({
-      query: ({ projectId }) => ({ url: `project/${projectId}/show/activate`, method: 'POST' }),
+      query: ({ projectId }) => ({ url: `projects/${projectId}/show/activate`, method: 'POST' }),
       // Patch the playhead as soon as the server confirms so `isShowActive` flips immediately.
       async onQueryStarted({ projectId }, { dispatch, queryFulfilled }) {
         try {
@@ -435,7 +435,7 @@ export const cueStacksApi = restApi.injectEndpoints({
     }),
 
     deactivateProgram: build.mutation<void, { projectId: number }>({
-      query: ({ projectId }) => ({ url: `project/${projectId}/show/deactivate`, method: 'POST' }),
+      query: ({ projectId }) => ({ url: `projects/${projectId}/show/deactivate`, method: 'POST' }),
       async onQueryStarted({ projectId }, { dispatch, queryFulfilled }) {
         try {
           await queryFulfilled
@@ -461,7 +461,7 @@ export const cueStacksApi = restApi.injectEndpoints({
       { projectId: number } & AdvanceProgramRequest
     >({
       query: ({ projectId, ...body }) => ({
-        url: `project/${projectId}/show/advance`,
+        url: `projects/${projectId}/show/advance`,
         method: 'POST',
         body,
       }),
@@ -490,7 +490,7 @@ export const cueStacksApi = restApi.injectEndpoints({
       { projectId: number } & GoToStackRequest
     >({
       query: ({ projectId, ...body }) => ({
-        url: `project/${projectId}/show/go-to`,
+        url: `projects/${projectId}/show/go-to`,
         method: 'POST',
         body,
       }),

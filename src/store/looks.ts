@@ -56,8 +56,8 @@ export const looksApi = restApi.injectEndpoints({
     lookList: build.query<LookSummary[], { projectId: number; family?: AttributeFamily }>({
       query: ({ projectId, family }) =>
         family
-          ? `project/${projectId}/looks?family=${family}`
-          : `project/${projectId}/looks`,
+          ? `projects/${projectId}/looks?family=${family}`
+          : `projects/${projectId}/looks`,
       providesTags: (_result, _error, { projectId }) => [
         { type: 'LookList', id: projectId },
         'LookList',
@@ -70,7 +70,7 @@ export const looksApi = restApi.injectEndpoints({
     }),
 
     look: build.query<LookDetails, { projectId: number; lookId: number }>({
-      query: ({ projectId, lookId }) => `project/${projectId}/looks/${lookId}`,
+      query: ({ projectId, lookId }) => `projects/${projectId}/looks/${lookId}`,
       providesTags: (_result, _error, { lookId }) => [{ type: 'Look', id: lookId }],
     }),
 
@@ -84,7 +84,7 @@ export const looksApi = restApi.injectEndpoints({
      */
     saveLook: build.mutation<LookDetails, { projectId: number; lookId: number } & LookInput>({
       query: ({ projectId, lookId, ...body }) => ({
-        url: `project/${projectId}/looks/${lookId}`,
+        url: `projects/${projectId}/looks/${lookId}`,
         method: 'PUT',
         body,
       }),
@@ -100,7 +100,7 @@ export const looksApi = restApi.injectEndpoints({
 
     deleteLook: build.mutation<void, { projectId: number; lookId: number; force?: boolean }>({
       query: ({ projectId, lookId, force }) => ({
-        url: `project/${projectId}/looks/${lookId}${force ? '?force=true' : ''}`,
+        url: `projects/${projectId}/looks/${lookId}${force ? '?force=true' : ''}`,
         method: 'DELETE',
       }),
       // Guarded on the *error*, not the result: a 204 carries no body. A LOOK_IN_USE 409 is an
@@ -126,14 +126,14 @@ export const looksApi = restApi.injectEndpoints({
       { projectId: number; lookId: number } & CopyLookRequest
     >({
       query: ({ projectId, lookId, ...body }) => ({
-        url: `project/${projectId}/looks/${lookId}/copy`,
+        url: `projects/${projectId}/looks/${lookId}/copy`,
         method: 'POST',
         body,
       }),
       // The copy lands in the *target* project's library, which may not be the one on screen — so
       // the list tag is scoped to that project. `Fixture`/`GroupList` are **not** conditional on
       // the target, though, and comparing it against the *source* project would be the wrong test:
-      // those two lists belong to the **active** project (`fixture/list` and `groups` take no
+      // those two lists belong to the **active** project (`fixtures` and `groups` take no
       // project), which this mutation cannot see. Copying from another project's library *into* the
       // active one — the main "Copy to Project" flow — is exactly the case a source==target check
       // skips, and it is the case that most needs the refresh: the new Look would exist and be
@@ -156,7 +156,7 @@ export const looksApi = restApi.injectEndpoints({
       { projectId: number; lookId: number; effectIds: number[] }
     >({
       query: ({ projectId, lookId, effectIds }) => ({
-        url: `project/${projectId}/looks/${lookId}/absorb-effects`,
+        url: `projects/${projectId}/looks/${lookId}/absorb-effects`,
         method: 'POST',
         body: { effectIds },
       }),
@@ -178,7 +178,7 @@ export const looksApi = restApi.injectEndpoints({
       { projectId: number; lookId: number } & ToggleLookRequest
     >({
       query: ({ projectId, lookId, ...body }) => ({
-        url: `project/${projectId}/looks/${lookId}/toggle`,
+        url: `projects/${projectId}/looks/${lookId}/toggle`,
         method: 'POST',
         body,
       }),

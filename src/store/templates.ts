@@ -45,8 +45,8 @@ export const templatesApi = restApi.injectEndpoints({
     templateList: build.query<TemplateSummary[], { projectId: number; family?: AttributeFamily }>({
       query: ({ projectId, family }) =>
         family
-          ? `project/${projectId}/templates?family=${family}`
-          : `project/${projectId}/templates`,
+          ? `projects/${projectId}/templates?family=${family}`
+          : `projects/${projectId}/templates`,
       providesTags: (_result, _error, { projectId }) => [
         { type: 'TemplateList', id: projectId },
         'TemplateList',
@@ -54,13 +54,13 @@ export const templatesApi = restApi.injectEndpoints({
     }),
 
     template: build.query<TemplateSummary, { projectId: number; templateId: number }>({
-      query: ({ projectId, templateId }) => `project/${projectId}/templates/${templateId}`,
+      query: ({ projectId, templateId }) => `projects/${projectId}/templates/${templateId}`,
       providesTags: (_result, _error, { templateId }) => [{ type: 'Template', id: templateId }],
     }),
 
     createTemplate: build.mutation<TemplateSummary, { projectId: number } & TemplateInput>({
       query: ({ projectId, ...body }) => ({
-        url: `project/${projectId}/templates`,
+        url: `projects/${projectId}/templates`,
         method: 'POST',
         body,
       }),
@@ -81,7 +81,7 @@ export const templatesApi = restApi.injectEndpoints({
       { projectId: number; templateId: number } & TemplateInput
     >({
       query: ({ projectId, templateId, ...body }) => ({
-        url: `project/${projectId}/templates/${templateId}`,
+        url: `projects/${projectId}/templates/${templateId}`,
         method: 'PUT',
         body,
       }),
@@ -96,7 +96,7 @@ export const templatesApi = restApi.injectEndpoints({
       { projectId: number; templateId: number; force?: boolean }
     >({
       query: ({ projectId, templateId, force }) => ({
-        url: `project/${projectId}/templates/${templateId}${force ? '?force=true' : ''}`,
+        url: `projects/${projectId}/templates/${templateId}${force ? '?force=true' : ''}`,
         method: 'DELETE',
       }),
       // Guarded on the *error*, not the result: a 204 carries no body. A TEMPLATE_IN_USE 409 is an
@@ -120,7 +120,7 @@ export const templatesApi = restApi.injectEndpoints({
       { projectId: number } & TemplateResolveRequest
     >({
       query: ({ projectId, ...body }) => ({
-        url: `project/${projectId}/templates/resolve`,
+        url: `projects/${projectId}/templates/resolve`,
         method: 'POST',
         body,
       }),
@@ -140,7 +140,7 @@ export const templatesApi = restApi.injectEndpoints({
       { projectId: number; templateId: number; targets: TemplateTarget[]; fadeMs?: number }
     >({
       query: ({ projectId, templateId, ...body }) => ({
-        url: `project/${projectId}/templates/${templateId}/apply`,
+        url: `projects/${projectId}/templates/${templateId}/apply`,
         method: 'POST',
         body,
       }),
@@ -170,7 +170,7 @@ export const templatesApi = restApi.injectEndpoints({
       }
     >({
       query: ({ projectId, ...body }) => ({
-        url: `project/${projectId}/templates/from-programmer`,
+        url: `projects/${projectId}/templates/from-programmer`,
         method: 'POST',
         body,
       }),
@@ -189,7 +189,7 @@ export const templatesApi = restApi.injectEndpoints({
       { projectId: number; templateId: number; targets: TemplateTarget[]; propertyMask?: string }
     >({
       query: ({ projectId, templateId, ...body }) => ({
-        url: `project/${projectId}/templates/${templateId}/toggle`,
+        url: `projects/${projectId}/templates/${templateId}/toggle`,
         method: 'POST',
         body,
       }),

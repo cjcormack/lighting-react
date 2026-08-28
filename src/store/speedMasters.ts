@@ -18,7 +18,7 @@ lightingApi.speedMasters.subscribeList(function () {
 export const speedMastersApi = restApi.injectEndpoints({
   endpoints: (build) => ({
     speedMasterList: build.query<SpeedMaster[], { projectId: number }>({
-      query: ({ projectId }) => `project/${projectId}/speed-masters`,
+      query: ({ projectId }) => `projects/${projectId}/speed-masters`,
       providesTags: (_result, _error, { projectId }) => [
         { type: 'SpeedMasterList', id: projectId },
         'SpeedMasterList',
@@ -30,7 +30,7 @@ export const speedMastersApi = restApi.injectEndpoints({
       { projectId: number } & CreateSpeedMasterRequest
     >({
       query: ({ projectId, ...body }) => ({
-        url: `project/${projectId}/speed-masters`,
+        url: `projects/${projectId}/speed-masters`,
         method: 'POST',
         body,
       }),
@@ -43,7 +43,7 @@ export const speedMastersApi = restApi.injectEndpoints({
       { projectId: number; masterId: number } & UpdateSpeedMasterRequest
     >({
       query: ({ projectId, masterId, ...body }) => ({
-        url: `project/${projectId}/speed-masters/${masterId}`,
+        url: `projects/${projectId}/speed-masters/${masterId}`,
         method: 'PUT',
         body,
       }),
@@ -56,7 +56,7 @@ export const speedMastersApi = restApi.injectEndpoints({
       { projectId: number; masterId: number; force?: boolean }
     >({
       query: ({ projectId, masterId, force }) => ({
-        url: `project/${projectId}/speed-masters/${masterId}${force ? '?force=true' : ''}`,
+        url: `projects/${projectId}/speed-masters/${masterId}${force ? '?force=true' : ''}`,
         method: 'DELETE',
       }),
       // The 409s (protected master 1, master in use) are ordinary parts of the flow —

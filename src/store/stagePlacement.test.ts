@@ -118,8 +118,8 @@ describe('commitPlacements', () => {
    * returns it.
    *
    * `patches/placements` is listed FIRST and always has an entry, because the mock
-   * matches routes by URL substring in insertion order and `project/1/patches` is
-   * a prefix of `project/1/patches/placements`. Without an explicit entry the bulk
+   * matches routes by URL substring in insertion order and `projects/1/patches` is
+   * a prefix of `projects/1/patches/placements`. Without an explicit entry the bulk
    * PUT would be answered with the patch *array*, which has no `.failed` and would
    * look like a transport error. `overrides` can replace it to simulate a failure.
    */
@@ -127,7 +127,7 @@ describe('commitPlacements', () => {
     fetchMock = installRecordingFetch({
       'patches/placements': { updated: [], failed: [], warnings: [] },
       ...overrides,
-      'project/1/patches': patches,
+      'projects/1/patches': patches,
     })
     subscription = store.dispatch(patchesApi.endpoints.patchList.initiate(PROJECT))
     await vi.waitFor(() => expect(cached()).toHaveLength(patches.length))
@@ -313,7 +313,7 @@ describe('commitPlacements', () => {
     const listGets = () =>
       fetchMock.mock.calls
         .map((c) => c[0] as Request)
-        .filter((r) => r.method === 'GET' && r.url.endsWith('project/1/patches')).length
+        .filter((r) => r.method === 'GET' && r.url.endsWith('projects/1/patches')).length
     const before = listGets()
 
     // The backend broadcasts patchListChanged after each PUT. Unsuspended, four

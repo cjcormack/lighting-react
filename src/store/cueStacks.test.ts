@@ -26,9 +26,9 @@ describe('cueStacks program transport', () => {
     installRelativeUrlRequest()
     // Keys are matched by substring, most-specific first.
     fetchMock = installRecordingFetch({
-      'project/1/show/activate': { projectId: 1, activeStackId: 5, activatedStackName: 'Act 1' },
-      'project/1/show': { projectId: 1, activeStackId: null, canEdit: true },
-      'project/1/cue-stacks/reorder': {},
+      'projects/1/show/activate': { projectId: 1, activeStackId: 5, activatedStackName: 'Act 1' },
+      'projects/1/show': { projectId: 1, activeStackId: null, canEdit: true },
+      'projects/1/cue-stacks/reorder': {},
     })
   })
 
@@ -48,7 +48,7 @@ describe('cueStacks program transport', () => {
   it('GET projectProgramState hits /show', async () => {
     await store.dispatch(cueStacksApi.endpoints.projectProgramState.initiate(1))
     await vi.waitFor(() => {
-      const req = lastRequestTo('project/1/show')
+      const req = lastRequestTo('projects/1/show')
       expect(req).toBeDefined()
       expect(req!.method).toBe('GET')
     })
@@ -58,7 +58,7 @@ describe('cueStacks program transport', () => {
     await store.dispatch(cueStacksApi.endpoints.projectProgramState.initiate(1))
     await store.dispatch(cueStacksApi.endpoints.activateProgram.initiate({ projectId: 1 }))
 
-    const req = lastRequestTo('project/1/show/activate')
+    const req = lastRequestTo('projects/1/show/activate')
     expect(req).toBeDefined()
     expect(req!.method).toBe('POST')
 
@@ -105,8 +105,8 @@ describe('reorderCueStackCues optimistic patch', () => {
   beforeEach(() => {
     installRelativeUrlRequest()
     installRecordingFetch({
-      'project/1/cue-stacks/7/reorder': {},
-      'project/1/cue-stacks': [
+      'projects/1/cue-stacks/7/reorder': {},
+      'projects/1/cue-stacks': [
         {
           id: 7,
           name: 'Act 1',
@@ -212,8 +212,8 @@ describe('cueRunStateChanged', () => {
   beforeEach(() => {
     installRelativeUrlRequest()
     installRecordingFetch({
-      'project/1/cue-stacks/7/standby': { stackId: 7, activeCueId: 10, standbyCueId: 12, nextCueId: 12 },
-      'project/1/cue-stacks': [stackFixture],
+      'projects/1/cue-stacks/7/standby': { stackId: 7, activeCueId: 10, standbyCueId: 12, nextCueId: 12 },
+      'projects/1/cue-stacks': [stackFixture],
     })
   })
 

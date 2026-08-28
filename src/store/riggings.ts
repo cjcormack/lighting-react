@@ -17,13 +17,13 @@ lightingApi.riggings.subscribe(() => {
 export const riggingsApi = restApi.injectEndpoints({
   endpoints: (build) => ({
     riggingList: build.query<RiggingDto[], number>({
-      query: (projectId) => `project/${projectId}/riggings`,
+      query: (projectId) => `projects/${projectId}/riggings`,
       providesTags: ['Rigging'],
     }),
 
     createRigging: build.mutation<RiggingDto, { projectId: number } & CreateRiggingRequest>({
       query: ({ projectId, ...body }) => ({
-        url: `project/${projectId}/riggings`,
+        url: `projects/${projectId}/riggings`,
         method: 'POST',
         body,
       }),
@@ -32,7 +32,7 @@ export const riggingsApi = restApi.injectEndpoints({
 
     updateRigging: build.mutation<RiggingDto, { projectId: number; riggingId: number } & UpdateRiggingRequest>({
       query: ({ projectId, riggingId, ...body }) => ({
-        url: `project/${projectId}/riggings/${riggingId}`,
+        url: `projects/${projectId}/riggings/${riggingId}`,
         method: 'PUT',
         body,
       }),
@@ -41,7 +41,7 @@ export const riggingsApi = restApi.injectEndpoints({
 
     deleteRigging: build.mutation<void, { projectId: number; riggingId: number }>({
       query: ({ projectId, riggingId }) => ({
-        url: `project/${projectId}/riggings/${riggingId}`,
+        url: `projects/${projectId}/riggings/${riggingId}`,
         method: 'DELETE',
       }),
       invalidatesTags: ['Rigging', 'Patch'],

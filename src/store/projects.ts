@@ -46,13 +46,13 @@ export const projectsApi = restApi.injectEndpoints({
     return {
       // List all projects
       projectList: build.query<ProjectSummary[], void>({
-        query: () => 'project/list',
+        query: () => 'projects',
         providesTags: ['ProjectList'],
       }),
 
       // Get current project details
       currentProject: build.query<ProjectDetail, void>({
-        query: () => 'project/current',
+        query: () => 'projects/current',
         providesTags: ['Project'],
         async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
           try {
@@ -69,14 +69,14 @@ export const projectsApi = restApi.injectEndpoints({
 
       // Get specific project details
       project: build.query<ProjectDetail, number>({
-        query: (id) => `project/${id}`,
+        query: (id) => `projects/${id}`,
         providesTags: (_result, _error, id) => [{ type: 'Project', id }],
       }),
 
       // Create new project
       createProject: build.mutation<ProjectDetail, CreateProjectRequest>({
         query: (body) => ({
-          url: 'project',
+          url: 'projects',
           method: 'POST',
           body,
         }),
@@ -86,7 +86,7 @@ export const projectsApi = restApi.injectEndpoints({
       // Update project
       updateProject: build.mutation<ProjectDetail, { id: number } & UpdateProjectRequest>({
         query: ({ id, ...body }) => ({
-          url: `project/${id}`,
+          url: `projects/${id}`,
           method: 'PUT',
           body,
         }),
@@ -100,7 +100,7 @@ export const projectsApi = restApi.injectEndpoints({
       // Delete project
       deleteProject: build.mutation<void, number>({
         query: (id) => ({
-          url: `project/${id}`,
+          url: `projects/${id}`,
           method: 'DELETE',
         }),
         invalidatesTags: ['ProjectList'],
@@ -109,7 +109,7 @@ export const projectsApi = restApi.injectEndpoints({
       // Switch to project
       setCurrentProject: build.mutation<ProjectDetail, number>({
         query: (id) => ({
-          url: `project/${id}/set-current`,
+          url: `projects/${id}/set-current`,
           method: 'POST',
         }),
         // Cache invalidation handled by WebSocket subscription above
@@ -117,7 +117,7 @@ export const projectsApi = restApi.injectEndpoints({
 
       // Get scripts for any project
       projectScripts: build.query<ProjectScriptDetail[], number>({
-        query: (projectId) => `project/${projectId}/scripts`,
+        query: (projectId) => `projects/${projectId}/scripts`,
         providesTags: ['Script'],
         async onQueryStarted(projectId, { dispatch, queryFulfilled }) {
           try {
@@ -140,14 +140,14 @@ export const projectsApi = restApi.injectEndpoints({
 
       // Get full script from any project
       projectScript: build.query<ProjectScriptDetail, { projectId: number; scriptId: number }>({
-        query: ({ projectId, scriptId }) => `project/${projectId}/scripts/${scriptId}`,
+        query: ({ projectId, scriptId }) => `projects/${projectId}/scripts/${scriptId}`,
         providesTags: ['Script'],
       }),
 
       // Clone a project
       cloneProject: build.mutation<CloneProjectResponse, { id: number } & CloneProjectRequest>({
         query: ({ id, ...body }) => ({
-          url: `project/${id}/clone`,
+          url: `projects/${id}/clone`,
           method: 'POST',
           body,
         }),
@@ -157,7 +157,7 @@ export const projectsApi = restApi.injectEndpoints({
       // Export a project to a server-side folder
       exportProject: build.mutation<ExportProjectResponse, { id: number } & ExportProjectRequest>({
         query: ({ id, ...body }) => ({
-          url: `project/${id}/export`,
+          url: `projects/${id}/export`,
           method: 'POST',
           body,
         }),
@@ -166,7 +166,7 @@ export const projectsApi = restApi.injectEndpoints({
       // Import a project from a server-side folder
       importProject: build.mutation<ImportProjectResponse, ImportProjectRequest>({
         query: (body) => ({
-          url: 'project/import',
+          url: 'projects/import',
           method: 'POST',
           body,
         }),
@@ -176,7 +176,7 @@ export const projectsApi = restApi.injectEndpoints({
       // Copy a script to another project
       copyScript: build.mutation<CopyScriptResponse, { projectId: number; scriptId: number } & CopyScriptRequest>({
         query: ({ projectId, scriptId, ...body }) => ({
-          url: `project/${projectId}/scripts/${scriptId}/copy`,
+          url: `projects/${projectId}/scripts/${scriptId}/copy`,
           method: 'POST',
           body,
         }),
@@ -189,7 +189,7 @@ export const projectsApi = restApi.injectEndpoints({
       // Compile script
       compileProjectScript: build.mutation<CompileResult, { projectId: number } & CompileRequest>({
         query: ({ projectId, ...request }) => ({
-          url: `project/${projectId}/scripts/compile`,
+          url: `projects/${projectId}/scripts/compile`,
           method: 'POST',
           body: request,
         }),
@@ -198,7 +198,7 @@ export const projectsApi = restApi.injectEndpoints({
       // Run script
       runProjectScript: build.mutation<RunResult, { projectId: number } & RunRequest>({
         query: ({ projectId, ...request }) => ({
-          url: `project/${projectId}/scripts/run`,
+          url: `projects/${projectId}/scripts/run`,
           method: 'POST',
           body: request,
         }),
@@ -208,7 +208,7 @@ export const projectsApi = restApi.injectEndpoints({
       // Save script
       saveProjectScript: build.mutation<Script, { projectId: number; scriptId: number } & Partial<ScriptInput>>({
         query: ({ projectId, scriptId, ...request }) => ({
-          url: `project/${projectId}/scripts/${scriptId}`,
+          url: `projects/${projectId}/scripts/${scriptId}`,
           method: 'PUT',
           body: request,
         }),
@@ -218,7 +218,7 @@ export const projectsApi = restApi.injectEndpoints({
       // Delete script
       deleteProjectScript: build.mutation<void, { projectId: number; scriptId: number }>({
         query: ({ projectId, scriptId }) => ({
-          url: `project/${projectId}/scripts/${scriptId}`,
+          url: `projects/${projectId}/scripts/${scriptId}`,
           method: 'DELETE',
         }),
         invalidatesTags: ['Script', 'FxLibrary'],
@@ -227,7 +227,7 @@ export const projectsApi = restApi.injectEndpoints({
       // Create script
       createProjectScript: build.mutation<Script, { projectId: number } & ScriptInput>({
         query: ({ projectId, ...script }) => ({
-          url: `project/${projectId}/scripts`,
+          url: `projects/${projectId}/scripts`,
           method: 'POST',
           body: script,
         }),

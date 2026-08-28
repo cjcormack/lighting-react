@@ -14,13 +14,13 @@ lightingApi.stageRegions.subscribe(() => {
 export const stageRegionsApi = restApi.injectEndpoints({
   endpoints: (build) => ({
     stageRegionList: build.query<StageRegionDto[], number>({
-      query: (projectId) => `project/${projectId}/stageRegions`,
+      query: (projectId) => `projects/${projectId}/stage-regions`,
       providesTags: ['StageRegion'],
     }),
 
     createStageRegion: build.mutation<StageRegionDto, { projectId: number } & CreateStageRegionRequest>({
       query: ({ projectId, ...body }) => ({
-        url: `project/${projectId}/stageRegions`,
+        url: `projects/${projectId}/stage-regions`,
         method: 'POST',
         body,
       }),
@@ -29,7 +29,7 @@ export const stageRegionsApi = restApi.injectEndpoints({
 
     updateStageRegion: build.mutation<StageRegionDto, { projectId: number; regionId: number } & UpdateStageRegionRequest>({
       query: ({ projectId, regionId, ...body }) => ({
-        url: `project/${projectId}/stageRegions/${regionId}`,
+        url: `projects/${projectId}/stage-regions/${regionId}`,
         method: 'PUT',
         body,
       }),
@@ -38,7 +38,7 @@ export const stageRegionsApi = restApi.injectEndpoints({
 
     deleteStageRegion: build.mutation<void, { projectId: number; regionId: number }>({
       query: ({ projectId, regionId }) => ({
-        url: `project/${projectId}/stageRegions/${regionId}`,
+        url: `projects/${projectId}/stage-regions/${regionId}`,
         method: 'DELETE',
       }),
       invalidatesTags: ['StageRegion'],

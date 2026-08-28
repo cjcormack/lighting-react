@@ -86,14 +86,14 @@ export const patchesApi = restApi.injectEndpoints({
   endpoints: (build) => ({
     // List patches for a project
     patchList: build.query<FixturePatch[], number>({
-      query: (projectId) => `project/${projectId}/patches`,
+      query: (projectId) => `projects/${projectId}/patches`,
       providesTags: ['Patch'],
     }),
 
     // Create a single patch
     createPatch: build.mutation<FixturePatch, { projectId: number } & CreatePatchRequest>({
       query: ({ projectId, ...body }) => ({
-        url: `project/${projectId}/patches`,
+        url: `projects/${projectId}/patches`,
         method: 'POST',
         body,
       }),
@@ -103,7 +103,7 @@ export const patchesApi = restApi.injectEndpoints({
     // Update a patch
     updatePatch: build.mutation<FixturePatch, { projectId: number; patchId: number } & UpdatePatchRequest>({
       query: ({ projectId, patchId, ...body }) => ({
-        url: `project/${projectId}/patches/${patchId}`,
+        url: `projects/${projectId}/patches/${patchId}`,
         method: 'PUT',
         body,
       }),
@@ -125,7 +125,7 @@ export const patchesApi = restApi.injectEndpoints({
       { projectId: number; updates: BulkPlacementEntry[]; atomic?: boolean }
     >({
       query: ({ projectId, updates, atomic = true }) => ({
-        url: `project/${projectId}/patches/placements`,
+        url: `projects/${projectId}/patches/placements`,
         method: 'PUT',
         body: { updates, atomic },
       }),
@@ -134,7 +134,7 @@ export const patchesApi = restApi.injectEndpoints({
     // Delete a patch
     deletePatch: build.mutation<void, { projectId: number; patchId: number }>({
       query: ({ projectId, patchId }) => ({
-        url: `project/${projectId}/patches/${patchId}`,
+        url: `projects/${projectId}/patches/${patchId}`,
         method: 'DELETE',
       }),
       invalidatesTags: ['Patch', 'Fixture'],
@@ -142,14 +142,14 @@ export const patchesApi = restApi.injectEndpoints({
 
     // List universe configs for a project
     universeConfigList: build.query<UniverseConfig[], number>({
-      query: (projectId) => `project/${projectId}/universe-configs`,
+      query: (projectId) => `projects/${projectId}/universe-configs`,
       providesTags: ['UniverseConfig'],
     }),
 
     // Update a universe config (address, controller type, Art-Net transmit interval)
     updateUniverseConfig: build.mutation<UniverseConfig, { projectId: number; configId: number; address?: string; controllerType?: string; refreshIntervalMs?: number; resetRefreshInterval?: boolean }>({
       query: ({ projectId, configId, ...body }) => ({
-        url: `project/${projectId}/universe-configs/${configId}`,
+        url: `projects/${projectId}/universe-configs/${configId}`,
         method: 'PUT',
         body,
       }),
@@ -158,20 +158,20 @@ export const patchesApi = restApi.injectEndpoints({
 
     // List patch groups for a project
     patchGroupList: build.query<PatchGroup[], number>({
-      query: (projectId) => `project/${projectId}/patch-groups`,
+      query: (projectId) => `projects/${projectId}/patch-groups`,
       providesTags: ['Patch'],
     }),
 
     // Get patch group detail (with ordered members)
     patchGroupDetail: build.query<PatchGroupDetail, { projectId: number; groupId: number }>({
-      query: ({ projectId, groupId }) => `project/${projectId}/patch-groups/${groupId}`,
+      query: ({ projectId, groupId }) => `projects/${projectId}/patch-groups/${groupId}`,
       providesTags: ['Patch'],
     }),
 
     // Update patch group (rename, reorder)
     updatePatchGroup: build.mutation<PatchGroupDetail, { projectId: number; groupId: number } & UpdatePatchGroupRequest>({
       query: ({ projectId, groupId, ...body }) => ({
-        url: `project/${projectId}/patch-groups/${groupId}`,
+        url: `projects/${projectId}/patch-groups/${groupId}`,
         method: 'PUT',
         body,
       }),
@@ -181,7 +181,7 @@ export const patchesApi = restApi.injectEndpoints({
     // Delete patch group
     deletePatchGroup: build.mutation<void, { projectId: number; groupId: number }>({
       query: ({ projectId, groupId }) => ({
-        url: `project/${projectId}/patch-groups/${groupId}`,
+        url: `projects/${projectId}/patch-groups/${groupId}`,
         method: 'DELETE',
       }),
       invalidatesTags: ['Patch', 'Fixture'],

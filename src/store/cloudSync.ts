@@ -223,7 +223,7 @@ export interface ImportFromRemoteResult {
 export const cloudSyncApi = restApi.injectEndpoints({
   endpoints: (build) => ({
     cloudSyncConfig: build.query<SyncConfig, number>({
-      query: (projectId) => `project/${projectId}/sync/config`,
+      query: (projectId) => `projects/${projectId}/sync/config`,
       providesTags: ['CloudSyncConfig'],
     }),
     /**
@@ -245,7 +245,7 @@ export const cloudSyncApi = restApi.injectEndpoints({
       { projectId: number; body: UpdateSyncConfigRequest }
     >({
       query: ({ projectId, body }) => ({
-        url: `project/${projectId}/sync/config`,
+        url: `projects/${projectId}/sync/config`,
         method: 'PUT',
         body,
       }),
@@ -259,7 +259,7 @@ export const cloudSyncApi = restApi.injectEndpoints({
      */
     cloudSyncDisconnect: build.mutation<SyncConfig, number>({
       query: (projectId) => ({
-        url: `project/${projectId}/sync/disconnect`,
+        url: `projects/${projectId}/sync/disconnect`,
         method: 'POST',
       }),
       invalidatesTags: ['CloudSyncConfig', 'CloudSyncStatus', 'ProjectList'],
@@ -274,14 +274,14 @@ export const cloudSyncApi = restApi.injectEndpoints({
       { projectId: number; body: ReconnectRequest }
     >({
       query: ({ projectId, body }) => ({
-        url: `project/${projectId}/sync/reconnect`,
+        url: `projects/${projectId}/sync/reconnect`,
         method: 'POST',
         body,
       }),
       invalidatesTags: ['CloudSyncConfig', 'CloudSyncStatus', 'ProjectList'],
     }),
     cloudSyncStatus: build.query<SyncStatus, number>({
-      query: (projectId) => `project/${projectId}/sync/status`,
+      query: (projectId) => `projects/${projectId}/sync/status`,
       providesTags: ['CloudSyncStatus'],
     }),
     cloudSyncLog: build.query<
@@ -293,7 +293,7 @@ export const cloudSyncApi = restApi.injectEndpoints({
         if (limit != null) params.limit = limit
         if (before) params.before = before
         return {
-          url: `project/${projectId}/sync/log`,
+          url: `projects/${projectId}/sync/log`,
           params: Object.keys(params).length ? params : undefined,
         }
       },
@@ -308,7 +308,7 @@ export const cloudSyncApi = restApi.injectEndpoints({
         if (limit != null) params.limit = limit
         if (beforeId != null) params.beforeId = beforeId
         return {
-          url: `project/${projectId}/sync/activity`,
+          url: `projects/${projectId}/sync/activity`,
           params: Object.keys(params).length ? params : undefined,
         }
       },
@@ -319,7 +319,7 @@ export const cloudSyncApi = restApi.injectEndpoints({
       { projectId: number; message?: string | null }
     >({
       query: ({ projectId, message }) => ({
-        url: `project/${projectId}/sync/snapshot`,
+        url: `projects/${projectId}/sync/snapshot`,
         method: 'POST',
         body: { message: message ?? null },
       }),
@@ -328,7 +328,7 @@ export const cloudSyncApi = restApi.injectEndpoints({
     }),
     setCloudSyncCredentials: build.mutation<void, { projectId: number; pat: string }>({
       query: ({ projectId, pat }) => ({
-        url: `project/${projectId}/sync/credentials`,
+        url: `projects/${projectId}/sync/credentials`,
         method: 'PUT',
         body: { pat },
       }),
@@ -337,14 +337,14 @@ export const cloudSyncApi = restApi.injectEndpoints({
     }),
     clearCloudSyncCredentials: build.mutation<void, number>({
       query: (projectId) => ({
-        url: `project/${projectId}/sync/credentials`,
+        url: `projects/${projectId}/sync/credentials`,
         method: 'DELETE',
       }),
       invalidatesTags: ['CloudSyncConfig'],
     }),
     cloudSyncRun: build.mutation<SyncRunResult, number>({
       query: (projectId) => ({
-        url: `project/${projectId}/sync/run`,
+        url: `projects/${projectId}/sync/run`,
         method: 'POST',
       }),
       // A run can advance HEAD (push), rewrite the working tree (fast-forward), and
@@ -356,7 +356,7 @@ export const cloudSyncApi = restApi.injectEndpoints({
     // ─── Phase 5 conflict-session endpoints ─────────────────────────
 
     cloudSyncConflicts: build.query<ConflictsResponse, number>({
-      query: (projectId) => `project/${projectId}/sync/conflicts`,
+      query: (projectId) => `projects/${projectId}/sync/conflicts`,
       providesTags: ['CloudSyncConflicts'],
     }),
     cloudSyncResolve: build.mutation<
@@ -364,7 +364,7 @@ export const cloudSyncApi = restApi.injectEndpoints({
       { projectId: number; resolutions: ResolveEntry[] }
     >({
       query: ({ projectId, resolutions }) => ({
-        url: `project/${projectId}/sync/resolve`,
+        url: `projects/${projectId}/sync/resolve`,
         method: 'POST',
         body: { resolutions },
       }),
@@ -373,7 +373,7 @@ export const cloudSyncApi = restApi.injectEndpoints({
     }),
     cloudSyncApply: build.mutation<SyncRunResult, number>({
       query: (projectId) => ({
-        url: `project/${projectId}/sync/apply`,
+        url: `projects/${projectId}/sync/apply`,
         method: 'POST',
       }),
       // Apply closes the session and may advance HEAD + push.
@@ -381,7 +381,7 @@ export const cloudSyncApi = restApi.injectEndpoints({
     }),
     cloudSyncAbort: build.mutation<AbortResult, number>({
       query: (projectId) => ({
-        url: `project/${projectId}/sync/abort`,
+        url: `projects/${projectId}/sync/abort`,
         method: 'POST',
       }),
       invalidatesTags: ['CloudSyncConflicts', 'CloudSyncStatus'],

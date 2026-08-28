@@ -25,19 +25,19 @@ describe('looks endpoints', () => {
     installRelativeUrlRequest()
     // Keys are matched by substring, most-specific first.
     fetchMock = installRecordingFetch({
-      'project/1/looks/4/toggle': { action: 'applied', effectCount: 2 },
-      'project/1/looks/4/copy': {
+      'projects/1/looks/4/toggle': { action: 'applied', effectCount: 2 },
+      'projects/1/looks/4/copy': {
         lookId: 9,
         lookName: 'Warm (Copy)',
         targetProjectId: 2,
         targetProjectName: 'Other',
         message: 'ok',
       },
-      'project/1/looks/preview': { writeCount: 3 },
-      'project/1/looks/4': { id: 4, uuid: 'u4', name: 'Warm', rows: [], effects: [] },
-      'project/1/looks?family=COLOUR': [],
-      'project/1/looks': [],
-      'fixture/list': [],
+      'projects/1/looks/preview': { writeCount: 3 },
+      'projects/1/looks/4': { id: 4, uuid: 'u4', name: 'Warm', rows: [], effects: [] },
+      'projects/1/looks?family=COLOUR': [],
+      'projects/1/looks': [],
+      'fixtures': [],
       groups: [],
     })
   })
@@ -63,7 +63,7 @@ describe('looks endpoints', () => {
 
   it('GET lookList hits the unfiltered collection', async () => {
     await store.dispatch(looksApi.endpoints.lookList.initiate({ projectId: 1 }))
-    const req = lastRequestTo('project/1/looks')
+    const req = lastRequestTo('projects/1/looks')
     expect(req).toBeDefined()
     expect(req!.method).toBe('GET')
     expect(new URL(req!.url).search).toBe('')
@@ -86,7 +86,7 @@ describe('looks endpoints', () => {
     await store.dispatch(
       looksApi.endpoints.saveLook.initiate({ projectId: 1, lookId: 4, name: 'Warmer' }),
     )
-    const req = lastRequestTo('project/1/looks/4')
+    const req = lastRequestTo('projects/1/looks/4')
     expect(req).toBeDefined()
     expect(req!.method).toBe('PUT')
     expect(JSON.parse(await req!.clone().text())).toEqual({ name: 'Warmer' })
@@ -94,7 +94,7 @@ describe('looks endpoints', () => {
 
   it('DELETE deleteLook appends force only when asked', async () => {
     await store.dispatch(looksApi.endpoints.deleteLook.initiate({ projectId: 1, lookId: 4 }))
-    expect(new URL(lastRequestTo('project/1/looks/4')!.url).search).toBe('')
+    expect(new URL(lastRequestTo('projects/1/looks/4')!.url).search).toBe('')
 
     await store.dispatch(
       looksApi.endpoints.deleteLook.initiate({ projectId: 1, lookId: 4, force: true }),
@@ -148,17 +148,17 @@ describe('looks endpoints', () => {
   it('deleteLook refetches them too, so the dead id leaves every compatibility list', async () => {
     const sub = store.dispatch(fixturesApi.endpoints.fixtureList.initiate())
     await sub
-    const before = countRequestsTo('fixture/list')
+    const before = countRequestsTo('fixtures')
 
     await store.dispatch(looksApi.endpoints.deleteLook.initiate({ projectId: 1, lookId: 4 }))
-    await vi.waitFor(() => expect(countRequestsTo('fixture/list')).toBeGreaterThan(before))
+    await vi.waitFor(() => expect(countRequestsTo('fixtures')).toBeGreaterThan(before))
 
     sub.unsubscribe()
   })
 
   /**
    * And a copy does too, **whichever project it lands in**. Gating this on
-   * `targetProjectId === projectId` looks like the right economy and is not: `fixture/list` and
+   * `targetProjectId === projectId` looks like the right economy and is not: `fixtures` and
    * `groups` are the *active* project's, which the mutation cannot see, so the case that check skips
    * — copying out of another project's library into the active one, which is what "Copy to Project"
    * is for — is exactly the case that needs the refresh. This copy is cross-project (source 1,
@@ -167,12 +167,12 @@ describe('looks endpoints', () => {
   it('copyLook refetches the compatibility lists even when the target is another project', async () => {
     const sub = store.dispatch(fixturesApi.endpoints.fixtureList.initiate())
     await sub
-    const before = countRequestsTo('fixture/list')
+    const before = countRequestsTo('fixtures')
 
     await store.dispatch(
       looksApi.endpoints.copyLook.initiate({ projectId: 1, lookId: 4, targetProjectId: 2 }),
     )
-    await vi.waitFor(() => expect(countRequestsTo('fixture/list')).toBeGreaterThan(before))
+    await vi.waitFor(() => expect(countRequestsTo('fixtures')).toBeGreaterThan(before))
 
     sub.unsubscribe()
   })
@@ -183,7 +183,7 @@ describe('looks invalidation guards', () => {
   beforeEach(() => {
     installRelativeUrlRequest()
     installRecordingFetch({
-      'project/1/looks/4': failWith(409, {
+      'projects/1/looks/4': failWith(409, {
         error: 'This look is still used by 2 cue layer(s)',
         code: 'LOOK_IN_USE',
         layerCount: 2,
@@ -191,7 +191,7 @@ describe('looks invalidation guards', () => {
         cueIds: [1, 2],
         cueNames: ['Act 1', 'Act 2'],
       }),
-      'project/1/looks': failWith(409, { error: 'A look named Warm already exists' }),
+      'projects/1/looks': failWith(409, { error: 'A look named Warm already exists' }),
     })
   })
 

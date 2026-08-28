@@ -38,7 +38,7 @@ export interface CueAnchorDto {
 /**
  * A cue's reading position in the project's prompt book — the anchor region reduced
  * server-side to its earliest rect (topmost line on the lowest page). Served by
- * GET project/{id}/cue-locations for the Run view; the frontend turns `{page, y}`
+ * GET projects/{id}/cue-locations for the Run view; the frontend turns `{page, y}`
  * into a "top of p. 9"-style label. Project-scoped and book-agnostic.
  */
 export interface CueLocationDto {
@@ -103,5 +103,5 @@ export interface ScriptUploadResponse {
  * do the rest. Kept out of RTK Query on purpose: it's binary, not state.
  */
 export function scriptDocUrl(projectId: number, scriptHash: string): string {
-  return `/api/rest/project/${projectId}/prompt-book/scripts/${scriptHash}`
+  return `/api/rest/projects/${projectId}/prompt-book/scripts/${scriptHash}`
 }

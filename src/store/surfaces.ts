@@ -54,13 +54,13 @@ export const surfacesApi = restApi.injectEndpoints({
   endpoints: (build) => ({
     // All known device-family profiles (not attached instances — see useSurfaceDevices hook).
     controlSurfaceTypeList: build.query<ControlSurfaceType[], void>({
-      query: () => 'controlSurfaceTypes',
+      query: () => 'control-surface-types',
       providesTags: ['ControlSurfaceType'],
     }),
 
     // All bindings for a project.
     surfaceBindings: build.query<ControlSurfaceBinding[], number>({
-      query: (projectId) => `project/${projectId}/surfaceBindings`,
+      query: (projectId) => `projects/${projectId}/surface-bindings`,
       providesTags: (_result, _error, projectId) => [
         { type: 'SurfaceBinding', id: projectId },
       ],
@@ -71,7 +71,7 @@ export const surfacesApi = restApi.injectEndpoints({
       { projectId: number } & CreateSurfaceBindingRequest
     >({
       query: ({ projectId, ...body }) => ({
-        url: `project/${projectId}/surfaceBindings`,
+        url: `projects/${projectId}/surface-bindings`,
         method: 'POST',
         body,
       }),
@@ -85,7 +85,7 @@ export const surfacesApi = restApi.injectEndpoints({
       { projectId: number; bindingId: number } & UpdateSurfaceBindingRequest
     >({
       query: ({ projectId, bindingId, ...body }) => ({
-        url: `project/${projectId}/surfaceBindings/${bindingId}`,
+        url: `projects/${projectId}/surface-bindings/${bindingId}`,
         method: 'PATCH',
         body,
       }),
@@ -99,7 +99,7 @@ export const surfacesApi = restApi.injectEndpoints({
       { projectId: number; bindingId: number }
     >({
       query: ({ projectId, bindingId }) => ({
-        url: `project/${projectId}/surfaceBindings/${bindingId}`,
+        url: `projects/${projectId}/surface-bindings/${bindingId}`,
         method: 'DELETE',
       }),
       invalidatesTags: (_result, _error, { projectId }) => [

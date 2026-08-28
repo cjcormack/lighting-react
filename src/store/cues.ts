@@ -23,7 +23,7 @@ lightingApi.cues.subscribe(function () {
 export const cuesApi = restApi.injectEndpoints({
   endpoints: (build) => ({
     projectCueList: build.query<Cue[], number>({
-      query: (projectId) => `project/${projectId}/cues`,
+      query: (projectId) => `projects/${projectId}/cues`,
       providesTags: (_result, _error, projectId) => [
         { type: 'CueList', id: projectId },
         'CueList',
@@ -31,7 +31,7 @@ export const cuesApi = restApi.injectEndpoints({
     }),
 
     projectCue: build.query<Cue, { projectId: number; cueId: number }>({
-      query: ({ projectId, cueId }) => `project/${projectId}/cues/${cueId}`,
+      query: ({ projectId, cueId }) => `projects/${projectId}/cues/${cueId}`,
       providesTags: (_result, _error, { cueId }) => [{ type: 'Cue', id: cueId }],
     }),
 
@@ -51,13 +51,13 @@ export const cuesApi = restApi.injectEndpoints({
      * carried by a chase reads as whatever its values say. They are listed separately.
      */
     projectCueCooked: build.query<CueCookedResponse, { projectId: number; cueId: number }>({
-      query: ({ projectId, cueId }) => `project/${projectId}/cues/${cueId}/cooked`,
+      query: ({ projectId, cueId }) => `projects/${projectId}/cues/${cueId}/cooked`,
       providesTags: (_result, _error, { cueId }) => [{ type: 'Cue', id: cueId }],
     }),
 
     createProjectCue: build.mutation<Cue, { projectId: number } & CueInput>({
       query: ({ projectId, ...body }) => ({
-        url: `project/${projectId}/cues`,
+        url: `projects/${projectId}/cues`,
         method: 'POST',
         body,
       }),
@@ -72,7 +72,7 @@ export const cuesApi = restApi.injectEndpoints({
       { projectId: number; cueId: number } & CueInput
     >({
       query: ({ projectId, cueId, ...body }) => ({
-        url: `project/${projectId}/cues/${cueId}`,
+        url: `projects/${projectId}/cues/${cueId}`,
         method: 'PUT',
         body,
       }),
@@ -88,7 +88,7 @@ export const cuesApi = restApi.injectEndpoints({
       { projectId: number; cueId: number } & CuePatchInput
     >({
       query: ({ projectId, cueId, ...body }) => ({
-        url: `project/${projectId}/cues/${cueId}`,
+        url: `projects/${projectId}/cues/${cueId}`,
         method: 'PATCH',
         body,
       }),
@@ -109,7 +109,7 @@ export const cuesApi = restApi.injectEndpoints({
 
     deleteProjectCue: build.mutation<void, { projectId: number; cueId: number }>({
       query: ({ projectId, cueId }) => ({
-        url: `project/${projectId}/cues/${cueId}`,
+        url: `projects/${projectId}/cues/${cueId}`,
         method: 'DELETE',
       }),
       invalidatesTags: (_result, _error, { projectId }) => [
@@ -123,7 +123,7 @@ export const cuesApi = restApi.injectEndpoints({
       { projectId: number; cueId: number } & CopyCueRequest
     >({
       query: ({ projectId, cueId, ...body }) => ({
-        url: `project/${projectId}/cues/${cueId}/copy`,
+        url: `projects/${projectId}/cues/${cueId}/copy`,
         method: 'POST',
         body,
       }),
@@ -137,7 +137,7 @@ export const cuesApi = restApi.injectEndpoints({
       { projectId: number; cueId: number; replaceAll?: boolean }
     >({
       query: ({ projectId, cueId, replaceAll }) => ({
-        url: `project/${projectId}/cues/${cueId}/apply${replaceAll ? '?replaceAll=true' : ''}`,
+        url: `projects/${projectId}/cues/${cueId}/apply${replaceAll ? '?replaceAll=true' : ''}`,
         method: 'POST',
       }),
       invalidatesTags: () => [
@@ -151,7 +151,7 @@ export const cuesApi = restApi.injectEndpoints({
       { projectId: number; cueId: number }
     >({
       query: ({ projectId, cueId }) => ({
-        url: `project/${projectId}/cues/${cueId}/stop`,
+        url: `projects/${projectId}/cues/${cueId}/stop`,
         method: 'POST',
       }),
       invalidatesTags: () => [
@@ -161,7 +161,7 @@ export const cuesApi = restApi.injectEndpoints({
     }),
 
     currentCueState: build.query<CueCurrentState, number>({
-      query: (projectId) => `project/${projectId}/cues/current-state`,
+      query: (projectId) => `projects/${projectId}/cues/current-state`,
     }),
 
     // `snapshotCueFromLive` lived here until Session 3. Capturing the stage is now

@@ -38,7 +38,7 @@ lightingApi.cueSlots.subscribe(function () {
 export const cueSlotsApi = restApi.injectEndpoints({
   endpoints: (build) => ({
     projectCueSlots: build.query<CueSlot[], number>({
-      query: (projectId) => `project/${projectId}/cue-slots`,
+      query: (projectId) => `projects/${projectId}/cue-slots`,
       providesTags: (_result, _error, projectId) => [
         { type: 'CueSlotList', id: projectId },
         'CueSlotList',
@@ -50,7 +50,7 @@ export const cueSlotsApi = restApi.injectEndpoints({
       { projectId: number } & AssignCueSlotRequest
     >({
       query: ({ projectId, ...body }) => ({
-        url: `project/${projectId}/cue-slots`,
+        url: `projects/${projectId}/cue-slots`,
         method: 'POST',
         body,
       }),
@@ -88,7 +88,7 @@ export const cueSlotsApi = restApi.injectEndpoints({
       { projectId: number } & SwapCueSlotsRequest
     >({
       query: ({ projectId, ...body }) => ({
-        url: `project/${projectId}/cue-slots/swap`,
+        url: `projects/${projectId}/cue-slots/swap`,
         method: 'POST',
         body,
       }),
@@ -128,7 +128,7 @@ export const cueSlotsApi = restApi.injectEndpoints({
 
     clearCueSlot: build.mutation<void, { projectId: number; slotId: number }>({
       query: ({ projectId, slotId }) => ({
-        url: `project/${projectId}/cue-slots/${slotId}`,
+        url: `projects/${projectId}/cue-slots/${slotId}`,
         method: 'DELETE',
       }),
       async onQueryStarted({ projectId, slotId }, { dispatch, queryFulfilled }) {

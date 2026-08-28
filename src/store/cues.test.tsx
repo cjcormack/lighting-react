@@ -46,7 +46,7 @@ describe('active cue / stack liveness', () => {
   beforeEach(() => {
     installRelativeUrlRequest()
     installRecordingFetch({
-      'project/1/cue-stacks': [stack(2, 7), stack(3, null)],
+      'projects/1/cue-stacks': [stack(2, 7), stack(3, null)],
     })
   })
 

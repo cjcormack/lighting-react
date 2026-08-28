@@ -144,7 +144,7 @@ export interface CommitPlacementsResult {
 /**
  * Applies many placement changes as one user-visible operation.
  *
- * Backed by `PUT /project/{id}/patches/placements`: **one request, one
+ * Backed by `PUT /projects/{id}/patches/placements`: **one request, one
  * transaction, one broadcast**, so an align across forty fixtures costs the same
  * round trip as moving one. Around that:
  *
