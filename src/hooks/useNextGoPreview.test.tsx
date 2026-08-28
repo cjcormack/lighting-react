@@ -111,8 +111,8 @@ describe('useNextGoSource', () => {
     cueRunStateWs.callback!(frame())
 
     await waitFor(() => expect(previewRequests()).toHaveLength(2))
-    const body = await previewRequests()[1].clone().json()
-    expect(body).toEqual({ cueId: 12 })
+    const url = new URL(previewRequests()[1].url)
+    expect(url.searchParams.get('cueId')).toBe('12')
   })
 
   it('requests nothing while disabled', async () => {

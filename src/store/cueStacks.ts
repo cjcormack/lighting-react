@@ -372,11 +372,12 @@ export const cueStacksApi = restApi.injectEndpoints({
      * What a cue *would* look like on stage, composed by the backend's own resolver. Layer 4
      * only — see `PreviewCueResponse`.
      *
-     * A **query** despite being a POST: it reads, and the two things a query gives are both
-     * load-bearing for the Next GO stage source. Several stage surfaces can be mounted at once
-     * (the Stage route's canvas and the globally-mounted overview panel), and RTK Query collapses
-     * their identical args into one request; and the subscribers all see the same `isError`, so
-     * the View menu can say a preview failed rather than describing a look nobody is being shown.
+     * A plain GET: the backend sweep's F4 moved this off POST since it only reads (see
+     * `docs/api-conventions.md` §"POST-for-read" in the backend repo). Several stage surfaces can
+     * be mounted at once (the Stage route's canvas and the globally-mounted overview panel), and
+     * RTK Query collapses their identical args into one request; the subscribers all see the same
+     * `isError`, so the View menu can say a preview failed rather than describing a look nobody is
+     * being shown.
      *
      * `cueId` is required rather than "null means the effective next": under a query the arg *is*
      * the cache key, and a key meaning "whatever the server currently thinks" would serve one
@@ -388,8 +389,7 @@ export const cueStacksApi = restApi.injectEndpoints({
     >({
       query: ({ projectId, stackId, cueId }) => ({
         url: `projects/${projectId}/cue-stacks/${stackId}/preview`,
-        method: 'POST',
-        body: { cueId },
+        params: { cueId },
       }),
     }),
 
