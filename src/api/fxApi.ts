@@ -3,22 +3,53 @@ import { Subscription } from './subscription'
 
 // === Types ===
 
+/**
+ * One running effect, exactly as the backend's single `EffectDto` (`fx/EffectDto.kt`) reports
+ * it — the `fxState` frame and `GET /api/rest/fx/active` now return the same shape, so this and
+ * `ActiveEffect` in `store/fixtureFx.ts` describe one wire type. Collapsing the two TS
+ * declarations is frontend-sweep work; the fields below are the source of truth.
+ *
+ * Backend sweep item F8 changed three things here: `phase` is now `currentPhase`, `targetKey` is
+ * the bare fixture/group key with `propertyName` alongside it (it used to be the composite
+ * `"key.property"`), and `effectType` is the registry id rather than the effect's display name.
+ */
 export interface FxEffectState {
   id: number
+  /** Registry id, the string an Update hands back — not the effect's display name. */
   effectType: string
+  /** Fixture or group key, *without* the property suffix. */
   targetKey: string
-  isRunning: boolean
-  phase: number
+  propertyName: string
+  beatDivision: number
   blendMode: string
+  isRunning: boolean
+  phaseOffset: number
+  currentPhase: number
+  parameters: Record<string, string>
+  isGroupTarget: boolean
+  distributionStrategy?: string | null
+  elementMode?: string | null
+  elementFilter?: string | null
+  stepTiming?: boolean
+  /** The Look this effect came out of, when it came out of one. */
+  lookId?: number | null
+  /** The programmer layer that spawned it. Null for an effect the operator busked directly. */
+  programmerLayerId?: number | null
   cueId: number | null
   cueStackId: number | null
   timingSource?: string
+  /** True when the effect sits in the programmer's priority band. */
+  programmerOwned?: boolean
+  /** Fade envelope in [0, 1]; the effect's output is scaled by this before blending. */
+  intensityMultiplier?: number
   /** Speed master this effect subscribes to (null → master 1). */
   speedMasterUuid?: string | null
-  /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
-  rateSpeedMasterUuid?: string | null
   /** 1-based display index of that master — what the FX-sheet chip renders. */
   speedMasterIndex?: number
+  /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
+  rateSpeedMasterUuid?: string | null
+  /** 1-based display index of that rate master. */
+  rateSpeedMasterIndex?: number
 }
 
 /**
