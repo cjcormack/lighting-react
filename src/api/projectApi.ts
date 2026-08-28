@@ -150,11 +150,6 @@ export function createProjectApi(conn: InternalApiConnection): ProjectApi {
     switchSubscriptions.forEach((fn) => fn(data));
   };
 
-  const handleOnOpen = () => {
-    // Request current project state when connection opens
-    conn.send(JSON.stringify({ type: "projectState" }));
-  };
-
   const handleOnMessage = (ev: MessageEvent) => {
     const message: ProjectInMessage = JSON.parse(ev.data);
 
@@ -176,10 +171,9 @@ export function createProjectApi(conn: InternalApiConnection): ProjectApi {
     }
   };
 
+  // No `projectState` request on open: the server pushes one per connection.
   conn.subscribe((evType, ev) => {
-    if (evType === 'open') {
-      handleOnOpen();
-    } else if (evType === 'message' && ev instanceof MessageEvent) {
+    if (evType === 'message' && ev instanceof MessageEvent) {
       handleOnMessage(ev);
     }
   });

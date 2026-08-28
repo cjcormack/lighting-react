@@ -49,7 +49,7 @@ export function SpeedMasterDetailSheet({
   const [inUse, setInUse] = useState<SpeedMasterInUseResponse | null>(null)
 
   // Seed once per master, tracked by id in a ref rather than by dependencies — the list
-  // refetches on every `speedMasterListChanged`, and depending on the fields would let a
+  // refetches on every `speedMasters.listChanged`, and depending on the fields would let a
   // rename in another tab replace whatever is being typed here. Same rationale as
   // LookDetailSheet; closing and reopening re-seeds from the server.
   const seededIdRef = useRef<number | null>(null)

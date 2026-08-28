@@ -74,7 +74,7 @@ type SpeedMasterInMessage =
       timestampMs: number
     }
   | ({ type: 'speedMasters.beat' } & SpeedMasterBeat)
-  | { type: 'speedMasterListChanged' }
+  | { type: 'speedMasters.listChanged' }
 
 export function createSpeedMastersWsApi(conn: InternalApiConnection): SpeedMastersWsApi {
   const listChanged = createWsSubscribable<void>()
@@ -105,9 +105,8 @@ export function createSpeedMastersWsApi(conn: InternalApiConnection): SpeedMaste
 
   conn.subscribe((evType, ev) => {
     if (evType === 'open') {
-      // The server also sends a state frame in its connect burst; requesting one here as
-      // well covers reconnects racing that burst, and the duplicate is one small frame.
-      conn.send(JSON.stringify({ type: 'speedMasters.state' }))
+      // No `speedMasters.state` request here: the server pushes one per connection, a
+      // reconnect included, so asking only ever produced the frame twice.
       // Beat requests are one-shot and live on the server's per-connection scope, so a
       // reconnect loses every pending one. Without re-asking, an indicator keeps free-
       // running its local timer at the pre-drop tempo until the next throttled frame —
@@ -133,7 +132,7 @@ export function createSpeedMastersWsApi(conn: InternalApiConnection): SpeedMaste
         stateChanged.notify(masters)
       } else if (message.type === 'speedMasters.beat') {
         beatByMaster.get(beatKey(message.masterUuid))?.notify(message)
-      } else if (message.type === 'speedMasterListChanged') {
+      } else if (message.type === 'speedMasters.listChanged') {
         // Membership changed — re-request the live bank alongside the REST invalidation,
         // since the server does not push a state frame on CRUD.
         conn.send(JSON.stringify({ type: 'speedMasters.state' }))

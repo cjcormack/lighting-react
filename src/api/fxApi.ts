@@ -63,8 +63,6 @@ export function createFxApi(conn: InternalApiConnection): FxApi {
         // Re-request full state to get updated effect list
         conn.send(JSON.stringify({ type: 'fxState' }))
       }
-    } else if (evType === 'open') {
-      conn.send(JSON.stringify({ type: 'fxState' }))
     }
   })
 

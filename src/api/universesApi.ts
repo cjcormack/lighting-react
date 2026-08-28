@@ -23,13 +23,6 @@ export function createUniversesApi(conn: InternalApiConnection): UniversesApi {
         })
     }
 
-    const handleOnOpen = () => {
-        const payload = {
-            type: 'universesState',
-        }
-        conn.send(JSON.stringify(payload))
-    }
-
     const handleOnMessage = (ev: MessageEvent) => {
         const message: UniversesInMessage = JSON.parse(ev.data)
 
@@ -41,10 +34,9 @@ export function createUniversesApi(conn: InternalApiConnection): UniversesApi {
         updateItem(message.universes)
     }
 
+    // No `universesState` request on open: the server pushes one per connection.
     conn.subscribe((evType, ev) => {
-        if (evType === 'open') {
-            handleOnOpen()
-        } else if (evType === 'message' && ev instanceof MessageEvent) {
+        if (evType === 'message' && ev instanceof MessageEvent) {
             handleOnMessage(ev)
         }
     })

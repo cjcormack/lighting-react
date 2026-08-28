@@ -82,13 +82,6 @@ export function createChannelsApi(conn: InternalApiConnection): ChannelsApi {
         notifyChannelsChange(updates)
     }, 33)
 
-    const handleOnOpen = () => {
-        const payload = {
-            type: 'channelState',
-        }
-        conn.send(JSON.stringify(payload))
-    }
-
     const handleOnMessage = (ev: MessageEvent) => {
         const message: ChannelStateInMessage = JSON.parse(ev.data)
 
@@ -106,10 +99,9 @@ export function createChannelsApi(conn: InternalApiConnection): ChannelsApi {
         updateBatch(updates)
     }
 
+    // No `channelState` request on open: the server pushes the whole buffer per connection.
     conn.subscribe((evType, ev) => {
-        if (evType === 'open') {
-            handleOnOpen()
-        } else if (evType === 'message' && ev instanceof MessageEvent) {
+        if (evType === 'message' && ev instanceof MessageEvent) {
             handleOnMessage(ev)
         }
     })

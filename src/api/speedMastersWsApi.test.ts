@@ -55,13 +55,13 @@ function stateFrame(masters: SpeedMasterLiveState[] = [MASTER_1, MASTER_2]) {
 }
 
 describe('createSpeedMastersWsApi', () => {
-  it('requests a state snapshot when the socket opens', () => {
+  it('asks for no bank snapshot on open — the server pushes one per connection', () => {
     const { conn, sent, fire } = fakeConnection()
     createSpeedMastersWsApi(conn)
 
     fire(InternalEventType.open, new Event('open'))
 
-    expect(sent).toEqual([{ type: 'speedMasters.state' }])
+    expect(sent).toEqual([])
   })
 
   it('holds the latest bank and exposes it via getState', () => {
@@ -116,7 +116,7 @@ describe('createSpeedMastersWsApi', () => {
     expect(liveFn).toHaveBeenCalledTimes(2)
     expect(listFn).not.toHaveBeenCalled()
 
-    frame({ type: 'speedMasterListChanged' })
+    frame({ type: 'speedMasters.listChanged' })
     expect(listFn).toHaveBeenCalledTimes(1)
     // A tempo change must never masquerade as CRUD — that is the invalidation-storm rule.
     expect(liveFn).toHaveBeenCalledTimes(2)
@@ -126,7 +126,7 @@ describe('createSpeedMastersWsApi', () => {
     const { conn, sent, frame } = fakeConnection()
     createSpeedMastersWsApi(conn)
 
-    frame({ type: 'speedMasterListChanged' })
+    frame({ type: 'speedMasters.listChanged' })
 
     expect(sent).toContainEqual({ type: 'speedMasters.state' })
   })
@@ -242,7 +242,6 @@ describe('createSpeedMastersWsApi', () => {
     // one-shot request; without re-asking, an indicator free-runs at the pre-drop tempo
     // until the next throttled frame.
     expect(sent).toEqual([
-      { type: 'speedMasters.state' },
       { type: 'speedMasters.requestBeat', masterUuid: MASTER_2.uuid },
       { type: 'speedMasters.requestBeat' },
     ])

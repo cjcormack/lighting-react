@@ -334,7 +334,7 @@ type InboundMessage =
   | { type: "surfaceBank.state"; activeBanks: Record<string, string> }
   | { type: "surfaceBank.changed"; deviceTypeKey: string; previousBank: string | null; newBank: string | null }
   | ({ type: "surfacePickup.changed" } & PickupChange)
-  | ({ type: "surfaceBindingsChanged" } & BindingsChangeEvent)
+  | ({ type: "surfaceBank.bindingsChanged" } & BindingsChangeEvent)
   | ({ type: "surfaceScaler.state" } & ScalerState)
   | ({ type: "surfaceLearn.started" } & LearnStartedEvent)
   | ({ type: "surfaceLearn.captured" } & LearnCapturedEvent)
@@ -364,13 +364,9 @@ export function createSurfacesWsApi(conn: InternalApiConnection): SurfacesWsApi 
   let lastBanks: Record<string, string> | null = null
   let lastScaler: ScalerState | null = null
 
+  // No state requests on open: the server pushes `surfaceDevices.state`,
+  // `surfaceBank.state` and `surfaceScaler.state` per connection.
   conn.subscribe((evType, ev) => {
-    if (evType === "open") {
-      conn.send(JSON.stringify({ type: "surfaceDevices.state" }))
-      conn.send(JSON.stringify({ type: "surfaceBank.state" }))
-      conn.send(JSON.stringify({ type: "surfaceScaler.state" }))
-      return
-    }
     if (evType !== "message" || !(ev instanceof MessageEvent)) return
 
     let parsed: InboundMessage | null = null
@@ -409,7 +405,7 @@ export function createSurfacesWsApi(conn: InternalApiConnection): SurfacesWsApi 
           target: parsed.target,
         })
         break
-      case "surfaceBindingsChanged":
+      case "surfaceBank.bindingsChanged":
         bindings.notify({
           projectId: parsed.projectId,
           changeType: parsed.changeType,

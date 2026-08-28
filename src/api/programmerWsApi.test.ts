@@ -76,13 +76,13 @@ describe('createProgrammerApi', () => {
     vi.useRealTimers()
   })
 
-  it('requests a full state snapshot when the socket opens', () => {
+  it('asks for no state snapshot on open — the server pushes one per connection', () => {
     const { conn, sent, fire } = fakeConnection()
     createProgrammerApi(conn)
 
     fire(InternalEventType.open, new Event('open'))
 
-    expect(sent).toEqual([{ type: 'programmer.state' }])
+    expect(sent).toEqual([])
   })
 
   it('indexes a state snapshot by (targetKey, propertyName)', () => {

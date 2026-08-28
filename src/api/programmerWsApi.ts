@@ -717,11 +717,9 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     }
   }
 
+  // No `programmer.state` request on open: the server pushes one per connection.
+  // `requestState()` and `scheduleStateRefetch()` remain, as explicit resync.
   conn.subscribe((evType, ev) => {
-    if (evType === 'open') {
-      conn.send(JSON.stringify({ type: 'programmer.state' }))
-      return
-    }
     if (evType !== 'message' || !(ev instanceof MessageEvent)) return
     // Fast path: skip JSON.parse for the channelState / fxState firehose. Both
     // discriminators we care about are checked as raw substrings first.

@@ -62,7 +62,7 @@ describe('SpeedMasterDetailSheet', () => {
   })
 
   it('keeps an in-progress edit when the master refetches', async () => {
-    // The list refetches on every speedMasterListChanged. Re-seeding on those would wipe
+    // The list refetches on every speedMasters.listChanged. Re-seeding on those would wipe
     // whatever the operator is halfway through typing.
     const initial = master()
     const { rerender } = renderSheet(initial)
