@@ -17,7 +17,10 @@ import { formatError } from '../lib/formatError'
  */
 export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // Inline <Alert variant="destructive"> rendered from the mutation's own `error` state
-  'copyCue', // src/components/cues/CopyCueDialog.tsx
+  // `CopyCueDialog.tsx` rendered this one; the dialog is gone and the mutation has no caller
+  // left. Kept until the endpoint itself goes, because this is a deny-list: dropping the name
+  // early would make a resurrected copyCue toast twice.
+  'copyCue',
   'copyLook', // src/components/looks/CopyLookDialog.tsx
   'copyScript', // src/CopyScriptDialog.tsx
   'cloneProject', // src/CloneProjectDialog.tsx

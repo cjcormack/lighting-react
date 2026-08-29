@@ -179,9 +179,9 @@ export function CueCardEditor({
     <div ref={setNodeRef} style={sortableStyle} {...attributes} data-cue-row={cue.id}>
       <div
         className={cn(
-          // `@container`: the header's columns below query THIS box, which is also what `bodyRef`
-          // measures for `tabsBreakpoint`. They used to be viewport `max-[…]:` against a
-          // container-measured body, and the two disagree by exactly the sidebar width.
+          // `@container`: the header's columns below query THIS box. They used to be viewport
+          // `max-[…]:` queries against a container-measured body, and the two disagree by exactly
+          // the sidebar width — so a card in the sidebar broke its columns at the wrong point.
           '@container rounded-lg border bg-muted overflow-hidden transition-colors mx-2 my-1',
           isActive && 'border-green-500/70 shadow-[0_0_0_1px_rgba(34,197,94,0.3)]',
           isStandby && !isActive && 'border-blue-500/60',
@@ -466,11 +466,12 @@ export function CueCardEditor({
                         Record
                       </Button>
                     )}
-                    {/* No per-cue "Make hard" any more: the route is retired along with
-                        value-level references, and "flatten this layer into local rows" is the
-                        gesture that replaces it. It arrives with the programmer rewrite; until
-                        then the programmer-wide Make hard in the programmer toolbar is the only
-                        way out of a reference. */}
+                    {/* No "Make hard" here, and nothing replaces it. The gesture existed to
+                        resolve value-level references; those retired with the `ref:` grammar, so
+                        there is nothing left to make hard. Every route it could have called is
+                        gone too — the per-cue one, `POST /programmer/make-hard`, and
+                        `POST /cues/{id}/flatten`. Don't add a button back for a concept the
+                        composition model no longer has. */}
                   </div>
                   )}
                 </>

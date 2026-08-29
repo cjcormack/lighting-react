@@ -44,7 +44,10 @@ export interface FxEffectState {
   intensityMultiplier?: number
   /** Speed master this effect subscribes to (null → master 1). */
   speedMasterUuid?: string | null
-  /** 1-based display index of that master — what the FX-sheet chip renders. */
+  /**
+   * 1-based display index of that master, as the server numbered the bank. Nothing reads it: the
+   * FX-sheet chip resolves the index from the live master list itself, so the two cannot drift.
+   */
   speedMasterIndex?: number
   /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
   rateSpeedMasterUuid?: string | null

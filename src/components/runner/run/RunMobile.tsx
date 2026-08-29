@@ -9,10 +9,11 @@ import { RunMobileCueCard, type MobileExpansion } from './RunMobileCueCard'
 import type { CueStack, CueStackCueEntry } from '@/api/cueStacksApi'
 
 /**
- * Note on this directory: `runner/run/` used to be "the Run view's components". Run folded into
- * Show in session 2b, and what is left here is the **phone runner** — the takeover layout Show
- * swaps to below 600px, which is always locked. Everything shared with the desktop view moved up
- * into `runner/`.
+ * The **phone runner**: the takeover layout Show swaps to below 600px, always locked.
+ *
+ * Note on the directory name, which no longer describes it — `runner/run/` was "the Run view's
+ * components" until session 2b folded Run into Show. Everything shared with the desktop view
+ * moved up into `runner/`, so what is left here is only the phone layout.
  */
 export interface RunnerDisplayState {
   activeCue: CueStackCueEntry | null

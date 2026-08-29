@@ -8,7 +8,8 @@ interface TimingBadgeProps {
 }
 
 /**
- * Small inline badge showing timing configuration on preset/effect summary cards.
+ * Small inline badge showing a layer's timing configuration. Rendered by `LookStack`'s rows and
+ * by `CueDetailContent`.
  * Only renders when timing is configured (non-immediate).
  */
 export function TimingBadge({ delayMs, intervalMs, randomWindowMs }: TimingBadgeProps) {

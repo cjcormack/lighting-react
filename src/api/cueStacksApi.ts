@@ -188,7 +188,8 @@ export interface PreviewChannel {
  *
  * Layer 4 only: cue-band effects and timed presets aren't previewed, and channels no cue
  * asserts are absent rather than 0 — fall back to the live output for those. See
- * `docs/cue-stacks-engineering.md` §"Preview compose".
+ * `lighting7/docs/cue-stacks-engineering.md` §"Preview compose" — the **backend** repo. This one
+ * has a `docs/` of its own, so the unqualified path reads as a local file that does not exist.
  */
 export interface PreviewCueResponse {
   cueId: number

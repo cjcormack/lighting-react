@@ -3,7 +3,8 @@
  *
  * Nothing here is Look- or preset-shaped, which is why it lives in its own module: it answers
  * "which fixture types exist and what are they called", and its consumers are the patch sheet
- * (`AddFixtureSheet`), the type picker, and the Look editor's `editorFixtureType` hint. It used to
+ * (`AddFixtureSheet`) and `FixtureTypePicker`. It also fed the Look editor's `editorFixtureType`
+ * hint until session 3 deleted both. It used to
  * sit in the FX-preset DTO module, which made it look like preset machinery it never was.
  */
 import type { PropertyDescriptor } from '@/store/fixtures'

@@ -7,9 +7,10 @@ import type { LookSummary } from '@/api/looksApi'
 /**
  * The shared component's own contract, driven with plain spies.
  *
- * `LayersPane.test.tsx` covers the same rows through the *cue*, asserting the PATCH payload it
- * builds; this covers what the rows promise their host, which is what the programmer relies on.
- * The two are not duplicates: a handler shape that changed would break one and not the other.
+ * The cue side of these rows had its own suite in `LayersPane.test.tsx`, asserting the PATCH
+ * payload the pane built; session 2a deleted the pane and the suite with it. So this file is now
+ * the only coverage of what the rows promise their host — which is what the programmer relies on,
+ * and what a changed handler shape would break silently.
  */
 
 function look(overrides: Partial<LookSummary> = {}): LookSummary {

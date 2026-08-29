@@ -247,8 +247,10 @@ own `propertyAssignments` are the last layer and beat all of them. Across cues, 
 governs intensity. That flip is the change an operator coming from presets is most likely to
 be surprised by, so `LookStack`'s `precedenceNote` says it in the section body rather than leaving
 it implied (it was `LayersPane` that said so until session 2a deleted that pane).
-A layer's `sortOrder` is authoritative, not its array position — `reorderCueLayers` in
-`lib/cueUtils.ts` renumbers the whole list on every drag for that reason.
+A layer's `sortOrder` is authoritative, not its array position: two layers sharing one leaves the
+tie to insertion order in the cook step. Nothing renumbers client-side today — the programmer
+stack asks the server to move a layer and takes the order back — and `reorderCueLayers` in
+`lib/cueUtils.ts` is the *unused* record of what a client-side reorder would have to do.
 
 **Layer order does not govern the value/effect boundary**, and per-layer `stomp` is the escape
 hatch. Effects are Layer 3 and values Layer 4, so a lower layer's colour *effect* beats a higher
@@ -359,15 +361,20 @@ Creating a **bound** Look and **update-back after Include** both work now —
 `RecordLookSheet` (`POST /programmer/record-look`) and `updateIncludedLook`. `includedTargetIsReadOnly`
 and the `INCLUDE_TARGET_READ_ONLY` conflict arm are gone with them.
 
-**All three Make Hard routes are gone**, replaced by one flatten-layer route:
-`POST /{projectId}/cues/{cueId}/flatten`. It writes the *cooked* result as local rows and deletes
-the layers, so what it stores is what the rig is showing. Two consequences to know before using
-it. Rows come out **fixture-targeted, never group-targeted** — cook's output is per fixture by
+**All three Make Hard routes are gone, and nothing replaced them.** They existed to swap
+value-level palette references for the literals they resolved to, and the `ref:` grammar retired,
+so there is nothing left to harden. A successor gesture — "promote a layer's *cooked* values into
+local rows and delete the layers" — shipped briefly as `POST /{projectId}/cues/{cueId}/flatten`
+and was deleted again in the backend sweep, uncalled. **Do not cite flatten as live**, and do not
+add a button for it.
+
+The two constraints that made it hard are worth keeping, because any reimplementation meets them
+again. Rows come out **fixture-targeted, never group-targeted** — cook's output is per fixture by
 construction and carries no group name, so the old route's "keep a group row when every member
 agrees" cannot be reproduced without guessing which of several overlapping groups to name. And a
-**single `layerId` is refused unless it is the last enabled layer**, because local rows beat every
-layer: promoting a middle layer's values would make them win over the layers above and change the
-cue's output, which is the opposite of what flattening promises.
+**single `layerId` can only be the last enabled layer**, because local rows beat every layer:
+promoting a middle layer's values would make them win over the layers above and change the cue's
+output, which is the opposite of what flattening promises.
 
 Two things about the record sheet that are not arbitrary. The **mask is prominent** rather than
 incidental — a palette bank implied its attribute, a Look has no type, so an unmasked record of

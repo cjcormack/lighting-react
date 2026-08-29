@@ -71,8 +71,9 @@ export function ProgrammerLookStack() {
       },
       onMove: (oldIndex, newIndex) => {
         const layer = layers[oldIndex]
-        // No client-side renumbering (the cue path's `reorderCueLayers`): the server renumbers the
-        // whole stack and re-ranks the running effects in place, and restating `sortOrder` here
+        // No client-side renumbering — not even `cueUtils.reorderCueLayers`, which is what such a
+        // renumber would look like and has no caller for exactly this reason. The server renumbers
+        // the whole stack and re-ranks the running effects in place, so restating `sortOrder` here
         // would be a second opinion on an order we don't own.
         if (layer) programmerMoveLayer(layer.layerId, newIndex)
       },

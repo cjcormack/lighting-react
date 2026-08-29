@@ -34,8 +34,9 @@ export const NON_SAVE_ENDPOINTS: ReadonlySet<string> = new Set([
   'recordLook',
   'includeIntoProgrammer',
   'updateProgrammer',
-  // Make Hard at *programmer* level writes only live programmer state — no persisted row moves,
-  // so a "Saved" flash would be a lie. The cue-level one really does save, and is absent here.
+  // Make Hard stood here, at programmer level, because it wrote only live programmer state and
+  // a "Saved" flash would have been a lie. Both it and the cue-level one are gone now, retired
+  // with the value-level references they resolved.
 
   // ── Live output: DMX and effects state, none of it persisted ──
   'updateChannel',
@@ -52,8 +53,9 @@ export const NON_SAVE_ENDPOINTS: ReadonlySet<string> = new Set([
   'pauseGroupFx',
   'resumeGroupFx',
   'clearGroupFx',
-  // `previewLook` / `clearLookPreview` stood here. They drove the Look editor's rig preview, which
-  // went with the editor in session 3; the routes remain server-side but nothing sends them.
+  // `previewLook` / `clearLookPreview` stood here. They drove the Look editor's rig preview,
+  // which went with the editor in session 3; the routes themselves were deleted server-side
+  // afterwards, so there is nothing left to classify.
   'toggleLook',
   // The template gestures, for the same reason `toggleLook` is here: they land on the rig and the
   // strip reports what happened itself, so a save-status spinner would be describing a press.

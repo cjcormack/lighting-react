@@ -127,8 +127,10 @@ export function buildCueInput(cue: Cue): CueInput {
  * `sortOrder` would leave the tie to insertion order in the cook step, which is exactly the
  * accident the layer model exists to remove.
  *
- * Pure, and separate from the component, because dnd-kit's pointer sequence is not drivable with
- * `fireEvent` — this is the half that can be tested directly.
+ * **No production caller.** The drag it was written for went with `LayersPane` in session 2a, and
+ * the programmer stack deliberately does not renumber client-side (`ProgrammerLookStack.onMove`) —
+ * the server owns that order. Only `cueUtils.test.ts` exercises it. Kept because the rule above is
+ * the one a client-side cue reorder would have to obey, and re-deriving it is the expensive part.
  */
 export function reorderCueLayers<T extends CueLayer>(
   layers: readonly T[],
@@ -154,11 +156,13 @@ export function reorderCueLayers<T extends CueLayer>(
 /**
  * Restate every `sortOrder` from array position without moving anything.
  *
- * The insert and remove paths need exactly this — a list that arrived with gaps (a migrated cue, an
- * older client's edit) must not hand the appended layer a `sortOrder` another layer already holds,
- * and removing the middle of three must not leave 0 and 2 for a later insert to land in. Named,
- * because expressing it as `reorderCueLayers(layers, 0, 0)` reads as a move and relies on that
- * function's guard clause to mean "renumber".
+ * The insert and remove paths a client-side cue editor would need want exactly this — a list that
+ * arrived with gaps (an older client's edit) must not hand the appended layer a `sortOrder` another
+ * layer already holds, and removing the middle of three must not leave 0 and 2 for a later insert
+ * to land in. Named, because expressing it as `reorderCueLayers(layers, 0, 0)` reads as a move and
+ * relies on that function's guard clause to mean "renumber".
+ *
+ * **No production caller either**, for the same reason as [reorderCueLayers].
  */
 export function densifyCueLayerOrder<T extends CueLayer>(layers: readonly T[]): T[] {
   return layers.map((layer, index) => ({ ...layer, sortOrder: index }))
