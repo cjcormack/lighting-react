@@ -11,7 +11,6 @@ import type {
   CopyCueResponse,
   ApplyCueResponse,
   StopCueResponse,
-  CueCurrentState,
   CueCookedResponse,
 } from '../api/cuesApi'
 
@@ -160,10 +159,6 @@ export const cuesApi = restApi.injectEndpoints({
       ],
     }),
 
-    currentCueState: build.query<CueCurrentState, number>({
-      query: (projectId) => `projects/${projectId}/cues/current-state`,
-    }),
-
     // `snapshotCueFromLive` lived here until Session 3. Capturing the stage is now
     // `recordProgrammer({ source: 'STAGE_SNAPSHOT' })` in `programmerOps.ts` — the same
     // capture, plus the programmer overlay it used to miss, as one Record source among
@@ -184,7 +179,6 @@ export const {
   useCopyCueMutation,
   useApplyCueMutation,
   useStopCueMutation,
-  useLazyCurrentCueStateQuery,
 } = cuesApi
 
 /**

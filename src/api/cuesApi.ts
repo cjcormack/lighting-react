@@ -259,11 +259,6 @@ export interface StopCueResponse {
   cueId: number
 }
 
-// Current lighting state snapshot (the running effects)
-export interface CueCurrentState {
-  adHocEffects: CueAdHocEffect[]
-}
-
 /**
  * One composed value from `GET /cues/{id}/cooked`, in the canonical assignment grammar
  * `parseProgrammerValue` already reads.
