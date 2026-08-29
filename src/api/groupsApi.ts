@@ -9,9 +9,16 @@ export interface GroupSummary {
   symmetricMode: string
   defaultDistribution: string
   /**
-   * Ids of the Looks that can be pointed at this group — deferred Looks matching its type and
-   * capabilities. Bound Looks are absent by design: they name their own targets, so
-   * "is this compatible?" is not a question about them.
+   * Ids of the Looks the backend reports as compatible with this group.
+   *
+   * **Capability-only**: "does this group have colour/position at all", never "was this Look
+   * authored against that model", and no Look is excluded on any other ground — the "deferred
+   * Looks only" this used to claim describes nothing now that every Look row is bound. It
+   * answers for a Look's *deferred effects*, which are what the layer's targets supply.
+   *
+   * Known hole, and it is the backend's to close: a rows-only Look has an empty capability set,
+   * so it is reported compatible with everything. Do not filter here — compatibility is one
+   * answer, given server-side, or it drifts.
    */
   compatibleLookIds: number[]
 }

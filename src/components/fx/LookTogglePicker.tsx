@@ -11,17 +11,23 @@ interface LookTogglePickerProps {
   /** Target type and key the Look is put on. */
   targetType: 'fixture' | 'group'
   targetKey: string
-  /** Compatible Look ids, computed by the backend from type and capability. */
+  /** Compatible Look ids, computed by the backend from the target's capabilities alone. */
   compatibleLookIds: number[]
 }
 
 /**
  * Put a Look on one target from the FX panel, or take it off again.
  *
- * Offers only what `compatibleLookIds` names, which is **deferred Looks** — the backend leaves
- * bound ones out of that list entirely, and rightly: a bound Look names its own fixtures, so
- * toggling it onto *this* one would apply rows meant for others. A bound Look reaches the stage
- * through a cue layer or through Include instead.
+ * Offers only what `compatibleLookIds` names. That list is **capability-only**: the backend asks
+ * "does this target have the properties this Look's deferred effects drive", not "was this Look
+ * authored for this fixture", and it excludes nothing else — every Look row is bound now, so the
+ * "deferred Looks only" this used to say describes no filter that exists.
+ *
+ * So a toggle here can land a Look whose rows name other fixtures: those rows still apply to the
+ * fixtures they name, and *this* target gets only what the Look defers. The degenerate case is a
+ * rows-only Look — no capabilities, so compatible with everything, and a pad for it asserts
+ * nothing about this target. That is a gap in the backend's answer, not something to filter
+ * around here: one owner for the rule, or the two drift.
  */
 export function LookTogglePicker({
   targetType,
