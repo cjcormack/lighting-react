@@ -7,8 +7,7 @@ import {
 } from '../store/cueStacks'
 import { useShowTransport } from './useShowTransport'
 import { programmerSetBlind, useProgrammerSummaryQuery } from '../store/programmer'
-import { usePersistentState } from './usePersistentState'
-import { PROGRAMMER_FADE_KEY } from '../lib/programmerFade'
+import { getProgrammerFadeMs } from '../lib/programmerFade'
 
 /**
  * Everything `ShowBar` needs, derived from a project id.
@@ -79,17 +78,15 @@ export function useShowBarProps(
   const { data: programmerSummary } = useProgrammerSummaryQuery()
   const blind = programmerSummary?.blind ?? false
   /**
-   * The same fade the programmer's Clear uses, read from the same persisted key.
+   * The same fade the programmer's Clear uses, read from the same store.
    *
    * Blind moved here out of the programmer's action bar, which passed this — so without it,
    * blinding would start snapping where it used to fade. Read rather than re-declared: two
-   * definitions of one operator preference is how they come to disagree.
+   * definitions of one operator preference is how they come to disagree. Read at press time, not
+   * subscribed: the picker sits on `/programmer` beside this button, and the bar has no reason to
+   * re-render while the operator scrolls through fade times.
    */
-  const [fadeMs] = usePersistentState<string>(PROGRAMMER_FADE_KEY, '0')
-  const onBlind = useCallback(
-    () => programmerSetBlind(!blind, Number(fadeMs) || 0),
-    [blind, fadeMs],
-  )
+  const onBlind = useCallback(() => programmerSetBlind(!blind, getProgrammerFadeMs()), [blind])
 
   const [activateShow] = useActivateProgramMutation()
   const [deactivateShow] = useDeactivateProgramMutation()

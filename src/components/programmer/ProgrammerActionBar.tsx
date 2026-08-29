@@ -17,8 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { usePersistentState } from '@/hooks/usePersistentState'
-import { PROGRAMMER_FADE_KEY } from '@/lib/programmerFade'
+import { setProgrammerFade, useProgrammerFade } from '@/lib/programmerFade'
 import {
   programmerClearAll,
   useProgrammerSummaryQuery,
@@ -69,7 +68,7 @@ export function ProgrammerActionBar({
   const { data: summary } = useProgrammerSummaryQuery()
   const { data: activeEffects } = useActiveEffectsQuery()
   const { data: stacks } = useProjectCueStackListQuery(projectId)
-  const [fadeMs, setFadeMs] = usePersistentState<string>(PROGRAMMER_FADE_KEY, '0')
+  const fadeMs = useProgrammerFade()
   const sheets = useProgrammerSheets()
 
   const entryCount = summary?.entryCount ?? 0
@@ -110,7 +109,7 @@ export function ProgrammerActionBar({
                 <Eraser className="size-3.5" />
                 Clear
               </button>
-              <Select value={fadeMs} onValueChange={setFadeMs}>
+              <Select value={fadeMs} onValueChange={setProgrammerFade}>
                 <SelectTrigger
                   size="sm"
                   aria-label="Fade time"

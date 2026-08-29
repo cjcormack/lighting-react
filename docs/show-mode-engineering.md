@@ -212,7 +212,7 @@ API Layer          Type definitions + WebSocket subscription factories
 | `src/routes/ProgrammerPage.tsx` | Route for `/projects/:projectId/programmer`, and the `/program*` → `/show*` redirect. Source strip · action bar · **scope band** · workspace (grid + layer/FX rail). |
 | `src/routes/RunPage.tsx` | **Redirects only.** `/projects/:id/run` and the legacy `/cue-stacks` paths → `/show`. |
 | `src/components/ShowBar.tsx` | Row 3, **identical on all three live views**: DBO, **BLIND**, speed masters, programmer chip, active→next, BACK/GO. Every host spreads `showBarProps`; only `showShortcuts` is overridden. |
-| `src/lib/programmerFade.ts` | `PROGRAMMER_FADE_KEY` — the programmer's fade time, shared because the action bar's picker writes it and the bar's Blind reads it. |
+| `src/lib/programmerFade.ts` | The programmer's fade time, as a `lib/syncStore.ts` singleton: the action bar's picker writes it, the bar's Blind reads it at press time. A store, not two `usePersistentState` calls, so the picker actually reaches Blind. |
 | `src/components/runner/StackTabStrip.tsx` | Sibling-stack switcher. `selectedStackId` owns the underline, `liveStackId` the green pip — **selecting never moves the playhead**. |
 | `src/components/runner/OffPlayheadBanner.tsx` | Shown while reading a stack that is not the playhead: *Jump to live* (navigation) and *Make this stack live* (confirm-gated `go-to`). |
 | `src/components/runner/ShowLockControl.tsx` | The lock toggle and its re-lock countdown, for `ShowHeader`'s `actions` slot. |
@@ -502,9 +502,10 @@ Two 2b changes worth knowing:
   BACK/GO. Gating it was what made Blind's *location* depend on the show's state.
 - **Blind moved into it**, beside blackout, out of the programmer's action-bar Stage zone — so one
   control is in one place on every view instead of one place on the Programmer and another on Show.
-  It still fades by the programmer's own fade time, read from the same persisted key
-  (`PROGRAMMER_FADE_KEY`) the action bar's picker writes; without that, moving the button would have
-  turned a fade into a snap. `ProgrammerIndicator` sits two elements along and normally draws its own
+  It still fades by the programmer's own fade time, read at press time from the `programmerFade`
+  store the action bar's picker writes; without that, moving the button would have turned a fade
+  into a snap. The store replaced a second `usePersistentState` instance of the key, which only ever
+  held the value as it stood when the bar mounted. `ProgrammerIndicator` sits two elements along and normally draws its own
   amber "Blind" badge, so the bar passes it `blindShownSeparately` and it reports only the value count
   there — the tile is the louder and the actionable one. The app-header mount keeps its badge, because
   there is no tile there and blind has to be visible from `/fixtures`.

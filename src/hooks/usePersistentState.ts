@@ -8,6 +8,11 @@ import { useCallback, useEffect, useState } from 'react'
  * exhaustion and in some private-browsing modes, and a persisted UI preference
  * is never worth taking the app down for.
  *
+ * **One mounted instance per key.** There is no `storage` listener and no cross-instance sync, so
+ * two components sharing a key hold two snapshots and drift apart the moment one writes. Where two
+ * surfaces genuinely share a preference, build it on `lib/syncStore.ts` instead —
+ * `lib/programmerFade.ts` and `hooks/useVisSource.ts` are the two that had to.
+ *
  * `merge` matters for object-shaped state: a value written by an older build
  * won't have keys added since, so the raw parse is spread over the fallback
  * rather than used directly. Without it, adding a field to a persisted object

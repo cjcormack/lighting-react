@@ -683,9 +683,10 @@ two transport instances.
 - **Blind lives in the bar, beside blackout** — the same class of thing (a gate on what reaches the
   rig) in the one piece of chrome every live view shares. It was in the programmer's action-bar Stage
   zone, which meant the same control was in one place on the Programmer and another on Show. It still
-  fades by the programmer's own fade time: `useShowBarProps` reads `PROGRAMMER_FADE_KEY`, the same
-  persisted value the action bar's picker writes, so moving the button did not turn a fade into a
-  snap. Do **not** make `ProgrammerIndicator` the toggle — it is also the link to the programmer, and
+  fades by the programmer's own fade time: `useShowBarProps` reads it at press time from the
+  `programmerFade` store the action bar's picker writes, so moving the button did not turn a fade
+  into a snap. That store is module-level for a reason — as two `usePersistentState` instances of
+  one key it was two mount-time snapshots, and Blind snapped for the rest of the visit. Do **not** make `ProgrammerIndicator` the toggle — it is also the link to the programmer, and
   one control cannot be both without one of the two jobs becoming a surprise. That indicator instead
   takes `blindShownSeparately` in the bar, so it reports only the value count there: it normally
   draws its own amber Blind badge, which beside the tile was the same word twice.
