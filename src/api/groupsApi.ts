@@ -117,7 +117,6 @@ export interface GroupActiveEffect {
   elementMode: ElementMode | null
   elementFilter: string | null
   stepTiming: boolean
-  presetId: number | null
   cueId: number | null
   /** Speed master this effect subscribes to (null → master 1). */
   speedMasterUuid?: string | null

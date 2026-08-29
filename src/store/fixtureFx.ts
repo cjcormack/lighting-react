@@ -25,7 +25,6 @@ export interface FixtureDirectEffect {
   distributionStrategy: string | null
   elementFilter: string | null
   stepTiming: boolean
-  presetId: number | null
   cueId: number | null
   /** Speed master this effect subscribes to (null → master 1). */
   speedMasterUuid?: string | null
@@ -162,7 +161,6 @@ export interface ActiveEffect {
   elementMode: string | null
   elementFilter: string | null
   stepTiming: boolean
-  presetId: number | null
   /**
    * The Look this effect came out of, when it came out of one.
    *
@@ -171,8 +169,8 @@ export interface ActiveEffect {
    * *lives* — "in Storm Wash · layer 2" rather than an unattributed row — which is the answer to
    * "why can't I delete this?".
    *
-   * Not interchangeable with [presetId], and not with each other: one Look may be applied by two
-   * layers, so the Look says what the effect is and the layer says which stack line spawned it.
+   * Not interchangeable with [programmerLayerId]: one Look may be applied by two layers, so the
+   * Look says what the effect is and the layer says which stack line spawned it.
    */
   lookId: number | null
   /** The programmer layer that spawned it. Null for an effect the operator busked directly. */

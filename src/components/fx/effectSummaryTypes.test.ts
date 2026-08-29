@@ -46,7 +46,7 @@ describe('effectSummaryTypes speed-master threading', () => {
       id: 1, effectType: 'Pulse', targetKey: 'hex-1', propertyName: 'dimmer',
       beatDivision: 1, blendMode: 'OVERRIDE', isRunning: true, phaseOffset: 0,
       currentPhase: 0, parameters: {}, isGroupTarget: false, distributionStrategy: null,
-      elementFilter: null, stepTiming: false, presetId: null, cueId: null,
+      elementFilter: null, stepTiming: false, cueId: null,
       speedMasterUuid: MASTER,
     }
     expect(fromFixtureDirectEffect(e).speedMasterUuid).toBe(MASTER)
@@ -67,7 +67,7 @@ describe('effectSummaryTypes speed-master threading', () => {
       id: 1, effectType: 'Pulse', propertyName: 'dimmer', beatDivision: 1,
       blendMode: 'OVERRIDE', distribution: 'LINEAR', isRunning: true, phaseOffset: 0,
       currentPhase: 0, parameters: {}, elementMode: null, elementFilter: null,
-      stepTiming: false, presetId: null, cueId: null, speedMasterUuid: MASTER,
+      stepTiming: false, cueId: null, speedMasterUuid: MASTER,
     }
     expect(fromGroupActiveEffect(e).speedMasterUuid).toBe(MASTER)
   })

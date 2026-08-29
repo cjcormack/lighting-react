@@ -106,9 +106,8 @@ describe('buildCueInput', () => {
   })
 
   /**
-   * The cue wire shape still carries `presetApplications` — the table survives until the retirement
-   * pass — but nothing composes from them, and a PUT that echoed them back would resurrect dead
-   * rows the migration already copied into `layers`.
+   * `presetApplications` is gone from the wire — the cue rewrite retired it in favour of `layers` —
+   * so `buildCueInput` must never echo one back even if a stale caller still hands it one.
    */
   it('does not send preset applications', () => {
     expect('presetApplications' in buildCueInput(cueWithOneLayer())).toBe(false)

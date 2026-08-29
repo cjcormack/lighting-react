@@ -355,7 +355,6 @@ function toEffectContext(effect: ActiveEffect): ActiveEffectContext {
     parameters: effect.parameters,
     elementFilter: effect.elementFilter,
     stepTiming: effect.stepTiming,
-    presetId: effect.presetId,
     cueId: effect.cueId,
     // Explicit like everything else here: dropping this would hand the edit sheet a
     // master-less copy, and its Update would silently reset the effect to master 1.

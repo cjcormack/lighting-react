@@ -261,12 +261,6 @@ export interface StopCueResponse {
 
 // Current lighting state snapshot (the running effects)
 export interface CueCurrentState {
-  /**
-   * Still `presetApplications` on the wire: `captureCurrentState` reconstructs them from the live
-   * FX instances' `presetId`, which the layer rewrite has not reached. Nothing composes from them,
-   * so this is a snapshot of what is running rather than something to write back.
-   */
-  presetApplications: { presetId: number; presetName: string | null; targets: CueTarget[] }[]
   adHocEffects: CueAdHocEffect[]
 }
 
