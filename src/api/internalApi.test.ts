@@ -85,4 +85,22 @@ describe("createInternalApiConnection", () => {
 
     expect(bridge).toHaveBeenCalledWith(InternalEventType.open, expect.anything(), null)
   })
+
+  it("does not let a throwing bridge starve the ones registered after it", () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+    const { conn, socket } = connect()
+    const thrower = vi.fn(() => {
+      throw new Error("bridge blew up")
+    })
+    const later = vi.fn()
+    conn.subscribe(thrower)
+    conn.subscribe(later)
+
+    socket.deliver({ type: "cueListChanged" })
+
+    expect(thrower).toHaveBeenCalledTimes(1)
+    expect(later).toHaveBeenCalledTimes(1)
+    // Hardening, not silence: a bridge that throws has to be visible.
+    expect(logged).toHaveBeenCalled()
+  })
 })

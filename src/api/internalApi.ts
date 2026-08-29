@@ -69,7 +69,14 @@ export function createInternalApiConnection(baseUrl: string, wsUrl: string): Int
     if (!evType) return
     const message = evType === InternalEventType.message ? parseWsFrame(ev) : null
     eventSubscriptions.forEach((fn) => {
-      fn(evType, ev, message)
+      // One bridge that throws must not starve the ones registered after it of this
+      // frame — and the two most latency-sensitive (programmer, speed masters) are
+      // registered last. Report it; never swallow it silently.
+      try {
+        fn(evType, ev, message)
+      } catch (err) {
+        console.error(`WebSocket: a ${evType} subscriber threw`, err)
+      }
     })
   }
 
