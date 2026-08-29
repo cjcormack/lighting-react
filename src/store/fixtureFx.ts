@@ -8,6 +8,17 @@ lightingApi.fx.subscribe(() => {
   store.dispatch(restApi.util.invalidateTags(['FixtureEffects']))
 })
 
+// …and `fxDefinitionListChanged` for the effect *library* — the vocabulary an effect is chosen
+// from, which changes for entirely unrelated reasons to the running set above.
+//
+// Bridged here rather than in `store/fxDefinitions.ts`, where the definition CRUD endpoints live:
+// `effectLibrary` below is the `FxLibrary` consumer that mounts everywhere (the FX sheet, the
+// programmer's add-effect popover), while that slice is reached only from `routes/FxLibrary.tsx`.
+// A bridge there would exist only once someone had opened the library page.
+lightingApi.fxDefinitions.subscribe(() => {
+  store.dispatch(restApi.util.invalidateTags(['FxLibrary']))
+})
+
 // === Types ===
 
 export interface FixtureDirectEffect {

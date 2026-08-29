@@ -41,6 +41,20 @@ lightingApi.projects.subscribeToSwitch(function() {
   ]))
 })
 
+// Bridge `scriptListChanged` into cache invalidation.
+//
+// The script endpoints live in this slice rather than in `store/scripts.ts` (types only), so the
+// bridge does too. Module scope is safe here for the same reason the project-switch bridge above
+// is: this module already touches `lightingApi` at evaluation time.
+//
+// `FxLibrary` rides along because an `FX_DEFINITION` script *is* an entry in the effect library —
+// the same pairing the script mutations below invalidate. The backend fires the two frames from
+// different routes, so a definition edited through `/fx/definitions` arrives on
+// `fxDefinitionListChanged` instead, bridged in `store/fixtureFx.ts` beside its library query.
+lightingApi.scripts.subscribe(function () {
+  store.dispatch(restApi.util.invalidateTags(['Script', 'FxLibrary']))
+})
+
 export const projectsApi = restApi.injectEndpoints({
   endpoints: (build) => {
     return {
