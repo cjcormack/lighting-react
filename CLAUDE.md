@@ -376,11 +376,15 @@ per-family counts (`familyForCategory`, at last with a caller) exist to make tha
 *before* it happens. And the **selection defaults on**, the opposite of `RecordSheet`: a cue
 usually does want everything you busked, a Look named "Warm Amber" almost never does.
 
-**Provenance names the winning layer.** `ProvenanceEntry` gained `layerId`/`lookId`/`lookName`,
-which `useRowOwnership` aggregates into `CellOwnership.layer` — so "why is this fixture this
-colour?" answers *Warm Wash* rather than *a cue*. Those fields **must stay in
-`provenanceSignature`**: a key can move from the cue to one of the cue's layers with `source`
-unchanged, and a cell that didn't wake would keep naming the old answer.
+**Provenance names the winning layer.** `ProvenanceEntry` gained `layerId` and `layerSource` —
+the resolved referent, `kind` + `id` + `name` — which `useRowOwnership` aggregates into
+`CellOwnership.layer`, so "why is this fixture this colour?" answers *Warm Wash* rather than *a
+cue*. Those fields **must stay in `provenanceSignature`**: a key can move from the cue to one of
+the cue's layers with `source` unchanged, and a cell that didn't wake would keep naming the old
+answer. The signature reads the whole `layerSource` object rather than its id alone, because a
+Look layer and a template layer can share an int PK — that is the reason the entry carries a
+source object at all, and matching on `layerId` would let a swap between the two look like no
+change.
 
 Both branches fill them in, and the `PROGRAMMER` one only since session 4: session 3a wired the
 `CUE` branch from `cueLayerLayerWinners` and left the programmer branch building a bare entry, so
