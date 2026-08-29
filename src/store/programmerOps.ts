@@ -36,8 +36,12 @@ export interface ProgrammerSkip {
     | 'NO_BACKING_PROPERTY'
     | 'MASKED_OUT'
     /**
-     * Outside the request's fixture scope. Only the palette routes pass a scope — a palette
-     * recorded from the *whole* programmer would capture every head it happens to hold.
+     * Outside the request's fixture scope — the `targets` it sent, when it sent any.
+     *
+     * The **Look** record routes always pass the operator's selection, because a Look recorded
+     * from the *whole* programmer would capture every head it happens to hold and "Warm Amber"
+     * would mean the rig. A cue Record scoped to targets passes one too, and gets the same
+     * reason back for everything it left out.
      */
     | 'OUT_OF_SCOPE'
 }
@@ -72,8 +76,9 @@ export interface RecordRequest {
    * Restrict the record to these fixtures — "put just these heads into this cue". Groups are
    * expanded server-side.
    *
-   * Omitted records the whole programmer, which is the right default for a cue: unlike a
-   * palette, capturing everything the operator busked is usually what was meant.
+   * Omitted records the whole programmer, which is the right default for a cue: capturing
+   * everything the operator busked is usually what was meant. A Look is the opposite case — see
+   * the Look record's own `targets`, and `OUT_OF_SCOPE`.
    */
   targets?: CueTarget[]
 }
@@ -102,8 +107,9 @@ export interface RecordLookRequest {
   notes?: string
   source?: RecordSource
   /**
-   * Which attribute families to record. Explicit because a Look has **no type to imply it** —
-   * unlike the palette banks this replaces, where the bank you were recording into said so.
+   * Which attribute families to record. Explicit because a Look has **no type to imply it**:
+   * nothing about the destination says "this is a colour record", so the operator's mask is the
+   * only statement of intent there is.
    */
   mask?: PropertyMaskGroup[]
   /**
