@@ -262,9 +262,10 @@ read-only row draws instead. Backend contract in `lighting7/docs/lighting-compos
 §Stomp, which is also where the *other* stomp lives — the cue-level, cross-cue, removing one. Don't
 conflate them.
 
-`buildCueInput` rebuilds `layers` **field by field**, and its comment says why. A field
-missing from that rebuild is dropped on every inline cue edit; `cueUtils.test.ts` pins all
-thirteen individually rather than by deep-equal.
+`buildCueInput` rebuilds `layers` and `triggers` **field by field**, and its comment says why. A
+field missing from that rebuild is dropped on every inline cue edit; `cueUtils.test.ts` pins every
+field of both individually rather than by deep-equal — a deep-equal against a fixture built in the
+test file would pass just as happily with the same field missing from both sides.
 
 **The `ref:{uuid}` value grammar is gone** — retired in session 4, on both sides at once,
 because a client cannot render rows a server still produces. A cue or the programmer depends on

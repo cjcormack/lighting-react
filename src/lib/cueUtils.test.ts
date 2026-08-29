@@ -84,6 +84,29 @@ describe('buildCueInput', () => {
     expect(layer.randomWindowMs).toBe(250)
   })
 
+  it('carries every trigger field through the rebuild', () => {
+    // The same silent-drop failure as the layer rebuild, on the other list `buildCueInput`
+    // reconstructs. The fixture's trigger sets all six to non-defaults so an omission cannot hide
+    // behind a value that happens to match the default.
+    const input = buildCueInput(cueWithOneLayer())
+    const trigger = input.triggers![0]
+
+    expect(trigger.triggerType).toBe('DEACTIVATION')
+    expect(trigger.delayMs).toBe(750)
+    expect(trigger.intervalMs).toBe(2000)
+    expect(trigger.randomWindowMs).toBe(125)
+    expect(trigger.scriptId).toBe(42)
+    expect(trigger.sortOrder).toBe(2)
+  })
+
+  it('strips the response-only scriptName from a trigger', () => {
+    // `scriptName` is the server's resolved label for `scriptId`, present on `CueTriggerDetail`
+    // and absent from `CueTrigger`. Echoing it back would invite the server to trust a client's
+    // idea of what a script is called — the same rule as the layer's `source`.
+    const input = buildCueInput(cueWithOneLayer())
+    expect('scriptName' in input.triggers![0]).toBe(false)
+  })
+
   it('strips the response-only source, which is why the rebuild exists at all', () => {
     // `source` is what the server resolved the layer's referent to — kind, id, uuid and name. It is
     // read-only: `lookId` / `templateId` are the write fields, and echoing the resolved object back
@@ -147,7 +170,7 @@ describe('reorderCueLayers', () => {
   })
 })
 
-/** One cue holding a single layer with every optional field set to a non-default. */
+/** One cue holding a single layer and a single trigger, every optional field at a non-default. */
 function cueWithOneLayer(): Cue {
   return {
     id: 1,
@@ -172,7 +195,17 @@ function cueWithOneLayer(): Cue {
     ],
     adHocEffects: [],
     propertyAssignments: [],
-    triggers: [],
+    triggers: [
+      {
+        triggerType: 'DEACTIVATION',
+        delayMs: 750,
+        intervalMs: 2000,
+        randomWindowMs: 125,
+        scriptId: 42,
+        scriptName: 'house-lights-up',
+        sortOrder: 2,
+      },
+    ],
     cueStackId: 1,
     cueStackName: 'show',
     sortOrder: 0,
