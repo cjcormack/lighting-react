@@ -54,10 +54,17 @@ export interface LookRowStoreValue {
   deferredRows: readonly LookRow[]
   /**
    * Rows addressing one element of a multi-element fixture. **Not composed here**, and that is a
-   * known gap rather than an oversight: `LookRow.elementKey` is an element-*local* suffix, no
-   * client code can produce one (`syntheticFixture.ts` records that element keys must never be
-   * parsed), and the backend's own `CueComposer.applyLayer` drops element rows too —
-   * `FU-LOOK-ELEMENT-ROWS`. Surfaced so the grid can say so rather than render an empty cell.
+   * known gap rather than an oversight, and the invariant behind it lives here now because the
+   * file that used to record it (`syntheticFixture.ts`) was deleted:
+   *
+   * > **An element key is an element-*local* suffix owned by the backend.** Client code never
+   * > parses one, never splits a target key on it, and never synthesises one — the fixture's
+   * > element list is the only source of the keys that exist. Composing an element row would
+   * > mean deriving "which cell is this" from the string, which is exactly the derivation the
+   * > rule forbids.
+   *
+   * The backend's own `CueComposer.applyLayer` drops element rows too — `FU-LOOK-ELEMENT-ROWS`.
+   * Surfaced so the grid can say so rather than render an empty cell.
    */
   elementRows: readonly LookRow[]
   loaded: boolean
