@@ -463,7 +463,10 @@ export interface ProgrammerApi {
     propertyName: string,
     fn: (state: ProgrammerKeyState) => void,
   ): Subscription
-  /** Errors from `programmer.*` ops, so callers can surface a toast. */
+  /**
+   * Errors from `programmer.*` ops. The server unicasts these to the acting socket, so the
+   * subscriber can toast unconditionally; `store/programmerErrors.ts` is the one that does.
+   */
   subscribeToErrors(fn: (message: string) => void): Subscription
 }
 
