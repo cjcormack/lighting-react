@@ -14,10 +14,10 @@ export interface CuePosition {
  * here, and both were cut rather than faked:
  *
  *  - **"Q4 changed on another desk since you included it."** `Cue` carries no `updatedAt` or
- *    version and no frame announces it, so the client cannot know ambiently. The two real conflict
- *    codes — `CUE_EDIT_SESSION_OPEN`, `INCLUDE_TARGET_GONE` — arrive as a 409 *in response to a
- *    write*, not before one. The `missing` flag below is the one ambient case that IS knowable: the
- *    included cue no longer appears in the stack list, i.e. someone deleted it.
+ *    version and no frame announces it, so the client cannot know ambiently. The one real conflict
+ *    code — `INCLUDE_TARGET_GONE` — arrives as a 409 *in response to a write*, not before one. The
+ *    `missing` flag below is the one ambient case that IS knowable: the included cue no longer
+ *    appears in the stack list, i.e. someone deleted it.
  *  - **Detach.** There is no op to clear the include target. Suppressing it client-side would lie
  *    to `UpdateDialog` and to every other tab.
  */

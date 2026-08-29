@@ -27,7 +27,6 @@ import { useProjectCueStackListQuery } from '@/store/cueStacks'
 import { useRecordProgrammerMutation } from '@/store/programmerOps'
 import { selectTargetKeys } from '@/store/selectionSlice'
 import type {
-  ProgrammerConflict,
   PropertyMaskGroup,
   RecordMode,
   RecordResponse,
@@ -110,7 +109,6 @@ export function RecordSheet({
   const [name, setName] = useState('')
   const [cueNumber, setCueNumber] = useState('')
   const [result, setResult] = useState<RecordResponse | null>(null)
-  const [conflict, setConflict] = useState<ProgrammerConflict | null>(null)
 
   const recordableStacks = useMemo(
     () => (stacks ?? []).filter((stack) => stack.type !== 'SEPARATOR'),
@@ -139,7 +137,6 @@ export function RecordSheet({
     setCueNumber('')
     setStackId(String(defaultCueStackId ?? recordableStacks[0]?.id ?? ''))
     setResult(null)
-    setConflict(null)
     reset()
     // recordableStacks is only read for its first id on open; re-running when the list
     // reloads would stomp a stack the operator had already picked.
@@ -152,31 +149,25 @@ export function RecordSheet({
   // while this sheet is open, and sending an empty `targets` is a 400, not a whole-rig record.
   const scoped = selectedOnly && selectedKeys.length > 0
 
-  const submit = async (force: boolean) => {
-    setConflict(null)
-    try {
-      const response = await record({
-        projectId,
-        mode,
-        source,
-        mask: mask.length > 0 ? mask : undefined,
-        includeFx,
-        targets: scoped
-          ? selectedKeys.map((key) => ({ type: 'fixture' as const, key }))
-          : undefined,
-        cueStackId: creating ? Number(stackId) : undefined,
-        cueId: creating ? undefined : targetCueId,
-        name: creating && name.trim() !== '' ? name.trim() : undefined,
-        cueNumber: creating && cueNumber.trim() !== '' ? cueNumber.trim() : undefined,
-        force,
-      }).unwrap()
-      setResult(response)
-    } catch (err) {
-      // A cue-edit session on the target cue is recoverable — its Discard would revert the
-      // write, so the server refuses once and lets the operator insist.
-      const body = (err as { data?: ProgrammerConflict })?.data
-      if (body?.code === 'CUE_EDIT_SESSION_OPEN') setConflict(body)
-    }
+  // No `unwrap()`: a failure is reported by the hook's own `error`, rendered below. There is
+  // nothing left to catch here — Record's one recoverable refusal was `409 CUE_EDIT_SESSION_OPEN`,
+  // and backend sweep item D1 retired the sessions that produced it.
+  const submit = async () => {
+    const response = await record({
+      projectId,
+      mode,
+      source,
+      mask: mask.length > 0 ? mask : undefined,
+      includeFx,
+      targets: scoped
+        ? selectedKeys.map((key) => ({ type: 'fixture' as const, key }))
+        : undefined,
+      cueStackId: creating ? Number(stackId) : undefined,
+      cueId: creating ? undefined : targetCueId,
+      name: creating && name.trim() !== '' ? name.trim() : undefined,
+      cueNumber: creating && cueNumber.trim() !== '' ? cueNumber.trim() : undefined,
+    })
+    if ('data' in response && response.data) setResult(response.data)
   }
 
   return (
@@ -304,19 +295,7 @@ export function RecordSheet({
             Record effects too
           </label>
 
-          {conflict && (
-            <Alert variant="destructive">
-              <XCircle className="size-4" />
-              <AlertDescription className="space-y-2">
-                <p>{conflict.error}</p>
-                <Button size="sm" variant="outline" onClick={() => submit(true)}>
-                  Record anyway
-                </Button>
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {error != null && !conflict && (
+          {error != null && (
             <Alert variant="destructive">
               <XCircle className="size-4" />
               <AlertDescription>{formatError(error)}</AlertDescription>
@@ -330,7 +309,7 @@ export function RecordSheet({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
             {result ? 'Close' : 'Cancel'}
           </Button>
-          <Button onClick={() => submit(false)} disabled={!canSubmit || isLoading}>
+          <Button onClick={() => void submit()} disabled={!canSubmit || isLoading}>
             {isLoading && <Loader2 className="size-4 animate-spin" />}
             {isLoading ? 'Recording…' : 'Record'}
           </Button>

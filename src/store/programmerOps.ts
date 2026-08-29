@@ -68,8 +68,6 @@ export interface RecordRequest {
   includeFx?: boolean
   name?: string
   cueNumber?: string
-  /** Record anyway when a cue-edit session is open on the target cue. */
-  force?: boolean
   /**
    * Restrict the record to these fixtures — "put just these heads into this cue". Groups are
    * expanded server-side.
@@ -229,7 +227,6 @@ export interface UpdateRequest {
   /** Fetch the checklist without writing, even when an include target exists. */
   preview?: boolean
   includeFx?: boolean
-  force?: boolean
 }
 
 export interface UpdateResult {
@@ -294,16 +291,20 @@ export interface UpdateResponse {
 // there is no longer such a slot to harden. Detaching a *cue* from the library is
 // `POST /{projectId}/cues/{cueId}/flatten`.
 
-/** The 409 body both Record and Update use, so the caller can offer "do it anyway". */
+/**
+ * Update's 409 body: the cue or Look Include staged has been deleted since.
+ *
+ * A one-arm union rather than a bare string, because it is the *narrowed* remains of three. There
+ * was `INCLUDE_TARGET_READ_ONLY`, for a Look target Update could not write back to — both halves
+ * of that guard went when the write-back path stopped leading into the retired palette tables, and
+ * it was never handled here, only declared. And there was `CUE_EDIT_SESSION_OPEN`, the one
+ * recoverable arm, which both Record and Update offered a "do it anyway" for: backend sweep item
+ * D1 retired the `cueEdit.*` sessions, so nothing can hold one and no request can be refused for
+ * it. Record now has no conflict path at all.
+ */
 export interface ProgrammerConflict {
   error: string
-  /**
-   * `INCLUDE_TARGET_GONE` means the cue or look Include staged has been deleted since. There was
-   * a third arm, `INCLUDE_TARGET_READ_ONLY`, for a Look target Update could not write back to;
-   * both halves of that guard went when the write-back path stopped leading into the retired
-   * palette tables. It was never handled here — only declared.
-   */
-  code: 'CUE_EDIT_SESSION_OPEN' | 'INCLUDE_TARGET_GONE'
+  code: 'INCLUDE_TARGET_GONE'
   cueId?: number
 }
 
@@ -315,9 +316,8 @@ export const programmerOpsApi = restApi.injectEndpoints({
         method: 'POST',
         body: { ...body, projectId: String(projectId) },
       }),
-      // Nothing was written on a failure — and Record's 409 "a cue-edit session is open"
-      // path is an ordinary part of the flow, so refetching the whole cue list behind the
-      // sheet each time the operator hits it would be pure churn.
+      // Guarded on the result: nothing was written on a failure, so refetching the whole cue
+      // list behind the sheet would be pure churn.
       invalidatesTags: (result, _error, { projectId, cueId }) =>
         result == null
           ? []

@@ -28,12 +28,6 @@ export interface LatencyHistogramSnapshot {
   buckets: BucketCount[]
 }
 
-export interface CueEditHistogramSnapshot {
-  sessionActive: boolean
-  live: LatencyHistogramSnapshot
-  lastSessionEnded: LatencyHistogramSnapshot | null
-}
-
 export interface PortCcRates {
   displayKey: string
   displayName: string
@@ -58,9 +52,6 @@ export const perfApi = restApi.injectEndpoints({
     getArtNetRates: build.query<ArtNetRatesResponse, void>({
       query: () => 'perf/artnet-rates',
     }),
-    getCueEditHistogram: build.query<CueEditHistogramSnapshot, void>({
-      query: () => 'perf/cueedit-histogram',
-    }),
     getMidiLatency: build.query<MidiLatencyResponse, void>({
       query: () => 'perf/midi-latency',
       providesTags: ['PerfMidi'],
@@ -78,7 +69,6 @@ export const perfApi = restApi.injectEndpoints({
 
 export const {
   useGetArtNetRatesQuery,
-  useGetCueEditHistogramQuery,
   useGetMidiLatencyQuery,
   useResetMidiLatencyMutation,
 } = perfApi

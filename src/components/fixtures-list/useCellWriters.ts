@@ -51,7 +51,8 @@ export interface CellWriters {
  * reverse-engineer the other.
  *
  * There was a third route until session 2b — `cueEdit.*`, for a cue being edited in place. A cue is
- * read-only now and edited by Include, so there is exactly one place values are set.
+ * read-only now and edited by Include, so there is exactly one place values are set; the backend
+ * protocol itself was deleted in the post-refactor sweep, so the route cannot come back by accident.
  */
 /**
  * Dispatch one planned write to the matching writer. The single place that maps a

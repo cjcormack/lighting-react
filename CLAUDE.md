@@ -737,10 +737,15 @@ Includes it) and **Cue properties…** (`CuePropertiesSheet`). Consequences wort
   `CueAnchorPickerSheet` also still creates a cue at an anchor, deliberately.
 - **`CuePropsPane` survived, relocated.** It was not the problem with the three-pane editor, and a
   per-field autosaving form is right for cue metadata; it is now the body of the properties drawer.
-- **Nothing provides `EditorContextValue`'s `cue` arm any more**, so the `cueEdit.*` session is never
-  opened from this client. The arm and its branches are kept — see the note in `EditorContext.tsx` —
-  because the backend protocol is live (so the `409 CUE_EDIT_SESSION_OPEN` handling is *not* dead)
-  and session 2b decides whether an unlocked cue row gets editable cells back.
+- **`EditorContextValue` has no `cue` arm**, and the `cueEdit.*` protocol no longer exists on
+  either side. Session 2a stopped providing the arm; 2b removed it, along with its four session
+  helpers, `api/cueEditWsApi.ts` and the fifteen `kind === 'cue'` branches, having decided that
+  giving a cue row editable cells would make a cue and the programmer two places to set a value
+  again. The backend sweep then deleted the family server-side, so the `409 CUE_EDIT_SESSION_OPEN`
+  handling, the `force` request field both Record and Update sent, the two "do it anyway" buttons
+  and the Diagnostics `cueEdit` histogram panel are all gone too. Don't reintroduce any of it:
+  a cue is edited by Include, and `EditorContext.tsx`'s doc comment is the record of why.
+  `INCLUDE_TARGET_GONE` is Update's own 409 and is unrelated — that one is live.
 
 **Timed effects**: Layers and ad-hoc effects can have optional timing (delayMs, intervalMs, randomWindowMs) to fire after a delay or on a recurring interval. Immediate (no timing) is the default. A timed layer re-cooks the whole cue when it fires rather than appending its rows, so an in-flight crossfade weight survives.
 

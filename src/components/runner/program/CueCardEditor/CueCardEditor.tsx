@@ -85,7 +85,7 @@ interface CueCardEditorProps {
  *
  * **It used to be a three-pane editor** (Targets · Properties · Layers), collapsing to tabs below
  * 1000px, and each expanded card opened its own `cueEdit` WS session. All of that went in session
- * 2a. Targets and Layers were a second, differently-shaped restatement of what a value grid and a
+ * 2a, and the backend protocol behind it was deleted in the post-refactor sweep. Targets and Layers were a second, differently-shaped restatement of what a value grid and a
  * layer stack already say, and keeping two renderings of one state in step is a losing game; the
  * session went with them, because a cue is now edited in exactly one place. The tab machinery went
  * too — there is one body, so there is nothing to switch between.
@@ -362,8 +362,9 @@ export function CueCardEditor({
                   {/* Scoped to this cue: the show-wide pill in the header reports any write in the
                       project, which is no use when you want to know that the field you just left
                       actually landed. The Live / Preview-edit toggle that stood beside it went with
-                      the `cueEdit` session it switched — with the cue read-only there is nothing
-                      here for it to gate, and the programmer's own Blind is the gate that matters.
+                      the `cueEdit` session it switched — that session no longer exists on either
+                      side, and with the cue read-only there is nothing here for it to gate; the
+                      programmer's own Blind is the gate that matters.
 
                       The whole strip is withheld while locked. The properties drawer is an editing
                       form, and with it gone the row would hold only a save indicator for writes that

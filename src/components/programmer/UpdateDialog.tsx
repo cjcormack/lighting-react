@@ -53,7 +53,7 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
   const [conflict, setConflict] = useState<ProgrammerConflict | null>(null)
 
   const run = useCallback(
-    async (body: { targets?: number[]; preview?: boolean; force?: boolean }) => {
+    async (body: { targets?: number[]; preview?: boolean }) => {
       setConflict(null)
       try {
         const response = await update({ projectId, ...body }).unwrap()
@@ -70,9 +70,7 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
         return response
       } catch (err) {
         const data = (err as { data?: ProgrammerConflict })?.data
-        if (data?.code === 'CUE_EDIT_SESSION_OPEN' || data?.code === 'INCLUDE_TARGET_GONE') {
-          setConflict(data)
-        }
+        if (data?.code === 'INCLUDE_TARGET_GONE') setConflict(data)
         return null
       }
     },
@@ -119,8 +117,10 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
 
   const canCommit = modeB ? selected.size > 0 : true
 
-  const commit = (force: boolean) =>
-    void run(modeB ? { targets: [...selected], force } : { force })
+  // Nothing is offered as a retry: `INCLUDE_TARGET_GONE` is terminal — the cue or Look Include
+  // staged has been deleted, so there is nowhere to write it back to. The recoverable arm was
+  // `CUE_EDIT_SESSION_OPEN`, retired with the sessions in backend sweep item D1.
+  const commit = () => void run(modeB ? { targets: [...selected] } : {})
 
   return (
     <Dialog open={open} onOpenChange={(next) => !isLoading && onOpenChange(next)}>
@@ -156,14 +156,7 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
           {conflict && (
             <Alert variant="destructive">
               <XCircle className="size-4" />
-              <AlertDescription className="space-y-2">
-                <p>{conflict.error}</p>
-                {conflict.code === 'CUE_EDIT_SESSION_OPEN' && (
-                  <Button size="sm" variant="outline" onClick={() => commit(true)}>
-                    Update anyway
-                  </Button>
-                )}
-              </AlertDescription>
+              <AlertDescription>{conflict.error}</AlertDescription>
             </Alert>
           )}
 
@@ -227,7 +220,7 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
             {result?.applied ? 'Close' : 'Cancel'}
           </Button>
           {!result?.applied && (
-            <Button onClick={() => commit(false)} disabled={!canCommit || isLoading}>
+            <Button onClick={() => commit()} disabled={!canCommit || isLoading}>
               {isLoading && <Loader2 className="size-4 animate-spin" />}
               {isLoading ? 'Updating…' : modeB ? `Update ${selected.size} cue(s)` : 'Update'}
             </Button>

@@ -9,13 +9,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Loader2, Activity, Wifi, Music, RefreshCw } from "lucide-react"
+import { Loader2, Wifi, Music, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import {
   useGetArtNetRatesQuery,
-  useGetCueEditHistogramQuery,
   useGetMidiLatencyQuery,
   useResetMidiLatencyMutation,
   type LatencyHistogramSnapshot,
@@ -41,7 +40,6 @@ export function DiagnosticsContent() {
         Backend-global — counters do not reset on project switch.
       </p>
       <ArtNetPanel />
-      <CueEditPanel />
       <MidiPanel />
     </div>
   )
@@ -101,51 +99,6 @@ function UniverseRow({ universe }: { universe: UniversePacketStats }) {
       <TableCell className="text-right tabular-nums">{universe.packetsPerSec.toFixed(1)}</TableCell>
       <TableCell className="text-right tabular-nums">{universe.totalPackets.toLocaleString()}</TableCell>
     </TableRow>
-  )
-}
-
-// ─── cueEdit panel ────────────────────────────────────────────────────
-//
-// The histogram is REST-backed and server-side, so the panel survives session 2b even though this
-// client no longer opens a cueEdit session: a cue is read-only and edited by Include. What it now
-// reports is *another* client's session — a second desk, or a MIDI surface harness — which is still
-// worth being able to see. The empty state says so rather than telling the operator to open an
-// editor that no longer exists.
-
-function CueEditPanel() {
-  const { data, isLoading } = useGetCueEditHistogramQuery(undefined, {
-    pollingInterval: POLL_INTERVAL_MS,
-  })
-
-  const hasLive = data?.sessionActive && data.live.count > 0
-  const fallback = data?.lastSessionEnded && data.lastSessionEnded.count > 0
-    ? data.lastSessionEnded
-    : null
-
-  return (
-    <Card className="p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <Activity className="size-4" />
-        <h2 className="font-semibold">cueEdit set-property latency</h2>
-        {data?.sessionActive ? (
-          <Badge variant="default" className="text-xs">session active</Badge>
-        ) : (
-          <Badge variant="outline" className="text-xs">idle</Badge>
-        )}
-      </div>
-      {isLoading && !data ? (
-        <Loader2 className="size-4 animate-spin" />
-      ) : !data ? null : hasLive ? (
-        <HistogramView title="Live (current session)" snapshot={data.live} />
-      ) : fallback ? (
-        <HistogramView title="Last completed session" snapshot={fallback} />
-      ) : (
-        <EmptyState
-          title="No cueEdit observations yet"
-          body="No cueEdit session has run since startup. This desk no longer opens one — a cue is read-only and edited by Include — so this fills in only for a session held by another client or by MidiFloodHarness."
-        />
-      )}
-    </Card>
   )
 }
 
@@ -271,73 +224,6 @@ function MidiPortTable({ ports }: { ports: PortCcRates[] }) {
           ))}
         </TableBody>
       </Table>
-    </div>
-  )
-}
-
-// ─── Histogram rendering ──────────────────────────────────────────────
-
-function HistogramView({
-  title,
-  snapshot,
-}: {
-  title: string
-  snapshot: LatencyHistogramSnapshot
-}) {
-  const buckets = snapshot.buckets
-  const firstNonZero = buckets.findIndex((b) => b.count > 0)
-  const lastNonZero = buckets.reduce(
-    (last, b, i) => (b.count > 0 ? i : last),
-    -1,
-  )
-  const trimmed = firstNonZero >= 0
-    ? buckets.slice(firstNonZero, lastNonZero + 1)
-    : []
-  const maxCount = trimmed.reduce((m, b) => Math.max(m, b.count), 1)
-
-  return (
-    <div className="space-y-3">
-      <div className="text-xs font-medium text-muted-foreground">{title}</div>
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-xs">
-        <Stat label="count" value={snapshot.count.toLocaleString()} />
-        <Stat label="mean" value={formatNanos(snapshot.meanNanos)} />
-        <Stat label="p50" value={formatNanos(snapshot.p50Nanos)} />
-        <Stat label="p95" value={formatNanos(snapshot.p95Nanos)} />
-        <Stat label="p99" value={formatNanos(snapshot.p99Nanos)} />
-        <Stat label="max" value={formatNanos(snapshot.maxNanos)} />
-      </div>
-      {trimmed.length > 0 && (
-        <div className="space-y-0.5">
-          {trimmed.map((b, i) => {
-            const idx = firstNonZero + i
-            const lower = idx === 0 ? 0 : buckets[idx - 1].upperBoundNanos
-            const widthPct = (b.count / maxCount) * 100
-            return (
-              <div key={idx} className="flex items-center gap-2 text-[11px] tabular-nums">
-                <div className="w-32 text-right text-muted-foreground">
-                  {formatNanos(lower)} – {formatNanos(b.upperBoundNanos)}
-                </div>
-                <div className="flex-1 bg-muted rounded h-3 overflow-hidden">
-                  <div
-                    className="bg-primary h-full"
-                    style={{ width: `${widthPct}%` }}
-                  />
-                </div>
-                <div className="w-16 text-right">{b.count.toLocaleString()}</div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-mono">{value}</span>
     </div>
   )
 }

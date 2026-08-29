@@ -11,9 +11,12 @@ import { createContext, useContext, useMemo, type ReactNode } from 'react'
  * helpers, `api/cueEditWsApi.ts` and the fifteen `kind === 'cue'` branches across five hooks were
  * removed in 2b.
  *
- * **The `409 CUE_EDIT_SESSION_OPEN` handling stays** — in `RecordSheet`, `UpdateDialog` and
- * `store/programmerOps.ts`. The backend protocol is still live and another client can hold a
- * session, so that response is a real thing this client must handle; it simply never *opens* one.
+ * The `409 CUE_EDIT_SESSION_OPEN` handling outlived the arm for a while, on the argument that the
+ * backend protocol was still live and another client could hold a session. Backend sweep item D1
+ * retired the whole `cueEdit.*` family — the fifteen socket messages, all four 409 guards and
+ * `GET /perf/cueedit-histogram` — so nothing can open one and that response can no longer arrive.
+ * The client's `force` senders, both "do it anyway" buttons and the Diagnostics histogram panel
+ * went with it. Update's remaining 409, `INCLUDE_TARGET_GONE`, is unrelated and still live.
  *
  * There was a `kind: 'look'` arm, whose writes reached neither: they landed in `LookDraftContext`,
  * because the library's Look editor worked against a *synthetic fixture* built from
