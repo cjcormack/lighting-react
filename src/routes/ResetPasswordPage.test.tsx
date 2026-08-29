@@ -3,8 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 // The page is store-connected and reads its token from the router. Mocking both keeps this
-// a component test and — as with SpeedMastersStrip — keeps the import graph away from
-// lightingApi's real WebSocket.
+// a component test and keeps the import graph away from lightingApi's real WebSocket.
 const redeem = vi.fn()
 let infoResult: {
   data?: { username: string; displayName: string; expiresAtMs: number }

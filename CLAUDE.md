@@ -503,8 +503,15 @@ now. Rows show the live one and edit it with tap / click-to-type; the stored def
 editable only in the detail sheet, where it can be labelled as such.
 
 `/projects/:id/speed-masters` manages the bank — one nav entry, one route, no sibling
-switcher. `SpeedMastersStrip` in the ShowBar is the performance surface and shows
-masters **2..N** only, because the ShowBar's BPM tile already *is* master 1.
+switcher. `components/SpeedMasters.tsx` is the ShowBar's performance surface, and it shows
+**every** master, master 1 included. It used to render 2..N on the reasoning that the
+ShowBar's own BPM tile *was* master 1; that tile is gone, and the split was the width bug —
+two thresholds fired at 560px in opposite directions, so between 560 and 900px the tiles and
+the transport left the live-state block nothing and its cue numbers spilled. Don't
+reintroduce it: the component's docblock is the record of why. It picks one of three arms
+from the bar's `@container` width **and** the master count (`TILED_ARM`, because a container
+query cannot see how many masters there are): a named tile each, one railed tile with a pill
+per master, or `SpeedMastersChip` below 440px.
 
 Two independent per-effect references, both uuid-addressed:
 
@@ -517,11 +524,13 @@ gets "Cycle length (seconds)" and the rate picker, a beat effect gets beat divis
 the speed picker. Showing both to both was the pre-existing bug — a wall-clock effect's
 "Speed Master" did nothing at all.
 
-`BeatIndicator` takes an optional master and pulses from the keyed `speedMasters.beat`
-stream; without one it uses the legacy unkeyed `beatSync`, which is bound to master 1's
-clock object and cannot speak for any other master. Server frames are throttled (one per
-16 beats), so the component free-runs a local timer in between — that interpolation is
-load-bearing, not decoration.
+`BeatIndicator` pulses from the keyed `speedMasters.beat` stream, always — the unkeyed
+legacy `beatSync` it used to fall back to is gone from both sides (backend D2). Omitting the
+master, or passing master 1 with a null uuid, resolves to master 1's **real row uuid** through
+`useMaster1Uuid` in `store/speedMasters.ts`: null means master 1 only on the tempo *write*
+messages, and an `''`-keyed subscriber matches no frame at all. Server frames are throttled
+(one per 16 beats), so the component free-runs a local timer in between — that interpolation
+is load-bearing, not decoration.
 
 ### Desk accounts
 

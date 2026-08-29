@@ -53,9 +53,9 @@ export function SpeedMastersRedirect() {
  * reading during a show; the stored default is only editable in the sheet, where it can be
  * labelled as such.
  *
- * Unlike `SpeedMastersStrip`, this lists master 1 too. The strip hides it because the
- * ShowBar's BPM tile *is* master 1 and two readouts would drift in the operator's head — but
- * this is the one place M1 can be renamed or annotated.
+ * The ShowBar's `SpeedMasters` surface lists every master too, master 1 included — the 2..N
+ * split it used to draw is gone. What is still only here: renaming a master, annotating it,
+ * creating and deleting one, and editing the *stored* default rather than the live tempo.
  */
 export function ProjectSpeedMasters() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -114,7 +114,7 @@ export function ProjectSpeedMasters() {
 
 /**
  * One master. Runnable as well as editable — tap and click-to-type work here exactly as they
- * do on the ShowBar strip (same `useBpmDraft`), so the page is usable during a show rather
+ * do on the ShowBar (same `useBpmDraft`), so the page is usable during a show rather
  * than only between them.
  */
 function SpeedMasterRow({
