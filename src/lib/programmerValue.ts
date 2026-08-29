@@ -19,16 +19,17 @@ import {
  * contribution is gated out of the merge, the staged value exists only in `programmer.state`
  * — the wire values the sheet normally displays still show the layers underneath.
  *
- * **Neither palette reference form is handled here, for two different reasons.**
+ * **One rule covers every reference form: this parser reads literals only.**
  *
- * `"P1"` — the positional ordered-colour-list form — only ever appears inside FX effect parameters,
- * which resolve it themselves against the live list (`colourUtils.ts`). It never reaches this
- * parser, and returning null for it is correct forever.
+ * There is nothing left for it to resolve. `"ref:{uuid}"` — the named-palette reference — retired
+ * in session 4 and is now actively *rejected* at the Look write boundary, which is the no-nesting
+ * guarantee. The positional `"P1"` / `"P*"` colour-list form retired with it. Neither can reach a
+ * programmer entry or a cue row any more, so both are simply unparseable strings here, handled by
+ * the same fallback as junk: return null and let the caller sample live DMX.
  *
- * `"ref:{uuid}"` — a named-palette reference — *can* now appear as a programmer entry's or a cue
- * row's `value`. This parser still returns null for it, deliberately: a reference is not a value.
- * The backend sends the literal it resolved to separately, so use [parseProgrammerEntryValue] when
- * you have a whole entry and want something renderable.
+ * The one reference grammar still alive is `tmpl:{uuid}`, and it is legal only inside an **FX
+ * colour parameter**, never as a value — `colourUtils.ts` owns it end to end and resolves it
+ * itself. It never reaches this parser either.
  */
 export type ProgrammerParsedValue =
   | { kind: 'level'; value: number }
@@ -40,7 +41,7 @@ const POSITION_RE = /^(\d{1,3}),(\d{1,3})$/
 
 /**
  * Parse a programmer/assignment value. Returns null for anything that doesn't match the
- * canonical grammar (an unresolved palette ref, a future value form, or junk) — callers
+ * canonical grammar (a retired reference form, a future value form, or junk) — callers
  * fall back to the live DMX value rather than rendering a guess.
  */
 export function parseProgrammerValue(value: string): ProgrammerParsedValue | null {
@@ -103,16 +104,18 @@ export function serializeColour(
 /**
  * Parse whatever a programmer entry should *display* as.
  *
- * A thin wrapper over [parseProgrammerValue] now, and kept as its own function because its two
- * callers depend on *not* sampling live DMX (see the comment at `useCellWriters`' call site).
+ * A thin wrapper over [parseProgrammerValue] now, and kept as its own function because its callers
+ * hold a whole entry: one entry-shaped reader is what stops them re-forking on `entry.value` the
+ * next time the entry grows a field that matters.
  *
  * It used to branch: an entry's `value` could be `ref:{uuid}`, in which case the displayed literal
  * came from the entry's `resolvedValue` — the value the backend resolved that reference to for this
  * specific target and property, which mattered because a position palette gives every head a
  * different answer. The `ref:` value grammar retired in session 4 of the looks-and-layers plan, and
  * with it `PALETTE_REF_PREFIX` / `parsePaletteRefUuid` / `isPaletteRefValue` / `serializePaletteRef`.
- * The positional `P1` grammar in `components/fx/colourUtils.ts` is a different thing entirely and
- * survives.
+ * The positional `P1` grammar went too. What replaced neither of them but occupies the same
+ * ground is `tmpl:{uuid}` in `components/fx/colourUtils.ts` — an FX *parameter* grammar, not a
+ * value grammar, pinned by `colourUtils.test.ts`.
  */
 export function parseProgrammerEntryValue(entry: { value: string }): ProgrammerParsedValue | null {
   return parseProgrammerValue(entry.value)

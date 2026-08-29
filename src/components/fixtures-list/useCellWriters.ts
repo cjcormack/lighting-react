@@ -232,9 +232,9 @@ export function useCellWriters(): CellWriters {
         // land on. (Taking the whole position is the console-normal consequence of touching
         // one axis; what we avoid here is freezing it to an arbitrary sample.)
         const held = lightingApi.programmer.getKeyState(fixtureKey, 'position').entry
-        // Through `parseProgrammerEntryValue`, not `parseProgrammerValue(held.value)`: a slot
-        // holding a palette reference has `ref:{uuid}` as its value, which parses to null and
-        // would drop us onto the live wire sample this branch exists to avoid.
+        // Through `parseProgrammerEntryValue` rather than `parseProgrammerValue(held.value)`
+        // purely to keep one entry-shaped reader: the two are the same function now that `ref:`
+        // is retired, and going straight to the string would quietly re-fork them.
         const heldPosition = held ? parseProgrammerEntryValue(held) : null
         const staged = heldPosition?.kind === 'position' ? heldPosition : null
         const effectivePan =

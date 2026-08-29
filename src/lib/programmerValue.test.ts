@@ -69,8 +69,8 @@ describe('parseProgrammerValue', () => {
   })
 
   it('returns null for values it cannot represent, so callers fall back to live DMX', () => {
-    // `P1` is the *positional* colour-list ref. It only ever appears inside FX effect params,
-    // which resolve it themselves, so returning null here is correct permanently — not a gap.
+    // `P1` was the positional colour-list reference. It retired with `ref:`, so it is now just
+    // another unparseable string — kept here because a stale cue row could still hold one.
     expect(parseProgrammerValue('P1')).toBeNull()
     expect(parseProgrammerValue('')).toBeNull()
     expect(parseProgrammerValue('   ')).toBeNull()
@@ -78,8 +78,9 @@ describe('parseProgrammerValue', () => {
   })
 
   it('returns null for a named-palette reference, because a reference is not a value', () => {
-    // Callers with a whole entry use parseProgrammerEntryValue, which reads the resolved literal
-    // the backend sends alongside. This parser must not invent one.
+    // `ref:` is retired and rejected at the Look write boundary, so nothing should produce one —
+    // but a stale row could still hold one, and reading it as a colour would be worse than
+    // falling back to live DMX. This parser must never invent a literal for a reference.
     expect(parseProgrammerValue(`ref:${PALETTE_UUID}`)).toBeNull()
   })
 
@@ -134,9 +135,9 @@ describe('parseProgrammerEntryValue', () => {
   // A `describe('named-palette references')` block of four tests stood above this one, covering
   // `parsePaletteRefUuid` / `isPaletteRefValue` / `serializePaletteRef` — including that they were
   // strict about the uuid shape (a corrupt value had to read as "not a reference" rather than as a
-  // reference to nothing) and that they were never confused with `colourUtils.isPaletteRef`, which
-  // matches the positional `P1`. The `ref:` grammar retired in session 4; the positional one did
-  // not, and its own tests live in `colourUtils`.
+  // reference to nothing) and that they were never confused with the positional `P1` form. Both
+  // grammars retired in session 4. The one live reference grammar is `tmpl:`, which is an FX
+  // colour *parameter* rather than a value, and `colourUtils.test.ts` covers it.
   it('reads a literal entry directly', () => {
     expect(parseProgrammerEntryValue({ value: '200' })).toEqual({ kind: 'level', value: 200 })
   })
