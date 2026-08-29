@@ -13,10 +13,10 @@ export default [
       // Agent worktrees are full second checkouts of this repo, build output and
       // all, so linting them reports every issue twice over.
       ".claude/**",
-      // Design-session scratch: these are .jsx on disk but TypeScript inside,
-      // so the parser can't read them. Only the .jsx files are affected —
-      // prototypes/model.ts is ordinary TypeScript and stays linted.
-      "src/prototypes/**/*.jsx",
+      // Design-session scratch, kept as reference implementations next to the
+      // rest of the docs. Outside `src/`, so tsc never sees it; the `.jsx`
+      // files are TypeScript inside and the parser can't read them either.
+      "docs/prototypes/**",
     ],
   },
   { files: ["**/*.{js,mjs,cjs,ts,jsx,tsx}"] },

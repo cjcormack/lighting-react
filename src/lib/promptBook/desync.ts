@@ -6,7 +6,7 @@
 //   • script position  — each anchor's (page, y) reading position
 //
 // Agreement means: advancing the stack moves you monotonically DOWN the script.
-// Ported from src/prototypes/model.ts (the design-session spec) with numeric cue ids.
+// Ported from docs/prototypes/model.ts (the design-session spec) with numeric cue ids.
 //
 // A cue with no anchor is NOT a fault: a pre-show state, house lights, or an
 // auto-followed cue has no line to point at and never will. Unanchored cues are
