@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { InternalApiConnection, InternalEventType } from './internalApi'
+import { InternalEventType } from './internalApi'
+import { fakeWsConnection } from '../test/fakeWsConnection'
 import {
   createProgrammerApi,
   programmerKey,
@@ -7,36 +8,6 @@ import {
   type ProgrammerLayer,
   type ProvenanceEntry,
 } from './programmerWsApi'
-
-type EventHandler = (evType: InternalEventType, ev: Event) => void
-
-/** Fake connection capturing the registered handler and every frame sent. */
-function fakeConnection() {
-  let handler: EventHandler | null = null
-  const sent: Record<string, unknown>[] = []
-  const conn: InternalApiConnection = {
-    baseUrl: '/api/',
-    readyState: () => 1,
-    send: (payload: string) => {
-      sent.push(JSON.parse(payload))
-    },
-    reconnect: () => {},
-    subscribe: (fn) => {
-      handler = fn
-      return { unsubscribe: () => { handler = null } }
-    },
-  }
-  return {
-    conn,
-    sent,
-    fire: (evType: InternalEventType, ev: Event) => handler?.(evType, ev),
-    frame: (body: unknown) =>
-      handler?.(
-        InternalEventType.message,
-        new MessageEvent('message', { data: JSON.stringify(body) }),
-      ),
-  }
-}
 
 const ENTRY: ProgrammerEntry = {
   targetKey: 'hex-1',
@@ -77,7 +48,7 @@ describe('createProgrammerApi', () => {
   })
 
   it('asks for no state snapshot on open — the server pushes one per connection', () => {
-    const { conn, sent, fire } = fakeConnection()
+    const { conn, sent, fire } = fakeWsConnection()
     createProgrammerApi(conn)
 
     fire(InternalEventType.open, new Event('open'))
@@ -86,7 +57,7 @@ describe('createProgrammerApi', () => {
   })
 
   it('indexes a state snapshot by (targetKey, propertyName)', () => {
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
 
     frame(stateFrame())
@@ -97,7 +68,7 @@ describe('createProgrammerApi', () => {
   })
 
   it('ignores frames of other types without parsing them', () => {
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
     const spy = vi.fn()
     api.subscribe(spy)
@@ -108,7 +79,7 @@ describe('createProgrammerApi', () => {
   })
 
   it('does not fire when the message event is not a MessageEvent', () => {
-    const { conn, fire } = fakeConnection()
+    const { conn, fire } = fakeWsConnection()
     const api = createProgrammerApi(conn)
     const spy = vi.fn()
     api.subscribe(spy)
@@ -119,7 +90,7 @@ describe('createProgrammerApi', () => {
   })
 
   it('survives a malformed frame that trips the substring fast path', () => {
-    const { conn, fire } = fakeConnection()
+    const { conn, fire } = fakeWsConnection()
     const api = createProgrammerApi(conn)
     const spy = vi.fn()
     api.subscribe(spy)
@@ -133,7 +104,7 @@ describe('createProgrammerApi', () => {
   })
 
   it('applies provenance and exposes it per key', () => {
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
 
     frame({ type: 'provenanceState', entries: [PROV] })
@@ -144,7 +115,7 @@ describe('createProgrammerApi', () => {
   })
 
   it('re-requests programmer state after provenance, debounced into one refetch', () => {
-    const { conn, sent, frame } = fakeConnection()
+    const { conn, sent, frame } = fakeWsConnection()
     createProgrammerApi(conn)
 
     // Provenance is the only broadcast the server sends for programmer activity — including
@@ -160,7 +131,7 @@ describe('createProgrammerApi', () => {
   })
 
   it('re-arms the debounce for provenance that arrives after a refetch', () => {
-    const { conn, sent, frame } = fakeConnection()
+    const { conn, sent, frame } = fakeWsConnection()
     createProgrammerApi(conn)
 
     frame({ type: 'provenanceState', entries: [] })
@@ -172,7 +143,7 @@ describe('createProgrammerApi', () => {
   })
 
   it('notifies only the keys whose state actually changed', () => {
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
     const dimmer = vi.fn()
     const strobe = vi.fn()
@@ -187,7 +158,7 @@ describe('createProgrammerApi', () => {
   })
 
   it('notifies a key when its entry is removed', () => {
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
     frame(stateFrame())
 
@@ -200,7 +171,7 @@ describe('createProgrammerApi', () => {
   })
 
   it('does not re-notify when a snapshot repeats an entry with identical values', () => {
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
     frame(stateFrame())
 
@@ -215,7 +186,7 @@ describe('createProgrammerApi', () => {
   })
 
   it('re-notifies when a repeated entry differs in any field', () => {
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
     frame(stateFrame())
 
@@ -233,7 +204,7 @@ describe('createProgrammerApi', () => {
   })
 
   it('does not re-notify when provenance repeats with identical values', () => {
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
     frame({ type: 'provenanceState', entries: [PROV] })
 
@@ -250,7 +221,7 @@ describe('createProgrammerApi', () => {
   })
 
   it('reports the local connection as the owner when its write takes over a property', () => {
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
     frame(stateFrame([{ ...ENTRY, owner: 'locate', owners: ['locate'], sourceGroup: 'Wash' }]))
 
@@ -271,7 +242,7 @@ describe('createProgrammerApi', () => {
   })
 
   it('echoes an own-connection write locally before the state refetch lands', () => {
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
 
     frame({
@@ -294,7 +265,7 @@ describe('createProgrammerApi', () => {
   // entry now.
 
   it('drops the entry on an own-connection clear', () => {
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
     frame(stateFrame())
 
@@ -309,7 +280,7 @@ describe('createProgrammerApi', () => {
   })
 
   it('empties the cache on clear-all', () => {
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
     frame(stateFrame())
 
@@ -319,7 +290,7 @@ describe('createProgrammerApi', () => {
   })
 
   it('tracks the blind gate from both the snapshot and the toggle reply', () => {
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
 
     expect(api.isBlind()).toBe(false)
@@ -330,7 +301,7 @@ describe('createProgrammerApi', () => {
   })
 
   it('reports programmer errors to error subscribers only', () => {
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
     const errors = vi.fn()
     const keySpy = vi.fn()
@@ -344,7 +315,7 @@ describe('createProgrammerApi', () => {
   })
 
   it('sends the documented wire shapes', () => {
-    const { conn, sent } = fakeConnection()
+    const { conn, sent } = fakeWsConnection()
     const api = createProgrammerApi(conn)
 
     api.set('fixture', 'hex-1', 'dimmer', '200', 500)
@@ -392,7 +363,7 @@ describe('createProgrammerApi', () => {
   })
 
   it('sends the documented layer wire shapes', () => {
-    const { conn, sent } = fakeConnection()
+    const { conn, sent } = fakeWsConnection()
     const api = createProgrammerApi(conn)
 
     api.addLayer({ lookId: 7, targets: [{ type: 'group', key: 'front-wash' }], amount: 0.5 })
@@ -420,7 +391,7 @@ describe('createProgrammerApi', () => {
   it('never sends a look uuid on addLayer', () => {
     // The backend resolves the Look from its int id. A uuid here would be a second address for the
     // same thing, and the two are minted differently across a sync import.
-    const { conn, sent } = fakeConnection()
+    const { conn, sent } = fakeWsConnection()
     createProgrammerApi(conn).addLayer({ lookId: 7 })
     expect(JSON.stringify(sent[0])).not.toMatch(/uuid/i)
   })
@@ -428,7 +399,7 @@ describe('createProgrammerApi', () => {
   it('carries an optional sourceGroup on the set ops', () => {
     // For fan-outs that can't send targetType:'group' — a group virtual dimmer over
     // heterogeneous members, a Highlight release restoring per-fixture values.
-    const { conn, sent } = fakeConnection()
+    const { conn, sent } = fakeWsConnection()
     const api = createProgrammerApi(conn)
 
     api.set('fixture', 'hex-1', 'dimmer', '200', undefined, 'front-wash')
@@ -439,7 +410,7 @@ describe('createProgrammerApi', () => {
   })
 
   it('tracks the include target from the state snapshot and the broadcast', () => {
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
     expect(api.lastIncluded()).toBeNull()
 
@@ -459,7 +430,7 @@ describe('createProgrammerApi', () => {
   it('forgets the include target when the programmer is cleared', () => {
     // Clear releases everything Include staged, so an Update offering that target would
     // silently write nothing.
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
     frame({ ...stateFrame(), lastIncluded: { kind: 'CUE', cueId: 42 } })
 
@@ -471,7 +442,7 @@ describe('createProgrammerApi', () => {
   it('does not wake per-key subscribers when only the include target changed', () => {
     // `lastIncluded` is deliberately outside `entrySignature`: including a different cue must
     // not re-render every cell in a few-hundred-row sheet.
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
     const spy = vi.fn()
     api.subscribeToKey('hex-1', 'dimmer', spy)
@@ -486,7 +457,7 @@ describe('createProgrammerApi', () => {
   it('takes the layer stack from a broadcast layerState frame', () => {
     // Broadcast, so this arrives for another tab's reorder as well as our own mutation — which is
     // the whole reason the server sends it rather than replying to the caller.
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
     expect(api.layers()).toEqual([])
 
@@ -499,7 +470,7 @@ describe('createProgrammerApi', () => {
   it('does not wake per-key subscribers when only the layer stack changed', () => {
     // Same argument as the include target: the stack is the cue-level composition, not per-cell
     // state, and a reorder must not re-render every cell in a few-hundred-row sheet.
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
     const spy = vi.fn()
     api.subscribeToKey('hex-1', 'dimmer', spy)
@@ -512,7 +483,7 @@ describe('createProgrammerApi', () => {
   })
 
   it('wakes coarse subscribers on a layerState frame', () => {
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
     const spy = vi.fn()
     api.subscribe(spy)
@@ -527,7 +498,7 @@ describe('createProgrammerApi', () => {
     // `layers` rides `programmer.state` so a fresh connection needs no second round trip. It is
     // optional on the wire, and an absent field means an older server — not an empty stack, which
     // would blank the pane on every refetch.
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
 
     frame({ ...stateFrame(), layers: [LAYER] })
@@ -540,7 +511,7 @@ describe('createProgrammerApi', () => {
   it('wakes a cell when only the winning layer changed', () => {
     // `source` stays `CUE` when a cue's value starts coming from one of its layers, so leaving the
     // layer fields out of the provenance signature would leave the cell naming the old answer.
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
     const spy = vi.fn()
     api.subscribeToKey('hex-1', 'dimmer', spy)
@@ -560,7 +531,7 @@ describe('createProgrammerApi', () => {
   })
 
   it('stops delivering to a key subscriber after it unsubscribes', () => {
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
     const spy = vi.fn()
     const sub = api.subscribeToKey('hex-1', 'dimmer', spy)
@@ -581,7 +552,7 @@ describe('createProgrammerApi', () => {
   // instance of it now that a key can move from a cue to one of the cue's layers.
 
   it('accepts a PALETTE include target', () => {
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
     frame({
       type: 'programmer.includeTarget',

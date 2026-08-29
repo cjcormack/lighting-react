@@ -1,13 +1,9 @@
 import { InternalApiConnection } from './internalApi'
 import { Subscription } from './subscription'
-import { createWsSubscribable } from './wsSubscriptionFactory'
+import { createChangeSignalApi } from './wsSubscriptionFactory'
 
 export interface FxDefinitionsWsApi {
   subscribe(fn: () => void): Subscription
-}
-
-type FxDefinitionInMessage = {
-  type: 'fxDefinitionListChanged'
 }
 
 /**
@@ -19,17 +15,5 @@ type FxDefinitionInMessage = {
  * `scriptListChanged` for the reason that frame's own doc gives.
  */
 export function createFxDefinitionsWsApi(conn: InternalApiConnection): FxDefinitionsWsApi {
-  const definitionsChanged = createWsSubscribable<void>()
-
-  conn.subscribe((evType, ev) => {
-    if (evType === 'message' && ev instanceof MessageEvent) {
-      const message: FxDefinitionInMessage = JSON.parse(ev.data)
-      if (message == null) return
-      if (message.type === 'fxDefinitionListChanged') {
-        definitionsChanged.notify()
-      }
-    }
-  })
-
-  return definitionsChanged.api
+  return createChangeSignalApi(conn, 'fxDefinitionListChanged')
 }

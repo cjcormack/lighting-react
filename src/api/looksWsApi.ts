@@ -1,13 +1,9 @@
 import { InternalApiConnection } from './internalApi'
 import { Subscription } from './subscription'
-import { createWsSubscribable } from './wsSubscriptionFactory'
+import { createChangeSignalApi } from './wsSubscriptionFactory'
 
 export interface LooksWsApi {
   subscribe(fn: () => void): Subscription
-}
-
-type LookInMessage = {
-  type: 'lookListChanged'
 }
 
 /**
@@ -21,17 +17,5 @@ type LookInMessage = {
  * `programmer.state` re-read — that is what refreshes resolved values on screen.
  */
 export function createLooksWsApi(conn: InternalApiConnection): LooksWsApi {
-  const looksChanged = createWsSubscribable<void>()
-
-  conn.subscribe((evType, ev) => {
-    if (evType === 'message' && ev instanceof MessageEvent) {
-      const message: LookInMessage = JSON.parse(ev.data)
-      if (message == null) return
-      if (message.type === 'lookListChanged') {
-        looksChanged.notify()
-      }
-    }
-  })
-
-  return looksChanged.api
+  return createChangeSignalApi(conn, 'lookListChanged')
 }

@@ -1,6 +1,6 @@
 import { InternalApiConnection } from './internalApi'
 import { Subscription } from './subscription'
-import { createWsSubscribable } from './wsSubscriptionFactory'
+import { createChangeSignalApi } from './wsSubscriptionFactory'
 
 export interface StageRegionDto {
   id: number;
@@ -43,22 +43,6 @@ export interface StageRegionApi {
   subscribe(fn: () => void): Subscription;
 }
 
-type StageRegionInMessage = {
-  type: 'stageRegionListChanged'
-}
-
 export function createStageRegionApi(conn: InternalApiConnection): StageRegionApi {
-  const stageRegionsChanged = createWsSubscribable<void>()
-
-  conn.subscribe((evType, ev) => {
-    if (evType === 'message' && ev instanceof MessageEvent) {
-      const message: StageRegionInMessage = JSON.parse(ev.data)
-      if (message == null) return
-      if (message.type === 'stageRegionListChanged') {
-        stageRegionsChanged.notify()
-      }
-    }
-  })
-
-  return stageRegionsChanged.api
+  return createChangeSignalApi(conn, 'stageRegionListChanged')
 }

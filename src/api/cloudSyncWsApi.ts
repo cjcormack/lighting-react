@@ -109,9 +109,9 @@ export function createCloudSyncWsApi(conn: InternalApiConnection): CloudSyncWsAp
   const projectImported = createWsSubscribable<CloudSyncProjectImportedEvent>()
   const oauthIdentityChanged = createWsSubscribable<OAuthIdentityChangedEvent>()
 
-  conn.subscribe((evType, ev) => {
-    if (evType !== 'message' || !(ev instanceof MessageEvent)) return
-    const message: CloudSyncInMessage = JSON.parse(ev.data)
+  conn.subscribe((evType, _ev, frame) => {
+    if (evType !== 'message') return
+    const message = frame as CloudSyncInMessage | null
     if (message == null) return
     switch (message.type) {
       case 'cloudSyncStarted':

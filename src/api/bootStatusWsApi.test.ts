@@ -1,32 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
-import { InternalApiConnection, InternalEventType } from "./internalApi"
+import { InternalEventType } from "./internalApi"
+import { fakeWsConnection } from "../test/fakeWsConnection"
 import { BootStatus, createBootStatusWsApi } from "./bootStatusWsApi"
-
-type EventHandler = (evType: InternalEventType, ev: Event) => void
-
-// A fake connection that captures the single handler createBootStatusWsApi
-// registers, so tests can fire synthetic WS events at it directly.
-function fakeConnection() {
-  let handler: EventHandler | null = null
-  const conn: InternalApiConnection = {
-    baseUrl: "/api/",
-    readyState: () => 1, // WebSocket.OPEN — never called, just a stub value
-    send: () => {},
-    reconnect: () => {},
-    subscribe: (fn) => {
-      handler = fn
-      return {
-        unsubscribe: () => {
-          handler = null
-        },
-      }
-    },
-  }
-  return {
-    conn,
-    fire: (evType: InternalEventType, ev: Event) => handler?.(evType, ev),
-  }
-}
 
 const SAMPLE_STATUS: BootStatus = {
   phase: "FX_COMPILE",
@@ -44,7 +19,7 @@ function bootFrame(status: BootStatus = SAMPLE_STATUS) {
 
 describe("createBootStatusWsApi", () => {
   it("does NOT fire on an 'open' event — the reconnect resync owns that", () => {
-    const { conn, fire } = fakeConnection()
+    const { conn, fire } = fakeWsConnection()
     const api = createBootStatusWsApi(conn)
     const spy = vi.fn()
     api.subscribe(spy)
@@ -58,7 +33,7 @@ describe("createBootStatusWsApi", () => {
   })
 
   it("fires on a 'bootProgressState' message frame", () => {
-    const { conn, fire } = fakeConnection()
+    const { conn, fire } = fakeWsConnection()
     const api = createBootStatusWsApi(conn)
     const spy = vi.fn()
     api.subscribe(spy)
@@ -69,7 +44,7 @@ describe("createBootStatusWsApi", () => {
   })
 
   it("does NOT fire on a message frame of another type", () => {
-    const { conn, fire } = fakeConnection()
+    const { conn, fire } = fakeWsConnection()
     const api = createBootStatusWsApi(conn)
     const spy = vi.fn()
     api.subscribe(spy)
@@ -85,20 +60,20 @@ describe("createBootStatusWsApi", () => {
   })
 
   it("does NOT fire when the message event is not a MessageEvent", () => {
-    const { conn, fire } = fakeConnection()
+    const { conn, fire } = fakeWsConnection()
     const api = createBootStatusWsApi(conn)
     const spy = vi.fn()
     api.subscribe(spy)
 
-    // Same 'message' event type, but a plain Event — fails the
-    // `ev instanceof MessageEvent` guard, so JSON.parse never runs.
+    // Same 'message' event type, but a plain Event — `parseWsFrame` returns null
+    // for it, so the bridge sees no body.
     fire(InternalEventType.message, new Event("message"))
 
     expect(spy).not.toHaveBeenCalled()
   })
 
   it("does NOT fire when the parsed body is null", () => {
-    const { conn, fire } = fakeConnection()
+    const { conn, fire } = fakeWsConnection()
     const api = createBootStatusWsApi(conn)
     const spy = vi.fn()
     api.subscribe(spy)
@@ -109,7 +84,7 @@ describe("createBootStatusWsApi", () => {
   })
 
   it("notifies every subscriber", () => {
-    const { conn, fire } = fakeConnection()
+    const { conn, fire } = fakeWsConnection()
     const api = createBootStatusWsApi(conn)
     const a = vi.fn()
     const b = vi.fn()
@@ -123,7 +98,7 @@ describe("createBootStatusWsApi", () => {
   })
 
   it("stops delivering to a subscriber after it unsubscribes", () => {
-    const { conn, fire } = fakeConnection()
+    const { conn, fire } = fakeWsConnection()
     const api = createBootStatusWsApi(conn)
     const spy = vi.fn()
     const sub = api.subscribe(spy)

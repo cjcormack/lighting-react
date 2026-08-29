@@ -38,9 +38,7 @@ export function createParkApi(conn: InternalApiConnection): ParkApi {
     }
   }
 
-  const handleOnMessage = (ev: MessageEvent) => {
-    const message: ParkStateInMessage = JSON.parse(ev.data)
-
+  const handleOnMessage = (message: ParkStateInMessage | null) => {
     if (message == null || message.type !== "parkState") {
       return
     }
@@ -65,9 +63,9 @@ export function createParkApi(conn: InternalApiConnection): ParkApi {
   }
 
   // No `parkState` request on open: the server pushes one per connection.
-  conn.subscribe((evType, ev) => {
-    if (evType === "message" && ev instanceof MessageEvent) {
-      handleOnMessage(ev)
+  conn.subscribe((evType, _ev, message) => {
+    if (evType === "message") {
+      handleOnMessage(message as ParkStateInMessage | null)
     }
   })
 

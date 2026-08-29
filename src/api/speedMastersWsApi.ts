@@ -103,7 +103,7 @@ export function createSpeedMastersWsApi(conn: InternalApiConnection): SpeedMaste
 
   let masters: SpeedMasterLiveState[] = []
 
-  conn.subscribe((evType, ev) => {
+  conn.subscribe((evType, _ev, frame) => {
     if (evType === 'open') {
       // Beat requests are one-shot and live on the server's per-connection scope, so a
       // reconnect loses every pending one. Without re-asking, an indicator keeps free-
@@ -114,10 +114,11 @@ export function createSpeedMastersWsApi(conn: InternalApiConnection): SpeedMaste
       // reconnect resync in `store/status.ts` invalidates `SpeedMaster`/`SpeedMasterList`
       // with every other tag).
       requestBeatsFor(beatByMaster.keys())
-    } else if (evType === 'message' && ev instanceof MessageEvent) {
-      // Fast-path: skip JSON.parse for the torrent of unrelated frames.
-      if (typeof ev.data === 'string' && !ev.data.includes('"speedMaster')) return
-      const message: SpeedMasterInMessage = JSON.parse(ev.data)
+    } else if (evType === 'message') {
+      // The connection parses each frame once for every bridge, so the substring
+      // pre-filter this used to run against the torrent of unrelated frames has
+      // nothing left to save: discriminate on the parsed `type` instead.
+      const message = frame as SpeedMasterInMessage | null
       if (message == null) return
       if (message.type === 'speedMasters.state') {
         masters = message.masters

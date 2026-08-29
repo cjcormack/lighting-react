@@ -1,6 +1,6 @@
 import { InternalApiConnection } from './internalApi'
 import { Subscription } from './subscription'
-import { createWsSubscribable } from './wsSubscriptionFactory'
+import { createChangeSignalApi } from './wsSubscriptionFactory'
 
 // Backend "server-first" boot contract. The web server comes up immediately and
 // serves this frontend, then initialises the show (FX compile, fixtures, cue
@@ -27,29 +27,13 @@ export interface BootStatusWsApi {
   subscribe(fn: () => void): Subscription
 }
 
-type BootStatusInMessage = {
-  type: 'bootProgressState'
-  status: BootStatus
-}
-
+// Fires whenever the boot status may have changed. The consumer refetches the
+// authoritative `/api/rest/status` on each notification, so the pushed `status` payload
+// is deliberately not forwarded — which is what lets this be a plain change signal.
+// Deliberately no `open` branch: re-checking readiness after a backend restart (when the
+// poll has stopped because the show was ready) is one case of the reconnect resync in
+// `store/status.ts`, which invalidates `BootStatus` along with every other tag. A branch
+// here would only fire the same refetch twice.
 export function createBootStatusWsApi(conn: InternalApiConnection): BootStatusWsApi {
-  // Fires whenever the boot status may have changed. The consumer refetches the
-  // authoritative `/api/rest/status` on each notification, so we don't forward
-  // the pushed payload. Deliberately no `open` branch: re-checking readiness after a
-  // backend restart (when the poll has stopped because the show was ready) is one case
-  // of the reconnect resync in `store/status.ts`, which invalidates `BootStatus` along
-  // with every other tag. A branch here would only fire the same refetch twice.
-  const bootProgress = createWsSubscribable<void>()
-
-  conn.subscribe((evType, ev) => {
-    if (evType === 'message' && ev instanceof MessageEvent) {
-      const message: BootStatusInMessage = JSON.parse(ev.data)
-      if (message == null) return
-      if (message.type === 'bootProgressState') {
-        bootProgress.notify()
-      }
-    }
-  })
-
-  return bootProgress.api
+  return createChangeSignalApi(conn, 'bootProgressState')
 }

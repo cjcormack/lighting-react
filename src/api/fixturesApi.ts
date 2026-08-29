@@ -19,9 +19,7 @@ export function createFixtureApi(conn: InternalApiConnection): FixturesApi {
     })
   }
 
-  const handleOnMessage = (ev: MessageEvent) => {
-    const message: FixturesChangedInMessage = JSON.parse(ev.data)
-
+  const handleOnMessage = (message: FixturesChangedInMessage | null) => {
     if (message == null || message.type != 'fixturesChanged') {
       return
     }
@@ -29,9 +27,9 @@ export function createFixtureApi(conn: InternalApiConnection): FixturesApi {
     notifyChange()
   }
 
-  conn.subscribe((evType, ev) => {
-    if (evType === 'message' && ev instanceof MessageEvent) {
-      handleOnMessage(ev)
+  conn.subscribe((evType, _ev, message) => {
+    if (evType === 'message') {
+      handleOnMessage(message as FixturesChangedInMessage | null)
     }
   })
 

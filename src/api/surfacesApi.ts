@@ -366,15 +366,10 @@ export function createSurfacesWsApi(conn: InternalApiConnection): SurfacesWsApi 
 
   // No state requests on open: the server pushes `surfaceDevices.state`,
   // `surfaceBank.state` and `surfaceScaler.state` per connection.
-  conn.subscribe((evType, ev) => {
-    if (evType !== "message" || !(ev instanceof MessageEvent)) return
+  conn.subscribe((evType, _ev, frame) => {
+    if (evType !== "message") return
 
-    let parsed: InboundMessage | null = null
-    try {
-      parsed = JSON.parse(ev.data)
-    } catch {
-      return
-    }
+    const parsed = frame as InboundMessage | null
     if (!parsed) return
 
     switch (parsed.type) {

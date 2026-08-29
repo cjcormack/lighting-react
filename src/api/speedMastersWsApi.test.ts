@@ -1,36 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { InternalApiConnection, InternalEventType } from './internalApi'
+import { InternalEventType } from './internalApi'
+import { fakeWsConnection } from '../test/fakeWsConnection'
 import { createSpeedMastersWsApi, type SpeedMasterLiveState } from './speedMastersWsApi'
-
-type EventHandler = (evType: InternalEventType, ev: Event) => void
-
-/** Fake connection capturing the registered handler and every frame sent. */
-function fakeConnection() {
-  let handler: EventHandler | null = null
-  const sent: Record<string, unknown>[] = []
-  const conn: InternalApiConnection = {
-    baseUrl: '/api/',
-    readyState: () => 1,
-    send: (payload: string) => {
-      sent.push(JSON.parse(payload as string))
-    },
-    reconnect: () => {},
-    subscribe: (fn) => {
-      handler = fn
-      return { unsubscribe: () => { handler = null } }
-    },
-  }
-  return {
-    conn,
-    sent,
-    fire: (evType: InternalEventType, ev: Event) => handler?.(evType, ev),
-    frame: (body: unknown) =>
-      handler?.(
-        InternalEventType.message,
-        new MessageEvent('message', { data: JSON.stringify(body) }),
-      ),
-  }
-}
 
 const MASTER_1: SpeedMasterLiveState = {
   uuid: 'aaaaaaaa-0000-0000-0000-000000000001',
@@ -56,7 +27,7 @@ function stateFrame(masters: SpeedMasterLiveState[] = [MASTER_1, MASTER_2]) {
 
 describe('createSpeedMastersWsApi', () => {
   it('asks for no bank snapshot on open — the server pushes one per connection', () => {
-    const { conn, sent, fire } = fakeConnection()
+    const { conn, sent, fire } = fakeWsConnection()
     createSpeedMastersWsApi(conn)
 
     fire(InternalEventType.open, new Event('open'))
@@ -65,7 +36,7 @@ describe('createSpeedMastersWsApi', () => {
   })
 
   it('holds the latest bank and exposes it via getState', () => {
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createSpeedMastersWsApi(conn)
 
     expect(api.getState()).toEqual([])
@@ -74,7 +45,7 @@ describe('createSpeedMastersWsApi', () => {
   })
 
   it('patches one master on speedMasters-changed without touching the others', () => {
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createSpeedMastersWsApi(conn)
     frame(stateFrame())
     const untouchedBefore = api.getState()[0]
@@ -97,7 +68,7 @@ describe('createSpeedMastersWsApi', () => {
   })
 
   it('notifies live subscribers on state and changed frames, list subscribers on CRUD only', () => {
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createSpeedMastersWsApi(conn)
     const liveFn = vi.fn()
     const listFn = vi.fn()
@@ -123,7 +94,7 @@ describe('createSpeedMastersWsApi', () => {
   })
 
   it('re-requests the bank when membership changes', () => {
-    const { conn, sent, frame } = fakeConnection()
+    const { conn, sent, frame } = fakeWsConnection()
     createSpeedMastersWsApi(conn)
 
     frame({ type: 'speedMasters.listChanged' })
@@ -132,7 +103,7 @@ describe('createSpeedMastersWsApi', () => {
   })
 
   it('sends keyed and unkeyed tempo writes', () => {
-    const { conn, sent } = fakeConnection()
+    const { conn, sent } = fakeWsConnection()
     const api = createSpeedMastersWsApi(conn)
 
     api.setBpm(MASTER_2.uuid, 72)
@@ -145,7 +116,7 @@ describe('createSpeedMastersWsApi', () => {
   })
 
   it('routes a beat frame only to the subscribers of that master', () => {
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createSpeedMastersWsApi(conn)
 
     const onM1 = vi.fn()
@@ -182,7 +153,7 @@ describe('createSpeedMastersWsApi', () => {
   })
 
   it('routes the pre-load master 1 frame, which carries no uuid, to the null key', () => {
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createSpeedMastersWsApi(conn)
 
     // Before the bank loads, slot 0 is the synthetic master 1 and has no row to name it. An
@@ -203,7 +174,7 @@ describe('createSpeedMastersWsApi', () => {
   })
 
   it('requests an immediate beat when a subscriber attaches', () => {
-    const { conn, sent } = fakeConnection()
+    const { conn, sent } = fakeWsConnection()
     const api = createSpeedMastersWsApi(conn)
 
     // Frames are throttled to one every 16 beats, so without this a freshly-mounted
@@ -218,7 +189,7 @@ describe('createSpeedMastersWsApi', () => {
   })
 
   it('requests a beat without resubscribing', () => {
-    const { conn, sent } = fakeConnection()
+    const { conn, sent } = fakeWsConnection()
     const api = createSpeedMastersWsApi(conn)
 
     // For a subscriber whose local timer went stale (a backgrounded tab) but whose
@@ -230,7 +201,7 @@ describe('createSpeedMastersWsApi', () => {
   })
 
   it('re-requests beats for every subscribed master on reconnect', () => {
-    const { conn, sent, fire } = fakeConnection()
+    const { conn, sent, fire } = fakeWsConnection()
     const api = createSpeedMastersWsApi(conn)
     api.subscribeBeat(MASTER_2.uuid, () => {})
     api.subscribeBeat(null, () => {})
@@ -248,7 +219,7 @@ describe('createSpeedMastersWsApi', () => {
   })
 
   it('stops delivering beats after unsubscribe', () => {
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createSpeedMastersWsApi(conn)
     const onBeat = vi.fn()
     const sub = api.subscribeBeat(MASTER_2.uuid, onBeat)
@@ -267,7 +238,7 @@ describe('createSpeedMastersWsApi', () => {
   })
 
   it('ignores unrelated frames without parsing trouble', () => {
-    const { conn, frame } = fakeConnection()
+    const { conn, frame } = fakeWsConnection()
     const api = createSpeedMastersWsApi(conn)
     frame(stateFrame())
 

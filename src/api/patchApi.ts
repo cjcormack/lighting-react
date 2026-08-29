@@ -136,9 +136,9 @@ export function createPatchApi(conn: InternalApiConnection): PatchApi {
     subscriptions.forEach((fn) => fn());
   };
 
-  conn.subscribe((evType, ev) => {
-    if (evType === 'message' && ev instanceof MessageEvent) {
-      const message = JSON.parse(ev.data);
+  conn.subscribe((evType, _ev, frame) => {
+    if (evType === 'message') {
+      const message = frame as { type?: string } | null;
       if (message?.type === 'patchListChanged') {
         notifyChange();
       }

@@ -82,9 +82,9 @@ export function createFxApi(conn: InternalApiConnection): FxApi {
     stateSubscriptions.forEach((fn) => fn(state))
   }
 
-  conn.subscribe((evType, ev) => {
-    if (evType === InternalEventType.message && ev instanceof MessageEvent) {
-      const message: FxMessage = JSON.parse(ev.data)
+  conn.subscribe((evType, _ev, frame) => {
+    if (evType === InternalEventType.message) {
+      const message = frame as FxMessage | null
       if (message == null) return
 
       if (message.type === 'fxState') {

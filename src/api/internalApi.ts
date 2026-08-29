@@ -6,11 +6,27 @@ import {Subscription} from "./subscription";
 // application-range code rather than an HTTP status.
 export const UNAUTHENTICATED_CLOSE_CODE = 4401
 
+/**
+ * A bridge's handler for one connection event.
+ *
+ * `message` is the frame's already-parsed JSON body — parsed exactly once per frame
+ * for all ~27 bridges, rather than once per bridge (the `channelState` firehose runs
+ * at ~40 frames/s per universe, on the same main thread that paints the grid). It is
+ * `null` for anything that is not a text `message` event, and for a frame whose body
+ * is not valid JSON. Switch on its `type`; `ev` remains available for the lifecycle
+ * branches that need the raw event (`CloseEvent.code`, for instance).
+ */
+export type InternalEventHandler = (
+  evType: InternalEventType,
+  ev: Event,
+  message: unknown,
+) => void
+
 export interface InternalApiConnection {
   baseUrl: string
   readyState(): number;
   send(data: string | ArrayBufferLike | Blob | ArrayBufferView): void,
-  subscribe(fn: ((evType: InternalEventType, ev: Event) => void)): Subscription
+  subscribe(fn: InternalEventHandler): Subscription
   /**
    * Re-open the socket. A no-op while it is already OPEN or CONNECTING, unless
    * `force` — which is what a fresh login needs, since the identity behind an
@@ -26,18 +42,34 @@ export enum InternalEventType {
   'open' = 'open',
 }
 
+/**
+ * The single parse of an inbound frame. Exported so a bridge's test fake can mirror
+ * production exactly rather than hand-rolling the same guards; nothing else should
+ * call it, since the connection has already parsed the frame by the time a bridge
+ * sees it. Returns null for a non-text event and for a body that is not valid JSON.
+ */
+export function parseWsFrame(ev: Event): unknown {
+  if (!(ev instanceof MessageEvent) || typeof ev.data !== 'string') return null
+  try {
+    return JSON.parse(ev.data)
+  } catch {
+    console.error('WebSocket: dropping a frame that is not valid JSON', ev.data)
+    return null
+  }
+}
+
 export function createInternalApiConnection(baseUrl: string, wsUrl: string): InternalApiConnection {
   let nextEventSubscriptionId = 1
-  const eventSubscriptions = new Map<number, (evType: InternalEventType, ev: Event) => void>()
+  const eventSubscriptions = new Map<number, InternalEventHandler>()
   let reconnectDelay = 1000
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
   const notifyEvent = (ev: Event) => {
+    const evType = ev.type as InternalEventType
+    if (!evType) return
+    const message = evType === InternalEventType.message ? parseWsFrame(ev) : null
     eventSubscriptions.forEach((fn) => {
-      const evType = ev.type as InternalEventType
-      if (evType) {
-        fn(evType, ev)
-      }
+      fn(evType, ev, message)
     })
   }
 
@@ -117,7 +149,7 @@ export function createInternalApiConnection(baseUrl: string, wsUrl: string): Int
       }
       ws = connect()
     },
-    subscribe(fn: (evType: InternalEventType, ev: Event) => void): Subscription {
+    subscribe(fn: InternalEventHandler): Subscription {
       const thisId = nextEventSubscriptionId
       nextEventSubscriptionId++
 

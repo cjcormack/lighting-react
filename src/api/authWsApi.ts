@@ -41,7 +41,7 @@ export function createAuthWsApi(conn: InternalApiConnection): AuthWsApi {
   // before the next macrotask, so the first open is never missed.
   let seenOpen = false
 
-  conn.subscribe((evType, ev) => {
+  conn.subscribe((evType, ev, frame) => {
     if (
       evType === InternalEventType.close &&
       ev instanceof CloseEvent &&
@@ -54,8 +54,8 @@ export function createAuthWsApi(conn: InternalApiConnection): AuthWsApi {
       // stale `data` (see the comment in AuthGate), so nothing blanks out.
       if (seenOpen) ownAccountChanged.notify()
       seenOpen = true
-    } else if (evType === InternalEventType.message && ev instanceof MessageEvent) {
-      const message: AuthInMessage = JSON.parse(ev.data)
+    } else if (evType === InternalEventType.message) {
+      const message = frame as AuthInMessage | null
       if (message == null) return
       if (message.type === 'ownAccountChanged') {
         ownAccountChanged.notify()

@@ -1,6 +1,6 @@
 import { InternalApiConnection } from './internalApi'
 import { Subscription } from './subscription'
-import { createWsSubscribable } from './wsSubscriptionFactory'
+import { createChangeSignalApi } from './wsSubscriptionFactory'
 
 export interface RiggingDto {
   id: number;
@@ -46,22 +46,6 @@ export interface RiggingApi {
   subscribe(fn: () => void): Subscription;
 }
 
-type RiggingInMessage = {
-  type: 'riggingListChanged'
-}
-
 export function createRiggingApi(conn: InternalApiConnection): RiggingApi {
-  const riggingsChanged = createWsSubscribable<void>()
-
-  conn.subscribe((evType, ev) => {
-    if (evType === 'message' && ev instanceof MessageEvent) {
-      const message: RiggingInMessage = JSON.parse(ev.data)
-      if (message == null) return
-      if (message.type === 'riggingListChanged') {
-        riggingsChanged.notify()
-      }
-    }
-  })
-
-  return riggingsChanged.api
+  return createChangeSignalApi(conn, 'riggingListChanged')
 }

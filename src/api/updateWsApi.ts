@@ -31,9 +31,9 @@ type UpdateInMessage = {
 export function createUpdateWsApi(conn: InternalApiConnection): UpdateWsApi {
   const updateChanged = createWsSubscribable<UpdateStateChangedEvent>()
 
-  conn.subscribe((evType, ev) => {
-    if (evType !== 'message' || !(ev instanceof MessageEvent)) return
-    const message: UpdateInMessage | null = JSON.parse(ev.data)
+  conn.subscribe((evType, _ev, frame) => {
+    if (evType !== 'message') return
+    const message = frame as UpdateInMessage | null
     if (message == null || message.type !== 'updateStateChanged') return
     updateChanged.notify({
       phase: message.phase,

@@ -1,33 +1,8 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest"
-import { InternalApiConnection, InternalEventType, UNAUTHENTICATED_CLOSE_CODE } from "./internalApi"
+import { InternalEventType, UNAUTHENTICATED_CLOSE_CODE } from "./internalApi"
+import { fakeWsConnection } from "../test/fakeWsConnection"
 import { createAuthWsApi } from "./authWsApi"
-
-type EventHandler = (evType: InternalEventType, ev: Event) => void
-
-// A fake connection that captures the single handler createAuthWsApi registers, so
-// tests can fire synthetic WS events at it directly. Mirrors bootStatusWsApi.test.ts.
-function fakeConnection() {
-  let handler: EventHandler | null = null
-  const conn: InternalApiConnection = {
-    baseUrl: "/api/",
-    readyState: () => 3, // WebSocket.CLOSED — never called, just a stub value
-    send: () => {},
-    reconnect: () => {},
-    subscribe: (fn) => {
-      handler = fn
-      return {
-        unsubscribe: () => {
-          handler = null
-        },
-      }
-    },
-  }
-  return {
-    conn,
-    fire: (evType: InternalEventType, ev: Event) => handler?.(evType, ev),
-  }
-}
 
 function closeEvent(code: number) {
   return new CloseEvent("close", { code })
@@ -35,7 +10,7 @@ function closeEvent(code: number) {
 
 describe("createAuthWsApi", () => {
   it("fires the subscriber on a 4401 close", () => {
-    const { conn, fire } = fakeConnection()
+    const { conn, fire } = fakeWsConnection()
     const api = createAuthWsApi(conn)
     const spy = vi.fn()
     api.subscribeUnauthenticated(spy)
@@ -46,7 +21,7 @@ describe("createAuthWsApi", () => {
   })
 
   it("does NOT fire on an ordinary close", () => {
-    const { conn, fire } = fakeConnection()
+    const { conn, fire } = fakeWsConnection()
     const api = createAuthWsApi(conn)
     const spy = vi.fn()
     api.subscribeUnauthenticated(spy)
@@ -60,7 +35,7 @@ describe("createAuthWsApi", () => {
   })
 
   it("does NOT fire on non-close events", () => {
-    const { conn, fire } = fakeConnection()
+    const { conn, fire } = fakeWsConnection()
     const api = createAuthWsApi(conn)
     const spy = vi.fn()
     api.subscribeUnauthenticated(spy)
@@ -73,7 +48,7 @@ describe("createAuthWsApi", () => {
   })
 
   it("does NOT fire when the close event is not a CloseEvent (no code to read)", () => {
-    const { conn, fire } = fakeConnection()
+    const { conn, fire } = fakeWsConnection()
     const api = createAuthWsApi(conn)
     const spy = vi.fn()
     api.subscribeUnauthenticated(spy)
@@ -84,7 +59,7 @@ describe("createAuthWsApi", () => {
   })
 
   it("notifies every subscriber, and stops after unsubscribe", () => {
-    const { conn, fire } = fakeConnection()
+    const { conn, fire } = fakeWsConnection()
     const api = createAuthWsApi(conn)
     const a = vi.fn()
     const b = vi.fn()
@@ -107,7 +82,7 @@ describe("createAuthWsApi", () => {
   // revoked session sitting in the app.
   describe("ownAccountChanged, independently of the 4401 channel", () => {
     it("fires on an 'ownAccountChanged' frame, but not the unauthenticated one", () => {
-      const { conn, fire } = fakeConnection()
+      const { conn, fire } = fakeWsConnection()
       const api = createAuthWsApi(conn)
       const own = vi.fn()
       const unauth = vi.fn()
@@ -124,7 +99,7 @@ describe("createAuthWsApi", () => {
     })
 
     it("catches up on re-open, but not on the page's first connect", () => {
-      const { conn, fire } = fakeConnection()
+      const { conn, fire } = fakeWsConnection()
       const own = vi.fn()
       createAuthWsApi(conn).subscribeOwnAccountChanged(own)
 
@@ -144,7 +119,7 @@ describe("createAuthWsApi", () => {
     })
 
     it("is NOT fired by a 4401 close", () => {
-      const { conn, fire } = fakeConnection()
+      const { conn, fire } = fakeWsConnection()
       const api = createAuthWsApi(conn)
       const own = vi.fn()
       const unauth = vi.fn()
@@ -158,7 +133,7 @@ describe("createAuthWsApi", () => {
     })
 
     it("is NOT fired by the sibling machine-scoped frames or a null body", () => {
-      const { conn, fire } = fakeConnection()
+      const { conn, fire } = fakeWsConnection()
       const api = createAuthWsApi(conn)
       const own = vi.fn()
       api.subscribeOwnAccountChanged(own)

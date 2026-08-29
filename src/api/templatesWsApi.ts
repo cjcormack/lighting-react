@@ -1,13 +1,9 @@
 import { InternalApiConnection } from './internalApi'
 import { Subscription } from './subscription'
-import { createWsSubscribable } from './wsSubscriptionFactory'
+import { createChangeSignalApi } from './wsSubscriptionFactory'
 
 export interface TemplatesWsApi {
   subscribe(fn: () => void): Subscription
-}
-
-type TemplateInMessage = {
-  type: 'templateListChanged'
 }
 
 /**
@@ -24,17 +20,5 @@ type TemplateInMessage = {
  * invalidation storm behind an open editor.
  */
 export function createTemplatesWsApi(conn: InternalApiConnection): TemplatesWsApi {
-  const templatesChanged = createWsSubscribable<void>()
-
-  conn.subscribe((evType, ev) => {
-    if (evType === 'message' && ev instanceof MessageEvent) {
-      const message: TemplateInMessage = JSON.parse(ev.data)
-      if (message == null) return
-      if (message.type === 'templateListChanged') {
-        templatesChanged.notify()
-      }
-    }
-  })
-
-  return templatesChanged.api
+  return createChangeSignalApi(conn, 'templateListChanged')
 }

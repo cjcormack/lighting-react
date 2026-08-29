@@ -1,6 +1,6 @@
 import { InternalApiConnection } from './internalApi'
 import { Subscription } from './subscription'
-import { createWsSubscribable } from './wsSubscriptionFactory'
+import { createChangeSignalApi } from './wsSubscriptionFactory'
 
 // Desk-account changes made by *another* client. Users are machine-scoped rather than
 // show-scoped, so the backend sends this from its own flow (`AuthService.userChanges` via
@@ -16,22 +16,6 @@ export interface UsersWsApi {
   subscribe(fn: () => void): Subscription
 }
 
-type UserInMessage = {
-  type: 'userListChanged'
-}
-
 export function createUsersWsApi(conn: InternalApiConnection): UsersWsApi {
-  const usersChanged = createWsSubscribable<void>()
-
-  conn.subscribe((evType, ev) => {
-    if (evType === 'message' && ev instanceof MessageEvent) {
-      const message: UserInMessage = JSON.parse(ev.data)
-      if (message == null) return
-      if (message.type === 'userListChanged') {
-        usersChanged.notify()
-      }
-    }
-  })
-
-  return usersChanged.api
+  return createChangeSignalApi(conn, 'userListChanged')
 }

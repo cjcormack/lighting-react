@@ -31,9 +31,7 @@ export function createChannelMappingApi(conn: InternalApiConnection): ChannelMap
     subscriptions.forEach((fn) => fn(currentMappings))
   }
 
-  const handleOnMessage = (ev: MessageEvent) => {
-    const message: ChannelMappingStateMessage = JSON.parse(ev.data)
-
+  const handleOnMessage = (message: ChannelMappingStateMessage | null) => {
     if (message?.type !== 'channelMappingState') return
 
     // Clear and rebuild mappings
@@ -53,9 +51,9 @@ export function createChannelMappingApi(conn: InternalApiConnection): ChannelMap
     notifyChange()
   }
 
-  conn.subscribe((evType, ev) => {
-    if (evType === 'message' && ev instanceof MessageEvent) {
-      handleOnMessage(ev)
+  conn.subscribe((evType, _ev, message) => {
+    if (evType === 'message') {
+      handleOnMessage(message as ChannelMappingStateMessage | null)
     }
   })
 

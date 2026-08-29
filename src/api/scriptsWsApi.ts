@@ -1,13 +1,9 @@
 import { InternalApiConnection } from './internalApi'
 import { Subscription } from './subscription'
-import { createWsSubscribable } from './wsSubscriptionFactory'
+import { createChangeSignalApi } from './wsSubscriptionFactory'
 
 export interface ScriptsWsApi {
   subscribe(fn: () => void): Subscription
-}
-
-type ScriptInMessage = {
-  type: 'scriptListChanged'
 }
 
 /**
@@ -22,17 +18,5 @@ type ScriptInMessage = {
  * `usedByProperties` and `canDelete`, both of which move when the source does.
  */
 export function createScriptsWsApi(conn: InternalApiConnection): ScriptsWsApi {
-  const scriptsChanged = createWsSubscribable<void>()
-
-  conn.subscribe((evType, ev) => {
-    if (evType === 'message' && ev instanceof MessageEvent) {
-      const message: ScriptInMessage = JSON.parse(ev.data)
-      if (message == null) return
-      if (message.type === 'scriptListChanged') {
-        scriptsChanged.notify()
-      }
-    }
-  })
-
-  return scriptsChanged.api
+  return createChangeSignalApi(conn, 'scriptListChanged')
 }
