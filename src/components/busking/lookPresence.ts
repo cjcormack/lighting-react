@@ -26,7 +26,7 @@ export function lookLayerPresence(
   // Matched on the source being a **Look** with this id, not on the id alone: a template layer can
   // carry the same int PK from the other table, and a pad would then light for someone else's row.
   const covering = layers.filter(
-    (layer) => !layer.isPreview && layer.source.kind === 'LOOK' && layer.source.id === lookId,
+    (layer) => layer.source.kind === 'LOOK' && layer.source.id === lookId,
   )
   if (covering.length === 0) return 'none'
 
@@ -61,7 +61,7 @@ export function templateLayerPresence(
   if (targets.length === 0) return 'none'
 
   const covering = layers.filter(
-    (layer) => !layer.isPreview && layer.source.kind === 'TEMPLATE' && layer.source.id === templateId,
+    (layer) => layer.source.kind === 'TEMPLATE' && layer.source.id === templateId,
   )
   if (covering.length === 0) return 'none'
 

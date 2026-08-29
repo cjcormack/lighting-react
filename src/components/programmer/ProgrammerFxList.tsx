@@ -30,11 +30,7 @@ export function ProgrammerFxList() {
   // beside it does not show.
   const layerHomes = useMemo(
     () =>
-      new Map(
-        (layers ?? [])
-          .filter((l) => !l.isPreview)
-          .map((l, i) => [l.layerId, { name: l.source.name, position: i + 1 }]),
-      ),
+      new Map((layers ?? []).map((l, i) => [l.layerId, { name: l.source.name, position: i + 1 }])),
     [layers],
   )
 

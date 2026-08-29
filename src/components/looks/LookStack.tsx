@@ -334,13 +334,11 @@ export function LayerRow({
           {/* The name badge *is* the focus control where there is a grid to focus. A separate
               button would be a second thing to learn for what reads as "look at this one", and
               the badge is already the row's subject. Absent the handler it stays a plain badge —
-              a cue's rows and the Look editor's preview have nothing to point anywhere.
+              a cue's rows have nothing to point anywhere.
 
               `readOnly` gates it for the same reason it gates the amount field and the remove
-              button. `ProgrammerLookStack` renders the preview row *outside* its filtered list, at
-              `index === layers.length`, and passes the same `handlers` — so without this the preview
-              got a badge that looked pressable and resolved to `layers[layers.length]`, i.e. did
-              nothing at all. */}
+              button: a row rendered outside the sortable list is addressed by an index its
+              handlers cannot resolve, so a pressable-looking badge there would do nothing at all. */}
           {handlers?.onFocus && !readOnly ? (
             <button
               type="button"

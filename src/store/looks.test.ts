@@ -33,7 +33,6 @@ describe('looks endpoints', () => {
         targetProjectName: 'Other',
         message: 'ok',
       },
-      'projects/1/looks/preview': { writeCount: 3 },
       'projects/1/looks/4': { id: 4, uuid: 'u4', name: 'Warm', rows: [], effects: [] },
       'projects/1/looks?family=COLOUR': [],
       'projects/1/looks': [],

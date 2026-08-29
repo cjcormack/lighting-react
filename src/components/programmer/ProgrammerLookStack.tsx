@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useParams } from 'react-router'
-import { Badge } from '@/components/ui/badge'
-import { LayerRow, LookStack, describeStackSource, type LayerHandlers } from '@/components/looks/LookStack'
+import { LookStack, type LayerHandlers } from '@/components/looks/LookStack'
 import { AddLayerSheet } from '@/components/cues/editor/AddLayerSheet'
 import { useLookListQuery } from '@/store/looks'
 import { useTemplateListQuery } from '@/store/templates'
@@ -31,7 +30,7 @@ import type { ProgrammerLayer } from '@/store/programmer'
 export function ProgrammerLookStack() {
   const { projectId: projectIdParam } = useParams()
   const projectId = Number(projectIdParam)
-  const { data: allLayers } = useProgrammerLayersQuery()
+  const { data: layerList } = useProgrammerLayersQuery()
   const { data: lookList } = useLookListQuery({ projectId }, { skip: !projectId })
   // Both libraries, because a layer can apply either — and a row that could not find its entry
   // paints as missing, so loading only one would slander every template layer in the stack.
@@ -52,12 +51,11 @@ export function ProgrammerLookStack() {
   )
   const looksLoaded = lookList != null && templateList != null
 
-  // The Look editor's live preview is a layer too, but it is not part of the composition an
-  // operator authors: it holds an unsaved draft, it is never recorded, and the server pins it to
-  // the tail whatever index a move asks for. Rendering it in the sortable list would offer three
-  // controls that all lie.
-  const layers = useMemo(() => (allLayers ?? []).filter((l) => !l.isPreview), [allLayers])
-  const preview = useMemo(() => (allLayers ?? []).find((l) => l.isPreview), [allLayers])
+  // Every layer the broadcast carries is part of the composition the operator authors. It was
+  // filtered here until backend sweep item D4 deleted `ProgrammerLayerStack.installPreview` and
+  // the Look editor's live-preview routes with it: the stack can no longer hold a layer that is
+  // never recorded and pinned to the tail, so there is nothing left to hold back.
+  const layers = useMemo(() => layerList ?? [], [layerList])
 
   // A stable identity, because `LookStack` memoises its dnd-kit id list on it: an inline arrow
   // would mint a fresh `items` array for `SortableContext` on every render of the pane.
@@ -147,28 +145,6 @@ export function ProgrammerLookStack() {
         keyFor={keyFor}
         focusedIndex={
           scope?.kind === 'layer' ? layers.findIndex((l) => l.layerId === scope.layerId) : null
-        }
-        footer={
-          preview && (
-            <div className="space-y-1.5">
-              <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
-                  Preview
-                </Badge>
-                An unsaved look is being previewed on top of the stack. It closes with the editor and
-                is never recorded.
-              </p>
-              <LayerRow
-                layer={preview}
-                index={layers.length}
-                info={describeStackSource(preview.source, looksById, templatesById, looksLoaded)}
-                handlers={handlers}
-                sortable={false}
-                showTargets
-                readOnly
-              />
-            </div>
-          )
         }
       />
 

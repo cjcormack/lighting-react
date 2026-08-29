@@ -115,11 +115,6 @@ export interface ProgrammerLayer {
   rateSpeedMasterUuid?: string | null
   /** Set when Include minted this from a cue's layer — Update's diff key. */
   sourceCueLayerId?: number | null
-  /**
-   * The Look editor's live preview. Always last, never recorded, and not reorderable — the server
-   * renumbers it to the tail regardless of what the client asks for.
-   */
-  isPreview?: boolean
 }
 
 /**

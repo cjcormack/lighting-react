@@ -50,7 +50,7 @@ function look(id: number, name: string): LookSummary {
   }
 }
 
-const LOOKS = [look(7, 'Warm Wash'), look(8, 'Slow Pulse'), look(9, 'Draft')]
+const LOOKS = [look(7, 'Warm Wash'), look(8, 'Slow Pulse')]
 
 function layer(overrides: Partial<ProgrammerLayer> = {}): ProgrammerLayer {
   return {
@@ -108,44 +108,18 @@ describe('ProgrammerLookStack', () => {
     expect(mocks.patchLayer).toHaveBeenCalledWith(40, { amount: 0.6 })
   })
 
-  it('keeps the preview layer out of the reorderable stack', () => {
-    // It holds an unsaved draft, is never recorded, and the server pins it to the tail whatever
-    // index a move asks for — so a drag handle, an amount field and a remove button would all lie.
-    mocks.layers = [layer({ layerId: 40 }), layer({ layerId: 99, source: { kind: 'LOOK', id: 9, uuid: 'u9', name: 'Draft' }, isPreview: true })]
-    render(<ProgrammerLookStack />)
-
-    expect(screen.getAllByLabelText('Reorder layer')).toHaveLength(1)
-    expect(screen.getAllByLabelText('Layer amount (%)')).toHaveLength(1)
-    expect(screen.getByText('Draft')).toBeInTheDocument()
-    expect(screen.getByText('Preview')).toBeInTheDocument()
-  })
-
-  it('does not let a preview layer shift the ids the rows act on', () => {
-    // The server sorts the preview last, but a client that filtered *after* indexing would map row
-    // 1 onto it. This is the failure that would silently retarget every control by one.
+  it('addresses a blend or mask change by layerId, not by index', async () => {
+    // Same index→id translation the other ops get, and worth its own case because blend and mask
+    // arrive from a popover rather than from the row: the second row must still reach layer 41.
     mocks.layers = [
-      layer({ layerId: 99, source: { kind: 'LOOK', id: 9, uuid: 'u9', name: 'Draft' }, isPreview: true }),
       layer({ layerId: 40 }),
       layer({ layerId: 41, source: { kind: 'LOOK', id: 8, uuid: 'u8', name: 'Slow Pulse' } }),
     ]
     render(<ProgrammerLookStack />)
 
-    fireEvent.click(screen.getAllByLabelText('Disable layer')[0])
-    expect(mocks.patchLayer).toHaveBeenCalledWith(40, { enabled: false })
-  })
-
-  it('addresses a blend or mask change by layerId, not by index', async () => {
-    // Same index→id translation the other ops get, and the same reason: the rendered list is
-    // filtered, so position N is not layer N.
-    mocks.layers = [
-      layer({ layerId: 99, source: { kind: 'LOOK', id: 9, uuid: 'u9', name: 'Draft' }, isPreview: true }),
-      layer({ layerId: 40 }),
-    ]
-    render(<ProgrammerLookStack />)
-
-    fireEvent.click(screen.getByTitle(/How this layer combines/))
+    fireEvent.click(screen.getAllByTitle(/How this layer combines/)[1])
     fireEvent.click(await screen.findByLabelText('Colour'))
-    expect(mocks.patchLayer).toHaveBeenCalledWith(40, { propertyMask: 'COLOUR' })
+    expect(mocks.patchLayer).toHaveBeenCalledWith(41, { propertyMask: 'COLOUR' })
   })
 
   it('clears a mask with an empty string, because an omitted field means leave alone', async () => {

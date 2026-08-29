@@ -43,11 +43,6 @@ describe('lookLayerPresence', () => {
     expect(lookLayerPresence(layers, [FRONT, BACK], 7)).toBe('all')
   })
 
-  it('ignores the Look editor’s preview layer', () => {
-    // It holds an unsaved draft and is never recorded, so it must not make the pad read as applied.
-    expect(lookLayerPresence([layer({ isPreview: true })], [FRONT], 7)).toBe('none')
-  })
-
   it('counts a layer with no targets as covering nothing', () => {
     // A bound Look's own rows decide where such a layer lands, and that is a server-side question
     // (group expansion, per-fixture resolution). Claiming coverage would be a guess; a pad always

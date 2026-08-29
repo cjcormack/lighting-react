@@ -189,8 +189,8 @@ export function LookRowStoreProvider({
       // Debounce with a ceiling. The cadence is not only a network question: each save invalidates
       // the fixture and group lists (so every row rebuilds) *and* republishes the Look's live
       // consumers, so this is also how often the rig moves. Faster is not better here — and there
-      // is no smooth-preview escape hatch to reach for, because `LookPreviewRequest` is
-      // deferred-only and cannot preview a bound-row edit.
+      // is no smooth-preview escape hatch to reach for: backend sweep item D4 deleted the Look
+      // preview routes outright.
       if (timerRef.current != null) window.clearTimeout(timerRef.current)
       timerRef.current = window.setTimeout(flush, SAVE_DEBOUNCE_MS)
       if (ceilingRef.current == null) {

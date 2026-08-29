@@ -464,8 +464,9 @@ Things that will bite:
 - **A layer-scope edit is a live write.** It goes through `PUT /looks/{id}`, which republishes every
   cue layering that Look — the point of composing in place. `LookRowDraft` coalesces at 400 ms with
   a 2 s ceiling, and **flush cadence is stage-update cadence**: a colour drag steps the rig rather
-  than gliding, which the band says out loud. There is no smooth-preview escape hatch —
-  `LookPreviewRequest` is deferred-only and cannot preview a bound-row edit.
+  than gliding, which the band says out loud. There is no smooth-preview escape hatch — backend
+  sweep item D4 deleted the Look preview routes and `ProgrammerLayerStack.installPreview` with
+  them, so no layer can carry an unsaved draft any more and `ProgrammerLayer` has no `isPreview`.
 - **`RowCell.targetKeys` is index-parallel to `resolutions`** and `keys` is not: one resolution can
   contribute two keys (a position paired from pan/tilt sliders), so for a group row the two arrays
   share neither length nor indices. Ownership never noticed because it collapses to one verdict.

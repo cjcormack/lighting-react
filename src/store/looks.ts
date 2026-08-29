@@ -40,8 +40,9 @@ export function startLooksBridge() {
  * - **`createLook`** — a Look is *recorded* now (D9), never hand-authored, so the create form that
  *   called this does not exist. `POST /looks` stays server-side; nothing on the desk sends it.
  * - **`previewLook` / `clearLookPreview`** — they drove `LookLivePreview`, the Look editor's rig
- *   preview, which went with the editor. The route and `ProgrammerLayerStack.installPreview` remain
- *   and still work; see `FU-TMPL-EDITOR-PREVIEW` for whether the template editor should use them.
+ *   preview, which went with the editor. Backend sweep item D4 then deleted the two routes and
+ *   `ProgrammerLayerStack.installPreview` as well, so live preview no longer exists on either side.
+ *   A template editor that wants one would be building it, not re-adopting it.
  */
 export const looksApi = restApi.injectEndpoints({
   endpoints: (build) => ({
