@@ -14,9 +14,7 @@ export function createCuesWsApi(conn: InternalApiConnection): CuesWsApi {
   const cuesChanged = createWsSubscribable<void>()
 
   conn.subscribe((evType, ev) => {
-    if (evType === 'open') {
-      cuesChanged.notify()
-    } else if (evType === 'message' && ev instanceof MessageEvent) {
+    if (evType === 'message' && ev instanceof MessageEvent) {
       const message: CueInMessage = JSON.parse(ev.data)
       if (message == null) return
       if (message.type === 'cueListChanged') {

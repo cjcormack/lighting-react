@@ -43,7 +43,7 @@ function bootFrame(status: BootStatus = SAMPLE_STATUS) {
 }
 
 describe("createBootStatusWsApi", () => {
-  it("fires the subscriber on an 'open' event (reconnect re-check)", () => {
+  it("does NOT fire on an 'open' event — the reconnect resync owns that", () => {
     const { conn, fire } = fakeConnection()
     const api = createBootStatusWsApi(conn)
     const spy = vi.fn()
@@ -51,7 +51,10 @@ describe("createBootStatusWsApi", () => {
 
     fire(InternalEventType.open, new Event("open"))
 
-    expect(spy).toHaveBeenCalledTimes(1)
+    // Re-checking readiness after a backend restart is `store/status.ts`'s job now: it
+    // invalidates `BootStatus` with every other tag on CLOSED→OPEN. A branch here would
+    // fire the same refetch a second time.
+    expect(spy).not.toHaveBeenCalled()
   })
 
   it("fires on a 'bootProgressState' message frame", () => {
@@ -125,11 +128,11 @@ describe("createBootStatusWsApi", () => {
     const spy = vi.fn()
     const sub = api.subscribe(spy)
 
-    fire(InternalEventType.open, new Event("open"))
+    fire(InternalEventType.message, bootFrame())
     expect(spy).toHaveBeenCalledTimes(1)
 
     sub.unsubscribe()
-    fire(InternalEventType.open, new Event("open"))
+    fire(InternalEventType.message, bootFrame())
     expect(spy).toHaveBeenCalledTimes(1) // no further deliveries
   })
 })

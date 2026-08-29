@@ -24,9 +24,7 @@ export function createLooksWsApi(conn: InternalApiConnection): LooksWsApi {
   const looksChanged = createWsSubscribable<void>()
 
   conn.subscribe((evType, ev) => {
-    if (evType === 'open') {
-      looksChanged.notify()
-    } else if (evType === 'message' && ev instanceof MessageEvent) {
+    if (evType === 'message' && ev instanceof MessageEvent) {
       const message: LookInMessage = JSON.parse(ev.data)
       if (message == null) return
       if (message.type === 'lookListChanged') {

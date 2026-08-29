@@ -105,14 +105,15 @@ export function createSpeedMastersWsApi(conn: InternalApiConnection): SpeedMaste
 
   conn.subscribe((evType, ev) => {
     if (evType === 'open') {
-      // No `speedMasters.state` request here: the server pushes one per connection, a
-      // reconnect included, so asking only ever produced the frame twice.
       // Beat requests are one-shot and live on the server's per-connection scope, so a
       // reconnect loses every pending one. Without re-asking, an indicator keeps free-
       // running its local timer at the pre-drop tempo until the next throttled frame —
-      // up to 16 beats later, and at the wrong rate if the tempo moved meanwhile.
+      // up to 16 beats later, and at the wrong rate if the tempo moved meanwhile. That
+      // is the *only* thing this branch owes: no `speedMasters.state` request (the server
+      // pushes one per connection, a reconnect included) and no `listChanged` notify (the
+      // reconnect resync in `store/status.ts` invalidates `SpeedMaster`/`SpeedMasterList`
+      // with every other tag).
       requestBeatsFor(beatByMaster.keys())
-      listChanged.notify()
     } else if (evType === 'message' && ev instanceof MessageEvent) {
       // Fast-path: skip JSON.parse for the torrent of unrelated frames.
       if (typeof ev.data === 'string' && !ev.data.includes('"speedMaster')) return

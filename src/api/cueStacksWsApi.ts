@@ -27,9 +27,7 @@ export function createCueStacksWsApi(conn: InternalApiConnection): CueStacksWsAp
   const runStateChanged = createWsSubscribable<CueRunStateEvent>()
 
   conn.subscribe((evType, ev) => {
-    if (evType === 'open') {
-      cueStacksChanged.notify()
-    } else if (evType === 'message' && ev instanceof MessageEvent) {
+    if (evType === 'message' && ev instanceof MessageEvent) {
       const message: CueStackInMessage = JSON.parse(ev.data)
       if (message == null) return
       if (message.type === 'cueStackListChanged') {

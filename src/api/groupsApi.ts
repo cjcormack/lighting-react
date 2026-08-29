@@ -230,10 +230,6 @@ export function createGroupsApi(conn: InternalApiConnection): GroupsApi {
     })
   }
 
-  const handleOnOpen = () => {
-    notifyListChange()
-  }
-
   const handleOnMessage = (ev: MessageEvent) => {
     const message: GroupsInMessage = JSON.parse(ev.data)
 
@@ -250,9 +246,7 @@ export function createGroupsApi(conn: InternalApiConnection): GroupsApi {
   }
 
   conn.subscribe((evType, ev) => {
-    if (evType === 'open') {
-      handleOnOpen()
-    } else if (evType === 'message' && ev instanceof MessageEvent) {
+    if (evType === 'message' && ev instanceof MessageEvent) {
       handleOnMessage(ev)
     }
   })

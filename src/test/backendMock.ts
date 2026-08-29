@@ -200,6 +200,20 @@ export const programmerWs: {
   },
 }
 
+// WebSocket readyState bridge, captured from store/status.ts. Unlike the holders above this
+// keeps a *list*: two subscribers exist in that module — the module-level reconnect resync and
+// the `status` query's cache-entry stream — and a single-callback holder would silently drop
+// whichever registered first. `fire` drives all of them, as the real StatusApi does.
+export const statusWs: {
+  callbacks: ((status: number) => void)[]
+  fire: (status: number) => void
+} = {
+  callbacks: [],
+  fire: (status) => {
+    for (const fn of [...statusWs.callbacks]) fn(status)
+  },
+}
+
 const noopSub = () => ({ unsubscribe: () => {} })
 
 export function lightingApiMock() {
@@ -277,7 +291,14 @@ export function lightingApiMock() {
       // subscriber factory for both — callable, but it would make `get()` answer with
       // a Subscription. Spell the namespace out instead of relying on that.
       status: {
-        subscribe: noopSub,
+        subscribe: (fn: (status: number) => void) => {
+          statusWs.callbacks.push(fn)
+          return {
+            unsubscribe: () => {
+              statusWs.callbacks = statusWs.callbacks.filter((cb) => cb !== fn)
+            },
+          }
+        },
         get: () => 3, // Status.CLOSED — no socket exists under the mock
         reconnect: () => {},
       },

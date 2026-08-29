@@ -813,6 +813,24 @@ The app maintains a persistent WebSocket connection to the backend for:
 
 REST API is used for CRUD operations on scripts, scenes, fixtures, etc.
 
+**Reconnect resync is central and derived.** `store/status.ts` invalidates every tag in
+`REST_TAG_TYPES` (exported from `store/restApi.ts`) on a CLOSED→OPEN transition, minus a short,
+argued exclusion set — `Auth` only, because `AuthGate` already fetches `auth/status` on the first
+connect and `authWsApi` carries the `seenOpen`-guarded catch-up for genuine re-opens. Do **not**
+add an `open` branch to a WS bridge just to re-invalidate its own tag: that duplicates the central
+dispatch, and the hand-maintained list it replaced had drifted to 15 tags of 47 while claiming to
+cover them all. An `open` branch is still right when it re-sends something the *server* forgot —
+`speedMastersWsApi` re-requests its one-shot beat subscriptions, which live on the server's
+per-connection scope — but it should then do only that.
+
+The dispatch is **debounced and waved**, not one tick: a reconnect usually means the backend has
+just restarted, and lighting7 serves REST from a single pooled SQLite connection, so the whole set
+arriving at once serialises behind a show that is still warming up. `RESYNC_DEBOUNCE_MS` lets a
+flapping link settle, then `RECONNECT_RESYNC_WAVES` goes out `RESYNC_WAVE_SIZE` tags at a time,
+operator-visible caches first; a drop mid-sequence abandons the rest. The waves are a transport
+detail only — `src/store/status.test.ts` pins that they concatenate to exactly the resync set, so
+a tag can never fall out by landing in no wave.
+
 ## Patterns and Conventions
 
 ### State Management

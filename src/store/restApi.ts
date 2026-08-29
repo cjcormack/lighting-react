@@ -43,8 +43,20 @@ const baseQueryWithAuthCheck: BaseQueryFn<string | FetchArgs, unknown, FetchBase
     return result
   }
 
+/**
+ * Every REST cache tag in the app.
+ *
+ * Exported because the reconnect resync in `./status.ts` derives its invalidation set from
+ * this array rather than restating it: the previous hand-maintained list had drifted to 15 of
+ * these, leaving twenty tags — `ProgramState` and `Patch` among them — with no path back to the
+ * server after a laptop sleep or a lighting7 restart.
+ */
+export const REST_TAG_TYPES = ['Channel', 'Fixture', 'Script', 'Project', 'ProjectList', 'GroupList', 'GroupActiveEffects', 'FixtureEffects', 'FxLibrary', 'Look', 'LookList', 'Template', 'TemplateList', 'SpeedMaster', 'SpeedMasterList', 'Cue', 'CueList', 'CueStackList', 'CueSlotList', 'AiConversation', 'Patch', 'UniverseConfig', 'ProgramState', 'ControlSurfaceType', 'SurfaceBinding', 'PerfMidi', 'Install', 'CloudSyncConfig', 'CloudSyncStatus', 'CloudSyncLog', 'CloudSyncActivity', 'CloudSyncConflicts', 'OAuthIdentity', 'OAuthRepos', 'Rigging', 'StageRegion', 'PromptBook', 'BootStatus', 'Locate', 'Auth', 'AuthSessions', 'UserList', 'User', 'ResetToken', 'ResetTokenList', 'DeviceLogin', 'Update'] as const
+
+export type RestTagType = (typeof REST_TAG_TYPES)[number]
+
 export const restApi = createApi({
   baseQuery: baseQueryWithAuthCheck,
-  tagTypes: ['Channel', 'Fixture', 'Script', 'Project', 'ProjectList', 'GroupList', 'GroupActiveEffects', 'FixtureEffects', 'FxLibrary', 'Look', 'LookList', 'Template', 'TemplateList', 'SpeedMaster', 'SpeedMasterList', 'Cue', 'CueList', 'CueStackList', 'CueSlotList', 'AiConversation', 'Patch', 'UniverseConfig', 'ProgramState', 'ControlSurfaceType', 'SurfaceBinding', 'PerfMidi', 'Install', 'CloudSyncConfig', 'CloudSyncStatus', 'CloudSyncLog', 'CloudSyncActivity', 'CloudSyncConflicts', 'OAuthIdentity', 'OAuthRepos', 'Rigging', 'StageRegion', 'PromptBook', 'BootStatus', 'Locate', 'Auth', 'AuthSessions', 'UserList', 'User', 'ResetToken', 'ResetTokenList', 'DeviceLogin', 'Update'],
+  tagTypes: REST_TAG_TYPES,
   endpoints: () => ({}),
 })

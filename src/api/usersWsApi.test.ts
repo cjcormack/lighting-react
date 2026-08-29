@@ -34,14 +34,15 @@ function frame(type: string) {
 }
 
 describe("createUsersWsApi", () => {
-  it("fires the subscriber on an 'open' event (reconnect catch-up)", () => {
+  it("does NOT fire on an 'open' event — the reconnect resync owns that", () => {
     const { conn, fire } = fakeConnection()
     const spy = vi.fn()
     createUsersWsApi(conn).subscribe(spy)
 
     fire(InternalEventType.open, new Event("open"))
 
-    expect(spy).toHaveBeenCalledTimes(1)
+    // `store/status.ts` invalidates `UserList`/`User` with every other tag on CLOSED→OPEN.
+    expect(spy).not.toHaveBeenCalled()
   })
 
   it("fires on a 'userListChanged' message frame", () => {
@@ -108,7 +109,7 @@ describe("createUsersWsApi", () => {
 })
 
 describe("createInstallWsApi", () => {
-  it("fires on 'open' and on an 'installChanged' frame", () => {
+  it("fires on an 'installChanged' frame, but not on 'open'", () => {
     const { conn, fire } = fakeConnection()
     const spy = vi.fn()
     createInstallWsApi(conn).subscribe(spy)
@@ -116,7 +117,8 @@ describe("createInstallWsApi", () => {
     fire(InternalEventType.open, new Event("open"))
     fire(InternalEventType.message, frame("installChanged"))
 
-    expect(spy).toHaveBeenCalledTimes(2)
+    // Reconnect catch-up is `store/status.ts`'s, so only the pushed frame counts here.
+    expect(spy).toHaveBeenCalledTimes(1)
   })
 
   it("does NOT fire on the sibling machine-scoped frames", () => {

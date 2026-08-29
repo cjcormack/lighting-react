@@ -51,9 +51,7 @@ export function createStageRegionApi(conn: InternalApiConnection): StageRegionAp
   const stageRegionsChanged = createWsSubscribable<void>()
 
   conn.subscribe((evType, ev) => {
-    if (evType === 'open') {
-      stageRegionsChanged.notify()
-    } else if (evType === 'message' && ev instanceof MessageEvent) {
+    if (evType === 'message' && ev instanceof MessageEvent) {
       const message: StageRegionInMessage = JSON.parse(ev.data)
       if (message == null) return
       if (message.type === 'stageRegionListChanged') {
