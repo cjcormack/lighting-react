@@ -23,17 +23,6 @@ export function getPropertyChannels(property: PropertyDescriptor): ChannelRef[] 
 }
 
 /**
- * Check if a single channel is parked. Returns the parked value or undefined.
- */
-export function useChannelParkStatus(channel: ChannelRef) {
-  const { data: parkedValue } = useGetChannelParkStateQuery({
-    universe: channel.universe,
-    channelNo: channel.channelNo,
-  })
-  return parkedValue !== undefined
-}
-
-/**
  * Check if any channels of a property are parked.
  * Returns a simple boolean — suitable for showing a lock indicator.
  *

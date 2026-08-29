@@ -87,22 +87,6 @@ export function lowerToPlacement(t: BulkTarget, world: LightingPoint): Placement
 
 export type AlignEdge = 'min-h' | 'max-h' | 'centre-h' | 'min-v' | 'max-v' | 'centre-v'
 
-/** Human label for an align edge, in the terms of the active projection. */
-export function alignEdgeLabel(edge: AlignEdge, proj: StageProjection): string {
-  const axis = edge.endsWith('-h') ? proj.hAxisLabel : proj.vAxisLabel
-  if (edge.startsWith('centre')) return `Centre on ${axis}`
-  // min/max are in *screen* terms (left/right, top/bottom as drawn), which is
-  // what the user is looking at — the underlying axis may be sign-flipped.
-  const which = edge.startsWith('min')
-    ? edge.endsWith('-h')
-      ? 'left'
-      : 'top'
-    : edge.endsWith('-h')
-      ? 'right'
-      : 'bottom'
-  return `Align ${which}`
-}
-
 export interface ArrangeResult {
   changes: PlacementChange[]
   /** Patch ids left alone because they're bolted to a rigging. */

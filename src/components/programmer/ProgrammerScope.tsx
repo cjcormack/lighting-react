@@ -121,11 +121,6 @@ export function scopesEqual(a: ProgrammerScope, b: ProgrammerScope): boolean {
   return a.kind !== 'layer' || b.kind !== 'layer' || a.layerId === b.layerId
 }
 
-/** Does this scope write, or is it a read of something composed? */
-export function scopeIsEditable(scope: ProgrammerScope | null): boolean {
-  return scope !== null && scope.kind !== 'output'
-}
-
 /** The focused layer's id, or null in any other scope. */
 export function focusedLayerId(scope: ProgrammerScope | null): number | null {
   return scope?.kind === 'layer' ? scope.layerId : null

@@ -189,24 +189,3 @@ export interface ToggleLookResponse {
   action: 'applied' | 'removed'
   effectCount: number
 }
-
-/**
- * Complete desired state for the project's preview slot — replaces any prior preview. Empty
- * `targets` (or `rows`) collapses to a clear.
- *
- * The wire field is `propertyAssignments`, not `rows`: the backend reuses the preset editor's
- * preview slot verbatim, which is exactly why the route needed no new logic.
- */
-export interface LookPreviewRequest {
-  propertyAssignments: { propertyName: string; value: string; fadeDurationMs?: number | null; sortOrder?: number; elementKey?: string | null }[]
-  targets: ToggleLookTarget[]
-}
-
-export interface LookPreviewResponse {
-  writeCount: number
-}
-
-/** True when a row or effect takes its targets from the layer rather than naming one. */
-export function isDeferred(row: { targetType: string }): boolean {
-  return row.targetType === DEFERRED_TARGET_TYPE
-}

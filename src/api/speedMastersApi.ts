@@ -48,5 +48,4 @@ export interface SpeedMasterInUseResponse {
   cueIds: number[]
 }
 
-export const CODE_SPEED_MASTER_PROTECTED = 'SPEED_MASTER_PROTECTED'
 export const CODE_SPEED_MASTER_IN_USE = 'SPEED_MASTER_IN_USE'

@@ -110,17 +110,3 @@ export function buildFixtureTypeHierarchy(
 
   return { manufacturers, models: allModels, typeKeyToModel }
 }
-
-/** Resolve a typeKey to a human-readable label. */
-export function resolveFixtureTypeLabel(
-  typeKey: string,
-  hierarchy: FixtureTypeHierarchy,
-): string {
-  const info = hierarchy.typeKeyToModel.get(typeKey)
-  if (!info) return typeKey
-  const parts: string[] = []
-  if (info.manufacturer) parts.push(info.manufacturer)
-  parts.push(info.model)
-  if (info.mode.modeName) parts.push(info.mode.modeName)
-  return parts.join(' ')
-}

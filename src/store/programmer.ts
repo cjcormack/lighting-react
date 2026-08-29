@@ -157,26 +157,6 @@ export function programmerSet(
   lightingApi.programmer.set(targetType, targetKey, propertyName, value, fadeMs)
 }
 
-export function programmerSetColour(
-  targetType: ProgrammerTargetType,
-  targetKey: string,
-  propertyName: string,
-  rgb: { r: number; g: number; b: number; w?: number; a?: number; uv?: number },
-  fadeMs?: number,
-) {
-  lightingApi.programmer.setColour(targetType, targetKey, propertyName, rgb, fadeMs)
-}
-
-export function programmerSetPosition(
-  targetType: ProgrammerTargetType,
-  targetKey: string,
-  pan: number,
-  tilt: number,
-  fadeMs?: number,
-) {
-  lightingApi.programmer.setPosition(targetType, targetKey, pan, tilt, fadeMs)
-}
-
 /** Releases **every** owner on the property — locate, presets and surface faders included. */
 export function programmerClearEntry(
   targetType: ProgrammerTargetType,

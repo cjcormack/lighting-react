@@ -53,7 +53,6 @@ export function useShiftHeld() {
 
 export const SNAP_DISTANCE_M = 0.25
 export const SNAP_ANGLE_DEG = 15
-export const SNAP_ANGLE_RAD = (SNAP_ANGLE_DEG * Math.PI) / 180
 
 export function snap(value: number, step: number): number {
   return Math.round(value / step) * step

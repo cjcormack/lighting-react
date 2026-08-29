@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
-import { useNavigate } from "react-router"
+import { useMemo, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
@@ -11,35 +10,10 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Loader2, Plus } from "lucide-react"
-import { useCurrentProjectQuery } from "@/store/projects"
 import { useStageRegionListQuery } from "@/store/stageRegions"
 import { EditStageRegionSheet } from "@/components/stage/EditStageRegionSheet"
 import type { StageRegionDto } from "@/api/stageRegionApi"
 import { bySortOrder, formatTriple } from "@/lib/utils"
-
-// ─── Redirect ─────────────────────────────────────────────────────────
-
-export function StageRegionsRedirect() {
-  const { data: currentProject, isLoading } = useCurrentProjectQuery()
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    if (!isLoading && currentProject) {
-      navigate(`/projects/${currentProject.id}/settings/stage`, { replace: true })
-    }
-  }, [currentProject, isLoading, navigate])
-
-  if (isLoading) {
-    return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
-    )
-  }
-  return null
-}
-
-// ─── Content ──────────────────────────────────────────────────────────
 
 type Editing = StageRegionDto | "new" | null
 
