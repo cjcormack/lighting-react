@@ -13,12 +13,12 @@ import {
   type ElementMode,
 } from "../api/groupsApi"
 
-// WebSocket subscription for auto-invalidation
-lightingApi.groups.subscribe(function () {
-  store.dispatch(restApi.util.invalidateTags(['GroupList']))
-})
+// `GroupList` freshness is not wired here: the group register only changes inside
+// `Fixtures.register {}`, whose tail fires `fixturesChanged`, so `store/fixtures.ts` carries the
+// tag. The groups WS layer that used to claim this job was deleted along with the backend's
+// `GroupSocket` — it had been announcing frames the server never sent.
 
-// Also invalidate GroupActiveEffects when any FX changes (shared /fx/{id} endpoints)
+// Invalidate GroupActiveEffects when any FX changes (shared /fx/{id} endpoints)
 lightingApi.fx.subscribe(() => {
   store.dispatch(restApi.util.invalidateTags(['GroupActiveEffects']))
 })
@@ -49,13 +49,6 @@ export const groupsApi = restApi.injectEndpoints({
     group: build.query<GroupDetail, string>({
       query: (name) => `groups/${encodeURIComponent(name)}`,
       providesTags: (_result, _error, name) => [{ type: 'GroupList', id: name }],
-      async onCacheEntryAdded(name, { updateCachedData, cacheEntryRemoved }) {
-        const subscription = lightingApi.groups.subscribeToGroup(name, (value) => {
-          updateCachedData(() => value)
-        })
-        await cacheEntryRemoved
-        subscription.unsubscribe()
-      },
     }),
 
     // Get group properties (aggregated property descriptors for all members)

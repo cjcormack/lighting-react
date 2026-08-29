@@ -6,7 +6,6 @@ import {createUniversesApi, UniversesApi} from "./universesApi";
 
 import {createFixtureApi, FixturesApi} from "./fixturesApi";
 import {createProjectApi, ProjectApi} from "./projectApi";
-import {createGroupsApi, GroupsApi} from "./groupsApi";
 import {createFxApi, FxApi} from "./fxApi";
 import {createLooksWsApi, LooksWsApi} from "./looksWsApi";
 import {createScriptsWsApi, ScriptsWsApi} from "./scriptsWsApi";
@@ -42,7 +41,6 @@ interface LightingApi {
 
   fixtures: FixturesApi
   projects: ProjectApi
-  groups: GroupsApi
   fx: FxApi
   fxDefinitions: FxDefinitionsWsApi
   scripts: ScriptsWsApi
@@ -89,7 +87,6 @@ function createLightingApi(): LightingApi {
   const updateWsApi = createUpdateWsApi(connection)
   const fixtureApi = createFixtureApi(connection)
   const projectApi = createProjectApi(connection)
-  const groupsApi = createGroupsApi(connection)
   const fxApi = createFxApi(connection)
   const fxDefinitionsWsApi = createFxDefinitionsWsApi(connection)
   const scriptsWsApi = createScriptsWsApi(connection)
@@ -121,7 +118,6 @@ function createLightingApi(): LightingApi {
 
     fixtures: fixtureApi,
     projects: projectApi,
-    groups: groupsApi,
     fx: fxApi,
     fxDefinitions: fxDefinitionsWsApi,
     scripts: scriptsWsApi,

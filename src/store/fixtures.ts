@@ -3,8 +3,14 @@ import { lightingApi } from "../api/lightingApi"
 import { store } from "./index"
 import type { GroupColourPropertyDescriptor, GroupPropertyDescriptor } from "../api/groupsApi"
 
+// `GroupList` rides along because `GET /groups` reads the same runtime register the
+// `fixturesChanged` frame announces: groups only ever change inside `Fixtures.register {}`
+// (patch CRUD, patch-group edits, riggings, universe configs, a project switch), and that
+// block fires `fixturesChanged()` as its last act. Without this tag a second client's group
+// list stayed on whatever it fetched at connect — the freshness gap the deleted groups WS
+// layer was supposed to close and never did.
 lightingApi.fixtures.subscribe(function() {
-  store.dispatch(restApi.util.invalidateTags(['Fixture']))
+  store.dispatch(restApi.util.invalidateTags(['Fixture', 'GroupList']))
 })
 
 export const fixturesApi = restApi.injectEndpoints({
