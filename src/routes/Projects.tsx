@@ -80,10 +80,12 @@ export default function Projects() {
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold">Projects</h1>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
-              <Upload className="size-4" />
-              Import
-            </Button>
+            {isAdmin && (
+              <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+                <Upload className="size-4" />
+                Import
+              </Button>
+            )}
             {oauthConnected ? (
               addRemoteButton
             ) : (
@@ -153,6 +155,7 @@ function ProjectCard({
   const [cloneOpen, setCloneOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const navigate = useNavigate()
+  const isAdmin = useIsNavAdmin()
 
   const { data: currentProject } = useCurrentProjectQuery()
 
@@ -253,9 +256,11 @@ function ProjectCard({
                 <DropdownMenuItem onClick={() => setCloneOpen(true)}>
                   Clone
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setExportOpen(true)}>
-                  Export
-                </DropdownMenuItem>
+                {isAdmin && (
+                  <DropdownMenuItem onClick={() => setExportOpen(true)}>
+                    Export
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
