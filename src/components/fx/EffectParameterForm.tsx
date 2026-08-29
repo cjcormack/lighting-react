@@ -474,7 +474,11 @@ function ParameterInput({
   // Double/Float → slider with appropriate range
   if (paramType === 'double' || paramType === 'float') {
     const numVal = Number(value) || 0
-    // Heuristic: if default <= 1.0, treat as 0-1 ratio; otherwise 0-10 range
+    // Heuristic: if default <= 1.0, treat as 0-1 ratio; otherwise 0-10 range.
+    // Every double declared by the 28 built-ins is a 0-1 ratio with a default in
+    // [0.1, 1.0], so the 0-10 arm is reachable only from a script-defined effect —
+    // which is also the only place this can pick a range too narrow to be usable,
+    // since the wire carries no declared bounds to prefer over the guess.
     const max = Number(param.defaultValue) <= 1.0 ? 1.0 : 10.0
     const step = max <= 1.0 ? 0.01 : 0.1
     return (
@@ -497,21 +501,36 @@ function ParameterInput({
     )
   }
 
-  // Int → slider with sensible range
+  // Int → slider over a fixed range, plus a typable value for anything outside it
   if (paramType === 'int') {
     const numVal = Number(value) || 0
-    const max = Math.max(255, numVal * 2)
+    // The range comes from the *declared default* and nothing else, so it never moves.
+    // Deriving it from the live value (`Math.max(255, numVal * 2)`) made the max grow
+    // every time the handle reached the right edge — FluorescentFlicker's 800 ms burst
+    // opened at 0-1600, then 0-3200 — so the end of the track could never be reached.
+    // Widening by the live value instead pins the thumb at 100% for every value above
+    // the derived range, which lets it fall but never rise. Since the wire declares no
+    // bounds (see `FU-FE-FX-PARAM-RANGE`), the range is a guess either way; the input
+    // beside it is what makes a value outside the guess reachable at all.
+    const defaultVal = Number(param.defaultValue) || 0
+    const max = Math.max(255, defaultVal * 2)
     return (
       <div>
-        <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center justify-between gap-2 mb-1">
           <span className="text-xs">{formatParamName(param.name)}</span>
-          <span className="text-xs text-muted-foreground">{numVal}</span>
+          <Input
+            inputMode="numeric"
+            aria-label={formatParamName(param.name)}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="h-6 w-20 text-xs text-right"
+          />
         </div>
         {param.description && (
           <p className="text-[11px] text-muted-foreground mb-1">{param.description}</p>
         )}
         <Slider
-          value={[numVal]}
+          value={[Math.min(numVal, max)]}
           min={0}
           max={max}
           step={1}
