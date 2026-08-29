@@ -24,7 +24,7 @@ export type ProgrammerScope =
   | { kind: 'local' }
   | { kind: 'layer'; layerId: number }
 
-export const LOCAL_SCOPE: ProgrammerScope = { kind: 'local' }
+const LOCAL_SCOPE: ProgrammerScope = { kind: 'local' }
 const OUTPUT_SCOPE: ProgrammerScope = { kind: 'output' }
 
 export interface ProgrammerScopeActions {
@@ -116,7 +116,7 @@ export function ProgrammerScopeProvider({ children }: { children: ReactNode }) {
   )
 }
 
-export function scopesEqual(a: ProgrammerScope, b: ProgrammerScope): boolean {
+function scopesEqual(a: ProgrammerScope, b: ProgrammerScope): boolean {
   if (a.kind !== b.kind) return false
   return a.kind !== 'layer' || b.kind !== 'layer' || a.layerId === b.layerId
 }

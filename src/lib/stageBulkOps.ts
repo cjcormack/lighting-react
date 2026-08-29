@@ -29,7 +29,7 @@ import {
 } from './stageProjection'
 
 /** Default gap left at each end of a truss when spacing fixtures evenly. */
-export const DEFAULT_ARRAY_INSET_M = 0.25
+const DEFAULT_ARRAY_INSET_M = 0.25
 /** Default drop below a truss for a newly hung fixture, in metres. */
 export const DEFAULT_DROP_M = 0.3
 

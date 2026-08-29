@@ -6,7 +6,7 @@ import { colourMagnitude } from '../lib/colourMath'
  * Stable hook-call-order placeholder for `useSliderValue` when the optional
  * descriptor is absent. Channel u0c0 + name `__none__` is ignored downstream.
  */
-export function makeFallbackSlider(category: PropertyCategory): SliderPropertyDescriptor {
+function makeFallbackSlider(category: PropertyCategory): SliderPropertyDescriptor {
   return {
     type: 'slider',
     name: '__none__',

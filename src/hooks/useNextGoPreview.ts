@@ -30,7 +30,7 @@ const NOTHING: NextGoTarget = { projectId: null, stackId: null, cueId: null, cue
  * query's cache, so reading it here *is* following the run state — no second socket listener, and
  * no re-read on a standby-only or connect-snapshot frame that left the next cue where it was.
  */
-export function useNextGoTarget(enabled: boolean): NextGoTarget {
+function useNextGoTarget(enabled: boolean): NextGoTarget {
   const { data: project } = useCurrentProjectQuery(undefined, { skip: !enabled })
   const projectId = project?.id ?? null
   const skip = !enabled || projectId == null

@@ -17,7 +17,7 @@ import { parseProgrammerValue } from '@/lib/programmerValue'
  */
 
 /** The CSS colour a literal paints, or null when it isn't colour-shaped. */
-export function lookValueColourCss(value: string): string | null {
+function lookValueColourCss(value: string): string | null {
   const parsed = parseProgrammerValue(value)
   if (parsed?.kind !== 'colour') return null
   return computeCombinedCss(parsed.r, parsed.g, parsed.b, parsed.w, parsed.a, parsed.uv)
@@ -30,7 +30,7 @@ export function lookValueColourCss(value: string): string | null {
  * and rounding it to "50%" here would make it impossible to tell 127 from 128 in a Look whose whole
  * purpose is to be re-applied exactly.
  */
-export function describeLookValue(value: string): string {
+function describeLookValue(value: string): string {
   const parsed = parseProgrammerValue(value)
   if (!parsed) return value
   switch (parsed.kind) {

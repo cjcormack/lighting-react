@@ -94,7 +94,7 @@ function useProgrammerSource(enabled: boolean): DerivedChannelSource | null {
  * being absent — a single early-out would pin `nextGo` to the wire, since it never builds a
  * programmer source at all.
  */
-export function useResolvedChannelSource(visSource: VisSource): ChannelSource {
+function useResolvedChannelSource(visSource: VisSource): ChannelSource {
   const programmer = useProgrammerSource(
     visSource === 'outputProgrammer' || visSource === 'programmer',
   )
