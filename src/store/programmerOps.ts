@@ -42,14 +42,18 @@ export interface ProgrammerSkip {
     | 'OUT_OF_SCOPE'
 }
 
-/** What a write deliberately left alone. */
+/**
+ * What a write deliberately left alone. Every count is optional: the server defaults all five to
+ * zero and does not encode defaults, so a wholly uneventful Record omits the lot.
+ */
 export interface ProgrammerPreservedCounts {
-  triggers: number
-  timedPresetApplications: number
-  timedAdHocEffects: number
-  outOfMaskAssignments: number
+  triggers?: number
+  /** Timed layers left untouched. Named `timedPresetApplications` before a preset became a layer. */
+  timedLayers?: number
+  timedAdHocEffects?: number
+  outOfMaskAssignments?: number
   /** Rows left alone because they name a fixture outside the request's `targets`. */
-  outOfScopeAssignments: number
+  outOfScopeAssignments?: number
 }
 
 export interface RecordRequest {

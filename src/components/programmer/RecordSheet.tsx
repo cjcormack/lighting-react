@@ -351,18 +351,16 @@ function RecordResult({ result }: { result: RecordResponse }) {
     notes.push(`${result.groupRowsEmitted} group row${result.groupRowsEmitted === 1 ? '' : 's'}`)
   }
   if (result.fxWritten > 0) notes.push(`${result.fxWritten} effect${result.fxWritten === 1 ? '' : 's'}`)
-  if (preserved.triggers > 0) notes.push(`${preserved.triggers} trigger(s) kept`)
-  if (preserved.timedPresetApplications + preserved.timedAdHocEffects > 0) {
-    notes.push(
-      `${preserved.timedPresetApplications + preserved.timedAdHocEffects} timed effect(s) kept`,
-    )
-  }
-  if (preserved.outOfMaskAssignments > 0) {
-    notes.push(`${preserved.outOfMaskAssignments} out-of-mask row(s) kept`)
-  }
-  if (preserved.outOfScopeAssignments > 0) {
-    notes.push(`${preserved.outOfScopeAssignments} out-of-selection row(s) kept`)
-  }
+  const triggersKept = preserved.triggers ?? 0
+  // One sentence for both kinds of timed child: what the operator needs to know is that a timed
+  // thing was preserved rather than dropped, not which shape it had.
+  const timedKept = (preserved.timedLayers ?? 0) + (preserved.timedAdHocEffects ?? 0)
+  const outOfMaskKept = preserved.outOfMaskAssignments ?? 0
+  const outOfScopeKept = preserved.outOfScopeAssignments ?? 0
+  if (triggersKept > 0) notes.push(`${triggersKept} trigger(s) kept`)
+  if (timedKept > 0) notes.push(`${timedKept} timed effect(s) kept`)
+  if (outOfMaskKept > 0) notes.push(`${outOfMaskKept} out-of-mask row(s) kept`)
+  if (outOfScopeKept > 0) notes.push(`${outOfScopeKept} out-of-selection row(s) kept`)
   if (result.republishedLive) notes.push('the live cue was republished')
 
   const skipNote = describeSkips(result.skipped)
