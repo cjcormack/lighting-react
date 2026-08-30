@@ -386,7 +386,6 @@ export function ScriptForm({
                   id={script?.id ?? 'new'}
                   scriptType={scriptType}
                   readOnly={readOnly}
-                  compact
                   onScriptChange={readOnly ? undefined : handleCodeChange}
                 />
               </SheetBody>

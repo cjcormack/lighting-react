@@ -1,6 +1,5 @@
 import { lazy, Suspense } from 'react'
 import { Loader2 } from 'lucide-react'
-import { Card } from '@/components/ui/card'
 import { FeatureErrorBoundary } from '@/components/FeatureErrorBoundary'
 import type { ScriptEditorProps } from './ScriptEditor'
 
@@ -26,16 +25,14 @@ const ScriptEditorImpl = lazy(() =>
 /**
  * Reserves the editor's box while the chunk loads, so the surrounding sheet or page doesn't
  * reflow when it arrives. The real editor is content-sized, so this is a plausible floor rather
- * than an exact match; `compact` mirrors the real component's choice of whether to wrap in a Card.
+ * than an exact match.
  */
-function ScriptEditorFallback({ compact }: { compact?: boolean }) {
-  const body = (
+function ScriptEditorFallback() {
+  return (
     <div className="flex min-h-48 items-center justify-center" aria-busy="true">
       <Loader2 className="size-6 animate-spin text-muted-foreground" />
     </div>
   )
-
-  return compact ? body : <Card className="p-4 m-2 flex flex-col overflow-hidden min-w-0">{body}</Card>
 }
 
 export function LazyScriptEditor(props: ScriptEditorProps) {
@@ -43,7 +40,7 @@ export function LazyScriptEditor(props: ScriptEditorProps) {
     // Every surface that mounts the editor is a sheet over a page the operator still needs, so a
     // chunk that never arrives has to stay inside the sheet rather than take the desk down with it.
     <FeatureErrorBoundary feature="The script editor" className="m-2">
-      <Suspense fallback={<ScriptEditorFallback compact={props.compact} />}>
+      <Suspense fallback={<ScriptEditorFallback />}>
         <ScriptEditorImpl {...props} />
       </Suspense>
     </FeatureErrorBoundary>

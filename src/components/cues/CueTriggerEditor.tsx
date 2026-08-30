@@ -315,7 +315,6 @@ export function CueTriggerEditor({
                 script={{ name: inlineName || 'Inline Hook', script: inlineCode }}
                 id="trigger-inline"
                 scriptType="FX_APPLICATION"
-                compact
                 onScriptChange={setInlineCode}
               />
             </div>

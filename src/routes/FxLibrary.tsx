@@ -453,7 +453,6 @@ function EffectDetailSheet({ effect }: { effect: EffectLibraryEntry }) {
             id={`view-${effect.name}`}
             scriptType={editorType}
             readOnly
-            compact
           />
         )}
       </SheetBody>
@@ -493,7 +492,13 @@ function EditFxDefinitionSheet({
     setEdits({})
   }, [definitionId])
 
-  const hasChanged = edits.name !== undefined || edits.script !== undefined
+  // `edits.script` holds whatever is in the editor, verbatim. The editor is a controlled component
+  // now, so a field that collapsed back to `undefined` whenever the text happened to trim equal to
+  // the saved script would revert the operator's typing — and their caret — under them. Whether
+  // that text counts as a *change* is asked here instead of at the point it is stored.
+  const hasChanged =
+    edits.name !== undefined ||
+    (edits.script !== undefined && edits.script.trim() !== definition?.script.trim())
 
   // Before the early returns: hooks cannot be skipped, and the sheet must know about the edit
   // whatever the query is doing.
@@ -620,12 +625,7 @@ function EditFxDefinitionSheet({
             script={{ name: currentName, script: currentScript }}
             id={definitionId}
             scriptType={editorType}
-            compact
-            onScriptChange={(code) => {
-              const normalized = code.trim()
-              const original = definition.script.trim()
-              setEdits({ ...edits, script: normalized !== original ? code : undefined })
-            }}
+            onScriptChange={(code) => setEdits({ ...edits, script: code })}
           />
         </div>
       </SheetBody>
@@ -927,7 +927,6 @@ function NewFxDefinitionSheet({
             script={{ name, script: scriptCode }}
             id="new-fx"
             scriptType={editorType}
-            compact
             onScriptChange={setScriptCode}
           />
         </div>

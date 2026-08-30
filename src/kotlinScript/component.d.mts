@@ -17,6 +17,18 @@ import { Component } from "react"
  *
  * Every other flag below is compared `=== "true"`, so `"false"` genuinely turns it off.
  */
+/**
+ * Imperative access to a live editor, handed out through `getEditor`.
+ *
+ * Both sides speak the *body* — the text between the widget's fold markers, which is what
+ * `onChange` reports and what the consumer stores. The markers themselves belong to the widget
+ * and are put back on the way to the server.
+ */
+export interface KotlinEditorHandle {
+  /** Write a body into the editor without it echoing back out as a user edit. */
+  setBody(code: string): void
+}
+
 export interface ReactKotlinPlaygroundProps {
   /** Class name for the wrapper `div` the widget mounts inside. */
   className?: string
@@ -24,8 +36,25 @@ export interface ReactKotlinPlaygroundProps {
   /** The `kotlin-playground` factory. `index.mjs` supplies this; callers do not. */
   playground?: (target: string | HTMLElement, ...args: unknown[]) => unknown
 
-  // Event proxies. The wrapper forwards each of these straight through.
+  /**
+   * Fires on the keystroke, with the editor's body.
+   *
+   * This is the wrapper's own CodeMirror listener, not the widget's `onChange`, which is
+   * debounced 500 ms with no flush — see the note at the top of `component.mjs`.
+   */
   onChange?: (code: string) => void
+
+  /**
+   * The widget mounted, but not as a working editor: either its `/versions` probe failed and it
+   * fell back to a highlight-only editor, or `playground()` rejected outright. The operator is
+   * otherwise given an editor that silently refuses every keystroke.
+   */
+  onInitFailure?: (error?: unknown) => void
+
+  /** Receives the imperative handle when the editor goes live, and `null` when it is torn down. */
+  getEditor?: (editor: KotlinEditorHandle | null) => void
+
+  // Event proxies. The wrapper forwards each of these straight through.
   onConsoleOpen?: () => void
   onConsoleClose?: () => void
   getInstance?: (instance: unknown) => void

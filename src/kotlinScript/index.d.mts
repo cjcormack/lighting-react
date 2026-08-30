@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "react"
-import type { ReactKotlinPlaygroundProps } from "./component.mjs"
+import type { KotlinEditorHandle, ReactKotlinPlaygroundProps } from "./component.mjs"
 
-export type { ReactKotlinPlaygroundProps }
+export type { KotlinEditorHandle, ReactKotlinPlaygroundProps }
 
 /**
  * `component.mjs` with the `kotlin-playground` factory already bound, which is the
