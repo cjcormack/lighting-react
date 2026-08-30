@@ -90,13 +90,32 @@ export const looksApi = restApi.injectEndpoints({
         body,
       }),
       // A rename can collide (409) and a bad row can 400; nothing moved when either happens.
-      // Cues are invalidated because a contents edit republishes every cue layering this Look, and
-      // `Fixture`/`GroupList` because an edit can move `compatibleLookIds` — changing the editor
-      // fixture type, or adding the first effect of a family, changes which heads the Look fits.
-      invalidatesTags: (result, _error, { lookId }) =>
+      // Cues are invalidated because a contents edit republishes every cue layering this Look.
+      //
+      // `Fixture`/`GroupList` ride on **`effects` alone**, and that conditional is the point.
+      // `compatibleLookIds` is derived server-side by `compatibleIdsFor`, which filters on a Look's
+      // effect categories and nothing else — the `editorFixtureType` type gate that used to sit
+      // beside it went with the column in session 3, so the comment that once justified these two
+      // tags for *any* edit was describing a filter that no longer exists. Rows and metadata
+      // provably cannot move compatibility; only adding (or clearing) an effect of a family can.
+      //
+      // Unconditional was expensive in the one place it fires most: `LookRowStore` saves rows-only
+      // bodies every 400 ms through a layer-scope drag, and `Fixture` is the fixture list — 48
+      // consumers here, `loadLookCompatibilityInfos` + `detectCapabilities` per fixture server-side
+      // — so every drag tick refetched it and handed every consumer a new array identity mid-drag.
+      invalidatesTags: (result, _error, { lookId, effects }) =>
         result == null
           ? []
-          : [{ type: 'Look', id: lookId }, 'LookList', 'Cue', 'CueList', 'Fixture', 'GroupList'],
+          : effects === undefined
+            ? [{ type: 'Look', id: lookId }, 'LookList', 'Cue', 'CueList']
+            : [
+                { type: 'Look', id: lookId },
+                'LookList',
+                'Cue',
+                'CueList',
+                'Fixture',
+                'GroupList',
+              ],
     }),
 
     deleteLook: build.mutation<void, { projectId: number; lookId: number; force?: boolean }>({

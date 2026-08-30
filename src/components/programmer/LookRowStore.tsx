@@ -193,11 +193,12 @@ export function LookRowStoreProvider({
       draft.set(targetKey, propertyName, value)
       writesRef.current += 1
       setSaveState('dirty')
-      // Debounce with a ceiling. The cadence is not only a network question: each save invalidates
-      // the fixture and group lists (so every row rebuilds) *and* republishes the Look's live
-      // consumers, so this is also how often the rig moves. Faster is not better here — and there
-      // is no smooth-preview escape hatch to reach for: backend sweep item D4 deleted the Look
-      // preview routes outright.
+      // Debounce with a ceiling. The cadence is not only a network question: each save republishes
+      // the Look's live consumers, so this is also how often the rig moves. Faster is not better
+      // here — and there is no smooth-preview escape hatch to reach for: backend sweep item D4
+      // deleted the Look preview routes outright. It no longer rebuilds every row on top of that:
+      // a rows-only PUT skips the `Fixture`/`GroupList` tags, because compatibility is derived from
+      // a Look's effects alone (see `saveLook`'s `invalidatesTags`).
       if (timerRef.current != null) window.clearTimeout(timerRef.current)
       timerRef.current = window.setTimeout(flush, SAVE_DEBOUNCE_MS)
       if (ceilingRef.current == null) {

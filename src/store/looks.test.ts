@@ -156,6 +156,33 @@ describe('looks endpoints', () => {
   })
 
   /**
+   * The economy half of the same claim. `compatibleLookIds` is derived by `compatibleIdsFor` from a
+   * Look's **effect categories** and nothing else, so rows and metadata cannot move it — and
+   * `LookRowStore` writes rows-only bodies every 400 ms for the length of a layer-scope drag. A
+   * `Fixture` invalidation there refetches the list 48 consumers read (and which costs
+   * `loadLookCompatibilityInfos` + `detectCapabilities` per fixture server-side) and hands every one
+   * of them a new array identity mid-drag.
+   *
+   * Both arms in one test on purpose: the effects arm is what proves the subscriber was live and
+   * would have refetched, so the rows arm is a real negative rather than a timing accident.
+   */
+  it('saveLook refetches the compatibility lists only when the body writes effects', async () => {
+    const sub = store.dispatch(fixturesApi.endpoints.fixtureList.initiate())
+    await sub
+    const before = countRequestsTo('fixtures')
+
+    await store.dispatch(looksApi.endpoints.saveLook.initiate({ projectId: 1, lookId: 4, rows: [] }))
+    expect(countRequestsTo('fixtures')).toBe(before)
+
+    await store.dispatch(
+      looksApi.endpoints.saveLook.initiate({ projectId: 1, lookId: 4, effects: [] }),
+    )
+    await vi.waitFor(() => expect(countRequestsTo('fixtures')).toBeGreaterThan(before))
+
+    sub.unsubscribe()
+  })
+
+  /**
    * And a copy does too, **whichever project it lands in**. Gating this on
    * `targetProjectId === projectId` looks like the right economy and is not: `fixtures` and
    * `groups` are the *active* project's, which the mutation cannot see, so the case that check skips
