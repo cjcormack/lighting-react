@@ -14,7 +14,10 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { XCircle } from "lucide-react"
+import { toast } from "sonner"
 import { useCloneProjectMutation } from "./store/projects"
+
+const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`
 
 interface CloneProjectDialogProps {
   open: boolean
@@ -49,11 +52,20 @@ export default function CloneProjectDialog({
 
   const handleClone = async () => {
     try {
-      await cloneProject({
+      const result = await cloneProject({
         id: sourceProjectId,
         name,
         description: description || undefined,
       }).unwrap()
+      // The only confirmation an operator gets that the clone was complete. A clone is
+      // export → fresh uuids → import over the whole project graph, so `recordsCloned` is the
+      // number that says "all of it"; the four named counts are what a show is recognised by.
+      toast.success(
+        `Cloned "${result.project.name}": ${plural(result.scriptsCloned, "script")}, ` +
+          `${plural(result.looksCloned, "look")}, ${plural(result.cuesCloned, "cue")}, ` +
+          `${plural(result.cueStacksCloned, "stack")} — ` +
+          `${plural(result.recordsCloned, "record")} in all`,
+      )
       handleClose()
     } catch {
       // Error handled by mutation state
@@ -75,8 +87,8 @@ export default function CloneProjectDialog({
         <SheetHeader>
           <SheetTitle>Clone Project</SheetTitle>
           <SheetDescription>
-            Clone &quot;{sourceProjectName}&quot; with all its scripts and
-            settings.
+            Clone &quot;{sourceProjectName}&quot; with everything in it &mdash;
+            patch, looks, cues, stacks, scripts and settings.
           </SheetDescription>
         </SheetHeader>
         <SheetBody>

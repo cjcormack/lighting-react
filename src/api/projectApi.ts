@@ -95,7 +95,11 @@ export interface ImportProjectResponse {
 export interface CloneProjectResponse {
   project: ProjectDetail;
   scriptsCloned: number;
-
+  looksCloned: number;
+  cuesCloned: number;
+  cueStacksCloned: number;
+  /** Total records copied across every synced table — patches, groups, universes, cue children, … */
+  recordsCloned: number;
   message: string;
 }
 
