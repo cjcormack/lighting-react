@@ -30,9 +30,6 @@ type FxSectionProps =
   | { group: GroupSummary; fixture?: never }
 
 export function FxSection(props: FxSectionProps) {
-  // In preset mode the host fixture is synthetic — its key doesn't resolve in fx/group
-  // queries and there's no stage surface to apply to. Effects live on the preset editor's
-  // own Effects tab. Suppress this whole panel.
   if ('fixture' in props && props.fixture) {
     return <FixtureFxSection fixture={props.fixture} />
   }
@@ -69,7 +66,7 @@ function FixtureFxSection({ fixture }: { fixture: Fixture }) {
         if (!isExpanded) setIsExpanded(true)
         setSheetState({ mode: 'add' })
       }}
-      presetPicker={
+      lookPicker={
         <LookTogglePicker
           targetType="fixture"
           targetKey={fixture.key}
@@ -160,7 +157,7 @@ function GroupFxSection({ group }: { group: GroupSummary }) {
         if (!isExpanded) setIsExpanded(true)
         setSheetState({ mode: 'add' })
       }}
-      presetPicker={
+      lookPicker={
         <LookTogglePicker
           targetType="group"
           targetKey={group.name}
@@ -225,11 +222,11 @@ interface FxSectionShellProps {
   isExpanded: boolean
   onToggle: () => void
   onAdd: () => void
-  presetPicker?: React.ReactNode
+  lookPicker?: React.ReactNode
   children: React.ReactNode
 }
 
-function FxSectionShell({ totalCount, isExpanded, onToggle, onAdd, presetPicker, children }: FxSectionShellProps) {
+function FxSectionShell({ totalCount, isExpanded, onToggle, onAdd, lookPicker, children }: FxSectionShellProps) {
   return (
     <div className="pt-3 border-t">
       <div className="flex items-center justify-between">
@@ -251,7 +248,7 @@ function FxSectionShell({ totalCount, isExpanded, onToggle, onAdd, presetPicker,
           )}
         </button>
         <div className="flex items-center gap-0.5 shrink-0">
-          {presetPicker}
+          {lookPicker}
           <Button
             variant="ghost"
             size="icon"
