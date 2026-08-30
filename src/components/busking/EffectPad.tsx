@@ -11,6 +11,7 @@ import { PropertyPadButton } from './PropertyPadButton'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
 import type { EffectPresence, PropertyButton } from './buskingTypes'
 import type { LookSummary } from '@/api/looksApi'
+import { useIsDeskConnected } from '@/store/status'
 
 const CATEGORY_ORDER = ['looks', 'dimmer', 'colour', 'position', 'controls'] as const
 
@@ -63,6 +64,11 @@ export function EffectPad({
   onPropertyLongPress,
   getPropertyValue,
 }: EffectPadProps) {
+  // Only the *property* pads are gated. The effect pads above them add and remove FX over REST,
+  // which stays usable while the socket is mid-backoff; the property pads write straight to the
+  // programmer over the socket.
+  const deskConnected = useIsDeskConnected()
+
   if (!hasSelection) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground px-4">
@@ -131,6 +137,7 @@ export function EffectPad({
                     activeValue={getPropertyValue(btn)}
                     onToggle={(level) => onPropertyToggle(btn, level)}
                     onLongPress={() => onPropertyLongPress(btn)}
+                    disabled={!deskConnected}
                   />
                 ))}
               </div>

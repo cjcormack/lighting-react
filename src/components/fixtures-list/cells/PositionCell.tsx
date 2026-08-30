@@ -12,6 +12,12 @@ interface PositionCellProps {
   batchCount: number
   /** No value in the current scope — see `UnsetCellMark`. */
   placeholder?: boolean
+  /**
+   * The cell cannot take an edit — the desk is unreachable, so the write would go nowhere.
+   * A real `disabled` rather than the wrapper's `pointer-events-none` alone: that stops the
+   * mouse and not the keyboard, and this trigger is tabbable.
+   */
+  disabled?: boolean
   onCommit: (commit: CellCommit) => void
   onBeginEdit: () => void
 }
@@ -26,6 +32,7 @@ export const PositionCell = memo(function PositionCell({
   resolutions,
   batchCount,
   placeholder,
+  disabled = false,
   onCommit,
   onBeginEdit,
 }: PositionCellProps) {
@@ -40,6 +47,7 @@ export const PositionCell = memo(function PositionCell({
       <PopoverTrigger asChild>
         <button
           type="button"
+          disabled={disabled}
           className="flex h-full w-full items-center gap-1.5 rounded text-left hover:bg-accent/50"
           title={placeholder ? UNSET_CELL_TITLE : undefined}
         >

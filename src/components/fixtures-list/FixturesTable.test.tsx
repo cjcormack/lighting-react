@@ -96,8 +96,15 @@ vi.mock('@tanstack/react-virtual', () => ({
   }),
 }))
 vi.mock('../fixtures/LocateButton', () => ({ LocateButton: () => null }))
+// The socket's readyState, driven directly for the same reason the scope is: the real hook is an
+// RTK Query subscription and this suite deliberately mounts without a Provider.
+const deskConnected = vi.hoisted(() => ({ current: true }))
+vi.mock('../../store/status', () => ({
+  useIsDeskConnected: () => deskConnected.current,
+}))
 
 import { FixturesTable } from './FixturesTable'
+import { EditorContextProvider } from '../programmer/EditorContext'
 import { useCellSelection } from './useCellSelection'
 import type { Row } from './rowModel'
 import { lookRowKey } from '../programmer/lookRowKey'
@@ -157,6 +164,7 @@ afterEach(() => {
   scopeState.current = null
   lookStore.current = null
   ownership.current = {}
+  deskConnected.current = true
 })
 
 /** The value cell's popover trigger — the button the marquee must not fight with. */
@@ -379,5 +387,30 @@ describe('FixturesTable scopes', () => {
     expect(cellWrapper().className).toContain('border-dashed')
     // A marquee dragged across the grid must never quietly widen a layer to the whole rig.
     expect(cellWrapper().className).toContain('pointer-events-none')
+  })
+})
+
+describe('FixturesTable with the desk unreachable', () => {
+  it('makes the cells inert rather than taking edits that go nowhere', () => {
+    // A cell edit is a `programmer.*` WS write, and the grid reads its values back from the
+    // server — so with the socket down the drag does nothing and the cell snaps back with no
+    // explanation. Inert says so up front.
+    deskConnected.current = false
+    render(<Harness />)
+    expect(cellWrapper().className).toContain('pointer-events-none')
+  })
+
+  it('leaves a focused Look layer editable — that edit is a local draft, not a wire write', () => {
+    deskConnected.current = false
+    scopeState.current = { kind: 'layer', layerId: 7 }
+    lookStore.current = layerStore({
+      serverRows: new Map([[lookRowKey('a', 'dimmer'), { kind: 'level', value: 128 }]]),
+    })
+    render(
+      <EditorContextProvider value={{ kind: 'lookLayer', layerId: 7, lookId: 3 }}>
+        <Harness />
+      </EditorContextProvider>,
+    )
+    expect(cellWrapper().className).not.toContain('pointer-events-none')
   })
 })

@@ -25,7 +25,18 @@ export type InternalEventHandler = (
 export interface InternalApiConnection {
   baseUrl: string
   readyState(): number;
-  send(data: string | ArrayBufferLike | Blob | ArrayBufferView): void,
+  /**
+   * Write a frame, and report whether it was written.
+   *
+   * A socket that is CONNECTING, CLOSING or CLOSED cannot take a frame, and the reconnect
+   * backoff below reaches 30 s — so the drop window after a network blip is seconds to half a
+   * minute. Callers carrying an operator gesture must not ignore the `false`: see `sendGesture`
+   * in `./wsGesture.ts`, which is how every such call site says so out loud.
+   *
+   * Deliberately no queue. Flushing a minute-old blackout on reconnect moves the rig behind the
+   * operator's back; the bridges' idempotent state re-requests are the correct catch-up.
+   */
+  send(data: string | ArrayBufferLike | Blob | ArrayBufferView): boolean,
   subscribe(fn: InternalEventHandler): Subscription
   /**
    * Re-open the socket. A no-op while it is already OPEN or CONNECTING, unless
@@ -124,10 +135,10 @@ export function createInternalApiConnection(baseUrl: string, wsUrl: string): Int
     readyState(): number {
       return ws.readyState
     },
-    send(data: string | ArrayBufferLike | Blob | ArrayBufferView): void {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(data)
-      }
+    send(data: string | ArrayBufferLike | Blob | ArrayBufferView): boolean {
+      if (ws.readyState !== WebSocket.OPEN) return false
+      ws.send(data)
+      return true
     },
     reconnect(force = false) {
       if (reconnectTimer) {

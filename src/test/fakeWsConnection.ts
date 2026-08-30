@@ -16,13 +16,19 @@ import {
  */
 export function fakeWsConnection() {
   let handler: InternalEventHandler | null = null
+  let open = true
   const sent: Record<string, unknown>[] = []
 
   const conn: InternalApiConnection = {
     baseUrl: "/api/",
-    readyState: () => 1, // WebSocket.OPEN — no bridge reads it, it is just a stub value
+    readyState: () => (open ? 1 : 3), // WebSocket.OPEN / CLOSED
     send: (payload) => {
+      // Mirrors the real connection: a frame written to a socket that isn't OPEN goes
+      // nowhere, and the caller is told so. `setOpen(false)` is how a test reaches the
+      // dropped-gesture path without standing up a real WebSocket.
+      if (!open) return false
       sent.push(JSON.parse(payload as string))
+      return true
     },
     reconnect: () => {},
     subscribe: (fn) => {
@@ -39,6 +45,10 @@ export function fakeWsConnection() {
     conn,
     /** Every frame the bridge sent, already parsed. */
     sent,
+    /** Take the socket down (or bring it back), so writes are dropped as they are live. */
+    setOpen: (value: boolean) => {
+      open = value
+    },
     /** Deliver an arbitrary connection event — an open, a close with a code, a raw frame. */
     fire: (evType: InternalEventType, ev: Event) => handler?.(evType, ev, parseWsFrame(ev)),
     /** Deliver one inbound message frame, given its body. */

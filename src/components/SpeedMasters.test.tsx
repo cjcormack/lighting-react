@@ -23,6 +23,12 @@ vi.mock('../store/speedMasters', () => ({
   useMaster1Uuid: () => liveMasters.find((m) => m.index === 1)?.uuid ?? null,
   requestSpeedMasterBeat: () => {},
 }))
+// The socket's readyState, driven directly: the real hook is an RTK Query subscription and this
+// suite deliberately mounts the bar without a Provider.
+const deskConnected = { current: true }
+vi.mock('../store/status', () => ({
+  useIsDeskConnected: () => deskConnected.current,
+}))
 
 import { SpeedMasters, SpeedMastersChip } from './SpeedMasters'
 
@@ -30,6 +36,7 @@ afterEach(() => {
   cleanup()
   vi.clearAllMocks()
   window.localStorage.clear()
+  deskConnected.current = true
 })
 
 function master(index: number, overrides: Partial<SpeedMasterLiveState> = {}): SpeedMasterLiveState {
@@ -154,6 +161,18 @@ describe('SpeedMastersChip — the phone arm', () => {
     openChip()
     fireEvent.click(screen.getByLabelText('Tap tempo for master 2'))
     expect(tapSpeedMaster).toHaveBeenCalledWith(liveMasters[1].uuid)
+  })
+
+  it('stops taking taps while the desk is unreachable, rather than dropping them', () => {
+    // TAP is a `speedMasters.tap` frame and the number beside it is the server's answer, so
+    // against a dead socket the operator taps out a bar and nothing moves.
+    liveMasters = [master(1), master(2)]
+    deskConnected.current = false
+    openChip()
+    const tap = screen.getByLabelText('Tap tempo for master 2')
+    expect(tap).toBeDisabled()
+    fireEvent.click(tap)
+    expect(tapSpeedMaster).not.toHaveBeenCalled()
   })
 
   it('commits a typed tempo on Enter and sends it to the right master', () => {

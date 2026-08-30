@@ -1,6 +1,7 @@
 import type { CueTarget, LayerSource } from './cuesApi'
 import type { InternalApiConnection } from './internalApi'
 import type { Subscription } from './subscription'
+import { sendGesture } from './wsGesture'
 
 /**
  * Client for the backend's Layer-2 programmer (`programmer.*` WS ops plus the
@@ -764,7 +765,10 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     handleMessage(parsed as ProgrammerIncomingMessage)
   })
 
-  const send = (message: ProgrammerOutgoingMessage) => conn.send(JSON.stringify(message))
+  // Every outgoing frame below is an operator gesture — a set, a Blind press, a layer move — so
+  // a write that lands on a dead socket is announced rather than dropped. The one exception is
+  // `programmer.state`, idempotent catch-up that goes out through `conn.send` directly.
+  const send = (message: ProgrammerOutgoingMessage) => sendGesture(conn, message)
 
   return {
     getState: () => snapshot,
@@ -809,7 +813,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
       send({ type: 'programmer.setBlind', blind: blindOn, fadeMs })
     },
     requestState() {
-      send({ type: 'programmer.state' })
+      conn.send(JSON.stringify({ type: 'programmer.state' }))
     },
 
     addLayer({ lookId, templateId, targets, propertyMask, blendMode, amount, speedMasterUuid, rateSpeedMasterUuid, fadeMs }) {

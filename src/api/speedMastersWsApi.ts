@@ -1,6 +1,7 @@
 import { InternalApiConnection } from './internalApi'
 import { Subscription } from './subscription'
 import { createWsSubscribable } from './wsSubscriptionFactory'
+import { sendGesture } from './wsGesture'
 
 /** One master's live state, as streamed by `speedMasters.state` / `speedMasters.changed`. */
 export interface SpeedMasterLiveState {
@@ -162,14 +163,10 @@ export function createSpeedMastersWsApi(conn: InternalApiConnection): SpeedMaste
       requestBeatsFor([beatKey(masterUuid)])
     },
     setBpm(masterUuid, bpm) {
-      conn.send(
-        JSON.stringify({ type: 'speedMasters.setBpm', masterUuid: masterUuid ?? undefined, bpm }),
-      )
+      sendGesture(conn, { type: 'speedMasters.setBpm', masterUuid: masterUuid ?? undefined, bpm })
     },
     tap(masterUuid) {
-      conn.send(
-        JSON.stringify({ type: 'speedMasters.tap', masterUuid: masterUuid ?? undefined }),
-      )
+      sendGesture(conn, { type: 'speedMasters.tap', masterUuid: masterUuid ?? undefined })
     },
   }
 }

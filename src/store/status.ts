@@ -164,3 +164,26 @@ export const statusApi = restApi.injectEndpoints({
 })
 
 export const { useStatusQuery, useReconnectMutation } = statusApi
+
+/**
+ * Whether the desk is reachable right now.
+ *
+ * For controls that promise an *immediate* change to the rig — blackout, grand master, Blind,
+ * park, the programmer's value editors. A WebSocket write made while the socket is down goes
+ * nowhere (`sendGesture` says so, but only after the fact), and because programmer state is
+ * server-driven the control would otherwise sit there looking live and doing nothing. Disabling
+ * is the honest answer, and it is the one thing a replay queue must not be used for: flushing a
+ * minute-old blackout on reconnect moves the rig behind the operator's back.
+ *
+ * REST-backed editing is deliberately *not* gated on this — those surfaces have their own error
+ * toasts, and REST can be perfectly healthy while the socket is mid-backoff.
+ *
+ * `selectFromResult` narrows the subscription to the boolean, so the many controls reading it
+ * re-render on connect and disconnect only, not on every `Status` transition through CONNECTING.
+ */
+export function useIsDeskConnected(): boolean {
+  const { connected } = useStatusQuery(undefined, {
+    selectFromResult: ({ data }) => ({ connected: data === Status.OPEN }),
+  })
+  return connected
+}

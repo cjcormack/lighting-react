@@ -17,6 +17,12 @@ interface SliderCellProps {
    * `value` as the editor's starting point so a busk begins where the rig is. See `UnsetCellMark`.
    */
   placeholder?: boolean
+  /**
+   * The cell cannot take an edit — the desk is unreachable, so the write would go nowhere.
+   * A real `disabled` rather than the wrapper's `pointer-events-none` alone: that stops the
+   * mouse and not the keyboard, and this trigger is tabbable.
+   */
+  disabled?: boolean
   onCommit: (commit: CellCommit) => void
   onBeginEdit: () => void
 }
@@ -35,6 +41,7 @@ export const SliderCell = memo(function SliderCell({
   resolutions,
   batchCount,
   placeholder,
+  disabled = false,
   onCommit,
   onBeginEdit,
 }: SliderCellProps) {
@@ -66,6 +73,7 @@ export const SliderCell = memo(function SliderCell({
       <PopoverTrigger asChild>
         <button
           type="button"
+          disabled={disabled}
           className="flex h-full w-full items-center gap-1.5 rounded text-left hover:bg-accent/50"
           title={placeholder ? UNSET_CELL_TITLE : undefined}
         >

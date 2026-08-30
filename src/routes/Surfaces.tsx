@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Loader2, Sliders, Zap, ZapOff, Power, AlertTriangle } from "lucide-react"
 import { useCurrentProjectQuery } from "@/store/projects"
+import { useIsDeskConnected } from "@/store/status"
+import { DESK_OFFLINE_LABEL } from "@/api/wsGesture"
 import {
   useSurfaceDevices,
   useActiveBanks,
@@ -168,12 +170,20 @@ export function SurfacesContent({
 
 function ScalerToolbar() {
   const scaler = useScalerState()
+  // Blackout and the grand master are the two controls on this page that promise the rig will
+  // change *now*. Both are WebSocket writes, so with the socket down the press goes nowhere and
+  // the state they read back is whatever it was before the drop — an inert button that still
+  // paints as live. Disabled says so before the press instead of after it.
+  const connected = useIsDeskConnected()
+  const offlineTitle = connected ? undefined : DESK_OFFLINE_LABEL
   return (
     <div className="flex items-center gap-2">
       <Button
         size="sm"
         variant={scaler.blackoutEnabled ? "destructive" : "outline"}
         onClick={() => lightingApi.surfaces.setBlackout(!scaler.blackoutEnabled)}
+        disabled={!connected}
+        title={offlineTitle}
         className="gap-1.5"
       >
         <Power className="size-3.5" />
@@ -183,6 +193,8 @@ function ScalerToolbar() {
         size="sm"
         variant={scaler.grandMasterEnabled ? "outline" : "default"}
         onClick={() => lightingApi.surfaces.setGrandMaster(!scaler.grandMasterEnabled)}
+        disabled={!connected}
+        title={offlineTitle}
         className="gap-1.5"
       >
         {scaler.grandMasterEnabled ? (

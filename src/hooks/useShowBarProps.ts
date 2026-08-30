@@ -9,6 +9,7 @@ import { useShowTransport } from './useShowTransport'
 import { programmerSetBlind, useProgrammerSummaryQuery } from '../store/programmer'
 import { getProgrammerFadeMs } from '../lib/programmerFade'
 import { ignoreReportedError } from '../store/errorToastMiddleware'
+import { useIsDeskConnected } from '../store/status'
 
 /**
  * Everything `ShowBar` needs, derived from a project id.
@@ -105,6 +106,12 @@ export function useShowBarProps(
    * re-render while the operator scrolls through fade times.
    */
   const onBlind = useCallback(() => programmerSetBlind(!blind, getProgrammerFadeMs()), [blind])
+  /**
+   * Blind is the one tile in the bar whose write is a *WebSocket* op, so it is the only one gated
+   * on the socket. GO/BACK and start/stop are REST, which stays perfectly usable while the socket
+   * is mid-backoff — and they already report their own failures through `errorToastMiddleware`.
+   */
+  const deskConnected = useIsDeskConnected()
 
   const [activateShow] = useActivateProgramMutation()
   const [deactivateShow] = useDeactivateProgramMutation()
@@ -149,6 +156,7 @@ export function useShowBarProps(
       goDisabled: transport.goDisabled,
       blind,
       onBlind,
+      blindDisabled: !deskConnected,
     },
   }
 }

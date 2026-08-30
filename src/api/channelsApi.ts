@@ -1,10 +1,12 @@
 import {Subscription} from "./subscription";
 import {InternalApiConnection} from "./internalApi";
+import {sendGesture} from "./wsGesture";
 
 export interface ChannelsApi {
     getAll(): Map<string, number>
     get(universe: number, channelNo: number): number
-    update(universe: number, channelNo: number, value: number): void
+    /** False when the socket was down, so the write went nowhere. */
+    update(universe: number, channelNo: number, value: number): boolean
     subscribe(fn: (updates: Map<string, number>) => void): Subscription
     subscribeToChannel(key: string, fn: (value: number) => void): Subscription
 }
@@ -112,14 +114,13 @@ export function createChannelsApi(conn: InternalApiConnection): ChannelsApi {
             return currentValues.get(`${universe}:${channelNo}`) || 0
         },
         update(universe: number, channelNo: number, value: number) {
-            const payload = {
+            return sendGesture(conn, {
                 type: 'updateChannel',
                 universe: universe,
                 id: channelNo,
                 level: value,
                 fadeTime: 0
-            }
-            conn.send(JSON.stringify(payload))
+            })
         },
         subscribe(fn: (updates: Map<string, number>) => void): Subscription {
             const thisId = nextChannelSubscriptionId

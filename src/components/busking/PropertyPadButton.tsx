@@ -1,6 +1,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import type { PropertyButton, EffectPresence } from './buskingTypes'
+import { DESK_OFFLINE_LABEL } from '@/api/wsGesture'
 
 interface PropertyPadButtonProps {
   button: PropertyButton
@@ -8,6 +9,12 @@ interface PropertyPadButtonProps {
   activeValue: string | null
   onToggle: (settingLevel?: number) => void
   onLongPress: () => void
+  /**
+   * The desk is unreachable. A property pad is a `programmer.set` / `programmer.clearEntry` over
+   * the socket and the pad's own lit state is read back from the server, so a press against a
+   * dead socket lights nothing and changes nothing.
+   */
+  disabled?: boolean
 }
 
 const HOLD_MS = 300
@@ -19,6 +26,7 @@ export function PropertyPadButton({
   activeValue,
   onToggle,
   onLongPress,
+  disabled = false,
 }: PropertyPadButtonProps) {
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const didLongPress = useRef(false)
@@ -310,6 +318,8 @@ export function PropertyPadButton({
     <div className="relative">
       <button
         ref={buttonElRef}
+        disabled={disabled}
+        title={disabled ? DESK_OFFLINE_LABEL : undefined}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -322,6 +332,7 @@ export function PropertyPadButton({
           presence === 'some' && !sliding && !picking && 'border-primary/40 bg-primary/10 hover:bg-primary/15',
           presence === 'all' && !sliding && !picking && 'border-primary bg-primary/20 ring-1 ring-primary/50 hover:bg-primary/25',
           (sliding || picking) && 'border-primary bg-primary/20 ring-1 ring-primary/50',
+          disabled && 'opacity-50',
         )}
       >
         {/* Slider fill indicator */}

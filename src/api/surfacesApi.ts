@@ -1,6 +1,7 @@
 import { InternalApiConnection } from "./internalApi"
 import { Subscription } from "./subscription"
 import { createWsSubscribable } from "./wsSubscriptionFactory"
+import { sendGesture } from "./wsGesture"
 
 // Types mirror `uk.me.cormack.lighting7.midi.BindingTarget` and related Kotlin
 // classes on the backend. Keep field names in sync with kotlinx.serialization.
@@ -301,15 +302,19 @@ export interface SurfacesWsApi {
 
   /** Set the active bank for a device type (pass null to clear). */
   setBank(deviceTypeKey: string, bank: string | null): void
-  /** Start a MIDI Learn session; responses come back via `subscribeLearn`. */
-  beginLearn(projectId: number, deviceTypeKey?: string | null): void
+  /**
+   * Start a MIDI Learn session; responses come back via `subscribeLearn`. False when the socket
+   * was down, so no `started` event is coming — the caller has a spinner to take down.
+   */
+  beginLearn(projectId: number, deviceTypeKey?: string | null): boolean
   cancelLearn(sessionId: string): void
+  /** False when the socket was down — see `beginLearn`, and the same spinner. */
   commitLearn(
     sessionId: string,
     target: BindingTarget,
     bank?: string | null,
     takeoverPolicy?: TakeoverPolicy | null,
-  ): void
+  ): boolean
 
   /** Scaler state (blackout / grand master). */
   subscribeScaler(fn: (state: ScalerState) => void): Subscription
@@ -445,26 +450,26 @@ export function createSurfacesWsApi(conn: InternalApiConnection): SurfacesWsApi 
     requestBanksState: () => conn.send(JSON.stringify({ type: "surfaceBank.state" })),
     requestScalerState: () => conn.send(JSON.stringify({ type: "surfaceScaler.state" })),
     setBank: (deviceTypeKey, bank) =>
-      conn.send(JSON.stringify({ type: "surfaceBank.set", deviceTypeKey, bank })),
+      sendGesture(conn, { type: "surfaceBank.set", deviceTypeKey, bank }),
     beginLearn: (projectId, deviceTypeKey) =>
-      conn.send(JSON.stringify({
+      sendGesture(conn, {
         type: "surfaceLearn.begin",
         projectId,
         deviceTypeKey: deviceTypeKey ?? null,
-      })),
+      }),
     cancelLearn: (sessionId) =>
-      conn.send(JSON.stringify({ type: "surfaceLearn.cancel", sessionId })),
+      sendGesture(conn, { type: "surfaceLearn.cancel", sessionId }),
     commitLearn: (sessionId, target, bank, takeoverPolicy) =>
-      conn.send(JSON.stringify({
+      sendGesture(conn, {
         type: "surfaceLearn.commit",
         sessionId,
         target,
         bank: bank ?? null,
         takeoverPolicy: takeoverPolicy ?? null,
-      })),
+      }),
     setBlackout: (enabled) =>
-      conn.send(JSON.stringify({ type: "surfaceScaler.setBlackout", enabled })),
+      sendGesture(conn, { type: "surfaceScaler.setBlackout", enabled }),
     setGrandMaster: (enabled) =>
-      conn.send(JSON.stringify({ type: "surfaceScaler.setGrandMaster", enabled })),
+      sendGesture(conn, { type: "surfaceScaler.setGrandMaster", enabled }),
   }
 }

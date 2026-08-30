@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, Radio } from "lucide-react"
 import { lightingApi } from "@/api/lightingApi"
+import { DESK_OFFLINE_LABEL } from "@/api/wsGesture"
 import { controlLabel } from "./targetUtils"
 import type {
   BindingTarget,
@@ -66,8 +67,13 @@ export function LearnModeOverlay({
       setPhase({ state: "idle" })
       return
     }
+    // A dropped frame produces no `started` event, so without this the dialog spins on its
+    // loader forever with Cancel as the only way out.
+    if (!lightingApi.surfaces.beginLearn(projectId, deviceTypeKey)) {
+      setPhase({ state: "error", message: `${DESK_OFFLINE_LABEL} — MIDI Learn needs the desk.` })
+      return
+    }
     setPhase({ state: "starting" })
-    lightingApi.surfaces.beginLearn(projectId, deviceTypeKey)
   }, [open, projectId, deviceTypeKey])
 
   useEffect(() => {
@@ -112,7 +118,10 @@ export function LearnModeOverlay({
 
   const commit = () => {
     if (phase.state !== "captured") return
-    lightingApi.surfaces.commitLearn(phase.sessionId, target, bank, takeoverPolicy)
+    if (!lightingApi.surfaces.commitLearn(phase.sessionId, target, bank, takeoverPolicy)) {
+      setPhase({ state: "error", message: `${DESK_OFFLINE_LABEL} — the binding was not saved.` })
+      return
+    }
     setPhase({ state: "committing", sessionId: phase.sessionId })
   }
 

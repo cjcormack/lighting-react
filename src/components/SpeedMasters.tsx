@@ -7,6 +7,8 @@ import { BeatIndicator } from './BeatIndicator'
 import { formatBpm, useBpmDraft } from '../hooks/useBpmDraft'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { setSpeedMasterBpm, tapSpeedMaster, useSpeedMasterLiveQuery } from '../store/speedMasters'
+import { useIsDeskConnected } from '../store/status'
+import { DESK_OFFLINE_LABEL } from '../api/wsGesture'
 import type { SpeedMasterLiveState } from '../api/speedMastersWsApi'
 
 /**
@@ -290,6 +292,10 @@ function MasterTile({ master }: { master: TileMaster }) {
   const { editing, draft, start, change, commit, onKeyDown } = useBpmDraft(master.uuid, (bpm) =>
     setSpeedMasterBpm(master.uuid, bpm),
   )
+  // Both a typed tempo and a TAP are `speedMasters.*` WS writes, and the readout is the server's
+  // — so against a dead socket the operator taps a bar's worth of beats and the number never
+  // moves. The tile keeps *showing* the tempo; only the two writes stop.
+  const connected = useIsDeskConnected()
 
   return (
     <>
@@ -316,9 +322,13 @@ function MasterTile({ master }: { master: TileMaster }) {
         ) : (
           <button
             type="button"
-            disabled={master.bpm == null}
+            disabled={master.bpm == null || !connected}
             onClick={() => master.bpm != null && start(master.bpm)}
-            title={`Master ${master.index} — click to type a tempo`}
+            title={
+              connected
+                ? `Master ${master.index} — click to type a tempo`
+                : DESK_OFFLINE_LABEL
+            }
             className="text-left font-mono text-lg font-bold leading-none tabular-nums text-foreground transition-colors hover:text-primary disabled:hover:text-foreground @max-[700px]:text-[15px]"
           >
             {master.bpm == null ? '—' : formatBpm(master.bpm)}
@@ -328,6 +338,8 @@ function MasterTile({ master }: { master: TileMaster }) {
       <button
         type="button"
         onClick={() => tapSpeedMaster(master.uuid)}
+        disabled={!connected}
+        title={connected ? undefined : DESK_OFFLINE_LABEL}
         aria-label={`Tap tempo for master ${master.index}`}
         className="flex items-center justify-center border-l px-3 text-xs font-bold uppercase tracking-[0.08em] transition-colors hover:bg-primary hover:text-primary-foreground active:bg-primary active:text-primary-foreground @max-[700px]:px-2 @max-[700px]:text-[11px]"
       >
@@ -346,6 +358,8 @@ function MasterRow({ master }: { master: TileMaster }) {
   const { editing, draft, start, change, commit, onKeyDown } = useBpmDraft(master.uuid, (bpm) =>
     setSpeedMasterBpm(master.uuid, bpm),
   )
+  /** Same two writes as `MasterTile` above, in the narrow arm's popover. */
+  const connected = useIsDeskConnected()
 
   return (
     <div
@@ -373,9 +387,11 @@ function MasterRow({ master }: { master: TileMaster }) {
       ) : (
         <button
           type="button"
-          disabled={master.bpm == null}
+          disabled={master.bpm == null || !connected}
           onClick={() => master.bpm != null && start(master.bpm)}
-          title={`Master ${master.index} — click to type a tempo`}
+          title={
+            connected ? `Master ${master.index} — click to type a tempo` : DESK_OFFLINE_LABEL
+          }
           className="font-mono text-sm font-bold tabular-nums transition-colors hover:text-primary disabled:hover:text-foreground"
         >
           {master.bpm == null ? '—' : formatBpm(master.bpm)}
@@ -384,6 +400,8 @@ function MasterRow({ master }: { master: TileMaster }) {
       <button
         type="button"
         onClick={() => tapSpeedMaster(master.uuid)}
+        disabled={!connected}
+        title={connected ? undefined : DESK_OFFLINE_LABEL}
         aria-label={`Tap tempo for master ${master.index}`}
         className="rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] transition-colors hover:bg-primary hover:text-primary-foreground"
       >

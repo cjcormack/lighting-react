@@ -15,6 +15,9 @@ import { useGetChannelQuery } from "@/store/channels"
 import { useGetChannelMappingQuery } from "@/store/channelMapping"
 import { useGetChannelParkStateQuery, useParkChannelMutation } from "@/store/park"
 import { useUpdateChannelMutation } from "@/store/channels"
+import { useIsDeskConnected } from "@/store/status"
+import { DESK_OFFLINE_LABEL, WS_GESTURE_DROPPED_MESSAGE, WS_GESTURE_DROPPED_TOAST_ID } from "@/api/wsGesture"
+import { toast } from "sonner"
 
 interface ChannelValueDialogProps {
   open: boolean
@@ -23,6 +26,10 @@ interface ChannelValueDialogProps {
 }
 
 export function ChannelValueDialog({ open, onOpenChange, mode }: ChannelValueDialogProps) {
+  // Both arms of this sheet write over the WebSocket. The Channels page already disables the
+  // buttons that open it, but the command palette opens it too, so the guard belongs here as
+  // well as there.
+  const connected = useIsDeskConnected()
   const [universe, setUniverse] = useState("0")
   const [channel, setChannel] = useState("")
   const [value, setValue] = useState("")
@@ -74,6 +81,12 @@ export function ChannelValueDialog({ open, onOpenChange, mode }: ChannelValueDia
       const ch = Number(channel)
       const v = Number(value)
       if (isNaN(u) || isNaN(ch) || isNaN(v) || ch < 1 || ch > 512 || v < 0 || v > 255) return
+      // Says so rather than returning quietly: the submit button is disabled, but the value
+      // field's Enter shortcut reaches here directly, and the footer still advertises it.
+      if (!connected) {
+        toast.error(WS_GESTURE_DROPPED_MESSAGE, { id: WS_GESTURE_DROPPED_TOAST_ID })
+        return
+      }
 
       if (mode === "park") {
         runParkChannel({ universe: u, channelNo: ch, value: v })
@@ -82,7 +95,7 @@ export function ChannelValueDialog({ open, onOpenChange, mode }: ChannelValueDia
       }
       onOpenChange(false)
     },
-    [universe, channel, value, mode, runParkChannel, runUpdateChannel, onOpenChange]
+    [universe, channel, value, mode, connected, runParkChannel, runUpdateChannel, onOpenChange]
   )
 
   // Keyboard shortcut handlers for field advancement
@@ -124,7 +137,8 @@ export function ChannelValueDialog({ open, onOpenChange, mode }: ChannelValueDia
     channelNum <= 512 &&
     !isNaN(valueNum) &&
     valueNum >= 0 &&
-    valueNum <= 255
+    valueNum <= 255 &&
+    connected
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -189,7 +203,12 @@ export function ChannelValueDialog({ open, onOpenChange, mode }: ChannelValueDia
               <kbd className="rounded border bg-muted px-1 py-0.5 font-mono text-[10px]">=</kbd> value{" · "}
               <kbd className="rounded border bg-muted px-1 py-0.5 font-mono text-[10px]">Enter</kbd> submit
             </p>
-            <Button type="submit" disabled={!isValid} className="shrink-0">
+            <Button
+              type="submit"
+              disabled={!isValid}
+              title={connected ? undefined : DESK_OFFLINE_LABEL}
+              className="shrink-0"
+            >
               {buttonLabel}
             </Button>
           </div>

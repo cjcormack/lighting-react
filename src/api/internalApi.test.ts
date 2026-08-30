@@ -103,4 +103,23 @@ describe("createInternalApiConnection", () => {
     // Hardening, not silence: a bridge that throws has to be visible.
     expect(logged).toHaveBeenCalled()
   })
+
+  it("writes a frame and reports success while the socket is OPEN", () => {
+    const { conn, socket } = connect()
+    const written = vi.spyOn(socket, "send")
+
+    expect(conn.send('{"type":"programmer.clearAll"}')).toBe(true)
+    expect(written).toHaveBeenCalledWith('{"type":"programmer.clearAll"}')
+  })
+
+  it("reports a write that lands while the socket is down, rather than dropping it silently", () => {
+    const { conn, socket } = connect()
+    const written = vi.spyOn(socket, "send")
+    socket.readyState = FakeWebSocket.CLOSED
+
+    // The reconnect backoff reaches 30 s, so this window is seconds to half a minute long.
+    // Callers carrying an operator gesture use the answer to say so — see `sendGesture`.
+    expect(conn.send('{"type":"surfaceScaler.setBlackout","enabled":true}')).toBe(false)
+    expect(written).not.toHaveBeenCalled()
+  })
 })

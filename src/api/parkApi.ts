@@ -1,12 +1,15 @@
 import { Subscription } from "./subscription"
 import { InternalApiConnection } from "./internalApi"
+import { sendGesture } from "./wsGesture"
 
 export interface ParkApi {
   getAll(): Map<string, number>
   isParked(universe: number, channelNo: number): boolean
   getParkedValue(universe: number, channelNo: number): number | undefined
-  park(universe: number, channelNo: number, value: number): void
-  unpark(universe: number, channelNo: number): void
+  /** False when the socket was down, so the write went nowhere. */
+  park(universe: number, channelNo: number, value: number): boolean
+  /** False when the socket was down, so the write went nowhere. */
+  unpark(universe: number, channelNo: number): boolean
   subscribe(fn: (parked: Map<string, number>) => void): Subscription
   subscribeToChannel(key: string, fn: (value: number | undefined) => void): Subscription
 }
@@ -83,24 +86,20 @@ export function createParkApi(conn: InternalApiConnection): ParkApi {
     },
 
     park(universe: number, channelNo: number, value: number) {
-      conn.send(
-        JSON.stringify({
-          type: "parkChannel",
-          universe,
-          channel: channelNo,
-          value,
-        })
-      )
+      return sendGesture(conn, {
+        type: "parkChannel",
+        universe,
+        channel: channelNo,
+        value,
+      })
     },
 
     unpark(universe: number, channelNo: number) {
-      conn.send(
-        JSON.stringify({
-          type: "unparkChannel",
-          universe,
-          channel: channelNo,
-        })
-      )
+      return sendGesture(conn, {
+        type: "unparkChannel",
+        universe,
+        channel: channelNo,
+      })
     },
 
     subscribe(fn: (parked: Map<string, number>) => void): Subscription {

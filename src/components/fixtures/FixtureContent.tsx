@@ -15,6 +15,7 @@ import {
 } from '../../store/fixtures'
 import type { GroupPropertyDescriptor, GroupColourPropertyDescriptor } from '../../api/groupsApi'
 import { useGetChannelQuery } from '../../store/channels'
+import { useIsDeskConnected } from '../../store/status'
 import { useUpdateChannel } from '../../hooks/usePropertyValues'
 import { useSettingColourPreview } from '../../hooks/usePropertyValues'
 import { useColourAppearance } from '../../hooks/useColourAppearance'
@@ -48,16 +49,24 @@ export function FixtureContent({
   viewMode,
 }: FixtureContentProps) {
   const hasElements = (fixture.elements?.length ?? 0) > 0
+  // Every editable control below writes to the programmer over the WebSocket, and `isEditing`
+  // is already the one flag the whole subtree gates `canEdit` on — so narrowing it here makes
+  // the entire detail view read-only while the desk is unreachable, without threading a second
+  // flag through forty call sites. Same reasoning as the fixtures grid: the writes are
+  // fire-and-forget, and the values are read back from the server, so a slider dragged against a
+  // dead socket just springs back with nothing said.
+  const deskConnected = useIsDeskConnected()
+  const canWrite = isEditing && deskConnected
 
   if (viewMode === 'channels') {
-    return <ChannelsView fixture={fixture} span={cardSpan} isEditing={isEditing} />
+    return <ChannelsView fixture={fixture} span={cardSpan} isEditing={canWrite} />
   }
 
   return (
     <PropertiesView
       fixture={fixture}
       hasElements={hasElements}
-      isEditing={isEditing}
+      isEditing={canWrite}
       onGroupClick={onGroupClick}
     />
   )

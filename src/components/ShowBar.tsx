@@ -7,6 +7,7 @@ import { useFadeRemainMs } from '@/hooks/useAnimatedProgress'
 import type { RunnerAnimSpan } from '@/store/runnerSlice'
 import { ProgrammerIndicator } from './ProgrammerIndicator'
 import { SpeedMasters } from './SpeedMasters'
+import { DESK_OFFLINE_LABEL } from '@/api/wsGesture'
 
 interface ShowBarProps {
   /** Leading "current stack" segment. Rendered only when non-null — Run passes it only when
@@ -49,6 +50,15 @@ interface ShowBarProps {
    */
   blind?: boolean
   onBlind?: () => void
+  /**
+   * The desk is unreachable, so the Blind tile can't act. Default false.
+   *
+   * Blind is a WebSocket write and the programmer's blind flag is server-owned, so a press made
+   * while the socket is down neither reaches the rig nor moves the tile — it just looks broken.
+   * The tile stays *visible* (blind is show-critical state the operator needs to keep reading);
+   * it only stops taking the press. Supplied by `useShowBarProps`, like everything else here.
+   */
+  blindDisabled?: boolean
   /**
    * A running show is unlocked. Washes the bar amber to match the header above it — the chrome has
    * to tint as one band, or it reads as stripes.
@@ -113,6 +123,7 @@ export const ShowBar = memo(function ShowBar({
   showShortcuts = false,
   blind,
   onBlind,
+  blindDisabled = false,
   unlockedWarning = false,
 }: ShowBarProps) {
   // The one frame-rate-adjacent thing in the bar, kept at the 10 Hz the 0.1 s readout can show.
@@ -173,17 +184,21 @@ export const ShowBar = memo(function ShowBar({
         <button
           type="button"
           onClick={onBlind}
+          disabled={blindDisabled}
           aria-pressed={blind ?? false}
           title={
-            blind
-              ? 'Blind is on — programmer values are gated out of the stage output'
-              : 'Blind — edit without the rig showing it'
+            blindDisabled
+              ? `${DESK_OFFLINE_LABEL} — Blind cannot be changed`
+              : blind
+                ? 'Blind is on — programmer values are gated out of the stage output'
+                : 'Blind — edit without the rig showing it'
           }
           className={cn(
             'flex shrink-0 flex-col items-start justify-start gap-px rounded-md border px-2 py-1 transition-colors @[440px]:px-2.5 @[700px]:px-3 @[700px]:py-1.5',
             'bg-card hover:bg-muted/40',
             blind &&
               'border-amber-600 bg-amber-950/40 hover:bg-amber-950/50 shadow-[0_0_12px_rgba(245,158,11,0.25)]',
+            blindDisabled && 'opacity-50',
           )}
         >
           <span

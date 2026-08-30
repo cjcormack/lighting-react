@@ -126,6 +126,9 @@ describe('SILENT_ENDPOINTS', () => {
       import('./passwordReset'),
       import('./deviceLogin'),
       import('./updates'),
+      // The three WebSocket-backed mutations, injected from these two modules.
+      import('./park'),
+      import('./channels'),
     ])
 
     const known = new Set(Object.keys(restApi.endpoints))

@@ -15,6 +15,9 @@ import { parsePropertyMask } from '../../lib/attributeFamily'
 import { AddToTargetsButton } from '../programmer/AddToTargetsButton'
 import { useLookRowStore } from '../programmer/LookRowStore'
 import { useProgrammerScope, useProgrammerScopeActions } from '../programmer/ProgrammerScope'
+import { useEditorContext } from '../programmer/EditorContext'
+import { useIsDeskConnected } from '../../store/status'
+import { DESK_OFFLINE_LABEL } from '../../api/wsGesture'
 import { useRowOwnership } from './useRowOwnership'
 import { applyStagedValue, layerCellClass, ownershipCellClass, ownershipTitle } from './ownership'
 import { cellSelectionClass } from './cellSelection'
@@ -109,6 +112,8 @@ export function FixturesTable({
   cellSelection,
 }: FixturesTableProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
+  // One subscription for the whole grid; every row takes the answer as a prop.
+  const deskConnected = useIsDeskConnected()
 
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -237,6 +242,7 @@ export function FixturesTable({
                   onShowInfo={onShowInfo}
                   showOwnership={showOwnership}
                   cellSelection={cellSelection}
+                  deskConnected={deskConnected}
                 />
               </div>
             )
@@ -536,6 +542,15 @@ interface RowViewProps {
   onShowInfo: (row: InfoRow) => void
   showOwnership: boolean
   cellSelection?: CellSelection
+  /**
+   * The desk is reachable. A cell edit in the `live` editor context is a `programmer.*`
+   * WebSocket write, so with the socket down it goes nowhere — and because the grid reads its
+   * values back from the server, the cell simply snaps to its old value with nothing said. The
+   * cells go inert instead. Layer scope is unaffected: those edits land in a local Look draft.
+   *
+   * Read once by the table and passed down rather than read per row — a rig fills this grid.
+   */
+  deskConnected: boolean
 }
 
 const NO_INERT_COLUMNS: ReadonlySet<ColumnKey> = new Set()
@@ -581,6 +596,7 @@ const RowView = React.memo(function RowView({
   onShowInfo,
   showOwnership,
   cellSelection,
+  deskConnected,
 }: RowViewProps) {
   // Hooks run unconditionally; divider rows just have no cells.
   const cells = useMemo(() => buildRowCells(row, visibleColumns), [row, visibleColumns])
@@ -590,6 +606,12 @@ const RowView = React.memo(function RowView({
   const liveValues = useRowValues(cells)
   const scoped = useScopedRowValues(cells, liveValues)
   const scope = useProgrammerScope()
+  // A cell edit reaches the wire in every context but `lookLayer`, where it lands in the Look row
+  // draft instead. Derived from the context rather than from `scope.kind === 'layer'` so it cannot
+  // disagree with `useCellWriters`, which routes on exactly this — layer scope without a row store
+  // is still a live write.
+  const editorContext = useEditorContext()
+  const cellsInert = !deskConnected && editorContext.kind === 'live'
   // Passing an empty cell list is the "off" state: useRowOwnership then registers no
   // subscriptions and returns a constant, so the plain list views pay nothing for this.
   //
@@ -766,8 +788,19 @@ const RowView = React.memo(function RowView({
               // choosing one is what the scope switcher is for — so the cell reads and the
               // overlay button below takes the click instead.
               state?.editable === false && 'pointer-events-none',
+              // Same mechanism as the read-only Output cell above, for a different reason: this
+              // cell would take the edit and drop it. `OwnerJumpOverlay` sets `pointer-events-auto`
+              // and so still navigates — reading why a cell is what it is stays available offline.
+              cellsInert && 'pointer-events-none opacity-60',
             )}
-            title={ownershipTitle(owned)}
+            // Only when the *connection* is why this cell is inert. A cell that Output scope has
+            // already made read-only stays inert after a reconnect, so blaming the socket there
+            // would send the operator to fix the wrong thing.
+            title={
+              cellsInert && state?.editable !== false
+                ? DESK_OFFLINE_LABEL
+                : ownershipTitle(owned)
+            }
           >
             {/* The winning Look layer, layered around the cell rather than inside it — the same
                 choice `ownershipCellClass` documents. The four cell editors already encode value
@@ -799,6 +832,10 @@ const RowView = React.memo(function RowView({
               // scope that has one and says "nothing here".
               placeholder={state !== undefined && state.value === undefined}
               batchCount={batchCountFor(row, col)}
+              // Belt and braces with the wrapper's `pointer-events-none` below: that stops the
+              // mouse, this stops the keyboard. The trigger is tabbable, so Tab-then-Enter would
+              // otherwise walk straight past the guard and open an editor whose commit is dropped.
+              disabled={cellsInert}
               onBeginEdit={() => onBeginCellEdit(row, col)}
               onCommit={(commit) => onCellCommit(row, col, commit)}
             />
@@ -861,6 +898,7 @@ function PropertyCell({
   value,
   placeholder,
   batchCount,
+  disabled,
   onBeginEdit,
   onCommit,
 }: {
@@ -873,6 +911,8 @@ function PropertyCell({
   value: NonNullable<ReturnType<typeof useRowValues>[ColumnKey]>
   placeholder?: boolean
   batchCount: number
+  /** The desk is unreachable, so an edit here would go nowhere. */
+  disabled: boolean
   onBeginEdit: () => void
   onCommit: (commit: CellCommit) => void
 }) {
@@ -884,6 +924,7 @@ function PropertyCell({
           resolutions={cell.resolutions}
           batchCount={batchCount}
           placeholder={placeholder}
+          disabled={disabled}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
         />
@@ -895,6 +936,7 @@ function PropertyCell({
           resolutions={cell.resolutions}
           batchCount={batchCount}
           placeholder={placeholder}
+          disabled={disabled}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
         />
@@ -906,6 +948,7 @@ function PropertyCell({
           resolutions={cell.resolutions}
           batchCount={batchCount}
           placeholder={placeholder}
+          disabled={disabled}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
         />
@@ -917,6 +960,7 @@ function PropertyCell({
           resolutions={cell.resolutions}
           batchCount={batchCount}
           placeholder={placeholder}
+          disabled={disabled}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
         />
