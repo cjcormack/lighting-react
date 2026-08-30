@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { InternalEventType } from './internalApi'
 import { fakeWsConnection } from '../test/fakeWsConnection'
+import type { LayerSource } from './cuesApi'
 import {
   createProgrammerApi,
   programmerKey,
@@ -24,6 +25,9 @@ const PROV: ProvenanceEntry = {
   source: 'PROGRAMMER',
 }
 
+const WARM: LayerSource = { kind: 'LOOK', id: 7, uuid: 'u7', name: 'Warm Wash' }
+const COOL: LayerSource = { kind: 'LOOK', id: 8, uuid: 'u8', name: 'Cool Wash' }
+
 const LAYER: ProgrammerLayer = {
   layerId: 1,
   source: { kind: 'LOOK', id: 7, uuid: 'u7', name: 'Warm Wash' },
@@ -37,6 +41,21 @@ const LAYER: ProgrammerLayer = {
 
 function stateFrame(entries: ProgrammerEntry[] = [ENTRY], blind = false) {
   return { type: 'programmer.state', blind, entries, channels: [] }
+}
+
+/**
+ * A `provenanceState` frame, with its entries **typed**.
+ *
+ * `fakeWsConnection.frame` takes `unknown` — it has to, it serves every bridge — so a fixture
+ * written straight into it can name fields `ProvenanceEntry` does not have and still pass. This
+ * test file did exactly that for a while, sending a `lookId`/`lookName` pair that had been replaced
+ * by `layerSource` on both sides of the wire: the assertions still ran, against a shape production
+ * never sees. Going through here makes that a compile error instead.
+ */
+function provenanceFrame(entries: ProvenanceEntry[], programmerRevision?: number) {
+  return programmerRevision === undefined
+    ? { type: 'provenanceState', entries }
+    : { type: 'provenanceState', entries, programmerRevision }
 }
 
 describe('createProgrammerApi', () => {
@@ -107,7 +126,7 @@ describe('createProgrammerApi', () => {
     const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
 
-    frame({ type: 'provenanceState', entries: [PROV] })
+    frame(provenanceFrame([PROV]))
 
     expect(api.getKeyState('hex-1', 'dimmer').provenance).toEqual(PROV)
     // A key nothing covers is baseline-owned: absent, not a synthesised entry.
@@ -120,9 +139,9 @@ describe('createProgrammerApi', () => {
 
     // Provenance is the only broadcast the server sends for programmer activity — including
     // writes made by MIDI surfaces, locate, or another tab — so it drives the refetch.
-    frame({ type: 'provenanceState', entries: [PROV] })
-    frame({ type: 'provenanceState', entries: [PROV] })
-    frame({ type: 'provenanceState', entries: [PROV] })
+    frame(provenanceFrame([PROV]))
+    frame(provenanceFrame([PROV]))
+    frame(provenanceFrame([PROV]))
     expect(sent).toEqual([])
 
     vi.advanceTimersByTime(100)
@@ -135,15 +154,15 @@ describe('createProgrammerApi', () => {
     const api = createProgrammerApi(conn)
 
     // The first frame of a connection always refetches, whatever revision it carries.
-    frame({ type: 'provenanceState', entries: [PROV], programmerRevision: 3 })
+    frame(provenanceFrame([PROV], 3))
     vi.advanceTimersByTime(200)
     expect(sent).toEqual([{ type: 'programmer.state' }])
 
     // A running crossfade republishes provenance ~20×/s at an unmoved revision; the timer
     // is advanced past the debounce between frames so a refetch would show if one fired.
-    frame({ type: 'provenanceState', entries: [PROV], programmerRevision: 3 })
+    frame(provenanceFrame([PROV], 3))
     vi.advanceTimersByTime(200)
-    frame({ type: 'provenanceState', entries: [PROV], programmerRevision: 3 })
+    frame(provenanceFrame([PROV], 3))
     vi.advanceTimersByTime(200)
 
     expect(sent).toEqual([{ type: 'programmer.state' }])
@@ -155,13 +174,13 @@ describe('createProgrammerApi', () => {
     const { conn, sent, frame } = fakeWsConnection()
     createProgrammerApi(conn)
 
-    frame({ type: 'provenanceState', entries: [PROV], programmerRevision: 3 })
+    frame(provenanceFrame([PROV], 3))
     vi.advanceTimersByTime(200)
     // A MIDI write (or second tab) mid-fade bumps the revision on the server's next frame —
     // even when it changed no provenance winner, so the entries are identical.
-    frame({ type: 'provenanceState', entries: [PROV], programmerRevision: 4 })
+    frame(provenanceFrame([PROV], 4))
     vi.advanceTimersByTime(200)
-    frame({ type: 'provenanceState', entries: [PROV], programmerRevision: 4 })
+    frame(provenanceFrame([PROV], 4))
     vi.advanceTimersByTime(200)
 
     expect(sent).toEqual([{ type: 'programmer.state' }, { type: 'programmer.state' }])
@@ -171,9 +190,9 @@ describe('createProgrammerApi', () => {
     const { conn, sent, frame } = fakeWsConnection()
     createProgrammerApi(conn)
 
-    frame({ type: 'provenanceState', entries: [PROV] })
+    frame(provenanceFrame([PROV]))
     vi.advanceTimersByTime(200)
-    frame({ type: 'provenanceState', entries: [PROV] })
+    frame(provenanceFrame([PROV]))
     vi.advanceTimersByTime(200)
 
     expect(sent).toEqual([{ type: 'programmer.state' }, { type: 'programmer.state' }])
@@ -183,9 +202,9 @@ describe('createProgrammerApi', () => {
     const { conn, sent, frame } = fakeWsConnection()
     createProgrammerApi(conn)
 
-    frame({ type: 'provenanceState', entries: [] })
+    frame(provenanceFrame([]))
     vi.advanceTimersByTime(100)
-    frame({ type: 'provenanceState', entries: [PROV] })
+    frame(provenanceFrame([PROV]))
     vi.advanceTimersByTime(100)
 
     expect(sent).toHaveLength(2)
@@ -255,17 +274,17 @@ describe('createProgrammerApi', () => {
   it('does not re-notify when provenance repeats with identical values', () => {
     const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
-    frame({ type: 'provenanceState', entries: [PROV] })
+    frame(provenanceFrame([PROV]))
 
     const dimmer = vi.fn()
     api.subscribeToKey('hex-1', 'dimmer', dimmer)
     // An unrelated cue firing rebroadcasts the whole provenance table; cells it doesn't touch
     // must stay quiet.
-    frame({ type: 'provenanceState', entries: [{ ...PROV }] })
+    frame(provenanceFrame([{ ...PROV }]))
 
     expect(dimmer).not.toHaveBeenCalled()
 
-    frame({ type: 'provenanceState', entries: [{ ...PROV, source: 'CUE', cueId: 7 }] })
+    frame(provenanceFrame([{ ...PROV, source: 'CUE', cueId: 7 }]))
     expect(dimmer).toHaveBeenCalledTimes(1)
   })
 
@@ -537,13 +556,13 @@ describe('createProgrammerApi', () => {
     const coarse = vi.fn()
     api.subscribe(coarse)
 
-    frame({ type: 'provenanceState', entries: [PROV], programmerRevision: 3 })
+    frame(provenanceFrame([PROV], 3))
     expect(coarse).toHaveBeenCalledTimes(1)
 
     // A fade republishes content-identical provenance ~20×/s; waking every whole-state
     // subscriber per frame was a render storm even with the refetch gone.
-    frame({ type: 'provenanceState', entries: [{ ...PROV }], programmerRevision: 3 })
-    frame({ type: 'provenanceState', entries: [{ ...PROV }], programmerRevision: 3 })
+    frame(provenanceFrame([{ ...PROV }], 3))
+    frame(provenanceFrame([{ ...PROV }], 3))
     expect(coarse).toHaveBeenCalledTimes(1)
   })
 
@@ -581,18 +600,39 @@ describe('createProgrammerApi', () => {
     const spy = vi.fn()
     api.subscribeToKey('hex-1', 'dimmer', spy)
 
-    frame({
-      type: 'provenanceState',
-      entries: [{ ...PROV, source: 'CUE', cueId: 4, layerId: 1, lookId: 7, lookName: 'Warm' }],
-    })
+    frame(provenanceFrame([{ ...PROV, source: 'CUE', cueId: 4, layerId: 1, layerSource: WARM }]))
     expect(spy).toHaveBeenCalledTimes(1)
 
-    frame({
-      type: 'provenanceState',
-      entries: [{ ...PROV, source: 'CUE', cueId: 4, layerId: 2, lookId: 8, lookName: 'Cool' }],
-    })
+    frame(provenanceFrame([{ ...PROV, source: 'CUE', cueId: 4, layerId: 2, layerSource: COOL }]))
     expect(spy).toHaveBeenCalledTimes(2)
-    expect(spy.mock.calls[1][0].provenance.lookName).toBe('Cool')
+    expect(spy.mock.calls[1][0].provenance?.layerSource).toEqual(COOL)
+  })
+
+  it('wakes a cell when only the winning layer’s *source* changed', () => {
+    // The hazard the whole `layerSource` object is in the signature for: a Look and a template can
+    // share an int PK, so a key moving from Look 3 to template 3 moves neither `layerId` (the
+    // stack slot is the same one) nor `source` (still `CUE`) nor `layerSource.id`. Signing only
+    // the id would leave the sheet naming the Look for a value the template now owns.
+    const { conn, frame } = fakeWsConnection()
+    const api = createProgrammerApi(conn)
+    const spy = vi.fn()
+    api.subscribeToKey('hex-1', 'dimmer', spy)
+
+    frame(
+      provenanceFrame([
+        { ...PROV, source: 'CUE', layerId: 1, layerSource: { kind: 'LOOK', id: 3, uuid: 'u3', name: 'Warm Wash' } },
+      ]),
+    )
+    expect(spy).toHaveBeenCalledTimes(1)
+
+    frame(
+      provenanceFrame([
+        { ...PROV, source: 'CUE', layerId: 1, layerSource: { kind: 'TEMPLATE', id: 3, uuid: 't3', name: 'Sweep' } },
+      ]),
+    )
+
+    expect(spy).toHaveBeenCalledTimes(2)
+    expect(spy.mock.calls[1][0].provenance?.layerSource?.kind).toBe('TEMPLATE')
   })
 
   it('stops delivering to a key subscriber after it unsubscribes', () => {
