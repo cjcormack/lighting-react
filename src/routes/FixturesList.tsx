@@ -468,26 +468,35 @@ export function FixturesListContainer({
     [flushPendingCommit],
   )
 
+  // The marquee has to be counted, or the popover says "Applying to 1" while the commit writes
+  // six hundred. An upper bound: cross-column commits are shape-filtered at write time, so a
+  // colour edit over a Colour+Position marquee reaches fewer than this says. It's the same total
+  // for every selected cell (marquee count doesn't vary by row/col), so it's hoisted into one
+  // memo rather than recomputed per rendered cell — `batchCountFor` runs once per visible cell
+  // per render, and each recompute here was itself O(rows × columns).
+  const marqueeBatchCount = useMemo(
+    () =>
+      cellSelection.byColumn().reduce((n, group) => {
+        const targets = expandSelectionToTargets(rows, new Set(group.rowIds))
+        return n + targets.reduce((m, t) => m + resolveTargetCells(t, group.col).length, 0)
+      }, 0),
+    [cellSelection, rows],
+  )
+
   // Counts write RESOLUTIONS for the column, not rows — a collapsed 12-head
   // bar's colour cell must warn "Applying to 12", matching what
   // planBatchWrites will actually expand the commit into.
   const batchCountFor = useCallback(
     (row: Row, col: ColumnKey): number => {
       if (row.kind === 'divider') return 0
-      // The marquee has to be counted, or the popover says "Applying to 1" while the commit writes
-      // six hundred. An upper bound: cross-column commits are shape-filtered at write time, so a
-      // colour edit over a Colour+Position marquee reaches fewer than this says.
       if (cellSelection.isSelected(row.id, col)) {
-        return cellSelection.byColumn().reduce((n, group) => {
-          const targets = expandSelectionToTargets(rows, new Set(group.rowIds))
-          return n + targets.reduce((m, t) => m + resolveTargetCells(t, group.col).length, 0)
-        }, 0)
+        return marqueeBatchCount
       }
       const targets =
         selection.isSelected(row.id) ? selectedTargets : rowWriteTargets(row)
       return targets.reduce((n, target) => n + resolveTargetCells(target, col).length, 0)
     },
-    [cellSelection, rows, selection, selectedTargets],
+    [cellSelection, marqueeBatchCount, selection, selectedTargets],
   )
 
   // ?select=fixture:<key> / ?select=group:<name> deep-link (Cmd+K lands here):
