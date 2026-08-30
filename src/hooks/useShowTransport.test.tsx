@@ -36,7 +36,7 @@ const cue = (id: number, over: Partial<CueStackCueEntry> = {}): CueStackCueEntry
   id,
   name: `Q${id}`,
   sortOrder: id,
-  presetCount: 0,
+  layerCount: 0,
   adHocEffectCount: 0,
   autoAdvance: false,
   autoAdvanceDelayMs: null,

@@ -52,7 +52,7 @@ const cue: CueStackCueEntry = {
   id: 1,
   name: 'Q1',
   sortOrder: 1,
-  presetCount: 0,
+  layerCount: 0,
   adHocEffectCount: 0,
   autoAdvance: false,
   autoAdvanceDelayMs: null,

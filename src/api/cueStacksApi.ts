@@ -13,7 +13,13 @@ export interface CueStackCueEntry {
   id: number
   name: string
   sortOrder: number
-  presetCount: number
+  /**
+   * How many Look layers the cue carries. This was spelled `presetCount` here long after the
+   * server renamed it, so the field the wire actually sends was invisible and the declared one was
+   * always `undefined`. Still unconsumed, but it is the count a collapsed cue row wants: a cue
+   * built entirely from layers otherwise reads as empty in the Run list.
+   */
+  layerCount: number
   adHocEffectCount: number
   autoAdvance: boolean
   autoAdvanceDelayMs: number | null
