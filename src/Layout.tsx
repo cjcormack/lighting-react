@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, lazy, Suspense } from "react"
 import { Outlet, useLocation } from "react-router"
-import { ChevronLeft, Menu, LayoutGrid, Grid3X3, AudioWaveform, Sparkles, Theater, Loader2 } from "lucide-react"
+import { ChevronLeft, Menu, Sparkles, Loader2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -15,20 +15,13 @@ import { ProgrammerIndicator } from './components/ProgrammerIndicator'
 import ProjectSwitcher from "./ProjectSwitcher"
 import ThemeToggle from "./ThemeToggle"
 import { UserMenu } from "./components/auth/UserMenu"
-import { FixtureOverviewToggle } from "./components/FixtureOverviewToggle"
 import { FixtureOverviewPanel } from "./components/FixtureOverviewPanel"
-import { StageOverviewToggle } from "./components/StageOverviewToggle"
 import { StageOverviewPanel } from "./components/StageOverviewPanel"
-import { EffectsOverviewToggle } from "./components/EffectsOverviewToggle"
 import { EffectsOverviewPanel } from "./components/EffectsOverviewPanel"
 import { FixtureDetailModal } from "./components/groups/FixtureDetailModal"
-import { useFixtureOverview } from "./hooks/useFixtureOverview"
-import { useStageOverview } from "./hooks/useStageOverview"
-import { useEffectsOverview } from "./hooks/useEffectsOverview"
+import { OverviewToggle, useOverviewPanels } from "./components/overviewPanels"
 import { AiChatToggle } from "./components/ai/AiChatToggle"
-import { CueSlotOverviewToggle } from "./components/CueSlotOverviewToggle"
 import { CueSlotOverviewPanel, CueSlotDndProvider } from "./components/CueSlotOverviewPanel"
-import { useCueSlotOverview } from "./hooks/useCueSlotOverview"
 import CommandPalette from "./components/CommandPalette"
 import { AddEditFxSheet, type FxTarget } from "./components/fx/AddEditFxSheet"
 import { ChannelValueDialog } from "./components/ChannelValueDialog"
@@ -77,10 +70,7 @@ export default function Layout() {
   }, [])
   const [applyFxTarget, setApplyFxTarget] = useState<FxTarget | null>(null)
   const [channelDialogMode, setChannelDialogMode] = useState<"park" | "set" | null>(null)
-  const { isVisible: isOverviewVisible, toggle: toggleOverview } = useFixtureOverview()
-  const { isVisible: isStageVisible, toggle: toggleStage } = useStageOverview()
-  const { isVisible: isEffectsVisible, isLocked: isEffectsLocked, toggle: toggleEffects, lock: lockEffects, unlock: unlockEffects } = useEffectsOverview()
-  const { isVisible: isCueSlotsVisible, toggle: toggleCueSlots } = useCueSlotOverview()
+  const { panels, byId, lockEffects, unlockEffects } = useOverviewPanels()
   const location = useLocation()
   // Segment-aware, not a prefix regex: `/\/projects\/\d+\/fx/` also matched `/fx-library`, which
   // force-opened this panel over the library and left its toggle disabled with a tooltip naming a
@@ -219,10 +209,9 @@ export default function Layout() {
               <div className="flex shrink-0 items-center gap-1 overflow-x-auto sm:gap-2">
                 <ConnectionStatus />
                 <ProgrammerIndicator />
-                <StageOverviewToggle isVisible={isStageVisible} onToggle={toggleStage} />
-                <FixtureOverviewToggle isVisible={isOverviewVisible} onToggle={toggleOverview} />
-                <CueSlotOverviewToggle isVisible={isCueSlotsVisible} onToggle={toggleCueSlots} />
-                <EffectsOverviewToggle isVisible={isEffectsVisible} isLocked={isEffectsLocked} onToggle={toggleEffects} />
+                {panels.map((panel) => (
+                  <OverviewToggle key={panel.id} panel={panel} />
+                ))}
                 <AiChatToggle isVisible={isAiChatVisible} onToggle={() => setAiChatVisible(!isAiChatVisible)} />
                 <ThemeToggle />
                 <UserMenu />
@@ -235,21 +224,25 @@ export default function Layout() {
               it once the collapse has finished. Adding a panel here means doing the same, or the
               rig pays for it on every route the operator is on. */}
           <StageOverviewPanel
-            isVisible={isStageVisible}
+            isVisible={byId.stage.isVisible}
             selectedFixtureKey={selectedFixture}
             onFixtureClick={setSelectedFixture}
           />
 
           <FixtureOverviewPanel
             onFixtureClick={setSelectedFixture}
-            isVisible={isOverviewVisible}
+            isVisible={byId.fixtures.isVisible}
           />
 
-          <EffectsOverviewPanel isVisible={isEffectsVisible} isLocked={isEffectsLocked} isDesktop={isDesktop} />
+          <EffectsOverviewPanel
+            isVisible={byId.effects.isVisible}
+            isLocked={byId.effects.isLocked}
+            isDesktop={isDesktop}
+          />
 
           {/* Cue Slot DnD Provider wraps panel + page content for cross-component drag-and-drop */}
-          <CueSlotDndProvider isVisible={isCueSlotsVisible}>
-            <CueSlotOverviewPanel isVisible={isCueSlotsVisible} />
+          <CueSlotDndProvider isVisible={byId.cueSlots.isVisible}>
+            <CueSlotOverviewPanel isVisible={byId.cueSlots.isVisible} />
 
             {/* Page Content. The re-auth banner sits inside the scroll container's flex
                 column rather than above it so it doesn't shift the ShowBar or the panels;
@@ -299,10 +292,14 @@ export default function Layout() {
           onParkChannelAtValue={() => setChannelDialogMode("park")}
           onSetChannelValue={() => setChannelDialogMode("set")}
           toggles={[
-            { label: "Stage Overview", icon: Theater, isVisible: isStageVisible, onToggle: toggleStage },
-            { label: "Fixture Overview", icon: LayoutGrid, isVisible: isOverviewVisible, onToggle: toggleOverview },
-            { label: "Cue Slots", icon: Grid3X3, isVisible: isCueSlotsVisible, onToggle: toggleCueSlots },
-            { label: "Effects Overview", icon: AudioWaveform, isVisible: isEffectsVisible, onToggle: toggleEffects },
+            // The same four panels the toolbar renders, from the same array — the palette used to
+            // declare its own copy, which is how the Stage entry drifted onto a second icon.
+            ...panels.map((panel) => ({
+              label: panel.label,
+              icon: panel.icon,
+              isVisible: panel.isVisible,
+              onToggle: panel.toggle,
+            })),
             { label: "Lux (AI Chat)", icon: Sparkles, isVisible: isAiChatVisible, onToggle: () => setAiChatVisible(!isAiChatVisible) },
           ]}
         />
