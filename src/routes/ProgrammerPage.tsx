@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { memo, useEffect } from 'react'
 import { Layers, Loader2 } from 'lucide-react'
 import { Navigate, useLocation, useNavigate, useParams } from 'react-router'
 import { Button } from '@/components/ui/button'
@@ -146,8 +146,12 @@ export function ProgrammerPage() {
 /**
  * Split from `ProgrammerPage` only so it sits *inside* `ProgrammerSheetsProvider` and can call
  * `useProgrammerSheets`.
+ *
+ * Memoized: its only prop is `projectId`, so this is the barrier that keeps `ProgrammerPage`'s own
+ * re-renders (`useShowBarProps`, `useCurrentProjectQuery`, `useProjectQuery`) from cascading into
+ * the whole grid/rail/scope subtree below it.
  */
-function ProgrammerBody({ projectId }: { projectId: number }) {
+const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: number }) {
   const sheets = useProgrammerSheets()
   const { data: summary } = useProgrammerSummaryQuery()
   const { includeCue } = useInclude(projectId)
@@ -223,4 +227,4 @@ function ProgrammerBody({ projectId }: { projectId: number }) {
       </LookRowStoreProvider>
     </ProgrammerScopeProvider>
   )
-}
+})
