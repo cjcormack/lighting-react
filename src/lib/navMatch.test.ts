@@ -3,7 +3,7 @@
 // api/lightingApi (it reads window.location at import time).
 import { describe, expect, it } from 'vitest'
 import { navItems } from '../navigation'
-import { mostSpecificActiveId } from './navMatch'
+import { mostSpecificActiveId, pathHasSegment } from './navMatch'
 
 /**
  * The sibling-route collision, pinned rather than described.
@@ -39,5 +39,23 @@ describe('mostSpecificActiveId', () => {
 
   it('returns null when nothing matches', () => {
     expect(mostSpecificActiveId(nav, '/projects')).toBeNull()
+  })
+})
+
+/**
+ * The FX-vs-FX-Library collision, which `Layout` got wrong for as long as it did this by hand:
+ * an unanchored `/\/projects\/\d+\/fx/` fired on the library too, force-opening and disabling the
+ * effects overview panel there. Pinned on the shared predicate so the next hand-rolled match has
+ * something to reuse.
+ */
+describe('pathHasSegment', () => {
+  it('does not let a longer segment match a shorter one', () => {
+    expect(pathHasSegment('/projects/7/fx-library', '/fx')).toBe(false)
+    expect(pathHasSegment('/projects/7/fx', '/fx')).toBe(true)
+    expect(pathHasSegment('/projects/7/fx/anything', '/fx')).toBe(true)
+  })
+
+  it('does not match a segment that is only a prefix of the path', () => {
+    expect(pathHasSegment('/projects/7/programmer', '/program')).toBe(false)
   })
 })

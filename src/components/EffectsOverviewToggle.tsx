@@ -30,8 +30,13 @@ export function EffectsOverviewToggle({ isVisible, isLocked, onToggle }: Effects
           <AudioWaveform className="size-5" />
         </Button>
       </TooltipTrigger>
+      {/* The locked branch is a whole sentence: the old form left ` effects overview` outside the
+          ternary, so a locked toggle read "…locked while in FX view) effects overview". And it is
+          the FX *page* that holds it open — "view" named a surface that no longer exists. */}
       <TooltipContent>
-        {isLocked ? 'Effects overview (locked while in FX view)' : isVisible ? 'Hide' : 'Show'} effects overview
+        {isLocked
+          ? 'Effects overview (held open by the FX page)'
+          : `${isVisible ? 'Hide' : 'Show'} effects overview`}
       </TooltipContent>
     </Tooltip>
   )

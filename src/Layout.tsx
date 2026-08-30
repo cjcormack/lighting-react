@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card"
 import { FeatureErrorBoundary } from "./components/FeatureErrorBoundary"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import { pathHasSegment } from "@/lib/navMatch"
 import { useMediaQuery } from "@/hooks/useMediaQuery"
 
 import { ConnectionStatus } from "./connection"
@@ -81,7 +82,10 @@ export default function Layout() {
   const { isVisible: isEffectsVisible, isLocked: isEffectsLocked, toggle: toggleEffects, lock: lockEffects, unlock: unlockEffects } = useEffectsOverview()
   const { isVisible: isCueSlotsVisible, toggle: toggleCueSlots } = useCueSlotOverview()
   const location = useLocation()
-  const isFxRoute = /\/projects\/\d+\/fx/.test(location.pathname)
+  // Segment-aware, not a prefix regex: `/\/projects\/\d+\/fx/` also matched `/fx-library`, which
+  // force-opened this panel over the library and left its toggle disabled with a tooltip naming a
+  // page the operator wasn't on. Same trap `mostSpecificActiveId` exists for.
+  const isFxRoute = pathHasSegment(location.pathname, '/fx')
   const isDesktop = useMediaQuery('(min-width: 768px)')
 
   // Auto-show & lock effects overview when on the FX busking route
