@@ -145,24 +145,42 @@ export function createProgrammerChannelSource(
 ): DerivedChannelSource {
   const fanOut = createFanOut()
   let values = new Map<string, number>()
+  let lastEntries: ProgrammerChannelState['entries'] | null = null
+  let lastChannels: ProgrammerChannelState['channels'] | null = null
 
-  const rebuild = () => {
+  /**
+   * `force` is what tells a subscription notification apart from a [DerivedChannelSource.refresh].
+   *
+   * The programmer notifies on every frame it handles — `includeTarget`, `layerState`,
+   * `blindState`, and provenance at up to 10/s — but only ever *reassigns* `entries` and
+   * `channels`, never mutates them. So identity on both is an exact test for "nothing here can
+   * have changed a channel", and skipping those frames avoids a full parse-and-descriptor-scan
+   * per entry plus a walk of old and new in `notifyChanged`. That ran app-wide, because the
+   * always-mounted stage overview panel held this source.
+   *
+   * `refresh` must force: it exists precisely for the case where the *descriptors* changed under
+   * an unchanged programmer state, which no identity check here could see.
+   */
+  const rebuild = (force: boolean) => {
     const state = programmer.getState()
+    if (!force && state.entries === lastEntries && state.channels === lastChannels) return
+    lastEntries = state.entries
+    lastChannels = state.channels
     const next = buildProgrammerChannelMap(state.entries.values(), state.channels, getDescriptors())
     const before = values
     values = next
     fanOut.notifyChanged(before, next)
   }
 
-  const upstream = programmer.subscribe(rebuild)
-  rebuild()
+  const upstream = programmer.subscribe(() => rebuild(false))
+  rebuild(true)
 
   return {
     get: (universe, channelNo) => values.get(`${universe}:${channelNo}`) ?? 0,
     getByKey: (key) => values.get(key) ?? 0,
     holds: (key) => values.has(key),
     subscribeToChannel: fanOut.subscribe,
-    refresh: rebuild,
+    refresh: () => rebuild(true),
     dispose: () => upstream.unsubscribe(),
   }
 }

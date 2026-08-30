@@ -32,6 +32,10 @@ function fakeProgrammer(initial: Partial<ProgrammerChannelState> = {}) {
       state = { entries: new Map(), channels: [], ...next }
       listeners.forEach((fn) => fn())
     },
+    /** A notification carrying the same `entries`/`channels` — a provenance or blind frame. */
+    notifyUnchanged() {
+      listeners.forEach((fn) => fn())
+    },
   }
 }
 
@@ -173,6 +177,27 @@ describe('createProgrammerChannelSource', () => {
 
     expect(source.getByKey('0:1')).toBe(180)
     expect(listener).toHaveBeenCalledExactlyOnceWith(180)
+  })
+
+  it('skips the rebuild on a notification that changed neither entries nor channels', () => {
+    // A provenance frame reassigns only the snapshot wrapper, at up to 10/s — and this source is
+    // held by the stage overview panel, so an ungated rebuild was a full parse-and-descriptor-scan
+    // per entry on whatever route the operator happened to be on.
+    let descriptorReads = 0
+    const source = createProgrammerChannelSource(fake.programmer, () => {
+      descriptorReads++
+      return DESCRIPTORS
+    })
+    fake.set({ entries: entryMap({ targetKey: 'fx-1', propertyName: 'dimmer', value: '180' }) })
+    const readsAfterRealChange = descriptorReads
+
+    fake.notifyUnchanged()
+    expect(descriptorReads).toBe(readsAfterRealChange)
+
+    // …but refresh still forces, because a descriptor change is invisible to the guard.
+    source.refresh()
+    expect(descriptorReads).toBe(readsAfterRealChange + 1)
+    expect(source.getByKey('0:1')).toBe(180)
   })
 
   it('stops rebuilding once disposed', () => {
