@@ -35,18 +35,57 @@ export function getChannelValue(
   return source.get(channel.universe, channel.channelNo)
 }
 
-// Subscribe to channel updates for specific channels
+/**
+ * Subscribe to a *set* of channels, waking the caller at most once per batch.
+ *
+ * Every source notifies per channel — `channelsApi` walks its 33 ms debounced batch key by key,
+ * and `createFanOut.notifyChanged` walks its changed keys — so a naive per-channel registration
+ * fires the same callback k times for a batch that moved k of the set's channels. Each of those
+ * wake-ups reruns a `useSyncExternalStore` snapshot that reads *all* k channels, so a row's cost
+ * is O(k²) per batch even though nothing renders more than once (the snapshot compare absorbs it).
+ * That is cheap for an ordinary fixture row and expensive for the collapsed multi-head bars and
+ * group rows, where k runs to the hundreds.
+ *
+ * Coalescing on a microtask fixes it above every source rather than in each one: a source's fan-out
+ * is synchronous within one batch, so a microtask queued by the first notification runs once the
+ * whole batch has drained. Per-channel granularity is untouched — the set still hears only about
+ * its own channels, and `getSnapshot` reads current values, so a coalesced wake-up sees everything
+ * the batch did.
+ *
+ * A single-channel set takes the direct path: there is nothing to coalesce (one channel can notify
+ * at most once per batch), and it keeps the common `useSliderValue` / `useSettingValue` case
+ * synchronous and allocation-free.
+ */
 export function subscribeToChannels(
   channels: ChannelRef[],
   callback: () => void,
   source: ChannelSource = outputChannelSource
 ): () => void {
-  const subscriptions = channels.map((ch) => {
-    const key = channelKey(ch)
-    return source.subscribeToChannel(key, callback)
-  })
+  if (channels.length <= 1) {
+    const subscriptions = channels.map((ch) => source.subscribeToChannel(channelKey(ch), callback))
+    return () => subscriptions.forEach((sub) => sub.unsubscribe())
+  }
 
-  return () => subscriptions.forEach((sub) => sub.unsubscribe())
+  let unsubscribed = false
+  let scheduled = false
+  const notify = () => {
+    if (scheduled) return
+    scheduled = true
+    queueMicrotask(() => {
+      scheduled = false
+      // A batch can land in the same task as the unsubscribe — during a React commit that swaps
+      // one subscription for another, say — and calling back after teardown would wake a store
+      // the caller has already stopped listening to.
+      if (!unsubscribed) callback()
+    })
+  }
+
+  const subscriptions = channels.map((ch) => source.subscribeToChannel(channelKey(ch), notify))
+
+  return () => {
+    unsubscribed = true
+    subscriptions.forEach((sub) => sub.unsubscribe())
+  }
 }
 
 /**

@@ -44,6 +44,7 @@ import {
   channelKey,
   getChannelValue,
   resolveSettingOption,
+  subscribeToChannels,
 } from '../../hooks/usePropertyValues'
 import { useChannelSource } from '../../hooks/useChannelSource'
 import type { ChannelSource } from '../../api/channelSource'
@@ -1186,11 +1187,16 @@ function useLiveColour(channels: ChannelRef[], apply: () => void, source: Channe
   })
   // Live path: write straight to the scene from the channel callback, bypassing
   // React entirely so beat-rate changes can't be dropped by the reconciler.
-  useEffect(() => {
-    const cb = () => applyRef.current()
-    const subs = channels.map((ch) => source.subscribeToChannel(channelKey(ch), cb))
-    return () => subs.forEach((s) => s.unsubscribe())
-  }, [channels, source])
+  //
+  // Through [subscribeToChannels] rather than registering each channel here: a colour beam's set
+  // runs to seven channels, and a per-channel registration reapplies the *whole* colour — seven
+  // reads, the dimmer and colour factors, the normalised hue — once per changed channel per
+  // batch, for every fixture on the stage. The coalesced wake-up still lands in the same frame
+  // (a microtask drains before paint), so the reconciler is no more involved than it was.
+  useEffect(
+    () => subscribeToChannels(channels, () => applyRef.current(), source),
+    [channels, source],
+  )
 }
 
 function ColourBeamSync({
