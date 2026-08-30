@@ -130,6 +130,13 @@ vi.mock('../hooks/useShowBarProps', () => ({
       fadeRemainMs: null,
       autoProgress: null,
       activeCueId: null,
+      // Derived exactly as the real hook derives it, from the same controllable data — the page
+      // reads the server cursor through the transport now, not off the cache directly.
+      serverActiveCueId:
+        programState.data?.activeStackId != null
+          ? (stacksState.data?.find((s) => s.id === programState.data!.activeStackId)
+              ?.activeCueId ?? null)
+          : null,
       go: transportSpies.go,
       back: transportSpies.back,
       setStandby: transportSpies.setStandby,
@@ -233,7 +240,6 @@ const mkStack = (over: Partial<CueStack> = {}): CueStack => ({
   label: null,
   cues: [],
   activeCueId: null,
-  standbyCueId: null,
   nextCueId: null,
   canEdit: true,
   canDelete: true,

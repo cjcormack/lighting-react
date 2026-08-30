@@ -731,6 +731,19 @@ never a prop — each row reads its own through `useCueFade`, because `ProgramVi
 specifically to stop several hundred rows reconciling at frame rate, and passing `fadeProgress` down
 would defeat that with the memo still in place, looking effective.
 
+**Each server run fact has one owner.** The RTK cache owns what the server says
+(`stack.activeCueId`, `stack.nextCueId`); the runner slice owns what is local — the animating
+cursor, the optimistic next (`standbyCueId`), done ticks, fade/auto descriptors — plus a private
+memory of the last frame it adopted (`serverActiveCueId`), which exists because a reducer cannot
+read the cache. That slice field is **not** a substitute for `useShowTransport`'s own
+change-tracking ref: the optimistic mutation patches move the cache with no frame, and a snapshot
+frame moves both stores at once, so "do the stores disagree" and "did the cache move" are
+different questions (the reconcile effect's docblock spells this out). Surfaces read cursors
+through `useShowTransport`, whose docblock maps who reads which and why; don't hand-compute
+`activeStack?.activeCueId` in a view, and don't add a second cache copy of a run cursor (the
+armed-only `CueStack.standbyCueId` was exactly that — written twice, read never — and was
+removed).
+
 **Expansion is one addressed card plus the live one, derived.** `?cue=` holds the operator's card;
 the cue on stage is expanded on top of it by `useCueExpansion`. So a GO opens the new live card and
 cannot take away the one being read. Run kept a `Set` and never removed from it (five GOs, five open

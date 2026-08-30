@@ -32,7 +32,6 @@ function stack(id: number, overrides: Partial<CueStack> = {}): CueStack {
     label: null,
     cues: [],
     activeCueId: null,
-    standbyCueId: null,
     nextCueId: null,
     canEdit: true,
     canDelete: true,

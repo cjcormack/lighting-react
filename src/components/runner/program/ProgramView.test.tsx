@@ -38,7 +38,6 @@ const mkStack = (over: Partial<CueStack> = {}): CueStack => ({
   label: null,
   cues: [],
   activeCueId: null,
-  standbyCueId: null,
   nextCueId: null,
   canEdit: true,
   canDelete: true,

@@ -89,6 +89,32 @@ export interface ShowTransport {
  * block, and its version carried two defects this one does not — it keyed `resetStack` on the stack
  * id alone, so its own "Fix Order" never recomputed the done/next cursors, and its reset payload
  * omitted `serverNextCueId`, which the backend owns.
+ *
+ * ── Cursor ownership ──
+ *
+ * One `cueRunStateChanged` frame lands in two stores, so it matters which copy is the fact and
+ * which is derived:
+ *
+ * - **The RTK cache owns the server's run facts**: `stack.activeCueId` (the cue on stage) and
+ *   `stack.nextCueId` (the effective next — armed standby, else positional), patched by the
+ *   subscriber in `store/cueStacks.ts` so a refetch can't flap back.
+ * - **The runner slice owns what is genuinely local**: the animating cursor (`activeCueId`), the
+ *   optimistic next (`standbyCueId` — seeded from the server's `nextCueId`, moved *ahead* of the
+ *   server by go/back/setStandby, confirmed by the next frame), this session's done ticks, and the
+ *   write-once fade/auto descriptors. Its `serverActiveCueId` / `serverAutoAdvance*` fields are not
+ *   a competing copy of the cache but the slice's memory of the last frame it adopted — kept
+ *   because a reducer cannot read the cache, and read only by the slice's own transition logic.
+ *
+ * Who reads which cursor, and why:
+ *
+ * - The stable "on stage" marker (`ProgramView`'s green row, cue expansion, `OffPlayheadBanner`)
+ *   reads `serverActiveCueId` — it must hold on the outgoing cue mid-fade.
+ * - The fade chrome reads `activeCueId` — it must move the instant GO is pressed, before the
+ *   server answers.
+ * - The NEXT pill and boundary GO read `standbyCueId` — the effective next, optimistically moved.
+ * - The Prompt Book's `statusOf` deliberately reads the optimistic `activeCueId`: the reader
+ *   follows the fade, not the stage. The stage's Next-GO preview reads the cache's `nextCueId`
+ *   directly (`useNextGoPreview`) — it wants only the server's opinion.
  */
 export function useShowTransport({
   projectId,
@@ -118,11 +144,16 @@ export function useShowTransport({
     selectStackRunner(state, activeStackId ?? 0),
   )
 
-  // Live cue: the optimistic runner cursor while a fade animates, else the server's active cue.
-  const activeCueId = runner.activeCueId ?? activeStack?.activeCueId ?? null
+  // The server's live cue, straight off the cache — the "on stage" cursor (see the docblock).
+  const serverActiveCueId = activeStack?.activeCueId ?? null
 
-  // ── Runner ↔ server reconciliation. Init when the stack (or its cues) first load and on stack
-  // switch, AND on a cue reorder/add/remove (sig changes) — but NOT on an unrelated refetch or
+  // Live cue: the optimistic runner cursor while a fade animates, else the server's active cue.
+  const activeCueId = runner.activeCueId ?? serverActiveCueId
+
+  // ── Runner ↔ server reconciliation. Re-init when the stack (or its cues) first load and on
+  // stack switch, on a cue reorder/add/remove (sig changes), AND when the cache's live cue moves
+  // while nothing is fading here — a settled snapshot frame, a refetch revealing a missed
+  // transition, or an optimistic patch from a local BACK. NOT on an unrelated refetch or
   // mid-fade re-render, so a user-armed standby and an in-flight fade are preserved. ──
   const stackCueSig = activeStack ? activeStack.cues.map((c) => c.id).join(',') : ''
   /**
@@ -137,54 +168,48 @@ export function useShowTransport({
    * re-runs at that point because the cursor it depends on has gone back to null.
    *
    * A *stack switch* mid-fade still resets immediately — that fade belongs to the stack being left.
+   *
+   * `appliedServerCueRef` is the same idea for the cache's live cue, and it is *not* a duplicate
+   * of the slice's `serverActiveCueId`: that field is the store's memory of the last WS frame it
+   * adopted (kept because a reducer cannot read the cache), while this ref is what *this effect*
+   * last saw of the cache — and the two genuinely differ, both ways. The optimistic mutation
+   * patches (`advanceCueStack`, `goToCueInStack`, …) move the cache with no frame at all, and a
+   * connect-time snapshot frame moves both stores at once while the done ticks it implies (a jump
+   * of several cues heard as one frame) still need the positional recompute a reset does. So the
+   * trigger is "did the cache cursor change since this effect last looked", never "do the two
+   * stores disagree". Unlike the other two refs it advances even when the reset is skipped
+   * mid-fade: a live-cue move heard during a fade is this session's own GO echoing back (the
+   * local cursors already moved), and replaying it as a reset when the fade ends would clobber a
+   * standby armed during the fade.
    */
   const appliedStackRef = useRef<number | null>(null)
   const appliedSigRef = useRef<string | null>(null)
+  const appliedServerCueRef = useRef<number | null>(null)
   useEffect(() => {
-    if (activeStackId == null || !activeStack || activeStack.cues.length === 0) return
+    if (activeStackId == null || !activeStack) return
     const sameStack = appliedStackRef.current === activeStackId
-    if (sameStack && appliedSigRef.current === stackCueSig) return
+    const serverMoved = sameStack && appliedServerCueRef.current !== serverActiveCueId
+    appliedServerCueRef.current = serverActiveCueId
+    if (activeStack.cues.length === 0) return
+    if (sameStack && appliedSigRef.current === stackCueSig && !serverMoved) return
     if (sameStack && runner.activeCueId != null) return
     dispatch(
       resetStack({
         stackId: activeStackId,
         cues: activeStack.cues,
-        serverActiveCueId: activeStack.activeCueId,
+        serverActiveCueId,
         serverNextCueId: activeStack.nextCueId,
         loop: activeStack.loop,
       }),
     )
     appliedStackRef.current = activeStackId
     appliedSigRef.current = stackCueSig
-    // `activeStack` is read for its cues/cursors only when one of the two refs says a reset is
-    // due, so it is deliberately not a dependency — a new object with the same ids must not
-    // re-run this.
+    // `activeStack` is read for its cues/next/loop only when a reset is due (the refs say so),
+    // so it is deliberately not a dependency — a new object with the same ids and cursors must
+    // not re-run this. Its live cue participates as the derived primitive above, so a patch or
+    // refetch that *moves* it does.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeStackId, stackCueSig, runner.activeCueId, dispatch])
-
-  const prevServerActiveCueRef = useRef<number | null | undefined>(undefined)
-  useEffect(() => {
-    prevServerActiveCueRef.current = undefined
-  }, [activeStackId])
-  useEffect(() => {
-    if (activeStackId == null || !activeStack) return
-    const serverActive = activeStack.activeCueId
-    const prev = prevServerActiveCueRef.current
-    prevServerActiveCueRef.current = serverActive
-    if (prev === undefined || serverActive === prev) return
-    if (runner.activeCueId != null) return
-    if (activeStack.cues.length > 0) {
-      dispatch(
-        resetStack({
-          stackId: activeStackId,
-          cues: activeStack.cues,
-          serverActiveCueId: serverActive,
-          serverNextCueId: activeStack.nextCueId,
-          loop: activeStack.loop,
-        }),
-      )
-    }
-  }, [activeStackId, activeStack, runner.activeCueId, dispatch])
+  }, [activeStackId, stackCueSig, serverActiveCueId, runner.activeCueId, dispatch])
 
   // ── Fade / auto-advance animation. Keyed on runner.activeCueId, which the optimistic go()
   // below sets the instant GO is pressed. ──
@@ -292,7 +317,7 @@ export function useShowTransport({
     activeStackId,
     activeStack,
     activeCueId,
-    serverActiveCueId: activeStack?.activeCueId ?? null,
+    serverActiveCueId,
     standbyCueId: runner.standbyCueId,
     completedCueIds: runner.completedCueIds,
     autoProgress,

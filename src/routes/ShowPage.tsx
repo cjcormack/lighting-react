@@ -298,7 +298,7 @@ export function ShowPage() {
     // The memoised setter, not an inline arrow: an arrow would be a fresh identity every render,
     // which would give `toggleExpanded` one too and break `ProgramView`'s memo mid-fade.
     setOpenCueId: setExpandedCueId,
-    liveCueId: drillStackId === activeStackId ? (activeStack?.activeCueId ?? null) : null,
+    liveCueId: drillStackId === activeStackId ? transport.serverActiveCueId : null,
     resetKey: drillStackId,
   })
 
@@ -486,7 +486,7 @@ export function ShowPage() {
             <OffPlayheadBanner
               liveStackName={activeStack?.name ?? null}
               selectedStackName={phoneStack.name}
-              liveCueIsOnStage={activeStack?.activeCueId != null}
+              liveCueIsOnStage={transport.serverActiveCueId != null}
               onJumpToLive={() =>
                 activeStackId != null &&
                 navigate(`/projects/${projectIdNum}/show/stacks/${activeStackId}`)
@@ -544,7 +544,7 @@ export function ShowPage() {
               <OffPlayheadBanner
                 liveStackName={activeStack?.name ?? null}
                 selectedStackName={drillStack.name}
-                liveCueIsOnStage={activeStack?.activeCueId != null}
+                liveCueIsOnStage={transport.serverActiveCueId != null}
                 onJumpToLive={() =>
                   activeStackId != null &&
                   navigate(`/projects/${projectIdNum}/show/stacks/${activeStackId}`)
@@ -558,9 +558,9 @@ export function ShowPage() {
               drillStackId={drillStackId}
               onDrillStack={handleDrillStack}
               activeStackId={activeStackId}
-              // Server-tracked activeCueId reflects what's on stage, not the
-              // transient fade cursor — so the marker stays stable during fades.
-              activeCueId={activeStack?.activeCueId ?? null}
+              // The server cursor reflects what's on stage, not the transient
+              // fade cursor — so the marker stays stable during fades.
+              activeCueId={transport.serverActiveCueId}
               standbyCueId={transport.standbyCueId}
               fadeStackId={activeStackId}
               completedCueIds={transport.completedCueIds}

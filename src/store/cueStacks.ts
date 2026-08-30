@@ -341,8 +341,9 @@ export const cueStacksApi = restApi.injectEndpoints({
     }),
 
     /**
-     * Arm the next GO. The optimistic patch is only for the row highlight — the server's
-     * `cueRunStateChanged` frame is what every session (this one included) ends up believing.
+     * Arm the next GO. No optimistic cache patch: the instant row highlight is the runner slice's
+     * `setStandby` dispatch in `useShowTransport`, and the server's `cueRunStateChanged` frame is
+     * what every session (this one included) ends up believing.
      */
     setCueStackStandby: build.mutation<
       CueStackRunState,
@@ -353,19 +354,6 @@ export const cueStacksApi = restApi.injectEndpoints({
         method: 'POST',
         body: { cueId },
       }),
-      async onQueryStarted({ projectId, stackId, cueId }, { dispatch, queryFulfilled }) {
-        const patchResult = dispatch(
-          cueStacksApi.util.updateQueryData('projectCueStackList', projectId, (draft) => {
-            const stack = draft.find((s) => s.id === stackId)
-            if (stack) stack.standbyCueId = cueId
-          }),
-        )
-        try {
-          await queryFulfilled
-        } catch {
-          patchResult.undo()
-        }
-      },
     }),
 
     /**
@@ -537,7 +525,6 @@ lightingApi.cueStacks.subscribeToRunState(function (event: CueRunStateEvent) {
       const stack = draft.find((s) => s.id === event.stackId)
       if (!stack) return
       stack.activeCueId = event.activeCueId
-      stack.standbyCueId = event.nextIsArmed ? event.nextCueId : null
       stack.nextCueId = event.nextCueId
     }),
   )

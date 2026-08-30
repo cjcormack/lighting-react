@@ -40,11 +40,12 @@ export interface CueStack {
   label: string | null
   cues: CueStackCueEntry[]
   activeCueId: number | null
-  /** The cue an operator has explicitly armed as the next GO, if any. Server-owned. */
-  standbyCueId: number | null
   /**
-   * The cue the next GO fires: `standbyCueId` when set, else the positional next. Computed by
-   * the backend so every session — desk, tablet, MIDI surface — agrees on what is on deck.
+   * The cue the next GO fires: an operator-armed standby when one is set, else the positional
+   * next. Computed by the backend so every session — desk, tablet, MIDI surface — agrees on what
+   * is on deck. The wire also carries the armed-only cursor (`standbyCueId` here,
+   * `nextIsArmed` on `CueRunStateEvent`), but no surface renders armed differently from
+   * positional, so this type deliberately mirrors only the effective next.
    */
   nextCueId: number | null
   canEdit: boolean

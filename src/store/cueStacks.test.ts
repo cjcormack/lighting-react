@@ -285,7 +285,6 @@ describe('cueRunStateChanged', () => {
     await vi.waitFor(() => {
       const stacks = cueStacksApi.endpoints.projectCueStackList.select(1)(store.getState()).data
       expect(stacks?.[0].activeCueId).toBe(11)
-      expect(stacks?.[0].standbyCueId).toBe(12)
       expect(stacks?.[0].nextCueId).toBe(12)
     })
   })

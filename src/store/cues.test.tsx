@@ -28,7 +28,6 @@ function stack(id: number, activeCueId: number | null): CueStack {
     label: null,
     cues: [],
     activeCueId,
-    standbyCueId: null,
     nextCueId: null,
     canEdit: true,
     canDelete: true,
