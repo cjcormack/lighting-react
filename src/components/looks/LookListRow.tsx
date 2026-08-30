@@ -11,7 +11,7 @@ import { Clapperboard, Copy, CopyPlus, MoreHorizontal, Pencil, Trash2 } from 'lu
 import { cn } from '@/lib/utils'
 import { FAMILY_LABELS } from '@/lib/attributeFamily'
 import type { LookSummary } from '@/api/looksApi'
-import { LookPreviewSwatches } from './lookRefValue'
+import { LookPreviewSwatches } from './lookValueChips'
 
 interface LookListRowProps {
   look: LookSummary

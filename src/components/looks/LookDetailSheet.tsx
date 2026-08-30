@@ -20,7 +20,7 @@ import { formatError } from '@/lib/formatError'
 import { FAMILY_LABELS } from '@/lib/attributeFamily'
 import { useDeleteLookMutation, useLookQuery, useSaveLookMutation } from '@/store/looks'
 import { useInclude } from '@/components/programmer/useInclude'
-import { LookValueChip } from './lookRefValue'
+import { LookValueChip } from './lookValueChips'
 import type { LookInUseError, LookSummary } from '@/api/looksApi'
 
 export interface LookDetailSheetProps {
