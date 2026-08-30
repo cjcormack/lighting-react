@@ -135,6 +135,21 @@ describe('buildCueInput', () => {
   it('does not send preset applications', () => {
     expect('presetApplications' in buildCueInput(cueWithOneLayer())).toBe(false)
   })
+
+  it('carries the cue-level stomp, which is not the per-layer one', () => {
+    // Two flags with the same name: the layer's suppresses effects inside the cue's own
+    // composition, the cue's removes the effects running *under* the cue when it fires. The client
+    // modelled only the layer one for a session, so a duplicate POSTed a copy that silently took
+    // the server default — and the PUT route overwrites the field rather than preserving it.
+    const input = buildCueInput(cueWithOneLayer())
+    expect(input.stomp).toBe(true)
+    expect(input.layers[0].stomp).toBe(true)
+
+    // The server omits the flag when false (`encodeDefaults = false`), so absent must stay absent
+    // rather than being rebuilt as `false`.
+    const off = buildCueInput({ ...cueWithOneLayer(), stomp: undefined })
+    expect(off.stomp).toBeUndefined()
+  })
 })
 
 describe('reorderCueLayers', () => {
@@ -216,6 +231,7 @@ function cueWithOneLayer(): Cue {
     cueNumber: null,
     cueNumberAuto: true,
     notes: null,
+    stomp: true,
     cueType: 'STANDARD',
     canEdit: true,
     canDelete: true,

@@ -202,6 +202,14 @@ export interface Cue {
   /** True when `cueNumber` was derived from the cue's position rather than typed by the operator. */
   cueNumberAuto: boolean
   notes: string | null
+  /**
+   * Cue-level stomp: firing this cue removes the effects running under it, rather than layering
+   * over them. Distinct from `CueLayerDetail.stomp`, which suppresses effects *within* one cue's
+   * composition — this one is cross-cue and destructive.
+   *
+   * Optional because the server omits it when false (`encodeDefaults = false`); absent means off.
+   */
+  stomp?: boolean
   cueType: CueType
   canEdit: boolean
   canDelete: boolean
@@ -223,6 +231,8 @@ export interface CueInput {
   fadeCurve?: string
   cueNumber?: string | null
   notes?: string | null
+  /** Cue-level stomp — see `Cue.stomp`. Not the per-layer flag on `CueLayer`. */
+  stomp?: boolean
   /** Only honoured on POST; PUT/PATCH ignore it so markers cannot be turned into standard cues. */
   cueType?: CueType
 }

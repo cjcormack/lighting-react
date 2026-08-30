@@ -112,6 +112,10 @@ export function buildCueInput(cue: Cue): CueInput {
     fadeCurve: cue.fadeCurve,
     cueNumber: cue.cueNumber,
     notes: cue.notes,
+    // The cue-level flag, not the per-layer one rebuilt above. Nothing on the desk sets it today,
+    // but a cue can arrive carrying it (sync import, the AI tools, another client) and the PUT
+    // route overwrites what it is not sent — so an inline edit must hand it back.
+    stomp: cue.stomp,
     // Round-tripped so a PUT can't reinterpret a MARKER as a STANDARD cue. (The server ignores
     // cueType on PUT, but sending the truth keeps the payload honest if that ever changes.)
     cueType: cue.cueType,
