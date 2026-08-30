@@ -8,6 +8,7 @@ import {
 import { useShowTransport } from './useShowTransport'
 import { programmerSetBlind, useProgrammerSummaryQuery } from '../store/programmer'
 import { getProgrammerFadeMs } from '../lib/programmerFade'
+import { ignoreReportedError } from '../store/errorToastMiddleware'
 
 /**
  * Everything `ShowBar` needs, derived from a project id.
@@ -95,10 +96,10 @@ export function useShowBarProps(
   // Both `.catch()` blocks swallow deliberately: `errorToastMiddleware` reports the failure, and
   // this is only here to stop the unhandled rejection.
   const onStart = useCallback(() => {
-    activateShow({ projectId }).unwrap().catch(() => {})
+    activateShow({ projectId }).unwrap().catch(ignoreReportedError)
   }, [activateShow, projectId])
   const onStop = useCallback(async () => {
-    await deactivateShow({ projectId }).unwrap().catch(() => {})
+    await deactivateShow({ projectId }).unwrap().catch(ignoreReportedError)
   }, [deactivateShow, projectId])
 
   return {

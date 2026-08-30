@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import { useFxStateQuery } from '@/store/fx'
 import { useRemoveFxMutation } from '@/store/fixtureFx'
 import { tapSpeedMaster, useSpeedMasterLiveQuery } from '@/store/speedMasters'
+import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import { BeatIndicator } from './BeatIndicator'
 
 interface EffectsOverviewPanelProps {
@@ -36,7 +37,7 @@ export function EffectsOverviewPanel({ isVisible, isLocked, isDesktop }: Effects
     if (!fxState?.activeEffects.length) return
     await Promise.all(
       fxState.activeEffects.map((effect) =>
-        removeFx({ id: effect.id, fixtureKey: effect.targetKey }).unwrap().catch(() => {}),
+        removeFx({ id: effect.id, fixtureKey: effect.targetKey }).unwrap().catch(ignoreReportedError),
       ),
     )
   }, [fxState, removeFx])
