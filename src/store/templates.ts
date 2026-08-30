@@ -29,7 +29,12 @@ import type {
  */
 export function startTemplatesBridge() {
   lightingApi.templates.subscribe(function () {
-    store.dispatch(restApi.util.invalidateTags(['Template', 'TemplateList']))
+    // `Cue` rides along for the reason the looks bridge gives: a template created, copied or
+    // deleted elsewhere changes what the cues layering it compose to, and this signal is the only
+    // announcement of a delete. A template *retune* rides `cuesRecomposed` instead. `CueList` is
+    // the same pairing the looks bridge and every cue-affecting mutation here use — the list's
+    // entries carry `layers[].source.name`, so a rename shows through it.
+    store.dispatch(restApi.util.invalidateTags(['Template', 'TemplateList', 'Cue', 'CueList']))
   })
 }
 

@@ -19,6 +19,16 @@ lightingApi.cues.subscribe(function () {
   store.dispatch(restApi.util.invalidateTags(['CueList']))
 })
 
+// A Look or template contents edit elsewhere changed what these cues compose to. Keyed, so this
+// re-reads the named cues rather than dropping every cue cache — see `projectCueCooked` below for
+// what this closes, and `cuesWsApi` for why the CRUD signals cannot carry it.
+lightingApi.cues.subscribeRecomposed(function (cueIds) {
+  if (cueIds.length === 0) return
+  store.dispatch(
+    restApi.util.invalidateTags(cueIds.map((id) => ({ type: 'Cue' as const, id }))),
+  )
+})
+
 export const cuesApi = restApi.injectEndpoints({
   endpoints: (build) => ({
     projectCueList: build.query<Cue[], number>({
@@ -43,8 +53,27 @@ export const cuesApi = restApi.injectEndpoints({
      *
      * Server-side, and that is the point — composing this here would mean reimplementing layer
      * order, masks, per-layer amount and blend, group expansion and specificity in the browser,
-     * and every one of those is a place for the desk and the display to disagree. Tagged `Cue` so a
-     * PATCH to the cue, or a Look edit that republishes it, refetches this too.
+     * and every one of those is a place for the desk and the display to disagree.
+     *
+     * Tagged `Cue`, and it is worth being exact about what actually invalidates that tag, because
+     * the answer is narrower than it looks:
+     *
+     * - **This client's own writes** — a PATCH or PUT to the cue, `recordProgrammer`, and
+     *   `recordLook` (which invalidates each id in the response's `cuesRepublished`).
+     * - **Another client's Look or template CRUD** — `lookListChanged` / `templateListChanged`
+     *   carry `Cue` through the two bridges in `looks.ts` / `templates.ts`. Load-bearing on the
+     *   delete path in particular: deleting a Look changes what every cue layering it composes to,
+     *   and that route fires the list signal without republishing.
+     * - **Another client's Look or template *retune*** — the `cuesRecomposed` frame, which names
+     *   the affected cue ids. The CRUD signals deliberately don't fire for a contents edit (they
+     *   drop every cached expansion, and a colour retune would be a storm), so this is its own
+     *   keyed frame; the bridge is at the top of this file.
+     * - **Reconnect** — `Cue` is in `RECONNECT_RESYNC_TAGS`, and in the first wave.
+     *
+     * That is the whole set, and it is deliberately exhaustive: before the `cuesRecomposed` frame
+     * existed, a second tab with this cue expanded held pre-edit composed values indefinitely on a
+     * perfectly healthy socket, because a retune moves the rig without touching any signal this
+     * read was subscribed to.
      *
      * Effects are **not** here: an effect has no static value to report, so a cue whose look is
      * carried by a chase reads as whatever its values say. They are listed separately.
