@@ -425,8 +425,11 @@ says which happened, so both are stated on the chip's title:
   later does not move them; this is the busking gesture, and it is why the retired `ref:` grammar is
   not missed.
 - **⌥click** → `POST /templates/{id}/toggle`. Adds a layer that **tracks** it, targeted at the
-  selection and masked to the template's family (the client states the mask, so the layer row shows
-  what it asserts). Retune the template and every layer moves. The layer *is* the dependency
+  selection and masked to the template's family — **the server derives the mask** from the
+  template's own rows, because which family a template layer belongs to is a fact about the
+  template, not about the press. This repo sends its `propertyMask` anyway, as the belief it is
+  acting on; the response reports the mask actually applied, so a disagreement surfaces there rather
+  than silently on the rig. Retune the template and every layer moves. The layer *is* the dependency
   mechanism — it already was, for Looks — so "a colour I can change everywhere later" and "a colour I
   want right now" are two gestures on one chip rather than two kinds of template.
 

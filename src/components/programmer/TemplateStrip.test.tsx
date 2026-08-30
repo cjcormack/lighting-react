@@ -129,8 +129,9 @@ describe('TemplateStrip', () => {
   })
 
   it('⌥click adds a tracking layer, masked to the template’s family', () => {
-    // The mask is stated by the client rather than left to the server, so the layer row shows what
-    // it asserts. An unmasked template layer would read as "this could touch anything".
+    // The server derives the applied mask from the template's rows; this send is the belief this
+    // client is acting on, which is what lets a disagreement surface in the response rather than
+    // silently on the rig. Pinned because sending nothing would make that check unavailable.
     render(<TemplateStrip projectId={1} cells={[{ rowId: 'fixture:hex-1', col: 'colour' }]} />)
     fireEvent.click(screen.getByText('Amber Key'), { altKey: true })
     expect(toggleTemplate).toHaveBeenCalledWith({

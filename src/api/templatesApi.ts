@@ -113,6 +113,12 @@ export interface ToggleTemplateResponse {
   action: 'applied' | 'removed'
   /** Always 0 — a template holds no effects. Present because the toggle shape is shared. */
   effectCount: number
+  /**
+   * The mask the layer actually carries — the template's own family, **derived server-side** from
+   * its rows rather than echoed from the request. Null only for a template whose rows name no known
+   * property. It can therefore disagree with the `propertyMask` sent, which is the point: the send
+   * states what this client believed, and a disagreement surfaces here rather than on the rig.
+   */
   propertyMask: string | null
 }
 
