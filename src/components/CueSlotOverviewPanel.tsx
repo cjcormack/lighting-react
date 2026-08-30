@@ -40,6 +40,7 @@ import {
 import { useApplyCueMutation, useStopCueMutation, useActiveCueIds, useActiveCueStackIds } from '../store/cues'
 import { useActivateCueStackMutation, useDeactivateCueStackMutation } from '../store/cueStacks'
 import { EditModeAssignPanel } from './CueSlotEditAssignPanel'
+import { CollapsiblePanel } from './CollapsiblePanel'
 
 export { type CueSlot } from '../store/cueSlots'
 
@@ -223,6 +224,19 @@ interface CueSlotOverviewPanelProps {
 }
 
 export function CueSlotOverviewPanel({ isVisible }: CueSlotOverviewPanelProps) {
+  return (
+    <CollapsiblePanel isVisible={isVisible}>
+      <CueSlotOverviewPanelBody />
+    </CollapsiblePanel>
+  )
+}
+
+/**
+ * Below the collapse boundary: the slot and cue-stack queries, the wheel/pointer listeners and
+ * the drag monitor, none of which a hidden panel has any use for. The page survives a collapse
+ * because it is persisted on every change, not because the state outlives the unmount.
+ */
+function CueSlotOverviewPanelBody() {
   const { data: currentProject } = useCurrentProjectQuery()
   const projectId = currentProject?.id
   const { data: slots } = useProjectCueSlotsQuery(projectId!, { skip: !projectId })
@@ -377,6 +391,11 @@ export function CueSlotOverviewPanel({ isVisible }: CueSlotOverviewPanelProps) {
     edgeScrollDirection.current = null
   }, [])
 
+  // Same unmount hazard as the long-press timers below: `useDndMonitor` unsubscribes on unmount,
+  // so onDragEnd never runs, and a pending edge scroll would land a page the operator never
+  // reached in localStorage.
+  useEffect(() => clearEdgeScroll, [clearEdgeScroll])
+
   useDndMonitor({
     onDragStart() {
       setIsDraggingAny(true)
@@ -474,94 +493,80 @@ export function CueSlotOverviewPanel({ isVisible }: CueSlotOverviewPanelProps) {
 
   return (
     <div
-      className={cn(
-        'grid transition-all duration-200 ease-in-out',
-        isVisible ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
-      )}
+      ref={panelRef}
+      className="border-b bg-background px-4 py-3"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     >
-      <div className="overflow-hidden">
-        <div
-          ref={panelRef}
-          className="border-b bg-background px-4 py-3"
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-        >
-          {/* Edit mode header */}
-          {isEditMode && (
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-muted-foreground">Editing slots</span>
-              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={exitEditMode}>
-                Done
-              </Button>
-            </div>
-          )}
-
-          {/* Slot grid */}
-          <div className="relative">
-            <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
-              {slotsForPage.map((slot, index) => (
-                <CueSlotCell
-                  key={`${page}-${index}`}
-                  slot={slot}
-                  page={page}
-                  slotIndex={index}
-                  isActive={
-                    slot
-                      ? slot.itemType === 'cue'
-                        ? activeCueIds.has(slot.itemId)
-                        : activeCueStackIds.has(slot.itemId)
-                      : false
-                  }
-                  isEditMode={isEditMode}
-                  onTap={handleSlotTap}
-                  onView={handleViewSlot}
-                  onClear={handleClearSlot}
-                />
-              ))}
-            </div>
-            {/* Edge indicators during drag */}
-            {isDraggingAny && page > 0 && (
-              <div className="absolute inset-y-0 -left-3 w-3 bg-gradient-to-r from-primary/20 to-transparent pointer-events-none" />
-            )}
-            {isDraggingAny && page < totalPages - 1 && (
-              <div className="absolute inset-y-0 -right-3 w-3 bg-gradient-to-l from-primary/20 to-transparent pointer-events-none" />
-            )}
-          </div>
-
-          {/* Page dots */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-1.5 mt-2">
-              {Array.from({ length: totalPages }, (_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setPagePersist(i)}
-                  className={cn(
-                    'rounded-full transition-all',
-                    i === page
-                      ? 'size-2 bg-primary'
-                      : 'size-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/50',
-                  )}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Edit mode assign panel (inline, not portalled) */}
-          {projectId && (
-            <div
-              className={cn(
-                'grid transition-all duration-200 ease-in-out',
-                isEditMode ? 'grid-rows-[1fr] mt-3' : 'grid-rows-[0fr]',
-              )}
-            >
-              <div className="overflow-hidden">
-                <EditModeAssignPanel projectId={projectId} />
-              </div>
-            </div>
-          )}
+      {/* Edit mode header */}
+      {isEditMode && (
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-medium text-muted-foreground">Editing slots</span>
+          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={exitEditMode}>
+            Done
+          </Button>
         </div>
+      )}
+
+      {/* Slot grid */}
+      <div className="relative">
+        <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
+          {slotsForPage.map((slot, index) => (
+            <CueSlotCell
+              key={`${page}-${index}`}
+              slot={slot}
+              page={page}
+              slotIndex={index}
+              isActive={
+                slot
+                  ? slot.itemType === 'cue'
+                    ? activeCueIds.has(slot.itemId)
+                    : activeCueStackIds.has(slot.itemId)
+                  : false
+              }
+              isEditMode={isEditMode}
+              onTap={handleSlotTap}
+              onView={handleViewSlot}
+              onClear={handleClearSlot}
+            />
+          ))}
+        </div>
+        {/* Edge indicators during drag */}
+        {isDraggingAny && page > 0 && (
+          <div className="absolute inset-y-0 -left-3 w-3 bg-gradient-to-r from-primary/20 to-transparent pointer-events-none" />
+        )}
+        {isDraggingAny && page < totalPages - 1 && (
+          <div className="absolute inset-y-0 -right-3 w-3 bg-gradient-to-l from-primary/20 to-transparent pointer-events-none" />
+        )}
       </div>
+
+      {/* Page dots */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-1.5 mt-2">
+          {Array.from({ length: totalPages }, (_, i) => (
+            <button
+              key={i}
+              onClick={() => setPagePersist(i)}
+              className={cn(
+                'rounded-full transition-all',
+                i === page
+                  ? 'size-2 bg-primary'
+                  : 'size-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/50',
+              )}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Edit mode assign panel (inline, not portalled). Through `CollapsiblePanel` for the same
+          reason the four overview panels are: it holds a cue-stack query, and edit mode is the
+          exception rather than the rule. */}
+      {projectId && (
+        <CollapsiblePanel isVisible={isEditMode} className={isEditMode ? 'mt-3' : undefined}>
+          <EditModeAssignPanel projectId={projectId} />
+        </CollapsiblePanel>
+      )}
     </div>
   )
 }
@@ -629,6 +634,13 @@ function CueSlotCell({
     }
     startPos.current = null
   }, [])
+
+  // The cell now really does unmount — the panel body goes when the panel collapses, where before
+  // it only flattened to zero height. A long press in flight at that moment used to be harmless;
+  // orphaned, its second stage fires ~800 ms later, dispatches a global Escape (which would close
+  // whatever dialog the operator had opened in the meantime) and latches edit mode on a provider
+  // whose auto-exit already ran.
+  useEffect(() => clearPress, [clearPress])
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {

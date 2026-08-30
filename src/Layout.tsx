@@ -226,25 +226,25 @@ export default function Layout() {
             </div>
           </header>
 
-          {/* Stage Overview Panel - always rendered for animation */}
+          {/* The four overview panels. Each is always rendered — but only its animated wrapper
+              is: every one of them puts its live body behind `CollapsiblePanel`, which unmounts
+              it once the collapse has finished. Adding a panel here means doing the same, or the
+              rig pays for it on every route the operator is on. */}
           <StageOverviewPanel
             isVisible={isStageVisible}
             selectedFixtureKey={selectedFixture}
             onFixtureClick={setSelectedFixture}
           />
 
-          {/* Fixture Overview Panel - always rendered for animation */}
           <FixtureOverviewPanel
             onFixtureClick={setSelectedFixture}
             isVisible={isOverviewVisible}
           />
 
-          {/* Effects Overview Panel - always rendered for animation */}
           <EffectsOverviewPanel isVisible={isEffectsVisible} isLocked={isEffectsLocked} isDesktop={isDesktop} />
 
           {/* Cue Slot DnD Provider wraps panel + page content for cross-component drag-and-drop */}
           <CueSlotDndProvider isVisible={isCueSlotsVisible}>
-            {/* Cue Slot Overview Panel - always rendered for animation */}
             <CueSlotOverviewPanel isVisible={isCueSlotsVisible} />
 
             {/* Page Content. The re-auth banner sits inside the scroll container's flex

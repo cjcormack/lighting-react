@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useFixtureListQuery, type Fixture } from '../store/fixtures'
 import { CompactFixtureCard, MultiElementCompactCard } from './groups/CompactFixtureCard'
-import { cn } from '@/lib/utils'
+import { CollapsiblePanel } from './CollapsiblePanel'
 
 interface FixtureOverviewPanelProps {
   onFixtureClick: (fixtureKey: string) => void
@@ -10,6 +10,17 @@ interface FixtureOverviewPanelProps {
 }
 
 export function FixtureOverviewPanel({ onFixtureClick, isVisible }: FixtureOverviewPanelProps) {
+  return (
+    <CollapsiblePanel isVisible={isVisible}>
+      <FixtureOverviewPanelBody onFixtureClick={onFixtureClick} />
+    </CollapsiblePanel>
+  )
+}
+
+/** Below the collapse boundary: every card here subscribes to its own fixture's live channels. */
+function FixtureOverviewPanelBody({
+  onFixtureClick,
+}: Pick<FixtureOverviewPanelProps, 'onFixtureClick'>) {
   const { data: fixtures, isLoading } = useFixtureListQuery()
 
   // Separate fixtures into single fixtures and multi-head fixtures
@@ -38,48 +49,39 @@ export function FixtureOverviewPanel({ onFixtureClick, isVisible }: FixtureOverv
   const hasFixtures = singleFixtures.length > 0 || multiHeadFixtures.length > 0
 
   return (
-    <div
-      className={cn(
-        'grid transition-all duration-200 ease-in-out',
-        isVisible ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
-      )}
-    >
-      <div className="overflow-hidden">
-        <div className="border-b bg-background px-4 py-3">
-          {isLoading ? (
-            <div className="flex justify-center">
-              <Loader2 className="size-4 animate-spin" />
-            </div>
-          ) : !hasFixtures ? (
-            <p className="text-sm text-muted-foreground text-center">No fixtures configured</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {/* Single fixtures */}
-              {singleFixtures.map((fixture) => (
-                <CompactFixtureCard
-                  key={fixture.key}
-                  fixtureKey={fixture.key}
-                  fixtureName={fixture.name}
-                  tags={[]}
-                  fixture={fixture}
-                  onClick={() => onFixtureClick(fixture.key)}
-                />
-              ))}
-
-              {/* Multi-head fixtures */}
-              {multiHeadFixtures.map((fixture) => (
-                <MultiElementCompactCard
-                  key={fixture.key}
-                  parentKey={fixture.key}
-                  elementCount={fixture.elements!.length}
-                  fixture={fixture}
-                  onClick={() => onFixtureClick(fixture.key)}
-                />
-              ))}
-            </div>
-          )}
+    <div className="border-b bg-background px-4 py-3">
+      {isLoading ? (
+        <div className="flex justify-center">
+          <Loader2 className="size-4 animate-spin" />
         </div>
-      </div>
+      ) : !hasFixtures ? (
+        <p className="text-sm text-muted-foreground text-center">No fixtures configured</p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {/* Single fixtures */}
+          {singleFixtures.map((fixture) => (
+            <CompactFixtureCard
+              key={fixture.key}
+              fixtureKey={fixture.key}
+              fixtureName={fixture.name}
+              tags={[]}
+              fixture={fixture}
+              onClick={() => onFixtureClick(fixture.key)}
+            />
+          ))}
+
+          {/* Multi-head fixtures */}
+          {multiHeadFixtures.map((fixture) => (
+            <MultiElementCompactCard
+              key={fixture.key}
+              parentKey={fixture.key}
+              elementCount={fixture.elements!.length}
+              fixture={fixture}
+              onClick={() => onFixtureClick(fixture.key)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

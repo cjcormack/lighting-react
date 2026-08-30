@@ -70,9 +70,16 @@ response is dropped by an `ignore` flag in the effect cleanup.
 
 **The request is a query, not a mutation, despite being a POST.** Two things follow from that, and
 both are load-bearing. Several stage surfaces can be mounted at once — the Stage route's canvas and
-the globally-mounted `StageOverviewPanel`, which renders whether or not it is expanded — and RTK
-Query collapses their identical args into one request and one cache entry, so a collapsed panel
-costs nothing and a GO produces one POST rather than one per surface. And every subscriber sees the
+the `StageOverviewPanel` Layout hangs under the header — and RTK Query collapses their identical
+args into one request and one cache entry, so two open surfaces cost one request and a GO produces
+one POST rather than one per surface.
+
+The overview panel used to render whether or not it was expanded, and this paragraph used to say a
+collapsed panel therefore cost nothing. It no longer renders collapsed: `CollapsiblePanel` unmounts
+its body once the collapse animation finishes, taking the panel's `StageChannelSourceProvider` and
+this query's subscription with it. Nothing above changes — a collapsed panel now costs nothing
+because it isn't there — but reopening is a remount, so it re-subscribes, and past RTK Query's
+one-minute retention of an unsubscribed entry it refetches rather than reading cache. And every subscriber sees the
 same `isError`, which is what lets the status line report the *request* rather than the target.
 `refetchOnMountOrArgChange` is set, so re-selecting the source recomposes instead of replaying a
 cached look. `cueId` is a required arg rather than "null means the effective next", because under a

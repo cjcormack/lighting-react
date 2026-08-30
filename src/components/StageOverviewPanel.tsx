@@ -11,6 +11,7 @@ import { StageChannelSourceProvider } from '../hooks/useChannelSource'
 import { StageMarker } from './stage/StageMarker'
 import { StageBackdrop } from './stage/StageBackdrop'
 import { chipButtonClassName } from './patches/chipButton'
+import { CollapsiblePanel } from './CollapsiblePanel'
 
 const STAGE_CANVAS_HEIGHT = 'h-[420px]'
 
@@ -20,11 +21,43 @@ interface StageOverviewPanelProps {
   onFixtureClick: (fixtureKey: string) => void
 }
 
+/**
+ * The group filter lives out here rather than in the body: the body unmounts on collapse, and an
+ * operator who filters to a group, closes the panel and reopens it should find their filter still
+ * on. Everything below the boundary is a live subscription and stays there.
+ */
 export function StageOverviewPanel({
   isVisible,
   selectedFixtureKey,
   onFixtureClick,
 }: StageOverviewPanelProps) {
+  const [groupFilter, setGroupFilter] = useState<number | null>(null)
+
+  return (
+    <CollapsiblePanel isVisible={isVisible}>
+      <StageOverviewPanelBody
+        selectedFixtureKey={selectedFixtureKey}
+        onFixtureClick={onFixtureClick}
+        groupFilter={groupFilter}
+        onGroupFilterChange={setGroupFilter}
+      />
+    </CollapsiblePanel>
+  )
+}
+
+interface StageOverviewPanelBodyProps {
+  selectedFixtureKey: string | null
+  onFixtureClick: (fixtureKey: string) => void
+  groupFilter: number | null
+  onGroupFilterChange: (groupId: number | null) => void
+}
+
+function StageOverviewPanelBody({
+  selectedFixtureKey,
+  onFixtureClick,
+  groupFilter,
+  onGroupFilterChange,
+}: StageOverviewPanelBodyProps) {
   const project = useViewedProject()
   const projectId = project?.id
 
@@ -35,8 +68,6 @@ export function StageOverviewPanel({
   const { data: groups } = usePatchGroupListQuery(projectId!, {
     skip: projectId == null,
   })
-
-  const [groupFilter, setGroupFilter] = useState<number | null>(null)
 
   // The selected patch survives the `stageHidden` cut: this panel shares its
   // selection with Stage3D (see routes/Stage.tsx), which draws the selected
@@ -50,105 +81,96 @@ export function StageOverviewPanel({
   const showChips = visibleGroups.length > 0
 
   return (
-    <div
-      className={cn(
-        'grid transition-all duration-200 ease-in-out',
-        isVisible ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
-      )}
-    >
-      <div className="overflow-hidden">
-        <div className="border-b bg-background">
-          <div className="flex items-center gap-2 px-4 py-2 border-b">
-            <span
-              className="size-2 rounded-full bg-primary"
-              style={{ boxShadow: '0 0 8px currentColor' }}
-            />
-            <span className="text-sm font-semibold">Stage</span>
-            <span className="text-xs font-mono text-muted-foreground border-l pl-2">
-              {placedPatches.length} fixture{placedPatches.length === 1 ? '' : 's'}
-            </span>
-            <div className="flex-1" />
-            {groupFilter != null && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs"
-                onClick={() => setGroupFilter(null)}
-                title="Reset filter"
-              >
-                <RotateCcw className="size-3.5" />
-                Reset
-              </Button>
-            )}
-          </div>
+    <div className="border-b bg-background">
+      <div className="flex items-center gap-2 px-4 py-2 border-b">
+        <span
+          className="size-2 rounded-full bg-primary"
+          style={{ boxShadow: '0 0 8px currentColor' }}
+        />
+        <span className="text-sm font-semibold">Stage</span>
+        <span className="text-xs font-mono text-muted-foreground border-l pl-2">
+          {placedPatches.length} fixture{placedPatches.length === 1 ? '' : 's'}
+        </span>
+        <div className="flex-1" />
+        {groupFilter != null && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => onGroupFilterChange(null)}
+            title="Reset filter"
+          >
+            <RotateCcw className="size-3.5" />
+            Reset
+          </Button>
+        )}
+      </div>
 
-          {showChips && (
-            <div className="flex flex-wrap gap-1.5 px-4 py-2 border-b">
-              <ChipButton
-                active={groupFilter == null}
-                onClick={() => setGroupFilter(null)}
-              >
-                All <span className="ml-1 font-mono text-[10px] opacity-70">{placedPatches.length}</span>
-              </ChipButton>
-              {visibleGroups.map((g) => (
-                <ChipButton
-                  key={g.id}
-                  active={groupFilter === g.id}
-                  onClick={() => setGroupFilter(groupFilter === g.id ? null : g.id)}
-                >
-                  {g.name}
-                  <span className="ml-1 font-mono text-[10px] opacity-70">{g.memberCount}</span>
-                </ChipButton>
-              ))}
-            </div>
-          )}
-
-          <div className="p-4">
-            {patchesLoading ? (
-              <div className={cn('flex items-center justify-center', STAGE_CANVAS_HEIGHT)}>
-                <Loader2 className="size-4 animate-spin text-muted-foreground" />
-              </div>
-            ) : placedPatches.length === 0 ? (
-              <EmptyState projectId={projectId} />
-            ) : (
-              <StageChannelSourceProvider>
-                {/* Follows the same vis source the Stage route's View menu sets, so the two
-                    pictures agree whenever they are on screen together. */}
-                <StageBackdrop className={STAGE_CANVAS_HEIGHT}>
-                  {placedPatches.map(({ patch, leftPct, topPct }) => {
-                    const fixture = fixtureByKey.get(patch.key)
-                    const fixtureType = fixture
-                      ? typeByKey.get(fixture.typeKey)
-                      : undefined
-                    const matchesFilter =
-                      groupFilter == null ||
-                      patch.groups.some((g) => g.id === groupFilter)
-                    return (
-                      <button
-                        key={patch.id}
-                        type="button"
-                        onClick={() => onFixtureClick(patch.key)}
-                        className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer focus:outline-none"
-                        style={{
-                          left: `${leftPct}%`,
-                          top: `${topPct}%`,
-                        }}
-                      >
-                        <StageMarker
-                          patch={patch}
-                          fixture={fixture}
-                          fixtureType={fixtureType}
-                          selected={selectedFixtureKey === patch.key}
-                          dimmed={!matchesFilter}
-                        />
-                      </button>
-                    )
-                  })}
-                </StageBackdrop>
-              </StageChannelSourceProvider>
-            )}
-          </div>
+      {showChips && (
+        <div className="flex flex-wrap gap-1.5 px-4 py-2 border-b">
+          <ChipButton
+            active={groupFilter == null}
+            onClick={() => onGroupFilterChange(null)}
+          >
+            All <span className="ml-1 font-mono text-[10px] opacity-70">{placedPatches.length}</span>
+          </ChipButton>
+          {visibleGroups.map((g) => (
+            <ChipButton
+              key={g.id}
+              active={groupFilter === g.id}
+              onClick={() => onGroupFilterChange(groupFilter === g.id ? null : g.id)}
+            >
+              {g.name}
+              <span className="ml-1 font-mono text-[10px] opacity-70">{g.memberCount}</span>
+            </ChipButton>
+          ))}
         </div>
+      )}
+
+      <div className="p-4">
+        {patchesLoading ? (
+          <div className={cn('flex items-center justify-center', STAGE_CANVAS_HEIGHT)}>
+            <Loader2 className="size-4 animate-spin text-muted-foreground" />
+          </div>
+        ) : placedPatches.length === 0 ? (
+          <EmptyState projectId={projectId} />
+        ) : (
+          <StageChannelSourceProvider>
+            {/* Follows the same vis source the Stage route's View menu sets, so the two
+                pictures agree whenever they are on screen together. */}
+            <StageBackdrop className={STAGE_CANVAS_HEIGHT}>
+              {placedPatches.map(({ patch, leftPct, topPct }) => {
+                const fixture = fixtureByKey.get(patch.key)
+                const fixtureType = fixture
+                  ? typeByKey.get(fixture.typeKey)
+                  : undefined
+                const matchesFilter =
+                  groupFilter == null ||
+                  patch.groups.some((g) => g.id === groupFilter)
+                return (
+                  <button
+                    key={patch.id}
+                    type="button"
+                    onClick={() => onFixtureClick(patch.key)}
+                    className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer focus:outline-none"
+                    style={{
+                      left: `${leftPct}%`,
+                      top: `${topPct}%`,
+                    }}
+                  >
+                    <StageMarker
+                      patch={patch}
+                      fixture={fixture}
+                      fixtureType={fixtureType}
+                      selected={selectedFixtureKey === patch.key}
+                      dimmed={!matchesFilter}
+                    />
+                  </button>
+                )
+              })}
+            </StageBackdrop>
+          </StageChannelSourceProvider>
+        )}
       </div>
     </div>
   )
