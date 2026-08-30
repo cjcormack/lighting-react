@@ -1,9 +1,22 @@
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+
 import globals from "globals"
 import pluginJs from "@eslint/js"
 import tseslint from "typescript-eslint"
 import pluginReact from "eslint-plugin-react"
 import pluginReactHooks from "eslint-plugin-react-hooks"
+import pluginImport from "eslint-plugin-import"
 import configPrettier from "eslint-config-prettier"
+
+// Absolute, and computed rather than written down: eslint-module-utils `require`s the resolver by
+// name, and a repo-relative name is resolved against the *linted file's* base directory — so
+// "./eslint-import-resolver-alias.cjs" loads for a file in `src/` and throws for one in
+// `src/components/`. See that file for what it does and why it has to exist.
+const ALIAS_RESOLVER = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "eslint-import-resolver-alias.cjs",
+)
 
 export default [
   {
@@ -55,6 +68,28 @@ export default [
     },
   },
   {
+    // Cycle detection only — not `plugin:import/recommended`, which brings a pile of rules this
+    // tree has never been written against and which TypeScript already answers better.
+    //
+    // A value-import cycle here is not a style question: `startOAuthIdentityBridge` produced a
+    // TDZ break that compiled green and showed up only as a broken app in the browser, and the
+    // one this rule was added alongside was `CueSlotOverviewPanel` ↔ `CueSlotEditAssignPanel`.
+    // `allowUnsafeDynamicCyclicDependency` stays off; `maxDepth` stays unbounded, because the
+    // cycles that hurt are rarely the two-module ones.
+    files: ["src/**/*.{ts,tsx}"],
+    plugins: { import: pluginImport },
+    settings: {
+      // Both entries are load-bearing, and both fail *silently* when wrong — the rule skips any
+      // import it cannot parse or resolve, so a misconfiguration reads as "no cycles". Without
+      // `import/parsers` it cannot read a `.ts` dependency at all and reports nothing whatsoever;
+      // without the alias resolver it misses the ~70% of imports written `@/…`. Verified by
+      // reintroducing a cycle in each import style and watching both be reported.
+      "import/parsers": { "@typescript-eslint/parser": [".ts", ".tsx"] },
+      "import/resolver": { [ALIAS_RESOLVER]: {} },
+    },
+    rules: { "import/no-cycle": ["error", { ignoreExternal: true }] },
+  },
+  {
     // react-three-fiber props (position, intensity, args, …) are not DOM
     // attributes; @react-three/fiber's own JSX types are what validate them.
     files: ["src/components/stage3d/**"],
@@ -63,6 +98,13 @@ export default [
   {
     files: ["*.config.{js,ts}", "*.config.*.{js,ts}"],
     languageOptions: { globals: globals.node },
+  },
+  {
+    // The import resolver runs inside ESLint, in Node, and has to be CommonJS: eslint-module-utils
+    // loads it with `require`.
+    files: ["*.cjs"],
+    languageOptions: { globals: globals.node, sourceType: "commonjs" },
+    rules: { "@typescript-eslint/no-require-imports": "off" },
   },
   // Last, so it wins: turns off every core/plugin rule that would fight
   // `npm run format`. Prettier itself is not run from the lint gate — this only
