@@ -21,6 +21,16 @@ import type { Subscription } from './subscription'
  * So provenance doubles as the invalidation signal: on receipt we debounce briefly and
  * re-request `programmer.state`. Own-connection replies are additionally applied straight
  * to the cache so a local edit paints without waiting for the round trip.
+ *
+ * The one exception: a crossfade's weight ticks are layer events too, so a running fade
+ * republishes provenance at up to ~20 Hz with nothing in it changed. Each frame carries
+ * `programmerRevision` — a monotonic count of the triggers that could have moved the
+ * programmer's value set, which weight-only republishes don't bump — and we refetch only
+ * when it moved. Without that, every tab answered a fade with ~10 `programmer.state`
+ * requests/s. A revision on every frame rather than a per-frame flag because the server's
+ * broadcast flow drops frames past a slow tab: whatever frame arrives carries the latest
+ * revision, so a MIDI write, locate, template apply or second-tab edit mid-fade always
+ * refetches. A server that omits the field degrades to refetch-on-every-frame.
  */
 
 export type ProgrammerTargetType = 'fixture' | 'group'
@@ -351,6 +361,12 @@ interface ProgrammerErrorIncoming {
 interface ProvenanceStateIncoming {
   type: 'provenanceState'
   entries: ProvenanceEntry[]
+  /**
+   * Monotonic count of the triggers that could have changed the programmer's value set.
+   * Unchanged across crossfade weight ticks, so the `programmer.state` refetch runs only
+   * when it moved. Optional: an older server omits it, and we then refetch on every frame.
+   */
+  programmerRevision?: number
 }
 
 type ProgrammerIncomingMessage =
@@ -607,6 +623,10 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     notifyState()
   }
 
+  // The last programmerRevision a provenance frame delivered. Starts undefined so the first
+  // frame of a connection always refetches, whatever revision it carries.
+  let lastProgrammerRevision: number | undefined
+
   const applyProvenance = (message: ProvenanceStateIncoming) => {
     const next = new Map<string, ProvenanceEntry>()
     for (const entry of message.entries) {
@@ -614,11 +634,26 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     }
     const touched = changedKeys(provenance, next, provenanceSignature)
     provenance = next
-    notifyKeys(touched)
-    notifyState()
+    // A frame that changed nothing wakes nobody: a fade republishes content-identical
+    // provenance ~20×/s, and an ungated notifyState would rebuild the snapshot and re-render
+    // every whole-state subscriber per frame for the whole fade. (This also absorbs the
+    // duplicated connect frame a warm desk delivers.) The refetch decision below is
+    // deliberately independent — identical provenance does NOT mean identical values, so it
+    // rides the revision, never `touched`.
+    if (touched.length > 0) {
+      notifyKeys(touched)
+      notifyState()
+    }
     // Provenance is the only broadcast the server sends for programmer activity, so it is
-    // also our cue to re-read the values — including writes we didn't make.
-    scheduleStateRefetch()
+    // also our cue to re-read the values — including writes we didn't make. Except when the
+    // revision says nothing since the last frame could have moved the programmer (a
+    // crossfade's weight ticks don't bump it): refetching on those turned every fade into
+    // ~10 requests/s per tab. An older server omits the field and we refetch every frame.
+    const revision = message.programmerRevision
+    if (revision === undefined || revision !== lastProgrammerRevision) {
+      lastProgrammerRevision = revision
+      scheduleStateRefetch()
+    }
   }
 
   /**

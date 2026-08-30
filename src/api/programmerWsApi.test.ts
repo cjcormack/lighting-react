@@ -130,6 +130,55 @@ describe('createProgrammerApi', () => {
     expect(sent).toEqual([{ type: 'programmer.state' }])
   })
 
+  it('skips the refetch while the programmer revision holds — a crossfade cannot move the programmer', () => {
+    const { conn, sent, frame } = fakeWsConnection()
+    const api = createProgrammerApi(conn)
+
+    // The first frame of a connection always refetches, whatever revision it carries.
+    frame({ type: 'provenanceState', entries: [PROV], programmerRevision: 3 })
+    vi.advanceTimersByTime(200)
+    expect(sent).toEqual([{ type: 'programmer.state' }])
+
+    // A running crossfade republishes provenance ~20×/s at an unmoved revision; the timer
+    // is advanced past the debounce between frames so a refetch would show if one fired.
+    frame({ type: 'provenanceState', entries: [PROV], programmerRevision: 3 })
+    vi.advanceTimersByTime(200)
+    frame({ type: 'provenanceState', entries: [PROV], programmerRevision: 3 })
+    vi.advanceTimersByTime(200)
+
+    expect(sent).toEqual([{ type: 'programmer.state' }])
+    // The frames' provenance content is still applied — only the refetch is skipped.
+    expect(api.getKeyState('hex-1', 'dimmer').provenance).toEqual(PROV)
+  })
+
+  it('refetches when the revision moves mid-fade — an off-connection write got in', () => {
+    const { conn, sent, frame } = fakeWsConnection()
+    createProgrammerApi(conn)
+
+    frame({ type: 'provenanceState', entries: [PROV], programmerRevision: 3 })
+    vi.advanceTimersByTime(200)
+    // A MIDI write (or second tab) mid-fade bumps the revision on the server's next frame —
+    // even when it changed no provenance winner, so the entries are identical.
+    frame({ type: 'provenanceState', entries: [PROV], programmerRevision: 4 })
+    vi.advanceTimersByTime(200)
+    frame({ type: 'provenanceState', entries: [PROV], programmerRevision: 4 })
+    vi.advanceTimersByTime(200)
+
+    expect(sent).toEqual([{ type: 'programmer.state' }, { type: 'programmer.state' }])
+  })
+
+  it('refetches on every frame from a server that sends no revision', () => {
+    const { conn, sent, frame } = fakeWsConnection()
+    createProgrammerApi(conn)
+
+    frame({ type: 'provenanceState', entries: [PROV] })
+    vi.advanceTimersByTime(200)
+    frame({ type: 'provenanceState', entries: [PROV] })
+    vi.advanceTimersByTime(200)
+
+    expect(sent).toEqual([{ type: 'programmer.state' }, { type: 'programmer.state' }])
+  })
+
   it('re-arms the debounce for provenance that arrives after a refetch', () => {
     const { conn, sent, frame } = fakeWsConnection()
     createProgrammerApi(conn)
@@ -480,6 +529,22 @@ describe('createProgrammerApi', () => {
     frame({ type: 'programmer.layerState', layers: [LAYER] })
 
     expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not wake any subscriber for a provenance frame that changed nothing', () => {
+    const { conn, frame } = fakeWsConnection()
+    const api = createProgrammerApi(conn)
+    const coarse = vi.fn()
+    api.subscribe(coarse)
+
+    frame({ type: 'provenanceState', entries: [PROV], programmerRevision: 3 })
+    expect(coarse).toHaveBeenCalledTimes(1)
+
+    // A fade republishes content-identical provenance ~20×/s; waking every whole-state
+    // subscriber per frame was a render storm even with the refetch gone.
+    frame({ type: 'provenanceState', entries: [{ ...PROV }], programmerRevision: 3 })
+    frame({ type: 'provenanceState', entries: [{ ...PROV }], programmerRevision: 3 })
+    expect(coarse).toHaveBeenCalledTimes(1)
   })
 
   it('wakes coarse subscribers on a layerState frame', () => {
