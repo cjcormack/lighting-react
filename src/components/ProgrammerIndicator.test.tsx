@@ -18,10 +18,11 @@ vi.mock('../store/projects', () => ({
 
 import { ProgrammerIndicator } from './ProgrammerIndicator'
 
-function draw(props: { blindShownSeparately?: boolean } = {}) {
+function draw(props: { blindShownSeparately?: boolean; at?: string } = {}) {
+  const { at = '/projects/1/show', ...rest } = props
   return render(
-    <MemoryRouter initialEntries={['/projects/1/show']}>
-      <ProgrammerIndicator {...props} />
+    <MemoryRouter initialEntries={[at]}>
+      <ProgrammerIndicator {...rest} />
     </MemoryRouter>,
   )
 }
@@ -74,6 +75,33 @@ describe('ProgrammerIndicator', () => {
     summary.entryCount = 5
     draw({ blindShownSeparately: true })
     expect(screen.getByLabelText(/gated out of the stage output/)).toBeTruthy()
+  })
+
+  it('offers the trip to the programmer from anywhere else', () => {
+    summary.entryCount = 5
+    draw({ at: '/projects/1/show' })
+
+    const link = screen.getByRole('link')
+    expect(link.getAttribute('href')).toBe('/projects/1/programmer')
+    expect(link.getAttribute('aria-label')).toContain('Go to the programmer')
+  })
+
+  it('is inert on the programmer itself — a link to where you already are is noise', () => {
+    summary.entryCount = 5
+    draw({ at: '/projects/1/programmer' })
+
+    expect(screen.queryByRole('link')).toBeNull()
+    expect(screen.getByText('5')).toBeTruthy()
+    expect(screen.getByLabelText(/Programmer holds 5 values$/)).toBeTruthy()
+  })
+
+  it('counts a programmer subroute as being here', () => {
+    // Segment-aware, not a bare `startsWith`: `/programmer/fx` is still the programmer, and the
+    // badge must not offer a trip to the page it is already sitting on.
+    summary.entryCount = 5
+    draw({ at: '/projects/1/programmer/fx' })
+
+    expect(screen.queryByRole('link')).toBeNull()
   })
 
   it('keeps the amber wash for its own blind reporting only', () => {
