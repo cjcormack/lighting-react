@@ -171,7 +171,13 @@ export interface FaderControl {
   channel: number
   hasMotor: boolean
   motorCc: number | null
+  /**
+   * Touch-sense, in the two spellings the wire allows — at most one is set. A note-style fader
+   * sends note-on/note-off; a CC-style one (the shipped X-Touch Compact profile) sends a CC whose
+   * value > 0 means down.
+   */
   touchNote: number | null
+  touchCc: number | null
   resolution: FaderResolution
 }
 
@@ -200,7 +206,13 @@ export interface BankButtonControl {
   type: "bankButton"
   controlId: string
   label: string
-  note: number
+  /**
+   * Exactly one of `note` / `programChange` is non-null — the backend's `BankButtonDescriptor`
+   * requires it. Most bank buttons are notes; the X-Touch Compact's A/B Layer button is a program
+   * change, which is why `note` is nullable here rather than merely optional.
+   */
+  note: number | null
+  programChange: number | null
   channel: number
   bankId: string
 }
