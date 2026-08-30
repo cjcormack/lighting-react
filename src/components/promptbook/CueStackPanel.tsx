@@ -14,6 +14,11 @@ import type { CueRunStatus } from './AnchorOverlay'
 import { DesyncWarningsPanel } from './DesyncWarningsPanel'
 import { PromptBookCueCard } from './PromptBookCueCard'
 
+// Stable identity for the common case (a cue with no warnings) — a fresh `[]` literal here
+// would be a new prop value every render and defeat `PromptBookCueCard`'s memo for almost
+// every row, almost every time.
+const NO_WARNINGS: DesyncWarning[] = []
+
 interface CueStackPanelProps {
   /** Rail rows in show order — headers, cue cards, and separators (markers). */
   rows: ShowRailRow[]
@@ -35,11 +40,11 @@ interface CueStackPanelProps {
   /** Stage/Details mode per cue — the page owns it so it persists across cue changes. */
   modeOf: (cueId: number, status: CueRunStatus) => ExpansionMode | null
   onCueModeChange: (cueId: number, status: CueRunStatus, mode: ExpansionMode | null) => void
-  /** Fade-in progress/remaining for the live cue (drives its amber fade bar). Only the
-   *  live card (kind='cur') reads these; other cards ignore them. */
-  fadeProgress: number | null
-  fadeRemainMs: number | null
-  /** The stack the transport acts on — only its cues can be armed as the next GO. */
+  /**
+   * The stack the transport acts on — only its cues can be armed as the next GO, and it is
+   * also the id each card gates its own `useCueFade` subscription on (only a live-stack cue
+   * can be the one fading in).
+   */
   activeStackId: number | null
   onCueClick: (cue: FlatCue) => void
   onRemoveAnchor: (cueId: number) => void
@@ -94,8 +99,6 @@ export function CueStackPanel({
   onToggleExpanded,
   modeOf,
   onCueModeChange,
-  fadeProgress,
-  fadeRemainMs,
   activeStackId,
   onCueClick,
   onRemoveAnchor,
@@ -204,6 +207,9 @@ export function CueStackPanel({
             return <MarkerRow key={`s-${row.source}-${row.id}`} name={row.name} />
           }
           const status = statusOf(row.cue.cueId)
+          // Both facts below are the same underlying question — "is this row on the live
+          // stack?" — computed once so they can't drift apart under a future edit.
+          const isLiveStack = row.cue.stackId === activeStackId
           return (
             <PromptBookCueCard
               key={row.cue.cueId}
@@ -213,24 +219,23 @@ export function CueStackPanel({
               anchorHint={anchorHintByCue.get(row.cue.cueId) ?? null}
               cueEntry={cueEntryByCue.get(row.cue.cueId)}
               projectId={projectId}
-              warnings={warningsByCue.get(row.cue.cueId) ?? []}
+              warnings={warningsByCue.get(row.cue.cueId) ?? NO_WARNINGS}
               locked={locked}
               placing={placingCueId === row.cue.cueId}
               expanded={expandedCues.has(row.cue.cueId)}
               mode={modeOf(row.cue.cueId, status)}
-              onModeChange={(m) => onCueModeChange(row.cue.cueId, status, m)}
-              fadeProgress={fadeProgress}
-              fadeRemainMs={fadeRemainMs}
-              canSetNext={!goDisabled && row.cue.stackId === activeStackId}
+              onModeChange={onCueModeChange}
+              fadeStackId={isLiveStack ? activeStackId : null}
+              canSetNext={!goDisabled && isLiveStack}
               coverPages={coverPages}
-              onCueClick={() => onCueClick(row.cue)}
-              onToggleExpanded={() => onToggleExpanded(row.cue.cueId)}
-              onSetStandby={() => onSetStandby(row.cue.cueId)}
-              onRemoveAnchor={() => onRemoveAnchor(row.cue.cueId)}
-              onEditCue={() => onEditCue(row.cue.cueId)}
-              onRenameCue={(name) => onRenameCue(row.cue.cueId, name)}
-              onRenumberCue={(cueNumber) => onRenumberCue(row.cue.cueId, cueNumber)}
-              onRenoteCue={(notes) => onRenoteCue(row.cue.cueId, notes)}
+              onCueClick={onCueClick}
+              onToggleExpanded={onToggleExpanded}
+              onSetStandby={onSetStandby}
+              onRemoveAnchor={onRemoveAnchor}
+              onEditCue={onEditCue}
+              onRenameCue={onRenameCue}
+              onRenumberCue={onRenumberCue}
+              onRenoteCue={onRenoteCue}
               onEditInteraction={onEditInteraction}
             />
           )

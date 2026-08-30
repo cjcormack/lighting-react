@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { Anchor, ChevronRight, Pencil, TriangleAlert, X } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -6,6 +7,7 @@ import { InlineEditField } from '@/components/InlineEditField'
 import { TruncateStart } from '@/components/TruncateStart'
 import { cueNumberCellWidth } from '@/lib/cueNumber'
 import { CueCardBody, type CueCardKind, type ExpansionMode } from '@/components/runner/run/CueCardBody'
+import { useCueFade } from '@/hooks/useCueFade'
 import type { CueAnchorDto } from '@/api/promptBooksApi'
 import type { CueStackCueEntry } from '@/api/cueStacksApi'
 import type { DesyncWarning, FlatCue } from '@/lib/promptBook/desync'
@@ -28,26 +30,32 @@ interface PromptBookCueCardProps {
   /** Stage / Details mode for this card, owned by the page so it can persist across
    *  cue changes (live cue carries the last-used view). null = neither selected. */
   mode: ExpansionMode | null
-  onModeChange: (mode: ExpansionMode | null) => void
-  /** cur-only: 0..1 fade-in progress, drives the amber fade bar/badge. */
-  fadeProgress: number | null
-  fadeRemainMs: number | null
+  onModeChange: (cueId: number, status: CueRunStatus, mode: ExpansionMode | null) => void
+  /**
+   * The live stack id, or null when this cue's own stack isn't it — gates this card's own
+   * `useCueFade` subscription, which drives the amber fade bar/badge on the live (cur) card.
+   */
+  fadeStackId: number | null
   /** Show active + editable — enables the "Set next" affordance. */
   canSetNext: boolean
   /** Front-matter page count, offsets the cue's page label to the script's numbering. */
   coverPages: number
-  /** Primary action: scroll the book to this cue's anchor. */
-  onCueClick: () => void
-  onToggleExpanded: () => void
-  onSetStandby: () => void
-  onRemoveAnchor: () => void
-  onEditCue: () => void
+  /**
+   * These take the row's own id/cue rather than being pre-bound, so `CueStackPanel` can pass
+   * the page's own stable (`useCallback`'d) handlers straight through instead of allocating a
+   * fresh per-row closure on every render — which is what makes `memo` below hold.
+   */
+  onCueClick: (cue: FlatCue) => void
+  onToggleExpanded: (cueId: number) => void
+  onSetStandby: (cueId: number) => void
+  onRemoveAnchor: (cueId: number) => void
+  onEditCue: (cueId: number) => void
   /** Rename the cue. Only wired up while the book is unlocked. */
-  onRenameCue: (name: string) => void
+  onRenameCue: (cueId: number, name: string) => void
   /** Set (or clear, with null) the cue number. Only wired up while unlocked. */
-  onRenumberCue: (cueNumber: string | null) => void
+  onRenumberCue: (cueId: number, cueNumber: string | null) => void
   /** Set (or clear, with null) the cue's note. Only wired up while unlocked. */
-  onRenoteCue: (notes: string | null) => void
+  onRenoteCue: (cueId: number, notes: string | null) => void
   /** Resets the idle auto-relock clock, so it can't tear down a field mid-edit. */
   onEditInteraction: () => void
 }
@@ -70,8 +78,13 @@ const STATUS_KIND: Record<CueRunStatus, CueCardKind> = {
  * has no line to point at. While locked the row says nothing about it beyond slightly
  * dimmer text; the "place anchor" affordance only appears while the book is unlocked,
  * and the expanded card states it in words.
+ *
+ * Memoized: the rail can hold hundreds of these, and every one used to re-render on every
+ * page render (a fade frame among them) for ten freshly-allocated per-row callbacks. The
+ * callbacks are now the page's own stable handlers (see the prop doc above), so this bails
+ * out except for the row whose own props actually changed.
  */
-export function PromptBookCueCard({
+export const PromptBookCueCard = memo(function PromptBookCueCard({
   cue,
   status,
   anchor,
@@ -84,8 +97,7 @@ export function PromptBookCueCard({
   expanded,
   mode,
   onModeChange,
-  fadeProgress,
-  fadeRemainMs,
+  fadeStackId,
   canSetNext,
   coverPages,
   onCueClick,
@@ -100,6 +112,10 @@ export function PromptBookCueCard({
 }: PromptBookCueCardProps) {
   const anchored = anchor != null
   const showSetNext = canSetNext && status !== 'live' && status !== 'next'
+
+  // The live card's own fade — read here rather than drilled from the page, so a fade frame
+  // re-renders only this one card instead of every card in the whole show (see `useCueFade`).
+  const { fadeProgress, fadeRemainMs } = useCueFade(fadeStackId, cue.cueId, cue.fadeMs)
 
   // Cue identity is editable exactly while the book is unlocked — the same gate as anchors
   // and annotations. `cueEntry` carries the raw cueNumber (FlatCue only has the folded label).
@@ -149,12 +165,12 @@ export function PromptBookCueCard({
               tabIndex={0}
               onClick={(e) => {
                 e.stopPropagation()
-                onRemoveAnchor()
+                onRemoveAnchor(cue.cueId)
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.stopPropagation()
-                  onRemoveAnchor()
+                  onRemoveAnchor(cue.cueId)
                 }
               }}
               aria-label={`Remove anchor for ${cue.label}`}
@@ -174,7 +190,7 @@ export function PromptBookCueCard({
       type="button"
       onClick={(e) => {
         e.stopPropagation()
-        onToggleExpanded()
+        onToggleExpanded(cue.cueId)
       }}
       aria-label={expanded ? `Collapse ${cue.label}` : `Expand ${cue.label}`}
       aria-expanded={expanded}
@@ -190,12 +206,12 @@ export function PromptBookCueCard({
       tabIndex={0}
       onClick={(e) => {
         e.stopPropagation()
-        onSetStandby()
+        onSetStandby(cue.cueId)
       }}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.stopPropagation()
-          onSetStandby()
+          onSetStandby(cue.cueId)
         }
       }}
       aria-label={`Set ${cue.label} as the next cue`}
@@ -213,7 +229,7 @@ export function PromptBookCueCard({
           cue={cueEntry ?? null}
           projectId={projectId}
           mode={mode}
-          onModeChange={onModeChange}
+          onModeChange={(m) => onModeChange(cue.cueId, status, m)}
           location={
             anchored
               ? positionLabel(anchor.region, coverPages)
@@ -224,10 +240,10 @@ export function PromptBookCueCard({
           headerLabel={cue.label}
           fadeProgress={fadeProgress}
           fadeRemainMs={fadeRemainMs}
-          onBodyClick={onCueClick}
-          onCueNumberCommit={editable ? onRenumberCue : undefined}
-          onCueNameCommit={editable ? onRenameCue : undefined}
-          onNotesCommit={editable ? onRenoteCue : undefined}
+          onBodyClick={() => onCueClick(cue)}
+          onCueNumberCommit={editable ? (next) => onRenumberCue(cue.cueId, next) : undefined}
+          onCueNameCommit={editable ? (next) => onRenameCue(cue.cueId, next) : undefined}
+          onNotesCommit={editable ? (next) => onRenoteCue(cue.cueId, next) : undefined}
           onEditInteraction={onEditInteraction}
           headerTrailing={
             <>
@@ -244,7 +260,7 @@ export function PromptBookCueCard({
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation()
-                  onEditCue()
+                  onEditCue(cue.cueId)
                 }}
                 className="inline-flex items-center gap-1 font-medium text-sky-400 hover:underline"
               >
@@ -299,9 +315,9 @@ export function PromptBookCueCard({
     <div
       role="button"
       tabIndex={0}
-      onClick={onCueClick}
+      onClick={() => onCueClick(cue)}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') onCueClick()
+        if (e.key === 'Enter' || e.key === ' ') onCueClick(cue)
       }}
       className={cn(
         'group my-0.5 flex w-full items-center gap-2.5 rounded-md border px-2.5 py-2 text-left',
@@ -345,7 +361,7 @@ export function PromptBookCueCard({
               // rather than `cue.label`: both come from the stack list, so clearing a number
               // shows the name at once instead of the stale "Q…" until `cueOrder` refetches.
               formatDisplay={(v) => <TruncateStart text={v ? `Q${v}` : cueEntry.name} />}
-              onCommit={(next) => onRenumberCue(next.trim() || null)}
+              onCommit={(next) => onRenumberCue(cue.cueId, next.trim() || null)}
               ariaLabel="cue number"
               placeholder="Q#"
               onEditInteraction={onEditInteraction}
@@ -365,7 +381,7 @@ export function PromptBookCueCard({
               onCommit={(next) => {
                 const trimmed = next.trim()
                 if (trimmed === '') return false
-                onRenameCue(trimmed)
+                onRenameCue(cue.cueId, trimmed)
               }}
               ariaLabel="cue name"
               onEditInteraction={onEditInteraction}
@@ -390,4 +406,4 @@ export function PromptBookCueCard({
       {chevron}
     </div>
   )
-}
+})

@@ -218,16 +218,19 @@ export function PromptBookViewerPage() {
    * stack name differently. `canOperate` and `onBeforeGo` are the two things that are genuinely
    * this page's — book-level permission, and re-locking on GO.
    */
+  // `frameRateProgress: false` — the rail's live card reads its own fade via `useCueFade`
+  // (see `railProps`/`CueStackPanel` below), so this page never needs `fadeProgress`/
+  // `fadeRemainMs`; without the flag every fade frame re-rendered this page and, through
+  // `railProps`, every card in the whole show.
   const { transport, showBarProps } = useShowBarProps(projectIdNum, {
     canOperate: canEdit,
     onBeforeGo: noteGo,
+    frameRateProgress: false,
   })
   const {
     activeStack,
     activeCueId,
     standbyCueId,
-    fadeProgress,
-    fadeRemainMs,
     goDisabled,
     go: fireGo,
     back: fireBack,
@@ -798,7 +801,7 @@ export function PromptBookViewerPage() {
     )
   }
 
-  // O(1) lookups via the existing cueOrderIndex map (this render path runs every fade frame).
+  // O(1) lookups via the existing cueOrderIndex map.
   const liveCue = activeCueId != null ? (cueOrder[cueOrderIndex.get(activeCueId) ?? -1] ?? null) : null
   const activeCueLabel = liveCue?.label ?? null
   const railStackName = activeStack?.name ?? cueOrder[0]?.stackName ?? null
@@ -818,8 +821,6 @@ export function PromptBookViewerPage() {
     onToggleExpanded: toggleExpanded,
     modeOf,
     onCueModeChange: handleCardModeChange,
-    fadeProgress,
-    fadeRemainMs,
     activeStackId,
     onCueClick: handleCueClick,
     onRemoveAnchor: handleRemoveAnchor,
