@@ -2,10 +2,12 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ProgrammerLayer } from '@/api/programmerWsApi'
+import type { CueLayer } from '@/api/cuesApi'
 import type { LookSummary } from '@/api/looksApi'
 
 const mocks = vi.hoisted(() => ({
   layers: [] as ProgrammerLayer[],
+  picked: {} as CueLayer,
   addLayer: vi.fn(),
   removeLayer: vi.fn(),
   moveLayer: vi.fn(),
@@ -28,8 +30,12 @@ vi.mock('@/store/templates', () => ({
   useTemplateListQuery: () => ({ data: [] }),
 }))
 vi.mock('react-router', () => ({ useParams: () => ({ projectId: '1' }) }))
-// The picker drags in the whole look/target/timing wizard, and nothing here presses Add.
-vi.mock('@/components/cues/editor/AddLayerSheet', () => ({ AddLayerSheet: () => null }))
+// The picker drags in the whole look/target/timing wizard. Stubbed down to the one thing this
+// file cares about: the `CueLayer` it hands back, and what `handleAdd` then puts on the wire.
+vi.mock('@/components/cues/editor/AddLayerSheet', () => ({
+  AddLayerSheet: ({ open, onAdd }: { open: boolean; onAdd: (layer: CueLayer) => void }) =>
+    open ? <button onClick={() => onAdd(mocks.picked)}>confirm picked layer</button> : null,
+}))
 
 import { ProgrammerLookStack } from './ProgrammerLookStack'
 
@@ -70,6 +76,7 @@ afterEach(() => {
   cleanup()
   vi.clearAllMocks()
   mocks.layers = []
+  mocks.picked = {} as CueLayer
 })
 
 describe('ProgrammerLookStack', () => {
@@ -144,5 +151,36 @@ describe('ProgrammerLookStack', () => {
   it('offers an empty state rather than a blank pane', () => {
     render(<ProgrammerLookStack />)
     expect(screen.getByText(/No layers\./)).toBeInTheDocument()
+  })
+
+  it('forwards the picker’s property mask, and drops only its timing', () => {
+    // `handleAdd` rebuilds the wire frame field by field, so anything the picker sets and it
+    // forgets is silently lost. `propertyMask` was: the picker masks a template layer to the
+    // template's own family so the row cannot read as "this could touch anything", and the same
+    // picker was producing a masked layer in a cue and an unmasked one here. The timing fields
+    // stay dropped on purpose — a programmer layer fires now.
+    mocks.picked = {
+      templateId: 11,
+      targets: [{ type: 'group', key: 'front-wash' }],
+      propertyMask: 'COLOUR',
+      speedMasterUuid: 'aaaaaaaa-0000-0000-0000-000000000002',
+      rateSpeedMasterUuid: null,
+      delayMs: 3000,
+      intervalMs: 500,
+      randomWindowMs: 250,
+    }
+    render(<ProgrammerLookStack />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    fireEvent.click(screen.getByRole('button', { name: 'confirm picked layer' }))
+
+    expect(mocks.addLayer).toHaveBeenCalledWith({
+      lookId: undefined,
+      templateId: 11,
+      targets: [{ type: 'group', key: 'front-wash' }],
+      propertyMask: 'COLOUR',
+      speedMasterUuid: 'aaaaaaaa-0000-0000-0000-000000000002',
+      rateSpeedMasterUuid: undefined,
+    })
   })
 })

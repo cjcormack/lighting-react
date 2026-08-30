@@ -112,14 +112,20 @@ export function ProgrammerLookStack() {
   )
 
   const handleAdd = useCallback((layer: CueLayer) => {
-    // The picker's timing fields are dropped rather than sent: a programmer layer fires now, and
-    // "in 3 seconds" is a property of a cue's playback, which the programmer has none of. The
-    // picker is told so via `allowTiming={false}`, so they are not offered either — a field the
-    // operator can fill in and this call then ignores is worse than no field.
+    // The picker's timing fields — and *only* those — are dropped rather than sent: a programmer
+    // layer fires now, and "in 3 seconds" is a property of a cue's playback, which the programmer
+    // has none of. The picker is told so via `allowTiming={false}`, so they are not offered either
+    // — a field the operator can fill in and this call then ignores is worse than no field.
+    //
+    // Every other field the picker sets is forwarded. `propertyMask` in particular: the picker
+    // masks a template layer to the template's own family so the row cannot read as "this could
+    // touch anything", and dropping it here made the identical picker produce a masked layer in a
+    // cue and an unmasked one in the programmer.
     programmerAddLayer({
       lookId: layer.lookId ?? undefined,
       templateId: layer.templateId ?? undefined,
       targets: layer.targets,
+      propertyMask: layer.propertyMask ?? undefined,
       speedMasterUuid: layer.speedMasterUuid ?? undefined,
       rateSpeedMasterUuid: layer.rateSpeedMasterUuid ?? undefined,
     })
