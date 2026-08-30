@@ -1,13 +1,6 @@
 import { useState, useCallback, useRef, useMemo, useEffect, createContext, useContext } from 'react'
 import { useNavigate } from 'react-router'
-import {
-  Layers,
-  ListMusic,
-  Eye,
-  Trash2,
-  Pencil,
-  X,
-} from 'lucide-react'
+import { Eye, Trash2, Pencil, X } from 'lucide-react'
 import {
   DndContext,
   useDraggable,
@@ -41,6 +34,7 @@ import { useApplyCueMutation, useStopCueMutation, useActiveCueIds, useActiveCueS
 import { useActivateCueStackMutation, useDeactivateCueStackMutation } from '../store/cueStacks'
 import { EditModeAssignPanel } from './CueSlotEditAssignPanel'
 import { CollapsiblePanel } from './CollapsiblePanel'
+import { SlotItemContent, type CueSlotAssignDragData } from './cueSlotShared'
 
 export { type CueSlot } from '../store/cueSlots'
 
@@ -68,13 +62,6 @@ function storePage(page: number) {
 }
 
 // ─── DnD data types ───────────────────────────────────────────────────
-
-export interface CueSlotAssignDragData {
-  type: 'cue-slot-assign'
-  itemType: 'cue' | 'cue_stack'
-  itemId: number
-  itemName: string
-}
 
 export interface CueSlotSwapDragData {
   type: 'slot-item'
@@ -107,31 +94,6 @@ const CueSlotDndContext = createContext<CueSlotDndContextValue>({
 
 export function useCueSlotDnd() {
   return useContext(CueSlotDndContext)
-}
-
-// ─── Shared visual content ────────────────────────────────────────────
-
-export function SlotItemContent({
-  name,
-  itemType,
-}: {
-  name: string
-  itemType: 'cue' | 'cue_stack'
-}) {
-  return (
-    <>
-      <span className="text-xs font-medium leading-tight text-center line-clamp-2 w-full">
-        {name}
-      </span>
-      <div className="flex items-center gap-1 mt-0.5">
-        {itemType === 'cue_stack' ? (
-          <Layers className="size-3 text-muted-foreground shrink-0" />
-        ) : (
-          <ListMusic className="size-3 text-muted-foreground shrink-0" />
-        )}
-      </div>
-    </>
-  )
 }
 
 interface CueSlotDndProviderProps {

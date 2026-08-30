@@ -3,7 +3,7 @@ import { ChevronRight, Layers } from 'lucide-react'
 import { useDraggable } from '@dnd-kit/core'
 import { cn } from '@/lib/utils'
 import { useProjectCueStackListQuery } from '../store/cueStacks'
-import { SlotItemContent, type CueSlotAssignDragData } from './CueSlotOverviewPanel'
+import { SlotItemContent, type CueSlotAssignDragData } from './cueSlotShared'
 
 interface EditModeAssignPanelProps {
   projectId: number
