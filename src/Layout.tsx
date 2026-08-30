@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useCallback, lazy, Suspense } from "react"
 import { Outlet, useLocation } from "react-router"
-import { ChevronLeft, Menu, LayoutGrid, Grid3X3, AudioWaveform, Sparkles, Theater } from "lucide-react"
+import { ChevronLeft, Menu, LayoutGrid, Grid3X3, AudioWaveform, Sparkles, Theater, Loader2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { FeatureErrorBoundary } from "./components/FeatureErrorBoundary"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { useMediaQuery } from "@/hooks/useMediaQuery"
@@ -23,7 +25,6 @@ import { useFixtureOverview } from "./hooks/useFixtureOverview"
 import { useStageOverview } from "./hooks/useStageOverview"
 import { useEffectsOverview } from "./hooks/useEffectsOverview"
 import { AiChatToggle } from "./components/ai/AiChatToggle"
-import { AiChatPanel } from "./components/ai/AiChatPanel"
 import { CueSlotOverviewToggle } from "./components/CueSlotOverviewToggle"
 import { CueSlotOverviewPanel, CueSlotDndProvider } from "./components/CueSlotOverviewPanel"
 import { useCueSlotOverview } from "./hooks/useCueSlotOverview"
@@ -36,11 +37,43 @@ import { SyncReauthBanner } from "./components/cloudSync/SyncReauthBanner"
 const DRAWER_WIDTH = 240
 const DRAWER_COLLAPSED_WIDTH = 64
 
+/**
+ * The AI chat panel behind a lazy boundary — react-markdown and its remark/micromark stack are
+ * ~120 kB, and the panel is the only thing in the app that renders Markdown. It sits in Layout
+ * rather than on a route, so the split is a mount latch rather than a route boundary: nothing is
+ * fetched until the operator first opens Lux, and the panel then stays mounted for the rest of
+ * the session because the conversation lives in its own component state and closing must not
+ * discard it.
+ */
+const AiChatPanel = lazy(() =>
+  import("./components/ai/AiChatPanel").then((m) => ({ default: m.AiChatPanel })),
+)
+
+/**
+ * Reserves the page area while a lazily-imported route chunk loads. Everything outside `<main>` —
+ * the drawer, the ShowBar, the overview panels — is already mounted and stays put, so this only
+ * has to fill the scroll container, matching what those routes show while their own queries load.
+ */
+function RouteFallback() {
+  return (
+    <Card className="m-4 p-4 flex items-center justify-center">
+      <Loader2 className="size-6 animate-spin" />
+    </Card>
+  )
+}
+
 export default function Layout() {
   const [open, setOpen] = React.useState(true)
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [selectedFixture, setSelectedFixture] = useState<string | null>(null)
   const [isAiChatVisible, setIsAiChatVisible] = useState(false)
+  // Latched by the first open and never cleared — see the `AiChatPanel` note above. Go through
+  // `setAiChatVisible` rather than `setIsAiChatVisible` so every opener trips the latch.
+  const [hasOpenedAiChat, setHasOpenedAiChat] = useState(false)
+  const setAiChatVisible = useCallback((visible: boolean) => {
+    if (visible) setHasOpenedAiChat(true)
+    setIsAiChatVisible(visible)
+  }, [])
   const [applyFxTarget, setApplyFxTarget] = useState<FxTarget | null>(null)
   const [channelDialogMode, setChannelDialogMode] = useState<"park" | "set" | null>(null)
   const { isVisible: isOverviewVisible, toggle: toggleOverview } = useFixtureOverview()
@@ -186,7 +219,7 @@ export default function Layout() {
                 <FixtureOverviewToggle isVisible={isOverviewVisible} onToggle={toggleOverview} />
                 <CueSlotOverviewToggle isVisible={isCueSlotsVisible} onToggle={toggleCueSlots} />
                 <EffectsOverviewToggle isVisible={isEffectsVisible} isLocked={isEffectsLocked} onToggle={toggleEffects} />
-                <AiChatToggle isVisible={isAiChatVisible} onToggle={() => setIsAiChatVisible(!isAiChatVisible)} />
+                <AiChatToggle isVisible={isAiChatVisible} onToggle={() => setAiChatVisible(!isAiChatVisible)} />
                 <ThemeToggle />
                 <UserMenu />
               </div>
@@ -220,7 +253,14 @@ export default function Layout() {
                 and the viewer is an admin who can act on it. */}
             <main className="flex-1 overflow-auto bg-muted/40 min-w-0">
               <SyncReauthBanner />
-              <Outlet />
+              {/* Outside the Suspense, so a route chunk that never arrives is caught here rather
+                  than unmounting the desk. Keyed by pathname so navigating away from a failed
+                  route clears the boundary instead of pinning the error over every later page. */}
+              <FeatureErrorBoundary key={location.pathname} feature="This page">
+                <Suspense fallback={<RouteFallback />}>
+                  <Outlet />
+                </Suspense>
+              </FeatureErrorBoundary>
             </main>
           </CueSlotDndProvider>
 
@@ -232,11 +272,22 @@ export default function Layout() {
           />
         </div>
 
-        {/* AI Chat Panel */}
-        <AiChatPanel
-          isOpen={isAiChatVisible}
-          onClose={() => setIsAiChatVisible(false)}
-        />
+        {/* AI Chat Panel. Mounted from the first open onwards and never unmounted, so the
+            conversation survives closing the sheet; the fallback is `null` because the panel is
+            an overlay and has no layout of its own to reserve. */}
+        {hasOpenedAiChat && (
+          <FeatureErrorBoundary
+            feature="Lux"
+            className="fixed bottom-4 right-4 z-50 max-w-sm m-0"
+          >
+            <Suspense fallback={null}>
+              <AiChatPanel
+                isOpen={isAiChatVisible}
+                onClose={() => setAiChatVisible(false)}
+              />
+            </Suspense>
+          </FeatureErrorBoundary>
+        )}
 
         {/* Command Palette */}
         <CommandPalette
@@ -248,7 +299,7 @@ export default function Layout() {
             { label: "Fixture Overview", icon: LayoutGrid, isVisible: isOverviewVisible, onToggle: toggleOverview },
             { label: "Cue Slots", icon: Grid3X3, isVisible: isCueSlotsVisible, onToggle: toggleCueSlots },
             { label: "Effects Overview", icon: AudioWaveform, isVisible: isEffectsVisible, onToggle: toggleEffects },
-            { label: "Lux (AI Chat)", icon: Sparkles, isVisible: isAiChatVisible, onToggle: () => setIsAiChatVisible(v => !v) },
+            { label: "Lux (AI Chat)", icon: Sparkles, isVisible: isAiChatVisible, onToggle: () => setAiChatVisible(!isAiChatVisible) },
           ]}
         />
 

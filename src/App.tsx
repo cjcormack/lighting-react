@@ -34,7 +34,6 @@ import {
   LegacyProgramRedirect,
 } from "./routes/ProgrammerPage";
 import { LegacyRunRedirect, LegacyCueStacksRedirect } from "./routes/RunPage";
-import { PromptBookViewerPage, PromptBookRedirect } from "./routes/PromptBookPage";
 import { SurfacesRedirect } from "./routes/Surfaces";
 import { DiagnosticsRedirect } from "./routes/Diagnostics";
 import { CloudSyncHubRedirect } from "./routes/CloudSync";
@@ -42,7 +41,33 @@ import { ProjectSettings, ProjectSettingsRedirect } from "./routes/ProjectSettin
 import { InstallSettings } from "./routes/InstallSettings";
 import { ResetPasswordPage } from "./routes/ResetPasswordPage";
 import { DeviceLoginPage } from "./routes/DeviceLoginPage";
-import { Stage, StageRedirect } from "./routes/Stage";
+
+// Route-level lazy boundaries for two of the four heavy islands.
+//
+// `routes/Stage` pulls @react-three/fiber, drei and postprocessing (~290 kB);
+// `routes/PromptBookPage` pulls react-pdf and pdfjs (~415 kB). Neither is on the path to the
+// login screen, so importing them statically made every cold boot — and every post-update
+// restart — parse both before anything painted. The redirects live in the same modules and so
+// ride the same chunks: visiting `/stage` or `/prompt-book` fetches the chunk to then redirect
+// into a page that needs it anyway.
+//
+// The Suspense boundary these resolve against is in `Layout`, around the router `Outlet`; both
+// routes are children of Layout. `AuthGate` and `BootGate` stay statically imported — they are
+// what decides whether a router renders at all, and neither may sit behind a chunk fetch.
+//
+// This does *not* take `three` itself out of the entry chunk: `lib/stageCoords.ts` is Three-typed
+// and reaches non-3D code through `hooks/useProjectedPatches`, which the Layout's stage overview
+// panel uses. Separating those helpers is a job of its own.
+const Stage = React.lazy(() => import("./routes/Stage").then((m) => ({ default: m.Stage })));
+const StageRedirect = React.lazy(() =>
+  import("./routes/Stage").then((m) => ({ default: m.StageRedirect })),
+);
+const PromptBookViewerPage = React.lazy(() =>
+  import("./routes/PromptBookPage").then((m) => ({ default: m.PromptBookViewerPage })),
+);
+const PromptBookRedirect = React.lazy(() =>
+  import("./routes/PromptBookPage").then((m) => ({ default: m.PromptBookRedirect })),
+);
 
 function PatchesToSettings() {
   const { projectId } = useParams()

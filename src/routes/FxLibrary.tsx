@@ -59,7 +59,7 @@ import {
   useDeleteFxDefinitionMutation,
 } from "../store/fxDefinitions"
 import { Breadcrumbs } from "@/components/Breadcrumbs"
-import { ScriptEditor } from "@/components/scripts/ScriptEditor"
+import { LazyScriptEditor } from "@/components/scripts/LazyScriptEditor"
 import {
   ScriptCompileDialog,
   ScriptRunDialog,
@@ -448,7 +448,7 @@ function EffectDetailSheet({ effect }: { effect: EffectLibraryEntry }) {
         )}
 
         {effect.script && (
-          <ScriptEditor
+          <LazyScriptEditor
             script={{ name, script: effect.script }}
             id={`view-${effect.name}`}
             scriptType={editorType}
@@ -616,7 +616,7 @@ function EditFxDefinitionSheet({
               </Button>
             </div>
           </div>
-          <ScriptEditor
+          <LazyScriptEditor
             script={{ name: currentName, script: currentScript }}
             id={definitionId}
             scriptType={editorType}
@@ -923,7 +923,7 @@ function NewFxDefinitionSheet({
               </Button>
             </div>
           </div>
-          <ScriptEditor
+          <LazyScriptEditor
             script={{ name, script: scriptCode }}
             id="new-fx"
             scriptType={editorType}

@@ -23,7 +23,7 @@ import {
   SheetBody,
   SheetFooter,
 } from '@/components/ui/sheet'
-import { ScriptEditor } from './ScriptEditor'
+import { LazyScriptEditor } from './LazyScriptEditor'
 import {
   ScriptCompileDialog,
   ScriptRunDialog,
@@ -381,7 +381,7 @@ export function ScriptForm({
                 )}
 
                 {/* Code editor */}
-                <ScriptEditor
+                <LazyScriptEditor
                   script={editorScript}
                   id={script?.id ?? 'new'}
                   scriptType={scriptType}

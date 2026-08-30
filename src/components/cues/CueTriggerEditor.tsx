@@ -18,7 +18,7 @@ import {
   useCompileProjectScriptMutation,
   useRunProjectScriptMutation,
 } from '@/store/projects'
-import { ScriptEditor } from '@/components/scripts/ScriptEditor'
+import { LazyScriptEditor } from '@/components/scripts/LazyScriptEditor'
 import {
   ScriptCompileDialog,
   ScriptRunDialog,
@@ -311,7 +311,7 @@ export function CueTriggerEditor({
                   </Button>
                 </div>
               </div>
-              <ScriptEditor
+              <LazyScriptEditor
                 script={{ name: inlineName || 'Inline Hook', script: inlineCode }}
                 id="trigger-inline"
                 scriptType="FX_APPLICATION"
