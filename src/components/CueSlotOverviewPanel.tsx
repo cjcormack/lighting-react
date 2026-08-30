@@ -49,8 +49,22 @@ const PAGE_STORAGE_KEY = 'cue-slot-overview-page'
 
 function getInitialPage(): number {
   if (typeof window === 'undefined') return 0
-  const stored = localStorage.getItem(PAGE_STORAGE_KEY)
-  return stored ? parseInt(stored, 10) || 0 : 0
+  try {
+    const stored = localStorage.getItem(PAGE_STORAGE_KEY)
+    return stored ? parseInt(stored, 10) || 0 : 0
+  } catch {
+    // Storage unavailable — open on page 1, the same as a desk that has never paged.
+    return 0
+  }
+}
+
+/** The page is remembered, not required: a failed write only costs the operator a re-page. */
+function storePage(page: number) {
+  try {
+    localStorage.setItem(PAGE_STORAGE_KEY, String(page))
+  } catch {
+    // Quota exhausted or storage unavailable — the in-session page still moves.
+  }
 }
 
 // ─── DnD data types ───────────────────────────────────────────────────
@@ -277,7 +291,7 @@ function CueSlotOverviewPanelBody() {
 
   const setPagePersist = useCallback((p: number) => {
     setPage(p)
-    localStorage.setItem(PAGE_STORAGE_KEY, String(p))
+    storePage(p)
   }, [])
 
   // Swipe handling for touch page navigation

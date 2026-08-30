@@ -6,8 +6,16 @@ export type Theme = "light" | "dark"
 export function getInitialTheme(): Theme {
   if (typeof window === "undefined") return "light"
 
-  const stored = localStorage.getItem("theme")
-  if (stored === "dark" || stored === "light") return stored
+  // Wrapped because this one runs at module scope in main.tsx, before React mounts and so before
+  // any error boundary exists: `localStorage` throws outright when site data is blocked or in
+  // some embedded views, and a throw here is a blank page with nothing in it to explain itself.
+  // Degrades to the OS preference, which is what a first-time visitor gets anyway.
+  try {
+    const stored = localStorage.getItem("theme")
+    if (stored === "dark" || stored === "light") return stored
+  } catch {
+    // Storage unavailable — fall through to the OS preference.
+  }
 
   return window.matchMedia("(prefers-color-scheme: dark)").matches
     ? "dark"

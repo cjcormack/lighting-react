@@ -13,7 +13,12 @@ export default function ThemeToggle() {
 
   useEffect(() => {
     applyThemeClass(theme)
-    localStorage.setItem("theme", theme)
+    try {
+      localStorage.setItem("theme", theme)
+    } catch {
+      // Quota exhausted or storage unavailable. The class is already on the document, so the
+      // theme holds for this session; it just won't survive a reload.
+    }
   }, [theme])
 
   const toggleTheme = () => {
