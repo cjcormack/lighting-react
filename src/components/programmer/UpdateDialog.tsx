@@ -178,23 +178,10 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
                   </p>
                 ))}
                 {/* A separate field from `results` rather than a cue-shaped entry, matching the
-                    wire: a palette Update writes entries, not assignments, and what it moves is
-                    every consumer of the palette rather than one cue. That second number is the
-                    one the operator most needs — it is the rest of the show changing. */}
-                {result.paletteResult && (
-                  <p>
-                    Updated “{result.paletteResult.paletteName}” —{' '}
-                    {result.paletteResult.entriesWritten} value
-                    {result.paletteResult.entriesWritten === 1 ? '' : 's'} written
-                    {result.paletteResult.cuesRepublished.length > 0
-                      ? `, ${result.paletteResult.cuesRepublished.length} live cue(s) moved with it`
-                      : ''}
-                    .
-                  </p>
-                )}
-                {/* The Look arm of the same field. What it moves is every cue layering the Look,
-                    which is the number that matters most here — it is the rest of the show
-                    changing, and it is the payoff of a look being a reference at all. */}
+                    wire: a Look Update writes rows, not assignments, and what it moves is every
+                    cue layering the Look rather than one cue. That second number is the one the
+                    operator most needs — it is the rest of the show changing, and it is the payoff
+                    of a Look being a reference at all. */}
                 {result.lookResult && (
                   <p>
                     Updated “{result.lookResult.lookName}” — {result.lookResult.rowsWritten} row

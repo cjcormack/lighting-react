@@ -245,30 +245,10 @@ export interface UpdateResult {
 }
 
 /**
- * Mode A written back into a palette rather than a cue.
+ * Mode A written back into a **Look** rather than a cue.
  *
  * A separate field from `results` rather than a nullable `cueId` on `UpdateResult`, matching the
  * backend: everything that already reads `results` for cue counts keeps working untouched.
- *
- * Unreachable from this client — nothing includes a palette any more, and a Look include disables
- * Update — but the field is still on the wire, so the shape stays until the record rewrite retires
- * the route. It no longer carries an attribute type: a Look declares none.
- */
-export interface PaletteUpdateResult {
-  paletteId: number
-  paletteName: string
-  entriesWritten: number
-  /** What the re-resolve moved — the live consumers of the palette. */
-  programmerKeysRefreshed: number
-  cuesRepublished: number[]
-}
-
-/**
- * Mode A written back into a **Look** rather than a cue.
- *
- * Separate from [PaletteUpdateResult] rather than replacing it, matching the backend: the palette
- * arm is still mounted and retires with its tables, and the two write through different code into
- * different tables. Collapsing them would make one field mean two destinations.
  */
 export interface LookUpdateResult {
   lookId: number
@@ -283,9 +263,7 @@ export interface UpdateResponse {
   applied: boolean
   mode: 'A' | 'B' | 'CHECKLIST'
   results: UpdateResult[]
-  /** Set when Mode A's include target was a palette. Mode B is cue-only, by design. */
-  paletteResult?: PaletteUpdateResult
-  /** Set when Mode A's include target was a Look. */
+  /** Set when Mode A's include target was a Look. Mode B is cue-only, by design. */
   lookResult?: LookUpdateResult
   checklist?: UpdateChecklist
   skipped: ProgrammerSkip[]
@@ -395,10 +373,6 @@ export const programmerOpsApi = restApi.injectEndpoints({
           ? [
               { type: 'CueList', id: projectId },
               'CueList',
-              // Mode A can write a palette instead of a cue, which changes what every
-              // referencing row resolves to. Unreachable from this client today (see
-              // PaletteUpdateResult) but the tag stays with the field.
-              ...(result.paletteResult ? (['Look', 'LookList'] as const) : []),
             ]
           : [],
     }),
