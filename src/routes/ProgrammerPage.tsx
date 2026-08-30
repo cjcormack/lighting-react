@@ -22,8 +22,9 @@ import { ProgrammerWorkspace } from '@/components/programmer/ProgrammerWorkspace
 import { useInclude } from '@/components/programmer/useInclude'
 import { usePersistentState } from '@/hooks/usePersistentState'
 import { useShowBarProps } from '@/hooks/useShowBarProps'
+import { lightingApi } from '@/api/lightingApi'
 import { includedCueId } from '@/lib/includedTarget'
-import { programmerClearAll, useProgrammerSummaryQuery } from '@/store/programmer'
+import { programmerClearAll } from '@/store/programmer'
 import { useCurrentProjectQuery, useProjectQuery } from '@/store/projects'
 
 const GROUPED_KEY = 'programmer.grouped'
@@ -153,7 +154,6 @@ export function ProgrammerPage() {
  */
 const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: number }) {
   const sheets = useProgrammerSheets()
-  const { data: summary } = useProgrammerSummaryQuery()
   const { includeCue } = useInclude(projectId)
   // Grouping is a toggle rather than a route split: busking a whole wash wants group rows, plotting
   // an individual mover wants the flat list, and both are the same grid.
@@ -162,11 +162,16 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
   // full-width band above the workspace the grid sits in.
   const [columnVisibility, setColumnVisibility] = useColumnVisibility()
 
-  const cueId = includedCueId(summary?.lastIncluded ?? null)
-
   // Revert is drop-everything-then-re-Include. There is no server-side revert, and those two steps
   // in that order are what the operator means: throw away the busk, load the cue again.
+  //
+  // The include target is read at click time rather than subscribed via
+  // `useProgrammerSummaryQuery`: this component is the memo barrier for the whole grid/rail
+  // subtree, and a summary subscription held *here* re-rendered all of it on every Include,
+  // Record, blind flip or entry-count move — a wake `memo` cannot block, since it only
+  // compares props. Read before `programmerClearAll`, which is about to clear the target.
   const handleRevert = () => {
+    const cueId = includedCueId(lightingApi.programmer.getState().lastIncluded)
     programmerClearAll(0)
     if (cueId != null) void includeCue(cueId)
   }
