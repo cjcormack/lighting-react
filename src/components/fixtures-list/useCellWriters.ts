@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { lightingApi } from '../../api/lightingApi'
-import { useEditorContext } from '../../components/lighting-editor/EditorContext'
+import { useEditorContext } from '../../components/programmer/EditorContext'
 import {
   parseProgrammerEntryValue,
   parseProgrammerValue,

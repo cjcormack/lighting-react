@@ -51,7 +51,7 @@ vi.mock('@/components/ShowHeader', () => ({
   ShowHeader: ({ view }: { view: string }) => <div data-testid="header">{view}</div>,
 }))
 vi.mock('@/components/ShowBar', () => ({ ShowBar: () => <div data-testid="show-bar" /> }))
-vi.mock('@/components/lighting-editor/EditorContext', () => ({
+vi.mock('@/components/programmer/EditorContext', () => ({
   EditorContextProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
 vi.mock('@/components/programmer/useInclude', () => ({

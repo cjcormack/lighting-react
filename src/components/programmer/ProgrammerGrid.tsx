@@ -4,12 +4,12 @@ import { describeCellScope } from '@/components/fixtures-list/cellSelectionModel
 import { COLUMN_DEFS, type ColumnKey } from '@/components/fixtures-list/columns'
 import type { ColumnVisibility } from '@/components/fixtures-list/ColumnsMenu'
 import { FixturesListContainer } from '@/routes/FixturesList'
-import { EditorContextProvider } from '@/components/lighting-editor/EditorContext'
+import { EditorContextProvider } from '@/components/programmer/EditorContext'
 import { LayerRowNotices } from './LayerRowNotices'
 import { TemplateStrip } from './TemplateStrip'
 import { useLookRowStore } from './LookRowStore'
 import { useProgrammerScope } from './ProgrammerScope'
-import type { EditorContextValue } from '@/components/lighting-editor/EditorContext'
+import type { EditorContextValue } from '@/components/programmer/EditorContext'
 
 /**
  * The programmer's value grid: the fixtures-list spreadsheet with per-cell ownership colouring,
