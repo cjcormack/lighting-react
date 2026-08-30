@@ -16,6 +16,7 @@ import {
   runnerSlice,
 } from '../store/runnerSlice'
 import { useRunnerAnimation } from './useRunnerAnimation'
+import { useAnimatedProgress } from './useAnimatedProgress'
 
 interface UseShowTransportArgs {
   projectId: number
@@ -206,14 +207,24 @@ export function useShowTransport({
     onAutoAdvanceComplete: handleAutoAdvanceComplete,
   })
 
-  const isFadingActive = runner.activeCueId != null && runner.fadeProgress < 1
-  const fadeProgress = isFadingActive ? runner.fadeProgress : null
-  const fadeRemainMs = useMemo(() => {
+  // The store only carries the fade/auto *descriptors* (written once per transition); the
+  // frame-rate progress is computed here, locally, so only this hook's host re-renders per frame
+  // rather than every selectStackRunner subscriber. A live cue with no descriptor yet (GO landed,
+  // the animation effect hasn't) reads as progress 0, as the old reset-to-0-on-go did.
+  const fadeAnim =
+    runner.activeCueId != null && runner.fade?.cueId === runner.activeCueId ? runner.fade : null
+  const animatedFade = useAnimatedProgress(fadeAnim)
+  const rawFadeProgress = runner.activeCueId == null ? null : (animatedFade ?? 0)
+  const isFadingActive = rawFadeProgress != null && rawFadeProgress < 1
+  const fadeProgress = isFadingActive ? rawFadeProgress : null
+  const fadeRemainMs = (() => {
     if (!isFadingActive || !animCue) return null
     const dur = animCue.fadeDurationMs ?? 0
     if (dur <= 0) return null
-    return Math.max(0, dur * (1 - runner.fadeProgress))
-  }, [isFadingActive, animCue, runner.fadeProgress])
+    return Math.max(0, dur * (1 - rawFadeProgress))
+  })()
+
+  const autoProgress = useAnimatedProgress(runner.auto)
 
   const go = useCallback(() => {
     onBeforeGo?.()
@@ -265,7 +276,7 @@ export function useShowTransport({
     serverActiveCueId: activeStack?.activeCueId ?? null,
     standbyCueId: runner.standbyCueId,
     completedCueIds: runner.completedCueIds,
-    autoProgress: runner.autoProgress,
+    autoProgress,
     fadeProgress,
     fadeRemainMs,
     goDisabled,

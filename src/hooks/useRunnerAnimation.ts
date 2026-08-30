@@ -1,6 +1,6 @@
 import { useRef, useCallback, useEffect } from 'react'
 import { useDispatch } from 'react-redux'
-import { setFadeProgress, setAutoProgress, markDone } from '../store/runnerSlice'
+import { startFade, startAuto, animationsCancelled, markDone } from '../store/runnerSlice'
 
 interface UseRunnerAnimationOptions {
   stackId: number
@@ -60,8 +60,7 @@ export function useRunnerAnimation({
       cancelAnimationFrame(autoFrameRef.current)
       autoFrameRef.current = null
     }
-    dispatch(setFadeProgress({ stackId: stackIdRef.current, progress: 0 }))
-    dispatch(setAutoProgress({ stackId: stackIdRef.current, progress: null }))
+    dispatch(animationsCancelled({ stackId: stackIdRef.current }))
   }, [dispatch])
 
   // Start fade animation when activeCueId changes (or the same cue is re-fired, which
@@ -77,7 +76,7 @@ export function useRunnerAnimation({
       const delay = autoAdvanceDelayRef.current ?? 0
 
       const finish = () => {
-        dispatch(setAutoProgress({ stackId: sid, progress: null }))
+        // markDone clears the auto descriptor along with the cursor.
         dispatch(markDone({ stackId: sid, cueId }))
         onAutoCompleteRef.current()
       }
@@ -91,10 +90,11 @@ export function useRunnerAnimation({
       }
 
       const t0 = performance.now()
+      dispatch(startAuto({ stackId: sid, startMs: t0, durationMs: delay }))
+      // The loop below only watches for completion — the countdown itself is drawn by whoever
+      // reads the descriptor (see useAnimatedProgress), so nothing is dispatched per frame.
       const tick = (t: number) => {
-        const p = Math.min((t - t0) / delay, 1)
-        dispatch(setAutoProgress({ stackId: sid, progress: p }))
-        if (p < 1) {
+        if (t - t0 < delay) {
           autoFrameRef.current = requestAnimationFrame(tick)
         } else {
           autoFrameRef.current = null
@@ -110,10 +110,10 @@ export function useRunnerAnimation({
       // Rewind the clock by however much of the fade already happened server-side, so a late
       // frame animates the remainder rather than the whole thing.
       const t0 = performance.now() - Math.min(startElapsedRef.current, dur)
+      dispatch(startFade({ stackId: sid, cueId, startMs: t0, durationMs: dur }))
+      // Completion watcher only — same shape as the auto loop above.
       const tick = (t: number) => {
-        const p = Math.min((t - t0) / dur, 1)
-        dispatch(setFadeProgress({ stackId: sid, progress: p }))
-        if (p < 1) {
+        if (t - t0 < dur) {
           fadeFrameRef.current = requestAnimationFrame(tick)
         } else {
           fadeFrameRef.current = null

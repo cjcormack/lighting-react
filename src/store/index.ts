@@ -22,15 +22,26 @@ export const store = configureStore({
   },
 
   middleware: (getDefaultMiddleware) => {
+    // The dev-only invariant middleware deep-traverses every non-ignored path on EVERY dispatch,
+    // twice (before/after) — whichever slice the action touched. Dispatches arrive continuously
+    // during a show (WS run-state frames, RTK Query lifecycle actions, selection updates at
+    // drag-select rate), so the hand-written slices are excluded along with RTK Query's
+    // internals — otherwise dev profiling is dominated by the invariant scans rather than the
+    // app. The trade-off is real: an in-place mutation of, say, `completedCueIds` outside a
+    // reducer now goes undetected in dev — small, plain-Immer slices, judged worth it.
+    const ignoredPaths = [
+      // RTK Query internal paths - subscription functions / large cache state
+      'restApi.queries',
+      'restApi.mutations',
+      'restApi.subscriptions',
+      'runner',
+      'selection',
+      'saveStatus',
+      'editLock',
+    ]
     return getDefaultMiddleware({
-      serializableCheck: {
-        // Ignore RTK Query internal paths - contains subscription functions
-        ignoredPaths: ['restApi.queries', 'restApi.mutations', 'restApi.subscriptions'],
-      },
-      immutableCheck: {
-        // Ignore RTK Query internal paths - large state with many cache entries
-        ignoredPaths: ['restApi.queries', 'restApi.mutations', 'restApi.subscriptions'],
-      },
+      serializableCheck: { ignoredPaths },
+      immutableCheck: { ignoredPaths },
       // Runs after restApi.middleware so it sees the rejected endpoint actions RTK Query
       // dispatches. Any mutation failure not claimed by its call site becomes a toast.
     }).concat(restApi.middleware, errorToastMiddleware)

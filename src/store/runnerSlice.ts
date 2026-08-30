@@ -1,12 +1,35 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import type { CueRunStateEvent, CueStackCueEntry } from '../api/cueStacksApi'
 
+/**
+ * A running animation, described once rather than streamed. `startMs` is a `performance.now()`
+ * timestamp (already rewound by the server's `fadeElapsedMs` for a mid-fade join), so progress at
+ * any instant is `(now - startMs) / durationMs` — computed locally by whoever draws it (see
+ * `useAnimatedProgress`) instead of dispatched into the store at 60 Hz, which re-rendered every
+ * `selectStackRunner` subscriber per frame and drowned dev profiling in invariant middleware.
+ */
+export interface RunnerAnimSpan {
+  startMs: number
+  durationMs: number
+}
+
+interface FadeAnim extends RunnerAnimSpan {
+  /** The cue the fade belongs to — guards a descriptor outliving its cue. */
+  cueId: number
+}
+
 interface StackRunnerState {
   activeCueId: number | null
   standbyCueId: number | null
   completedCueIds: number[]
-  fadeProgress: number
-  autoProgress: number | null
+  /**
+   * The live cue's fade, written once by `useRunnerAnimation` when the animation starts. Null
+   * while nothing has started — a live cue with no descriptor reads as progress 0, which is the
+   * old reset-to-0-on-go window.
+   */
+  fade: FadeAnim | null
+  /** The auto-advance countdown, same write-once scheme. Null when no timer is running. */
+  auto: RunnerAnimSpan | null
   /**
    * How far into the live cue's fade the *server* was when it told us, in ms. The animation
    * starts there rather than at 0, so a session that joins mid-fade — or one that hears about
@@ -48,8 +71,8 @@ function getOrCreate(state: RunnerState, stackId: number): StackRunnerState {
       activeCueId: null,
       standbyCueId: null,
       completedCueIds: [],
-      fadeProgress: 0,
-      autoProgress: null,
+      fade: null,
+      auto: null,
       fadeStartElapsedMs: 0,
       serverTransition: 0,
       serverActiveCueId: null,
@@ -112,16 +135,16 @@ export const runnerSlice = createSlice({
       }
 
       s.activeCueId = s.standbyCueId
-      s.fadeProgress = 0
-      s.autoProgress = null
+      s.fade = null
+      s.auto = null
       s.standbyCueId = nextStandardCue(cues, s.activeCueId, loop)
     },
 
     back(state, action: PayloadAction<{ stackId: number; cues: CueStackCueEntry[] }>) {
       const { stackId, cues } = action.payload
       const s = getOrCreate(state, stackId)
-      s.fadeProgress = 0
-      s.autoProgress = null
+      s.fade = null
+      s.auto = null
 
       if (s.activeCueId != null) {
         // Mid-fade: return standby to the cue that was fading
@@ -139,14 +162,39 @@ export const runnerSlice = createSlice({
       }
     },
 
-    setFadeProgress(state, action: PayloadAction<{ stackId: number; progress: number }>) {
-      const s = getOrCreate(state, action.payload.stackId)
-      s.fadeProgress = action.payload.progress
+    /**
+     * The animation driver telling the store a fade has started — once per transition, with the
+     * clock already rewound for a mid-fade join. Everything per-frame stays out of the store.
+     */
+    startFade(
+      state,
+      action: PayloadAction<{ stackId: number; cueId: number; startMs: number; durationMs: number }>,
+    ) {
+      const { stackId, cueId, startMs, durationMs } = action.payload
+      const s = getOrCreate(state, stackId)
+      s.fade = { cueId, startMs, durationMs }
+      // A fade starting means any auto-advance countdown is over. Normally markDone already
+      // cleared it, but a host unmounting mid-countdown cancels the completion watcher before
+      // markDone fires — without this, the remount restarts the fade under a stale countdown
+      // pinned at 100%.
+      s.auto = null
     },
 
-    setAutoProgress(state, action: PayloadAction<{ stackId: number; progress: number | null }>) {
+    /** The auto-advance countdown starting. Cleared by `markDone` or `animationsCancelled`. */
+    startAuto(
+      state,
+      action: PayloadAction<{ stackId: number; startMs: number; durationMs: number }>,
+    ) {
+      const { stackId, startMs, durationMs } = action.payload
+      const s = getOrCreate(state, stackId)
+      s.auto = { startMs, durationMs }
+    },
+
+    /** `cancelAnimations` — stand both animations down without touching the cursors. */
+    animationsCancelled(state, action: PayloadAction<{ stackId: number }>) {
       const s = getOrCreate(state, action.payload.stackId)
-      s.autoProgress = action.payload.progress
+      s.fade = null
+      s.auto = null
     },
 
     markDone(state, action: PayloadAction<{ stackId: number; cueId: number }>) {
@@ -155,9 +203,11 @@ export const runnerSlice = createSlice({
         s.completedCueIds.push(action.payload.cueId)
       }
       s.activeCueId = null
-      // Keep fadeProgress at its current value (1.0) so the progress bar stays
-      // at 100% until the next go() resets it.
-      s.autoProgress = null
+      // Clearing `activeCueId` is what ends the fade for every consumer (they all gate on it
+      // before reading the descriptors), so the descriptors are cleared too rather than left
+      // behind as unreachable state.
+      s.fade = null
+      s.auto = null
     },
 
     resetStack(
@@ -186,8 +236,8 @@ export const runnerSlice = createSlice({
           // is the fallback for a caller that doesn't, e.g. a stack loaded without run state.
           standbyCueId: serverNextCueId ?? nextStandardCue(cues, serverActiveCueId, loop ?? false),
           completedCueIds: completed,
-          fadeProgress: 0,
-          autoProgress: null,
+          fade: null,
+          auto: null,
           fadeStartElapsedMs: 0,
           serverTransition: 0,
           serverActiveCueId,
@@ -199,8 +249,8 @@ export const runnerSlice = createSlice({
           activeCueId: null,
           standbyCueId: serverNextCueId ?? firstStandardCue(cues),
           completedCueIds: [],
-          fadeProgress: 0,
-          autoProgress: null,
+          fade: null,
+          auto: null,
           fadeStartElapsedMs: 0,
           serverTransition: 0,
           serverActiveCueId: null,
@@ -252,8 +302,8 @@ export const runnerSlice = createSlice({
       if (activeCueId == null) {
         // Stack stopped.
         s.activeCueId = null
-        s.fadeProgress = 0
-        s.autoProgress = null
+        s.fade = null
+        s.auto = null
         return
       }
 
@@ -263,16 +313,16 @@ export const runnerSlice = createSlice({
         // or an arming frame would kill a fade this session is legitimately drawing.
         if (previous !== activeCueId) {
           s.activeCueId = null
-          s.fadeProgress = 0
-          s.autoProgress = null
+          s.fade = null
+          s.auto = null
         }
         return
       }
 
       s.activeCueId = activeCueId
       s.fadeStartElapsedMs = fadeElapsedMs ?? 0
-      s.fadeProgress = 0
-      s.autoProgress = null
+      s.fade = null
+      s.auto = null
       s.serverTransition += 1
     },
   },
@@ -281,8 +331,9 @@ export const runnerSlice = createSlice({
 export const {
   go,
   back,
-  setFadeProgress,
-  setAutoProgress,
+  startFade,
+  startAuto,
+  animationsCancelled,
   markDone,
   resetStack,
   setStandby,
@@ -298,8 +349,8 @@ const EMPTY_STACK_RUNNER: StackRunnerState = {
   activeCueId: null,
   standbyCueId: null,
   completedCueIds: [],
-  fadeProgress: 0,
-  autoProgress: null,
+  fade: null,
+  auto: null,
   fadeStartElapsedMs: 0,
   serverTransition: 0,
   serverActiveCueId: null,
