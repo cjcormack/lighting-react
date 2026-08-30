@@ -34,32 +34,16 @@ import { useApplyCueMutation, useStopCueMutation, useActiveCueIds, useActiveCueS
 import { useActivateCueStackMutation, useDeactivateCueStackMutation } from '../store/cueStacks'
 import { EditModeAssignPanel } from './CueSlotEditAssignPanel'
 import { CollapsiblePanel } from './CollapsiblePanel'
+import { usePersistentState } from '@/hooks/usePersistentState'
 import { SlotItemContent, type CueSlotAssignDragData } from './cueSlotShared'
 
 export { type CueSlot } from '../store/cueSlots'
 
 const SLOTS_PER_PAGE = 8
+// Read and written through `usePersistentState`, which already wraps both directions. The
+// encoding is unchanged by the move: this value is a number, and `JSON.stringify(3)` is the same
+// `"3"` the hand-rolled `String(page)` wrote, so a desk's stored page survives the switch.
 const PAGE_STORAGE_KEY = 'cue-slot-overview-page'
-
-function getInitialPage(): number {
-  if (typeof window === 'undefined') return 0
-  try {
-    const stored = localStorage.getItem(PAGE_STORAGE_KEY)
-    return stored ? parseInt(stored, 10) || 0 : 0
-  } catch {
-    // Storage unavailable — open on page 1, the same as a desk that has never paged.
-    return 0
-  }
-}
-
-/** The page is remembered, not required: a failed write only costs the operator a re-page. */
-function storePage(page: number) {
-  try {
-    localStorage.setItem(PAGE_STORAGE_KEY, String(page))
-  } catch {
-    // Quota exhausted or storage unavailable — the in-session page still moves.
-  }
-}
 
 // ─── DnD data types ───────────────────────────────────────────────────
 
@@ -243,7 +227,7 @@ function CueSlotOverviewPanelBody() {
   const { data: slots } = useProjectCueSlotsQuery(projectId!, { skip: !projectId })
   const { isEditMode, exitEditMode } = useCueSlotDnd()
 
-  const [page, setPage] = useState(getInitialPage)
+  const [page, setPagePersist] = usePersistentState<number>(PAGE_STORAGE_KEY, 0)
 
   const activeCueIds = useActiveCueIds(projectId)
   const activeCueStackIds = useActiveCueStackIds(projectId)
@@ -275,11 +259,6 @@ function CueSlotOverviewPanelBody() {
   }, [slots])
 
   const totalPages = Math.max(1, maxUsedPage + 2)
-
-  const setPagePersist = useCallback((p: number) => {
-    setPage(p)
-    storePage(p)
-  }, [])
 
   // Swipe handling for touch page navigation
   const swipeStartX = useRef<number | null>(null)
@@ -405,7 +384,10 @@ function CueSlotOverviewPanelBody() {
       if (!panelRef.current) return
       const rect = panelRef.current.getBoundingClientRect()
       const activator = event.activatorEvent as PointerEvent
-      if (!activator.clientX) return
+      // `== null`, not falsy: a drag begun hard against the left edge of the screen — or from a
+      // touch that reports 0 — has a perfectly valid `clientX` of 0, and a falsy test disabled
+      // edge auto-paging for that entire drag.
+      if (activator.clientX == null) return
       const currentX = activator.clientX + event.delta.x
 
       const edgeThreshold = 40

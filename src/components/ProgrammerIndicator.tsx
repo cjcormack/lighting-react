@@ -2,6 +2,7 @@ import { EyeOff, SlidersHorizontal } from 'lucide-react'
 import { Link, useLocation } from 'react-router'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { pathHasSegment } from '@/lib/navMatch'
 import { useProgrammerSummaryQuery } from '../store/programmer'
 import { useCurrentProjectQuery } from '../store/projects'
 
@@ -40,14 +41,14 @@ export function ProgrammerIndicator({
   if (entryCount === 0 && !reportBlind) return null
 
   // The programmer is its own page again, so the link goes there. The "am I already there?" test
-  // stays segment-aware rather than a bare `startsWith`, which is a trap in both directions: while
+  // is segment-aware rather than a bare `startsWith`, which is a trap in both directions: while
   // this pointed at `/program`, the sibling `/projects/1/programmer` DID start with it — and would
   // have read as "already there" on the one page that needed the link least, and as "not there" the
-  // other way round. Same idiom as `mostSpecificActiveId`; a subroute still counts as being here.
+  // other way round. It used to say so by hand; it now shares `pathHasSegment` with
+  // `mostSpecificActiveId`, which is the third site to have wanted exactly this. A subroute still
+  // counts as being here.
   const programmerPath = currentProject ? `/projects/${currentProject.id}/programmer` : null
-  const onProgrammer =
-    programmerPath != null &&
-    (location.pathname === programmerPath || location.pathname.startsWith(`${programmerPath}/`))
+  const onProgrammer = programmerPath != null && pathHasSegment(location.pathname, programmerPath)
 
   const body = (
     <span
