@@ -46,6 +46,7 @@ export function useProgrammerRowSnapshot<T>(
 
   const cachedRef = useRef<{
     cells: readonly RowCell[]
+    keys: readonly CellPropertyKey[]
     version: number
     snapshot: T
   } | null>(null)
@@ -54,6 +55,13 @@ export function useProgrammerRowSnapshot<T>(
   const subscribe = useCallback(
     (callback: () => void) => {
       if (subscribedKeys.length === 0) return () => {}
+
+      // Registration itself invalidates: a notification can land between a row's render and
+      // this passive effect (React yields under a time-sliced scope switch), and it would
+      // otherwise be lost — the row wasn't subscribed yet, and nothing re-announces it. The
+      // post-subscribe snapshot check then recomputes once, which is the price of never
+      // serving that gap's value.
+      versionRef.current += 1
 
       const bump = () => {
         versionRef.current += 1
@@ -80,14 +88,27 @@ export function useProgrammerRowSnapshot<T>(
 
   const getSnapshot = useCallback((): T => {
     if (subscribedKeys.length === 0) return emptySnapshot
-    // Cache on both the programmer version and the cell identity: a repatch or a column
-    // toggle changes what to aggregate without any programmer event firing.
+    // Cache on the programmer version AND the cell identity (a repatch or a column toggle
+    // changes what to aggregate without any programmer event firing) AND the subscription set's
+    // identity. The last one is what heals an off→on cycle: `versionRef` only advances from
+    // notifications received *while subscribed*, and a change during an off window is never
+    // re-announced (`changedKeys` diffs against the api's own maps, which kept advancing), so a
+    // snapshot cached before the hook was switched off would otherwise be served again on
+    // re-entry — `cells` identity survives a scope switch, and the grid never remounts. A
+    // (re)registered subscription set always arrives as a fresh `subscribedKeys` array, so its
+    // identity invalidates during the re-entry render itself, before any stale frame paints;
+    // the version bump in `subscribe` closes the remaining render→registration gap.
     const cached = cachedRef.current
-    if (cached && cached.cells === cells && cached.version === versionRef.current) {
+    if (
+      cached &&
+      cached.cells === cells &&
+      cached.keys === subscribedKeys &&
+      cached.version === versionRef.current
+    ) {
       return cached.snapshot
     }
     const snapshot = computeSnapshot(cells)
-    cachedRef.current = { cells, version: versionRef.current, snapshot }
+    cachedRef.current = { cells, keys: subscribedKeys, version: versionRef.current, snapshot }
     return snapshot
   }, [cells, subscribedKeys, emptySnapshot, computeSnapshot])
 
