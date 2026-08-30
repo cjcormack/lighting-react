@@ -154,7 +154,6 @@ export type GroupSliderValueResult = {
   max: number
   isUniform: boolean
   displayText: string
-  values: number[]
 }
 
 // Empty-group results are module constants rather than fresh literals: `useSyncExternalStore`
@@ -165,7 +164,6 @@ const EMPTY_SLIDER_RESULT: GroupSliderValueResult = {
   max: 0,
   isUniform: true,
   displayText: '0%',
-  values: [],
 }
 
 /**
@@ -184,23 +182,14 @@ export function useGroupSliderValues(
   )
 
   const getSnapshot = useCallback((): GroupSliderValueResult => {
-    // Wrapped rather than point-free: `read` takes one argument, but `map` would hand it the
-    // array index as a second and any later signature change would silently pick it up.
     const read = readerFor(source)
-    const values = property.memberChannels.map((ch) => read(ch))
-
     const aggregate = aggregateCellValue(sliderResolutions(property), read)
     if (aggregate?.kind !== 'slider') return EMPTY_SLIDER_RESULT
     const { min, max, isUniform } = aggregate
 
     // Check if values changed
     const cached = cachedRef.current
-    if (
-      cached &&
-      cached.min === min &&
-      cached.max === max &&
-      cached.values.length === values.length
-    ) {
+    if (cached && cached.min === min && cached.max === max && cached.isUniform === isUniform) {
       return cached
     }
 
@@ -209,7 +198,7 @@ export function useGroupSliderValues(
     const maxPct = Math.round((max / 255) * 100)
     const displayText = isUniform ? `${minPct}%` : `${minPct}-${maxPct}%`
 
-    const result = { min, max, isUniform, displayText, values }
+    const result = { min, max, isUniform, displayText }
     cachedRef.current = result
     return result
   }, [property, source])
@@ -381,6 +370,24 @@ export function computeGroupColourValues(
   }
 }
 
+// The aggregates above are permutation-invariant over `members` (two heads swapping colours
+// leaves every avg/beam field unchanged), but `members` is exactly what `MultiPixelAppearance`
+// maps into per-pixel stage segments — so a colour chase needs its own, elementwise, compare.
+function colourMembersEqual(
+  a: GroupColourValueResult['members'],
+  b: GroupColourValueResult['members'],
+): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i]
+    const y = b[i]
+    if (x.r !== y.r || x.g !== y.g || x.b !== y.b || x.w !== y.w || x.a !== y.a || x.uv !== y.uv) {
+      return false
+    }
+  }
+  return true
+}
+
 /**
  * Hook to get aggregated colour values from all group members.
  */
@@ -424,7 +431,8 @@ export function useGroupColourValues(
       cached.beamR === result.beamR &&
       cached.beamG === result.beamG &&
       cached.beamB === result.beamB &&
-      cached.beamIntensity === result.beamIntensity
+      cached.beamIntensity === result.beamIntensity &&
+      colourMembersEqual(cached.members, result.members)
     ) {
       return cached
     }
@@ -479,11 +487,6 @@ export type GroupPositionValueResult = {
   avgTilt: number
   avgPanNormalized: number
   avgTiltNormalized: number
-  members: Array<{
-    fixtureKey: string
-    pan: number
-    tilt: number
-  }>
 }
 
 const EMPTY_POSITION_RESULT: GroupPositionValueResult = {
@@ -493,7 +496,6 @@ const EMPTY_POSITION_RESULT: GroupPositionValueResult = {
   avgTilt: 128,
   avgPanNormalized: 0.5,
   avgTiltNormalized: 0.5,
-  members: [],
 }
 
 /**
@@ -520,12 +522,6 @@ export function useGroupPositionValues(
 
   const getSnapshot = useCallback((): GroupPositionValueResult => {
     const read = readerFor(source)
-    const members = property.memberPositionChannels.map((m) => ({
-      fixtureKey: m.fixtureKey,
-      pan: read(m.panChannel),
-      tilt: read(m.tiltChannel),
-    }))
-
     const aggregate = aggregateCellValue(positionResolutions(property), read)
     if (aggregate?.kind !== 'position') return EMPTY_POSITION_RESULT
 
@@ -559,7 +555,6 @@ export function useGroupPositionValues(
       avgTilt,
       avgPanNormalized,
       avgTiltNormalized,
-      members,
     }
     cachedRef.current = result
     return result
@@ -604,13 +599,11 @@ export type GroupSettingValueResult = {
   isUniform: boolean
   displayText: string
   currentOption?: GroupSettingPropertyDescriptor['options'][number]
-  values: number[]
 }
 
 const EMPTY_SETTING_RESULT: GroupSettingValueResult = {
   isUniform: true,
   displayText: 'No members',
-  values: [],
 }
 
 /**
@@ -634,8 +627,6 @@ export function useGroupSettingValues(
 
   const getSnapshot = useCallback((): GroupSettingValueResult => {
     const read = readerFor(source)
-    const values = property.memberChannels.map((m) => read(m.channel))
-
     const aggregate = aggregateCellValue(settingResolutions(property), read)
     if (aggregate?.kind !== 'setting') return EMPTY_SETTING_RESULT
 
@@ -659,7 +650,6 @@ export function useGroupSettingValues(
       isUniform,
       displayText,
       currentOption,
-      values,
     }
     cachedRef.current = result
     return result
