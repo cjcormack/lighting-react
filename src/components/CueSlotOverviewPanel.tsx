@@ -79,14 +79,18 @@ export interface CueSlotDropTargetData {
 // ─── Context for DnD + edit mode ─────────────────────────────────────
 
 interface CueSlotDndContextValue {
-  isSlotPanelVisible: boolean
+  /**
+   * Whether a slot drag is in flight. Lives on the provider rather than in the panel body,
+   * because the body is what it exists to keep mounted — see [CueSlotOverviewPanel].
+   */
+  isDragging: boolean
   isEditMode: boolean
   enterEditMode: () => void
   exitEditMode: () => void
 }
 
 const CueSlotDndContext = createContext<CueSlotDndContextValue>({
-  isSlotPanelVisible: false,
+  isDragging: false,
   isEditMode: false,
   enterEditMode: () => {},
   exitEditMode: () => {},
@@ -107,6 +111,7 @@ export function CueSlotDndProvider({ isVisible, children }: CueSlotDndProviderPr
   const [assignSlot] = useAssignCueSlotMutation()
   const [swapSlots] = useSwapCueSlotsMutation()
   const [draggedLabel, setDraggedLabel] = useState<string | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
 
   const enterEditMode = useCallback(() => setIsEditMode(true), [])
@@ -122,6 +127,7 @@ export function CueSlotDndProvider({ isVisible, children }: CueSlotDndProviderPr
   )
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
+    setIsDragging(true)
     const data = event.active.data.current
     if (data?.type === 'slot-item') {
       setDraggedLabel((data as CueSlotSwapDragData).slot.itemName)
@@ -130,8 +136,14 @@ export function CueSlotDndProvider({ isVisible, children }: CueSlotDndProviderPr
     }
   }, [])
 
+  const handleDragCancel = useCallback(() => {
+    setIsDragging(false)
+    setDraggedLabel(null)
+  }, [])
+
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
+      setIsDragging(false)
       setDraggedLabel(null)
       if (!projectId) return
 
@@ -178,8 +190,16 @@ export function CueSlotDndProvider({ isVisible, children }: CueSlotDndProviderPr
   )
 
   return (
-    <CueSlotDndContext.Provider value={{ isSlotPanelVisible: isVisible, isEditMode, enterEditMode, exitEditMode }}>
-      <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+    <CueSlotDndContext.Provider value={{ isDragging, isEditMode, enterEditMode, exitEditMode }}>
+      {/* `onDragCancel` matters more than it looks: a cancelled drag (Escape, a lost pointer)
+          never reaches `onDragEnd`, so without it both the overlay label and `isDragging` would
+          stay set — and `isDragging` is what holds the panel body mounted. */}
+      <DndContext
+        sensors={sensors}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
+      >
         {children}
         <DragOverlay dropAnimation={null}>
           {draggedLabel ? (
@@ -200,8 +220,13 @@ interface CueSlotOverviewPanelProps {
 }
 
 export function CueSlotOverviewPanel({ isVisible }: CueSlotOverviewPanelProps) {
+  const { isDragging } = useCueSlotDnd()
+  // Held mounted through a drag: unmounting the body takes every droppable with it, so a drag
+  // in flight when the panel is hidden would resolve with no `over` target and be discarded in
+  // silence. Rare — the pointer is captured, so the toggle is hard to reach mid-drag — but the
+  // failure is invisible, which is the kind worth spending a boolean on.
   return (
-    <CollapsiblePanel isVisible={isVisible}>
+    <CollapsiblePanel isVisible={isVisible} holdMounted={isDragging}>
       <CueSlotOverviewPanelBody />
     </CollapsiblePanel>
   )

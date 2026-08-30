@@ -9,6 +9,12 @@ interface CollapsiblePanelProps {
   children: ReactNode
   /** Extra classes on the grid wrapper — margins that should only apply while open. */
   className?: string
+  /**
+   * Keep the body mounted even while collapsed. For the case where unmounting would destroy
+   * something in flight — a drag whose drop targets live inside the body. Clearing it lets the
+   * normal collapse timer run.
+   */
+  holdMounted?: boolean
 }
 
 /**
@@ -29,17 +35,22 @@ interface CollapsiblePanelProps {
  * `children` must therefore be a component, not inline JSX with hooks in the caller — the point
  * is that the subscribing hooks live below this boundary.
  */
-export function CollapsiblePanel({ isVisible, children, className }: CollapsiblePanelProps) {
+export function CollapsiblePanel({
+  isVisible,
+  children,
+  className,
+  holdMounted = false,
+}: CollapsiblePanelProps) {
   const [isMounted, setIsMounted] = useState(isVisible)
 
   useEffect(() => {
-    if (isVisible) {
+    if (isVisible || holdMounted) {
       setIsMounted(true)
       return
     }
     const timer = setTimeout(() => setIsMounted(false), COLLAPSE_MS)
     return () => clearTimeout(timer)
-  }, [isVisible])
+  }, [isVisible, holdMounted])
 
   return (
     <div
