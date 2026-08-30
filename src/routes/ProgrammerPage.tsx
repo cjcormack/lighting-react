@@ -94,7 +94,13 @@ export function ProgrammerPage() {
   const projectIdNum = Number(projectId)
   const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
-  const { showBarProps, showHeaderProps } = useShowBarProps(projectIdNum)
+  // `frameRateProgress: false` — this page mounts the hook only for the bar's props and never
+  // reads the transport, so without it a running fade re-renders the whole page (and everything
+  // under `ProgrammerBody`) per rAF, exactly while channel frames are also landing. The bar's
+  // FADING countdown is unaffected: it animates itself from the write-once `fade` descriptor.
+  const { showBarProps, showHeaderProps } = useShowBarProps(projectIdNum, {
+    frameRateProgress: false,
+  })
 
   if (currentLoading || projectLoading) {
     return (

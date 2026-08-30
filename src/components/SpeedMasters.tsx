@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { memo, useRef } from 'react'
 import { Link, useParams } from 'react-router'
 import { ChevronDown, Settings2 } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -78,8 +78,12 @@ const PENDING_MASTER_1: TileMaster = {
  * Every arm that can render is in the DOM at once. That is deliberate and cheap: `BeatIndicator`
  * subscribables are shared per master, so the total is N however many arms are mounted, and an
  * unopened Radix popover mounts only its trigger.
+ *
+ * Memoized (it takes no props) because its host is the ShowBar, which re-renders ~10×/s while a
+ * cue fades to run its FADING countdown — the masters have nothing to say about a fade, and this
+ * subtree is the bar's biggest.
  */
-export function SpeedMasters() {
+export const SpeedMasters = memo(function SpeedMasters() {
   const { data: live } = useSpeedMasterLiveQuery()
   // A new key rather than a migration of `showbar.speedMaster.selected`: existing desks have `2`
   // stored, which is still a *valid* index, so reusing the key would silently land them on M2 and
@@ -132,7 +136,7 @@ export function SpeedMasters() {
       <SpeedMastersChip className="@[440px]:hidden" />
     </>
   )
-}
+})
 
 /**
  * The phone-width tempo control: master 1's readout, a count of the masters it is standing in for,

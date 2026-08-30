@@ -15,6 +15,7 @@ import {
   selectStackRunner,
   runnerSlice,
 } from '../store/runnerSlice'
+import type { RunnerAnimSpan } from '../store/runnerSlice'
 import { useRunnerAnimation } from './useRunnerAnimation'
 import { useAnimatedProgress } from './useAnimatedProgress'
 
@@ -27,6 +28,14 @@ interface UseShowTransportArgs {
   canOperate?: boolean
   /** Runs at the top of `go()` before any dispatch. Prompt Book passes `noteGo` (relock-on-GO). */
   onBeforeGo?: () => void
+  /**
+   * Pass false when the host consumes none of `fadeProgress`/`fadeRemainMs`/`autoProgress` — they
+   * come back null and, more to the point, the per-rAF re-render that computes them never runs, so
+   * the host stops paying frame rate for a fade it doesn't draw. The Programmer page opts out: it
+   * mounts this hook only for the ShowBar's props, and the bar animates from the write-once `fade`
+   * descriptor (unaffected by this flag) instead. Default true.
+   */
+  frameRateProgress?: boolean
 }
 
 export interface ShowTransport {
@@ -51,6 +60,13 @@ export interface ShowTransport {
   /** 0..1 while the live cue fades in, else null. */
   fadeProgress: number | null
   fadeRemainMs: number | null
+  /**
+   * The live cue's fade *descriptor* — written once per transition, gated to the current cursor.
+   * This is the frame-rate-free way to hand a fade onwards: the `ShowBar` takes this (stable
+   * identity for the whole fade, so its memo holds) and animates the countdown itself, where
+   * `fadeProgress`/`fadeRemainMs` above change on every render of this hook's host.
+   */
+  fade: RunnerAnimSpan | null
   /** `!isShowActive || !canOperate` — disables the transport. */
   goDisabled: boolean
   go: () => void
@@ -80,6 +96,7 @@ export function useShowTransport({
   stacks,
   canOperate,
   onBeforeGo,
+  frameRateProgress = true,
 }: UseShowTransportArgs): ShowTransport {
   const dispatch = useDispatch()
 
@@ -213,8 +230,10 @@ export function useShowTransport({
   // the animation effect hasn't) reads as progress 0, as the old reset-to-0-on-go did.
   const fadeAnim =
     runner.activeCueId != null && runner.fade?.cueId === runner.activeCueId ? runner.fade : null
-  const animatedFade = useAnimatedProgress(fadeAnim)
-  const rawFadeProgress = runner.activeCueId == null ? null : (animatedFade ?? 0)
+  // A null span subscribes to nothing, so an opted-out host takes no per-frame re-render here.
+  const animatedFade = useAnimatedProgress(frameRateProgress ? fadeAnim : null)
+  const rawFadeProgress =
+    !frameRateProgress || runner.activeCueId == null ? null : (animatedFade ?? 0)
   const isFadingActive = rawFadeProgress != null && rawFadeProgress < 1
   const fadeProgress = isFadingActive ? rawFadeProgress : null
   const fadeRemainMs = (() => {
@@ -224,7 +243,7 @@ export function useShowTransport({
     return Math.max(0, dur * (1 - rawFadeProgress))
   })()
 
-  const autoProgress = useAnimatedProgress(runner.auto)
+  const autoProgress = useAnimatedProgress(frameRateProgress ? runner.auto : null)
 
   const go = useCallback(() => {
     onBeforeGo?.()
@@ -279,6 +298,7 @@ export function useShowTransport({
     autoProgress,
     fadeProgress,
     fadeRemainMs,
+    fade: fadeAnim,
     goDisabled,
     go,
     back,

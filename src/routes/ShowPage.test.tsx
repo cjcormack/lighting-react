@@ -120,6 +120,7 @@ vi.mock('../hooks/useShowBarProps', () => ({
       stackName: 'Act 1',
       blind: false,
       onBlind: vi.fn(),
+      fade: null,
     },
     showHeaderProps: { isShowActive: false, canStart: false, onStart: vi.fn(), onStop: vi.fn() },
     transport: {

@@ -22,7 +22,7 @@ const PROPS = {
   activeName: 'Warm Wash',
   standbyNumber: 'Q5',
   standbyName: 'Sunset Fade',
-  fadeRemainMs: null,
+  fade: null,
   onGo: () => {},
   onBack: () => {},
 }
@@ -62,6 +62,18 @@ describe('ShowBar', () => {
     expect(screen.getByTestId('speed-masters')).toBeTruthy()
     expect(screen.queryByText('TAP')).toBeNull()
     expect(screen.queryByText(/M1 · BPM/)).toBeNull()
+  })
+
+  it('counts the FADING badge down from the descriptor, not from a per-frame prop', () => {
+    // The bar takes the fade's write-once span and runs the countdown itself — the prop must stay
+    // identity-stable for the whole fade or the memo wrapping the bar buys nothing.
+    render(<ShowBar {...PROPS} fade={{ startMs: performance.now(), durationMs: 5000 }} />)
+    expect(screen.getByText(/FADING/)).toBeTruthy()
+
+    cleanup()
+    // A span that has already run out is not a fade.
+    render(<ShowBar {...PROPS} fade={{ startMs: performance.now() - 6000, durationMs: 5000 }} />)
+    expect(screen.queryByText(/FADING/)).toBeNull()
   })
 
   it('toggles blackout', () => {

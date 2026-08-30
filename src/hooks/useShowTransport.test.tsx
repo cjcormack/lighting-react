@@ -74,6 +74,7 @@ interface Args {
   stacks: CueStack[] | undefined
   canOperate?: boolean
   onBeforeGo?: () => void
+  frameRateProgress?: boolean
 }
 
 function draw(args: Args) {
@@ -132,6 +133,32 @@ describe('useShowTransport', () => {
     const { result } = draw({ activeStackId: 10, stacks: [mkStack({ activeCueId: 2 })] })
     expect(result.current.activeCueId).toBe(2)
     expect(result.current.fadeProgress).toBeNull()
+  })
+
+  it('keeps the frame-rate values null for an opted-out host, but still hands over the descriptor', () => {
+    // The Programmer page mounts the transport purely for the ShowBar's props: it must not pay a
+    // per-rAF re-render for a fade it doesn't draw. The bar's countdown comes from `fade`, which
+    // stays live regardless.
+    const { result } = draw({
+      activeStackId: 10,
+      stacks: [mkStack({ activeCueId: 1, nextCueId: 2 })],
+      frameRateProgress: false,
+    })
+    act(() => result.current.go())
+    act(() => {
+      store.dispatch(
+        runnerSlice.actions.startFade({
+          stackId: 10,
+          cueId: 2,
+          startMs: performance.now(),
+          durationMs: 2000,
+        }),
+      )
+    })
+    expect(result.current.fade).toMatchObject({ cueId: 2, durationMs: 2000 })
+    expect(result.current.fadeProgress).toBeNull()
+    expect(result.current.fadeRemainMs).toBeNull()
+    expect(result.current.autoProgress).toBeNull()
   })
 
   it('prefers the optimistic runner cursor once GO has fired', () => {

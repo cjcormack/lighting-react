@@ -1,7 +1,10 @@
+import { memo } from 'react'
 import { ArrowRight, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { UNLOCKED_WARNING_CLASS } from '@/lib/lockChrome'
+import { useFadeRemainMs } from '@/hooks/useAnimatedProgress'
+import type { RunnerAnimSpan } from '@/store/runnerSlice'
 import { ProgrammerIndicator } from './ProgrammerIndicator'
 import { SpeedMasters } from './SpeedMasters'
 
@@ -17,8 +20,14 @@ interface ShowBarProps {
   /** The cue queued to fire on the next GO. */
   standbyNumber: string | null
   standbyName: string | null
-  /** When the active cue is fading in, ms remaining (drives the amber FADING badge). */
-  fadeRemainMs: number | null
+  /**
+   * The active cue's fade *descriptor* (drives the amber FADING badge) — write-once per
+   * transition, never a per-frame value. The bar runs its own ~10 Hz countdown from it, so a host
+   * re-rendering at frame rate hands the memo below identical props and the chrome sits out the
+   * fade. Do not swap this back to a `fadeRemainMs` number: that is what had `SpeedMasters` and
+   * every tile here reconciling 60×/s during every fade.
+   */
+  fade: RunnerAnimSpan | null
   onGo: () => void
   onBack: () => void
   /** Disables + mutes BACK/GO (e.g. Prompt Book when the operator can't edit). Default false. */
@@ -89,7 +98,7 @@ interface ShowBarProps {
  * different question in kind — "is there slack left over" rather than "which rung" — so folding it
  * into 1000 would put it in the band where the live block is tightest.
  */
-export function ShowBar({
+export const ShowBar = memo(function ShowBar({
   stackName,
   dbo,
   onDbo,
@@ -97,7 +106,7 @@ export function ShowBar({
   activeName,
   standbyNumber,
   standbyName,
-  fadeRemainMs,
+  fade,
   onGo,
   onBack,
   goDisabled = false,
@@ -106,6 +115,10 @@ export function ShowBar({
   onBlind,
   unlockedWarning = false,
 }: ShowBarProps) {
+  // The one frame-rate-adjacent thing in the bar, kept at the 10 Hz the 0.1 s readout can show.
+  // Only this component re-renders on its tick; the memo above keeps the host's per-frame renders
+  // out, and SpeedMasters' own memo keeps the masters out of this tick.
+  const fadeRemainMs = useFadeRemainMs(fade)
   const isFading = fadeRemainMs != null && fadeRemainMs > 0
 
   return (
@@ -316,4 +329,4 @@ export function ShowBar({
       </div>
     </div>
   )
-}
+})
