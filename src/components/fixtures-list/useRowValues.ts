@@ -15,8 +15,13 @@ import type { ChannelRef, SettingOption } from '../../store/fixtures'
 /**
  * Aggregated live value for one cell. For a fixture row there's exactly one
  * backing resolution and `isUniform` is always true; for a group row the value
- * aggregates every member that has the property (mirroring the maths in
- * useGroupPropertyValues.ts).
+ * aggregates every member that has the property.
+ *
+ * This is also what the group cards and the stage views display —
+ * `useGroupPropertyValues.ts` projects its group descriptors into
+ * [CellResolution]s and reads through [aggregateCellValue]. There used to be a
+ * second implementation there, and the two had already diverged over extended
+ * emitters (see [aggregateCellValue]).
  */
 export type CellValue =
   | { kind: 'slider'; min: number; max: number; isUniform: boolean }
@@ -120,7 +125,17 @@ export function buildRowCells(row: Row, visibleColumns: readonly ColumnKey[]): R
  * the combined CSS swatch, the normalised pad axes, the resolved wheel option — serves values
  * that never came off the wire at all. `scopedCellValue.ts` feeds it a lookup built from
  * programmer entries or a Look's stored rows; nothing about the maths differs, and duplicating
- * it for each scope is how the four kinds drift apart.
+ * it for each scope is how the four kinds drift apart. It also lets the group cards and stage
+ * views pass their `ChannelSource` selection in (`useGroupPropertyValues.ts`).
+ *
+ * **The extended-emitter averaging rule, stated once because it is the thing the two former
+ * implementations disagreed about**: each of white/amber/UV is averaged over the members that
+ * actually *have* that emitter, not over every member. A head with no white channel has no
+ * opinion about white — it is not a vote for white=0. So two RGBW heads at W=255 beside two
+ * RGB heads read W=255, and the swatch shows the white the rig is actually throwing; dividing
+ * by four would report a half-white nothing is emitting, and would make the same group's
+ * reading depend on how many colour-only heads happened to be patched next to it. R/G/B are
+ * present on every colour member by construction, so the two rules coincide there.
  */
 export function aggregateCellValue(
   resolutions: readonly NonNullable<CellResolution>[],

@@ -1,12 +1,14 @@
 import { useRef, useMemo, useSyncExternalStore, useCallback } from 'react'
 import { lightingApi } from '../api/lightingApi'
-import { getChannelValue, resolveSettingOption, subscribeToChannels } from './usePropertyValues'
+import { getChannelValue, subscribeToChannels } from './usePropertyValues'
 import { useChannelSource } from './useChannelSource'
 import { colourFactor } from './useNormalizedIntensity'
 import { foldChannels } from '../lib/colourMath'
 import { serializeLevel } from '../lib/programmerValue'
+import { aggregateCellValue } from '../components/fixtures-list/useRowValues'
 import { outputChannelSource, type ChannelSource } from '../api/channelSource'
-import type { ChannelRef } from '../store/fixtures'
+import type { CellResolution } from '../components/fixtures-list/columns'
+import type { ChannelRef, PropertyCategory } from '../store/fixtures'
 import type {
   GroupSliderPropertyDescriptor,
   GroupColourPropertyDescriptor,
@@ -18,6 +20,133 @@ import type {
 // They now come from usePropertyValues, so there is one place to thread a ChannelSource
 // through rather than three.
 
+// === Aggregation ===
+
+// The min/max, component averaging, uniformity, swatch and pad-axis maths used to be written a
+// second time in this file, and the two copies had already diverged over extended emitters.
+// There is now one: `aggregateCellValue`, which the fixtures table also uses. These hooks
+// project their group descriptors into its `CellResolution` shape — one resolution per member,
+// which is exactly what a *group row* in that table already resolves to — and layer their own
+// presentation (display text, per-member arrays, the stage beam) on top of its verdict.
+
+type Resolutions = NonNullable<CellResolution>[]
+
+/**
+ * Resolutions cached on the descriptor object. Descriptors arrive as a fresh parse per fetch,
+ * so this is keyed by identity rather than by content, and it keeps the imperative stage path
+ * ([computeGroupColourValues], re-run on every channel batch) from rebuilding them per frame.
+ */
+const resolutionCache = new WeakMap<object, Resolutions>()
+
+function cachedResolutions(key: object, build: () => Resolutions): Resolutions {
+  const hit = resolutionCache.get(key)
+  if (hit) return hit
+  const built = build()
+  resolutionCache.set(key, built)
+  return built
+}
+
+// The group descriptors type `category` as a plain `string`, but it carries the same backend
+// vocabulary as the per-fixture descriptors — the widened type is an accident of the group DTO,
+// not a different domain.
+const asCategory = (category: string) => category as PropertyCategory
+
+function sliderResolutions(property: GroupSliderPropertyDescriptor): Resolutions {
+  return cachedResolutions(property, () =>
+    property.memberChannels.map((channel) => ({
+      kind: 'slider',
+      property: {
+        type: 'slider',
+        name: property.name,
+        displayName: property.displayName,
+        category: asCategory(property.category),
+        channel,
+        min: property.min,
+        max: property.max,
+      },
+    })),
+  )
+}
+
+function colourResolutions(property: GroupColourPropertyDescriptor): Resolutions {
+  return cachedResolutions(property, () =>
+    property.memberColourChannels.map((m) => ({
+      kind: 'colour',
+      property: {
+        type: 'colour',
+        name: property.name,
+        displayName: property.displayName,
+        category: 'colour',
+        redChannel: m.redChannel,
+        greenChannel: m.greenChannel,
+        blueChannel: m.blueChannel,
+        whiteChannel: m.whiteChannel,
+        amberChannel: m.amberChannel,
+        uvChannel: m.uvChannel,
+      },
+    })),
+  )
+}
+
+function positionResolutions(property: GroupPositionPropertyDescriptor): Resolutions {
+  // Ranges come from each member, and `aggregateCellValue` normalises against the first — the
+  // same "they should all be the same" assumption this file made before the collapse.
+  return cachedResolutions(property, () =>
+    property.memberPositionChannels.map((m) => ({
+      kind: 'position',
+      pan: m.panChannel,
+      tilt: m.tiltChannel,
+      panMin: m.panMin,
+      panMax: m.panMax,
+      tiltMin: m.tiltMin,
+      tiltMax: m.tiltMax,
+    })),
+  )
+}
+
+function settingResolutions(property: GroupSettingPropertyDescriptor): Resolutions {
+  // `property.options` is passed by reference, so the resolved option is an element of the
+  // caller's own array — the group `Select` matches on it by identity.
+  return cachedResolutions(property, () =>
+    property.memberChannels.map((m) => ({
+      kind: 'setting',
+      property: {
+        type: 'setting',
+        name: property.name,
+        displayName: property.displayName,
+        category: asCategory(property.category),
+        channel: m.channel,
+        options: property.options,
+      },
+    })),
+  )
+}
+
+/**
+ * A reader bound to one channel source, in the shape [aggregateCellValue] takes, that consults
+ * the source at most once per channel.
+ *
+ * The memo is the point. These hooks need the raw per-member values *as well as* the aggregate —
+ * the display arrays, and the stage's per-pixel colours — and `aggregateCellValue` pulls through
+ * a callback rather than reading a table, so both passes ask for the same channels. Reading
+ * twice would be correct (one synchronous call, one source) but wasteful on the path that most
+ * needs not to be: [computeGroupColourValues] runs on the stage's per-channel-batch path, where
+ * `outputChannelSource.get` mints a lookup key per call.
+ */
+function readerFor(source: ChannelSource): (ref: ChannelRef) => number {
+  const seen = new Map<number, number>()
+  return (ref) => {
+    // DMX channel numbers are 1..512, so (universe, channelNo) packs into one number and the
+    // memo itself allocates no keys.
+    const key = ref.universe * 1024 + ref.channelNo
+    const hit = seen.get(key)
+    if (hit !== undefined) return hit
+    const value = getChannelValue(ref, source)
+    seen.set(key, value)
+    return value
+  }
+}
+
 // === Slider Group Values ===
 
 export type GroupSliderValueResult = {
@@ -26,6 +155,17 @@ export type GroupSliderValueResult = {
   isUniform: boolean
   displayText: string
   values: number[]
+}
+
+// Empty-group results are module constants rather than fresh literals: `useSyncExternalStore`
+// compares snapshots by identity, and a memberless group would otherwise hand it a new object
+// on every read.
+const EMPTY_SLIDER_RESULT: GroupSliderValueResult = {
+  min: 0,
+  max: 0,
+  isUniform: true,
+  displayText: '0%',
+  values: [],
 }
 
 /**
@@ -44,17 +184,14 @@ export function useGroupSliderValues(
   )
 
   const getSnapshot = useCallback((): GroupSliderValueResult => {
-    // Wrapped rather than point-free: `getChannelValue` takes an optional source second and
-    // `map` would hand it the array index.
-    const values = property.memberChannels.map((ch) => getChannelValue(ch, source))
+    // Wrapped rather than point-free: `read` takes one argument, but `map` would hand it the
+    // array index as a second and any later signature change would silently pick it up.
+    const read = readerFor(source)
+    const values = property.memberChannels.map((ch) => read(ch))
 
-    if (values.length === 0) {
-      return { min: 0, max: 0, isUniform: true, displayText: '0%', values: [] }
-    }
-
-    const min = Math.min(...values)
-    const max = Math.max(...values)
-    const isUniform = min === max
+    const aggregate = aggregateCellValue(sliderResolutions(property), read)
+    if (aggregate?.kind !== 'slider') return EMPTY_SLIDER_RESULT
+    const { min, max, isUniform } = aggregate
 
     // Check if values changed
     const cached = cachedRef.current
@@ -75,7 +212,7 @@ export function useGroupSliderValues(
     const result = { min, max, isUniform, displayText, values }
     cachedRef.current = result
     return result
-  }, [property.memberChannels, source])
+  }, [property, source])
 
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
@@ -144,6 +281,20 @@ export type GroupColourValueResult = {
   }>
 }
 
+const EMPTY_COLOUR_RESULT: GroupColourValueResult = {
+  isUniform: true,
+  displayText: 'No members',
+  avgR: 0,
+  avgG: 0,
+  avgB: 0,
+  combinedCss: 'rgb(0, 0, 0)',
+  beamR: 0,
+  beamG: 0,
+  beamB: 0,
+  beamIntensity: 0,
+  members: [],
+}
+
 /**
  * Pure computation behind [useGroupColourValues] — reads live DMX for every
  * member and returns per-member colours plus the aggregate beam hue/level.
@@ -152,70 +303,33 @@ export type GroupColourValueResult = {
  *
  * `source` defaults to the wire; the stage views pass the source their vis-source
  * selection resolved to.
+ *
+ * The swatch half (`avg*`, `isUniform`, `combinedCss`) is [aggregateCellValue]'s verdict, so
+ * the group card and the fixtures table agree. **The beam half below is deliberately not** —
+ * it is not an average at all, and unifying it with the swatch would change what the stage
+ * paints. See the comment on the loop.
  */
 export function computeGroupColourValues(
   property: GroupColourPropertyDescriptor,
   source: ChannelSource = outputChannelSource
 ): GroupColourValueResult {
+  const read = readerFor(source)
   const members = property.memberColourChannels.map((m) => ({
     fixtureKey: m.fixtureKey,
-    r: getChannelValue(m.redChannel, source),
-    g: getChannelValue(m.greenChannel, source),
-    b: getChannelValue(m.blueChannel, source),
-    w: m.whiteChannel ? getChannelValue(m.whiteChannel, source) : undefined,
-    a: m.amberChannel ? getChannelValue(m.amberChannel, source) : undefined,
-    uv: m.uvChannel ? getChannelValue(m.uvChannel, source) : undefined,
+    r: read(m.redChannel),
+    g: read(m.greenChannel),
+    b: read(m.blueChannel),
+    w: m.whiteChannel ? read(m.whiteChannel) : undefined,
+    a: m.amberChannel ? read(m.amberChannel) : undefined,
+    uv: m.uvChannel ? read(m.uvChannel) : undefined,
   }))
 
-  if (members.length === 0) {
-    return {
-      isUniform: true,
-      displayText: 'No members',
-      avgR: 0,
-      avgG: 0,
-      avgB: 0,
-      combinedCss: 'rgb(0, 0, 0)',
-      beamR: 0,
-      beamG: 0,
-      beamB: 0,
-      beamIntensity: 0,
-      members: [],
-    }
-  }
+  const aggregate = aggregateCellValue(colourResolutions(property), read)
+  if (aggregate?.kind !== 'colour') return EMPTY_COLOUR_RESULT
 
-  // Calculate averages for RGB
-  const avgR = Math.round(members.reduce((sum, m) => sum + m.r, 0) / members.length)
-  const avgG = Math.round(members.reduce((sum, m) => sum + m.g, 0) / members.length)
-  const avgB = Math.round(members.reduce((sum, m) => sum + m.b, 0) / members.length)
-
-  // Calculate averages for extended channels (only if any member has them)
-  const hasWhite = members.some((m) => m.w !== undefined)
-  const hasAmber = members.some((m) => m.a !== undefined)
-  const hasUv = members.some((m) => m.uv !== undefined)
-
-  const avgW = hasWhite
-    ? Math.round(members.reduce((sum, m) => sum + (m.w ?? 0), 0) / members.length)
-    : undefined
-  const avgA = hasAmber
-    ? Math.round(members.reduce((sum, m) => sum + (m.a ?? 0), 0) / members.length)
-    : undefined
-  const avgUv = hasUv
-    ? Math.round(members.reduce((sum, m) => sum + (m.uv ?? 0), 0) / members.length)
-    : undefined
-
-  // Check if all values are the same (including extended channels)
-  const isUniform = members.every(
-    (m) =>
-      m.r === members[0].r &&
-      m.g === members[0].g &&
-      m.b === members[0].b &&
-      m.w === members[0].w &&
-      m.a === members[0].a &&
-      m.uv === members[0].uv
-  )
-
+  const { r: avgR, g: avgG, b: avgB, w: avgW, a: avgA, uv: avgUv, isUniform } = aggregate
   const displayText = isUniform ? `R:${avgR} G:${avgG} B:${avgB}` : 'Mixed'
-  const combinedCss = `rgb(${avgR}, ${avgG}, ${avgB})`
+  const combinedCss = aggregate.combinedCss
 
   // Aggregate beam: intensity-weight each pixel's hue by its own brightness
   // (iₖ = brightest emitter / 255, counting white/amber/UV) so bright pixels
@@ -223,6 +337,12 @@ export function computeGroupColourValues(
   // amber/UV-only bar contributes its warm/violet colour to the beam instead of
   // reading as black. Level blends mean with peak so a sparse-but-bright bar
   // still throws a visible beam.
+  //
+  // This stays here rather than moving into the shared aggregation: the swatch answers "what
+  // are these heads set to", and a per-emitter mean is the honest answer to that, while the
+  // beam answers "what does this bar throw", where a mean is the wrong shape in both terms —
+  // it muddies a red+blue bar to grey and makes one bright pixel on a dark bar invisible. Two
+  // questions, two derivations, deliberately.
   let weight = 0
   let peak = 0
   let wr = 0
@@ -366,6 +486,16 @@ export type GroupPositionValueResult = {
   }>
 }
 
+const EMPTY_POSITION_RESULT: GroupPositionValueResult = {
+  isUniform: true,
+  displayText: 'No members',
+  avgPan: 128,
+  avgTilt: 128,
+  avgPanNormalized: 0.5,
+  avgTiltNormalized: 0.5,
+  members: [],
+}
+
 /**
  * Hook to get aggregated position values from all group members.
  */
@@ -389,37 +519,23 @@ export function useGroupPositionValues(
   )
 
   const getSnapshot = useCallback((): GroupPositionValueResult => {
+    const read = readerFor(source)
     const members = property.memberPositionChannels.map((m) => ({
       fixtureKey: m.fixtureKey,
-      pan: getChannelValue(m.panChannel, source),
-      tilt: getChannelValue(m.tiltChannel, source),
+      pan: read(m.panChannel),
+      tilt: read(m.tiltChannel),
     }))
 
-    if (members.length === 0) {
-      return {
-        isUniform: true,
-        displayText: 'No members',
-        avgPan: 128,
-        avgTilt: 128,
-        avgPanNormalized: 0.5,
-        avgTiltNormalized: 0.5,
-        members: [],
-      }
-    }
+    const aggregate = aggregateCellValue(positionResolutions(property), read)
+    if (aggregate?.kind !== 'position') return EMPTY_POSITION_RESULT
 
-    const avgPan = Math.round(members.reduce((sum, m) => sum + m.pan, 0) / members.length)
-    const avgTilt = Math.round(members.reduce((sum, m) => sum + m.tilt, 0) / members.length)
-
-    const isUniform = members.every(
-      (m) => m.pan === members[0].pan && m.tilt === members[0].tilt
-    )
-
-    // Use first member's range for normalization (they should all be the same)
-    const first = property.memberPositionChannels[0]
-    const panRange = first.panMax - first.panMin
-    const tiltRange = first.tiltMax - first.tiltMin
-    const avgPanNormalized = panRange > 0 ? (avgPan - first.panMin) / panRange : 0.5
-    const avgTiltNormalized = tiltRange > 0 ? (avgTilt - first.tiltMin) / tiltRange : 0.5
+    const {
+      pan: avgPan,
+      tilt: avgTilt,
+      panNormalized: avgPanNormalized,
+      tiltNormalized: avgTiltNormalized,
+      isUniform,
+    } = aggregate
 
     const displayText = isUniform
       ? `Pan:${avgPan} Tilt:${avgTilt}`
@@ -447,7 +563,7 @@ export function useGroupPositionValues(
     }
     cachedRef.current = result
     return result
-  }, [property.memberPositionChannels, source])
+  }, [property, source])
 
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
@@ -491,6 +607,12 @@ export type GroupSettingValueResult = {
   values: number[]
 }
 
+const EMPTY_SETTING_RESULT: GroupSettingValueResult = {
+  isUniform: true,
+  displayText: 'No members',
+  values: [],
+}
+
 /**
  * Hook to get aggregated setting values from all group members.
  */
@@ -511,22 +633,14 @@ export function useGroupSettingValues(
   )
 
   const getSnapshot = useCallback((): GroupSettingValueResult => {
-    const values = property.memberChannels.map((m) => getChannelValue(m.channel, source))
+    const read = readerFor(source)
+    const values = property.memberChannels.map((m) => read(m.channel))
 
-    if (values.length === 0) {
-      return {
-        isUniform: true,
-        displayText: 'No members',
-        values: [],
-      }
-    }
+    const aggregate = aggregateCellValue(settingResolutions(property), read)
+    if (aggregate?.kind !== 'setting') return EMPTY_SETTING_RESULT
 
-    const isUniform = values.every((v) => v === values[0])
-
-    const currentOption = isUniform
-      ? resolveSettingOption(property.options, values[0])
-      : property.options[0]
-
+    // `option` is already gated on uniformity — a mixed wheel names no position.
+    const { isUniform, option: currentOption } = aggregate
     const displayText = isUniform
       ? currentOption?.displayName ?? 'Unknown'
       : 'Mixed'
@@ -544,12 +658,12 @@ export function useGroupSettingValues(
     const result: GroupSettingValueResult = {
       isUniform,
       displayText,
-      currentOption: isUniform ? currentOption : undefined,
+      currentOption,
       values,
     }
     cachedRef.current = result
     return result
-  }, [property.memberChannels, property.options, source])
+  }, [property, source])
 
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
