@@ -13,7 +13,6 @@ export interface FxDefinition {
   parameters: EffectParameterDef[]
   compatibleProperties: string[]
   script: string
-  isBuiltin: boolean
   defaultStepTiming: boolean
   timingSource?: 'BEAT' | 'WALL_CLOCK'
 }
