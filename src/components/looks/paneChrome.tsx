@@ -3,11 +3,11 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 
 /**
- * The small layout primitives the cue body and the programmer's layer stack share.
+ * The small layout primitives `LookStack` builds its sections and row controls from.
  *
- * Extracted from `LayersPane` when `LookStack` moved out of it: these three are used by the layer
- * stack, by the cue's assignment and effect sections and by the by-target cards, so leaving them in
- * either consumer would have made one import the other for a button.
+ * Kept as a peer module rather than inlined because `LookStack` is shared back to the cue side, so
+ * these travel with it: a cue body and the programmer's layer stack render the same chrome, and
+ * splitting them would give one surface a different button from the other.
  */
 export function Section({
   title,
