@@ -7,7 +7,8 @@ import { Card } from "@/components/ui/card"
 import { FeatureErrorBoundary } from "./components/FeatureErrorBoundary"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
-import { pathHasSegment } from "@/lib/navMatch"
+import { mostSpecificActiveId } from "@/lib/navMatch"
+import { navItems } from "./navigation"
 import { useMediaQuery } from "@/hooks/useMediaQuery"
 
 import { ConnectionStatus } from "./connection"
@@ -72,10 +73,13 @@ export default function Layout() {
   const [channelDialogMode, setChannelDialogMode] = useState<"park" | "set" | null>(null)
   const { panels, byId, lockEffects, unlockEffects } = useOverviewPanels()
   const location = useLocation()
-  // Segment-aware, not a prefix regex: `/\/projects\/\d+\/fx/` also matched `/fx-library`, which
-  // force-opened this panel over the library and left its toggle disabled with a tooltip naming a
-  // page the operator wasn't on. Same trap `mostSpecificActiveId` exists for.
-  const isFxRoute = pathHasSegment(location.pathname, '/fx')
+  // "Is the FX busking grid the active nav entry?", asked the same way the sidebar asks it —
+  // rather than by matching the path here, which this has now got wrong twice. The old
+  // `/\/projects\/\d+\/fx/` regex was unanchored and fired on `/fx-library`; a plain segment
+  // match fixes that but then fires on `/projects/:id/programmer/fx`, which is a *section* of the
+  // programmer and not this page. `mostSpecificActiveId` resolves both, because longest-match is
+  // exactly the question: `/programmer` beats `/fx` there, and `/fx-library` beats nothing.
+  const isFxRoute = mostSpecificActiveId(navItems, location.pathname) === 'fx'
   const isDesktop = useMediaQuery('(min-width: 768px)')
 
   // Auto-show & lock effects overview when on the FX busking route

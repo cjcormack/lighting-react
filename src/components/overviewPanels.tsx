@@ -15,14 +15,17 @@ import { useEffectsOverview } from '@/hooks/useEffectsOverview'
  * `label` is the palette's noun (title case, it heads a list); `noun` is the toolbar tooltip's,
  * which reads "Show …" / "Hide …". They differ per panel and always have.
  */
+type OverviewPanelId = 'stage' | 'fixtures' | 'cueSlots' | 'effects'
+
 interface OverviewPanelDescriptor {
-  id: 'stage' | 'fixtures' | 'cueSlots' | 'effects'
+  id: OverviewPanelId
   label: string
   noun: string
   icon: LucideIcon
   storageKey: string
 }
 
+/** Declaration order is display order, left to right in the toolbar and top to bottom in the palette. */
 const DESCRIPTORS: readonly OverviewPanelDescriptor[] = [
   {
     id: 'stage',
@@ -57,6 +60,18 @@ const DESCRIPTORS: readonly OverviewPanelDescriptor[] = [
   },
 ]
 
+const BY_ID = Object.fromEntries(DESCRIPTORS.map((d) => [d.id, d])) as Record<
+  OverviewPanelId,
+  OverviewPanelDescriptor
+>
+
+/** One panel's visibility, however it is held. */
+interface PanelVisibility {
+  isVisible: boolean
+  toggle: () => void
+  isLocked: boolean
+}
+
 /** One panel's live state, ready for the toolbar, the palette and the panel itself. */
 export interface OverviewPanel extends OverviewPanelDescriptor {
   isVisible: boolean
@@ -68,36 +83,40 @@ export interface OverviewPanel extends OverviewPanelDescriptor {
 /**
  * Visibility for all four panels.
  *
- * The hooks are written out rather than mapped over `DESCRIPTORS` because they are hooks — the
- * order and count have to be statically obvious. The array is what everything downstream reads.
+ * The hooks are written out rather than mapped over `DESCRIPTORS`, because they are hooks and
+ * their order and count have to be statically obvious. They are then paired with their descriptors
+ * **by id**, through a `Record` the compiler makes exhaustive — never by array index, which would
+ * mean reordering `DESCRIPTORS` silently put one panel's icon and label on another's storage key
+ * and visibility. That is the same class of mismatch this module was written to end.
  */
 export function useOverviewPanels(): {
   panels: readonly OverviewPanel[]
-  byId: Record<OverviewPanelDescriptor['id'], OverviewPanel>
+  byId: Record<OverviewPanelId, OverviewPanel>
   lockEffects: () => void
   unlockEffects: () => void
 } {
-  const stage = usePersistentToggle(DESCRIPTORS[0].storageKey)
-  const fixtures = usePersistentToggle(DESCRIPTORS[1].storageKey)
-  const cueSlots = usePersistentToggle(DESCRIPTORS[2].storageKey)
+  const stage = usePersistentToggle(BY_ID.stage.storageKey)
+  const fixtures = usePersistentToggle(BY_ID.fixtures.storageKey)
+  const cueSlots = usePersistentToggle(BY_ID.cueSlots.storageKey)
   const effects = useEffectsOverview()
 
-  const panels: OverviewPanel[] = [
-    { ...DESCRIPTORS[0], isVisible: stage.isVisible, toggle: stage.toggle, isLocked: false },
-    { ...DESCRIPTORS[1], isVisible: fixtures.isVisible, toggle: fixtures.toggle, isLocked: false },
-    { ...DESCRIPTORS[2], isVisible: cueSlots.isVisible, toggle: cueSlots.toggle, isLocked: false },
-    {
-      ...DESCRIPTORS[3],
+  const visibility: Record<OverviewPanelId, PanelVisibility> = {
+    stage: { isVisible: stage.isVisible, toggle: stage.toggle, isLocked: false },
+    fixtures: { isVisible: fixtures.isVisible, toggle: fixtures.toggle, isLocked: false },
+    cueSlots: { isVisible: cueSlots.isVisible, toggle: cueSlots.toggle, isLocked: false },
+    effects: {
       isVisible: effects.isVisible,
       toggle: effects.toggle,
       isLocked: effects.isLocked,
     },
-  ]
+  }
+
+  const panels = DESCRIPTORS.map((d) => ({ ...d, ...visibility[d.id] }))
 
   return {
     panels,
     byId: Object.fromEntries(panels.map((p) => [p.id, p])) as Record<
-      OverviewPanelDescriptor['id'],
+      OverviewPanelId,
       OverviewPanel
     >,
     lockEffects: effects.lock,

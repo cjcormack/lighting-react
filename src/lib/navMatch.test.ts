@@ -59,3 +59,26 @@ describe('pathHasSegment', () => {
     expect(pathHasSegment('/projects/7/programmer', '/program')).toBe(false)
   })
 })
+
+/**
+ * Layout's FX lock, which decides whether the effects overview panel is held open. It is
+ * `mostSpecificActiveId(...) === 'fx'` rather than a path match of its own because the path match
+ * has been got wrong twice: an unanchored regex fired on the FX Library, and a plain segment match
+ * fires on the programmer's own `/fx` section.
+ */
+describe("Layout's FX-route lock", () => {
+  const nav = navItems.map(({ id, pathMatch }) => ({ id, pathMatch }))
+  const isFxRoute = (pathname: string) => mostSpecificActiveId(nav, pathname) === 'fx'
+
+  it('holds on the busking grid', () => {
+    expect(isFxRoute('/projects/7/fx')).toBe(true)
+  })
+
+  it('does not hold on the FX library', () => {
+    expect(isFxRoute('/projects/7/fx-library')).toBe(false)
+  })
+
+  it("does not hold on the programmer's FX section", () => {
+    expect(isFxRoute('/projects/7/programmer/fx')).toBe(false)
+  })
+})
