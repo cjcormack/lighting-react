@@ -129,8 +129,12 @@ export function ShowPage() {
   // same three lines off the same state, and a second copy is a copy that drifts.
   // `onBeforeGo: noteGo` is what makes GO end a fix-it session, on this surface as well as on the
   // Prompt Book — the two share one lock, so they have to agree about what GO does to it.
+  // `frameRateProgress: false` — the desktop rows read their own fade via `ProgramView`'s
+  // `fadeStackId`, and the phone runner's Current card and cue-list sheet now do the same, so
+  // this page never reads `transport.fadeProgress`/`fadeRemainMs`/`autoProgress`. The bar's
+  // FADING badge is unaffected: it animates from the write-once `fade` descriptor.
   const { showBarProps, showHeaderProps, transport, nextStack, activeCue, standbyCue } =
-    useShowBarProps(projectIdNum, { onBeforeGo: editLock.noteGo })
+    useShowBarProps(projectIdNum, { onBeforeGo: editLock.noteGo, frameRateProgress: false })
   const runnableStackCount = stacks?.filter((s) => s.type === 'STACK').length ?? 0
 
   // The phone layout is always locked, whatever the lock says — it is a running surface with no
@@ -194,8 +198,6 @@ export function ShowPage() {
     activeCue,
     standbyCue,
     nextStack,
-    fadeProgress: transport.fadeProgress,
-    autoProgress: transport.autoProgress,
     activeCueId: transport.activeCueId,
     standbyCueId: transport.standbyCueId,
     completedCueIds: transport.completedCueIds,
@@ -507,7 +509,7 @@ export function ShowPage() {
             // *playhead's* stack, so a tap here would arm a cue that is not in it.
             onRequeueCue={phoneOffPlayhead ? NO_REQUEUE : handleSetStandby}
             projectId={projectIdNum}
-            fadeRemainMs={transport.fadeRemainMs}
+            fadeStackId={activeStackId}
             activeLocation={activeCue ? locationByCue.get(activeCue.id) ?? null : null}
             standbyLocation={standbyCue ? locationByCue.get(standbyCue.id) ?? null : null}
           />

@@ -51,3 +51,21 @@ export function useCueFade(
 
   return { fadeProgress, fadeRemainMs }
 }
+
+/**
+ * A single cue row's auto-advance countdown, read straight from the runner — the auto-advance
+ * sibling of `useCueFade` above, for the same reason: a row that reads its own descriptor doesn't
+ * force whatever memo sits above it to reconcile at frame rate for a countdown only one row draws.
+ *
+ * `auto` carries no `cueId` of its own (only one cue per stack can be counting down), so the
+ * gate is `runner.activeCueId === cueId` rather than a per-descriptor id check.
+ */
+export function useCueAutoProgress(stackId: number | null | undefined, cueId: number) {
+  const auto = useSelector((state: RunnerRoot) => {
+    if (stackId == null) return null
+    const runner = selectStackRunner(state, stackId)
+    return runner.activeCueId === cueId ? runner.auto : null
+  })
+
+  return useAnimatedProgress(auto)
+}

@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import {
   Sheet,
   SheetContent,
@@ -16,8 +17,9 @@ interface MobileCueListSheetProps {
   activeCueId: number | null
   standbyCueId: number | null
   completedCueIds: number[]
-  fadeProgress: number
-  autoProgress: number | null
+  /** The live stack id, or null when this sheet's stack isn't it — passed straight through to
+   *  each row's own `useCueFade`/`useCueAutoProgress` subscription. */
+  fadeStackId: number | null
   isTheatre: boolean
   onSelectCue: (cueId: number) => void
 }
@@ -30,11 +32,13 @@ export function MobileCueListSheet({
   activeCueId,
   standbyCueId,
   completedCueIds,
-  fadeProgress,
-  autoProgress,
+  fadeStackId,
   isTheatre,
   onSelectCue,
 }: MobileCueListSheetProps) {
+  // Hoisted once instead of `completedCueIds.includes(cue.id)` per row — O(n) → O(1) per row,
+  // which is what turned a 200-cue stack's per-frame cost quadratic.
+  const completedSet = useMemo(() => new Set(completedCueIds), [completedCueIds])
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -58,10 +62,11 @@ export function MobileCueListSheet({
               }
               const isActive = cue.id === activeCueId
               const isStandby = cue.id === standbyCueId
-              const isDone = completedCueIds.includes(cue.id)
+              const isDone = completedSet.has(cue.id)
               return (
                 <MobileCueRow
                   key={cue.id}
+                  cueId={cue.id}
                   cueNumber={cue.cueNumber}
                   cueNumberAuto={cue.cueNumberAuto}
                   name={cue.name}
@@ -72,9 +77,8 @@ export function MobileCueListSheet({
                   isStandby={isStandby}
                   isDone={isDone}
                   isTheatre={isTheatre}
-                  fadeProgress={isActive ? fadeProgress : 0}
-                  autoProgress={isActive ? autoProgress : null}
-                  onClick={() => onSelectCue(cue.id)}
+                  fadeStackId={isActive ? fadeStackId : null}
+                  onClick={onSelectCue}
                 />
               )
             })

@@ -19,9 +19,6 @@ export interface RunnerDisplayState {
   activeCue: CueStackCueEntry | null
   standbyCue: CueStackCueEntry | null
   nextStack: CueStack | null
-  /** 0..1 while the active cue is fading in, null otherwise. */
-  fadeProgress: number | null
-  autoProgress: number | null
   activeCueId: number | null
   standbyCueId: number | null
   completedCueIds: number[]
@@ -41,8 +38,9 @@ interface RunMobileProps {
   onSelectStack: (stack: CueStack) => void
   onRequeueCue: (cueId: number) => void
   projectId: number
-  /** ms remaining for the active cue's fade-in. null when not fading. */
-  fadeRemainMs: number | null
+  /** The live stack id, or null off the playhead — gates the Current card's and the cue-list
+   *  sheet's own `useCueFade` subscriptions (see `useCueFade`). */
+  fadeStackId: number | null
   /** Prompt-book reading position of the active / next cue, e.g. "top of p. 9". */
   activeLocation: string | null
   standbyLocation: string | null
@@ -67,7 +65,7 @@ export function RunMobile({
   onSelectStack,
   onRequeueCue,
   projectId,
-  fadeRemainMs,
+  fadeStackId,
   activeLocation,
   standbyLocation,
 }: RunMobileProps) {
@@ -79,7 +77,7 @@ export function RunMobile({
     mode: 'stage',
   })
 
-  const { activeCue, standbyCue, nextStack, fadeProgress } = display
+  const { activeCue, standbyCue, nextStack } = display
 
   const playable = useMemo(
     () => cues.filter((c) => c.cueType === 'STANDARD'),
@@ -170,8 +168,7 @@ export function RunMobile({
           expansion={expansion}
           onSetExpansion={setExpansion}
           counter={counter}
-          fadeProgress={fadeProgress}
-          fadeRemainMs={fadeRemainMs}
+          fadeStackId={fadeStackId}
           location={activeLocation}
         />
         <RunMobileCueCard
@@ -231,8 +228,7 @@ export function RunMobile({
         activeCueId={display.activeCueId}
         standbyCueId={display.standbyCueId}
         completedCueIds={display.completedCueIds}
-        fadeProgress={display.fadeProgress ?? 0}
-        autoProgress={display.autoProgress}
+        fadeStackId={fadeStackId}
         // Q-numbers and notes always render now that the Theatre/Band toggle
         // is gone — pass true so MobileCueListSheet doesn't hide them.
         isTheatre={true}

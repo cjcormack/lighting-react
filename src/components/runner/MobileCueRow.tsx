@@ -1,10 +1,13 @@
+import { memo } from 'react'
 import { cn } from '@/lib/utils'
 import { formatFadeText } from '@/lib/cueUtils'
 import { AUTO_CUE_NUMBER_CLASS } from '@/lib/cueNumber'
 import { TruncateStart } from '@/components/TruncateStart'
+import { useCueFade, useCueAutoProgress } from '@/hooks/useCueFade'
 import { cueStatusIcon } from './cueStatusIcon'
 
 interface MobileCueRowProps {
+  cueId: number
   cueNumber: string | null
   /** Number was derived from position — rendered fainter to mark it provisional. */
   cueNumberAuto?: boolean
@@ -16,12 +19,20 @@ interface MobileCueRowProps {
   isStandby: boolean
   isDone: boolean
   isTheatre: boolean
-  fadeProgress: number
-  autoProgress: number | null
-  onClick: () => void
+  /** The live stack id, or null when this row's stack isn't it — gates this row's own
+   *  `useCueFade`/`useCueAutoProgress` subscriptions (see `useCueFade`). */
+  fadeStackId: number | null
+  onClick: (cueId: number) => void
 }
 
-export function MobileCueRow({
+/**
+ * Memoized: the sheet can hold hundreds of these on a big show, and every one used to re-render
+ * on every fade/auto-advance frame for a drilled `fadeProgress`/`autoProgress` pair that only the
+ * active row ever used. Each row now reads its own via `fadeStackId`, and `onClick` takes the
+ * row's own cue id so the sheet can pass its stable handler straight through.
+ */
+export const MobileCueRow = memo(function MobileCueRow({
+  cueId,
   cueNumber,
   cueNumberAuto = false,
   name,
@@ -32,19 +43,20 @@ export function MobileCueRow({
   isStandby,
   isDone,
   isTheatre,
-  fadeProgress,
-  autoProgress,
+  fadeStackId,
   onClick,
 }: MobileCueRowProps) {
-  const showFadeBar = isActive && fadeProgress > 0 && autoProgress == null
-  const showAutoBar = isActive && autoProgress != null
+  const { fadeProgress } = useCueFade(fadeStackId, cueId, fadeDurationMs)
+  const autoProgress = useCueAutoProgress(fadeStackId, cueId)
+  const showFadeBar = fadeProgress != null && fadeProgress > 0 && autoProgress == null
+  const showAutoBar = autoProgress != null
   const statusIcon = cueStatusIcon(isActive, isStandby, isDone, autoProgress)
   const fadeText = formatFadeText(fadeDurationMs, fadeCurve)
 
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={() => onClick(cueId)}
       className={cn(
         'relative flex w-full items-center gap-2 h-12 px-4 border-b border-l-[3px] border-l-transparent text-left transition-colors hover:bg-muted/50',
         isDone && !isActive && !isStandby && 'opacity-40',
@@ -107,4 +119,4 @@ export function MobileCueRow({
       )}
     </button>
   )
-}
+})

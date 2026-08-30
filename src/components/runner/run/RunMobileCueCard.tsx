@@ -1,5 +1,6 @@
 import { ChevronDown } from 'lucide-react'
 import type { CueStackCueEntry } from '@/api/cueStacksApi'
+import { useCueFade } from '@/hooks/useCueFade'
 import { CueCardBody, type ExpansionMode } from './CueCardBody'
 
 export type CardKind = 'cur' | 'nxt'
@@ -20,10 +21,9 @@ interface RunMobileCueCardProps {
   counter?: string | null
   /** Open the bottom-sheet picker (Next card "Change" button). */
   onChange?: () => void
-  /** 0..1 fade progress when this is the Current card and the cue is fading in. */
-  fadeProgress?: number | null
-  /** Remaining ms in the fade-in. */
-  fadeRemainMs?: number | null
+  /** The live stack id, or null off the playhead — gates this card's own `useCueFade`
+   *  subscription. Only meaningful for the Current card; the Next card never fades. */
+  fadeStackId?: number | null
   /** Prompt-book reading position for this cue, e.g. "top of p. 9". */
   location?: string | null
 }
@@ -42,11 +42,17 @@ export function RunMobileCueCard({
   onSetExpansion,
   counter,
   onChange,
-  fadeProgress,
-  fadeRemainMs,
+  fadeStackId = null,
   location,
 }: RunMobileCueCardProps) {
   const mode = expansion?.card === kind ? expansion.mode : null
+  // A sentinel cueId when there's no cue (pre-show, or nothing on deck): no real cue has id -1,
+  // so the hook naturally reads as "not fading" rather than needing a conditional hook call.
+  const { fadeProgress, fadeRemainMs } = useCueFade(
+    kind === 'cur' ? fadeStackId : null,
+    cue?.id ?? -1,
+    cue?.fadeDurationMs ?? null,
+  )
   // CueCardBody now always renders headerTrailing (so the book's chevron survives the
   // fade); preserve the current card's pre-extraction behaviour of hiding the counter
   // while the fade badge is showing.

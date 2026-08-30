@@ -141,6 +141,10 @@ export function StackDetail({
     [stack.cues],
   )
 
+  // Hoisted once instead of `completedCueIds.includes(cue.id)` per row — O(n) → O(1) per row,
+  // the same fix FS-PERF-MOBILE-SHEET-FADE applied on the phone sheet for the same reason.
+  const completedSet = useMemo(() => new Set(completedCueIds), [completedCueIds])
+
   // Number-column width for every row in this stack. MARKERs are unnumbered dividers, so they
   // must not drag the column down to the "—" placeholder width.
   const cueNumChars = useMemo(
@@ -280,7 +284,7 @@ export function StackDetail({
                   onToggleExpanded={() => onToggleExpanded(cue.id)}
                   isActive={cue.id === activeCueId}
                   isStandby={cue.id === standbyCueId}
-                  isDone={completedCueIds?.includes(cue.id) ?? false}
+                  isDone={completedSet.has(cue.id)}
                   fadeStackId={fadeStackId}
                   location={locationByCue?.get(cue.id) ?? null}
                   onSetStandby={onSetStandby ? () => onSetStandby(cue.id) : undefined}
