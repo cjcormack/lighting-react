@@ -3,6 +3,7 @@ import pluginJs from "@eslint/js"
 import tseslint from "typescript-eslint"
 import pluginReact from "eslint-plugin-react"
 import pluginReactHooks from "eslint-plugin-react-hooks"
+import configPrettier from "eslint-config-prettier"
 
 export default [
   {
@@ -63,4 +64,8 @@ export default [
     files: ["*.config.{js,ts}", "*.config.*.{js,ts}"],
     languageOptions: { globals: globals.node },
   },
+  // Last, so it wins: turns off every core/plugin rule that would fight
+  // `npm run format`. Prettier itself is not run from the lint gate — this only
+  // stops ESLint from having an opinion about formatting.
+  configPrettier,
 ]
