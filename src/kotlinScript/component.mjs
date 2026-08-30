@@ -1,5 +1,4 @@
 import { Component, createElement, createRef } from "react";
-import PropTypes from "prop-types";
 
 const EVENTS = [
     "onChange",
@@ -33,11 +32,6 @@ function normalizeAttribute(name) {
     if (DATA_ATTRS.indexOf(name) !== -1) attr = "data-" + attr;
     return upper2dash(attr);
 }
-
-const eventsPropTypes = EVENTS.reduce((types, name) => {
-    types[name] = PropTypes.func;
-    return types;
-}, {});
 
 class ReactKotlinPlayground extends Component {
     constructor(props, ...args) {
@@ -122,57 +116,5 @@ class ReactKotlinPlayground extends Component {
         );
     }
 }
-
-function cloneProps(props) {
-    const clonedProps = { ...props };
-
-    Object.keys(props).forEach((name) => {
-        clonedProps[normalizeAttribute(name)] = props[name];
-    });
-
-    return clonedProps;
-}
-
-ReactKotlinPlayground.propTypes = {
-    className: PropTypes.string,
-    playground: PropTypes.func,
-
-    ...eventsPropTypes,
-
-    ...cloneProps({
-        value: PropTypes.string,
-        version: PropTypes.string,
-        args: PropTypes.oneOfType([
-            PropTypes.string,
-            PropTypes.arrayOf(PropTypes.string),
-        ]),
-        targetPlatform: PropTypes.oneOf(["junit", "canvas", "js", "java"]),
-        highlightOnly: PropTypes.oneOf(["nocursor"]),
-        jsLibs: PropTypes.string,
-        autoIndent: PropTypes.bool,
-        theme: PropTypes.string,
-        mode: PropTypes.oneOf([
-            "kotlin",
-            "js",
-            "java",
-            "groovy",
-            "xml",
-            "c",
-            "shell",
-            "swift",
-            "obj-c",
-        ]),
-        minCompilerVersion: PropTypes.string,
-        autocomplete: PropTypes.oneOf(["true", "false"]),
-        highlightOnFly: PropTypes.oneOf(["true", "false"]),
-        indent: PropTypes.number,
-        lines: PropTypes.oneOf(["true", "false"]),
-        from: PropTypes.number,
-        to: PropTypes.number,
-        outputHeight: PropTypes.number,
-        matchBrackets: PropTypes.oneOf(["true", "false"]),
-        mobileShorterHeight: PropTypes.number,
-    }),
-};
 
 export default ReactKotlinPlayground;

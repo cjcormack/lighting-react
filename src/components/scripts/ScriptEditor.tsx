@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useIsDarkMode } from "@/hooks/useIsDarkMode"
 import { EditorScriptType } from "@/store/scripts"
-// @ts-expect-error - no type declarations for kotlinScript
 import ReactKotlinPlayground from "@/kotlinScript/index.mjs"
 
 export interface ScriptEditorScript {
@@ -108,6 +107,29 @@ export function ScriptEditor({
   const canCompile = script.script !== ""
   const canRun = script.script !== ""
 
+  // Both branches below mount the same widget; only the wrapper differs, so the
+  // element is built once. `key` remounts it when the identity, script type or
+  // theme changes, because the widget reads all three at construction only.
+  const editor = (
+    <div className="kotlin-editor overflow-x-auto min-w-0">
+      <ReactKotlinPlayground
+        mode="kotlin"
+        lines="true"
+        onChange={readOnly ? undefined : onScriptChange}
+        value={wrapForEditor(scriptType, script.script)}
+        highlightOnFly="true"
+        autocomplete={readOnly ? undefined : "true"}
+        matchBrackets={readOnly ? undefined : "true"}
+        // `highlightOnly` is presence-tested by the widget, so the read-only arm
+        // must be `undefined` and not `"false"`; `autocomplete` and
+        // `matchBrackets` above are compared `=== "true"` instead.
+        highlightOnly={readOnly ? "true" : undefined}
+        theme={isDarkMode ? "darcula" : "idea"}
+        key={`${id ?? "new"}-${scriptType}-${isDarkMode ? "dark" : "light"}`}
+      />
+    </div>
+  )
+
   return (
     <>
       {/* Name section (hidden in compact mode) */}
@@ -134,36 +156,10 @@ export function ScriptEditor({
 
       {/* Kotlin playground */}
       {compact ? (
-        <div className="kotlin-editor overflow-x-auto min-w-0">
-          <ReactKotlinPlayground
-            mode="kotlin"
-            lines="true"
-            onChange={readOnly ? undefined : onScriptChange}
-            value={wrapForEditor(scriptType, script.script)}
-            highlightOnFly="true"
-            autocomplete={readOnly ? undefined : "true"}
-            matchBrackets={readOnly ? undefined : "true"}
-            highlightOnly={readOnly ? "true" : undefined}
-            theme={isDarkMode ? "darcula" : "idea"}
-            key={`${id ?? "new"}-${scriptType}-${isDarkMode ? "dark" : "light"}`}
-          />
-        </div>
+        editor
       ) : (
         <Card className="p-4 m-2 flex flex-col overflow-hidden min-w-0">
-          <div className="kotlin-editor overflow-x-auto min-w-0">
-            <ReactKotlinPlayground
-              mode="kotlin"
-              lines="true"
-              onChange={readOnly ? undefined : onScriptChange}
-              value={wrapForEditor(scriptType, script.script)}
-              highlightOnFly="true"
-              autocomplete={readOnly ? undefined : "true"}
-              matchBrackets={readOnly ? undefined : "true"}
-              highlightOnly={readOnly ? "true" : undefined}
-              theme={isDarkMode ? "darcula" : "idea"}
-              key={`${id ?? "new"}-${scriptType}-${isDarkMode ? "dark" : "light"}`}
-            />
-          </div>
+          {editor}
         </Card>
       )}
 

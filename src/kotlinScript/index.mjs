@@ -5,6 +5,4 @@ import KotlinPlayground from "./component.mjs";
 const ReactKotlinPlayground = (props) =>
     h(KotlinPlayground, { playground, ...props });
 
-ReactKotlinPlayground.propTypes = KotlinPlayground.propTypes;
-
 export default ReactKotlinPlayground;
