@@ -41,6 +41,7 @@ import { ProjectSettings, ProjectSettingsRedirect } from "./routes/ProjectSettin
 import { InstallSettings } from "./routes/InstallSettings";
 import { ResetPasswordPage } from "./routes/ResetPasswordPage";
 import { DeviceLoginPage } from "./routes/DeviceLoginPage";
+import { isPublicPath } from "./lib/publicPath";
 
 // Route-level lazy boundaries for two of the four heavy islands.
 //
@@ -82,10 +83,8 @@ function ProjectSyncToSettings() {
   return <Navigate to={`/projects/${projectId}/settings/sync`} replace />
 }
 
-// Pages reachable without an account, and without the show being up: the two phone-facing
-// QR pages. `/reset/<token>` belongs to someone locked out of the desk; `/device/<token>` is
-// a phone being signed in from it. Neither has a session, so neither gate may stand in front
-// of them.
+// `isPublicPath` (see `lib/publicPath.ts` for what it matches and why) decides which pages skip
+// both `AuthGate` and `BootGate`.
 //
 // Read once at module scope, which is safe only because these pages are siblings of the
 // router's Layout rather than routes inside it, and because the one that finishes with a
@@ -93,16 +92,7 @@ function ProjectSyncToSettings() {
 // re-evaluates this. **A react-router `navigate('/')` from either page would render the whole
 // app with both gates bypassed.** `DeviceLoginPage`'s test pins the document-level navigation
 // for exactly that reason.
-//
-// Matched as routes, not as a bare prefix: `/device/` with no token would otherwise render a
-// blank screen with both gates off.
-//
-// **The `i` flag is not decoration.** React Router matches routes case-insensitively unless a
-// route sets `caseSensitive: true`, which none of ours do — so `/Device/<token>` renders
-// `DeviceLoginPage` either way. A case-sensitive flag here would leave both gates armed in front
-// of it, and a phone keyboard that auto-capitalises the first letter of a hand-typed URL is
-// exactly how that happens.
-const publicPath = /^\/(reset|device)\/[^/]+\/?$/i.test(window.location.pathname)
+const publicPath = isPublicPath(window.location.pathname)
 
 function App() {
   const router = createBrowserRouter([
