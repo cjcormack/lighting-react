@@ -106,16 +106,15 @@ export const looksApi = restApi.injectEndpoints({
       invalidatesTags: (result, _error, { lookId, effects }) =>
         result == null
           ? []
-          : effects === undefined
-            ? [{ type: 'Look', id: lookId }, 'LookList', 'Cue', 'CueList']
-            : [
-                { type: 'Look', id: lookId },
-                'LookList',
-                'Cue',
-                'CueList',
-                'Fixture',
-                'GroupList',
-              ],
+          : [
+              { type: 'Look' as const, id: lookId },
+              'LookList' as const,
+              'Cue' as const,
+              'CueList' as const,
+              ...(effects === undefined
+                ? []
+                : (['Fixture', 'GroupList'] as const)),
+            ],
     }),
 
     deleteLook: build.mutation<void, { projectId: number; lookId: number; force?: boolean }>({
@@ -180,10 +179,14 @@ export const looksApi = restApi.injectEndpoints({
         method: 'POST',
         body: { effectIds },
       }),
+      // Absorbing is an effect write, so it moves `compatibleLookIds` the same way
+      // `saveLook`'s `effects` arm does — hence `Fixture`/`GroupList` here too.
       invalidatesTags: (_result, _error, { lookId }) => [
         { type: 'Look' as const, id: lookId },
         'LookList' as const,
         'FixtureEffects' as const,
+        'Fixture' as const,
+        'GroupList' as const,
       ],
     }),
 
