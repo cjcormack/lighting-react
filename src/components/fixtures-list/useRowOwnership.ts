@@ -1,7 +1,7 @@
 import type { LayerSource } from '@/api/cuesApi'
-import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react'
 import { lightingApi } from '../../api/lightingApi'
 import { parseProgrammerValue } from '../../lib/programmerValue'
+import { useProgrammerRowSnapshot } from './useProgrammerRowSnapshot'
 import type {
   ProgrammerKeyState,
   ProvenanceEntry,
@@ -195,101 +195,22 @@ export function aggregateCellOwnership(
 
 /**
  * Ownership for one row's cells — the sibling of `useRowValues`, and the same discipline:
- * one subscription set per row (not per cell), keyed on a stable string so rebuilding the
- * row list doesn't churn subscriptions, and a cached snapshot identity so an unrelated
- * layer event never re-renders the row.
- *
- * The subscriptions are per `(target, property)` rather than whole-state, because
- * `provenanceState` is a *full* snapshot pushed on every layer event — a cue change would
- * otherwise wake every mounted row in the sheet.
+ * one subscription set per row (not per cell) and a cached snapshot identity, both owned by
+ * `useProgrammerRowSnapshot`. This hook is just the aggregation layered on top.
  */
 export function useRowOwnership(cells: readonly RowCell[]): RowOwnership {
-  const keysSignature = useMemo(
-    () =>
-      cells
-        .map((cell) => `${cell.col}=${cell.keys.map((k) => `${k.targetKey}|${k.propertyName}`).join(',')}`)
-        .join(';'),
-    [cells],
-  )
+  return useProgrammerRowSnapshot(cells, EMPTY_OWNERSHIP, computeRowOwnership)
+}
 
-  const subscribedKeys = useMemo<CellPropertyKey[]>(() => {
-    const seen = new Set<string>()
-    const out: CellPropertyKey[] = []
-    for (const cell of cells) {
-      for (const key of cell.keys) {
-        const id = `${key.targetKey}|${key.propertyName}`
-        if (seen.has(id)) continue
-        seen.add(id)
-        out.push(key)
-      }
-    }
-    return out
-    // Keyed on the signature, not `cells`: buildRows mints fresh Row objects on every filter
-    // keystroke, and re-registering every subscription for every mounted row would make
-    // typing in the filter box quadratic.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [keysSignature])
+function computeRowOwnership(cells: readonly RowCell[]): RowOwnership {
+  const blind = lightingApi.programmer.isBlind()
+  const lookup = (targetKey: string, propertyName: string) =>
+    lightingApi.programmer.getKeyState(targetKey, propertyName)
 
-  const cachedRef = useRef<{
-    cells: readonly RowCell[]
-    version: number
-    ownership: RowOwnership
-  } | null>(null)
-  const versionRef = useRef(0)
-
-  const subscribe = useCallback(
-    (callback: () => void) => {
-      // Nothing to track — the "ownership off" path (FixturesTable passes an empty cell list
-      // for the plain Fixtures/Groups lists). Registering the blind listener anyway would put
-      // every mounted row of a several-hundred-row table on the global programmer channel,
-      // waking them all on every cue change and effect start — the exact cost the per-key
-      // split exists to avoid.
-      if (subscribedKeys.length === 0) return () => {}
-
-      const bump = () => {
-        versionRef.current += 1
-        callback()
-      }
-      const subscriptions = subscribedKeys.map((key) =>
-        lightingApi.programmer.subscribeToKey(key.targetKey, key.propertyName, bump),
-      )
-      // Blind is global rather than per-key, and flipping it changes what every cell
-      // displays. Filter to *just* that transition — the whole-state channel also fires on
-      // every provenance push, and reacting to those here would undo the per-key split.
-      let lastBlind = lightingApi.programmer.isBlind()
-      subscriptions.push(
-        lightingApi.programmer.subscribe((state) => {
-          if (state.blind === lastBlind) return
-          lastBlind = state.blind
-          bump()
-        }),
-      )
-      return () => subscriptions.forEach((s) => s.unsubscribe())
-    },
-    [subscribedKeys],
-  )
-
-  const getSnapshot = useCallback((): RowOwnership => {
-    if (subscribedKeys.length === 0) return EMPTY_OWNERSHIP
-    // Cache on both the programmer version and the cell identity: a repatch or a column
-    // toggle changes what to aggregate without any layer event firing.
-    const cached = cachedRef.current
-    if (cached && cached.cells === cells && cached.version === versionRef.current) {
-      return cached.ownership
-    }
-
-    const blind = lightingApi.programmer.isBlind()
-    const lookup = (targetKey: string, propertyName: string) =>
-      lightingApi.programmer.getKeyState(targetKey, propertyName)
-
-    const ownership: RowOwnership = {}
-    for (const cell of cells) {
-      const value = aggregateCellOwnership(cell.keys, blind, lookup)
-      if (value) ownership[cell.col] = value
-    }
-    cachedRef.current = { cells, version: versionRef.current, ownership }
-    return ownership
-  }, [cells, subscribedKeys])
-
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  const ownership: RowOwnership = {}
+  for (const cell of cells) {
+    const value = aggregateCellOwnership(cell.keys, blind, lookup)
+    if (value) ownership[cell.col] = value
+  }
+  return ownership
 }

@@ -6,10 +6,11 @@ import { cellValueFromParts, isLocalEntry, stagedPartFor } from './scopedCellVal
 import { parseProgrammerEntryValue, parseProgrammerValue } from '../../lib/programmerValue'
 import { useProgrammerScope } from '../programmer/ProgrammerScope'
 import { lookRowKey, useLookRowStore } from '../programmer/LookRowStore'
+import { useProgrammerRowSnapshot } from './useProgrammerRowSnapshot'
 import { useRowValues } from './useRowValues'
 import type { AttributeFamily } from '../../lib/attributeFamily'
 import type { CellState, RowCellStates, StagedPart } from './scopedCellValue'
-import type { CellPropertyKey, RowCell } from './useRowValues'
+import type { RowCell } from './useRowValues'
 import type { LookRowStoreValue } from '../programmer/LookRowStore'
 import type { StagedValue } from './useRowOwnership'
 
@@ -72,9 +73,9 @@ const KEY_LIST_SEP = '\u0001'
 /**
  * What the **operator** set, and nothing else.
  *
- * Modelled on `useRowOwnership` rather than on `useRowValues`, because the question is keyed by
- * `(target, property)` and not by channel: per-key subscriptions, a version counter in place of a
- * numeric channel signature, and the same blind-transition filter.
+ * Keyed by `(target, property)` and not by channel, so the subscription mechanics —
+ * per-key subscriptions, a version counter in place of a numeric channel signature, the
+ * blind-transition filter — are `useProgrammerRowSnapshot`'s, shared with `useRowOwnership`.
  *
  * The values themselves come from the programmer's own entries rather than from the wire. That is
  * not an optimisation — under blind the programmer is gated out of the merge, so the wire shows
@@ -82,74 +83,25 @@ const KEY_LIST_SEP = '\u0001'
  * will take.
  */
 function useLocalRowValues(cells: readonly RowCell[]): RowCellStates {
-  const keysSignature = useMemo(() => signatureOf(cells), [cells])
+  return useProgrammerRowSnapshot(cells, EMPTY_STATES, computeLocalRowStates)
+}
 
-  const subscribedKeys = useMemo<CellPropertyKey[]>(
-    () => dedupeKeys(cells),
-    // Keyed on the signature, not `cells`: buildRows mints fresh Row objects on every filter
-    // keystroke, and re-registering every subscription for every mounted row would make typing
-    // in the filter box quadratic. Same reasoning as `useRowOwnership`.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [keysSignature],
-  )
+function computeLocalRowStates(cells: readonly RowCell[]): RowCellStates {
+  const lookup = (targetKey: string, propertyName: string): StagedValue | undefined => {
+    const state = lightingApi.programmer.getKeyState(targetKey, propertyName)
+    if (!isLocalEntry(state)) return undefined
+    return parseProgrammerEntryValue(state.entry!) ?? undefined
+  }
 
-  const cachedRef = useRef<{ cells: readonly RowCell[]; version: number; states: RowCellStates } | null>(
-    null,
-  )
-  const versionRef = useRef(0)
-
-  const subscribe = useCallback(
-    (callback: () => void) => {
-      if (subscribedKeys.length === 0) return () => {}
-      const bump = () => {
-        versionRef.current += 1
-        callback()
-      }
-      const subscriptions = subscribedKeys.map((key) =>
-        lightingApi.programmer.subscribeToKey(key.targetKey, key.propertyName, bump),
-      )
-      // Blind is global, and flipping it does not change what Local holds — but it does change
-      // whether the row is showing a staged value, and the ownership rings beside it move. Track
-      // just that transition; reacting to every provenance push would undo the per-key split.
-      let lastBlind = lightingApi.programmer.isBlind()
-      subscriptions.push(
-        lightingApi.programmer.subscribe((state) => {
-          if (state.blind === lastBlind) return
-          lastBlind = state.blind
-          bump()
-        }),
-      )
-      return () => subscriptions.forEach((s) => s.unsubscribe())
-    },
-    [subscribedKeys],
-  )
-
-  const getSnapshot = useCallback((): RowCellStates => {
-    if (subscribedKeys.length === 0) return EMPTY_STATES
-    const cached = cachedRef.current
-    if (cached && cached.cells === cells && cached.version === versionRef.current) {
-      return cached.states
-    }
-
-    const lookup = (targetKey: string, propertyName: string): StagedValue | undefined => {
-      const state = lightingApi.programmer.getKeyState(targetKey, propertyName)
-      if (!isLocalEntry(state)) return undefined
-      return parseProgrammerEntryValue(state.entry!) ?? undefined
-    }
-
-    const states: RowCellStates = {}
-    for (const cell of cells) {
-      const parts = cell.resolutions.map((res, i) =>
-        stagedPartFor(res, cell.targetKeys[i], lookup),
-      )
-      // Every cell is editable in Local, set or not — an em-dash is where you *start* a value.
-      states[cell.col] = { value: cellValueFromParts(cell.resolutions, parts), editable: true }
-    }
-    cachedRef.current = { cells, version: versionRef.current, states }
-    return states
-  }, [cells, subscribedKeys])
-
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  const states: RowCellStates = {}
+  for (const cell of cells) {
+    const parts = cell.resolutions.map((res, i) =>
+      stagedPartFor(res, cell.targetKeys[i], lookup),
+    )
+    // Every cell is editable in Local, set or not — an em-dash is where you *start* a value.
+    states[cell.col] = { value: cellValueFromParts(cell.resolutions, parts), editable: true }
+  }
+  return states
 }
 
 /**
@@ -268,25 +220,3 @@ function cellFamily(cell: RowCell): AttributeFamily {
   return columnFamily(cell.col)
 }
 
-function signatureOf(cells: readonly RowCell[]): string {
-  return cells
-    .map(
-      (cell) =>
-        `${cell.col}=${cell.keys.map((k) => `${k.targetKey}|${k.propertyName}`).join(',')}`,
-    )
-    .join(';')
-}
-
-function dedupeKeys(cells: readonly RowCell[]): CellPropertyKey[] {
-  const seen = new Set<string>()
-  const out: CellPropertyKey[] = []
-  for (const cell of cells) {
-    for (const key of cell.keys) {
-      const id = `${key.targetKey}|${key.propertyName}`
-      if (seen.has(id)) continue
-      seen.add(id)
-      out.push(key)
-    }
-  }
-  return out
-}
