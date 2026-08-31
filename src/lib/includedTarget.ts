@@ -28,11 +28,6 @@ export function includedTargetParts(target: IncludedTarget): {
   if (target.kind === 'LOOK') {
     return { name: target.lookName ?? `Look ${target.lookId}` }
   }
-  if (target.kind === 'PALETTE') {
-    // Unreachable from this client — nothing includes a palette any more — but the arm is still on
-    // the wire, so a stale target from another client still gets a name rather than "Cue undefined".
-    return { name: target.paletteName ?? `Palette ${target.paletteId}` }
-  }
   return {
     number: target.cueNumber || undefined,
     // The id fallback only stands in when there is no number either: "Q3 · Cue 5" would name the
@@ -44,15 +39,15 @@ export function includedTargetParts(target: IncludedTarget): {
 /**
  * A stable key for the include target, used by `UpdateDialog`'s once-per-run guard.
  *
- * One shape per kind — `B`, `A:C:{id}`, `A:L:{id}`, `A:P:{id}` — so flipping between a cue target,
- * a Look target and the checklist each re-arms the dialog. Keying on `open` alone previously left
- * Mode B showing no checklist and a permanently disabled button; the same class of bug is reachable
- * when a target is cleared from another tab.
+ * One shape per kind — `B`, `A:C:{id}`, `A:L:{id}` — so flipping between a cue target, a Look
+ * target and the checklist each re-arms the dialog. Keying on `open` alone previously left Mode B
+ * showing no checklist and a permanently disabled button; the same class of bug is reachable when a
+ * target is cleared from another tab. Any kind added later needs its own prefix here, or two
+ * targets of different kinds sharing an id would look like one.
  */
 export function includedTargetKey(target: IncludedTarget | null): string {
   if (target == null) return 'B'
   if (target.kind === 'LOOK') return `A:L:${target.lookId}`
-  if (target.kind === 'PALETTE') return `A:P:${target.paletteId}`
   return `A:C:${target.cueId}`
 }
 

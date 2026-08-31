@@ -132,10 +132,15 @@ export interface ProgrammerLayer {
  * What Include last pulled into the programmer, and therefore what a bare Update writes back to.
  * Null means nothing is staged, so Update falls through to the Mode B checklist.
  *
- * A discriminated union rather than one shape with nullable halves: a cue target has no palette and
+ * A discriminated union rather than one shape with nullable halves: a cue target has no Look id and
  * vice versa, and the compiler should say so at every read site. Use `describeIncludedTarget` in
  * `src/lib/includedTarget.ts` for anything user-facing so the wording can't drift between the
  * toolbar, the Update dialog and the collapsed pane.
+ *
+ * There was a third `PALETTE` arm, kept on the grounds that a stale target from an older client
+ * would still need naming. `IncludedTargetDto` has since dropped all three `palette*` fields with
+ * the palette tables, so the arm could only ever have rendered "Palette undefined" — the server
+ * cannot describe a palette target even if one somehow arrived.
  */
 export type IncludedTarget =
   | {
@@ -144,11 +149,6 @@ export type IncludedTarget =
       cueStackId?: number
       cueName?: string
       cueNumber?: string
-    }
-  | {
-      kind: 'PALETTE'
-      paletteId: number
-      paletteName?: string
     }
   | {
       /**

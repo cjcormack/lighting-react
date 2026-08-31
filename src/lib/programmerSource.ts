@@ -95,12 +95,6 @@ export function resolveProgrammerSource({
     }
   }
 
-  if (target.kind === 'PALETTE') {
-    // Nothing in this client includes a palette any more, but a stale target from an older client
-    // must still name itself rather than rendering as an empty programmer.
-    return { kind: 'look', name: includedTargetParts(target).name, dirty, missing: false }
-  }
-
   const { number, name } = includedTargetParts(target)
   return {
     kind: 'cue',

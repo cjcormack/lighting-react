@@ -656,18 +656,8 @@ describe('createProgrammerApi', () => {
   // same class of bug is still guarded — see the provenance-signature test below, which is the live
   // instance of it now that a key can move from a cue to one of the cue's layers.
 
-  it('accepts a PALETTE include target', () => {
-    const { conn, frame } = fakeWsConnection()
-    const api = createProgrammerApi(conn)
-    frame({
-      type: 'programmer.includeTarget',
-      target: { kind: 'PALETTE', paletteId: 4, paletteName: 'Warm Amber', paletteType: 'COLOUR' },
-    })
-    expect(api.lastIncluded()).toEqual({
-      kind: 'PALETTE',
-      paletteId: 4,
-      paletteName: 'Warm Amber',
-      paletteType: 'COLOUR',
-    })
-  })
+  // "accepts a PALETTE include target" stood here, feeding `paletteId` / `paletteName` /
+  // `paletteType`. `IncludedTargetDto` carries none of those — they went with the palette tables,
+  // and its `kind` is `CUE` or `LOOK` — so the test pinned a payload the server cannot emit, which
+  // certifies the drift rather than catching it.
 })

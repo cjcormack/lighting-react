@@ -70,13 +70,9 @@ describe('resolveProgrammerSource', () => {
     ).toEqual({ kind: 'look', name: 'Amber Key', families: 'Colour', dirty: 1, missing: false })
   })
 
-  it('still names a stale palette target rather than reading as empty', () => {
-    const result = resolveProgrammerSource({
-      ...base,
-      target: { kind: 'PALETTE', paletteId: 7, paletteName: 'Old Blues' },
-    })
-    expect(result).toMatchObject({ kind: 'look', name: 'Old Blues' })
-  })
+  // A case pinning that a stale `PALETTE` target resolved to a named `look` source stood here. The
+  // arm it covered is gone: `IncludedTargetDto` dropped its `palette*` fields with the palette
+  // tables, so the frame it fed cannot arrive and the name it asserted cannot be sent.
 })
 
 describe('canClaimInSync', () => {

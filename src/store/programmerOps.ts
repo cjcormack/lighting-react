@@ -174,10 +174,11 @@ export interface IncludeRequest {
 
 export interface IncludeResponse {
   /**
-   * `PALETTE` is still in the union because the backend arm still exists, but nothing here sends
-   * a `paletteId` any more — the palette route reads tables no consumer resolves through.
+   * A `PALETTE` arm stood here on the grounds that the backend one still existed. It does not:
+   * `ProgrammerIncludeResponse` is constructed at exactly two sites, one per kind, and the
+   * `IncludedTarget.Kind` enum behind them has only `CUE` and `LOOK`.
    */
-  kind: 'CUE' | 'PALETTE' | 'LOOK'
+  kind: 'CUE' | 'LOOK'
   /** Null unless a cue was included. */
   cueId?: number
   cueStackId?: number

@@ -19,11 +19,10 @@ describe('describeIncludedTarget', () => {
     expect(describeIncludedTarget({ kind: 'LOOK', lookId: 9 })).toBe('Look 9')
   })
 
-  it('still names a legacy palette target rather than falling through to the cue arm', () => {
-    // Nothing in this client includes a palette any more, but the arm is still on the wire and a
-    // stale target set by another client would otherwise read "Cue undefined".
-    expect(describeIncludedTarget({ kind: 'PALETTE', paletteId: 3, paletteName: 'Old' })).toBe('Old')
-  })
+  // A fourth case stood here pinning that a legacy `PALETTE` target still got a name. It certified
+  // the drift rather than catching it: `IncludedTargetDto` carries no `palette*` fields any more,
+  // so the payload it fed is one the server cannot emit, and the arm it exercised could only ever
+  // have rendered "Palette undefined" against a real frame.
 })
 
 describe('includedTargetKey', () => {
