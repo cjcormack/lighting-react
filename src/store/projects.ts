@@ -129,32 +129,12 @@ export const projectsApi = restApi.injectEndpoints({
         // Cache invalidation handled by WebSocket subscription above
       }),
 
-      // Get scripts for any project
+      // Get scripts for any project. The list carries each script in full — `source` included
+      // — so the editor opens straight from a row; there is no single-script read to warm.
+      // (One stood here, with an `onQueryStarted` that upserted every row into it. Nothing ever
+      // subscribed to that cache, so the whole warming loop ran per list fetch for no reader.)
       projectScripts: build.query<ProjectScriptDetail[], number>({
         query: (projectId) => `projects/${projectId}/scripts`,
-        providesTags: ['Script'],
-        async onQueryStarted(projectId, { dispatch, queryFulfilled }) {
-          try {
-            const { data } = await queryFulfilled
-            // Warm the individual script cache with data from the list
-            data.forEach(script => {
-              dispatch(
-                projectsApi.util.upsertQueryData(
-                  'projectScript',
-                  { projectId, scriptId: script.id },
-                  script
-                )
-              )
-            })
-          } catch {
-            // Query failed, nothing to cache
-          }
-        },
-      }),
-
-      // Get full script from any project
-      projectScript: build.query<ProjectScriptDetail, { projectId: number; scriptId: number }>({
-        query: ({ projectId, scriptId }) => `projects/${projectId}/scripts/${scriptId}`,
         providesTags: ['Script'],
       }),
 
@@ -261,7 +241,6 @@ export const {
   useDeleteProjectMutation,
   useSetCurrentProjectMutation,
   useProjectScriptsQuery,
-  useProjectScriptQuery,
   useCloneProjectMutation,
   useExportProjectMutation,
   useImportProjectMutation,

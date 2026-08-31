@@ -7,8 +7,6 @@ import type {
   Cue,
   CueInput,
   CuePatchInput,
-  CopyCueRequest,
-  CopyCueResponse,
   ApplyCueResponse,
   StopCueResponse,
   CueCookedResponse,
@@ -95,21 +93,9 @@ export const cuesApi = restApi.injectEndpoints({
       ],
     }),
 
-    saveProjectCue: build.mutation<
-      Cue,
-      { projectId: number; cueId: number } & CueInput
-    >({
-      query: ({ projectId, cueId, ...body }) => ({
-        url: `projects/${projectId}/cues/${cueId}`,
-        method: 'PUT',
-        body,
-      }),
-      invalidatesTags: (_result, _error, { projectId, cueId }) => [
-        { type: 'CueList', id: projectId },
-        { type: 'Cue', id: cueId },
-        { type: 'CueStackList', id: projectId },
-      ],
-    }),
+    // `saveProjectCue` (the whole-cue PUT) stood here. A cue's values became read-only in
+    // session 2a — they are composed server-side from its layers — so every write left is a
+    // field-level `patchProjectCue`, and nothing had sent a full-body PUT since.
 
     patchProjectCue: build.mutation<
       Cue,
@@ -146,19 +132,9 @@ export const cuesApi = restApi.injectEndpoints({
       ],
     }),
 
-    copyCue: build.mutation<
-      CopyCueResponse,
-      { projectId: number; cueId: number } & CopyCueRequest
-    >({
-      query: ({ projectId, cueId, ...body }) => ({
-        url: `projects/${projectId}/cues/${cueId}/copy`,
-        method: 'POST',
-        body,
-      }),
-      invalidatesTags: (_result, _error, { targetProjectId }) => [
-        { type: 'CueList', id: targetProjectId },
-      ],
-    }),
+    // `copyCue` stood here, fired by a `CopyCueDialog` that was deleted before this sweep;
+    // copying a cue between projects is `cloneProject` or an export/import today. The route
+    // remains server-side.
 
     applyCue: build.mutation<
       ApplyCueResponse,
@@ -202,10 +178,8 @@ export const {
   useProjectCueCookedQuery,
   useLazyProjectCueQuery,
   useCreateProjectCueMutation,
-  useSaveProjectCueMutation,
   usePatchProjectCueMutation,
   useDeleteProjectCueMutation,
-  useCopyCueMutation,
   useApplyCueMutation,
   useStopCueMutation,
 } = cuesApi

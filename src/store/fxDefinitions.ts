@@ -43,30 +43,13 @@ export interface UpdateFxDefinitionRequest {
   timingSource?: string
 }
 
-export interface CompileFxDefinitionRequest {
-  script: string
-  effectMode?: string
-}
-
-export interface FxCompileResponse {
-  success: boolean
-  messages: FxCompileMessage[]
-}
-
-export interface FxCompileMessage {
-  severity: string
-  message: string
-  location?: string | null
-}
-
 // === RTK Query Endpoints ===
 
 export const fxDefinitionsApi = restApi.injectEndpoints({
   endpoints: (build) => ({
-    fxDefinitions: build.query<FxDefinition[], void>({
-      query: () => 'fx/definitions',
-      providesTags: ['FxLibrary'],
-    }),
+    // The definition *list* is not read here: every consumer wants the whole effect
+    // vocabulary, built-ins included, which is `effectLibrary` in `store/fixtureFx.ts`. That
+    // query carries the `FxLibrary` tag the `fxDefinitionListChanged` bridge invalidates.
 
     fxDefinition: build.query<FxDefinition, number>({
       query: (id) => `fx/definitions/${id}`,
@@ -99,40 +82,16 @@ export const fxDefinitionsApi = restApi.injectEndpoints({
       invalidatesTags: ['FxLibrary'],
     }),
 
-    compileFxScript: build.mutation<FxCompileResponse, CompileFxDefinitionRequest>({
-      query: (body) => ({
-        url: 'fx/definitions/compile',
-        method: 'POST',
-        body,
-      }),
-    }),
-
-    compileFxDefinition: build.mutation<FxCompileResponse, { id: number } & CompileFxDefinitionRequest>({
-      query: ({ id, ...body }) => ({
-        url: `fx/definitions/${id}/compile`,
-        method: 'POST',
-        body,
-      }),
-    }),
-
-    testFxDefinition: build.mutation<FxCompileResponse, number>({
-      query: (id) => ({
-        url: `fx/definitions/${id}/test`,
-        method: 'POST',
-      }),
-      invalidatesTags: ['FxLibrary'],
-    }),
+    // The three FX-definition compile/test mutations stood here. `routes/FxLibrary.tsx` compiles
+    // through `compileProjectScript` instead — one dialog and one code path for every script
+    // type, the effect editor included — so none of them was ever fired.
   }),
   overrideExisting: false,
 })
 
 export const {
-  useFxDefinitionsQuery,
   useFxDefinitionQuery,
   useCreateFxDefinitionMutation,
   useUpdateFxDefinitionMutation,
   useDeleteFxDefinitionMutation,
-  useCompileFxScriptMutation,
-  useCompileFxDefinitionMutation,
-  useTestFxDefinitionMutation,
 } = fxDefinitionsApi

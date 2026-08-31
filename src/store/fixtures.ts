@@ -22,12 +22,8 @@ export const fixturesApi = restApi.injectEndpoints({
         },
         providesTags: ['Fixture'],
       }),
-      fixture: build.query<Fixture, number>({
-        query: (id) => {
-          return `fixtures/${id}`
-        },
-        providesTags: ['Fixture'],
-      }),
+      // A single-fixture read stood here. Every surface works from `fixtureList` — it is one
+      // request for the whole rig and the grid needs all of it anyway — so nothing fetched one.
       fixtureTypeList: build.query<Array<FixtureTypeInfo>, void>({
         query: () => {
           return 'fixture-types'
@@ -40,7 +36,7 @@ export const fixturesApi = restApi.injectEndpoints({
 })
 
 export const {
-  useFixtureListQuery, useFixtureQuery, useFixtureTypeListQuery,
+  useFixtureListQuery, useFixtureTypeListQuery,
 } = fixturesApi
 
 export const FIXTURE_KINDS = [

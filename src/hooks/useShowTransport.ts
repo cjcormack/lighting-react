@@ -178,7 +178,7 @@ export function useShowTransport({
    * of the slice's `serverActiveCueId`: that field is the store's memory of the last WS frame it
    * adopted (kept because a reducer cannot read the cache), while this ref is what *this effect*
    * last saw of the cache — and the two genuinely differ, both ways. The optimistic mutation
-   * patches (`advanceCueStack`, `goToCueInStack`, …) move the cache with no frame at all, and a
+   * patches (`advanceCueStack`, `activateCueStack`, …) move the cache with no frame at all, and a
    * connect-time snapshot frame moves both stores at once while the done ticks it implies (a jump
    * of several cues heard as one frame) still need the positional recompute a reset does. So the
    * trigger is "did the cache cursor change since this effect last looked", never "do the two

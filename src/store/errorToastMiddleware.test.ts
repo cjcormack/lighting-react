@@ -57,7 +57,7 @@ describe('errorToastMiddleware', () => {
   })
 
   it('stays silent for an endpoint whose call site reports its own errors', () => {
-    run(rejection({ endpointName: 'copyCue' }))
+    run(rejection({ endpointName: 'copyLook' }))
     expect(toastError).not.toHaveBeenCalled()
   })
 

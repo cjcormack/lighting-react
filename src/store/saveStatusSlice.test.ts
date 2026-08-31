@@ -70,14 +70,14 @@ describe('saveStatusSlice', () => {
     // until the last one lands, not flicker per response.
     let state = run(
       lifecycle('pending', { endpointName: 'patchProjectCue', requestId: 'a' }),
-      lifecycle('pending', { endpointName: 'saveProjectCue', requestId: 'b' }),
+      lifecycle('pending', { endpointName: 'createProjectCue', requestId: 'b' }),
     )
     expect(state.pending).toBe(2)
 
     state = reducer(state, lifecycle('fulfilled', { endpointName: 'patchProjectCue', requestId: 'a' }))
     expect(state.pending).toBe(1)
 
-    state = reducer(state, lifecycle('fulfilled', { endpointName: 'saveProjectCue', requestId: 'b' }))
+    state = reducer(state, lifecycle('fulfilled', { endpointName: 'createProjectCue', requestId: 'b' }))
     expect(state).toEqual({ pending: 0, savedTick: 2, byCue: {} })
   })
 

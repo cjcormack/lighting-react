@@ -35,13 +35,6 @@ export interface DisplayMessage {
   toolCalls?: DisplayToolCall[] | null
 }
 
-export interface AiConversationDetail {
-  id: number
-  title: string | null
-  messages: DisplayMessage[]
-  updatedAt: number
-}
-
 // ─── API Endpoints ──────────────────────────────────────────────────────────
 
 export const aiApi = restApi.injectEndpoints({
@@ -69,12 +62,8 @@ export const aiApi = restApi.injectEndpoints({
       providesTags: ['AiConversation'],
     }),
 
-    aiConversation: build.query<AiConversationDetail, number>({
-      query: (id) => `projects/current/ai/conversations/${id}`,
-      providesTags: (_result, _error, id) => [
-        { type: 'AiConversation', id },
-      ],
-    }),
+    // A single-conversation read stood here. The panel keeps the live transcript in local
+    // state and `aiChat` returns each reply, so re-reading a conversation never had a caller.
 
     deleteAiConversation: build.mutation<void, number>({
       query: (id) => ({
@@ -90,6 +79,5 @@ export const aiApi = restApi.injectEndpoints({
 export const {
   useAiChatMutation,
   useAiConversationsQuery,
-  useAiConversationQuery,
   useDeleteAiConversationMutation,
 } = aiApi

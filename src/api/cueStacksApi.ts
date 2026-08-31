@@ -80,12 +80,6 @@ export interface SortByCueNumberResponse {
   nullNumberCount: number
 }
 
-export interface AddCueToStackRequest {
-  cueId: number
-  sortOrder?: number
-  insertByNumber?: boolean
-}
-
 export interface ReorderCueStacksRequest {
   stackIds: number[]
 }
@@ -96,10 +90,6 @@ export interface ActivateCueStackRequest {
 
 export interface AdvanceCueStackRequest {
   direction: 'FORWARD' | 'BACKWARD'
-}
-
-export interface GoToCueRequest {
-  cueId: number
 }
 
 export interface CueStackActivateResponse {

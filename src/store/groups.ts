@@ -6,8 +6,6 @@ import {
   GroupDetail,
   ApplyFxRequest,
   ApplyFxResponse,
-  ClearFxResponse,
-  DistributionStrategy,
   GroupActiveEffect,
   GroupPropertyDescriptor,
   type ElementMode,
@@ -57,10 +55,9 @@ export const groupsApi = restApi.injectEndpoints({
       providesTags: (_result, _error, name) => [{ type: 'GroupList', id: name }],
     }),
 
-    // Get distribution strategies
-    distributionStrategies: build.query<{ strategies: DistributionStrategy[] }, void>({
-      query: () => 'groups/distribution-strategies',
-    }),
+    // The distribution-strategy vocabulary is not fetched: `DistributionStrategy` is a closed
+    // union in `api/groupsApi.ts` and the pickers render it directly, so the route's list would
+    // only be a second spelling of the same set.
 
     // Get active effects for a group
     groupActiveEffects: build.query<GroupActiveEffect[], string>({
@@ -84,18 +81,8 @@ export const groupsApi = restApi.injectEndpoints({
       ],
     }),
 
-    // Clear all effects from group
-    clearGroupFx: build.mutation<ClearFxResponse, string>({
-      query: (groupName) => ({
-        url: `groups/${encodeURIComponent(groupName)}/fx`,
-        method: 'DELETE',
-      }),
-      invalidatesTags: (_result, _error, groupName) => [
-        { type: 'GroupList', id: groupName },
-        { type: 'GroupActiveEffects', id: groupName },
-        'GroupList',
-      ],
-    }),
+    // `clearGroupFx` (DELETE the whole group's effects) stood here. Every surface removes
+    // effects one at a time through `removeGroupFx`, so the bulk delete had no caller.
 
     // Pause a single group effect (shared /fx/{id} endpoint)
     pauseGroupFx: build.mutation<void, { id: number; groupName: string }>({
@@ -155,10 +142,8 @@ export const {
   useGroupListQuery,
   useGroupQuery,
   useGroupPropertiesQuery,
-  useDistributionStrategiesQuery,
   useGroupActiveEffectsQuery,
   useApplyGroupFxMutation,
-  useClearGroupFxMutation,
   usePauseGroupFxMutation,
   useResumeGroupFxMutation,
   useRemoveGroupFxMutation,

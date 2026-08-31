@@ -8,10 +8,8 @@ import type {
   CueStackCueEntry,
   ReorderCuesRequest,
   ReorderCueStacksRequest,
-  AddCueToStackRequest,
   ActivateCueStackRequest,
   AdvanceCueStackRequest,
-  GoToCueRequest,
   CueRunStateEvent,
   CueStackRunState,
   PreviewCueResponse,
@@ -41,12 +39,9 @@ export const cueStacksApi = restApi.injectEndpoints({
       ],
     }),
 
-    projectCueStack: build.query<CueStack, { projectId: number; stackId: number }>({
-      query: ({ projectId, stackId }) => `projects/${projectId}/cue-stacks/${stackId}`,
-      providesTags: (_result, _error, { projectId }) => [
-        { type: 'CueStackList', id: projectId },
-      ],
-    }),
+    // A single-stack read stood here. Every surface drills into `projectCueStackList` instead
+    // — the list carries each stack's cues in full, so a second cache entry for one of them was
+    // only ever a way for the two to disagree.
 
     // The project's playhead — which stack is currently live. The ordered stack list itself
     // comes from projectCueStackList; this is just the transport state.
@@ -184,23 +179,9 @@ export const cueStacksApi = restApi.injectEndpoints({
       ],
     }),
 
-    // Add or move a cue into a stack (moving between stacks; there is no standalone target).
-    addCueToCueStack: build.mutation<
-      CueStackCueEntry[],
-      { projectId: number; stackId: number } & AddCueToStackRequest
-    >({
-      query: ({ projectId, stackId, ...body }) => ({
-        url: `projects/${projectId}/cue-stacks/${stackId}/add-cue`,
-        method: 'POST',
-        body,
-      }),
-      invalidatesTags: (_result, _error, { projectId }) => [
-        { type: 'CueStackList', id: projectId },
-        'CueStackList',
-        { type: 'CueList', id: projectId },
-        'CueList',
-      ],
-    }),
+    // `addCueToCueStack` stood here. A cue is created straight into its stack
+    // (`createProjectCue` carries `cueStackId`, the one request that honours it) and ordered
+    // within one by `reorderCueStackCues` — so nothing ever sent the add-cue POST.
 
     activateCueStack: build.mutation<
       CueStackActivateResponse,
@@ -311,34 +292,9 @@ export const cueStacksApi = restApi.injectEndpoints({
       ],
     }),
 
-    goToCueInStack: build.mutation<
-      CueStackActivateResponse,
-      { projectId: number; stackId: number } & GoToCueRequest
-    >({
-      query: ({ projectId, stackId, ...body }) => ({
-        url: `projects/${projectId}/cue-stacks/${stackId}/go-to`,
-        method: 'POST',
-        body,
-      }),
-      // Optimistic update: immediately set activeCueId to the target cue
-      async onQueryStarted({ projectId, stackId, cueId }, { dispatch, queryFulfilled }) {
-        const patchResult = dispatch(
-          cueStacksApi.util.updateQueryData('projectCueStackList', projectId, (draft) => {
-            const stack = draft.find((s) => s.id === stackId)
-            if (stack) stack.activeCueId = cueId
-          }),
-        )
-        try {
-          await queryFulfilled
-        } catch {
-          patchResult.undo()
-        }
-      },
-      invalidatesTags: () => [
-        'FixtureEffects',
-        'GroupActiveEffects',
-      ],
-    }),
+    // `goToCueInStack` stood here, with the same optimistic cache patch `activateCueStack`
+    // carries. Jumping to a cue *is* `activateCueStack({ cueId })` — one endpoint whether the
+    // stack was already live or not — so the go-to POST had no caller.
 
     /**
      * Arm the next GO. No optimistic cache patch: the instant row highlight is the runner slice's
@@ -532,18 +488,15 @@ lightingApi.cueStacks.subscribeToRunState(function (event: CueRunStateEvent) {
 
 export const {
   useProjectCueStackListQuery,
-  useProjectCueStackQuery,
   useProjectProgramStateQuery,
   useCreateProjectCueStackMutation,
   useSaveProjectCueStackMutation,
   useDeleteProjectCueStackMutation,
   useReorderCueStacksMutation,
   useReorderCueStackCuesMutation,
-  useAddCueToCueStackMutation,
   useActivateCueStackMutation,
   useDeactivateCueStackMutation,
   useAdvanceCueStackMutation,
-  useGoToCueInStackMutation,
   useSetCueStackStandbyMutation,
   usePreviewCueLookQuery,
   useSortCueStackByCueNumberMutation,

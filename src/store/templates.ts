@@ -34,7 +34,7 @@ export function startTemplatesBridge() {
     // announcement of a delete. A template *retune* rides `cuesRecomposed` instead. `CueList` is
     // the same pairing the looks bridge and every cue-affecting mutation here use — the list's
     // entries carry `layers[].source.name`, so a rename shows through it.
-    store.dispatch(restApi.util.invalidateTags(['Template', 'TemplateList', 'Cue', 'CueList']))
+    store.dispatch(restApi.util.invalidateTags(['TemplateList', 'Cue', 'CueList']))
   })
 }
 
@@ -58,10 +58,8 @@ export const templatesApi = restApi.injectEndpoints({
       ],
     }),
 
-    template: build.query<TemplateSummary, { projectId: number; templateId: number }>({
-      query: ({ projectId, templateId }) => `projects/${projectId}/templates/${templateId}`,
-      providesTags: (_result, _error, { templateId }) => [{ type: 'Template', id: templateId }],
-    }),
+    // A single-template read stood here. The editor opens from a `templateList` row and the
+    // list carries the whole summary, so nothing fetched one on its own.
 
     createTemplate: build.mutation<TemplateSummary, { projectId: number } & TemplateInput>({
       query: ({ projectId, ...body }) => ({
@@ -90,10 +88,8 @@ export const templatesApi = restApi.injectEndpoints({
         method: 'PUT',
         body,
       }),
-      invalidatesTags: (result, _error, { templateId }) =>
-        result == null
-          ? []
-          : [{ type: 'Template', id: templateId }, 'TemplateList', 'Cue', 'CueList'],
+      invalidatesTags: (result) =>
+        result == null ? [] : ['TemplateList', 'Cue', 'CueList'],
     }),
 
     deleteTemplate: build.mutation<
@@ -107,10 +103,8 @@ export const templatesApi = restApi.injectEndpoints({
       // Guarded on the *error*, not the result: a 204 carries no body. A TEMPLATE_IN_USE 409 is an
       // ordinary step (it opens "delete anyway") and nothing was deleted. A forced delete does
       // remove cue layers, hence the cue tags.
-      invalidatesTags: (_result, error, { templateId }) =>
-        error != null
-          ? []
-          : ['TemplateList', { type: 'Template', id: templateId }, 'CueList', 'Cue'],
+      invalidatesTags: (_result, error) =>
+        error != null ? [] : ['TemplateList', 'CueList', 'Cue'],
     }),
 
     /**
@@ -206,7 +200,6 @@ export const templatesApi = restApi.injectEndpoints({
 export const {
   useTemplateListQuery,
   useCreateTemplateFromProgrammerMutation,
-  useTemplateQuery,
   useCreateTemplateMutation,
   useSaveTemplateMutation,
   useDeleteTemplateMutation,

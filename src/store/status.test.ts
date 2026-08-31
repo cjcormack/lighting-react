@@ -33,7 +33,8 @@ const TAGS_FORMERLY_COVERED_BY_A_BRIDGE = [
   "SpeedMaster",
   "SpeedMasterList",
   "StageRegion",
-  "Template",
+  // `Template` stood here too. Its only provider was the single-template read, deleted with the
+  // rest of the caller-less endpoints; `TemplateList` is what the library actually subscribes to.
   "TemplateList",
   "User",
   "UserList",

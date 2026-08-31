@@ -20,7 +20,6 @@ export const NON_SAVE_ENDPOINTS: ReadonlySet<string> = new Set([
   'activateCueStack',
   'deactivateCueStack',
   'advanceCueStack',
-  'goToCueInStack',
   'setCueStackStandby',
   'goToStack',
   'activateProgram',
@@ -52,7 +51,6 @@ export const NON_SAVE_ENDPOINTS: ReadonlySet<string> = new Set([
   'removeGroupFx',
   'pauseGroupFx',
   'resumeGroupFx',
-  'clearGroupFx',
   // `previewLook` / `clearLookPreview` stood here. They drove the Look editor's rig preview,
   // which went with the editor in session 3; the routes themselves were deleted server-side
   // afterwards, so there is nothing left to classify.
@@ -66,9 +64,6 @@ export const NON_SAVE_ENDPOINTS: ReadonlySet<string> = new Set([
   // ── Compile / run / chat: long-running, and each already reports its own outcome ──
   'compileProjectScript',
   'runProjectScript',
-  'compileFxScript',
-  'compileFxDefinition',
-  'testFxDefinition',
   'aiChat',
 
   // ── Session and connection state, not project data ──

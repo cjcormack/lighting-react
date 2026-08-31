@@ -238,24 +238,11 @@ export interface CueInput {
 }
 
 // Partial input for PATCH (inline edits — only send changed fields).
-// Excludes cueStackId/sortOrder which should only change via full PUT.
+// Excludes cueStackId/sortOrder: the stack is fixed at POST (the server ignores it on PATCH
+// anyway) and the order within one moves through `reorderCueStackCues`.
 export type CuePatchInput = Partial<
   Omit<CueInput, 'cueStackId' | 'sortOrder' | 'cueType'>
 >
-
-// Copy request/response
-export interface CopyCueRequest {
-  targetProjectId: number
-  newName?: string
-}
-
-export interface CopyCueResponse {
-  cueId: number
-  cueName: string
-  targetProjectId: number
-  targetProjectName: string
-  message: string
-}
 
 // Apply response
 export interface ApplyCueResponse {

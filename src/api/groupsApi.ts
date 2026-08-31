@@ -116,10 +116,6 @@ export interface GroupActiveEffect {
   rateSpeedMasterUuid?: string | null
 }
 
-export interface ClearFxResponse {
-  removedCount: number
-}
-
 // === Group Property Types ===
 
 export type GroupPropertyDescriptor =
