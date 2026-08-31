@@ -302,6 +302,16 @@ export interface SurfacesWsApi {
   subscribeBanks(fn: (banks: Record<string, string>) => void): Subscription
   /** Pickup-state transitions (non-motor fader soft takeover). */
   subscribePickup(fn: (change: PickupChange) => void): Subscription
+
+  // The last snapshot of each cached stream, or null before its first frame. `subscribeX`
+  // already replays that snapshot synchronously to a new subscriber; these exist so a reader
+  // that is not a subscriber — an RTK Query `queryFn` seeding its cache entry — can have the
+  // same value without one. Mirrors `speedMasters.getState()`. There is deliberately no
+  // pickup equivalent: pickup is an event stream with no snapshot to replay.
+  getDevices(): SurfaceDeviceInfo[] | null
+  getBanks(): Record<string, string> | null
+  getScaler(): ScalerState | null
+
   /** Binding list membership changed (added / updated / removed / reloaded). */
   subscribeBindingsChanged(fn: (event: BindingsChangeEvent) => void): Subscription
   /** Learn session events scoped to this connection. */
@@ -458,6 +468,9 @@ export function createSurfacesWsApi(conn: InternalApiConnection): SurfacesWsApi 
     subscribeDevices: subscribeCached(devices.api, () => lastDevices),
     subscribeBanks: subscribeCached(banks.api, () => lastBanks),
     subscribePickup: pickup.api.subscribe,
+    getDevices: () => lastDevices,
+    getBanks: () => lastBanks,
+    getScaler: () => lastScaler,
     subscribeBindingsChanged: bindings.api.subscribe,
     subscribeLearn: learn.api.subscribe,
     subscribeScaler: subscribeCached(scaler.api, () => lastScaler),

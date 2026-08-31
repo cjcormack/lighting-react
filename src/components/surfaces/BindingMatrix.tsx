@@ -29,6 +29,7 @@ import {
   useUpdateSurfaceBindingMutation,
   useDeleteSurfaceBindingMutation,
   usePickupStates,
+  pickupKey,
 } from "@/store/surfaces"
 import type {
   BindingTarget,
@@ -104,7 +105,7 @@ export function BindingMatrix({
               {group.controls.map((control) => {
                 const list = bindingsByControl.get(control.controlId) ?? []
                 const active = resolveActive(list, activeBank)
-                const pickup = pickupStates.get(`${device.displayKey}|${control.controlId}`)
+                const pickup = pickupStates[pickupKey(device.displayKey, control.controlId)]
                 const highlight = active?.id === highlightBindingId
                 const deadReason = active ? describeHealth(active.health) : null
                 const dead = deadReason != null
