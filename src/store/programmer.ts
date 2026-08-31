@@ -84,8 +84,16 @@ export const programmerLayersApi = restApi.injectEndpoints({
       async onCacheEntryAdded(_, { updateCachedData, cacheEntryRemoved }) {
         // `subscribe` fires on every provenance push too, so compare before writing: an
         // untouched stack must not wake the pads on each 50 Hz-adjacent layer event.
-        let signature = layerSignature(lightingApi.programmer.layers())
+        let seen = lightingApi.programmer.layers()
+        let signature = layerSignature(seen)
         const subscription = lightingApi.programmer.subscribe((state) => {
+          // The WS api only reassigns `layers` on a frame that carries them, so the dominant
+          // caller here — a provenance push — hands back the identical array and settles for
+          // free. The stringify stays as the backstop for the frames that do rebuild it (a
+          // `programmer.state` snapshot allocates a new array whatever its contents), because
+          // the whole-object compare is the part that must not drift into a field list.
+          if (state.layers === seen) return
+          seen = state.layers
           const next = layerSignature(state.layers)
           if (next === signature) return
           signature = next
