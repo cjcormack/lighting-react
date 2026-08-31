@@ -93,6 +93,9 @@ export interface FixturesListContainerProps {
    * programmer action happening elsewhere.
    */
   respondToIncludeSelection?: boolean
+  /** Take ownership of the column menu's state — see `useColumnVisibility`. Pass both or neither. */
+  columnVisibility?: ColumnVisibility
+  onColumnVisibilityChange?: (next: ColumnVisibility) => void
   /**
    * Replace the built-in toolbar row, receiving the controls this container owns as ready-made
    * nodes so a caller can re-arrange them without re-implementing their state.
@@ -101,9 +104,6 @@ export interface FixturesListContainerProps {
    * the filter sits above the grid, and the selection actions get a bar of their own. Absent — the
    * two plain list routes — keeps today's single row exactly.
    */
-  /** Take ownership of the column menu's state — see `useColumnVisibility`. Pass both or neither. */
-  columnVisibility?: ColumnVisibility
-  onColumnVisibilityChange?: (next: ColumnVisibility) => void
   renderToolbar?: (parts: {
     filter: React.ReactNode
     lit: React.ReactNode
