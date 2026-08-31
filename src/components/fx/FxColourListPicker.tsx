@@ -1,8 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
-import { HexColorPicker } from 'react-colorful'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Label } from '@/components/ui/label'
-import { ExtendedChannelSlider } from '../fixtures/ExtendedChannelSlider'
 import {
   DndContext,
   closestCenter,
@@ -22,24 +20,19 @@ import { CSS } from '@dnd-kit/utilities'
 import {
   parseExtendedColour,
   serializeExtendedColour,
-  isValidHexColour,
   isTemplateRef,
-  parseTemplateRefUuid,
-  COLOUR_PRESETS,
+  type ExtendedChannelFlags,
   type ExtendedColour,
 } from './colourUtils'
-import { FxColourTemplateRow, useColourTemplates, type ColourTemplates } from './FxColourTemplates'
+import { useColourTemplates, type ColourTemplates } from './FxColourTemplates'
+import { ColourEditorBody } from './ColourEditorBody'
 
 interface FxColourListPickerProps {
   value: string
   onChange: (value: string) => void
   label?: string
   description?: string
-  extendedChannels?: {
-    white?: boolean
-    amber?: boolean
-    uv?: boolean
-  }
+  extendedChannels?: Partial<ExtendedChannelFlags>
 }
 
 interface ColourItem {
@@ -209,11 +202,7 @@ function SortableColourSwatch({
   onEdit: () => void
   onRemove: () => void
   onColourChange: (colour: ExtendedColour, raw?: string) => void
-  extendedChannels?: {
-    white?: boolean
-    amber?: boolean
-    uv?: boolean
-  }
+  extendedChannels?: Partial<ExtendedChannelFlags>
   /** Lifted to the parent so one query serves every swatch in the list. */
   colourTemplates: ColourTemplates
 }) {
@@ -242,45 +231,19 @@ function SortableColourSwatch({
     opacity: isDragging ? 0.5 : undefined,
   }
 
-  const [hexInput, setHexInput] = useState(effectiveColour.hex)
-
-  // Re-seed when the editor opens, not only at mount. The swatch is mounted for the whole list's
-  // lifetime while its popover is not, so a reference seeded before the template list arrived would
-  // show `#000000` in the hex field for the rest of the session — the swatch itself is fine, since
-  // it paints from `refSwatch` on every render.
-  useEffect(() => {
-    if (isEditing) setHexInput(effectiveColour.hex)
-  }, [isEditing, effectiveColour.hex])
-
-  const handleHexChange = useCallback(
-    (hex: string) => {
-      setHexInput(hex)
-      const normalized = hex.startsWith('#') ? hex : `#${hex}`
-      if (isValidHexColour(normalized)) {
-        onColourChange({ ...effectiveColour, hex: normalized.toLowerCase() })
-      }
-    },
-    [onColourChange, effectiveColour]
+  // Touching the editor replaces a reference with the literal it resolved to — the same rule
+  // `FxColourPicker` follows, and why the body is handed `effectiveColour` rather than `item.colour`.
+  const handleColourEdit = useCallback(
+    (colour: ExtendedColour) => onColourChange(colour),
+    [onColourChange],
   )
 
-  const handlePickerChange = useCallback(
-    (hex: string) => {
-      const lower = hex.toLowerCase()
-      setHexInput(lower)
-      onColourChange({ ...effectiveColour, hex: lower })
-    },
-    [onColourChange, effectiveColour]
+  // Picking a template keeps the item's *stored* colour as the placeholder and swaps the raw value
+  // for the reference, so the item goes back to following the template.
+  const handlePickTemplate = useCallback(
+    (ref: string) => onColourChange(item.colour, ref),
+    [onColourChange, item.colour],
   )
-
-  const handleExtendedChange = useCallback(
-    (channel: 'white' | 'amber' | 'uv', val: number) => {
-      onColourChange({ ...effectiveColour, [channel]: val })
-    },
-    [onColourChange, effectiveColour]
-  )
-
-  const hasExtended =
-    extendedChannels?.white || extendedChannels?.amber || extendedChannels?.uv
 
   return (
     <Popover
@@ -322,72 +285,14 @@ function SortableColourSwatch({
         </button>
       </div>
       <PopoverContent className="w-auto p-3" align="start" side="right">
-        <div className="space-y-3">
-          <HexColorPicker color={effectiveColour.hex} onChange={handlePickerChange} />
-
-          {/* Hex input */}
-          <input
-            type="text"
-            value={hexInput}
-            onChange={(e) => handleHexChange(e.target.value)}
-            className="w-full h-7 px-2 text-xs font-mono rounded border border-input bg-background"
-            spellCheck={false}
-          />
-
-          {/* Quick presets */}
-          <div className="flex gap-1 flex-wrap">
-            {COLOUR_PRESETS.map((preset) => (
-              <button
-                key={preset.hex}
-                type="button"
-                title={preset.name}
-                className="w-5 h-5 rounded border border-border hover:scale-110 transition-transform"
-                style={{ backgroundColor: preset.hex }}
-                onClick={() => {
-                  setHexInput(preset.hex)
-                  onColourChange({ ...effectiveColour, hex: preset.hex })
-                }}
-              />
-            ))}
-          </div>
-
-          <FxColourTemplateRow
-            templates={colourTemplates.templates}
-            currentHex={effectiveColour.hex}
-            selectedUuid={parseTemplateRefUuid(item.raw)}
-            onPick={(ref) => onColourChange(item.colour, ref)}
-          />
-
-          {/* Extended channels */}
-          {hasExtended && (
-            <div className="space-y-2 pt-2 border-t border-border">
-              {extendedChannels?.white && (
-                <ExtendedChannelSlider
-                  label="White"
-                  value={effectiveColour.white}
-                  onChange={(v) => handleExtendedChange('white', v)}
-                  color="#fffbe6"
-                />
-              )}
-              {extendedChannels?.amber && (
-                <ExtendedChannelSlider
-                  label="Amber"
-                  value={effectiveColour.amber}
-                  onChange={(v) => handleExtendedChange('amber', v)}
-                  color="#ffbf00"
-                />
-              )}
-              {extendedChannels?.uv && (
-                <ExtendedChannelSlider
-                  label="UV"
-                  value={effectiveColour.uv}
-                  onChange={(v) => handleExtendedChange('uv', v)}
-                  color="#7f00ff"
-                />
-              )}
-            </div>
-          )}
-        </div>
+        <ColourEditorBody
+          colour={effectiveColour}
+          onColourChange={handleColourEdit}
+          rawValue={item.raw}
+          onPickTemplate={handlePickTemplate}
+          templates={colourTemplates.templates}
+          extendedChannels={extendedChannels}
+        />
       </PopoverContent>
     </Popover>
   )

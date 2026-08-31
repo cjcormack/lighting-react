@@ -1,19 +1,16 @@
 import { useState, useCallback, useEffect } from 'react'
-import { HexColorPicker } from 'react-colorful'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Label } from '@/components/ui/label'
-import { ExtendedChannelSlider } from '../fixtures/ExtendedChannelSlider'
 import {
   resolveColourToHex,
   parseExtendedColour,
   serializeExtendedColour,
-  isValidHexColour,
   isTemplateRef,
-  parseTemplateRefUuid,
-  COLOUR_PRESETS,
+  type ExtendedChannelFlags,
   type ExtendedColour,
 } from './colourUtils'
-import { FxColourTemplateRow, useColourTemplates } from './FxColourTemplates'
+import { useColourTemplates } from './FxColourTemplates'
+import { ColourEditorBody } from './ColourEditorBody'
 
 interface FxColourPickerProps {
   value: string
@@ -21,11 +18,7 @@ interface FxColourPickerProps {
   label?: string
   description?: string
   /** Which extended channels to show (based on target fixture capabilities) */
-  extendedChannels?: {
-    white?: boolean
-    amber?: boolean
-    uv?: boolean
-  }
+  extendedChannels?: Partial<ExtendedChannelFlags>
 }
 
 export function FxColourPicker({
@@ -40,10 +33,6 @@ export function FxColourPicker({
 
   const [isOpen, setIsOpen] = useState(false)
   const [localColour, setLocalColour] = useState<ExtendedColour>(() => parseExtendedColour(value))
-  // A reference has no literal to read at mount and the template list has not arrived yet, so this
-  // seeds to black either way; the open effect below re-seeds from the resolved colour, and the
-  // field is only rendered inside the popover.
-  const [hexInput, setHexInput] = useState(() => resolveColourToHex(value))
 
   // Sync from parent value when the popover opens.
   //
@@ -54,9 +43,7 @@ export function FxColourPicker({
   useEffect(() => {
     if (isOpen) {
       const resolved = isTemplateRef(value) ? swatchFor(value) : null
-      const parsed = parseExtendedColour(resolved ?? value)
-      setLocalColour(parsed)
-      setHexInput(parsed.hex)
+      setLocalColour(parseExtendedColour(resolved ?? value))
     }
   }, [isOpen, value, swatchFor])
 
@@ -67,45 +54,6 @@ export function FxColourPicker({
     },
     [onChange]
   )
-
-  const handleHexChange = useCallback(
-    (hex: string) => {
-      setHexInput(hex)
-      // Only emit when valid to avoid intermediate states
-      const normalized = hex.startsWith('#') ? hex : `#${hex}`
-      if (isValidHexColour(normalized)) {
-        emitChange({ ...localColour, hex: normalized.toLowerCase() })
-      }
-    },
-    [emitChange, localColour]
-  )
-
-  const handlePickerChange = useCallback(
-    (hex: string) => {
-      const lower = hex.toLowerCase()
-      setHexInput(lower)
-      emitChange({ ...localColour, hex: lower })
-    },
-    [emitChange, localColour]
-  )
-
-  const handlePresetClick = useCallback(
-    (hex: string) => {
-      setHexInput(hex)
-      emitChange({ ...localColour, hex })
-    },
-    [emitChange, localColour]
-  )
-
-  const handleExtendedChange = useCallback(
-    (channel: 'white' | 'amber' | 'uv', val: number) => {
-      emitChange({ ...localColour, [channel]: val })
-    },
-    [emitChange, localColour]
-  )
-
-  const hasExtended =
-    extendedChannels?.white || extendedChannels?.amber || extendedChannels?.uv
 
   const refSwatch = isRef ? swatchFor(value) : null
   const displayHex = refSwatch ?? resolveColourToHex(value)
@@ -135,70 +83,14 @@ export function FxColourPicker({
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-3" align="start" side="right">
-          <div className="space-y-3">
-            {/* Colour picker */}
-            <HexColorPicker color={localColour.hex} onChange={handlePickerChange} />
-
-            {/* Hex input */}
-            <input
-              type="text"
-              value={hexInput}
-              onChange={(e) => handleHexChange(e.target.value)}
-              className="w-full h-7 px-2 text-xs font-mono rounded border border-input bg-background"
-              spellCheck={false}
-            />
-
-            {/* Quick presets */}
-            <div className="flex gap-1 flex-wrap">
-              {COLOUR_PRESETS.map((preset) => (
-                <button
-                  key={preset.hex}
-                  type="button"
-                  title={preset.name}
-                  className="w-5 h-5 rounded border border-border hover:scale-110 transition-transform"
-                  style={{ backgroundColor: preset.hex }}
-                  onClick={() => handlePresetClick(preset.hex)}
-                />
-              ))}
-            </div>
-
-            <FxColourTemplateRow
-              templates={templates}
-              currentHex={localColour.hex}
-              selectedUuid={parseTemplateRefUuid(value)}
-              onPick={onChange}
-            />
-
-            {/* Extended channels (W/A/UV) */}
-            {hasExtended && (
-              <div className="space-y-2 pt-2 border-t border-border">
-                {extendedChannels?.white && (
-                  <ExtendedChannelSlider
-                    label="White"
-                    value={localColour.white}
-                    onChange={(v) => handleExtendedChange('white', v)}
-                    color="#fffbe6"
-                  />
-                )}
-                {extendedChannels?.amber && (
-                  <ExtendedChannelSlider
-                    label="Amber"
-                    value={localColour.amber}
-                    onChange={(v) => handleExtendedChange('amber', v)}
-                    color="#ffbf00"
-                  />
-                )}
-                {extendedChannels?.uv && (
-                  <ExtendedChannelSlider
-                    label="UV"
-                    value={localColour.uv}
-                    onChange={(v) => handleExtendedChange('uv', v)}
-                    color="#7f00ff"
-                  />
-                )}
-              </div>
-            )}
-          </div>
+          <ColourEditorBody
+            colour={localColour}
+            onColourChange={emitChange}
+            rawValue={value}
+            onPickTemplate={onChange}
+            templates={templates}
+            extendedChannels={extendedChannels}
+          />
         </PopoverContent>
       </Popover>
     </div>
