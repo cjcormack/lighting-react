@@ -27,7 +27,7 @@ import {
 import { useCloudSyncConfigsQuery, type SyncConfig } from "../store/cloudSync"
 import { useOauthGithubIdentityQuery } from "../store/oauthGithub"
 import { useIsNavAdmin } from "../navigation"
-import { formatRepoUrl } from "./CloudSync"
+import { formatRepoUrl } from "@/lib/formatRepoUrl"
 import { ProjectSummary } from "../api/projectApi"
 import CreateProjectDialog from "../CreateProjectDialog"
 import DeleteProjectConfirmDialog from "../DeleteProjectConfirmDialog"

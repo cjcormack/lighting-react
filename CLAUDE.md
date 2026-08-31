@@ -810,7 +810,9 @@ Backend contract in `lighting7/docs/sync-engineering.md`. Three traps on this si
   `connected: true` and gains `reauthRequired` — that conflation is why the desk showed
   "Connected as @user" plus a permanent "refreshing soon" badge for 25 days while every
   sync failed. Every gate must read `connected === true && reauthRequired !== true`; the
-  five that do are in `IdentityRow`, `CloudSync.tsx` (×3) and `Projects.tsx`.
+  five that do are in `IdentityRow`, `routes/CloudSync.tsx` (the hub's "Add remote
+  project"), `components/cloudSync/ConfigPanel.tsx`, `components/cloudSync/StatusPanel.tsx`
+  and `Projects.tsx`.
 - **`/api/rest/oauth/` is admin-gated**, so every caller of `useOauthGithubIdentityQuery`
   passes `skip: !isAdmin` — the same reliance `store/users.ts` documents for
   `useUsersQuery`, and now load-bearing in a new way, because the sidebar badge and the
