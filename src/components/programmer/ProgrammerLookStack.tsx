@@ -71,10 +71,9 @@ export function ProgrammerLookStack() {
       },
       onMove: (oldIndex, newIndex) => {
         const layer = layers[oldIndex]
-        // No client-side renumbering — not even `cueUtils.reorderCueLayers`, which is what such a
-        // renumber would look like and has no caller for exactly this reason. The server renumbers
-        // the whole stack and re-ranks the running effects in place, so restating `sortOrder` here
-        // would be a second opinion on an order we don't own.
+        // No client-side renumbering. The server renumbers the whole stack and re-ranks the running
+        // effects in place, so restating `sortOrder` here would be a second opinion on an order we
+        // don't own — which is also why `cueUtils`' two layer-order helpers had no caller and went.
         if (layer) programmerMoveLayer(layer.layerId, newIndex)
       },
       onSetEnabled: (index, enabled) => {

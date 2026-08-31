@@ -1,4 +1,4 @@
-import type { Cue, CueInput, CueLayer } from '@/api/cuesApi'
+import type { Cue, CueInput } from '@/api/cuesApi'
 import { formatMs } from './formatMs'
 
 const CURVE_LABELS: Record<string, string> = {
@@ -122,52 +122,10 @@ export function buildCueInput(cue: Cue): CueInput {
   }
 }
 
-/**
- * Move a layer within a cue's ordered composition and restate every `sortOrder` from its position.
- *
- * Rewriting the whole list rather than the two moved entries is what keeps the order dense and
- * gap-free, and `sortOrder` is the authoritative playback order — the array position is only how
- * this client happens to hold it. A stale gap would resolve fine, but two layers sharing a
- * `sortOrder` would leave the tie to insertion order in the cook step, which is exactly the
- * accident the layer model exists to remove.
- *
- * **No production caller.** The drag it was written for went with `LayersPane` in session 2a, and
- * the programmer stack deliberately does not renumber client-side (`ProgrammerLookStack.onMove`) —
- * the server owns that order. Only `cueUtils.test.ts` exercises it. Kept because the rule above is
- * the one a client-side cue reorder would have to obey, and re-deriving it is the expensive part.
- */
-export function reorderCueLayers<T extends CueLayer>(
-  layers: readonly T[],
-  oldIndex: number,
-  newIndex: number,
-): T[] {
-  const next = [...layers]
-  if (
-    oldIndex < 0 ||
-    newIndex < 0 ||
-    oldIndex >= next.length ||
-    newIndex >= next.length ||
-    oldIndex === newIndex
-  ) {
-    // Still restate sortOrder: a no-op drag on a list that arrived with gaps should not leave them.
-    return next.map((layer, index) => ({ ...layer, sortOrder: index }))
-  }
-  const [moved] = next.splice(oldIndex, 1)
-  next.splice(newIndex, 0, moved)
-  return next.map((layer, index) => ({ ...layer, sortOrder: index }))
-}
-
-/**
- * Restate every `sortOrder` from array position without moving anything.
- *
- * The insert and remove paths a client-side cue editor would need want exactly this — a list that
- * arrived with gaps (an older client's edit) must not hand the appended layer a `sortOrder` another
- * layer already holds, and removing the middle of three must not leave 0 and 2 for a later insert
- * to land in. Named, because expressing it as `reorderCueLayers(layers, 0, 0)` reads as a move and
- * relies on that function's guard clause to mean "renumber".
- *
- * **No production caller either**, for the same reason as [reorderCueLayers].
- */
-export function densifyCueLayerOrder<T extends CueLayer>(layers: readonly T[]): T[] {
-  return layers.map((layer, index) => ({ ...layer, sortOrder: index }))
-}
+// `reorderCueLayers` and `densifyCueLayerOrder` stood here, restating every `sortOrder` from array
+// position so a client-side layer drag could not leave two layers tied. Both were deleted rather
+// than kept a third time: the drag they served went with `LayersPane` in session 2a, the programmer
+// stack deliberately leaves that order to the server (`ProgrammerLookStack.onMove`), and nothing but
+// their own tests had called them since. The rule they encoded is stated where it binds — `sortOrder`
+// is the authoritative playback order, and a tie in it hands the cook step's precedence to insertion
+// order, which is the accident the layer model exists to remove.

@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  buildCueInput,
-  formatFadeDuration,
-  parseFadeDuration,
-  reorderCueLayers,
-} from './cueUtils'
+import { buildCueInput, formatFadeDuration, parseFadeDuration } from './cueUtils'
 import type { Cue } from '@/api/cuesApi'
 
 describe('parseFadeDuration', () => {
@@ -152,38 +147,9 @@ describe('buildCueInput', () => {
   })
 })
 
-describe('reorderCueLayers', () => {
-  const layers = [
-    { lookId: 1, targets: [], sortOrder: 0 },
-    { lookId: 2, targets: [], sortOrder: 1 },
-    { lookId: 3, targets: [], sortOrder: 2 },
-  ]
-
-  it('moves the layer and renumbers every sortOrder from its position', () => {
-    // Dragging the first layer to the end must leave 1, 2, 3 → 2, 3, 1 *and* sortOrder 0, 1, 2.
-    // Leaving the old numbers behind would make the cook step resolve the stack in the order the
-    // operator just dragged away from.
-    const next = reorderCueLayers(layers, 0, 2)
-    expect(next.map((l) => l.lookId)).toEqual([2, 3, 1])
-    expect(next.map((l) => l.sortOrder)).toEqual([0, 1, 2])
-  })
-
-  it('renumbers even when nothing moved', () => {
-    // A list that arrived with gaps — a removed layer, an old import — is densified by any drag,
-    // including one that lands where it started. Two layers sharing a sortOrder would leave the
-    // tie to insertion order in the cook step, which is the accident layers exist to remove.
-    const gappy = [
-      { lookId: 1, targets: [], sortOrder: 0 },
-      { lookId: 2, targets: [], sortOrder: 5 },
-    ]
-    expect(reorderCueLayers(gappy, 1, 1).map((l) => l.sortOrder)).toEqual([0, 1])
-  })
-
-  it('ignores an out-of-range index rather than dropping a layer', () => {
-    const next = reorderCueLayers(layers, 0, 9)
-    expect(next.map((l) => l.lookId)).toEqual([1, 2, 3])
-  })
-})
+// A `reorderCueLayers` block stood here — move-and-renumber, renumber-a-gappy-list, and an
+// out-of-range index that must not drop a layer. It went with the function: see `cueUtils.ts` for
+// why both layer-order helpers were deleted rather than kept annotated a third time.
 
 /** One cue holding a single layer and a single trigger, every optional field at a non-default. */
 function cueWithOneLayer(): Cue {

@@ -251,8 +251,10 @@ be surprised by, so `LookStack`'s `precedenceNote` says it in the section body r
 it implied (it was `LayersPane` that said so until session 2a deleted that pane).
 A layer's `sortOrder` is authoritative, not its array position: two layers sharing one leaves the
 tie to insertion order in the cook step. Nothing renumbers client-side today — the programmer
-stack asks the server to move a layer and takes the order back — and `reorderCueLayers` in
-`lib/cueUtils.ts` is the *unused* record of what a client-side reorder would have to do.
+stack asks the server to move a layer and takes the order back — so a client-side reorder would
+have to restate every `sortOrder`, not just the two it moved. `lib/cueUtils.ts` kept two unused
+helpers (`reorderCueLayers`, `densifyCueLayerOrder`) saying exactly that; they were deleted, and
+the rule lives here instead.
 
 **Layer order does not govern the value/effect boundary**, and per-layer `stomp` is the escape
 hatch. Effects are Layer 3 and values Layer 4, so a lower layer's colour *effect* beats a higher
