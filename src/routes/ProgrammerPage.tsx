@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import { Layers, Loader2 } from 'lucide-react'
-import { Navigate, useLocation, useParams } from 'react-router'
+import { Navigate, useParams } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ShowBar } from '@/components/ShowBar'
@@ -44,23 +44,6 @@ export function ProgrammerRedirect() {
 export function ProgrammerFxRedirect() {
   const { projectId } = useParams()
   return <Navigate to={projectId ? `/projects/${projectId}/programmer` : '/programmer'} replace />
-}
-
-/**
- * `/projects/:id/program*` → `/projects/:id/show*`.
- *
- * Program was renamed to Show when the programmer became a page of its own — two live views one
- * letter apart was the collision that kept the programmer out of the nav last time. The search
- * string is carried across because `?cue=` deep links are how the Prompt Book's "Edit cue"
- * reach a specific cue.
- */
-export function LegacyProgramRedirect() {
-  const { projectId, stackId } = useParams()
-  const { search } = useLocation()
-  const base = stackId
-    ? `/projects/${projectId}/show/stacks/${stackId}`
-    : `/projects/${projectId}/show`
-  return <Navigate to={`${base}${search}`} replace />
 }
 
 /**

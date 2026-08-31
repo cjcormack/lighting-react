@@ -88,11 +88,12 @@ src/
 │   ├── index.ts          # Store configuration
 │   ├── restApi.ts        # Base RTK Query API
 │   └── *.ts              # Entity-specific query hooks
-├── routes/           # Route components (pages)
+├── routes/           # Route components (pages) — see "Components" for what may live here
 │   ├── Channels.tsx      # DMX channel control
 │   ├── Fixtures.tsx      # Fixture management
 │   ├── Scenes.tsx        # Scenes and chases
-│   └── Scripts.tsx       # Kotlin script editor
+│   ├── Scripts.tsx       # Kotlin script editor
+│   └── legacyRedirects.tsx  # Redirects for paths that no longer name a view
 ├── App.tsx           # Router configuration
 ├── Layout.tsx        # Main layout with navigation drawer
 └── main.tsx          # Application entry point
@@ -939,6 +940,35 @@ which the lint rule does not see.
 - Route components in `src/routes/`
 - Shared/utility components in `src/`
 - Use Radix UI primitives (via `src/components/ui/`) and Tailwind for UI
+
+#### What may live in `routes/`
+
+`routes/` is not "anything page-shaped" — it is one module per **routed resource**, and the
+convention has three parts. It is worth stating because the tree looks messier than it is: most
+modules export a page *and* one or two redirects, which reads like drift and is not.
+
+1. **A module owns a resource, and everything that resolves that resource lives in it.** So
+   `Fixtures.tsx` exports both `ProjectFixtures` (the page) and `FixturesRedirect` (bare
+   `/fixtures` → the current project's fixtures). The redirect is part of the resource: it answers
+   "which project?", not "where did this view go?".
+2. **A former route that became a settings tab keeps its module and its identity**, exporting the
+   tab body alongside the redirect that survives its old path — `Patches.tsx` (`PatchesRedirect` +
+   `PatchListContent`), `Surfaces.tsx`, `CloudSync.tsx`. This is the uniform pattern, not a stray.
+   The test is whether the module is still *routed*: if nothing in `App.tsx` renders it, it is a
+   component, not a route, and belongs under `components/<feature>/` — which is where
+   `RiggingsContent` and `StageRegionsContent` went.
+3. **A redirect for a path that no longer names a view goes in `routes/legacyRedirects.tsx`**, not
+   in whichever module happens to be its destination. `/run`, `/cue-stacks`, `/cues` and `/program`
+   all land on `/show`; collecting them keeps `ShowPage.tsx` from accumulating four unrelated
+   histories, and keeps `/program` out of `ProgrammerPage.tsx`, where it reproduced the
+   `/program` vs `/programmer` confusion in the file layout.
+
+Anything else — a pure helper, a shared type — belongs in `lib/` even when only one route uses it
+(`formatRepoUrl` was exported from `CloudSync.tsx` until it moved).
+
+**Redirect targets are frozen.** `?cue=` deep links are an external contract minted by the Prompt
+Book's "Edit cue" card, so a redirect that carries `search` must keep carrying it, and no legacy
+path may quietly change where it lands.
 
 ### Navigation Registry
 - All navigation items are defined in `src/navigation.ts`

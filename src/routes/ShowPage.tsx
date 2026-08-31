@@ -49,18 +49,6 @@ export function ShowRedirect() {
   return <CurrentProjectRedirect to="show" />
 }
 
-/**
- * Back-compat for the removed FX Cues view. `/cues`, `/cues/all`, `/cues/standalone` →
- * `/show`; `/cues/stacks/:stackId` → `/show/stacks/:stackId`.
- */
-export function CuesLegacyRedirect() {
-  const { projectId, stackId } = useParams()
-  const target = stackId
-    ? `/projects/${projectId}/show/stacks/${stackId}`
-    : `/projects/${projectId}/show`
-  return <Navigate to={target} replace />
-}
-
 export function ShowPage() {
   const { projectId, stackId } = useParams()
   const projectIdNum = Number(projectId)

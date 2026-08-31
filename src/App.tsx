@@ -26,14 +26,20 @@ import { TemplatesRedirect, ProjectTemplates } from "./routes/Templates";
 import { SpeedMastersRedirect, ProjectSpeedMasters } from "./routes/SpeedMasters";
 import ProjectOverview, { ProjectOverviewRedirect } from "./routes/ProjectOverview";
 import { PatchesRedirect } from "./routes/Patches";
-import { ShowPage, ShowRedirect, CuesLegacyRedirect } from "./routes/ShowPage";
+import { ShowPage, ShowRedirect } from "./routes/ShowPage";
 import {
   ProgrammerPage,
   ProgrammerRedirect,
   ProgrammerFxRedirect,
-  LegacyProgramRedirect,
 } from "./routes/ProgrammerPage";
-import { LegacyRunRedirect, LegacyCueStacksRedirect } from "./routes/RunPage";
+// Redirects for paths that no longer name a view — see the module header for why they are
+// collected rather than parked in whichever module happens to be the destination.
+import {
+  CuesLegacyRedirect,
+  LegacyCueStacksRedirect,
+  LegacyProgramRedirect,
+  LegacyRunRedirect,
+} from "./routes/legacyRedirects";
 import { SurfacesRedirect } from "./routes/Surfaces";
 import { DiagnosticsRedirect } from "./routes/Diagnostics";
 import { CloudSyncHubRedirect } from "./routes/CloudSync";

@@ -209,8 +209,8 @@ API Layer          Type definitions + WebSocket subscription factories
 | File | Purpose |
 |------|---------|
 | `src/routes/ShowPage.tsx` | Route for `/projects/:projectId/show` (and `/show/stacks/:stackId`) — **the whole of Show Mode's UI since the Run merge**. Header (with the lock control) + `ShowBar`, then either the phone runner or the tab strip / off-playhead banner / `ShowView`. Owns the drill state, the `?cue=` contract, the playhead follow, the edit lock, the transport keyboard, Blind, make-live, and the two `RecordSheet` mounts. |
-| `src/routes/ProgrammerPage.tsx` | Route for `/projects/:projectId/programmer`, and the `/program*` → `/show*` redirect. Source strip · action bar · **scope band** · workspace (grid + layer/FX rail). |
-| `src/routes/RunPage.tsx` | **Redirects only.** `/projects/:id/run` and the legacy `/cue-stacks` paths → `/show`. |
+| `src/routes/ProgrammerPage.tsx` | Route for `/projects/:projectId/programmer`. Source strip · action bar · **scope band** · workspace (grid + layer/FX rail). |
+| `src/routes/legacyRedirects.tsx` | **Redirects only.** Every retired path that lands on Show — `/run`, `/cue-stacks`, `/cues*`, `/program*` — collected in one module rather than parked in whichever page happens to be the destination. `/program*` carries its search string, because `?cue=` is an external contract. |
 | `src/components/ShowBar.tsx` | Row 3, **identical on all three live views**: DBO, **BLIND**, speed masters, programmer chip, active→next, BACK/GO. Every host spreads `showBarProps`; only `showShortcuts` is overridden. |
 | `src/lib/programmerFade.ts` | The programmer's fade time, as a `lib/syncStore.ts` singleton: the action bar's picker writes it, the bar's Blind reads it at press time. A store, not two `usePersistentState` calls, so the picker actually reaches Blind. |
 | `src/components/runner/StackTabStrip.tsx` | Sibling-stack switcher. `selectedStackId` owns the underline, `liveStackId` the green pip — **selecting never moves the playhead**. |
