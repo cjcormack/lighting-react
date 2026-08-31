@@ -1,6 +1,6 @@
 import { InternalApiConnection } from './internalApi'
 import { Subscription } from './subscription'
-import { createWsSubscribable } from './wsSubscriptionFactory'
+import { createKeyedWsSubscribable, createWsSubscribable } from './wsSubscriptionFactory'
 import { sendGesture } from './wsGesture'
 
 /** One master's live state, as streamed by `speedMasters.state` / `speedMasters.changed`. */
@@ -84,8 +84,10 @@ export function createSpeedMastersWsApi(conn: InternalApiConnection): SpeedMaste
   // One subscribable per master rather than one shared stream that every indicator filters:
   // a bank of four masters at 120 BPM is a steady trickle of frames, and waking every
   // indicator on every master's beat only to discard it is exactly the re-render pattern
-  // `useSpeedMasterDisplay`'s selectFromResult exists to avoid.
-  const beatByMaster = new Map<string, ReturnType<typeof createWsSubscribable<SpeedMasterBeat>>>()
+  // `useSpeedMasterDisplay`'s selectFromResult exists to avoid. Pooled and pruned by
+  // `createKeyedWsSubscribable`, so `keys()` below is the set of masters something is watching
+  // now — not every master this tab has ever displayed.
+  const beats = createKeyedWsSubscribable<SpeedMasterBeat>()
   /** Only reachable before the bank has loaded — after that master 1 keys by its real uuid. */
   const MASTER_1_KEY = ''
   const beatKey = (masterUuid: string | null) => masterUuid ?? MASTER_1_KEY
@@ -114,7 +116,7 @@ export function createSpeedMastersWsApi(conn: InternalApiConnection): SpeedMaste
       // pushes one per connection, a reconnect included) and no `listChanged` notify (the
       // reconnect resync in `store/status.ts` invalidates `SpeedMaster`/`SpeedMasterList`
       // with every other tag).
-      requestBeatsFor(beatByMaster.keys())
+      requestBeatsFor(beats.keys())
     } else if (evType === 'message') {
       // The connection parses each frame once for every bridge, so the substring
       // pre-filter this used to run against the torrent of unrelated frames has
@@ -134,7 +136,7 @@ export function createSpeedMastersWsApi(conn: InternalApiConnection): SpeedMaste
         )
         stateChanged.notify(masters)
       } else if (message.type === 'speedMasters.beat') {
-        beatByMaster.get(beatKey(message.masterUuid))?.notify(message)
+        beats.notify(beatKey(message.masterUuid), message)
       } else if (message.type === 'speedMasters.listChanged') {
         // Membership changed — re-request the live bank alongside the REST invalidation,
         // since the server does not push a state frame on CRUD.
@@ -150,12 +152,7 @@ export function createSpeedMastersWsApi(conn: InternalApiConnection): SpeedMaste
     getState: () => masters,
     subscribeBeat(masterUuid, fn) {
       const key = beatKey(masterUuid)
-      let entry = beatByMaster.get(key)
-      if (entry == null) {
-        entry = createWsSubscribable<SpeedMasterBeat>()
-        beatByMaster.set(key, entry)
-      }
-      const subscription = entry.api.subscribe(fn)
+      const subscription = beats.subscribe(key, fn)
       requestBeatsFor([key])
       return subscription
     },

@@ -6,6 +6,7 @@ import {
   type SidebandChannel,
 } from '../lib/programmerChannels'
 import type { Subscription } from './subscription'
+import { createKeyedWsSubscribable } from './wsSubscriptionFactory'
 
 /**
  * A read-only source of DMX channel values, so a stage view can be pointed at something other
@@ -61,33 +62,18 @@ export interface DerivedChannelSource extends ChannelSource {
  * Notifying only the channels whose value actually moved is the whole point: a stage may hold
  * hundreds of subscriptions, and waking all of them on every programmer event would make the
  * per-channel split pointless — the same reasoning as `diffSignatures` in `programmerWsApi.ts`.
+ *
+ * The pooling, the pruning and the identity check that makes a repeated unsubscribe safe all live
+ * in [createKeyedWsSubscribable]; what stays here is the only part that is about channels — which
+ * keys a pair of value maps says have moved. (`channelsApi.subscribeToChannel` still has its own
+ * unpruned map: it is keyed by wire channel rather than by whatever a stage is drawing, so it is
+ * bounded by the patch and never grows past it.)
  */
 function createFanOut() {
-  let nextId = 1
-  const subscribers = new Map<string, Map<number, (value: number) => void>>()
+  const byChannel = createKeyedWsSubscribable<number>()
 
   return {
-    subscribe(key: string, fn: (value: number) => void): Subscription {
-      const id = nextId++
-      let forKey = subscribers.get(key)
-      if (!forKey) {
-        forKey = new Map()
-        subscribers.set(key, forKey)
-      }
-      const map = forKey
-      forKey.set(id, fn)
-      return {
-        unsubscribe: () => {
-          map.delete(id)
-          // Identity-checked before dropping the parent entry: an unsubscribe that runs twice
-          // would otherwise empty its own detached map, still see `size === 0`, and delete
-          // whatever map has since replaced it — silently killing every live subscriber on the
-          // channel, with no error. (`channelsApi.subscribeToChannel` sidesteps this by never
-          // dropping the parent entry at all.)
-          if (map.size === 0 && subscribers.get(key) === map) subscribers.delete(key)
-        },
-      }
-    },
+    subscribe: byChannel.subscribe,
     /**
      * Notify every key whose value *or presence* differs between the two maps.
      *
@@ -100,15 +86,13 @@ function createFanOut() {
      */
     notifyChanged(before: ReadonlyMap<string, number>, after: ReadonlyMap<string, number>) {
       for (const [key, value] of after) {
-        if (!before.has(key) || before.get(key) !== value) {
-          subscribers.get(key)?.forEach((fn) => fn(value))
-        }
+        if (!before.has(key) || before.get(key) !== value) byChannel.notify(key, value)
       }
       // A key that vanished has dropped to 0. An entry being cleared is exactly as visible a
       // change as one being set, and a subscriber that never hears about it keeps painting a
       // value the programmer no longer holds.
       for (const key of before.keys()) {
-        if (!after.has(key)) subscribers.get(key)?.forEach((fn) => fn(0))
+        if (!after.has(key)) byChannel.notify(key, 0)
       }
     },
   }

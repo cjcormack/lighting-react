@@ -218,6 +218,45 @@ describe('createSpeedMastersWsApi', () => {
     ])
   })
 
+  it('stops re-requesting beats for a master nothing watches any more', () => {
+    const { conn, sent, fire } = fakeWsConnection()
+    const api = createSpeedMastersWsApi(conn)
+    const kept = api.subscribeBeat(MASTER_2.uuid, () => {})
+    const dropped = api.subscribeBeat(null, () => {})
+    dropped.unsubscribe()
+    // Twice: an unsubscribe running again must not disturb the map (React can call a cleanup
+    // more than once, and the key may since have been re-pooled for a live subscriber).
+    dropped.unsubscribe()
+    sent.length = 0
+
+    fire(InternalEventType.open, new Event('open'))
+
+    // Only the master still on screen. Without pruning, the map holds every master ever
+    // displayed and every reconnect asks the desk for beats nothing is listening to.
+    expect(sent).toEqual([{ type: 'speedMasters.requestBeat', masterUuid: MASTER_2.uuid }])
+    kept.unsubscribe()
+  })
+
+  it('re-pools a master a later subscriber comes back to', () => {
+    const { conn, sent, frame } = fakeWsConnection()
+    const api = createSpeedMastersWsApi(conn)
+    api.subscribeBeat(MASTER_2.uuid, () => {}).unsubscribe()
+
+    const onBeat = vi.fn()
+    api.subscribeBeat(MASTER_2.uuid, onBeat)
+    frame({
+      type: 'speedMasters.beat',
+      masterUuid: MASTER_2.uuid,
+      index: 2,
+      beatNumber: 16,
+      bpm: 60,
+      timestampMs: 1,
+    })
+
+    expect(onBeat).toHaveBeenCalledTimes(1)
+    expect(sent).toContainEqual({ type: 'speedMasters.requestBeat', masterUuid: MASTER_2.uuid })
+  })
+
   it('stops delivering beats after unsubscribe', () => {
     const { conn, frame } = fakeWsConnection()
     const api = createSpeedMastersWsApi(conn)
