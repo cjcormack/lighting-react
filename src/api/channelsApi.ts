@@ -21,39 +21,47 @@ type ChannelStateInMessage = {
 }
 
 /**
- * Debounces map updates, merging incoming maps with pending updates.
- * All entries from a single call are guaranteed to fire together,
- * either immediately (if no interval running) or on the next tick.
+ * Throttles map updates, merging incoming maps with pending updates. All entries from a single
+ * call are guaranteed to fire together — immediately when the last emit was more than [waitMs]
+ * ago, else on the trailing timer that closes that window.
+ *
+ * No timer is alive while idle. The previous `setInterval` form kept ticking until a tick
+ * observed an empty batch, so every idle transition cost one no-op wake-up and the function read
+ * as a self-cancelling debounce it wasn't. Remembering the last emit time instead means a timer
+ * is armed only when there is something waiting for it.
  */
 function debounceMapUpdates(
     func: (updates: Map<string, number>) => void,
     waitMs: number
 ): (updates: Map<string, number>) => void {
-    let intervalId: number | undefined = undefined
+    let timeoutId: number | undefined = undefined
     let pending = new Map<string, number>()
-    let newValsSeen = false
+    let lastEmitMs = Number.NEGATIVE_INFINITY
 
-    function flush() {
-        if (newValsSeen) {
-            func(pending)
-            pending = new Map()
-            newValsSeen = false
-        } else {
-            clearInterval(intervalId)
-            intervalId = undefined
-        }
+    function emit() {
+        const batch = pending
+        pending = new Map()
+        lastEmitMs = Date.now()
+        func(batch)
     }
 
     return (updates: Map<string, number>) => {
         updates.forEach((value, key) => {
             pending.set(key, value)
         })
-        newValsSeen = true
 
-        if (!intervalId) {
-            flush()
-            intervalId = window.setInterval(flush, waitMs)
+        // A timer already owns this batch — it picks the merged map up when it fires.
+        if (timeoutId !== undefined) return
+
+        const remainingMs = waitMs - (Date.now() - lastEmitMs)
+        if (remainingMs <= 0) {
+            emit()
+            return
         }
+        timeoutId = window.setTimeout(() => {
+            timeoutId = undefined
+            emit()
+        }, remainingMs)
     }
 }
 
