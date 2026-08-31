@@ -15,6 +15,12 @@ interface FixtureDimmers {
   heads: string[]
 }
 
+/** A master at zero gates the heads dark; a master up over all-zero heads emits nothing either. */
+function isLit({ master, heads }: FixtureDimmers, all: ReadonlyMap<string, number>): boolean {
+  if (master !== undefined && (all.get(master) ?? 0) <= 0) return false
+  return heads.length === 0 || heads.some((key) => (all.get(key) ?? 0) > 0)
+}
+
 /**
  * The set of fixture keys currently emitting light — drives the "only lit"
  * filter. A fixture is lit when its master dimmer (if any) is above zero AND
@@ -65,15 +71,28 @@ export function useLitFixtureKeys(fixtures: readonly Fixture[]): ReadonlySet<str
 
   const getSnapshot = useCallback((): ReadonlySet<string> => {
     const all = lightingApi.channels.getAll()
-    const lit = new Set<string>()
-    for (const { fixtureKey, master, heads } of dimmers.perFixture) {
-      const masterLit = master === undefined || (all.get(master) ?? 0) > 0
-      const headsLit = heads.length === 0 || heads.some((key) => (all.get(key) ?? 0) > 0)
-      if (masterLit && headsLit) lit.add(fixtureKey)
-    }
     const cached = cachedRef.current
-    if (cached.size === lit.size && [...lit].every((key) => cached.has(key))) {
-      return cached
+    // Membership is checked against the cached set as it is computed, and a Set is allocated
+    // only once the two are known to differ. The unchanged case — every read during a fade that
+    // moves levels without lighting or darkening anything — then costs no allocation at all,
+    // which matters because this runs per 33 ms channel batch *and* per render.
+    let litCount = 0
+    let diverged = false
+    for (const entry of dimmers.perFixture) {
+      if (!isLit(entry, all)) continue
+      litCount++
+      if (!cached.has(entry.fixtureKey)) {
+        diverged = true
+        break
+      }
+    }
+    // Equal sizes with no key outside the cache means equal sets: the loop counted every lit
+    // fixture as a member of `cached`.
+    if (!diverged && litCount === cached.size) return cached
+
+    const lit = new Set<string>()
+    for (const entry of dimmers.perFixture) {
+      if (isLit(entry, all)) lit.add(entry.fixtureKey)
     }
     cachedRef.current = lit
     return lit
