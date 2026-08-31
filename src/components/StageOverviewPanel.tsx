@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { Loader2, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useViewedProject } from '../ProjectSwitcher'
 import { usePatchListQuery, usePatchGroupListQuery } from '../store/patches'
+import { useRiggingListQuery } from '../store/riggings'
 import { useFixtureLookup } from '../hooks/useFixtureLookup'
 import { useProjectedPatches } from '../hooks/useProjectedPatches'
 import { StageChannelSourceProvider } from '../hooks/useChannelSource'
@@ -68,6 +69,14 @@ function StageOverviewPanelBody({
   const { data: groups } = usePatchGroupListQuery(projectId!, {
     skip: projectId == null,
   })
+  // The marker badge names the rigging a patch hangs on, and a patch only carries its uuid. Read
+  // rather than derived per marker: the list is one cached query the Stage route already holds, so
+  // this shares it rather than adding a fetch.
+  const { data: riggings } = useRiggingListQuery(projectId!, { skip: projectId == null })
+  const riggingNameByUuid = useMemo(
+    () => new Map((riggings ?? []).map((rig) => [rig.uuid, rig.name])),
+    [riggings],
+  )
 
   // The selected patch survives the `stageHidden` cut: this panel shares its
   // selection with Stage3D (see routes/Stage.tsx), which draws the selected
@@ -164,6 +173,11 @@ function StageOverviewPanelBody({
                       fixtureType={fixtureType}
                       selected={selectedFixtureKey === patch.key}
                       dimmed={!matchesFilter}
+                      riggingName={
+                        patch.riggingUuid
+                          ? riggingNameByUuid.get(patch.riggingUuid)
+                          : undefined
+                      }
                     />
                   </button>
                 )

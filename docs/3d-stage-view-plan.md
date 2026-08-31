@@ -406,12 +406,16 @@ the raw `stageX/Y/Z`.
     `src/components/patches/RiggingPositionInput.tsx` — both were only
     referenced by `EditPatchSheet`.
 - _Open follow-ups_:
-  - `riggingPosition` field still on `FixturePatch` /
+  - ~~`riggingPosition` field still on `FixturePatch` /
     `CreatePatchRequest` / `UpdatePatchRequest` in `src/api/patchApi.ts`
     and read by `src/components/stage/StageMarker.tsx` (legacy 2D marker
     label). Per the Session 4 plan body it stays for now; full DTO removal
     is a follow-up once nothing reads it (likely after the 2D view is
-    retired in/after Session 5).
+    retired in/after Session 5).~~ — **closed** by the frontend sweep's
+    `FS-TYPES-RIGGING-POSITION`, without waiting for the 2D view to retire:
+    all three declarations are gone, and the marker badge now names the
+    rigging resolved from `riggingUuid` instead of a field the server had
+    already stopped sending.
   - `worldPositionFor` rigging-frame composition (Session 1 carry-over) is
     still translate-only. Session 5 callers should prefer the backend's
     pre-composed `worldPositionX/Y/Z`.

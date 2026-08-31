@@ -20,8 +20,14 @@ export interface FixturePatch {
   stageZ: number | null;
   baseYawDeg: number | null;
   basePitchDeg: number | null;
+  /**
+   * The rigging this patch hangs on, or null when it is free-standing.
+   *
+   * A free-text position label sat beside this until the backend folded it into first-class
+   * Rigging rows. Resolve the uuid against `useRiggingListQuery` for anything that wants to *name*
+   * the position — that is the one spelling of it there is now.
+   */
   riggingUuid: string | null;
-  riggingPosition: string | null;
   beamAngleDeg: number | null;
   gelCode: string | null;
   /** Per-patch FixtureKind override for the 3D view — null means inherit
@@ -73,7 +79,6 @@ export interface CreatePatchRequest {
   baseYawDeg?: number | null;
   basePitchDeg?: number | null;
   riggingUuid?: string | null;
-  riggingPosition?: string | null;
   beamAngleDeg?: number | null;
   gelCode?: string | null;
   kindOverride?: string | null;
@@ -92,7 +97,6 @@ export interface UpdatePatchRequest {
   baseYawDeg?: number | null;
   basePitchDeg?: number | null;
   riggingUuid?: string | null;
-  riggingPosition?: string | null;
   beamAngleDeg?: number | null;
   gelCode?: string | null;
   kindOverride?: string | null;

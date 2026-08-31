@@ -16,10 +16,20 @@ interface StageMarkerProps {
   selected: boolean
   dimmed: boolean
   beamScale?: number
+  /**
+   * The name of the rigging this patch hangs on, for the amber badge beside the label.
+   *
+   * Resolved by the caller from `patch.riggingUuid` rather than read off the patch: the badge used
+   * to render a free-text `riggingPosition` field, which the backend deleted when rigging became
+   * first-class rows — so the marker had been drawing from a phantom. Undefined both for a
+   * free-standing patch and for one whose rigging list hasn't arrived, and the badge is absent in
+   * both cases: a placeholder would be a claim about the rig.
+   */
+  riggingName?: string
 }
 
 export function StageMarker(props: StageMarkerProps) {
-  const { patch, fixture, fixtureType, selected, dimmed, beamScale = 1 } = props
+  const { patch, fixture, fixtureType, selected, dimmed, beamScale = 1, riggingName } = props
 
   const showCone = !!fixtureType?.acceptsBeamAngle
   const beamDeg = patch.beamAngleDeg ?? DEFAULT_BEAM_DEG
@@ -36,7 +46,7 @@ export function StageMarker(props: StageMarkerProps) {
   const renderLabel = (
     <div className={labelClass} style={{ textShadow: '0 0 4px rgba(0,0,0,0.7)' }}>
       <span>{patch.displayName}</span>
-      {patch.riggingPosition && (
+      {riggingName && (
         <span
           className="rounded-sm px-1 py-px text-[9px] font-mono"
           style={{
@@ -45,7 +55,7 @@ export function StageMarker(props: StageMarkerProps) {
             color: '#f0c46f',
           }}
         >
-          {patch.riggingPosition}
+          {riggingName}
         </span>
       )}
     </div>
