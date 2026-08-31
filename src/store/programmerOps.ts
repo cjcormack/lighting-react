@@ -1,4 +1,5 @@
 import { restApi } from './restApi'
+import type { AttributeFamily } from '../lib/attributeFamily'
 import type { Cue, CueTarget } from '../api/cuesApi'
 import type { LookDetails } from '../api/looksApi'
 import type { IncludedTarget } from '../api/programmerWsApi'
@@ -16,8 +17,17 @@ import type { IncludedTarget } from '../api/programmerWsApi'
  * own errors, so a global toast would double up.
  */
 
-/** Which attribute families an operation touches. Omitted or all four means "everything". */
-export type PropertyMaskGroup = 'INTENSITY' | 'POSITION' | 'COLOUR' | 'BEAM'
+/**
+ * Which attribute families an operation touches. Omitted or all four means "everything".
+ *
+ * An **alias**, not a second declaration: this is the same four-value vocabulary
+ * `lib/attributeFamily.ts` calls [AttributeFamily], and one Kotlin enum (`PropertyMaskGroup`)
+ * behind both. The name survives because it is the wire's — these request bodies are mirrors of
+ * the backend's own field — but the *type* must not, or a literal added to one union still
+ * typechecks against the other while meaning nothing to the server. `maskPicker.test.ts` pins the
+ * vocabulary; this pins the types.
+ */
+export type PropertyMaskGroup = AttributeFamily
 
 export type RecordMode = 'CREATE' | 'MERGE' | 'REMOVE' | 'UPDATE_EXISTING'
 

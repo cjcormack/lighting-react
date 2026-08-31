@@ -237,7 +237,9 @@ partition; a Look spans families by nature, so filtering by one would hide most 
 most filters.
 
 `src/lib/attributeFamily.ts` owns the family vocabulary and mirrors the backend's
-`PropertyMaskGroup`; `maskPicker.test.ts` pins the two lists against each other, and
+`PropertyMaskGroup` — `store/programmerOps.ts` exports that name as an *alias* of
+`AttributeFamily`, so the wire keeps its spelling without the two becoming separately-extensible
+types; `maskPicker.test.ts` pins the two lists against each other, and
 `templateIntent.test.ts` pins the template vocabulary the same way. It caught a real divergence
 already: `Number('')` is 0 where Kotlin's `toDoubleOrNull()` is null, so the client read `pct:` as
 0% while the server rejected the row.

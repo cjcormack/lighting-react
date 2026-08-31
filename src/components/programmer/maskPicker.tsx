@@ -1,4 +1,5 @@
 import { Label } from '@/components/ui/label'
+import { ATTRIBUTE_FAMILIES, FAMILY_LABELS } from '@/lib/attributeFamily'
 import type { ProgrammerSkip, PropertyMaskGroup } from '@/store/programmerOps'
 
 /**
@@ -8,13 +9,15 @@ import type { ProgrammerSkip, PropertyMaskGroup } from '@/store/programmerOps'
  * attribute is annotated differently across heads (a gobo wheel is a setting on one fixture
  * and a plain slider on another), so a category-level mask would silently miss fixtures. This
  * is the console I/P/C/B vocabulary, and it is four checkboxes rather than twenty-two.
+ *
+ * Derived from [ATTRIBUTE_FAMILIES] rather than restated: the rows *are* the families, in their
+ * order, under the labels the Look library already uses. `maskPicker.test.ts` asserted both facts
+ * while this list was hand-written; deriving it makes them true by construction and leaves the
+ * test as the guard against someone un-deriving it.
  */
-export const MASK_GROUPS: { value: PropertyMaskGroup; label: string }[] = [
-  { value: 'INTENSITY', label: 'Intensity' },
-  { value: 'POSITION', label: 'Position' },
-  { value: 'COLOUR', label: 'Colour' },
-  { value: 'BEAM', label: 'Beam' },
-]
+export const MASK_GROUPS: { value: PropertyMaskGroup; label: string }[] = ATTRIBUTE_FAMILIES.map(
+  (family) => ({ value: family, label: FAMILY_LABELS[family].singular }),
+)
 
 export interface MaskPickerProps {
   value: PropertyMaskGroup[]
