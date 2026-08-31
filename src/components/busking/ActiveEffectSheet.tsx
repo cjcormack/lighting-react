@@ -25,6 +25,7 @@ import {
 } from '@/store/groups'
 import { useFixtureListQuery } from '@/store/fixtures'
 import { detectExtendedChannels } from '@/components/fx/colourUtils'
+import { groupMemberFixtures } from '@/lib/fxTargetProperties'
 import type { ActiveEffectContext } from './buskingTypes'
 import { normalizeEffectName } from './buskingTypes'
 import type { ElementMode } from '@/api/groupsApi'
@@ -83,7 +84,7 @@ export function ActiveEffectSheet({ context, onClose }: ActiveEffectSheetProps) 
     if (!context || context.type !== 'group') return false
     if (!fixtureList) return false
     const groupName = context.groupName
-    const members = fixtureList.filter((f) => f.groups.includes(groupName))
+    const members = groupMemberFixtures(fixtureList, groupName)
     return members.some((f) => f.elements && f.elements.length > 1)
   }, [context, fixtureList])
 
@@ -93,7 +94,7 @@ export function ActiveEffectSheet({ context, onClose }: ActiveEffectSheetProps) 
     const fixtures =
       context.type === 'fixture'
         ? fixtureList.filter((f) => f.key === context.fixtureKey)
-        : fixtureList.filter((f) => f.groups.includes(context.groupName))
+        : groupMemberFixtures(fixtureList, context.groupName)
     return detectExtendedChannels(fixtures.map((f) => f.properties ?? []))
   }, [context, fixtureList])
 

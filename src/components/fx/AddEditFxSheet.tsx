@@ -35,6 +35,7 @@ import {
   SLIDER_SENTINEL,
   type FxPropertyTarget,
 } from '@/lib/fxTargetProperties'
+import { fxCreateAddition, type FxCreateRequest } from '@/lib/fxCreateRequest'
 import { EffectCategoryPicker } from './EffectCategoryPicker'
 import { EffectTypePicker } from './EffectTypePicker'
 import { EffectParameterForm } from './EffectParameterForm'
@@ -259,6 +260,33 @@ export function AddEditFxSheet({ target, mode, onClose, programmerOwned, onCreat
         ? { rateSpeedMasterUuid }
         : {}
 
+    /**
+     * Start the effect, on whichever of the two create routes this target needs.
+     *
+     * The route-shaped half lives in `fxCreateAddition`, shared with the busking pad; what each
+     * branch below still decides is which of its own fields are *meaningful* — a single-head
+     * fixture has nothing to distribute across, a group with no multi-element members has no
+     * element mode.
+     */
+    const create = async (request: FxCreateRequest) => {
+      const addition = fxCreateAddition(
+        target.type === 'group'
+          ? { type: 'group', groupName: target.group.name }
+          : { type: 'fixture', fixtureKey: target.fixture.key },
+        request,
+      )
+      const created = await (addition.kind === 'group'
+        ? applyGroupFx({ groupName: addition.groupName, ...addition.payload })
+        : addFixtureFx(addition.payload))
+        .unwrap()
+        // `.unwrap()` is here only so `onCreated` gets a real id — but it also makes a failed
+        // create *throw*, which from an `onClick` is an unhandled rejection that skips `onClose`.
+        // Swallowed rather than surfaced: `errorToastMiddleware` already reports it, and the
+        // sheet's own behaviour on failure is unchanged from before the id was needed.
+        .catch(() => null)
+      if (created) onCreated?.(created.effectId)
+    }
+
     if (target.type === 'fixture') {
       const fixture = target.fixture
       const fixtureIsMultiHead = (fixture.elementGroupProperties?.length ?? 0) > 0
@@ -283,10 +311,8 @@ export function AddEditFxSheet({ target, mode, onClose, programmerOwned, onCreat
           },
         })
       } else if (selectedEffect && targetPropertyName) {
-        const created = await addFixtureFx({
+        await create({
           effectType: selectedEffect.name,
-          fixtureKey: fixture.key,
-          ...(programmerOwned ? { programmerOwned } : {}),
           propertyName: targetPropertyName,
           beatDivision,
           blendMode: blendMode as BlendMode,
@@ -294,18 +320,14 @@ export function AddEditFxSheet({ target, mode, onClose, programmerOwned, onCreat
           phaseOffset,
           parameters,
           stepTiming,
-          ...(speedMasterUuid != null ? { speedMasterUuid } : {}),
+          programmerOwned,
+          speedMasterUuid,
           ...ratePayload,
-          ...(fixtureIsMultiHead ? { distributionStrategy } : {}),
+          ...(fixtureIsMultiHead
+            ? { distribution: distributionStrategy as DistributionStrategy }
+            : {}),
           ...filterPayload,
         })
-          .unwrap()
-          // `.unwrap()` is here only so `onCreated` gets a real id — but it also makes a failed
-          // create *throw*, which from an `onClick` is an unhandled rejection that skips `onClose`.
-          // Swallowed rather than surfaced: `errorToastMiddleware` already reports it, and the
-          // sheet's own behaviour on failure is unchanged from before the id was needed.
-          .catch(() => null)
-        if (created) onCreated?.(created.effectId)
       }
     } else {
       const group = target.group
@@ -331,10 +353,8 @@ export function AddEditFxSheet({ target, mode, onClose, programmerOwned, onCreat
           },
         })
       } else if (selectedEffect && targetPropertyName) {
-        const created = await applyGroupFx({
-          groupName: group.name,
-          ...(programmerOwned ? { programmerOwned } : {}),
-          effectType: selectedEffect.name as never,
+        await create({
+          effectType: selectedEffect.name,
           propertyName: targetPropertyName,
           beatDivision,
           blendMode: blendMode as BlendMode,
@@ -342,16 +362,12 @@ export function AddEditFxSheet({ target, mode, onClose, programmerOwned, onCreat
           phaseOffset,
           parameters,
           stepTiming,
-          ...(speedMasterUuid != null ? { speedMasterUuid } : {}),
+          programmerOwned,
+          speedMasterUuid,
           ...ratePayload,
           ...(hasMultiElementMembers ? { elementMode } : {}),
           ...filterPayload,
         })
-          .unwrap()
-          // See the fixture branch above: a rejected `.unwrap()` from an `onClick` is an unhandled
-          // rejection, and it would also stop the sheet closing.
-          .catch(() => null)
-        if (created) onCreated?.(created.effectId)
       }
     }
     onClose()

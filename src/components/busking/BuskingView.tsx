@@ -20,7 +20,8 @@ import { SelectedTargetSummary } from './SelectedTargetSummary'
 import { ActiveEffectSheet } from './ActiveEffectSheet'
 import { ConfigureEffectSheet } from './ConfigureEffectSheet'
 import { FixtureDetailModal } from '@/components/groups/FixtureDetailModal'
-import { useBuskingState, type TargetEffectsData } from './useBuskingState'
+import { useBuskingState } from './useBuskingState'
+import type { TargetEffectsData } from './buskingTypes'
 import { programmerClearEntry, useProgrammerRevision } from '@/store/programmer'
 import {
   type BuskingTarget,
@@ -31,6 +32,7 @@ import {
   normalizeEffectName,
 } from './buskingTypes'
 import { detectExtendedChannels } from '@/components/fx/colourUtils'
+import { groupMemberFixtures } from '@/lib/fxTargetProperties'
 import { toast } from 'sonner'
 import { formatError } from '@/lib/formatError'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
@@ -181,7 +183,7 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
       if (target.type === 'fixture') {
         if (target.fixture.properties) propertySets.push(target.fixture.properties)
       } else if (fixtureList) {
-        for (const f of fixtureList.filter((fi) => fi.groups.includes(target.name))) {
+        for (const f of groupMemberFixtures(fixtureList, target.name)) {
           if (f.properties) propertySets.push(f.properties)
         }
       }
@@ -310,7 +312,7 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
     if (!fixtureList) return false
     return selectedArray.some((target) => {
       if (target.type !== 'group') return false
-      const members = fixtureList.filter((f) => f.groups.includes(target.name))
+      const members = groupMemberFixtures(fixtureList, target.name)
       return members.some((f) => f.elements && f.elements.length > 1)
     })
   }, [selectedArray, fixtureList])
