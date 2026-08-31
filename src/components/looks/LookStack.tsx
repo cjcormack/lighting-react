@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { targetKey } from '@/lib/targetKey'
 import { TimingBadge } from '@/components/cues/TimingBadge'
 import { AddBtn, RemoveBtn, Section } from './paneChrome'
 import { Label } from '@/components/ui/label'
@@ -449,7 +450,7 @@ export function LayerRow({
               ) : (
                 layer.targets.map((t) => (
                   <Badge
-                    key={`${t.type}:${t.key}`}
+                    key={targetKey(t)}
                     variant="outline"
                     className="shrink-0 px-1.5 py-0 text-[10px]"
                   >

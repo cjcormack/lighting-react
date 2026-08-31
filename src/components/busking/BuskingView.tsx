@@ -27,7 +27,7 @@ import {
   type PropertyButton,
   type ActiveEffectContext,
   type EffectPresence,
-  targetKey,
+  buskingTargetKey,
   normalizeEffectName,
 } from './buskingTypes'
 import { detectExtendedChannels } from '@/components/fx/colourUtils'
@@ -663,7 +663,7 @@ function useTargetEffects(target: BuskingTarget | undefined): TargetEffectsData 
   return useMemo(() => {
     if (!target) return null
     return {
-      key: targetKey(target),
+      key: buskingTargetKey(target),
       target,
       groupEffects: isGroup ? groupEffects ?? [] : undefined,
       fixtureDirectEffects: isFixture ? fixtureEffects?.direct ?? [] : undefined,

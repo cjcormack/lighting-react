@@ -61,6 +61,7 @@ import type {
   RowId,
 } from '../components/fixtures-list/rowModel'
 import type { LocateTarget } from '../store/locate'
+import { targetKey } from '../lib/targetKey'
 import type { Fixture } from '../store/fixtures'
 import type { GroupSummary } from '../api/groupsApi'
 import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
@@ -300,7 +301,7 @@ export function FixturesListContainer({
       if (row.kind === 'element' && covered.has(row.fixture.key)) continue
       const target = rowLocateTarget(row)
       if (!target) continue
-      const dedupeKey = `${target.type}:${target.key}`
+      const dedupeKey = targetKey(target)
       if (seen.has(dedupeKey)) continue
       seen.add(dedupeKey)
       targets.push(target)

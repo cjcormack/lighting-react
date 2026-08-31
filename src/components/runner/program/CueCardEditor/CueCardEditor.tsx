@@ -15,6 +15,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { targetKey } from '@/lib/targetKey'
 import {
   useDeleteProjectCueMutation,
   usePatchProjectCueMutation,
@@ -278,7 +279,7 @@ export function CueCardEditor({
               </span>
             )}
             {targets.slice(0, 4).map((t) => (
-              <CueTargetChip key={`${t.type}:${t.key}`} target={t} />
+              <CueTargetChip key={targetKey(t)} target={t} />
             ))}
             {targetCount > 4 && (
               <Badge variant="outline" className="text-[10px] px-1.5 py-0">

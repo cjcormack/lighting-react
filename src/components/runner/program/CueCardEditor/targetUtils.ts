@@ -1,4 +1,5 @@
 import type { Cue, CueTarget } from '@/api/cuesApi'
+import { targetKey } from '@/lib/targetKey'
 
 /**
  * Order: insertion order across the three lists, deduplicated by `type:key`.
@@ -8,7 +9,7 @@ export function collectCueTargets(cue: Cue): CueTarget[] {
   const out: CueTarget[] = []
 
   const push = (t: CueTarget) => {
-    const id = `${t.type}:${t.key}`
+    const id = targetKey(t)
     if (seen.has(id)) return
     seen.add(id)
     out.push({ type: t.type, key: t.key })
@@ -23,12 +24,4 @@ export function collectCueTargets(cue: Cue): CueTarget[] {
   }
 
   return out
-}
-
-export function targetKey(t: CueTarget): string {
-  return `${t.type}:${t.key}`
-}
-
-export function targetEquals(a: CueTarget, b: CueTarget): boolean {
-  return a.type === b.type && a.key === b.key
 }

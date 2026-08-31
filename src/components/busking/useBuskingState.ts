@@ -22,7 +22,7 @@ import {
   type PropertyButton,
   type EffectPresence,
   type ActiveEffectContext,
-  targetKey,
+  buskingTargetKey,
   normalizeEffectName,
 } from './buskingTypes'
 import { lookLayerPresence } from './lookPresence'
@@ -64,7 +64,7 @@ export function useBuskingState() {
   const { data: programmerLayers } = useProgrammerLayersQuery()
 
   const selectTarget = useCallback((target: BuskingTarget) => {
-    setSelectedTargets(new Map([[targetKey(target), target]]))
+    setSelectedTargets(new Map([[buskingTargetKey(target), target]]))
   }, [])
 
   const clearSelection = useCallback(() => {
@@ -74,7 +74,7 @@ export function useBuskingState() {
   const toggleTarget = useCallback((target: BuskingTarget) => {
     setSelectedTargets((prev) => {
       const next = new Map(prev)
-      const key = targetKey(target)
+      const key = buskingTargetKey(target)
       if (next.has(key)) {
         next.delete(key)
       } else {

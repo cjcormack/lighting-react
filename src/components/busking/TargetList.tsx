@@ -2,7 +2,7 @@ import { useGroupListQuery } from '@/store/groups'
 import { useFixtureListQuery } from '@/store/fixtures'
 import { TargetListItem } from './TargetListItem'
 import type { BuskingTarget } from './buskingTypes'
-import { targetKey } from './buskingTypes'
+import { buskingTargetKey } from './buskingTypes'
 
 interface TargetListProps {
   selectedTargets: Map<string, BuskingTarget>
@@ -29,9 +29,9 @@ export function TargetList({ selectedTargets, onSelect, onToggle }: TargetListPr
           </div>
           {groupTargets.map((target) => (
             <TargetListItem
-              key={targetKey(target)}
+              key={buskingTargetKey(target)}
               target={target}
-              isSelected={selectedTargets.has(targetKey(target))}
+              isSelected={selectedTargets.has(buskingTargetKey(target))}
               onSelect={() => onSelect(target)}
               onToggle={() => onToggle(target)}
             />
@@ -46,9 +46,9 @@ export function TargetList({ selectedTargets, onSelect, onToggle }: TargetListPr
           </div>
           {fixtureTargets.map((target) => (
             <TargetListItem
-              key={targetKey(target)}
+              key={buskingTargetKey(target)}
               target={target}
-              isSelected={selectedTargets.has(targetKey(target))}
+              isSelected={selectedTargets.has(buskingTargetKey(target))}
               onSelect={() => onSelect(target)}
               onToggle={() => onToggle(target)}
             />
