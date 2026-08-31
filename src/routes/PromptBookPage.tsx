@@ -21,49 +21,37 @@ import {
 } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
 import { useProjectQuery } from '../store/projects'
-import { useProjectProgramStateQuery, useActivateProgramMutation, useDeactivateProgramMutation } from '../store/cueStacks'
 import {
+  useProjectProgramStateQuery,
+  useActivateProgramMutation,
+  useDeactivateProgramMutation,
   useProjectCueStackListQuery,
-  useReorderCueStackCuesMutation,
-  useCreateProjectCueStackMutation,
 } from '../store/cueStacks'
-import { useCreateProjectCueMutation, usePatchProjectCueMutation } from '../store/cues'
-import type { CueStackCueEntry } from '../api/cueStacksApi'
+import { usePatchProjectCueMutation } from '../store/cues'
 import { useNarrowContainer } from '../hooks/useNarrowContainer'
 import { useShowBarProps } from '../hooks/useShowBarProps'
-import {
-  useProjectPromptBookQuery,
-  useSetPromptBookMutation,
-  useUploadScriptDocMutation,
-  useUpsertAnchorMutation,
-  useDeleteAnchorMutation,
-  useCreateAnnotationMutation,
-  useUpdateAnnotationMutation,
-  useDeleteAnnotationMutation,
-} from '../store/promptBooks'
-import { scriptDocUrl, type AnnotationDto, type AnnotationKind, type NoteTone, type Region } from '../api/promptBooksApi'
+import { useProjectPromptBookQuery } from '../store/promptBooks'
+import { scriptDocUrl, type NoteTone } from '../api/promptBooksApi'
 import { cn } from '@/lib/utils'
-import { formatError } from '../lib/formatError'
-import { computeWarnings, regionsOverlap, type DesyncWarning, type FlatCue } from '../lib/promptBook/desync'
-import {
-  flattenCueOrder,
-  flattenShowRows,
-  nearestAnchoredCue,
-  orderedCueIdsForInsert,
-} from '../lib/promptBook/geometry'
+import { computeWarnings, type DesyncWarning, type FlatCue } from '../lib/promptBook/desync'
+import { useCueIndex } from '../lib/promptBook/useCueIndex'
+import { useCueRunStatus } from '../lib/promptBook/useCueRunStatus'
+import { useRailExpansion } from '../lib/promptBook/useRailExpansion'
+import { useCardViewMode } from '../lib/promptBook/useCardViewMode'
+import { useBookAnchors } from '../lib/promptBook/useBookAnchors'
+import { useAnnotationEditor } from '../lib/promptBook/useAnnotationEditor'
+import { useScriptDocument } from '../lib/promptBook/useScriptDocument'
 import { ScriptViewer, type ScriptViewerHandle } from '../components/promptbook/ScriptViewer'
-import { CueAnchorPickerSheet, type NewCueStackChoice } from '../components/promptbook/CueAnchorPickerSheet'
+import { CueAnchorPickerSheet } from '../components/promptbook/CueAnchorPickerSheet'
 import { ShowHeader } from '../components/ShowHeader'
 import { ShowBar } from '../components/ShowBar'
 import { PromptBookToolbar } from '../components/promptbook/PromptBookToolbar'
 import { ShowLockControl } from '../components/runner/ShowLockControl'
 import { ToolPalette, type PromptBookTool } from '../components/promptbook/ToolPalette'
 import { CueStackPanel } from '../components/promptbook/CueStackPanel'
-import type { ExpansionMode } from '../components/runner/mobile/CueCardBody'
-import { ScriptUploadCard, type PickedScript } from '../components/promptbook/ScriptUploadCard'
+import { ScriptUploadCard } from '../components/promptbook/ScriptUploadCard'
 import { useEditLock } from '../hooks/useEditLock'
 import { useTransportKeys } from '../hooks/useTransportKeys'
-import type { CueRunStatus } from '../components/promptbook/AnchorOverlay'
 import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
 
 export function PromptBookRedirect() {
@@ -72,10 +60,16 @@ export function PromptBookRedirect() {
 
 // ─── Viewer ──────────────────────────────────────────────────────────────
 
-type AnnotationDialogState =
-  | { mode: 'create'; kind: AnnotationKind; region: Region }
-  | { mode: 'edit'; annotation: AnnotationDto }
-
+/**
+ * The Prompt Book: the show's script PDF with cues anchored into it.
+ *
+ * The page composes six hooks under `lib/promptBook/` and owns only what genuinely spans them —
+ * the lock, the transport, the desync advisories and the layout. The hooks are ordered by a real
+ * dependency knot rather than by taste: anchors before the lock (its `onLock` stands the placing
+ * cursor down), the lock before the transport (`onBeforeGo` re-locks), and the transport before
+ * the playhead-derived state. `useBookAnchors` deliberately knows nothing about the lock so that
+ * knot stays a line — see its docblock.
+ */
 export function PromptBookViewerPage() {
   const { projectId } = useParams()
   const projectIdNum = Number(projectId)
@@ -88,82 +82,56 @@ export function PromptBookViewerPage() {
 
   const [activateShow] = useActivateProgramMutation()
   const [deactivateShow] = useDeactivateProgramMutation()
+  const [patchCue] = usePatchProjectCueMutation()
 
   const activeStackId = programState?.activeStackId ?? null
   const isShowActive = activeStackId != null
 
-  const [upsertAnchor] = useUpsertAnchorMutation()
-  const [deleteAnchor] = useDeleteAnchorMutation()
-  const [createAnnotation] = useCreateAnnotationMutation()
-  const [updateAnnotation] = useUpdateAnnotationMutation()
-  const [deleteAnnotation] = useDeleteAnnotationMutation()
-  const [uploadScriptDoc, { isLoading: reuploading }] = useUploadScriptDocMutation()
-  const [setPromptBook, { isLoading: settingBook }] = useSetPromptBookMutation()
-  const [createCue] = useCreateProjectCueMutation()
-  const [patchCue] = usePatchProjectCueMutation()
-  const [reorderCues] = useReorderCueStackCuesMutation()
-  const [createStack] = useCreateProjectCueStackMutation()
-
   // ── Runtime view state — NEVER persisted. ──
-  // The lock itself moved to `useEditLock` (a store slice) in session 2b, so that unlocking here
-  // and stepping over to Show does not silently re-lock: one fix-it session, one fact.
   const [tool, setTool] = useState<PromptBookTool>('move')
-  const [placingCueId, setPlacingCueId] = useState<number | null>(null)
-  // Region awaiting a cue choice — set when "Anchor cue" is clicked on a selection.
-  const [anchorPicker, setAnchorPicker] = useState<{ region: Region } | null>(null)
-  const [undoSnapshot, setUndoSnapshot] = useState<{ cueId: number; region: Region; label: string | null } | null>(null)
   const [showWarnings, setShowWarnings] = useState(true)
-  const [annotationDialog, setAnnotationDialog] = useState<AnnotationDialogState | null>(null)
-  const [annotationText, setAnnotationText] = useState('')
-  const [annotationTone, setAnnotationTone] = useState<NoteTone>('NOTE')
-  const [pdfLoadState, setPdfLoadState] = useState<'ok' | 'missing' | 'error'>('ok')
-  const [pdfRetryNonce, setPdfRetryNonce] = useState(0)
-  const [hashMismatch, setHashMismatch] = useState<string | null>(null)
-
   // Local blackout toggle (parity with the Run view) + tablet/phone drawer.
   const [dbo, setDbo] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   // Below this container width the side rail becomes a drawer + bottom transport.
   const [bodyRef, isNarrow] = useNarrowContainer(1040)
 
-  // Which rail cards are expanded. Live + next expand by default and snap back to
-  // that default whenever the live/next cue changes (see the effect below).
-  const [expandedCues, setExpandedCues] = useState<Set<number>>(new Set())
-  const toggleExpanded = useCallback((cueId: number) => {
-    setExpandedCues((prev) => {
-      const next = new Set(prev)
-      if (next.has(cueId)) next.delete(cueId)
-      else next.add(cueId)
-      return next
-    })
-  }, [])
-
-  // Stage/Details view persists across cue changes: `viewMode` is the live card's current
-  // view (null = body collapsed) and is carried to the next live cue on GO. A non-live
-  // cue the operator toggled remembers its own choice via `cueModeOverrides` until it
-  // becomes live, when it rejoins viewMode. Overrides are transient (per session).
-  const [viewMode, setViewMode] = useState<ExpansionMode | null>('stage')
-  const [cueModeOverrides, setCueModeOverrides] = useState<Map<number, ExpansionMode | null>>(
-    new Map(),
-  )
-  const handleCardModeChange = useCallback(
-    (cueId: number, status: CueRunStatus, next: ExpansionMode | null) => {
-      if (status === 'live') {
-        // Toggling the live card updates the shared view (which the next GO carries).
-        // Never write a per-cue override for the live cue, so it can't get pinned stale.
-        setViewMode(next)
-      } else {
-        setCueModeOverrides((prev) => {
-          const m = new Map(prev)
-          m.set(cueId, next)
-          return m
-        })
-      }
-    },
-    [],
-  )
-
   const viewerRef = useRef<ScriptViewerHandle>(null)
+
+  // ── Upstream running state — subscribed, never owned. ──
+  const {
+    cueOrder,
+    railRows,
+    cueOrderIndex,
+    cueLabelByCue,
+    existingCueNames,
+    cueEntryByCue,
+    cueNotesByCue,
+    defaultStackId,
+  } = useCueIndex(stacks, activeStackId)
+
+  const {
+    anchorByCue,
+    anchorHintByCue,
+    scrollToCue,
+    placingCueId,
+    clearPlacing,
+    togglePlacing,
+    anchorPicker,
+    overlapCueId,
+    requestAnchor,
+    closePicker,
+    undoSnapshot,
+    undo,
+    moveAnchor,
+    placeAnchor,
+    anchorCue,
+    removeAnchor,
+    createCueFromSelection,
+  } = useBookAnchors({ projectId: projectIdNum, book, stacks, cueOrder, cueLabelByCue, viewerRef })
+
+  const doc = useScriptDocument(projectIdNum, book)
+  const ann = useAnnotationEditor(projectIdNum)
 
   const canEdit = book?.canEdit ?? false
 
@@ -176,25 +144,13 @@ export function PromptBookViewerPage() {
     isShowActive,
     onLock: () => {
       setTool('move')
-      setPlacingCueId(null)
+      clearPlacing()
     },
   })
   const { locked, toggleLock, noteEdit, noteGo } = relock
   /** See the note in `ShowPage`: the whole chrome band tints, or it reads as stripes. */
   const unlockedWarning = !locked && isShowActive
 
-  // ── Upstream running state — subscribed, never owned. ──
-  const cueOrder: FlatCue[] = useMemo(() => flattenCueOrder(stacks), [stacks])
-  // Rail rows include separators + per-stack headers (multi-stack only).
-  const railRows = useMemo(() => flattenShowRows(stacks), [stacks])
-  const cueOrderIndex = useMemo(() => new Map(cueOrder.map((c, i) => [c.cueId, i])), [cueOrder])
-  // Live cue labels — the pill reads these so an edited cue number reflects at once
-  // (the anchor's own cached label only refreshes when the anchor is re-saved).
-  const cueLabelByCue = useMemo(() => new Map(cueOrder.map((c) => [c.cueId, c.label])), [cueOrder])
-
-  // Row 3 (show bar) + rail transport — the follow-server runner shared with the Edit view.
-  // `onBeforeGo: noteGo` preserves relock-on-GO; `canOperate: canEdit` gates GO exactly as the
-  // old inline `goDisabled` did. Aliased to fireGo/fireBack so the rest of the page is unchanged.
   /**
    * One transport and one show bar, from the same hook every other live view uses.
    *
@@ -221,52 +177,17 @@ export function PromptBookViewerPage() {
     back: fireBack,
   } = transport
 
-  // The cue armed to fire on the next GO: an explicit standby, else the next cue
-  // in reading order. Pre-show (nothing live) the first cue sits on deck.
-  const nextCueId = useMemo(() => {
-    // Stopped show: nothing is on deck. Without this, a null activeCueId would put
-    // the first cue on deck (blue "NEXT"), making a stopped rail look pre-show/armed.
-    if (!isShowActive) return null
-    // An explicitly-armed standby is the next GO — but never treat the cue that's
-    // already live as "next" (activating a standby leaves standbyCueId sitting on it).
-    const sb = standbyCueId
-    if (sb != null && sb !== activeCueId) return sb
-    // Nothing fired yet: the active stack's first cue is on deck; fall back to the
-    // very first cue in the show only when no stack is active.
-    if (activeCueId == null) {
-      const firstOfActive =
-        activeStackId != null ? cueOrder.find((c) => c.stackId === activeStackId) : undefined
-      return (firstOfActive ?? cueOrder[0])?.cueId ?? null
-    }
-    const activeIdx = cueOrderIndex.get(activeCueId)
-    if (activeIdx == null) return null
-    return cueOrder[activeIdx + 1]?.cueId ?? null
-  }, [isShowActive, standbyCueId, activeCueId, activeStackId, cueOrder, cueOrderIndex])
+  const { nextCueId, statusOf } = useCueRunStatus({
+    isShowActive,
+    activeCueId,
+    standbyCueId,
+    activeStackId,
+    cueOrder,
+    cueOrderIndex,
+  })
 
-  const statusOf = useCallback(
-    (cueId: number): CueRunStatus => {
-      if (cueId === activeCueId) return 'live'
-      if (cueId === nextCueId) return 'next'
-      if (activeCueId == null) return 'standby'
-      const idx = cueOrderIndex.get(cueId)
-      const activeIdx = cueOrderIndex.get(activeCueId)
-      if (idx == null || activeIdx == null) return 'standby'
-      return idx < activeIdx ? 'done' : 'standby'
-    },
-    [activeCueId, nextCueId, cueOrderIndex],
-  )
-
-  // Effective Stage/Details mode for a cue: the live cue ALWAYS follows the persistent
-  // viewMode (so GO carries the view forward and a cue never opens live with a stale
-  // pinned mode); a non-live cue uses the operator's own choice if it has one, else opens
-  // with neither selected.
-  const modeOf = useCallback(
-    (cueId: number, status: CueRunStatus): ExpansionMode | null => {
-      if (status === 'live') return viewMode
-      return cueModeOverrides.has(cueId) ? cueModeOverrides.get(cueId) ?? null : null
-    },
-    [cueModeOverrides, viewMode],
-  )
+  const { isExpanded, toggleExpanded } = useRailExpansion(activeCueId, nextCueId)
+  const { modeOf, onCueModeChange } = useCardViewMode()
 
   // ── Desync — advisory only; recomputed on every edit and on load. ──
   const warnings: DesyncWarning[] = useMemo(
@@ -280,90 +201,15 @@ export function PromptBookViewerPage() {
   }, [warnings])
   const warningCueIds = useMemo(() => new Set(warnings.map((w) => w.cueId)), [warnings])
 
-  const anchorByCue = useMemo(
-    () => new Map((book?.anchors ?? []).map((a) => [a.cueId, a])),
-    [book],
-  )
-
-  // Names in play, so the create form can suggest a non-colliding "New Cue N".
-  const existingCueNames = useMemo(() => new Set(cueOrder.map((c) => c.name)), [cueOrder])
-
-  // Default target stack for a cue created from a selection: the live stack (if runnable),
-  // else the sole runnable stack, else the first in show order. null → no stack to add to.
-  const defaultStackId = useMemo(() => {
-    const runnable = (stacks ?? []).filter((s) => s.type === 'STACK')
-    if (runnable.length === 0) return null
-    if (activeStackId != null && runnable.some((s) => s.id === activeStackId)) return activeStackId
-    return [...runnable].sort((a, b) => a.sortOrder - b.sortOrder)[0]?.id ?? null
-  }, [stacks, activeStackId])
-
-  // When the picker opens on a selection that lands on an existing anchor, surface that
-  // cue (preselect + edit affordance) so "edit this cue" is one tap.
-  const overlapCueId = useMemo(() => {
-    if (!anchorPicker) return null
-    return (book?.anchors ?? []).find((a) => regionsOverlap(a.region, anchorPicker.region))?.cueId ?? null
-  }, [anchorPicker, book])
-
-  // Full stack entries by cue id — each expanded rail card renders the shared Run
-  // card, which needs the entry's cueNumber/notes/auto (FlatCue carries only a label).
-  const cueEntryByCue = useMemo(() => {
-    const m = new Map<number, CueStackCueEntry>()
-    for (const s of stacks ?? []) for (const c of s.cues) m.set(c.id, c)
-    return m
-  }, [stacks])
-
-  // Notes for the script's right gutter. Only cues that actually have one are included, so the
-  // viewer can render a bubble per entry without filtering blanks itself. An unanchored cue has
-  // nowhere on the page to sit — its note shows on the rail card instead.
-  const cueNotesByCue = useMemo(() => {
-    const m = new Map<number, string>()
-    for (const [id, c] of cueEntryByCue) if (c.notes) m.set(id, c.notes)
-    return m
-  }, [cueEntryByCue])
-
-  // Where the book should scroll for a cue: its own anchor, else a best-effort borrow
-  // from the nearest anchored cue (normally the one before it). An unanchored cue —
-  // pre-show, house lights, an auto-follow — is a legitimate state, not a dead end.
-  const resolveScrollRegion = useCallback(
-    (cueId: number): Region | null => {
-      const anchor = anchorByCue.get(cueId)
-      if (anchor) return anchor.region
-      return nearestAnchoredCue(cueId, cueOrder, anchorByCue)?.region ?? null
-    },
-    [anchorByCue, cueOrder],
-  )
-
-  // "follows Q12" / "before Q14" for each unanchored cue — names what the book scrolls
-  // to. Built from the same helper as the navigation, so the two can't disagree.
-  const anchorHintByCue = useMemo(() => {
-    const m = new Map<number, string>()
-    for (const cue of cueOrder) {
-      if (anchorByCue.has(cue.cueId)) continue
-      const fallback = nearestAnchoredCue(cue.cueId, cueOrder, anchorByCue)
-      if (fallback) {
-        m.set(cue.cueId, `${fallback.direction === 'before' ? 'follows' : 'before'} ${fallback.cue.label}`)
-      }
-    }
-    return m
-  }, [cueOrder, anchorByCue])
+  const jumpToLive = useCallback(() => {
+    if (activeCueId != null) scrollToCue(activeCueId)
+  }, [activeCueId, scrollToCue])
 
   // ── Runtime emphasis: scroll the live cue into view on advance. ──
-  // The resolver lives in a ref so an unrelated book refetch (edit, WS echo) can't
-  // re-run the effect and yank the viewport while the operator reads ahead.
-  const resolveScrollRegionRef = useRef(resolveScrollRegion)
-  resolveScrollRegionRef.current = resolveScrollRegion
-  useEffect(() => {
-    if (activeCueId == null) return
-    const region = resolveScrollRegionRef.current(activeCueId)
-    if (region) viewerRef.current?.scrollToRegion(region)
-  }, [activeCueId])
-
-  // Reset rail expansion to its default — live + next expanded, everything else
-  // collapsed — whenever the live or next cue changes (GO, Back, or arming a new
-  // standby). Manual chevron toggles persist between those transitions.
-  useEffect(() => {
-    setExpandedCues(new Set([activeCueId, nextCueId].filter((id): id is number => id != null)))
-  }, [activeCueId, nextCueId])
+  // The same operation the toolbar's "jump to live" performs, so the two cannot drift.
+  // `scrollToCue` holds one identity for the session, so an unrelated book refetch (edit, WS echo)
+  // can't re-run this and yank the viewport while the operator reads ahead.
+  useEffect(jumpToLive, [jumpToLive])
 
   // Arm a cue as the next GO (mirrors the Run page's standby). Does NOT fire it. The
   // transport ignores the live cue; we just also close the narrow drawer here.
@@ -394,27 +240,32 @@ export function PromptBookViewerPage() {
   // Existing anchors keep their cached label, which the rail/viewer already override with the
   // live cue labels — so a renumber shows up immediately without re-saving anchors.
   const handleRenameCue = useCallback(
-    (cueId: number, name: string) => {
-      patchCue({ projectId: projectIdNum, cueId, name })
-      noteEdit()
-    },
-    [patchCue, projectIdNum, noteEdit],
+    (cueId: number, name: string) => patchCue({ projectId: projectIdNum, cueId, name }),
+    [patchCue, projectIdNum],
   )
-
   const handleRenumberCue = useCallback(
-    (cueId: number, cueNumber: string | null) => {
-      patchCue({ projectId: projectIdNum, cueId, cueNumber })
-      noteEdit()
-    },
-    [patchCue, projectIdNum, noteEdit],
+    (cueId: number, cueNumber: string | null) => patchCue({ projectId: projectIdNum, cueId, cueNumber }),
+    [patchCue, projectIdNum],
+  )
+  const handleRenoteCue = useCallback(
+    (cueId: number, notes: string | null) => patchCue({ projectId: projectIdNum, cueId, notes }),
+    [patchCue, projectIdNum],
   )
 
-  const handleRenoteCue = useCallback(
-    (cueId: number, notes: string | null) => {
-      patchCue({ projectId: projectIdNum, cueId, notes })
-      noteEdit()
+  // Primary rail click: always move the book as close to the cue as we can — its own
+  // anchor, or a borrowed neighbour position. Unlocked, an unanchored cue ALSO arms
+  // click-to-place, so you land near where the anchor belongs and can select the line.
+  const handleCueClick = useCallback(
+    (cue: FlatCue) => {
+      scrollToCue(cue.cueId)
+      if (!anchorByCue.has(cue.cueId) && !locked) togglePlacing(cue.cueId)
     },
-    [patchCue, projectIdNum, noteEdit],
+    [scrollToCue, anchorByCue, locked, togglePlacing],
+  )
+
+  const handleWarningClick = useCallback(
+    (warning: DesyncWarning) => scrollToCue(warning.cueId),
+    [scrollToCue],
   )
 
   // Start/Stop the show in place from the header (parity with Program/Run). State is
@@ -432,12 +283,6 @@ export function PromptBookViewerPage() {
     await deactivateShow({ projectId: projectIdNum }).unwrap()
   }, [deactivateShow, projectIdNum])
 
-  const jumpToLive = useCallback(() => {
-    if (activeCueId == null) return
-    const region = resolveScrollRegionRef.current(activeCueId)
-    if (region) viewerRef.current?.scrollToRegion(region)
-  }, [activeCueId])
-
   /**
    * Space=GO, Backspace=Back, L toggles the lock — see `useTransportKeys` for the guards, three of
    * which this page used to carry inline and one of which it was missing.
@@ -453,294 +298,6 @@ export function PromptBookViewerPage() {
     onBack: fireBack,
     onToggleLock: toggleLock,
   })
-
-  // ── Edit operations ──
-
-  const handleMoveAnchor = useCallback(
-    (cueId: number, region: Region, prevRegion: Region) => {
-      const anchor = anchorByCue.get(cueId)
-      setUndoSnapshot({ cueId, region: prevRegion, label: anchor?.label ?? null })
-      upsertAnchor({
-        projectId: projectIdNum,
-        cueId,
-        region,
-        label: anchor?.label ?? undefined,
-      })
-      noteEdit()
-    },
-    [anchorByCue, upsertAnchor, projectIdNum, noteEdit],
-  )
-
-  const handleUndo = useCallback(() => {
-    if (!undoSnapshot) return
-    upsertAnchor({
-      projectId: projectIdNum,
-      cueId: undoSnapshot.cueId,
-      region: undoSnapshot.region,
-      label: undoSnapshot.label ?? undefined,
-    })
-    setUndoSnapshot(null)
-    noteEdit()
-  }, [undoSnapshot, upsertAnchor, projectIdNum, noteEdit])
-
-  const handlePlaceAnchor = useCallback(
-    (region: Region) => {
-      if (placingCueId == null) return
-      // Re-anchoring an existing cue → snapshot the old region so it can be undone.
-      const existing = anchorByCue.get(placingCueId)
-      if (existing) setUndoSnapshot({ cueId: placingCueId, region: existing.region, label: existing.label ?? null })
-      upsertAnchor({
-        projectId: projectIdNum,
-        cueId: placingCueId,
-        region,
-        label: cueLabelByCue.get(placingCueId),
-      })
-      setPlacingCueId(null)
-    },
-    [placingCueId, cueLabelByCue, anchorByCue, upsertAnchor, projectIdNum],
-  )
-
-  // Anchor a chosen cue to a selected region (from the cue picker). Overwriting an
-  // existing anchor re-anchors it; snapshot the old region so it can be undone.
-  const handleAnchorCue = useCallback(
-    (cueId: number, region: Region) => {
-      const existing = anchorByCue.get(cueId)
-      if (existing) setUndoSnapshot({ cueId, region: existing.region, label: existing.label ?? null })
-      upsertAnchor({ projectId: projectIdNum, cueId, region, label: cueLabelByCue.get(cueId) })
-      setAnchorPicker(null)
-      setPlacingCueId(null)
-      noteEdit()
-    },
-    [cueLabelByCue, anchorByCue, upsertAnchor, projectIdNum, noteEdit],
-  )
-
-  // Create a brand-new cue from the current selection: resolve the target stack (creating
-  // one inline when asked), make the cue, anchor it to the region, then slot it into an
-  // existing stack in reading order. Reused create-stack/create-cue/anchor/reorder mutations
-  // — no new backend surface. The sheet stays open on failure to retry.
-  const handleCreateCueFromSelection = useCallback(
-    async ({
-      name,
-      cueNumber,
-      notes,
-      stack,
-    }: {
-      name: string
-      cueNumber: string | null
-      notes: string | null
-      stack: NewCueStackChoice
-    }) => {
-      if (!anchorPicker) return
-      const region = anchorPicker.region
-      try {
-        // A brand-new stack has no other cues, so there's nothing to reorder against.
-        let stackId: number
-        if (stack.kind === 'new') {
-          const created = await createStack({
-            projectId: projectIdNum,
-            name: stack.name,
-            loop: false,
-            type: 'STACK',
-          }).unwrap()
-          stackId = created.id
-        } else {
-          stackId = stack.id
-        }
-        const newCue = await createCue({
-          projectId: projectIdNum,
-          name,
-          cueNumber,
-          notes,
-          layers: [],
-          adHocEffects: [],
-          triggers: [],
-          fadeDurationMs: 3000,
-          fadeCurve: 'LINEAR',
-          cueStackId: stackId,
-        }).unwrap()
-        await upsertAnchor({
-          projectId: projectIdNum,
-          cueId: newCue.id,
-          region,
-          label: cueNumber ? `Q${cueNumber}` : name,
-        }).unwrap()
-        // Reading-order placement only matters when joining an existing stack that has cues;
-        // reorder only when it differs from the natural append the create already performed.
-        if (stack.kind === 'existing') {
-          const existing = (stacks ?? []).find((s) => s.id === stackId)
-          if (existing) {
-            const cueIds = orderedCueIdsForInsert(existing, anchorByCue, region, newCue.id)
-            const appended = [...existing.cues.map((c) => c.id), newCue.id]
-            const isAppend = cueIds.length === appended.length && cueIds.every((id, i) => id === appended[i])
-            if (!isAppend) await reorderCues({ projectId: projectIdNum, stackId, cueIds }).unwrap()
-          }
-        }
-        setAnchorPicker(null)
-        noteEdit()
-      } catch {
-        // Leave the sheet open so the operator can retry.
-      }
-    },
-    [anchorPicker, createStack, createCue, upsertAnchor, reorderCues, projectIdNum, stacks, anchorByCue, noteEdit],
-  )
-
-  // Primary rail click: always move the book as close to the cue as we can — its own
-  // anchor, or a borrowed neighbour position. Unlocked, an unanchored cue ALSO arms
-  // click-to-place, so you land near where the anchor belongs and can select the line.
-  const handleCueClick = useCallback(
-    (cue: FlatCue) => {
-      const region = resolveScrollRegion(cue.cueId)
-      if (region) viewerRef.current?.scrollToRegion(region)
-      if (!anchorByCue.has(cue.cueId) && !locked) {
-        setPlacingCueId((prev) => (prev === cue.cueId ? null : cue.cueId))
-        noteEdit()
-      }
-    },
-    [resolveScrollRegion, anchorByCue, locked, noteEdit],
-  )
-
-  const handleRemoveAnchor = useCallback(
-    (cueId: number) => {
-      deleteAnchor({ projectId: projectIdNum, cueId })
-      noteEdit()
-    },
-    [deleteAnchor, projectIdNum, noteEdit],
-  )
-
-  // Stable identity so the memoized ScriptViewer isn't re-rendered every fade frame.
-  const handleAnchorRequest = useCallback((region: Region) => setAnchorPicker({ region }), [])
-
-  const handleWarningClick = useCallback(
-    (warning: DesyncWarning) => {
-      const region = resolveScrollRegion(warning.cueId)
-      if (region) viewerRef.current?.scrollToRegion(region)
-    },
-    [resolveScrollRegion],
-  )
-
-  const handleCreateAnnotation = useCallback(
-    (kind: AnnotationKind, region: Region) => {
-      if (kind === 'STRIKETHROUGH') {
-        createAnnotation({ projectId: projectIdNum, kind, region })
-        return
-      }
-      setAnnotationText('')
-      setAnnotationTone('NOTE')
-      setAnnotationDialog({ mode: 'create', kind, region })
-    },
-    [createAnnotation, projectIdNum],
-  )
-
-  const handleAnnotationClick = useCallback((annotation: AnnotationDto) => {
-    setAnnotationText(annotation.text ?? '')
-    setAnnotationTone(annotation.tone ?? 'NOTE')
-    setAnnotationDialog({ mode: 'edit', annotation })
-  }, [])
-
-  const commitAnnotationDialog = useCallback(() => {
-    if (!annotationDialog) return
-    if (annotationDialog.mode === 'create') {
-      createAnnotation({
-        projectId: projectIdNum,
-        kind: annotationDialog.kind,
-        region: annotationDialog.region,
-        text: annotationText || undefined,
-        tone: annotationDialog.kind === 'NOTE' ? annotationTone : undefined,
-      })
-    } else {
-      const { annotation } = annotationDialog
-      updateAnnotation({
-        projectId: projectIdNum,
-        annotationId: annotation.id,
-        kind: annotation.kind,
-        region: annotation.region,
-        text: annotationText || undefined,
-        color: annotation.color ?? undefined,
-        tone: annotation.kind === 'NOTE' ? annotationTone : undefined,
-      })
-    }
-    setAnnotationDialog(null)
-    noteEdit()
-  }, [annotationDialog, annotationText, annotationTone, createAnnotation, updateAnnotation, projectIdNum, noteEdit])
-
-  const handleDeleteAnnotation = useCallback(() => {
-    if (annotationDialog?.mode !== 'edit') return
-    deleteAnnotation({ projectId: projectIdNum, annotationId: annotationDialog.annotation.id })
-    setAnnotationDialog(null)
-    noteEdit()
-  }, [annotationDialog, deleteAnnotation, projectIdNum, noteEdit])
-
-  // Change the front-matter (cover/title) page count. Reuses the create-or-replace PUT
-  // (which keeps anchors/annotations) to persist just this field; the optimistic patch in
-  // the mutation makes the stepper snappy. Clamped so at least one numbered page remains.
-  const handleCoverPagesChange = useCallback(
-    (n: number) => {
-      if (!book) return
-      const next = Math.max(0, Math.min(n, book.pageCount - 1))
-      if (next === book.coverPages) return
-      setPromptBook({
-        projectId: projectIdNum,
-        scriptHash: book.scriptHash,
-        pageCount: book.pageCount,
-        scriptFileName: book.scriptFileName ?? undefined,
-        coverPages: next,
-      })
-      noteEdit()
-    },
-    [book, setPromptBook, projectIdNum, noteEdit],
-  )
-
-  // ── Missing-PDF re-attach flow ──
-  const [reuploadError, setReuploadError] = useState<string | null>(null)
-  const handleReupload = useCallback(
-    async (script: PickedScript) => {
-      setReuploadError(null)
-      try {
-        const upload = await uploadScriptDoc({ projectId: projectIdNum, bytes: script.bytes }).unwrap()
-        if (book && upload.scriptHash !== book.scriptHash) {
-          setHashMismatch(upload.scriptHash)
-          return
-        }
-        setHashMismatch(null)
-        setPdfLoadState('ok')
-        setPdfRetryNonce((n) => n + 1)
-      } catch (err) {
-        setReuploadError(`Upload failed: ${formatError(err)}`)
-      }
-    },
-    [uploadScriptDoc, projectIdNum, book],
-  )
-
-  // A PDF load failure is only "missing" if the store actually 404s; anything
-  // else (backend restart, network blip) gets a retry path, not the re-import card.
-  const handleDocumentError = useCallback(() => {
-    void fetch(scriptDocUrl(projectIdNum, book?.scriptHash ?? ''), { method: 'HEAD' })
-      .then((resp) => setPdfLoadState(resp.status === 404 ? 'missing' : 'error'))
-      .catch(() => setPdfLoadState('error'))
-  }, [projectIdNum, book?.scriptHash])
-
-  // Import the show's prompt book from a picked PDF (the empty-state flow). The same
-  // route then shows the reader once the book exists — no navigation needed. The
-  // server computes the content hash (the script's identity), so import works on
-  // plain-HTTP LAN origins where crypto.subtle doesn't exist.
-  const [importError, setImportError] = useState<string | null>(null)
-  const handleImportBook = useCallback(
-    async (script: PickedScript) => {
-      setImportError(null)
-      try {
-        const upload = await uploadScriptDoc({ projectId: projectIdNum, bytes: script.bytes }).unwrap()
-        await setPromptBook({
-          projectId: projectIdNum,
-          scriptHash: upload.scriptHash,
-          pageCount: script.pageCount,
-          scriptFileName: script.fileName,
-        }).unwrap()
-      } catch (err) {
-        setImportError(`Import failed: ${formatError(err)}`)
-      }
-    },
-    [uploadScriptDoc, setPromptBook, projectIdNum],
-  )
 
   // ── Guards ──
 
@@ -778,9 +335,9 @@ export function PromptBookViewerPage() {
         <ScriptUploadCard
           title="Import a script PDF"
           description="The PDF becomes the spatial backbone of the show's prompt book — cue anchors pin cues to it. Identity is the file's content, so re-importing the same PDF re-attaches cleanly."
-          uploading={reuploading || settingBook}
-          error={importError}
-          onUpload={handleImportBook}
+          uploading={doc.uploading || doc.settingBook}
+          error={doc.importError}
+          onUpload={doc.importBook}
         />
       </div>
     )
@@ -802,20 +359,19 @@ export function PromptBookViewerPage() {
     showWarnings,
     locked,
     placingCueId,
-    expandedCues,
+    isExpanded,
     onToggleExpanded: toggleExpanded,
     modeOf,
-    onCueModeChange: handleCardModeChange,
+    onCueModeChange,
     activeStackId,
     onCueClick: handleCueClick,
-    onRemoveAnchor: handleRemoveAnchor,
+    onRemoveAnchor: removeAnchor,
     onWarningClick: handleWarningClick,
     onSetStandby: handleSetStandby,
     onEditCue: handleEditCue,
     onRenameCue: handleRenameCue,
     onRenumberCue: handleRenumberCue,
     onRenoteCue: handleRenoteCue,
-    onEditInteraction: noteEdit,
     goDisabled,
     showActive: isShowActive,
     stackName: railStackName,
@@ -831,18 +387,26 @@ export function PromptBookViewerPage() {
     SAFETY: 'border-red-600 bg-red-500/15 text-red-400',
   }
 
-  const annotationKind =
-    annotationDialog == null
-      ? null
-      : annotationDialog.mode === 'create'
-        ? annotationDialog.kind
-        : annotationDialog.annotation.kind
-  const annotationKindLabel = annotationKind === 'NOTE' ? 'note' : 'freetext'
-  const cutConfirmOpen = annotationKind === 'STRIKETHROUGH'
-  const annotationSheetOpen = annotationDialog != null && !cutConfirmOpen
-
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    /* One boundary, not fifteen hand-placed calls: `noteEdit` on any pointer/key interaction
+       anywhere in the page is what keeps the idle re-lock from firing at an operator who is
+       mid-edit. The affordances that edit this page are spread across the toolbar, the tool
+       palette, the script overlay, the rail's inline fields, the annotation sheet and the anchor
+       picker — catching it once here means a new one cannot forget to feed the timer, which is
+       exactly what the scattered call sites could not guarantee. The dialogs are Radix portals but
+       still React children of this div, and React propagates through the React tree, so they are
+       covered too. A no-op while locked (and while the show is stopped), so it costs nothing in the
+       normal running state. Mirrors `ShowPage`, which does the same at its body boundary.
+
+       `input` is the third handler because it is the only one that catches a value arriving without
+       a keystroke — a dictated phrase, an IME commit, text dropped into a field. Those are exactly
+       the slow, hands-off edits the idle timer would otherwise tear down mid-sentence. */
+    <div
+      className="flex h-full min-h-0 flex-col"
+      onPointerDownCapture={noteEdit}
+      onKeyDownCapture={noteEdit}
+      onInputCapture={noteEdit}
+    >
       <ShowHeader
         view="prompt-book"
         projectId={projectIdNum}
@@ -875,10 +439,10 @@ export function PromptBookViewerPage() {
         locked={locked}
         unlockedWarning={unlockedWarning}
         canUndo={undoSnapshot != null}
-        onUndo={handleUndo}
+        onUndo={undo}
         coverPages={book.coverPages}
         pageCount={book.pageCount}
-        onCoverPagesChange={handleCoverPagesChange}
+        onCoverPagesChange={doc.setCoverPages}
         activeLabel={activeCueLabel}
         onJumpToLive={jumpToLive}
         warningCount={warnings.length}
@@ -895,8 +459,7 @@ export function PromptBookViewerPage() {
           placingLabel={placingCueId != null ? (cueLabelByCue.get(placingCueId) ?? null) : null}
           onSelectTool={(t) => {
             setTool(t)
-            setPlacingCueId(null)
-            noteEdit()
+            clearPlacing()
           }}
         />
       )}
@@ -911,17 +474,17 @@ export function PromptBookViewerPage() {
         )}
       >
         <div className="relative flex min-w-0 flex-1 flex-col">
-          {pdfLoadState === 'missing' ? (
+          {doc.loadState === 'missing' ? (
             <div className="flex flex-1 items-center justify-center p-8">
               <div className="max-w-md">
                 <ScriptUploadCard
                   title="Script PDF missing on this install"
                   description={`The prompt-book references ${book.scriptFileName ?? 'a PDF'} by content hash, but the file isn't in this backend's store. Re-import the same PDF to re-attach — anchors and annotations are untouched.`}
-                  uploading={reuploading}
-                  error={reuploadError}
-                  onUpload={handleReupload}
+                  uploading={doc.uploading}
+                  error={doc.reuploadError}
+                  onUpload={doc.reupload}
                 />
-                {hashMismatch && (
+                {doc.hashMismatch && (
                   <p className="mt-3 text-sm text-red-500">
                     That PDF&rsquo;s content doesn&rsquo;t match this prompt-book&rsquo;s script (different hash). If the
                     script was revised, open the book settings to swap it in and re-anchor.
@@ -929,19 +492,13 @@ export function PromptBookViewerPage() {
                 )}
               </div>
             </div>
-          ) : pdfLoadState === 'error' ? (
+          ) : doc.loadState === 'error' ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
               <p className="font-medium">Couldn&rsquo;t load the script PDF</p>
               <p className="max-w-md text-sm text-muted-foreground">
                 The backend may be restarting or the connection blipped. The script itself is untouched.
               </p>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setPdfLoadState('ok')
-                  setPdfRetryNonce((n) => n + 1)
-                }}
-              >
+              <Button variant="outline" onClick={doc.retry}>
                 Retry
               </Button>
             </div>
@@ -949,7 +506,7 @@ export function PromptBookViewerPage() {
             <ScriptViewer
               // Remount on a script change (different book/PDF) as well as on retry,
               // so per-page text-bounds/scanned classification never carry over stale.
-              key={`${book.scriptHash}:${pdfRetryNonce}`}
+              key={`${book.scriptHash}:${doc.retryNonce}`}
               ref={viewerRef}
               fileUrl={scriptDocUrl(projectIdNum, book.scriptHash)}
               anchors={book.anchors}
@@ -962,13 +519,12 @@ export function PromptBookViewerPage() {
               locked={locked}
               tool={tool}
               placingCueId={placingCueId}
-              onMoveAnchor={handleMoveAnchor}
-              onPlaceAnchor={handlePlaceAnchor}
-              onAnchorRequest={handleAnchorRequest}
-              onCreateAnnotation={handleCreateAnnotation}
-              onAnnotationClick={handleAnnotationClick}
-              onEditInteraction={noteEdit}
-              onDocumentError={handleDocumentError}
+              onMoveAnchor={moveAnchor}
+              onPlaceAnchor={placeAnchor}
+              onAnchorRequest={requestAnchor}
+              onCreateAnnotation={ann.create}
+              onAnnotationClick={ann.open}
+              onDocumentError={doc.onDocumentError}
             />
           )}
         </div>
@@ -999,20 +555,15 @@ export function PromptBookViewerPage() {
 
       {/* Note / freetext text entry — a form, so a Sheet per the app's Sheet-vs-Dialog rule.
           A clicked strikethrough has nothing to edit; it gets a delete confirmation Dialog. */}
-      <Sheet
-        open={annotationSheetOpen}
-        onOpenChange={(open) => !open && setAnnotationDialog(null)}
-      >
+      <Sheet open={ann.sheetOpen} onOpenChange={(open) => !open && ann.close()}>
         <SheetContent className="flex flex-col sm:max-w-md">
           <SheetHeader>
             <SheetTitle>
-              {annotationDialog?.mode === 'create'
-                ? `New ${annotationKindLabel}`
-                : `Edit ${annotationKindLabel}`}
+              {ann.mode === 'create' ? `New ${ann.kindLabel}` : `Edit ${ann.kindLabel}`}
             </SheetTitle>
           </SheetHeader>
           <SheetBody>
-            {annotationKind === 'NOTE' && (
+            {ann.kind === 'NOTE' && (
               <div>
                 <span className="mb-1.5 block text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase">
                   Tone
@@ -1022,10 +573,10 @@ export function PromptBookViewerPage() {
                     <button
                       key={t}
                       type="button"
-                      onClick={() => setAnnotationTone(t)}
+                      onClick={() => ann.setTone(t)}
                       className={cn(
                         'flex-1 rounded-md border px-2 py-1.5 text-xs font-semibold capitalize',
-                        annotationTone === t
+                        ann.tone === t
                           ? toneBtnActive[t]
                           : 'text-muted-foreground hover:bg-muted/40',
                       )}
@@ -1037,37 +588,37 @@ export function PromptBookViewerPage() {
               </div>
             )}
             <Textarea
-              value={annotationText}
-              onChange={(e) => setAnnotationText(e.target.value)}
+              value={ann.text}
+              onChange={(e) => ann.setText(e.target.value)}
               placeholder="e.g. slow build, 5s — watch conductor"
               autoFocus
             />
           </SheetBody>
-          {annotationDialog?.mode === 'edit' ? (
+          {ann.mode === 'edit' ? (
             <SheetFooter className="flex-row justify-between">
-              <Button variant="destructive" onClick={handleDeleteAnnotation}>
+              <Button variant="destructive" onClick={ann.remove}>
                 <Trash2 className="size-3.5" />
                 Delete
               </Button>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setAnnotationDialog(null)}>
+                <Button variant="outline" onClick={ann.close}>
                   Cancel
                 </Button>
-                <Button onClick={commitAnnotationDialog}>Save</Button>
+                <Button onClick={ann.commit}>Save</Button>
               </div>
             </SheetFooter>
           ) : (
             <SheetFooter className="flex-row justify-end gap-2">
-              <Button variant="outline" onClick={() => setAnnotationDialog(null)}>
+              <Button variant="outline" onClick={ann.close}>
                 Cancel
               </Button>
-              <Button onClick={commitAnnotationDialog}>Save</Button>
+              <Button onClick={ann.commit}>Save</Button>
             </SheetFooter>
           )}
         </SheetContent>
       </Sheet>
 
-      <Dialog open={cutConfirmOpen} onOpenChange={(open) => !open && setAnnotationDialog(null)}>
+      <Dialog open={ann.cutConfirmOpen} onOpenChange={(open) => !open && ann.close()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Remove this cut?</DialogTitle>
@@ -1076,10 +627,10 @@ export function PromptBookViewerPage() {
             The strikethrough will be removed from the script. Anchors and the cue stack are untouched.
           </DialogDescription>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAnnotationDialog(null)}>
+            <Button variant="outline" onClick={ann.close}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleDeleteAnnotation}>
+            <Button variant="destructive" onClick={ann.remove}>
               <Trash2 className="size-3.5" />
               Remove cut
             </Button>
@@ -1096,11 +647,11 @@ export function PromptBookViewerPage() {
         existingCueNames={existingCueNames}
         preselectCueId={placingCueId ?? overlapCueId}
         onPick={(cueId) => {
-          if (anchorPicker) handleAnchorCue(cueId, anchorPicker.region)
+          if (anchorPicker) anchorCue(cueId, anchorPicker.region)
         }}
-        onCreateCue={handleCreateCueFromSelection}
+        onCreateCue={createCueFromSelection}
         onEditCue={handleEditCue}
-        onClose={() => setAnchorPicker(null)}
+        onClose={closePicker}
       />
     </div>
   )

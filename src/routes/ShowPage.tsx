@@ -277,11 +277,19 @@ export function ShowPage() {
    * replaced an auto-expand effect that *wrote* `?cue=` on drill, which conflated "what is live"
    * with "what I am reading" in one slot and let a GO overwrite the second with the first.
    */
+  // `?cue=` holds one cue by contract, so the operator's slot is a one-element set and opening a
+  // second cue replaces the first. Memoised, and the close is a memoised callback rather than an
+  // inline arrow: an arrow would be a fresh identity every render, which would give
+  // `toggleExpanded` one too and break `ShowView`'s memo mid-fade.
+  const openCueIds = useMemo(
+    () => (openedCueId != null ? new Set([openedCueId]) : new Set<number>()),
+    [openedCueId],
+  )
+  const closeExpandedCue = useCallback(() => setExpandedCueId(null), [setExpandedCueId])
   const { isExpanded, toggleExpanded } = useCueExpansion({
-    openCueId: openedCueId,
-    // The memoised setter, not an inline arrow: an arrow would be a fresh identity every render,
-    // which would give `toggleExpanded` one too and break `ShowView`'s memo mid-fade.
-    setOpenCueId: setExpandedCueId,
+    openCueIds,
+    onOpen: setExpandedCueId,
+    onClose: closeExpandedCue,
     liveCueId: drillStackId === activeStackId ? transport.serverActiveCueId : null,
     resetKey: drillStackId,
   })

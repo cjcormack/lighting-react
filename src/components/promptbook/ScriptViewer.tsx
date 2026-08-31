@@ -158,8 +158,6 @@ interface ScriptViewerProps {
   /** Create a free annotation over a selected/drawn region. */
   onCreateAnnotation: (kind: AnnotationKind, region: Region) => void
   onAnnotationClick: (annotation: AnnotationDto) => void
-  /** Any edit-surface interaction — feeds the auto-relock idle timer. */
-  onEditInteraction: () => void
   onDocumentError: () => void
 }
 
@@ -194,7 +192,6 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
     onAnchorRequest,
     onCreateAnnotation,
     onAnnotationClick,
-    onEditInteraction,
     onDocumentError,
   },
   ref,
@@ -289,11 +286,8 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
       return
     }
     const b = range.getBoundingClientRect()
-    // Selecting text is the primary annotation gesture — feed the auto-relock idle
-    // timer so the pane doesn't relock (and drop the selection) while deliberating.
-    onEditInteraction()
     setSelection({ region, anchor: { x: b.left + b.width / 2, y: b.top } })
-  }, [locked, onEditInteraction])
+  }, [locked])
 
   // Hide the toolbar when the selection collapses (click elsewhere / post-commit).
   useEffect(() => {
@@ -359,9 +353,8 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
         moved: false,
       }
       setDragOverride({ cueId: anchor.cueId, region: anchor.region })
-      onEditInteraction()
     },
-    [locked, tool, onEditInteraction],
+    [locked, tool],
   )
 
   // ── Annotation draw (box) — scanned-page fallback + freetext ──
@@ -388,7 +381,6 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
         // Scanned fallback: click a point → full-width band.
         const point = clientPointToNormalized(e.clientX, e.clientY, pageEl)
         onPlaceAnchor([placedAnchorRect(page, point.y)])
-        onEditInteraction()
         return
       }
 
@@ -402,9 +394,8 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
       const rect = cornersToRect(page, start, start)
       drawRef.current = { page, start, lastRect: rect, pageEl, moved: false }
       setDraftRect(rect)
-      onEditInteraction()
     },
-    [locked, tool, placingCueId, hasTextByPage, onPlaceAnchor, onEditInteraction],
+    [locked, tool, placingCueId, hasTextByPage, onPlaceAnchor],
   )
 
   const onPointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
@@ -693,7 +684,6 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
                               leftPct={noteLeftNorm * 100}
                               widthPx={noteWidthPx}
                               onCommit={(next) => onRenoteCue(note.cueId, next)}
-                              onEditInteraction={onEditInteraction}
                             />
                           ),
                         )}
@@ -715,7 +705,6 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
                               topPct={note.top * 100}
                               locked={annLocked}
                               onCommit={(next) => onRenoteCue(note.cueId, next)}
-                              onEditInteraction={onEditInteraction}
                             />
                           ),
                         )}
@@ -741,17 +730,14 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
           anchor={selection.anchor}
           onAnchor={() => {
             onAnchorRequest(selection.region)
-            onEditInteraction()
             clearSelection()
           }}
           onCut={() => {
             onCreateAnnotation('STRIKETHROUGH', selection.region)
-            onEditInteraction()
             clearSelection()
           }}
           onNote={() => {
             onCreateAnnotation('NOTE', selection.region)
-            onEditInteraction()
             clearSelection()
           }}
         />

@@ -35,7 +35,8 @@ interface CueStackPanelProps {
   /** Cue currently armed for click-to-place on the script. */
   placingCueId: number | null
   /** Cue ids rendered as expanded cards (live + next by default). */
-  expandedCues: Set<number>
+  /** Whether a cue's card is open — a predicate, because several can be. See `useCueExpansion`. */
+  isExpanded: (cueId: number) => boolean
   onToggleExpanded: (cueId: number) => void
   /** Stage/Details mode per cue — the page owns it so it persists across cue changes. */
   modeOf: (cueId: number, status: CueRunStatus) => ExpansionMode | null
@@ -59,8 +60,6 @@ interface CueStackPanelProps {
   onRenumberCue: (cueId: number, cueNumber: string | null) => void
   /** Set or clear a cue's note in place (unlocked only). */
   onRenoteCue: (cueId: number, notes: string | null) => void
-  /** Resets the idle auto-relock clock while a cue field is being edited. */
-  onEditInteraction: () => void
   goDisabled: boolean
   /** Whether the show is running — drives the drawer header dot colour + a "Stopped" label. */
   showActive: boolean
@@ -95,7 +94,7 @@ export function CueStackPanel({
   showWarnings,
   locked,
   placingCueId,
-  expandedCues,
+  isExpanded,
   onToggleExpanded,
   modeOf,
   onCueModeChange,
@@ -108,7 +107,6 @@ export function CueStackPanel({
   onRenameCue,
   onRenumberCue,
   onRenoteCue,
-  onEditInteraction,
   goDisabled,
   showActive,
   stackName,
@@ -222,7 +220,7 @@ export function CueStackPanel({
               warnings={warningsByCue.get(row.cue.cueId) ?? NO_WARNINGS}
               locked={locked}
               placing={placingCueId === row.cue.cueId}
-              expanded={expandedCues.has(row.cue.cueId)}
+              expanded={isExpanded(row.cue.cueId)}
               mode={modeOf(row.cue.cueId, status)}
               onModeChange={onCueModeChange}
               fadeStackId={isLiveStack ? activeStackId : null}
@@ -236,7 +234,6 @@ export function CueStackPanel({
               onRenameCue={onRenameCue}
               onRenumberCue={onRenumberCue}
               onRenoteCue={onRenoteCue}
-              onEditInteraction={onEditInteraction}
             />
           )
         })}

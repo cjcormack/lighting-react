@@ -325,7 +325,6 @@ export function CueNoteCallout({
   leftPct,
   widthPx,
   onCommit,
-  onEditInteraction,
 }: {
   /** The cue's display number, e.g. "Q12" — the bubble's tag. */
   label: string
@@ -336,7 +335,6 @@ export function CueNoteCallout({
   leftPct: number
   widthPx: number
   onCommit: (next: string | null) => void
-  onEditInteraction: () => void
 }) {
   return (
     <div
@@ -348,7 +346,6 @@ export function CueNoteCallout({
           notes={notes}
           locked={locked}
           onCommit={onCommit}
-          onEditInteraction={onEditInteraction}
         />
       </Bubble>
     </div>
@@ -362,7 +359,6 @@ export function CueNoteInline({
   topPct,
   locked,
   onCommit,
-  onEditInteraction,
 }: {
   label: string
   notes: string | null
@@ -370,7 +366,6 @@ export function CueNoteInline({
   topPct: number
   locked: boolean
   onCommit: (next: string | null) => void
-  onEditInteraction: () => void
 }) {
   return (
     <div
@@ -383,7 +378,6 @@ export function CueNoteInline({
             notes={notes}
             locked={locked}
             onCommit={onCommit}
-            onEditInteraction={onEditInteraction}
           />
         </Bubble>
       </div>
@@ -396,12 +390,10 @@ function CueNoteText({
   notes,
   locked,
   onCommit,
-  onEditInteraction,
 }: {
   notes: string | null
   locked: boolean
   onCommit: (next: string | null) => void
-  onEditInteraction: () => void
 }) {
   if (locked) {
     return <div className="text-[11.5px] leading-snug whitespace-pre-wrap">{notes}</div>
@@ -412,7 +404,6 @@ function CueNoteText({
       onCommit={(next) => onCommit(next.trim() || null)}
       ariaLabel="cue notes"
       placeholder="Performance note…"
-      onEditInteraction={onEditInteraction}
       multiline
       rows={3}
       formatDisplay={(v) => v || <span className="opacity-60">+ Add note</span>}

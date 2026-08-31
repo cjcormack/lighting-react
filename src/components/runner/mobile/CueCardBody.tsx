@@ -48,8 +48,6 @@ interface CueCardBodyProps {
    * affordance. Receives the trimmed text, or null when cleared. Omit for a read-only card.
    */
   onNotesCommit?: (next: string | null) => void
-  /** Forwarded to the editable fields — resets a host idle timer that could unmount them. */
-  onEditInteraction?: () => void
 }
 
 /**
@@ -78,7 +76,6 @@ export function CueCardBody({
   onCueNumberCommit,
   onCueNameCommit,
   onNotesCommit,
-  onEditInteraction,
 }: CueCardBodyProps) {
   const isCur = kind === 'cur'
   const isNxt = kind === 'nxt'
@@ -103,7 +100,6 @@ export function CueCardBody({
         onCommit={(next) => onCueNumberCommit(next.trim() || null)}
         ariaLabel="cue number"
         placeholder="Q#"
-        onEditInteraction={onEditInteraction}
         className={cn(
           isCur ? 'w-full text-center' : 'max-w-full',
           cue.cueNumberAuto && AUTO_CUE_NUMBER_CLASS,
@@ -130,7 +126,6 @@ export function CueCardBody({
           onCueNameCommit(trimmed)
         }}
         ariaLabel="cue name"
-        onEditInteraction={onEditInteraction}
         className={cn('max-w-full', isCur ? 'text-center' : 'truncate')}
       />
     ) : (
@@ -320,7 +315,6 @@ export function CueCardBody({
                 onCommit={(next) => onNotesCommit(next.trim() || null)}
                 ariaLabel="cue notes"
                 placeholder="Performance note…"
-                onEditInteraction={onEditInteraction}
                 multiline
                 rows={3}
                 formatDisplay={(v) =>
@@ -350,7 +344,6 @@ export function CueCardBody({
                   onCommit={(next) => onNotesCommit(next.trim() || null)}
                   ariaLabel="cue notes"
                   placeholder="Performance note…"
-                  onEditInteraction={onEditInteraction}
                   multiline
                   rows={3}
                   formatDisplay={(v) => v || <span className="opacity-70">+ Add note</span>}

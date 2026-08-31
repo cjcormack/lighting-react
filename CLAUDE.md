@@ -756,10 +756,17 @@ through `useShowTransport`, whose docblock maps who reads which and why; don't h
 armed-only `CueStack.standbyCueId` was exactly that — written twice, read never — and was
 removed).
 
-**Expansion is one addressed card plus the live one, derived.** `?cue=` holds the operator's card;
-the cue on stage is expanded on top of it by `useCueExpansion`. So a GO opens the new live card and
-cannot take away the one being read. Run kept a `Set` and never removed from it (five GOs, five open
-cards); Show kept a bare scalar a GO would overwrite.
+**Expansion is the operator's cards plus the playhead's, derived.** `useCueExpansion` owns one
+rule — there are two reasons a card can be open, and closing must silence both — and leaves the
+operator's slot to the caller, because its storage and multiplicity genuinely differ: Show keeps one
+cue in `?cue=` (an external contract; the Prompt Book mints those links), while the Prompt Book rail
+keeps a set in local state so two cues can be compared against the page they anchor to. The rail
+also auto-opens the cue on deck (`nextCueId`), which Show does not. Either way a GO opens the new
+playhead cards and cannot take away one being read, because nothing in the hook writes the
+operator's slot. Run kept a `Set` and never removed from it (five GOs, five open cards); Show kept a
+bare scalar a GO would overwrite. Dismissed playhead cards self-clear as their ids stop matching;
+`resetKey` exists for the one id that survives a transition — a dismissed *next* card the GO makes
+live.
 
 **Cue numbers** are free-form display labels (`sortOrder` is the authoritative playback order). They are parsed as **prefix + decimal run + suffix** (`S1-3.1` → `("S1-", [3,1], "")`) and only ever compared *within a prefix group*, so `Pre-show 1, Pre-show 2, T2-1, S-1, S-2` is correctly ordered. `src/lib/cueNumber.ts` holds that model and drives the "Fix Order" banner; it mirrors `routes/cueNumbering.kt` in lighting7, which performs the fix — **keep the two in step**.
 

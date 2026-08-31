@@ -20,12 +20,6 @@ interface InlineEditFieldProps {
   /** Renders as plain text with no edit affordance. */
   disabled?: boolean
   /**
-   * Called when the operator opens the field and on every keystroke. Hosts with an idle
-   * timer that can tear the field down (the prompt book's auto-relock) must pass this, or
-   * an in-progress edit is discarded unsaved when the timer fires.
-   */
-  onEditInteraction?: () => void
-  /**
    * Applied to both the display element and the input, so the row can't jump on open.
    * Pass `truncate` when the host cell needs one clipped line — the field wraps like a
    * plain `<span>` otherwise, matching whatever the read-only markup did.
@@ -64,7 +58,6 @@ export function InlineEditField({
   formatDisplay,
   placeholder,
   disabled = false,
-  onEditInteraction,
   className,
   displayClassName,
   inputClassName,
@@ -105,7 +98,6 @@ export function InlineEditField({
     setDraft(pending ?? value)
     setInvalid(false)
     setEditing(true)
-    onEditInteraction?.()
   }
 
   const cancel = () => {
@@ -145,7 +137,6 @@ export function InlineEditField({
       onChange: (e: { target: { value: string } }) => {
         setDraft(e.target.value)
         setInvalid(false)
-        onEditInteraction?.()
       },
       onClick: (e: { stopPropagation: () => void }) => e.stopPropagation(),
       onPointerDown: (e: { stopPropagation: () => void }) => e.stopPropagation(),

@@ -56,8 +56,6 @@ interface PromptBookCueCardProps {
   onRenumberCue: (cueId: number, cueNumber: string | null) => void
   /** Set (or clear, with null) the cue's note. Only wired up while unlocked. */
   onRenoteCue: (cueId: number, notes: string | null) => void
-  /** Resets the idle auto-relock clock, so it can't tear down a field mid-edit. */
-  onEditInteraction: () => void
 }
 
 const STATUS_KIND: Record<CueRunStatus, CueCardKind> = {
@@ -108,7 +106,6 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
   onRenameCue,
   onRenumberCue,
   onRenoteCue,
-  onEditInteraction,
 }: PromptBookCueCardProps) {
   const anchored = anchor != null
   const showSetNext = canSetNext && status !== 'live' && status !== 'next'
@@ -244,7 +241,6 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
           onCueNumberCommit={editable ? (next) => onRenumberCue(cue.cueId, next) : undefined}
           onCueNameCommit={editable ? (next) => onRenameCue(cue.cueId, next) : undefined}
           onNotesCommit={editable ? (next) => onRenoteCue(cue.cueId, next) : undefined}
-          onEditInteraction={onEditInteraction}
           headerTrailing={
             <>
               {warningTriangle}
@@ -364,7 +360,6 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
               onCommit={(next) => onRenumberCue(cue.cueId, next.trim() || null)}
               ariaLabel="cue number"
               placeholder="Q#"
-              onEditInteraction={onEditInteraction}
               // Whatever the cell ends up showing, in full — it is the same cell that folds
               // in the name when there's no number, and either can be clipped.
               title={cueEntry.cueNumber ? `Q${cueEntry.cueNumber}` : cueEntry.name}
@@ -384,7 +379,6 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
                 onRenameCue(cue.cueId, trimmed)
               }}
               ariaLabel="cue name"
-              onEditInteraction={onEditInteraction}
               className={cn(nameClass, 'max-w-full')}
             />
           </span>
