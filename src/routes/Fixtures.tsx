@@ -251,7 +251,7 @@ function FixtureCardHeader({ fixture }: { fixture: Fixture }) {
             {cap}
           </Badge>
         ))}
-        <FxBadge fixtureKey={fixture.key} />
+        <FxBadge fixtureKey={fixture.key} fixtureGroups={fixture.groups} />
       </div>
     </CardHeader>
   )
