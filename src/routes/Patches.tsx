@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { useNavigate, useSearchParams } from "react-router"
-import { Card } from "@/components/ui/card"
+import { useSearchParams } from "react-router"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,7 +13,6 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Loader2, Plus, Pencil, Check, EyeOff } from "lucide-react"
-import { useCurrentProjectQuery } from "../store/projects"
 import { usePatchListQuery, useUniverseConfigListQuery, useUpdateUniverseConfigMutation, usePatchGroupListQuery } from "../store/patches"
 import { useRiggingListQuery } from "../store/riggings"
 import { AddFixtureSheet } from "@/components/patches/AddFixtureSheet"
@@ -28,23 +26,12 @@ import {
 } from "../api/patchApi"
 import { parseNullableNumber } from "@/lib/utils"
 import { findGel } from "@/data/gels"
+import { CurrentProjectRedirect } from "@/components/CurrentProjectRedirect"
 
 // ─── Redirect ─────────────────────────────────────────────────────────
 
 export function PatchesRedirect() {
-  const { data: currentProject, isLoading } = useCurrentProjectQuery()
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    if (!isLoading && currentProject) {
-      navigate(`/projects/${currentProject.id}/settings/patches`, { replace: true })
-    }
-  }, [currentProject, isLoading, navigate])
-
-  if (isLoading) {
-    return <Card className="m-4 p-4 flex items-center justify-center"><Loader2 className="size-6 animate-spin" /></Card>
-  }
-  return null
+  return <CurrentProjectRedirect to="settings/patches" />
 }
 
 // ─── Content ──────────────────────────────────────────────────────────

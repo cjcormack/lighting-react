@@ -36,6 +36,7 @@ import { EditModeProvider, useEditMode } from "@/components/fixtures/EditModeCon
 import { FixtureDetailModal } from "@/components/groups/FixtureDetailModal"
 import { ChannelValueDialog } from "@/components/ChannelValueDialog"
 import { useVirtualizer } from "@tanstack/react-virtual"
+import { CurrentProjectRedirect } from "@/components/CurrentProjectRedirect"
 
 // Pre-computed static channel groups: 64 groups of 8 channels each
 const CHANNEL_GROUPS: number[][] = Array.from({ length: 64 }, (_, g) =>
@@ -368,24 +369,7 @@ export function ChannelsBaseRedirect() {
 // Redirect component for /channels/:universe route
 export function ChannelsRedirect() {
   const { universe } = useParams()
-  const { data: currentProject, isLoading } = useCurrentProjectQuery()
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    if (!isLoading && currentProject) {
-      navigate(`/projects/${currentProject.id}/channels/${universe ?? 0}`, { replace: true })
-    }
-  }, [currentProject, isLoading, navigate, universe])
-
-  if (isLoading) {
-    return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
-    )
-  }
-
-  return null
+  return <CurrentProjectRedirect to={`channels/${universe ?? 0}`} />
 }
 
 // Main ProjectChannels route component

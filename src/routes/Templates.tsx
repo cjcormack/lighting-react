@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router'
+import { useParams, useSearchParams } from 'react-router'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -31,27 +31,11 @@ import type { TemplateInUseError, TemplateInput, TemplateSummary } from '../api/
 import { parseFamilySlug, familySlug } from '../lib/attributeFamily'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { formatError } from '../lib/formatError'
+import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
 
 /** Redirect `/templates` → `/projects/:projectId/templates`. */
 export function TemplatesRedirect() {
-  const { data: currentProject, isLoading } = useCurrentProjectQuery()
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    if (!isLoading && currentProject) {
-      navigate(`/projects/${currentProject.id}/templates`, { replace: true })
-    }
-  }, [currentProject, isLoading, navigate])
-
-  if (isLoading) {
-    return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
-    )
-  }
-
-  return null
+  return <CurrentProjectRedirect to="templates" />
 }
 
 /**

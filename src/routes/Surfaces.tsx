@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from "react"
-import { useNavigate, useSearchParams } from "react-router"
+import { useSearchParams } from "react-router"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { Loader2, Sliders, Zap, ZapOff, Power, AlertTriangle } from "lucide-react"
-import { useCurrentProjectQuery } from "@/store/projects"
+import { Sliders, Zap, ZapOff, Power, AlertTriangle } from "lucide-react"
 import { useIsDeskConnected } from "@/store/status"
 import { DESK_OFFLINE_LABEL } from "@/api/wsGesture"
 import {
@@ -20,27 +19,12 @@ import { BankSwitcher } from "@/components/surfaces/BankSwitcher"
 import { BindingMatrix } from "@/components/surfaces/BindingMatrix"
 import { lightingApi } from "@/api/lightingApi"
 import { cn } from "@/lib/utils"
+import { CurrentProjectRedirect } from "@/components/CurrentProjectRedirect"
 
 // ─── Redirect ─────────────────────────────────────────────────────────
 
 export function SurfacesRedirect() {
-  const { data: currentProject, isLoading } = useCurrentProjectQuery()
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    if (!isLoading && currentProject) {
-      navigate(`/projects/${currentProject.id}/settings/surfaces`, { replace: true })
-    }
-  }, [currentProject, isLoading, navigate])
-
-  if (isLoading) {
-    return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
-    )
-  }
-  return null
+  return <CurrentProjectRedirect to="settings/surfaces" />
 }
 
 // ─── Content ──────────────────────────────────────────────────────────

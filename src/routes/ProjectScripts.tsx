@@ -6,7 +6,6 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { Breadcrumbs } from '@/components/Breadcrumbs'
 import {
   useProjectQuery,
-  useCurrentProjectQuery,
   useProjectScriptsQuery,
 } from '../store/projects'
 import type { ProjectScriptDetail } from '../api/projectApi'
@@ -19,31 +18,12 @@ import {
 import { ScriptListContent } from '../components/scripts/ScriptListContent'
 import { ScriptForm } from '../components/scripts/ScriptForm'
 import { SCRIPT_TYPE_LABELS } from '../components/scripts/scriptUtils'
+import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
 
 // Redirect component for /scripts route
 export function ScriptsRedirect() {
   const { scriptId } = useParams()
-  const { data: currentProject, isLoading } = useCurrentProjectQuery()
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    if (!isLoading && currentProject) {
-      const target = scriptId
-        ? `/projects/${currentProject.id}/scripts/${scriptId}`
-        : `/projects/${currentProject.id}/scripts`
-      navigate(target, { replace: true })
-    }
-  }, [currentProject, isLoading, scriptId, navigate])
-
-  if (isLoading) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin text-muted-foreground" />
-      </div>
-    )
-  }
-
-  return null
+  return <CurrentProjectRedirect to={scriptId ? `scripts/${scriptId}` : 'scripts'} fullHeight />
 }
 
 // Main ProjectScripts route component

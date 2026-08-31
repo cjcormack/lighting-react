@@ -1,5 +1,5 @@
 import { Suspense, useEffect } from 'react'
-import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
+import { Navigate, useLocation, useParams } from 'react-router'
 import { Card } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
 import { Breadcrumbs } from '../components/Breadcrumbs'
@@ -10,31 +10,11 @@ import {
 } from '../components/ViewSwitcher'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import { FixturesListContainer, LIST_PAGE_CARD_CLASS } from './FixturesList'
+import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
 
 // Redirect component for the bare /groups/list route
 export function GroupsListRedirect() {
-  const { data: currentProject, isLoading } = useCurrentProjectQuery()
-  const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-
-  useEffect(() => {
-    if (!isLoading && currentProject) {
-      const query = searchParams.toString()
-      navigate(`/projects/${currentProject.id}/groups/list${query ? `?${query}` : ''}`, {
-        replace: true,
-      })
-    }
-  }, [currentProject, isLoading, navigate, searchParams])
-
-  if (isLoading) {
-    return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
-    )
-  }
-
-  return null
+  return <CurrentProjectRedirect to="groups/list" preserveSearch />
 }
 
 export function ProjectGroupsList() {

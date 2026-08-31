@@ -1,5 +1,5 @@
-import { Suspense, useState, useEffect } from 'react'
-import { useParams, useNavigate, useLocation, Navigate } from 'react-router'
+import { Suspense, useState } from 'react'
+import { useParams, useLocation, Navigate } from 'react-router'
 import { Card } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
@@ -7,6 +7,7 @@ import { useGroupListQuery } from '../store/groups'
 import { GroupCard } from '../components/groups/GroupCard'
 import { FixtureDetailModal } from '../components/groups/FixtureDetailModal'
 import { Breadcrumbs } from '../components/Breadcrumbs'
+import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
 import {
   GROUPS_VIEW_KEY,
   GroupsViewSwitcher,
@@ -16,24 +17,7 @@ import {
 
 // Redirect component for /groups route
 export function GroupsRedirect() {
-  const { data: currentProject, isLoading } = useCurrentProjectQuery()
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    if (!isLoading && currentProject) {
-      navigate(`/projects/${currentProject.id}/groups`, { replace: true })
-    }
-  }, [currentProject, isLoading, navigate])
-
-  if (isLoading) {
-    return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
-    )
-  }
-
-  return null
+  return <CurrentProjectRedirect to="groups" />
 }
 
 // Main ProjectGroups route component

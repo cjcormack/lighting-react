@@ -20,7 +20,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
-import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
+import { useProjectQuery } from '../store/projects'
 import { useProjectProgramStateQuery, useActivateProgramMutation, useDeactivateProgramMutation } from '../store/cueStacks'
 import {
   useProjectCueStackListQuery,
@@ -64,25 +64,10 @@ import { ScriptUploadCard, type PickedScript } from '../components/promptbook/Sc
 import { useEditLock } from '../hooks/useEditLock'
 import { useTransportKeys } from '../hooks/useTransportKeys'
 import type { CueRunStatus } from '../components/promptbook/AnchorOverlay'
+import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
 
 export function PromptBookRedirect() {
-  const { data: currentProject, isLoading } = useCurrentProjectQuery()
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    if (!isLoading && currentProject) {
-      navigate(`/projects/${currentProject.id}/prompt-book`, { replace: true })
-    }
-  }, [currentProject, isLoading, navigate])
-
-  if (isLoading) {
-    return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
-    )
-  }
-  return null
+  return <CurrentProjectRedirect to="prompt-book" />
 }
 
 // ─── Viewer ──────────────────────────────────────────────────────────────

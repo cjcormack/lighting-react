@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router'
+import { useState } from 'react'
+import { useParams } from 'react-router'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -9,7 +9,7 @@ import { Breadcrumbs } from '../components/Breadcrumbs'
 import { BeatIndicator } from '../components/BeatIndicator'
 import { SpeedMasterDetailSheet } from '../components/speedMasters/SpeedMasterDetailSheet'
 import { formatBpm, useBpmDraft } from '../hooks/useBpmDraft'
-import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
+import { useProjectQuery } from '../store/projects'
 import {
   setSpeedMasterBpm,
   tapSpeedMaster,
@@ -19,27 +19,11 @@ import {
 } from '../store/speedMasters'
 import type { SpeedMaster } from '../api/speedMastersApi'
 import type { SpeedMasterLiveState } from '../api/speedMastersWsApi'
+import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
 
 // Redirect /speed-masters → /projects/:projectId/speed-masters
 export function SpeedMastersRedirect() {
-  const { data: currentProject, isLoading } = useCurrentProjectQuery()
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    if (!isLoading && currentProject) {
-      navigate(`/projects/${currentProject.id}/speed-masters`, { replace: true })
-    }
-  }, [currentProject, isLoading, navigate])
-
-  if (isLoading) {
-    return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
-    )
-  }
-
-  return null
+  return <CurrentProjectRedirect to="speed-masters" />
 }
 
 /**

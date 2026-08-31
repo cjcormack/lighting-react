@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { useParams, useNavigate, useSearchParams } from "react-router"
+import { useParams, useSearchParams } from "react-router"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -65,27 +65,12 @@ import {
   ScriptRunDialog,
 } from "@/components/scripts/ScriptResultDialogs"
 import type { FxCalcEditorType } from "../store/scripts"
+import { CurrentProjectRedirect } from "../components/CurrentProjectRedirect"
 
 // ─── Redirect ─────────────────────────────────────────────────────────
 
 export function FxLibraryRedirect() {
-  const { data: currentProject, isLoading } = useCurrentProjectQuery()
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    if (!isLoading && currentProject) {
-      navigate(`/projects/${currentProject.id}/fx-library`, { replace: true })
-    }
-  }, [currentProject, isLoading, navigate])
-
-  if (isLoading) {
-    return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
-    )
-  }
-  return null
+  return <CurrentProjectRedirect to="fx-library" />
 }
 
 // ─── Main route ───────────────────────────────────────────────────────

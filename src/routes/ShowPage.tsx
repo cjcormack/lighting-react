@@ -28,6 +28,7 @@ import { ProgramView } from '../components/runner/program/ProgramView'
 import { RecordSheet } from '../components/programmer/RecordSheet'
 import { useInclude } from '../components/programmer/useInclude'
 import type { CueStack } from '../api/cueStacksApi'
+import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
 
 /** Below this container width the view becomes the phone runner, which is always locked. */
 const MOBILE_RUNNER_THRESHOLD = 600
@@ -45,24 +46,7 @@ function cueNameFor(stacks: CueStack[] | undefined, cueId: number): string | und
 }
 
 export function ShowRedirect() {
-  const { data: currentProject, isLoading } = useCurrentProjectQuery()
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    if (!isLoading && currentProject) {
-      navigate(`/projects/${currentProject.id}/show`, { replace: true })
-    }
-  }, [currentProject, isLoading, navigate])
-
-  if (isLoading) {
-    return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
-    )
-  }
-
-  return null
+  return <CurrentProjectRedirect to="show" />
 }
 
 /**

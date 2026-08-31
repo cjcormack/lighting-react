@@ -63,31 +63,11 @@ import type {
 import type { LocateTarget } from '../store/locate'
 import type { Fixture } from '../store/fixtures'
 import type { GroupSummary } from '../api/groupsApi'
+import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
 
 // Redirect component for the bare /fixtures/list route
 export function FixturesListRedirect() {
-  const { data: currentProject, isLoading } = useCurrentProjectQuery()
-  const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-
-  useEffect(() => {
-    if (!isLoading && currentProject) {
-      const query = searchParams.toString()
-      navigate(`/projects/${currentProject.id}/fixtures/list${query ? `?${query}` : ''}`, {
-        replace: true,
-      })
-    }
-  }, [currentProject, isLoading, navigate, searchParams])
-
-  if (isLoading) {
-    return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
-    )
-  }
-
-  return null
+  return <CurrentProjectRedirect to="fixtures/list" preserveSearch />
 }
 
 export function ProjectFixturesList() {

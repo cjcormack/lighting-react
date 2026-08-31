@@ -1,6 +1,6 @@
-import { memo, useEffect } from 'react'
+import { memo } from 'react'
 import { Layers, Loader2 } from 'lucide-react'
-import { Navigate, useLocation, useNavigate, useParams } from 'react-router'
+import { Navigate, useLocation, useParams } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ShowBar } from '@/components/ShowBar'
@@ -26,29 +26,13 @@ import { lightingApi } from '@/api/lightingApi'
 import { includedCueId } from '@/lib/includedTarget'
 import { programmerClearAll } from '@/store/programmer'
 import { useCurrentProjectQuery, useProjectQuery } from '@/store/projects'
+import { CurrentProjectRedirect } from '@/components/CurrentProjectRedirect'
 
 const GROUPED_KEY = 'programmer.grouped'
 
 /** Bare `/programmer` → the current project's programmer. Mirrors `ShowRedirect`. */
 export function ProgrammerRedirect() {
-  const { data: currentProject, isLoading } = useCurrentProjectQuery()
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    if (!isLoading && currentProject) {
-      navigate(`/projects/${currentProject.id}/programmer`, { replace: true })
-    }
-  }, [currentProject, isLoading, navigate])
-
-  if (isLoading) {
-    return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
-    )
-  }
-
-  return null
+  return <CurrentProjectRedirect to="programmer" />
 }
 
 /**

@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Loader2 } from "lucide-react"
-import { useCurrentProjectQuery, useProjectQuery, useUpdateProjectMutation } from "@/store/projects"
+import { useProjectQuery, useUpdateProjectMutation } from "@/store/projects"
 import { Breadcrumbs } from "@/components/Breadcrumbs"
 import { formatError } from "@/lib/formatError"
 import { parseNullableNumber } from "@/lib/utils"
@@ -17,6 +17,7 @@ import { SurfacesContent } from "./Surfaces"
 import { StageRegionsContent } from "./StageRegions"
 import { RiggingsContent } from "./Riggings"
 import { ProjectSyncContent } from "./CloudSync"
+import { CurrentProjectRedirect } from "@/components/CurrentProjectRedirect"
 
 const TABS = ["general", "patches", "surfaces", "stage", "rigging", "sync"] as const
 type Tab = (typeof TABS)[number]
@@ -26,23 +27,7 @@ function isTab(value: string | undefined): value is Tab {
 }
 
 export function ProjectSettingsRedirect() {
-  const { data: currentProject, isLoading } = useCurrentProjectQuery()
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    if (!isLoading && currentProject) {
-      navigate(`/projects/${currentProject.id}/settings`, { replace: true })
-    }
-  }, [currentProject, isLoading, navigate])
-
-  if (isLoading) {
-    return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
-    )
-  }
-  return null
+  return <CurrentProjectRedirect to="settings" />
 }
 
 export function ProjectSettings() {
