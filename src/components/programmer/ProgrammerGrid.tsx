@@ -3,7 +3,7 @@ import { LayerLegend, OwnershipLegend } from '@/components/fixtures-list/Ownersh
 import { describeCellScope } from '@/components/fixtures-list/cellSelectionModel'
 import { COLUMN_DEFS, type ColumnKey } from '@/components/fixtures-list/columns'
 import type { ColumnVisibility } from '@/components/fixtures-list/ColumnsMenu'
-import { FixturesListContainer } from '@/routes/FixturesList'
+import { FixturesListContainer } from '@/components/fixtures-list/FixturesListContainer'
 import { EditorContextProvider } from '@/components/programmer/EditorContext'
 import { LayerRowNotices } from './LayerRowNotices'
 import { TemplateStrip } from './TemplateStrip'

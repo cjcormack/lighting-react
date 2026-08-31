@@ -9,7 +9,10 @@ import {
   setStoredCardsListView,
 } from '../components/ViewSwitcher'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
-import { FixturesListContainer, LIST_PAGE_CARD_CLASS } from './FixturesList'
+import {
+  FixturesListContainer,
+  LIST_PAGE_CARD_CLASS,
+} from '../components/fixtures-list/FixturesListContainer'
 import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
 
 // Redirect component for the bare /groups/list route
