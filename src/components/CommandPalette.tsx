@@ -132,20 +132,30 @@ function GroupItem({ group, onSelect }: { group: GroupSummary; onSelect: () => v
 
 export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetChannelValue, toggles }: CommandPaletteProps) {
   const [open, setOpen] = useState(false)
+  /**
+   * The palette is mounted on every route but draws nothing until it opens, so its data queries
+   * are skipped until first open: subscribed while closed they re-render it on every fixture,
+   * group, park and channel-mapping invalidation, on pages showing none of them, and pin those
+   * caches so they can never be evicted. A latch rather than `open` itself, so reopening stays
+   * instant — and the flag is set in the same batch as `open`, so the first open renders with the
+   * cache entries (warm from the switcher and the routes) already readable.
+   */
+  const [everOpened, setEverOpened] = useState(false)
+  const closed = { skip: !everOpened }
   const [pages, setPages] = useState<string[]>([])
   const [search, setSearch] = useState("")
   const navigate = useNavigate()
-  const { data: projects } = useProjectListQuery()
-  const { data: currentProject } = useCurrentProjectQuery()
-  const { data: fixtures } = useFixtureListQuery()
-  const { data: groups } = useGroupListQuery()
+  const { data: projects } = useProjectListQuery(undefined, closed)
+  const { data: currentProject } = useCurrentProjectQuery(undefined, closed)
+  const { data: fixtures } = useFixtureListQuery(undefined, closed)
+  const { data: groups } = useGroupListQuery(undefined, closed)
   const allNavItems = useNavItems()
   const universeNavItems = useUniverseNavItems()
   const templateFamilyNavItems = useTemplateFamilyNavItems()
   const isNavAdmin = useIsNavAdmin()
 
-  const { data: parkStateList } = useGetParkStateListQuery()
-  const { data: channelMappings } = useGetChannelMappingListQuery()
+  const { data: parkStateList } = useGetParkStateListQuery(undefined, closed)
+  const { data: channelMappings } = useGetChannelMappingListQuery(undefined, closed)
   const parkedCount = parkStateList?.length ?? 0
 
   const viewedProject = useViewedProject()
@@ -162,6 +172,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault()
         setOpen((o) => !o)
+        setEverOpened(true)
       }
     }
     document.addEventListener("keydown", handler)
@@ -171,6 +182,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   // Reset state when dialog closes
   const handleOpenChange = useCallback((next: boolean) => {
     setOpen(next)
+    if (next) setEverOpened(true)
     if (!next) {
       setPages([])
       setSearch("")
