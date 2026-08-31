@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Lock } from "lucide-react"
-import { useGetChannelQuery } from "@/store/channels"
+import { useChannelValue } from "@/hooks/usePropertyValues"
 import { useGetChannelMappingQuery } from "@/store/channelMapping"
 import { useGetChannelParkStateQuery, useParkChannelMutation } from "@/store/park"
 import { useUpdateChannelMutation } from "@/store/channels"
@@ -46,10 +46,11 @@ export function ChannelValueDialog({ open, onOpenChange, mode }: ChannelValueDia
   const channelNum = Number(channel)
   const isValidChannel = !isNaN(universeNum) && !isNaN(channelNum) && channelNum >= 1 && channelNum <= 512
 
-  // Live data via RTK Query hooks (auto-subscribe to WebSocket updates)
-  const { data: currentValue } = useGetChannelQuery(
-    { universe: universeNum, channelNo: channelNum },
-    { skip: !isValidChannel }
+  // Live data. The level reads its WS subscription directly — it moves at frame rate, and a
+  // cache entry per channel made a Redux dispatch of every frame; mapping and park state are
+  // RTK Query entries that update on the far rarer frames of their own.
+  const currentValue = useChannelValue(
+    isValidChannel ? { universe: universeNum, channelNo: channelNum } : null
   )
   const { data: mapping } = useGetChannelMappingQuery(
     { universe: universeNum, channelNo: channelNum },
@@ -233,7 +234,7 @@ export function ChannelValueDialog({ open, onOpenChange, mode }: ChannelValueDia
               </div>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <span>
-                  Current: <span className="font-mono font-medium text-foreground">{currentValue ?? 0}</span>
+                  Current: <span className="font-mono font-medium text-foreground">{currentValue}</span>
                 </span>
                 {parkedValue !== undefined ? (
                   <Badge className="bg-amber-500 text-white text-[10px] px-1.5 py-0 gap-1">

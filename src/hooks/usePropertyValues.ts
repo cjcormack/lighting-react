@@ -89,6 +89,44 @@ export function subscribeToChannels(
 }
 
 /**
+ * One raw DMX channel's live value, straight off the wire.
+ *
+ * The rest of this module reads channels through a fixture's property descriptor. Three surfaces
+ * hold a bare `{universe, channelNo}` instead — the /channels debug grid, the fixture sheet's
+ * per-channel sliders and the channel dialog — and they used to read it through an RTK Query cache
+ * entry per channel, whose `onCacheEntryAdded` turned every frame into a Redux dispatch. That put
+ * the store in a path that moves at up to 30 Hz per mounted slider for a value nothing else in the
+ * tree consumes; reading the same subscription directly keeps the per-channel split and takes
+ * Redux out of it. `channelsApi`'s batching and the write path are unchanged.
+ *
+ * `null` stands in for the query's `skip` — a hook can't be skipped — and reads 0 while
+ * subscribing to nothing, for a caller whose channel isn't a number yet.
+ *
+ * Deliberately at the wire source rather than `useChannelSource()`: every caller is a live editing
+ * control, so it must show the channel it writes even while a stage view previews something else.
+ * Same reasoning as `useVirtualDimmer`.
+ */
+export function useChannelValue(channel: ChannelRef | null): number {
+  const universe = channel?.universe ?? null
+  const channelNo = channel?.channelNo ?? null
+
+  const subscribe = useCallback(
+    (callback: () => void) =>
+      universe === null || channelNo === null
+        ? () => {}
+        : subscribeToChannels([{ universe, channelNo }], callback),
+    [universe, channelNo]
+  )
+
+  const getSnapshot = useCallback(
+    () => (universe === null || channelNo === null ? 0 : getChannelValue({ universe, channelNo })),
+    [universe, channelNo]
+  )
+
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+}
+
+/**
  * Hook to get a slider property's current value
  */
 export function useSliderValue(property: SliderPropertyDescriptor): number {

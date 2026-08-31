@@ -20,7 +20,8 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import { ChevronRight, Loader2, Lock, LockOpen, MoreHorizontal, SlidersHorizontal, Pencil, Check } from "lucide-react"
-import { useGetChannelQuery, useUpdateChannelMutation } from "../store/channels"
+import { useUpdateChannelMutation } from "../store/channels"
+import { useChannelValue } from "@/hooks/usePropertyValues"
 import { useGetChannelMappingListQuery, type ChannelMappingEntry } from "../store/channelMapping"
 import {
   useGetParkStateListQuery,
@@ -99,13 +100,9 @@ export const ChannelSlider = React.memo(function ChannelSlider({
   parkedValue?: number
   onFixtureClick?: (fixtureKey: string) => void
 }) {
-  const { data: maybeValue } = useGetChannelQuery({
-    universe: universe,
-    channelNo: id,
-  })
+  const value = useChannelValue({ universe, channelNo: id })
 
   const isParked = parkedValue !== undefined
-  const value = maybeValue || 0
   const displayValue = isParked ? parkedValue : value
   const percentage = Math.round((displayValue / 255) * 100)
 

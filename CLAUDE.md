@@ -909,6 +909,11 @@ not stylistic:
    not render empty. `store/speedMasters.ts` (`speedMasterLive`) and `store/surfaces.ts` (devices,
    banks, pickups, scaler) are the worked examples. Prefer this over `useState` + `useEffect` in a
    hook: two components reading one stream then share a subscription, and RTK Query owns teardown.
+   **Not for a stream that moves at frame rate**: `updateCachedData` is a dispatch, so a per-channel
+   entry over `channelState` costs the whole store a reducer pass and a subscriber scan per channel
+   per frame, for a value nothing outside the reading component consumes. Those read the WS layer's
+   own per-key subscription through `useSyncExternalStore` instead — `useChannelValue` and its
+   neighbours in `hooks/usePropertyValues.ts`.
 
 The census as of this writing, so a new slice can see which company it is in: **25 module-scope
 sites across 19 slices** (`grep -n '^lightingApi\.' src/store/*.ts`), and **four deferred**, all

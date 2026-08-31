@@ -14,7 +14,7 @@ import {
   useFixtureTypeListQuery,
 } from '../../store/fixtures'
 import type { GroupPropertyDescriptor, GroupColourPropertyDescriptor } from '../../api/groupsApi'
-import { useGetChannelQuery } from '../../store/channels'
+import { useChannelValue } from '../../hooks/usePropertyValues'
 import { useIsDeskConnected } from '../../store/status'
 import { useUpdateChannel } from '../../hooks/usePropertyValues'
 import { useSettingColourPreview } from '../../hooks/usePropertyValues'
@@ -592,12 +592,7 @@ const ChannelSlider = React.memo(function ChannelSlider({
   description?: string
   isEditing: boolean
 }) {
-  const { data: maybeValue } = useGetChannelQuery({
-    universe: universe,
-    channelNo: id,
-  })
-
-  const value = maybeValue || 0
+  const value = useChannelValue({ universe, channelNo: id })
   const percentage = Math.round((value / 255) * 100)
 
   const updateChannel = useUpdateChannel()
