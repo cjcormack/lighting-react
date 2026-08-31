@@ -47,6 +47,12 @@ export interface PixelSegment {
 /** The warm tungsten every surface falls back to for a colourless fixture. */
 export const DEFAULT_FIXTURE_COLOUR = '#fff8d5'
 
+/** Grey and barely lit — how every surface draws a patch with no matching fixture, so it reads
+ *  as visibly *not* a live light rather than as a lamp at full. Shared with the 3D scene, which
+ *  has its own dispatch over the same colour sources and must agree with the plot and markers. */
+export const PLACEHOLDER_FIXTURE_COLOUR = '#666'
+export const PLACEHOLDER_FIXTURE_INTENSITY = 0.2
+
 interface FixtureAppearanceProps {
   patch: FixturePatch
   fixture: Fixture | undefined
@@ -182,7 +188,14 @@ function FixedColourAppearance({
 
 function PlaceholderAppearance({ children }: LeafProps) {
   // Patch with no matching fixture — grey and barely lit, so it is visibly *not* a live light.
-  return <>{children({ color: '#666', intensity: 0.2 })}</>
+  return (
+    <>
+      {children({
+        color: PLACEHOLDER_FIXTURE_COLOUR,
+        intensity: PLACEHOLDER_FIXTURE_INTENSITY,
+      })}
+    </>
+  )
 }
 
 function MultiPixelAppearance({

@@ -57,6 +57,11 @@ import {
 } from '../../lib/colourMath'
 import { findGel } from '../../data/gels'
 import {
+  DEFAULT_FIXTURE_COLOUR,
+  PLACEHOLDER_FIXTURE_COLOUR,
+  PLACEHOLDER_FIXTURE_INTENSITY,
+} from '../fixtures/fixtureAppearance'
+import {
   dmxToDegrees,
   dmxToSignedDegrees,
   headQuaternionFor,
@@ -336,7 +341,7 @@ export function FixtureModel({
   // Shared per-fixture color state. ColourSync writes here (React-rate);
   // useBeamDirector reads here (per-frame) and pushes to the emitter slot.
   const colorStateRef = useRef<ColorState>({
-    color: new Color('#fff8d5'),
+    color: new Color(DEFAULT_FIXTURE_COLOUR),
     coneOpacity: 0,
     poolOpacity: 0,
   })
@@ -441,6 +446,7 @@ export function FixtureModel({
       {showLabel && <StageLabel position={[0, 0.18, 0]}>{patch.displayName}</StageLabel>}
 
       <ColourSync
+        hasFixture={!!fixture}
         colourSource={colourSource}
         groupColour={pixelCount > 1 ? groupColour : undefined}
         gel={gel}
@@ -934,12 +940,17 @@ interface ColourSyncBaseProps {
   pixelWashStateRef?: React.RefObject<PixelWashState | null>
 }
 
-function ColourSync({
+/** Exported for the unit test — the arms are the interesting part and the enclosing
+ *  `FixtureModel` cannot be rendered outside an R3F canvas. */
+export function ColourSync({
+  hasFixture,
   colourSource,
   groupColour,
   gel,
   ...refs
 }: ColourSyncBaseProps & {
+  /** False for a patch whose fixture record hasn't resolved (or never will). */
+  hasFixture: boolean
   colourSource:
     | { type: 'colour'; property: ColourPropertyDescriptor }
     | { type: 'setting'; property: SettingPropertyDescriptor }
@@ -947,6 +958,13 @@ function ColourSync({
   groupColour: GroupColourPropertyDescriptor | undefined
   gel: { color: string } | null
 }) {
+  // First, and above the gel arm, exactly as FixtureAppearanceSource orders it: a patch with no
+  // fixture record has no channels to read, and falling through to the warm-white default painted
+  // it as a fully-lit lamp — for an unmatched patch, and for every patch during the window before
+  // the fixture list resolves — while the 2D plot and markers correctly showed a placeholder.
+  if (!hasFixture) {
+    return <PlaceholderBeamSync {...refs} />
+  }
   // Multi-element fixtures drive per-pixel bodies + one aggregate beam.
   if (groupColour) {
     return <MultiPixelColourSync groupColour={groupColour} {...refs} />
@@ -957,7 +975,7 @@ function ColourSync({
   if (colourSource?.type === 'setting') {
     return <SettingColourBeamSync settingProp={colourSource.property} {...refs} />
   }
-  return <FixedColourBeamSync hex={gel?.color ?? '#fff8d5'} {...refs} />
+  return <FixedColourBeamSync hex={gel?.color ?? DEFAULT_FIXTURE_COLOUR} {...refs} />
 }
 
 interface ColourApplyRefs {
@@ -1113,6 +1131,18 @@ function FixedColourBeamSync({
     },
     source,
   )
+  return null
+}
+
+// Patch with no matching fixture. The one arm of this dispatch with no channels to watch, so it
+// holds no subscription at all — but it keeps the fixed-hook-set-per-branch shape the others have
+// (one hook, unconditionally) and re-applies after every render, because the lens material is
+// created by the body rendered as this component's sibling and doesn't exist on the first pass.
+function PlaceholderBeamSync({ lensRef, colorStateRef }: ColourSyncBaseProps) {
+  const refs = { lensRef, colorStateRef }
+  useEffect(() => {
+    applyColour(PLACEHOLDER_FIXTURE_COLOUR, PLACEHOLDER_FIXTURE_INTENSITY, refs)
+  })
   return null
 }
 
