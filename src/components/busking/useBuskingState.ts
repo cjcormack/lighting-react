@@ -6,7 +6,7 @@ import { useCurrentProjectQuery } from '@/store/projects'
 import { useToggleLookMutation } from '@/store/looks'
 import type { SettingPropertyDescriptor, SliderPropertyDescriptor } from '@/store/fixtures'
 import type { EffectLibraryEntry, FixtureDirectEffect } from '@/store/fixtureFx'
-import type { GroupActiveEffect, BlendMode, DistributionStrategy, EffectType, ElementMode } from '@/api/groupsApi'
+import type { GroupActiveEffect, BlendMode, DistributionStrategy, ElementMode } from '@/api/groupsApi'
 import type { LookSummary, ToggleLookTarget } from '@/api/looksApi'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import { lightingApi } from '@/api/lightingApi'
@@ -429,7 +429,7 @@ export function useBuskingState() {
               additions.push(
                 applyGroupFx({
                   groupName: data.target.name,
-                  effectType: effect.name as EffectType,
+                  effectType: effect.name,
                   propertyName,
                   beatDivision: defaultBeatDivision,
                   blendMode: 'OVERRIDE' as BlendMode,
@@ -489,7 +489,7 @@ export function useBuskingState() {
           additions.push(
             applyGroupFx({
               groupName: data.target.name,
-              effectType: effect.name as EffectType,
+              effectType: effect.name,
               propertyName,
               beatDivision: params.beatDivision,
               blendMode: params.blendMode as BlendMode,

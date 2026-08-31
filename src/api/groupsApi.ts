@@ -53,36 +53,23 @@ export type DistributionStrategy =
   | 'RANDOM'
   | 'POSITIONAL'
 
-export type DimmerEffectType =
-  | 'sinewave'
-  | 'pulse'
-  | 'rampup'
-  | 'rampdown'
-  | 'triangle'
-  | 'squarewave'
-  | 'strobe'
-  | 'flicker'
-  | 'breathe'
-
-export type ColourEffectType =
-  | 'rainbowcycle'
-  | 'colourstrobe'
-  | 'colourpulse'
-  | 'colourfade'
-  | 'colourflicker'
-
-export type PositionEffectType =
-  | 'circle'
-  | 'figure8'
-  | 'sweep'
-  | 'pansweep'
-  | 'tiltsweep'
-  | 'randomposition'
-
-export type EffectType = DimmerEffectType | ColourEffectType | PositionEffectType
-
 export interface ApplyFxRequest {
-  effectType: EffectType
+  /**
+   * The effect's registry id, as `GET /fx/library` reports it — `string`, like every other
+   * `effectType` in this client (`GroupActiveEffect`, `FxEffectState`, `addFixtureFx`).
+   *
+   * Three closed unions stood here (dimmer / colour / position, twenty lowercase literals). The
+   * vocabulary they claimed to enumerate is data-driven — `fx/index.txt` plus each `.fx.kts`
+   * `id:`, plus whatever an `FX_DEFINITION` script registers — so no union could name a
+   * user-defined effect, and the built-in list had already outgrown these by eight. They only
+   * typechecked because the one production call site cast `effect.name as EffectType`, which
+   * constrains nothing. Narrow it from the FX library query at runtime if narrowing is ever wanted.
+   *
+   * **Send the library's name verbatim.** `FxRegistry` normalises on lookup, which is what lets a
+   * `SineWave` id answer a `sinewave` request; canonicalising here would only add a second
+   * spelling to keep in step.
+   */
+  effectType: string
   propertyName: string
   beatDivision: number
   blendMode: BlendMode
