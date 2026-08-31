@@ -155,7 +155,12 @@ export function useShowTransport({
   // while nothing is fading here — a settled snapshot frame, a refetch revealing a missed
   // transition, or an optimistic patch from a local BACK. NOT on an unrelated refetch or
   // mid-fade re-render, so a user-armed standby and an in-flight fade are preserved. ──
-  const stackCueSig = activeStack ? activeStack.cues.map((c) => c.id).join(',') : ''
+  // Memoized on the stack object: this hook re-renders at frame rate through a fade, and the
+  // signature only ever changes when the cache hands back a new stack.
+  const stackCueSig = useMemo(
+    () => (activeStack ? activeStack.cues.map((c) => c.id).join(',') : ''),
+    [activeStack],
+  )
   /**
    * What the runner was last initialised against. These two refs are what let the effect depend on
    * `runner.activeCueId` honestly rather than carrying a disabled lint rule: "is there anything to
@@ -213,10 +218,13 @@ export function useShowTransport({
 
   // ── Fade / auto-advance animation. Keyed on runner.activeCueId, which the optimistic go()
   // below sets the instant GO is pressed. ──
-  const animCue =
-    runner.activeCueId != null
-      ? activeStack?.cues.find((c) => c.id === runner.activeCueId)
-      : undefined
+  const animCue = useMemo(
+    () =>
+      runner.activeCueId != null
+        ? activeStack?.cues.find((c) => c.id === runner.activeCueId)
+        : undefined,
+    [activeStack, runner.activeCueId],
+  )
 
   // Server call to move the backend cursor. No standby branch any more: the backend owns the
   // armed cue, so `advance` FORWARD fires whatever is on deck. A stopped stack still needs

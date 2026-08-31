@@ -194,14 +194,26 @@ export function ShowPage() {
   const { setStandby } = transport
   const handleSetStandby = useCallback((cueId: number) => setStandby(cueId), [setStandby])
 
-  const runnerDisplay: RunnerDisplayState = {
-    activeCue,
-    standbyCue,
-    nextStack,
-    activeCueId: transport.activeCueId,
-    standbyCueId: transport.standbyCueId,
-    completedCueIds: transport.completedCueIds,
-  }
+  // Only the phone branch below draws this, but it is built on every render of a component that
+  // re-renders per fade frame — so memoize rather than hand `RunMobile` a fresh object 60×/s.
+  const runnerDisplay: RunnerDisplayState = useMemo(
+    () => ({
+      activeCue,
+      standbyCue,
+      nextStack,
+      activeCueId: transport.activeCueId,
+      standbyCueId: transport.standbyCueId,
+      completedCueIds: transport.completedCueIds,
+    }),
+    [
+      activeCue,
+      standbyCue,
+      nextStack,
+      transport.activeCueId,
+      transport.standbyCueId,
+      transport.completedCueIds,
+    ],
+  )
 
   const dispatch = useDispatch()
   const [goToStack] = useGoToStackMutation()
