@@ -34,6 +34,10 @@ import {
 } from '@/lib/colourMath'
 import { cn } from '@/lib/utils'
 import { ColourPickerPopover } from './ColourPickerPopover'
+import { ColourChannelSlider } from './ColourChannelSlider'
+
+/** Label metrics for this surface's channel rows; each channel supplies its own colour. */
+const CHANNEL_LABEL = 'w-4 text-xs font-mono'
 
 interface GroupPropertyVisualizerProps {
   property: GroupPropertyDescriptor
@@ -207,26 +211,30 @@ export const GroupColourSwatch = memo(function GroupColourSwatch({
               label="R"
               value={avgR}
               onChange={(v) => updateAll(v, avgG, avgB, avgW, avgA, avgUv)}
-              colour="rgb(239, 68, 68)"
+              labelClassName={CHANNEL_LABEL}
+              labelStyle={{ color: 'rgb(239, 68, 68)' }}
             />
             <ColourChannelSlider
               label="G"
               value={avgG}
               onChange={(v) => updateAll(avgR, v, avgB, avgW, avgA, avgUv)}
-              colour="rgb(34, 197, 94)"
+              labelClassName={CHANNEL_LABEL}
+              labelStyle={{ color: 'rgb(34, 197, 94)' }}
             />
             <ColourChannelSlider
               label="B"
               value={avgB}
               onChange={(v) => updateAll(avgR, avgG, v, avgW, avgA, avgUv)}
-              colour="rgb(59, 130, 246)"
+              labelClassName={CHANNEL_LABEL}
+              labelStyle={{ color: 'rgb(59, 130, 246)' }}
             />
             {hasWhite && (
               <ColourChannelSlider
                 label="W"
                 value={avgW ?? 0}
                 onChange={(v) => updateAll(avgR, avgG, avgB, v, avgA, avgUv)}
-                colour="rgb(156, 163, 175)"
+                labelClassName={CHANNEL_LABEL}
+                labelStyle={{ color: 'rgb(156, 163, 175)' }}
               />
             )}
             {hasAmber && (
@@ -234,7 +242,8 @@ export const GroupColourSwatch = memo(function GroupColourSwatch({
                 label="A"
                 value={avgA ?? 0}
                 onChange={(v) => updateAll(avgR, avgG, avgB, avgW, v, avgUv)}
-                colour="rgb(245, 158, 11)"
+                labelClassName={CHANNEL_LABEL}
+                labelStyle={{ color: 'rgb(245, 158, 11)' }}
               />
             )}
             {hasUv && (
@@ -242,7 +251,8 @@ export const GroupColourSwatch = memo(function GroupColourSwatch({
                 label="UV"
                 value={avgUv ?? 0}
                 onChange={(v) => updateAll(avgR, avgG, avgB, avgW, avgA, v)}
-                colour="rgb(168, 85, 247)"
+                labelClassName={CHANNEL_LABEL}
+                labelStyle={{ color: 'rgb(168, 85, 247)' }}
               />
             )}
           </div>
@@ -263,37 +273,6 @@ export const GroupColourSwatch = memo(function GroupColourSwatch({
   )
 })
 
-/**
- * Individual colour channel slider
- */
-function ColourChannelSlider({
-  label,
-  value,
-  onChange,
-  colour,
-}: {
-  label: string
-  value: number
-  onChange: (value: number) => void
-  colour: string
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="w-4 text-xs font-mono" style={{ color: colour }}>
-        {label}
-      </span>
-      <Slider
-        value={[value]}
-        min={0}
-        max={255}
-        step={1}
-        onValueChange={([v]) => onChange(v)}
-        className="flex-1"
-      />
-      <span className="w-8 text-xs text-right text-muted-foreground">{value}</span>
-    </div>
-  )
-}
 
 /**
  * Group position indicator showing average/mixed position

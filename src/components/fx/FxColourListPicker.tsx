@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { HexColorPicker } from 'react-colorful'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
-import { Slider } from '@/components/ui/slider'
 import { Label } from '@/components/ui/label'
+import { ExtendedChannelSlider } from '../fixtures/ExtendedChannelSlider'
 import {
   DndContext,
   closestCenter,
@@ -362,7 +362,7 @@ function SortableColourSwatch({
           {hasExtended && (
             <div className="space-y-2 pt-2 border-t border-border">
               {extendedChannels?.white && (
-                <ExtendedSlider
+                <ExtendedChannelSlider
                   label="White"
                   value={effectiveColour.white}
                   onChange={(v) => handleExtendedChange('white', v)}
@@ -370,7 +370,7 @@ function SortableColourSwatch({
                 />
               )}
               {extendedChannels?.amber && (
-                <ExtendedSlider
+                <ExtendedChannelSlider
                   label="Amber"
                   value={effectiveColour.amber}
                   onChange={(v) => handleExtendedChange('amber', v)}
@@ -378,7 +378,7 @@ function SortableColourSwatch({
                 />
               )}
               {extendedChannels?.uv && (
-                <ExtendedSlider
+                <ExtendedChannelSlider
                   label="UV"
                   value={effectiveColour.uv}
                   onChange={(v) => handleExtendedChange('uv', v)}
@@ -390,40 +390,6 @@ function SortableColourSwatch({
         </div>
       </PopoverContent>
     </Popover>
-  )
-}
-
-function ExtendedSlider({
-  label,
-  value,
-  onChange,
-  color,
-}: {
-  label: string
-  value: number
-  onChange: (v: number) => void
-  color: string
-}) {
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-0.5">
-        <span className="text-[11px] flex items-center gap-1">
-          <span
-            className="inline-block w-2 h-2 rounded-full border border-border"
-            style={{ backgroundColor: color }}
-          />
-          {label}
-        </span>
-        <span className="text-[11px] text-muted-foreground font-mono">{value}</span>
-      </div>
-      <Slider
-        value={[value]}
-        min={0}
-        max={255}
-        step={1}
-        onValueChange={([v]) => onChange(v)}
-      />
-    </div>
   )
 }
 

@@ -32,6 +32,10 @@ import { SWATCH_FLOOR } from '@/lib/colourMath'
 import { usePropertyParkStatus } from '../../hooks/usePropertyParkStatus'
 import { cn } from '@/lib/utils'
 import { ColourPickerPopover } from './ColourPickerPopover'
+import { ColourChannelSlider } from './ColourChannelSlider'
+
+/** Label metrics for this surface's channel rows; the colour class is appended per channel. */
+const CHANNEL_LABEL = 'w-6 text-xs font-medium'
 
 /** Small amber lock icon shown next to parked property names */
 function ParkedIndicator() {
@@ -174,25 +178,26 @@ export const ColourSwatch = memo(function ColourSwatch({
             label="R"
             value={colour.r}
             onChange={setR}
-            className="text-red-500"
+            labelClassName={cn(CHANNEL_LABEL, 'text-red-500')}
           />
           <ColourChannelSlider
             label="G"
             value={colour.g}
             onChange={setG}
-            className="text-green-500"
+            labelClassName={cn(CHANNEL_LABEL, 'text-green-500')}
           />
           <ColourChannelSlider
             label="B"
             value={colour.b}
             onChange={setB}
-            className="text-blue-500"
+            labelClassName={cn(CHANNEL_LABEL, 'text-blue-500')}
           />
           {property.whiteChannel && (
             <ColourChannelSlider
               label="W"
               value={colour.w ?? 0}
               onChange={setW}
+              labelClassName={CHANNEL_LABEL}
             />
           )}
           {property.amberChannel && (
@@ -200,7 +205,7 @@ export const ColourSwatch = memo(function ColourSwatch({
               label="A"
               value={colour.a ?? 0}
               onChange={setA}
-              className="text-amber-500"
+              labelClassName={cn(CHANNEL_LABEL, 'text-amber-500')}
             />
           )}
           {property.uvChannel && (
@@ -208,7 +213,7 @@ export const ColourSwatch = memo(function ColourSwatch({
               label="UV"
               value={colour.uv ?? 0}
               onChange={setUv}
-              className="text-purple-400"
+              labelClassName={cn(CHANNEL_LABEL, 'text-purple-400')}
             />
           )}
         </div>
@@ -217,32 +222,6 @@ export const ColourSwatch = memo(function ColourSwatch({
   )
 })
 
-function ColourChannelSlider({
-  label,
-  value,
-  onChange,
-  className,
-}: {
-  label: string
-  value: number
-  onChange: (value: number) => void
-  className?: string
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className={cn('w-6 text-xs font-medium', className)}>{label}</span>
-      <Slider
-        value={[value]}
-        min={0}
-        max={255}
-        step={1}
-        onValueChange={([v]) => onChange(v)}
-        className="flex-1"
-      />
-      <span className="w-8 text-xs text-right text-muted-foreground">{value}</span>
-    </div>
-  )
-}
 
 /**
  * Position indicator showing pan/tilt on a 2D grid
