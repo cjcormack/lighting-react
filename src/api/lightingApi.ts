@@ -61,6 +61,16 @@ interface LightingApi {
   programmer: ProgrammerApi
 }
 
+/**
+ * The one WS/REST client, built at module-evaluation time.
+ *
+ * Store slices subscribe to it three different ways — at module scope (the default), deferred
+ * behind a `startXBridge()` called from `main.tsx` (for slices on the earliest render path, where
+ * an import cycle back to this module would otherwise TDZ), or per cache entry inside
+ * `onCacheEntryAdded` (for state that is streamed rather than fetched). Which one a new slice
+ * should use, and why the split is not stylistic, is written down once in `CLAUDE.md` §"Where a WS
+ * bridge subscribes".
+ */
 export const lightingApi = createLightingApi()
 
 function getWebSocketUrl() {

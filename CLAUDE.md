@@ -883,6 +883,44 @@ operator-visible caches first; a drop mid-sequence abandons the rest. The waves 
 detail only — `src/store/status.test.ts` pins that they concatenate to exactly the resync set, so
 a tag can never fall out by landing in no wave.
 
+### Where a WS bridge subscribes
+
+A "bridge" is a store slice's standing `lightingApi.<x>.subscribe(…)` that turns a pushed frame
+into a `dispatch` — usually an invalidation. There are three places to put one, and the choice is
+not stylistic:
+
+1. **At module scope — the default.** A bare `lightingApi.x.subscribe(...)` statement at the top
+   level of the slice. Use this unless one of the other two applies. It runs once, when something
+   first imports the slice, and lives for the life of the tab; that is right for a bridge whose job
+   is to keep a cache honest whether or not anything is currently rendering it.
+2. **Deferred, started from `main.tsx`** — an exported `startXBridge()` the slice does *not* call
+   itself. Use this **only when the slice sits on the earliest render path**: imported, directly or
+   transitively, by something that renders before or during the first paint — the sidebar and its
+   nav registry (`src/navigation.ts`), `Layout`, `AuthGate`, the boot overlay, or a picker those
+   mount. The hazard is a runtime import cycle: if any module in `api/lightingApi`'s own import
+   closure reaches back to the slice, the slice's body can run while `lightingApi` is still
+   mid-initialisation, and touching it there throws a TDZ `ReferenceError` that takes *every export
+   of the slice* with it. `tsc`, `vite build` and the unit tests all pass anyway — the symptom is a
+   blank-looking app in the browser. `store/oauthGithub.ts`'s doc comment is the long version.
+3. **Per cache entry, inside `onCacheEntryAdded`** — not a bridge at all, but the right answer for
+   a *stream* rather than a notification: the value itself arrives over WS and there is nothing to
+   refetch. Subscribe when the entry is created, `updateCachedData` on each frame, unsubscribe on
+   `cacheEntryRemoved`, and seed `queryFn` from the WS layer's cached snapshot so a late mount does
+   not render empty. `store/speedMasters.ts` (`speedMasterLive`) and `store/surfaces.ts` (devices,
+   banks, pickups, scaler) are the worked examples. Prefer this over `useState` + `useEffect` in a
+   hook: two components reading one stream then share a subscription, and RTK Query owns teardown.
+
+The census as of this writing, so a new slice can see which company it is in: **25 module-scope
+sites across 19 slices** (`grep -n '^lightingApi\.' src/store/*.ts`), and **four deferred**, all
+started from `main.tsx` — `oauthGithub`, `looks`, `templates`, `programmerErrors`. The imbalance is
+the rule working, not drift: form 1 is the default and form 2 is the exception, and the four are
+exactly the slices the sidebar and the first paint reach.
+
+Nothing is being migrated toward form 2. `import/no-cycle` is an ESLint **error** in this repo, so
+the precondition for the TDZ hazard — an import cycle through `api/lightingApi` — cannot reappear
+silently; the four deferred bridges stay deferred as defence in depth for the render-order half,
+which the lint rule does not see.
+
 ## Patterns and Conventions
 
 ### State Management
