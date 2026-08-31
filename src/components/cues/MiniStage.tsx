@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import { findGel } from '@/data/gels'
+import { DEFAULT_FIXTURE_COLOUR } from '@/components/fixtures/fixtureAppearance'
 import { StageBackdrop } from '@/components/stage/StageBackdrop'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { useProjectedPatches } from '@/hooks/useProjectedPatches'
@@ -90,7 +91,7 @@ export function MiniStage({
         const fixtureType = fixture ? typeByKey.get(fixture.typeKey) : undefined
         const showCone = !!fixtureType?.acceptsBeamAngle
         const beamDeg = patch.beamAngleDeg ?? 30
-        const colour = pickColour(patch.gelCode)
+        const colour = pickColour(patch.gelCode, !!fixtureType?.acceptsGel)
         return (
           <div
             key={patch.id}
@@ -110,12 +111,19 @@ export function MiniStage({
   )
 }
 
-function pickColour(gelCode: string | null): string {
-  if (gelCode) {
+/**
+ * The gel arm of `FixtureAppearanceSource`, minus its live-colour branches: this surface
+ * deliberately draws simulated cue targeting rather than the wire, so a fixture's own colour
+ * properties are not consulted. The `acceptsGel` gate is the shared version's, though — a gel code
+ * on a fixture whose type doesn't take gel is stale data, and honouring it here would tint a
+ * colour-mixing LED that every other surface leaves at the default warm tungsten.
+ */
+function pickColour(gelCode: string | null, acceptsGel: boolean): string {
+  if (acceptsGel && gelCode) {
     const gel = findGel(gelCode)
     if (gel) return gel.color
   }
-  return '#fff8d5' // warm tungsten — same default as DimmerOnlyMarker
+  return DEFAULT_FIXTURE_COLOUR
 }
 
 function SimulatedMarker({
