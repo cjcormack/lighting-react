@@ -3,6 +3,7 @@ import { GripVertical, X } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Input } from '@/components/ui/input'
+import { MarkerRow } from '@/components/runner/MarkerRow'
 
 interface ProgramMarkerRowProps {
   id: number
@@ -55,6 +56,25 @@ export function ProgramMarkerRow({
     [onRename],
   )
 
+  // Locked, a separator is just a labelled divider — the same one the phone cue list and the
+  // Prompt Book rail draw, so render `MarkerRow` rather than a second spelling of it. The wrapper
+  // keeps the unlocked row's padding and grip-column spacer, and suppresses `MarkerRow`'s own
+  // horizontal padding, so the divider starts at the same x in both states: nothing shifts
+  // sideways as the lock flips.
+  if (locked) {
+    return (
+      <div
+        ref={setNodeRef}
+        style={style}
+        {...attributes}
+        className="flex items-center gap-2.5 py-2 px-4 hover:bg-muted/10 transition-colors"
+      >
+        <div className="size-4 shrink-0" />
+        <MarkerRow name={name} className="min-w-0 flex-1 px-0 py-0" />
+      </div>
+    )
+  }
+
   return (
     <div
       ref={setNodeRef}
@@ -62,46 +82,32 @@ export function ProgramMarkerRow({
       {...attributes}
       className="flex items-center gap-2.5 py-2 px-4 hover:bg-muted/10 transition-colors"
     >
-      {/* Locked, a separator is just a labelled divider: the column is kept so rows do not shift,
-          but the grip, the editable label and the delete are all absent. */}
-      {locked ? (
-        <div className="size-4" />
-      ) : (
-        <div
-          {...listeners}
-          className="flex items-center justify-center text-muted-foreground hover:text-foreground cursor-grab"
-        >
-          <GripVertical className="size-4" />
-        </div>
-      )}
+      <div
+        {...listeners}
+        className="flex items-center justify-center text-muted-foreground hover:text-foreground cursor-grab"
+      >
+        <GripVertical className="size-4" />
+      </div>
       <div className="flex-1 h-px bg-border" />
-      {locked ? (
-        <span className="px-2 text-center text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {localName}
-        </span>
-      ) : (
-        <Input
-          value={localName}
-          onChange={(e) => {
-            setLocalName(e.target.value)
-            debouncedRename(e.target.value)
-          }}
-          onClick={(e) => e.stopPropagation()}
-          className="h-7 w-auto min-w-[120px] max-w-[200px] text-center text-xs font-medium text-muted-foreground bg-card border-border"
-        />
-      )}
+      <Input
+        value={localName}
+        onChange={(e) => {
+          setLocalName(e.target.value)
+          debouncedRename(e.target.value)
+        }}
+        onClick={(e) => e.stopPropagation()}
+        className="h-7 w-auto min-w-[120px] max-w-[200px] text-center text-xs font-medium text-muted-foreground bg-card border-border"
+      />
       <div className="flex-1 h-px bg-border" />
-      {!locked && (
-        <button
-          className="size-5 flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors"
-          onClick={(e) => {
-            e.stopPropagation()
-            onDelete()
-          }}
-        >
-          <X className="size-3.5" />
-        </button>
-      )}
+      <button
+        className="size-5 flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors"
+        onClick={(e) => {
+          e.stopPropagation()
+          onDelete()
+        }}
+      >
+        <X className="size-3.5" />
+      </button>
     </div>
   )
 }

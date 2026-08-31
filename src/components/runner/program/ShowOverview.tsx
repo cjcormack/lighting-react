@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { MarkerRow } from '@/components/runner/MarkerRow'
 import {
   Dialog,
   DialogContent,
@@ -251,6 +252,25 @@ function SortableSeparatorEntry({
     opacity: isDragging ? 0.5 : undefined,
   }
 
+  // Locked, a separator is just a labelled divider — the same one every other surface draws, so
+  // render `MarkerRow` rather than a third spelling of it. The wrapper keeps the unlocked row's
+  // padding and grip-column spacer and suppresses `MarkerRow`'s own, so nothing shifts sideways as
+  // the lock flips. Leaving the field and the delete live made this the one row a stray click could
+  // still rename or remove from a running show.
+  if (locked) {
+    return (
+      <div
+        ref={setNodeRef}
+        style={style}
+        {...attributes}
+        className="flex items-center gap-2.5 py-1.5 px-4"
+      >
+        <div className="size-4 shrink-0" />
+        <MarkerRow name={localLabel} className="min-w-0 flex-1 px-0 py-0" />
+      </div>
+    )
+  }
+
   return (
     <div
       ref={setNodeRef}
@@ -258,43 +278,28 @@ function SortableSeparatorEntry({
       {...attributes}
       className="flex items-center gap-2.5 py-1.5 px-4"
     >
-      {locked ? (
-        <div className="size-4" />
-      ) : (
-        <div
-          {...listeners}
-          className="flex items-center justify-center text-muted-foreground hover:text-foreground cursor-grab"
-        >
-          <GripVertical className="size-4" />
-        </div>
-      )}
+      <div
+        {...listeners}
+        className="flex items-center justify-center text-muted-foreground hover:text-foreground cursor-grab"
+      >
+        <GripVertical className="size-4" />
+      </div>
       <div className="flex-1 h-px bg-border" />
-      {/* Locked, a separator is just a labelled divider — same rule as the stack row above and as
-          `ProgramMarkerRow`. Leaving the field and the delete live made this the one row a stray
-          click could still rename or remove from a running show. */}
-      {locked ? (
-        <span className="px-2 text-center text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {localLabel}
-        </span>
-      ) : (
-        <Input
-          value={localLabel}
-          onChange={(e) => handleChange(e.target.value)}
-          onClick={(e) => e.stopPropagation()}
-          className="h-7 w-auto min-w-[120px] max-w-[200px] text-center text-xs font-medium text-muted-foreground bg-card border-border"
-        />
-      )}
+      <Input
+        value={localLabel}
+        onChange={(e) => handleChange(e.target.value)}
+        onClick={(e) => e.stopPropagation()}
+        className="h-7 w-auto min-w-[120px] max-w-[200px] text-center text-xs font-medium text-muted-foreground bg-card border-border"
+      />
       <div className="flex-1 h-px bg-border" />
-      {!locked && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-5 text-muted-foreground hover:text-destructive shrink-0"
-          onClick={() => onRemove(stack)}
-        >
-          <X className="size-3.5" />
-        </Button>
-      )}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="size-5 text-muted-foreground hover:text-destructive shrink-0"
+        onClick={() => onRemove(stack)}
+      >
+        <X className="size-3.5" />
+      </Button>
     </div>
   )
 }
