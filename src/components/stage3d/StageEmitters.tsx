@@ -99,8 +99,9 @@ export interface WallGeometry {
 // Per-fixture emitter writes, called from FixtureModel's per-frame loop.
 // All writes target a (slot, lobe) allocated to the fixture by the controller:
 // lobe 0 is the primary beam, lobes 1+ exist for prism images and stay parked
-// otherwise. Buffer needsUpdate flags are marked dirty centrally by the
-// controller's own useFrame so the caller doesn't have to.
+// otherwise. Each writer records which buffer *group* it touched; the
+// controller's own useFrame flips needsUpdate on the dirty groups once at the
+// end of the frame, so the caller never handles a buffer flag itself.
 export interface EmittersHandle {
   fixtureCount: number
   regionCount: number
@@ -246,6 +247,150 @@ export interface EmittersHandle {
   hideWashSlot(slot: number): void
 }
 
+// — dirty groups ————————————————————————————————————————————————————
+//
+// One bit per buffer group, set by the writer that touches the group and cleared by the
+// controller's flush at the end of the frame. Flipping `needsUpdate` is indeed cheap; what
+// isn't is what it schedules — three re-uploads the *whole* flagged attribute buffer, so a
+// group nothing wrote costs a full bufferSubData for zero changed bytes. The wash groups are
+// the clearest case: `washFloorMesh.instanceMatrix` alone is 16 floats × MAX_WASH_PIXELS per
+// fixture, and on a show with no pixel strips no byte of it ever changes.
+//
+// Groups follow the writers, not the meshes, so each `EmittersHandle` method sets exactly one
+// bit — add a writer, give it a bit, and add its buffers to the table below.
+const DIRTY_BEAM_MATRIX = 1 << 0
+const DIRTY_CONE_ATTRS = 1 << 1
+const DIRTY_BEAM_FX = 1 << 2
+const DIRTY_SHADOW_MASK = 1 << 3
+const DIRTY_FLOOR_MATRIX = 1 << 4
+const DIRTY_FLOOR_ATTRS = 1 << 5
+const DIRTY_REGION_VISIBLE = 1 << 6
+const DIRTY_REGION_ATTRS = 1 << 7
+const DIRTY_WALL_MATRIX = 1 << 8
+const DIRTY_WALL_ATTRS = 1 << 9
+const DIRTY_WASH_FLOOR_MATRIX = 1 << 10
+const DIRTY_WASH_FLOOR_ATTRS = 1 << 11
+const DIRTY_WASH_REGION_VISIBLE = 1 << 12
+const DIRTY_WASH_REGION_ATTRS = 1 << 13
+
+/** Anything with a `needsUpdate` flag — an InstancedBufferAttribute or a mesh's instanceMatrix. */
+interface Uploadable {
+  needsUpdate: boolean
+}
+
+export interface DirtyGroup {
+  bit: number
+  buffers: Uploadable[]
+}
+
+/**
+ * The bit → buffers table, built once per `BuiltEmitters` (the buffers are fixed for its
+ * lifetime) so the per-frame flush allocates nothing.
+ *
+ * Wash groups first: they are the biggest buffers and the ones most often untouched — a rig with
+ * no pixel bar never writes any of them — so the reader meets the case this exists for first.
+ */
+export function dirtyGroups(b: BuiltEmitters): DirtyGroup[] {
+  return [
+    { bit: DIRTY_WASH_FLOOR_MATRIX, buffers: [b.washFloorMesh.instanceMatrix] },
+    {
+      bit: DIRTY_WASH_FLOOR_ATTRS,
+      buffers: [
+        b.washFloorOrigin,
+        b.washFloorDir,
+        b.washFloorColor,
+        b.washFloorOpacity,
+        b.washFloorCosHalfAngle,
+      ],
+    },
+    { bit: DIRTY_WASH_REGION_VISIBLE, buffers: [b.washRegionVisible] },
+    {
+      bit: DIRTY_WASH_REGION_ATTRS,
+      buffers: [
+        b.washRegionOrigin,
+        b.washRegionDir,
+        b.washRegionColor,
+        b.washRegionOpacity,
+        b.washRegionCosHalfAngle,
+      ],
+    },
+    {
+      bit: DIRTY_BEAM_MATRIX,
+      buffers: [b.coneMesh.instanceMatrix, b.volumeMesh.instanceMatrix],
+    },
+    {
+      bit: DIRTY_CONE_ATTRS,
+      buffers: [
+        b.coneOrigin,
+        b.coneColor,
+        b.coneOpacity,
+        b.volumeOrigin,
+        b.volumeDir,
+        b.volumeColor,
+        b.volumeOpacity,
+        b.volumeCosHalfAngle,
+      ],
+    },
+    {
+      bit: DIRTY_BEAM_FX,
+      buffers: [
+        b.coneFx,
+        b.volumeFx,
+        b.floorFx,
+        b.regionFx,
+        b.wallFx,
+        b.volumeRight,
+        b.floorRight,
+        b.regionRight,
+        b.wallRight,
+      ],
+    },
+    {
+      bit: DIRTY_SHADOW_MASK,
+      buffers: [b.volumeMask, b.floorMask, b.regionMask, b.wallMask],
+    },
+    { bit: DIRTY_FLOOR_MATRIX, buffers: [b.floorMesh.instanceMatrix] },
+    {
+      bit: DIRTY_FLOOR_ATTRS,
+      buffers: [b.floorOrigin, b.floorDir, b.floorColor, b.floorOpacity, b.floorCosHalfAngle],
+    },
+    { bit: DIRTY_REGION_VISIBLE, buffers: [b.regionVisible] },
+    {
+      bit: DIRTY_REGION_ATTRS,
+      buffers: [
+        b.regionOrigin,
+        b.regionDir,
+        b.regionColor,
+        b.regionOpacity,
+        b.regionCosHalfAngle,
+      ],
+    },
+    { bit: DIRTY_WALL_MATRIX, buffers: [b.wallMesh.instanceMatrix] },
+    {
+      bit: DIRTY_WALL_ATTRS,
+      buffers: [b.wallOrigin, b.wallDir, b.wallColor, b.wallOpacity, b.wallCosHalfAngle],
+    },
+  ]
+}
+
+/**
+ * Upload the frame's writes: flip `needsUpdate` on the groups the writers touched, then clear.
+ *
+ * Separate from the `useFrame` that calls it so `StageEmitters.test.ts` can drive a full
+ * write → flush cycle without a canvas. The invariant it pins is one-directional: every buffer a
+ * writer *mutated* must end up flagged. Flagging a group whose bytes happen not to have changed
+ * costs an upload, not a wrong picture.
+ */
+export function flushDirty(b: BuiltEmitters, groups: ReadonlyArray<DirtyGroup>): void {
+  const dirty = b.dirty
+  if (dirty === 0) return
+  for (const group of groups) {
+    if ((dirty & group.bit) === 0) continue
+    for (const buffer of group.buffers) buffer.needsUpdate = true
+  }
+  b.dirty = 0
+}
+
 const EmittersContext = createContext<EmittersHandle | null>(null)
 
 export function useEmitters(): EmittersHandle | null {
@@ -385,71 +530,12 @@ export function StageEmitters({
   const handleRef = useRef(handle)
   handleRef.current = handle
 
-  // Mark every per-fixture attribute dirty once per frame after all
-  // FixtureModel useFrames have run. Cheap (just bit flips) and avoids 50
-  // FixtureModels each setting the same needsUpdate flags.
-  useFrame(() => {
-    const m = built
-    m.coneMesh.instanceMatrix.needsUpdate = true
-    m.coneOrigin.needsUpdate = true
-    m.coneColor.needsUpdate = true
-    m.coneOpacity.needsUpdate = true
-    m.coneFx.needsUpdate = true
+  const groups = useMemo(() => dirtyGroups(built), [built])
 
-    m.volumeMesh.instanceMatrix.needsUpdate = true
-    m.volumeOrigin.needsUpdate = true
-    m.volumeDir.needsUpdate = true
-    m.volumeRight.needsUpdate = true
-    m.volumeColor.needsUpdate = true
-    m.volumeOpacity.needsUpdate = true
-    m.volumeCosHalfAngle.needsUpdate = true
-    m.volumeFx.needsUpdate = true
-    m.volumeMask.needsUpdate = true
-
-    m.floorMesh.instanceMatrix.needsUpdate = true
-    m.floorOrigin.needsUpdate = true
-    m.floorDir.needsUpdate = true
-    m.floorColor.needsUpdate = true
-    m.floorOpacity.needsUpdate = true
-    m.floorCosHalfAngle.needsUpdate = true
-    m.floorFx.needsUpdate = true
-    m.floorRight.needsUpdate = true
-    m.floorMask.needsUpdate = true
-
-    m.regionOrigin.needsUpdate = true
-    m.regionFx.needsUpdate = true
-    m.regionRight.needsUpdate = true
-    m.regionMask.needsUpdate = true
-    m.regionDir.needsUpdate = true
-    m.regionColor.needsUpdate = true
-    m.regionOpacity.needsUpdate = true
-    m.regionCosHalfAngle.needsUpdate = true
-    m.regionVisible.needsUpdate = true
-
-    m.wallMesh.instanceMatrix.needsUpdate = true
-    m.wallOrigin.needsUpdate = true
-    m.wallDir.needsUpdate = true
-    m.wallColor.needsUpdate = true
-    m.wallOpacity.needsUpdate = true
-    m.wallCosHalfAngle.needsUpdate = true
-    m.wallFx.needsUpdate = true
-    m.wallRight.needsUpdate = true
-    m.wallMask.needsUpdate = true
-
-    m.washFloorMesh.instanceMatrix.needsUpdate = true
-    m.washFloorOrigin.needsUpdate = true
-    m.washFloorDir.needsUpdate = true
-    m.washFloorColor.needsUpdate = true
-    m.washFloorOpacity.needsUpdate = true
-    m.washFloorCosHalfAngle.needsUpdate = true
-
-    m.washRegionOrigin.needsUpdate = true
-    m.washRegionDir.needsUpdate = true
-    m.washRegionColor.needsUpdate = true
-    m.washRegionOpacity.needsUpdate = true
-    m.washRegionCosHalfAngle.needsUpdate = true
-    m.washRegionVisible.needsUpdate = true
-  }, 1)
+  // Flush the frame's writes once, after all the FixtureModel useFrames have run — so 50
+  // FixtureModels don't each flip the same flags, and a group none of them wrote is not
+  // re-uploaded at all. `built.dirty` is set by the handle's writers; see the table above.
+  useFrame(() => flushDirty(built, groups), 1)
 
   return (
     <>
@@ -465,10 +551,14 @@ export function StageEmitters({
   )
 }
 
-interface BuiltEmitters {
+export interface BuiltEmitters {
   fixtureCount: number
   regionCount: number
   wall: WallGeometry
+
+  /** Bitfield of the DIRTY_* groups written since the last flush. Mutable, and mutated from the
+   *  per-frame write path — the one piece of state the handle owns rather than the meshes. */
+  dirty: number
 
   coneMesh: InstancedMesh
   volumeMesh: InstancedMesh
@@ -543,7 +633,7 @@ interface BuiltEmitters {
   washRegionVisible: InstancedBufferAttribute
 }
 
-function buildEmitters(
+export function buildEmitters(
   fixtureCount: number,
   regionCount: number,
   regionGeometry: ReadonlyArray<RegionGeometry>,
@@ -802,6 +892,8 @@ function buildEmitters(
     fixtureCount,
     regionCount,
     wall,
+    // The build-time writes above flag their own buffers directly; the frame loop starts clean.
+    dirty: 0,
     coneMesh,
     volumeMesh,
     floorMesh,
@@ -882,10 +974,11 @@ const FLOOR_QUAT = new Quaternion()
 const FLOOR_SCALE = new Vector3()
 const FLOOR_MAT = new Matrix4()
 
-function makeHandle(b: BuiltEmitters): EmittersHandle {
+export function makeHandle(b: BuiltEmitters): EmittersHandle {
   // A named closure rather than a `this`-call so the handle survives
   // destructuring (the tests stub methods individually).
   function hideLobes(slot: number, fromLobe: number): void {
+    b.dirty |= DIRTY_BEAM_MATRIX | DIRTY_FLOOR_MATRIX | DIRTY_WALL_MATRIX | DIRTY_REGION_VISIBLE
     for (let lobe = fromLobe; lobe < MAX_PRISM_LOBES; lobe++) {
       const i = beamInstanceIndex(slot, lobe)
       b.coneMesh.setMatrixAt(i, ZERO_MATRIX)
@@ -904,11 +997,13 @@ function makeHandle(b: BuiltEmitters): EmittersHandle {
     wall: b.wall,
 
     writeBeamMatrix(slot, lobe, matrix, volumetric) {
+      b.dirty |= DIRTY_BEAM_MATRIX
       const i = beamInstanceIndex(slot, lobe)
       b.coneMesh.setMatrixAt(i, volumetric ? ZERO_MATRIX : matrix)
       b.volumeMesh.setMatrixAt(i, volumetric ? matrix : ZERO_MATRIX)
     },
     writeConeAttrs(slot, lobe, origin, dir, color, opacity, cosHalfAngle) {
+      b.dirty |= DIRTY_CONE_ATTRS
       const i = beamInstanceIndex(slot, lobe)
       b.coneOrigin.setXYZ(i, origin.x, origin.y, origin.z)
       b.coneColor.setXYZ(i, color.r, color.g, color.b)
@@ -921,6 +1016,7 @@ function makeHandle(b: BuiltEmitters): EmittersHandle {
     },
 
     writeBeamFx(slot, lobe, edge, goboSlot, goboAngle, focusDist, right) {
+      b.dirty |= DIRTY_BEAM_FX
       const i = beamInstanceIndex(slot, lobe)
       // The cone shell reads only .x (edge) — it has no interior to project
       // into, so the gobo/focus payload matters on the pool meshes (and the
@@ -937,6 +1033,7 @@ function makeHandle(b: BuiltEmitters): EmittersHandle {
     },
 
     writeShadowMask(slot, lobe, mask) {
+      b.dirty |= DIRTY_SHADOW_MASK
       const i = beamInstanceIndex(slot, lobe)
       b.volumeMask.setX(i, mask)
       b.floorMask.setX(i, mask)
@@ -945,6 +1042,7 @@ function makeHandle(b: BuiltEmitters): EmittersHandle {
     },
 
     writeFloorMatrix(slot, lobe, visible, cx, cz, side) {
+      b.dirty |= DIRTY_FLOOR_MATRIX
       const i = beamInstanceIndex(slot, lobe)
       if (!visible) {
         b.floorMesh.setMatrixAt(i, ZERO_MATRIX)
@@ -957,6 +1055,7 @@ function makeHandle(b: BuiltEmitters): EmittersHandle {
       b.floorMesh.setMatrixAt(i, FLOOR_MAT)
     },
     writeFloorAttrs(slot, lobe, origin, dir, color, opacity, cosHalfAngle) {
+      b.dirty |= DIRTY_FLOOR_ATTRS
       const i = beamInstanceIndex(slot, lobe)
       b.floorOrigin.setXYZ(i, origin.x, origin.y, origin.z)
       b.floorDir.setXYZ(i, dir.x, dir.y, dir.z)
@@ -966,12 +1065,14 @@ function makeHandle(b: BuiltEmitters): EmittersHandle {
     },
 
     writeRegionVisibility(slot, lobe, regionIdx, visible) {
+      b.dirty |= DIRTY_REGION_VISIBLE
       b.regionVisible.setX(
         regionInstanceIndex(slot, lobe, b.regionCount, regionIdx),
         visible ? 1 : 0,
       )
     },
     writeRegionAttrs(slot, lobe, origin, dir, color, opacity, cosHalfAngle) {
+      b.dirty |= DIRTY_REGION_ATTRS
       const i = beamInstanceIndex(slot, lobe)
       b.regionOrigin.setXYZ(i, origin.x, origin.y, origin.z)
       b.regionDir.setXYZ(i, dir.x, dir.y, dir.z)
@@ -981,6 +1082,7 @@ function makeHandle(b: BuiltEmitters): EmittersHandle {
     },
 
     writeWallMatrix(slot, lobe, visible, cx, cy, sideX, sideY) {
+      b.dirty |= DIRTY_WALL_MATRIX
       const i = beamInstanceIndex(slot, lobe)
       if (!visible) {
         b.wallMesh.setMatrixAt(i, ZERO_MATRIX)
@@ -993,6 +1095,7 @@ function makeHandle(b: BuiltEmitters): EmittersHandle {
       b.wallMesh.setMatrixAt(i, FLOOR_MAT)
     },
     writeWallAttrs(slot, lobe, origin, dir, color, opacity, cosHalfAngle) {
+      b.dirty |= DIRTY_WALL_ATTRS
       const i = beamInstanceIndex(slot, lobe)
       b.wallOrigin.setXYZ(i, origin.x, origin.y, origin.z)
       b.wallDir.setXYZ(i, dir.x, dir.y, dir.z)
@@ -1002,6 +1105,7 @@ function makeHandle(b: BuiltEmitters): EmittersHandle {
     },
 
     writeWashFloorMatrix(slot, pixelIdx, visible, cx, cz, side) {
+      b.dirty |= DIRTY_WASH_FLOOR_MATRIX
       const i = washPixelIndex(slot, pixelIdx)
       if (!visible) {
         b.washFloorMesh.setMatrixAt(i, ZERO_MATRIX)
@@ -1014,6 +1118,7 @@ function makeHandle(b: BuiltEmitters): EmittersHandle {
       b.washFloorMesh.setMatrixAt(i, FLOOR_MAT)
     },
     writeWashFloorAttrs(slot, pixelIdx, origin, dir, color, opacity, cosHalfAngle) {
+      b.dirty |= DIRTY_WASH_FLOOR_ATTRS
       const i = washPixelIndex(slot, pixelIdx)
       b.washFloorOrigin.setXYZ(i, origin.x, origin.y, origin.z)
       b.washFloorDir.setXYZ(i, dir.x, dir.y, dir.z)
@@ -1022,12 +1127,14 @@ function makeHandle(b: BuiltEmitters): EmittersHandle {
       b.washFloorCosHalfAngle.setX(i, cosHalfAngle)
     },
     writeWashRegionVisibility(slot, pixelIdx, regionIdx, visible) {
+      b.dirty |= DIRTY_WASH_REGION_VISIBLE
       b.washRegionVisible.setX(
         washRegionInstanceIndex(slot, pixelIdx, b.regionCount, regionIdx),
         visible ? 1 : 0,
       )
     },
     writeWashRegionAttrs(slot, pixelIdx, origin, dir, color, opacity, cosHalfAngle) {
+      b.dirty |= DIRTY_WASH_REGION_ATTRS
       const i = washPixelIndex(slot, pixelIdx)
       b.washRegionOrigin.setXYZ(i, origin.x, origin.y, origin.z)
       b.washRegionDir.setXYZ(i, dir.x, dir.y, dir.z)
@@ -1041,6 +1148,7 @@ function makeHandle(b: BuiltEmitters): EmittersHandle {
       hideLobes(slot, 0)
     },
     hideWashSlot(slot) {
+      b.dirty |= DIRTY_WASH_FLOOR_MATRIX | DIRTY_WASH_REGION_VISIBLE
       for (let p = 0; p < MAX_WASH_PIXELS; p++) {
         const pix = washPixelIndex(slot, p)
         b.washFloorMesh.setMatrixAt(pix, ZERO_MATRIX)
