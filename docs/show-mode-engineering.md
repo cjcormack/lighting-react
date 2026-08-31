@@ -8,7 +8,7 @@
 > pre-existing drift rather than anything 2b introduced; where they disagree with "Show Mode, in one
 > view" or "The Show view", those two are the authority.
 >
-> The plan is `lighting7/docs/plans/desk-simplification-plan.md`.
+> The plan is `lighting7/docs/plans/completed/desk-simplification-plan.md`.
 
 Show Mode is the production show programming and playback system. It lives in **two** routes, each
 with its own sidebar entry:
