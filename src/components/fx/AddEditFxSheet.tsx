@@ -20,9 +20,21 @@ import {
   useApplyGroupFxMutation,
   useUpdateGroupFxMutation,
 } from '@/store/groups'
-import { useFixtureListQuery, type SettingPropertyDescriptor, type SliderPropertyDescriptor } from '@/store/fixtures'
+import { useFixtureListQuery } from '@/store/fixtures'
 import type { Fixture } from '@/store/fixtures'
 import type { GroupSummary, GroupActiveEffect, BlendMode, DistributionStrategy, ElementMode } from '@/api/groupsApi'
+import {
+  compatibleEffectsFor,
+  effectsByCategory as groupEffectsByCategory,
+  extraSliderPropertiesFor,
+  groupMemberFixtures,
+  propertyNamesFor,
+  resolveEffectProperty,
+  settingPropertiesFor,
+  SETTING_SENTINEL,
+  SLIDER_SENTINEL,
+  type FxPropertyTarget,
+} from '@/lib/fxTargetProperties'
 import { EffectCategoryPicker } from './EffectCategoryPicker'
 import { EffectTypePicker } from './EffectTypePicker'
 import { EffectParameterForm } from './EffectParameterForm'
@@ -106,9 +118,18 @@ export function AddEditFxSheet({ target, mode, onClose, programmerOwned, onCreat
 
   // Member fixtures (groups only)
   const memberFixtures = useMemo(() => {
-    if (target.type !== 'group' || !fixtureList) return []
-    return fixtureList.filter((f) => f.groups.includes(target.group.name))
+    if (target.type !== 'group') return []
+    return groupMemberFixtures(fixtureList, target.group.name)
   }, [target, fixtureList])
+
+  // The target as the shared property module addresses it.
+  const propertyTarget = useMemo(
+    (): FxPropertyTarget =>
+      target.type === 'fixture'
+        ? { type: 'fixture', fixture: target.fixture }
+        : { type: 'group', capabilities: target.group.capabilities, members: memberFixtures },
+    [target, memberFixtures],
+  )
 
   // Multi-head detection
   const isMultiHead = useMemo(() => {
@@ -135,109 +156,28 @@ export function AddEditFxSheet({ target, mode, onClose, programmerOwned, onCreat
 
   // ─── Property computation ──────────────────────────────────────────────
 
-  const allPropertyNames = useMemo(() => {
-    const names = new Set<string>()
+  const effectsByCategory = useMemo(
+    () => groupEffectsByCategory(compatibleEffectsFor(library, propertyNamesFor([propertyTarget]))),
+    [library, propertyTarget],
+  )
 
-    if (target.type === 'fixture') {
-      target.fixture.properties?.forEach((p) => names.add(p.name))
-      target.fixture.elementGroupProperties?.forEach((p) => names.add(p.name))
-      if (target.fixture.properties?.some((p) => p.type === 'setting')) {
-        names.add('setting')
-      }
-      if (target.fixture.properties?.some((p) => p.type === 'slider' && p.category !== 'dimmer' && p.category !== 'uv')) {
-        names.add('slider')
-      }
-    } else {
-      for (const cap of target.group.capabilities) names.add(cap)
-      for (const fixture of memberFixtures) {
-        fixture.properties?.forEach((p) => names.add(p.name))
-        fixture.elementGroupProperties?.forEach((p) => names.add(p.name))
-      }
-      if (memberFixtures.some((f) => f.properties?.some((p) => p.type === 'setting'))) {
-        names.add('setting')
-      }
-      if (memberFixtures.some((f) => f.properties?.some((p) => p.type === 'slider' && p.category !== 'dimmer' && p.category !== 'uv'))) {
-        names.add('slider')
-      }
-    }
-
-    return names
-  }, [target, memberFixtures])
-
-  const compatibleEffects = useMemo(() => {
-    if (!library) return []
-    return library.filter((effect) =>
-      effect.compatibleProperties.some((propName) => allPropertyNames.has(propName)),
-    )
-  }, [library, allPropertyNames])
-
-  const effectsByCategory = useMemo(() => {
-    const grouped: Record<string, EffectLibraryEntry[]> = {}
-    for (const effect of compatibleEffects) {
-      const cat = effect.category
-      if (!grouped[cat]) grouped[cat] = []
-      grouped[cat].push(effect)
-    }
-    return grouped
-  }, [compatibleEffects])
-
-  // Setting and slider properties
-  const settingProperties = useMemo(() => {
-    if (target.type === 'fixture') {
-      return (target.fixture.properties?.filter((p) => p.type === 'setting') ?? []) as SettingPropertyDescriptor[]
-    }
-    const seen = new Set<string>()
-    const result: SettingPropertyDescriptor[] = []
-    for (const fixture of memberFixtures) {
-      for (const p of fixture.properties ?? []) {
-        if (p.type === 'setting' && !seen.has(p.name)) {
-          seen.add(p.name)
-          result.push(p as SettingPropertyDescriptor)
-        }
-      }
-    }
-    return result
-  }, [target, memberFixtures])
-
-  const extraSliderProperties = useMemo(() => {
-    if (target.type === 'fixture') {
-      return (target.fixture.properties?.filter(
-        (p) => p.type === 'slider' && p.category !== 'dimmer' && p.category !== 'uv'
-      ) ?? []) as SliderPropertyDescriptor[]
-    }
-    const seen = new Set<string>()
-    const result: SliderPropertyDescriptor[] = []
-    for (const fixture of memberFixtures) {
-      for (const p of fixture.properties ?? []) {
-        if (p.type === 'slider' && p.category !== 'dimmer' && p.category !== 'uv' && !seen.has(p.name)) {
-          seen.add(p.name)
-          result.push(p as SliderPropertyDescriptor)
-        }
-      }
-    }
-    return result
-  }, [target, memberFixtures])
+  // Setting and slider properties, for the explicit pickers this sheet offers.
+  const settingProperties = useMemo(() => settingPropertiesFor([propertyTarget]), [propertyTarget])
+  const extraSliderProperties = useMemo(
+    () => extraSliderPropertiesFor([propertyTarget]),
+    [propertyTarget],
+  )
 
   const targetPropertyName = useMemo((): string | null => {
     if (!selectedEffect) return null
-    const matched = selectedEffect.compatibleProperties.find((name) => allPropertyNames.has(name)) ?? null
-    if (matched === 'setting') {
-      if (selectedSettingProp && settingProperties.some((sp) => sp.name === selectedSettingProp)) {
-        return selectedSettingProp
-      }
-      return settingProperties[0]?.name ?? null
-    }
-    if (matched === 'slider') {
-      if (selectedSliderProp && extraSliderProperties.some((sp) => sp.name === selectedSliderProp)) {
-        return selectedSliderProp
-      }
-      return extraSliderProperties[0]?.name ?? null
-    }
-    return matched
-  }, [selectedEffect, allPropertyNames, settingProperties, selectedSettingProp, extraSliderProperties, selectedSliderProp])
+    return resolveEffectProperty(propertyTarget, selectedEffect, {
+      setting: selectedSettingProp,
+      slider: selectedSliderProp,
+    })
+  }, [selectedEffect, propertyTarget, selectedSettingProp, selectedSliderProp])
 
   const settingOptions = useMemo(() => {
-    if (!selectedEffect?.compatibleProperties.includes('setting') || !targetPropertyName) return undefined
+    if (!selectedEffect?.compatibleProperties.includes(SETTING_SENTINEL) || !targetPropertyName) return undefined
     const settingProp = settingProperties.find((sp) => sp.name === targetPropertyName)
     return settingProp?.options
   }, [selectedEffect, targetPropertyName, settingProperties])
@@ -318,6 +258,7 @@ export function AddEditFxSheet({ target, mode, onClose, programmerOwned, onCreat
       selectedEffect?.timingSource === 'WALL_CLOCK' && rateSpeedMasterUuid != null
         ? { rateSpeedMasterUuid }
         : {}
+
     if (target.type === 'fixture') {
       const fixture = target.fixture
       const fixtureIsMultiHead = (fixture.elementGroupProperties?.length ?? 0) > 0
@@ -468,9 +409,9 @@ export function AddEditFxSheet({ target, mode, onClose, programmerOwned, onCreat
               onElementFilterChange={setElementFilter}
               showElementFilter={isMultiHead}
               settingOptions={settingOptions}
-              settingProperties={selectedEffect?.compatibleProperties.includes('setting') ? settingProperties : undefined}
+              settingProperties={selectedEffect?.compatibleProperties.includes(SETTING_SENTINEL) ? settingProperties : undefined}
               onSettingPropertyChange={setSelectedSettingProp}
-              sliderProperties={selectedEffect?.compatibleProperties.includes('slider') ? extraSliderProperties : undefined}
+              sliderProperties={selectedEffect?.compatibleProperties.includes(SLIDER_SENTINEL) ? extraSliderProperties : undefined}
               onSliderPropertyChange={setSelectedSliderProp}
               extendedChannels={selectedEffect?.category === 'colour' ? extendedChannels : undefined}
               stepTiming={stepTiming}
