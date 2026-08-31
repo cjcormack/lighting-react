@@ -1,6 +1,3 @@
-/**
- * @vitest-environment jsdom
- */
 import { describe, it, expect, vi } from "vitest"
 import { MathUtils, Vector3 } from "three"
 import {
@@ -8,7 +5,7 @@ import {
   cullRegionCookies,
   updateFloorCookie,
   updateWallCookie,
-} from "./FixtureModel"
+} from "./beamCookies"
 
 const HALF_ANGLE_RAD = MathUtils.degToRad(15)
 const COS_CONE = Math.cos(HALF_ANGLE_RAD)
