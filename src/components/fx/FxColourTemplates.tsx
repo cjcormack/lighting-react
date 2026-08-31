@@ -35,7 +35,14 @@ import { parseTemplateRefUuid, serializeTemplateRef } from './colourUtils'
  * follows `TemplateRegistry.version` rather than anything on this side.
  */
 
-/** A template this picker can offer: exactly one family, exactly one generic row, and that a colour. */
+/**
+ * A template this picker can offer: the colour family, generic, and **exactly one row**.
+ *
+ * The row count is not a simplification waiting to be lifted. Everything downstream reads `rows[0]`
+ * and only `rows[0]` — `swatchFor`, the chip's swatch, the chip's tooltip — so a two-row template
+ * would be offered under a name that claims both rows and would apply one of them. Lifting the
+ * clause means deciding what a multi-row colour template *means* to a single-colour output first.
+ */
 function isOfferable(template: TemplateSummary): boolean {
   return template.family === 'COLOUR' && template.isGeneric && template.rows.length === 1
 }

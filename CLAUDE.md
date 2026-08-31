@@ -320,9 +320,13 @@ entity that became a Look in session 4. **Don't reintroduce it in either sense.*
   are literals; the dependency mechanism for a *value* is a layer. `validateLookRows` refuses a
   `tmpl:`-shaped value beside its `ref:` refusal, and `parseAssignmentValue` returns null for one
   rather than letting `parseExtendedColour` answer white.
-- **Only generic colour templates are offerable** (`family === 'COLOUR' && isGeneric`), on both
-  sides. A per-fixture template holds no single colour, so there is nothing for a fixture-agnostic
-  output to take.
+- **Only single-row generic colour templates are offerable.** `family === 'COLOUR' && isGeneric`
+  holds on both sides — a per-fixture template holds no single colour, so there is nothing for a
+  fixture-agnostic output to take. The third clause, `rows.length === 1`, is this side's alone and
+  is deliberate rather than a simplification: every consumer here reads `rows[0]` and only `rows[0]`
+  — `swatchFor`, the chip's swatch, the chip's tooltip — so offering a two-row template would apply
+  one of its rows under a name that claims both, silently. All three exclusions are pinned in
+  `FxColourTemplates.test.tsx`.
 - **There is no successor to `P*`.** A template holds one colour, so there is no set to expand; a
   colour list is an explicit ordered mix of literals and references. `FxColourListPicker`'s
   "Use entire palette" checkbox and its `savedValue` machinery went with it.
