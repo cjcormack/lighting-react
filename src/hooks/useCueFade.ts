@@ -8,7 +8,7 @@ type RunnerRoot = { runner: ReturnType<typeof runnerSlice.getInitialState> }
  * A single cue row's fade state, read straight from the runner rather than passed down.
  *
  * The fade is the only value on a cue row that changes at frame rate, and prop-drilling it would
- * defeat the reason `ProgramView` is memoized in the first place — "so memo keeps the whole editor
+ * defeat the reason `ShowView` is memoized in the first place — "so memo keeps the whole editor
  * subtree from reconciling ~60x/sec while a cue fades". A stack is several hundred rows; re-rendering
  * all of them to animate one is the cost that memo was put there to avoid, and threading
  * `fadeProgress` through would reintroduce it with the memo still in place, looking effective.

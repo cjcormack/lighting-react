@@ -730,7 +730,7 @@ fires and the desk darkens it again — a visible blip on top of losing the curr
 **Two cursors reach a cue row, and neither is a mode.** `serverActiveCueId` places the stable
 "on stage" marker; `activeCueId` (the optimistic runner cursor) says which row owns the fade chrome.
 During a crossfade those are different rows, so one value cannot serve both. The fade *value* is
-never a prop — each row reads its own through `useCueFade`, because `ProgramView` is memoized
+never a prop — each row reads its own through `useCueFade`, because `ShowView` is memoized
 specifically to stop several hundred rows reconciling at frame rate, and passing `fadeProgress` down
 would defeat that with the memo still in place, looking effective.
 

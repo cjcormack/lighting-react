@@ -5,7 +5,7 @@ import type { CueStack, CueStackCueEntry } from '@/api/cueStacksApi'
 
 /**
  * Characterisation suite written before session 2b (`desk-simplification-plan.md` §Session 2b,
- * phase 0). Nothing under `components/runner/program/` had a test. The two scroll effects are
+ * phase 0). Nothing under `components/runner/` had a test. The two scroll effects are
  * pinned because 2b changes what feeds *both*: the active-cue effect gains a sibling fade cursor,
  * and the expansion effect stops being driven by a single scalar.
  */
@@ -23,8 +23,8 @@ const rowProps = new Map<
   number,
   { isStandby?: boolean; isActive?: boolean; expanded?: boolean; locked?: boolean }
 >()
-vi.mock('./ProgramCueRow', () => ({
-  ProgramCueRow: (p: {
+vi.mock('./CueCardEditor', () => ({
+  CueCardEditor: (p: {
     cue: CueStackCueEntry
     isStandby?: boolean
     isActive?: boolean
@@ -40,8 +40,8 @@ vi.mock('./ProgramCueRow', () => ({
     return <div data-cue-row={p.cue.id} data-testid={`cue-${p.cue.id}`} />
   },
 }))
-vi.mock('./ProgramMarkerRow', () => ({
-  ProgramMarkerRow: (p: { id: number }) => (
+vi.mock('./ShowMarkerRow', () => ({
+  ShowMarkerRow: (p: { id: number }) => (
     <div data-cue-row={p.id} data-testid={`marker-${p.id}`} />
   ),
 }))
@@ -219,7 +219,7 @@ describe('StackDetail', () => {
 
   it('forwards a standby cue to the row when it is given one', () => {
     // The prop works; nothing currently passes it. See the companion assertion in
-    // ProgramView.test.tsx — 2b is what finally wires it through.
+    // ShowView.test.tsx — 2b is what finally wires it through.
     render(view({ standbyCueId: 3 }))
     expect(rowProps.get(3)?.isStandby).toBe(true)
     expect(rowProps.get(1)?.isStandby).toBe(false)

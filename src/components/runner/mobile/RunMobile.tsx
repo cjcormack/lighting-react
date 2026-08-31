@@ -11,9 +11,9 @@ import type { CueStack, CueStackCueEntry } from '@/api/cueStacksApi'
 /**
  * The **phone runner**: the takeover layout Show swaps to below 600px, always locked.
  *
- * Note on the directory name, which no longer describes it — `runner/run/` was "the Run view's
- * components" until session 2b folded Run into Show. Everything shared with the desktop view
- * moved up into `runner/`, so what is left here is only the phone layout.
+ * This directory was `runner/run/` — "the Run view's components" — until session 2b folded Run
+ * into Show and everything shared with the desktop view moved up into `runner/`. What is left is
+ * only the phone layout, which is what `runner/mobile/` is now named for.
  */
 export interface RunnerDisplayState {
   activeCue: CueStackCueEntry | null

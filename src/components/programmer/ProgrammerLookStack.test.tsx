@@ -32,7 +32,7 @@ vi.mock('@/store/templates', () => ({
 vi.mock('react-router', () => ({ useParams: () => ({ projectId: '1' }) }))
 // The picker drags in the whole look/target/timing wizard. Stubbed down to the one thing this
 // file cares about: the `CueLayer` it hands back, and what `handleAdd` then puts on the wire.
-vi.mock('@/components/cues/editor/AddLayerSheet', () => ({
+vi.mock('@/components/programmer/AddLayerSheet', () => ({
   AddLayerSheet: ({ open, onAdd }: { open: boolean; onAdd: (layer: CueLayer) => void }) =>
     open ? <button onClick={() => onAdd(mocks.picked)}>confirm picked layer</button> : null,
 }))

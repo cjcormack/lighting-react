@@ -17,14 +17,14 @@ import { useProjectCueLocationsQuery, useProjectPromptBookQuery } from '../store
 import { positionLabelFor } from '../lib/promptBook/geometry'
 import { StackTabStrip } from '../components/runner/StackTabStrip'
 import { OffPlayheadBanner } from '../components/runner/OffPlayheadBanner'
-import { RunMobile, type RunnerDisplayState } from '../components/runner/run/RunMobile'
+import { RunMobile, type RunnerDisplayState } from '../components/runner/mobile/RunMobile'
 import { ShowLockControl } from '../components/runner/ShowLockControl'
 import { useGoToStackMutation, useDeactivateCueStackMutation } from '../store/cueStacks'
 import { resetStack } from '../store/runnerSlice'
 import { useDispatch } from 'react-redux'
 import { ShowHeader } from '../components/ShowHeader'
 import { ShowBar } from '../components/ShowBar'
-import { ProgramView } from '../components/runner/program/ProgramView'
+import { ShowView } from '../components/runner/ShowView'
 import { RecordSheet } from '../components/programmer/RecordSheet'
 import { useInclude } from '../components/programmer/useInclude'
 import type { CueStack } from '../api/cueStacksApi'
@@ -113,7 +113,7 @@ export function ShowPage() {
   // same three lines off the same state, and a second copy is a copy that drifts.
   // `onBeforeGo: noteGo` is what makes GO end a fix-it session, on this surface as well as on the
   // Prompt Book — the two share one lock, so they have to agree about what GO does to it.
-  // `frameRateProgress: false` — the desktop rows read their own fade via `ProgramView`'s
+  // `frameRateProgress: false` — the desktop rows read their own fade via `ShowView`'s
   // `fadeStackId`, and the phone runner's Current card and cue-list sheet now do the same, so
   // this page never reads `transport.fadeProgress`/`fadeRemainMs`/`autoProgress`. The bar's
   // FADING badge is unaffected: it animates from the write-once `fade` descriptor.
@@ -172,7 +172,7 @@ export function ShowPage() {
    *
    * Depends on `transport.setStandby` rather than on `transport`: the transport hook returns a fresh
    * object literal every render, so taking the whole thing as a dependency gives this callback a new
-   * identity on every fade frame — which defeats `ProgramView`'s memo, the one thing standing between
+   * identity on every fade frame — which defeats `ShowView`'s memo, the one thing standing between
    * a fade and several hundred cue rows reconciling at frame rate.
    */
   const { setStandby } = transport
@@ -292,7 +292,7 @@ export function ShowPage() {
   const { isExpanded, toggleExpanded } = useCueExpansion({
     openCueId: openedCueId,
     // The memoised setter, not an inline arrow: an arrow would be a fresh identity every render,
-    // which would give `toggleExpanded` one too and break `ProgramView`'s memo mid-fade.
+    // which would give `toggleExpanded` one too and break `ShowView`'s memo mid-fade.
     setOpenCueId: setExpandedCueId,
     liveCueId: drillStackId === activeStackId ? transport.serverActiveCueId : null,
     resetKey: drillStackId,
@@ -548,7 +548,7 @@ export function ShowPage() {
                 onMakeLive={() => handleMakeLive(drillStack)}
               />
             )}
-            <ProgramView
+            <ShowView
               projectId={projectIdNum}
               stacks={stacks ?? []}
               drillStackId={drillStackId}

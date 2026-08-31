@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { useProjectCueQuery } from '@/store/cues'
 import type { Cue, CueTarget } from '@/api/cuesApi'
-import { collectCueTargets } from '@/components/runner/program/CueCardEditor/targetUtils'
+import { collectCueTargets } from './targetUtils'
 
 /**
  * The pieces a collapsed cue row is made of, in one place.

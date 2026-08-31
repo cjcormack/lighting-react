@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 interface MarkerRowProps {
   name: string
   /**
-   * Merged over the row's own classes. `ProgramMarkerRow` passes `px-0` because its wrapper already
+   * Merged over the row's own classes. `ShowMarkerRow` passes `px-0` because its wrapper already
    * supplies the row padding around the grip column — see the note there.
    */
   className?: string

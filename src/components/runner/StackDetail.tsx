@@ -22,8 +22,8 @@ import {
 import { cn } from '@/lib/utils'
 import type { CueStack } from '@/api/cueStacksApi'
 import type { Cue } from '@/api/cuesApi'
-import { ProgramCueRow } from './ProgramCueRow'
-import { ProgramMarkerRow } from './ProgramMarkerRow'
+import { CueCardEditor } from './CueCardEditor'
+import { ShowMarkerRow } from './ShowMarkerRow'
 import { OutOfOrderBanner } from '@/components/runner/OutOfOrderBanner'
 import { cueNumberColumnChars, detectOutOfOrder } from '@/lib/cueNumber'
 import { UNLOCKED_WARNING_CLASS } from '@/lib/lockChrome'
@@ -265,7 +265,7 @@ export function StackDetail({
             {stack.cues.map((cue) => {
               if (cue.cueType === 'MARKER') {
                 return (
-                  <ProgramMarkerRow
+                  <ShowMarkerRow
                     key={cue.id}
                     id={cue.id}
                     name={cue.name}
@@ -276,7 +276,7 @@ export function StackDetail({
                 )
               }
               return (
-                <ProgramCueRow
+                <CueCardEditor
                   key={cue.id}
                   cue={cue}
                   projectId={projectId}

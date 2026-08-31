@@ -101,7 +101,7 @@ Both come from `useShowTransport`, and neither is selected by a mode:
 
 During a crossfade those are different rows, which is why one value cannot serve both.
 
-**No fade *value* is ever a prop.** `ProgramView` is memoized precisely to stop several hundred cue
+**No fade *value* is ever a prop.** `ShowView` is memoized precisely to stop several hundred cue
 rows reconciling at frame rate; threading `fadeProgress` down would defeat that with the memo still
 in place, looking effective. Each row reads its own via `useCueFade`, whose selector returns `null`
 for every row that is not fading — and a `null` that stays `null` is reference-equal, so those rows
@@ -208,7 +208,7 @@ API Layer          Type definitions + WebSocket subscription factories
 #### Component Layer (UI)
 | File | Purpose |
 |------|---------|
-| `src/routes/ShowPage.tsx` | Route for `/projects/:projectId/show` (and `/show/stacks/:stackId`) — **the whole of Show Mode's UI since the Run merge**. Header (with the lock control) + `ShowBar`, then either the phone runner or the tab strip / off-playhead banner / `ProgramView`. Owns the drill state, the `?cue=` contract, the playhead follow, the edit lock, the transport keyboard, Blind, make-live, and the two `RecordSheet` mounts. |
+| `src/routes/ShowPage.tsx` | Route for `/projects/:projectId/show` (and `/show/stacks/:stackId`) — **the whole of Show Mode's UI since the Run merge**. Header (with the lock control) + `ShowBar`, then either the phone runner or the tab strip / off-playhead banner / `ShowView`. Owns the drill state, the `?cue=` contract, the playhead follow, the edit lock, the transport keyboard, Blind, make-live, and the two `RecordSheet` mounts. |
 | `src/routes/ProgrammerPage.tsx` | Route for `/projects/:projectId/programmer`, and the `/program*` → `/show*` redirect. Source strip · action bar · **scope band** · workspace (grid + layer/FX rail). |
 | `src/routes/RunPage.tsx` | **Redirects only.** `/projects/:id/run` and the legacy `/cue-stacks` paths → `/show`. |
 | `src/components/ShowBar.tsx` | Row 3, **identical on all three live views**: DBO, **BLIND**, speed masters, programmer chip, active→next, BACK/GO. Every host spreads `showBarProps`; only `showShortcuts` is overridden. |
@@ -218,16 +218,15 @@ API Layer          Type definitions + WebSocket subscription factories
 | `src/components/runner/ShowLockControl.tsx` | The lock toggle and its re-lock countdown, for `ShowHeader`'s `actions` slot. |
 | `src/components/runner/MarkerRow.tsx` | Separator row (shared desktop + mobile) |
 | `src/components/runner/OutOfOrderBanner.tsx` | Warning when cue numbers are not ascending. Withheld while locked — "Fix Order" re-sorts a whole stack in one press. |
-| `src/components/runner/run/RunMobile.tsx` | The **phone runner**: top strip, active-cue hero, standby card, GO/BACK footer with safe-area padding. Always locked. What is left of `runner/run/`. |
+| `src/components/runner/mobile/RunMobile.tsx` | The **phone runner**: top strip, active-cue hero, standby card, GO/BACK footer with safe-area padding. Always locked. What is left of what was `runner/run/`. |
 | `src/components/runner/StackPickerSheet.tsx` | Bottom sheet listing show entries for mobile stack switching |
 | `src/components/runner/MobileCueListSheet.tsx` | Bottom sheet exposing the full cue list on mobile; tapping a cue opens CueEditor |
 | `src/components/runner/MobileCueRow.tsx` | Lean cue row used inside `MobileCueListSheet` (no fixed notes/auto-pill columns) |
-| `src/components/runner/program/ProgramView.tsx` | Show body: routes between ShowOverview and StackDetail on `drillStackId`. **Memoized**, which is why no fade *value* passes through it — only `fadeStackId`; see `useCueFade`. |
-| `src/components/runner/program/ShowOverview.tsx` | The project's ordered stack list: drag reorder, **Create Stack** (in place) + **Add Separator**, per-stack actions menu (edit settings / sort-by-cue-number / delete). Activation controls live in `ShowHeader`, not here; every edit affordance is hidden while locked. |
-| `src/components/runner/program/StackDetail.tsx` | Cue list within a stack, dnd-kit reorder, **Record into `<stack>`** + Separator, "Stacks" back button. There is no "Add Cue": a cue is a captured state, so recording is the only way one is made (session 2a). |
-| `src/components/runner/program/ProgramCueRow.tsx` | Thin pass-through to `CueCardEditor`. Its props are **derived** from that component rather than re-declared, so a new row prop cannot be silently dropped here. |
-| `src/components/runner/program/ProgramMarkerRow.tsx` | Interactive marker with inline rename/delete |
-| `src/components/runner/program/CueCardEditor/` | The expandable cue row. **No longer an editor**: session 2a deleted its three panes (Targets · Cue properties · Layers) and their tab chrome, and the expanded body is now the read-only cue surface — `CueDetailContent`, which includes `CueValueGrid`, the same cells the programmer's grid draws. Two ways out: **Edit in Programmer** (Includes the cue) and **Cue properties…** (`CuePropertiesSheet`, which reuses the surviving `CuePropsPane`). |
+| `src/components/runner/ShowView.tsx` | Show body: routes between ShowOverview and StackDetail on `drillStackId`. **Memoized**, which is why no fade *value* passes through it — only `fadeStackId`; see `useCueFade`. |
+| `src/components/runner/ShowOverview.tsx` | The project's ordered stack list: drag reorder, **Create Stack** (in place) + **Add Separator**, per-stack actions menu (edit settings / sort-by-cue-number / delete). Activation controls live in `ShowHeader`, not here; every edit affordance is hidden while locked. |
+| `src/components/runner/StackDetail.tsx` | Cue list within a stack, dnd-kit reorder, **Record into `<stack>`** + Separator, "Stacks" back button. There is no "Add Cue": a cue is a captured state, so recording is the only way one is made (session 2a). |
+| `src/components/runner/ShowMarkerRow.tsx` | Interactive marker with inline rename/delete. Locked, it renders `MarkerRow` — one separator, every surface. |
+| `src/components/runner/CueCardEditor.tsx` | The expandable cue row, rendered straight by `StackDetail`. **No longer an editor**: session 2a deleted its three panes (Targets · Cue properties · Layers) and their tab chrome, and the expanded body is now the read-only cue surface — `CueDetailContent`, which includes `CueValueGrid`, the same cells the programmer's grid draws. Two ways out: **Edit in Programmer** (Includes the cue) and **Cue properties…** (`CuePropertiesSheet`, which reuses the surviving `CuePropsPane`, now in `components/cues/`). |
 | `src/components/cues/CueValueGrid.tsx` | What a cue asserts, per head and property, read-only — built from `GET /cues/{id}/cooked` so the composition is the server's, not a second implementation of it. |
 | `src/hooks/useRunnerAnimation.ts` | requestAnimationFrame hook for fade/auto-advance progress |
 | `src/hooks/useNarrowContainer.ts` | ResizeObserver hook, true while a container is below a threshold. `ShowPage` uses it at 600px to switch to the phone runner. |

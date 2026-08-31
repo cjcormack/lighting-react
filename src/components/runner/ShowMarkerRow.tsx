@@ -5,7 +5,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { Input } from '@/components/ui/input'
 import { MarkerRow } from '@/components/runner/MarkerRow'
 
-interface ProgramMarkerRowProps {
+interface ShowMarkerRowProps {
   id: number
   name: string
   onRename: (name: string) => void
@@ -14,13 +14,13 @@ interface ProgramMarkerRowProps {
   locked?: boolean
 }
 
-export function ProgramMarkerRow({
+export function ShowMarkerRow({
   id,
   name,
   onRename,
   onDelete,
   locked = false,
-}: ProgramMarkerRowProps) {
+}: ShowMarkerRowProps) {
   const [localName, setLocalName] = useState(name)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 

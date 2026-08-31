@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useParams } from 'react-router'
 import { LookStack, type LayerHandlers } from '@/components/looks/LookStack'
-import { AddLayerSheet } from '@/components/cues/editor/AddLayerSheet'
+import { AddLayerSheet } from '@/components/programmer/AddLayerSheet'
 import { useLookListQuery } from '@/store/looks'
 import { useTemplateListQuery } from '@/store/templates'
 import { useProgrammerScope, useProgrammerScopeActions } from './ProgrammerScope'

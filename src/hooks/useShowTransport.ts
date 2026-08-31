@@ -107,7 +107,7 @@ export interface ShowTransport {
  *
  * Who reads which cursor, and why:
  *
- * - The stable "on stage" marker (`ProgramView`'s green row, cue expansion, `OffPlayheadBanner`)
+ * - The stable "on stage" marker (`ShowView`'s green row, cue expansion, `OffPlayheadBanner`)
  *   reads `serverActiveCueId` — it must hold on the outgoing cue mid-fade.
  * - The fade chrome reads `activeCueId` — it must move the instant GO is pressed, before the
  *   server answers.

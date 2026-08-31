@@ -12,7 +12,7 @@ vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).li
  * (`desk-simplification-plan.md` §Session 2b, phase 0). 2b changes how a cue is *addressed* — it
  * folds Run's local `Set` of expanded cues into this view — and "deep links survive" is one of its
  * own stated rules, so the addressing needs a net first. There was none: §8 records that
- * `ShowPage`, `StackDetail`, `ShowOverview`, `ProgramView` and `CueCardEditor` are all untested.
+ * `ShowPage`, `StackDetail`, `ShowOverview`, `ShowView` and `CueCardEditor` are all untested.
  *
  * `?cue=` is an external contract — the Prompt Book's "Edit cue" mints it and the `/program*`
  * redirects carry the search string precisely to keep it — so everything here is about the URL,
@@ -86,7 +86,7 @@ vi.mock('../components/runner/OffPlayheadBanner', () => ({
     return <div data-testid="off-playhead">{p.liveStackName}</div>
   },
 }))
-vi.mock('../components/runner/run/RunMobile', () => ({
+vi.mock('../components/runner/mobile/RunMobile', () => ({
   RunMobile: () => <div data-testid="mobile" />,
 }))
 vi.mock('../components/runner/ShowLockControl', () => ({
@@ -204,8 +204,8 @@ const probe: {
   toggle: () => {},
   drill: () => {},
 }
-vi.mock('../components/runner/program/ProgramView', () => ({
-  ProgramView: (p: {
+vi.mock('../components/runner/ShowView', () => ({
+  ShowView: (p: {
     drillStackId: number | null
     openedCueId?: number | null
     activeCueId: number | null

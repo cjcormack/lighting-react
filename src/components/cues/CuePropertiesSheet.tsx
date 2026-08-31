@@ -7,7 +7,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
-import { CuePropsPane } from '@/components/runner/program/CueCardEditor/CuePropsPane'
+import { CuePropsPane } from './CuePropsPane'
 import type { Cue } from '@/api/cuesApi'
 
 /**

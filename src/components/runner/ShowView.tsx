@@ -11,7 +11,7 @@ import { StackDetail } from './StackDetail'
 import { ShowOverview } from './ShowOverview'
 import { nextAvailableName } from '@/lib/cueUtils'
 
-interface ProgramViewProps {
+interface ShowViewProps {
   projectId: number
   stacks: CueStack[]
   drillStackId: number | null
@@ -61,7 +61,7 @@ interface ProgramViewProps {
 // countdown on the row and passing one through would have re-rendered the whole list every frame
 // with this memo still in place, looking like it was working. Each row reads its own instead — see
 // `useCueFade`.
-export const ProgramView = memo(function ProgramView({
+export const ShowView = memo(function ShowView({
   projectId,
   stacks,
   drillStackId,
@@ -83,7 +83,7 @@ export const ProgramView = memo(function ProgramView({
   onIncludeCue,
   onRecordIntoStack,
   includePending,
-}: ProgramViewProps) {
+}: ShowViewProps) {
   const [createCue] = useCreateProjectCueMutation()
   const [deleteCue] = useDeleteProjectCueMutation()
   const [patchCue] = usePatchProjectCueMutation()

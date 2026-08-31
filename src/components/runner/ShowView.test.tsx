@@ -5,7 +5,7 @@ import type { CueStack } from '@/api/cueStacksApi'
 
 /**
  * Characterisation suite written before session 2b (`desk-simplification-plan.md` §Session 2b,
- * phase 0). `ProgramView` is the switch between the stack list and one stack's cues, and 2b changes
+ * phase 0). `ShowView` is the switch between the stack list and one stack's cues, and 2b changes
  * both sides of it — so the two rules it enforces today need pinning first.
  */
 
@@ -27,7 +27,7 @@ vi.mock('./ShowOverview', () => ({
   ShowOverview: () => <div data-testid="show-overview" />,
 }))
 
-import { ProgramView } from './ProgramView'
+import { ShowView } from './ShowView'
 
 const mkStack = (over: Partial<CueStack> = {}): CueStack => ({
   id: 10,
@@ -46,9 +46,9 @@ const mkStack = (over: Partial<CueStack> = {}): CueStack => ({
 
 const STACKS = [mkStack(), mkStack({ id: 11, name: 'Act 2', sortOrder: 1 })]
 
-function draw(over: Partial<React.ComponentProps<typeof ProgramView>> = {}) {
+function draw(over: Partial<React.ComponentProps<typeof ShowView>> = {}) {
   return render(
-    <ProgramView
+    <ShowView
       projectId={1}
       stacks={STACKS}
       drillStackId={null}
@@ -68,7 +68,7 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe('ProgramView', () => {
+describe('ShowView', () => {
   it('shows the stack list when nothing is drilled', () => {
     draw()
     expect(screen.getByTestId('show-overview')).toBeTruthy()

@@ -1,5 +1,5 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { LayerPicker } from '@/components/cues/editor/LayerPicker'
+import { LayerPicker } from './LayerPicker'
 import type { CueLayer, CueTarget } from '@/api/cuesApi'
 
 interface AddLayerSheetProps {
