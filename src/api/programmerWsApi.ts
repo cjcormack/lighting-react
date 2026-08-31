@@ -496,17 +496,132 @@ const STATE_REFETCH_DEBOUNCE_MS = 100
 
 const EMPTY_KEY_STATE: ProgrammerKeyState = {}
 
+// JSON, not a delimiter-joined string: group names and palette-ref values are free text,
+// so any separator character could also occur inside a field and make two different
+// entries compare equal.
+//
+// Every field a cell renders has to be in here. The palette fields especially: without them a
+// rename, a re-record, or a reference going unresolved changes nothing observable, the diff
+// reports no change, and the cell keeps painting the old colour indefinitely — a stale cell that
+// looks perfectly fine.
+const entrySignature = (e: ProgrammerEntry) =>
+  JSON.stringify([e.value, e.owner, e.touched, e.sourceGroup ?? null, e.owners])
+
+// The layer fields belong here: a key can move from "the cue" to "the cue's Warm Wash layer"
+// with `source` unchanged, and leaving them out would leave the cell showing the old answer.
+const provenanceSignature = (p: ProvenanceEntry) =>
+  JSON.stringify([
+    p.source,
+    p.cueId ?? null,
+    p.cueStackId ?? null,
+    p.effectId ?? null,
+    p.layerId ?? null,
+    // The whole source object, not just its id: a key can move between a Look layer and a
+    // template layer that happen to share an int PK, and the cell would keep naming the old one.
+    p.layerSource?.kind ?? null,
+    p.layerSource?.id ?? null,
+    p.layerSource?.name ?? null,
+  ])
+
+/**
+ * A map of values paired with the signatures of those values, kept in step by construction.
+ *
+ * The per-key channel diffs by **content**, not identity: every snapshot is rebuilt from
+ * `JSON.parse`, so each frame hands us structurally-equal-but-freshly-allocated objects, and an
+ * identity check would call every key changed on every frame — an unrelated cue firing would
+ * wake every cell in the sheet, exactly what the channel exists to prevent.
+ *
+ * Signing *both* sides per key per frame is what that used to cost, at 10–20 Hz under load. Only
+ * the incoming side is signed now; the resident side was signed when it was installed and is held
+ * here. That trades the second `JSON.stringify` pass for one `Map` of N short strings per install,
+ * which the old shape did not allocate — not profiled, but the two sides are not close, and the
+ * strings exist either way.
+ *
+ * The pairing is the reason this is a type rather than two variables. A signature left behind for
+ * a key whose value has moved makes the diff call that key unchanged, and the cell keeps painting
+ * the old value until something unrelated wakes it — a stale cell that looks perfectly fine. Every
+ * mutator here moves both maps, so no caller can produce one.
+ *
+ * [values] is handed straight to the state snapshot and so is copy-on-write. The signatures never
+ * leave this closure and are mutated in place: a drag echo allocating a fresh N-entry map per
+ * frame is the cost this cache exists to avoid.
+ */
+function signedMap<T>(signature: (value: T) => string) {
+  let values = new Map<string, T>()
+  let signatures = new Map<string, string>()
+
+  return {
+    get values(): ReadonlyMap<string, T> {
+      return values
+    },
+    get size(): number {
+      return values.size
+    },
+    get: (key: string): T | undefined => values.get(key),
+    has: (key: string): boolean => values.has(key),
+
+    /** Replace the whole map, returning the keys whose value changed. */
+    install(next: Map<string, T>): string[] {
+      const nextSignatures = new Map<string, string>()
+      const touched: string[] = []
+      for (const [key, value] of next) {
+        const sig = signature(value)
+        nextSignatures.set(key, sig)
+        // An absent key reads back `undefined`, which no signature ever equals, so a key that
+        // wasn't there before is reported changed — as it was when this compared the values.
+        if (signatures.get(key) !== sig) touched.push(key)
+      }
+      for (const key of signatures.keys()) {
+        if (!next.has(key)) touched.push(key)
+      }
+      values = next
+      signatures = nextSignatures
+      return touched
+    },
+
+    /** Set one key. The caller has already decided this is a change; nothing is diffed. */
+    put(key: string, value: T): void {
+      values = new Map(values).set(key, value)
+      signatures.set(key, signature(value))
+    },
+
+    /** Remove one key. */
+    drop(key: string): void {
+      const next = new Map(values)
+      next.delete(key)
+      values = next
+      signatures.delete(key)
+    },
+
+    /** Empty the map, returning every key that was in it. */
+    clear(): string[] {
+      const touched = [...values.keys()]
+      values = new Map()
+      signatures = new Map()
+      return touched
+    },
+  }
+}
+
 export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi {
   let blind = false
-  let entries = new Map<string, ProgrammerEntry>()
+  const entries = signedMap(entrySignature)
   let channels: ProgrammerChannelEntry[] = []
-  let provenance = new Map<string, ProvenanceEntry>()
+  const provenance = signedMap(provenanceSignature)
   let lastIncluded: IncludedTarget | null = null
   let layers: readonly ProgrammerLayer[] = []
 
-  let snapshot: ProgrammerState = { blind, entries, channels, provenance, lastIncluded, layers }
+  const buildSnapshot = (): ProgrammerState => ({
+    blind,
+    entries: entries.values,
+    channels,
+    provenance: provenance.values,
+    lastIncluded,
+    layers,
+  })
+  let snapshot: ProgrammerState = buildSnapshot()
   const rebuildSnapshot = () => {
-    snapshot = { blind, entries, channels, provenance, lastIncluded, layers }
+    snapshot = buildSnapshot()
   }
 
   let nextSubscriptionId = 1
@@ -535,64 +650,6 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     stateSubscriptions.forEach((fn) => fn(snapshot))
   }
 
-  /**
-   * Notify exactly the keys whose entry or provenance *value* changed between two maps.
-   *
-   * Compares by content, not identity: every snapshot is rebuilt from `JSON.parse`, so each
-   * frame hands us structurally-equal-but-freshly-allocated objects. A `!==` check would call
-   * every key changed on every frame, which would make this whole per-key channel a no-op —
-   * an unrelated cue firing would wake every cell in the sheet, exactly what it exists to
-   * prevent.
-   */
-  const changedKeys = <T>(
-    before: ReadonlyMap<string, T>,
-    after: ReadonlyMap<string, T>,
-    signature: (value: T) => string,
-  ): string[] => {
-    const out: string[] = []
-    for (const [key, value] of after) {
-      const previous = before.get(key)
-      if (previous === undefined || signature(previous) !== signature(value)) out.push(key)
-    }
-    for (const key of before.keys()) {
-      if (!after.has(key)) out.push(key)
-    }
-    return out
-  }
-
-  // JSON, not a delimiter-joined string: group names and palette-ref values are free text,
-  // so any separator character could also occur inside a field and make two different
-  // entries compare equal.
-  //
-  // Every field a cell renders has to be in here. The palette fields especially: without them a
-  // rename, a re-record, or a reference going unresolved changes nothing observable, `changedKeys`
-  // reports no change, and the cell keeps painting the old colour indefinitely — a stale cell that
-  // looks perfectly fine.
-  const entrySignature = (e: ProgrammerEntry) =>
-    JSON.stringify([
-      e.value,
-      e.owner,
-      e.touched,
-      e.sourceGroup ?? null,
-      e.owners,
-    ])
-
-  // The layer fields belong here: a key can move from "the cue" to "the cue's Warm Wash layer"
-  // with `source` unchanged, and leaving them out would leave the cell showing the old answer.
-  const provenanceSignature = (p: ProvenanceEntry) =>
-    JSON.stringify([
-      p.source,
-      p.cueId ?? null,
-      p.cueStackId ?? null,
-      p.effectId ?? null,
-      p.layerId ?? null,
-      // The whole source object, not just its id: a key can move between a Look layer and a
-      // template layer that happen to share an int PK, and the cell would keep naming the old one.
-      p.layerSource?.kind ?? null,
-      p.layerSource?.id ?? null,
-      p.layerSource?.name ?? null,
-    ])
-
   // Bare `setTimeout`, not `window.setTimeout`: this module is exercised by unit tests that
   // run without a DOM, and nothing here needs the window-typed handle.
   let refetchTimer: ReturnType<typeof setTimeout> | undefined
@@ -609,9 +666,8 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     for (const entry of message.entries) {
       nextEntries.set(programmerKey(entry.targetKey, entry.propertyName), entry)
     }
-    const touched = changedKeys(entries, nextEntries, entrySignature)
+    const touched = entries.install(nextEntries)
     blind = message.blind
-    entries = nextEntries
     channels = message.channels
     // The include target isn't per-key, so it rides `notifyState` only and is deliberately
     // *not* part of `entrySignature` — including it there would wake every cell whenever the
@@ -633,8 +689,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     for (const entry of message.entries) {
       next.set(programmerKey(entry.targetKey, entry.propertyName), entry)
     }
-    const touched = changedKeys(provenance, next, provenanceSignature)
-    provenance = next
+    const touched = provenance.install(next)
     // A frame that changed nothing wakes nobody: a fade republishes content-identical
     // provenance ~20×/s, and an ungated notifyState would rebuild the snapshot and re-render
     // every whole-state subscriber per frame for the whole fade. (This also absorbs the
@@ -665,7 +720,6 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
   const applyLocalEntry = (message: ProgrammerEntryChangedIncoming) => {
     const key = programmerKey(message.targetKey, message.propertyName)
     const existing = entries.get(key)
-    const next = new Map(entries)
     // This reply is only ever our own write (the op is unicast), so the winning slot is now
     // `web` — even if some other owner held the property a moment ago. Carrying the previous
     // owner forward would make a fader drag over a located fixture report "locate" as the
@@ -676,7 +730,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     // `ref:` string landed locally as a reference-*less* entry until the refetch corrected it, and
     // every cell Apply Palette touched dropped its badge for ~100 ms. Nothing writes a `ref:` any
     // more, so the echo is the whole entry.
-    next.set(key, {
+    entries.put(key, {
       targetKey: message.targetKey,
       propertyName: message.propertyName,
       value: message.value,
@@ -684,7 +738,6 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
       touched: true,
       owners,
     })
-    entries = next
     notifyKeys([key])
     notifyState()
   }
@@ -692,9 +745,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
   const applyLocalClear = (message: ProgrammerEntryClearedIncoming) => {
     const key = programmerKey(message.targetKey, message.propertyName)
     if (!entries.has(key)) return
-    const next = new Map(entries)
-    next.delete(key)
-    entries = next
+    entries.drop(key)
     notifyKeys([key])
     notifyState()
   }
@@ -732,8 +783,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
         applyLocalClear(message)
         break
       case 'programmer.cleared': {
-        const touched = [...entries.keys()]
-        entries = new Map()
+        const touched = entries.clear()
         channels = []
         // Clear releases everything Include staged, so the server drops the target too.
         lastIncluded = null

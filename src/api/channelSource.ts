@@ -60,7 +60,7 @@ export interface DerivedChannelSource extends ChannelSource {
  *
  * Notifying only the channels whose value actually moved is the whole point: a stage may hold
  * hundreds of subscriptions, and waking all of them on every programmer event would make the
- * per-channel split pointless — the same reasoning as `changedKeys` in `programmerWsApi.ts`.
+ * per-channel split pointless — the same reasoning as `diffSignatures` in `programmerWsApi.ts`.
  */
 function createFanOut() {
   let nextId = 1

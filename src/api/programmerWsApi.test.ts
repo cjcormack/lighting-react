@@ -332,6 +332,88 @@ describe('createProgrammerApi', () => {
   // stale palette forward. Both retired with the `ref:` grammar in session 4 — the echo is the whole
   // entry now.
 
+  // The four tests below guard the signature cache the per-key diff compares against. `signedMap`
+  // carries it alongside the values rather than recomputing it, so every path that writes an entry
+  // outside a state snapshot — the local echo, the single clear, clear-all — has to move both maps.
+  // A signature left behind for a key whose value has moved is the bad failure: the diff calls the
+  // key unchanged and the cell paints the old value until something unrelated wakes it.
+  it('wakes the cell when the authoritative snapshot disagrees with the local echo', () => {
+    const { conn, frame } = fakeWsConnection()
+    const api = createProgrammerApi(conn)
+    const dimmer = vi.fn()
+    api.subscribeToKey('hex-1', 'dimmer', dimmer)
+
+    frame({
+      type: 'programmer.entryChanged',
+      targetType: 'fixture',
+      targetKey: 'hex-1',
+      propertyName: 'dimmer',
+      value: '120',
+    })
+    dimmer.mockClear()
+    // The server clamped it, or another surface got in first.
+    frame(stateFrame([{ ...ENTRY, value: '90' }]))
+
+    expect(dimmer).toHaveBeenCalledTimes(1)
+    expect(api.getKeyState('hex-1', 'dimmer').entry?.value).toBe('90')
+  })
+
+  it('does not wake the cell when the snapshot confirms the local echo', () => {
+    const { conn, frame } = fakeWsConnection()
+    const api = createProgrammerApi(conn)
+    const dimmer = vi.fn()
+    api.subscribeToKey('hex-1', 'dimmer', dimmer)
+
+    frame({
+      type: 'programmer.entryChanged',
+      targetType: 'fixture',
+      targetKey: 'hex-1',
+      propertyName: 'dimmer',
+      value: '200',
+    })
+    dimmer.mockClear()
+    // `ENTRY` is the echo's own shape — owner `web`, touched, sole owner — so the refetch
+    // that lands ~100 ms later says exactly what the echo already painted.
+    frame(stateFrame())
+
+    expect(dimmer).not.toHaveBeenCalled()
+  })
+
+  it('wakes the cell when a snapshot restores an entry a local clear removed', () => {
+    const { conn, frame } = fakeWsConnection()
+    const api = createProgrammerApi(conn)
+    frame(stateFrame())
+
+    const dimmer = vi.fn()
+    api.subscribeToKey('hex-1', 'dimmer', dimmer)
+    frame({
+      type: 'programmer.entryCleared',
+      targetType: 'fixture',
+      targetKey: 'hex-1',
+      propertyName: 'dimmer',
+    })
+    dimmer.mockClear()
+    frame(stateFrame())
+
+    expect(dimmer).toHaveBeenCalledTimes(1)
+    expect(api.getKeyState('hex-1', 'dimmer').entry?.value).toBe('200')
+  })
+
+  it('wakes the cell when a snapshot restores an entry clear-all removed', () => {
+    const { conn, frame } = fakeWsConnection()
+    const api = createProgrammerApi(conn)
+    frame(stateFrame())
+
+    const dimmer = vi.fn()
+    api.subscribeToKey('hex-1', 'dimmer', dimmer)
+    frame({ type: 'programmer.cleared', cleared: 1, effectsCleared: 0 })
+    dimmer.mockClear()
+    frame(stateFrame())
+
+    expect(dimmer).toHaveBeenCalledTimes(1)
+    expect(api.getKeyState('hex-1', 'dimmer').entry?.value).toBe('200')
+  })
+
   it('drops the entry on an own-connection clear', () => {
     const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)

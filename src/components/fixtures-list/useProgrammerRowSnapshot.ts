@@ -92,12 +92,13 @@ export function useProgrammerRowSnapshot<T>(
     // changes what to aggregate without any programmer event firing) AND the subscription set's
     // identity. The last one is what heals an off→on cycle: `versionRef` only advances from
     // notifications received *while subscribed*, and a change during an off window is never
-    // re-announced (`changedKeys` diffs against the api's own maps, which kept advancing), so a
-    // snapshot cached before the hook was switched off would otherwise be served again on
-    // re-entry — `cells` identity survives a scope switch, and the grid never remounts. A
-    // (re)registered subscription set always arrives as a fresh `subscribedKeys` array, so its
-    // identity invalidates during the re-entry render itself, before any stale frame paints;
-    // the version bump in `subscribe` closes the remaining render→registration gap.
+    // re-announced (`diffSignatures` diffs against the api's own signature maps, which kept
+    // advancing), so a snapshot cached before the hook was switched off would otherwise be
+    // served again on re-entry — `cells` identity survives a scope switch, and the grid never
+    // remounts. A (re)registered subscription set always arrives as a fresh `subscribedKeys`
+    // array, so its identity invalidates during the re-entry render itself, before any stale
+    // frame paints; the version bump in `subscribe` closes the remaining render→registration
+    // gap.
     const cached = cachedRef.current
     if (
       cached &&
