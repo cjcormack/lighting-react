@@ -307,10 +307,13 @@ export interface SurfacesWsApi {
   /** Learn session events scoped to this connection. */
   subscribeLearn(fn: (event: LearnEvent) => void): Subscription
 
-  /** Request the initial snapshots when mounted. */
-  requestDevicesState(): void
-  requestBanksState(): void
-  requestScalerState(): void
+  // Three `request*State()` senders stood here — `surfaceDevices.state`, `surfaceBank.state`,
+  // `surfaceScaler.state` — described as "request the initial snapshots when mounted". Nothing
+  // ever called them, and nothing needed to: `setupSurfaceSubscriptions` takes each snapshot as a
+  // StateFlow subscription, so the server sends all three on connect, and `subscribeCached` below
+  // replays the last one to a subscriber that arrives after the frame. The backend still handles
+  // the request messages, so add one back if a surface ever needs a re-read the socket doesn't
+  // volunteer.
 
   /** Set the active bank for a device type (pass null to clear). */
   setBank(deviceTypeKey: string, bank: string | null): void
@@ -458,9 +461,6 @@ export function createSurfacesWsApi(conn: InternalApiConnection): SurfacesWsApi 
     subscribeBindingsChanged: bindings.api.subscribe,
     subscribeLearn: learn.api.subscribe,
     subscribeScaler: subscribeCached(scaler.api, () => lastScaler),
-    requestDevicesState: () => conn.send(JSON.stringify({ type: "surfaceDevices.state" })),
-    requestBanksState: () => conn.send(JSON.stringify({ type: "surfaceBank.state" })),
-    requestScalerState: () => conn.send(JSON.stringify({ type: "surfaceScaler.state" })),
     setBank: (deviceTypeKey, bank) =>
       sendGesture(conn, { type: "surfaceBank.set", deviceTypeKey, bank }),
     beginLearn: (projectId, deviceTypeKey) =>

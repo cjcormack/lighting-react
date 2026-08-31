@@ -9,9 +9,13 @@ import type { SyncErrorCode, SyncLogEntry, SyncOutcome } from '../store/cloudSyn
  * per `POST /sync/apply`. The page uses these to trigger toast + cache-invalidation;
  * we don't render a streaming progress bar yet (single done/fail is enough for the
  * data volumes we support — revisit if syncs ever feel slow).
+ *
+ * **`cloudSyncStarted` is deliberately not surfaced.** The frame is emitted, but the run is
+ * started *by* this client through `POST /sync/run`, so its own spinner is already up by the time
+ * the echo arrives and there is nothing for a subscriber to do with it. A `subscribeStarted` sat
+ * here with no caller; the progress bar the KDoc above defers is where it would earn its keep.
  */
 export interface CloudSyncWsApi {
-  subscribeStarted(fn: (event: CloudSyncStartedEvent) => void): Subscription
   subscribeDone(fn: (event: CloudSyncDoneEvent) => void): Subscription
   subscribeFailed(fn: (event: CloudSyncFailedEvent) => void): Subscription
   /**
@@ -38,10 +42,6 @@ export interface CloudSyncWsApi {
    * picks up the new row without a full reload.
    */
   subscribeProjectImported(fn: (event: CloudSyncProjectImportedEvent) => void): Subscription
-}
-
-export interface CloudSyncStartedEvent {
-  projectId: number
 }
 
 export interface CloudSyncDoneEvent {
@@ -92,7 +92,6 @@ export interface OAuthIdentityChangedEvent {
 }
 
 type CloudSyncInMessage =
-  | { type: 'cloudSyncStarted' } & CloudSyncStartedEvent
   | { type: 'cloudSyncDone' } & CloudSyncDoneEvent
   | { type: 'cloudSyncFailed' } & CloudSyncFailedEvent
   | { type: 'cloudSyncConflictsPending' } & CloudSyncConflictsPendingEvent
@@ -101,7 +100,6 @@ type CloudSyncInMessage =
   | { type: 'oauthIdentityChanged' } & OAuthIdentityChangedEvent
 
 export function createCloudSyncWsApi(conn: InternalApiConnection): CloudSyncWsApi {
-  const started = createWsSubscribable<CloudSyncStartedEvent>()
   const done = createWsSubscribable<CloudSyncDoneEvent>()
   const failed = createWsSubscribable<CloudSyncFailedEvent>()
   const conflictsPending = createWsSubscribable<CloudSyncConflictsPendingEvent>()
@@ -114,9 +112,6 @@ export function createCloudSyncWsApi(conn: InternalApiConnection): CloudSyncWsAp
     const message = frame as CloudSyncInMessage | null
     if (message == null) return
     switch (message.type) {
-      case 'cloudSyncStarted':
-        started.notify(message)
-        break
       case 'cloudSyncDone':
         done.notify(message)
         break
@@ -139,7 +134,6 @@ export function createCloudSyncWsApi(conn: InternalApiConnection): CloudSyncWsAp
   })
 
   return {
-    subscribeStarted: started.api.subscribe,
     subscribeDone: done.api.subscribe,
     subscribeFailed: failed.api.subscribe,
     subscribeConflictsPending: conflictsPending.api.subscribe,
