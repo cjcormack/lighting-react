@@ -252,9 +252,10 @@ function MasterRail({
  * through the sidebar.
  *
  * Renders nothing off a project-scoped route. `variant="row"` is the popover's full-width footer —
- * at phone widths there is otherwise no route to the bank page at all.
+ * at phone widths there is otherwise no route to the bank page at all — and is exported for the
+ * busk view's speed rail, whose footer is the same bordered row saying the same thing.
  */
-function ManageMastersLink({ variant = 'icon' }: { variant?: 'icon' | 'row' }) {
+export function ManageMastersLink({ variant = 'icon' }: { variant?: 'icon' | 'row' }) {
   const { projectId } = useParams<{ projectId: string }>()
   if (projectId == null) return null
 

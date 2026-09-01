@@ -158,10 +158,10 @@ export default function ProjectOverview() {
                 onClick={() => navigate(`/projects/${project.id}/settings/surfaces`)}
               />
               <QuickNavCard
-                title="FX"
+                title="Busk"
                 icon={<AudioWaveform className="size-5" />}
-                description="Live effects busking controls"
-                onClick={() => navigate(`/projects/${project.id}/fx`)}
+                description="Pads, targets and tempo on one performance surface"
+                onClick={() => navigate(`/projects/${project.id}/busk`)}
               />
               <QuickNavCard
                 title="Looks"

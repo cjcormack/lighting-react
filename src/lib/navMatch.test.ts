@@ -20,6 +20,14 @@ describe('mostSpecificActiveId', () => {
     expect(mostSpecificActiveId(nav, '/projects/7/show')).toBe('program')
   })
 
+  it('keeps the busk view apart from the FX library', () => {
+    // Busk was `/fx` until the busking-view plan's session 3, one hyphen from `/fx-library` — the
+    // collision this module exists for. `/busk` shares a prefix with nothing, which is half the
+    // reason for the rename.
+    expect(mostSpecificActiveId(nav, '/projects/7/busk')).toBe('fx')
+    expect(mostSpecificActiveId(nav, '/projects/7/fx-library')).toBe('fx-library')
+  })
+
   it('keeps a drilled stack on the show entry', () => {
     expect(mostSpecificActiveId(nav, '/projects/7/show/stacks/5')).toBe('program')
   })
@@ -45,8 +53,9 @@ describe('mostSpecificActiveId', () => {
 /**
  * The FX-vs-FX-Library collision, which `Layout` got wrong for as long as it did this by hand:
  * an unanchored `/\/projects\/\d+\/fx/` fired on the library too, force-opening and disabling the
- * effects overview panel there. Pinned on the shared predicate so the next hand-rolled match has
- * something to reuse.
+ * effects overview panel there. That lock is gone and the busking grid has moved to `/busk`, so
+ * nothing in the app makes this exact match today — the assertions stay because the *shape* of the
+ * mistake is what recurs, and the next hand-rolled match should have something to reuse.
  */
 describe('pathHasSegment', () => {
   it('does not let a longer segment match a shorter one', () => {
@@ -57,28 +66,5 @@ describe('pathHasSegment', () => {
 
   it('does not match a segment that is only a prefix of the path', () => {
     expect(pathHasSegment('/projects/7/programmer', '/program')).toBe(false)
-  })
-})
-
-/**
- * Layout's FX lock, which decides whether the effects overview panel is held open. It is
- * `mostSpecificActiveId(...) === 'fx'` rather than a path match of its own because the path match
- * has been got wrong twice: an unanchored regex fired on the FX Library, and a plain segment match
- * fires on the programmer's own `/fx` section.
- */
-describe("Layout's FX-route lock", () => {
-  const nav = navItems.map(({ id, pathMatch }) => ({ id, pathMatch }))
-  const isFxRoute = (pathname: string) => mostSpecificActiveId(nav, pathname) === 'fx'
-
-  it('holds on the busking grid', () => {
-    expect(isFxRoute('/projects/7/fx')).toBe(true)
-  })
-
-  it('does not hold on the FX library', () => {
-    expect(isFxRoute('/projects/7/fx-library')).toBe(false)
-  })
-
-  it("does not hold on the programmer's FX section", () => {
-    expect(isFxRoute('/projects/7/programmer/fx')).toBe(false)
   })
 })

@@ -156,12 +156,17 @@ export const navItems: NavItem[] = [
     group: "live",
   },
   {
+    // `id` stays "fx" — the stable handle, the same call `program` made when Show was renamed.
+    // This is one destination under a new name, not a new one.
     id: "fx",
-    label: "FX",
+    // Busk: the pad-first performance surface, and the fourth live view. It was "FX", which named
+    // the machinery rather than the job and sat one hyphen from `/fx-library` — a genuinely
+    // different destination that the route match here got wrong twice.
+    label: "Busk",
     icon: AudioWaveform,
-    path: (p) => `/projects/${p}/fx`,
+    path: (p) => `/projects/${p}/busk`,
     visibility: "active-only",
-    pathMatch: "/fx",
+    pathMatch: "/busk",
     group: "live",
   },
   {

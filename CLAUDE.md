@@ -421,9 +421,15 @@ is the ring: `lookLayerPresence` reads the **layer stack**, not the effect list.
 `DaoFxPreset`) and could never see a rows-only Look at all. `templateLayerPresence` is its twin for
 templates, and it is the *only* way a template pad can light: a template holds no effects.
 
-`/fx-busking`'s pad grid takes both — Looks with deferred **effects** (a chase you point at a
+The **busk view**'s pad grid takes both — Looks with deferred **effects** (a chase you point at a
 selection) and every template — and it has no create affordance, because neither entity is authored
-from a pad grid. It is also off-nav and reachable only by URL.
+from a pad grid. Templates sit in **four family columns** there rather than one flat grid, which is
+the same fact that put the family filter on `/templates`: a template is in exactly one family, so
+four columns is an exact partition and every pad has one right home. A Look spans families by
+nature and gets a section of its own instead. A colour pad carries a **swatch**, but only when the
+template is generic and single-row — `templateSwatch` in `components/busking/EffectPad.tsx` makes
+the same two exclusions `isOfferable` makes in `FxColourTemplates.tsx`, and for the same reason:
+`rows[0]` under a name covering several rows states one of them as the whole thing.
 
 ### The two apply gestures
 
@@ -557,10 +563,19 @@ speed-master work, and both are edited only in `SpeedMasterDetailSheet`:
   never computes a follower's live tempo**, only previews and labels. Master 1 itself may never
   follow, so the sheet hides the control for it rather than disabling it.
 
-**A follower's tempo cannot be typed or tapped, and exactly three surfaces offer those:**
-`MasterTile` and `MasterRow` in `components/SpeedMasters.tsx`, and `SpeedMasterRow` in
-`routes/SpeedMasters.tsx`. All three swap TAP for the ratio and stop opening the draft. A fourth
-TAP button exists in `EffectsOverviewPanel` and needs no arm — it taps master 1 only.
+**A follower's tempo cannot be typed or tapped, and exactly four surfaces offer those:**
+`MasterTile` and `MasterRow` in `components/SpeedMasters.tsx`, `SpeedMasterRow` in
+`routes/SpeedMasters.tsx`, and `MasterCard` in `components/busking/BuskSpeedRail.tsx`. All four swap
+TAP for the ratio and stop opening the draft. A fifth TAP button exists in `EffectsOverviewPanel`
+and needs no arm — it taps master 1 only.
+
+**The busk rail is the second surface that can *write* a follow ratio**, after
+`SpeedMasterDetailSheet`; its five chips retune a link that already exists. Both write it the same
+way and must keep to both of the sheet's rules: **both halves of the pair or neither** (a half-patch
+is a 400), and **never `bpm` beside them** — the server refuses that combination on a follower,
+whose tempo comes from master 1 rather than from a stored default. Linking and *unlinking* stay in
+the sheet, where the choice can be labelled; retuning a link mid-show is the half that belongs on a
+performance surface.
 `speedMasters.error` is the backstop for writers with no affordance to remove (a MIDI surface, a
 script, a stale tab); `store/speedMasters.ts` toasts it, keyed per master so a burst of hardware
 taps replaces rather than stacks.
@@ -743,7 +758,7 @@ Six things about it are load-bearing:
   depending on the view. It carries the Prompt Book's extra case: where the backend will not accept
   edits, the control is shown but **inert**, because it is the only thing saying why.
 
-**One `ShowBar`, identical on all three live views.** Every host spreads `showBarProps` from
+**One `ShowBar`, identical on all four live views.** Every host spreads `showBarProps` from
 `useShowBarProps` and overrides exactly one prop — `showShortcuts`, which advertises keys and so can
 only be answered by the host that binds them. Everything else comes from the hook, which is what
 stops the bar drifting into three near-copies: it previously had no Blind on the Prompt Book, a
@@ -1005,9 +1020,13 @@ modules export a page *and* one or two redirects, which reads like drift and is 
    `RiggingsContent` and `StageRegionsContent` went.
 3. **A redirect for a path that no longer names a view goes in `routes/legacyRedirects.tsx`**, not
    in whichever module happens to be its destination. `/run`, `/cue-stacks`, `/cues` and `/program`
-   all land on `/show`; collecting them keeps `ShowPage.tsx` from accumulating four unrelated
-   histories, and keeps `/program` out of `ProgrammerPage.tsx`, where it reproduced the
-   `/program` vs `/programmer` confusion in the file layout.
+   all land on `/show`, and `/fx` lands on `/busk`; collecting them keeps `ShowPage.tsx` from
+   accumulating four unrelated histories, and keeps `/program` out of `ProgrammerPage.tsx`, where
+   it reproduced the `/program` vs `/programmer` confusion in the file layout.
+
+   The line between rules 1 and 3 is what a redirect *answers*. `BuskRedirect` lives in
+   `Busk.tsx` because it answers "which project's busk view?" — part of the resource.
+   `LegacyFxRedirect` lives here because it only answers "where did `/fx` go?".
 
 Anything else — a pure helper, a shared type — belongs in `lib/` even when only one route uses it
 (`formatRepoUrl` was exported from `CloudSync.tsx` until it moved).
@@ -1028,11 +1047,49 @@ path may quietly change where it lands.
   sidebar keeps one entry per resource; the cards route redirects to the list
   when the sticky view preference says so. Follow that pattern for any new
   cards/list pair instead of adding a second sidebar row.
-- **There are three live views: Programmer · Show · Prompt Book.** The programmer is
+- **There are four live views: Programmer · Show · Prompt Book · Busk.** The programmer is
   `/projects/:id/programmer` (`ProgrammerPage`); `/show` (`ShowPage`) is *both* the
   cue/stack authoring surface and the runner. `/program*` and `/run*` both redirect to
   the `/show` equivalent, and `/program*` **carries the search string**, because
   `?cue=` deep links are how the Prompt Book's "Edit cue" reaches a cue.
+
+  **Busk is `/projects/:id/busk`** (`routes/Busk.tsx` → `components/busking/BuskingView`):
+  the target band, the pad pools and the speed rail, under the same `ShowHeader` and
+  `ShowBar` as the other three, from the same `useShowBarProps`. It was `/fx`, which named
+  the machinery rather than the job and sat one hyphen from `/fx-library` — the collision
+  `lib/navMatch.ts` exists for. `LegacyFxRedirect` keeps both spellings of the old path
+  alive; the nav entry keeps `id: "fx"` as its stable handle, the same call `program` made
+  when Show was renamed.
+
+  Three things about it that are decisions rather than detail:
+
+  - **It does not pass `canOperate`, and the show-editing lock is not consulted.** GO must
+    work from a busk pad: busking *is* the live use, and the lock is a stray-click guard for
+    editing surfaces rather than a transport gate — the same reasoning that keeps `locked`
+    away from `canOperate` on `/show`.
+  - **The target band replaced a sidebar, and a pad is a plain toggle.** `TargetBand` is two
+    rows of pads in one `grid-flow-col` container, groups then fixtures, scrolling sideways
+    — so the band's height is fixed at two pads whatever the rig size, and the width a
+    sidebar spent permanently goes to the pads. The list it replaced was
+    left-click-replace / right-click-toggle, which has no touchscreen gesture and no
+    discoverable mouse one; `selectTarget` survives only for the narrow-width sheet, where
+    picking one thing and getting one thing is right. `SelectedTargetSummary` went with the
+    sidebar, and `Breadcrumbs`' `extra` / `onExtraClick` went with *it* — the busk view was
+    their last consumer, so every breadcrumb trail is now `Projects > Project > <View>`.
+  - **With nothing selected the pools dim rather than disappear.** They used to be replaced
+    by a centred "Select a group or fixture" page, which hid the whole library behind a step
+    the operator had not been shown; seeing what there is to press is most of what makes a
+    pad grid learnable. Nothing can be pressed by mistake — presence is `none` for every pad
+    with an empty selection, so there is nothing lit to release either.
+
+  **The Effects Overview panel is no longer route-locked.** `/fx` used to hold it open and
+  its toggle inert for as long as it was mounted, through a `useEffectsOverview` hook that
+  OR-ed a lock over the stored preference. That existed because the busk view had no tempo
+  readout and no view of what was running; it has a speed rail and pad presence rings of its
+  own now. All four panels are plain stored toggles, and **Kill All is unconditional** —
+  gating a control on which route you arrived from is the same "one control in two places"
+  problem the rest of this file argues against, and `disabled` on an empty stage already
+  says when there is nothing to kill.
 
   **Run is gone as a route, replaced by a mode.** Run and Show were never different
   destinations — the only real distinction was whether a stray click can change the

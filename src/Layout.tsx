@@ -7,8 +7,6 @@ import { Card } from "@/components/ui/card"
 import { FeatureErrorBoundary } from "./components/FeatureErrorBoundary"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
-import { mostSpecificActiveId } from "@/lib/navMatch"
-import { navItems } from "./navigation"
 import { useMediaQuery } from "@/hooks/useMediaQuery"
 
 import { ConnectionStatus } from "./connection"
@@ -71,25 +69,9 @@ export default function Layout() {
   }, [])
   const [applyFxTarget, setApplyFxTarget] = useState<FxTarget | null>(null)
   const [channelDialogMode, setChannelDialogMode] = useState<"park" | "set" | null>(null)
-  const { panels, byId, lockEffects, unlockEffects } = useOverviewPanels()
+  const { panels, byId } = useOverviewPanels()
   const location = useLocation()
-  // "Is the FX busking grid the active nav entry?", asked the same way the sidebar asks it —
-  // rather than by matching the path here, which this has now got wrong twice. The old
-  // `/\/projects\/\d+\/fx/` regex was unanchored and fired on `/fx-library`; a plain segment
-  // match fixes that but then fires on `/projects/:id/programmer/fx`, which is a *section* of the
-  // programmer and not this page. `mostSpecificActiveId` resolves both, because longest-match is
-  // exactly the question: `/programmer` beats `/fx` there, and `/fx-library` beats nothing.
-  const isFxRoute = mostSpecificActiveId(navItems, location.pathname) === 'fx'
   const isDesktop = useMediaQuery('(min-width: 768px)')
-
-  // Auto-show & lock effects overview when on the FX busking route
-  useEffect(() => {
-    if (isFxRoute) {
-      lockEffects()
-    } else {
-      unlockEffects()
-    }
-  }, [isFxRoute, lockEffects, unlockEffects])
 
   // Close mobile drawer on route change
   useEffect(() => {
@@ -238,11 +220,7 @@ export default function Layout() {
             isVisible={byId.fixtures.isVisible}
           />
 
-          <EffectsOverviewPanel
-            isVisible={byId.effects.isVisible}
-            isLocked={byId.effects.isLocked}
-            isDesktop={isDesktop}
-          />
+          <EffectsOverviewPanel isVisible={byId.effects.isVisible} isDesktop={isDesktop} />
 
           {/* Cue Slot DnD Provider wraps panel + page content for cross-component drag-and-drop */}
           <CueSlotDndProvider isVisible={byId.cueSlots.isVisible}>

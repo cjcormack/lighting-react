@@ -20,6 +20,7 @@ const PAGE_LABEL: Record<ShowView, string> = {
   programmer: 'Programmer',
   show: 'Show',
   'prompt-book': 'Prompt Book',
+  busk: 'Busk',
 }
 
 interface ShowHeaderProps {
@@ -32,9 +33,10 @@ interface ShowHeaderProps {
    * stack list.
    *
    * There used to be an `extra` prop for breadcrumb drill segments, which only Show passed and only
-   * to append the drilled stack's name. It was dropped so the three live views read identically:
-   * `Projects > Project > <View>` everywhere. `Breadcrumbs` still supports `extra` for `FxBusking`,
-   * which uses it directly.
+   * to append the drilled stack's name. It was dropped so the live views read identically:
+   * `Projects > Project > <View>` everywhere. `Breadcrumbs` kept `extra` for the busk view, which
+   * listed the selected targets there and opened the target picker from them; the target band
+   * carries both jobs now, so the prop is gone from `Breadcrumbs` too.
    */
   onCurrentPageClick?: () => void
   isShowActive: boolean
@@ -64,7 +66,7 @@ interface ShowHeaderProps {
 }
 
 /**
- * Shared header for the three live-show views (Programmer · Show · Prompt Book): breadcrumbs
+ * Shared header for the four live-show views (Programmer · Show · Prompt Book · Busk): breadcrumbs
  * on the left, then any view-specific actions, the view switcher, a single Start/Stop
  * button, and an always-visible status dot. The switcher, Start/Stop button, and dot are
  * right-anchored so they hold the same position across views regardless of which view

@@ -1,8 +1,5 @@
-import { useEffect } from 'react'
-import { useLocation, useNavigate, useParams, Navigate } from 'react-router'
-import { Card } from '@/components/ui/card'
-import { Loader2 } from 'lucide-react'
-import { useCurrentProjectQuery } from '../store/projects'
+import { useLocation, useParams, Navigate } from 'react-router'
+import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
 
 /**
  * Redirects for paths that no longer name a view.
@@ -20,32 +17,12 @@ import { useCurrentProjectQuery } from '../store/projects'
  * Every target here is byte-identical to what it was before the collection. `?cue=` deep links are
  * an external contract, minted by the Prompt Book's "Edit cue" rail card, so the search string is
  * carried across wherever the original did.
+ *
+ * The project-less spellings delegate to `CurrentProjectRedirect` rather than re-implementing the
+ * wait-then-navigate body, for the reason its own doc comment gives (FS-DUP-REDIRECTS): it is the
+ * single home for "follow the current project", and a second copy is a second thing to keep in
+ * step with its loading state.
  */
-
-/**
- * `/run`, `/cue-stacks` and friends without a project in the path: wait for the current project,
- * then go to its show. Only reachable from the bare, project-less spellings of these paths.
- */
-function ShowRedirectForCurrentProject() {
-  const { data: currentProject, isLoading } = useCurrentProjectQuery()
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    if (!isLoading && currentProject) {
-      navigate(`/projects/${currentProject.id}/show`, { replace: true })
-    }
-  }, [currentProject, isLoading, navigate])
-
-  if (isLoading) {
-    return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
-    )
-  }
-
-  return null
-}
 
 /** `/projects/:id/<anything retired>` → `/projects/:id/show`, or the current project's show. */
 function ToShow() {
@@ -53,7 +30,7 @@ function ToShow() {
   if (projectId) {
     return <Navigate to={`/projects/${projectId}/show`} replace />
   }
-  return <ShowRedirectForCurrentProject />
+  return <CurrentProjectRedirect to="show" />
 }
 
 /**
@@ -94,6 +71,26 @@ export function CuesLegacyRedirect() {
     ? `/projects/${projectId}/show/stacks/${stackId}`
     : `/projects/${projectId}/show`
   return <Navigate to={target} replace />
+}
+
+/**
+ * `/fx` and `/projects/:id/fx` → the busk view.
+ *
+ * The pad grid was called FX for as long as it was one thing among several the page could have
+ * been about. It is the busking surface and nothing else, so it is named for what an operator
+ * stands at it to do — and `/fx` sat one hyphen away from `/fx-library`, a genuinely different
+ * destination that `Layout`'s route match got wrong twice (see `lib/navMatch.ts`).
+ *
+ * Here rather than in `Busk.tsx` because `/fx` no longer names a view: `BuskRedirect` resolves the
+ * *resource* ("which project's busk view?") and belongs beside the page, while this one only keeps
+ * a retired path alive. No search string to carry — `/fx` never took query params.
+ */
+export function LegacyFxRedirect() {
+  const { projectId } = useParams()
+  if (projectId) {
+    return <Navigate to={`/projects/${projectId}/busk`} replace />
+  }
+  return <CurrentProjectRedirect to="busk" />
 }
 
 /**

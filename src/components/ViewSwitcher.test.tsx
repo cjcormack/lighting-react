@@ -23,13 +23,31 @@ describe('ViewSwitcher labels', () => {
       </MemoryRouter>,
     )
     const label = screen.getByText('Show')
-    expect(label.className).toContain('@[760px]:inline')
+    expect(label.className).toContain('@[820px]:inline')
     expect(label.className).not.toMatch(/\bsm:/)
   })
 
   it('use a threshold that suits the number of pills', () => {
-    // Five family pills need room three view pills do not.
+    // Five family pills need room four view pills do not — and the view threshold has to move
+    // with the pill count, which is why it has been 820 (four views), 760 (three) and 820 again
+    // (four, with Busk). Asserting the number is what stops the next pill being added for free.
     render(<LookFamilyFilterBar current="ALL" onChange={() => {}} />)
     expect(screen.getByText('All').className).toContain('@[720px]:inline')
+  })
+
+  it('offers all four live views, with the current one static', () => {
+    render(
+      <MemoryRouter>
+        <ViewSwitcher current="busk" projectId={1} />
+      </MemoryRouter>,
+    )
+    expect(screen.getByLabelText('Busk')).toHaveAttribute('aria-current', 'page')
+    for (const [label, href] of [
+      ['Programmer', '/projects/1/programmer'],
+      ['Show', '/projects/1/show'],
+      ['Prompt Book', '/projects/1/prompt-book'],
+    ] as const) {
+      expect(screen.getByLabelText(label)).toHaveAttribute('href', href)
+    }
   })
 })

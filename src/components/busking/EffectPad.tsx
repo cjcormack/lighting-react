@@ -1,6 +1,6 @@
 import React, { useRef } from 'react'
 import { useNavigate } from 'react-router'
-import { Crosshair, SwatchBook, Clock } from 'lucide-react'
+import { SwatchBook, Palette, Clock } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { cn } from '@/lib/utils'
@@ -10,6 +10,9 @@ import { PropertyPadButton } from './PropertyPadButton'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
 import type { EffectPresence, PropertyButton } from './buskingTypes'
 import type { LookSummary } from '@/api/looksApi'
+import type { TemplateSummary } from '@/api/templatesApi'
+import { templateIntentSwatch } from '@/lib/templateIntent'
+import { FAMILY_LABELS, type AttributeFamily } from '@/lib/attributeFamily'
 import { useIsDeskConnected } from '@/store/status'
 
 const CATEGORY_ORDER = ['looks', 'dimmer', 'colour', 'position', 'controls'] as const
@@ -20,14 +23,13 @@ interface EffectPadProps {
   onToggle: (effect: EffectLibraryEntry) => void
   onLongPress: (effect: EffectLibraryEntry) => void
   hasSelection: boolean
-  /** Content rendered at the top of the scrollable area (e.g. selected target summary) */
-  headerContent?: React.ReactNode
   /**
-   * The Looks a pad can toggle — **deferred ones only**, filtered by the caller. A bound Look names
-   * its own fixtures, so the toggle route offers none of its rows and a pad for it would fire
-   * nothing.
+   * The named things a pad can toggle onto the selection: templates, which fill the four family
+   * columns, and Looks, which get a section of their own below them.
+   *
+   * The Looks here are **deferred ones only**, filtered by the caller. A bound Look names its own
+   * fixtures, so the toggle route offers none of its rows and a pad for it would fire nothing.
    */
-  /** The named things a pad can toggle onto the selection — Looks and templates in one grid. */
   padItems: PadItem[]
   currentProjectId: number | undefined
   // Beat division
@@ -47,7 +49,6 @@ export function EffectPad({
   onToggle,
   onLongPress,
   hasSelection,
-  headerContent,
   padItems,
   currentProjectId,
   defaultBeatDivision,
@@ -63,24 +64,44 @@ export function EffectPad({
   // programmer over the socket.
   const deskConnected = useIsDeskConnected()
 
-  if (!hasSelection) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground px-4">
-        <Crosshair className="size-10 opacity-30" />
-        <p className="text-sm text-center">Select a group or fixture to control effects</p>
-      </div>
-    )
-  }
-
   return (
-    <div className="@container flex flex-col h-full overflow-y-auto px-2 pb-2">
-      {headerContent}
+    <div
+      className={cn(
+        '@container flex flex-col h-full overflow-y-auto px-2 pb-2 transition-opacity',
+        // Dimmed and inert rather than replaced by a placeholder. This used to be a centred
+        // "Select a group or fixture" page, which hid the entire library behind a step the
+        // operator had not been shown yet — seeing what there *is* to press is most of what makes
+        // a pad grid learnable. Nothing can be pressed by mistake: presence is `none` for every
+        // pad with an empty selection, so there is nothing lit to release either.
+        //
+        // The inertness is on the *buttons*, not on this element: `pointer-events-none` here
+        // would take the scroll container out of hit-testing too, so the wheel and a touch drag
+        // would find no scrollable ancestor and the library the operator was just invited to
+        // read would be stuck at its first screenful. Every interactive thing below is a
+        // `<button>` (the pads, the beat-division toggles, the manage links), so the descendant
+        // selector covers the same ground the container rule did.
+        !hasSelection && 'opacity-55 select-none [&_button]:pointer-events-none',
+      )}
+      aria-disabled={!hasSelection || undefined}
+    >
+      {!hasSelection && (
+        <p className="mt-2 shrink-0 rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
+          Toggle fixtures or groups above — pads apply to the selection. Lit pads are already on
+          stage and stay live.
+        </p>
+      )}
       {CATEGORY_ORDER.map((cat) => {
         if (cat === 'looks') {
           return (
             <React.Fragment key={cat}>
-              <CategorySection label="Looks &amp; templates" icon={SwatchBook}>
-                <LookGrid items={padItems} currentProjectId={currentProjectId} />
+              <CategorySection label="Templates" icon={Palette}>
+                <TemplateColumns items={padItems} />
+              </CategorySection>
+              <CategorySection label="Looks" icon={SwatchBook}>
+                <LookGrid
+                  items={padItems.filter((i) => i.kind === 'look')}
+                  currentProjectId={currentProjectId}
+                />
               </CategorySection>
               <hr className="border-border mt-3 mb-0" />
               <CategorySection label="Time" icon={Clock}>
@@ -194,9 +215,61 @@ export interface PadItem {
   /** What it holds, in a badge's worth of text. */
   detail: string
   kind: 'look' | 'template'
+  /**
+   * Which column a template pad lands in. Null on a Look, which spans families by nature and has
+   * its own section for exactly that reason.
+   */
+  family: AttributeFamily | null
+  /** The colour a colour template resolves to, for the pad's swatch. Null when there isn't one. */
+  swatch: string | null
   presence: EffectPresence
   onToggle: () => void
   onEdit: () => void
+}
+
+/**
+ * The four family columns of the template pool.
+ *
+ * A template is in **exactly one** family — derived from its rows, validated at the write boundary
+ * — so four columns is an exact partition of the pool rather than a filter over it, and every pad
+ * has one right home. That is the same fact that put the family filter on `/templates` and kept it
+ * off `/looks`; here it buys the operator a spatial memory instead of a dropdown, which is what a
+ * palette bank was always for.
+ *
+ * The order is the mock's — colour first, because it is the family a busking operator reaches for
+ * most — rather than `ATTRIBUTE_FAMILIES`'. Columns render their heading even when empty, so the
+ * four positions stay put as the library fills up.
+ *
+ * A template with a null `family` has no column and is dropped. The write boundary does not allow
+ * one, so this is a guard rather than a case.
+ */
+const TEMPLATE_COLUMNS: readonly AttributeFamily[] = ['COLOUR', 'POSITION', 'BEAM', 'INTENSITY']
+
+function TemplateColumns({ items }: { items: PadItem[] }) {
+  const templates = items.filter((item) => item.kind === 'template')
+
+  return (
+    <div className="grid grid-cols-1 @[20rem]:grid-cols-2 @[48rem]:grid-cols-4 gap-3">
+      {TEMPLATE_COLUMNS.map((family) => (
+        <div key={family} className="flex flex-col gap-2">
+          <span className="text-[10px] font-semibold text-muted-foreground">
+            {FAMILY_LABELS[family].singular}
+          </span>
+          {templates
+            .filter((item) => item.family === family)
+            .map((item) => (
+              <LookPadButton
+                key={item.key}
+                item={item}
+                presence={item.presence}
+                onToggle={item.onToggle}
+                onLongPress={item.onEdit}
+              />
+            ))}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function LookGrid({
@@ -320,13 +393,24 @@ function LookPadButton({
         presence === 'all' && 'border-primary bg-primary/20 ring-1 ring-primary/50 hover:bg-primary/25',
       )}
     >
-      <span
-        className={cn(
-          'text-sm font-medium leading-tight',
-          presence !== 'none' ? 'text-primary' : 'text-foreground',
+      <span className="flex items-center gap-1.5">
+        {/* Only a colour template that resolves to one colour has a swatch — see `swatch`'s
+            derivation in `BuskingView`. Everything else names itself. */}
+        {item.swatch && (
+          <span
+            aria-hidden
+            className="size-3 shrink-0 rounded shadow-[inset_0_0_0_1px_rgba(255,255,255,0.15)]"
+            style={{ background: item.swatch }}
+          />
         )}
-      >
-        {item.name}
+        <span
+          className={cn(
+            'text-sm font-medium leading-tight',
+            presence !== 'none' ? 'text-primary' : 'text-foreground',
+          )}
+        >
+          {item.name}
+        </span>
       </span>
       {item.notes && (
         <span className="mt-0.5 text-[10px] leading-tight text-muted-foreground line-clamp-1">
@@ -366,4 +450,24 @@ export function describeLookContents(look: LookSummary): string {
     parts.push(`${look.rowCount} ${look.rowCount === 1 ? 'value' : 'values'}`)
   }
   return parts.length === 0 ? 'empty' : parts.join(' · ')
+}
+
+/**
+ * The colour a template pad draws beside its name, or null.
+ *
+ * The two exclusions are the ones `isOfferable` makes in `components/fx/FxColourTemplates.tsx`,
+ * and for the same reason rather than by coincidence. A **per-fixture** template holds one colour
+ * per head, so there is no single colour for a swatch to claim — its badge already says
+ * "{n} heads", which is the honest answer. A **multi-row** template holds several, and drawing
+ * `rows[0]` under a name that covers all of them would state one of them as the whole thing,
+ * silently.
+ *
+ * `templateIntentSwatch` returns null for a non-colour intent, so the family check is implicit —
+ * but a position template resolving to a hex would be a bug worth seeing rather than hiding, and
+ * this stays a pure read either way: the client half of the intent grammar parses and never
+ * resolves (`lib/templateIntent.ts`).
+ */
+export function templateSwatch(template: TemplateSummary): string | null {
+  if (!template.isGeneric || template.rows.length !== 1) return null
+  return templateIntentSwatch(template.rows[0].value)
 }

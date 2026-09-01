@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react'
 import {
   Aperture,
+  AudioWaveform,
   BookOpenText,
   Layers,
   LayoutGrid,
@@ -20,7 +21,7 @@ import {
   type AttributeFamily,
 } from '@/lib/attributeFamily'
 
-export type ShowView = 'programmer' | 'show' | 'prompt-book'
+export type ShowView = 'programmer' | 'show' | 'prompt-book' | 'busk'
 
 const ITEM = 'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold'
 
@@ -40,51 +41,62 @@ const ITEM = 'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs fo
 const LABEL_AT_560 = 'hidden @[560px]:inline' // Cards · List — two pills
 const LABEL_AT_720 = 'hidden @[720px]:inline' // Look families — five pills
 /**
- * Three pills in a header that also carries a breadcrumb trail (~220-320px above 640), the save
+ * Four pills in a header that also carries a breadcrumb trail (~220-320px above 640), the save
  * indicator, per-page actions, Start/Stop and the live dot: roughly 570px is spoken for before any
- * label, and three labels add ~175.
+ * label, and four labels add ~230.
  *
- * Was `@[820px]` for four pills, sized when Run was still a view of its own; session 2b merged it
- * into Show. Recomputed rather than left alone — the threshold has to track the pill count or the
- * labels collapse earlier than they need to. Written out in full because a template literal
- * produces no CSS: the scanner only reads whole class strings.
+ * This number has moved twice, in both directions, and both moves were the same rule: **the
+ * threshold tracks the pill count.** It was `@[820px]` for four when Run was its own view, dropped
+ * to `@[760px]` when session 2b merged Run into Show and left three, and is back at `@[820px]` now
+ * that Busk is the fourth. Written out in full because a template literal produces no CSS — the
+ * scanner only reads whole class strings — which is also why this cannot be computed from the
+ * count.
  */
-const LABEL_AT_760 = 'hidden @[760px]:inline' // Programmer · Show · Prompt Book
+const LABEL_AT_820 = 'hidden @[820px]:inline' // Programmer · Show · Prompt Book · Busk
 
 /**
- * Programmer · Show · Prompt Book switcher, shared across the three live views. Run used to sit
- * between Show and the Prompt Book; session 2b folded it into Show, because the two were one
+ * Programmer · Show · Prompt Book · Busk switcher, shared across the four live views. Run used to
+ * sit between Show and the Prompt Book; session 2b folded it into Show, because the two were one
  * destination in two modes rather than two destinations. The `current`
  * view renders as a static pill; the others are links. Icons show at every width — only the text
- * labels collapse, at `LABEL_AT_760` — so the switch stays usable on phones (the sole in-view way
+ * labels collapse, at `LABEL_AT_820` — so the switch stays usable on phones (the sole in-view way
  * to move between the views on a narrow screen).
  *
  * Programmer comes first because it is where values are edited and Show is where they are arranged:
- * the pills run in the order the work does.
+ * the pills run in the order the work does. Busk comes last because it is the one you stand at
+ * once the other three are done — and it is here at all because a live view reachable only from
+ * the sidebar would be the one destination these pills could not get you to.
  */
 export function ViewSwitcher({ current, projectId }: { current: ShowView; projectId: number }) {
   return (
     <nav className="inline-flex items-center gap-0.5 rounded-lg border bg-card p-0.5">
       <Segment
-        labelClass={LABEL_AT_760}
+        labelClass={LABEL_AT_820}
         active={current === 'programmer'}
         to={`/projects/${projectId}/programmer`}
         icon={<SlidersVertical className="size-3.5" />}
         label="Programmer"
       />
       <Segment
-        labelClass={LABEL_AT_760}
+        labelClass={LABEL_AT_820}
         active={current === 'show'}
         to={`/projects/${projectId}/show`}
         icon={<Pencil className="size-3.5" />}
         label="Show"
       />
       <Segment
-        labelClass={LABEL_AT_760}
+        labelClass={LABEL_AT_820}
         active={current === 'prompt-book'}
         to={`/projects/${projectId}/prompt-book`}
         icon={<BookOpenText className="size-3.5" />}
         label="Prompt Book"
+      />
+      <Segment
+        labelClass={LABEL_AT_820}
+        active={current === 'busk'}
+        to={`/projects/${projectId}/busk`}
+        icon={<AudioWaveform className="size-3.5" />}
+        label="Busk"
       />
     </nav>
   )

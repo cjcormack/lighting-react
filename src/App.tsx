@@ -20,7 +20,7 @@ import Projects from "./routes/Projects";
 import ProjectScripts, { ScriptsRedirect } from "./routes/ProjectScripts";
 import { ProjectFxLibrary, FxLibraryRedirect } from "./routes/FxLibrary";
 
-import { FxRedirect, ProjectFxBusking } from "./routes/FxBusking";
+import { BuskRedirect, ProjectBusk } from "./routes/Busk";
 import { LooksRedirect, ProjectLooks } from "./routes/Looks";
 import { TemplatesRedirect, ProjectTemplates } from "./routes/Templates";
 import { SpeedMastersRedirect, ProjectSpeedMasters } from "./routes/SpeedMasters";
@@ -37,6 +37,7 @@ import {
 import {
   CuesLegacyRedirect,
   LegacyCueStacksRedirect,
+  LegacyFxRedirect,
   LegacyProgramRedirect,
   LegacyRunRedirect,
 } from "./routes/legacyRedirects";
@@ -151,12 +152,22 @@ function App() {
           element: <GroupsRedirect />,
         },
         {
+          path: "projects/:projectId/busk",
+          element: <ProjectBusk />,
+        },
+        {
+          path: "busk",
+          element: <BuskRedirect />,
+        },
+        // The busk view was `/fx` until the busking-view plan's session 3. Kept so a bookmark, a
+        // Cmd+K deep link or muscle memory lands. Distinct from `/fx-library`, which is untouched.
+        {
           path: "projects/:projectId/fx",
-          element: <ProjectFxBusking />,
+          element: <LegacyFxRedirect />,
         },
         {
           path: "fx",
-          element: <FxRedirect />,
+          element: <LegacyFxRedirect />,
         },
         // The Look library: **one route, no filter**. Recorded states over named fixtures; a Look
         // spans families by nature, so there is nothing here for a family filter to partition.

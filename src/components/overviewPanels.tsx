@@ -2,7 +2,6 @@ import { AudioWaveform, Grid3x3, LayoutGrid, Theater, type LucideIcon } from 'lu
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { usePersistentToggle } from '@/hooks/usePersistentState'
-import { useEffectsOverview } from '@/hooks/useEffectsOverview'
 
 /**
  * The four collapsible panels Layout hangs under the header, as data.
@@ -55,7 +54,6 @@ const DESCRIPTORS: readonly OverviewPanelDescriptor[] = [
     label: 'Effects Overview',
     noun: 'effects overview',
     icon: AudioWaveform,
-    // Held by `useEffectsOverview`, which OR-s this stored preference with the FX page's lock.
     storageKey: 'effects-overview-visible',
   },
 ]
@@ -65,23 +63,27 @@ const BY_ID = Object.fromEntries(DESCRIPTORS.map((d) => [d.id, d])) as Record<
   OverviewPanelDescriptor
 >
 
-/** One panel's visibility, however it is held. */
+/** One panel's visibility. */
 interface PanelVisibility {
   isVisible: boolean
   toggle: () => void
-  isLocked: boolean
 }
 
 /** One panel's live state, ready for the toolbar, the palette and the panel itself. */
 export interface OverviewPanel extends OverviewPanelDescriptor {
   isVisible: boolean
   toggle: () => void
-  /** Effects only: the FX page holds the panel open and the toggle inert while it is mounted. */
-  isLocked: boolean
 }
 
 /**
  * Visibility for all four panels.
+ *
+ * All four are now plain stored toggles. The effects panel used to be different: the busk view
+ * (then `/fx`) held it open and its toggle inert for as long as that route was mounted, through a
+ * `useEffectsOverview` hook that OR-ed a lock over the stored preference. That existed because the
+ * busk view had no tempo readout and no way to see what was running. It has a speed rail and pad
+ * presence rings of its own now, so a panel forced open and made unclosable by one route was
+ * buying nothing and costing the operator a control.
  *
  * The hooks are written out rather than mapped over `DESCRIPTORS`, because they are hooks and
  * their order and count have to be statically obvious. They are then paired with their descriptors
@@ -92,23 +94,17 @@ export interface OverviewPanel extends OverviewPanelDescriptor {
 export function useOverviewPanels(): {
   panels: readonly OverviewPanel[]
   byId: Record<OverviewPanelId, OverviewPanel>
-  lockEffects: () => void
-  unlockEffects: () => void
 } {
   const stage = usePersistentToggle(BY_ID.stage.storageKey)
   const fixtures = usePersistentToggle(BY_ID.fixtures.storageKey)
   const cueSlots = usePersistentToggle(BY_ID.cueSlots.storageKey)
-  const effects = useEffectsOverview()
+  const effects = usePersistentToggle(BY_ID.effects.storageKey)
 
   const visibility: Record<OverviewPanelId, PanelVisibility> = {
-    stage: { isVisible: stage.isVisible, toggle: stage.toggle, isLocked: false },
-    fixtures: { isVisible: fixtures.isVisible, toggle: fixtures.toggle, isLocked: false },
-    cueSlots: { isVisible: cueSlots.isVisible, toggle: cueSlots.toggle, isLocked: false },
-    effects: {
-      isVisible: effects.isVisible,
-      toggle: effects.toggle,
-      isLocked: effects.isLocked,
-    },
+    stage: { isVisible: stage.isVisible, toggle: stage.toggle },
+    fixtures: { isVisible: fixtures.isVisible, toggle: fixtures.toggle },
+    cueSlots: { isVisible: cueSlots.isVisible, toggle: cueSlots.toggle },
+    effects: { isVisible: effects.isVisible, toggle: effects.toggle },
   }
 
   const panels = DESCRIPTORS.map((d) => ({ ...d, ...visibility[d.id] }))
@@ -119,14 +115,12 @@ export function useOverviewPanels(): {
       OverviewPanelId,
       OverviewPanel
     >,
-    lockEffects: effects.lock,
-    unlockEffects: effects.unlock,
   }
 }
 
 /** The header button for one overview panel. */
 export function OverviewToggle({ panel }: { panel: OverviewPanel }) {
-  const { icon: Icon, noun, isVisible, isLocked, toggle } = panel
+  const { icon: Icon, noun, isVisible, toggle } = panel
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -134,7 +128,6 @@ export function OverviewToggle({ panel }: { panel: OverviewPanel }) {
           variant="ghost"
           size="icon"
           onClick={toggle}
-          disabled={isLocked}
           className={
             isVisible
               ? 'text-primary-foreground bg-primary-foreground/20 hover:bg-primary-foreground/30'
@@ -144,15 +137,7 @@ export function OverviewToggle({ panel }: { panel: OverviewPanel }) {
           <Icon className="size-5" />
         </Button>
       </TooltipTrigger>
-      {/* The locked branch is a whole sentence. The effects toggle's old form left ` effects
-          overview` outside the ternary, so a locked toggle read "…locked while in FX view) effects
-          overview" — and it is the FX *page* that holds it open; "view" named a surface that no
-          longer exists. */}
-      <TooltipContent>
-        {isLocked
-          ? `${panel.label} (held open by the FX page)`
-          : `${isVisible ? 'Hide' : 'Show'} ${noun}`}
-      </TooltipContent>
+      <TooltipContent>{`${isVisible ? 'Hide' : 'Show'} ${noun}`}</TooltipContent>
     </Tooltip>
   )
 }

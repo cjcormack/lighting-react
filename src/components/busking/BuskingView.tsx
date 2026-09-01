@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useGroupActiveEffectsQuery } from '@/store/groups'
@@ -11,16 +11,16 @@ import { useNavigate } from 'react-router'
 import { FAMILY_LABELS } from '@/lib/attributeFamily'
 import { templateLayerPresence } from './lookPresence'
 import { useProgrammerLayersQuery } from '@/store/programmer'
-import { describeLookContents, type PadItem } from './EffectPad'
+import { describeLookContents, templateSwatch, type PadItem } from './EffectPad'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import type { CueTarget } from '@/api/cuesApi'
 import { TargetList } from './TargetList'
+import { TargetBand } from './TargetBand'
+import { BuskSpeedRail } from './BuskSpeedRail'
 import { EffectPad } from './EffectPad'
-import { SelectedTargetSummary } from './SelectedTargetSummary'
 import { ActiveEffectSheet } from './ActiveEffectSheet'
 import { ConfigureEffectSheet } from './ConfigureEffectSheet'
 import { usageLabel } from '@/lib/speedMasterModel'
-import { FixtureDetailModal } from '@/components/groups/FixtureDetailModal'
 import { useBuskingState } from './useBuskingState'
 import type { TargetEffectsData } from './buskingTypes'
 import { programmerClearEntry, useProgrammerRevision } from '@/store/programmer'
@@ -38,12 +38,13 @@ import { toast } from 'sonner'
 import { formatError } from '@/lib/formatError'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
 
-interface BuskingViewProps {
-  /** Called whenever the set of selected targets changes, with control functions */
-  onSelectionChange?: (targetNames: string[], controls: { clearSelection: () => void; openTargetPicker: () => void }) => void
-}
-
-export function BuskingView({ onSelectionChange }: BuskingViewProps) {
+/**
+ * The busk view's body: the target band, the pad pools, and the speed rail.
+ *
+ * The show chrome above it (`ShowHeader`, `ShowBar`) belongs to `routes/Busk.tsx`, like every other
+ * live view — this component owns only what is particular to busking.
+ */
+export function BuskingView() {
   const isDesktop = useMediaQuery('(min-width: 768px)')
   const [targetSheetOpen, setTargetSheetOpen] = useState(false)
 
@@ -70,7 +71,6 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
   } = useBuskingState()
 
   const [configuringEffect, setConfiguringEffect] = useState<EffectLibraryEntry | null>(null)
-  const [detailFixtureKey, setDetailFixtureKey] = useState<string | null>(null)
 
   // Fetch looks for the current project
   const { data: currentProject } = useCurrentProjectQuery()
@@ -95,6 +95,8 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
   // Save write its rows into the second.
   const { data: fixtureList } = useFixtureListQuery()
 
+  const openTargetPicker = useCallback(() => setTargetSheetOpen(true), [])
+
   // On mobile, close the target sheet when a target is selected
   const handleSelectTarget = useCallback(
     (target: BuskingTarget) => {
@@ -111,67 +113,6 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
     () => Array.from(selectedTargets.values()),
     [selectedTargets],
   )
-
-  // Track which group cards are expanded (default: all expanded)
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
-    const groups = new Set<string>()
-    for (const t of selectedTargets.values()) {
-      if (t.type === 'group') groups.add(t.name)
-    }
-    return groups
-  })
-
-  // Auto-expand newly added groups
-  useEffect(() => {
-    setExpandedGroups((prev) => {
-      const currentGroupNames = new Set<string>()
-      for (const t of selectedTargets.values()) {
-        if (t.type === 'group') currentGroupNames.add(t.name)
-      }
-      // Add any new groups that aren't already tracked
-      let changed = false
-      const next = new Set(prev)
-      for (const name of currentGroupNames) {
-        if (!next.has(name)) {
-          next.add(name)
-          changed = true
-        }
-      }
-      // Remove groups that are no longer selected
-      for (const name of next) {
-        if (!currentGroupNames.has(name)) {
-          next.delete(name)
-          changed = true
-        }
-      }
-      return changed ? next : prev
-    })
-  }, [selectedTargets])
-
-  const toggleGroupExpanded = useCallback((groupName: string) => {
-    setExpandedGroups((prev) => {
-      const next = new Set(prev)
-      if (next.has(groupName)) {
-        next.delete(groupName)
-      } else {
-        next.add(groupName)
-      }
-      return next
-    })
-  }, [])
-
-  // Stable ref for openTargetPicker to avoid effect re-fires
-  const openTargetPicker = useCallback(() => setTargetSheetOpen(true), [])
-
-  // Notify parent of selection changes for breadcrumb display
-  useEffect(() => {
-    onSelectionChange?.(
-      selectedArray.map((t) =>
-        t.type === 'group' ? t.name : t.fixture.name,
-      ),
-      { clearSelection, openTargetPicker },
-    )
-  }, [selectedArray, onSelectionChange, clearSelection, openTargetPicker])
 
   // Fetch effects data for selected targets
   const targetEffectsData = useSelectedTargetEffects(selectedArray)
@@ -256,6 +197,10 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
         notes: look.notes,
         detail: describeLookContents(look),
         kind: 'look' as const,
+        // A Look spans families by nature — `families` is derived from its rows and can hold two —
+        // so it has no column and gets a section of its own instead.
+        family: null,
+        swatch: null,
         presence: computeLookPresence(look, targetEffectsData),
         onToggle: () => void applyLook(look, 'none', targetEffectsData),
         onEdit: () => navigate(`/projects/${currentProject?.id ?? 0}/looks`),
@@ -271,12 +216,18 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
           ? (template.family != null ? FAMILY_LABELS[template.family].singular : 'value')
           : `${template.rows.length} heads`,
         kind: 'template' as const,
+        family: template.family,
+        swatch: templateSwatch(template),
         // A template holds no effects, so the running-effect presence a Look's ring is read from
         // cannot answer for one. The layer stack can: `templateLayerPresence` asks whether a layer
         // applying this template covers the selection, which is the same question one press ago.
         presence: templateLayerPresence(programmerLayers ?? [], selectedCueTargets, template.id),
         onToggle: () => {
-          if (currentProject == null) return
+          // Guarded the same way `applyLook` is, and for the same reason: a toggle carrying no
+          // targets is not "apply to nothing", it is a layer the server has to interpret. The
+          // pool is dimmed and its buttons made inert with an empty selection, so this should be
+          // unreachable — but the two pad kinds must not disagree about what an empty press means.
+          if (currentProject == null || selectedCueTargets.length === 0) return
           void toggleTemplate({
             projectId: currentProject.id,
             templateId: template.id,
@@ -326,57 +277,19 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
   }, [selectedArray])
 
   return (
-    <div className="flex flex-col h-full">
-      {isDesktop ? (
-        <div className="flex-1 flex min-h-0">
-          <div className="w-52 lg:w-72 border-r overflow-y-auto shrink-0">
-            <TargetList
-              selectedTargets={selectedTargets}
-              onSelect={handleSelectTarget}
-              onToggle={toggleTarget}
-            />
-          </div>
-          <div className="flex-1 min-w-0 min-h-0">
-            <EffectPadWrapper
-              selectedTargets={selectedArray}
-              targetEffectsData={targetEffectsData}
-              effectsByCategory={effectsByCategory}
-              computePresence={computePresence}
-              toggleEffect={toggleEffect}
-              defaultBeatDivision={defaultBeatDivision}
-              onBeatDivisionChange={setDefaultBeatDivision}
-              propertyButtons={propertyButtons}
-              computePropertyPresence={computePropertyPresence}
-              togglePropertyEffect={togglePropertyEffect}
-              getActivePropertyValue={getActivePropertyValue}
-              setEditingEffect={setEditingEffect}
-              setConfiguringEffect={setConfiguringEffect}
-              padItems={padItems}
-              currentProjectId={currentProject?.id}
-              headerContent={
-                <SelectedTargetSummary
-                  targets={selectedArray}
-                  onDeselect={toggleTarget}
-                  expandedGroups={expandedGroups}
-                  onToggleGroupExpanded={toggleGroupExpanded}
-                  onFixtureClick={setDetailFixtureKey}
-                />
-              }
-            />
-          </div>
-        </div>
-      ) : selectedTargets.size === 0 ? (
-        /* Mobile: nothing selected — show target list inline for discoverability */
-        <div className="flex-1 overflow-y-auto">
-          <TargetList
-            selectedTargets={selectedTargets}
-            onSelect={handleSelectTarget}
-            onToggle={toggleTarget}
-          />
-        </div>
-      ) : (
-        /* Mobile: targets selected — show effects with sheet for quick target switching */
-        <div className="flex-1 min-h-0">
+    <div className="flex h-full flex-col">
+      {/* One layout at every width. The old three-way branch existed because the target list was a
+          sidebar, which a phone has no room for; a band of pads scrolling sideways fits both, so
+          the narrow arm is now the same page with the rail hidden and the sheet as a second way in. */}
+      <TargetBand
+        selectedTargets={selectedTargets}
+        onToggle={toggleTarget}
+        onClear={clearSelection}
+        onOpenPicker={openTargetPicker}
+      />
+
+      <div className="flex min-h-0 flex-1">
+        <div className="min-h-0 min-w-0 flex-1">
           <EffectPadWrapper
             selectedTargets={selectedArray}
             targetEffectsData={targetEffectsData}
@@ -393,32 +306,29 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
             setConfiguringEffect={setConfiguringEffect}
             padItems={padItems}
             currentProjectId={currentProject?.id}
-            headerContent={
-              <SelectedTargetSummary
-                targets={selectedArray}
-                onDeselect={toggleTarget}
-                expandedGroups={expandedGroups}
-                onToggleGroupExpanded={toggleGroupExpanded}
-                onFixtureClick={setDetailFixtureKey}
-              />
-            }
           />
-          <Sheet open={targetSheetOpen} onOpenChange={setTargetSheetOpen}>
-            <SheetContent side="bottom" className="h-[70vh]">
-              <SheetHeader>
-                <SheetTitle>Select Targets</SheetTitle>
-              </SheetHeader>
-              <div className="overflow-y-auto flex-1">
-                <TargetList
-                  selectedTargets={selectedTargets}
-                  onSelect={handleSelectTarget}
-                  onToggle={toggleTarget}
-                />
-              </div>
-            </SheetContent>
-          </Sheet>
         </div>
-      )}
+        {/* Hides itself below `md`; the ShowBar's own masters chip covers that width. */}
+        <BuskSpeedRail />
+      </div>
+
+      {/* Kept for narrow widths, where the band is reachable but a long rig means a lot of
+          sideways scrolling. Selecting here *replaces* the selection and closes — picking one
+          thing and getting one thing is what a modal picker should do. */}
+      <Sheet open={targetSheetOpen} onOpenChange={setTargetSheetOpen}>
+        <SheetContent side="bottom" className="h-[70vh]">
+          <SheetHeader>
+            <SheetTitle>Select Targets</SheetTitle>
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto">
+            <TargetList
+              selectedTargets={selectedTargets}
+              onSelect={handleSelectTarget}
+              onToggle={toggleTarget}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <ActiveEffectSheet context={editingEffect} onClose={() => setEditingEffect(null)} />
       <ConfigureEffectSheet
@@ -444,10 +354,6 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
         }}
         onClose={() => setConfiguringEffect(null)}
       />
-      <FixtureDetailModal
-        fixtureKey={detailFixtureKey}
-        onClose={() => setDetailFixtureKey(null)}
-      />
     </div>
   )
 }
@@ -471,7 +377,6 @@ function EffectPadWrapper({
   setConfiguringEffect,
   padItems,
   currentProjectId,
-  headerContent,
 }: {
   selectedTargets: BuskingTarget[]
   targetEffectsData: TargetEffectsData[]
@@ -488,7 +393,6 @@ function EffectPadWrapper({
   setConfiguringEffect: (effect: EffectLibraryEntry | null) => void
   padItems: PadItem[]
   currentProjectId: number | undefined
-  headerContent?: React.ReactNode
 }) {
   const getPresence = useCallback(
     (effectName: string): EffectPresence => {
@@ -593,7 +497,6 @@ function EffectPadWrapper({
       onToggle={handleToggle}
       onLongPress={handleLongPress}
       hasSelection={selectedTargets.length > 0}
-      headerContent={headerContent}
       padItems={padItems}
       currentProjectId={currentProjectId}
       defaultBeatDivision={defaultBeatDivision}

@@ -8,18 +8,21 @@ interface BreadcrumbsProps {
   isActive?: boolean
   /** Current page name (e.g. "Fixtures", "Scripts"). Omit for project overview. */
   currentPage?: string
-  /** Optional trailing segments shown after the current page (e.g. selected fixture/group names) */
-  extra?: string[]
-  /** Called when the currentPage segment is clicked (only active when extra segments are shown) */
+  /**
+   * Called when the currentPage segment is clicked — Show uses it to leave a drilled stack.
+   *
+   * There used to be an `extra` array of trailing segments beside this, for a drill trail. Its
+   * last consumer was the busk view, which listed the selected targets there and re-opened the
+   * target picker from a click on one. The target band says both of those in the page itself, so
+   * the trail is back to `Projects > Project > <View>` on every route.
+   */
   onCurrentPageClick?: () => void
-  /** Called when an extra segment is clicked (receives the segment index) */
-  onExtraClick?: (index: number) => void
   /** When set, the full trail collapses to just this label below the `@[640px]` container width
    *  (needs a `@container` ancestor). Used by the show views so the breadcrumb can't overflow. */
   collapsedLabel?: string
 }
 
-export function Breadcrumbs({ projectName, isActive = true, currentPage, extra, onCurrentPageClick, onExtraClick, collapsedLabel }: BreadcrumbsProps) {
+export function Breadcrumbs({ projectName, isActive = true, currentPage, onCurrentPageClick, collapsedLabel }: BreadcrumbsProps) {
   const navigate = useNavigate()
   const { projectId } = useParams()
 
@@ -65,35 +68,7 @@ export function Breadcrumbs({ projectName, isActive = true, currentPage, extra, 
           </button>
           <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" />
 
-          {/* Current page + optional extra segments */}
-          {extra && extra.length > 0 ? (
-            <>
-              <button
-                onClick={onCurrentPageClick}
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                {currentPage}
-              </button>
-              {extra.map((segment, i) => {
-                const isLast = i === extra.length - 1
-                return (
-                  <span key={i} className="contents">
-                    <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" />
-                    {isLast ? (
-                      <span className="font-medium truncate max-w-[300px]">{segment}</span>
-                    ) : (
-                      <button
-                        onClick={() => onExtraClick?.(i)}
-                        className="text-muted-foreground hover:text-foreground transition-colors truncate max-w-[300px]"
-                      >
-                        {segment}
-                      </button>
-                    )}
-                  </span>
-                )
-              })}
-            </>
-          ) : onCurrentPageClick ? (
+          {onCurrentPageClick ? (
             <button
               onClick={onCurrentPageClick}
               className="font-medium hover:text-muted-foreground transition-colors"

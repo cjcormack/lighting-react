@@ -11,15 +11,13 @@ import { CollapsiblePanel } from './CollapsiblePanel'
 
 interface EffectsOverviewPanelProps {
   isVisible: boolean
-  /** When locked (FX view), show extended controls like Kill All */
-  isLocked?: boolean
   isDesktop: boolean
 }
 
-export function EffectsOverviewPanel({ isVisible, isLocked, isDesktop }: EffectsOverviewPanelProps) {
+export function EffectsOverviewPanel({ isVisible, isDesktop }: EffectsOverviewPanelProps) {
   return (
     <CollapsiblePanel isVisible={isVisible}>
-      <EffectsOverviewPanelBody isLocked={isLocked} isDesktop={isDesktop} />
+      <EffectsOverviewPanelBody isDesktop={isDesktop} />
     </CollapsiblePanel>
   )
 }
@@ -28,10 +26,7 @@ export function EffectsOverviewPanel({ isVisible, isLocked, isDesktop }: Effects
  * Below the collapse boundary: the fx-state and speed-master subscriptions, and the
  * [BeatIndicator]'s free-running interval — which ran on every route when this was one component.
  */
-function EffectsOverviewPanelBody({
-  isLocked,
-  isDesktop,
-}: Omit<EffectsOverviewPanelProps, 'isVisible'>) {
+function EffectsOverviewPanelBody({ isDesktop }: Omit<EffectsOverviewPanelProps, 'isVisible'>) {
   const { data: fxState, isLoading } = useFxStateQuery()
   const [removeFx] = useRemoveFxMutation()
   // Tempo comes from the speed-master bank, not from the fx frame: `fxState` carried master
@@ -92,19 +87,22 @@ function EffectsOverviewPanelBody({
             </span>
           </div>
 
-          {/* Kill All - shown when in FX view (locked), pushed to end */}
-          {isLocked && (
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={handleKillAll}
-              disabled={totalCount === 0}
-              className="ml-auto"
-            >
-              <OctagonX className="size-4 mr-1" />
-              Kill All
-            </Button>
-          )}
+          {/* Kill All, pushed to the end.
+              It used to appear only while the busk page held this panel locked open. That lock is
+              gone, and gating a control on *which route you are on* was the wrong shape anyway: it
+              made one button live in two places depending on where you had come from. A panel the
+              operator opened deliberately offers its full controls, and `disabled` on an empty
+              stage already says when there is nothing to kill. */}
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={handleKillAll}
+            disabled={totalCount === 0}
+            className="ml-auto"
+          >
+            <OctagonX className="size-4 mr-1" />
+            Kill All
+          </Button>
         </div>
       ) : (
         /* MOBILE: one compact row of controls. It was two until the palette strip below it
@@ -120,18 +118,16 @@ function EffectsOverviewPanelBody({
           <span className="text-xs text-muted-foreground">
             {totalCount === 0 ? 'No FX' : `${runningCount}/${totalCount} FX`}
           </span>
-          {isLocked && (
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={handleKillAll}
-              disabled={totalCount === 0}
-              className="ml-auto h-7 px-2"
-              title="Kill All"
-            >
-              <OctagonX className="size-3.5" />
-            </Button>
-          )}
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={handleKillAll}
+            disabled={totalCount === 0}
+            className="ml-auto h-7 px-2"
+            title="Kill All"
+          >
+            <OctagonX className="size-3.5" />
+          </Button>
         </div>
       )}
     </div>
