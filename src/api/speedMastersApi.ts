@@ -18,6 +18,18 @@ export interface SpeedMaster {
   /** How the tempo was last set — display only. */
   source: 'MANUAL' | 'TAP'
   notes?: string | null
+  /**
+   * Effect-library category this master is the apply-time default for (`dimmer` / `colour` /
+   * `position`), or null/absent to route nothing. Unique within a project — the server 409s
+   * with `SPEED_MASTER_USAGE_TAKEN` on a second claimant.
+   */
+  usage?: string | null
+  /**
+   * Follow ratio over master 1: this master's tempo is `m1.bpm * followNum / followDen`.
+   * Both null (or absent) means a manual tempo. Master 1 itself may never follow.
+   */
+  followNum?: number | null
+  followDen?: number | null
   /** Persisted rows referencing this master. Gates delete. */
   referenceCount: number
 }
@@ -27,12 +39,30 @@ export interface CreateSpeedMasterRequest {
   name?: string
   bpm?: number
   notes?: string
+  /** See {@link SpeedMaster.usage}. */
+  usage?: string | null
+  /** See {@link SpeedMaster.followNum} — both-or-neither, and never alongside `bpm`. */
+  followNum?: number | null
+  followDen?: number | null
 }
 
+/**
+ * PUT patch body — **only the keys present are changed**, which is why every field is optional
+ * and nullable rather than defaulted. Three server-side rules the caller must respect:
+ *
+ * - `followNum` and `followDen` move together. A half-patch is a 400; unlinking is both
+ *   explicitly `null`.
+ * - `bpm` must not be sent when the resulting state follows master 1 (400
+ *   `SPEED_MASTER_FOLLOWER`) — a follower's tempo is derived, not stored.
+ * - `usage` present-with-null clears the routing.
+ */
 export interface UpdateSpeedMasterRequest {
   name?: string
   bpm?: number
   notes?: string | null
+  usage?: string | null
+  followNum?: number | null
+  followDen?: number | null
 }
 
 /** 409 body when deleting a referenced master without `force`. */

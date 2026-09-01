@@ -227,3 +227,42 @@ describe('SpeedMastersChip — the phone arm', () => {
     expect(setSpeedMasterBpm).not.toHaveBeenCalled()
   })
 })
+
+describe('a master that follows master 1', () => {
+  it('trades TAP for its ratio and stops offering the tempo draft', () => {
+    // The server refuses both writes on a follower (SPEED_MASTER_FOLLOWER) because its tempo is
+    // derived from master 1. The refusal stays as a backstop for writers with no affordance to
+    // remove — a MIDI surface, a stale tab — but nothing here should be a button that can't work.
+    liveMasters = [master(1), master(2, { bpm: 60, followNum: 1, followDen: 2 })]
+    render(<SpeedMasters />)
+
+    expect(screen.queryByLabelText('Tap tempo for master 2')).not.toBeInTheDocument()
+    expect(
+      screen.getByLabelText('Master 2 follows Master 1 at 1/2'),
+    ).toHaveTextContent('½')
+
+    // Master 1 keeps both — it is what the follower derives from. (Every width arm is mounted
+    // at once, and master 1 is the railed arm's default selection, so it appears more than once.)
+    expect(screen.getAllByLabelText('Tap tempo for master 1').length).toBeGreaterThan(0)
+  })
+
+  it('does not open a BPM draft when its readout is clicked', () => {
+    liveMasters = [master(1), master(2, { bpm: 60, followNum: 1, followDen: 2 })]
+    render(<SpeedMasters />)
+
+    fireEvent.click(screen.getByText('60'))
+
+    expect(screen.queryByLabelText('Master 2 BPM')).not.toBeInTheDocument()
+    expect(setSpeedMasterBpm).not.toHaveBeenCalled()
+  })
+
+  it('applies the same rule in the phone popover', () => {
+    // Three surfaces offer tap + click-to-type; a follower that is inert on the ShowBar and
+    // tappable on a phone is the same bug in a narrower window.
+    liveMasters = [master(1), master(2, { bpm: 60, followNum: 1, followDen: 2 })]
+    openChip()
+
+    expect(screen.queryByLabelText('Tap tempo for master 2')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Master 2 follows Master 1 at 1/2')).toBeInTheDocument()
+  })
+})

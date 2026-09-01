@@ -7,6 +7,11 @@ import { BeatIndicator } from './BeatIndicator'
 import { formatBpm, useBpmDraft } from '../hooks/useBpmDraft'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { setSpeedMasterBpm, tapSpeedMaster, useSpeedMasterLiveQuery } from '../store/speedMasters'
+import {
+  followRatioOf,
+  followerTempoLockedReason,
+  formatFollowRatio,
+} from '../lib/speedMasterModel'
 import { useIsDeskConnected } from '../store/status'
 import { DESK_OFFLINE_LABEL } from '../api/wsGesture'
 import type { SpeedMasterLiveState } from '../api/speedMastersWsApi'
@@ -296,6 +301,14 @@ function MasterTile({ master }: { master: TileMaster }) {
   // — so against a dead socket the operator taps a bar's worth of beats and the number never
   // moves. The tile keeps *showing* the tempo; only the two writes stop.
   const connected = useIsDeskConnected()
+  // A follower's tempo is derived from master 1, and the server refuses both writes on it
+  // (SPEED_MASTER_FOLLOWER). So the tile trades TAP for the ratio and stops offering the draft
+  // — the refusal still exists as a backstop for writers with no affordance to remove (a MIDI
+  // surface, a stale tab), but nothing here should be a button that cannot work.
+  const follow = followRatioOf(master)
+  const lockedReason = follow
+    ? followerTempoLockedReason(master.name || `Master ${master.index}`, follow.num, follow.den)
+    : null
 
   return (
     <>
@@ -322,12 +335,11 @@ function MasterTile({ master }: { master: TileMaster }) {
         ) : (
           <button
             type="button"
-            disabled={master.bpm == null || !connected}
+            disabled={master.bpm == null || !connected || lockedReason != null}
             onClick={() => master.bpm != null && start(master.bpm)}
             title={
-              connected
-                ? `Master ${master.index} — click to type a tempo`
-                : DESK_OFFLINE_LABEL
+              lockedReason ??
+              (connected ? `Master ${master.index} — click to type a tempo` : DESK_OFFLINE_LABEL)
             }
             className="text-left font-mono text-lg font-bold leading-none tabular-nums text-foreground transition-colors hover:text-primary disabled:hover:text-foreground @max-[700px]:text-[15px]"
           >
@@ -335,16 +347,28 @@ function MasterTile({ master }: { master: TileMaster }) {
           </button>
         )}
       </div>
-      <button
-        type="button"
-        onClick={() => tapSpeedMaster(master.uuid)}
-        disabled={!connected}
-        title={connected ? undefined : DESK_OFFLINE_LABEL}
-        aria-label={`Tap tempo for master ${master.index}`}
-        className="flex items-center justify-center border-l px-3 text-xs font-bold uppercase tracking-[0.08em] transition-colors hover:bg-primary hover:text-primary-foreground active:bg-primary active:text-primary-foreground @max-[700px]:px-2 @max-[700px]:text-[11px]"
-      >
-        TAP
-      </button>
+      {/* Same cell, same borders — a follower swaps TAP for what it is following at, so linking
+          a master never reflows the bar. */}
+      {follow ? (
+        <span
+          title={lockedReason ?? undefined}
+          aria-label={`Master ${master.index} follows Master 1 at ${follow.num}/${follow.den}`}
+          className="flex items-center justify-center border-l px-3 text-xs font-bold tabular-nums text-muted-foreground @max-[700px]:px-2 @max-[700px]:text-[11px]"
+        >
+          {formatFollowRatio(follow.num, follow.den)}
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => tapSpeedMaster(master.uuid)}
+          disabled={!connected}
+          title={connected ? undefined : DESK_OFFLINE_LABEL}
+          aria-label={`Tap tempo for master ${master.index}`}
+          className="flex items-center justify-center border-l px-3 text-xs font-bold uppercase tracking-[0.08em] transition-colors hover:bg-primary hover:text-primary-foreground active:bg-primary active:text-primary-foreground @max-[700px]:px-2 @max-[700px]:text-[11px]"
+        >
+          TAP
+        </button>
+      )}
     </>
   )
 }
@@ -360,6 +384,11 @@ function MasterRow({ master }: { master: TileMaster }) {
   )
   /** Same two writes as `MasterTile` above, in the narrow arm's popover. */
   const connected = useIsDeskConnected()
+  /** And the same follower rule — the phone arm must not offer a write the server refuses. */
+  const follow = followRatioOf(master)
+  const lockedReason = follow
+    ? followerTempoLockedReason(master.name || `Master ${master.index}`, follow.num, follow.den)
+    : null
 
   return (
     <div
@@ -387,26 +416,37 @@ function MasterRow({ master }: { master: TileMaster }) {
       ) : (
         <button
           type="button"
-          disabled={master.bpm == null || !connected}
+          disabled={master.bpm == null || !connected || lockedReason != null}
           onClick={() => master.bpm != null && start(master.bpm)}
           title={
-            connected ? `Master ${master.index} — click to type a tempo` : DESK_OFFLINE_LABEL
+            lockedReason ??
+            (connected ? `Master ${master.index} — click to type a tempo` : DESK_OFFLINE_LABEL)
           }
           className="font-mono text-sm font-bold tabular-nums transition-colors hover:text-primary disabled:hover:text-foreground"
         >
           {master.bpm == null ? '—' : formatBpm(master.bpm)}
         </button>
       )}
-      <button
-        type="button"
-        onClick={() => tapSpeedMaster(master.uuid)}
-        disabled={!connected}
-        title={connected ? undefined : DESK_OFFLINE_LABEL}
-        aria-label={`Tap tempo for master ${master.index}`}
-        className="rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] transition-colors hover:bg-primary hover:text-primary-foreground"
-      >
-        TAP
-      </button>
+      {follow ? (
+        <span
+          title={lockedReason ?? undefined}
+          aria-label={`Master ${master.index} follows Master 1 at ${follow.num}/${follow.den}`}
+          className="rounded border px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-muted-foreground"
+        >
+          {formatFollowRatio(follow.num, follow.den)}
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => tapSpeedMaster(master.uuid)}
+          disabled={!connected}
+          title={connected ? undefined : DESK_OFFLINE_LABEL}
+          aria-label={`Tap tempo for master ${master.index}`}
+          className="rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] transition-colors hover:bg-primary hover:text-primary-foreground"
+        >
+          TAP
+        </button>
+      )}
     </div>
   )
 }

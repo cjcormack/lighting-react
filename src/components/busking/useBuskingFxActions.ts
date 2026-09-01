@@ -26,8 +26,14 @@ import {
 interface BuskingDefaults {
   /** Beat division a one-tap apply uses. */
   defaultBeatDivision: number
-  /** Pad-wide default speed master (uuid; null → master 1). */
-  defaultSpeedMasterUuid: string | null
+  /**
+   * Apply-time speed-master routing: effect category in, master uuid (or null for master 1) out.
+   *
+   * Passed in rather than resolved here so the pad and the configure sheet stamp identically —
+   * the sheet has to *show* what a press would do, which means both must ask the same question
+   * of the same lookup. `useBuskingState` owns the one instance.
+   */
+  speedMasterForCategory: (category: string | null | undefined) => string | null
 }
 
 /**
@@ -39,7 +45,7 @@ interface BuskingDefaults {
  */
 export function useBuskingFxActions({
   defaultBeatDivision,
-  defaultSpeedMasterUuid,
+  speedMasterForCategory,
 }: BuskingDefaults) {
   const { data: fixtureList } = useFixtureListQuery()
   const { data: currentProject } = useCurrentProjectQuery()
@@ -121,14 +127,18 @@ export function useBuskingFxActions({
             blendMode: 'OVERRIDE' as BlendMode,
             phaseOffset: 0,
             parameters: defaults,
-            speedMasterUuid: defaultSpeedMasterUuid,
+            // Busking-view plan D1: a one-tap apply is *stamped* with the master whose usage
+            // matches this effect's family, here, at creation. Nothing resolves usage later —
+            // the instance carries a concrete uuid, visible and editable afterwards like any
+            // other. A category no master claims resolves to null, which is master 1.
+            speedMasterUuid: speedMasterForCategory(effect.category),
           }),
         )
         .filter((p): p is Promise<unknown> => p !== null)
 
       await Promise.all(additions).catch(ignoreReportedError)
     },
-    [defaultBeatDivision, defaultSpeedMasterUuid, addEffect, removeFx, removeGroupFx],
+    [defaultBeatDivision, speedMasterForCategory, addEffect, removeFx, removeGroupFx],
   )
 
   /** The configure sheet's apply: the same create, with the operator's own settings. */

@@ -17,6 +17,13 @@ import {
   useSpeedMasterListQuery,
   useSpeedMasterLiveQuery,
 } from '../store/speedMasters'
+import {
+  describeFollow,
+  followRatioOf,
+  formatFollowRatio,
+  followerTempoLockedReason,
+  usageLabel,
+} from '../lib/speedMasterModel'
 import type { SpeedMaster } from '../api/speedMastersApi'
 import type { SpeedMasterLiveState } from '../api/speedMastersWsApi'
 import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
@@ -118,6 +125,14 @@ function SpeedMasterRow({
     master.uuid,
     (next) => setSpeedMasterBpm(uuidForWrites, next),
   )
+  // Read the ratio off the persisted row rather than the live frame: this page joins the two by
+  // uuid and the row is the one that exists before the first frame arrives. A follower's tempo
+  // is master 1's business, so both writes go — same rule as the ShowBar tiles.
+  const follow = followRatioOf(master)
+  const lockedReason = follow
+    ? followerTempoLockedReason(master.name, follow.num, follow.den)
+    : null
+  const usage = usageLabel(master.usage)
 
   return (
     <div className="flex items-center gap-3 rounded-md border bg-card p-3">
@@ -139,6 +154,22 @@ function SpeedMasterRow({
           {master.masterIndex === 1 && (
             <Badge variant="secondary" className="text-[10px]">
               Global
+            </Badge>
+          )}
+          {usage != null && (
+            <Badge
+              variant="outline"
+              className="text-[10px]"
+              title={`Busked ${usage.toLowerCase()} effects with no explicit master run on this one`}
+            >
+              {usage}
+            </Badge>
+          )}
+          {/* A follower's provenance reads MANUAL (its tempo is written through, not tapped),
+              so these two badges never collide. */}
+          {follow != null && (
+            <Badge variant="outline" className="text-[10px]" title={lockedReason ?? undefined}>
+              {describeFollow(follow.num, follow.den)}
             </Badge>
           )}
           {live?.source === 'TAP' && (
@@ -169,10 +200,11 @@ function SpeedMasterRow({
       ) : (
         <button
           type="button"
+          disabled={lockedReason != null}
           onClick={() => start(bpm)}
-          title={`Master ${master.masterIndex} — click to type a tempo`}
+          title={lockedReason ?? `Master ${master.masterIndex} — click to type a tempo`}
           className={cn(
-            'w-[6ch] shrink-0 text-right font-mono text-lg font-bold tabular-nums transition-colors hover:text-primary',
+            'w-[6ch] shrink-0 text-right font-mono text-lg font-bold tabular-nums transition-colors hover:text-primary disabled:hover:text-foreground',
             live == null && 'text-muted-foreground',
           )}
         >
@@ -180,15 +212,25 @@ function SpeedMasterRow({
         </button>
       )}
 
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => tapSpeedMaster(uuidForWrites)}
-        aria-label={`Tap tempo for master ${master.masterIndex}`}
-        className="shrink-0 font-bold tracking-[0.08em]"
-      >
-        TAP
-      </Button>
+      {follow ? (
+        <span
+          title={lockedReason ?? undefined}
+          aria-label={`Master ${master.masterIndex} follows Master 1 at ${follow.num}/${follow.den}`}
+          className="flex h-8 shrink-0 items-center rounded-md border px-3 text-sm font-bold tabular-nums text-muted-foreground"
+        >
+          {formatFollowRatio(follow.num, follow.den)}
+        </span>
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => tapSpeedMaster(uuidForWrites)}
+          aria-label={`Tap tempo for master ${master.masterIndex}`}
+          className="shrink-0 font-bold tracking-[0.08em]"
+        >
+          TAP
+        </Button>
+      )}
     </div>
   )
 }

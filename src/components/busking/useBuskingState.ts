@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useEffectLibraryQuery } from '@/store/fixtureFx'
+import { useSpeedMasterForCategory } from '@/store/speedMasters'
 import { useFixtureListQuery } from '@/store/fixtures'
 import type { SettingPropertyDescriptor, SliderPropertyDescriptor } from '@/store/fixtures'
 import {
@@ -32,16 +33,17 @@ export function useBuskingState() {
   const { selectedTargets, selectTarget, toggleTarget, clearSelection } = useBuskingSelection()
 
   const [defaultBeatDivision, setDefaultBeatDivision] = useState(1.0)
-  // Pad-wide default master (uuid; null → master 1). One-tap applies and the configure
-  // sheet's starting value both take it, so a busk can be pinned to M2 wholesale.
-  const [defaultSpeedMasterUuid, setDefaultSpeedMasterUuid] = useState<string | null>(null)
   const [editingEffect, setEditingEffect] = useState<ActiveEffectContext | null>(null)
 
   const { data: library } = useEffectLibraryQuery()
   const { data: fixtureList } = useFixtureListQuery()
 
   const presence = useBuskingPresence()
-  const actions = useBuskingFxActions({ defaultBeatDivision, defaultSpeedMasterUuid })
+  // The pad has no speed-master picker: a busked effect is routed by the master's declared
+  // usage instead, which is what keeps a pad press to one press. One instance, shared with the
+  // configure sheet so both agree on where a press would land.
+  const speedMasterForCategory = useSpeedMasterForCategory()
+  const actions = useBuskingFxActions({ defaultBeatDivision, speedMasterForCategory })
 
   const propertyTargets = useMemo(
     () => [...selectedTargets.values()].map((t) => fxPropertyTarget(t, fixtureList)),
@@ -108,9 +110,8 @@ export function useBuskingState() {
     defaultBeatDivision,
     setDefaultBeatDivision,
 
-    // Pad-wide default speed master
-    defaultSpeedMasterUuid,
-    setDefaultSpeedMasterUuid,
+    // Apply-time speed-master routing (there is no pad-wide picker: usage decides)
+    speedMasterForCategory,
 
     // Effect data
     effectsByCategory,

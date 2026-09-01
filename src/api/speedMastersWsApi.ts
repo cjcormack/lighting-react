@@ -14,6 +14,31 @@ export interface SpeedMasterLiveState {
   isRunning: boolean
   /** How the tempo was last set — display only. */
   source: 'MANUAL' | 'TAP'
+  /**
+   * Effect-library category this master is the apply-time routing default for, or null.
+   *
+   * Carried on `speedMasters.state` only — `.changed` is the tempo push and says nothing about
+   * routing, so anything reading this must be fed by a state frame, not a change frame.
+   */
+  usage?: string | null
+  /** Follow ratio over master 1 (`bpm = m1 x num/den`); both null = manual. `.state` only. */
+  followNum?: number | null
+  followDen?: number | null
+}
+
+/**
+ * A tempo write the server refused — `speedMasters.error`, unicast to whoever sent it.
+ *
+ * [code] is `SPEED_MASTER_FOLLOWER` (the master derives its tempo from master 1) or
+ * `SPEED_MASTER_UNKNOWN` (the uuid names no master, and the write was dropped rather than
+ * redirected). [message] is the server's single operator-facing phrasing, shared with the MIDI
+ * surface, so clients display it rather than composing their own. A full `speedMasters.state`
+ * frame always follows, which is what snaps a stale client back — there is nothing to refetch.
+ */
+export interface SpeedMasterError {
+  masterUuid: string | null
+  code: string
+  message: string
 }
 
 /** One master crossing a beat boundary, as streamed by `speedMasters.beat`. */
@@ -40,6 +65,8 @@ export interface SpeedMastersWsApi {
   subscribeList(fn: () => void): Subscription
   /** Live bank pushes — the full masters array after every state frame or tempo change. */
   subscribe(fn: (masters: SpeedMasterLiveState[]) => void): Subscription
+  /** Refused tempo writes — see {@link SpeedMasterError}. Unicast, so only this tab's own. */
+  subscribeError(fn: (error: SpeedMasterError) => void): Subscription
   /** Latest known bank, slot order (master 1 first). Empty before the first state frame. */
   getState(): SpeedMasterLiveState[]
   /**
@@ -75,11 +102,13 @@ type SpeedMasterInMessage =
       timestampMs: number
     }
   | ({ type: 'speedMasters.beat' } & SpeedMasterBeat)
+  | ({ type: 'speedMasters.error' } & SpeedMasterError)
   | { type: 'speedMasters.listChanged' }
 
 export function createSpeedMastersWsApi(conn: InternalApiConnection): SpeedMastersWsApi {
   const listChanged = createWsSubscribable<void>()
   const stateChanged = createWsSubscribable<SpeedMasterLiveState[]>()
+  const errors = createWsSubscribable<SpeedMasterError>()
 
   // One subscribable per master rather than one shared stream that every indicator filters:
   // a bank of four masters at 120 BPM is a steady trickle of frames, and waking every
@@ -135,6 +164,10 @@ export function createSpeedMastersWsApi(conn: InternalApiConnection): SpeedMaste
             : m,
         )
         stateChanged.notify(masters)
+      } else if (message.type === 'speedMasters.error') {
+        // Report only. The state frame the server sends straight after carries the truth this
+        // client disagreed with, so there is nothing to patch or refetch here.
+        errors.notify(message)
       } else if (message.type === 'speedMasters.beat') {
         beats.notify(beatKey(message.masterUuid), message)
       } else if (message.type === 'speedMasters.listChanged') {
@@ -149,6 +182,7 @@ export function createSpeedMastersWsApi(conn: InternalApiConnection): SpeedMaste
   return {
     subscribeList: listChanged.api.subscribe,
     subscribe: stateChanged.api.subscribe,
+    subscribeError: errors.api.subscribe,
     getState: () => masters,
     subscribeBeat(masterUuid, fn) {
       const key = beatKey(masterUuid)

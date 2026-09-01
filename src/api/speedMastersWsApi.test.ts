@@ -287,3 +287,42 @@ describe('createSpeedMastersWsApi', () => {
     expect(api.getState()).toEqual([MASTER_1, MASTER_2])
   })
 })
+
+describe('speedMasters.error', () => {
+  it('reaches subscribeError with the server phrasing intact', () => {
+    // The message is the server's single operator-facing sentence, shared with the MIDI log —
+    // clients display it rather than composing their own from the code.
+    const { conn, frame } = fakeWsConnection()
+    const api = createSpeedMastersWsApi(conn)
+    const onError = vi.fn()
+    api.subscribeError(onError)
+
+    frame({
+      type: 'speedMasters.error',
+      masterUuid: MASTER_2.uuid,
+      code: 'SPEED_MASTER_FOLLOWER',
+      message: 'Master 2 follows Master 1 at 1/2 — unlink it in the speed-master sheet to set its tempo',
+    })
+
+    expect(onError).toHaveBeenCalledTimes(1)
+    expect(onError.mock.calls[0][0]).toMatchObject({
+      masterUuid: MASTER_2.uuid,
+      code: 'SPEED_MASTER_FOLLOWER',
+    })
+  })
+
+  it('leaves the bank alone — the state frame that follows carries the truth', () => {
+    const { conn, frame } = fakeWsConnection()
+    const api = createSpeedMastersWsApi(conn)
+    frame(stateFrame())
+
+    frame({
+      type: 'speedMasters.error',
+      masterUuid: MASTER_2.uuid,
+      code: 'SPEED_MASTER_UNKNOWN',
+      message: 'No speed master with that uuid — the write was dropped',
+    })
+
+    expect(api.getState()).toEqual([MASTER_1, MASTER_2])
+  })
+})

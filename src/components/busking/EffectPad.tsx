@@ -5,7 +5,6 @@ import { Badge } from '@/components/ui/badge'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { cn } from '@/lib/utils'
 import { EFFECT_CATEGORY_INFO, BEAT_DIVISION_OPTIONS } from '@/components/fx/fxConstants'
-import { SpeedMasterSelect } from '@/components/fx/SpeedMasterSelect'
 import { EffectPadButton } from './EffectPadButton'
 import { PropertyPadButton } from './PropertyPadButton'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
@@ -34,9 +33,6 @@ interface EffectPadProps {
   // Beat division
   defaultBeatDivision: number
   onBeatDivisionChange: (value: number) => void
-  // Pad-wide default speed master (uuid; null → master 1)
-  defaultSpeedMasterUuid: string | null
-  onSpeedMasterChange: (masterUuid: string) => void
   // Property buttons (settings & sliders)
   propertyButtons: PropertyButton[]
   getPropertyPresence: (button: PropertyButton) => EffectPresence
@@ -56,8 +52,6 @@ export function EffectPad({
   currentProjectId,
   defaultBeatDivision,
   onBeatDivisionChange,
-  defaultSpeedMasterUuid,
-  onSpeedMasterChange,
   propertyButtons,
   getPropertyPresence,
   onPropertyToggle,
@@ -109,14 +103,6 @@ export function EffectPad({
                     </ToggleGroupItem>
                   ))}
                 </ToggleGroup>
-                {/* Pad-wide default master: one-tap applies and the configure sheet's
-                    starting value both take it, so a busk can be pinned to M2 wholesale. */}
-                <div className="mt-2 max-w-[16rem]">
-                  <SpeedMasterSelect
-                    value={defaultSpeedMasterUuid}
-                    onChange={onSpeedMasterChange}
-                  />
-                </div>
               </CategorySection>
             </React.Fragment>
           )

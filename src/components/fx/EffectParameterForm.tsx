@@ -67,6 +67,11 @@ interface EffectParameterFormProps {
   speedMasterUuid?: string | null
   onSpeedMasterChange?: (masterUuid: string) => void
   /**
+   * Optional hint under the speed picker. The busking pad uses it to say that the pre-selected
+   * master came from the effect's family rather than from a choice the operator made.
+   */
+  speedMasterDescription?: string
+  /**
    * The effect's wall-clock rate master (uuid; null → unscaled). Rendered only for
    * WALL_CLOCK effects, and only when the change callback is supplied.
    */
@@ -109,6 +114,7 @@ export function EffectParameterForm({
   onStepTimingChange,
   speedMasterUuid,
   onSpeedMasterChange,
+  speedMasterDescription,
   rateSpeedMasterUuid,
   onRateSpeedMasterChange,
 }: EffectParameterFormProps) {
@@ -198,7 +204,11 @@ export function EffectParameterForm({
           — it is not driven by ticks at all — so showing that picker here would be a knob
           that does nothing. It gets the rate master instead, which scales its cycle. */}
       {onSpeedMasterChange && !isWallClock && (
-        <SpeedMasterSelect value={speedMasterUuid} onChange={onSpeedMasterChange} />
+        <SpeedMasterSelect
+          value={speedMasterUuid}
+          onChange={onSpeedMasterChange}
+          description={speedMasterDescription}
+        />
       )}
       {onRateSpeedMasterChange && isWallClock && (
         <SpeedMasterSelect

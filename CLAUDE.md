@@ -537,6 +537,45 @@ from the bar's `@container` width **and** the master count (`TILED_ARM`, because
 query cannot see how many masters there are): a named tile each, one railed tile with a pill
 per master, or `SpeedMastersChip` below 440px.
 
+**A master can also declare a `usage` and follow master 1.** Both landed with the busking view's
+speed-master work, and both are edited only in `SpeedMasterDetailSheet`:
+
+- **Usage** (`dimmer` / `colour` / `position`) is the **apply-time routing default**. A busked
+  effect with no explicit master is *stamped* with the usage-matching master's uuid at the moment
+  it is created — `useSpeedMasterForCategory` in `store/speedMasters.ts`, the rule itself in
+  `lib/speedMasterModel.ts`. Nothing resolves usage later, and `null` still means master 1
+  everywhere; that invariant does not move. This is what lets a busking pad stay **one press**:
+  the pad has no speed picker at all any more, and the long-press configure sheet opens
+  pre-selected on the routed master so the routing is visible at the press rather than after it.
+  Usage is unique per project (the server 409s `SPEED_MASTER_USAGE_TAKEN`), and `controls` and
+  `composite` are deliberately not routable — those land on master 1, which is what an unmatched
+  category is defined to do. `speedMasterModel.test.ts` pins the vocabulary against
+  `EFFECT_CATEGORY_INFO` the way `maskPicker.test.ts` pins the family lists.
+- **Follow** (`followNum` / `followDen`, both null = manual) makes a master derive its tempo from
+  master 1 as `m1.bpm × num/den`. The server owns that arithmetic — write-through in
+  `SpeedMasterBank`, arriving here as ordinary `speedMasters.changed` frames — so **this side
+  never computes a follower's live tempo**, only previews and labels. Master 1 itself may never
+  follow, so the sheet hides the control for it rather than disabling it.
+
+**A follower's tempo cannot be typed or tapped, and exactly three surfaces offer those:**
+`MasterTile` and `MasterRow` in `components/SpeedMasters.tsx`, and `SpeedMasterRow` in
+`routes/SpeedMasters.tsx`. All three swap TAP for the ratio and stop opening the draft. A fourth
+TAP button exists in `EffectsOverviewPanel` and needs no arm — it taps master 1 only.
+`speedMasters.error` is the backstop for writers with no affordance to remove (a MIDI surface, a
+script, a stale tab); `store/speedMasters.ts` toasts it, keyed per master so a burst of hardware
+taps replaces rather than stacks.
+
+Two traps in that area:
+
+- **`speedMasterLive`'s field-wise merge must copy every new field.** It writes named fields into
+  the Immer draft rather than replacing the array (so a bpm push doesn't churn tile identity), so
+  a field it forgets is written once from the first frame and never again — a usage retagged in
+  another tab would leave this one routing to the old master for the life of the page.
+- **Usage and follow ride `speedMasters.state`, not `.changed`.** The change frame is the tempo
+  push and says nothing about routing.
+- **Never render a link PUT's response `bpm`** — it is the pre-link stored value beside the ratio
+  it just accepted (`FU-SPEED-LINK-PUT-STALE-BPM` in lighting7). The state frame corrects it.
+
 Two independent per-effect references, both uuid-addressed:
 
 - `speedMasterUuid` — which tempo an effect's beats come from. BEAT effects only.

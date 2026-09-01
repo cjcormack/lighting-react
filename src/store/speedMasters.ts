@@ -1,6 +1,9 @@
+import { useMemo } from 'react'
+import { toast } from 'sonner'
 import { restApi } from './restApi'
 import { lightingApi } from '../api/lightingApi'
 import { store } from './index'
+import { resolveSpeedMasterForCategory, type RoutableMaster } from '../lib/speedMasterModel'
 import type { SpeedMasterBeat, SpeedMasterLiveState } from '../api/speedMastersWsApi'
 import type {
   CreateSpeedMasterRequest,
@@ -13,6 +16,37 @@ import type {
 // (Live BPM deliberately does NOT go through invalidation — see speedMasterLive below.)
 lightingApi.speedMasters.subscribeList(function () {
   store.dispatch(restApi.util.invalidateTags(['SpeedMaster', 'SpeedMasterList']))
+})
+
+/**
+ * Shared sonner id for every refused tempo write, per master.
+ *
+ * A hardware TAP is a burst — an operator taps four beats on a linked master and the server
+ * refuses four times. Keying the toast by master makes sonner replace rather than stack, the
+ * same reasoning as `PROGRAMMER_ERROR_TOAST_ID`, while still letting two different masters each
+ * say their piece.
+ */
+export const speedMasterErrorToastId = (masterUuid: string | null) =>
+  `speed-master-error-${masterUuid ?? 'master-1'}`
+
+/**
+ * Bridge `speedMasters.error` into a toast.
+ *
+ * The UI removes the affordance — a follower's tile shows its ratio where TAP was — so this is
+ * the backstop for the writers that have no affordance to remove: a MIDI surface bound to that
+ * master, a script, another tab that hasn't seen the link yet. Without it those writes are
+ * silently dropped and the operator watches a tempo not move.
+ *
+ * The frame is unicast to whoever sent the write, so a second tab never toasts for someone
+ * else's mistake, and [message] is already the server's own prose — the single phrasing shared
+ * with the MIDI log — so it needs no `formatError` and no code-to-copy mapping here. Nothing is
+ * invalidated: a full `speedMasters.state` frame always follows and carries the truth.
+ *
+ * Module scope (form 1 of CLAUDE.md's three) like the list bridge above: this slice is not on
+ * the earliest render path, so the deferred form buys nothing.
+ */
+lightingApi.speedMasters.subscribeError(function (error) {
+  toast.error(error.message, { id: speedMasterErrorToastId(error.masterUuid) })
 })
 
 export const speedMastersApi = restApi.injectEndpoints({
@@ -91,6 +125,21 @@ export const speedMastersApi = restApi.injectEndpoints({
               existing.bpm = master.bpm
               existing.isRunning = master.isRunning
               existing.source = master.source
+              // Routing and follow move on CRUD, not at tap rate — but they still have to be
+              // copied here. A field this merge forgets is written once, from the first frame,
+              // and then never again: a usage retagged on another tab would leave this one
+              // routing busked effects at the old master for the life of the page.
+              //
+              // Compared before writing, unlike the four above, because these three are optional
+              // on the wire and the server encodes no defaults — an unrouted, unlinked master,
+              // which is the common case, arrives with the keys *absent*. Assigning `undefined`
+              // over an absent key counts as a mutation to Immer, so an unconditional write would
+              // hand every master a fresh identity on every tempo push: exactly the churn this
+              // field-wise merge exists to avoid, and which `useSpeedMasterDisplay`'s per-master
+              // subscription depends on not happening.
+              if (existing.usage !== master.usage) existing.usage = master.usage
+              if (existing.followNum !== master.followNum) existing.followNum = master.followNum
+              if (existing.followDen !== master.followDen) existing.followDen = master.followDen
             })
           })
         })
@@ -119,6 +168,42 @@ export function useSpeedMasterDisplay(speedMasterUuid: string | null | undefined
     }),
   })
   return master && master.index !== 1 ? master : null
+}
+
+/**
+ * The apply-time routing lookup: category in, speed-master uuid (or null for master 1) out.
+ *
+ * Reads the **live** bank rather than the project list because every caller is acting on the
+ * current show and already has the socket open — no `projectId`, no second fetch, and the WS
+ * layer re-requests a state frame on `speedMasters.listChanged`, so a usage retagged anywhere
+ * lands here. (The manage page and the detail sheet use the list query instead: they are
+ * project-scoped and may be looking at a project that isn't current.)
+ *
+ * Selects a **string** rather than the masters themselves. RTK Query shallow-compares what
+ * `selectFromResult` returns, and the live array is rebuilt on every tempo push — so returning
+ * an array or a map here would hand back a new identity per tap of any master and re-render
+ * every pad that holds this hook. The key only changes when the routing actually does.
+ */
+export function useSpeedMasterForCategory(): (category: string | null | undefined) => string | null {
+  const { routingKey } = useSpeedMasterLiveQuery(undefined, {
+    selectFromResult: ({ data }) => ({
+      routingKey: (data ?? [])
+        .filter((m) => m.usage != null && m.uuid != null)
+        .map((m) => `${m.usage}\u0000${m.uuid}`)
+        .join('\u001f'),
+    }),
+  })
+
+  return useMemo(() => {
+    const routed: RoutableMaster[] =
+      routingKey === ''
+        ? []
+        : routingKey.split('\u001f').map((pair) => {
+            const [usage, uuid] = pair.split('\u0000')
+            return { usage, uuid }
+          })
+    return (category) => resolveSpeedMasterForCategory(routed, category)
+  }, [routingKey])
 }
 
 /**

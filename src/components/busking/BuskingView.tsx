@@ -19,6 +19,7 @@ import { EffectPad } from './EffectPad'
 import { SelectedTargetSummary } from './SelectedTargetSummary'
 import { ActiveEffectSheet } from './ActiveEffectSheet'
 import { ConfigureEffectSheet } from './ConfigureEffectSheet'
+import { usageLabel } from '@/lib/speedMasterModel'
 import { FixtureDetailModal } from '@/components/groups/FixtureDetailModal'
 import { useBuskingState } from './useBuskingState'
 import type { TargetEffectsData } from './buskingTypes'
@@ -53,8 +54,7 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
     clearSelection,
     defaultBeatDivision,
     setDefaultBeatDivision,
-    defaultSpeedMasterUuid,
-    setDefaultSpeedMasterUuid,
+    speedMasterForCategory,
     effectsByCategory,
     computePresence,
     toggleEffect,
@@ -345,8 +345,6 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
               toggleEffect={toggleEffect}
               defaultBeatDivision={defaultBeatDivision}
               onBeatDivisionChange={setDefaultBeatDivision}
-              defaultSpeedMasterUuid={defaultSpeedMasterUuid}
-              onSpeedMasterChange={setDefaultSpeedMasterUuid}
               propertyButtons={propertyButtons}
               computePropertyPresence={computePropertyPresence}
               togglePropertyEffect={togglePropertyEffect}
@@ -387,8 +385,6 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
             toggleEffect={toggleEffect}
             defaultBeatDivision={defaultBeatDivision}
             onBeatDivisionChange={setDefaultBeatDivision}
-            defaultSpeedMasterUuid={defaultSpeedMasterUuid}
-            onSpeedMasterChange={setDefaultSpeedMasterUuid}
             propertyButtons={propertyButtons}
             computePropertyPresence={computePropertyPresence}
             togglePropertyEffect={togglePropertyEffect}
@@ -428,7 +424,15 @@ export function BuskingView({ onSelectionChange }: BuskingViewProps) {
       <ConfigureEffectSheet
         effect={configuringEffect}
         defaultBeatDivision={defaultBeatDivision}
-        defaultSpeedMasterUuid={defaultSpeedMasterUuid}
+        // Seeded with where a plain press would have put it, so the routing is visible at the
+        // moment of the press rather than only after the effect exists. The operator can change
+        // it; the sheet then sends that choice explicitly.
+        defaultSpeedMasterUuid={speedMasterForCategory(configuringEffect?.category)}
+        speedMasterDescription={
+          configuringEffect
+            ? routedMasterNote(configuringEffect.category, speedMasterForCategory)
+            : undefined
+        }
         showDistribution={showDistribution}
         showElementMode={hasMultiElementTarget}
         extendedChannels={extendedChannels}
@@ -459,8 +463,6 @@ function EffectPadWrapper({
   toggleEffect,
   defaultBeatDivision,
   onBeatDivisionChange,
-  defaultSpeedMasterUuid,
-  onSpeedMasterChange,
   propertyButtons,
   computePropertyPresence,
   togglePropertyEffect,
@@ -478,8 +480,6 @@ function EffectPadWrapper({
   toggleEffect: (effect: EffectLibraryEntry, presence: EffectPresence, data: TargetEffectsData[]) => Promise<void>
   defaultBeatDivision: number
   onBeatDivisionChange: (value: number) => void
-  defaultSpeedMasterUuid: string | null
-  onSpeedMasterChange: (masterUuid: string) => void
   propertyButtons: PropertyButton[]
   computePropertyPresence: (button: PropertyButton, data: TargetEffectsData[]) => EffectPresence
   togglePropertyEffect: (button: PropertyButton, presence: EffectPresence, data: TargetEffectsData[], settingLevel?: number) => Promise<void>
@@ -598,8 +598,6 @@ function EffectPadWrapper({
       currentProjectId={currentProjectId}
       defaultBeatDivision={defaultBeatDivision}
       onBeatDivisionChange={onBeatDivisionChange}
-      defaultSpeedMasterUuid={defaultSpeedMasterUuid}
-      onSpeedMasterChange={onSpeedMasterChange}
       propertyButtons={propertyButtons}
       getPropertyPresence={getPropertyPresence}
       onPropertyToggle={handlePropertyToggle}
@@ -671,4 +669,20 @@ function useTargetEffects(target: BuskingTarget | undefined): TargetEffectsData 
       fixtureDirectEffects: isFixture ? fixtureEffects?.direct ?? [] : undefined,
     }
   }, [target, isGroup, isFixture, groupEffects, fixtureEffects])
+}
+
+/**
+ * Why the configure sheet opens on the master it does.
+ *
+ * Said only when usage routing actually matched. With no usage-tagged master for this family the
+ * picker falls back to master 1 like everything else, and captioning that as a routing decision
+ * would credit a rule that did nothing.
+ */
+function routedMasterNote(
+  category: string,
+  resolve: (category: string | null | undefined) => string | null,
+): string | undefined {
+  if (resolve(category) == null) return undefined
+  const label = usageLabel(category) ?? category
+  return `Routed by usage — ${label.toLowerCase()} effects follow this master.`
 }

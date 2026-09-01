@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Sheet,
@@ -16,9 +16,19 @@ import type { EffectLibraryEntry } from '@/store/fixtureFx'
 interface ConfigureEffectSheetProps {
   effect: EffectLibraryEntry | null
   defaultBeatDivision: number
-  /** Pad-wide default speed master (uuid; null → master 1). */
+  /**
+   * Where a plain pad press would have put this effect — the master whose usage matches the
+   * effect's family, or null for master 1. Seeding the picker with it is what makes the routing
+   * visible at the moment of the press; the operator can override, and then the sheet sends
+   * that choice explicitly.
+   */
   defaultSpeedMasterUuid?: string | null
-  /** Pad-wide default wall-clock rate master (uuid; null → unscaled). */
+  /** Caption under the speed picker explaining that seed. Absent when routing didn't match. */
+  speedMasterDescription?: string
+  /**
+   * Default wall-clock rate master (uuid; null → unscaled). Not routed by usage — a rate scale
+   * is a deliberate binding rather than a default worth guessing.
+   */
   defaultRateSpeedMasterUuid?: string | null
   onApply: (params: {
     beatDivision: number
@@ -44,6 +54,7 @@ export function ConfigureEffectSheet({
   effect,
   defaultBeatDivision,
   defaultSpeedMasterUuid = null,
+  speedMasterDescription,
   defaultRateSpeedMasterUuid = null,
   onApply,
   onClose,
@@ -65,23 +76,44 @@ export function ConfigureEffectSheet({
   )
   const [parameters, setParameters] = useState<Record<string, string>>({})
 
-  // Reset state when a new effect is opened
+  // The three seeds, read through a ref so that only *opening an effect* resets the form.
+  //
+  // `defaultSpeedMasterUuid` is derived from the live speed-master bank now that a press is routed
+  // by usage, so it moves on its own: any `speedMasters.listChanged` that retags a master (another
+  // tab, the manage page, an import) changes it. Had it stayed a dependency below, that would fire
+  // the reset mid-edit and silently throw away the parameters, blend mode and phase the operator
+  // had already dialled in on the open sheet.
+  const seedsRef = useRef({
+    defaultBeatDivision,
+    defaultSpeedMasterUuid,
+    defaultRateSpeedMasterUuid,
+  })
+  seedsRef.current = { defaultBeatDivision, defaultSpeedMasterUuid, defaultRateSpeedMasterUuid }
+
+  // Reset state when a new effect is opened. `effect` goes back to null on close, so reopening
+  // the same library entry is still a fresh identity and still re-seeds.
   useEffect(() => {
     if (!effect) return
-    setBeatDivision(defaultBeatDivision)
+    const seeds = seedsRef.current
+    setBeatDivision(seeds.defaultBeatDivision)
     setBlendMode('OVERRIDE')
     setPhaseOffset(0)
     setDistribution('LINEAR')
     setElementMode('PER_FIXTURE')
     setStepTiming(false)
-    setSpeedMasterUuid(defaultSpeedMasterUuid)
-    setRateSpeedMasterUuid(defaultRateSpeedMasterUuid)
+    setSpeedMasterUuid(seeds.defaultSpeedMasterUuid)
+    setRateSpeedMasterUuid(seeds.defaultRateSpeedMasterUuid)
     const defaults: Record<string, string> = {}
     effect.parameters.forEach((p) => {
       defaults[p.name] = p.defaultValue
     })
     setParameters(defaults)
-  }, [effect, defaultBeatDivision, defaultSpeedMasterUuid, defaultRateSpeedMasterUuid])
+  }, [effect])
+
+  // Only said while the picker still holds the seed the routing put there. Once the operator has
+  // overridden it, "routed by usage" would be captioning a master that is no longer selected.
+  const routingNote =
+    speedMasterUuid === defaultSpeedMasterUuid ? speedMasterDescription : undefined
 
   // Resolve the target property name for display
   const targetPropertyName = useMemo(() => {
@@ -142,6 +174,7 @@ export function ConfigureEffectSheet({
               onStepTimingChange={setStepTiming}
               speedMasterUuid={speedMasterUuid}
               onSpeedMasterChange={setSpeedMasterUuid}
+              speedMasterDescription={routingNote}
               rateSpeedMasterUuid={rateSpeedMasterUuid}
               onRateSpeedMasterChange={setRateSpeedMasterUuid}
             />
