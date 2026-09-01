@@ -130,7 +130,7 @@ export const speedMastersApi = restApi.injectEndpoints({
               // and then never again: a usage retagged on another tab would leave this one
               // routing busked effects at the old master for the life of the page.
               //
-              // Compared before writing, unlike the four above, because these three are optional
+              // Compared before writing, unlike the four above, because these are optional
               // on the wire and the server encodes no defaults — an unrouted, unlinked master,
               // which is the common case, arrives with the keys *absent*. Assigning `undefined`
               // over an absent key counts as a mutation to Immer, so an unconditional write would
@@ -140,6 +140,9 @@ export const speedMastersApi = restApi.injectEndpoints({
               if (existing.usage !== master.usage) existing.usage = master.usage
               if (existing.followNum !== master.followNum) existing.followNum = master.followNum
               if (existing.followDen !== master.followDen) existing.followDen = master.followDen
+              if (existing.followTargetUuid !== master.followTargetUuid) {
+                existing.followTargetUuid = master.followTargetUuid
+              }
             })
           })
         })

@@ -20,6 +20,9 @@ import {
 import {
   describeFollow,
   followRatioOf,
+  followTargetOf,
+  leaderLabelOf,
+  leaderNameOf,
   formatFollowRatio,
   followerTempoLockedReason,
   usageLabel,
@@ -86,6 +89,7 @@ export function ProjectSpeedMasters() {
             <SpeedMasterRow
               key={master.id}
               master={master}
+              bank={masters ?? []}
               live={liveByUuid.get(master.uuid) ?? null}
               onOpen={() => setOpenMaster(master)}
             />
@@ -110,10 +114,13 @@ export function ProjectSpeedMasters() {
  */
 function SpeedMasterRow({
   master,
+  bank,
   live,
   onOpen,
 }: {
   master: SpeedMaster
+  /** The whole bank, so a follower's badge can name the master it actually follows. */
+  bank: readonly SpeedMaster[]
   live: SpeedMasterLiveState | null
   onOpen: () => void
 }) {
@@ -129,8 +136,12 @@ function SpeedMasterRow({
   // uuid and the row is the one that exists before the first frame arrives. A follower's tempo
   // is master 1's business, so both writes go — same rule as the ShowBar tiles.
   const follow = followRatioOf(master)
+  const leaderTarget = followTargetOf(master)
+  // One lookup for the tooltip *and* the badge's accessible name — a screen reader told
+  // "follows Master 1" about a follower of M2 is the bug the leader label exists to fix.
+  const leaderName = leaderNameOf(bank, leaderTarget)
   const lockedReason = follow
-    ? followerTempoLockedReason(master.name, follow.num, follow.den)
+    ? followerTempoLockedReason(master.name, follow.num, follow.den, leaderName)
     : null
   const usage = usageLabel(master.usage)
 
@@ -169,7 +180,7 @@ function SpeedMasterRow({
               so these two badges never collide. */}
           {follow != null && (
             <Badge variant="outline" className="text-[10px]" title={lockedReason ?? undefined}>
-              {describeFollow(follow.num, follow.den)}
+              {describeFollow(follow.num, follow.den, leaderLabelOf(bank, leaderTarget))}
             </Badge>
           )}
           {live?.source === 'TAP' && (
@@ -215,7 +226,7 @@ function SpeedMasterRow({
       {follow ? (
         <span
           title={lockedReason ?? undefined}
-          aria-label={`Master ${master.masterIndex} follows Master 1 at ${follow.num}/${follow.den}`}
+          aria-label={`Master ${master.masterIndex} follows ${leaderName} at ${follow.num}/${follow.den}`}
           className="flex h-8 shrink-0 items-center rounded-md border px-3 text-sm font-bold tabular-nums text-muted-foreground"
         >
           {formatFollowRatio(follow.num, follow.den)}

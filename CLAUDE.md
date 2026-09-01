@@ -543,8 +543,8 @@ from the bar's `@container` width **and** the master count (`TILED_ARM`, because
 query cannot see how many masters there are): a named tile each, one railed tile with a pill
 per master, or `SpeedMastersChip` below 440px.
 
-**A master can also declare a `usage` and follow master 1.** Both landed with the busking view's
-speed-master work, and both are edited only in `SpeedMasterDetailSheet`:
+**A master can also declare a `usage` and follow another master.** Both landed with the busking
+view's speed-master work, and both are edited only in `SpeedMasterDetailSheet`:
 
 - **Usage** (`dimmer` / `colour` / `position`) is the **apply-time routing default**. An effect
   created with no explicit master is *stamped* with the usage-matching master's uuid at the moment
@@ -559,11 +559,31 @@ speed-master work, and both are edited only in `SpeedMasterDetailSheet`:
   `composite` are deliberately not routable — those land on master 1, which is what an unmatched
   category is defined to do. `speedMasterModel.test.ts` pins the vocabulary against
   `EFFECT_CATEGORY_INFO` the way `maskPicker.test.ts` pins the family lists.
-- **Follow** (`followNum` / `followDen`, both null = manual) makes a master derive its tempo from
-  master 1 as `m1.bpm × num/den`. The server owns that arithmetic — write-through in
-  `SpeedMasterBank`, arriving here as ordinary `speedMasters.changed` frames — so **this side
-  never computes a follower's live tempo**, only previews and labels. Master 1 itself may never
-  follow, so the sheet hides the control for it rather than disabling it.
+- **Follow** (`followNum` / `followDen`, both null = manual, plus `followTargetUuid`) makes a
+  master run at `leader.bpm × num/den`. The server owns that arithmetic *and the timing*: a
+  follower's clock is **driven** by its leader's tick, so the two beat together rather than merely
+  running at proportional speeds — say that, not "derives its tempo", when explaining the switch.
+  Live values arrive as ordinary `speedMasters.changed` frames, so **this side never computes a
+  follower's live tempo**, only previews and labels. Master 1 itself may never follow, so the
+  sheet hides the control for it rather than disabling it.
+  - **`followTargetUuid` is the leader; null means master 1** — the spelling every row written
+    before targets existed carries, and the one the sheet sends when master 1 is picked, so
+    "master 1" has two representations and comparisons must normalise (see `canonicalTarget` in
+    the sheet). Chains are legal (M3 → M2 → M1) and loops are refused server-side
+    (`SPEED_MASTER_FOLLOW_CYCLE`), which is why the picker filters through
+    `eligibleFollowTargets` — self and descendants excluded — rather than letting the operator
+    discover the rule by hitting a 400. Every read-only surface names the leader through
+    `leaderLabelOf` / `leaderNameOf`: a bank prop is threaded to each of the four so a follower
+    of M2 never reads "follows M1" — **including in its `aria-label`**, which is where three of
+    the four kept saying "Master 1" after the visible text was fixed.
+  - The REST row carries the **stored** target; the WS live frame carries the **resolved** one.
+    They normally agree — a forced delete of a leader unlinks its followers server-side, so no
+    route leaves a row naming a master that is gone. They can still diverge on a row no route
+    wrote (an import, a hand-edited database): the bank degrades a dangling or looped link to
+    manual while the row still advertises it, so the manage page would show a follow badge for a
+    master the desk is running manually and a ratio-only PUT on it would 400 with
+    `SPEED_MASTER_FOLLOW_TARGET_UNKNOWN`. Prefer the live frame wherever the question is "what
+    is the desk doing".
 
 **A follower's tempo cannot be typed or tapped, and exactly four surfaces offer those:**
 `MasterTile` and `MasterRow` in `components/SpeedMasters.tsx`, `SpeedMasterRow` in
@@ -575,9 +595,11 @@ and needs no arm — it taps master 1 only.
 `SpeedMasterDetailSheet`; its five chips retune a link that already exists. Both write it the same
 way and must keep to both of the sheet's rules: **both halves of the pair or neither** (a half-patch
 is a 400), and **never `bpm` beside them** — the server refuses that combination on a follower,
-whose tempo comes from master 1 rather than from a stored default. Linking and *unlinking* stay in
-the sheet, where the choice can be labelled; retuning a link mid-show is the half that belongs on a
-performance surface.
+whose tempo comes from its leader rather than from a stored default. The chips deliberately send
+**no `followTargetUuid`**: they retune an existing link, and a ratio-only patch carries the stored
+leader forward server-side, so sending one would let a chip press re-point the link. Linking and
+*unlinking* stay in the sheet, where the choice can be labelled; retuning a link mid-show is the
+half that belongs on a performance surface.
 `speedMasters.error` is the backstop for writers with no affordance to remove (a MIDI surface, a
 script, a stale tab); `store/speedMasters.ts` toasts it, keyed per master so a burst of hardware
 taps replaces rather than stacks.

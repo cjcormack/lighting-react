@@ -21,15 +21,17 @@ export interface SpeedMasterLiveState {
    * routing, so anything reading this must be fed by a state frame, not a change frame.
    */
   usage?: string | null
-  /** Follow ratio over master 1 (`bpm = m1 x num/den`); both null = manual. `.state` only. */
+  /** Follow ratio over {@link followTargetUuid} (`bpm = leader x num/den`); both null = manual. `.state` only. */
   followNum?: number | null
   followDen?: number | null
+  /** The master being followed; null/absent means master 1. Resolved server-side. `.state` only. */
+  followTargetUuid?: string | null
 }
 
 /**
  * A tempo write the server refused — `speedMasters.error`, unicast to whoever sent it.
  *
- * [code] is `SPEED_MASTER_FOLLOWER` (the master derives its tempo from master 1) or
+ * [code] is `SPEED_MASTER_FOLLOWER` (the master derives its tempo from the one it follows) or
  * `SPEED_MASTER_UNKNOWN` (the uuid names no master, and the write was dropped rather than
  * redirected). [message] is the server's single operator-facing phrasing, shared with the MIDI
  * surface, so clients display it rather than composing their own. A full `speedMasters.state`

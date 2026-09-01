@@ -25,11 +25,26 @@ export interface SpeedMaster {
    */
   usage?: string | null
   /**
-   * Follow ratio over master 1: this master's tempo is `m1.bpm * followNum / followDen`.
-   * Both null (or absent) means a manual tempo. Master 1 itself may never follow.
+   * Follow ratio over {@link followTargetUuid}: this master's clock is *driven* by that
+   * master's at `followNum / followDen` of its rate, so their beats line up. Both null (or
+   * absent) means a manual tempo. Master 1 itself may never follow.
    */
   followNum?: number | null
   followDen?: number | null
+  /**
+   * The master being followed; null (or absent) means master 1. Only meaningful alongside a
+   * ratio — the server nulls it out on a manual row rather than leaving a stale leader visible.
+   *
+   * Unlike {@link SpeedMasterLiveState.followTargetUuid}, this is the **stored** target, not the
+   * resolved one: the degradations `SpeedMasterBank` applies at load happen to the running bank,
+   * not to this DTO. The two normally agree, because the routes keep the rows honest — a forced
+   * delete of a leader unlinks its followers rather than leaving them dangling. What can still
+   * differ is a row no route wrote: an import or a hand-edited database carrying a target this
+   * project doesn't have, or a cycle. There the desk runs the master manually while this DTO
+   * still shows the link, and the leader lookups fall back to master 1. Read the live frame when
+   * the question is what the bank is doing; read this when it is what the row says.
+   */
+  followTargetUuid?: string | null
   /** Persisted rows referencing this master. Gates delete. */
   referenceCount: number
 }
@@ -44,6 +59,8 @@ export interface CreateSpeedMasterRequest {
   /** See {@link SpeedMaster.followNum} — both-or-neither, and never alongside `bpm`. */
   followNum?: number | null
   followDen?: number | null
+  /** See {@link SpeedMaster.followTargetUuid}; omitted with a ratio means master 1. */
+  followTargetUuid?: string | null
 }
 
 /**
@@ -52,7 +69,11 @@ export interface CreateSpeedMasterRequest {
  *
  * - `followNum` and `followDen` move together. A half-patch is a 400; unlinking is both
  *   explicitly `null`.
- * - `bpm` must not be sent when the resulting state follows master 1 (400
+ * - `followTargetUuid` rides with that pair. Sent, it re-points the link; omitted on a
+ *   ratio-only edit, the server carries the stored leader forward; an unlink clears it. A
+ *   target that names no master is a 400 `SPEED_MASTER_FOLLOW_TARGET_UNKNOWN`, and one that
+ *   would close a loop a 400 `SPEED_MASTER_FOLLOW_CYCLE`.
+ * - `bpm` must not be sent when the resulting state follows another master (400
  *   `SPEED_MASTER_FOLLOWER`) — a follower's tempo is derived, not stored.
  * - `usage` present-with-null clears the routing.
  */
@@ -63,6 +84,7 @@ export interface UpdateSpeedMasterRequest {
   usage?: string | null
   followNum?: number | null
   followDen?: number | null
+  followTargetUuid?: string | null
 }
 
 /** 409 body when deleting a referenced master without `force`. */

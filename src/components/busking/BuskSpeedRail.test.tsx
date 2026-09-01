@@ -177,6 +177,37 @@ describe('BuskSpeedRail — the three arms', () => {
 })
 
 describe('BuskSpeedRail — the ratio chips', () => {
+  it('names the master a follower actually follows', () => {
+    // Follow targets: master 3 follows master 2, so neither the chip nor the ratio buttons may
+    // say "M1" — the one thing every read-only surface got wrong for free before the target
+    // existed, because there was only ever one answer.
+    liveMasters = [
+      live(1),
+      live(2, { name: 'Movement', bpm: 90 }),
+      live(3, {
+        name: 'Crawl',
+        bpm: 45,
+        followNum: 1,
+        followDen: 2,
+        followTargetUuid: 'aaaaaaaa-0000-0000-0000-000000000002',
+      }),
+    ]
+    rows = [
+      row(1),
+      row(2, { name: 'Movement' }),
+      row(3, {
+        name: 'Crawl',
+        followNum: 1,
+        followDen: 2,
+        followTargetUuid: 'aaaaaaaa-0000-0000-0000-000000000002',
+      }),
+    ]
+    render(<BuskSpeedRail />)
+
+    expect(screen.getByText('follows M2 · ½')).toBeInTheDocument()
+    expect(screen.getByLabelText('Follow Movement at 1/3')).toBeInTheDocument()
+  })
+
   /**
    * The two rules the detail sheet's save comment spells out, restated here because this is the
    * second surface that can write a follow ratio: both halves of the pair, and **never** `bpm`
@@ -187,7 +218,7 @@ describe('BuskSpeedRail — the ratio chips', () => {
     rows = [row(1), row(2, { followNum: 1, followDen: 2 })]
     render(<BuskSpeedRail />)
 
-    fireEvent.click(screen.getByLabelText('Follow master 1 at 1/3'))
+    fireEvent.click(screen.getByLabelText('Follow Master 1 at 1/3'))
 
     expect(saveMaster).toHaveBeenCalledTimes(1)
     const body = saveMaster.mock.calls[0]![0]
@@ -202,7 +233,7 @@ describe('BuskSpeedRail — the ratio chips', () => {
     rows = []
     render(<BuskSpeedRail />)
 
-    expect(screen.getByLabelText('Follow master 1 at 1/3')).toBeDisabled()
+    expect(screen.getByLabelText('Follow Master 1 at 1/3')).toBeDisabled()
   })
 })
 

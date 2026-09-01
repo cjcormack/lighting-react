@@ -10,6 +10,8 @@ import { setSpeedMasterBpm, tapSpeedMaster, useSpeedMasterLiveQuery } from '../s
 import {
   followRatioOf,
   followerTempoLockedReason,
+  followTargetOf,
+  leaderNameOf,
   formatFollowRatio,
 } from '../lib/speedMasterModel'
 import { useIsDeskConnected } from '../store/status'
@@ -115,7 +117,7 @@ export const SpeedMasters = memo(function SpeedMasters() {
               key={m.uuid ?? m.index}
               className="flex items-stretch rounded-md border bg-card overflow-hidden"
             >
-              <MasterTile master={m} />
+              <MasterTile master={m} bank={masters} />
             </div>
           ))}
           <ManageMastersLink />
@@ -128,7 +130,7 @@ export const SpeedMasters = memo(function SpeedMasters() {
       <div className={cn('hidden @[440px]:flex items-stretch gap-2 shrink-0', tiledArm?.hide)}>
         <div className="flex items-stretch rounded-md border bg-card overflow-hidden">
           <MasterRail masters={masters} selected={selected} onSelect={setSelectedIndex} />
-          <MasterTile master={selected} />
+          <MasterTile master={selected} bank={masters} />
         </div>
         {/* A bank too big to tile never renders the arm that carries this, and would otherwise
             lose its only route to the bank page. */}
@@ -201,7 +203,7 @@ export function SpeedMastersChip({ className }: { className?: string }) {
         </p>
         <div className="flex flex-col gap-px">
           {masters.map((m) => (
-            <MasterRow key={m.uuid ?? m.index} master={m} />
+            <MasterRow key={m.uuid ?? m.index} master={m} bank={masters} />
           ))}
         </div>
         <ManageMastersLink variant="row" />
@@ -294,7 +296,7 @@ export function ManageMastersLink({ variant = 'icon' }: { variant?: 'icon' | 'ro
  * exactly the same terms as the rest: it used to be a read-only span in the ShowBar, which made the
  * global tempo the one master you could not type at while standing at the desk.
  */
-function MasterTile({ master }: { master: TileMaster }) {
+function MasterTile({ master, bank }: { master: TileMaster; bank: readonly TileMaster[] }) {
   const { editing, draft, start, change, commit, onKeyDown } = useBpmDraft(master.uuid, (bpm) =>
     setSpeedMasterBpm(master.uuid, bpm),
   )
@@ -302,13 +304,22 @@ function MasterTile({ master }: { master: TileMaster }) {
   // — so against a dead socket the operator taps a bar's worth of beats and the number never
   // moves. The tile keeps *showing* the tempo; only the two writes stop.
   const connected = useIsDeskConnected()
-  // A follower's tempo is derived from master 1, and the server refuses both writes on it
+  // A follower's tempo is derived from its leader, and the server refuses both writes on it
   // (SPEED_MASTER_FOLLOWER). So the tile trades TAP for the ratio and stops offering the draft
   // — the refusal still exists as a backstop for writers with no affordance to remove (a MIDI
   // surface, a stale tab), but nothing here should be a button that cannot work.
   const follow = followRatioOf(master)
+  // Named once and used by both the tooltip and the badge's accessible name: a screen reader
+  // reading "follows Master 1" off a follower of M2 is the same wrong answer the visible label
+  // stopped giving when the bank arrived here.
+  const leaderName = leaderNameOf(bank, followTargetOf(master))
   const lockedReason = follow
-    ? followerTempoLockedReason(master.name || `Master ${master.index}`, follow.num, follow.den)
+    ? followerTempoLockedReason(
+        master.name || `Master ${master.index}`,
+        follow.num,
+        follow.den,
+        leaderName,
+      )
     : null
 
   return (
@@ -353,7 +364,7 @@ function MasterTile({ master }: { master: TileMaster }) {
       {follow ? (
         <span
           title={lockedReason ?? undefined}
-          aria-label={`Master ${master.index} follows Master 1 at ${follow.num}/${follow.den}`}
+          aria-label={`Master ${master.index} follows ${leaderName} at ${follow.num}/${follow.den}`}
           className="flex items-center justify-center border-l px-3 text-xs font-bold tabular-nums text-muted-foreground @max-[700px]:px-2 @max-[700px]:text-[11px]"
         >
           {formatFollowRatio(follow.num, follow.den)}
@@ -379,7 +390,7 @@ function MasterTile({ master }: { master: TileMaster }) {
  * genuinely differ — horizontal, name-first — but nothing is duplicated: both go through
  * `useBpmDraft`, `tapSpeedMaster` and `BeatIndicator`, which is where the behaviour lives.
  */
-function MasterRow({ master }: { master: TileMaster }) {
+function MasterRow({ master, bank }: { master: TileMaster; bank: readonly TileMaster[] }) {
   const { editing, draft, start, change, commit, onKeyDown } = useBpmDraft(master.uuid, (bpm) =>
     setSpeedMasterBpm(master.uuid, bpm),
   )
@@ -387,8 +398,15 @@ function MasterRow({ master }: { master: TileMaster }) {
   const connected = useIsDeskConnected()
   /** And the same follower rule — the phone arm must not offer a write the server refuses. */
   const follow = followRatioOf(master)
+  /** Same leader lookup as the tile, feeding the same tooltip and the same accessible name. */
+  const leaderName = leaderNameOf(bank, followTargetOf(master))
   const lockedReason = follow
-    ? followerTempoLockedReason(master.name || `Master ${master.index}`, follow.num, follow.den)
+    ? followerTempoLockedReason(
+        master.name || `Master ${master.index}`,
+        follow.num,
+        follow.den,
+        leaderName,
+      )
     : null
 
   return (
@@ -431,7 +449,7 @@ function MasterRow({ master }: { master: TileMaster }) {
       {follow ? (
         <span
           title={lockedReason ?? undefined}
-          aria-label={`Master ${master.index} follows Master 1 at ${follow.num}/${follow.den}`}
+          aria-label={`Master ${master.index} follows ${leaderName} at ${follow.num}/${follow.den}`}
           className="rounded border px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-muted-foreground"
         >
           {formatFollowRatio(follow.num, follow.den)}

@@ -7,7 +7,12 @@ import {
   bpmAtSlideFraction,
   bpmSlideFraction,
   derivedBpm,
+  describeFollow,
+  eligibleFollowTargets,
   followRatioOf,
+  followTargetOf,
+  leaderLabelOf,
+  leaderNameOf,
   formatFollowRatio,
   isFollowing,
   resolveSpeedMasterForCategory,
@@ -77,6 +82,56 @@ describe('follow ratios', () => {
     expect(derivedBpm(120, 1, 3)).toBeCloseTo(40, 10)
     expect(derivedBpm(128, 1, 2)).toBe(64)
     expect(derivedBpm(90, 2, 1)).toBe(180)
+  })
+
+  it('reads a follow target only on a live link', () => {
+    // A manual row may still carry a stale target (an unlink writes both ratio columns null;
+    // an import writes whatever it was handed). Reading it there would draw a link that isn't.
+    expect(followTargetOf({ followNum: 1, followDen: 2, followTargetUuid: 'm2' })).toBe('m2')
+    expect(followTargetOf({ followNum: 1, followDen: 2 })).toBeNull()
+    expect(followTargetOf({ followTargetUuid: 'm2' })).toBeNull()
+  })
+})
+
+describe('leader labels', () => {
+  const bank = [
+    { uuid: 'm1', masterIndex: 1, name: 'House Tempo' },
+    { uuid: 'm2', index: 2, name: 'Movement' },
+  ]
+
+  it('reads either index spelling, and treats a null target as master 1', () => {
+    // A REST row says `masterIndex`, a live frame says `index`; both reach these helpers.
+    expect(leaderLabelOf(bank, 'm2')).toBe('M2')
+    expect(leaderLabelOf(bank, null)).toBe('M1')
+    expect(leaderNameOf(bank, 'm2')).toBe('Movement')
+    expect(leaderNameOf(bank, null)).toBe('House Tempo')
+  })
+
+  it('falls back to master 1 for a target the bank does not know', () => {
+    // A bank mid-refetch, or a master deleted in another tab. "M1" is what a dangling target
+    // resolves to on the server too, so the label is not a guess.
+    expect(leaderLabelOf(bank, 'gone')).toBe('M1')
+    expect(describeFollow(1, 2, leaderLabelOf(bank, 'm2'))).toBe('follows M2 · ½')
+  })
+})
+
+describe('eligibleFollowTargets', () => {
+  // m3 → m2 → m1, and m4 stands alone.
+  const bank = [
+    { uuid: 'm1', masterIndex: 1, name: 'Master 1' },
+    { uuid: 'm2', masterIndex: 2, name: 'Movement', followNum: 1, followDen: 2, followTargetUuid: 'm1' },
+    { uuid: 'm3', masterIndex: 3, name: 'Crawl', followNum: 1, followDen: 2, followTargetUuid: 'm2' },
+    { uuid: 'm4', masterIndex: 4, name: 'Strobe' },
+  ]
+
+  it('offers a follower as a leader — chains are legal', () => {
+    expect(eligibleFollowTargets(bank, bank[3]).map((m) => m.uuid)).toEqual(['m1', 'm2', 'm3'])
+  })
+
+  it('excludes the master itself and everything descending from it', () => {
+    // m2 may not follow m3, because m3 already follows m2 — that is the loop the server
+    // refuses with SPEED_MASTER_FOLLOW_CYCLE, and a picker should never offer it.
+    expect(eligibleFollowTargets(bank, bank[1]).map((m) => m.uuid)).toEqual(['m1', 'm4'])
   })
 })
 

@@ -29,6 +29,7 @@ import {
 import {
   useDeleteSpeedMasterMutation,
   useSaveSpeedMasterMutation,
+  useSpeedMasterListQuery,
   useSpeedMasterLiveQuery,
 } from '../../store/speedMasters'
 import {
@@ -36,8 +37,11 @@ import {
   FOLLOW_RATIOS,
   SPEED_MASTER_USAGES,
   derivedBpm,
+  eligibleFollowTargets,
   followRatioOf,
+  followTargetOf,
   formatFollowRatio,
+  leaderNameOf,
   usageOptionLabel,
   type FollowRatio,
 } from '@/lib/speedMasterModel'
@@ -60,10 +64,11 @@ const USAGE_NONE = '__none__'
  * (and the strip) where tap is, and this sheet owns the stored default.
  *
  * It is also the only place the two routing facts are set — a master's **usage** (which
- * category of busked effect defaults to it) and whether it **follows master 1** at a ratio.
- * Both are deliberately here rather than on the performance surfaces: they are decisions about
- * how the show is wired, not knobs to reach for mid-cue, and the follow switch in particular
- * takes a master's own tempo away from it.
+ * category of busked effect defaults to it) and whether it **follows** another master at a
+ * ratio. Both are deliberately here rather than on the performance surfaces: they are decisions
+ * about how the show is wired, not knobs to reach for mid-cue, and the follow switch in
+ * particular takes a master's own tempo away from it — the leader *drives its clock*, so the
+ * two beat together rather than merely running at proportional speeds.
  */
 export function SpeedMasterDetailSheet({
   open,
@@ -86,13 +91,36 @@ export function SpeedMasterDetailSheet({
   // null = manual. Held as the ratio itself rather than a mode flag plus a ratio, so there is
   // exactly one source of truth for "is this following" and the two cannot disagree.
   const [follow, setFollow] = useState<FollowRatio | null>(null)
+  // Which master is followed, as a uuid; null means master 1, the spelling a row written before
+  // follow targets existed carries. Kept beside the ratio rather than inside it because the two
+  // are edited by different controls and only the pair together is a link.
+  const [followTarget, setFollowTarget] = useState<string | null>(null)
   const [inUse, setInUse] = useState<SpeedMasterInUseResponse | null>(null)
 
-  // Master 1's *live* tempo, for the follow preview — the preview answers "what will this master
-  // run at", which is a question about the running bank, not about stored defaults.
-  const { master1Bpm } = useSpeedMasterLiveQuery(undefined, {
-    selectFromResult: ({ data }) => ({ master1Bpm: data?.find((m) => m.index === 1)?.bpm ?? null }),
+  // The bank, for the leader picker: which masters this one may point at, and what they are
+  // called. Already fetched by every surface that opens this sheet, so this is a cache read —
+  // skipped on a non-numeric route param for the same reason `BuskSpeedRail` skips its own copy,
+  // since this sheet's hooks run even while it is closed.
+  const { data: bank } = useSpeedMasterListQuery(
+    { projectId },
+    { skip: !Number.isFinite(projectId) },
+  )
+
+  // The leader's *live* tempo, for the follow preview — the preview answers "what will this
+  // master run at", which is a question about the running bank, not about stored defaults.
+  const leaderUuid = followTarget ?? bank?.find((m) => m.masterIndex === 1)?.uuid ?? null
+  const { leaderBpm } = useSpeedMasterLiveQuery(undefined, {
+    selectFromResult: ({ data }) => ({
+      leaderBpm:
+        (leaderUuid == null
+          ? data?.find((m) => m.index === 1)
+          : data?.find((m) => m.uuid === leaderUuid)
+        )?.bpm ?? null,
+    }),
   })
+  // Through the shared helper rather than an inline find: it is the same lookup every read-only
+  // surface uses, and it falls back to "Master N" on a blank name instead of rendering nothing.
+  const leaderName = leaderNameOf(bank, followTarget)
 
   // Seed once per master, tracked by id in a ref rather than by dependencies — the list
   // refetches on every `speedMasters.listChanged`, and depending on the fields would let a
@@ -111,6 +139,7 @@ export function SpeedMasterDetailSheet({
     setStartingBpm(String(master.bpm))
     setUsage(master.usage ?? USAGE_NONE)
     setFollow(followRatioOf(master))
+    setFollowTarget(followTargetOf(master))
     setInUse(null)
   }, [master])
 
@@ -124,8 +153,22 @@ export function SpeedMasterDetailSheet({
   const parsedBpm = Number(startingBpm)
   const bpmValid = Number.isFinite(parsedBpm) && parsedBpm >= 20 && parsedBpm <= 300
   const storedFollow = followRatioOf(master)
+  const storedTarget = followTargetOf(master)
+  // Master 1 has two spellings — its uuid, and the null that means it — so the comparison
+  // normalises both sides. Without that, opening the sheet on a follower of master 1 and
+  // saving a rename would send a redundant re-link (and a picker that shows the uuid it
+  // resolved to would read as a pending edit the operator never made).
+  const master1Uuid = bank?.find((m) => m.masterIndex === 1)?.uuid ?? null
+  const canonicalTarget = (uuid: string | null) => (uuid === master1Uuid ? null : uuid)
   const followChanged =
-    follow?.num !== storedFollow?.num || follow?.den !== storedFollow?.den
+    follow?.num !== storedFollow?.num ||
+    follow?.den !== storedFollow?.den ||
+    (follow != null && canonicalTarget(followTarget) !== canonicalTarget(storedTarget))
+
+  // Itself and its own descendants are excluded: a loop is the one shape with no tempo, and the
+  // server refuses it (400 SPEED_MASTER_FOLLOW_CYCLE). Offering a choice that can only fail is
+  // worse than not offering it.
+  const followTargetOptions = eligibleFollowTargets(bank, master)
   const usageToSend = usage === USAGE_NONE ? null : usage
   const usageChanged = usageToSend !== (master.usage ?? null)
   // A follower's tempo is derived, so its stored default is meaningless while linked and the
@@ -155,8 +198,16 @@ export function SpeedMasterDetailSheet({
       ...(bpmChanged ? { bpm: parsedBpm } : {}),
       // The PUT is a patch, so an untouched key is left alone; usage present-with-null clears.
       ...(usageChanged ? { usage: usageToSend } : {}),
-      // Both halves or neither — a half-patch is a 400. Unlinking is both explicitly null.
-      ...(followChanged ? { followNum: follow?.num ?? null, followDen: follow?.den ?? null } : {}),
+      // Both halves or neither — a half-patch is a 400. Unlinking is both explicitly null, and
+      // the target rides with the pair (the server carries the stored leader forward when a
+      // ratio-only patch omits it, but this sheet always knows which master it means).
+      ...(followChanged
+        ? {
+            followNum: follow?.num ?? null,
+            followDen: follow?.den ?? null,
+            followTargetUuid: follow == null ? null : canonicalTarget(followTarget),
+          }
+        : {}),
       notes: notes.trim() === '' ? null : notes.trim(),
     })
       .unwrap()
@@ -222,7 +273,7 @@ export function SpeedMasterDetailSheet({
 
           <div className="border-t" />
 
-          {/* Master 1 is what followers derive from, so it is offered no tempo mode at all —
+          {/* Master 1 is the root every chain ends at, so it is offered no tempo mode at all —
               only the stored default below. Hiding the control rather than disabling it: a
               segmented switch with both halves dead reads as breakage. */}
           {!isProtected && (
@@ -234,6 +285,9 @@ export function SpeedMasterDetailSheet({
                 onValueChange={(v) => {
                   if (!v) return
                   setFollow(v === 'follow' ? (storedFollow ?? DEFAULT_FOLLOW_RATIO) : null)
+                  // A fresh link starts on the stored leader, or master 1 — the same default
+                  // the ratio chips take, and the master every bank has.
+                  if (v === 'follow') setFollowTarget(storedTarget ?? master1Uuid)
                 }}
                 className="w-full gap-1"
               >
@@ -241,7 +295,7 @@ export function SpeedMasterDetailSheet({
                   Manual
                 </ToggleGroupItem>
                 <ToggleGroupItem value="follow" className="flex-1">
-                  Follow Master 1
+                  Follow
                 </ToggleGroupItem>
               </ToggleGroup>
             </div>
@@ -249,6 +303,31 @@ export function SpeedMasterDetailSheet({
 
           {follow != null ? (
             <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="speed-master-follow-target" className="text-xs">
+                  Follows
+                </Label>
+                <Select
+                  value={followTarget ?? master1Uuid ?? ''}
+                  onValueChange={(v) => setFollowTarget(v)}
+                >
+                  <SelectTrigger id="speed-master-follow-target">
+                    <SelectValue placeholder="Master 1" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {followTargetOptions.map((option) => (
+                      <SelectItem key={option.uuid} value={option.uuid}>
+                        M{option.masterIndex} · {option.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  Any master except this one and anything already following it — a follow chain
+                  may not loop.
+                </p>
+              </div>
+
               <div className="space-y-1.5">
                 <Label className="text-xs">Time signature</Label>
                 <ToggleGroup
@@ -266,7 +345,7 @@ export function SpeedMasterDetailSheet({
                       key={r.label}
                       value={`${r.num}/${r.den}`}
                       className="flex-1 font-bold"
-                      aria-label={`Follow Master 1 at ${r.num}/${r.den}`}
+                      aria-label={`Follow ${leaderName} at ${r.num}/${r.den}`}
                     >
                       {r.label}
                     </ToggleGroupItem>
@@ -274,16 +353,16 @@ export function SpeedMasterDetailSheet({
                 </ToggleGroup>
               </div>
 
-              {/* What the ratio actually resolves to, off master 1's *live* tempo — the
+              {/* What the ratio actually resolves to, off the leader's *live* tempo — the
                   arithmetic is the server's, this only shows its answer. */}
-              {master1Bpm != null && (
+              {leaderBpm != null && (
                 <div className="flex items-center gap-3 rounded-md bg-muted/40 p-3">
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-[9px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
-                      Master 1
+                    <span className="truncate text-[9px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                      {leaderName}
                     </span>
                     <span className="font-mono text-lg font-bold tabular-nums">
-                      {formatBpm(master1Bpm)}
+                      {formatBpm(leaderBpm)}
                     </span>
                   </div>
                   <span className="text-sm text-muted-foreground">
@@ -294,15 +373,17 @@ export function SpeedMasterDetailSheet({
                       This master
                     </span>
                     <span className="font-mono text-lg font-bold tabular-nums text-primary">
-                      {formatBpm(derivedBpm(master1Bpm, follow.num, follow.den))}
+                      {formatBpm(derivedBpm(leaderBpm, follow.num, follow.den))}
                     </span>
                   </div>
                 </div>
               )}
 
               <p className="text-xs text-muted-foreground">
-                While following, TAP and typed tempos are disabled on this master — retune
-                Master 1 and this master moves with it, everywhere it is shown.
+                {leaderName} drives this master&apos;s clock, so their beats land together — a ½
+                follower beats on every second beat of its leader. TAP and typed tempos are
+                disabled here while linked; retune {leaderName} and this master moves with it,
+                everywhere it is shown.
               </p>
             </div>
           ) : (

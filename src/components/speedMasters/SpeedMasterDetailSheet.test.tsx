@@ -6,7 +6,28 @@ import type { SpeedMaster } from '../../api/speedMastersApi'
 const saveMaster = vi.fn()
 const deleteMaster = vi.fn()
 
+const U2 = 'aaaaaaaa-0000-0000-0000-000000000002'
+
+/**
+ * The bank the sheet's leader picker and follow preview read.
+ *
+ * `vi.hoisted` because the mock factory below is hoisted above module scope and may not close
+ * over ordinary consts. M6 follows M5 (the master these tests edit), so it is the descendant
+ * whose exclusion from the picker keeps a chain from looping.
+ */
+const bank = vi.hoisted(() => [
+  { id: 1, uuid: 'aaaaaaaa-0000-0000-0000-000000000001', masterIndex: 1, name: 'Master 1', bpm: 120, source: 'MANUAL', notes: null, referenceCount: 0 },
+  { id: 2, uuid: 'aaaaaaaa-0000-0000-0000-000000000002', masterIndex: 2, name: 'Movement', bpm: 90, source: 'MANUAL', notes: null, referenceCount: 0 },
+  { id: 5, uuid: 'aaaaaaaa-0000-0000-0000-000000000005', masterIndex: 5, name: 'Slow Wash', bpm: 64, source: 'MANUAL', notes: null, referenceCount: 0 },
+  {
+    id: 6, uuid: 'aaaaaaaa-0000-0000-0000-000000000006', masterIndex: 6, name: 'Chase',
+    bpm: 32, source: 'MANUAL', notes: null, referenceCount: 0,
+    followNum: 1, followDen: 2, followTargetUuid: 'aaaaaaaa-0000-0000-0000-000000000005',
+  },
+])
+
 vi.mock('../../store/speedMasters', () => ({
+  useSpeedMasterListQuery: () => ({ data: bank }),
   useSaveSpeedMasterMutation: () => [
     (args: unknown) => ({ unwrap: () => saveMaster(args) }),
     { isLoading: false, error: undefined },
@@ -15,12 +36,22 @@ vi.mock('../../store/speedMasters', () => ({
     (args: unknown) => ({ unwrap: () => deleteMaster(args) }),
     { isLoading: false },
   ],
-  // The follow preview reads master 1's *live* tempo through selectFromResult; the sheet only
-  // ever asks for that one number, so a fixed bank is enough.
+  // The follow preview reads the *leader's* live tempo through selectFromResult, keyed by
+  // uuid — which is why these carry one, unlike the index-only stub this replaced.
   useSpeedMasterLiveQuery: (
     _arg: unknown,
-    opts?: { selectFromResult: (r: { data: { index: number; bpm: number }[] }) => unknown },
-  ) => opts?.selectFromResult({ data: [{ index: 1, bpm: 120 }] }) ?? {},
+    opts?: {
+      selectFromResult: (r: {
+        data: { uuid: string; index: number; bpm: number }[]
+      }) => unknown
+    },
+  ) =>
+    opts?.selectFromResult({
+      data: [
+        { uuid: 'aaaaaaaa-0000-0000-0000-000000000001', index: 1, bpm: 120 },
+        { uuid: 'aaaaaaaa-0000-0000-0000-000000000002', index: 2, bpm: 90 },
+      ],
+    }) ?? {},
 }))
 
 import { SpeedMasterDetailSheet } from './SpeedMasterDetailSheet'
@@ -163,7 +194,7 @@ describe('SpeedMasterDetailSheet', () => {
     // switch with both halves dead reads as breakage.
     renderSheet(master({ id: 1, masterIndex: 1, name: 'Master 1' }))
 
-    expect(screen.queryByRole('radio', { name: 'Follow Master 1' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: 'Follow' })).not.toBeInTheDocument()
     expect(screen.getByLabelText('Starting BPM')).toBeInTheDocument()
   })
 
@@ -181,12 +212,18 @@ describe('SpeedMasterDetailSheet', () => {
     saveMaster.mockResolvedValueOnce(undefined)
     renderSheet(master())
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Follow Master 1' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Follow' }))
     fireEvent.click(screen.getByRole('radio', { name: 'Follow Master 1 at 1/3' }))
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(saveMaster).toHaveBeenCalledTimes(1))
-    expect(saveMaster.mock.calls[0][0]).toMatchObject({ followNum: 1, followDen: 3 })
+    // Master 1 travels as null, not as its uuid: null *is* master 1 on every wire here, and a
+    // fresh link defaults to it.
+    expect(saveMaster.mock.calls[0][0]).toMatchObject({
+      followNum: 1,
+      followDen: 3,
+      followTargetUuid: null,
+    })
     // The pair and a bpm together is a 400 (SPEED_MASTER_FOLLOWER) — a follower has no stored
     // tempo to set.
     expect(saveMaster.mock.calls[0][0]).not.toHaveProperty('bpm')
@@ -202,7 +239,52 @@ describe('SpeedMasterDetailSheet', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(saveMaster).toHaveBeenCalledTimes(1))
-    expect(saveMaster.mock.calls[0][0]).toMatchObject({ followNum: null, followDen: null })
+    expect(saveMaster.mock.calls[0][0]).toMatchObject({
+      followNum: null,
+      followDen: null,
+      followTargetUuid: null,
+    })
+  })
+
+  it('names the followed master in the picker, the preview and the prose', () => {
+    // The whole point of follow targets: a follower of M2 must not be described — anywhere —
+    // as following master 1.
+    renderSheet(master({ followNum: 1, followDen: 2, followTargetUuid: U2 }))
+
+    expect(screen.getByRole('combobox', { name: 'Follows' })).toHaveTextContent('M2 · Movement')
+    // M2 is mocked at 90 live, so half time is 45 — read off the leader, not off master 1.
+    expect(screen.getByText('45')).toBeInTheDocument()
+    expect(screen.getByText(/Movement drives this master/)).toBeInTheDocument()
+  })
+
+  it('carries the stored leader through a ratio-only edit', async () => {
+    // The target rides with the pair. Sending the ratio alone would let the server's
+    // carry-forward do the right thing, but this sheet knows which master it means and says so.
+    saveMaster.mockResolvedValueOnce(undefined)
+    renderSheet(master({ followNum: 1, followDen: 2, followTargetUuid: U2 }))
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Follow Movement at 1/4' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(saveMaster).toHaveBeenCalledTimes(1))
+    expect(saveMaster.mock.calls[0][0]).toMatchObject({
+      followNum: 1,
+      followDen: 4,
+      followTargetUuid: U2,
+    })
+  })
+
+  it('treats a re-save of a master-1 follower as unchanged', async () => {
+    // Master 1 has two spellings — its uuid and the null that means it. A picker seeded with
+    // the uuid must not make a rename look like a re-link, or every save would re-send one.
+    saveMaster.mockResolvedValueOnce(undefined)
+    renderSheet(master({ followNum: 1, followDen: 2 }))
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Chorus' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(saveMaster).toHaveBeenCalledTimes(1))
+    expect(saveMaster.mock.calls[0][0]).not.toHaveProperty('followTargetUuid')
   })
 
   it('leaves the follow pair out of a save that did not touch it', async () => {

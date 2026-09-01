@@ -24,6 +24,9 @@ import {
   describeFollow,
   followRatioOf,
   followerTempoLockedReason,
+  followTargetOf,
+  leaderLabelOf,
+  leaderNameOf,
   usageLabel,
 } from '@/lib/speedMasterModel'
 import { useIsDeskConnected } from '@/store/status'
@@ -108,6 +111,7 @@ export function BuskSpeedRail() {
           <MasterCard
             key={master.uuid ?? master.index}
             master={master}
+            bank={live ?? []}
             projectId={projectIdNum}
             row={row}
             onOpenSettings={row == null ? undefined : () => setSheetMasterId(row.id)}
@@ -264,11 +268,14 @@ function useLiveTempoPush(uuid: string | null) {
  */
 function MasterCard({
   master,
+  bank,
   projectId,
   row,
   onOpenSettings,
 }: {
   master: SpeedMasterLiveState
+  /** The live bank, so a follower's chip can name the master it actually follows. */
+  bank: readonly SpeedMasterLiveState[]
   projectId: number
   /** The REST row behind this live frame, absent until the list arrives. */
   row: SpeedMaster | undefined
@@ -281,8 +288,14 @@ function MasterCard({
   )
   const isMaster1 = master.index === 1
   const follow = followRatioOf(master)
+  const leaderTarget = followTargetOf(master)
   const lockedReason = follow
-    ? followerTempoLockedReason(master.name || `Master ${master.index}`, follow.num, follow.den)
+    ? followerTempoLockedReason(
+        master.name || `Master ${master.index}`,
+        follow.num,
+        follow.den,
+        leaderNameOf(bank, leaderTarget),
+      )
     : null
   const usage = usageLabel(master.usage)
 
@@ -470,7 +483,7 @@ function MasterCard({
                 title={lockedReason ?? undefined}
               >
                 <Link2 className="size-2.5 shrink-0" />
-                {describeFollow(follow.num, follow.den)}
+                {describeFollow(follow.num, follow.den, leaderLabelOf(bank, leaderTarget))}
               </span>
             ) : (
               <span className="text-[10px] text-muted-foreground">manual</span>
@@ -493,6 +506,7 @@ function MasterCard({
             projectId={projectId}
             masterId={row?.id}
             current={follow}
+            leaderName={leaderNameOf(bank, leaderTarget)}
           />
         )}
       </div>
@@ -547,11 +561,14 @@ function RatioChips({
   projectId,
   masterId,
   current,
+  leaderName,
 }: {
   index: number
   projectId: number
   masterId: number | undefined
   current: { num: number; den: number }
+  /** The master being followed — the chips retune the ratio, never the leader. */
+  leaderName: string
 }) {
   const [saveMaster, { isLoading }] = useSaveSpeedMasterMutation()
 
@@ -564,12 +581,15 @@ function RatioChips({
             key={ratio.label}
             type="button"
             aria-pressed={active}
-            aria-label={`Follow master 1 at ${ratio.num}/${ratio.den}`}
+            aria-label={`Follow ${leaderName} at ${ratio.num}/${ratio.den}`}
             // No id means the REST list has not arrived (or this is the pre-boot synthetic master
             // 1, which never follows anyway); the chip has nothing to address until it does.
             disabled={masterId == null || isLoading || active}
             onClick={() => {
               if (masterId == null) return
+              // No `followTargetUuid`: these chips change the *ratio* of an existing link, and
+              // the PUT carries the stored leader forward when a ratio-only patch omits it.
+              // Sending one would make a chip press capable of re-pointing the link.
               void saveMaster({
                 projectId,
                 masterId,

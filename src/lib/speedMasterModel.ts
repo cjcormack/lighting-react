@@ -11,8 +11,10 @@ import { EFFECT_CATEGORY_INFO } from '@/components/fx/fxConstants'
  *   busked effect with no explicit master is stamped with the usage-matching master's uuid at
  *   the moment it is created (`resolveSpeedMasterForCategory`); nothing resolves usage later,
  *   and a null `speedMasterUuid` still means master 1 everywhere, forever.
- * - a **follow ratio** over master 1, so retuning master 1 retunes this master too. The server
- *   owns the arithmetic (write-through in `SpeedMasterBank`); everything here is display.
+ * - a **follow link** to another master, so that master's clock drives this one: the follower
+ *   ticks — and beats — at `num/den` of its leader's rate, in phase with it. The server owns the
+ *   arithmetic and the graph (`SpeedMasterBank` drives a follower's clock from its leader's
+ *   tick); everything here is display and the picker's cycle guard.
  */
 
 /**
@@ -74,17 +76,21 @@ export const FOLLOW_RATIOS: readonly (FollowRatio & { label: string })[] = [
 /** The chip a fresh link starts on — half time, the ratio the model exists for. */
 export const DEFAULT_FOLLOW_RATIO: FollowRatio = { num: 1, den: 2 }
 
-/** Anything carrying the two follow columns — a REST row or a live-state entry. */
+/** Anything carrying the follow columns — a REST row or a live-state entry. */
 export interface FollowableMaster {
   followNum?: number | null
   followDen?: number | null
+  /** The master being followed; null/absent means master 1. */
+  followTargetUuid?: string | null
 }
 
 /**
- * Does this master derive its tempo from master 1?
+ * Does this master derive its tempo from another one?
  *
- * Both columns or neither, mirroring the server's write-boundary rule; a half-set pair is not a
- * state the server will produce, and treating it as manual is the safe reading.
+ * Both ratio columns or neither, mirroring the server's write-boundary rule; a half-set pair is
+ * not a state the server will produce, and treating it as manual is the safe reading. The
+ * *target* says nothing about whether a link is live — a manual row may still carry a stale one,
+ * so read it through {@link followTargetOf}.
  */
 export function isFollowing(master: FollowableMaster | null | undefined): boolean {
   return master?.followNum != null && master?.followDen != null
@@ -94,14 +100,105 @@ export function followRatioOf(master: FollowableMaster | null | undefined): Foll
   return isFollowing(master) ? { num: master!.followNum!, den: master!.followDen! } : null
 }
 
+/** The uuid this master follows, or null for master 1 — and null when it isn't following. */
+export function followTargetOf(master: FollowableMaster | null | undefined): string | null {
+  return isFollowing(master) ? (master?.followTargetUuid ?? null) : null
+}
+
 /** `1/2` -> `½`; a ratio outside {@link FOLLOW_RATIOS} prints as `n/d` rather than vanishing. */
 export function formatFollowRatio(num: number, den: number): string {
   return FOLLOW_RATIOS.find((r) => r.num === num && r.den === den)?.label ?? `${num}/${den}`
 }
 
-/** "follows M1 · ½" — the one phrasing every read-only surface uses for a linked master. */
-export function describeFollow(num: number, den: number): string {
-  return `follows M1 · ${formatFollowRatio(num, den)}`
+/**
+ * "follows M1 · ½" — the one phrasing every read-only surface uses for a linked master.
+ *
+ * [leaderLabel] is the short form of the master being followed (`M2`, or a name where there is
+ * room); it defaults to `M1`, which is what a null follow target means everywhere in this
+ * system. {@link leaderLabelOf} builds one from a bank.
+ */
+export function describeFollow(num: number, den: number, leaderLabel = 'M1'): string {
+  return `follows ${leaderLabel} · ${formatFollowRatio(num, den)}`
+}
+
+/**
+ * Anything the leader lookups need: identity, display index and name.
+ *
+ * Both index spellings, because both shapes are real and both reach these helpers: a REST row
+ * (`SpeedMaster`) calls it `masterIndex`, a live frame (`SpeedMasterLiveState`) calls it `index`.
+ * Normalising here beats making every call site spread a renamed copy of the bank.
+ */
+export interface NamedMaster extends FollowableMaster {
+  uuid?: string | null
+  index?: number | null
+  masterIndex?: number | null
+  name?: string
+}
+
+/** The display index of either shape. */
+export function masterIndexOf(master: NamedMaster): number | null {
+  return master.index ?? master.masterIndex ?? null
+}
+
+/**
+ * The short label for the master [targetUuid] names — `M2` — or `M1` when it names none.
+ *
+ * Short rather than the full name because it appears inside chips and tiles beside the ratio;
+ * the sheet, which has room, shows the name instead.
+ */
+export function leaderLabelOf(
+  masters: readonly NamedMaster[] | undefined,
+  targetUuid: string | null | undefined,
+): string {
+  if (targetUuid == null) return 'M1'
+  const leader = masters?.find((m) => m.uuid === targetUuid)
+  const index = leader == null ? null : masterIndexOf(leader)
+  return index == null ? 'M1' : `M${index}`
+}
+
+/** The leader's display name, for prose — "Slow Wash" rather than "M2". */
+export function leaderNameOf(
+  masters: readonly NamedMaster[] | undefined,
+  targetUuid: string | null | undefined,
+): string {
+  const leader =
+    targetUuid == null
+      ? masters?.find((m) => masterIndexOf(m) === 1)
+      : masters?.find((m) => m.uuid === targetUuid)
+  return leader?.name?.trim() || (leader ? `Master ${masterIndexOf(leader)}` : 'Master 1')
+}
+
+/**
+ * The masters [self] may be pointed at: everything except itself and its own descendants.
+ *
+ * Chains are legal (M3 → M2 → M1); loops are not, and the server refuses one with
+ * `SPEED_MASTER_FOLLOW_CYCLE`. Offering a choice that can only 400 is worse than not offering
+ * it, so the picker filters here rather than letting the operator discover the rule by hitting
+ * it. The walk is over followers-of-followers from [self], which is the set that would close a
+ * loop; the guard against a malformed bank looping this walk forever is the visited set.
+ */
+export function eligibleFollowTargets<T extends NamedMaster>(
+  masters: readonly T[] | undefined,
+  self: NamedMaster | null | undefined,
+): T[] {
+  if (masters == null || self == null) return []
+  const banned = new Set<string>()
+  if (self.uuid != null) banned.add(self.uuid)
+  let grew = true
+  while (grew) {
+    grew = false
+    for (const m of masters) {
+      if (m.uuid == null || banned.has(m.uuid)) continue
+      const target = followTargetOf(m)
+      // A follower of master 1 stores no target; it can only be a descendant of `self` if
+      // `self` *is* master 1, which the sheet never offers a ratio for anyway.
+      if (target != null && banned.has(target)) {
+        banned.add(m.uuid)
+        grew = true
+      }
+    }
+  }
+  return masters.filter((m) => m.uuid != null && !banned.has(m.uuid))
 }
 
 /**
@@ -109,15 +206,26 @@ export function describeFollow(num: number, den: number): string {
  *
  * Deliberately the same sentence the server sends back when it refuses such a write
  * (`TempoWriteOutcome.RefusedFollower.describe`), so the tooltip on the affordance and the toast
- * from a stale write say the same thing.
+ * from a stale write say the same thing — [leaderName] included, which is why it defaults to the
+ * master a null target means rather than being optional prose.
  */
-export function followerTempoLockedReason(name: string, num: number, den: number): string {
-  return `${name} follows Master 1 at ${num}/${den} — unlink it in the speed-master sheet to set its tempo`
+export function followerTempoLockedReason(
+  name: string,
+  num: number,
+  den: number,
+  leaderName = 'Master 1',
+): string {
+  return `${name} follows ${leaderName} at ${num}/${den} — unlink it in the speed-master sheet to set its tempo`
 }
 
-/** What a follower runs at. The server owns this arithmetic; this is for previews and labels. */
-export function derivedBpm(master1Bpm: number, num: number, den: number): number {
-  return (master1Bpm * num) / den
+/**
+ * What a follower runs at. The server owns this arithmetic; this is for previews and labels.
+ *
+ * Note it is *not* clamped to the clock's 20..300: a follower has no timer for that range to
+ * protect, so 2× of 200 really is 400 and the server reports it as such.
+ */
+export function derivedBpm(leaderBpm: number, num: number, den: number): number {
+  return (leaderBpm * num) / den
 }
 
 /** The shape routing needs: a uuid and the usage it claims. */

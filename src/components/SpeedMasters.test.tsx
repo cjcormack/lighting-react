@@ -256,6 +256,26 @@ describe('a master that follows master 1', () => {
     expect(setSpeedMasterBpm).not.toHaveBeenCalled()
   })
 
+  it('names the master it actually follows, in the label as well as the text', () => {
+    // The accessible name is the half that kept saying "Master 1" after the visible badge
+    // learned about follow targets — so a screen reader was told the wrong leader on every
+    // surface an operator can reach a follower from.
+    liveMasters = [
+      master(1),
+      master(2, { name: 'Movement', bpm: 90 }),
+      master(3, {
+        name: 'Crawl',
+        bpm: 45,
+        followNum: 1,
+        followDen: 2,
+        followTargetUuid: 'aaaaaaaa-0000-0000-0000-000000000002',
+      }),
+    ]
+    render(<SpeedMasters />)
+
+    expect(screen.getByLabelText('Master 3 follows Movement at 1/2')).toHaveTextContent('½')
+  })
+
   it('applies the same rule in the phone popover', () => {
     // Three surfaces offer tap + click-to-type; a follower that is inert on the ShowBar and
     // tappable on a phone is the same bug in a narrower window.
