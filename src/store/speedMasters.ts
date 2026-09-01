@@ -173,6 +173,15 @@ export function useSpeedMasterDisplay(speedMasterUuid: string | null | undefined
 /**
  * The apply-time routing lookup: category in, speed-master uuid (or null for master 1) out.
  *
+ * **It has no caller today.** Its only one was the busk view's effect pads, which stamped a busked
+ * effect with the usage-matching master at the moment of the press — the busking-view plan's D1 —
+ * and those pads were removed when the view was cut back to the library pads its design draws. The
+ * rule itself is untouched and every other half of it still stands: a master still declares a
+ * `usage`, the detail sheet still sets it, `EffectParameterForm` still shows and edits an effect's
+ * master, and a null `speedMasterUuid` still means master 1 everywhere. This is kept for the next
+ * surface that mints an effect without asking which master it belongs to; delete it only if that
+ * turns out never to arrive.
+ *
  * Reads the **live** bank rather than the project list because every caller is acting on the
  * current show and already has the socket open — no `projectId`, no second fetch, and the WS
  * layer re-requests a state frame on `speedMasters.listChanged`, so a usage retagged anywhere

@@ -1,44 +1,22 @@
 import { useState, useCallback, useMemo } from 'react'
+import { useNavigate } from 'react-router'
+import { toast } from 'sonner'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { useGroupActiveEffectsQuery } from '@/store/groups'
-import { useFixtureEffectsQuery } from '@/store/fixtureFx'
-import { useFixtureListQuery } from '@/store/fixtures'
 import { useCurrentProjectQuery } from '@/store/projects'
 import { useLookListQuery } from '@/store/looks'
 import { useTemplateListQuery, useToggleTemplateMutation } from '@/store/templates'
-import { useNavigate } from 'react-router'
-import { FAMILY_LABELS } from '@/lib/attributeFamily'
+import { FAMILY_LABELS, type AttributeFamily } from '@/lib/attributeFamily'
+import { formatError } from '@/lib/formatError'
 import { templateLayerPresence } from './lookPresence'
-import { useProgrammerLayersQuery } from '@/store/programmer'
-import { describeLookContents, templateSwatch, type PadItem } from './EffectPad'
-import type { AttributeFamily } from '@/lib/attributeFamily'
-import type { CueTarget } from '@/api/cuesApi'
+import { describeLookContents, templateSwatch, BuskPools, type PadItem } from './BuskPools'
 import { TargetList } from './TargetList'
 import { TargetBand } from './TargetBand'
 import { BuskSpeedRail } from './BuskSpeedRail'
-import { EffectPad } from './EffectPad'
-import { ActiveEffectSheet } from './ActiveEffectSheet'
-import { ConfigureEffectSheet } from './ConfigureEffectSheet'
-import { usageLabel } from '@/lib/speedMasterModel'
-import { useBuskingState } from './useBuskingState'
-import type { TargetEffectsData } from './buskingTypes'
-import { programmerClearEntry, useProgrammerRevision } from '@/store/programmer'
-import {
-  type BuskingTarget,
-  type PropertyButton,
-  type ActiveEffectContext,
-  type EffectPresence,
-  buskingTargetKey,
-  normalizeEffectName,
-} from './buskingTypes'
-import { detectExtendedChannels } from '@/components/fx/colourUtils'
-import { groupMemberFixtures } from '@/lib/fxTargetProperties'
-import { toast } from 'sonner'
-import { formatError } from '@/lib/formatError'
-import type { EffectLibraryEntry } from '@/store/fixtureFx'
-import type { ShowTransport } from '@/hooks/useShowTransport'
 import { BuskCueStacks } from './BuskCueStacks'
+import { useBuskingState } from './useBuskingState'
+import { type BuskingTarget } from './buskingTypes'
+import type { ShowTransport } from '@/hooks/useShowTransport'
 
 interface BuskingViewProps {
   projectId: number
@@ -55,6 +33,12 @@ interface BuskingViewProps {
  * holds one through `useShowBarProps`. A second `useShowTransport` on the page would run a second
  * rAF loop and a second reconcile effect writing the same runner slice — the defect adopting that
  * hook removed from the Prompt Book, which is worth not reintroducing one view along.
+ *
+ * **Nothing here reads a target's running effects.** It used to: eight fixed hook slots fanned the
+ * selection out over `useGroupActiveEffectsQuery` / `useFixtureEffectsQuery` so the effect pads could
+ * read their rings from the FX list — which also capped the selection at eight targets
+ * (`FU-BUSK-TARGET-CAP`). Both surviving pad kinds read the programmer's **layer stack** instead, and
+ * that needs only the targets, so the fan-out and its cap went with the effect pads.
  */
 export function BuskingView({ projectId, transport }: BuskingViewProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)')
@@ -62,29 +46,16 @@ export function BuskingView({ projectId, transport }: BuskingViewProps) {
 
   const {
     selectedTargets,
+    selectedArray,
+    selectedLayerTargets,
     selectTarget,
     toggleTarget,
     clearSelection,
-    defaultBeatDivision,
-    setDefaultBeatDivision,
-    speedMasterForCategory,
-    effectsByCategory,
-    computePresence,
-    toggleEffect,
-    propertyButtons,
-    computePropertyPresence,
-    togglePropertyEffect,
-    getActivePropertyValue,
+    programmerLayers,
     applyLook,
     computeLookPresence,
-    applyEffectWithParams,
-    editingEffect,
-    setEditingEffect,
   } = useBuskingState()
 
-  const [configuringEffect, setConfiguringEffect] = useState<EffectLibraryEntry | null>(null)
-
-  // Fetch looks for the current project
   const { data: currentProject } = useCurrentProjectQuery()
   const { data: looks } = useLookListQuery(
     { projectId: currentProject?.id ?? 0 },
@@ -94,18 +65,8 @@ export function BuskingView({ projectId, transport }: BuskingViewProps) {
     { projectId: currentProject?.id ?? 0 },
     { skip: !currentProject },
   )
-  // The layer stack, because a template pad's ring can only be read from it: a template holds no
-  // effects, so the running-effect presence a Look's ring uses has nothing to say about one.
-  const { data: programmerLayers } = useProgrammerLayersQuery()
   const [toggleTemplate] = useToggleTemplateMutation()
   const navigate = useNavigate()
-  // The editor needs rows and effects, which the library list does not carry.
-  //
-  // `currentData`, **not** `data` — see the same read in `routes/Looks.tsx`: `data` falls back to
-  // the previous arg's result while a new one is in flight (and `isLoading` is false whenever it
-  // does), so editing one Look then opening another would seed the editor from the first and let
-  // Save write its rows into the second.
-  const { data: fixtureList } = useFixtureListQuery()
 
   const openTargetPicker = useCallback(() => setTargetSheetOpen(true), [])
 
@@ -118,43 +79,6 @@ export function BuskingView({ projectId, transport }: BuskingViewProps) {
       }
     },
     [selectTarget, isDesktop],
-  )
-
-  // Collect effects data for all selected targets
-  const selectedArray = useMemo(
-    () => Array.from(selectedTargets.values()),
-    [selectedTargets],
-  )
-
-  // Fetch effects data for selected targets
-  const targetEffectsData = useSelectedTargetEffects(selectedArray)
-
-  // Extended colour channels (W/A/UV) available across selected targets
-  const extendedChannels = useMemo(() => {
-    const propertySets: Array<readonly { type: string; category?: string; whiteChannel?: unknown; amberChannel?: unknown; uvChannel?: unknown }[]> = []
-    for (const target of selectedArray) {
-      if (target.type === 'fixture') {
-        if (target.fixture.properties) propertySets.push(target.fixture.properties)
-      } else if (fixtureList) {
-        for (const f of groupMemberFixtures(fixtureList, target.name)) {
-          if (f.properties) propertySets.push(f.properties)
-        }
-      }
-    }
-    return detectExtendedChannels(propertySets)
-  }, [selectedArray, fixtureList])
-
-  /**
-   * The selection in the layer/toggle target shape, with the same group-name convention `applyLook`
-   * sends: a group is named by its *name*, a fixture by its key.
-   */
-  const selectedCueTargets = useMemo<CueTarget[]>(
-    () =>
-      selectedArray.map((target) => ({
-        type: target.type,
-        key: target.type === 'group' ? target.name : target.key,
-      })),
-    [selectedArray],
   )
 
   /**
@@ -213,8 +137,8 @@ export function BuskingView({ projectId, transport }: BuskingViewProps) {
         // so it has no column and gets a section of its own instead.
         family: null,
         swatch: null,
-        presence: computeLookPresence(look, targetEffectsData),
-        onToggle: () => void applyLook(look, 'none', targetEffectsData),
+        presence: computeLookPresence(look),
+        onToggle: () => void applyLook(look),
         onEdit: () => navigate(`/projects/${currentProject?.id ?? 0}/looks`),
       }))
 
@@ -230,20 +154,21 @@ export function BuskingView({ projectId, transport }: BuskingViewProps) {
         kind: 'template' as const,
         family: template.family,
         swatch: templateSwatch(template),
-        // A template holds no effects, so the running-effect presence a Look's ring is read from
-        // cannot answer for one. The layer stack can: `templateLayerPresence` asks whether a layer
-        // applying this template covers the selection, which is the same question one press ago.
-        presence: templateLayerPresence(programmerLayers ?? [], selectedCueTargets, template.id),
+        // A template holds no effects, so the running-effect presence a Look's ring was once read
+        // from could not have answered for one. The layer stack can: `templateLayerPresence` asks
+        // whether a layer applying this template covers the selection, which is the same question
+        // one press ago.
+        presence: templateLayerPresence(programmerLayers ?? [], selectedLayerTargets, template.id),
         onToggle: () => {
           // Guarded the same way `applyLook` is, and for the same reason: a toggle carrying no
           // targets is not "apply to nothing", it is a layer the server has to interpret. The
           // pool is dimmed and its buttons made inert with an empty selection, so this should be
           // unreachable — but the two pad kinds must not disagree about what an empty press means.
-          if (currentProject == null || selectedCueTargets.length === 0) return
+          if (currentProject == null || selectedLayerTargets.length === 0) return
           void toggleTemplate({
             projectId: currentProject.id,
             templateId: template.id,
-            targets: selectedCueTargets,
+            targets: selectedLayerTargets,
             propertyMask: template.family ?? undefined,
           })
             .unwrap()
@@ -259,69 +184,39 @@ export function BuskingView({ projectId, transport }: BuskingViewProps) {
     targetCapabilities,
     selectedArray.length,
     computeLookPresence,
-    targetEffectsData,
     applyLook,
     navigate,
     currentProject,
     programmerLayers,
-    selectedCueTargets,
+    selectedLayerTargets,
     toggleTemplate,
   ])
 
-  // Detect whether any selected GROUP target has multi-element (multi-head) fixtures.
-  // Element Mode is a group-only concept (PER_FIXTURE vs FLAT across the group),
-  // so individual fixtures never show this option.
-  const hasMultiElementTarget = useMemo(() => {
-    if (!fixtureList) return false
-    return selectedArray.some((target) => {
-      if (target.type !== 'group') return false
-      const members = groupMemberFixtures(fixtureList, target.name)
-      return members.some((f) => f.elements && f.elements.length > 1)
-    })
-  }, [selectedArray, fixtureList])
-
-  // Show distribution for groups or multi-head single fixtures
-  const showDistribution = useMemo(() => {
-    return selectedArray.some((target) => {
-      if (target.type === 'group') return true
-      return (target.fixture.elementGroupProperties?.length ?? 0) > 0
-    })
-  }, [selectedArray])
-
   return (
     <div className="flex h-full flex-col">
-      {/* One layout at every width. The old three-way branch existed because the target list was a
+      {/* The band lives *inside* the left column, so the rail's border runs from under the ShowBar
+          to the bottom of the page — the mock's arrangement, and the one that gives a rail which
+          scrolls its own bank the full height to do it in.
+
+          One layout at every width. The old three-way branch existed because the target list was a
           sidebar, which a phone has no room for; a band of pads scrolling sideways fits both, so
           the narrow arm is now the same page with the rail hidden and the sheet as a second way in. */}
-      <TargetBand
-        selectedTargets={selectedTargets}
-        onToggle={toggleTarget}
-        onClear={clearSelection}
-        onOpenPicker={openTargetPicker}
-      />
-
       <div className="flex min-h-0 flex-1">
-        <div className="min-h-0 min-w-0 flex-1">
-          <EffectPadWrapper
-            selectedTargets={selectedArray}
-            targetEffectsData={targetEffectsData}
-            effectsByCategory={effectsByCategory}
-            computePresence={computePresence}
-            toggleEffect={toggleEffect}
-            defaultBeatDivision={defaultBeatDivision}
-            onBeatDivisionChange={setDefaultBeatDivision}
-            propertyButtons={propertyButtons}
-            computePropertyPresence={computePropertyPresence}
-            togglePropertyEffect={togglePropertyEffect}
-            getActivePropertyValue={getActivePropertyValue}
-            setEditingEffect={setEditingEffect}
-            setConfiguringEffect={setConfiguringEffect}
-            padItems={padItems}
-            cueColumn={
-              <BuskCueStacks projectId={projectId} transport={transport} />
-            }
-            currentProjectId={currentProject?.id}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <TargetBand
+            selectedTargets={selectedTargets}
+            onToggle={toggleTarget}
+            onClear={clearSelection}
+            onOpenPicker={openTargetPicker}
           />
+          <div className="min-h-0 flex-1">
+            <BuskPools
+              hasSelection={selectedArray.length > 0}
+              padItems={padItems}
+              cueColumn={<BuskCueStacks projectId={projectId} transport={transport} />}
+              currentProjectId={currentProject?.id}
+            />
+          </div>
         </div>
         {/* Hides itself below `md`; the ShowBar's own masters chip covers that width. */}
         <BuskSpeedRail />
@@ -344,266 +239,6 @@ export function BuskingView({ projectId, transport }: BuskingViewProps) {
           </div>
         </SheetContent>
       </Sheet>
-
-      <ActiveEffectSheet context={editingEffect} onClose={() => setEditingEffect(null)} />
-      <ConfigureEffectSheet
-        effect={configuringEffect}
-        defaultBeatDivision={defaultBeatDivision}
-        // Seeded with where a plain press would have put it, so the routing is visible at the
-        // moment of the press rather than only after the effect exists. The operator can change
-        // it; the sheet then sends that choice explicitly.
-        defaultSpeedMasterUuid={speedMasterForCategory(configuringEffect?.category)}
-        speedMasterDescription={
-          configuringEffect
-            ? routedMasterNote(configuringEffect.category, speedMasterForCategory)
-            : undefined
-        }
-        showDistribution={showDistribution}
-        showElementMode={hasMultiElementTarget}
-        extendedChannels={extendedChannels}
-        onApply={(params) => {
-          if (configuringEffect) {
-            applyEffectWithParams(configuringEffect, targetEffectsData, params)
-          }
-          setConfiguringEffect(null)
-        }}
-        onClose={() => setConfiguringEffect(null)}
-      />
     </div>
   )
-}
-
-/**
- * Wrapper that provides presence computation + toggle handlers to the EffectPad.
- */
-function EffectPadWrapper({
-  selectedTargets,
-  targetEffectsData,
-  effectsByCategory,
-  computePresence,
-  toggleEffect,
-  defaultBeatDivision,
-  onBeatDivisionChange,
-  propertyButtons,
-  computePropertyPresence,
-  togglePropertyEffect,
-  getActivePropertyValue,
-  setEditingEffect,
-  setConfiguringEffect,
-  padItems,
-  cueColumn,
-  currentProjectId,
-}: {
-  selectedTargets: BuskingTarget[]
-  targetEffectsData: TargetEffectsData[]
-  effectsByCategory: Record<string, EffectLibraryEntry[]>
-  computePresence: (effectName: string, data: TargetEffectsData[]) => EffectPresence
-  toggleEffect: (effect: EffectLibraryEntry, presence: EffectPresence, data: TargetEffectsData[]) => Promise<void>
-  defaultBeatDivision: number
-  onBeatDivisionChange: (value: number) => void
-  propertyButtons: PropertyButton[]
-  computePropertyPresence: (button: PropertyButton, data: TargetEffectsData[]) => EffectPresence
-  togglePropertyEffect: (button: PropertyButton, presence: EffectPresence, data: TargetEffectsData[], settingLevel?: number) => Promise<void>
-  getActivePropertyValue: (button: PropertyButton, data: TargetEffectsData[]) => string | null
-  setEditingEffect: (ctx: ActiveEffectContext | null) => void
-  setConfiguringEffect: (effect: EffectLibraryEntry | null) => void
-  padItems: PadItem[]
-  cueColumn: React.ReactNode
-  currentProjectId: number | undefined
-}) {
-  const getPresence = useCallback(
-    (effectName: string): EffectPresence => {
-      return computePresence(effectName, targetEffectsData)
-    },
-    [computePresence, targetEffectsData],
-  )
-
-  const handleToggle = useCallback(
-    (effect: EffectLibraryEntry) => {
-      const presence = getPresence(effect.name)
-      toggleEffect(effect, presence, targetEffectsData)
-    },
-    [getPresence, toggleEffect, targetEffectsData],
-  )
-
-  const handleLongPress = useCallback(
-    (effect: EffectLibraryEntry) => {
-      // Find the first active instance of this effect on a selected target
-      const normalized = normalizeEffectName(effect.name)
-      for (const data of targetEffectsData) {
-        if (data.target.type === 'group' && data.groupEffects) {
-          const match = data.groupEffects.find(
-            (e) => normalizeEffectName(e.effectType) === normalized,
-          )
-          if (match) {
-            setEditingEffect({ type: 'group', groupName: data.target.name, effect: match })
-            return
-          }
-        } else if (data.target.type === 'fixture' && data.fixtureDirectEffects) {
-          const match = data.fixtureDirectEffects.find(
-            (e) => normalizeEffectName(e.effectType) === normalized,
-          )
-          if (match) {
-            setEditingEffect({ type: 'fixture', fixtureKey: data.target.key, effect: match })
-            return
-          }
-        }
-      }
-      // Effect not active on any target — open configure sheet
-      setConfiguringEffect(effect)
-    },
-    [targetEffectsData, setEditingEffect, setConfiguringEffect],
-  )
-
-  // Property button bound callbacks.
-  //
-  // Property pads read the programmer directly (their values stopped being FX instances when
-  // plain statics became programmer values), so they need a subscription to know when to look
-  // again — the RTK Query summary only tracks counters, and re-setting a pad to a different
-  // level leaves the count alone. Subscribing here is enough: EffectPad is not memoised, so a
-  // re-render of this component recomputes every pad's presence and value from live state.
-  useProgrammerRevision()
-
-  const getPropertyPresence = useCallback(
-    (button: PropertyButton): EffectPresence => {
-      return computePropertyPresence(button, targetEffectsData)
-    },
-    [computePropertyPresence, targetEffectsData],
-  )
-
-  const handlePropertyToggle = useCallback(
-    (button: PropertyButton, settingLevel?: number) => {
-      const presence = getPropertyPresence(button)
-      togglePropertyEffect(button, presence, targetEffectsData, settingLevel)
-    },
-    [getPropertyPresence, togglePropertyEffect, targetEffectsData],
-  )
-
-  /**
-   * Long-press a property pad to release it.
-   *
-   * This used to open the underlying `StaticValue` / `StaticSetting` effect's parameter
-   * sheet. Those instances no longer exist — a plain pad write is a programmer value now —
-   * and the sheet's controls (blend mode, beat division, phase) never meant anything for a
-   * flat value anyway. Releasing is the gesture the pad was missing.
-   */
-  const handlePropertyLongPress = useCallback(
-    (button: PropertyButton) => {
-      for (const data of targetEffectsData) {
-        const target =
-          data.target.type === 'group'
-            ? ({ type: 'group', key: data.target.name } as const)
-            : ({ type: 'fixture', key: data.target.key } as const)
-        programmerClearEntry(target.type, target.key, button.propertyName)
-      }
-    },
-    [targetEffectsData],
-  )
-
-  const getPropertyValue = useCallback(
-    (button: PropertyButton): string | null => {
-      return getActivePropertyValue(button, targetEffectsData)
-    },
-    [getActivePropertyValue, targetEffectsData],
-  )
-
-  return (
-    <EffectPad
-      effectsByCategory={effectsByCategory}
-      getPresence={getPresence}
-      onToggle={handleToggle}
-      onLongPress={handleLongPress}
-      hasSelection={selectedTargets.length > 0}
-      padItems={padItems}
-      cueColumn={cueColumn}
-      currentProjectId={currentProjectId}
-      defaultBeatDivision={defaultBeatDivision}
-      onBeatDivisionChange={onBeatDivisionChange}
-      propertyButtons={propertyButtons}
-      getPropertyPresence={getPropertyPresence}
-      onPropertyToggle={handlePropertyToggle}
-      onPropertyLongPress={handlePropertyLongPress}
-      getPropertyValue={getPropertyValue}
-    />
-  )
-}
-
-/**
- * Custom hook that fetches effects for up to N selected targets.
- * Uses RTK Query hooks conditionally via a wrapper component pattern.
- * Since we can't call hooks in a loop, we use a fixed-size approach:
- * render individual fetcher components for each target.
- *
- * For simplicity, we fetch effects for up to the first 20 selected targets.
- */
-function useSelectedTargetEffects(targets: BuskingTarget[]): TargetEffectsData[] {
-  // We need a stable approach. Since RTK Query hooks can't be called conditionally,
-  // we'll use the skip pattern with fixed slots.
-  const t0 = targets[0]
-  const t1 = targets[1]
-  const t2 = targets[2]
-  const t3 = targets[3]
-  const t4 = targets[4]
-  const t5 = targets[5]
-  const t6 = targets[6]
-  const t7 = targets[7]
-
-  const d0 = useTargetEffects(t0)
-  const d1 = useTargetEffects(t1)
-  const d2 = useTargetEffects(t2)
-  const d3 = useTargetEffects(t3)
-  const d4 = useTargetEffects(t4)
-  const d5 = useTargetEffects(t5)
-  const d6 = useTargetEffects(t6)
-  const d7 = useTargetEffects(t7)
-
-  return useMemo(() => {
-    const result: TargetEffectsData[] = []
-    const all = [d0, d1, d2, d3, d4, d5, d6, d7]
-    for (let i = 0; i < targets.length && i < 8; i++) {
-      if (all[i]) result.push(all[i]!)
-    }
-    return result
-  }, [targets.length, d0, d1, d2, d3, d4, d5, d6, d7])
-}
-
-function useTargetEffects(target: BuskingTarget | undefined): TargetEffectsData | null {
-  const isGroup = target?.type === 'group'
-  const isFixture = target?.type === 'fixture'
-
-  const { data: groupEffects } = useGroupActiveEffectsQuery(
-    isGroup ? target.name : '',
-    { skip: !isGroup },
-  )
-
-  const { data: fixtureEffects } = useFixtureEffectsQuery(
-    isFixture ? target.key : '',
-    { skip: !isFixture },
-  )
-
-  return useMemo(() => {
-    if (!target) return null
-    return {
-      key: buskingTargetKey(target),
-      target,
-      groupEffects: isGroup ? groupEffects ?? [] : undefined,
-      fixtureDirectEffects: isFixture ? fixtureEffects?.direct ?? [] : undefined,
-    }
-  }, [target, isGroup, isFixture, groupEffects, fixtureEffects])
-}
-
-/**
- * Why the configure sheet opens on the master it does.
- *
- * Said only when usage routing actually matched. With no usage-tagged master for this family the
- * picker falls back to master 1 like everything else, and captioning that as a routing decision
- * would credit a rule that did nothing.
- */
-function routedMasterNote(
-  category: string,
-  resolve: (category: string | null | undefined) => string | null,
-): string | undefined {
-  if (resolve(category) == null) return undefined
-  const label = usageLabel(category) ?? category
-  return `Routed by usage — ${label.toLowerCase()} effects follow this master.`
 }

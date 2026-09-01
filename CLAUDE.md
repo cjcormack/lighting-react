@@ -546,13 +546,15 @@ per master, or `SpeedMastersChip` below 440px.
 **A master can also declare a `usage` and follow master 1.** Both landed with the busking view's
 speed-master work, and both are edited only in `SpeedMasterDetailSheet`:
 
-- **Usage** (`dimmer` / `colour` / `position`) is the **apply-time routing default**. A busked
-  effect with no explicit master is *stamped* with the usage-matching master's uuid at the moment
+- **Usage** (`dimmer` / `colour` / `position`) is the **apply-time routing default**. An effect
+  created with no explicit master is *stamped* with the usage-matching master's uuid at the moment
   it is created — `useSpeedMasterForCategory` in `store/speedMasters.ts`, the rule itself in
   `lib/speedMasterModel.ts`. Nothing resolves usage later, and `null` still means master 1
-  everywhere; that invariant does not move. This is what lets a busking pad stay **one press**:
-  the pad has no speed picker at all any more, and the long-press configure sheet opens
-  pre-selected on the routed master so the routing is visible at the press rather than after it.
+  everywhere; that invariant does not move. **The hook has no caller today**: the stamping was the
+  busk view's ad-hoc effect pads, and those went when the view was brought back onto its design
+  (see §Busk). Every other half of the rule stands — a master declares a usage, the detail sheet
+  sets it, `BuskSpeedRail` badges it — so the hook is kept for the next surface that mints an
+  effect without asking which master it belongs to. Don't delete it to silence a dead-export sweep.
   Usage is unique per project (the server 409s `SPEED_MASTER_USAGE_TAKEN`), and `controls` and
   `composite` are deliberately not routable — those land on master 1, which is what an unmatched
   category is defined to do. `speedMasterModel.test.ts` pins the vocabulary against
@@ -1061,8 +1063,29 @@ path may quietly change where it lands.
   alive; the nav entry keeps `id: "fx"` as its stable handle, the same call `program` made
   when Show was renamed.
 
-  Three things about it that are decisions rather than detail:
+  Four things about it that are decisions rather than detail:
 
+  - **The pads are the *library*, and nothing else.** `BuskPools` (once `EffectPad`) draws
+    templates in four family columns and Looks beside the cue column. It used to draw three more
+    pools of ad-hoc effect pads, a Controls pool of hold-to-slide property pads writing straight to
+    the programmer, and a beat-division toggle to parameterise whatever those minted; all of it went
+    when the view was brought back onto its design. A busk pad presses a **named thing from the
+    library** onto the selection, and a second grid minting anonymous FX instances with their own
+    timing model was a different gesture wearing the same clothes. Three things follow, and none is
+    a bug:
+    - **Nothing on this page mints an FX instance.** An ad-hoc effect reaches the stage through a
+      Look with deferred effects, a cue, or the Programmer's `+ Effect`; a raw level through an
+      intensity template or the Programmer.
+    - **`useSpeedMasterForCategory` has no caller.** The effect pads were the only surface doing the
+      busking plan's D1 stamping, and it is client-side — the backend serves `usage` but does not
+      resolve it. The rest of the rule stands, so the hook is kept and documented as uncalled; the
+      rail's caption was reworded off the promise it could no longer keep. Don't delete it to
+      silence a dead-export sweep, and don't restore the caption's old wording.
+    - **`BuskingView` reads no target's running effects.** The eight fixed RTK Query slots that once
+      fanned the selection out (and capped it at eight targets — `FU-BUSK-TARGET-CAP`, now retired)
+      went with the pads. Both surviving pad kinds read the programmer's **layer stack**, which
+      needs only `{type, key}` per target, so `lookLayerTarget` is the one place the group-name
+      convention is applied and the selection has no ceiling.
   - **It does not pass `canOperate`, and the show-editing lock is not consulted.** GO must
     work from a busk pad: busking *is* the live use, and the lock is a stray-click guard for
     editing surfaces rather than a transport gate — the same reasoning that keeps `locked`
@@ -1081,6 +1104,68 @@ path may quietly change where it lands.
     the operator had not been shown; seeing what there is to press is most of what makes a
     pad grid learnable. Nothing can be pressed by mistake — presence is `none` for every pad
     with an empty selection, so there is nothing lit to release either.
+
+  **`busking-view-design/Main.dc.html` in lighting7 is the layout authority**, and the view was
+  brought back onto it after the four sessions landed. Two conventions came out of that and should
+  hold for anything added here:
+
+  - **One label, `BuskLabel`** (9px bold uppercase, wide-tracked, muted, **no icon**), on every
+    region — band, pools, cue column, rail. The pools and the cue column drew a larger icon-bearing
+    heading, which made three regions of one instrument read as three surfaces. It renders a
+    `<div>` deliberately: `BuskPools.test.tsx` walks up from a heading to reach its pool's grid.
+  - **The target band lives inside the left column**, so the rail's border runs from under the
+    ShowBar to the bottom of the page rather than starting below the band.
+
+  **Holding a speed-master card turns it into a tempo fader**, which is the busk view's own
+  hold-to-slide gesture — the one the property pads carried before they were deleted. It is the
+  third way to set a tempo and they do not overlap: TAP finds one you can hear, the number sets one
+  you know, and the drag *trims* one that is nearly right, which is what a busking operator does
+  most and had no gesture for. Six things:
+
+  - **The whole card is the fader**, armed after `SLIDE_HOLD_MS` and seeded from the point the press
+    started at, so nothing jumps when the hold takes. `useLongPress` hands `onLongPress` that
+    origin for exactly this. The rest of the drag lives on **window** listeners — a fader is
+    followed past the edge of the thing that started it — keyed on the `sliding` *boolean* and never
+    on the dragged value, or every `pointermove` would tear the listeners down and rebuild them.
+    They must listen for **`pointercancel` as well as `pointerup`**: the rail is a scroller with no
+    `touch-action` of its own, so on a touchscreen a drag the browser reclaims as a pan ends with no
+    release at all, and a card left `sliding` writes a tempo on the next pointer movement anywhere
+    on the page with nothing held down. `useLongPress` cancels on it too, or the armed hold fires on
+    a finger that is already scrolling something else.
+  - **The travel is `SLIDE_MIN_BPM`..`SLIDE_MAX_BPM` (60..180) in `lib/speedMasterModel.ts`**, not
+    the clock's 20..300. Deliberately the same window as lighting7's `BindingTarget.SpeedMasterBpm`
+    and for its stated reason: a drag across the whole range spends most of its travel in tempos
+    nobody plays at. It is a **control** range, not a limit — typing and TAP still reach the clock's
+    ends. Don't "fix" it by widening it to the clock's range.
+  - **It applies as it goes**, because that is what a fader is for: the tempo is judged by ear
+    against a running show, and a control that only lands on release makes that guess-then-check.
+    `useLiveTempoPush` is the traffic half of the same decision, not a softening of it — writes are
+    deduplicated on the whole BPM and floored at `SLIDE_PUSH_MS` (50 ms), a deferred value is held
+    and sent when the floor lifts rather than dropped, and the release bypasses both so the value
+    let go on always lands. There is deliberately no optimistic pending value after the release,
+    unlike the property pads: those waited on a REST refetch, and here the drag has been writing all
+    along, so the desk is already at the value being released.
+  - **`slideBpmRef` is written by the pointer handlers, never at render time.** A fast drag can
+    dispatch a `pointermove` and the `pointerup` that ends it in one task, with no re-render
+    between, so a ref assigned during render makes the release send the tempo from the move *before*
+    last — silently undoing the operator's final movement. Found by a test, not by inspection.
+  - **The click that ends a drag is swallowed** by an `onClickCapture` on the card calling
+    `consumeLongPress()`. Capture runs root-to-child, so neither TAP, nor the bpm button, nor a ratio
+    chip has to know the gesture exists — which is what lets the drag cross them freely.
+  - **A follower cannot be dragged**, alongside its existing TAP and click-to-type refusals: the
+    server refuses all three (`SPEED_MASTER_FOLLOWER`). Nor can any master while the desk is offline
+    or its bpm field is open.
+
+  **`SpeedMasterDetailSheet` is reached from the sliders glyph in the card's title row**, and only
+  from there — the hold belongs to the fader, and a card cannot answer a hold two ways.
+  `SlidersHorizontal`, not the footer link's `Settings2`: two identical glyphs a few rows apart read
+  as one destination. The glyph is withheld until the REST row arrives, since the sheet edits that
+  row rather than the live frame; the fader is not, because it needs only the uuid the live frame
+  carries.
+
+  The gesture itself is `hooks/useLongPress.ts`, which replaced two byte-identical hand-rolled
+  copies; `PropertyPadButton` had a third (deleted with it) and `CueSlotOverviewPanel` still has a
+  fourth, materially different one.
 
   **The cue column is the fourth region**, beside the Looks pool at the mock's `2fr`/`3fr` split
   (`components/busking/BuskCueStacks.tsx`): a card per runnable stack — name, live pip, current →

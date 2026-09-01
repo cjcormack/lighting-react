@@ -1,12 +1,10 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { MemoryRouter } from 'react-router'
-import type { PadItem } from './EffectPad'
-import { EffectPad, templateSwatch } from './EffectPad'
+import type { PadItem } from './BuskPools'
+import { BuskPools, templateSwatch } from './BuskPools'
 import type { TemplateSummary } from '@/api/templatesApi'
-
-vi.mock('@/store/status', () => ({ useIsDeskConnected: () => true }))
 
 afterEach(cleanup)
 
@@ -40,22 +38,7 @@ function pad(overrides: Partial<PadItem> & Pick<PadItem, 'key' | 'name'>): PadIt
 function draw(padItems: PadItem[], hasSelection = true) {
   return render(
     <MemoryRouter>
-      <EffectPad
-        effectsByCategory={{}}
-        getPresence={() => 'none'}
-        onToggle={() => {}}
-        onLongPress={() => {}}
-        hasSelection={hasSelection}
-        padItems={padItems}
-        currentProjectId={7}
-        defaultBeatDivision={1}
-        onBeatDivisionChange={() => {}}
-        propertyButtons={[]}
-        getPropertyPresence={() => 'none'}
-        onPropertyToggle={() => {}}
-        onPropertyLongPress={() => {}}
-        getPropertyValue={() => null}
-      />
+      <BuskPools hasSelection={hasSelection} padItems={padItems} currentProjectId={7} />
     </MemoryRouter>,
   )
 }
@@ -98,6 +81,28 @@ describe('the template pool columns', () => {
     expect(templateColumns(container)).toHaveLength(4)
   })
 
+  /**
+   * The pad's face is a name over one line of detail — the design's `.pad`, which has room for
+   * nothing else. The detail used to be a `<Badge>` with a third line of `notes` above it; the
+   * notes moved to the `title` so the pad can be the height it is drawn at.
+   */
+  it('draws the detail as plain text and keeps the notes in the tooltip', () => {
+    draw([
+      pad({
+        key: 't1',
+        name: 'Warm Amber',
+        family: 'COLOUR',
+        detail: 'colour',
+        notes: 'house warm',
+      }),
+    ])
+
+    const button = screen.getByRole('button', { name: /Warm Amber/ })
+    expect(button).toHaveAttribute('title', 'house warm')
+    expect(button.textContent).toBe('Warm Ambercolour')
+    expect(button.querySelector('[data-slot="badge"]')).toBeNull()
+  })
+
   /** A Look spans families by nature, so it has no column — it gets its own section instead. */
   it('puts Looks in their own section, not in a family column', () => {
     draw([pad({ key: 'l1', name: 'Ballyhoo', kind: 'look' })])
@@ -138,11 +143,7 @@ describe('the pool with nothing selected', () => {
   it('leaves the cue column live while the pools are dimmed', () => {
     const { container } = render(
       <MemoryRouter>
-        <EffectPad
-          effectsByCategory={{}}
-          getPresence={() => 'none'}
-          onToggle={() => {}}
-          onLongPress={() => {}}
+        <BuskPools
           hasSelection={false}
           padItems={[pad({ key: 't1', name: 'Warm Amber', family: 'COLOUR' })]}
           cueColumn={
@@ -151,13 +152,6 @@ describe('the pool with nothing selected', () => {
             </div>
           }
           currentProjectId={7}
-          defaultBeatDivision={1}
-          onBeatDivisionChange={() => {}}
-          propertyButtons={[]}
-          getPropertyPresence={() => 'none'}
-          onPropertyToggle={() => {}}
-          onPropertyLongPress={() => {}}
-          getPropertyValue={() => null}
         />
       </MemoryRouter>,
     )
@@ -165,6 +159,33 @@ describe('the pool with nothing selected', () => {
     const column = screen.getByTestId('cue-column')
     expect(column.closest('[aria-disabled="true"]')).toBeNull()
     expect(container.firstElementChild?.className).not.toContain('[&_button]:pointer-events-none')
+  })
+})
+
+/**
+ * The pools are the *library* and nothing else.
+ *
+ * This component used to draw three pools of ad-hoc effect pads, a Controls pool of hold-to-slide
+ * property pads, and a beat-division toggle to parameterise whatever those minted. All of it went:
+ * a busk pad presses a named thing from the library onto the selection, and a second grid minting
+ * anonymous FX instances with their own timing model made two instruments share a page. Pinned
+ * because the pools are where such a thing would be re-added without anyone noticing.
+ */
+describe('what the pools do not draw', () => {
+  it('offers no effect pads, property pads or beat divisions', () => {
+    draw([
+      pad({ key: 't1', name: 'Warm Amber', family: 'COLOUR' }),
+      pad({ key: 'l1', name: 'Ballyhoo', kind: 'look' }),
+    ])
+
+    // Not the four family column headings, which are Colour / Position / Beam / Intensity — these
+    // are the effect-pool and property-pool headings that used to sit below them.
+    for (const heading of ['Dimmer', 'Controls', 'Time']) {
+      expect(screen.queryByText(heading)).toBeNull()
+    }
+    // Every button left is a pad or one of the two manage links.
+    const labels = screen.getAllByRole('button').map((b) => b.textContent)
+    expect(labels).toEqual(['Warm Amber', 'Ballyhoo', 'Manage templates →', 'Manage looks →'])
   })
 })
 

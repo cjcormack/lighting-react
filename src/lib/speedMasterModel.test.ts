@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   FOLLOW_RATIOS,
+  SLIDE_MAX_BPM,
+  SLIDE_MIN_BPM,
   SPEED_MASTER_USAGES,
+  bpmAtSlideFraction,
+  bpmSlideFraction,
   derivedBpm,
   followRatioOf,
   formatFollowRatio,
@@ -103,5 +107,40 @@ describe('resolveSpeedMasterForCategory', () => {
     // The pre-load synthetic master 1 has a null uuid; stamping an effect with it would be
     // stamping nothing.
     expect(resolveSpeedMasterForCategory([{ uuid: null, usage: 'dimmer' }], 'dimmer')).toBeNull()
+  })
+})
+
+/**
+ * The window a *continuous* control maps onto, which is narrower than the clock's own 20..300 for
+ * the reason lighting7's MIDI tempo binding gives: a drag spread over the whole range spends most
+ * of its travel in tempos nobody plays at.
+ */
+describe('the tempo slide range', () => {
+  it('sits inside the clock range and covers the musical middle', () => {
+    // MasterClock.MIN_BPM / MAX_BPM in lighting7. A control window outside them could ask the
+    // clock for a tempo it would silently clamp.
+    expect(SLIDE_MIN_BPM).toBeGreaterThanOrEqual(20)
+    expect(SLIDE_MAX_BPM).toBeLessThanOrEqual(300)
+    expect(SLIDE_MIN_BPM).toBeLessThan(SLIDE_MAX_BPM)
+  })
+
+  it('maps the ends of the travel onto the ends of the window', () => {
+    expect(bpmAtSlideFraction(0)).toBe(SLIDE_MIN_BPM)
+    expect(bpmAtSlideFraction(1)).toBe(SLIDE_MAX_BPM)
+    expect(bpmAtSlideFraction(0.5)).toBe((SLIDE_MIN_BPM + SLIDE_MAX_BPM) / 2)
+  })
+
+  it('clamps rather than running past either end', () => {
+    // A drag is followed on the window, so the pointer routinely leaves the card it started on.
+    expect(bpmAtSlideFraction(-2)).toBe(SLIDE_MIN_BPM)
+    expect(bpmAtSlideFraction(4)).toBe(SLIDE_MAX_BPM)
+    expect(bpmSlideFraction(10)).toBe(0)
+    expect(bpmSlideFraction(600)).toBe(1)
+  })
+
+  it('round-trips a tempo through the fraction the fill is drawn from', () => {
+    for (const bpm of [SLIDE_MIN_BPM, 90, 120, SLIDE_MAX_BPM]) {
+      expect(bpmAtSlideFraction(bpmSlideFraction(bpm))).toBe(bpm)
+    }
   })
 })

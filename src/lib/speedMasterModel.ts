@@ -145,3 +145,47 @@ export function resolveSpeedMasterForCategory(
   if (category == null) return null
   return masters?.find((m) => m.usage === category && m.uuid != null)?.uuid ?? null
 }
+
+/**
+ * The tempo window a **continuous** control maps onto — a busk card held and dragged, as opposed
+ * to typed or tapped.
+ *
+ * Deliberately the same 60..180 as lighting7's `BindingTarget.SpeedMasterBpm`, and for the reason
+ * that binding's comment gives rather than by coincidence: a drag spread over the clock's full
+ * 20..300 (`MasterClock.MIN_BPM`/`MAX_BPM`) spends most of its travel in tempos nobody plays at,
+ * which is what makes trimming one by hand awkward. Across a 288px rail card, this window is about
+ * 0.4 BPM a pixel; the whole range would be nearer 1.
+ *
+ * It is a *control* range, not a limit. The clock still accepts 20..300, and the card's other two
+ * gestures still reach there — click the number to type one, or TAP it in. Nothing here is a
+ * ceiling on what a master can run at.
+ */
+export const SLIDE_MIN_BPM = 60
+export const SLIDE_MAX_BPM = 180
+
+/** How long the card is held before a press becomes a drag. The busk pads' own hold. */
+export const SLIDE_HOLD_MS = 300
+
+/**
+ * The floor between tempo writes while a drag is running.
+ *
+ * A drag **applies as it goes** — the operator is watching the rig and listening to the tempo, and
+ * a control that only lands on release turns that into guess-then-check. What this constant buys is
+ * the traffic half of that: a `pointermove` fires up to once a frame, and every write is broadcast
+ * to every other socket on the desk, so the sends are deduplicated on the rounded BPM and floored
+ * at this interval. 50 ms is 20 a second, far below what any drag can perceive and far above what
+ * the wire notices. The release always sends the final value regardless.
+ */
+export const SLIDE_PUSH_MS = 50
+
+/** Where along the control a tempo sits, 0..1 — for the fill behind a card mid-drag. */
+export function bpmSlideFraction(bpm: number): number {
+  const f = (bpm - SLIDE_MIN_BPM) / (SLIDE_MAX_BPM - SLIDE_MIN_BPM)
+  return Math.min(1, Math.max(0, f))
+}
+
+/** The tempo at a fraction along the control, rounded to whole BPM. */
+export function bpmAtSlideFraction(fraction: number): number {
+  const f = Math.min(1, Math.max(0, fraction))
+  return Math.round(SLIDE_MIN_BPM + f * (SLIDE_MAX_BPM - SLIDE_MIN_BPM))
+}

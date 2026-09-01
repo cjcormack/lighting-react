@@ -1,27 +1,15 @@
-import React, { useRef } from 'react'
+import React from 'react'
 import { useNavigate } from 'react-router'
-import { SwatchBook, Palette, Clock } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { cn } from '@/lib/utils'
-import { EFFECT_CATEGORY_INFO, BEAT_DIVISION_OPTIONS } from '@/components/fx/fxConstants'
-import { EffectPadButton } from './EffectPadButton'
-import { PropertyPadButton } from './PropertyPadButton'
-import type { EffectLibraryEntry } from '@/store/fixtureFx'
-import type { EffectPresence, PropertyButton } from './buskingTypes'
+import { useLongPress } from '@/hooks/useLongPress'
+import { BuskLabel } from './BuskLabel'
+import type { EffectPresence } from './buskingTypes'
 import type { LookSummary } from '@/api/looksApi'
 import type { TemplateSummary } from '@/api/templatesApi'
 import { templateIntentSwatch } from '@/lib/templateIntent'
 import { FAMILY_LABELS, type AttributeFamily } from '@/lib/attributeFamily'
-import { useIsDeskConnected } from '@/store/status'
 
-const CATEGORY_ORDER = ['looks', 'dimmer', 'colour', 'position', 'controls'] as const
-
-interface EffectPadProps {
-  effectsByCategory: Record<string, EffectLibraryEntry[]>
-  getPresence: (effectName: string) => EffectPresence
-  onToggle: (effect: EffectLibraryEntry) => void
-  onLongPress: (effect: EffectLibraryEntry) => void
+interface BuskPoolsProps {
   hasSelection: boolean
   /**
    * The named things a pad can toggle onto the selection: templates, which fill the four family
@@ -41,160 +29,67 @@ interface EffectPadProps {
    */
   cueColumn?: React.ReactNode
   currentProjectId: number | undefined
-  // Beat division
-  defaultBeatDivision: number
-  onBeatDivisionChange: (value: number) => void
-  // Property buttons (settings & sliders)
-  propertyButtons: PropertyButton[]
-  getPropertyPresence: (button: PropertyButton) => EffectPresence
-  onPropertyToggle: (button: PropertyButton, settingLevel?: number) => void
-  onPropertyLongPress: (button: PropertyButton) => void
-  getPropertyValue: (button: PropertyButton) => string | null
 }
 
-export function EffectPad({
-  effectsByCategory,
-  getPresence,
-  onToggle,
-  onLongPress,
-  hasSelection,
-  padItems,
-  cueColumn,
-  currentProjectId,
-  defaultBeatDivision,
-  onBeatDivisionChange,
-  propertyButtons,
-  getPropertyPresence,
-  onPropertyToggle,
-  onPropertyLongPress,
-  getPropertyValue,
-}: EffectPadProps) {
-  // Only the *property* pads are gated. The effect pads above them add and remove FX over REST,
-  // which stays usable while the socket is mid-backoff; the property pads write straight to the
-  // programmer over the socket.
-  const deskConnected = useIsDeskConnected()
-
+/**
+ * The busk view's pad pools: templates in four family columns, then Looks beside the cue column.
+ *
+ * **Those are all there is, and the deletion is deliberate.** This component was `EffectPad`, and it
+ * also drew three pools of ad-hoc effect pads (dimmer / colour / position), a Controls pool of
+ * hold-to-slide property pads writing straight to the programmer, and a Time beat-division toggle
+ * that parameterised whatever those two created. All of it went: a busk pad presses a *named thing*
+ * from the library onto the selection, and a second grid minting anonymous FX instances with their
+ * own timing model made two instruments share a page. `busking-view-design/Main.dc.html` draws these
+ * pools and nothing else.
+ *
+ * What that costs, said plainly so it is not rediscovered as a bug: an ad-hoc effect now reaches the
+ * stage through a Look with deferred effects, a cue, or the Programmer's `+ Effect`, and a raw level
+ * through an intensity template or the Programmer. Nothing on this page mints an FX instance.
+ */
+export function BuskPools({ hasSelection, padItems, cueColumn, currentProjectId }: BuskPoolsProps) {
   return (
     // The dim-when-nothing-selected state lives on each `CategorySection`, not here — see its
     // docblock. It has to, now that the cue column shares this scroller: firing a cue has nothing
     // to do with the target selection, and a subtree-wide rule would have made the stack cards and
     // pinned pads inert whenever no fixture happened to be selected.
-    <div className="@container flex flex-col h-full overflow-y-auto px-2 pb-2">
+    <div className="@container flex flex-col h-full overflow-y-auto px-4 pt-1 pb-4">
       {!hasSelection && (
         <p className="mt-2 shrink-0 rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
           Toggle fixtures or groups above — pads apply to the selection. Lit pads are already on
           stage and stay live.
         </p>
       )}
-      {CATEGORY_ORDER.map((cat) => {
-        if (cat === 'looks') {
-          return (
-            <React.Fragment key={cat}>
-              <CategorySection label="Templates" icon={Palette} dimmed={!hasSelection}>
-                <TemplateColumns items={padItems} />
-              </CategorySection>
-              {/* Looks at 2fr beside the cue column's 3fr, the mock's split. They sit side by side
-                  rather than stacked because the cue column is the one region an operator watches
-                  while pressing something else — a stack card's state line has to stay on screen
-                  when the pointer is in the Looks pool. Below the breakpoint they stack, which is
-                  the only arrangement a phone has room for. */}
-              <div
-                className={cn(
-                  'grid grid-cols-1 gap-4',
-                  // Only split the row when there is something to put in the second column: with no
-                  // cue column the 3fr track would still be reserved, squeezing the Looks pool into
-                  // 40% of the width beside an empty gap.
-                  cueColumn && '@[52rem]:grid-cols-[2fr_3fr]',
-                )}
-              >
-                {/* Its own `@container`, and `min-w-0` so a long Look name cannot push the
-                    track wider than its share. Without the container the grid inside reads the
-                    *scroller's* width, so a 55rem pad area gives the Looks pool four columns
-                    across the 21rem it actually got. */}
-                <CategorySection
-                  label="Looks"
-                  icon={SwatchBook}
-                  dimmed={!hasSelection}
-                  className="@container min-w-0"
-                >
-                  <LookGrid
-                    items={padItems.filter((i) => i.kind === 'look')}
-                    currentProjectId={currentProjectId}
-                  />
-                </CategorySection>
-                {cueColumn}
-              </div>
-              <hr className="border-border mt-3 mb-0" />
-              <CategorySection label="Time" icon={Clock} dimmed={!hasSelection}>
-                <ToggleGroup
-                  type="single"
-                  value={String(defaultBeatDivision)}
-                  onValueChange={(v) => {
-                    if (v) onBeatDivisionChange(parseFloat(v))
-                  }}
-                  className="h-auto gap-0.5 flex-wrap justify-start"
-                >
-                  {BEAT_DIVISION_OPTIONS.map((opt) => (
-                    <ToggleGroupItem
-                      key={opt.value}
-                      value={String(opt.value)}
-                      size="sm"
-                      className="text-xs px-2 h-7"
-                    >
-                      {opt.label}
-                    </ToggleGroupItem>
-                  ))}
-                </ToggleGroup>
-              </CategorySection>
-            </React.Fragment>
-          )
-        }
 
-        if (cat === 'controls') {
-          if (propertyButtons.length === 0) return null
-          const info = EFFECT_CATEGORY_INFO[cat]
-          if (!info) return null
-          return (
-            <CategorySection key={cat} label={info.label} icon={info.icon} dimmed={!hasSelection}>
-              <div className="grid grid-cols-1 @[20rem]:grid-cols-2 @[28rem]:grid-cols-3 @[48rem]:grid-cols-4 gap-2">
-                {propertyButtons.map((btn) => (
-                  <PropertyPadButton
-                    key={`${btn.kind}:${btn.propertyName}`}
-                    button={btn}
-                    presence={getPropertyPresence(btn)}
-                    activeValue={getPropertyValue(btn)}
-                    onToggle={(level) => onPropertyToggle(btn, level)}
-                    onLongPress={() => onPropertyLongPress(btn)}
-                    disabled={!deskConnected}
-                  />
-                ))}
-              </div>
-            </CategorySection>
-          )
-        }
+      <CategorySection label="Templates" dimmed={!hasSelection}>
+        <TemplateColumns items={padItems} />
+      </CategorySection>
 
-        // Effect categories: dimmer, colour, position
-        const effects = effectsByCategory[cat] ?? []
-        if (effects.length === 0) return null
-        const info = EFFECT_CATEGORY_INFO[cat]
-        if (!info) return null
-
-        return (
-          <CategorySection key={cat} label={info.label} icon={info.icon} dimmed={!hasSelection}>
-            <div className="grid grid-cols-1 @[20rem]:grid-cols-2 @[28rem]:grid-cols-3 @[48rem]:grid-cols-4 gap-2">
-              {effects.map((effect) => (
-                <EffectPadButton
-                  key={effect.name}
-                  effect={effect}
-                  presence={getPresence(effect.name)}
-                  onToggle={() => onToggle(effect)}
-                  onLongPress={() => onLongPress(effect)}
-                />
-              ))}
-            </div>
-          </CategorySection>
-        )
-      })}
+      {/* Looks at 2fr beside the cue column's 3fr, the mock's split. They sit side by side
+          rather than stacked because the cue column is the one region an operator watches
+          while pressing something else — a stack card's state line has to stay on screen
+          when the pointer is in the Looks pool. Below the breakpoint they stack, which is
+          the only arrangement a phone has room for. */}
+      <div
+        className={cn(
+          'grid grid-cols-1 gap-4',
+          // Only split the row when there is something to put in the second column: with no
+          // cue column the 3fr track would still be reserved, squeezing the Looks pool into
+          // 40% of the width beside an empty gap.
+          cueColumn && '@[52rem]:grid-cols-[2fr_3fr]',
+        )}
+      >
+        {/* Its own `@container`, and `min-w-0` so a long Look name cannot push the
+            track wider than its share. Without the container the grid inside reads the
+            *scroller's* width, so a 55rem pad area gives the Looks pool four columns
+            across the 21rem it actually got. */}
+        <CategorySection label="Looks" dimmed={!hasSelection} className="@container min-w-0">
+          <LookGrid
+            items={padItems.filter((i) => i.kind === 'look')}
+            currentProjectId={currentProjectId}
+          />
+        </CategorySection>
+        {cueColumn}
+      </div>
     </div>
   )
 }
@@ -213,21 +108,19 @@ export function EffectPad({
  * - **On the buttons, not on a container.** `pointer-events-none` on an element that scrolls takes
  *   it out of hit-testing, so the wheel and a touch drag find no scrollable ancestor and the
  *   library the operator was just invited to read is stuck at its first screenful. Every
- *   interactive thing in a pool is a `<button>` (the pads, the beat-division toggles, the manage
- *   links), so the descendant selector covers the same ground.
+ *   interactive thing in a pool is a `<button>` (the pads, the manage links), so the descendant
+ *   selector covers the same ground.
  * - **Per section, not on the whole scroller.** Session 4 put the cue stacks and pinned-cue pads in
  *   the same scroller, and those answer to the playhead rather than to the selection. A subtree
  *   rule would have made GO inert whenever no fixture happened to be selected.
  */
 function CategorySection({
   label,
-  icon: Icon,
   dimmed,
   className,
   children,
 }: {
   label: string
-  icon: React.ComponentType<{ className?: string }>
   /** True when no target is selected: this pool is showable but not pressable. */
   dimmed?: boolean
   /**
@@ -241,22 +134,17 @@ function CategorySection({
   return (
     <div
       className={cn(
-        'mt-3 first:mt-2 transition-opacity',
+        'mt-4 first:mt-3.5 transition-opacity',
         dimmed && 'opacity-55 select-none [&_button]:pointer-events-none',
         className,
       )}
       aria-disabled={dimmed || undefined}
     >
-      <div className="flex items-center gap-1.5 mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-        <Icon className="size-3.5" />
-        {label}
-      </div>
+      <BuskLabel className="mb-2">{label}</BuskLabel>
       {children}
     </div>
   )
 }
-
-const MOVE_THRESHOLD = 10
 
 /**
  * One pad: a named thing you toggle onto the current selection.
@@ -264,13 +152,13 @@ const MOVE_THRESHOLD = 10
  * Deliberately not "a Look" any more. Session 3 split the library in two and **both halves belong on
  * a pad** — a template is a named value, which is exactly what a palette bank was, and a Look with
  * deferred effects is a chase you point at a selection. They share one grid because they are one
- * gesture from the operator's side; only the badge says which.
+ * gesture from the operator's side; only the column it lands in says which.
  */
 export interface PadItem {
   key: string
   name: string
   notes: string | null
-  /** What it holds, in a badge's worth of text. */
+  /** What it holds, in a line's worth of text. */
   detail: string
   kind: 'look' | 'template'
   /**
@@ -386,65 +274,17 @@ function LookPadButton({
   onToggle: () => void
   onLongPress: () => void
 }) {
-  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const didLongPress = useRef(false)
-  const didMove = useRef(false)
-  const startPos = useRef<{ x: number; y: number } | null>(null)
-
-  const handlePointerDown = (e: React.PointerEvent) => {
-    didLongPress.current = false
-    didMove.current = false
-    startPos.current = { x: e.clientX, y: e.clientY }
-    pressTimer.current = setTimeout(() => {
-      didLongPress.current = true
-      if (!didMove.current) {
-        onLongPress()
-      }
-    }, 500)
-  }
-
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (startPos.current && !didMove.current) {
-      const dx = e.clientX - startPos.current.x
-      const dy = e.clientY - startPos.current.y
-      if (dx * dx + dy * dy > MOVE_THRESHOLD * MOVE_THRESHOLD) {
-        didMove.current = true
-        if (pressTimer.current) {
-          clearTimeout(pressTimer.current)
-          pressTimer.current = null
-        }
-      }
-    }
-  }
-
-  const handlePointerUp = () => {
-    if (pressTimer.current) {
-      clearTimeout(pressTimer.current)
-      pressTimer.current = null
-    }
-    if (!didLongPress.current && !didMove.current) {
-      onToggle()
-    }
-    startPos.current = null
-  }
-
-  const handlePointerLeave = () => {
-    if (pressTimer.current) {
-      clearTimeout(pressTimer.current)
-      pressTimer.current = null
-    }
-    startPos.current = null
-  }
+  const { handlers } = useLongPress({ onLongPress, onPress: onToggle })
 
   return (
     <button
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerLeave={handlePointerLeave}
+      {...handlers}
+      // The notes are off the pad's face — the mock has room for a name and one line of detail, and
+      // a third line is what pushed the pad past its drawn height. They are still readable here.
+      title={item.notes ?? item.name}
       className={cn(
-        'relative flex flex-col items-center justify-center rounded-lg border px-2 py-3 text-center transition-all',
-        'min-h-[64px] select-none touch-manipulation',
+        'relative flex flex-col items-center justify-center rounded-lg border p-2 text-center transition-all',
+        'min-h-[56px] select-none touch-manipulation',
         'active:scale-95',
         presence === 'none' && 'border-border bg-card hover:bg-accent/50',
         presence === 'some' && 'border-primary/40 bg-primary/10 hover:bg-primary/15',
@@ -470,14 +310,9 @@ function LookPadButton({
           {item.name}
         </span>
       </span>
-      {item.notes && (
-        <span className="mt-0.5 text-[10px] leading-tight text-muted-foreground line-clamp-1">
-          {item.notes}
-        </span>
-      )}
-      <Badge variant="secondary" className="mt-1 text-[9px] px-1.5 py-0 leading-tight">
+      <span className="mt-0.5 text-[10px] leading-tight text-muted-foreground line-clamp-1">
         {item.detail}
-      </Badge>
+      </span>
       {presence !== 'none' && (
         <div
           className={cn(
@@ -491,7 +326,7 @@ function LookPadButton({
 }
 
 /**
- * What a Look holds, in a badge's worth of text.
+ * What a Look holds, in a line's worth of text.
  *
  * Effects and rows are counted apart because they behave differently on a pad: an effect keeps
  * running until the pad is pressed again, while a static row is a value the toggle writes and holds.
@@ -515,7 +350,7 @@ export function describeLookContents(look: LookSummary): string {
  *
  * The two exclusions are the ones `isOfferable` makes in `components/fx/FxColourTemplates.tsx`,
  * and for the same reason rather than by coincidence. A **per-fixture** template holds one colour
- * per head, so there is no single colour for a swatch to claim — its badge already says
+ * per head, so there is no single colour for a swatch to claim — its detail line already says
  * "{n} heads", which is the honest answer. A **multi-row** template holds several, and drawing
  * `rows[0]` under a name that covers all of them would state one of them as the whole thing,
  * silently.

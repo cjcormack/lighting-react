@@ -1,8 +1,8 @@
 import { useCallback, useMemo } from 'react'
-import { Layers, Pin } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { AUTO_CUE_NUMBER_CLASS } from '@/lib/cueNumber'
+import { BuskLabel } from './BuskLabel'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import {
   useDeactivateCueStackMutation,
@@ -90,7 +90,7 @@ export function BuskCueStacks({
   if (stacks == null) {
     return (
       <div className={COLUMN_ROOT}>
-        <SectionLabel icon={Layers}>Cue stacks</SectionLabel>
+        <BuskLabel>Cue stacks</BuskLabel>
       </div>
     )
   }
@@ -98,7 +98,7 @@ export function BuskCueStacks({
   if (runnable.length === 0) {
     return (
       <div className={COLUMN_ROOT}>
-        <SectionLabel icon={Layers}>Cue stacks</SectionLabel>
+        <BuskLabel>Cue stacks</BuskLabel>
         <p className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
           This project has no cue stacks yet. Build the show on the Show view.
         </p>
@@ -108,7 +108,7 @@ export function BuskCueStacks({
 
   return (
     <div className={cn(COLUMN_ROOT, 'flex flex-col gap-2')}>
-      <SectionLabel icon={Layers}>Cue stacks</SectionLabel>
+      <BuskLabel>Cue stacks</BuskLabel>
 
       {runnable.map((stack) => (
         <StackCard
@@ -138,9 +138,7 @@ export function BuskCueStacks({
         />
       ))}
 
-      <SectionLabel icon={Pin} className="mt-1">
-        Pinned cues
-      </SectionLabel>
+      <BuskLabel className="mt-1">Pinned cues</BuskLabel>
       {pinned.length === 0 ? (
         <p className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
           No cues pinned yet. Pin one from its properties on the Show view to give it a pad here.
@@ -160,28 +158,6 @@ export function BuskCueStacks({
           ))}
         </div>
       )}
-    </div>
-  )
-}
-
-function SectionLabel({
-  icon: Icon,
-  className,
-  children,
-}: {
-  icon: React.ComponentType<{ className?: string }>
-  className?: string
-  children: React.ReactNode
-}) {
-  return (
-    <div
-      className={cn(
-        'flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground',
-        className,
-      )}
-    >
-      <Icon className="size-3.5" />
-      {children}
     </div>
   )
 }
@@ -228,13 +204,15 @@ function StackCard({
     cueById(stack.nextCueId) ?? stack.cues.find((c) => c.cueType !== 'MARKER') ?? null
 
   return (
-    <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2">
+    <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2.5">
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-sm font-semibold">{stack.name}</span>
-        <span className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">
+          {/* The same pip the ShowBar and the Prompt Book's anchors draw, from the one keyframe. */}
           {isLive && (
             <span
-              className="size-1.5 shrink-0 rounded-full bg-green-500"
+              className="size-2 shrink-0 rounded-full bg-green-500"
+              style={{ animation: 'r-live-pulse 1.6s ease-in-out infinite' }}
               aria-label="live"
             />
           )}
@@ -259,7 +237,7 @@ function StackCard({
       </div>
       <Button
         variant="ghost"
-        size="sm"
+        className="h-11 px-2.5 text-[11px]"
         onClick={onRelease}
         // Nothing to release on a stack that is not running. Disabled rather than hidden: the two
         // buttons keep their positions as stacks go live, so the operator's aim does not have to
@@ -271,7 +249,11 @@ function StackCard({
       {/* No standard cue means nothing to fire — an empty stack, or one made only of MARKERs, which
           `activateAtFirstCue` refuses outright. A live stack always has one, so this never mutes
           the transport's own advance. */}
-      <Button size="sm" onClick={onGo} disabled={goTarget == null}>
+      <Button
+        className="h-11 w-16 text-sm font-bold tracking-[0.06em]"
+        onClick={onGo}
+        disabled={goTarget == null}
+      >
         GO
       </Button>
     </div>
@@ -319,14 +301,14 @@ function PinnedCuePad({
     >
       <span
         className={cn(
-          'font-mono text-sm font-bold tabular-nums',
+          'font-mono text-[13px] font-bold tabular-nums',
           cue.cueNumberAuto && AUTO_CUE_NUMBER_CLASS,
         )}
       >
         {cue.cueNumber ?? '—'}
       </span>
-      <span className="line-clamp-1 text-xs text-muted-foreground">{cue.name}</span>
-      <span className="line-clamp-1 text-[10px] text-muted-foreground/70">{stackName}</span>
+      <span className="line-clamp-1 text-[11px] text-muted-foreground">{cue.name}</span>
+      <span className="line-clamp-1 text-[9px] text-muted-foreground/70">{stackName}</span>
     </button>
   )
 }

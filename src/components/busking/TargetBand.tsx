@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils'
 import { useGroupListQuery } from '@/store/groups'
 import { useFixtureListQuery } from '@/store/fixtures'
 import { buskingTargetKey, type BuskingTarget } from './buskingTypes'
+import { BuskLabel } from './BuskLabel'
 
 interface TargetBandProps {
   selectedTargets: Map<string, BuskingTarget>
@@ -51,9 +52,7 @@ export function TargetBand({
   return (
     <div className="shrink-0 border-b px-4 pt-2.5 pb-3">
       <div className="mb-2 flex items-baseline gap-2.5">
-        <span className="text-[9px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
-          Targets
-        </span>
+        <BuskLabel>Targets</BuskLabel>
         <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{summary}</span>
         {/* The band is the picker at every width the rail is; below that the sheet still is. */}
         <Button variant="ghost" size="sm" className="h-6 px-2 text-xs md:hidden" onClick={onOpenPicker}>
