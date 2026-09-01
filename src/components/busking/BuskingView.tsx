@@ -37,14 +37,26 @@ import { groupMemberFixtures } from '@/lib/fxTargetProperties'
 import { toast } from 'sonner'
 import { formatError } from '@/lib/formatError'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
+import type { ShowTransport } from '@/hooks/useShowTransport'
+import { BuskCueStacks } from './BuskCueStacks'
+
+interface BuskingViewProps {
+  projectId: number
+  transport: ShowTransport
+}
 
 /**
- * The busk view's body: the target band, the pad pools, and the speed rail.
+ * The busk view's body: the target band, the pad pools, the cue column and the speed rail.
  *
  * The show chrome above it (`ShowHeader`, `ShowBar`) belongs to `routes/Busk.tsx`, like every other
  * live view — this component owns only what is particular to busking.
+ *
+ * The transport arrives as a prop rather than being mounted here, because `routes/Busk.tsx` already
+ * holds one through `useShowBarProps`. A second `useShowTransport` on the page would run a second
+ * rAF loop and a second reconcile effect writing the same runner slice — the defect adopting that
+ * hook removed from the Prompt Book, which is worth not reintroducing one view along.
  */
-export function BuskingView() {
+export function BuskingView({ projectId, transport }: BuskingViewProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)')
   const [targetSheetOpen, setTargetSheetOpen] = useState(false)
 
@@ -305,6 +317,9 @@ export function BuskingView() {
             setEditingEffect={setEditingEffect}
             setConfiguringEffect={setConfiguringEffect}
             padItems={padItems}
+            cueColumn={
+              <BuskCueStacks projectId={projectId} transport={transport} />
+            }
             currentProjectId={currentProject?.id}
           />
         </div>
@@ -376,6 +391,7 @@ function EffectPadWrapper({
   setEditingEffect,
   setConfiguringEffect,
   padItems,
+  cueColumn,
   currentProjectId,
 }: {
   selectedTargets: BuskingTarget[]
@@ -392,6 +408,7 @@ function EffectPadWrapper({
   setEditingEffect: (ctx: ActiveEffectContext | null) => void
   setConfiguringEffect: (effect: EffectLibraryEntry | null) => void
   padItems: PadItem[]
+  cueColumn: React.ReactNode
   currentProjectId: number | undefined
 }) {
   const getPresence = useCallback(
@@ -498,6 +515,7 @@ function EffectPadWrapper({
       onLongPress={handleLongPress}
       hasSelection={selectedTargets.length > 0}
       padItems={padItems}
+      cueColumn={cueColumn}
       currentProjectId={currentProjectId}
       defaultBeatDivision={defaultBeatDivision}
       onBeatDivisionChange={onBeatDivisionChange}

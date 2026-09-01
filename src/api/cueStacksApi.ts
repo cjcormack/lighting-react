@@ -33,6 +33,14 @@ export interface CueStackCueEntry {
   cueNumberAuto: boolean
   notes: string | null
   cueType: CueType
+  /**
+   * True when this cue has a pad of its own on the busk view.
+   *
+   * Carried here rather than read from `/cues`, so a pinned pad and the stack card above it take
+   * their live/next state out of one cache — `useShowTransport`'s. Two caches would be two answers
+   * to "is this cue on stage", which can disagree mid-fade.
+   */
+  pinnedToBusk?: boolean
 }
 
 export interface CueStack {
@@ -121,6 +129,12 @@ export interface AdvanceProgramRequest {
 
 export interface GoToStackRequest {
   stackId: number
+  /**
+   * Land on this cue rather than the stack's first. Omitted by `/show`'s arming, which means
+   * activate-at-first-cue; sent by a busk pinned-cue pad, which has to move the playhead and fire
+   * a named cue in one request — going via the first cue would blip it onto a live rig.
+   */
+  cueId?: number
 }
 
 export interface ProgramActivateResponse {

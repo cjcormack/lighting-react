@@ -28,15 +28,16 @@ export function BuskRedirect() {
  *  - `canOperate`. GO must work from a busk pad — that is the plan's D9, and the show-editing lock
  *    is a stray-click guard for editing surfaces rather than a transport gate.
  *
- * `frameRateProgress: false` for the reason `ProgrammerPage` passes it: nothing here reads
- * `transport`, so without it every frame of a running fade would re-render the whole pad grid.
+ * `frameRateProgress: false` for the reason `ProgrammerPage` passes it. The cue column reads
+ * `transport`'s *cursors*, which move once per cue, but nothing here reads `fadeProgress` — so the
+ * flag still keeps a running fade from re-rendering the whole pad grid every frame.
  */
 export function ProjectBusk() {
   const { projectId } = useParams()
   const projectIdNum = Number(projectId)
   const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
-  const { showBarProps, showHeaderProps } = useShowBarProps(projectIdNum, {
+  const { showBarProps, showHeaderProps, transport } = useShowBarProps(projectIdNum, {
     frameRateProgress: false,
   })
 
@@ -72,7 +73,8 @@ export function ProjectBusk() {
           Blackout, Blind and the speed masters all mean something with the show down, and
           `goDisabled` already mutes BACK/GO. */}
       <ShowBar {...showBarProps} />
-      <BuskingView />
+      {/* The transport is handed down rather than mounted again inside — see `BuskingView`. */}
+      <BuskingView projectId={projectIdNum} transport={transport} />
     </div>
   )
 }

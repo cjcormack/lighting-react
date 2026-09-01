@@ -315,6 +315,11 @@ export function ShowPage() {
         const input = buildCueInput(cue)
         input.name = cue.name + ' (copy)'
         input.cueNumber = null
+        // Dropped for the same reason the cue number is: the busk pin is a *placement on a
+        // performance surface*, not part of the state the cue holds. `buildCueInput` hands it back
+        // so an inline PUT can't unpin a cue by accident, but inheriting it here would put a second
+        // pad — unnumbered, and named "… (copy)" — on the busk grid as a side effect of duplicating.
+        input.pinnedToBusk = undefined
         input.cueStackId = drillStackId
         const result = await createCue({ projectId: projectIdNum, ...input }).unwrap()
         setExpandedCueId(result.id)

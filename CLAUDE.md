@@ -1082,6 +1082,36 @@ path may quietly change where it lands.
     pad grid learnable. Nothing can be pressed by mistake — presence is `none` for every pad
     with an empty selection, so there is nothing lit to release either.
 
+  **The cue column is the fourth region**, beside the Looks pool at the mock's `2fr`/`3fr` split
+  (`components/busking/BuskCueStacks.tsx`): a card per runnable stack — name, live pip, current →
+  next, Release, GO — then the **pinned cues** as pads. Five things about it:
+
+  - **GO means two requests and one gesture.** On the live stack it is `transport.go()`, so a GO
+    here and a GO in the ShowBar are the same press, optimistic cursor and stack boundary included.
+    On any other stack it is `goToStack` — a playhead move, which is what "GO fires cue 1" says.
+    Routing the live stack through `goToStack` would restart it at cue 1 mid-show.
+  - **A pinned pad is one request, `POST /show/go-to` carrying a `cueId`.** That field was added
+    for this: a pad names a cue in a stack that may not be live, and go-to-then-activate fires the
+    target stack's *first* cue on the way past — a blip on a live rig, in the one gesture D9 says
+    names exactly what it fires. The cue is validated before the playhead moves, server-side.
+  - **The pin is `pinnedToBusk` on the cue**, set only in `CuePropsPane` — a pad grid has no create
+    affordance, the same rule the Look and template pools follow. It rides `CueStackCueEntry` as
+    well as `CueDetails`, so a pad and its stack card read one cache; sourcing pads from `/cues`
+    would be two answers to "is this cue on stage" that disagree mid-fade. It is also a field
+    `buildCueInput` must hand back, or an inline cue edit unpins the cue as a side effect of
+    renaming it. A **MARKER** is refused a pin at both ends — the toggle is hidden, and the pad list
+    filters it anyway, since an import can carry the flag and `goToCue` refuses a marker.
+  - **The empty-selection dim is per `CategorySection`, not on the scroller.** The cue column shares
+    that scroller and answers to the playhead rather than the selection, so the old subtree-wide
+    `[&_button]:pointer-events-none` would have made GO inert for want of a selected fixture. The
+    inertness still goes on the *buttons* — on a scrolling container it takes the container out of
+    hit-testing, which is session 3's own bug.
+  - **The transport is a prop; the stack list is not.** `routes/Busk.tsx` holds the one
+    `useShowTransport` (through `useShowBarProps`) and passes it down, because a second instance
+    means a second rAF loop and a second reconcile effect on one runner slice. `BuskCueStacks`
+    reads `useProjectCueStackListQuery` itself — that is the *same* cache entry, deduplicated by
+    key, not a second copy of a run cursor.
+
   **The Effects Overview panel is no longer route-locked.** `/fx` used to hold it open and
   its toggle inert for as long as it was mounted, through a `useEffectsOverview` hook that
   OR-ed a lock over the stored preference. That existed because the busk view had no tempo

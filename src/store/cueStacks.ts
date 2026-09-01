@@ -438,16 +438,31 @@ export const cueStacksApi = restApi.injectEndpoints({
         method: 'POST',
         body,
       }),
-      async onQueryStarted({ projectId, stackId }, { dispatch, queryFulfilled }) {
-        const patchResult = dispatch(
-          cueStacksApi.util.updateQueryData('projectProgramState', projectId, (draft) => {
-            draft.activeStackId = stackId
-          }),
-        )
+      async onQueryStarted({ projectId, stackId, cueId }, { dispatch, queryFulfilled }) {
+        const patches = [
+          dispatch(
+            cueStacksApi.util.updateQueryData('projectProgramState', projectId, (draft) => {
+              draft.activeStackId = stackId
+            }),
+          ),
+        ]
+        // A pad naming a cue gets the same optimism `activateCueStack` gives its own: the ring
+        // lights on the press rather than a round-trip later. Only when a cue was named — a bare
+        // go-to lands on whichever cue the server decides is first, which this side must not guess.
+        if (cueId != null) {
+          patches.push(
+            dispatch(
+              cueStacksApi.util.updateQueryData('projectCueStackList', projectId, (draft) => {
+                const stack = draft.find((s) => s.id === stackId)
+                if (stack) stack.activeCueId = cueId
+              }),
+            ),
+          )
+        }
         try {
           await queryFulfilled
         } catch {
-          patchResult.undo()
+          patches.forEach((p) => p.undo())
         }
       },
       invalidatesTags: (_result, _error, { projectId }) => [

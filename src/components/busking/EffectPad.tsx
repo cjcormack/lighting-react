@@ -31,6 +31,15 @@ interface EffectPadProps {
    * fixtures, so the toggle route offers none of its rows and a pad for it would fire nothing.
    */
   padItems: PadItem[]
+  /**
+   * The cue stacks and pinned-cue pads, drawn beside the Looks pool.
+   *
+   * A node rather than the data, because a pad grid has no business knowing about the show
+   * transport: everything it needs is a run cursor, and those live one hook up. Passing the built
+   * column keeps `useShowTransport` mounted exactly once on this page — the Prompt Book's two
+   * instances are what `useShowBarProps` exists to have stopped happening.
+   */
+  cueColumn?: React.ReactNode
   currentProjectId: number | undefined
   // Beat division
   defaultBeatDivision: number
@@ -50,6 +59,7 @@ export function EffectPad({
   onLongPress,
   hasSelection,
   padItems,
+  cueColumn,
   currentProjectId,
   defaultBeatDivision,
   onBeatDivisionChange,
@@ -65,25 +75,11 @@ export function EffectPad({
   const deskConnected = useIsDeskConnected()
 
   return (
-    <div
-      className={cn(
-        '@container flex flex-col h-full overflow-y-auto px-2 pb-2 transition-opacity',
-        // Dimmed and inert rather than replaced by a placeholder. This used to be a centred
-        // "Select a group or fixture" page, which hid the entire library behind a step the
-        // operator had not been shown yet — seeing what there *is* to press is most of what makes
-        // a pad grid learnable. Nothing can be pressed by mistake: presence is `none` for every
-        // pad with an empty selection, so there is nothing lit to release either.
-        //
-        // The inertness is on the *buttons*, not on this element: `pointer-events-none` here
-        // would take the scroll container out of hit-testing too, so the wheel and a touch drag
-        // would find no scrollable ancestor and the library the operator was just invited to
-        // read would be stuck at its first screenful. Every interactive thing below is a
-        // `<button>` (the pads, the beat-division toggles, the manage links), so the descendant
-        // selector covers the same ground the container rule did.
-        !hasSelection && 'opacity-55 select-none [&_button]:pointer-events-none',
-      )}
-      aria-disabled={!hasSelection || undefined}
-    >
+    // The dim-when-nothing-selected state lives on each `CategorySection`, not here — see its
+    // docblock. It has to, now that the cue column shares this scroller: firing a cue has nothing
+    // to do with the target selection, and a subtree-wide rule would have made the stack cards and
+    // pinned pads inert whenever no fixture happened to be selected.
+    <div className="@container flex flex-col h-full overflow-y-auto px-2 pb-2">
       {!hasSelection && (
         <p className="mt-2 shrink-0 rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
           Toggle fixtures or groups above — pads apply to the selection. Lit pads are already on
@@ -94,17 +90,42 @@ export function EffectPad({
         if (cat === 'looks') {
           return (
             <React.Fragment key={cat}>
-              <CategorySection label="Templates" icon={Palette}>
+              <CategorySection label="Templates" icon={Palette} dimmed={!hasSelection}>
                 <TemplateColumns items={padItems} />
               </CategorySection>
-              <CategorySection label="Looks" icon={SwatchBook}>
-                <LookGrid
-                  items={padItems.filter((i) => i.kind === 'look')}
-                  currentProjectId={currentProjectId}
-                />
-              </CategorySection>
+              {/* Looks at 2fr beside the cue column's 3fr, the mock's split. They sit side by side
+                  rather than stacked because the cue column is the one region an operator watches
+                  while pressing something else — a stack card's state line has to stay on screen
+                  when the pointer is in the Looks pool. Below the breakpoint they stack, which is
+                  the only arrangement a phone has room for. */}
+              <div
+                className={cn(
+                  'grid grid-cols-1 gap-4',
+                  // Only split the row when there is something to put in the second column: with no
+                  // cue column the 3fr track would still be reserved, squeezing the Looks pool into
+                  // 40% of the width beside an empty gap.
+                  cueColumn && '@[52rem]:grid-cols-[2fr_3fr]',
+                )}
+              >
+                {/* Its own `@container`, and `min-w-0` so a long Look name cannot push the
+                    track wider than its share. Without the container the grid inside reads the
+                    *scroller's* width, so a 55rem pad area gives the Looks pool four columns
+                    across the 21rem it actually got. */}
+                <CategorySection
+                  label="Looks"
+                  icon={SwatchBook}
+                  dimmed={!hasSelection}
+                  className="@container min-w-0"
+                >
+                  <LookGrid
+                    items={padItems.filter((i) => i.kind === 'look')}
+                    currentProjectId={currentProjectId}
+                  />
+                </CategorySection>
+                {cueColumn}
+              </div>
               <hr className="border-border mt-3 mb-0" />
-              <CategorySection label="Time" icon={Clock}>
+              <CategorySection label="Time" icon={Clock} dimmed={!hasSelection}>
                 <ToggleGroup
                   type="single"
                   value={String(defaultBeatDivision)}
@@ -134,7 +155,7 @@ export function EffectPad({
           const info = EFFECT_CATEGORY_INFO[cat]
           if (!info) return null
           return (
-            <CategorySection key={cat} label={info.label} icon={info.icon}>
+            <CategorySection key={cat} label={info.label} icon={info.icon} dimmed={!hasSelection}>
               <div className="grid grid-cols-1 @[20rem]:grid-cols-2 @[28rem]:grid-cols-3 @[48rem]:grid-cols-4 gap-2">
                 {propertyButtons.map((btn) => (
                   <PropertyPadButton
@@ -159,7 +180,7 @@ export function EffectPad({
         if (!info) return null
 
         return (
-          <CategorySection key={cat} label={info.label} icon={info.icon}>
+          <CategorySection key={cat} label={info.label} icon={info.icon} dimmed={!hasSelection}>
             <div className="grid grid-cols-1 @[20rem]:grid-cols-2 @[28rem]:grid-cols-3 @[48rem]:grid-cols-4 gap-2">
               {effects.map((effect) => (
                 <EffectPadButton
@@ -178,17 +199,54 @@ export function EffectPad({
   )
 }
 
+/**
+ * One pool of pads, with its heading — and the place the empty-selection state is expressed.
+ *
+ * **Dimmed and inert rather than replaced by a placeholder.** This used to be a centred "Select a
+ * group or fixture" page, which hid the entire library behind a step the operator had not been
+ * shown yet — seeing what there *is* to press is most of what makes a pad grid learnable. Nothing
+ * can be pressed by mistake: presence is `none` for every pad with an empty selection, so there is
+ * nothing lit to release either.
+ *
+ * Two things about *where* the rule sits, both learned the hard way:
+ *
+ * - **On the buttons, not on a container.** `pointer-events-none` on an element that scrolls takes
+ *   it out of hit-testing, so the wheel and a touch drag find no scrollable ancestor and the
+ *   library the operator was just invited to read is stuck at its first screenful. Every
+ *   interactive thing in a pool is a `<button>` (the pads, the beat-division toggles, the manage
+ *   links), so the descendant selector covers the same ground.
+ * - **Per section, not on the whole scroller.** Session 4 put the cue stacks and pinned-cue pads in
+ *   the same scroller, and those answer to the playhead rather than to the selection. A subtree
+ *   rule would have made GO inert whenever no fixture happened to be selected.
+ */
 function CategorySection({
   label,
   icon: Icon,
+  dimmed,
+  className,
   children,
 }: {
   label: string
   icon: React.ComponentType<{ className?: string }>
+  /** True when no target is selected: this pool is showable but not pressable. */
+  dimmed?: boolean
+  /**
+   * Extra classes on the pool's own root. Exists for the one pool that is a *grid track* rather
+   * than a full-width band: a track has to be its own `@container`, or the pad grid inside it
+   * sizes itself against the whole scroller and packs four columns into two fifths of it.
+   */
+  className?: string
   children: React.ReactNode
 }) {
   return (
-    <div className="mt-3 first:mt-2">
+    <div
+      className={cn(
+        'mt-3 first:mt-2 transition-opacity',
+        dimmed && 'opacity-55 select-none [&_button]:pointer-events-none',
+        className,
+      )}
+      aria-disabled={dimmed || undefined}
+    >
       <div className="flex items-center gap-1.5 mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
         <Icon className="size-3.5" />
         {label}

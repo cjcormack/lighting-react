@@ -10,6 +10,19 @@ vi.mock('@/store/status', () => ({ useIsDeskConnected: () => true }))
 
 afterEach(cleanup)
 
+/**
+ * The four family columns of the Templates pool.
+ *
+ * Reached through the section's heading rather than by a bare `.grid` selector: several grids share
+ * the scroller now, and one that matched by position would silently start asserting about a
+ * different pool the next time the layout moves.
+ */
+function templateColumns(container: HTMLElement): Element[] {
+  const heading = within(container).getByText('Templates').closest('div')?.parentElement
+  const grid = heading?.querySelector('.grid')
+  return grid ? [...grid.children] : []
+}
+
 function pad(overrides: Partial<PadItem> & Pick<PadItem, 'key' | 'name'>): PadItem {
   return {
     notes: null,
@@ -63,7 +76,9 @@ describe('the template pool columns', () => {
     ])
 
     // Colour first, the family a busking operator reaches for most — not `ATTRIBUTE_FAMILIES` order.
-    const columns = container.querySelectorAll('.grid > div')
+    // Scoped to the Templates section's own grid. A document-wide `.grid > div` also picks up the
+    // Looks/cue-column split session 4 added, which is a different grid entirely.
+    const columns = templateColumns(container)
     const headings = [...columns].map((c) => c.firstElementChild?.textContent)
     expect(headings).toEqual(['Colour', 'Position', 'Beam', 'Intensity'])
 
@@ -80,7 +95,7 @@ describe('the template pool columns', () => {
 
   it('keeps the four columns even when one is empty', () => {
     const { container } = draw([pad({ key: 't1', name: 'Warm Amber', family: 'COLOUR' })])
-    expect(container.querySelectorAll('.grid > div')).toHaveLength(4)
+    expect(templateColumns(container)).toHaveLength(4)
   })
 
   /** A Look spans families by nature, so it has no column — it gets its own section instead. */
@@ -105,8 +120,51 @@ describe('the pool with nothing selected', () => {
     // Inert on the *buttons*, never on the scroll container: `pointer-events-none` there takes
     // the container out of hit-testing, so the wheel and a touch drag find no scrollable
     // ancestor and the library cannot be read past its first screenful.
-    expect(container.firstElementChild?.className).toContain('[&_button]:pointer-events-none')
+    const dimmed = container.querySelectorAll('[aria-disabled="true"]')
+    expect(dimmed.length).toBeGreaterThan(0)
+    for (const section of dimmed) {
+      expect(section.className).toContain('[&_button]:pointer-events-none')
+    }
     expect(container.firstElementChild?.className).not.toMatch(/(^|\s)pointer-events-none/)
+  })
+
+  /**
+   * The dim is per pool, not over the whole scroller, and the cue column is why.
+   *
+   * Session 4 put the stack cards and pinned-cue pads in the same scroller. They answer to the
+   * playhead, not to the target selection — GO must work with nothing selected — so a subtree-wide
+   * rule would have made the transport inert for want of a fixture.
+   */
+  it('leaves the cue column live while the pools are dimmed', () => {
+    const { container } = render(
+      <MemoryRouter>
+        <EffectPad
+          effectsByCategory={{}}
+          getPresence={() => 'none'}
+          onToggle={() => {}}
+          onLongPress={() => {}}
+          hasSelection={false}
+          padItems={[pad({ key: 't1', name: 'Warm Amber', family: 'COLOUR' })]}
+          cueColumn={
+            <div data-testid="cue-column">
+              <button type="button">GO</button>
+            </div>
+          }
+          currentProjectId={7}
+          defaultBeatDivision={1}
+          onBeatDivisionChange={() => {}}
+          propertyButtons={[]}
+          getPropertyPresence={() => 'none'}
+          onPropertyToggle={() => {}}
+          onPropertyLongPress={() => {}}
+          getPropertyValue={() => null}
+        />
+      </MemoryRouter>,
+    )
+
+    const column = screen.getByTestId('cue-column')
+    expect(column.closest('[aria-disabled="true"]')).toBeNull()
+    expect(container.firstElementChild?.className).not.toContain('[&_button]:pointer-events-none')
   })
 })
 
