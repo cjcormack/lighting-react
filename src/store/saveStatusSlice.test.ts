@@ -186,7 +186,6 @@ describe('NON_SAVE_ENDPOINTS', () => {
       import('./cueStacks'),
       import('./channels'),
       import('./park'),
-      import('./fx'),
       import('./fixtureFx'),
       import('./groups'),
       import('./looks'),

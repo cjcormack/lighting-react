@@ -588,8 +588,8 @@ view's speed-master work, and both are edited only in `SpeedMasterDetailSheet`:
 **A follower's tempo cannot be typed or tapped, and exactly four surfaces offer those:**
 `MasterTile` and `MasterRow` in `components/SpeedMasters.tsx`, `SpeedMasterRow` in
 `routes/SpeedMasters.tsx`, and `MasterCard` in `components/busking/BuskSpeedRail.tsx`. All four swap
-TAP for the ratio and stop opening the draft. A fifth TAP button exists in `EffectsOverviewPanel`
-and needs no arm — it taps master 1 only.
+TAP for the ratio and stop opening the draft. Those four are now all of them: the fifth, an
+unarmed master-1-only TAP in `EffectsOverviewPanel`, went when that panel did.
 
 **The busk rail is the second surface that can *write* a follow ratio**, after
 `SpeedMasterDetailSheet`; its five chips retune a link that already exists. Both write it the same
@@ -1219,14 +1219,19 @@ path may quietly change where it lands.
     reads `useProjectCueStackListQuery` itself — that is the *same* cache entry, deduplicated by
     key, not a second copy of a run cursor.
 
-  **The Effects Overview panel is no longer route-locked.** `/fx` used to hold it open and
-  its toggle inert for as long as it was mounted, through a `useEffectsOverview` hook that
-  OR-ed a lock over the stored preference. That existed because the busk view had no tempo
-  readout and no view of what was running; it has a speed rail and pad presence rings of its
-  own now. All four panels are plain stored toggles, and **Kill All is unconditional** —
-  gating a control on which route you arrived from is the same "one control in two places"
-  problem the rest of this file argues against, and `disabled` on an empty stage already
-  says when there is nothing to kill.
+  **The Effects Overview panel is gone, and there are three overview panels now** — Stage,
+  Fixture, Cue Slots. It held a beat dot, master 1's bpm, a TAP, a running-effect count and a
+  Kill All, and `/fx` used to force it open and its toggle inert for as long as that route was
+  mounted, because the busk view had no tempo readout and no view of what was running. Both
+  halves of that reason expired: the ShowBar carries the whole speed-master bank on every live
+  view, each tile with its own beat dot and TAP, so the panel was a second and narrower answer
+  to "what tempo is the desk at" — narrower because it only ever spoke for master 1 — and the
+  busk view has a speed rail and pad presence rings besides. **The count and Kill All were not
+  moved anywhere.** What is running is listed, effect by effect and removable by name, in the
+  programmer's FX band and in `ActiveEffectSheet`; a "stop everything" gesture, if it is wanted
+  again, belongs beside blackout in the ShowBar rather than in a panel the operator has to open
+  first. `store/fx.ts` (the `fxState` RTK Query wrapper) went with it — `api/fxApi` stays, since
+  `store/groups.ts` still subscribes to the frame.
 
   **Run is gone as a route, replaced by a mode.** Run and Show were never different
   destinations — the only real distinction was whether a stray click can change the

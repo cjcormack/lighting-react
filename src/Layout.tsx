@@ -16,7 +16,6 @@ import ThemeToggle from "./ThemeToggle"
 import { UserMenu } from "./components/auth/UserMenu"
 import { FixtureOverviewPanel } from "./components/FixtureOverviewPanel"
 import { StageOverviewPanel } from "./components/StageOverviewPanel"
-import { EffectsOverviewPanel } from "./components/EffectsOverviewPanel"
 import { FixtureDetailModal } from "./components/groups/FixtureDetailModal"
 import { OverviewToggle, useOverviewPanels } from "./components/overviewPanels"
 import { AiChatToggle } from "./components/ai/AiChatToggle"
@@ -205,7 +204,7 @@ export default function Layout() {
             </div>
           </header>
 
-          {/* The four overview panels. Each is always rendered — but only its animated wrapper
+          {/* The three overview panels. Each is always rendered — but only its animated wrapper
               is: every one of them puts its live body behind `CollapsiblePanel`, which unmounts
               it once the collapse has finished. Adding a panel here means doing the same, or the
               rig pays for it on every route the operator is on. */}
@@ -219,8 +218,6 @@ export default function Layout() {
             onFixtureClick={setSelectedFixture}
             isVisible={byId.fixtures.isVisible}
           />
-
-          <EffectsOverviewPanel isVisible={byId.effects.isVisible} isDesktop={isDesktop} />
 
           {/* Cue Slot DnD Provider wraps panel + page content for cross-component drag-and-drop */}
           <CueSlotDndProvider isVisible={byId.cueSlots.isVisible}>
@@ -274,7 +271,7 @@ export default function Layout() {
           onParkChannelAtValue={() => setChannelDialogMode("park")}
           onSetChannelValue={() => setChannelDialogMode("set")}
           toggles={[
-            // The same four panels the toolbar renders, from the same array — the palette used to
+            // The same three panels the toolbar renders, from the same array — the palette used to
             // declare its own copy, which is how the Stage entry drifted onto a second icon.
             ...panels.map((panel) => ({
               label: panel.label,

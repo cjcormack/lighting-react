@@ -1,10 +1,10 @@
-import { AudioWaveform, Grid3x3, LayoutGrid, Theater, type LucideIcon } from 'lucide-react'
+import { Grid3x3, LayoutGrid, Theater, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { usePersistentToggle } from '@/hooks/usePersistentState'
 
 /**
- * The four collapsible panels Layout hangs under the header, as data.
+ * The three collapsible panels Layout hangs under the header, as data.
  *
  * They were four all-but-identical toggle components and three one-line hooks wrapping
  * `usePersistentToggle`, plus a fifth hand-written copy of the same list inside the command
@@ -14,7 +14,7 @@ import { usePersistentToggle } from '@/hooks/usePersistentState'
  * `label` is the palette's noun (title case, it heads a list); `noun` is the toolbar tooltip's,
  * which reads "Show …" / "Hide …". They differ per panel and always have.
  */
-type OverviewPanelId = 'stage' | 'fixtures' | 'cueSlots' | 'effects'
+type OverviewPanelId = 'stage' | 'fixtures' | 'cueSlots'
 
 interface OverviewPanelDescriptor {
   id: OverviewPanelId
@@ -49,13 +49,6 @@ const DESCRIPTORS: readonly OverviewPanelDescriptor[] = [
     icon: Grid3x3,
     storageKey: 'cue-slot-overview-visible',
   },
-  {
-    id: 'effects',
-    label: 'Effects Overview',
-    noun: 'effects overview',
-    icon: AudioWaveform,
-    storageKey: 'effects-overview-visible',
-  },
 ]
 
 const BY_ID = Object.fromEntries(DESCRIPTORS.map((d) => [d.id, d])) as Record<
@@ -76,14 +69,16 @@ export interface OverviewPanel extends OverviewPanelDescriptor {
 }
 
 /**
- * Visibility for all four panels.
+ * Visibility for all three panels.
  *
- * All four are now plain stored toggles. The effects panel used to be different: the busk view
- * (then `/fx`) held it open and its toggle inert for as long as that route was mounted, through a
- * `useEffectsOverview` hook that OR-ed a lock over the stored preference. That existed because the
- * busk view had no tempo readout and no way to see what was running. It has a speed rail and pad
- * presence rings of its own now, so a panel forced open and made unclosable by one route was
- * buying nothing and costing the operator a control.
+ * There was a fourth, Effects Overview: a beat dot, master 1's bpm, a TAP, a running-effect count
+ * and a Kill All. The ShowBar carries the tempo half on every live view — the whole speed-master
+ * bank, each tile with its own beat dot and TAP — so the panel was a second, narrower answer to
+ * "what tempo is the desk at", and one that only ever spoke for master 1. It went, and the count
+ * and Kill All went with it rather than moving: the programmer's FX band and the busk view's
+ * presence rings say what is running, and each lists the effects individually so they can be
+ * removed by name. If a "stop everything" gesture is wanted again it belongs beside blackout in
+ * the bar, not in a panel the operator has to open first.
  *
  * The hooks are written out rather than mapped over `DESCRIPTORS`, because they are hooks and
  * their order and count have to be statically obvious. They are then paired with their descriptors
@@ -98,13 +93,11 @@ export function useOverviewPanels(): {
   const stage = usePersistentToggle(BY_ID.stage.storageKey)
   const fixtures = usePersistentToggle(BY_ID.fixtures.storageKey)
   const cueSlots = usePersistentToggle(BY_ID.cueSlots.storageKey)
-  const effects = usePersistentToggle(BY_ID.effects.storageKey)
 
   const visibility: Record<OverviewPanelId, PanelVisibility> = {
     stage: { isVisible: stage.isVisible, toggle: stage.toggle },
     fixtures: { isVisible: fixtures.isVisible, toggle: fixtures.toggle },
     cueSlots: { isVisible: cueSlots.isVisible, toggle: cueSlots.toggle },
-    effects: { isVisible: effects.isVisible, toggle: effects.toggle },
   }
 
   const panels = DESCRIPTORS.map((d) => ({ ...d, ...visibility[d.id] }))
