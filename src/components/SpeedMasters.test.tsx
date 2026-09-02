@@ -22,6 +22,9 @@ vi.mock('../store/speedMasters', () => ({
     subscribeToSpeedMasterBeat(masterUuid, fn),
   useMaster1Uuid: () => liveMasters.find((m) => m.index === 1)?.uuid ?? null,
   requestSpeedMasterBeat: () => {},
+  // The dot re-seeds its interval off the live BPM, so it reads the same fake bank as the tiles.
+  useSpeedMasterBpm: (uuid: string | null) =>
+    liveMasters.find((m) => m.uuid === uuid)?.bpm ?? null,
 }))
 // The socket's readyState, driven directly: the real hook is an RTK Query subscription and this
 // suite deliberately mounts the bar without a Provider.

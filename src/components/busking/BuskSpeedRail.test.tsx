@@ -30,6 +30,8 @@ vi.mock('@/store/speedMasters', () => ({
   subscribeToSpeedMasterBeat: () => ({ unsubscribe: () => {} }),
   useMaster1Uuid: () => liveMasters.find((m) => m.index === 1)?.uuid ?? null,
   requestSpeedMasterBeat: () => {},
+  useSpeedMasterBpm: (uuid: string | null) =>
+    liveMasters.find((m) => m.uuid === uuid)?.bpm ?? null,
 }))
 const deskConnected = { current: true }
 vi.mock('@/store/status', () => ({

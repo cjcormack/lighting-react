@@ -11,6 +11,9 @@ const subscribeToSpeedMasterBeat = vi.fn(
 )
 const requestSpeedMasterBeat = vi.fn()
 const MASTER_1_UUID = 'aaaa-1'
+// Stands in for the live-BPM push (`speedMasters.changed`), which the dot uses to re-seed its
+// interval on a retune rather than waiting for the server's corrective beat frame.
+let liveBpm: number | null = null
 
 // The factory is hoisted above the consts above, so it has to call through lazily rather
 // than referencing them directly.
@@ -19,6 +22,7 @@ vi.mock('../store/speedMasters', () => ({
     subscribeToSpeedMasterBeat(masterUuid, fn),
   requestSpeedMasterBeat: (masterUuid: string | null) => requestSpeedMasterBeat(masterUuid),
   useMaster1Uuid: () => MASTER_1_UUID,
+  useSpeedMasterBpm: () => liveBpm,
 }))
 
 import { BeatIndicator } from './BeatIndicator'
@@ -26,6 +30,8 @@ import { BeatIndicator } from './BeatIndicator'
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  vi.useRealTimers()
+  liveBpm = null
 })
 
 describe('BeatIndicator', () => {
@@ -86,6 +92,77 @@ describe('BeatIndicator', () => {
 
     expect(requestSpeedMasterBeat).toHaveBeenCalledWith('aaaa-2')
     expect(subscribeToSpeedMasterBeat).toHaveBeenCalledTimes(1)
+  })
+
+  it('re-seeds the local interval as soon as the tempo moves', () => {
+    vi.useFakeTimers()
+    liveBpm = 60
+    const { container, rerender } = render(<BeatIndicator master={{ uuid: 'aaaa-2', index: 2 }} />)
+    const onBeat = subscribeToSpeedMasterBeat.mock.calls[0][1]
+    act(() => onBeat({ bpm: 60 }))
+    const dot = () => container.firstElementChild as HTMLElement
+
+    // 60 BPM: nothing at 500 ms, a flash at 1000 ms.
+    act(() => void vi.advanceTimersByTime(500))
+    expect(dot().className).not.toContain('bg-primary')
+
+    // Now the master is retuned to 240 BPM. The server arms a corrective beat frame for the
+    // *next* beat after a tempo move (`SpeedMasterSocket`), so the true-up is one beat away —
+    // one beat of the pre-retune grid, which is up to three seconds at the 20 BPM floor. This
+    // closes that gap: without the live-BPM re-seed the dot goes on flashing at the old rate
+    // for that whole beat, after the number beside it has already changed.
+    liveBpm = 240
+    rerender(<BeatIndicator master={{ uuid: 'aaaa-2', index: 2 }} />)
+
+    // Half of the old beat had been travelled, so half of a *new* 250 ms beat remains: the dot
+    // beats at 625 ms rather than at the 1000 ms the old grid was heading for.
+    act(() => void vi.advanceTimersByTime(150))
+    expect(dot().className).toContain('bg-primary')
+  })
+
+  it('keeps beating on the same grid while the tempo is dragged', () => {
+    vi.useFakeTimers()
+    liveBpm = 120
+    const { container, rerender } = render(<BeatIndicator master={{ uuid: 'aaaa-2', index: 2 }} />)
+    const onBeat = subscribeToSpeedMasterBeat.mock.calls[0][1]
+    act(() => onBeat({ bpm: 120 })) // flashes, and anchors the grid here — a 500 ms beat
+    act(() => void vi.advanceTimersByTime(200))
+
+    // A drag on the BPM field pushes at tap rate. Re-seeding by restarting a fresh full-beat
+    // deadline per push would have the next push cancel it before it could ever expire, so the
+    // dot would go dark for as long as the operator held the slider. The grid is anchored at
+    // the last flash instead, so the beat still lands ~500 ms after it.
+    let sawFlash = false
+    for (const bpm of [121, 122, 123, 124]) {
+      liveBpm = bpm
+      rerender(<BeatIndicator master={{ uuid: 'aaaa-2', index: 2 }} />)
+      act(() => void vi.advanceTimersByTime(100))
+      sawFlash ||= (container.firstElementChild as HTMLElement).className.includes('bg-primary')
+    }
+
+    expect(sawFlash).toBe(true)
+  })
+
+  it('keeps beating while the tempo is dragged downwards', () => {
+    vi.useFakeTimers()
+    liveBpm = 60
+    const { container, rerender } = render(<BeatIndicator master={{ uuid: 'aaaa-2', index: 2 }} />)
+    const onBeat = subscribeToSpeedMasterBeat.mock.calls[0][1]
+    act(() => onBeat({ bpm: 60 })) // a 1000 ms beat, anchored here
+    act(() => void vi.advanceTimersByTime(900)) // nearly a beat travelled
+
+    // Dragging *down* grows the beat. Re-arming a `lastFlash + period` deadline would push it
+    // further out (16.7 ms per BPM at 60 BPM) than the 50 ms of wall clock between pushes, so
+    // it would never expire and the dot would stay dark past the beat it owed.
+    let sawFlash = false
+    for (const bpm of [56, 52, 48, 44, 40, 36]) {
+      liveBpm = bpm
+      rerender(<BeatIndicator master={{ uuid: 'aaaa-2', index: 2 }} />)
+      act(() => void vi.advanceTimersByTime(50))
+      sawFlash ||= (container.firstElementChild as HTMLElement).className.includes('bg-primary')
+    }
+
+    expect(sawFlash).toBe(true)
   })
 
   it('renders an unsynced ring until the first frame arrives', () => {

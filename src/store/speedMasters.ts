@@ -240,6 +240,26 @@ export function useMaster1Uuid(): string | null {
   return uuid
 }
 
+/**
+ * One master's live BPM, or null while it is unresolved (no uuid yet, or a uuid naming no
+ * master in the live bank).
+ *
+ * For anything that has to *react* to a retune rather than merely display it — `BeatIndicator`
+ * re-seeds its free-running timer off this, because server beat frames are throttled and a
+ * tempo move makes the local timer wrong about the rate, not just drifted.
+ *
+ * `selectFromResult` like [useMaster1Uuid], so a dot re-renders only when its own master's
+ * tempo moves rather than on every tap of every master.
+ */
+export function useSpeedMasterBpm(masterUuid: string | null): number | null {
+  const { bpm } = useSpeedMasterLiveQuery(undefined, {
+    selectFromResult: ({ data }) => ({
+      bpm: masterUuid == null ? null : (data?.find((m) => m.uuid === masterUuid)?.bpm ?? null),
+    }),
+  })
+  return bpm
+}
+
 /** Set one master's live BPM over WS (null uuid → master 1). */
 export function setSpeedMasterBpm(masterUuid: string | null, bpm: number) {
   lightingApi.speedMasters.setBpm(masterUuid, bpm)
