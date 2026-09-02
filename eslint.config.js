@@ -22,6 +22,18 @@ export default [
   {
     ignores: [
       "dist/**",
+      // The design-sync library build (see .design-sync/); generated, like dist/.
+      "design-system/dist/**",
+      // The rest of the design-sync working set (see .design-sync/NOTES.md).
+      // `ds-bundle/` is generated output and `.ds-sync/` is a vendored copy of the
+      // converter, neither of which is this repo's code. `.design-sync/` holds the
+      // sync inputs: its preview cards import the bare package name the converter
+      // maps onto the shipped bundle ("lighting-desk-ui"), which nothing in
+      // node_modules resolves, so the import rules can only report false errors
+      // there. Those files are verified by actually rendering, which is stronger.
+      "ds-bundle/**",
+      ".ds-sync/**",
+      ".design-sync/**",
       "node_modules/**",
       "coverage/**",
       // Agent worktrees are full second checkouts of this repo, build output and
