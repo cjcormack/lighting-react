@@ -193,9 +193,16 @@ the bug that doc exists to prevent.
 ### Looks, templates and layers
 
 **Two library entities, and a Layer applies either.** A **Look** composes cues: any families, its
-own fixtures, its own effects, added to a cue's stack at a declared position. A **Template**
-composes values: exactly one attribute family, no targets of its own, no effects, applied to a
-selection. Backend contract in `lighting7/docs/lighting-composition-model.md` §"Looks and layers"
+own fixtures, its own effects, added to a cue's stack at a declared position. A **Template** is
+**one named thing** of exactly one attribute family, with no targets of its own, applied to a
+selection — either a value, *or* one effect, never both (`fx-templates-plan.md` D1). Which of the
+two it holds is `kind`, and it is fixed at creation the way the family is; three rules keep the
+effect half narrow, and each removes a way for it to complicate the cook: **a value or an effect**,
+**one effect** (several together is what a Look with deferred effects already is), and **always
+generic** (an effect fans over whatever the layer names, so `isGeneric` is true for every one).
+A **Beam** template holds values only — the effect library has no beam category, and the backend
+refuses `beam`, `controls` and `composite` **by name** so a script-registered beam effect cannot
+mint one behind the rule. Backend contract in `lighting7/docs/lighting-composition-model.md` §"Looks and layers"
 and `models/templates.kt`; the completed records are
 `lighting7/docs/plans/completed/looks-and-layers-plan.md` and
 `desk-simplification-plan.md` §Session 3.
@@ -419,7 +426,10 @@ Keeping one owner for that match rule is why they weren't moved to the explicit 
 is the ring: `lookLayerPresence` reads the **layer stack**, not the effect list. The old match was
 `FxInstance.presetId === lookId`, which worked by accident (the Look id in a field naming a
 `DaoFxPreset`) and could never see a rows-only Look at all. `templateLayerPresence` is its twin for
-templates, and it is the *only* way a template pad can light: a template holds no effects.
+templates, and it is the *only* way a template pad can light. That used to be because a template
+held no effects; it holds one now, and the rule is *more* load-bearing rather than less — an
+effect-template pad's ring would look matchable against the running instance, and matching there
+would light for an effect template while leaving every value template's pad dark.
 
 The **busk view**'s pad grid takes both — Looks with deferred **effects** (a chase you point at a
 selection) and every template — and it has no create affordance, because neither entity is authored
@@ -507,7 +517,9 @@ Things that will bite:
   would silently convert it to a per-fixture one on the first edit, which is a change to what the
   template *is* made by someone adjusting a value; element rows compose nowhere at all
   (`FU-LOOK-ELEMENT-ROWS`). `LookRowStore` therefore engages **only for a LOOK layer**, and
-  `+ Effect` is disabled on a focused template (D7 — a template holds no effects).
+  `+ Effect` is disabled on a focused template — not D7 any more, but because a template holds
+  **one** thing, chosen when it was made: there is no second effect to add, and adding a first
+  to a value template would flip its identity.
 - **In Output scope every tint is a destination**: clicking a cell jumps the scope to whatever won
   it. Three guards, and the middle one bites — `ProvenanceEntry.layerId` is present for a **cue's**
   layers too, so `focusLayer` checks membership in the programmer's own stack and reports failure.
@@ -550,11 +562,12 @@ view's speed-master work, and both are edited only in `SpeedMasterDetailSheet`:
   created with no explicit master is *stamped* with the usage-matching master's uuid at the moment
   it is created — `useSpeedMasterForCategory` in `store/speedMasters.ts`, the rule itself in
   `lib/speedMasterModel.ts`. Nothing resolves usage later, and `null` still means master 1
-  everywhere; that invariant does not move. **The hook has no caller today**: the stamping was the
-  busk view's ad-hoc effect pads, and those went when the view was brought back onto its design
-  (see §Busk). Every other half of the rule stands — a master declares a usage, the detail sheet
-  sets it, `BuskSpeedRail` badges it — so the hook is kept for the next surface that mints an
-  effect without asking which master it belongs to. Don't delete it to silence a dead-export sweep.
+  everywhere; that invariant does not move. **Its caller is `TemplateEditor`**: an effect template's
+  master is stamped when the effect is chosen, so a Colour effect template picks up the master whose
+  usage is `colour` without the operator being asked. The hook spent a while with no caller at all —
+  the busk view's ad-hoc effect pads were the original one, and they went when that view was brought
+  back onto its design — and was kept for exactly this. Every other half of the rule stands: a master
+  declares a usage, the detail sheet sets it, `BuskSpeedRail` badges it.
   Usage is unique per project (the server 409s `SPEED_MASTER_USAGE_TAKEN`), and `controls` and
   `composite` are deliberately not routable — those land on master 1, which is what an unmatched
   category is defined to do. `speedMasterModel.test.ts` pins the vocabulary against
@@ -1098,11 +1111,11 @@ path may quietly change where it lands.
     - **Nothing on this page mints an FX instance.** An ad-hoc effect reaches the stage through a
       Look with deferred effects, a cue, or the Programmer's `+ Effect`; a raw level through an
       intensity template or the Programmer.
-    - **`useSpeedMasterForCategory` has no caller.** The effect pads were the only surface doing the
-      busking plan's D1 stamping, and it is client-side — the backend serves `usage` but does not
-      resolve it. The rest of the rule stands, so the hook is kept and documented as uncalled; the
-      rail's caption was reworded off the promise it could no longer keep. Don't delete it to
-      silence a dead-export sweep, and don't restore the caption's old wording.
+    - **`useSpeedMasterForCategory` lost its caller here.** The effect pads were the only surface
+      doing the busking plan's D1 stamping, and it is client-side — the backend serves `usage` but
+      does not resolve it. The rail's caption was reworded off the promise it could no longer keep,
+      and should stay reworded: nothing on *this* page stamps a master. The hook itself was kept
+      rather than deleted, and `TemplateEditor` is its caller now (see §Speed Masters).
     - **`BuskingView` reads no target's running effects.** The eight fixed RTK Query slots that once
       fanned the selection out (and capped it at eight targets — `FU-BUSK-TARGET-CAP`, now retired)
       went with the pads. Both surviving pad kinds read the programmer's **layer stack**, which
@@ -1336,15 +1349,23 @@ All sheets must follow this structure using the shared primitives from `src/comp
 - **Buttons**: Use default size in footers (no `size="sm"`). Cancel is always `variant="outline"`. Delete is `variant="destructive"`.
 - **Multi-step sheets**: Use `p-0 gap-0` on SheetContent when step 1 needs edge-to-edge content (e.g. picker lists). Use SheetBody in subsequent steps for form content.
 - **Sub-view footers** (content embedded inside a parent sheet, e.g. CueEffectFlow): Use `<div className="border-t p-4 flex items-center gap-2">` since SheetFooter can only be a direct child of SheetContent.
-- **Unsaved changes**: a sheet holding a form should call `useUnsavedChanges(isDirty)` from the
-  component that owns the form state. Escape, a click outside and the X then ask
-  *"Discard changes?"* first. Only a close **Radix** drives reaches that question, so a Cancel
+- **Unsaved changes**: a guarded sheet asks *"Discard changes?"* before Escape, a click outside or
+  the X take it away. There are **two ways to say a sheet is dirty, and which one you need depends
+  on where you are**:
+  - `<Sheet unsavedChanges={isDirty}>` — for the component that renders the `<Sheet>` itself,
+    which is the common case (it usually owns the form state too).
+  - `useUnsavedChanges(isDirty)` — for a component **mounted inside `SheetContent`**, which is the
+    only place it works. It reports through a context `Sheet` provides, so a call in the component
+    that *renders* the `<Sheet>` resolves against providers **above** that component and finds
+    nothing: `register?.()` then no-ops and **the sheet is silently unguarded**. Four sheets
+    shipped that way. It is a deliberate no-op outside a sheet entirely, which is why the mistake
+    is invisible (`CueTriggerEditor` relies on that for its inline mode).
+
+  The two combine, so a parent's prop and a body's hook can both contribute. `sheet.test.tsx` pins
+  both directions of the trap. Only a close **Radix** drives reaches the question, so a Cancel
   button must be wrapped in `<SheetClose asChild>` rather than calling the parent's own
   `setOpen(false)` — and must not also carry an `onClick` that closes, since `asChild` would run
-  both. It reports up through context, so it works from any depth and is a
-  no-op outside a sheet (`CueTriggerEditor` uses the same call in its inline mode). A parent that
-  already tracks dirtiness can pass `<Sheet unsavedChanges={...}>` instead; the two combine.
-  Only controlled sheets can be guarded — an uncontrolled one closes itself inside Radix.
+  both. Only controlled sheets can be guarded — an uncontrolled one closes itself inside Radix.
 - **The Kotlin editor's completion popup** is a bare `<ul>` on `<body>`, invisible to Radix's
   layer stack, so `SheetContent` special-cases it twice: Escape while it is open closes the popup
   and not the sheet, and clicking a suggestion doesn't count as clicking outside. Both are in the

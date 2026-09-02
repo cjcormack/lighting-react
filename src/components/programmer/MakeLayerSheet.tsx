@@ -19,7 +19,6 @@ import { serializePropertyMask } from '@/lib/attributeFamily'
 import { useRecordLookMutation } from '@/store/programmerOps'
 import { programmerAddLayer, programmerClearEntry } from '@/store/programmer'
 import { selectTargetKeys } from '@/store/selectionSlice'
-import { useUnsavedChanges } from '@/components/ui/sheet'
 import { MaskPicker } from './maskPicker'
 import { useLocalFamilyCounts } from './useLocalFamilyCounts'
 import type { PropertyMaskGroup } from '@/store/programmerOps'
@@ -79,8 +78,6 @@ export function MakeLayerSheet({
     reset()
   }, [open, reset])
 
-  useUnsavedChanges(name.trim() !== '' || mask.length > 0)
-
   // The selection is what makes a Look reusable — "Warm Amber" over four named heads rather than
   // over whatever the programmer happened to be holding. Without one there is nothing to promote.
   const targets = selectedKeys.map((key) => ({ type: 'fixture' as const, key }))
@@ -123,7 +120,15 @@ export function MakeLayerSheet({
   }
 
   return (
-    <Sheet open={open} onOpenChange={(next) => !isLoading && onOpenChange(next)}>
+    // `unsavedChanges` on the Sheet, **not** `useUnsavedChanges` here: that hook reads a context
+    // `Sheet` itself provides, so calling it in the component that renders the `<Sheet>` looks up
+    // the tree past the provider, finds nothing and silently no-ops (`register?.()`). The hook is
+    // for a body component mounted *inside* `SheetContent`.
+    <Sheet
+      open={open}
+      onOpenChange={(next) => !isLoading && onOpenChange(next)}
+      unsavedChanges={name.trim() !== '' || mask.length > 0}
+    >
       <SheetContent className="flex flex-col sm:max-w-md">
         <SheetHeader>
           <SheetTitle>Make a layer from your values</SheetTitle>

@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import {
   ATTRIBUTE_FAMILIES,
+  TEMPLATE_EFFECT_FAMILIES,
+  effectCategoryForFamily,
+  familyCanHoldEffect,
   familyForCategory,
+  familyForEffectCategory,
   familySlug,
+  fixturesSupportingFamily,
   parseFamilySlug,
   parsePropertyMask,
   serializePropertyMask,
 } from './attributeFamily'
+import { SPEED_MASTER_USAGES } from './speedMasterModel'
 
 describe('attribute family slugs', () => {
   it('round-trips every family', () => {
@@ -86,5 +92,89 @@ describe('propertyMask round-trip', () => {
     for (const mask of ['INTENSITY', 'POSITION,COLOUR', 'INTENSITY,POSITION,BEAM']) {
       expect(serializePropertyMask(parsePropertyMask(mask)), mask).toBe(mask)
     }
+  })
+})
+
+describe('familyForEffectCategory', () => {
+  it('mirrors the backend map, including the `color` spelling', () => {
+    // A direct mirror of `familyForEffectCategory` in projectLooks.kt, which accepts both
+    // spellings because the shipped `.fx.kts` files are not consistent about it.
+    expect(familyForEffectCategory('dimmer')).toBe('INTENSITY')
+    expect(familyForEffectCategory('colour')).toBe('COLOUR')
+    expect(familyForEffectCategory('color')).toBe('COLOUR')
+    expect(familyForEffectCategory('position')).toBe('POSITION')
+    expect(familyForEffectCategory('beam')).toBe('BEAM')
+  })
+
+  it('answers null for a category that names no family, rather than a catch-all', () => {
+    // The load-bearing difference from `familyForCategory`, which is total and files anything it
+    // does not know under BEAM. Here `controls` has no tempo and `composite` spans families, so
+    // neither *has* a family — and answering BEAM would be a wrong answer rather than a default,
+    // one the write boundary would then refuse under a family the operator never chose.
+    expect(familyForEffectCategory('controls')).toBeNull()
+    expect(familyForEffectCategory('composite')).toBeNull()
+    expect(familyForEffectCategory('some_future_category')).toBeNull()
+  })
+
+  it('is a different vocabulary from familyForCategory, not a widening of it', () => {
+    // `position` is an effect category but not a PropertyCategory; the property side reaches
+    // POSITION through `pan`/`tilt`, which are not effect categories at all. The two maps share
+    // `dimmer` and `colour` and nothing else, which is why neither can absorb the other.
+    expect(familyForEffectCategory('pan')).toBeNull()
+    expect(familyForCategory('composite')).toBe('BEAM')
+  })
+})
+
+describe('which families can hold an effect', () => {
+  it('excludes BEAM, and by name rather than by the library being empty', () => {
+    // The backend refuses `beam` explicitly so a *script-registered* beam effect cannot mint a
+    // Beam effect template behind the rule — so this list must not be derived from whatever
+    // categories the shipped library happens to contain.
+    expect(TEMPLATE_EFFECT_FAMILIES).not.toContain('BEAM')
+    expect(familyCanHoldEffect('BEAM')).toBe(false)
+    expect(effectCategoryForFamily('BEAM')).toBeNull()
+  })
+
+  it('round-trips every effect-holding family through its category', () => {
+    for (const family of TEMPLATE_EFFECT_FAMILIES) {
+      const category = effectCategoryForFamily(family)
+      expect(category, family).not.toBeNull()
+      expect(familyForEffectCategory(category as string), family).toBe(family)
+    }
+  })
+
+  it('covers exactly the categories a speed master may be the default for', () => {
+    // The two lists coincide, and pinning them together is worth doing precisely because they
+    // coincide *for different reasons*: a usage excludes `controls` and `composite` for want of a
+    // tempo, while a template excludes `beam` for want of a column. If a beam category is ever
+    // added to the library, this is the assertion that should be argued with rather than deleted.
+    const templateCategories = TEMPLATE_EFFECT_FAMILIES.map(effectCategoryForFamily)
+    expect([...templateCategories].sort()).toEqual([...SPEED_MASTER_USAGES].sort())
+  })
+})
+
+describe('fixturesSupportingFamily', () => {
+  const patch = [
+    { capabilities: ['dimmer', 'colour'] },
+    { capabilities: ['dimmer'] },
+    { capabilities: ['dimmer', 'colour', 'position'] },
+    { capabilities: [] },
+    {},
+  ]
+
+  it('counts the heads that declare the family\'s capability', () => {
+    expect(fixturesSupportingFamily(patch, 'INTENSITY')).toBe(3)
+    expect(fixturesSupportingFamily(patch, 'COLOUR')).toBe(2)
+    expect(fixturesSupportingFamily(patch, 'POSITION')).toBe(1)
+  })
+
+  it('counts every fixture for BEAM, matching the busk view\'s refusal to filter on it', () => {
+    // The beam roles are per-model and a capability set does not summarise them, so filtering
+    // would hide heads that can in fact take a beam value.
+    expect(fixturesSupportingFamily(patch, 'BEAM')).toBe(patch.length)
+  })
+
+  it('answers 0 rather than throwing while the patch is still loading', () => {
+    expect(fixturesSupportingFamily(undefined, 'COLOUR')).toBe(0)
   })
 })

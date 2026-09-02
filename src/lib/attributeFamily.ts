@@ -82,6 +82,95 @@ export function familyForCategory(category: string): AttributeFamily {
   return FAMILY_BY_CATEGORY[category as PropertyCategory] ?? 'BEAM'
 }
 
+/**
+ * Which family an **effect library `category`** belongs to — `familyForCategory`'s sibling, and a
+ * different question from a different vocabulary.
+ *
+ * A mirror of `familyForEffectCategory` in lighting7's `routes/projectLooks.kt`. Keep the two in
+ * step: it is what derives an effect template's family, and a client that classified a category
+ * differently would offer the operator a template the write boundary then refuses.
+ *
+ * **Do not fold this into [familyForCategory].** That one is keyed by `PropertyCategory` — the
+ * *property* vocabulary, which has `pan` and `tilt` and no `position` at all — and it is total,
+ * answering BEAM for anything it does not recognise. This one is over the effect library's own
+ * `category`, and its `null` is load-bearing: `controls` has no tempo and `composite` spans
+ * families, so neither can name a family, and saying BEAM for them would be a wrong answer rather
+ * than a catch-all. The two vocabularies share two spellings (`dimmer`, `colour`) and nothing else.
+ */
+export function familyForEffectCategory(category: string): AttributeFamily | null {
+  switch (category.toLowerCase()) {
+    case 'dimmer':
+      return 'INTENSITY'
+    case 'colour':
+    case 'color':
+      return 'COLOUR'
+    case 'position':
+      return 'POSITION'
+    case 'beam':
+      return 'BEAM'
+    default:
+      return null
+  }
+}
+
+/**
+ * The families an **effect template** can be banked under (fx-templates D4).
+ *
+ * Not all four: BEAM is absent because the effect library has no beam category, so the column would
+ * have nothing to put in it. The backend refuses it **by name** rather than by the library happening
+ * to ship no beam effect — a script-registered one must not be able to mint a Beam effect template
+ * behind the rule — and this list is the client half of that refusal, which is why the sheet shows
+ * *Effect* disabled under Beam rather than omitting Beam from the family row.
+ *
+ * Mirrors `TEMPLATE_EFFECT_FAMILIES` in `routes/projectTemplates.kt`.
+ */
+export const TEMPLATE_EFFECT_FAMILIES: readonly AttributeFamily[] = ['INTENSITY', 'COLOUR', 'POSITION']
+
+/** True when a template of this family may hold an effect rather than values. */
+export function familyCanHoldEffect(family: AttributeFamily): boolean {
+  return TEMPLATE_EFFECT_FAMILIES.includes(family)
+}
+
+/**
+ * The effect-library category an effect template of this family draws its effects from — the
+ * inverse of [familyForEffectCategory], and the filter behind "the family is the filter".
+ *
+ * Null for BEAM, which is [TEMPLATE_EFFECT_FAMILIES]' absence read the other way round.
+ */
+export function effectCategoryForFamily(family: AttributeFamily): string | null {
+  switch (family) {
+    case 'INTENSITY':
+      return 'dimmer'
+    case 'COLOUR':
+      return 'colour'
+    case 'POSITION':
+      return 'position'
+    case 'BEAM':
+      return null
+  }
+}
+
+/**
+ * How many patched heads an effect template of this family would run on.
+ *
+ * Deliberately **not** a reuse of `BuskingView`'s `familiesFit`: that is a private closure asking
+ * "does the *current selection* satisfy this family", where this asks "how many heads in the patch
+ * have it at all" — the same capability strings, a different question, and no selection involved.
+ *
+ * BEAM counts every fixture, matching `familiesFit`'s deliberate refusal to filter on it: the beam
+ * roles are per-model and a capability set does not summarise them.
+ */
+export function fixturesSupportingFamily(
+  fixtures: readonly { capabilities?: string[] }[] | undefined,
+  family: AttributeFamily,
+): number {
+  if (fixtures == null) return 0
+  const capability =
+    family === 'INTENSITY' ? 'dimmer' : family === 'COLOUR' ? 'colour' : family === 'POSITION' ? 'position' : null
+  if (capability == null) return fixtures.length
+  return fixtures.filter((fixture) => fixture.capabilities?.includes(capability) === true).length
+}
+
 /** URL slug for a family, e.g. `COLOUR` → `colour`. */
 export function familySlug(type: AttributeFamily): string {
   return type.toLowerCase()

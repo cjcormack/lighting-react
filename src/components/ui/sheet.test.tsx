@@ -30,6 +30,38 @@ function DirtyBody({ unsaved }: { unsaved: boolean }) {
   return <p>body</p>
 }
 
+/**
+ * The **wrong** shape, kept as a harness: the hook called in the component that renders the
+ * `<Sheet>` rather than in a body inside it.
+ */
+function SelfGuardedSheet({ unsaved }: { unsaved: boolean }) {
+  const [open, setOpen] = useState(true)
+  useUnsavedChanges(unsaved)
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetContent>
+        <SheetHeader>
+          <SheetTitle>Edit</SheetTitle>
+        </SheetHeader>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+/** The same component, guarding the way it should: through the prop. */
+function PropGuardedSheet({ unsaved }: { unsaved: boolean }) {
+  const [open, setOpen] = useState(true)
+  return (
+    <Sheet open={open} onOpenChange={setOpen} unsavedChanges={unsaved}>
+      <SheetContent>
+        <SheetHeader>
+          <SheetTitle>Edit</SheetTitle>
+        </SheetHeader>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
 function GuardedSheet({ unsaved }: { unsaved: boolean }) {
   const [open, setOpen] = useState(true)
   return (
@@ -111,5 +143,38 @@ describe('SheetContent', () => {
 
     expect(screen.getByText('Edit')).toBeInTheDocument()
     expect(screen.getByText('Discard changes?')).toBeInTheDocument()
+  })
+})
+
+/**
+ * **Where the hook is called decides whether it does anything**, and getting it wrong is silent.
+ *
+ * `useUnsavedChanges` reads a context that `Sheet` itself provides, so a call in the component that
+ * *renders* the `<Sheet>` resolves against providers **above** that component — the `<Sheet>` is in
+ * the value it returns, which is below it. `register` is then null and the registration no-ops.
+ *
+ * Four sheets shipped with that shape and no discard guard at all: an edit could be lost to Escape
+ * or a click outside with no prompt. Pinned in both directions so the working form cannot be
+ * "simplified" into the broken one — and the fix is the `unsavedChanges` prop, which exists for a
+ * component that owns both the dirty state and the `<Sheet>`.
+ */
+describe('where useUnsavedChanges is called', () => {
+  it('does nothing from the component that renders the Sheet', () => {
+    render(<SelfGuardedSheet unsaved />)
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    // No prompt, and the sheet is gone — the edit went with it.
+    expect(screen.queryByText('Discard changes?')).not.toBeInTheDocument()
+    expect(screen.queryByText('Edit')).not.toBeInTheDocument()
+  })
+
+  it('guards from that same component through the unsavedChanges prop', () => {
+    render(<PropGuardedSheet unsaved />)
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.getByText('Discard changes?')).toBeInTheDocument()
+    expect(screen.getByText('Edit')).toBeInTheDocument()
   })
 })

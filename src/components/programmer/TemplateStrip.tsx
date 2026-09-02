@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { useSelector } from 'react-redux'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Plus } from 'lucide-react'
+import { AudioWaveform, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { COLUMN_CATEGORY, type ColumnKey } from '@/components/fixtures-list/columns'
@@ -103,6 +103,22 @@ export function TemplateStrip({
             toast.warning(
               `${result.written} head${result.written === 1 ? '' : 's'} set · ${result.skipped.length} could not take it`,
             )
+            return
+          }
+          // An **effect** template writes no literals at all — it mints detached programmer-band
+          // copies, so `written` stays 0 and `effectIds` is the whole result. Without this the one
+          // gesture that reaches the rig hardest is the only one that says nothing.
+          //
+          // An *empty* list is reported too, and that is the half worth keeping: a press that
+          // started nothing looks exactly like a press that started everything, and the value arm
+          // above has `skipped` to say so where this one has only the count.
+          if ('effectIds' in result && result.effectIds != null) {
+            const count = result.effectIds.length
+            if (count === 0) {
+              toast.warning('Nothing started — no selected head could take this effect')
+            } else {
+              toast.success(`${count} effect${count === 1 ? '' : 's'} started`)
+            }
           }
         })
         .catch((err) => toast.error(formatError(err)))
@@ -128,15 +144,22 @@ export function TemplateStrip({
             onClick={(e) => press(template, e.altKey)}
             title={
               // The two gestures, stated on the chip rather than left to be discovered: ⌥click is
-              // not a thing an operator guesses, and it is the one that creates a dependency.
-              `Click to set these values · ⌥click to add a layer that tracks “${template.name}”`
+              // not a thing an operator guesses, and it is the one that creates a dependency. An
+              // effect template sets no values, so the click half is named for what it does.
+              template.kind === 'effect'
+                ? `Click to run this effect on these fixtures · ⌥click to add a layer that tracks “${template.name}”`
+                : `Click to set these values · ⌥click to add a layer that tracks “${template.name}”`
             }
             className={cn(
               'flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors',
               'hover:bg-accent/60 active:scale-95',
             )}
           >
-            {templateIntentSwatch(template.rows[0]?.value ?? '') != null ? (
+            {/* An effect template holds no rows, so there is no value to preview — the glyph the
+                whole desk uses for FX says what the press will do instead of a blank gap. */}
+            {template.kind === 'effect' ? (
+              <AudioWaveform className="size-3 shrink-0 text-muted-foreground" />
+            ) : templateIntentSwatch(template.rows[0]?.value ?? '') != null ? (
               <span
                 className="size-3 rounded-sm border border-border/60"
                 style={{ background: templateIntentSwatch(template.rows[0].value) ?? undefined }}

@@ -39,13 +39,15 @@ export function TemplatesRedirect() {
 }
 
 /**
- * The template library — named values you build looks and cues out of, one attribute family each.
+ * The template library — named values and effects you build looks and cues out of, one family each.
  *
- * The half of `/looks` that was never a Look. A template composes *values*: no targets of its own,
- * no effects, no order, applied to whatever you have selected. `New template` lives here because a
- * template is **authored** rather than captured, which is exactly the line D9 draws — cues and Looks
- * are recorded and so have no create button, while templates, separators and stacks are not captured
- * states and keep theirs.
+ * The half of `/looks` that was never a Look. A template composes **one named thing** — a value, or
+ * one effect — with no targets of its own and no order, applied to whatever you have selected.
+ * `New template` lives here because a template is **authored** rather than captured, which is
+ * exactly the line D9 draws — cues and Looks are recorded and so have no create button, while
+ * templates, separators and stacks are not captured states and keep theirs. An effect template has a
+ * second, captured way in besides (*Save as template…* on a running effect), which is how the
+ * library fills up without anyone opening this sheet; it does not make the create button wrong.
  *
  * **One route with a sticky family filter**, and the reason is now the opposite of the one `/looks`
  * had: here a family is an exact partition (a template is in exactly one), so the filter is a view of
@@ -191,7 +193,7 @@ export function ProjectTemplates() {
             <h1 className="text-lg font-semibold">Templates</h1>
             <p className="text-sm text-muted-foreground">
               {isCurrentProject
-                ? 'Named values you build looks and cues out of. One attribute family each, applied to whatever you have selected.'
+                ? 'Named values and effects you build looks and cues out of. One attribute family each, applied to whatever you have selected.'
                 : `Viewing templates for "${project.name}".`}
             </p>
           </div>
@@ -219,7 +221,7 @@ export function ProjectTemplates() {
             <Palette className="size-10 mx-auto text-muted-foreground/30 mb-3" />
             <p className="text-sm text-muted-foreground">
               {isCurrentProject
-                ? 'No templates yet. Create one here, or record what you have selected from the programmer’s template strip.'
+                ? 'No templates yet. Create one here, or record what you have selected from the programmer’s template strip — or save a running effect as one.'
                 : 'No templates in this project.'}
             </p>
           </Card>
@@ -331,6 +333,20 @@ export function ProjectTemplates() {
                     {inUse.body.fxReferenceCount === 1 ? ' that one' : ' those'} pointing at
                     nothing, and an unresolved colour runs as white — repoint
                     {inUse.body.fxReferenceCount === 1 ? ' it' : ' them'} first.
+                  </p>
+                )}
+                {/* The third kind of usage, and the only one that is not stored: layers tracking
+                    this template in the programmer *right now*. A forced delete stops them, which
+                    is a consequence to state rather than a reference to repoint — and without it a
+                    template used only live would open this guard with no consequence listed at
+                    all. */}
+                {(inUse.body.runningCount ?? 0) > 0 && (
+                  <p>
+                    {inUse.body.runningCount} programmer layer
+                    {inUse.body.runningCount === 1 ? '' : 's'} appl
+                    {inUse.body.runningCount === 1 ? 'ies' : 'y'} it right now. Deleting it stops
+                    {inUse.body.runningCount === 1 ? ' that one' : ' those'} on the rig
+                    immediately.
                   </p>
                 )}
                 {inUse.body.cueNames.length > 0 && (

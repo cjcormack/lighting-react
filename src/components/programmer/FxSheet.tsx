@@ -16,16 +16,11 @@ import { COLUMN_DEFS, resolutionPropertyNames } from '../fixtures-list/columns'
 import { buildRows, resolveTargetCells, rowWriteTargets } from '../fixtures-list/rowModel'
 import { ActiveEffectSheet } from '../busking/ActiveEffectSheet'
 import type { ActiveEffect } from '../../store/fixtureFx'
-import type { ActiveEffectContext } from '../busking/buskingTypes'
+import { toEffectContext } from '../busking/buskingTypes'
 import type { ColumnKey } from '../fixtures-list/columns'
 import type { Row } from '../fixtures-list/rowModel'
 import type { Fixture } from '../../store/fixtures'
-import type {
-  BlendMode,
-  DistributionStrategy,
-  ElementMode,
-  GroupSummary,
-} from '../../api/groupsApi'
+import type { GroupSummary } from '../../api/groupsApi'
 
 const EMPTY_FIXTURES: Fixture[] = []
 const EMPTY_GROUPS: GroupSummary[] = []
@@ -67,6 +62,10 @@ export function FxSheet() {
   const [grouped, setGrouped] = usePersistentState<boolean>(GROUPED_KEY, false)
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(new Set())
   const [editing, setEditing] = useState<ActiveEffect | null>(null)
+  // Memoised on `editing` rather than rebuilt inline: `ActiveEffectSheet` re-seeds its draft
+  // whenever this object's identity changes, and this component re-renders on every
+  // `FixtureEffects` invalidation — so a fresh context per render discards an in-progress edit.
+  const editingContext = useMemo(() => (editing == null ? null : toEffectContext(editing)), [editing])
 
   // Suppression is read from live programmer state (see `isSuppressed`), which no query
   // covers — without this subscription a locate would grey the stage but leave every chip
@@ -331,62 +330,9 @@ export function FxSheet() {
         </div>
       )}
 
-      <ActiveEffectSheet context={editing ? toEffectContext(editing) : null} onClose={() => setEditing(null)} />
+      <ActiveEffectSheet context={editingContext} onClose={() => setEditing(null)} />
     </div>
   )
-}
-
-/**
- * Adapt an `/fx/active` row to the shape the busking parameter sheet edits.
- *
- * The two endpoints report the same instance under slightly different names — the group DTO
- * calls the spread `distribution` where the fixture DTO calls it `distributionStrategy` — so
- * the mapping is explicit rather than a cast.
- */
-function toEffectContext(effect: ActiveEffect): ActiveEffectContext {
-  const shared = {
-    id: effect.id,
-    effectType: effect.effectType,
-    propertyName: effect.propertyName,
-    beatDivision: effect.beatDivision,
-    isRunning: effect.isRunning,
-    phaseOffset: effect.phaseOffset,
-    currentPhase: effect.currentPhase,
-    parameters: effect.parameters,
-    elementFilter: effect.elementFilter,
-    stepTiming: effect.stepTiming,
-    cueId: effect.cueId,
-    // Explicit like everything else here: dropping this would hand the edit sheet a
-    // master-less copy, and its Update would silently reset the effect to master 1.
-    speedMasterUuid: effect.speedMasterUuid,
-    rateSpeedMasterUuid: effect.rateSpeedMasterUuid,
-  }
-  if (effect.isGroupTarget) {
-    return {
-      type: 'group',
-      groupName: effect.targetKey,
-      effect: {
-        ...shared,
-        blendMode: effect.blendMode as BlendMode,
-        // `LINEAR` is the vocabulary every other call site and the backend request shape use;
-        // the DTO's own `LinearDistribution` class name is not a valid DistributionStrategy
-        // and would reach the parameter sheet's Select as an unrecognised value.
-        distribution: (effect.distributionStrategy ?? 'LINEAR') as DistributionStrategy,
-        elementMode: effect.elementMode as ElementMode | null,
-      },
-    }
-  }
-  return {
-    type: 'fixture',
-    fixtureKey: effect.targetKey,
-    effect: {
-      ...shared,
-      targetKey: effect.targetKey,
-      blendMode: effect.blendMode,
-      isGroupTarget: false,
-      distributionStrategy: effect.distributionStrategy,
-    },
-  }
 }
 
 function EffectChip({

@@ -8,7 +8,6 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-  useUnsavedChanges,
 } from '@/components/ui/sheet'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -67,8 +66,6 @@ export function NewTemplateFromSelectionSheet({
     reset()
   }, [open, offered, reset])
 
-  useUnsavedChanges(name.trim() !== '')
-
   const targets = useMemo(
     () => selectedKeys.map((key) => ({ type: 'fixture' as const, key })),
     [selectedKeys],
@@ -99,7 +96,11 @@ export function NewTemplateFromSelectionSheet({
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    // `unsavedChanges` on the Sheet, **not** `useUnsavedChanges` here: that hook reads a context
+    // `Sheet` itself provides, so calling it in the component that renders the `<Sheet>` looks up
+    // the tree past the provider, finds nothing and silently no-ops (`register?.()`). The hook is
+    // for a body component mounted *inside* `SheetContent`.
+    <Sheet open={open} onOpenChange={onOpenChange} unsavedChanges={name.trim() !== ''}>
       <SheetContent className="flex flex-col sm:max-w-md">
         <SheetHeader>
           <SheetTitle>New template from selection</SheetTitle>

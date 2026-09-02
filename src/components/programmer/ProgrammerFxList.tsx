@@ -1,12 +1,24 @@
-import { useMemo } from 'react'
-import { AudioWaveform } from 'lucide-react'
+import { useCallback, useMemo, useState } from 'react'
+import { AudioWaveform, MoreHorizontal, Pencil, Plus, Square } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { SpeedMasterChip } from '@/components/fx/SpeedMasterChip'
 import { getBeatDivisionLabel } from '@/components/fx/fxConstants'
-import { useActiveEffectsQuery } from '@/store/fixtureFx'
+import { useActiveEffectsQuery, useEffectLibraryQuery, useRemoveFxMutation } from '@/store/fixtureFx'
+import { useRemoveGroupFxMutation } from '@/store/groups'
 import { useProgrammerLayersQuery } from '@/store/programmer'
+import { familyCanHoldEffect, familyForEffectCategory } from '@/lib/attributeFamily'
+import { ActiveEffectSheet } from '../busking/ActiveEffectSheet'
+import { findEffectEntry, toEffectContext } from '../busking/buskingTypes'
 import { ProgrammerAddEffect } from './ProgrammerAddEffect'
-import type { ActiveEffect } from '@/store/fixtureFx'
+import { NewTemplateFromEffectSheet } from './NewTemplateFromEffectSheet'
+import type { ActiveEffect, EffectLibraryEntry } from '@/store/fixtureFx'
 
 /**
  * What is running, one row per effect.
@@ -21,10 +33,29 @@ import type { ActiveEffect } from '@/store/fixtureFx'
  * who owns it?" — from `ActiveEffect` alone, so it needs no row model and no revision subscription.
  * `FxSheet` stays available beneath it as a mount-on-demand diagnostic, which is where the old
  * "don't mount two row models" argument now lives.
+ *
+ * The row menu keeps to that, and each item pays for itself. **Edit…** goes through
+ * `toEffectContext`, which maps an `ActiveEffect` to the parameter sheet's shape with no fixture or
+ * group lookup at all — the sheet it opens does subscribe to the fixture list, which is why it is
+ * mounted only while editing rather than sitting there empty. **Stop** is the same two mutations
+ * `FxSheet`'s chip calls. The one standing query added is the FX **library**, which
+ * *Save as template…* needs to read an effect's category: a single shared cache entry the whole app
+ * already subscribes to, not a fetch per row.
  */
 export function ProgrammerFxList() {
   const { data: effects } = useActiveEffectsQuery()
   const { data: layers } = useProgrammerLayersQuery()
+  const { data: library } = useEffectLibraryQuery()
+  const [removeFx] = useRemoveFxMutation()
+  const [removeGroupFx] = useRemoveGroupFxMutation()
+  /** Both sheets mount once, at the list, rather than one pair per row. */
+  const [editing, setEditing] = useState<ActiveEffect | null>(null)
+  const [saving, setSaving] = useState<ActiveEffect | null>(null)
+  // Memoised on the effect being edited, not rebuilt per render: `ActiveEffectSheet` seeds its
+  // draft from `context` in an effect keyed on that object's *identity*, and this band re-renders
+  // on every `FixtureEffects` invalidation — which the FX socket raises constantly. A fresh object
+  // each render would re-seed the open sheet mid-edit and throw away whatever was being adjusted.
+  const editingContext = useMemo(() => (editing == null ? null : toEffectContext(editing)), [editing])
   const running = effects ?? []
   // Named from the same broadcast the stack rail draws, so a row cannot claim a layer the list
   // beside it does not show.
@@ -32,6 +63,18 @@ export function ProgrammerFxList() {
     () =>
       new Map((layers ?? []).map((l, i) => [l.layerId, { name: l.source.name, position: i + 1 }])),
     [layers],
+  )
+
+  // Same shape `FxSheet`'s chip uses, including the `.catch`: `errorToastMiddleware` reports the
+  // failure, and this only stops the unhandled rejection.
+  const stopEffect = useCallback(
+    (effect: ActiveEffect) => {
+      const request = effect.isGroupTarget
+        ? removeGroupFx({ id: effect.id, groupName: effect.targetKey })
+        : removeFx({ id: effect.id, fixtureKey: effect.targetKey })
+      request.unwrap().catch(() => {})
+    },
+    [removeFx, removeGroupFx],
   )
 
   return (
@@ -52,12 +95,82 @@ export function ProgrammerFxList() {
       ) : (
         <div className="flex min-h-0 flex-col gap-1 overflow-y-auto">
           {running.map((effect) => (
-            <FxRow key={effect.id} effect={effect} home={homeOf(effect, layerHomes)} />
+            <FxRow
+              key={effect.id}
+              effect={effect}
+              home={homeOf(effect, layerHomes)}
+              saveAsTemplate={saveAsTemplateOffer(effect, library)}
+              onEdit={() => setEditing(effect)}
+              onSaveAsTemplate={() => setSaving(effect)}
+              onStop={() => stopEffect(effect)}
+            />
           ))}
         </div>
       )}
+      {/* Mounted only while editing, unlike `FxSheet`'s copy — that one is already a
+          mount-on-demand diagnostic, while this band is always on screen, and `ActiveEffectSheet`
+          subscribes to the fixture list. Mounting it eagerly would put back exactly the standing
+          subscription this band's docblock keeps it clear of. */}
+      {editingContext != null && (
+        <ActiveEffectSheet context={editingContext} onClose={() => setEditing(null)} />
+      )}
+      <NewTemplateFromEffectSheet
+        open={saving != null}
+        onOpenChange={(next) => !next && setSaving(null)}
+        effect={saving}
+      />
     </div>
   )
+}
+
+/**
+ * Whether this effect can become a template, and why not when it cannot.
+ *
+ * Two independent gates, and the order matters for what the operator is told:
+ *
+ *  - **The programmer must own it.** A copy of an effect that already belongs to a Look or a
+ *    template is not a new named thing — the named thing exists, and *Edit template* is the gesture.
+ *    An effect on a cue is that cue's, and a base effect belongs to the show.
+ *  - **Its category must map to a template family.** `controls` has no tempo and `composite` spans
+ *    families, so neither can name one; `beam` is refused by name server-side so a script-registered
+ *    beam effect cannot mint a Beam effect template behind the rule.
+ *
+ * Returns a reason rather than false, because the item is **shown disabled** in both cases. A menu
+ * that silently loses an entry teaches nobody why.
+ */
+function saveAsTemplateOffer(
+  effect: ActiveEffect,
+  library: EffectLibraryEntry[] | undefined,
+): { enabled: boolean; reason?: string } {
+  if (!effect.programmerOwned || effect.lookId != null || effect.templateId != null || effect.programmerLayerId != null) {
+    return {
+      enabled: false,
+      reason:
+        effect.sourceName != null
+          ? `Already named — this is “${effect.sourceName}” running. Edit that instead.`
+          : 'Only an effect the programmer owns can become a template. This one belongs to a cue or the show.',
+    }
+  }
+  // Two different absences, and telling them apart is the point: a library that has not arrived is
+  // a wait, while a miss against a loaded one is an effect type this desk's registry does not know
+  // — an import from a desk with script-registered effects. Reporting the second as the first
+  // leaves the item disabled forever under a message that promises it is about to work.
+  if (library == null) return { enabled: false, reason: 'Reading the effect library…' }
+  const entry = findEffectEntry(library, effect.effectType)
+  if (entry == null) {
+    return {
+      enabled: false,
+      reason: `“${effect.effectType}” is not in this desk's effect library, so its category — and so the template's family — cannot be read.`,
+    }
+  }
+  const family = familyForEffectCategory(entry.category)
+  if (family == null || !familyCanHoldEffect(family)) {
+    return {
+      enabled: false,
+      reason: `A “${entry.category}” effect is not banked by family, so it cannot be a template. It can live in a recorded look.`,
+    }
+  }
+  return { enabled: true }
 }
 
 /**
@@ -84,7 +197,21 @@ function homeOf(
   return { label: 'base' }
 }
 
-function FxRow({ effect, home }: { effect: ActiveEffect; home: ReturnType<typeof homeOf> }) {
+function FxRow({
+  effect,
+  home,
+  saveAsTemplate,
+  onEdit,
+  onSaveAsTemplate,
+  onStop,
+}: {
+  effect: ActiveEffect
+  home: ReturnType<typeof homeOf>
+  saveAsTemplate: { enabled: boolean; reason?: string }
+  onEdit: () => void
+  onSaveAsTemplate: () => void
+  onStop: () => void
+}) {
   return (
     <div className="flex items-center gap-2 rounded-md border bg-card px-2 py-1.5 text-xs">
       <span className="size-1.5 shrink-0 rounded-full bg-violet-500" />
@@ -118,6 +245,39 @@ function FxRow({ effect, home }: { effect: ActiveEffect; home: ReturnType<typeof
           {home.detail}
         </span>
       )}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6 shrink-0"
+            aria-label={`Actions for ${effect.effectType}`}
+          >
+            <MoreHorizontal className="size-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={onEdit}>
+            <Pencil className="size-3.5" />
+            Edit…
+          </DropdownMenuItem>
+          {/* Shown disabled with the reason rather than omitted, so "why is this not offered?" is
+              answerable from the menu itself. `title` carries it — a disabled item takes no hover
+              card, and the reasons are a sentence rather than a label. */}
+          <DropdownMenuItem
+            disabled={!saveAsTemplate.enabled}
+            onClick={onSaveAsTemplate}
+            title={saveAsTemplate.reason}
+          >
+            <Plus className="size-3.5" />
+            Save as template…
+          </DropdownMenuItem>
+          <DropdownMenuItem variant="destructive" onClick={onStop}>
+            <Square className="size-3.5" />
+            Stop
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   )
 }

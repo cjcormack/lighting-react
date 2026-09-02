@@ -44,6 +44,8 @@ function template(over: Partial<TemplateSummary> = {}): TemplateSummary {
     rows: [
       { targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#FF9D4A;policy=extract' },
     ],
+    kind: 'value',
+    effect: null,
     layerCount: 0,
     ...over,
   }

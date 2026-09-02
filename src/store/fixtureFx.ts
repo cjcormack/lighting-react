@@ -153,6 +153,17 @@ export interface ActiveEffect {
    * Look says what the effect is and the layer says which stack line spawned it.
    */
   lookId: number | null
+  /**
+   * The **template** this effect came out of, when it came out of one.
+   *
+   * A sibling of [lookId] rather than a widening of it: the backend kept `lookId` meaning a Look and
+   * added this beside it, so the two are never both set and a reader has to check both. Both are
+   * null on a *detached* copy — the one a plain click on an effect template's chip mints — which
+   * carries no source at all, deliberately, so nothing can rebuild it as a tracking layer.
+   */
+  templateId: number | null
+  /** The Look's or template's name, for the home badge. Null when the effect has no source. */
+  sourceName: string | null
   /** The programmer layer that spawned it. Null for an effect the operator busked directly. */
   programmerLayerId: number | null
   cueId: number | null

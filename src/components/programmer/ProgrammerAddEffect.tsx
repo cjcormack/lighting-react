@@ -44,10 +44,12 @@ export function ProgrammerAddEffect() {
 
   if (!scope) return null
 
-  // A **template layer takes no effect**, and the reason is D7 rather than a missing feature:
-  // effects live in a Look or on a cue, never in the thing a layer tracks. A focused template layer
-  // has no `LookRowStore` either, so without this the button would offer to absorb an effect into
-  // nothing at all.
+  // A **template layer takes no effect from here**, and the reason has changed rather than gone.
+  // It used to be D7 — a template held no effects at all. A template may now hold one
+  // (fx-templates D1), but exactly one, fixed at creation: there is no gesture for adding a second,
+  // and adding a *first* to a value template would flip what it holds, which is its identity. A
+  // focused template layer has no `LookRowStore` either, so without this the button would offer to
+  // absorb an effect into nothing at all.
   const templateFocused = scope.kind === 'layer' && store == null
 
   // An effect needs one target to be authored against. The selection is the operator's own answer
@@ -65,7 +67,7 @@ export function ProgrammerAddEffect() {
     scope.kind === 'output'
       ? 'Output is a read of everything composed together, so it owns nothing. Switch to Local for an effect on this cue, or focus a layer to put one in its look.'
       : templateFocused
-        ? 'A template holds one value, never an effect. Switch to Local for an effect on this cue, or focus a look layer to put one in its look.'
+        ? 'A template holds one thing — a value, or one effect chosen when it was made. Edit it in the template library, switch to Local for an effect on this cue, or focus a look layer to put one in its look.'
         : target == null
           ? 'Select the heads the effect should drive first.'
           : scope.kind === 'layer'

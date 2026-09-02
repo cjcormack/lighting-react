@@ -103,6 +103,28 @@ export function getDistributionLabel(strategy: string): string {
   return option?.label ?? strategy.toLowerCase()
 }
 
+/**
+ * An effect's speed as a label, with its **unit resolved** — the beat division for a `BEAT` effect,
+ * seconds for a `WALL_CLOCK` one.
+ *
+ * `beatDivision` carries both readings on one field, and they are a tempo apart: `2` is two beats
+ * or two seconds, and only `timingSource` says which. Everything that renders a speed away from
+ * `EffectParameterForm` (which has the library entry in hand and labels the input itself) goes
+ * through this, so no surface has to re-derive the rule and none can get it half right.
+ *
+ * **Null when the timing source is unknown**, and callers should then say nothing about the speed.
+ * That happens for a template whose stored `effectType` no longer resolves in the registry — an
+ * import from a desk carrying script-registered effects this one does not have. A confident
+ * "2 Bars" for a two-second cycle is worse than an absent clause.
+ */
+export function effectSpeedLabel(
+  beatDivision: number,
+  timingSource: string | null | undefined,
+): string | null {
+  if (timingSource == null) return null
+  return timingSource === 'WALL_CLOCK' ? `${beatDivision}s` : getBeatDivisionLabel(beatDivision)
+}
+
 export function getBeatDivisionLabel(beatDivision: number): string {
   const option = BEAT_DIVISION_OPTIONS.find(
     (o) => Math.abs(o.value - beatDivision) < 0.01

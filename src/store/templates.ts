@@ -75,9 +75,10 @@ export const templatesApi = restApi.injectEndpoints({
     /**
      * PUT a template.
      *
-     * Omit `rows` for a metadata-only edit; sending them replaces the lot. A contents edit is a
-     * **live write** — the server republishes every cue layering this template and the programmer's
-     * own stack — so `Cue` / `CueList` go with it.
+     * Omit `rows` (or `effect`) for a metadata-only edit; sending either replaces that half. Send
+     * **at most one of the two** — which half a template holds is fixed at creation, and a PUT
+     * naming the other is a 400. A contents edit is a **live write** — the server republishes every
+     * cue layering this template and the programmer's own stack — so `Cue` / `CueList` go with it.
      */
     saveTemplate: build.mutation<
       TemplateSummary,
