@@ -423,10 +423,15 @@ for the operator's own hand.
 server-side — it adds or removes a layer, matching on the **whole `LayerSource`** + exact `targets`
 (matching on an id alone would let a Look and a template that share an int PK cancel each other).
 Keeping one owner for that match rule is why they weren't moved to the explicit ops. What did change
-is the ring: `lookLayerPresence` reads the **layer stack**, not the effect list. The old match was
+is the ring: `lookLayerPresence` reads the desk's **resolved applied state** (`programmer.applied`,
+from `useProgrammerAppliedQuery`), not the effect list. The old match was
 `FxInstance.presetId === lookId`, which worked by accident (the Look id in a field naming a
-`DaoFxPreset`) and could never see a rows-only Look at all. `templateLayerPresence` is its twin for
-templates, and it is the *only* way a template pad can light. That used to be because a template
+`DaoFxPreset`) and could never see a rows-only Look at all. It then read the layer stack directly,
+expanding groups client-side; the desk resolves that now — `ProgrammerLayerStack.appliedState` sends
+one entry per record naming every target it covers, each group marked `all` or `some` — so all
+these functions do is fold the selection into one ring. Two copies of a coverage rule drift, and the
+copy in the browser is the one no test against the rig can reach. `templateLayerPresence` is its
+twin for templates, and it is the *only* way a template pad can light. That used to be because a template
 held no effects; it holds one now, and the rule is *more* load-bearing rather than less — an
 effect-template pad's ring would look matchable against the running instance, and matching there
 would light for an effect template while leaving every value template's pad dark.
@@ -1187,7 +1192,8 @@ path may quietly change where it lands.
       rather than deleted, and `TemplateEditor` is its caller now (see §Speed Masters).
     - **`BuskingView` reads no target's running effects.** The eight fixed RTK Query slots that once
       fanned the selection out (and capped it at eight targets — `FU-BUSK-TARGET-CAP`, now retired)
-      went with the pads. Both surviving pad kinds read the programmer's **layer stack**, which
+      went with the pads. Both surviving pad kinds read the programmer's **resolved applied state**
+      (`useProgrammerAppliedQuery`; the view does not subscribe to the layer stack at all), which
       needs only `{type, key}` per target, so `lookLayerTarget` is the one place the group-name
       convention is applied and the selection has no ceiling.
   - **It does not pass `canOperate`, and the show-editing lock is not consulted.** GO must

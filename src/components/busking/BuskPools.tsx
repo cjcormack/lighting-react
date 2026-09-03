@@ -226,8 +226,9 @@ export interface PadItem {
  *
  * **A template group is a bordered cluster** inside its family's column (`TemplateGroupCluster`),
  * at the position the layout gives it. Consecutive pads sharing a `group` are coalesced into one;
- * the group's exclusivity is the server's business (its siblings release on the same targets when
- * one is pressed), so the cluster draws nothing the presence ladder does not already show.
+ * the group's exclusivity is the server's business (a press takes its own targets off every
+ * sibling, narrowing one that only overlaps), so the cluster draws nothing the presence ladder does
+ * not already show.
  *
  * The programmer's `TemplateStrip` still draws its hairline — a different surface with a different
  * ask, and its own test pins the order. Recorded here so the divergence reads as chosen.

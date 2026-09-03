@@ -128,6 +128,31 @@ export interface ProgrammerLayer {
   sourceCueLayerId?: number | null
 }
 
+/** How much of one target a record is applied to. `some` only ever describes a group. */
+export type AppliedExtent = 'all' | 'some'
+
+/** One target a Look or template is applied to, and how much of it. */
+export interface AppliedTarget {
+  type: string
+  key: string
+  state: AppliedExtent
+}
+
+/**
+ * One Look or template and every target it is currently applied to — the **resolved** view of
+ * [ProgrammerState.layers], as the desk computes it (`ProgrammerLayerStack.appliedState`).
+ *
+ * Groups arrive already expanded and folded back up: a layer on `{group: wash}` reports the wash
+ * *and* each of its heads, and a layer on one head reports that head plus the wash as `some`. A
+ * pad's ring is therefore a lookup, not a coverage calculation — see `lookPresence.ts`. Nothing in
+ * the client expands a group or matches a target: the desk owns that rule, and a second copy here
+ * is one that drifts and that no test on the rig can reach.
+ */
+export interface ProgrammerAppliedSource {
+  source: LayerSource
+  targets: AppliedTarget[]
+}
+
 /**
  * What Include last pulled into the programmer, and therefore what a bare Update writes back to.
  * Null means nothing is staged, so Update falls through to the Mode B checklist.
@@ -172,6 +197,8 @@ export interface ProgrammerState {
   lastIncluded: IncludedTarget | null
   /** The Look-layer stack, most significant last. */
   layers: readonly ProgrammerLayer[]
+  /** The same stack resolved to per-target applied state — what a busk pad's ring reads. */
+  applied: readonly ProgrammerAppliedSource[]
 }
 
 /** Per-cell lookup result: what the programmer and the cascade say about one property. */
@@ -315,6 +342,8 @@ interface ProgrammerStateIncoming {
    * owner; this is the structure behind them.
    */
   layers?: ProgrammerLayer[]
+  /** The same stack resolved, so a fresh connection can light its pads without a round trip. */
+  applied?: ProgrammerAppliedSource[]
 }
 
 interface ProgrammerIncludeTargetIncoming {
@@ -325,6 +354,8 @@ interface ProgrammerIncludeTargetIncoming {
 interface ProgrammerLayerStateIncoming {
   type: 'programmer.layerState'
   layers: ProgrammerLayer[]
+  /** Resolved from the very list `layers` carries, so the two halves of a frame always agree. */
+  applied?: ProgrammerAppliedSource[]
 }
 
 interface ProgrammerEntryChangedIncoming {
@@ -394,6 +425,8 @@ export interface ProgrammerApi {
   lastIncluded(): IncludedTarget | null
   /** The Look-layer stack, most significant last. */
   layers(): readonly ProgrammerLayer[]
+  /** The same stack resolved to per-target applied state — a busk pad's ring, already answered. */
+  applied(): readonly ProgrammerAppliedSource[]
 
   set(
     targetType: ProgrammerTargetType,
@@ -610,6 +643,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
   const provenance = signedMap(provenanceSignature)
   let lastIncluded: IncludedTarget | null = null
   let layers: readonly ProgrammerLayer[] = []
+  let applied: readonly ProgrammerAppliedSource[] = []
 
   const buildSnapshot = (): ProgrammerState => ({
     blind,
@@ -618,6 +652,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     provenance: provenance.values,
     lastIncluded,
     layers,
+    applied,
   })
   let snapshot: ProgrammerState = buildSnapshot()
   const rebuildSnapshot = () => {
@@ -676,6 +711,13 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     // Same argument for the layer stack: it is per-cue-composition, not per-cell. An absent
     // `layers` is an older server, so leave what we have rather than blanking the pane.
     if (message.layers) layers = message.layers
+    // `?? []`, not the truthiness guard `layers` uses, and the asymmetry is the point: this is the
+    // **resync** frame, so what it says about coverage has to win outright. A server sends this
+    // field always (`@EncodeDefault(ALWAYS)`, since an empty stack must not read as an absent
+    // field), so absent means a server too old to have the concept — and dark pads are the right
+    // answer there. Keeping the previous value instead would leave every pad ringed against an
+    // empty programmer after a desk restart, with the press meant to clear one adding a layer.
+    applied = message.applied ?? []
     notifyKeys(touched)
     notifyState()
   }
@@ -771,6 +813,10 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
         // which already schedules the value re-read. A second call here would be redundant
         // rather than wrong (the timer guard swallows it), but it would read as the mechanism.
         layers = message.layers
+        // Only ever assigned together with `layers`, from the same frame: the resolved view and
+        // the list it resolves are one answer, and a pad reading one against the other's stack
+        // would light for a layer that had already gone.
+        applied = message.applied ?? []
         notifyState()
         break
       case 'provenanceState':
@@ -827,6 +873,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     entryCount: () => entries.size,
     lastIncluded: () => lastIncluded,
     layers: () => layers,
+    applied: () => applied,
 
     set(targetType, targetKey, propertyName, value, fadeMs, sourceGroup) {
       send({

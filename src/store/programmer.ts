@@ -4,12 +4,16 @@ import { lightingApi } from '../api/lightingApi'
 import type { CueTarget } from '../api/cuesApi'
 import type {
   IncludedTarget,
+  ProgrammerAppliedSource,
   ProgrammerLayer,
   ProgrammerTargetType,
 } from '../api/programmerWsApi'
 
 export type {
+  AppliedExtent,
+  AppliedTarget,
   IncludedTarget,
+  ProgrammerAppliedSource,
   ProgrammerEntry,
   ProgrammerKeyState,
   ProgrammerLayer,
@@ -112,6 +116,48 @@ function layerSignature(layers: readonly ProgrammerLayer[]): string {
 }
 
 export const { useProgrammerLayersQuery } = programmerLayersApi
+
+/**
+ * The layer stack **resolved**: which Looks and templates are applied to which targets.
+ *
+ * A third cache entry rather than a field on the layer stack, by the same argument that split the
+ * stack off the summary — the two are read by different surfaces. The Layers pane edits layers and
+ * never asks about coverage; the busk pads ask only about coverage and never draw a layer. Folding
+ * them together would wake each on the other's frames, and they arrive in the same frame anyway.
+ *
+ * The resolution itself is entirely the desk's (`ProgrammerLayerStack.appliedState`): group
+ * expansion, coverage and the `all`/`some` extent all arrive decided. See `lookPresence.ts` for
+ * the one thing left to do with it — folding a multi-target selection into one ring.
+ */
+export const programmerAppliedApi = restApi.injectEndpoints({
+  endpoints: (build) => ({
+    programmerApplied: build.query<ProgrammerAppliedSource[], void>({
+      queryFn: () => ({ data: [...lightingApi.programmer.applied()] }),
+      async onCacheEntryAdded(_, { updateCachedData, cacheEntryRemoved }) {
+        // Same guard as the layer stack's, and needed for the same reason: `subscribe` fires on
+        // every provenance push, and an untouched stack must not wake the pads 20×/s through a
+        // fade. The identity check settles those for free — only a frame carrying layers
+        // reassigns this — and the stringify catches a connect snapshot that rebuilt an
+        // equal list.
+        let seen = lightingApi.programmer.applied()
+        let signature = JSON.stringify(seen)
+        const subscription = lightingApi.programmer.subscribe((state) => {
+          if (state.applied === seen) return
+          seen = state.applied
+          const next = JSON.stringify(state.applied)
+          if (next === signature) return
+          signature = next
+          updateCachedData(() => [...state.applied])
+        })
+        await cacheEntryRemoved
+        subscription.unsubscribe()
+      },
+    }),
+  }),
+  overrideExisting: false,
+})
+
+export const { useProgrammerAppliedQuery } = programmerAppliedApi
 
 /**
  * Re-render on *any* programmer change, including a value edit that leaves the entry count

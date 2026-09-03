@@ -3,7 +3,7 @@ import type { CueTarget } from '@/api/cuesApi'
 import type { LookSummary } from '@/api/looksApi'
 import { useCurrentProjectQuery } from '@/store/projects'
 import { useToggleLookMutation } from '@/store/looks'
-import { useProgrammerLayersQuery } from '@/store/programmer'
+import { useProgrammerAppliedQuery } from '@/store/programmer'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import { lookLayerTarget, type EffectPresence } from './buskingTypes'
 import { useBuskingSelection } from './useBuskingSelection'
@@ -28,7 +28,10 @@ import { lookLayerPresence } from './lookPresence'
 export function useBuskingState() {
   const { selectedTargets, selectTarget, toggleTarget, clearSelection } = useBuskingSelection()
   const { data: currentProject } = useCurrentProjectQuery()
-  const { data: programmerLayers } = useProgrammerLayersQuery()
+  // The **resolved** stack, not the layer list: the pads ask about coverage and the desk has
+  // already answered, so this view never subscribes to the layers themselves. Handed out as well
+  // as used here because the template pads live in `BuskingView` and must read the same answer.
+  const { data: programmerApplied } = useProgrammerAppliedQuery()
   const [toggleLookMutation] = useToggleLookMutation()
 
   const selectedArray = useMemo(() => [...selectedTargets.values()], [selectedTargets])
@@ -58,16 +61,17 @@ export function useBuskingState() {
   )
 
   /**
-   * Whether a Look is on, from the programmer's **layer stack** rather than the effect list.
+   * Whether a Look is on, from the programmer's **applied state** rather than the effect list.
    *
    * A tap adds or removes a layer, so the stack is what the ring should read — and it is the only
    * thing that can answer for a Look made purely of static rows, which spawns no effect to find.
-   * The rule itself lives in `lookLayerPresence`, unit-tested there.
+   * The desk resolves that stack into per-target applied state; all `lookLayerPresence` does with
+   * it is fold the selection into one ring, unit-tested there.
    */
   const computeLookPresence = useCallback(
     (look: LookSummary): EffectPresence =>
-      lookLayerPresence(programmerLayers ?? [], selectedLayerTargets, look.id),
-    [programmerLayers, selectedLayerTargets],
+      lookLayerPresence(programmerApplied ?? [], selectedLayerTargets, look.id),
+    [programmerApplied, selectedLayerTargets],
   )
 
   return {
@@ -77,7 +81,7 @@ export function useBuskingState() {
     selectTarget,
     toggleTarget,
     clearSelection,
-    programmerLayers,
+    programmerApplied,
     applyLook,
     computeLookPresence,
   }

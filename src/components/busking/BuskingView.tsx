@@ -63,7 +63,7 @@ export function BuskingView({ projectId, transport }: BuskingViewProps) {
     selectTarget,
     toggleTarget,
     clearSelection,
-    programmerLayers,
+    programmerApplied,
     applyLook,
     computeLookPresence,
   } = useBuskingState()
@@ -199,10 +199,10 @@ export function BuskingView({ projectId, transport }: BuskingViewProps) {
         // A template's pad can only light from the **layer stack**, and that is more load-bearing
         // now that one can hold an effect rather than less: an effect-template pad's ring would look
         // matchable against the running instance, and matching there would light for effect
-        // templates while leaving every value template's pad dark. `templateLayerPresence` asks
-        // whether a layer applying this template covers the selection, which is the same question
-        // one press ago.
-        presence: templateLayerPresence(programmerLayers ?? [], selectedLayerTargets, template.id),
+        // templates while leaving every value template's pad dark. So it reads the desk's resolved
+        // applied state, which answers for the layer whatever the template holds — the same
+        // question one press ago, and the same answer a Look pad's ring reads.
+        presence: templateLayerPresence(programmerApplied ?? [], selectedLayerTargets, template.id),
         onToggle: () => {
           // Guarded the same way `applyLook` is, and for the same reason: a toggle carrying no
           // targets is not "apply to nothing", it is a layer the server has to interpret. The
@@ -232,7 +232,7 @@ export function BuskingView({ projectId, transport }: BuskingViewProps) {
     applyLook,
     navigate,
     currentProject,
-    programmerLayers,
+    programmerApplied,
     selectedLayerTargets,
     toggleTemplate,
   ])

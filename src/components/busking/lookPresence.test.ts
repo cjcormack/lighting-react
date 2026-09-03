@@ -1,18 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { lookLayerPresence, templateLayerPresence } from './lookPresence'
-import type { ProgrammerLayer } from '@/store/programmer'
+import type { AppliedTarget, ProgrammerAppliedSource } from '@/store/programmer'
 import type { CueTarget } from '@/api/cuesApi'
 
-function layer(overrides: Partial<ProgrammerLayer> = {}): ProgrammerLayer {
+/** The desk's answer for one record: "Warm Wash" applied to whatever [targets] say. */
+function applied(
+  targets: AppliedTarget[],
+  overrides: Partial<ProgrammerAppliedSource> = {},
+): ProgrammerAppliedSource {
   return {
-    layerId: 1,
     source: { kind: 'LOOK', id: 7, uuid: 'u7', name: 'Warm Wash' },
-    sortOrder: 0,
-    enabled: true,
-    targets: [{ type: 'group', key: 'front-wash' }],
-    blendMode: 'OVERRIDE',
-    amount: 1,
-    stomp: false,
+    targets,
     ...overrides,
   }
 }
@@ -20,85 +18,97 @@ function layer(overrides: Partial<ProgrammerLayer> = {}): ProgrammerLayer {
 const FRONT: CueTarget = { type: 'group', key: 'front-wash' }
 const BACK: CueTarget = { type: 'group', key: 'back-wash' }
 
+/** A group the desk reports as wholly covered, plus the heads that make it so. */
+const FRONT_ALL: AppliedTarget[] = [
+  { type: 'group', key: 'front-wash', state: 'all' },
+  { type: 'fixture', key: 'hex-1', state: 'all' },
+  { type: 'fixture', key: 'hex-2', state: 'all' },
+]
+
 describe('lookLayerPresence', () => {
   it('lights the ring for a Look made only of static rows', () => {
     // The regression this replaces: the old match read the effect list, so a rows-only Look could
-    // never light its ring however plainly it was on stage. A layer exists either way.
-    expect(lookLayerPresence([layer()], [FRONT], 7)).toBe('all')
+    // never light its ring however plainly it was on stage. A layer exists either way, and the
+    // desk resolves the layer.
+    expect(lookLayerPresence([applied(FRONT_ALL)], [FRONT], 7)).toBe('all')
   })
 
-  it('reads none when no layer names this Look', () => {
-    expect(lookLayerPresence([layer({ source: { kind: 'LOOK', id: 8, uuid: 'u8', name: 'Cool' } })], [FRONT], 7)).toBe('none')
+  it('reads none when the desk reports no layer for this Look', () => {
+    const other = applied(FRONT_ALL, { source: { kind: 'LOOK', id: 8, uuid: 'u8', name: 'Cool' } })
+    expect(lookLayerPresence([other], [FRONT], 7)).toBe('none')
     expect(lookLayerPresence([], [FRONT], 7)).toBe('none')
   })
 
-  it('reads some when the layer covers part of the selection', () => {
-    expect(lookLayerPresence([layer()], [FRONT, BACK], 7)).toBe('some')
+  it('reads some when only part of the selection is covered', () => {
+    expect(lookLayerPresence([applied(FRONT_ALL)], [FRONT, BACK], 7)).toBe('some')
   })
 
-  it('adds coverage across several layers of the same Look', () => {
-    // Two taps with two selections make two layers, which is what the server's toggle does when
-    // the target list differs. Together they cover the whole selection.
-    const layers = [layer(), layer({ layerId: 2, targets: [BACK] })]
-    expect(lookLayerPresence(layers, [FRONT, BACK], 7)).toBe('all')
+  it('passes a partly-covered group straight through as some', () => {
+    // Half the wash's heads: `some` is the desk's word, and the whole of the client's job is not
+    // to lose it. Working out which half is covered was the rule that used to live here.
+    const half: AppliedTarget[] = [
+      { type: 'group', key: 'front-wash', state: 'some' },
+      { type: 'fixture', key: 'hex-1', state: 'all' },
+    ]
+    expect(lookLayerPresence([applied(half)], [FRONT], 7)).toBe('some')
+    expect(lookLayerPresence([applied(half)], [{ type: 'fixture', key: 'hex-1' }], 7)).toBe('all')
   })
 
-  it('counts a layer with no targets as covering nothing', () => {
-    // A bound Look's own rows decide where such a layer lands, and that is a server-side question
-    // (group expansion, per-fixture resolution). Claiming coverage would be a guess; a pad always
-    // sends its targets, so this only arises for a layer another surface added.
-    expect(lookLayerPresence([layer({ targets: [] })], [FRONT], 7)).toBe('none')
+  it('lights for a member of a group the layer names', () => {
+    // A group is its fixtures — expanded server-side, so a head of a lit wash arrives lit. Before
+    // the desk answered this, the ring went dark the moment the operator picked one head out of
+    // the group they had just lit.
+    expect(lookLayerPresence([applied(FRONT_ALL)], [{ type: 'fixture', key: 'hex-2' }], 7)).toBe('all')
   })
 
   it('distinguishes a fixture from a group of the same name', () => {
-    expect(lookLayerPresence([layer()], [{ type: 'fixture', key: 'front-wash' }], 7)).toBe('none')
+    // A pad must never answer for the other kind of target: the two share a namespace on the wire.
+    expect(lookLayerPresence([applied(FRONT_ALL)], [{ type: 'fixture', key: 'front-wash' }], 7)).toBe('none')
   })
 
   it('reads none with nothing selected', () => {
-    expect(lookLayerPresence([layer()], [], 7)).toBe('none')
+    expect(lookLayerPresence([applied(FRONT_ALL)], [], 7)).toBe('none')
   })
 
-  it('still counts a disabled layer', () => {
-    // Deliberate: the pad's ring answers "is this look on the stack?", and a disabled layer is on
-    // it — tapping again should take it off rather than add a second. Enabled-ness is shown, and
-    // changed, in the layer stack.
-    expect(lookLayerPresence([layer({ enabled: false })], [FRONT], 7)).toBe('all')
+  it('reads none for a record the desk lists with no targets', () => {
+    // What a layer with empty targets resolves to: its source's own bound rows decide where it
+    // lands, which is the cook's answer to give, so the desk reports it as covering nothing.
+    expect(lookLayerPresence([applied([])], [FRONT], 7)).toBe('none')
   })
 })
 
-const templateLayer = (overrides: Partial<ProgrammerLayer> = {}) =>
-  layer({
-    source: { kind: 'TEMPLATE', id: 4, uuid: 'ut4', name: 'Amber Breathe' },
-    ...overrides,
-  })
+const templateApplied = (targets: AppliedTarget[]) =>
+  applied(targets, { source: { kind: 'TEMPLATE', id: 4, uuid: 'ut4', name: 'Amber Breathe' } })
 
 describe('templateLayerPresence', () => {
-  it('lights the ring from the layer stack, whatever the template holds', () => {
+  it('lights the ring from the applied state, whatever the template holds', () => {
     // The rule that matters since a template can hold an **effect**: presence is read from the
     // layer, never from the running instance. Matching on the instance would light for an effect
     // template and leave every value template's pad dark — the worst of both answers.
-    expect(templateLayerPresence([templateLayer()], [FRONT], 4)).toBe('all')
+    expect(templateLayerPresence([templateApplied(FRONT_ALL)], [FRONT], 4)).toBe('all')
   })
 
   it('does not confuse a Look and a template sharing an int PK', () => {
-    // Two tables, two id spaces. Matching on the id alone would let a Look light a template's pad.
-    expect(templateLayerPresence([layer({ source: { kind: 'LOOK', id: 4, uuid: 'u4', name: 'Warm Wash' } })], [FRONT], 4)).toBe('none')
-    expect(lookLayerPresence([templateLayer()], [FRONT], 4)).toBe('none')
+    // Two tables, two id spaces — so the Look here carries the *template's* id, or the assertion
+    // would pass on `7 !== 4` and never reach the kind check it exists to pin.
+    const lookWithTemplateId = applied(FRONT_ALL, {
+      source: { kind: 'LOOK', id: 4, uuid: 'u4', name: 'Warm Wash' },
+    })
+    expect(templateLayerPresence([lookWithTemplateId], [FRONT], 4)).toBe('none')
+    expect(lookLayerPresence([templateApplied(FRONT_ALL)], [FRONT], 4)).toBe('none')
   })
 
-  it('reads some when the layer covers part of the selection', () => {
-    expect(templateLayerPresence([templateLayer()], [FRONT, BACK], 4)).toBe('some')
+  it('reads some when only part of the selection is covered', () => {
+    expect(templateLayerPresence([templateApplied(FRONT_ALL)], [FRONT, BACK], 4)).toBe('some')
   })
 
-  it('counts a layer with no targets as covering nothing', () => {
-    // A template names no targets of its own, so such a layer asserts nothing at all — even more
-    // plainly than the Look case above, where the Look's own rows might have landed somewhere.
-    expect(templateLayerPresence([templateLayer({ targets: [] })], [FRONT], 4)).toBe('none')
+  it('reads a covered head of a named group like a Look pad does', () => {
+    expect(templateLayerPresence([templateApplied(FRONT_ALL)], [{ type: 'fixture', key: 'hex-2' }], 4)).toBe('all')
   })
 
-  it('reads none with nothing selected, or with no layer applying it', () => {
-    expect(templateLayerPresence([templateLayer()], [], 4)).toBe('none')
+  it('reads none with nothing selected, or with no record applying it', () => {
+    expect(templateLayerPresence([templateApplied(FRONT_ALL)], [], 4)).toBe('none')
     expect(templateLayerPresence([], [FRONT], 4)).toBe('none')
-    expect(templateLayerPresence([templateLayer()], [FRONT], 5)).toBe('none')
+    expect(templateLayerPresence([templateApplied(FRONT_ALL)], [FRONT], 5)).toBe('none')
   })
 })
