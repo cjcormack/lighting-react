@@ -112,9 +112,19 @@ export interface TemplateSummary {
   uuid: string
   name: string
   notes: string | null
+  /**
+   * Position **within its group** when `groupId` is set, otherwise in the project's top-level
+   * sequence — which ungrouped templates share with the groups (`TemplateGroup.sortOrder`). The
+   * server assigns it; `buildTemplateLayout` in `lib/templateLayout.ts` is the one reader.
+   */
   sortOrder: number
   /** Fade for every row this template writes; null = the caller's default. */
   fadeDurationMs: number | null
+  /**
+   * The group this template sits in, or null at top level. Membership lives here, on the member,
+   * so a template joining or leaving a group never touches the group's own record.
+   */
+  groupId: number | null
   /**
    * The one family this template is in, **derived** from its rows — or, for an effect template,
    * from its effect's library category. Null only for a template whose contents have all gone,
@@ -160,9 +170,59 @@ export interface TemplateInput {
   sortOrder?: number
   fadeDurationMs?: number | null
   fadeDurationMsPresent?: boolean
+  /**
+   * The group to sit in — null with `groupIdPresent` means "top level", the same absent-versus-null
+   * rule as `notes`. A move appends at the destination's end; `reorderTemplates` says *where*. A
+   * group of another family is a 409 `TEMPLATE_GROUP_FAMILY`.
+   */
+  groupId?: number | null
+  groupIdPresent?: boolean
   rows?: TemplateRow[]
   effect?: TemplateEffect
 }
+
+/**
+ * A template group: an ordered cluster of templates whose busk pads are mutually exclusive.
+ *
+ * Membership is **not** here — it is `TemplateSummary.groupId` on each template; the client composes
+ * the tree from the two flat lists (`lib/templateLayout.ts`). `family` is derived from the members
+ * server-side and is null for an empty group, which has no busk column and shows only under *All*
+ * on `/templates`.
+ */
+export interface TemplateGroup {
+  id: number
+  uuid: string
+  name: string
+  /** Position in the top-level sequence, shared with ungrouped templates. */
+  sortOrder: number
+  family: AttributeFamily | null
+}
+
+export interface TemplateGroupInput {
+  name: string
+}
+
+/**
+ * One top-level position in `reorderTemplates`' body: a template, **or** a group with its members
+ * in order. Exactly one of `templateId` / `groupId` is set.
+ */
+export interface TemplateLayoutEntryInput {
+  templateId?: number
+  groupId?: number
+  templateIds?: number[]
+}
+
+/**
+ * The **whole** layout — every template and group in the project, each named once, else a 400.
+ * Whole because a partial list cannot say "out of its group" (see the server's docblock); the page
+ * always holds the unfiltered list, and drag is disabled under a family filter for this reason.
+ */
+export interface ReorderTemplatesRequest {
+  entries: TemplateLayoutEntryInput[]
+}
+
+/** 409 code when a write would put two families in one group. */
+export const TEMPLATE_GROUP_FAMILY_CODE = 'TEMPLATE_GROUP_FAMILY'
 
 export interface TemplateTarget {
   type: 'fixture' | 'group'
@@ -226,6 +286,12 @@ export interface ToggleTemplateResponse {
    * surfaces here rather than on the rig.
    */
   propertyMask: string | null
+  /**
+   * How many **sibling** layers this press took off first — a template group's exclusivity, applied
+   * to layers on the same target set. 0 on a `removed`, and for an ungrouped template. Optional on
+   * the wire: a server that predates groups sends nothing here.
+   */
+  released?: number
 }
 
 /**

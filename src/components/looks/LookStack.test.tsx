@@ -44,6 +44,7 @@ function templateSummary(overrides: Partial<TemplateSummary> = {}): TemplateSumm
     name: 'Amber Key',
     notes: null,
     sortOrder: 0,
+    groupId: null,
     fadeDurationMs: null,
     family: 'COLOUR',
     isGeneric: true,

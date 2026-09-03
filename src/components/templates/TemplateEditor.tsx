@@ -45,6 +45,7 @@ import {
 import {
   DEFERRED_TARGET_TYPE,
   type TemplateEffect,
+  type TemplateGroup,
   type TemplateInput,
   type TemplateRow,
   type TemplateSummary,
@@ -97,6 +98,7 @@ export function TemplateEditor({
   isSaving,
   onDelete,
   isDeleting,
+  groups,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -107,8 +109,21 @@ export function TemplateEditor({
   isSaving: boolean
   onDelete?: () => void
   isDeleting?: boolean
+  /**
+   * The project's template groups, for the *Group* field. Offered only where one exists — a
+   * library with no groups gets no field — and narrowed to the groups whose family is the draft's
+   * (or none yet): the server refuses a mixed group with `TEMPLATE_GROUP_FAMILY`, and a select
+   * that offered the refusal would be a select that lies.
+   *
+   * **`undefined` is not `[]`.** Undefined means the group list has not answered (the query is in
+   * flight, or it failed, or the desk predates groups), and the save then sends no `groupIdPresent`
+   * at all: with a default of `[]` every save would have carried `groupId: null` with the flag and
+   * silently ejected the template from whatever group it was in.
+   */
+  groups?: TemplateGroup[]
 }) {
   const [name, setName] = useState('')
+  const [groupId, setGroupId] = useState<number | null>(null)
   const [notes, setNotes] = useState('')
   const [fadeSeconds, setFadeSeconds] = useState('')
   const [family, setFamily] = useState<AttributeFamily>('COLOUR')
@@ -152,6 +167,7 @@ export function TemplateEditor({
     seededRef.current = key
     setSaveError(null)
     setName(template?.name ?? '')
+    setGroupId(template?.groupId ?? null)
     setNotes(template?.notes ?? '')
     setFadeSeconds(template?.fadeDurationMs != null ? String(template.fadeDurationMs / 1000) : '')
     setFamily(template?.family ?? 'COLOUR')
@@ -163,6 +179,14 @@ export function TemplateEditor({
   const isGeneric = template == null || template.isGeneric
   const properties = templatePropertiesForFamily(family)
   const holdsEffect = holds === 'effect'
+
+  /**
+   * The groups this draft may join: no family yet, or the draft's own. Derived rather than held,
+   * so switching the family on a create draft narrows the list and a now-ineligible choice falls
+   * back to *None* at save — the server would refuse it anyway, and refusing here is quieter.
+   */
+  const eligibleGroups = (groups ?? []).filter((g) => g.family == null || g.family === family)
+  const effectiveGroupId = eligibleGroups.some((g) => g.id === groupId) ? groupId : null
 
   /**
    * The library entry behind the effect draft — the only thing that knows its `timingSource`.
@@ -199,15 +223,23 @@ export function TemplateEditor({
   }, [fadeSeconds])
 
   const isDirty = useMemo(() => {
-    if (template == null) return name.trim().length > 0 || rows.length > 0 || effectDraft != null
+    // The group counts, and is checked before the two early returns below — a group-only change is
+    // a change the operator made, and leaving it out meant Escape or a click outside took it away
+    // with no *Discard changes?* prompt. Only when the group list has answered: with `groups`
+    // undefined `effectiveGroupId` is null for every draft and every sheet would read dirty.
+    const groupMoved = groups != null && effectiveGroupId !== (template?.groupId ?? null)
+    if (template == null) {
+      return name.trim().length > 0 || rows.length > 0 || effectDraft != null || groupMoved
+    }
     if (name !== template.name) return true
     if ((notes || null) !== (template.notes ?? null)) return true
+    if (groupMoved) return true
     // Fade is not editable on an effect template — it has no arrival to time — so a hidden field
     // holding a stale value must not read as a change the operator made.
     if (!holdsEffect && fadeMs !== template.fadeDurationMs) return true
     if (holdsEffect) return effectKey(effectDraft) !== effectKey(template.effect)
     return JSON.stringify(rows.map(rowKey)) !== JSON.stringify((template.rows ?? []).map(rowKey))
-  }, [template, name, notes, fadeMs, rows, holdsEffect, effectDraft])
+  }, [template, name, notes, fadeMs, rows, holdsEffect, effectDraft, groups, effectiveGroupId])
 
   /** Name, plus **exactly one** of the two halves — which is the write boundary's first rule. */
   const isValid = name.trim().length > 0 && (holdsEffect ? effectDraft != null : rows.length > 0)
@@ -274,6 +306,11 @@ export function TemplateEditor({
         name: name.trim(),
         notes: notes.trim() === '' ? null : notes.trim(),
         notesPresent: true,
+        // Sent whenever the group list has answered, so an edit that picks *None* leaves the
+        // group: null with the flag is the instruction, absent is "leave it alone". Withheld while
+        // `groups` is undefined — the sheet has no opinion then, and claiming one would eject the
+        // template from its group on the strength of a failed fetch.
+        ...(groups != null ? { groupId: effectiveGroupId, groupIdPresent: true } : {}),
         // An effect has no arrival, so the field is hidden and the value cleared rather than left
         // to survive as a fade nothing can see or edit.
         fadeDurationMs: holdsEffect ? null : fadeMs,
@@ -402,6 +439,35 @@ export function TemplateEditor({
               placeholder="Amber Key"
             />
           </div>
+
+          {/* Only where a group exists: a library with none has nothing to offer, and an empty
+              select would be a question with one answer. The busk-side consequence is stated on
+              the field, because it is the one thing a group does that a folder would not. */}
+          {groups != null && groups.length > 0 && (
+            <div className="space-y-1.5">
+              <Label htmlFor="template-group">Group</Label>
+              <Select
+                value={effectiveGroupId == null ? 'none' : String(effectiveGroupId)}
+                onValueChange={(next) => setGroupId(next === 'none' ? null : Number(next))}
+              >
+                <SelectTrigger id="template-group" aria-label="Group">
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {eligibleGroups.map((g) => (
+                    <SelectItem key={g.id} value={String(g.id)}>
+                      {g.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                Pads in a group are exclusive on the busk view: pressing one releases the others on
+                the same targets. A group holds one family, so only matching groups are offered.
+              </p>
+            </div>
+          )}
 
           {/* Fade is hidden for an effect — an effect has no arrival to time, so a fade field would
               be a control that does nothing. Notes takes the whole row in its place. */}

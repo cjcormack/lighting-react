@@ -10,24 +10,37 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Loader2, Palette, Plus, TriangleAlert } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { FolderPlus, Loader2, Palette, Plus, TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import {
+  useCreateTemplateGroupMutation,
   useCreateTemplateMutation,
+  useDeleteTemplateGroupMutation,
   useDeleteTemplateMutation,
+  useRenameTemplateGroupMutation,
+  useReorderTemplatesMutation,
   useSaveTemplateMutation,
+  useTemplateGroupListQuery,
   useTemplateListQuery,
 } from '../store/templates'
 import { TemplateEditor } from '../components/templates/TemplateEditor'
-import { TemplateListRow } from '../components/templates/TemplateListRow'
+import { TemplateLayoutList } from '../components/templates/TemplateLayoutList'
 import {
   LookFamilyFilterBar,
   getStoredLookFamily,
   setStoredLookFamily,
   type LookFamilyFilter,
 } from '../components/ViewSwitcher'
-import type { TemplateInUseError, TemplateInput, TemplateSummary } from '../api/templatesApi'
+import type {
+  TemplateGroup,
+  TemplateInUseError,
+  TemplateInput,
+  TemplateLayoutEntryInput,
+  TemplateSummary,
+} from '../api/templatesApi'
+import { buildTemplateLayout, filterLayoutByFamily } from '../lib/templateLayout'
 import { parseFamilySlug, familySlug } from '../lib/attributeFamily'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { formatError } from '../lib/formatError'
@@ -52,6 +65,12 @@ export function TemplatesRedirect() {
  * **One route with a sticky family filter**, and the reason is now the opposite of the one `/looks`
  * had: here a family is an exact partition (a template is in exactly one), so the filter is a view of
  * a small library rather than a division of it, and `?family=colour` deep-links from Cmd+K.
+ *
+ * **The list is the operator's order**, and the place it is set. Templates and groups drag into
+ * one top-level sequence, templates drag into and out of groups, and the busk view draws the result
+ * (`buildTemplateLayout` is shared, so the two agree). Drag is available under *All* only: the
+ * server takes the whole layout in one write, and a filtered list cannot supply it. A group is
+ * authored here too (*New group*), for D9's reason — it is not a captured state.
  */
 export function ProjectTemplates() {
   const { projectId } = useParams()
@@ -63,10 +82,17 @@ export function ProjectTemplates() {
   const { data: templates, isLoading: templatesLoading } = useTemplateListQuery({
     projectId: projectIdNum,
   })
+  const { data: groups, isLoading: groupsLoading } = useTemplateGroupListQuery({
+    projectId: projectIdNum,
+  })
 
   const [createTemplate, { isLoading: isCreating }] = useCreateTemplateMutation()
   const [saveTemplate, { isLoading: isSaving }] = useSaveTemplateMutation()
   const [deleteTemplate, { isLoading: isDeleting }] = useDeleteTemplateMutation()
+  const [createGroup, { isLoading: isCreatingGroup }] = useCreateTemplateGroupMutation()
+  const [renameGroup] = useRenameTemplateGroupMutation()
+  const [deleteGroup, { isLoading: isDeletingGroup }] = useDeleteTemplateGroupMutation()
+  const [reorderTemplates] = useReorderTemplatesMutation()
 
   const [searchParams, setSearchParams] = useSearchParams()
   const [family, setFamily] = useState<LookFamilyFilter>(() => getStoredLookFamily())
@@ -82,6 +108,8 @@ export function ProjectTemplates() {
   /** A refused delete, held so the guard can name the cues and offer "delete anyway". */
   const [inUse, setInUse] = useState<{ templateId: number; body: TemplateInUseError } | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<TemplateSummary | null>(null)
+  const [newGroupName, setNewGroupName] = useState<string | null>(null)
+  const [confirmUngroup, setConfirmUngroup] = useState<TemplateGroup | null>(null)
 
   const isCurrentProject = currentProject?.id === projectIdNum
 
@@ -133,16 +161,54 @@ export function ProjectTemplates() {
     }
   }, [editingId, templates, editing])
 
-  const visible = useMemo(() => {
-    const list = templates ?? []
-    return family === 'ALL' ? list : list.filter((t) => t.family === family)
-  }, [templates, family])
+  const layout = useMemo(() => buildTemplateLayout(templates ?? [], groups ?? []), [templates, groups])
+  const visible = useMemo(() => filterLayoutByFamily(layout, family), [layout, family])
+  const visibleCount = useMemo(
+    () => visible.reduce((n, e) => n + (e.kind === 'template' ? 1 : e.templates.length), 0),
+    [visible],
+  )
 
   const handleSave = async (input: TemplateInput) => {
     if (editingId != null) {
       await saveTemplate({ projectId: projectIdNum, templateId: editingId, ...input }).unwrap()
     } else {
       await createTemplate({ projectId: projectIdNum, ...input }).unwrap()
+    }
+  }
+
+  /** One write per drop; a refusal (the family rule) undoes the optimistic patch and says why. */
+  const handleCommit = useCallback(
+    (entries: TemplateLayoutEntryInput[]) => {
+      void reorderTemplates({ projectId: projectIdNum, entries })
+        .unwrap()
+        .catch((err) => toast.error(formatError(err)))
+    },
+    [projectIdNum, reorderTemplates],
+  )
+
+  const handleCreateGroup = async () => {
+    const name = newGroupName?.trim() ?? ''
+    if (name === '') return
+    try {
+      await createGroup({ projectId: projectIdNum, name }).unwrap()
+      setNewGroupName(null)
+    } catch (err) {
+      toast.error(formatError(err))
+    }
+  }
+
+  const handleRenameGroup = (group: TemplateGroup, name: string) => {
+    void renameGroup({ projectId: projectIdNum, groupId: group.id, name })
+      .unwrap()
+      .catch((err) => toast.error(formatError(err)))
+  }
+
+  const handleUngroup = async (group: TemplateGroup) => {
+    try {
+      await deleteGroup({ projectId: projectIdNum, groupId: group.id }).unwrap()
+      setConfirmUngroup(null)
+    } catch (err) {
+      toast.error(formatError(err))
     }
   }
 
@@ -168,7 +234,7 @@ export function ProjectTemplates() {
     }
   }
 
-  if (projectLoading || currentLoading || templatesLoading) {
+  if (projectLoading || currentLoading || templatesLoading || groupsLoading) {
     return (
       <Card className="m-4 p-4 flex items-center justify-center">
         <Loader2 className="size-6 animate-spin" />
@@ -181,6 +247,8 @@ export function ProjectTemplates() {
   }
 
   const totalAll = templates?.length ?? 0
+  const totalGroups = groups?.length ?? 0
+  const dndEnabled = isCurrentProject && family === 'ALL'
 
   return (
     <div className="flex flex-col h-full">
@@ -198,17 +266,28 @@ export function ProjectTemplates() {
             </p>
           </div>
           {isCurrentProject && (
-            <Button
-              onClick={() => {
-                setEditingId(null)
-                setEditorOpen(true)
-              }}
-              size="sm"
-              className="gap-1.5 shrink-0"
-            >
-              <Plus className="size-4" />
-              <span className="hidden sm:inline">New template</span>
-            </Button>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setNewGroupName('')}
+              >
+                <FolderPlus className="size-4" />
+                <span className="hidden sm:inline">New group</span>
+              </Button>
+              <Button
+                onClick={() => {
+                  setEditingId(null)
+                  setEditorOpen(true)
+                }}
+                size="sm"
+                className="gap-1.5"
+              >
+                <Plus className="size-4" />
+                <span className="hidden sm:inline">New template</span>
+              </Button>
+            </div>
           )}
         </div>
 
@@ -216,7 +295,7 @@ export function ProjectTemplates() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 pb-4">
-        {totalAll === 0 ? (
+        {totalAll === 0 && totalGroups === 0 ? (
           <Card className="p-8 text-center">
             <Palette className="size-10 mx-auto text-muted-foreground/30 mb-3" />
             <p className="text-sm text-muted-foreground">
@@ -230,31 +309,95 @@ export function ProjectTemplates() {
             No {family === 'ALL' ? '' : 'matching '}templates.
           </div>
         ) : (
-          <div className="rounded-lg border divide-y">
-            {visible.map((template) => (
-              <TemplateListRow
-                key={template.id}
-                template={template}
-                onClick={
-                  isCurrentProject
-                    ? () => {
-                        setEditingId(template.id)
-                        setEditorOpen(true)
-                      }
-                    : undefined
-                }
-                onDelete={isCurrentProject ? () => setConfirmDelete(template) : undefined}
-              />
-            ))}
-          </div>
+          <TemplateLayoutList
+            entries={visible}
+            dndEnabled={dndEnabled}
+            editable={isCurrentProject}
+            onCommit={handleCommit}
+            onEditTemplate={(template) => {
+              setEditingId(template.id)
+              setEditorOpen(true)
+            }}
+            onDeleteTemplate={(template) => setConfirmDelete(template)}
+            onRenameGroup={handleRenameGroup}
+            onDeleteGroup={(group) => setConfirmUngroup(group)}
+          />
         )}
 
         {totalAll > 0 && family !== 'ALL' && (
           <p className="text-xs text-muted-foreground text-center mt-3">
-            Showing {visible.length} of {totalAll} templates
+            Showing {visibleCount} of {totalAll} templates
+            {isCurrentProject && <> · show All to reorder or regroup</>}
           </p>
         )}
       </div>
+
+      {/* A group is one field, so a Dialog rather than a sheet — and a Dialog rather than an inline
+          row because the list may be filtered to a family the new, empty group would not show in. */}
+      <Dialog open={newGroupName != null} onOpenChange={(next) => !next && setNewGroupName(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>New group</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Pads in a group are exclusive on the busk view: pressing one releases the others on the
+            same targets. Drag templates in once it exists — a group holds one family.
+          </p>
+          <Input
+            aria-label="Group name"
+            placeholder="Keys"
+            value={newGroupName ?? ''}
+            onChange={(e) => setNewGroupName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                void handleCreateGroup()
+              }
+            }}
+            autoFocus
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNewGroupName(null)} disabled={isCreatingGroup}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void handleCreateGroup()}
+              disabled={isCreatingGroup || (newGroupName?.trim() ?? '') === ''}
+            >
+              {isCreatingGroup && <Loader2 className="size-4 animate-spin" />}
+              Create group
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmUngroup != null} onOpenChange={(next) => !next && setConfirmUngroup(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ungroup</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Ungroup &ldquo;{confirmUngroup?.name}&rdquo;? Its templates stay in the library, in its
+            place; only the cluster goes, and its pads stop releasing each other.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmUngroup(null)} disabled={isDeletingGroup}>
+              Keep it
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={isDeletingGroup}
+              onClick={() => {
+                const target = confirmUngroup
+                if (target) void handleUngroup(target)
+              }}
+            >
+              {isDeletingGroup && <Loader2 className="size-4 animate-spin" />}
+              Ungroup
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <TemplateEditor
         open={editorOpen}
@@ -264,6 +407,9 @@ export function ProjectTemplates() {
         }}
         projectId={projectIdNum}
         template={editingId == null ? null : editing}
+        // Not `?? []`: undefined says the group list has not answered, and the editor then sends
+        // no `groupIdPresent` rather than claiming "top level" on a failed fetch.
+        groups={groups}
         onSave={handleSave}
         isSaving={isCreating || isSaving}
         onDelete={editingId == null ? undefined : () => handleDelete(editingId, false)}

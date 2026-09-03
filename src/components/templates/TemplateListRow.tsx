@@ -13,7 +13,7 @@ import { describeTemplateIntent, templateIntentSwatch } from '@/lib/templateInte
 import { effectSpeedLabel } from '@/components/fx/fxConstants'
 import { useSpeedMasterDisplay } from '@/store/speedMasters'
 import type { TemplateSummary } from '@/api/templatesApi'
-import type { MouseEvent } from 'react'
+import type { MouseEvent, ReactNode } from 'react'
 
 /**
  * One row of the template library — values and effects in one list, not two sections.
@@ -40,10 +40,17 @@ export function TemplateListRow({
   template,
   onClick,
   onDelete,
+  dragHandle,
 }: {
   template: TemplateSummary
   onClick?: () => void
   onDelete?: () => void
+  /**
+   * The grip, when the list is orderable. Rendered first, before the name, and handed in rather
+   * than owned: `useSortable` is the list's hook, and a row that called it would register itself
+   * with a `SortableContext` that is not always there (`TemplateLayoutList`'s docblock).
+   */
+  dragHandle?: ReactNode
 }) {
   const stop = (e: MouseEvent) => e.stopPropagation()
 
@@ -55,6 +62,7 @@ export function TemplateListRow({
       )}
       onClick={onClick}
     >
+      {dragHandle}
       <div className="min-w-0 flex-1">
         <div className="font-medium text-sm truncate">{template.name}</div>
         <div className="text-[11px] text-muted-foreground truncate mt-0.5">

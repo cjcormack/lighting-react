@@ -173,7 +173,8 @@ export interface PadItem {
   detail: React.ReactNode
   kind: 'look' | 'template'
   /**
-   * True for a template holding an **effect** rather than values (fx-templates D1).
+   * True for a template holding an **effect** rather than values (fx-templates D1). Drives the
+   * wave glyph on the pad's face and nothing else — the column no longer splits on it.
    *
    * Not `kind`, which is already taken here and means something else — a pad is a `'look' | 'template'`,
    * while `TemplateSummary.kind` is `'value' | 'effect'`. Two fields of that name on one object is
@@ -185,6 +186,13 @@ export interface PadItem {
    * its own section for exactly that reason.
    */
   family: AttributeFamily | null
+  /**
+   * The template group this pad sits in, or null at top level. Consecutive pads sharing a group
+   * are drawn as one bordered cluster (`TemplateGroupCluster`); the caller hands them over already
+   * contiguous, in the library's layout order, because `buildTemplateLayout` is where the tree is
+   * composed and this grid only walks it.
+   */
+  group?: { id: number; name: string } | null
   /** The colour a colour template resolves to, for the pad's swatch. Null when there isn't one. */
   swatch: string | null
   presence: EffectPresence
@@ -208,16 +216,44 @@ export interface PadItem {
  * A template with a null `family` has no column and is dropped. The write boundary does not allow
  * one, so this is a guard rather than a case.
  *
- * **Within a column, values then effects, split by a hairline** (fx-templates D10). The column is
- * the family and the hairline is the kind, so an effect pad is a pad like any other — same
- * component, same presence ladder, same long-press — rather than a second pool with its own
- * gesture. Library order holds inside each half; there is no sort here and none is added.
+ * **Within a column, the library's own order, values and effects interleaved.** fx-templates D10
+ * split each column at an *Effects* hairline; that went when the order became the operator's to
+ * set (`/templates` drags), because a hairline the operator cannot move is a second ordering
+ * fighting the one they chose. An effect pad is a pad like any other — same component, same
+ * presence ladder, same long-press — and only its wave glyph says what it holds. There is no sort
+ * here and none is added: the caller's array order is the contract, and it comes from
+ * `buildTemplateLayout`.
  *
- * Beam gets no hairline, and by construction rather than by a special case: the effect library has
- * no beam category (`TEMPLATE_EFFECT_FAMILIES` in `lib/attributeFamily.ts`), so its effect half is
- * always empty and the hairline is only drawn when there is something under it.
+ * **A template group is a bordered cluster** inside its family's column (`TemplateGroupCluster`),
+ * at the position the layout gives it. Consecutive pads sharing a `group` are coalesced into one;
+ * the group's exclusivity is the server's business (its siblings release on the same targets when
+ * one is pressed), so the cluster draws nothing the presence ladder does not already show.
+ *
+ * The programmer's `TemplateStrip` still draws its hairline — a different surface with a different
+ * ask, and its own test pins the order. Recorded here so the divergence reads as chosen.
  */
 const TEMPLATE_COLUMNS: readonly AttributeFamily[] = ['COLOUR', 'POSITION', 'BEAM', 'INTENSITY']
+
+/** A column's pads, with consecutive same-group pads folded into one run. */
+type ColumnRun =
+  | { kind: 'pad'; item: PadItem }
+  | { kind: 'group'; id: number; name: string; items: PadItem[] }
+
+function columnRuns(items: readonly PadItem[]): ColumnRun[] {
+  const runs: ColumnRun[] = []
+  for (const item of items) {
+    const group = item.group ?? null
+    const last = runs[runs.length - 1]
+    if (group == null) {
+      runs.push({ kind: 'pad', item })
+    } else if (last?.kind === 'group' && last.id === group.id) {
+      last.items.push(item)
+    } else {
+      runs.push({ kind: 'group', id: group.id, name: group.name, items: [item] })
+    }
+  }
+  return runs
+}
 
 function TemplateColumns({ items }: { items: PadItem[] }) {
   const templates = items.filter((item) => item.kind === 'template')
@@ -226,49 +262,60 @@ function TemplateColumns({ items }: { items: PadItem[] }) {
     <div className="grid grid-cols-1 @[20rem]:grid-cols-2 @[48rem]:grid-cols-4 gap-3">
       {TEMPLATE_COLUMNS.map((family) => {
         const inFamily = templates.filter((item) => item.family === family)
-        const values = inFamily.filter((item) => item.isEffect !== true)
-        const effects = inFamily.filter((item) => item.isEffect === true)
         return (
           <div key={family} className="flex flex-col gap-2">
             {/* The family heading stays this column's first child: `BuskPools.test.tsx` identifies a
-                column by it, and a hairline inserted above would silently rename every column. */}
+                column by it, and anything inserted above would silently rename every column. */}
             <span className="text-[10px] font-semibold text-muted-foreground">
               {FAMILY_LABELS[family].singular}
             </span>
-            {values.map((item) => (
-              <LookPadButton
-                key={item.key}
-                item={item}
-                presence={item.presence}
-                onToggle={item.onToggle}
-                onLongPress={item.onEdit}
-              />
-            ))}
-            {effects.length > 0 && (
-              // A `<div>`, not a button and not `BuskLabel`: the pool's inert-when-nothing-selected
-              // rule is a descendant-button selector, and `BuskLabel` is the *region* label — three
-              // regions of one instrument is what its docblock keeps this surface reading as.
-              <div
-                className="mt-1 flex items-center gap-1.5 text-[10px] font-semibold text-muted-foreground"
-                aria-hidden
-              >
-                <span className="h-px flex-1 bg-border" />
-                Effects
-                <span className="h-px flex-1 bg-border" />
-              </div>
+            {columnRuns(inFamily).map((run) =>
+              run.kind === 'pad' ? (
+                <LookPadButton
+                  key={run.item.key}
+                  item={run.item}
+                  presence={run.item.presence}
+                  onToggle={run.item.onToggle}
+                  onLongPress={run.item.onEdit}
+                />
+              ) : (
+                <TemplateGroupCluster key={`group-${run.id}`} name={run.name} items={run.items} />
+              ),
             )}
-            {effects.map((item) => (
-              <LookPadButton
-                key={item.key}
-                item={item}
-                presence={item.presence}
-                onToggle={item.onToggle}
-                onLongPress={item.onEdit}
-              />
-            ))}
           </div>
         )
       })}
+    </div>
+  )
+}
+
+/**
+ * A template group on the pad grid: its name as a tiny label, its pads inside one border.
+ *
+ * A `<div>`, not a button and not `BuskLabel`: the pool's inert-when-nothing-selected rule is a
+ * descendant-button selector, and `BuskLabel` is the *region* label — three regions of one
+ * instrument is what its docblock keeps this surface reading as. The border is the whole
+ * affordance; pressing a pad in it is the same press as anywhere else, and the fact that its
+ * siblings go dark is the server's answer, read back through the presence ladder.
+ */
+function TemplateGroupCluster({ name, items }: { name: string; items: PadItem[] }) {
+  return (
+    <div
+      data-template-group={name}
+      className="flex flex-col gap-1.5 rounded-md border border-border/80 bg-muted/20 p-1.5"
+    >
+      <span className="px-0.5 text-[10px] font-medium text-muted-foreground truncate" title={name}>
+        {name}
+      </span>
+      {items.map((item) => (
+        <LookPadButton
+          key={item.key}
+          item={item}
+          presence={item.presence}
+          onToggle={item.onToggle}
+          onLongPress={item.onEdit}
+        />
+      ))}
     </div>
   )
 }

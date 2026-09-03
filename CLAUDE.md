@@ -436,12 +436,26 @@ selection) and every template — and it has no create affordance, because neith
 from a pad grid. Templates sit in **four family columns** there rather than one flat grid, which is
 the same fact that put the family filter on `/templates`: a template is in exactly one family, so
 four columns is an exact partition and every pad has one right home. A Look spans families by
-nature and gets a section of its own instead. **Within a column, values then an *Effects* hairline
-then effect pads**: the column is the family and the hairline is the kind, so an effect pad is a pad
-like any other — same component, same presence ladder, same long-press. Library order holds inside
-each half, and nothing is sorted there. Beam gets no hairline **by construction** rather than by a
-special case: `TEMPLATE_EFFECT_FAMILIES` excludes it, so its effect half is always empty and the
-hairline is drawn only when there is something under it.
+nature and gets a section of its own instead. **Within a column, the library's own order, values
+and effects interleaved** — the *Effects* hairline fx-templates D10 drew went when the order became
+the operator's to set, because an ordering the operator cannot move fights the one they chose. An
+effect pad is a pad like any other — same component, same presence ladder, same long-press — and
+only its wave glyph says what it holds. Nothing is sorted there: the array order is the contract,
+and it comes from `buildTemplateLayout` in `lib/templateLayout.ts`, the **one** place the tree of
+templates and **template groups** is composed from the two flat lists the server serves. A group
+draws as a bordered cluster inside its family column at the position the layout gives it; its
+exclusivity (pressing a member releases its siblings on the same targets) is the server's, applied
+in the toggle route, and the cluster shows nothing the presence ladder does not already. The
+programmer's `TemplateStrip` still draws its hairline — a different surface with a different ask.
+
+`/templates` is where that order is **set**: `TemplateLayoutList` is the dnd-kit wiring (a top-level
+`SortableContext`, one nested per group, a `useDroppable` body per group so an empty one takes a
+drop) around the pure reducer `moveInLayout`, which is where the drag logic is tested. The reducer
+has two phases for the standard multi-container reason — `'over'` moves *between* containers only
+and answers null inside one, so it never fights the sortable preview; `'end'` commits the
+within-container `arrayMove`. A drop posts the **whole** layout (`reorderTemplates`, optimistic on
+both caches), because a partial list cannot say "out of its group"; drag is therefore disabled
+under a family filter, `DndContext` staying mounted with every sortable `disabled`.
 
 A colour pad carries a **swatch**, but only when the
 template is generic and single-row — `templateSwatch` in `components/busking/BuskPools.tsx` makes

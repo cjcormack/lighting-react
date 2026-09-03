@@ -51,6 +51,7 @@ const TEMPLATES: TemplateSummary[] = [
     name: 'Amber Breathe',
     notes: null,
     sortOrder: 0,
+    groupId: null,
     fadeDurationMs: null,
     family: 'COLOUR',
     isGeneric: true,

@@ -4,6 +4,9 @@ import { store } from './index'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import type {
   ApplyTemplateResponse,
+  ReorderTemplatesRequest,
+  TemplateGroup,
+  TemplateGroupInput,
   TemplateInput,
   TemplateResolveRequest,
   TemplateResolveResponse,
@@ -60,6 +63,117 @@ export const templatesApi = restApi.injectEndpoints({
 
     // A single-template read stood here. The editor opens from a `templateList` row and the
     // list carries the whole summary, so nothing fetched one on its own.
+
+    /**
+     * The project's template groups — the other half of the library's shape, beside `templateList`.
+     *
+     * Rides the **same** `'TemplateList'` tag rather than one of its own: the server announces a
+     * group create, rename, delete and every reorder as `templateListChanged`, one fact ("the
+     * library changed shape") that the bridge above maps to one invalidation. A second tag would
+     * only ever be invalidated in lockstep with this one.
+     */
+    templateGroupList: build.query<TemplateGroup[], { projectId: number }>({
+      query: ({ projectId }) => `projects/${projectId}/template-groups`,
+      providesTags: (_result, _error, { projectId }) => [
+        { type: 'TemplateList', id: projectId },
+        'TemplateList',
+      ],
+    }),
+
+    createTemplateGroup: build.mutation<TemplateGroup, { projectId: number } & TemplateGroupInput>({
+      query: ({ projectId, ...body }) => ({
+        url: `projects/${projectId}/template-groups`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: (result) => (result == null ? [] : ['TemplateList']),
+    }),
+
+    renameTemplateGroup: build.mutation<
+      TemplateGroup,
+      { projectId: number; groupId: number } & TemplateGroupInput
+    >({
+      query: ({ projectId, groupId, ...body }) => ({
+        url: `projects/${projectId}/template-groups/${groupId}`,
+        method: 'PUT',
+        body,
+      }),
+      invalidatesTags: (result) => (result == null ? [] : ['TemplateList']),
+    }),
+
+    /**
+     * Dissolve a group. Its members go back to the top level in the group's place — nothing is
+     * deleted but the cluster — so only the list tag moves; no cue composes differently.
+     */
+    deleteTemplateGroup: build.mutation<void, { projectId: number; groupId: number }>({
+      query: ({ projectId, groupId }) => ({
+        url: `projects/${projectId}/template-groups/${groupId}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: (_result, error) => (error != null ? [] : ['TemplateList']),
+    }),
+
+    /**
+     * Write the whole layout — order and membership for every template and group at once.
+     *
+     * Optimistic on **both** caches, the `reorderCueStacks` pattern twice over: a drop that snapped
+     * back until the refetch landed would read as a refused drag. The `templateList` patch targets
+     * the `{ projectId }` key with no `family`, which is the key every live consumer uses — the
+     * busk view and `/templates` both fetch unfiltered and filter client-side — so a filtered entry,
+     * if one ever exists, is left to the tag invalidation.
+     *
+     * A 409 `TEMPLATE_GROUP_FAMILY` undoes both patches and reaches the caller as an ordinary
+     * rejection; the page shows the server's own sentence.
+     */
+    reorderTemplates: build.mutation<void, { projectId: number } & ReorderTemplatesRequest>({
+      query: ({ projectId, ...body }) => ({
+        url: `projects/${projectId}/templates/reorder`,
+        method: 'POST',
+        body,
+      }),
+      async onQueryStarted({ projectId, entries }, { dispatch, queryFulfilled }) {
+        const templatePatch = dispatch(
+          templatesApi.util.updateQueryData('templateList', { projectId }, (draft) => {
+            const byId = new Map(draft.map((t) => [t.id, t]))
+            entries.forEach((entry, index) => {
+              if (entry.templateId != null) {
+                const t = byId.get(entry.templateId)
+                if (t) {
+                  t.groupId = null
+                  t.sortOrder = index
+                }
+              } else if (entry.groupId != null) {
+                const groupId = entry.groupId
+                ;(entry.templateIds ?? []).forEach((id, memberIndex) => {
+                  const t = byId.get(id)
+                  if (t) {
+                    t.groupId = groupId
+                    t.sortOrder = memberIndex
+                  }
+                })
+              }
+            })
+          }),
+        )
+        const groupPatch = dispatch(
+          templatesApi.util.updateQueryData('templateGroupList', { projectId }, (draft) => {
+            entries.forEach((entry, index) => {
+              if (entry.groupId == null) return
+              const g = draft.find((group) => group.id === entry.groupId)
+              if (g) g.sortOrder = index
+            })
+            draft.sort((a, b) => a.sortOrder - b.sortOrder)
+          }),
+        )
+        try {
+          await queryFulfilled
+        } catch {
+          templatePatch.undo()
+          groupPatch.undo()
+        }
+      },
+      invalidatesTags: (_result, error) => (error != null ? [] : ['TemplateList']),
+    }),
 
     createTemplate: build.mutation<TemplateSummary, { projectId: number } & TemplateInput>({
       query: ({ projectId, ...body }) => ({
@@ -200,6 +314,11 @@ export const templatesApi = restApi.injectEndpoints({
 
 export const {
   useTemplateListQuery,
+  useTemplateGroupListQuery,
+  useCreateTemplateGroupMutation,
+  useRenameTemplateGroupMutation,
+  useDeleteTemplateGroupMutation,
+  useReorderTemplatesMutation,
   useCreateTemplateFromProgrammerMutation,
   useCreateTemplateMutation,
   useSaveTemplateMutation,

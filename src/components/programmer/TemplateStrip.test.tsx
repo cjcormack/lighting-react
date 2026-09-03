@@ -31,6 +31,7 @@ vi.mock('sonner', () => ({
 
 vi.mock('@/store/templates', () => ({
   useTemplateListQuery: () => ({ data: templates }),
+  useTemplateGroupListQuery: () => ({ data: [] }),
   useApplyTemplateMutation: () => [
     (args: unknown) => {
       applyTemplate(args)
@@ -66,6 +67,7 @@ function template(over: Partial<TemplateSummary> = {}): TemplateSummary {
     name: 'Amber Key',
     notes: null,
     sortOrder: 0,
+    groupId: null,
     fadeDurationMs: null,
     family: 'COLOUR',
     isGeneric: true,

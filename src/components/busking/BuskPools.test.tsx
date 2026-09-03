@@ -104,10 +104,12 @@ describe('the template pool columns', () => {
   })
 
   /**
-   * The column is the family and the hairline is the kind (fx-templates D10). Both halves keep the
-   * library's own order, and neither is sorted here — the caller's array order is the contract.
+   * The column is the family and the order is the library's — values and effects interleaved as
+   * the operator arranged them. The *Effects* hairline fx-templates D10 drew is gone: an ordering
+   * the operator cannot move would fight the one they set on `/templates`. Nothing is sorted here;
+   * the caller's array order is the contract.
    */
-  it('splits each column at an Effects hairline, values first, library order within each half', () => {
+  it('keeps library order within a column, values and effects interleaved', () => {
     const { container } = draw([
       pad({ key: 't1', name: 'Amber Breathe', family: 'COLOUR', isEffect: true }),
       pad({ key: 't2', name: 'Amber Key', family: 'COLOUR' }),
@@ -121,27 +123,38 @@ describe('the template pool columns', () => {
     const names = [...within(colour as HTMLElement).getAllByRole('button')].map((b) =>
       b.textContent?.replace(/\s+$/, ''),
     )
-    expect(names).toEqual(['Amber Key', 'Steel Blue', 'Amber Breathe', 'Rainbow Drift'])
-    expect(within(colour as HTMLElement).getByText('Effects')).toBeInTheDocument()
+    expect(names).toEqual(['Amber Breathe', 'Amber Key', 'Steel Blue', 'Rainbow Drift'])
+    expect(within(colour as HTMLElement).queryByText('Effects')).toBeNull()
   })
 
   /**
-   * Beam has no effect templates by construction — the effect library has no beam category, and the
-   * backend refuses one by name — so its column has nothing to put under a hairline. The hairline is
-   * conditional on the half being non-empty rather than special-cased on the family, which is what
-   * keeps that true if the rule ever changes.
+   * A template group is a bordered cluster inside its family's column, at the position the layout
+   * gives it. Consecutive pads sharing a group fold into one cluster; a pad before and a pad after
+   * stay outside it, and the order across all three is the caller's.
    */
-  it('draws no hairline in a column with no effects', () => {
+  it('renders a group as a labelled cluster inside its family column', () => {
+    const keys = { id: 4, name: 'Keys' }
     const { container } = draw([
-      pad({ key: 't1', name: 'Tight Beam', family: 'BEAM' }),
-      pad({ key: 't2', name: 'Amber Breathe', family: 'COLOUR', isEffect: true }),
+      pad({ key: 't1', name: 'House Warm', family: 'COLOUR' }),
+      pad({ key: 't2', name: 'Amber Key', family: 'COLOUR', group: keys }),
+      pad({ key: 't3', name: 'Steel Blue', family: 'COLOUR', group: keys }),
+      pad({ key: 't4', name: 'Rainbow Drift', family: 'COLOUR', isEffect: true }),
     ])
 
-    const columns = templateColumns(container)
-    const beam = columns.find((c) => c.firstElementChild?.textContent === 'Beam')!
-    const colour = columns.find((c) => c.firstElementChild?.textContent === 'Colour')!
-    expect(within(beam as HTMLElement).queryByText('Effects')).toBeNull()
-    expect(within(colour as HTMLElement).getByText('Effects')).toBeInTheDocument()
+    const colour = templateColumns(container).find(
+      (c) => c.firstElementChild?.textContent === 'Colour',
+    )! as HTMLElement
+    const names = [...within(colour).getAllByRole('button')].map((b) => b.textContent?.replace(/\s+$/, ''))
+    expect(names).toEqual(['House Warm', 'Amber Key', 'Steel Blue', 'Rainbow Drift'])
+
+    const cluster = colour.querySelector('[data-template-group="Keys"]') as HTMLElement
+    expect(cluster).not.toBeNull()
+    expect(within(cluster).getByText('Keys')).toBeInTheDocument()
+    const inside = [...within(cluster).getAllByRole('button')].map((b) => b.textContent?.replace(/\s+$/, ''))
+    expect(inside).toEqual(['Amber Key', 'Steel Blue'])
+    // The label is not a button: the pool's inert-when-nothing-selected rule is a descendant-button
+    // selector, and a group name must never be pressable.
+    expect(within(cluster).getByText('Keys').tagName).not.toBe('BUTTON')
   })
 
   /** The glyph the whole desk uses for FX, where a value template's swatch would be. */

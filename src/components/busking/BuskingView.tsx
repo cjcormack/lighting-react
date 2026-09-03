@@ -5,9 +5,15 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useCurrentProjectQuery } from '@/store/projects'
 import { useLookListQuery } from '@/store/looks'
-import { useTemplateListQuery, useToggleTemplateMutation } from '@/store/templates'
+import {
+  useTemplateGroupListQuery,
+  useTemplateListQuery,
+  useToggleTemplateMutation,
+} from '@/store/templates'
 import { FAMILY_LABELS, type AttributeFamily } from '@/lib/attributeFamily'
 import { formatError } from '@/lib/formatError'
+import { buildTemplateLayout } from '@/lib/templateLayout'
+import type { TemplateSummary } from '@/api/templatesApi'
 import { templateLayerPresence } from './lookPresence'
 import {
   describeLookContents,
@@ -68,6 +74,10 @@ export function BuskingView({ projectId, transport }: BuskingViewProps) {
     { skip: !currentProject },
   )
   const { data: templates } = useTemplateListQuery(
+    { projectId: currentProject?.id ?? 0 },
+    { skip: !currentProject },
+  )
+  const { data: templateGroups } = useTemplateGroupListQuery(
     { projectId: currentProject?.id ?? 0 },
     { skip: !currentProject },
   )
@@ -148,12 +158,28 @@ export function BuskingView({ projectId, transport }: BuskingViewProps) {
         onEdit: () => navigate(`/projects/${currentProject?.id ?? 0}/looks`),
       }))
 
-    const templatePads: PadItem[] = (templates ?? [])
-      .filter((t) => t.family == null || familiesFit([t.family]))
-      .map((template) => ({
+    // The library's own order — `buildTemplateLayout` is the one place the tree is composed, so
+    // the pad grid and `/templates` draw the same order from the same numbers. A group's members
+    // come out contiguous with the group on each, which is what `TemplateColumns` folds into a
+    // cluster; the capability filter runs per pad *after* the walk, so a member the selection
+    // cannot take drops out of its cluster rather than breaking the walk.
+    const ordered: { template: TemplateSummary; group: { id: number; name: string } | null }[] = []
+    for (const entry of buildTemplateLayout(templates ?? [], templateGroups ?? [])) {
+      if (entry.kind === 'template') {
+        ordered.push({ template: entry.template, group: null })
+      } else {
+        const group = { id: entry.group.id, name: entry.group.name }
+        for (const template of entry.templates) ordered.push({ template, group })
+      }
+    }
+
+    const templatePads: PadItem[] = ordered
+      .filter(({ template: t }) => t.family == null || familiesFit([t.family]))
+      .map(({ template, group }) => ({
         key: `template-${template.id}`,
         name: template.name,
         notes: template.notes,
+        group,
         detail:
           template.kind === 'effect' ? (
             <EffectPadDetail template={template} />
@@ -199,6 +225,7 @@ export function BuskingView({ projectId, transport }: BuskingViewProps) {
   }, [
     looks,
     templates,
+    templateGroups,
     targetCapabilities,
     selectedArray.length,
     computeLookPresence,
