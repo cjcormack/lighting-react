@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -23,6 +23,7 @@ import { GripVertical } from 'lucide-react'
 import { toast } from 'sonner'
 import type { TemplateGroup, TemplateLayoutEntryInput, TemplateSummary } from '@/api/templatesApi'
 import {
+  filterLayoutByFamily,
   groupBodyDragId,
   groupDragId,
   groupFamilyOf,
@@ -33,6 +34,7 @@ import {
   templateDragId,
   type LayoutEntry,
 } from '@/lib/templateLayout'
+import type { LookFamilyFilter } from '@/components/ViewSwitcher'
 import { TemplateListRow } from './TemplateListRow'
 import { TemplateGroupRow } from './TemplateGroupRow'
 
@@ -53,12 +55,22 @@ import { TemplateGroupRow } from './TemplateGroupRow'
  * the header only (`setNodeRef` there), while the transform it hands back is applied to the whole
  * group wrapper so header and members move together.
  *
- * `dndEnabled` is false under a family filter: a filtered list cannot post the complete layout the
- * server requires, and rather than guess at the hidden entries the handles go away. The
- * `DndContext` stays mounted regardless — the repo rule — with every sortable `disabled`.
+ * **The filter is applied here, and only to what is drawn.** The component takes the *whole*
+ * project layout and the family separately, so `moveInLayout` and `layoutToRequest` always see
+ * every entry while `shown` is one bank — which is what lets a drag under a family filter post the
+ * complete layout the server requires (`moveInLayout`'s docblock has the four properties that make
+ * that sound). Drag is therefore available in every bank; `dndEnabled` now says only "this is the
+ * current project". The `DndContext` stays mounted when it is false — the repo rule — with every
+ * sortable `disabled`.
+ *
+ * One residual, stated because it looks like a bug if you meet it: a template with a **null**
+ * family — a state the write boundary does not allow, reachable only by import drift — is hidden by
+ * every filter, so dragging one out of a group while filtered unmounts the row under the cursor.
+ * The drop still commits a complete, valid layout; the template is simply not in this bank.
  */
 export function TemplateLayoutList({
-  entries,
+  layout,
+  family,
   dndEnabled,
   editable,
   onCommit,
@@ -67,8 +79,13 @@ export function TemplateLayoutList({
   onRenameGroup,
   onDeleteGroup,
 }: {
-  /** The layout to draw. When `dndEnabled`, this must be the **whole** project layout. */
-  entries: LayoutEntry[]
+  /**
+   * The **whole** project layout, always — never a filtered one. The reducer and the commit both
+   * read it, and the server refuses a body that does not name every template and group.
+   */
+  layout: LayoutEntry[]
+  /** Which bank to draw. Filtering happens here so a drag can still reduce over the whole layout. */
+  family: LookFamilyFilter
   dndEnabled: boolean
   editable: boolean
   onCommit: (entries: TemplateLayoutEntryInput[]) => void
@@ -81,7 +98,15 @@ export function TemplateLayoutList({
   const [activeLabel, setActiveLabel] = useState<string | null>(null)
   const [refusedGroupId, setRefusedGroupId] = useState<number | null>(null)
   const [overGroupId, setOverGroupId] = useState<number | null>(null)
-  const shown = draft ?? entries
+  /**
+   * The layout every write reads: the draft mid-drag, else the server's.
+   *
+   * Held as one binding rather than inlined so `shown` memoizes on its *identity* — `handleDragStart`
+   * stores `layout` itself as the first draft, so a drag start changes nothing here and the sortable
+   * items array keeps its identity at the moment a re-render would be most disruptive.
+   */
+  const source = draft ?? layout
+  const shown = useMemo(() => filterLayoutByFamily(source, family), [source, family])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -101,12 +126,12 @@ export function TemplateLayoutList({
    * does one of its members; its **header** does not (that arm places the template at the group's
    * top-level slot), and lighting the body there promised a join the drop would not perform.
    */
-  const groupOf = useCallback((layout: LayoutEntry[], overId: string): number | null => {
+  const groupOf = useCallback((current: LayoutEntry[], overId: string): number | null => {
     const parsed = parseDragId(overId)
     if (!parsed) return null
     if (parsed.kind === 'group') return null
     if (parsed.kind === 'groupBody') return parsed.id
-    for (const entry of layout) {
+    for (const entry of current) {
       if (entry.kind === 'group' && entry.templates.some((t) => t.id === parsed.id)) return entry.group.id
     }
     return null
@@ -116,7 +141,7 @@ export function TemplateLayoutList({
     ({ active }: DragStartEvent) => {
       const parsed = parseDragId(String(active.id))
       let label: string | null = null
-      for (const entry of entries) {
+      for (const entry of layout) {
         if (entry.kind === 'group') {
           if (parsed?.kind === 'group' && entry.group.id === parsed.id) label = entry.group.name
           const member = entry.templates.find((t) => parsed?.kind === 'template' && t.id === parsed.id)
@@ -125,10 +150,10 @@ export function TemplateLayoutList({
           label = entry.template.name
         }
       }
-      setDraft(entries)
+      setDraft(layout)
       setActiveLabel(label)
     },
-    [entries],
+    [layout],
   )
 
   const handleDragOver = useCallback(
@@ -138,7 +163,7 @@ export function TemplateLayoutList({
         setRefusedGroupId(null)
         return
       }
-      const current = draft ?? entries
+      const current = source
       const overId = String(over.id)
       const activeKind = parseDragId(String(active.id))?.kind
       // Only a template can join a group, so only a template's hover lights one.
@@ -152,17 +177,17 @@ export function TemplateLayoutList({
       setRefusedGroupId(null)
       setDraft(result.layout)
     },
-    [draft, entries, groupOf],
+    [source, groupOf],
   )
 
   const handleDragEnd = useCallback(
     ({ active, over }: DragEndEvent) => {
-      const current = draft ?? entries
+      const current = source
       // The draft is a *preview*, so only a drop the reducer accepts may be committed. A refusal
-      // and a release over nothing both fall back to `entries`: the draft can already hold a
+      // and a release over nothing both fall back to `layout`: the draft can already hold a
       // cross-container move made by a hover on the way past, and committing that beside a "wrong
       // family" toast would regroup a template into a group the operator merely dragged over.
-      let final = entries
+      let final = layout
       if (over) {
         const result = moveInLayout(current, String(active.id), String(over.id), 'end')
         if (result?.refused) {
@@ -172,11 +197,13 @@ export function TemplateLayoutList({
         }
       }
       reset()
-      const before = JSON.stringify(layoutToRequest(entries))
+      // Both sides are complete requests, whatever the filter is showing — which is the whole
+      // reason a filtered drag is safe: this compares the project, not the visible slice.
+      const before = JSON.stringify(layoutToRequest(layout))
       const after = JSON.stringify(layoutToRequest(final))
       if (before !== after) onCommit(layoutToRequest(final))
     },
-    [draft, entries, onCommit, reset],
+    [layout, source, onCommit, reset],
   )
 
   return (

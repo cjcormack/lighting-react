@@ -454,8 +454,26 @@ drop) around the pure reducer `moveInLayout`, which is where the drag logic is t
 has two phases for the standard multi-container reason — `'over'` moves *between* containers only
 and answers null inside one, so it never fights the sortable preview; `'end'` commits the
 within-container `arrayMove`. A drop posts the **whole** layout (`reorderTemplates`, optimistic on
-both caches), because a partial list cannot say "out of its group"; drag is therefore disabled
-under a family filter, `DndContext` staying mounted with every sortable `disabled`.
+both caches), because a partial list cannot say "out of its group".
+
+**Dragging works under a family filter too**, and the way it does is the thing to keep: the list
+takes the *unfiltered* `layout` plus the `family` and filters only what it draws, so the reducer
+runs over every entry while the operator sees one bank and the commit is still complete. Do not hand
+it a pre-filtered list. It holds because `moveInLayout` is **id-addressed** — every id dnd-kit
+reports names a mounted thing, the container test is membership rather than position, insertion is
+adjacent to the target rather than at a computed index, and `filterLayoutByFamily` preserves
+relative order, so the one place a position decides anything (`fromIndex < toIndex`) answers the
+same in both views. What it costs: hidden entries keep their own order but the moved row can pass
+them, because there is no drop target between two of them — the footer says so rather than leaving
+it to be discovered under *All*. `DndContext` still stays mounted with every sortable `disabled`
+when `dndEnabled` is false, which now means only "not the current project".
+
+A group with **no derivable family** shows in every bank rather than under *All* alone, and the
+predicate is `groupFamilyOf(entry) === null` and not "no members" for a reason: it is exactly when
+`moveInLayout` accepts a template of any family, so the UI offers a target precisely where the
+reducer has one. It covers a group just created (which must be fillable in the bank it was created
+in), one whose members all have a null family, and one drained mid-drag — which "no members" would
+unmount under the cursor.
 
 A colour pad carries a **swatch**, but only when the
 template is generic and single-row — `templateSwatch` in `components/busking/BuskPools.tsx` makes

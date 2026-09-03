@@ -68,9 +68,15 @@ export function TemplatesRedirect() {
  *
  * **The list is the operator's order**, and the place it is set. Templates and groups drag into
  * one top-level sequence, templates drag into and out of groups, and the busk view draws the result
- * (`buildTemplateLayout` is shared, so the two agree). Drag is available under *All* only: the
- * server takes the whole layout in one write, and a filtered list cannot supply it. A group is
- * authored here too (*New group*), for D9's reason — it is not a captured state.
+ * (`buildTemplateLayout` is shared, so the two agree). A group is authored here too (*New group*),
+ * for D9's reason — it is not a captured state.
+ *
+ * **Dragging works in every bank, filtered or not.** The server takes the whole layout in one
+ * write, so `TemplateLayoutList` is handed the unfiltered `layout` plus the `family` and filters
+ * only what it draws: the reducer reduces over every entry while the operator sees one family, and
+ * the commit is complete either way. Curating the colour bank while looking at colour is the point;
+ * what it costs is that entries the filter hides can end up on the other side of the row that
+ * moved, since there is no drop target between two of them. The footer says so.
  */
 export function ProjectTemplates() {
   const { projectId } = useParams()
@@ -162,6 +168,12 @@ export function ProjectTemplates() {
   }, [editingId, templates, editing])
 
   const layout = useMemo(() => buildTemplateLayout(templates ?? [], groups ?? []), [templates, groups])
+  /**
+   * The filtered view, for the count and the empty state only — the **list gets `layout`**, and
+   * filters again itself, because it has to filter its own mid-drag draft too. The duplicate call
+   * is deliberate: one predicate, in `filterLayoutByFamily`, so the two cannot disagree about what
+   * a bank contains.
+   */
   const visible = useMemo(() => filterLayoutByFamily(layout, family), [layout, family])
   const visibleCount = useMemo(
     () => visible.reduce((n, e) => n + (e.kind === 'template' ? 1 : e.templates.length), 0),
@@ -248,7 +260,8 @@ export function ProjectTemplates() {
 
   const totalAll = templates?.length ?? 0
   const totalGroups = groups?.length ?? 0
-  const dndEnabled = isCurrentProject && family === 'ALL'
+  // The filter no longer gates this: the list reduces over the whole layout whatever it is drawing.
+  const dndEnabled = isCurrentProject
 
   return (
     <div className="flex flex-col h-full">
@@ -305,12 +318,17 @@ export function ProjectTemplates() {
             </p>
           </Card>
         ) : visible.length === 0 ? (
+          /* An empty bank — but only while the project holds no family-less group, since one of
+             those shows in every bank. So once a group is created and not yet filled, a family
+             with nothing in it draws that group and its "Drop templates here" body rather than
+             this line, which is the point: the bank you created it in is where you fill it. */
           <div className="py-8 text-center text-sm text-muted-foreground">
             No {family === 'ALL' ? '' : 'matching '}templates.
           </div>
         ) : (
           <TemplateLayoutList
-            entries={visible}
+            layout={layout}
+            family={family}
             dndEnabled={dndEnabled}
             editable={isCurrentProject}
             onCommit={handleCommit}
@@ -327,13 +345,22 @@ export function ProjectTemplates() {
         {totalAll > 0 && family !== 'ALL' && (
           <p className="text-xs text-muted-foreground text-center mt-3">
             Showing {visibleCount} of {totalAll} templates
-            {isCurrentProject && <> · show All to reorder or regroup</>}
+            {/* Dragging is available here, so say what it does to the rows you cannot see: they
+                keep their own order, but the one you moved can pass them. Gated on `visible.length`
+                and not `visibleCount`: what makes the drift possible is *two entries to drag
+                between*, and both halves of that differ from a template count — a bank holding only
+                family-less groups counts zero templates and still reorders them past every hidden
+                one, while a bank showing a single template has nowhere to drag it. */}
+            {isCurrentProject && visible.length > 1 && totalAll > visibleCount && (
+              <> · dragging here leaves the rest where they are</>
+            )}
           </p>
         )}
       </div>
 
-      {/* A group is one field, so a Dialog rather than a sheet — and a Dialog rather than an inline
-          row because the list may be filtered to a family the new, empty group would not show in. */}
+      {/* A group is one field, so a Dialog rather than a sheet. (It used to be a Dialog rather than
+          an inline row as well, because a new empty group would not show under a family filter —
+          it does now, so that half of the reason is gone.) */}
       <Dialog open={newGroupName != null} onOpenChange={(next) => !next && setNewGroupName(null)}>
         <DialogContent>
           <DialogHeader>

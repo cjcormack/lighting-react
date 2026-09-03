@@ -137,18 +137,39 @@ export function groupFamilyOf(entry: Extract<LayoutEntry, { kind: 'group' }>): A
 }
 
 /**
- * The family filter, applied to the tree. A group is kept when its (member-derived) family matches;
- * an **empty** group has no family and is shown under `ALL` only — it has nothing to file under a
- * family, and nothing to file it under.
+ * The family filter, applied to the tree — a **view** of the layout, and never a re-ordering of it.
+ * `Array.filter` preserves relative order, which is the property [moveInLayout] leans on to run a
+ * drag against the whole layout while the operator is looking at one bank. Don't sort here.
+ *
+ * A group with **no derivable family** is kept under every family rather than under `ALL` alone.
+ * The predicate is `groupFamilyOf(entry) === null` and not "has no members" on purpose: that is
+ * exactly the condition under which [moveInLayout] accepts a template of *any* family, so the UI
+ * offers a target precisely where the reducer has one. It covers three cases in one — a group just
+ * created (which has to be fillable in the bank it was created in, or it never can be), a group
+ * whose members all have a null family, and a group drained of its last family-bearing member
+ * *mid-drag*, which a "no members" predicate would unmount under the operator's cursor.
+ *
+ * A group's **members are never filtered**: the family is uniform by the one-family rule, so
+ * whenever a group is shown its member list is shown whole. That is what makes a within-group
+ * reorder mean the same thing filtered or not.
+ *
+ * `/templates` is the only caller — the busk view buckets pads by each **template's** own family,
+ * so no group of any kind reaches a pad column. Both the route (for the count and the empty state)
+ * and `TemplateLayoutList` (to render) call this, and they must agree, which is why the predicate
+ * lives here rather than in either. `components/fixtures-list/rowModel.ts` makes the same call for
+ * fixture groups: a genuinely empty group survives a filter, one whose members were all filtered
+ * out does not.
  */
 export function filterLayoutByFamily(
   layout: readonly LayoutEntry[],
   family: LookFamilyFilter,
 ): LayoutEntry[] {
   if (family === 'ALL') return [...layout]
-  return layout.filter((entry) =>
-    entry.kind === 'template' ? entry.template.family === family : groupFamilyOf(entry) === family,
-  )
+  return layout.filter((entry) => {
+    if (entry.kind === 'template') return entry.template.family === family
+    const groupFamily = groupFamilyOf(entry)
+    return groupFamily === null || groupFamily === family
+  })
 }
 
 export type MoveResult =
@@ -185,6 +206,23 @@ export type MoveResult =
  *    *up* lands before it. A cross-container drop at this phase behaves as `'over'` would.
  *
  * Returns null when nothing would change, so a caller can skip a state write.
+ *
+ * **Filter-blind, and load-bearingly so.** `/templates` runs this on the **whole** layout while the
+ * operator may be seeing one family's bank, and that is what lets a filtered drag still post the
+ * complete body `reorderTemplates` requires. Four things make it hold, and a change to any of them
+ * breaks a filtered drag while leaving an unfiltered one working:
+ *
+ *  - every id dnd-kit reports names a **mounted** thing, so [findIn] can never resolve to an entry
+ *    the filter hid;
+ *  - the container test is **membership** (`top` / `g:{id}`), not position;
+ *  - insertion is **adjacent to the target** rather than at a computed index, so it means the same
+ *    thing in both views;
+ *  - [filterLayoutByFamily] preserves relative order, so the one place an array position decides
+ *    anything — the `fromIndex < toIndex` sign below — answers the same in both.
+ *
+ * What the operator sees as a result: entries the filter hides keep their own order, but can end up
+ * on the other side of the row that moved. There is no droppable for "the slot between two hidden
+ * entries", so the two placements are the same input; this is the minimal disturbance, not a bug.
  */
 export function moveInLayout(
   layout: readonly LayoutEntry[],
@@ -217,7 +255,14 @@ export function moveInLayout(
   // different number space entirely, and reading it there made a group dropped on a lower group's
   // first member land above that group instead of below it.
   const toIndex = active.kind === 'group' ? to.top : to.member === -1 ? to.top : to.member
-  const movingDown = sameContainer && fromIndex < toIndex
+  // A template dropped on a group's **body** appends and never reads `after`, so the comparison is
+  // dead for that case — but it would be *filter-sensitive* dead math if it ever woke up, because
+  // `toIndex` is then a top-level index while `fromIndex` is a member index, and the filter moves
+  // the former. Disarm it here rather than leave the trap for whoever teaches the body arm to
+  // honour a position. (A dragged **group** over a body is not this case: it moves at the top
+  // level, so `to.top` is the right number space and `after` genuinely applies.)
+  const intoBody = active.kind === 'template' && over.kind === 'groupBody'
+  const movingDown = sameContainer && !intoBody && fromIndex < toIndex
 
   // Lift the active thing out, remembering what it was.
   const next: LayoutEntry[] = layout.map((entry) =>

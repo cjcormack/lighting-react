@@ -113,11 +113,33 @@ describe('filterLayoutByFamily', () => {
   })
 
   it('keeps a group under the family its members derive', () => {
-    expect(shape(filterLayoutByFamily(layout, 'COLOUR'))).toEqual(['Amber', 'Keys[Blue]'])
+    expect(shape(filterLayoutByFamily(layout, 'COLOUR'))).toEqual(['Amber', 'Keys[Blue]', 'Empty[]'])
   })
 
-  it('hides an empty group under any family — it has nothing to file it under', () => {
-    expect(shape(filterLayoutByFamily(layout, 'POSITION'))).toEqual(['Downstage'])
+  it('keeps a family-less group in every bank, so a new group can be filled while filtered', () => {
+    // The predicate is "no derivable family", which is exactly when `moveInLayout` accepts a
+    // template of any family — so the UI offers a target precisely where the reducer has one.
+    expect(shape(filterLayoutByFamily(layout, 'POSITION'))).toEqual(['Downstage', 'Empty[]'])
+    expect(shape(filterLayoutByFamily(layout, 'BEAM'))).toEqual(['Empty[]'])
+  })
+
+  it('keeps a group whose members all have a null family', () => {
+    // Not the same as empty, and the "no members" predicate would hide it — including when a drag
+    // has just lifted the last family-bearing member out, which unmounts the row mid-drag.
+    const withNulls = buildTemplateLayout(
+      [template({ id: 7, name: 'Mystery', family: null, groupId: 20 })],
+      [group({ id: 20, name: 'Odd', sortOrder: 0 })],
+    )
+    expect(shape(filterLayoutByFamily(withNulls, 'COLOUR'))).toEqual(['Odd[Mystery]'])
+  })
+
+  it('is a subsequence — it never reorders what it keeps', () => {
+    // The property `moveInLayout` leans on to run a drag over the whole layout while the operator
+    // sees one bank. A sort here would break every filtered drag and no unfiltered one.
+    for (const family of ['ALL', 'COLOUR', 'POSITION', 'INTENSITY', 'BEAM'] as const) {
+      const kept = shape(filterLayoutByFamily(layout, family))
+      expect(shape(layout).filter((name) => kept.includes(name))).toEqual(kept)
+    }
   })
 })
 
@@ -262,5 +284,142 @@ describe('moveInLayout', () => {
     expect(moveInLayout(base(), templateDragId(1), templateDragId(1))).toBeNull()
     expect(moveInLayout(base(), 'slot-1', templateDragId(1))).toBeNull()
     expect(moveInLayout(base(), groupBodyDragId(10), templateDragId(1))).toBeNull()
+  })
+})
+
+/**
+ * A drag while `/templates` is filtered to one family. The reducer is **not** told about the
+ * filter: it is handed the whole layout and the two ids dnd-kit reports, which name mounted things
+ * — so every case here asserts two things, and the second is the one that matters. The full result
+ * must still name every template and group (the server 400s otherwise), and the *filtered* result
+ * must be the order the operator was previewing, which for a same-container drag is the `arrayMove`
+ * `verticalListSortingStrategy` drew.
+ *
+ * Every drag below has a hidden entry between its two ends, which is the whole point.
+ */
+describe('moveInLayout under a family filter', () => {
+  const keys = group({ id: 10, name: 'Keys', sortOrder: 2 })
+  const spare = group({ id: 11, name: 'Spare', sortOrder: 5 })
+  const full = () =>
+    buildTemplateLayout(
+      [
+        template({ id: 1, name: 'Amber', sortOrder: 0 }),
+        template({ id: 2, name: 'Downstage', family: 'POSITION', sortOrder: 1 }),
+        template({ id: 3, name: 'Blue', sortOrder: 0, groupId: 10 }),
+        template({ id: 4, name: 'Steel', sortOrder: 1, groupId: 10 }),
+        template({ id: 5, name: 'Warm', sortOrder: 3 }),
+        template({ id: 6, name: 'Upstage', family: 'POSITION', sortOrder: 4 }),
+      ],
+      [keys, spare],
+    )
+
+  /** The server's rule, asserted on the body this side would post. */
+  function namesEverything(layout: readonly LayoutEntry[]) {
+    const templateIds: number[] = []
+    const groupIds: number[] = []
+    for (const entry of layoutToRequest(layout)) {
+      if (entry.templateId != null) templateIds.push(entry.templateId)
+      if (entry.groupId != null) {
+        groupIds.push(entry.groupId)
+        templateIds.push(...(entry.templateIds ?? []))
+      }
+    }
+    expect(templateIds.sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6])
+    expect(groupIds.sort((a, b) => a - b)).toEqual([10, 11])
+  }
+
+  /** What the operator can see in the colour bank. `Spare` is family-less, so it is in every bank. */
+  const seen = (layout: readonly LayoutEntry[]) => shape(filterLayoutByFamily(layout, 'COLOUR'))
+
+  it('starts from the expected shape, filtered and not', () => {
+    expect(shape(full())).toEqual(['Amber', 'Downstage', 'Keys[Blue, Steel]', 'Warm', 'Upstage', 'Spare[]'])
+    expect(seen(full())).toEqual(['Amber', 'Keys[Blue, Steel]', 'Warm', 'Spare[]'])
+  })
+
+  it('moves a template up past a hidden one, landing before its target in both views', () => {
+    const result = moveInLayout(full(), templateDragId(5), templateDragId(1))!
+    namesEverything(result.layout)
+    expect(shape(result.layout)).toEqual(['Warm', 'Amber', 'Downstage', 'Keys[Blue, Steel]', 'Upstage', 'Spare[]'])
+    expect(seen(result.layout)).toEqual(['Warm', 'Amber', 'Keys[Blue, Steel]', 'Spare[]'])
+  })
+
+  it('moves a template down past a hidden one, landing after its target in both views', () => {
+    // The `arrayMove` convention is what survives the filter: `filterLayoutByFamily` keeps relative
+    // order, so `fromIndex < toIndex` has the same answer over the whole layout as over the bank.
+    const result = moveInLayout(full(), templateDragId(1), templateDragId(5))!
+    namesEverything(result.layout)
+    expect(shape(result.layout)).toEqual(['Downstage', 'Keys[Blue, Steel]', 'Warm', 'Amber', 'Upstage', 'Spare[]'])
+    expect(seen(result.layout)).toEqual(['Keys[Blue, Steel]', 'Warm', 'Amber', 'Spare[]'])
+  })
+
+  it('moves a group down past a hidden template', () => {
+    const result = moveInLayout(full(), groupDragId(10), groupDragId(11))!
+    namesEverything(result.layout)
+    expect(seen(result.layout)).toEqual(['Amber', 'Warm', 'Spare[]', 'Keys[Blue, Steel]'])
+  })
+
+  it('moves a group up past a hidden template', () => {
+    const result = moveInLayout(full(), groupDragId(11), templateDragId(1))!
+    namesEverything(result.layout)
+    expect(seen(result.layout)).toEqual(['Spare[]', 'Amber', 'Keys[Blue, Steel]', 'Warm'])
+  })
+
+  it('puts a template at a group’s top-level slot when over its header, past a hidden one', () => {
+    const result = moveInLayout(full(), templateDragId(1), groupDragId(10))!
+    namesEverything(result.layout)
+    expect(seen(result.layout)).toEqual(['Keys[Blue, Steel]', 'Amber', 'Warm', 'Spare[]'])
+  })
+
+  it('fills a family-less group from the bank it is shown in', () => {
+    // The reason an empty group survives the filter: this is the drop that gives it a family.
+    const result = moveInLayout(full(), templateDragId(5), groupBodyDragId(11))!
+    namesEverything(result.layout)
+    expect(shape(result.layout)).toEqual(['Amber', 'Downstage', 'Keys[Blue, Steel]', 'Upstage', 'Spare[Warm]'])
+    expect(seen(result.layout)).toEqual(['Amber', 'Keys[Blue, Steel]', 'Spare[Warm]'])
+  })
+
+  it('joins a group at the hovered member, and leaves one onto a visible target', () => {
+    const joined = moveInLayout(full(), templateDragId(5), templateDragId(3))!
+    namesEverything(joined.layout)
+    expect(seen(joined.layout)).toEqual(['Amber', 'Keys[Warm, Blue, Steel]', 'Spare[]'])
+
+    const left = moveInLayout(full(), templateDragId(4), templateDragId(1))!
+    namesEverything(left.layout)
+    expect(seen(left.layout)).toEqual(['Steel', 'Amber', 'Keys[Blue]', 'Warm', 'Spare[]'])
+  })
+
+  it('reorders a null-family member inside a group the filter keeps', () => {
+    // Members are never filtered, so within-group index maths is the same filtered or not — even
+    // for a member the filter would hide at top level.
+    const odd = group({ id: 20, name: 'Odd', sortOrder: 0 })
+    const layout = buildTemplateLayout(
+      [
+        template({ id: 7, name: 'Blue', sortOrder: 0, groupId: 20 }),
+        template({ id: 8, name: 'Mystery', family: null, sortOrder: 1, groupId: 20 }),
+      ],
+      [odd],
+    )
+    expect(shape(filterLayoutByFamily(layout, 'COLOUR'))).toEqual(['Odd[Blue, Mystery]'])
+    const result = moveInLayout(layout, templateDragId(8), templateDragId(7))!
+    expect(shape(filterLayoutByFamily(result.layout, 'COLOUR'))).toEqual(['Odd[Mystery, Blue]'])
+  })
+
+  it('lets a hidden entry drift past the row that moved — the filter’s one cost', () => {
+    // Dragging out and back restores the bank exactly, but `Downstage` has moved from between the
+    // two to after both. There is no droppable for "the slot between two hidden entries", so the
+    // two placements are the same input; this is the minimal disturbance, and it is deliberate.
+    const start = buildTemplateLayout(
+      [
+        template({ id: 1, name: 'Amber', sortOrder: 0 }),
+        template({ id: 2, name: 'Downstage', family: 'POSITION', sortOrder: 1 }),
+        template({ id: 3, name: 'Warm', sortOrder: 2 }),
+      ],
+      [],
+    )
+    const up = moveInLayout(start, templateDragId(3), templateDragId(1))!
+    expect(shape(up.layout)).toEqual(['Warm', 'Amber', 'Downstage'])
+    const back = moveInLayout(up.layout, templateDragId(3), templateDragId(1))!
+    expect(shape(filterLayoutByFamily(back.layout, 'COLOUR'))).toEqual(['Amber', 'Warm'])
+    expect(shape(back.layout)).toEqual(['Amber', 'Warm', 'Downstage'])
   })
 })

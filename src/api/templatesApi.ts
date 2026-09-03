@@ -186,8 +186,8 @@ export interface TemplateInput {
  *
  * Membership is **not** here — it is `TemplateSummary.groupId` on each template; the client composes
  * the tree from the two flat lists (`lib/templateLayout.ts`). `family` is derived from the members
- * server-side and is null for an empty group, which has no busk column and shows only under *All*
- * on `/templates`.
+ * server-side and is null for an empty group, which therefore has no busk column — but *is* shown
+ * in every bank on `/templates`, because that is where it gets filled (`filterLayoutByFamily`).
  */
 export interface TemplateGroup {
   id: number
@@ -214,8 +214,11 @@ export interface TemplateLayoutEntryInput {
 
 /**
  * The **whole** layout — every template and group in the project, each named once, else a 400.
- * Whole because a partial list cannot say "out of its group" (see the server's docblock); the page
- * always holds the unfiltered list, and drag is disabled under a family filter for this reason.
+ * Whole because a partial list cannot say "out of its group" (see the server's docblock).
+ *
+ * The page always holds the unfiltered list, and that is the *mechanism* rather than a caveat: a
+ * drag under a family filter reduces over every entry and draws a subset, so it still posts a
+ * complete body. Never build this from a filtered list.
  */
 export interface ReorderTemplatesRequest {
   entries: TemplateLayoutEntryInput[]

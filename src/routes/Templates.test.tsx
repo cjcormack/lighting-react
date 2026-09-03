@@ -204,10 +204,14 @@ describe('ProjectTemplates', () => {
       expect(names).toEqual(['House Warm', 'Keys', 'Amber Key', 'Steel Blue', 'Half Up', 'Spare'])
     })
 
-    it('hides an empty group under a family filter and shows it under All', () => {
+    it('shows a family-less group in every bank, so it can be filled while filtered', () => {
+      // An empty group has nothing to file it under a family — and it is the one thing that accepts
+      // a template of any family, so hiding it would put the drop target where the drag cannot go.
       const { container, unmount } = renderAt('/projects/1/templates?family=colour')
       expect(container.querySelector('[data-template-group="Keys"]')).not.toBeNull()
-      expect(container.querySelector('[data-template-group="Spare"]')).toBeNull()
+      expect(container.querySelector('[data-template-group="Spare"]')).not.toBeNull()
+      expect(screen.getByText(/Drop templates here/)).toBeInTheDocument()
+      // Templates are still filtered — only the family-less *group* is exempt.
       expect(screen.queryByText('Half Up')).not.toBeInTheDocument()
       unmount()
 
@@ -216,16 +220,25 @@ describe('ProjectTemplates', () => {
       expect(screen.getByText('empty')).toBeInTheDocument()
     })
 
-    it('offers drag handles under All and hides them under a filter', () => {
+    it('offers drag handles under a family filter too, and says what a filtered drag does', () => {
+      // The list is handed the whole layout and filters only what it draws, so a filtered drop
+      // still posts the complete body the server requires.
       const { unmount } = renderAt('/projects/1/templates')
       expect(screen.getByRole('button', { name: 'Reorder House Warm' })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Reorder Keys' })).toBeInTheDocument()
       unmount()
 
-      // A filtered list cannot post the whole layout the server requires, so the affordance goes.
       renderAt('/projects/1/templates?family=colour')
+      expect(screen.getByRole('button', { name: 'Reorder Keys' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Reorder Amber Key' })).toBeInTheDocument()
+      expect(screen.getByText(/Showing 3 of 4 templates/)).toBeInTheDocument()
+      expect(screen.getByText(/leaves the rest where they are/)).toBeInTheDocument()
+    })
+
+    it('hides the drag handles on a project that is not the current one', () => {
+      // `isCurrentProject` is the whole remaining gate; the family filter no longer carries it.
+      renderAt('/projects/2/templates')
       expect(screen.queryByRole('button', { name: /^Reorder / })).toBeNull()
-      expect(screen.getByText(/show All to reorder/)).toBeInTheDocument()
     })
 
     it('offers New group — a group is authored, like a template', () => {
