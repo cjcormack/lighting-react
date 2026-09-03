@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LayerRow, LookStack, describeStackSource, type LookStackLayer } from './LookStack'
 import type { LookSummary } from '@/api/looksApi'
+import type { TemplateSummary } from '@/api/templatesApi'
 
 /**
  * The shared component's own contract, driven with plain spies.
@@ -35,6 +36,31 @@ const LOOKS = new Map([
   [7, look()],
   [8, look({ id: 8, uuid: 'u8', name: 'Slow Pulse', families: ['INTENSITY'] })],
 ])
+
+function templateSummary(overrides: Partial<TemplateSummary> = {}): TemplateSummary {
+  return {
+    id: 4,
+    uuid: 'ut4',
+    name: 'Amber Key',
+    notes: null,
+    sortOrder: 0,
+    fadeDurationMs: null,
+    family: 'COLOUR',
+    isGeneric: true,
+    kind: 'value',
+    rows: [
+      {
+        targetType: 'deferred',
+        targetKey: '',
+        propertyName: 'rgbColour',
+        value: '#FF9D4A;policy=extract',
+      },
+    ],
+    effect: null,
+    layerCount: 0,
+    ...overrides,
+  }
+}
 
 function layer(overrides: Partial<LookStackLayer> = {}): LookStackLayer {
   return {
@@ -318,5 +344,64 @@ describe('LookStack', () => {
     expect(screen.queryByLabelText('Remove')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Reorder layer')).not.toBeInTheDocument()
     expect(screen.queryByTitle(/How this layer combines/)).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * The template arm, which had no coverage at all: every existing case passes a LOOK source and
+ * `undefined` for the template library, so neither the `isTemplate` badge nor the kind was pinned.
+ */
+describe('describeStackSource — template layers', () => {
+  const templates = new Map<number, TemplateSummary>([
+    [4, templateSummary({ id: 4, name: 'Amber Key', kind: 'value' })],
+    [5, templateSummary({ id: 5, name: 'Amber Breathe', kind: 'effect', rows: [] })],
+  ])
+  const source = (id: number, name: string) =>
+    ({ kind: 'TEMPLATE', id, uuid: `ut${id}`, name }) as const
+
+  it('reports the family and the kind from the library entry', () => {
+    expect(describeStackSource(source(5, 'Amber Breathe'), LOOKS, templates, true)).toEqual({
+      name: 'Amber Breathe',
+      families: ['COLOUR'],
+      missing: false,
+      isTemplate: true,
+      templateKind: 'effect',
+    })
+  })
+
+  it('leaves the kind undefined when the caller has no template library', () => {
+    // A surface that did not load the list knows a layer names a template but not which kind, and
+    // it must not be painted as missing on that account either.
+    const info = describeStackSource(source(5, 'Amber Breathe'), LOOKS, undefined, true)
+    expect(info.templateKind).toBeUndefined()
+    expect(info.missing).toBe(false)
+    expect(info.isTemplate).toBe(true)
+  })
+
+  it('draws the wave beside the palette only for an effect template', () => {
+    const { container, unmount } = render(
+      <LayerRow
+        layer={layer({ source: source(5, 'Amber Breathe') })}
+        index={0}
+        info={describeStackSource(source(5, 'Amber Breathe'), LOOKS, templates, true)}
+        sortable={false}
+        readOnly
+      />,
+    )
+    expect(container.querySelector('svg.lucide-audio-waveform')).not.toBeNull()
+    expect(container.querySelector('svg.lucide-palette')).not.toBeNull()
+    unmount()
+
+    const value = render(
+      <LayerRow
+        layer={layer({ source: source(4, 'Amber Key') })}
+        index={0}
+        info={describeStackSource(source(4, 'Amber Key'), LOOKS, templates, true)}
+        sortable={false}
+        readOnly
+      />,
+    )
+    expect(value.container.querySelector('svg.lucide-audio-waveform')).toBeNull()
+    expect(value.container.querySelector('svg.lucide-palette')).not.toBeNull()
   })
 })

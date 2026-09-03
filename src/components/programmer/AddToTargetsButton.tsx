@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { programmerPatchLayer } from '@/store/programmer'
 import { useLookRowStore } from './LookRowStore'
+import { useFocusedTemplateLayer } from './FocusedTemplateLayer'
 import type { CueTarget } from '@/api/cuesApi'
 
 /**
@@ -13,8 +14,12 @@ import type { CueTarget } from '@/api/cuesApi'
  * layer to the whole rig — the thing an operator would never be able to attribute to the drag they
  * just made. Widening is a press, on the row, next to Locate and Details.
  *
- * Reads only the store context, so it costs a mounted row nothing: the layer's target list rides on
- * the value the grid is already holding rather than a per-row query subscription.
+ * Reads only context, so it costs a mounted row nothing: the layer's target list rides on values the
+ * grid is already holding rather than a per-row query subscription. **Both** layer contexts — a
+ * focused Look layer's `LookRowStore` and a focused template layer's `FocusedTemplateLayer`, which
+ * are mutually exclusive by construction. The template half is not optional: since a template
+ * layer's grid became a read, an untargeted row there is painted dashed and non-editable, and
+ * without this button that tone would name a state with no way out of it.
  *
  * No optimistic update, matching `ProgrammerLookStack` — the programmer's layer state is a
  * broadcast, and the row un-dims when it lands. Restating it here would be a second opinion on a
@@ -32,10 +37,13 @@ export function AddToTargetsButton({
   name: string
 }) {
   const store = useLookRowStore()
-  // `targetedKeys === null` is "the Look's own targets" — every bound row lands where it names, so
-  // there is nothing to widen. Reading it as "no targets" would put this button on every row.
-  if (!store || store.targetedKeys === null) return null
-  const targeted = store.targetedKeys
+  const focusedTemplate = useFocusedTemplateLayer()
+  const layer = store ?? focusedTemplate
+  // `targetedKeys === null` is "the source's own targets" — for a Look, every bound row lands where
+  // it names, so there is nothing to widen. Reading it as "no targets" would put this button on
+  // every row.
+  if (!layer || layer.targetedKeys === null) return null
+  const targeted = layer.targetedKeys
   if (fixtureKeys.length === 0 || fixtureKeys.every((key) => targeted.has(key))) return null
 
   const label = `Add ${name} to this layer's targets`
@@ -48,7 +56,7 @@ export function AddToTargetsButton({
           className="size-8"
           aria-label={label}
           onClick={() =>
-            programmerPatchLayer(store.layerId, { targets: [...store.targets, target] })
+            programmerPatchLayer(layer.layerId, { targets: [...layer.targets, target] })
           }
         >
           <Crosshair className="size-3.5" />

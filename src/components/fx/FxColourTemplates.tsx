@@ -42,6 +42,14 @@ import { parseTemplateRefUuid, serializeTemplateRef } from './colourUtils'
  * and only `rows[0]` — `swatchFor`, the chip's swatch, the chip's tooltip — so a two-row template
  * would be offered under a name that claims both rows and would apply one of them. Lifting the
  * clause means deciding what a multi-row colour template *means* to a single-colour output first.
+ *
+ * It is also what excludes an **effect** template (fx-templates D12), which holds no rows at all —
+ * and that exclusion is deliberate rather than a by-product. An effect template is not a colour: it
+ * has nothing for a fixture-agnostic colour output to take, and `resolveColourGeneric` refuses one
+ * server-side for the same reason. So if the row-count clause is ever relaxed, put an explicit
+ * `kind !== 'effect'` back in its place. The other direction stays allowed and useful: an effect
+ * template's own colour parameter may name a **value** colour template, which is what this picker
+ * offers it.
  */
 function isOfferable(template: TemplateSummary): boolean {
   return template.family === 'COLOUR' && template.isGeneric && template.rows.length === 1

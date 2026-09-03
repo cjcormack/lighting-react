@@ -9,6 +9,7 @@ import { COLUMN_DEFS } from './columns'
 import { fanColours, fanValues } from './fanMath'
 import { clampCommitToResolution, planBatchWrites } from './rowModel'
 import { applyPlannedWrite, useCellWriters } from './useCellWriters'
+import { useFocusedTemplateLayer } from '../programmer/FocusedTemplateLayer'
 import type { ColumnKey } from './columns'
 import type { CellCommit, WriteTarget } from './rowModel'
 
@@ -60,7 +61,17 @@ export function FanPopover({ targets }: FanPopoverProps) {
   const plannedCount = activePlan?.planned.length ?? 0
   // A fan needs at least two points on SOME column to be worth opening, and
   // at least two on the CHOSEN column to apply — one point is a set, not a fan.
-  const canFan = columnPlans.some((plan) => plan.planned.length >= 2)
+  //
+  // **And somewhere for the values to land.** A focused *template* layer is a read: its cells are
+  // not editable and `useCellWriters` has no arm for it, so a fan applied there would fall through
+  // to a live write and put literals in Local, silently, on a grid drawing itself read-only. A
+  // focused *Look* layer is fine — that one has a row draft and the fan lands in it, which is why
+  // this is not a blanket "layer scope" test. Disabled with the reason rather than hidden: the
+  // gesture is worth discovering, and a control that vanishes when a layer is focused teaches
+  // nobody why.
+  const focusedTemplate = useFocusedTemplateLayer()
+  const readOnlyScope = focusedTemplate != null
+  const canFan = !readOnlyScope && columnPlans.some((plan) => plan.planned.length >= 2)
 
   const apply = () => {
     if (!activePlan) return
@@ -93,7 +104,16 @@ export function FanPopover({ targets }: FanPopoverProps) {
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" disabled={!canFan} title="Fan values across the selection">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!canFan}
+          title={
+            readOnlyScope
+              ? 'This layer applies a template — switch to Local to fan values onto these heads'
+              : 'Fan values across the selection'
+          }
+        >
           <GitCommitHorizontal className="size-3.5" />
           <span className="hidden sm:inline">Fan</span>
         </Button>

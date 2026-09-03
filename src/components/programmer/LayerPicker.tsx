@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { ChevronLeft, ChevronRight, Layers, Palette } from 'lucide-react'
+import { AudioWaveform, ChevronLeft, ChevronRight, Layers, Palette } from 'lucide-react'
 import { useLookListQuery } from '@/store/looks'
 import { useTemplateListQuery } from '@/store/templates'
 import { useGroupListQuery } from '@/store/groups'
@@ -215,7 +215,7 @@ export function LayerPicker({
               />
               <TemplateGroup
                 title="Templates"
-                hint="One value each. These take their fixtures from the layer."
+                hint="One value or effect each. These take their fixtures from the layer."
                 templates={templates ?? []}
                 onSelect={handleSelectTemplate}
               />
@@ -443,6 +443,11 @@ function TemplateGroup({
           className="flex items-center gap-2 p-3 rounded-md border text-left hover:bg-accent/50 transition-colors"
         >
           <Palette className="size-4 text-muted-foreground shrink-0" />
+          {/* Beside the palette rather than instead of it, as `LookNameBadge` draws it: an effect
+              template is a template that holds an effect, not a third kind of row. */}
+          {template.kind === 'effect' && (
+            <AudioWaveform className="size-4 text-muted-foreground shrink-0 -ml-1" />
+          )}
           <div className="flex-1 min-w-0">
             <div className="text-sm font-medium truncate">{template.name}</div>
             <div className="mt-0.5 flex flex-wrap items-center gap-1">
@@ -452,7 +457,13 @@ function TemplateGroup({
                 </Badge>
               )}
               <span className="text-[11px] text-muted-foreground">
-                {template.isGeneric ? 'Generic' : `Per fixture · ${template.rows.length}`}
+                {/* An effect template is always generic (D3), so "Generic" would be true and
+                    uninformative — what it holds is the thing worth saying here. */}
+                {template.kind === 'effect'
+                  ? (template.effect?.effectType ?? 'Effect')
+                  : template.isGeneric
+                    ? 'Generic'
+                    : `Per fixture · ${template.rows.length}`}
               </span>
               {template.rows[0] != null && (
                 <span className="font-mono text-[10px] tabular-nums text-muted-foreground">

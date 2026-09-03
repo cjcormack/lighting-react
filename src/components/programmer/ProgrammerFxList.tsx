@@ -187,8 +187,13 @@ function homeOf(
 ): { label: string; detail?: string } {
   if (effect.programmerLayerId != null) {
     const home = layerHomes.get(effect.programmerLayerId)
+    // The layer broadcast first, because it is the same list the stack rail draws and it can also
+    // say *which* layer. `sourceName` is the fallback and is right for both kinds since
+    // fx-templates D7 — an effect can come from a template as well as a Look, and the old literal
+    // "in a look" named the wrong entity for half of them.
+    const name = home?.name ?? effect.sourceName
     return {
-      label: home ? `in ${home.name}` : 'in a look',
+      label: name != null ? `in ${name}` : 'in a layer',
       detail: home ? `layer ${home.position}` : undefined,
     }
   }

@@ -10,6 +10,7 @@ import { ProgrammerActionBar } from '@/components/programmer/ProgrammerActionBar
 import { ColumnsMenu, useColumnVisibility } from '@/components/fixtures-list/ColumnsMenu'
 import { ProgrammerGrid } from '@/components/programmer/ProgrammerGrid'
 import { LookRowStoreProvider } from '@/components/programmer/LookRowStore'
+import { FocusedTemplateLayerProvider } from '@/components/programmer/FocusedTemplateLayer'
 import { ProgrammerRail } from '@/components/programmer/ProgrammerRail'
 import { ProgrammerScopeProvider } from '@/components/programmer/ProgrammerScope'
 import { ProgrammerScopeBand } from '@/components/programmer/ProgrammerScopeBand'
@@ -179,23 +180,28 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
           inside it too**, and must stay there: it reads `useLookSaveState()`, which outside the
           provider silently answers the context default — so "Unsaved", "Saving…" and, worst of the
           three, "Save failed" could never appear. */}
+      {/* Its template sibling, for the same reason and at the same height: a focused *template*
+          layer has no `LookRowStore` (that one owns a row draft and engages only for a LOOK), and
+          the grid, the notices and the scope band all need to know what it holds. */}
       <LookRowStoreProvider projectId={projectId}>
-        {/* Session 2's scope band. The template strip is still to come (session 3). */}
-        <ProgrammerScopeBand />
+        <FocusedTemplateLayerProvider projectId={projectId}>
+          {/* Session 2's scope band. */}
+          <ProgrammerScopeBand />
 
-        <EditorContextProvider value={{ kind: 'live' }}>
-          <ProgrammerWorkspace
-            grid={
-              <ProgrammerGrid
-                projectId={projectId}
-                grouped={grouped}
-                columnVisibility={columnVisibility}
-                onColumnVisibilityChange={setColumnVisibility}
-              />
-            }
-            rail={<ProgrammerRail />}
-          />
-        </EditorContextProvider>
+          <EditorContextProvider value={{ kind: 'live' }}>
+            <ProgrammerWorkspace
+              grid={
+                <ProgrammerGrid
+                  projectId={projectId}
+                  grouped={grouped}
+                  columnVisibility={columnVisibility}
+                  onColumnVisibilityChange={setColumnVisibility}
+                />
+              }
+              rail={<ProgrammerRail />}
+            />
+          </EditorContextProvider>
+        </FocusedTemplateLayerProvider>
       </LookRowStoreProvider>
     </ProgrammerScopeProvider>
   )

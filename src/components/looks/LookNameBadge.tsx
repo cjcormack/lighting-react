@@ -1,4 +1,4 @@
-import { Layers, Palette } from 'lucide-react'
+import { AudioWaveform, Layers, Palette } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export interface LookNameBadgeProps {
@@ -15,6 +15,16 @@ export interface LookNameBadgeProps {
    * differently-coloured chip would make one look more important than the other.
    */
   isTemplate?: boolean
+  /**
+   * True when that template holds an **effect** rather than values (fx-templates D1).
+   *
+   * Adds the wave **beside** the palette glyph rather than replacing it: the palette is what says
+   * "template" at the same rank a Look's `Layers` does, and swapping it would make an effect
+   * template read as a third kind of thing rather than as a template that happens to hold an
+   * effect. Undefined is a legal answer — a surface that has not loaded the template library cannot
+   * know, and draws the plain template chip.
+   */
+  isEffect?: boolean
   className?: string
 }
 
@@ -37,8 +47,16 @@ export interface LookNameBadgeProps {
  * the word "references" both misdescribe what a layer is — so the iconography is `Layers` and the
  * titles name the Look plainly.
  */
-export function LookNameBadge({ name, missing, isTemplate, className }: LookNameBadgeProps) {
-  const noun = isTemplate === true ? 'template' : 'look'
+export function LookNameBadge({
+  name,
+  missing,
+  isTemplate,
+  isEffect,
+  className,
+}: LookNameBadgeProps) {
+  const effectTemplate = isTemplate === true && isEffect === true
+  const noun = effectTemplate ? 'effect template' : isTemplate === true ? 'template' : 'look'
+  const Noun = effectTemplate ? 'Effect template' : isTemplate === true ? 'Template' : 'Look'
   const Glyph = isTemplate === true ? Palette : Layers
   // `missing` alone, not `name == null`: a caller can legitimately know a layer names a Look while
   // not yet knowing which one (the list is still loading). Painting that destructive-red would
@@ -60,7 +78,7 @@ export function LookNameBadge({ name, missing, isTemplate, className }: LookName
             ? `The ${noun} “${name}” no longer exists`
             : `This names a ${noun} that no longer exists`
           : name
-            ? `${isTemplate === true ? 'Template' : 'Look'} “${name}”`
+            ? `${Noun} “${name}”`
             : `A ${noun}`
       }
     >
@@ -68,9 +86,12 @@ export function LookNameBadge({ name, missing, isTemplate, className }: LookName
           swapped `Link2` for `Link2Off`, which read as "the link is severed"; a layer naming a
           deleted Look is not a severed link, it is a layer pointing at nothing. */}
       <Glyph className={cn('size-3 shrink-0', broken ? undefined : 'text-muted-foreground')} />
-      <span className="truncate">
-        {name ?? (broken ? `${isTemplate === true ? 'Template' : 'Look'} missing` : isTemplate === true ? 'Template' : 'Look')}
-      </span>
+      {effectTemplate && (
+        <AudioWaveform
+          className={cn('size-3 shrink-0', broken ? undefined : 'text-muted-foreground')}
+        />
+      )}
+      <span className="truncate">{name ?? (broken ? `${Noun} missing` : Noun)}</span>
     </span>
   )
 }

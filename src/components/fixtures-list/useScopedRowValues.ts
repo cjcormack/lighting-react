@@ -6,12 +6,14 @@ import { cellValueFromParts, isLocalEntry, stagedPartFor } from './scopedCellVal
 import { parseProgrammerEntryValue, parseProgrammerValue } from '../../lib/programmerValue'
 import { useProgrammerScope } from '../programmer/ProgrammerScope'
 import { lookRowKey, useLookRowStore } from '../programmer/LookRowStore'
+import { useFocusedTemplateLayer } from '../programmer/FocusedTemplateLayer'
 import { useProgrammerRowSnapshot } from './useProgrammerRowSnapshot'
 import { useRowValues } from './useRowValues'
 import type { AttributeFamily } from '../../lib/attributeFamily'
 import type { CellState, RowCellStates, StagedPart } from './scopedCellValue'
 import type { RowCell } from './useRowValues'
 import type { LookRowStoreValue } from '../programmer/LookRowStore'
+import type { FocusedTemplateLayerValue } from '../programmer/FocusedTemplateLayer'
 import type { StagedValue } from './useRowOwnership'
 
 /**
@@ -37,6 +39,7 @@ export function useScopedRowValues(
 ): RowCellStates {
   const scope = useProgrammerScope()
   const store = useLookRowStore()
+  const focusedTemplate = useFocusedTemplateLayer()
 
   // **`null` is not `output`.** No scope at all means the plain `/fixtures` and `/groups` lists,
   // which have no scope concept and must behave exactly as they did before this existed: live
@@ -47,11 +50,17 @@ export function useScopedRowValues(
 
   const local = useLocalRowValues(localCells)
   const layer = useLayerRowValues(layerCells, store)
+  const template = useTemplateRowValues(layerCells, focusedTemplate, live)
 
   return useMemo(() => {
     if (kind === undefined) return EMPTY_STATES
     if (kind === 'local') return local
-    if (kind === 'layer') return layer
+    // A focused template layer is a **read**, and neither store answers for it: `LookRowStore`
+    // engages only for a LOOK, so before this arm existed the layer scope fell through to no states
+    // at all — which the grid renders as live, editable cells writing straight to Local while the
+    // band overhead says "One layer". `LayerRowNotices` had been claiming the opposite since it
+    // shipped.
+    if (kind === 'layer') return focusedTemplate != null ? template : layer
     // Output is a read of the cook: every cell has a value and none of them is editable here.
     // Editing "the output" would have to pick a destination, and the point of the scope switcher
     // is that the operator says which.
@@ -61,7 +70,7 @@ export function useScopedRowValues(
       if (value) states[cell.col] = { value, editable: false }
     }
     return states
-  }, [kind, cells, live, local, layer])
+  }, [kind, cells, live, local, layer, template, focusedTemplate])
 }
 
 const EMPTY_CELLS: readonly RowCell[] = []
@@ -168,7 +177,7 @@ function useLayerRowValues(
 
     const states: RowCellStates = {}
     for (const cell of cells) {
-      const tone = layerCellTone(cell, store, mask)
+      const tone = cellTone(cell, mask, store.targetedKeys)
       const parts: (StagedPart | undefined)[] = cell.resolutions.map((res, i) =>
         stagedPartFor(res, cell.targetKeys[i], lookup),
       )
@@ -187,19 +196,65 @@ function useLayerRowValues(
 }
 
 /**
+ * A focused **template** layer's cells: a read, never an edit.
+ *
+ * Two shapes under one rule, because a template's two kinds hide different things (fx-templates D1):
+ *
+ * - a **value** template resolves one intent per head at cook, so there is nothing per-fixture to
+ *   show and every cell is unset. Projecting its generic row onto each targeted row would convert it
+ *   to a per-fixture template on the first edit — a change to what the template *is*, made by
+ *   someone adjusting a value. `LayerRowNotices` says so and links to the editor.
+ * - an **effect** template drives every head the layer names with one rule, and what is worth
+ *   watching is what it is producing *now*. So the cells it drives carry the live value, which
+ *   `layerCellClass` then rings, and `FixturesTable` marks with the wave and the division.
+ *
+ * Neither is editable. The edit goes through the template, and until this arm existed a template
+ * layer's cells silently took one and wrote it to Local.
+ *
+ * Pure — no subscription of its own. `live` is the row's existing channel read, already the reason
+ * this row re-renders.
+ */
+function useTemplateRowValues(
+  cells: readonly RowCell[],
+  focused: FocusedTemplateLayerValue | null,
+  live: ReturnType<typeof useRowValues>,
+): RowCellStates {
+  return useMemo(() => {
+    if (cells.length === 0 || focused == null) return EMPTY_STATES
+    const states: RowCellStates = {}
+    for (const cell of cells) {
+      const tone = cellTone(cell, focused.mask, focused.targetedKeys)
+      const state: CellState = { editable: false }
+      if (tone) state.tone = tone
+      // `kind` is undefined until the library lands, and that is deliberately not treated as
+      // "value": showing an empty grid and then filling it would be the wrong flash of the two.
+      if (focused.kind === 'effect' && tone === undefined) {
+        const value = live[cell.col]
+        if (value) state.value = value
+      }
+      states[cell.col] = state
+    }
+    return states
+  }, [cells, focused, live])
+}
+
+/**
  * Why a cell in layer scope is not editable, if it isn't.
  *
  * `inert` wins over `untargeted`: a column the layer does not assert at all is the more
  * fundamental fact, and saying "outside this layer's targets" about a property it would never
  * write either way sends the operator to fix the wrong thing.
+ *
+ * Takes the mask and targets rather than a store, because both layer arms ask it: a Look layer's
+ * come from `LookRowStore` and a template layer's from `FocusedTemplateLayer`, and the two must not
+ * disagree about which cells a layer reaches.
  */
-function layerCellTone(
+function cellTone(
   cell: RowCell,
-  store: LookRowStoreValue,
   mask: readonly AttributeFamily[],
+  targeted: ReadonlySet<string> | null,
 ): 'inert' | 'untargeted' | undefined {
   if (mask.length > 0 && !mask.includes(cellFamily(cell))) return 'inert'
-  const targeted = store.targetedKeys
   if (targeted && cell.targetKeys.some((key) => !targeted.has(key))) return 'untargeted'
   return undefined
 }

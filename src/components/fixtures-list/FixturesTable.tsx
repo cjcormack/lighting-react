@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { ChevronDown, ChevronRight, Info, Layers } from 'lucide-react'
+import { AudioWaveform, ChevronDown, ChevronRight, Info, Layers } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -14,8 +14,10 @@ import { useScopedRowValues } from './useScopedRowValues'
 import { parsePropertyMask } from '../../lib/attributeFamily'
 import { AddToTargetsButton } from '../programmer/AddToTargetsButton'
 import { useLookRowStore } from '../programmer/LookRowStore'
+import { useFocusedTemplateLayer } from '../programmer/FocusedTemplateLayer'
 import { useProgrammerScope, useProgrammerScopeActions } from '../programmer/ProgrammerScope'
 import { useEditorContext } from '../programmer/EditorContext'
+import { effectSpeedLabel } from '../fx/fxConstants'
 import { useIsDeskConnected } from '../../store/status'
 import { DESK_OFFLINE_LABEL } from '../../api/wsGesture'
 import { useRowOwnership } from './useRowOwnership'
@@ -621,6 +623,18 @@ const RowView = React.memo(function RowView({
   // — outside the mask, outside the targets — via `layerCellClass`.
   const ownershipCells = showOwnership && scope?.kind !== 'layer' ? cells : EMPTY_CELLS
   const ownership = useRowOwnership(ownershipCells)
+  // A focused **effect** template layer marks the cells its effect drives. Those are exactly the
+  // cells `useScopedRowValues` gave a value to in that scope, so the test below is `state?.value`
+  // rather than a second mask/target computation that could disagree with the one that painted the
+  // ring. The label is null where the effect type no longer resolves in the registry — the wave
+  // still draws, because "an effect drives this" is true whether or not its speed can be read.
+  const focusedTemplate = useFocusedTemplateLayer()
+  const effectDriven = scope?.kind === 'layer' && focusedTemplate?.kind === 'effect'
+  const templateEffect = focusedTemplate?.template?.effect
+  const effectDivision =
+    templateEffect == null
+      ? null
+      : effectSpeedLabel(templateEffect.beatDivision, templateEffect.timingSource)
   const cellByCol = useMemo(() => new Map(cells.map((cell) => [cell.col, cell])), [cells])
   // Every fixture this row covers — a group row's members, a fixture row's own key. The same
   // expansion the cells were resolved through, so "is this row in the layer's targets?" and "what
@@ -816,6 +830,19 @@ const RowView = React.memo(function RowView({
                 }`}
               />
             )}
+            {/* The same corner, and never both: ownership is switched off in layer scope, so the
+                glyph above is undefined exactly where this one draws. Around the cell rather than
+                inside it, for the reason that one documents — the four cell editors encode value
+                shape, and a marker drawn inside one of them would have to be drawn four times. */}
+            {effectDriven && state?.value != null && (
+              <span
+                className="pointer-events-none absolute bottom-0.5 right-0.5 flex items-center gap-0.5 text-[9px] leading-none text-muted-foreground"
+                title={`Driven by “${focusedTemplate?.name ?? 'this template'}”`}
+              >
+                <AudioWaveform className="size-2.5" />
+                {effectDivision}
+              </span>
+            )}
             <PropertyCell
               cell={cell}
               // The staged overlay is applied to whatever the scope resolved, not only to the live
@@ -835,7 +862,14 @@ const RowView = React.memo(function RowView({
               // Belt and braces with the wrapper's `pointer-events-none` below: that stops the
               // mouse, this stops the keyboard. The trigger is tabbable, so Tab-then-Enter would
               // otherwise walk straight past the guard and open an editor whose commit is dropped.
-              disabled={cellsInert}
+              //
+              // **Both reasons a cell takes no edit, not just the offline one.** `editable: false`
+              // is the *scope's* statement — Output is a read of the cook, and a focused template
+              // layer is a read of a template — and it reached only the pointer. A commit through
+              // the keyboard hole did not get dropped: `useCellWriters` has no scope arm for either
+              // (a template layer mints no `lookLayer` context), so it landed in Local, on a grid
+              // drawing itself as read-only.
+              disabled={cellsInert || state?.editable === false}
               onBeginEdit={() => onBeginCellEdit(row, col)}
               onCommit={(commit) => onCellCommit(row, col, commit)}
             />

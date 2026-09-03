@@ -2,6 +2,7 @@ import { Link } from 'react-router'
 import { Badge } from '@/components/ui/badge'
 import { useProgrammerLayersQuery } from '@/store/programmer'
 import { useLookRowStore } from './LookRowStore'
+import { useFocusedTemplateLayer } from './FocusedTemplateLayer'
 import { focusedLayerId, useProgrammerScope } from './ProgrammerScope'
 
 /**
@@ -10,12 +11,17 @@ import { focusedLayerId, useProgrammerScope } from './ProgrammerScope'
  * Three cases, and all three are *stated* rather than silently missing — a layer that looks empty
  * because the grid cannot render it is the worst of the available answers.
  *
- * **A focused template layer shows no rows at all**, which is the session-3 case and the one an
- * operator is most likely to meet. A template is one family of intents, resolved per head at cook;
- * projecting its generic row onto every targeted row would silently convert it to a per-fixture one
- * on the first edit — a change to what the template *is*, made by someone who was only adjusting a
- * value. That is the same argument the deferred-row case below already made, and it is why a template
- * is edited in its own family-native editor instead. The notice links there.
+ * **A focused *value* template layer shows no rows at all**, and it is the case an operator is most
+ * likely to meet. A template is one family of intents, resolved per head at cook; projecting its
+ * generic row onto every targeted row would silently convert it to a per-fixture one on the first
+ * edit — a change to what the template *is*, made by someone who was only adjusting a value. That is
+ * the same argument the deferred-row case below already made, and it is why a template is edited in
+ * its own family-native editor instead. The notice links there.
+ *
+ * **A focused *effect* template layer shows the live value instead**, ringed, with the wave on the
+ * cells the effect drives. An effect is one rule for every head rather than a per-head resolution,
+ * so there is nothing per-fixture to hide — but there *is* something worth watching, which is what
+ * it is currently producing. Neither is typeable: both go through the template.
  *
  * **Deferred rows** on a *Look* are the legacy of that split: a Look row cannot be deferred any more,
  * so this arm only fires for a row an older database left behind. Kept because such a row still
@@ -28,6 +34,7 @@ import { focusedLayerId, useProgrammerScope } from './ProgrammerScope'
 export function LayerRowNotices({ projectId }: { projectId: number }) {
   const scope = useProgrammerScope()
   const store = useLookRowStore()
+  const focusedTemplate = useFocusedTemplateLayer()
   const { data: layers } = useProgrammerLayersQuery()
   const layerId = focusedLayerId(scope)
   const layer = layerId == null ? undefined : layers?.find((l) => l.layerId === layerId)
@@ -43,8 +50,9 @@ export function LayerRowNotices({ projectId }: { projectId: number }) {
           template
         </Badge>
         <span className="text-muted-foreground">
-          “{layer.source.name}” holds one value for the whole family, resolved per head — so there is
-          nothing to show per fixture.
+          {focusedTemplate?.kind === 'effect'
+            ? `“${layer.source.name}” runs one effect for the whole family — the grid shows the live value under it, and the wave marks the cells it drives.`
+            : `“${layer.source.name}” holds one value for the whole family, resolved per head — so there is nothing to show per fixture.`}
         </span>
         {/* `projectId` from the host, not from the row store: the store does not engage for a
             template layer at all, so reading it here would build `/projects//templates`. */}

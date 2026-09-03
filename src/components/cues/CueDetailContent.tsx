@@ -14,6 +14,7 @@ import { formatFadeText } from '@/lib/cueUtils'
 import { formatMs } from '@/lib/formatMs'
 import { useEffectLibraryQuery } from '@/store/fixtureFx'
 import { useLookListQuery } from '@/store/looks'
+import { useTemplateListQuery } from '@/store/templates'
 import { EffectSummary } from '@/components/fx/EffectSummary'
 import { LayerRow, describeStackSource } from '@/components/looks/LookStack'
 import { CueValueGrid } from './CueValueGrid'
@@ -76,6 +77,11 @@ export const CueDetailContent = memo(function CueDetailContent({
 }: CueDetailContentProps) {
   const { data: library } = useEffectLibraryQuery(undefined, { skip: !enabled })
   const { data: looks } = useLookListQuery({ projectId }, { skip: !enabled })
+  // The template library, for the same reason the Look library is here: a layer row says what it
+  // applies, and since fx-templates a template's badge also says *which kind* it holds. Without this
+  // an effect template drew as a plain template chip on the one surface an operator reads a cue
+  // from. One cached list, already warm — the programmer and the busk view mount the same entry.
+  const { data: templates } = useTemplateListQuery({ projectId }, { skip: !enabled })
 
   // Same derivation the collapsed row uses for its target chips, so the two cannot disagree about
   // what the cue touches.
@@ -86,6 +92,10 @@ export const CueDetailContent = memo(function CueDetailContent({
   const looksById = useMemo(
     () => new Map((looks ?? []).map((look) => [look.id, look])),
     [looks],
+  )
+  const templatesById = useMemo(
+    () => new Map((templates ?? []).map((template) => [template.id, template])),
+    [templates],
   )
   const adHocEffects = cue?.adHocEffects ?? []
   const triggers = cue?.triggers ?? []
@@ -172,10 +182,20 @@ export const CueDetailContent = memo(function CueDetailContent({
               key={`layer-${index}`}
               layer={layer}
               index={index}
-              // No `templatesById`: this read surface does not load the template library, and
-              // `describeStackSource` deliberately declines to paint a template layer as missing on
-              // that account. The layer's own `source.name` labels it either way.
-              info={describeStackSource(layer.source, looksById, undefined, looks != null)}
+              // Both libraries, so a template layer reads here exactly as it does in the programmer
+              // — family badge, and the wave when it holds an effect. This surface used to pass no
+              // template library at all and `describeStackSource` therefore declined to paint a
+              // template layer as missing; with the list loaded that verdict becomes honest, and a
+              // layer naming a deleted template now says so here too.
+              // `librariesLoaded` waits for *both*, as `ProgrammerLookStack` does: with only one
+              // list back, every layer applying the other would paint as missing for the length of
+              // a fetch.
+              info={describeStackSource(
+                layer.source,
+                looksById,
+                templatesById,
+                looks != null && templates != null,
+              )}
               sortable={false}
               showTargets
               readOnly

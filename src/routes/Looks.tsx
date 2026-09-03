@@ -220,7 +220,8 @@ export function ProjectLooks() {
             most: an operator looking for "Amber Key" will look here first, because that is where it
             used to be. */}
         <p className="text-[11px] text-muted-foreground">
-          Looking for a single value like <em>Amber Key</em> or <em>Downstage Centre</em>? Those are{' '}
+          Looking for a single value or effect like <em>Amber Key</em> or <em>Slow Breathe</em>?
+          Those are{' '}
           <Link
             to={`/projects/${projectIdNum}/templates`}
             className="underline underline-offset-2 hover:text-foreground"

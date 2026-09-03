@@ -50,8 +50,13 @@ export function lookLayerPresence(
  * within the TEMPLATE arm, and the two id spaces are different tables that can collide. Folding them
  * into one would need a kind argument at every call site to avoid exactly that.
  *
- * A template holds no effects, so this is the *only* way its pad can light: the running-effect
- * presence a Look's ring is read from has nothing to say about one.
+ * This is the *only* way a template's pad can light, and since fx-templates that rule is **more**
+ * load-bearing rather than less. It used to hold because a template contained no effects at all, so
+ * the running-effect presence a Look's ring is read from had nothing to say about one. A template
+ * can hold one effect now — and matching on the running instance would therefore light for an
+ * effect template while leaving every value template's pad dark, which is the worst of both
+ * answers. The layer is what a press adds and what a second press removes, whatever the template
+ * holds.
  */
 export function templateLayerPresence(
   layers: readonly ProgrammerLayer[],

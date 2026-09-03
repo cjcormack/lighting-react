@@ -80,6 +80,9 @@ vi.mock('@/store/looks', () => ({
   useLookQuery: () => ({ data: undefined, isSuccess: false }),
   useSaveLookMutation: () => [vi.fn()],
 }))
+// Same reason as `@/store/looks` above, for `FocusedTemplateLayerProvider`: `skip` stops the
+// *request*, not the hook, so the query still reaches for the store.
+vi.mock('@/store/templates', () => ({ useTemplateListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/fixtures', () => ({ useFixtureListQuery: () => ({ data: [] }) }))
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 

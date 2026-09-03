@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { lookLayerPresence } from './lookPresence'
+import { lookLayerPresence, templateLayerPresence } from './lookPresence'
 import type { ProgrammerLayer } from '@/store/programmer'
 import type { CueTarget } from '@/api/cuesApi'
 
@@ -63,5 +63,42 @@ describe('lookLayerPresence', () => {
     // it — tapping again should take it off rather than add a second. Enabled-ness is shown, and
     // changed, in the layer stack.
     expect(lookLayerPresence([layer({ enabled: false })], [FRONT], 7)).toBe('all')
+  })
+})
+
+const templateLayer = (overrides: Partial<ProgrammerLayer> = {}) =>
+  layer({
+    source: { kind: 'TEMPLATE', id: 4, uuid: 'ut4', name: 'Amber Breathe' },
+    ...overrides,
+  })
+
+describe('templateLayerPresence', () => {
+  it('lights the ring from the layer stack, whatever the template holds', () => {
+    // The rule that matters since a template can hold an **effect**: presence is read from the
+    // layer, never from the running instance. Matching on the instance would light for an effect
+    // template and leave every value template's pad dark — the worst of both answers.
+    expect(templateLayerPresence([templateLayer()], [FRONT], 4)).toBe('all')
+  })
+
+  it('does not confuse a Look and a template sharing an int PK', () => {
+    // Two tables, two id spaces. Matching on the id alone would let a Look light a template's pad.
+    expect(templateLayerPresence([layer({ source: { kind: 'LOOK', id: 4, uuid: 'u4', name: 'Warm Wash' } })], [FRONT], 4)).toBe('none')
+    expect(lookLayerPresence([templateLayer()], [FRONT], 4)).toBe('none')
+  })
+
+  it('reads some when the layer covers part of the selection', () => {
+    expect(templateLayerPresence([templateLayer()], [FRONT, BACK], 4)).toBe('some')
+  })
+
+  it('counts a layer with no targets as covering nothing', () => {
+    // A template names no targets of its own, so such a layer asserts nothing at all — even more
+    // plainly than the Look case above, where the Look's own rows might have landed somewhere.
+    expect(templateLayerPresence([templateLayer({ targets: [] })], [FRONT], 4)).toBe('none')
+  })
+
+  it('reads none with nothing selected, or with no layer applying it', () => {
+    expect(templateLayerPresence([templateLayer()], [], 4)).toBe('none')
+    expect(templateLayerPresence([], [FRONT], 4)).toBe('none')
+    expect(templateLayerPresence([templateLayer()], [FRONT], 5)).toBe('none')
   })
 })

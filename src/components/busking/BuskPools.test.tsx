@@ -103,6 +103,54 @@ describe('the template pool columns', () => {
     expect(button.querySelector('[data-slot="badge"]')).toBeNull()
   })
 
+  /**
+   * The column is the family and the hairline is the kind (fx-templates D10). Both halves keep the
+   * library's own order, and neither is sorted here — the caller's array order is the contract.
+   */
+  it('splits each column at an Effects hairline, values first, library order within each half', () => {
+    const { container } = draw([
+      pad({ key: 't1', name: 'Amber Breathe', family: 'COLOUR', isEffect: true }),
+      pad({ key: 't2', name: 'Amber Key', family: 'COLOUR' }),
+      pad({ key: 't3', name: 'Steel Blue', family: 'COLOUR' }),
+      pad({ key: 't4', name: 'Rainbow Drift', family: 'COLOUR', isEffect: true }),
+    ])
+
+    const colour = templateColumns(container).find(
+      (c) => c.firstElementChild?.textContent === 'Colour',
+    )!
+    const names = [...within(colour as HTMLElement).getAllByRole('button')].map((b) =>
+      b.textContent?.replace(/\s+$/, ''),
+    )
+    expect(names).toEqual(['Amber Key', 'Steel Blue', 'Amber Breathe', 'Rainbow Drift'])
+    expect(within(colour as HTMLElement).getByText('Effects')).toBeInTheDocument()
+  })
+
+  /**
+   * Beam has no effect templates by construction — the effect library has no beam category, and the
+   * backend refuses one by name — so its column has nothing to put under a hairline. The hairline is
+   * conditional on the half being non-empty rather than special-cased on the family, which is what
+   * keeps that true if the rule ever changes.
+   */
+  it('draws no hairline in a column with no effects', () => {
+    const { container } = draw([
+      pad({ key: 't1', name: 'Tight Beam', family: 'BEAM' }),
+      pad({ key: 't2', name: 'Amber Breathe', family: 'COLOUR', isEffect: true }),
+    ])
+
+    const columns = templateColumns(container)
+    const beam = columns.find((c) => c.firstElementChild?.textContent === 'Beam')!
+    const colour = columns.find((c) => c.firstElementChild?.textContent === 'Colour')!
+    expect(within(beam as HTMLElement).queryByText('Effects')).toBeNull()
+    expect(within(colour as HTMLElement).getByText('Effects')).toBeInTheDocument()
+  })
+
+  /** The glyph the whole desk uses for FX, where a value template's swatch would be. */
+  it('marks an effect pad with the wave', () => {
+    draw([pad({ key: 't1', name: 'Amber Breathe', family: 'COLOUR', isEffect: true })])
+    const button = screen.getByRole('button', { name: /Amber Breathe/ })
+    expect(button.querySelector('svg.lucide-audio-waveform')).not.toBeNull()
+  })
+
   /** A Look spans families by nature, so it has no column — it gets its own section instead. */
   it('puts Looks in their own section, not in a family column', () => {
     draw([pad({ key: 'l1', name: 'Ballyhoo', kind: 'look' })])

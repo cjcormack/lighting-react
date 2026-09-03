@@ -294,7 +294,10 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
                       which is why it has a create entry at all where a Look does not. */}
                   <Command.Item
                     value="New Template"
-                    keywords={["template", "value", "colour", "palette", "create"]}
+                    // `effect` and `chase` because a template can now hold one, and the palette
+                    // keeps a *single* New Template action — the kind is chosen inside the sheet,
+                    // so a second entry would offer a choice the sheet then asks for again.
+                    keywords={["template", "value", "colour", "palette", "create", "effect", "chase"]}
                     onSelect={() => runAction(() => navigate(`/projects/${viewedProject.id}/templates?action=new`))}
                     className={itemClassName}
                   >

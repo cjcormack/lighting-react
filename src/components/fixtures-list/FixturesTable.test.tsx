@@ -58,6 +58,30 @@ vi.mock('../programmer/LookRowStore', async () => ({
     '../programmer/lookRowKey',
   )).lookRowKey,
 }))
+// The *template* half of layer scope, driven the same way. Mutually exclusive with `lookStore` by
+// construction: a layer applies one or the other.
+const focusedTemplate = vi.hoisted(() => ({ current: null as unknown }))
+vi.mock('../programmer/FocusedTemplateLayer', () => ({
+  useFocusedTemplateLayer: () => focusedTemplate.current,
+}))
+
+/** A focused template layer, in the shape `FocusedTemplateLayer` provides. */
+function templateLayer(over: Record<string, unknown> = {}) {
+  return {
+    layerId: 7,
+    templateId: 4,
+    name: 'Amber Breathe',
+    template: {
+      kind: 'effect',
+      effect: { beatDivision: 0.5, timingSource: 'BEAT' },
+    },
+    kind: 'effect',
+    mask: [],
+    targetedKeys: null,
+    targets: [],
+    ...over,
+  }
+}
 
 /** A focused-layer store with no pending edits — the draft is exercised in its own suite. */
 function layerStore(over: Record<string, unknown>) {
@@ -163,6 +187,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
   scopeState.current = null
   lookStore.current = null
+  focusedTemplate.current = null
   ownership.current = {}
   deskConnected.current = true
 })
@@ -294,6 +319,44 @@ describe('FixturesTable scopes', () => {
     render(<Harness />)
     expect(cellWrapper().className).toContain('opacity-40')
     expect(cellWrapper().className).toContain('pointer-events-none')
+  })
+
+  it('shows the live value, ringed and with the wave, on an effect template layer', () => {
+    scopeState.current = { kind: 'layer', layerId: 7 }
+    focusedTemplate.current = templateLayer()
+    const { container } = render(<Harness />)
+    // The **live** read, not an em-dash: an effect is one rule for every head, and what is worth
+    // watching is what it is producing right now. Same value Output shows, which is the point.
+    expect(screen.getAllByText('0%').length).toBe(ROWS.length)
+    expect(cellWrapper().className).toContain('ring-primary/70')
+    expect(container.querySelector('svg.lucide-audio-waveform')).not.toBeNull()
+    // 0.5 beats is an eighth note — the label the whole desk uses for that division.
+    expect(screen.getAllByText('1/8').length).toBeGreaterThan(0)
+  })
+
+  it('shows nothing per fixture on a value template layer', () => {
+    scopeState.current = { kind: 'layer', layerId: 7 }
+    focusedTemplate.current = templateLayer({ kind: 'value', template: { kind: 'value', effect: null } })
+    const { container } = render(<Harness />)
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0)
+    expect(container.querySelector('svg.lucide-audio-waveform')).toBeNull()
+  })
+
+  it('refuses the edit through the keyboard too, not only the pointer', () => {
+    // The pointer guard is `pointer-events-none` on the wrapper; the trigger stays tabbable, so
+    // Tab-then-Enter would otherwise open an editor whose commit falls through `useCellWriters`
+    // to a **live** write — literals in Local, on a grid drawing itself as a read.
+    scopeState.current = { kind: 'layer', layerId: 7 }
+    focusedTemplate.current = templateLayer()
+    render(<Harness />)
+    expect(cellWrapper().className).toContain('pointer-events-none')
+    expect(cellButton()).toBeDisabled()
+  })
+
+  it('disables an Output cell for the keyboard as well, for the same reason', () => {
+    scopeState.current = { kind: 'output' }
+    render(<Harness />)
+    expect(cellButton()).toBeDisabled()
   })
 
   it('makes an Output tint a destination — clicking jumps to the layer that won it', () => {

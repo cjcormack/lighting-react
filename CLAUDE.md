@@ -436,10 +436,22 @@ selection) and every template — and it has no create affordance, because neith
 from a pad grid. Templates sit in **four family columns** there rather than one flat grid, which is
 the same fact that put the family filter on `/templates`: a template is in exactly one family, so
 four columns is an exact partition and every pad has one right home. A Look spans families by
-nature and gets a section of its own instead. A colour pad carries a **swatch**, but only when the
-template is generic and single-row — `templateSwatch` in `components/busking/EffectPad.tsx` makes
+nature and gets a section of its own instead. **Within a column, values then an *Effects* hairline
+then effect pads**: the column is the family and the hairline is the kind, so an effect pad is a pad
+like any other — same component, same presence ladder, same long-press. Library order holds inside
+each half, and nothing is sorted there. Beam gets no hairline **by construction** rather than by a
+special case: `TEMPLATE_EFFECT_FAMILIES` excludes it, so its effect half is always empty and the
+hairline is drawn only when there is something under it.
+
+A colour pad carries a **swatch**, but only when the
+template is generic and single-row — `templateSwatch` in `components/busking/BuskPools.tsx` makes
 the same two exclusions `isOfferable` makes in `FxColourTemplates.tsx`, and for the same reason:
-`rows[0]` under a name covering several rows states one of them as the whole thing.
+`rows[0]` under a name covering several rows states one of them as the whole thing. An effect
+template has no rows, so it draws the wave in the swatch's place and an `EffectPadDetail` line
+(`Colour Pulse · ½ · M2`). That detail is a **component** and not a string built by the caller,
+for `EffectShape`'s reason in `TemplateListRow`: the master's label is a live value, hooks cannot be
+conditional, and a hook in the loop would make every value pad in the library subscribe to the
+master bank.
 
 ### The two apply gestures
 
@@ -512,11 +524,36 @@ Things that will bite:
   share neither length nor indices. Ownership never noticed because it collapses to one verdict.
 - **Widening a layer's targets is always explicit** — the `AddToTargetsButton` on the row, never a
   side effect of dragging a marquee across the grid.
-- **A focused template layer shows no rows at all**, and per-element Look rows stay out too — both
-  are named in `LayerRowNotices` instead. Projecting a template's generic row onto every targeted row
-  would silently convert it to a per-fixture one on the first edit, which is a change to what the
-  template *is* made by someone adjusting a value; element rows compose nowhere at all
-  (`FU-LOOK-ELEMENT-ROWS`). `LookRowStore` therefore engages **only for a LOOK layer**, and
+- **A focused template layer is a read, never an edit**, and the two kinds read differently. A
+  **value** template shows no rows at all: projecting its generic row onto every targeted row would
+  silently convert it to a per-fixture one on the first edit, which is a change to what the template
+  *is* made by someone adjusting a value. An **effect** template shows the **live** value on the
+  cells it drives — ringed by `layerCellClass`, with the wave and the division in `FixturesTable`'s
+  bottom-right corner slot (free there, because ownership is switched off in layer scope) — since an
+  effect is one rule for every head and what is worth watching is what it is producing now. Per-element
+  Look rows stay out too; all three cases are named in `LayerRowNotices` (`FU-LOOK-ELEMENT-ROWS` for
+  the last).
+
+  `LookRowStore` engages **only for a LOOK layer**, so a template layer's answer comes from its
+  sibling `FocusedTemplateLayer` — one context above the grid, read by `useScopedRowValues`,
+  `LayerRowNotices`, `ProgrammerScopeBand`, `AddToTargetsButton` and `FanPopover`, because that
+  hook runs per row and a query in it would be a subscription per visible row. Until that arm
+  existed the layer scope fell through to *no* states, which the grid renders as live editable cells
+  writing straight to Local while the band overhead says "One layer" — the notice had been claiming
+  the opposite since it shipped.
+
+  **"Read-only" has to be said in three places, not one.** `CellState.editable` reaches only the
+  pointer (`pointer-events-none` on the wrapper); the cell trigger stays tabbable, so `PropertyCell`
+  takes `disabled` from it too, and `FanPopover` — which writes through `useCellWriters` from the
+  toolbar, nowhere near a cell — gates on the focused template as well. A commit through either hole
+  is not dropped: `useCellWriters` has no arm for a template layer, so it falls through to a **live**
+  write and puts literals in Local. The Fan gate is on the *template* case only, not on layer scope
+  generally: a focused Look layer has a row draft and the fan correctly lands in it.
+
+  An untargeted row in a template layer is painted dashed like any other, so `AddToTargetsButton`
+  reads whichever layer context is live — it is the only way a layer widens, and a tone with no way
+  out of it is worse than no tone.
+
   `+ Effect` is disabled on a focused template — not D7 any more, but because a template holds
   **one** thing, chosen when it was made: there is no second effect to add, and adding a first
   to a value template would flip its identity.

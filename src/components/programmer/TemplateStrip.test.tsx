@@ -16,13 +16,25 @@ const applyTemplate = vi.fn()
 const toggleTemplate = vi.fn()
 let templates: TemplateSummary[] = []
 let selectedKeys: string[] = []
+/** What `apply` resolves with — the two arms report in different fields, so the tests set it. */
+let applyResult: unknown = { written: 1, skipped: [] }
+
+const toastSuccess = vi.fn()
+const toastWarning = vi.fn()
+vi.mock('sonner', () => ({
+  toast: {
+    success: (...args: unknown[]) => toastSuccess(...args),
+    warning: (...args: unknown[]) => toastWarning(...args),
+    error: vi.fn(),
+  },
+}))
 
 vi.mock('@/store/templates', () => ({
   useTemplateListQuery: () => ({ data: templates }),
   useApplyTemplateMutation: () => [
     (args: unknown) => {
       applyTemplate(args)
-      return { unwrap: () => Promise.resolve({ written: 1, skipped: [] }) }
+      return { unwrap: () => Promise.resolve(applyResult) }
     },
   ],
   useToggleTemplateMutation: () => [
@@ -76,9 +88,31 @@ const HALF_UP = template({
   rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'dimmer', value: 'pct:50' }],
 })
 
+/** An effect template: one effect, no rows, always generic (fx-templates D1–D3). */
+const BREATHE = template({
+  id: 3,
+  uuid: 'u3',
+  name: 'Amber Breathe',
+  family: 'COLOUR',
+  kind: 'effect',
+  rows: [],
+  effect: {
+    effectType: 'ColourPulse',
+    category: 'colour',
+    beatDivision: 0.5,
+    blendMode: 'OVERRIDE',
+    distribution: 'LINEAR',
+    parameters: {},
+    timingSource: 'BEAT',
+  },
+})
+
 beforeEach(() => {
   applyTemplate.mockClear()
   toggleTemplate.mockClear()
+  toastSuccess.mockClear()
+  toastWarning.mockClear()
+  applyResult = { written: 1, skipped: [] }
   templates = [AMBER, HALF_UP]
   selectedKeys = ['hex-1']
 })
@@ -151,6 +185,75 @@ describe('TemplateStrip', () => {
     fireEvent.click(screen.getByText('Amber Key'))
     expect(applyTemplate).not.toHaveBeenCalled()
     expect(toggleTemplate).not.toHaveBeenCalled()
+  })
+
+  /**
+   * The busk column's split, sideways: values, a hairline, then effects. The chips are one gesture
+   * either way — the order is what says which half you are in, since the tooltip is the only other
+   * thing that differs.
+   */
+  it('puts effect chips after the values, in library order', () => {
+    templates = [BREATHE, AMBER]
+    render(<TemplateStrip projectId={1} cells={[{ rowId: 'fixture:hex-1', col: 'colour' }]} />)
+    const names = screen
+      .getAllByRole('button')
+      .map((b) => b.textContent)
+      .filter((t) => t !== 'New from selection')
+    expect(names).toEqual(['Amber Key', 'Amber Breathe'])
+  })
+
+  it('click on an effect template mints copies, and says how many started', async () => {
+    // The effect arm writes no literals at all: `written` stays 0 and `effectIds` is the whole
+    // result, so without this the one gesture that reaches the rig hardest would say nothing.
+    templates = [BREATHE]
+    applyResult = { written: 0, skipped: [], effectIds: [11, 12] }
+    render(<TemplateStrip projectId={1} cells={[{ rowId: 'fixture:hex-1', col: 'colour' }]} />)
+
+    fireEvent.click(screen.getByText('Amber Breathe'))
+    expect(applyTemplate).toHaveBeenCalledWith({
+      projectId: 1,
+      templateId: 3,
+      targets: [{ type: 'fixture', key: 'hex-1' }],
+    })
+    expect(toggleTemplate).not.toHaveBeenCalled()
+    await vi.waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('2 effects started'))
+  })
+
+  it('warns when an effect press started nothing', async () => {
+    // An empty list looks exactly like a press that started everything, and this arm has no
+    // `skipped` to say otherwise — only the count.
+    templates = [BREATHE]
+    applyResult = { written: 0, skipped: [], effectIds: [] }
+    render(<TemplateStrip projectId={1} cells={[{ rowId: 'fixture:hex-1', col: 'colour' }]} />)
+
+    fireEvent.click(screen.getByText('Amber Breathe'))
+    await vi.waitFor(() =>
+      expect(toastWarning).toHaveBeenCalledWith(
+        'Nothing started — no selected head could take this effect',
+      ),
+    )
+  })
+
+  it('⌥click on an effect template adds a tracking layer like any other', () => {
+    templates = [BREATHE]
+    render(<TemplateStrip projectId={1} cells={[{ rowId: 'fixture:hex-1', col: 'colour' }]} />)
+    fireEvent.click(screen.getByText('Amber Breathe'), { altKey: true })
+    expect(toggleTemplate).toHaveBeenCalledWith({
+      projectId: 1,
+      templateId: 3,
+      targets: [{ type: 'fixture', key: 'hex-1' }],
+      propertyMask: 'COLOUR',
+    })
+    expect(applyTemplate).not.toHaveBeenCalled()
+  })
+
+  it('names a copy in the effect chip’s tooltip, because only the route says which happened', () => {
+    templates = [BREATHE]
+    render(<TemplateStrip projectId={1} cells={[{ rowId: 'fixture:hex-1', col: 'colour' }]} />)
+    expect(screen.getByText('Amber Breathe').closest('button')).toHaveAttribute(
+      'title',
+      'Click to run a copy of “Amber Breathe” on the selection · ⌥click to add a layer that tracks it',
+    )
   })
 
   it('disables New from selection without a selection, and enables it with one', () => {

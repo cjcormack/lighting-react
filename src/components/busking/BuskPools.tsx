@@ -1,5 +1,6 @@
 import React from 'react'
 import { useNavigate } from 'react-router'
+import { AudioWaveform } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useLongPress } from '@/hooks/useLongPress'
 import { BuskLabel } from './BuskLabel'
@@ -8,6 +9,8 @@ import type { LookSummary } from '@/api/looksApi'
 import type { TemplateSummary } from '@/api/templatesApi'
 import { templateIntentSwatch } from '@/lib/templateIntent'
 import { FAMILY_LABELS, type AttributeFamily } from '@/lib/attributeFamily'
+import { effectSpeedLabel } from '@/components/fx/fxConstants'
+import { useSpeedMasterDisplay } from '@/store/speedMasters'
 
 interface BuskPoolsProps {
   hasSelection: boolean
@@ -158,9 +161,25 @@ export interface PadItem {
   key: string
   name: string
   notes: string | null
-  /** What it holds, in a line's worth of text. */
-  detail: string
+  /**
+   * What it holds, in a line's worth of text.
+   *
+   * A node rather than a string because an **effect** template's line names its speed master, which
+   * is a live value: `EffectPadDetail` is a component for the reason `EffectShape` in
+   * `components/templates/TemplateListRow.tsx` is one — hooks cannot be conditional, so a hook here
+   * would make every value pad in the library subscribe to the master bank to serve the few that
+   * need it.
+   */
+  detail: React.ReactNode
   kind: 'look' | 'template'
+  /**
+   * True for a template holding an **effect** rather than values (fx-templates D1).
+   *
+   * Not `kind`, which is already taken here and means something else — a pad is a `'look' | 'template'`,
+   * while `TemplateSummary.kind` is `'value' | 'effect'`. Two fields of that name on one object is
+   * how a filter ends up reading the wrong one.
+   */
+  isEffect?: boolean
   /**
    * Which column a template pad lands in. Null on a Look, which spans families by nature and has
    * its own section for exactly that reason.
@@ -188,6 +207,15 @@ export interface PadItem {
  *
  * A template with a null `family` has no column and is dropped. The write boundary does not allow
  * one, so this is a guard rather than a case.
+ *
+ * **Within a column, values then effects, split by a hairline** (fx-templates D10). The column is
+ * the family and the hairline is the kind, so an effect pad is a pad like any other — same
+ * component, same presence ladder, same long-press — rather than a second pool with its own
+ * gesture. Library order holds inside each half; there is no sort here and none is added.
+ *
+ * Beam gets no hairline, and by construction rather than by a special case: the effect library has
+ * no beam category (`TEMPLATE_EFFECT_FAMILIES` in `lib/attributeFamily.ts`), so its effect half is
+ * always empty and the hairline is only drawn when there is something under it.
  */
 const TEMPLATE_COLUMNS: readonly AttributeFamily[] = ['COLOUR', 'POSITION', 'BEAM', 'INTENSITY']
 
@@ -196,14 +224,18 @@ function TemplateColumns({ items }: { items: PadItem[] }) {
 
   return (
     <div className="grid grid-cols-1 @[20rem]:grid-cols-2 @[48rem]:grid-cols-4 gap-3">
-      {TEMPLATE_COLUMNS.map((family) => (
-        <div key={family} className="flex flex-col gap-2">
-          <span className="text-[10px] font-semibold text-muted-foreground">
-            {FAMILY_LABELS[family].singular}
-          </span>
-          {templates
-            .filter((item) => item.family === family)
-            .map((item) => (
+      {TEMPLATE_COLUMNS.map((family) => {
+        const inFamily = templates.filter((item) => item.family === family)
+        const values = inFamily.filter((item) => item.isEffect !== true)
+        const effects = inFamily.filter((item) => item.isEffect === true)
+        return (
+          <div key={family} className="flex flex-col gap-2">
+            {/* The family heading stays this column's first child: `BuskPools.test.tsx` identifies a
+                column by it, and a hairline inserted above would silently rename every column. */}
+            <span className="text-[10px] font-semibold text-muted-foreground">
+              {FAMILY_LABELS[family].singular}
+            </span>
+            {values.map((item) => (
               <LookPadButton
                 key={item.key}
                 item={item}
@@ -212,8 +244,31 @@ function TemplateColumns({ items }: { items: PadItem[] }) {
                 onLongPress={item.onEdit}
               />
             ))}
-        </div>
-      ))}
+            {effects.length > 0 && (
+              // A `<div>`, not a button and not `BuskLabel`: the pool's inert-when-nothing-selected
+              // rule is a descendant-button selector, and `BuskLabel` is the *region* label — three
+              // regions of one instrument is what its docblock keeps this surface reading as.
+              <div
+                className="mt-1 flex items-center gap-1.5 text-[10px] font-semibold text-muted-foreground"
+                aria-hidden
+              >
+                <span className="h-px flex-1 bg-border" />
+                Effects
+                <span className="h-px flex-1 bg-border" />
+              </div>
+            )}
+            {effects.map((item) => (
+              <LookPadButton
+                key={item.key}
+                item={item}
+                presence={item.presence}
+                onToggle={item.onToggle}
+                onLongPress={item.onEdit}
+              />
+            ))}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -292,6 +347,10 @@ function LookPadButton({
       )}
     >
       <span className="flex items-center gap-1.5">
+        {/* An effect template has no value to preview, so the glyph the whole desk uses for FX
+            stands where a swatch would — the same substitution `TemplateListRow` and `TemplateStrip`
+            make, so one thing looks like itself in all three places. */}
+        {item.isEffect === true && <AudioWaveform className="size-3 shrink-0 text-muted-foreground" />}
         {/* Only a colour template that resolves to one colour has a swatch — see `swatch`'s
             derivation in `BuskingView`. Everything else names itself. */}
         {item.swatch && (
@@ -346,7 +405,54 @@ export function describeLookContents(look: LookSummary): string {
 }
 
 /**
+ * An **effect** template pad's detail line: `Colour Pulse · ½ · M2`.
+ *
+ * A component rather than a string built in `BuskingView`, because the master's label is a live
+ * value and the hook that reads it cannot be called in a loop over the library. That is the same
+ * split `EffectShape` makes in `components/templates/TemplateListRow.tsx`, and it buys the same
+ * thing: a value pad mounts no subscription at all.
+ *
+ * No leading `Effect ·` — the hairline above the pad already says which half of the column this is,
+ * where the library row has no such context and needs the word.
+ */
+export function EffectPadDetail({ template }: { template: TemplateSummary }) {
+  // A WALL_CLOCK effect never reads `speedMasterUuid`: its cycle is scaled by the *rate* master, and
+  // a null one means **unscaled** rather than master 1. Reading the beat master here would name a
+  // tempo link the effect does not have.
+  const isWallClock = template.effect?.timingSource === 'WALL_CLOCK'
+  const master = useSpeedMasterDisplay(
+    isWallClock ? template.effect?.rateSpeedMasterUuid : template.effect?.speedMasterUuid,
+  )
+  if (template.effect == null) return 'Effect'
+  const speed = effectSpeedLabel(template.effect.beatDivision, template.effect.timingSource)
+  // A null `timingSource` means the stored `effectType` no longer resolves in this desk's registry
+  // — an import from a desk with script-registered effects. **Both** clauses go then, not just the
+  // speed: `isWallClock` is false for a null as well as for a beat effect, so naming the beat
+  // master would state a tempo link a wall-clock effect does not have, which is the mistake the
+  // split above exists to avoid. Say nothing rather than pick the likelier of two wrong answers.
+  //
+  // `useSpeedMasterDisplay` is otherwise silent at master 1, which every *chip* reads as "draw
+  // nothing". A detail line is a sentence, so the commonest case is spelled out or the line loses a
+  // clause exactly when it is least surprising. It is also silent while the bank is still arriving,
+  // so a pad can read "M1" for a frame before settling — the same transient the library row has,
+  // and not worth a second query shape to remove.
+  const masterLabel =
+    template.effect.timingSource == null
+      ? null
+      : master
+        ? `M${master.index}`
+        : isWallClock && template.effect.rateSpeedMasterUuid == null
+          ? 'unscaled'
+          : 'M1'
+  return [template.effect.effectType, speed, masterLabel].filter(Boolean).join(' · ')
+}
+
+/**
  * The colour a template pad draws beside its name, or null.
+ *
+ * An **effect** template is excluded too, and deliberately rather than incidentally: it holds no
+ * rows at all, so `rows.length !== 1` already answers null, and its pad draws the wave glyph in the
+ * swatch's place instead. Don't relax the row-count clause without putting the kind check back.
  *
  * The two exclusions are the ones `isOfferable` makes in `components/fx/FxColourTemplates.tsx`,
  * and for the same reason rather than by coincidence. A **per-fixture** template holds one colour

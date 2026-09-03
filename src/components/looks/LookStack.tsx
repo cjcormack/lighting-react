@@ -241,6 +241,14 @@ export interface StackSourceInfo {
   /** The library has loaded and does not hold it — the row draws as missing. */
   missing: boolean
   isTemplate: boolean
+  /**
+   * What that template holds (fx-templates D1), for the wave on the badge.
+   *
+   * Undefined for a Look, and also for a template this caller could not look up — a surface without
+   * the template library knows a layer names a template but not which kind, and drawing the plain
+   * chip is the honest answer there.
+   */
+  templateKind?: 'value' | 'effect'
 }
 
 export function describeStackSource(
@@ -264,6 +272,7 @@ export function describeStackSource(
       // lie about the data.
       missing: librariesLoaded && templatesById != null && template == null,
       isTemplate: true,
+      templateKind: template?.kind,
     }
   }
   const look = looksById.get(source.id)
@@ -313,7 +322,8 @@ export function LayerRow({
   // Resolved by `describeStackSource`: the layer's own `source.name` arrives with the read, so a row
   // is labelled before either library lands; the library lookup only adds the families and the
   // deleted-since-read case.
-  const { name, missing, isTemplate } = info
+  const { name, missing, isTemplate, templateKind } = info
+  const isEffect = templateKind === 'effect'
 
   return (
     <SortableShell sortable={sortable} sortableId={sortableId}>
@@ -348,10 +358,20 @@ export function LayerRow({
               aria-pressed={focused === true}
               title={focused ? 'The grid is showing this look' : 'Show this look in the grid'}
             >
-              <LookNameBadge name={name} missing={missing} isTemplate={isTemplate} />
+              <LookNameBadge
+                name={name}
+                missing={missing}
+                isTemplate={isTemplate}
+                isEffect={isEffect}
+              />
             </button>
           ) : (
-            <LookNameBadge name={name} missing={missing} isTemplate={isTemplate} />
+            <LookNameBadge
+              name={name}
+              missing={missing}
+              isTemplate={isTemplate}
+              isEffect={isEffect}
+            />
           )}
 
           {info.families.map((family) => (

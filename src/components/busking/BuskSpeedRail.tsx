@@ -38,11 +38,11 @@ import type { SpeedMasterLiveState } from '@/api/speedMastersWsApi'
  * The busk view's speed rail: the whole bank, one card each, down the right-hand side.
  *
  * The rail is what makes the routing sessions 1-2 built *visible*: every master says what it is
- * for, in a badge, on a performance surface. The rule that badge names — a busked effect with no
- * explicit master is stamped with the usage-matching one — currently has **no caller**, since the
- * effect pads that did the stamping went with the view's cut-back to library pads
- * (`useSpeedMasterForCategory`'s own doc comment is the record). So the caption states what a badge
- * *means* rather than promising what a press here does; don't restore its old wording.
+ * for, in a badge, on a performance surface. The rule that badge names — an effect with no explicit
+ * master is stamped with the usage-matching one — has a caller again since fx-templates session 3:
+ * `TemplateEditor` stamps an effect template when its effect is chosen. **Nothing on this page does
+ * that**, though, so the caption still states what a badge *means* rather than promising what a
+ * press here does; don't restore its old wording, which claimed the pads stamped.
  *
  * **Two queries, and each is load-bearing.** The live query supplies everything drawn — since the
  * busking-view plan's session 2 the WS state carries `usage` and the follow pair alongside the
@@ -96,12 +96,14 @@ export function BuskSpeedRail() {
     <div className="hidden w-72 shrink-0 flex-col gap-2.5 overflow-y-auto border-l p-3 md:flex">
       <div>
         <BuskLabel>Speed</BuskLabel>
-        {/* States what a usage badge *means*, not what a press here does. It used to promise that
-            "effects busked with no explicit master follow the master matching their family", which
-            was true of the effect pads this view no longer has — see `BuskPools`. The routing rule
-            itself is unchanged for the next caller; `useSpeedMasterForCategory` has none today. */}
+        {/* Still states what a usage badge *means* rather than what a press here does — the pads on
+            this page stamp nothing, and the old "effects busked with no explicit master follow the
+            master matching their family" promised otherwise. What changed is that the rule has a
+            caller again: an effect template is stamped with the usage-matching master when its
+            effect is chosen in `TemplateEditor`, so the badge can name that rather than a routing
+            nobody performs. */}
         <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground">
-          Each master&apos;s badge names the effects that default to it.
+          A usage badge names the family whose effect templates default to this master.
         </p>
       </div>
 

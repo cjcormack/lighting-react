@@ -176,14 +176,16 @@ export function useSpeedMasterDisplay(speedMasterUuid: string | null | undefined
 /**
  * The apply-time routing lookup: category in, speed-master uuid (or null for master 1) out.
  *
- * **It has no caller today.** Its only one was the busk view's effect pads, which stamped a busked
- * effect with the usage-matching master at the moment of the press — the busking-view plan's D1 —
- * and those pads were removed when the view was cut back to the library pads its design draws. The
- * rule itself is untouched and every other half of it still stands: a master still declares a
- * `usage`, the detail sheet still sets it, `EffectParameterForm` still shows and edits an effect's
- * master, and a null `speedMasterUuid` still means master 1 everywhere. This is kept for the next
- * surface that mints an effect without asking which master it belongs to; delete it only if that
- * turns out never to arrive.
+ * **Its caller is `TemplateEditor`** (fx-templates D8): an effect template's master is stamped at
+ * the moment the effect is chosen, so a Colour effect template picks up the master whose usage is
+ * `colour` without the operator being asked. It spent a while with no caller at all — the busk
+ * view's ad-hoc effect pads were the original one, and they went when that view was brought back
+ * onto its design — and was kept for exactly this. Every other half of the rule stands unchanged: a
+ * master declares a `usage`, the detail sheet sets it, `BuskSpeedRail` badges it, and a null
+ * `speedMasterUuid` still means master 1 everywhere.
+ *
+ * The cost of stamping rather than resolving is that retagging a master's usage later does not move
+ * templates already stamped — accepted, and recorded as `FU-TMPL-USAGE-RETAG`.
  *
  * Reads the **live** bank rather than the project list because every caller is acting on the
  * current show and already has the socket open — no `projectId`, no second fetch, and the WS

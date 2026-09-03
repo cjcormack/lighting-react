@@ -9,7 +9,13 @@ import { useTemplateListQuery, useToggleTemplateMutation } from '@/store/templat
 import { FAMILY_LABELS, type AttributeFamily } from '@/lib/attributeFamily'
 import { formatError } from '@/lib/formatError'
 import { templateLayerPresence } from './lookPresence'
-import { describeLookContents, templateSwatch, BuskPools, type PadItem } from './BuskPools'
+import {
+  describeLookContents,
+  templateSwatch,
+  BuskPools,
+  EffectPadDetail,
+  type PadItem,
+} from './BuskPools'
 import { TargetList } from './TargetList'
 import { TargetBand } from './TargetBand'
 import { BuskSpeedRail } from './BuskSpeedRail'
@@ -148,14 +154,26 @@ export function BuskingView({ projectId, transport }: BuskingViewProps) {
         key: `template-${template.id}`,
         name: template.name,
         notes: template.notes,
-        detail: template.isGeneric
-          ? (template.family != null ? FAMILY_LABELS[template.family].singular : 'value')
-          : `${template.rows.length} heads`,
+        detail:
+          template.kind === 'effect' ? (
+            <EffectPadDetail template={template} />
+          ) : template.isGeneric ? (
+            template.family != null ? (
+              FAMILY_LABELS[template.family].singular
+            ) : (
+              'value'
+            )
+          ) : (
+            `${template.rows.length} heads`
+          ),
         kind: 'template' as const,
+        isEffect: template.kind === 'effect',
         family: template.family,
         swatch: templateSwatch(template),
-        // A template holds no effects, so the running-effect presence a Look's ring was once read
-        // from could not have answered for one. The layer stack can: `templateLayerPresence` asks
+        // A template's pad can only light from the **layer stack**, and that is more load-bearing
+        // now that one can hold an effect rather than less: an effect-template pad's ring would look
+        // matchable against the running instance, and matching there would light for effect
+        // templates while leaving every value template's pad dark. `templateLayerPresence` asks
         // whether a layer applying this template covers the selection, which is the same question
         // one press ago.
         presence: templateLayerPresence(programmerLayers ?? [], selectedLayerTargets, template.id),

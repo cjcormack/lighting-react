@@ -5,6 +5,7 @@ import { LookNameBadge } from '@/components/looks/LookNameBadge'
 import { FAMILY_LABELS, parsePropertyMask } from '@/lib/attributeFamily'
 import { useProgrammerLayersQuery } from '@/store/programmer'
 import { useLookSaveState } from './LookRowStore'
+import { useFocusedTemplateLayer } from './FocusedTemplateLayer'
 import { useProgrammerSheets } from './ProgrammerSheets'
 import { useLocalValueCount } from './useLocalFamilyCounts'
 import { useProgrammerScope, useProgrammerScopeActions } from './ProgrammerScope'
@@ -35,6 +36,7 @@ export function ProgrammerScopeBand() {
   const saveState = useLookSaveState()
   const sheets = useProgrammerSheets()
   const localCount = useLocalValueCount()
+  const focusedTemplate = useFocusedTemplateLayer()
 
   if (!scope || !actions) return null
 
@@ -112,6 +114,9 @@ export function ProgrammerScopeBand() {
             name={layer?.source.name}
             missing={layers != null && layer == null}
             isTemplate={layer?.source.kind === 'TEMPLATE'}
+            // From the provider rather than a query of this band's own: the grid and the notices
+            // need the same answer, and asking three times would be three subscriptions to one list.
+            isEffect={focusedTemplate?.kind === 'effect'}
           />
           <span className="text-muted-foreground">
             {mask.length === 0

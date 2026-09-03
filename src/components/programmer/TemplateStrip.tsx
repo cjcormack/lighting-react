@@ -80,6 +80,16 @@ export function TemplateStrip({
     return all.filter((t) => t.family != null && families.includes(t.family))
   }, [templates, families])
 
+  /**
+   * Values, then a hairline, then effects (fx-templates D10) — the busk column's split, sideways.
+   *
+   * Library order holds inside each half; nothing is sorted here and nothing was before. The
+   * hairline is drawn only when both halves have something in them, so a colour selection with no
+   * colour effect templates looks exactly as it did.
+   */
+  const valueChips = useMemo(() => visible.filter((t) => t.kind !== 'effect'), [visible])
+  const effectChips = useMemo(() => visible.filter((t) => t.kind === 'effect'), [visible])
+
   const press = useCallback(
     (template: TemplateSummary, additive: boolean) => {
       if (targets.length === 0) {
@@ -137,40 +147,16 @@ export function TemplateStrip({
           </Badge>
         )}
 
-        {visible.map((template) => (
-          <button
-            key={template.id}
-            type="button"
-            onClick={(e) => press(template, e.altKey)}
-            title={
-              // The two gestures, stated on the chip rather than left to be discovered: ⌥click is
-              // not a thing an operator guesses, and it is the one that creates a dependency. An
-              // effect template sets no values, so the click half is named for what it does.
-              template.kind === 'effect'
-                ? `Click to run this effect on these fixtures · ⌥click to add a layer that tracks “${template.name}”`
-                : `Click to set these values · ⌥click to add a layer that tracks “${template.name}”`
-            }
-            className={cn(
-              'flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors',
-              'hover:bg-accent/60 active:scale-95',
-            )}
-          >
-            {/* An effect template holds no rows, so there is no value to preview — the glyph the
-                whole desk uses for FX says what the press will do instead of a blank gap. */}
-            {template.kind === 'effect' ? (
-              <AudioWaveform className="size-3 shrink-0 text-muted-foreground" />
-            ) : templateIntentSwatch(template.rows[0]?.value ?? '') != null ? (
-              <span
-                className="size-3 rounded-sm border border-border/60"
-                style={{ background: templateIntentSwatch(template.rows[0].value) ?? undefined }}
-              />
-            ) : (
-              <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-                {template.rows[0] != null ? describeTemplateIntent(template.rows[0].value) : ''}
-              </span>
-            )}
-            <span className="truncate max-w-32">{template.name}</span>
-          </button>
+        {valueChips.map((template) => (
+          <TemplateChip key={template.id} template={template} onPress={press} />
+        ))}
+
+        {valueChips.length > 0 && effectChips.length > 0 && (
+          <span aria-hidden className="mx-0.5 h-5 w-px shrink-0 bg-border" />
+        )}
+
+        {effectChips.map((template) => (
+          <TemplateChip key={template.id} template={template} onPress={press} />
         ))}
 
         {/* The chip that fills the library. Disabled without a selection for the same reason the
@@ -199,5 +185,49 @@ export function TemplateStrip({
         families={families}
       />
     </>
+  )
+}
+
+function TemplateChip({
+  template,
+  onPress,
+}: {
+  template: TemplateSummary
+  onPress: (template: TemplateSummary, additive: boolean) => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => onPress(template, e.altKey)}
+      title={
+        // The two gestures, stated on the chip rather than left to be discovered: ⌥click is not a
+        // thing an operator guesses, and it is the one that creates a dependency. For an effect the
+        // click half says **a copy**, which is the whole difference between the two: the instance a
+        // click mints carries no `LayerSource`, so retuning the template afterwards never moves it.
+        template.kind === 'effect'
+          ? `Click to run a copy of “${template.name}” on the selection · ⌥click to add a layer that tracks it`
+          : `Click to set these values · ⌥click to add a layer that tracks “${template.name}”`
+      }
+      className={cn(
+        'flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors',
+        'hover:bg-accent/60 active:scale-95',
+      )}
+    >
+      {/* An effect template holds no rows, so there is no value to preview — the glyph the whole
+          desk uses for FX says what the press will do instead of a blank gap. */}
+      {template.kind === 'effect' ? (
+        <AudioWaveform className="size-3 shrink-0 text-muted-foreground" />
+      ) : templateIntentSwatch(template.rows[0]?.value ?? '') != null ? (
+        <span
+          className="size-3 rounded-sm border border-border/60"
+          style={{ background: templateIntentSwatch(template.rows[0].value) ?? undefined }}
+        />
+      ) : (
+        <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+          {template.rows[0] != null ? describeTemplateIntent(template.rows[0].value) : ''}
+        </span>
+      )}
+      <span className="truncate max-w-32">{template.name}</span>
+    </button>
   )
 }

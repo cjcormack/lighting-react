@@ -304,7 +304,7 @@ function buildServerRows(
  * those against fixture keys alone marked every pixel bar the layer explicitly targets as "outside
  * the targets" — dashed, non-editable, with a spurious Add-to-targets button beside it.
  */
-function expandTargets(
+export function expandTargets(
   targets: readonly CueTarget[],
   fixtures: readonly TargetableFixture[] | undefined,
 ): ReadonlySet<string> | null {

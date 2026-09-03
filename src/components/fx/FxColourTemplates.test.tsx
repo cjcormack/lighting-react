@@ -105,6 +105,14 @@ describe('useColourTemplates offerability', () => {
     expect(render().result.current.templates).toEqual([])
   })
 
+  it('excludes an effect template — an effect is not a colour', () => {
+    // fx-templates D12, and pinned rather than left to the row count that currently implements it:
+    // an effect template holds no rows, so it is excluded today by `rows.length === 1`. This is the
+    // assertion that fails if that clause is ever relaxed without an explicit kind check.
+    templates = [template({ id: 9, uuid: 'u9', name: 'Amber Breathe', kind: 'effect', rows: [] })]
+    expect(render().result.current.templates).toEqual([])
+  })
+
   it('skips the query entirely outside a project', () => {
     renderHook(() => useColourTemplates(), {
       wrapper: ({ children }) => <MemoryRouter>{children}</MemoryRouter>,
