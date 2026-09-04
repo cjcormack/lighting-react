@@ -4,6 +4,8 @@ import type { TemplateSummary } from '@/api/templatesApi'
 import { FAMILY_LABELS } from '@/lib/attributeFamily'
 import { templateIntentSwatch } from '@/lib/templateIntent'
 import { effectSpeedLabel } from '@/components/fx/fxConstants'
+import { cn } from '@/lib/utils'
+import type { EffectPresence } from './buskingTypes'
 
 /**
  * Everything a pad draws, derived from the record the pad embeds.
@@ -123,4 +125,19 @@ export function padFaceOf(pad: BuskPad): PadFace {
     }
   }
   return { ...EMPTY_FACE, kind: pad.kind }
+}
+
+/**
+ * The presence ladder: how much of the selection a record covers, as a shell.
+ *
+ * Here rather than in `BuskPad.tsx` because three surfaces draw it and must not drift: the pad, its
+ * drag ghost (so a lifted pad looks like itself), and the FX cue-slot overlay's Look tile
+ * (`slotLitClass`). A tweak to the ring belongs in this one function.
+ */
+export function padPresenceClass(presence: EffectPresence): string {
+  return cn(
+    presence === 'none' && 'border-border bg-card',
+    presence === 'some' && 'border-primary/40 bg-primary/10',
+    presence === 'all' && 'border-primary bg-primary/20 ring-1 ring-primary/50',
+  )
 }

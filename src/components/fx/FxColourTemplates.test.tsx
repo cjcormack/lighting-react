@@ -37,8 +37,6 @@ function template(over: Partial<TemplateSummary> = {}): TemplateSummary {
     uuid: 'u1',
     name: 'Warm Key',
     notes: null,
-    sortOrder: 0,
-    groupId: null,
     fadeDurationMs: null,
     family: 'COLOUR',
     isGeneric: true,

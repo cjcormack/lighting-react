@@ -11,11 +11,9 @@ import { familyForCategory, FAMILY_LABELS, type AttributeFamily } from '@/lib/at
 import { templateIntentSwatch, describeTemplateIntent } from '@/lib/templateIntent'
 import {
   useApplyTemplateMutation,
-  useTemplateGroupListQuery,
   useTemplateListQuery,
   useToggleTemplateMutation,
 } from '@/store/templates'
-import { buildTemplateLayout } from '@/lib/templateLayout'
 import { selectTargetKeys } from '@/store/selectionSlice'
 import { formatError } from '@/lib/formatError'
 import { NewTemplateFromSelectionSheet } from './NewTemplateFromSelectionSheet'
@@ -49,7 +47,6 @@ export function TemplateStrip({
   cells: readonly CellRef[]
 }) {
   const { data: templates } = useTemplateListQuery({ projectId }, { skip: !projectId })
-  const { data: templateGroups } = useTemplateGroupListQuery({ projectId }, { skip: !projectId })
   const [applyTemplate] = useApplyTemplateMutation()
   const [toggleTemplate] = useToggleTemplateMutation()
   const [newOpen, setNewOpen] = useState(false)
@@ -78,20 +75,17 @@ export function TemplateStrip({
   )
 
   const visible = useMemo(() => {
-    // The library's own order — the same walk the busk view and `/templates` take, so a chip sits
-    // where the operator put it. A group is flattened: the strip is a row of chips with no room
-    // for a cluster, and exclusivity is the toggle route's to apply, not the strip's to draw.
-    const all = buildTemplateLayout(templates ?? [], templateGroups ?? []).flatMap((entry) =>
-      entry.kind === 'template' ? [entry.template] : entry.templates,
-    )
+    // The library's own order, which is by name — the same list `/templates` draws. There is no
+    // operator-set order to honour any more: order belongs to a pad's place in a busk bank.
+    const all = templates ?? []
     if (families == null) return all
     return all.filter((t) => t.family != null && families.includes(t.family))
-  }, [templates, templateGroups, families])
+  }, [templates, families])
 
   /**
    * Values, then a hairline, then effects (fx-templates D10) — the busk column's split, sideways.
    *
-   * Library order holds inside each half; nothing is sorted here and nothing was before. The
+   * Name order holds inside each half; nothing is sorted here and nothing was before. The
    * hairline is drawn only when both halves have something in them, so a colour selection with no
    * colour effect templates looks exactly as it did.
    */

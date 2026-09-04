@@ -8,16 +8,21 @@ export interface CueSlot {
   id: number
   page: number
   slotIndex: number
-  itemType: 'cue' | 'cue_stack'
+  /** Which arm the slot holds. A cue *stack* was a third arm until the busk layout replaced it. */
+  itemType: 'cue' | 'look'
   itemId: number
   itemName: string
 }
 
+/**
+ * Exactly one of [cueId] / [lookId] — the server refuses two, and refuses a Look with a deferred
+ * effect (409 `CUE_SLOT_LOOK_NEEDS_SELECTION`), because a slot has no selection to give it.
+ */
 export interface AssignCueSlotRequest {
   page: number
   slotIndex: number
   cueId?: number
-  cueStackId?: number
+  lookId?: number
 }
 
 export interface SwapCueSlotsRequest {
@@ -64,8 +69,8 @@ export const cueSlotsApi = restApi.injectEndpoints({
               id: -1,
               page: input.page,
               slotIndex: input.slotIndex,
-              itemType: input.cueId != null ? 'cue' : 'cue_stack',
-              itemId: (input.cueId ?? input.cueStackId)!,
+              itemType: input.cueId != null ? 'cue' : 'look',
+              itemId: (input.cueId ?? input.lookId)!,
               itemName: '...',
             }
             if (idx >= 0) draft[idx] = placeholder

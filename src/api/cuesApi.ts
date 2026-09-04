@@ -210,14 +210,6 @@ export interface Cue {
    * Optional because the server omits it when false (`encodeDefaults = false`); absent means off.
    */
   stomp?: boolean
-  /**
-   * True when this cue has a pad of its own on the busk view.
-   *
-   * A flag on the cue rather than a pin list, so it survives export/import with the cue it names
-   * (`busking-view-plan.md` D10). Optional for the same reason `stomp` is — the server omits it
-   * when false, and absent means unpinned.
-   */
-  pinnedToBusk?: boolean
   cueType: CueType
   canEdit: boolean
   canDelete: boolean
@@ -241,8 +233,6 @@ export interface CueInput {
   notes?: string | null
   /** Cue-level stomp — see `Cue.stomp`. Not the per-layer flag on `CueLayer`. */
   stomp?: boolean
-  /** Busk-view pin — see `Cue.pinnedToBusk`. */
-  pinnedToBusk?: boolean
   /** Only honoured on POST; PUT/PATCH ignore it so markers cannot be turned into standard cues. */
   cueType?: CueType
 }

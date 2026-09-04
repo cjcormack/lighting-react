@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { lookLayerPresence, templateLayerPresence } from './lookPresence'
+import { lookIsApplied, lookLayerPresence, templateLayerPresence } from './lookPresence'
 import type { AppliedTarget, ProgrammerAppliedSource } from '@/store/programmer'
 import type { CueTarget } from '@/api/cuesApi'
 
@@ -110,5 +110,30 @@ describe('templateLayerPresence', () => {
     expect(templateLayerPresence([templateApplied(FRONT_ALL)], [], 4)).toBe('none')
     expect(templateLayerPresence([], [FRONT], 4)).toBe('none')
     expect(templateLayerPresence([templateApplied(FRONT_ALL)], [FRONT], 5)).toBe('none')
+  })
+})
+
+describe('lookIsApplied', () => {
+  it('answers for a surface with no selection, where the target-scoped fold cannot', () => {
+    // The whole reason the helper exists. An FX cue slot has no selection, so reading its tile
+    // through `lookLayerPresence` would leave every Look dark however plainly it is on stage.
+    const on = [applied(FRONT_ALL)]
+    expect(lookLayerPresence(on, [], 7)).toBe('none')
+    expect(lookIsApplied(on, 7)).toBe(true)
+  })
+
+  it('does not answer for a template carrying the same int PK', () => {
+    // Two tables, two id spaces — the collision `lookLayerPresence` guards, asked of a surface
+    // that has no targets to disambiguate with.
+    const template = applied(FRONT_ALL, {
+      source: { kind: 'TEMPLATE', id: 7, uuid: 't7', name: 'Amber Key' },
+    })
+    expect(lookIsApplied([template], 7)).toBe(false)
+  })
+
+  it('reads false for an empty feed, another Look, or a layer covering nothing', () => {
+    expect(lookIsApplied([], 7)).toBe(false)
+    expect(lookIsApplied([applied(FRONT_ALL, { source: { kind: 'LOOK', id: 8, uuid: 'u8', name: 'Cool' } })], 7)).toBe(false)
+    expect(lookIsApplied([applied([])], 7)).toBe(false)
   })
 })

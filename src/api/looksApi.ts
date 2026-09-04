@@ -82,7 +82,6 @@ export interface LookSummary {
   uuid: string
   name: string
   notes: string | null
-  sortOrder: number
   /**
    * Attribute families this Look touches, **derived server-side** from its rows rather than
    * stored. A Look spanning colour and position reports both — which is the point of there being
@@ -129,7 +128,6 @@ export interface LookDetails {
   uuid: string
   name: string
   notes: string | null
-  sortOrder: number
   families: AttributeFamily[]
   rows: LookRow[]
   effects: LookEffect[]
@@ -148,7 +146,6 @@ export interface LookDetails {
 export interface LookInput {
   name?: string
   notes?: string | null
-  sortOrder?: number
   rows?: LookRow[]
   effects?: LookEffect[]
 }

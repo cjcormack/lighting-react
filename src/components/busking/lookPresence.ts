@@ -96,3 +96,26 @@ export function templateLayerPresence(
 ): EffectPresence {
   return appliedPresence(applied, targets, 'TEMPLATE', templateId)
 }
+
+/**
+ * Is this Look on the rig **at all** — the only presence question a surface with no selection can
+ * ask.
+ *
+ * [lookLayerPresence] folds coverage over a *selection*, and answers `'none'` for an empty target
+ * list by design: a ring asking "is this record on for what I have selected?" has no answer when
+ * nothing is selected. An FX cue slot has no selection at all — a Look eligible for one is bound to
+ * its own fixtures, and pressing the tile derives the targets from them — so reading its tile
+ * through the selection-scoped fold would leave every Look tile dark.
+ *
+ * Matched on the source being a **Look** with this id, for [lookLayerPresence]'s reason: a template
+ * layer can carry the same int PK from the other table.
+ */
+export function lookIsApplied(
+  applied: readonly ProgrammerAppliedSource[],
+  lookId: number,
+): boolean {
+  return applied.some(
+    (entry) =>
+      entry.source.kind === 'LOOK' && entry.source.id === lookId && entry.targets.length > 0,
+  )
+}

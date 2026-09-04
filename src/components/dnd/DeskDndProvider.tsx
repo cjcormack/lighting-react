@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useState } from 'react'
 import {
   closestCenter,
   DndContext,
@@ -15,11 +15,8 @@ import {
 } from '@dnd-kit/core'
 import { useCurrentProjectQuery } from '../../store/projects'
 import { useAssignCueSlotMutation, useSwapCueSlotsMutation } from '../../store/cueSlots'
-import type {
-  CueSlotAssignDragData,
-  CueSlotDropTargetData,
-  CueSlotSwapDragData,
-} from '../cueSlotShared'
+import type { CueSlotSwapDragData } from '../cueSlotShared'
+import { isSlotTarget, slotAssignmentFor } from './slotDrop'
 import { renderDragOverlay } from './dragOverlayRegistry'
 
 /**
@@ -37,8 +34,13 @@ import { renderDragOverlay } from './dragOverlayRegistry'
  * adding here for that**: `DndContext` dispatches to its monitor bus whether or not the matching
  * prop is passed, so a monitor receives `onDragOver` even though this provider passes none.
  *
- * The cue-slot arm below is the second consumer, and stays here because it is the one that has to
- * run even when no busk page is mounted.
+ * The ignorance is of **ids and foreign targets, not of sources**. A drop onto a cue slot is
+ * resolved here whatever lifted it — a sibling slot, or a `busk-palette` row from the busk view's
+ * library — because this provider owns the slot droppables (which are mounted on every route),
+ * `projectId`, and both slot mutations. The alternative was a monitor inside the cue-slot panel,
+ * and that panel's body unmounts when the overlay hides: the one place a slot mutation must not
+ * live. `slotDrop.ts` holds the source→assignment mapping as pure functions, imported type-only
+ * from the busk feature, so the shell still reaches no busk runtime code.
  */
 interface DeskDndContextValue {
   /**
@@ -47,17 +49,9 @@ interface DeskDndContextValue {
    * every slot droppable with it and the drop would resolve against nothing.
    */
   isDragging: boolean
-  isEditMode: boolean
-  enterEditMode: () => void
-  exitEditMode: () => void
 }
 
-const DeskDndContext = createContext<DeskDndContextValue>({
-  isDragging: false,
-  isEditMode: false,
-  enterEditMode: () => {},
-  exitEditMode: () => {},
-})
+const DeskDndContext = createContext<DeskDndContextValue>({ isDragging: false })
 
 export function useDeskDnd() {
   return useContext(DeskDndContext)
@@ -86,12 +80,10 @@ const collisionDetection: CollisionDetection = (args) => {
 const measuring = { droppable: { strategy: MeasuringStrategy.Always } }
 
 interface DeskDndProviderProps {
-  /** Whether the cue-slot overlay is on screen; hiding it leaves its edit mode. */
-  isVisible: boolean
   children: React.ReactNode
 }
 
-export function DeskDndProvider({ isVisible, children }: DeskDndProviderProps) {
+export function DeskDndProvider({ children }: DeskDndProviderProps) {
   const { data: currentProject } = useCurrentProjectQuery()
   const projectId = currentProject?.id
   const [assignSlot] = useAssignCueSlotMutation()
@@ -99,15 +91,6 @@ export function DeskDndProvider({ isVisible, children }: DeskDndProviderProps) {
   const [active, setActive] = useState<Active | null>(null)
   const [draggedLabel, setDraggedLabel] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
-  const [isEditMode, setIsEditMode] = useState(false)
-
-  const enterEditMode = useCallback(() => setIsEditMode(true), [])
-  const exitEditMode = useCallback(() => setIsEditMode(false), [])
-
-  // Auto-exit edit mode when the panel hides
-  useEffect(() => {
-    if (!isVisible) setIsEditMode(false)
-  }, [isVisible])
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
@@ -115,10 +98,10 @@ export function DeskDndProvider({ isVisible, children }: DeskDndProviderProps) {
     setIsDragging(true)
     setActive(event.active)
     const data = event.active.data.current
+    // A palette row brings its own overlay through `dragOverlayRegistry`; only a slot-to-slot drag
+    // needs the plain label below.
     if (data?.type === 'slot-item') {
       setDraggedLabel((data as CueSlotSwapDragData).slot.itemName)
-    } else if (data?.type === 'cue-slot-assign') {
-      setDraggedLabel((data as CueSlotAssignDragData).itemName)
     }
   }, [])
 
@@ -141,21 +124,17 @@ export function DeskDndProvider({ isVisible, children }: DeskDndProviderProps) {
       if (!activeData || !overData) return
 
       // Only handle drops onto slot targets — everything else belongs to another surface's monitor.
-      if (overData.type !== 'slot-target') return
+      if (!isSlotTarget(overData)) return
 
-      const targetPage = (overData as CueSlotDropTargetData).page
-      const targetIndex = (overData as CueSlotDropTargetData).slotIndex
+      const targetPage = overData.page
+      const targetIndex = overData.slotIndex
 
-      // External cue/stack → slot assignment
-      if (activeData.type === 'cue-slot-assign') {
-        const { itemType, itemId } = activeData as CueSlotAssignDragData
-        assignSlot({
-          projectId,
-          page: targetPage,
-          slotIndex: targetIndex,
-          cueId: itemType === 'cue' ? itemId : undefined,
-          cueStackId: itemType === 'cue_stack' ? itemId : undefined,
-        })
+      // A library palette row → slot assignment. Null for anything a slot cannot hold (a template,
+      // a Look that needs a selection), and the drop is then a no-op — the tile drew a refusal ring
+      // on the way in, so the operator has already been told why.
+      const assignment = slotAssignmentFor(activeData)
+      if (assignment) {
+        assignSlot({ projectId, page: targetPage, slotIndex: targetIndex, ...assignment })
         return
       }
 
@@ -176,7 +155,7 @@ export function DeskDndProvider({ isVisible, children }: DeskDndProviderProps) {
   )
 
   return (
-    <DeskDndContext.Provider value={{ isDragging, isEditMode, enterEditMode, exitEditMode }}>
+    <DeskDndContext.Provider value={{ isDragging }}>
       {/* `onDragCancel` matters more than it looks: a cancelled drag (Escape, a lost pointer)
           never reaches `onDragEnd`, so without it both the overlay and `isDragging` would stay
           set — and `isDragging` is what holds the cue-slot panel body mounted. */}

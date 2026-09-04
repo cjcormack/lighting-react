@@ -222,7 +222,7 @@ export default function Layout() {
 
           {/* The app's one DndContext, wrapping the cue-slot overlay and the routed page together:
               a drag started in either must be able to land in the other. See DeskDndProvider. */}
-          <DeskDndProvider isVisible={byId.cueSlots.isVisible}>
+          <DeskDndProvider>
             <CueSlotOverviewPanel isVisible={byId.cueSlots.isVisible} />
 
             {/* Page Content. The re-auth banner sits inside the scroll container's flex

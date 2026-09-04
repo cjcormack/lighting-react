@@ -1,8 +1,7 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router'
-import { Eye, Trash2, Pencil, X } from 'lucide-react'
+import { Eye, Trash2, X } from 'lucide-react'
 import { useDraggable, useDroppable, useDndMonitor } from '@dnd-kit/core'
-import { Button } from '@/components/ui/button'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -17,13 +16,18 @@ import {
   useClearCueSlotMutation,
   type CueSlot,
 } from '../store/cueSlots'
-import { useApplyCueMutation, useStopCueMutation, useActiveCueIds, useActiveCueStackIds } from '../store/cues'
-import { useActivateCueStackMutation, useDeactivateCueStackMutation } from '../store/cueStacks'
-import { EditModeAssignPanel } from './CueSlotEditAssignPanel'
+import { useApplyCueMutation, useStopCueMutation, useActiveCueIds } from '../store/cues'
+import { useToggleLookMutation } from '../store/looks'
+import { useProgrammerAppliedQuery } from '../store/programmer'
+import { lookIsApplied } from './busking/lookPresence'
+import { useBuskEditMode } from '@/store/buskEditSlice'
+import { isSlotRefusedDrag } from './dnd/slotDrop'
 import { CollapsiblePanel } from './CollapsiblePanel'
 import { usePersistentState } from '@/hooks/usePersistentState'
+import { useLongPress } from '@/hooks/useLongPress'
 import {
   SlotItemContent,
+  slotLitClass,
   type CueSlotDropTargetData,
   type CueSlotSwapDragData,
 } from './cueSlotShared'
@@ -38,9 +42,14 @@ const SLOTS_PER_PAGE = 8
 const PAGE_STORAGE_KEY = 'cue-slot-overview-page'
 
 /**
- * Edit mode and the drag context both live on `DeskDndProvider` now — the app's one `DndContext`,
- * which wraps this panel *and* the routed page so a busk page can drop onto a slot. Re-exported
- * under the old name so this panel's own call sites read as they did.
+ * The drag context lives on `DeskDndProvider` — the app's one `DndContext`, which wraps this panel
+ * *and* the routed page so a busk page can drop onto a slot. Re-exported under the old name so this
+ * panel's own call sites read as they did.
+ *
+ * **Edit mode is not here.** A slot's cross and its drop target follow the *busk view's* edit mode
+ * (`useBuskEditMode`), because that is where slots are filled from: the library palette that fills
+ * a bank fills a slot (busk-layout plan D7). The panel's own long-press-to-wiggle mode and its
+ * inline assign panel went with that change.
  */
 export const useCueSlotDnd = useDeskDnd
 
@@ -74,17 +83,18 @@ function CueSlotOverviewPanelBody() {
   const { data: currentProject } = useCurrentProjectQuery()
   const projectId = currentProject?.id
   const { data: slots } = useProjectCueSlotsQuery(projectId!, { skip: !projectId })
-  const { isEditMode, exitEditMode } = useCueSlotDnd()
+  const buskEditing = useBuskEditMode()
 
   const [page, setPagePersist] = usePersistentState<number>(PAGE_STORAGE_KEY, 0)
 
   const activeCueIds = useActiveCueIds(projectId)
-  const activeCueStackIds = useActiveCueStackIds(projectId)
+  // Project-wide and argument-free, so a surface with no selection can still read it. A Look tile
+  // lights from the layer stack, never from cue liveness: it is a layer this tile would remove.
+  const { data: applied } = useProgrammerAppliedQuery()
 
   const [applyCue] = useApplyCueMutation()
   const [stopCue] = useStopCueMutation()
-  const [activateStack] = useActivateCueStackMutation()
-  const [deactivateStack] = useDeactivateCueStackMutation()
+  const [toggleLook] = useToggleLookMutation()
   const [clearSlot] = useClearCueSlotMutation()
 
   const navigate = useNavigate()
@@ -187,26 +197,6 @@ function CueSlotOverviewPanelBody() {
     return () => el.removeEventListener('wheel', onWheel)
   }, [setPagePersist])
 
-  // Dismiss edit mode on click outside panel or Escape key
-  useEffect(() => {
-    if (!isEditMode) return
-    const handlePointerDown = (e: PointerEvent) => {
-      const panel = panelRef.current
-      if (panel && !panel.contains(e.target as Node)) {
-        exitEditMode()
-      }
-    }
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') exitEditMode()
-    }
-    document.addEventListener('pointerdown', handlePointerDown)
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown)
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [isEditMode, exitEditMode])
-
   // Edge-drag page navigation: change page when dragging near left/right edges
   const [isDraggingAny, setIsDraggingAny] = useState(false)
   const edgeScrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -275,6 +265,15 @@ function CueSlotOverviewPanelBody() {
     },
   })
 
+  /** Is this tile's record on stage? Two different questions, by kind — see `slotLitClass`. */
+  const slotIsLit = useCallback(
+    (slot: CueSlot) =>
+      slot.itemType === 'cue'
+        ? activeCueIds.has(slot.itemId)
+        : lookIsApplied(applied ?? [], slot.itemId),
+    [activeCueIds, applied],
+  )
+
   const handleSlotTap = useCallback(
     (slot: CueSlot) => {
       if (!projectId) return
@@ -285,24 +284,27 @@ function CueSlotOverviewPanelBody() {
         } else {
           applyCue({ projectId, cueId: slot.itemId })
         }
-      } else {
-        if (activeCueStackIds.has(slot.itemId)) {
-          deactivateStack({ projectId, stackId: slot.itemId })
-        } else {
-          activateStack({ projectId, stackId: slot.itemId })
-        }
+        return
       }
+      // One route for both directions: the desk decides add-or-remove against the same layer stack
+      // the tile lights from. **Empty targets is the contract** — the route derives them from the
+      // Look's own patched fixtures, which is exactly why only a Look with no deferred effect may
+      // sit in a slot (D7). No optimistic ring: the applied feed lands on the same frame, and
+      // faking one would fight it.
+      void toggleLook({ projectId, lookId: slot.itemId, targets: [] })
     },
-    [projectId, activeCueIds, activeCueStackIds, applyCue, stopCue, activateStack, deactivateStack],
+    [projectId, activeCueIds, applyCue, stopCue, toggleLook],
   )
 
   const handleViewSlot = useCallback(
     (slot: CueSlot) => {
-      if (slot.itemType === 'cue_stack') {
-        navigate(`/projects/${projectId}/show/stacks/${slot.itemId}`)
-      } else {
-        navigate(`/projects/${projectId}/show`)
-      }
+      // A Look goes to the library that owns it, mirroring the busk view's own inspect; a cue to
+      // the Show view. (The `/show/stacks/{id}` arm died with the cue-stack slot.)
+      navigate(
+        slot.itemType === 'look'
+          ? `/projects/${projectId}/looks`
+          : `/projects/${projectId}/show`,
+      )
     },
     [navigate, projectId],
   )
@@ -331,13 +333,11 @@ function CueSlotOverviewPanelBody() {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Edit mode header */}
-      {isEditMode && (
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-medium text-muted-foreground">Editing slots</span>
-          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={exitEditMode}>
-            Done
-          </Button>
+      {/* No *Done* here: the mode belongs to the busk view, and a second exit in the header would
+          be a control that leaves a page mid-edit from another route. */}
+      {buskEditing && (
+        <div className="mb-2 text-xs text-muted-foreground">
+          Drag a cue or a bound Look from the library to fill a slot
         </div>
       )}
 
@@ -350,14 +350,8 @@ function CueSlotOverviewPanelBody() {
               slot={slot}
               page={page}
               slotIndex={index}
-              isActive={
-                slot
-                  ? slot.itemType === 'cue'
-                    ? activeCueIds.has(slot.itemId)
-                    : activeCueStackIds.has(slot.itemId)
-                  : false
-              }
-              isEditMode={isEditMode}
+              isLit={slot ? slotIsLit(slot) : false}
+              isEditMode={buskEditing}
               onTap={handleSlotTap}
               onView={handleViewSlot}
               onClear={handleClearSlot}
@@ -391,14 +385,6 @@ function CueSlotOverviewPanelBody() {
         </div>
       )}
 
-      {/* Edit mode assign panel (inline, not portalled). Through `CollapsiblePanel` for the same
-          reason the four overview panels are: it holds a cue-stack query, and edit mode is the
-          exception rather than the rule. */}
-      {projectId && (
-        <CollapsiblePanel isVisible={isEditMode} className={isEditMode ? 'mt-3' : undefined}>
-          <EditModeAssignPanel projectId={projectId} />
-        </CollapsiblePanel>
-      )}
     </div>
   )
 }
@@ -409,7 +395,9 @@ interface CueSlotCellProps {
   slot: CueSlot | null
   page: number
   slotIndex: number
-  isActive: boolean
+  /** On stage: a live cue, or a Look present on the rig. See `slotLitClass`. */
+  isLit: boolean
+  /** The **busk view's** edit mode: crosses, drags and drop targets all follow it. */
   isEditMode: boolean
   onTap: (slot: CueSlot) => void
   onView: (slot: CueSlot) => void
@@ -420,19 +408,25 @@ function CueSlotCell({
   slot,
   page,
   slotIndex,
-  isActive,
+  isLit,
   isEditMode,
   onTap,
   onView,
   onClear,
 }: CueSlotCellProps) {
-  const { enterEditMode } = useCueSlotDnd()
   const droppableId = `slot-${page}-${slotIndex}`
 
-  const { setNodeRef: setDropRef, isOver } = useDroppable({
+  // Only a droppable while the busk view is editing: outside that mode the overlay is press-only,
+  // and an armed drop target with nothing to drop on it would only steal a busk page's drags.
+  const { setNodeRef: setDropRef, isOver, active } = useDroppable({
     id: droppableId,
     data: { type: 'slot-target', page, slotIndex } satisfies CueSlotDropTargetData,
+    disabled: !isEditMode,
   })
+
+  // A palette row over this tile that cannot land in it — a template, or a Look needing a
+  // selection. The drop is a no-op either way; this only says why rather than swallowing it.
+  const refuses = isOver && isSlotRefusedDrag(active?.data.current)
 
   const {
     attributes: dragAttributes,
@@ -447,98 +441,31 @@ function CueSlotCell({
     disabled: !slot || !isEditMode,
   })
 
-  // Long-press + two-stage press state
+  /**
+   * Hold → the context menu, and nothing else.
+   *
+   * There used to be a second stage: keep holding and the panel latched its own wiggle-and-cross
+   * edit mode. That mode is gone — a slot's cross follows the busk view's *Edit layout* now — so
+   * what is left is exactly `useLongPress`: a hold that opens the menu (the only way to reach
+   * *View* / *Clear slot* on touch) and a short press that fires the tile.
+   */
   const triggerRef = useRef<HTMLDivElement>(null)
-  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const editModeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const didLongPress = useRef(false)
-  const startPos = useRef<{ x: number; y: number } | null>(null)
-  const isLongPressPointer = useRef(false)
 
-  const clearPress = useCallback(() => {
-    if (pressTimer.current) {
-      clearTimeout(pressTimer.current)
-      pressTimer.current = null
-    }
-    if (editModeTimer.current) {
-      clearTimeout(editModeTimer.current)
-      editModeTimer.current = null
-    }
-    startPos.current = null
-  }, [])
-
-  // The cell now really does unmount — the panel body goes when the panel collapses, where before
-  // it only flattened to zero height. A long press in flight at that moment used to be harmless;
-  // orphaned, its second stage fires ~800 ms later, dispatches a global Escape (which would close
-  // whatever dialog the operator had opened in the meantime) and latches edit mode on a provider
-  // whose auto-exit already ran.
-  useEffect(() => clearPress, [clearPress])
-
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent) => {
-      if (e.button === 2) return
-      isLongPressPointer.current = true
-      didLongPress.current = false
-      startPos.current = { x: e.clientX, y: e.clientY }
-      const clientX = e.clientX
-      const clientY = e.clientY
-      pressTimer.current = setTimeout(() => {
-        didLongPress.current = true
-        pressTimer.current = null
-        // Stage 1: Open context menu
-        triggerRef.current?.dispatchEvent(
-          new MouseEvent('contextmenu', {
-            bubbles: true,
-            clientX,
-            clientY,
-          }),
-        )
-        // Stage 2: If still holding after another 500ms, dismiss menu and enter edit mode
-        editModeTimer.current = setTimeout(() => {
-          editModeTimer.current = null
-          if (isLongPressPointer.current) {
-            // Dismiss the Radix context menu by dispatching Escape
-            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
-            navigator.vibrate?.(10)
-            enterEditMode()
-          }
-        }, 500)
-      }, 500)
+  const { handlers: pressHandlers } = useLongPress({
+    onLongPress: ({ x, y }) => {
+      triggerRef.current?.dispatchEvent(
+        new MouseEvent('contextmenu', { bubbles: true, clientX: x, clientY: y }),
+      )
     },
-    [enterEditMode],
-  )
-
-  const handlePointerMove = useCallback(
-    (e: React.PointerEvent) => {
-      if (!startPos.current) return
-      const dx = e.clientX - startPos.current.x
-      const dy = e.clientY - startPos.current.y
-      if (dx * dx + dy * dy > 10 * 10) {
-        clearPress()
-      }
+    onPress: () => {
+      if (slot) onTap(slot)
     },
-    [clearPress],
-  )
+    // While editing, dnd-kit owns the pointer: a tile is a drag handle, not a button.
+    disabled: isEditMode,
+  })
 
-  const handlePointerUp = useCallback(() => {
-    if (!isLongPressPointer.current) return
-    isLongPressPointer.current = false
-    const wasLongPress = didLongPress.current
-    clearPress()
-    if (!wasLongPress && slot && !isEditMode) {
-      onTap(slot)
-    }
-  }, [clearPress, slot, onTap, isEditMode])
-
-  // In edit mode, dnd-kit handles pointer events for dragging; otherwise our custom handlers
-  const pointerHandlers = isEditMode
-    ? {}
-    : {
-        onPointerDown: handlePointerDown,
-        onPointerMove: handlePointerMove,
-        onPointerUp: handlePointerUp,
-        onPointerCancel: clearPress,
-      }
+  // In edit mode, dnd-kit handles pointer events for dragging; otherwise the hold gesture does.
+  const pointerHandlers = isEditMode ? {} : pressHandlers
 
   // Merge refs for drag and drop
   const setRef = useCallback(
@@ -550,61 +477,46 @@ function CueSlotCell({
     [setDropRef, setDragRef],
   )
 
-  // Empty slot — drop target + context menu / long-press for "Edit slots"
+  // Empty slot — a drop target and nothing else. Its context menu held one item ("Edit slots"),
+  // which went with the panel's own edit mode, so there is no menu and no press to arm.
   if (!slot) {
-    const emptyPointerHandlers = isEditMode
-      ? {}
-      : {
-          onPointerDown: handlePointerDown,
-          onPointerMove: handlePointerMove,
-          onPointerUp: handlePointerUp,
-          onPointerCancel: clearPress,
-        }
-
     return (
-      <ContextMenu>
-        <ContextMenuTrigger asChild>
-          <div
-            ref={(node) => {
-              setDropRef(node)
-              ;(triggerRef as React.MutableRefObject<HTMLDivElement | null>).current = node
-            }}
-            {...emptyPointerHandlers}
-            className={cn(
-              'rounded-md border-2 border-dashed flex items-center justify-center min-h-[3.5rem] transition-colors touch-none select-none',
-              isOver
-                ? 'border-primary bg-primary/5'
-                : 'border-muted-foreground/25 text-muted-foreground/40',
-            )}
-          >
-            <span className="text-xs">{isOver ? '+' : '—'}</span>
-          </div>
-        </ContextMenuTrigger>
-        <ContextMenuContent>
-          <ContextMenuItem onSelect={enterEditMode}>
-            <Pencil className="mr-2 size-4" />
-            Edit slots
-          </ContextMenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
+      <div
+        ref={setDropRef}
+        className={cn(
+          'rounded-md border-2 border-dashed flex items-center justify-center min-h-[3.5rem] transition-colors touch-none select-none',
+          refuses
+            ? 'border-destructive bg-destructive/5 text-destructive'
+            : isOver
+              ? 'border-primary bg-primary/5'
+              : 'border-muted-foreground/25 text-muted-foreground/40',
+        )}
+      >
+        <span className="text-xs">{refuses ? '×' : isOver ? '+' : '—'}</span>
+      </div>
     )
   }
 
   // Filled slot
   return (
     <ContextMenu>
+      {/* The `aria-*` spread comes after `dragAttributes`, and only outside edit mode:
+          `useDraggable` sets `role` and an `aria-pressed` meaning *dragging*, which is the honest
+          reading while the tile is a drag handle. Pressed here means **on stage**. */}
       <ContextMenuTrigger asChild>
         <div
           ref={setRef}
           {...dragAttributes}
           {...dragListeners}
+          {...(isEditMode ? {} : { 'aria-label': slot.itemName, 'aria-pressed': isLit })}
           {...pointerHandlers}
           className={cn(
             'relative rounded-md border flex flex-col items-center justify-center gap-0.5 min-h-[3.5rem] px-1.5 py-1 select-none transition-all touch-none',
             isEditMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer',
-            isActive && !isEditMode && 'border-primary bg-primary/20',
-            !isActive && !isEditMode && 'hover:bg-muted/50',
-            isOver && 'ring-2 ring-primary ring-offset-1',
+            !isEditMode && slotLitClass(slot.itemType, isLit),
+            !isLit && !isEditMode && 'hover:bg-muted/50',
+            isOver &&
+              (refuses ? 'ring-2 ring-destructive ring-offset-1' : 'ring-2 ring-primary ring-offset-1'),
             isDragging && 'opacity-40',
             isEditMode && !isDragging && 'animate-[wiggle_0.3s_ease-in-out_infinite]',
           )}
@@ -615,6 +527,7 @@ function CueSlotCell({
           {/* Edit mode X button */}
           {isEditMode && (
             <button
+              aria-label={`Clear ${slot.itemName}`}
               className="absolute -top-1.5 -right-1.5 size-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow-sm z-10"
               onClick={(e) => {
                 e.stopPropagation()
@@ -626,6 +539,12 @@ function CueSlotCell({
             </button>
           )}
 
+          {/* A Look's presence pip — the busk pad's own affordance. A live cue is a solid fill and
+              needs none. */}
+          {isLit && slot.itemType === 'look' && !isEditMode && (
+            <span className="absolute top-1 right-1 size-2 rounded-full bg-primary" />
+          )}
+
           <SlotItemContent name={slot.itemName} itemType={slot.itemType} />
         </div>
       </ContextMenuTrigger>
@@ -633,11 +552,6 @@ function CueSlotCell({
         <ContextMenuItem onSelect={() => onView(slot)}>
           <Eye className="mr-2 size-4" />
           View
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem onSelect={enterEditMode}>
-          <Pencil className="mr-2 size-4" />
-          Edit slots
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem

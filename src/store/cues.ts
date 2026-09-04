@@ -201,23 +201,3 @@ export function useActiveCueIds(projectId: number | undefined): Set<number> {
     return ids
   }, [stacks])
 }
-
-/**
- * The stack ids currently on stage — a stack is live exactly when it holds an active cue.
- *
- * Not `projectProgramState.activeStackId`: that is the show transport's playhead, a field only
- * the `/show/*` routes set. A stack activated directly (a slot pad, another client) is live in
- * the engine without ever being the playhead, and reading the playhead here would leave its pad
- * unlit — so the next tap re-activates, and `POST /cue-stacks/{id}/activate` rewinds a running
- * stack to its first cue.
- */
-export function useActiveCueStackIds(projectId: number | undefined): Set<number> {
-  const { data: stacks } = useProjectCueStackListQuery(projectId!, { skip: !projectId })
-  return useMemo(() => {
-    const ids = new Set<number>()
-    for (const stack of stacks ?? []) {
-      if (stack.activeCueId != null) ids.add(stack.id)
-    }
-    return ids
-  }, [stacks])
-}

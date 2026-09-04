@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useDraggable } from '@dnd-kit/core'
 import { AudioWaveform, GripVertical, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useCueSlotHover } from '@/components/dnd/useCueSlotHover'
 import { Input } from '@/components/ui/input'
 import { ATTRIBUTE_FAMILIES, FAMILY_LABELS, type AttributeFamily } from '@/lib/attributeFamily'
 import { useTemplateListQuery } from '@/store/templates'
@@ -39,14 +40,29 @@ interface PaletteRow {
   badge: string
   kind: KindFilter
   families: AttributeFamily[]
-  /** A cue slot could take this: a cue, or a Look bound to its own fixtures (D7). */
+  /**
+   * A cue slot could take this: a cue, or a Look bound to its own fixtures (D7).
+   *
+   * Read by `slotDrop.ts` when this row is dropped on a slot, and here to dim the row while a slot
+   * is the target — derived at the palette because this is the surface that knows what each row is.
+   */
   slotEligible: boolean
   swatch: string | null
   isEffect: boolean
   cueNumber: string | null
 }
 
-function PaletteRowItem({ row, onPage }: { row: PaletteRow; onPage: boolean }) {
+function PaletteRowItem({
+  row,
+  onPage,
+  slotHovered,
+}: {
+  row: PaletteRow
+  onPage: boolean
+  /** A drag is over an FX cue slot, so rows a slot cannot take say why. */
+  slotHovered: boolean
+}) {
+  const refused = slotHovered && !row.slotEligible
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: row.dragId,
     data: {
@@ -63,6 +79,7 @@ function PaletteRowItem({ row, onPage }: { row: PaletteRow; onPage: boolean }) {
       className={cn(
         'flex min-h-10 items-center gap-2.5 border-t px-2.5 py-2 text-[13px] first:border-t-0',
         isDragging && 'opacity-35',
+        refused && 'opacity-40',
       )}
     >
       <button
@@ -91,6 +108,9 @@ function PaletteRowItem({ row, onPage }: { row: PaletteRow; onPage: boolean }) {
         <div className="truncate">{row.name}</div>
         <div className="truncate text-[11px] text-muted-foreground">{row.detail}</div>
       </div>
+      {refused && (
+        <span className="shrink-0 text-[10px] text-muted-foreground">needs a selection</span>
+      )}
       {onPage && (
         <span className="inline-flex h-4 shrink-0 items-center rounded-full bg-muted px-1.5 text-[10px]">
           on page
@@ -141,6 +161,9 @@ export function LibraryPalette({
   const { data: templates } = useTemplateListQuery({ projectId })
   const { data: looks } = useLookListQuery({ projectId })
   const { data: stacks } = useProjectCueStackListQuery(projectId)
+  // Once for the whole palette, not per row: it is a monitor subscription, and eight of them would
+  // be eight re-renders per hover.
+  const slotHovered = useCueSlotHover()
   const [search, setSearch] = useState('')
   const [kind, setKind] = useState<KindFilter>('all')
   const [family, setFamily] = useState<FamilyFilter>('any')
@@ -287,7 +310,12 @@ export function LibraryPalette({
           </p>
         ) : (
           shown.map((row) => (
-            <PaletteRowItem key={row.key} row={row} onPage={onPageKeys.has(row.key)} />
+            <PaletteRowItem
+              key={row.key}
+              row={row}
+              onPage={onPageKeys.has(row.key)}
+              slotHovered={slotHovered}
+            />
           ))
         )}
       </div>

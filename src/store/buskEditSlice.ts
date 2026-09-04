@@ -1,4 +1,5 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
+import { useSelector } from 'react-redux'
 
 /**
  * Whether the busk view is in **edit layout** mode, and which page is being edited.
@@ -48,3 +49,13 @@ export const { enterBuskEdit, exitBuskEdit } = buskEditSlice.actions
 export const selectBuskEdit = (state: { buskEdit: BuskEditState }) => state.buskEdit
 
 export { buskEditSlice }
+
+/**
+ * Is the busk view editing its layout?
+ *
+ * Selects the **boolean**, not the state object, so a page change does not re-render every consumer
+ * — the FX cue-slot overlay reads this once per tile, and it has eight of them.
+ */
+export function useBuskEditMode(): boolean {
+  return useSelector((state: { buskEdit: BuskEditState }) => state.buskEdit.editing)
+}

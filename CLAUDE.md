@@ -438,43 +438,22 @@ would light for an effect template while leaving every value template's pad dark
 
 The **busk view**'s pad grid takes both, and takes **cues** besides — but it no longer decides where
 any of them go. A pad sits where the operator put it, in a bank on a page they built (see §The busk
-layout); the library's family and its groups say nothing about the arrangement. What survives from
+layout); the library's family says nothing about the arrangement. What survives from
 the old automatic layout is the pad *face*: an effect pad is a pad like any other — same component,
 same presence ladder, same long-press — and only its wave glyph says what it holds. The paragraphs
-below still describe `/templates`' own list, where the array order is the contract,
-and it comes from `buildTemplateLayout` in `lib/templateLayout.ts`, the **one** place the tree of
-templates and **template groups** is composed from the two flat lists the server serves. A group's
-exclusivity (pressing a member releases its siblings on the same targets) is the server's, applied
-in the toggle route. **A busk pad no longer goes through it** — a press there goes through the pad,
-and the pad's *bank* decides the siblings — so template groups now reach only the programmer's
-⌥click strip and the AI; the busk-layout plan retires them in its session 3.
+below describe the pad face only.
 
-`/templates` is where that order is **set**: `TemplateLayoutList` is the dnd-kit wiring (a top-level
-`SortableContext`, one nested per group, a `useDroppable` body per group so an empty one takes a
-drop) around the pure reducer `moveInLayout`, which is where the drag logic is tested. The reducer
-has two phases for the standard multi-container reason — `'over'` moves *between* containers only
-and answers null inside one, so it never fights the sortable preview; `'end'` commits the
-within-container `arrayMove`. A drop posts the **whole** layout (`reorderTemplates`, optimistic on
-both caches), because a partial list cannot say "out of its group".
+**`/templates` is a flat list ordered by name, and there is nothing to drag.** A template carried an
+operator-set position and could sit in a *group* whose pads released each other; both went with the
+automatic layout, because both were things the busk page does better — order is a pad's place in a
+bank, exclusivity is a solo bank's. `TemplateLayoutList`, `TemplateGroupRow` and
+`lib/templateLayout.ts` are deleted, `/templates/reorder` and the `/template-groups` CRUD with them,
+and `TemplateSummary` carries no `sortOrder` and no `groupId`. The programmer's `TemplateStrip`
+renders the same name-ordered list; do not reintroduce a client-side library order.
 
-**Dragging works under a family filter too**, and the way it does is the thing to keep: the list
-takes the *unfiltered* `layout` plus the `family` and filters only what it draws, so the reducer
-runs over every entry while the operator sees one bank and the commit is still complete. Do not hand
-it a pre-filtered list. It holds because `moveInLayout` is **id-addressed** — every id dnd-kit
-reports names a mounted thing, the container test is membership rather than position, insertion is
-adjacent to the target rather than at a computed index, and `filterLayoutByFamily` preserves
-relative order, so the one place a position decides anything (`fromIndex < toIndex`) answers the
-same in both views. What it costs: hidden entries keep their own order but the moved row can pass
-them, because there is no drop target between two of them — the footer says so rather than leaving
-it to be discovered under *All*. `DndContext` still stays mounted with every sortable `disabled`
-when `dndEnabled` is false, which now means only "not the current project".
-
-A group with **no derivable family** shows in every bank rather than under *All* alone, and the
-predicate is `groupFamilyOf(entry) === null` and not "no members" for a reason: it is exactly when
-`moveInLayout` accepts a template of any family, so the UI offers a target precisely where the
-reducer has one. It covers a group just created (which must be fillable in the bank it was created
-in), one whose members all have a null family, and one drained mid-drag — which "no members" would
-unmount under the cursor.
+The **family filter** stays, and is the page's only partition: a template is in exactly one family,
+so `?family=colour` is a view of a small library rather than a division of it, and it deep-links
+from Cmd+K. The footer says how many of the whole library the bank is showing.
 
 A colour pad carries a **swatch**, but only when the
 template is generic and single-row — `templateSwatch` in `components/busking/padFace.ts` makes
@@ -511,8 +490,8 @@ siblings off — a layer sibling narrowed on the pressed heads, a live cue sibli
 press taking its layer siblings off wholesale, because a cue has no targets to narrow by. An **off**
 press releases nothing, and a stacking bank has no siblings at all.
 
-**`src/lib/buskLayout.ts` is the document model**, the `templateLayout.ts` slot for this surface: no
-React, no store, every gesture a plain call a unit test can make. Three rules run through it:
+**`src/lib/buskLayout.ts` is the document model**: no React, no store, every gesture a plain call a
+unit test can make. Three rules run through it:
 
 - **Addresses, not ids.** A pad, bank or column created by the *previous* gesture has no id yet —
   the layout PUT mints it — so drag ids and every position are index tuples (`bpad:{r}.{c}.{b}.{p}`,
@@ -546,8 +525,14 @@ the slot and the landing place agree; testing either half alone passes with the 
 cue-slot overlay and the routed page, and the busk page joins it with `useDndMonitor` rather than
 nesting one — a nested context wins for its subtree and would hide the busk page from the overlay's
 droppables, which is exactly the drop the plan's session 3 needs. The two surfaces coexist by
-**mutual ignorance**: `parseBuskDragId` answers null for a `slot-…` id and the slot handler ignores
-everything busk. Three things about that provider are load-bearing:
+**mutual ignorance of ids and of foreign *targets***: `parseBuskDragId` answers null for a `slot-…`
+id, and the slot handler returns for any `over` that is not a slot. It is **not** ignorance of
+*sources* — a drop onto a slot is resolved in the provider whatever lifted it, today a sibling slot
+or a `busk-palette` row from the library palette, because the provider owns the slot droppables
+(mounted on every route), `projectId` and both slot mutations, while the panel body unmounts with
+the overlay. The source→assignment mapping is pure in `components/dnd/slotDrop.ts`, imported
+type-only, so the shell still reaches no busk runtime code. Three things about that provider are
+load-bearing:
 
 - **Collision detection is `pointerWithin` falling back to `closestCenter`.** dnd-kit's default
   `rectIntersection` compares the *dragged* rect by area, so a 20px column gutter could never beat
@@ -558,6 +543,31 @@ everything busk. Three things about that provider are load-bearing:
   registers a renderer at **module scope**, so the app shell draws a busk pad without its import
   graph ever reaching one. The ghost face is a **frozen snapshot**: an effect template's detail line
   reads a live speed-master label through a hook, and the overlay must be hookless.
+
+**The FX cue-slot overlay is filled from the busk view's palette, and edited only while the busk
+view is.** A slot holds a cue or a **Look with no deferred effect** — `itemType` is `'cue' | 'look'`,
+and the cue-*stack* arm is gone. It has no selection, so it can hold only what needs none: a Look
+tile presses `POST /looks/{id}/toggle` with an **empty target list**, and the desk derives the
+targets from the Look's own patched fixtures. Three rules follow, and each has a reason that is easy
+to undo by accident:
+
+- **A Look tile lights from the programmer's applied feed, never from cue liveness.**
+  `lookIsApplied` (`busking/lookPresence.ts`) is a selection-*independent* helper for exactly this:
+  the target-scoped folds beside it answer `'none'` for an empty target list by design, so reading a
+  slot through one would leave every Look tile dark. It matches on the source being a **LOOK**,
+  because a template layer can carry the same int PK.
+- **Crosses, drags and drop targets follow `useBuskEditMode()`**, the `buskEdit` Redux slice — the
+  overlay is a *sibling* of the routed page in `Layout.tsx`, so a context inside the busk view could
+  never reach it. The panel's own long-press wiggle mode and its inline assign panel are deleted.
+  Outside edit mode the overlay is press-only, with its *View* / *Clear slot* context menu intact.
+- **`slotEligible` is decided at the palette and re-checked in `slotDrop.ts`.** An ineligible row
+  dims and says *needs a selection* while a slot is the target (`useCueSlotHover`, a `useDndMonitor`
+  rather than provider state, so only the palette re-renders at hover rate), and the drop is a no-op
+  if it lands anyway.
+
+Known gap: the slot droppables live inside `CollapsiblePanel`, so with the overlay shut a palette
+row dropped at the header lands on nothing, silently — `FU-SLOT-DROP-OVERLAY-HIDDEN` in lighting7's
+follow-ups.
 
 **The preview is a ghosted source plus one dashed slot, and there is no `SortableContext` anywhere
 on this page.** The primary gesture is a *palette* drop, and a palette row is not a member of any
@@ -1390,8 +1400,11 @@ path may quietly change where it lands.
   carries.
 
   The gesture itself is `hooks/useLongPress.ts`, which replaced two byte-identical hand-rolled
-  copies; `PropertyPadButton` had a third (deleted with it) and `CueSlotOverviewPanel` still has a
-  fourth, materially different one.
+  copies; `PropertyPadButton` had a third (deleted with it), and `CueSlotOverviewPanel` adopted it
+  too once its second stage — hold longer and the panel latched its own wiggle-and-cross edit mode —
+  went. A slot's cross follows the **busk view's** edit mode now (`useBuskEditMode`), so what is
+  left there is one stage: a hold opens the context menu, which is the only way to reach *View* and
+  *Clear slot* on touch.
 
   **The cue column is gone, and a cue is a pad like any other.** There was a fourth region beside
   the Looks pool (`BuskCueStacks.tsx`): a card per runnable stack — name, live pip, current → next,
@@ -1402,14 +1415,13 @@ path may quietly change where it lands.
   - **A cue pad is apply / stop, not a playhead move.** It presses through `POST /busk/pads/{id}/press`
     like every other pad, which reaches `CueStackManager` — so the cue goes live *without becoming
     the playhead*, exactly as a cue slot behaves, and pressing it again stops it. `useActiveCueIds`
-    is what lights it, for the same reason. The pinned pad's `POST /show/go-to` with a `cueId` lost
-    its only caller; the field stays on the request until the plan's session 3.
+    is what lights it, for the same reason. `GoToStackRequest.cueId` lost its only caller and is
+    gone: `/show/go-to` names a stack and lands on its first cue.
   - **GO and BACK are the ShowBar's, and only the ShowBar's.** The stack cards' GO was two requests
     behind one gesture — `transport.go()` on the live stack, `goToStack` on any other — and a busk
     page has no room for a transport that means different things depending on which card it is on.
-  - **`pinnedToBusk` has no reader on this page any more.** It still rides `CueStackCueEntry`, is
-    still set in `CuePropsPane`, and `buildCueInput` must still hand it back; session 3 deletes the
-    column and the toggle together. Don't add a new reader for it.
+  - **`pinnedToBusk` is gone entirely** — the column, the *Pin to Busk* toggle in `CuePropsPane`,
+    and the `buildCueInput` round-trip. A cue that wants a pad is placed in a bank.
   - **The transport is not a prop any more either.** `routes/Busk.tsx` still holds the one
     `useShowTransport` through `useShowBarProps` — a second instance would mean a second rAF loop
     and a second reconcile effect on one runner slice — but nothing below it needs one.

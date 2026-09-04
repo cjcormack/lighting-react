@@ -15,7 +15,7 @@ vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).li
 
 import { store } from './index'
 import { restApi } from './restApi'
-import { useActiveCueIds, useActiveCueStackIds } from './cues'
+import { useActiveCueIds } from './cues'
 import type { CueStack } from '../api/cueStacksApi'
 
 function stack(id: number, activeCueId: number | null): CueStack {
@@ -60,18 +60,13 @@ describe('active cue / stack liveness', () => {
 
   it('derives liveness from the stack list, with no effects anywhere', async () => {
     const cues = renderHook(() => useActiveCueIds(1), { wrapper })
-    const stacks = renderHook(() => useActiveCueStackIds(1), { wrapper })
 
-    await vi.waitFor(() => {
-      expect(cues.result.current.has(7)).toBe(true)
-      expect(stacks.result.current.has(2)).toBe(true)
-    })
-    expect(stacks.result.current.has(3)).toBe(false)
+    await vi.waitFor(() => expect(cues.result.current.has(7)).toBe(true))
+    expect(cues.result.current.has(9)).toBe(false)
   })
 
   it('follows cueRunStateChanged frames — the rows-only fire/stop path', async () => {
     const cues = renderHook(() => useActiveCueIds(1), { wrapper })
-    const stacks = renderHook(() => useActiveCueStackIds(1), { wrapper })
     await vi.waitFor(() => expect(cues.result.current.has(7)).toBe(true))
 
     // A rows-only cue fires on stack 3: the only signal is the run-state frame.
@@ -89,10 +84,7 @@ describe('active cue / stack liveness', () => {
         autoAdvanceDelayMs: null,
       })
     })
-    await vi.waitFor(() => {
-      expect(cues.result.current.has(9)).toBe(true)
-      expect(stacks.result.current.has(3)).toBe(true)
-    })
+    await vi.waitFor(() => expect(cues.result.current.has(9)).toBe(true))
 
     // And its stop is a frame with a null active cue.
     act(() => {
@@ -109,10 +101,7 @@ describe('active cue / stack liveness', () => {
         autoAdvanceDelayMs: null,
       })
     })
-    await vi.waitFor(() => {
-      expect(cues.result.current.has(9)).toBe(false)
-      expect(stacks.result.current.has(3)).toBe(false)
-    })
+    await vi.waitFor(() => expect(cues.result.current.has(9)).toBe(false))
   })
 
   it('subscribes nothing without a project id', () => {

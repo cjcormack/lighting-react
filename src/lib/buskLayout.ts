@@ -17,7 +17,7 @@ import type {
 /**
  * The busk page as a document, and every gesture that edits one.
  *
- * The `lib/templateLayout.ts` slot for the busk view: no React, no store, so each arm of the drag
+ * The pure half of the busk view's drag: no React, no store, so each arm of the drag
  * behaviour is a plain call a unit test can make. What the view keeps is a hover *target*, and this
  * module turns `(page, source, target)` into the next page exactly once, on drop.
  *
@@ -159,7 +159,7 @@ export function parseBuskDragId(id: string): ParsedBuskId | null {
  * The drop target a parsed droppable id names, or null when it names no landing place.
  *
  * The bank **body** collapses to a pad target at the end of the bank, which is what makes an empty
- * bank droppable at all — the `gbody:` trick from `templateLayout.ts`, one entity along.
+ * bank droppable at all — the same trick the retired template-group list used for an empty group.
  */
 export function dropTargetFor(parsed: ParsedBuskId, page: BuskPage): DropTarget | null {
   switch (parsed.kind) {

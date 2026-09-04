@@ -146,15 +146,6 @@ describe('buildCueInput', () => {
     expect(off.stomp).toBeUndefined()
   })
 
-  it('carries the busk pin, and leaves an absent one absent', () => {
-    // Set from the cue properties sheet's own PATCH, never from this form — so an inline edit that
-    // dropped it would unpin the cue as a side effect of renaming it. Same absent-stays-absent rule
-    // as `stomp` above, for the same `encodeDefaults = false` reason.
-    expect(buildCueInput(cueWithOneLayer()).pinnedToBusk).toBe(true)
-    expect(
-      buildCueInput({ ...cueWithOneLayer(), pinnedToBusk: undefined }).pinnedToBusk,
-    ).toBeUndefined()
-  })
 })
 
 // A `reorderCueLayers` block stood here — move-and-renumber, renumber-a-gappy-list, and an
@@ -208,7 +199,6 @@ function cueWithOneLayer(): Cue {
     cueNumberAuto: true,
     notes: null,
     stomp: true,
-    pinnedToBusk: true,
     cueType: 'STANDARD',
     canEdit: true,
     canDelete: true,

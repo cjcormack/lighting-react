@@ -1,14 +1,14 @@
-import { Layers, ListMusic } from 'lucide-react'
+import { ListMusic, SwatchBook } from 'lucide-react'
+import { padPresenceClass } from './busking/padFace'
 import type { CueSlot } from '../store/cueSlots'
 
 /**
- * What `CueSlotOverviewPanel` and `CueSlotEditAssignPanel` both need, extracted so neither has to
- * import the other.
+ * The cue-slot types and glyph, shared by `CueSlotOverviewPanel` and `dnd/DeskDndProvider`.
  *
- * They were a value-import cycle — the panel rendered the assign panel, the assign panel imported
- * the panel's `SlotItemContent` and drag-data type. That is the only failure mode in this tree
- * that shows up as a working build and a broken app in the browser (see the `startOAuthIdentityBridge`
- * TDZ break in CLAUDE.md), so the shared half lives here rather than in either end of it.
+ * Extracted when the panel and its own assign panel were a value-import cycle. That panel is gone —
+ * slots are filled by dragging from the busk view's library palette now — but the split still
+ * earns its keep: the provider resolves every slot drop and must not import the panel, and the
+ * panel imports the provider's hook.
  */
 
 /**
@@ -32,21 +32,13 @@ export interface CueSlotDropTargetData {
   slotIndex: number
 }
 
-/** The payload a drag from the assign panel carries to a slot. */
-export interface CueSlotAssignDragData {
-  type: 'cue-slot-assign'
-  itemType: 'cue' | 'cue_stack'
-  itemId: number
-  itemName: string
-}
-
-/** The label and type glyph, identical in a slot, in the assign list and under the drag cursor. */
+/** The label and type glyph, identical in a slot and under the drag cursor. */
 export function SlotItemContent({
   name,
   itemType,
 }: {
   name: string
-  itemType: 'cue' | 'cue_stack'
+  itemType: CueSlot['itemType']
 }) {
   return (
     <>
@@ -54,12 +46,29 @@ export function SlotItemContent({
         {name}
       </span>
       <div className="flex items-center gap-1 mt-0.5">
-        {itemType === 'cue_stack' ? (
-          <Layers className="size-3 text-muted-foreground shrink-0" />
+        {itemType === 'look' ? (
+          <SwatchBook className="size-3 text-muted-foreground shrink-0" />
         ) : (
           <ListMusic className="size-3 text-muted-foreground shrink-0" />
         )}
       </div>
     </>
   )
+}
+
+/**
+ * How a lit tile looks, by what it holds — two different claims, so two different faces.
+ *
+ * A live **cue** keeps the overlay's own shipped fill: this cue is its stack's live cue, a fact
+ * about the show. A **Look** on the rig is a *layer this tile would remove*, so it borrows the busk
+ * pad's presence vocabulary — literally, through [padPresenceClass], rather than by hand. It was
+ * hand-rolled first and had already drifted a shade from the pad's `all` state; a shared function
+ * is the only version of "one dialect" that stays true.
+ *
+ * A slot has no selection, so a Look is either present or it is not — `'all'` or `'none'`; the pad's
+ * middle rung has no meaning here. The corner pip is the tile's own.
+ */
+export function slotLitClass(itemType: CueSlot['itemType'], lit: boolean): string {
+  if (!lit) return ''
+  return itemType === 'cue' ? 'border-primary bg-primary/20' : padPresenceClass('all')
 }

@@ -9,7 +9,7 @@ import type { BuskPad } from '@/api/buskApi'
 import type { TemplateSummary } from '@/api/templatesApi'
 import { buskPadId, type PadAddress } from '@/lib/buskLayout'
 import type { EffectPresence } from './buskingTypes'
-import { padFaceOf, type PadFace } from './padFace'
+import { padFaceOf, padPresenceClass, type PadFace } from './padFace'
 import { buskDragData, DROP_DEPTH, type BuskDropData, type BuskPadDragData } from './buskDnd'
 
 /**
@@ -54,14 +54,6 @@ function EffectPadDetail({ template }: { template: TemplateSummary }) {
   return [template.effect.effectType, speed, masterLabel].filter(Boolean).join(' · ')
 }
 
-/** The presence ladder, shared by the pad and its ghost so a lifted pad looks like itself. */
-export function padPresenceClass(presence: EffectPresence): string {
-  return cn(
-    presence === 'none' && 'border-border bg-card',
-    presence === 'some' && 'border-primary/40 bg-primary/10',
-    presence === 'all' && 'border-primary bg-primary/20 ring-1 ring-primary/50',
-  )
-}
 
 function LookFace({
   face,

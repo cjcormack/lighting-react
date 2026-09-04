@@ -79,8 +79,6 @@ function template(over: Partial<TemplateSummary> = {}): TemplateSummary {
     uuid: 'u1',
     name: 'Amber Key',
     notes: null,
-    sortOrder: 0,
-    groupId: null,
     fadeDurationMs: null,
     family: 'COLOUR',
     isGeneric: true,
@@ -240,77 +238,3 @@ describe('validity and the save body', () => {
   })
 })
 
-/**
- * The *Group* field: present only where a group exists, narrowed to the draft's family, and
- * always sent — null with the flag is how an edit leaves a group.
- */
-describe('the Group field', () => {
-  const groups = [
-    { id: 10, uuid: 'g10', name: 'Keys', sortOrder: 0, family: 'COLOUR' as const },
-    { id: 11, uuid: 'g11', name: 'Movers', sortOrder: 1, family: 'POSITION' as const },
-    { id: 12, uuid: 'g12', name: 'Spare', sortOrder: 2, family: null },
-  ]
-
-  it('is absent when the project has no groups', () => {
-    renderEditor()
-    expect(screen.queryByRole('combobox', { name: 'Group' })).toBeNull()
-  })
-
-  it('offers only groups of the draft’s family, and the empty one', () => {
-    render(
-      <TemplateEditor open onOpenChange={() => {}} projectId={1} template={null} onSave={vi.fn(async () => {})} isSaving={false} groups={groups} />,
-    )
-    fireEvent.click(screen.getByRole('combobox', { name: 'Group' }))
-    expect(screen.getByRole('option', { name: 'None' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Keys' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Spare' })).toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: 'Movers' })).toBeNull()
-  })
-
-  it('sends the chosen group with the flag, and null with the flag when None', async () => {
-    const onSave = vi.fn(async () => {})
-    render(
-      <TemplateEditor open onOpenChange={() => {}} projectId={1} template={template({ groupId: 10 })} onSave={onSave} isSaving={false} groups={groups} />,
-    )
-    expect(screen.getByRole('combobox', { name: 'Group' })).toHaveTextContent('Keys')
-
-    fireEvent.click(screen.getByRole('combobox', { name: 'Group' }))
-    fireEvent.click(screen.getByRole('option', { name: 'None' }))
-    fireEvent.click(screen.getByRole('button', { name: /save/i }))
-    await waitFor(() => expect(onSave).toHaveBeenCalled())
-    const body = (onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as TemplateInput
-    expect(body.groupId).toBeNull()
-    expect(body.groupIdPresent).toBe(true)
-  })
-
-  /**
-   * A group-only change is a change. Without it Escape or a click outside took the choice away
-   * with no *Discard changes?* prompt, because `isDirty` never looked at the group.
-   */
-  it('counts a group change as unsaved work', () => {
-    render(
-      <TemplateEditor open onOpenChange={() => {}} projectId={1} template={template({ groupId: 10 })} onSave={vi.fn(async () => {})} isSaving={false} groups={groups} />,
-    )
-    fireEvent.click(screen.getByRole('combobox', { name: 'Group' }))
-    fireEvent.click(screen.getByRole('option', { name: 'None' }))
-    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
-    expect(screen.getByText(/Discard changes/i)).toBeInTheDocument()
-  })
-
-  /**
-   * `groups` undefined is "the list has not answered", not "there are none": sending
-   * `groupIdPresent` there would eject every saved template from its group on a failed fetch.
-   */
-  it('sends no group instruction at all when the group list is unknown', async () => {
-    const onSave = vi.fn(async () => {})
-    render(
-      <TemplateEditor open onOpenChange={() => {}} projectId={1} template={template({ groupId: 10 })} onSave={onSave} isSaving={false} />,
-    )
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Renamed' } })
-    fireEvent.click(screen.getByRole('button', { name: /save/i }))
-    await waitFor(() => expect(onSave).toHaveBeenCalled())
-    const body = (onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as TemplateInput
-    expect('groupId' in body).toBe(false)
-    expect(body.groupIdPresent).toBeUndefined()
-  })
-})

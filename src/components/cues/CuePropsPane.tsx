@@ -34,7 +34,8 @@ interface CuePropsPaneProps {
 
 /**
  * Properties pane: name, cue#, fade in/out, easing, notes,
- * auto-advance, the busk pin, script hooks. Every field auto-saves via PATCH — selects and
+ * auto-advance, script hooks. (There is no busk pin: a cue that wants a pad is placed in a bank on
+ * a busk page, which is where pad placement lives now.) Every field auto-saves via PATCH — selects and
  * toggles on change, text fields on blur, on Enter, and a beat after typing
  * stops (`useFieldAutosave`). There is no Save button and none is wanted.
  *
@@ -146,14 +147,6 @@ export function CuePropsPane({ cue, projectId }: CuePropsPaneProps) {
       patchCue({ projectId, cueId: cue.id, autoAdvance: next })
     },
     [cue.autoAdvance, cue.id, patchCue, projectId],
-  )
-
-  const setPinnedToBusk = useCallback(
-    (next: boolean) => {
-      if (next === (cue.pinnedToBusk ?? false)) return
-      patchCue({ projectId, cueId: cue.id, pinnedToBusk: next })
-    },
-    [cue.id, cue.pinnedToBusk, patchCue, projectId],
   )
 
   const [hooksExpanded, setHooksExpanded] = useState((cue.triggers ?? []).length > 0)
@@ -335,45 +328,6 @@ export function CuePropsPane({ cue, projectId }: CuePropsPaneProps) {
           </div>
         )}
 
-        {/* The pin lives here rather than on the busk view, because a busk pad grid has no create
-            affordance — same rule as the Look and template pools. This is the one place the
-            arrangement is authored, and it says what pressing the pad will do, since a busk pad
-            fires its cue with no arming confirm (`busking-view-plan.md` D9).
-
-            Hidden on a MARKER, which `goToCue` refuses server-side: a pad for one could only ever
-            fail, so offering the pin would be offering a broken pad. Hidden rather than disabled,
-            because a lone greyed-out switch reads as breakage rather than as "not for this kind of
-            cue". */}
-        {cue.cueType !== 'MARKER' && (
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label className="cursor-pointer" htmlFor={`cue-${cue.id}-pin`}>
-                Pin to Busk
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Give this cue a pad on the Busk view. Pressing it fires the cue immediately.
-              </p>
-            </div>
-            <button
-              id={`cue-${cue.id}-pin`}
-              type="button"
-              role="switch"
-              aria-checked={cue.pinnedToBusk ?? false}
-              onClick={() => setPinnedToBusk(!(cue.pinnedToBusk ?? false))}
-              className={cn(
-                'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors',
-                cue.pinnedToBusk ? 'bg-primary' : 'bg-muted',
-              )}
-            >
-              <span
-                className={cn(
-                  'pointer-events-none inline-block size-5 rounded-full bg-background shadow-lg transition-transform',
-                  cue.pinnedToBusk ? 'translate-x-5' : 'translate-x-0',
-                )}
-              />
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Script hooks */}

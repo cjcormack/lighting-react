@@ -41,9 +41,11 @@ export interface BuskPaletteDragData {
   /**
    * Whether a cue slot could take this — a cue, or a Look with no deferred effect (D7).
    *
-   * Nothing reads it yet. It is here because the palette is the surface session 3 feeds the slots
-   * from, and deriving it there rather than at the slot keeps one answer to "can this land in a
-   * place with no selection".
+   * Derived at the palette rather than at the slot, because the palette is the surface that knows
+   * what each row is, and one answer to "can this land in a place with no selection" is better than
+   * two. Read in two places: `dnd/slotDrop.ts` gates the drop on it (and re-checks the record kind,
+   * so a wrong value here cannot put a template in a slot), and `LibraryPalette` dims the row while
+   * a slot is the drop target.
    */
   slotEligible: boolean
 }

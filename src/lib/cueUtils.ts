@@ -116,9 +116,6 @@ export function buildCueInput(cue: Cue): CueInput {
     // but a cue can arrive carrying it (sync import, the AI tools, another client) and the PUT
     // route overwrites what it is not sent — so an inline edit must hand it back.
     stomp: cue.stomp,
-    // Handed back for the same reason as `stomp`: the pin is set from the properties sheet's own
-    // PATCH, and a PUT that omitted it would silently unpin the cue on the next inline edit.
-    pinnedToBusk: cue.pinnedToBusk,
     // Round-tripped so a PUT can't reinterpret a MARKER as a STANDARD cue. (The server ignores
     // cueType on PUT, but sending the truth keeps the payload honest if that ever changes.)
     cueType: cue.cueType,

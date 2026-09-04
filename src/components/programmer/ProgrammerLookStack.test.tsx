@@ -45,7 +45,6 @@ function look(id: number, name: string): LookSummary {
     uuid: `u${id}`,
     name,
     notes: null,
-    sortOrder: 0,
     families: ['COLOUR'],
     rowCount: 1,
     effectCount: 0,

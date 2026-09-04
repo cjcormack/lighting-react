@@ -138,3 +138,45 @@ describe('the library palette', () => {
     expect(grip.closest('.min-h-10')!.getAttribute('role')).toBeNull()
   })
 })
+
+/**
+ * While a drag is over an FX cue slot, the rows a slot cannot take say why.
+ *
+ * A slot has no selection, so it holds only what needs none: a cue, or a Look bound to its own
+ * fixtures (D7). `useCueSlotHover` is the signal — it crosses from the header, where the slots
+ * live, into the palette, which is in the routed page — and is mocked here because jsdom cannot
+ * drive a real drag.
+ */
+vi.mock('@/components/dnd/useCueSlotHover', () => ({ useCueSlotHover: () => true }))
+
+describe('the palette while a slot is the drop target', () => {
+  beforeEach(() => {
+    installRelativeUrlRequest()
+    installRecordingFetch({
+      'projects/1/templates': templates,
+      'projects/1/looks': looks,
+      'projects/1/cue-stacks': stacks,
+    })
+  })
+
+  afterEach(() => {
+    cleanup()
+    store.dispatch(restApi.util.resetApiState())
+    vi.unstubAllGlobals()
+  })
+
+  it('marks the rows a slot cannot take, and leaves the rest alone', async () => {
+    draw()
+    await screen.findByText('Storm Wash')
+
+    const refusedIn = (name: string) =>
+      screen.getByText(name).closest('.min-h-10')!.textContent!.includes('needs a selection')
+
+    // A template needs a selection to land on; so does a Look with deferred effects.
+    expect(refusedIn('Amber Key')).toBe(true)
+    expect(refusedIn('Ballyhoo')).toBe(true)
+    // A bound Look presses onto its own fixtures, and a cue has no targets at all.
+    expect(refusedIn('Storm Wash')).toBe(false)
+    expect(refusedIn('Blackout')).toBe(false)
+  })
+})
