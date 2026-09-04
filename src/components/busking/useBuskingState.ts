@@ -1,23 +1,16 @@
-import { useCallback, useMemo } from 'react'
+import { useMemo } from 'react'
 import type { CueTarget } from '@/api/cuesApi'
-import type { LookSummary } from '@/api/looksApi'
-import { useCurrentProjectQuery } from '@/store/projects'
-import { useToggleLookMutation } from '@/store/looks'
 import { useProgrammerAppliedQuery } from '@/store/programmer'
-import { ignoreReportedError } from '@/store/errorToastMiddleware'
-import { lookLayerTarget, type EffectPresence } from './buskingTypes'
+import { lookLayerTarget } from './buskingTypes'
 import { useBuskingSelection } from './useBuskingSelection'
-import { lookLayerPresence } from './lookPresence'
 
 /**
- * The busk view's state: what is selected, what a Look pad does, and whether its ring is lit.
+ * The busk view's state: what is selected, and what the desk currently has applied to it.
  *
- * It used to assemble four pieces — selection, presence, the four mutation paths, and the "which
- * properties does this target have" question — because the pad grid also minted ad-hoc FX instances
- * and wrote programmer values directly. Those pads are gone (see `BuskPools`), and with them went
- * `useBuskingFxActions`, `useBuskingPresence`, the effect library read, the property-button
- * derivation, the beat-division default and the apply-time speed-master routing. What is left is one
- * mutation and one predicate, so they live here rather than in a hook each.
+ * It used to carry the pad *actions* too — a mutation per kind, and a presence predicate each.
+ * Every press now goes through one route, `POST /busk/pads/{id}/press`, because the pad is what
+ * knows its bank and the bank is what decides the siblings; so what is left here is the selection
+ * and the one query the rings read.
  *
  * **Everything here addresses a target by `{type, key}`** — `CueTarget`, `ToggleLookTarget` and the
  * layer stack's own target shape are the same three fields, and `lookLayerTarget` is the single
@@ -27,12 +20,9 @@ import { lookLayerPresence } from './lookPresence'
  */
 export function useBuskingState() {
   const { selectedTargets, selectTarget, toggleTarget, clearSelection } = useBuskingSelection()
-  const { data: currentProject } = useCurrentProjectQuery()
   // The **resolved** stack, not the layer list: the pads ask about coverage and the desk has
-  // already answered, so this view never subscribes to the layers themselves. Handed out as well
-  // as used here because the template pads live in `BuskingView` and must read the same answer.
+  // already answered, so this view never subscribes to the layers themselves.
   const { data: programmerApplied } = useProgrammerAppliedQuery()
-  const [toggleLookMutation] = useToggleLookMutation()
 
   const selectedArray = useMemo(() => [...selectedTargets.values()], [selectedTargets])
 
@@ -40,38 +30,6 @@ export function useBuskingState() {
   const selectedLayerTargets = useMemo<CueTarget[]>(
     () => selectedArray.map(lookLayerTarget),
     [selectedArray],
-  )
-
-  /**
-   * One tap on a Look pad: add or remove a layer applying it, targeted at the selection.
-   *
-   * `POST /looks/{id}/toggle` is `programmerLayerStack.toggle` server-side, which matches on the
-   * whole `LayerSource` plus the exact targets — matching on an id alone would let a Look and a
-   * template sharing an int PK cancel each other.
-   */
-  const applyLook = useCallback(
-    async (look: LookSummary) => {
-      const projectId = currentProject?.id
-      if (!projectId || selectedLayerTargets.length === 0) return
-      await toggleLookMutation({ projectId, lookId: look.id, targets: selectedLayerTargets })
-        .unwrap()
-        .catch(ignoreReportedError)
-    },
-    [currentProject?.id, selectedLayerTargets, toggleLookMutation],
-  )
-
-  /**
-   * Whether a Look is on, from the programmer's **applied state** rather than the effect list.
-   *
-   * A tap adds or removes a layer, so the stack is what the ring should read — and it is the only
-   * thing that can answer for a Look made purely of static rows, which spawns no effect to find.
-   * The desk resolves that stack into per-target applied state; all `lookLayerPresence` does with
-   * it is fold the selection into one ring, unit-tested there.
-   */
-  const computeLookPresence = useCallback(
-    (look: LookSummary): EffectPresence =>
-      lookLayerPresence(programmerApplied ?? [], selectedLayerTargets, look.id),
-    [programmerApplied, selectedLayerTargets],
   )
 
   return {
@@ -82,7 +40,5 @@ export function useBuskingState() {
     toggleTarget,
     clearSelection,
     programmerApplied,
-    applyLook,
-    computeLookPresence,
   }
 }

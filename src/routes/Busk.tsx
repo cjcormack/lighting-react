@@ -37,11 +37,13 @@ export function ProjectBusk() {
   const projectIdNum = Number(projectId)
   const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
-  const { showBarProps, showHeaderProps, transport } = useShowBarProps(projectIdNum, {
+  const { showBarProps, showHeaderProps } = useShowBarProps(projectIdNum, {
     frameRateProgress: false,
   })
 
   if (!currentLoading && currentProject && projectIdNum !== currentProject.id) {
+    // Deliberately without the search string, unlike `/program*` → `/show`: `?page=` names a busk
+    // page **id**, which is scoped to a project, so carrying it to another one would name nothing.
     return <Navigate to={`/projects/${currentProject.id}/busk`} replace />
   }
 
@@ -73,8 +75,7 @@ export function ProjectBusk() {
           Blackout, Blind and the speed masters all mean something with the show down, and
           `goDisabled` already mutes BACK/GO. */}
       <ShowBar {...showBarProps} />
-      {/* The transport is handed down rather than mounted again inside — see `BuskingView`. */}
-      <BuskingView projectId={projectIdNum} transport={transport} />
+      <BuskingView projectId={projectIdNum} />
     </div>
   )
 }

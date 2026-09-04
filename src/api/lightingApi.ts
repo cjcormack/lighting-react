@@ -14,6 +14,7 @@ import {createTemplatesWsApi, TemplatesWsApi} from "./templatesWsApi";
 import {createCuesWsApi, CuesWsApi} from "./cuesWsApi";
 import {createCueStacksWsApi, CueStacksWsApi} from "./cueStacksWsApi";
 import {createCueSlotsWsApi, CueSlotsWsApi} from "./cueSlotsWsApi";
+import {createBuskWsApi, BuskWsApi} from "./buskWsApi";
 import {createPatchApi, PatchApi} from "./patchApi";
 import {createRiggingApi, RiggingApi} from "./riggingApi";
 import {createStageRegionApi, StageRegionApi} from "./stageRegionApi";
@@ -50,6 +51,7 @@ interface LightingApi {
   cues: CuesWsApi
   cueStacks: CueStacksWsApi
   cueSlots: CueSlotsWsApi
+  busk: BuskWsApi
   patches: PatchApi
   riggings: RiggingApi
   stageRegions: StageRegionApi
@@ -105,6 +107,7 @@ function createLightingApi(): LightingApi {
   const cuesWsApi = createCuesWsApi(connection)
   const cueStacksWsApi = createCueStacksWsApi(connection)
   const cueSlotsWsApi = createCueSlotsWsApi(connection)
+  const buskWsApi = createBuskWsApi(connection)
   const patchApi = createPatchApi(connection)
   const riggingApi = createRiggingApi(connection)
   const stageRegionApi = createStageRegionApi(connection)
@@ -137,6 +140,7 @@ function createLightingApi(): LightingApi {
     cues: cuesWsApi,
     cueStacks: cueStacksWsApi,
     cueSlots: cueSlotsWsApi,
+    busk: buskWsApi,
     patches: patchApi,
     riggings: riggingApi,
     stageRegions: stageRegionApi,

@@ -170,6 +170,7 @@ export const programmerWs: {
     provenance: Map<string, unknown>
     lastIncluded: unknown
     layers: unknown[]
+    applied: unknown[]
   }
   push: (patch: Partial<typeof programmerWs.state>) => void
   reset: () => void
@@ -182,6 +183,7 @@ export const programmerWs: {
     provenance: new Map(),
     lastIncluded: null,
     layers: [],
+    applied: [],
   },
   push(patch) {
     programmerWs.state = { ...programmerWs.state, ...patch }
@@ -196,6 +198,7 @@ export const programmerWs: {
       provenance: new Map(),
       lastIncluded: null,
       layers: [],
+      applied: [],
     }
   },
 }
@@ -215,6 +218,9 @@ export const statusWs: {
 }
 
 const noopSub = () => ({ unsubscribe: () => {} })
+
+/** `busk.layoutChanged` frames, so a test can fire one at `store/busk.ts`'s bridge. */
+export const buskWs: { callback: null | ((pageIds: number[]) => void) } = { callback: null }
 
 export function lightingApiMock() {
   const namespaces: Record<string, unknown> = {
@@ -252,6 +258,16 @@ export function lightingApiMock() {
           return {
             unsubscribe: () => {
               ownAccountWs.callback = null
+            },
+          }
+        },
+      },
+      busk: {
+        subscribe: (fn: (pageIds: number[]) => void) => {
+          buskWs.callback = fn
+          return {
+            unsubscribe: () => {
+              buskWs.callback = null
             },
           }
         },
@@ -308,6 +324,7 @@ export function lightingApiMock() {
       programmer: {
         getState: () => programmerWs.state,
         layers: () => programmerWs.state.layers,
+        applied: () => programmerWs.state.applied,
         isBlind: () => programmerWs.state.blind,
         entryCount: () => programmerWs.state.entries.size,
         lastIncluded: () => programmerWs.state.lastIncluded,

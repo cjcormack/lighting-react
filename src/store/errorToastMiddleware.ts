@@ -23,6 +23,9 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   'importProject', // src/ImportProjectDialog.tsx
   'exportProject', // src/ExportProjectDialog.tsx
   'deleteProject', // src/routes/Projects.tsx
+  // BUSK_PAGE_NAME_TAKEN is an ordinary step in naming a page, shown beside the field.
+  'createBuskPage', // src/components/busking/BuskPageStrip.tsx
+  'renameBuskPage', // src/components/busking/BuskPageStrip.tsx
   'recordProgrammer', // src/components/programmer/RecordSheet.tsx
   'recordLook', // src/components/programmer/RecordLookSheet.tsx
   'includeIntoProgrammer', // src/components/programmer/IncludeSheet.tsx

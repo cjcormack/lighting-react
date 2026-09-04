@@ -436,22 +436,18 @@ held no effects; it holds one now, and the rule is *more* load-bearing rather th
 effect-template pad's ring would look matchable against the running instance, and matching there
 would light for an effect template while leaving every value template's pad dark.
 
-The **busk view**'s pad grid takes both — Looks with deferred **effects** (a chase you point at a
-selection) and every template — and it has no create affordance, because neither entity is authored
-from a pad grid. Templates sit in **four family columns** there rather than one flat grid, which is
-the same fact that put the family filter on `/templates`: a template is in exactly one family, so
-four columns is an exact partition and every pad has one right home. A Look spans families by
-nature and gets a section of its own instead. **Within a column, the library's own order, values
-and effects interleaved** — the *Effects* hairline fx-templates D10 drew went when the order became
-the operator's to set, because an ordering the operator cannot move fights the one they chose. An
-effect pad is a pad like any other — same component, same presence ladder, same long-press — and
-only its wave glyph says what it holds. Nothing is sorted there: the array order is the contract,
+The **busk view**'s pad grid takes both, and takes **cues** besides — but it no longer decides where
+any of them go. A pad sits where the operator put it, in a bank on a page they built (see §The busk
+layout); the library's family and its groups say nothing about the arrangement. What survives from
+the old automatic layout is the pad *face*: an effect pad is a pad like any other — same component,
+same presence ladder, same long-press — and only its wave glyph says what it holds. The paragraphs
+below still describe `/templates`' own list, where the array order is the contract,
 and it comes from `buildTemplateLayout` in `lib/templateLayout.ts`, the **one** place the tree of
-templates and **template groups** is composed from the two flat lists the server serves. A group
-draws as a bordered cluster inside its family column at the position the layout gives it; its
+templates and **template groups** is composed from the two flat lists the server serves. A group's
 exclusivity (pressing a member releases its siblings on the same targets) is the server's, applied
-in the toggle route, and the cluster shows nothing the presence ladder does not already. The
-programmer's `TemplateStrip` still draws its hairline — a different surface with a different ask.
+in the toggle route. **A busk pad no longer goes through it** — a press there goes through the pad,
+and the pad's *bank* decides the siblings — so template groups now reach only the programmer's
+⌥click strip and the AI; the busk-layout plan retires them in its session 3.
 
 `/templates` is where that order is **set**: `TemplateLayoutList` is the dnd-kit wiring (a top-level
 `SortableContext`, one nested per group, a `useDroppable` body per group so an empty one takes a
@@ -481,7 +477,7 @@ in), one whose members all have a null family, and one drained mid-drag — whic
 unmount under the cursor.
 
 A colour pad carries a **swatch**, but only when the
-template is generic and single-row — `templateSwatch` in `components/busking/BuskPools.tsx` makes
+template is generic and single-row — `templateSwatch` in `components/busking/padFace.ts` makes
 the same two exclusions `isOfferable` makes in `FxColourTemplates.tsx`, and for the same reason:
 `rows[0]` under a name covering several rows states one of them as the whole thing. An effect
 template has no rows, so it draws the wave in the swatch's place and an `EffectPadDetail` line
@@ -489,6 +485,120 @@ template has no rows, so it draws the wave in the swatch's place and an `EffectP
 for `EffectShape`'s reason in `TemplateListRow`: the master's label is a live value, hooks cannot be
 conditional, and a hook in the loop would make every value pad in the library subscribe to the
 master bank.
+
+### The busk layout
+
+**The busk page is a thing the operator builds, not a view the library lays out.** A page is rows; a
+row is columns, each with a **width share in twelfths**; a column stacks banks top to bottom; a bank
+has a name, a `solo` flag and a `flow` (`WRAP` | `COLUMN`) and holds ordered **pads**, each a
+reference to exactly one template, Look or cue. One record may sit on several pads, on several
+pages. Backend contract in `lighting7/models/buskLayout.kt` and
+`lighting7/docs/lighting-composition-model.md` §"The busk layout"; the plan is
+`lighting7/docs/plans/busk-layout-plan.md` and the design authority is `look-groups-design/`.
+
+It replaced an automatic layout — four family columns of templates, a Looks pool, a cue column of
+stack cards and pinned-cue pads. The reason is the one a template group could not meet: a group
+holds **one family**, and the operator's actual ask (a position palette and a movement pattern that
+must not run together) needs a cluster holding both, plus cues. So order and exclusivity moved to
+the page, and the library went back to being a flat list.
+
+**A press goes through the pad, and the bank decides the siblings.**
+`POST /busk/pads/{padId}/press` is the *only* press on this surface — the three kind-specific
+mutations (`toggleTemplate`, `toggleLook`, `goToStack`) are the programmer's ⌥click strip's and the
+AI's now. The server reads the pad, its record and, when the bank is **solo**, the records on its
+sibling pads in one transaction. Solo has one meaning for every kind: pressing one *on* turns its
+siblings off — a layer sibling narrowed on the pressed heads, a live cue sibling stopped, and a cue
+press taking its layer siblings off wholesale, because a cue has no targets to narrow by. An **off**
+press releases nothing, and a stacking bank has no siblings at all.
+
+**`src/lib/buskLayout.ts` is the document model**, the `templateLayout.ts` slot for this surface: no
+React, no store, every gesture a plain call a unit test can make. Three rules run through it:
+
+- **Addresses, not ids.** A pad, bank or column created by the *previous* gesture has no id yet —
+  the layout PUT mints it — so drag ids and every position are index tuples (`bpad:{r}.{c}.{b}.{p}`,
+  `bbody:`, `bbank:`, `bunder:`, `bgut:`, `bnewrow`, `palette:`). Ids are read in **one** place,
+  `toLayoutRequest`, at commit. React keys are `uuid ?? localKey` for the same reason, and a **row's
+  key is its first column's uuid** — a row has no identity on either side of the wire, and an index
+  key over a list that gets rows spliced out of the middle is the classic remount bug.
+- **Normalise inside every mutator.** The server refuses an empty row or column
+  (`BUSK_LAYOUT_INVALID`), so `normalisePage` is not cosmetic — forget it and the gesture 400s. It
+  drops an empty column and the row left empty with it, and **keeps an empty bank**. That asymmetry
+  is deliberate: pruning a bank would delete the one the operator just made, the instant they
+  crossed the last pad off it.
+- **Null means nothing would change**, which is what lets a repeat hover write no state.
+
+`applyDrop` runs **once, on drop**, in the order **lift → insert → prune**; object identity carries
+the destination across the lift, so a bank leaving the column it is being dropped beside cannot
+renumber its own target.
+
+**A pad target is an insertion point, not a destination index** — it names the gap the dashed slot is
+drawn in, counted over the document as it stands with the source still in it and ghosted. Both halves
+must agree on that, or a pad lands somewhere other than where the operator was shown it would:
+`resolveDropTarget` produces the gap, `BuskBank` draws the slot at it, and `applyDrop` has to put the
+pad in *that* gap — which means subtracting one when the lifted pad sat before it, since removing it
+shifts every later gap down. Reading the index as an `arrayMove` destination instead made every
+**downward** drag within a bank overshoot by exactly one place, invisibly, because each half was
+self-consistent and only the composition was wrong. `buskDnd.test.ts` composes the two and asserts
+the slot and the landing place agree; testing either half alone passes with the bug in.
+
+**There is one `DndContext` in the app**, in `components/dnd/DeskDndProvider.tsx` (it was
+`CueSlotDndProvider`; it is not about cue slots). `Layout.tsx` mounts it around **both** the FX
+cue-slot overlay and the routed page, and the busk page joins it with `useDndMonitor` rather than
+nesting one — a nested context wins for its subtree and would hide the busk page from the overlay's
+droppables, which is exactly the drop the plan's session 3 needs. The two surfaces coexist by
+**mutual ignorance**: `parseBuskDragId` answers null for a `slot-…` id and the slot handler ignores
+everything busk. Three things about that provider are load-bearing:
+
+- **Collision detection is `pointerWithin` falling back to `closestCenter`.** dnd-kit's default
+  `rectIntersection` compares the *dragged* rect by area, so a 20px column gutter could never beat
+  the 300px column beside it, and it answers nothing at all in the gaps between banks.
+- **`MeasuringStrategy.Always`**, because the page changes its own geometry mid-drag.
+- **One `DragOverlay`, content dispatched** through `dnd/dragOverlayRegistry.ts`. A second overlay is
+  not an option — it registers itself on the context and two would fight over one ref. A surface
+  registers a renderer at **module scope**, so the app shell draws a busk pad without its import
+  graph ever reaching one. The ghost face is a **frozen snapshot**: an effect template's detail line
+  reads a live speed-master label through a hook, and the overlay must be hookless.
+
+**The preview is a ghosted source plus one dashed slot, and there is no `SortableContext` anywhere
+on this page.** The primary gesture is a *palette* drop, and a palette row is not a member of any
+sortable list, so the dashed placeholder has to be hand-drawn regardless; the three bank zones are
+not list indices; and the committed artefact is the whole document anyway. Two rules stop the
+classic placeholder oscillation: the dashed slot is **`pointer-events: none` and is not a
+droppable**, so it can never be the thing you are over, and the reducer answers null for a repeat
+hover. The cost is honest — pads snap around the slot rather than sliding. If that ever reads badly,
+`view-transition-name` is the additive fix; do not reach back for `SortableContext`.
+
+**Every gesture saves the whole page, and the queue holds operations rather than documents.**
+`useBuskLayoutCommit` in `store/busk.ts` enqueues `(page) => page` so each gesture can be *replayed*
+against the freshest confirmed document at send time. A queue of pre-computed documents could not:
+gesture 2's document was built before gesture 1's response existed, so it would name none of the ids
+that response minted and the server would recreate every pad it touched. The response is written
+into the cache **only when the queue drains** — an intermediate one describes the world a gesture
+ago, and writing it is exactly the snap-back the queue exists to avoid. On failure the queue is
+dropped, the last confirmed page restored, **and the page re-read**: the write may have been refused
+because a record behind one of its pads was deleted, and that is the one frame the echo suppression
+below can swallow.
+
+Patching from the **response** rather than optimistically-then-invalidating is a deliberate
+departure from `reorderTemplates`: that route answers `void`, so a refetch is its only way to learn
+what happened; this one answers the page as written, ids included.
+
+**`busk.layoutChanged {pageIds}` is keyed, and the bridge suppresses our own echo.** The frame fires
+for page CRUD, reorder, every layout write **including this client's**, and a record delete that took
+pads off a page; a page delete carries the deleted id *plus every survivor*, since their `sortOrder`
+moved. Invalidation is per page (`{type:'BuskPage', id: 'page-N'}` — prefixed, because the project
+id shares that tag type), so **a page id from another project matches nothing and is a silent
+no-op**: the frame needs no project lookup. A single-page frame is dropped while that page is saving
+or within a short grace after its response, because our own write would otherwise refetch once per
+gesture and could land between an optimistic patch and its own response. One page is the tell — a
+layout write announces exactly one, page CRUD and reorder announce several.
+
+**The showing page lives in `?page=`**, resolved against the fetched list so a stale bookmark lands
+on the first page, and written back with `replace` — flipping pages is not a history entry. Edit mode
+lives in `store/buskEditSlice.ts` rather than a React context, because the cue-slot overlay is a
+*sibling* of the routed page in `Layout.tsx` and could never read a context provided inside the busk
+view. It is never persisted, and `BuskingView` **must** exit it on unmount, or that overlay keeps
+drawing crosses on whatever page the operator went to next.
 
 ### The two apply gestures
 
@@ -1090,8 +1200,8 @@ not stylistic:
    own per-key subscription through `useSyncExternalStore` instead — `useChannelValue` and its
    neighbours in `hooks/usePropertyValues.ts`.
 
-The census as of this writing, so a new slice can see which company it is in: **25 module-scope
-sites across 19 slices** (`grep -n '^lightingApi\.' src/store/*.ts`), and **four deferred**, all
+The census as of this writing, so a new slice can see which company it is in: **27 module-scope
+sites across 20 slices** (`grep -n '^lightingApi\.' src/store/*.ts`), and **four deferred**, all
 started from `main.tsx` — `oauthGithub`, `looks`, `templates`, `programmerErrors`. The imbalance is
 the rule working, not drift: form 1 is the default and form 2 is the exception, and the four are
 exactly the slices the sidebar and the first paint reach.
@@ -1165,8 +1275,9 @@ path may quietly change where it lands.
   `?cue=` deep links are how the Prompt Book's "Edit cue" reaches a cue.
 
   **Busk is `/projects/:id/busk`** (`routes/Busk.tsx` → `components/busking/BuskingView`):
-  the target band, the pad pools and the speed rail, under the same `ShowHeader` and
-  `ShowBar` as the other three, from the same `useShowBarProps`. It was `/fx`, which named
+  the target band, the page the operator built and the speed rail, under the same `ShowHeader` and
+  `ShowBar` as the other three, from the same `useShowBarProps`. The page itself is §The busk
+  layout; this section is the route and the surface around it. It was `/fx`, which named
   the machinery rather than the job and sat one hyphen from `/fx-library` — the collision
   `lib/navMatch.ts` exists for. `LegacyFxRedirect` keeps both spellings of the old path
   alive; the nav entry keeps `id: "fx"` as its stable handle, the same call `program` made
@@ -1174,14 +1285,13 @@ path may quietly change where it lands.
 
   Four things about it that are decisions rather than detail:
 
-  - **The pads are the *library*, and nothing else.** `BuskPools` (once `EffectPad`) draws
-    templates in four family columns and Looks beside the cue column. It used to draw three more
-    pools of ad-hoc effect pads, a Controls pool of hold-to-slide property pads writing straight to
-    the programmer, and a beat-division toggle to parameterise whatever those minted; all of it went
-    when the view was brought back onto its design. A busk pad presses a **named thing from the
-    library** onto the selection, and a second grid minting anonymous FX instances with their own
-    timing model was a different gesture wearing the same clothes. Three things follow, and none is
-    a bug:
+  - **The pads are the *library*, and nothing else.** A busk pad presses a **named thing from the
+    library** — a template, a Look or a cue — and nothing on this page mints one. The view used to
+    draw three pools of ad-hoc effect pads besides, a Controls pool of hold-to-slide property pads
+    writing straight to the programmer, and a beat-division toggle to parameterise whatever those
+    minted; all of it went when the view was brought back onto its design, because a grid minting
+    anonymous FX instances with their own timing model was a different gesture wearing the same
+    clothes. Three things follow, and none is a bug:
     - **Nothing on this page mints an FX instance.** An ad-hoc effect reaches the stage through a
       Look with deferred effects, a cue, or the Programmer's `+ Effect`; a raw level through an
       intensity template or the Programmer.
@@ -1192,10 +1302,12 @@ path may quietly change where it lands.
       rather than deleted, and `TemplateEditor` is its caller now (see §Speed Masters).
     - **`BuskingView` reads no target's running effects.** The eight fixed RTK Query slots that once
       fanned the selection out (and capped it at eight targets — `FU-BUSK-TARGET-CAP`, now retired)
-      went with the pads. Both surviving pad kinds read the programmer's **resolved applied state**
+      went with the pads. A template or Look pad reads the programmer's **resolved applied state**
       (`useProgrammerAppliedQuery`; the view does not subscribe to the layer stack at all), which
       needs only `{type, key}` per target, so `lookLayerTarget` is the one place the group-name
-      convention is applied and the selection has no ceiling.
+      convention is applied and the selection has no ceiling. A **cue** pad reads `useActiveCueIds`
+      instead — its stack has that cue on stage, playhead or not, which is what makes a cue pad a
+      toggle rather than a playhead move.
   - **It does not pass `canOperate`, and the show-editing lock is not consulted.** GO must
     work from a busk pad: busking *is* the live use, and the lock is a stray-click guard for
     editing surfaces rather than a transport gate — the same reasoning that keeps `locked`
@@ -1209,20 +1321,24 @@ path may quietly change where it lands.
     picking one thing and getting one thing is right. `SelectedTargetSummary` went with the
     sidebar, and `Breadcrumbs`' `extra` / `onExtraClick` went with *it* — the busk view was
     their last consumer, so every breadcrumb trail is now `Projects > Project > <View>`.
-  - **With nothing selected the pools dim rather than disappear.** They used to be replaced
-    by a centred "Select a group or fixture" page, which hid the whole library behind a step
-    the operator had not been shown; seeing what there is to press is most of what makes a
-    pad grid learnable. Nothing can be pressed by mistake — presence is `none` for every pad
-    with an empty selection, so there is nothing lit to release either.
+  - **There is no empty-selection dim, and re-adding one would be a regression.** The pools used to
+    grey themselves out with nothing selected. Three of the things a pad can now hold do not need a
+    selection at all — a **per-fixture** template names its own heads, a Look with **no deferred
+    effect** names its own fixtures, and a **cue** has no targets — and the two cases that genuinely
+    need one are refused *by name* server-side (`TEMPLATE_NEEDS_SELECTION`, `LOOK_NEEDS_SELECTION`),
+    which is a better answer than a grey page. A bank mixes kinds anyway, so the old per-section dim
+    has nothing left to be per. The **target band** still dims, for the other reason: in edit mode
+    pads do not press, so the selection they would press onto is doing nothing.
 
-  **`busking-view-design/Main.dc.html` in lighting7 is the layout authority**, and the view was
-  brought back onto it after the four sessions landed. Two conventions came out of that and should
-  hold for anything added here:
+  **`look-groups-design/` in lighting7 is the layout authority** — `Main.dc.html` for play mode,
+  `Edit.dc.html` for edit mode, `Layout.dc.html` for the rows/columns/banks structure and the three
+  bank drop zones. It supersedes `busking-view-design/`, which drew the pools this page no longer
+  has. Two conventions carried over and should hold for anything added here:
 
   - **One label, `BuskLabel`** (9px bold uppercase, wide-tracked, muted, **no icon**), on every
-    region — band, pools, cue column, rail. The pools and the cue column drew a larger icon-bearing
-    heading, which made three regions of one instrument read as three surfaces. It renders a
-    `<div>` deliberately: `BuskPools.test.tsx` walks up from a heading to reach its pool's grid.
+    region — band, palette, rail. Regions once drew a larger icon-bearing heading, which made three
+    parts of one instrument read as three surfaces. It renders a `<div>` deliberately, so a test can
+    reach a region's body by walking up from its label.
   - **The target band lives inside the left column**, so the rail's border runs from under the
     ShowBar to the bottom of the page rather than starting below the band.
 
@@ -1277,35 +1393,26 @@ path may quietly change where it lands.
   copies; `PropertyPadButton` had a third (deleted with it) and `CueSlotOverviewPanel` still has a
   fourth, materially different one.
 
-  **The cue column is the fourth region**, beside the Looks pool at the mock's `2fr`/`3fr` split
-  (`components/busking/BuskCueStacks.tsx`): a card per runnable stack — name, live pip, current →
-  next, Release, GO — then the **pinned cues** as pads. Five things about it:
+  **The cue column is gone, and a cue is a pad like any other.** There was a fourth region beside
+  the Looks pool (`BuskCueStacks.tsx`): a card per runnable stack — name, live pip, current → next,
+  Release, GO — and the **pinned cues** as pads below it. All of it went with the automatic layout,
+  because a cue that wants a pad is now simply placed in a bank. What that decided, and what it
+  costs:
 
-  - **GO means two requests and one gesture.** On the live stack it is `transport.go()`, so a GO
-    here and a GO in the ShowBar are the same press, optimistic cursor and stack boundary included.
-    On any other stack it is `goToStack` — a playhead move, which is what "GO fires cue 1" says.
-    Routing the live stack through `goToStack` would restart it at cue 1 mid-show.
-  - **A pinned pad is one request, `POST /show/go-to` carrying a `cueId`.** That field was added
-    for this: a pad names a cue in a stack that may not be live, and go-to-then-activate fires the
-    target stack's *first* cue on the way past — a blip on a live rig, in the one gesture D9 says
-    names exactly what it fires. The cue is validated before the playhead moves, server-side.
-  - **The pin is `pinnedToBusk` on the cue**, set only in `CuePropsPane` — a pad grid has no create
-    affordance, the same rule the Look and template pools follow. It rides `CueStackCueEntry` as
-    well as `CueDetails`, so a pad and its stack card read one cache; sourcing pads from `/cues`
-    would be two answers to "is this cue on stage" that disagree mid-fade. It is also a field
-    `buildCueInput` must hand back, or an inline cue edit unpins the cue as a side effect of
-    renaming it. A **MARKER** is refused a pin at both ends — the toggle is hidden, and the pad list
-    filters it anyway, since an import can carry the flag and `goToCue` refuses a marker.
-  - **The empty-selection dim is per `CategorySection`, not on the scroller.** The cue column shares
-    that scroller and answers to the playhead rather than the selection, so the old subtree-wide
-    `[&_button]:pointer-events-none` would have made GO inert for want of a selected fixture. The
-    inertness still goes on the *buttons* — on a scrolling container it takes the container out of
-    hit-testing, which is session 3's own bug.
-  - **The transport is a prop; the stack list is not.** `routes/Busk.tsx` holds the one
-    `useShowTransport` (through `useShowBarProps`) and passes it down, because a second instance
-    means a second rAF loop and a second reconcile effect on one runner slice. `BuskCueStacks`
-    reads `useProjectCueStackListQuery` itself — that is the *same* cache entry, deduplicated by
-    key, not a second copy of a run cursor.
+  - **A cue pad is apply / stop, not a playhead move.** It presses through `POST /busk/pads/{id}/press`
+    like every other pad, which reaches `CueStackManager` — so the cue goes live *without becoming
+    the playhead*, exactly as a cue slot behaves, and pressing it again stops it. `useActiveCueIds`
+    is what lights it, for the same reason. The pinned pad's `POST /show/go-to` with a `cueId` lost
+    its only caller; the field stays on the request until the plan's session 3.
+  - **GO and BACK are the ShowBar's, and only the ShowBar's.** The stack cards' GO was two requests
+    behind one gesture — `transport.go()` on the live stack, `goToStack` on any other — and a busk
+    page has no room for a transport that means different things depending on which card it is on.
+  - **`pinnedToBusk` has no reader on this page any more.** It still rides `CueStackCueEntry`, is
+    still set in `CuePropsPane`, and `buildCueInput` must still hand it back; session 3 deletes the
+    column and the toggle together. Don't add a new reader for it.
+  - **The transport is not a prop any more either.** `routes/Busk.tsx` still holds the one
+    `useShowTransport` through `useShowBarProps` — a second instance would mean a second rAF loop
+    and a second reconcile effect on one runner slice — but nothing below it needs one.
 
   **The Effects Overview panel is gone, and there are three overview panels now** — Stage,
   Fixture, Cue Slots. It held a beat dot, master 1's bpm, a TAP, a running-effect count and a

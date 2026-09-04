@@ -190,6 +190,7 @@ describe('NON_SAVE_ENDPOINTS', () => {
       import('./groups'),
       import('./looks'),
       import('./templates'),
+      import('./busk'),
       import('./fxDefinitions'),
       import('./scripts'),
       import('./projects'),

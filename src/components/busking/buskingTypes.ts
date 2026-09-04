@@ -16,7 +16,8 @@ export type BuskingTarget =
 /**
  * A busking target as the programmer's **layer stack** addresses it.
  *
- * Deliberately the same shape `applyLook` sends and `computeLookPresence` reads: the ring and the
+ * Deliberately the same shape the press sends and the ring reads (`BuskingView`'s `onPress` and
+ * `presenceOf`): the ring and the
  * tap must agree on which layer a Look pad is talking about, and a group answering to its name in
  * one and its key in the other would light a pad that a tap then failed to clear.
  */

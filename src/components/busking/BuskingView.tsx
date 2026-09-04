@@ -1,289 +1,269 @@
-import { useState, useCallback, useMemo } from 'react'
-import { useNavigate } from 'react-router'
-import { toast } from 'sonner'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router'
+import { useDispatch, useSelector } from 'react-redux'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { useCurrentProjectQuery } from '@/store/projects'
 import { useLookListQuery } from '@/store/looks'
+import { useTemplateListQuery } from '@/store/templates'
+import { useActiveCueIds } from '@/store/cues'
+import { ignoreReportedError } from '@/store/errorToastMiddleware'
+import { enterBuskEdit, exitBuskEdit, selectBuskEdit } from '@/store/buskEditSlice'
 import {
-  useTemplateGroupListQuery,
-  useTemplateListQuery,
-  useToggleTemplateMutation,
-} from '@/store/templates'
-import { FAMILY_LABELS, type AttributeFamily } from '@/lib/attributeFamily'
-import { formatError } from '@/lib/formatError'
-import { buildTemplateLayout } from '@/lib/templateLayout'
-import type { TemplateSummary } from '@/api/templatesApi'
-import { templateLayerPresence } from './lookPresence'
-import {
-  describeLookContents,
-  templateSwatch,
-  BuskPools,
-  EffectPadDetail,
-  type PadItem,
-} from './BuskPools'
+  useBuskPagesQuery,
+  useCreateBuskPageMutation,
+  useDeleteBuskPageMutation,
+  useRenameBuskPageMutation,
+  useReorderBuskPagesMutation,
+  useSaveBuskLayoutMutation,
+  usePressBuskPadMutation,
+  useCacheBuskPage,
+} from '@/store/busk'
+import { libraryStarterLayout, recordsOnPage } from '@/lib/buskLayout'
+import type { BuskPad } from '@/api/buskApi'
+import { lookLayerPresence, templateLayerPresence } from './lookPresence'
 import { TargetList } from './TargetList'
 import { TargetBand } from './TargetBand'
 import { BuskSpeedRail } from './BuskSpeedRail'
-import { BuskCueStacks } from './BuskCueStacks'
+import { BuskEditProvider } from './BuskEditProvider'
+import { BuskPageBody } from './BuskPage'
+import { BuskPageStrip } from './BuskPageStrip'
+import { BuskFirstOpen } from './BuskFirstOpen'
+import { LibraryPalette } from './LibraryPalette'
 import { useBuskingState } from './useBuskingState'
-import { type BuskingTarget } from './buskingTypes'
-import type { ShowTransport } from '@/hooks/useShowTransport'
-
-interface BuskingViewProps {
-  projectId: number
-  transport: ShowTransport
-}
+import type { PadBehaviour } from './padBehaviour'
+import { type BuskingTarget, type EffectPresence } from './buskingTypes'
 
 /**
- * The busk view's body: the target band, the pad pools, the cue column and the speed rail.
+ * The busk view's body: the target band, the page the operator built, and the speed rail — or, in
+ * edit mode, the library palette in the rail's place.
  *
  * The show chrome above it (`ShowHeader`, `ShowBar`) belongs to `routes/Busk.tsx`, like every other
- * live view — this component owns only what is particular to busking.
+ * live view.
  *
- * The transport arrives as a prop rather than being mounted here, because `routes/Busk.tsx` already
- * holds one through `useShowBarProps`. A second `useShowTransport` on the page would run a second
- * rAF loop and a second reconcile effect writing the same runner slice — the defect adopting that
- * hook removed from the Prompt Book, which is worth not reintroducing one view along.
+ * **Every press goes through one route.** A pad is pressed by `POST /busk/pads/{id}/press`,
+ * whatever it holds, because the pad is what knows its bank and the bank is what decides which
+ * siblings a press releases (D4). The three kind-specific mutations this view used to call are the
+ * programmer's ⌥click strip's now, and the AI's.
  *
- * **Nothing here reads a target's running effects.** It used to: eight fixed hook slots fanned the
- * selection out over `useGroupActiveEffectsQuery` / `useFixtureEffectsQuery` so the effect pads could
- * read their rings from the FX list — which also capped the selection at eight targets
- * (`FU-BUSK-TARGET-CAP`). Both surviving pad kinds read the programmer's **layer stack** instead, and
- * that needs only the targets, so the fan-out and its cap went with the effect pads.
+ * **There is no empty-selection dim.** The pools used to grey themselves out with nothing selected,
+ * which is now wrong in three ways: a per-fixture template names its own heads, a Look with no
+ * deferred effect names its own fixtures, and a cue has no targets at all — so all three are
+ * legitimately pressable with an empty selection. The two that genuinely need one are refused *by
+ * name* server-side (`TEMPLATE_NEEDS_SELECTION`, `LOOK_NEEDS_SELECTION`), and a sentence saying so
+ * is a better answer than a grey page. A bank mixes kinds anyway, so the old per-section dim has
+ * nothing left to be per.
+ *
+ * **No transport.** The stack cards and the pinned-cue grid went with the layout; GO and BACK live
+ * on the ShowBar, and a cue pad's green comes from `useActiveCueIds` — its stack has that cue on
+ * stage, playhead or not, which is what makes a cue pad a toggle rather than a playhead move.
  */
-export function BuskingView({ projectId, transport }: BuskingViewProps) {
+export function BuskingView({ projectId }: { projectId: number }) {
   const isDesktop = useMediaQuery('(min-width: 768px)')
   const [targetSheetOpen, setTargetSheetOpen] = useState(false)
+  const navigate = useNavigate()
+  const dispatch = useDispatch()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const {
     selectedTargets,
-    selectedArray,
     selectedLayerTargets,
     selectTarget,
     toggleTarget,
     clearSelection,
     programmerApplied,
-    applyLook,
-    computeLookPresence,
   } = useBuskingState()
 
-  const { data: currentProject } = useCurrentProjectQuery()
-  const { data: looks } = useLookListQuery(
-    { projectId: currentProject?.id ?? 0 },
-    { skip: !currentProject },
-  )
-  const { data: templates } = useTemplateListQuery(
-    { projectId: currentProject?.id ?? 0 },
-    { skip: !currentProject },
-  )
-  const { data: templateGroups } = useTemplateGroupListQuery(
-    { projectId: currentProject?.id ?? 0 },
-    { skip: !currentProject },
-  )
-  const [toggleTemplate] = useToggleTemplateMutation()
-  const navigate = useNavigate()
+  const { data: pages, isLoading } = useBuskPagesQuery(projectId)
+  const { data: templates } = useTemplateListQuery({ projectId })
+  const { data: looks } = useLookListQuery({ projectId })
+  const activeCueIds = useActiveCueIds(projectId)
+  const { editing } = useSelector(selectBuskEdit)
 
-  const openTargetPicker = useCallback(() => setTargetSheetOpen(true), [])
+  const [createPage, { isLoading: creating }] = useCreateBuskPageMutation()
+  const [renamePage] = useRenameBuskPageMutation()
+  const [deletePage] = useDeleteBuskPageMutation()
+  const [reorderPages] = useReorderBuskPagesMutation()
+  const [saveLayout, { isLoading: generating }] = useSaveBuskLayoutMutation()
+  const [pressPad] = usePressBuskPadMutation()
+  const cachePage = useCacheBuskPage(projectId)
 
-  // On mobile, close the target sheet when a target is selected
-  const handleSelectTarget = useCallback(
-    (target: BuskingTarget) => {
-      selectTarget(target)
-      if (!isDesktop) {
-        setTargetSheetOpen(false)
+  // `?page=` is resolved against what actually came back, so a stale bookmark or a page deleted in
+  // another tab lands on the first page rather than on nothing.
+  const requestedPageId = Number(searchParams.get('page'))
+  const activePage = useMemo(() => {
+    if (pages == null || pages.length === 0) return null
+    return pages.find((page) => page.id === requestedPageId) ?? pages[0]
+  }, [pages, requestedPageId])
+
+  useEffect(() => {
+    if (activePage == null || activePage.id === requestedPageId) return
+    // `replace`, never `push`: flipping between pages is not a history entry.
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.set('page', String(activePage.id))
+        return next
+      },
+      { replace: true },
+    )
+  }, [activePage, requestedPageId, setSearchParams])
+
+  // Leaving the view leaves edit mode. Without this the FX cue-slot overlay, which reads the mode
+  // from the store, would keep drawing its crosses on whatever page the operator went to.
+  useEffect(() => () => void dispatch(exitBuskEdit()), [dispatch])
+
+  useEffect(() => {
+    if (editing && activePage != null) dispatch(enterBuskEdit(activePage.id))
+  }, [editing, activePage, dispatch])
+
+  const presenceOf = useCallback(
+    (pad: BuskPad): EffectPresence => {
+      const applied = programmerApplied ?? []
+      if (pad.kind === 'TEMPLATE' && pad.template != null) {
+        return templateLayerPresence(applied, selectedLayerTargets, pad.template.id)
       }
+      if (pad.kind === 'LOOK' && pad.look != null) {
+        return lookLayerPresence(applied, selectedLayerTargets, pad.look.id)
+      }
+      return 'none'
     },
-    [selectTarget, isDesktop],
+    [programmerApplied, selectedLayerTargets],
   )
 
-  /**
-   * What the selection can actually take, in capability terms: the union over the selected targets.
-   *
-   * The **only** filter left. There used to be a second one on `editorFixtureType` — a Look was
-   * refused unless it had been authored against one of the selected fixtures' types — and that gate
-   * is precisely what made "Amber Key" a MAC Aura's colour rather than a colour (D6). It went with
-   * the column.
-   */
-  const targetCapabilities = useMemo(() => {
-    const caps = new Set<string>()
-    for (const target of selectedArray) {
-      if (target.type === 'group') target.group.capabilities.forEach((c) => caps.add(c))
-      else target.fixture.capabilities.forEach((c) => caps.add(c))
-    }
-    return caps
-  }, [selectedArray])
+  const behaviour = useMemo<PadBehaviour>(
+    () => ({
+      presenceOf,
+      isLive: (pad) => pad.kind === 'CUE' && pad.cue != null && activeCueIds.has(pad.cue.id),
+      onPress: (pad) => {
+        // A pad the layout write has not answered for yet has no id to press. It cannot be reached
+        // in practice — presses are off while editing — but the guard keeps the type honest.
+        if (pad.id == null) return
+        void pressPad({ projectId, padId: pad.id, targets: selectedLayerTargets })
+          .unwrap()
+          .catch(ignoreReportedError)
+      },
+      onInspect: (pad) => {
+        if (pad.kind === 'TEMPLATE') navigate(`/projects/${projectId}/templates`)
+        else if (pad.kind === 'LOOK') navigate(`/projects/${projectId}/looks`)
+        else if (pad.cue != null) {
+          navigate(`/projects/${projectId}/show/stacks/${pad.cue.cueStackId}?cue=${pad.cue.id}`)
+        }
+      },
+    }),
+    [presenceOf, activeCueIds, pressPad, projectId, selectedLayerTargets, navigate],
+  )
 
-  /**
-   * The pads: Looks with **deferred effects**, plus every template.
-   *
-   * Both belong here and for the same reason — a pad puts a named thing on whatever is selected, so
-   * the thing has to be one that takes its targets from the press. For a Look that means a deferred
-   * *effect* (a chase you point somewhere); its bound rows name their own heads and reach the stage
-   * through a cue layer or Include instead. A template is target-less by definition, which is what
-   * made a palette bank a pad grid in the first place.
-   */
-  const padItems = useMemo<PadItem[]>(() => {
-    /**
-     * Does every family this thing touches have a capability the selection can answer?
-     *
-     * BEAM is deliberately unfiltered: a gobo wheel and a zoom are separate channels with no single
-     * capability flag, and the backend skips a property a fixture lacks. Nothing to filter on.
-     */
-    const familiesFit = (families: readonly AttributeFamily[]) => {
-      if (selectedArray.length === 0) return true
-      return families.every((family) => {
-        if (family === 'INTENSITY') return targetCapabilities.has('dimmer')
-        if (family === 'COLOUR') return targetCapabilities.has('colour')
-        if (family === 'POSITION') return targetCapabilities.has('position')
-        return true
-      })
-    }
+  const onPageKeys = useMemo(
+    () => (activePage != null ? recordsOnPage(activePage) : new Set<string>()),
+    [activePage],
+  )
 
-    const lookPads: PadItem[] = (looks ?? [])
-      .filter((look) => look.hasDeferredEffects)
-      .filter((look) => familiesFit(look.families))
-      .map((look) => ({
-        key: `look-${look.id}`,
-        name: look.name,
-        notes: look.notes,
-        detail: describeLookContents(look),
-        kind: 'look' as const,
-        // A Look spans families by nature — `families` is derived from its rows and can hold two —
-        // so it has no column and gets a section of its own instead.
-        family: null,
-        swatch: null,
-        presence: computeLookPresence(look),
-        onToggle: () => void applyLook(look),
-        onEdit: () => navigate(`/projects/${currentProject?.id ?? 0}/looks`),
-      }))
-
-    // The library's own order — `buildTemplateLayout` is the one place the tree is composed, so
-    // the pad grid and `/templates` draw the same order from the same numbers. A group's members
-    // come out contiguous with the group on each, which is what `TemplateColumns` folds into a
-    // cluster; the capability filter runs per pad *after* the walk, so a member the selection
-    // cannot take drops out of its cluster rather than breaking the walk.
-    const ordered: { template: TemplateSummary; group: { id: number; name: string } | null }[] = []
-    for (const entry of buildTemplateLayout(templates ?? [], templateGroups ?? [])) {
-      if (entry.kind === 'template') {
-        ordered.push({ template: entry.template, group: null })
-      } else {
-        const group = { id: entry.group.id, name: entry.group.name }
-        for (const template of entry.templates) ordered.push({ template, group })
-      }
-    }
-
-    const templatePads: PadItem[] = ordered
-      .filter(({ template: t }) => t.family == null || familiesFit([t.family]))
-      .map(({ template, group }) => ({
-        key: `template-${template.id}`,
-        name: template.name,
-        notes: template.notes,
-        group,
-        detail:
-          template.kind === 'effect' ? (
-            <EffectPadDetail template={template} />
-          ) : template.isGeneric ? (
-            template.family != null ? (
-              FAMILY_LABELS[template.family].singular
-            ) : (
-              'value'
-            )
-          ) : (
-            `${template.rows.length} heads`
-          ),
-        kind: 'template' as const,
-        isEffect: template.kind === 'effect',
-        family: template.family,
-        swatch: templateSwatch(template),
-        // A template's pad can only light from the **layer stack**, and that is more load-bearing
-        // now that one can hold an effect rather than less: an effect-template pad's ring would look
-        // matchable against the running instance, and matching there would light for effect
-        // templates while leaving every value template's pad dark. So it reads the desk's resolved
-        // applied state, which answers for the layer whatever the template holds — the same
-        // question one press ago, and the same answer a Look pad's ring reads.
-        presence: templateLayerPresence(programmerApplied ?? [], selectedLayerTargets, template.id),
-        onToggle: () => {
-          // Guarded the same way `applyLook` is, and for the same reason: a toggle carrying no
-          // targets is not "apply to nothing", it is a layer the server has to interpret. The
-          // pool is dimmed and its buttons made inert with an empty selection, so this should be
-          // unreachable — but the two pad kinds must not disagree about what an empty press means.
-          if (currentProject == null || selectedLayerTargets.length === 0) return
-          void toggleTemplate({
-            projectId: currentProject.id,
-            templateId: template.id,
-            targets: selectedLayerTargets,
-            propertyMask: template.family ?? undefined,
-          })
-            .unwrap()
-            .catch((err) => toast.error(formatError(err)))
-        },
-        onEdit: () => navigate(`/projects/${currentProject?.id ?? 0}/templates`),
-      }))
-
-    return [...templatePads, ...lookPads]
-  }, [
-    looks,
-    templates,
-    templateGroups,
-    targetCapabilities,
-    selectedArray.length,
-    computeLookPresence,
-    applyLook,
-    navigate,
-    currentProject,
-    programmerApplied,
-    selectedLayerTargets,
-    toggleTemplate,
-  ])
+  const startFromLibrary = useCallback(async () => {
+    const page = await createPage({ projectId, name: 'Page 1' }).unwrap().catch(ignoreReportedError)
+    if (page == null) return
+    const written = await saveLayout({
+      projectId,
+      pageId: page.id,
+      ...libraryStarterLayout(templates ?? [], looks ?? []),
+    })
+      .unwrap()
+      .catch(ignoreReportedError)
+    // The one layout write outside the commit queue, so it has to seed the cache itself — the
+    // create's own invalidation refetched this page while it was still empty, and nothing else
+    // would show what was just generated until an unrelated frame arrived.
+    if (written != null) cachePage(written)
+  }, [createPage, saveLayout, cachePage, projectId, templates, looks])
 
   return (
     <div className="flex h-full flex-col">
-      {/* The band lives *inside* the left column, so the rail's border runs from under the ShowBar
-          to the bottom of the page — the mock's arrangement, and the one that gives a rail which
-          scrolls its own bank the full height to do it in.
-
-          One layout at every width. The old three-way branch existed because the target list was a
-          sidebar, which a phone has no room for; a band of pads scrolling sideways fits both, so
-          the narrow arm is now the same page with the rail hidden and the sheet as a second way in. */}
       <div className="flex min-h-0 flex-1">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <TargetBand
-            selectedTargets={selectedTargets}
-            onToggle={toggleTarget}
-            onClear={clearSelection}
-            onOpenPicker={openTargetPicker}
-          />
-          <div className="min-h-0 flex-1">
-            <BuskPools
-              hasSelection={selectedArray.length > 0}
-              padItems={padItems}
-              cueColumn={<BuskCueStacks projectId={projectId} transport={transport} />}
-              currentProjectId={currentProject?.id}
+          {/* Dimmed while editing, because pads do not press then and the selection they would
+              press onto is therefore not doing anything. */}
+          <div
+            className={
+              editing ? 'opacity-55 transition-opacity [&_button]:pointer-events-none' : undefined
+            }
+            aria-disabled={editing || undefined}
+          >
+            <TargetBand
+              selectedTargets={selectedTargets}
+              onToggle={toggleTarget}
+              onClear={clearSelection}
+              onOpenPicker={() => setTargetSheetOpen(true)}
             />
           </div>
+
+          <BuskPageStrip
+            pages={pages ?? []}
+            activePageId={activePage?.id ?? null}
+            editing={editing}
+            onSelect={(pageId) =>
+              setSearchParams(
+                (prev) => {
+                  const next = new URLSearchParams(prev)
+                  next.set('page', String(pageId))
+                  return next
+                },
+                { replace: true },
+              )
+            }
+            onCreate={(name) => createPage({ projectId, name }).unwrap()}
+            onRename={(name) =>
+              activePage == null
+                ? Promise.resolve()
+                : renamePage({ projectId, pageId: activePage.id, name }).unwrap()
+            }
+            onReorder={(pageIds) => void reorderPages({ projectId, pageIds })}
+            onDelete={() => {
+              if (activePage == null) return
+              void deletePage({ projectId, pageId: activePage.id })
+            }}
+            onToggleEditing={() => {
+              if (editing) dispatch(exitBuskEdit())
+              else if (activePage != null) dispatch(enterBuskEdit(activePage.id))
+            }}
+          />
+
+          <BuskEditProvider editing={editing} projectId={projectId} page={activePage}>
+            {pages != null && pages.length === 0 && !isLoading ? (
+              <BuskFirstOpen
+                busy={creating || generating}
+                onStartFromLibrary={() => void startFromLibrary()}
+                onStartEmpty={() => void createPage({ projectId, name: 'Page 1' })}
+              />
+            ) : activePage != null ? (
+              <BuskPageBody page={activePage} behaviour={behaviour} />
+            ) : (
+              <div className="min-h-0 flex-1" />
+            )}
+          </BuskEditProvider>
         </div>
-        {/* Hides itself below `md`; the ShowBar's own masters chip covers that width. */}
-        <BuskSpeedRail />
+
+        {editing ? (
+          <LibraryPalette projectId={projectId} onPageKeys={onPageKeys} />
+        ) : (
+          <BuskSpeedRail />
+        )}
       </div>
 
-      {/* Kept for narrow widths, where the band is reachable but a long rig means a lot of
-          sideways scrolling. Selecting here *replaces* the selection and closes — picking one
-          thing and getting one thing is what a modal picker should do. */}
-      <Sheet open={targetSheetOpen} onOpenChange={setTargetSheetOpen}>
-        <SheetContent side="bottom" className="h-[70vh]">
-          <SheetHeader>
-            <SheetTitle>Select Targets</SheetTitle>
-          </SheetHeader>
-          <div className="flex-1 overflow-y-auto">
+      {!isDesktop && (
+        <Sheet open={targetSheetOpen} onOpenChange={setTargetSheetOpen}>
+          <SheetContent side="left" className="flex w-full flex-col p-0 sm:max-w-sm">
+            <SheetHeader className="px-4">
+              <SheetTitle>Pick a target</SheetTitle>
+            </SheetHeader>
             <TargetList
               selectedTargets={selectedTargets}
-              onSelect={handleSelectTarget}
+              onSelect={(target: BuskingTarget) => {
+                selectTarget(target)
+                setTargetSheetOpen(false)
+              }}
               onToggle={toggleTarget}
             />
-          </div>
-        </SheetContent>
-      </Sheet>
+          </SheetContent>
+        </Sheet>
+      )}
     </div>
   )
 }

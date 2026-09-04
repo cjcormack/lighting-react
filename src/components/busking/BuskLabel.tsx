@@ -6,12 +6,12 @@ import { cn } from '@/lib/utils'
  * Every region on this surface is titled the same way: 9px, bold, uppercase, wide-tracked, muted,
  * and **no icon**. That uniformity is the point rather than an economy. The pools and the cue column
  * used to draw a larger icon-bearing heading while the target band and the speed rail drew this one,
- * which made three regions of one instrument read as three surfaces; `busking-view-design/Main.dc.html`
- * draws no glyph beside any of them.
+ * which made three regions of one instrument read as three surfaces; neither design canvas draws a
+ * glyph beside any of them.
  *
- * A `<div>` on purpose: `BuskPools.test.tsx` reaches a pool's grid by walking up from its heading
- * (`getByText('Templates').closest('div')?.parentElement`), and a `<span>` here would make that walk
- * skip the section root and land on the scroller, silently asserting about a different pool.
+ * A `<div>` on purpose, so a test can reach a region's body by walking up from its label. The pools
+ * that relied on that are gone — the page is the operator's now — but the palette and the band still
+ * label themselves this way, and a `<span>` would make such a walk skip the region root.
  */
 export function BuskLabel({
   className,

@@ -19,7 +19,8 @@ import { StageOverviewPanel } from "./components/StageOverviewPanel"
 import { FixtureDetailModal } from "./components/groups/FixtureDetailModal"
 import { OverviewToggle, useOverviewPanels } from "./components/overviewPanels"
 import { AiChatToggle } from "./components/ai/AiChatToggle"
-import { CueSlotOverviewPanel, CueSlotDndProvider } from "./components/CueSlotOverviewPanel"
+import { CueSlotOverviewPanel } from "./components/CueSlotOverviewPanel"
+import { DeskDndProvider } from "./components/dnd/DeskDndProvider"
 import CommandPalette from "./components/CommandPalette"
 import { AddEditFxSheet, type FxTarget } from "./components/fx/AddEditFxSheet"
 import { ChannelValueDialog } from "./components/ChannelValueDialog"
@@ -219,8 +220,9 @@ export default function Layout() {
             isVisible={byId.fixtures.isVisible}
           />
 
-          {/* Cue Slot DnD Provider wraps panel + page content for cross-component drag-and-drop */}
-          <CueSlotDndProvider isVisible={byId.cueSlots.isVisible}>
+          {/* The app's one DndContext, wrapping the cue-slot overlay and the routed page together:
+              a drag started in either must be able to land in the other. See DeskDndProvider. */}
+          <DeskDndProvider isVisible={byId.cueSlots.isVisible}>
             <CueSlotOverviewPanel isVisible={byId.cueSlots.isVisible} />
 
             {/* Page Content. The re-auth banner sits inside the scroll container's flex
@@ -238,7 +240,7 @@ export default function Layout() {
                 </Suspense>
               </FeatureErrorBoundary>
             </main>
-          </CueSlotDndProvider>
+          </DeskDndProvider>
 
           {/* Fixture Detail Modal - opens in edit mode from overview */}
           <FixtureDetailModal

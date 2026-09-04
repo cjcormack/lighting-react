@@ -1,18 +1,7 @@
-import { useState, useCallback, useRef, useMemo, useEffect, createContext, useContext } from 'react'
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router'
 import { Eye, Trash2, Pencil, X } from 'lucide-react'
-import {
-  DndContext,
-  useDraggable,
-  useDroppable,
-  useDndMonitor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type DragStartEvent,
-  DragOverlay,
-} from '@dnd-kit/core'
+import { useDraggable, useDroppable, useDndMonitor } from '@dnd-kit/core'
 import { Button } from '@/components/ui/button'
 import {
   ContextMenu,
@@ -25,8 +14,6 @@ import { cn } from '@/lib/utils'
 import { useCurrentProjectQuery } from '../store/projects'
 import {
   useProjectCueSlotsQuery,
-  useAssignCueSlotMutation,
-  useSwapCueSlotsMutation,
   useClearCueSlotMutation,
   type CueSlot,
 } from '../store/cueSlots'
@@ -35,7 +22,12 @@ import { useActivateCueStackMutation, useDeactivateCueStackMutation } from '../s
 import { EditModeAssignPanel } from './CueSlotEditAssignPanel'
 import { CollapsiblePanel } from './CollapsiblePanel'
 import { usePersistentState } from '@/hooks/usePersistentState'
-import { SlotItemContent, type CueSlotAssignDragData } from './cueSlotShared'
+import {
+  SlotItemContent,
+  type CueSlotDropTargetData,
+  type CueSlotSwapDragData,
+} from './cueSlotShared'
+import { useDeskDnd } from './dnd/DeskDndProvider'
 
 export { type CueSlot } from '../store/cueSlots'
 
@@ -45,157 +37,14 @@ const SLOTS_PER_PAGE = 8
 // `"3"` the hand-rolled `String(page)` wrote, so a desk's stored page survives the switch.
 const PAGE_STORAGE_KEY = 'cue-slot-overview-page'
 
-// ─── DnD data types ───────────────────────────────────────────────────
+/**
+ * Edit mode and the drag context both live on `DeskDndProvider` now — the app's one `DndContext`,
+ * which wraps this panel *and* the routed page so a busk page can drop onto a slot. Re-exported
+ * under the old name so this panel's own call sites read as they did.
+ */
+export const useCueSlotDnd = useDeskDnd
 
-export interface CueSlotSwapDragData {
-  type: 'slot-item'
-  page: number
-  slotIndex: number
-  slot: CueSlot
-}
-
-export interface CueSlotDropTargetData {
-  type: 'slot-target'
-  page: number
-  slotIndex: number
-}
-
-// ─── Context for DnD + edit mode ─────────────────────────────────────
-
-interface CueSlotDndContextValue {
-  /**
-   * Whether a slot drag is in flight. Lives on the provider rather than in the panel body,
-   * because the body is what it exists to keep mounted — see [CueSlotOverviewPanel].
-   */
-  isDragging: boolean
-  isEditMode: boolean
-  enterEditMode: () => void
-  exitEditMode: () => void
-}
-
-const CueSlotDndContext = createContext<CueSlotDndContextValue>({
-  isDragging: false,
-  isEditMode: false,
-  enterEditMode: () => {},
-  exitEditMode: () => {},
-})
-
-export function useCueSlotDnd() {
-  return useContext(CueSlotDndContext)
-}
-
-interface CueSlotDndProviderProps {
-  isVisible: boolean
-  children: React.ReactNode
-}
-
-export function CueSlotDndProvider({ isVisible, children }: CueSlotDndProviderProps) {
-  const { data: currentProject } = useCurrentProjectQuery()
-  const projectId = currentProject?.id
-  const [assignSlot] = useAssignCueSlotMutation()
-  const [swapSlots] = useSwapCueSlotsMutation()
-  const [draggedLabel, setDraggedLabel] = useState<string | null>(null)
-  const [isDragging, setIsDragging] = useState(false)
-  const [isEditMode, setIsEditMode] = useState(false)
-
-  const enterEditMode = useCallback(() => setIsEditMode(true), [])
-  const exitEditMode = useCallback(() => setIsEditMode(false), [])
-
-  // Auto-exit edit mode when panel hides
-  useEffect(() => {
-    if (!isVisible) setIsEditMode(false)
-  }, [isVisible])
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-  )
-
-  const handleDragStart = useCallback((event: DragStartEvent) => {
-    setIsDragging(true)
-    const data = event.active.data.current
-    if (data?.type === 'slot-item') {
-      setDraggedLabel((data as CueSlotSwapDragData).slot.itemName)
-    } else if (data?.type === 'cue-slot-assign') {
-      setDraggedLabel((data as CueSlotAssignDragData).itemName)
-    }
-  }, [])
-
-  const handleDragCancel = useCallback(() => {
-    setIsDragging(false)
-    setDraggedLabel(null)
-  }, [])
-
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      setIsDragging(false)
-      setDraggedLabel(null)
-      if (!projectId) return
-
-      const { active, over } = event
-      if (!over) return
-
-      const activeData = active.data.current
-      const overData = over.data.current
-      if (!activeData || !overData) return
-
-      // Only handle drops onto slot targets
-      if (overData.type !== 'slot-target') return
-
-      const targetPage = (overData as CueSlotDropTargetData).page
-      const targetIndex = (overData as CueSlotDropTargetData).slotIndex
-
-      // External cue/stack → slot assignment
-      if (activeData.type === 'cue-slot-assign') {
-        const { itemType, itemId } = activeData as CueSlotAssignDragData
-        assignSlot({
-          projectId,
-          page: targetPage,
-          slotIndex: targetIndex,
-          cueId: itemType === 'cue' ? itemId : undefined,
-          cueStackId: itemType === 'cue_stack' ? itemId : undefined,
-        })
-        return
-      }
-
-      // Slot → slot swap/move
-      if (activeData.type === 'slot-item') {
-        const { page: fromPage, slotIndex: fromIndex } = activeData as CueSlotSwapDragData
-        if (fromPage === targetPage && fromIndex === targetIndex) return
-        swapSlots({
-          projectId,
-          fromPage,
-          fromSlotIndex: fromIndex,
-          toPage: targetPage,
-          toSlotIndex: targetIndex,
-        })
-      }
-    },
-    [projectId, assignSlot, swapSlots],
-  )
-
-  return (
-    <CueSlotDndContext.Provider value={{ isDragging, isEditMode, enterEditMode, exitEditMode }}>
-      {/* `onDragCancel` matters more than it looks: a cancelled drag (Escape, a lost pointer)
-          never reaches `onDragEnd`, so without it both the overlay label and `isDragging` would
-          stay set — and `isDragging` is what holds the panel body mounted. */}
-      <DndContext
-        sensors={sensors}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-        onDragCancel={handleDragCancel}
-      >
-        {children}
-        <DragOverlay dropAnimation={null}>
-          {draggedLabel ? (
-            <div className="rounded-md border bg-background px-2 py-1.5 shadow-lg text-sm font-medium opacity-90">
-              {draggedLabel}
-            </div>
-          ) : null}
-        </DragOverlay>
-      </DndContext>
-    </CueSlotDndContext.Provider>
-  )
-}
+export type { CueSlotSwapDragData, CueSlotDropTargetData } from './cueSlotShared'
 
 // ─── Panel component ──────────────────────────────────────────────────
 

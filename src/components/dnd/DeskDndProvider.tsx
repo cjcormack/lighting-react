@@ -1,0 +1,203 @@
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import {
+  closestCenter,
+  DndContext,
+  DragOverlay,
+  MeasuringStrategy,
+  PointerSensor,
+  pointerWithin,
+  useSensor,
+  useSensors,
+  type Active,
+  type CollisionDetection,
+  type DragEndEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core'
+import { useCurrentProjectQuery } from '../../store/projects'
+import { useAssignCueSlotMutation, useSwapCueSlotsMutation } from '../../store/cueSlots'
+import type {
+  CueSlotAssignDragData,
+  CueSlotDropTargetData,
+  CueSlotSwapDragData,
+} from '../cueSlotShared'
+import { renderDragOverlay } from './dragOverlayRegistry'
+
+/**
+ * The app's **one** drag context.
+ *
+ * It was `CueSlotDndProvider`, and it is not about cue slots any more: `Layout.tsx` mounts it
+ * around both the FX cue-slot overlay in the header *and* the routed page, and the busk layout
+ * joins it rather than nesting one of its own. Nesting is the thing to avoid — an inner
+ * `DndContext` wins for its subtree, so a drag started on a busk pad would never see the overlay's
+ * slot droppables, which is exactly the gesture `busk-layout-plan.md` D7 needs.
+ *
+ * A surface participates by calling `useDndMonitor()` somewhere inside, and by making its drag ids
+ * recognisable to itself and foreign to everyone else — `parseBuskDragId` answers null for a
+ * `slot-…` id and the handler below ignores anything that is not one. **No handler prop needs
+ * adding here for that**: `DndContext` dispatches to its monitor bus whether or not the matching
+ * prop is passed, so a monitor receives `onDragOver` even though this provider passes none.
+ *
+ * The cue-slot arm below is the second consumer, and stays here because it is the one that has to
+ * run even when no busk page is mounted.
+ */
+interface DeskDndContextValue {
+  /**
+   * Whether *any* drag is in flight. Lives on the provider rather than in the cue-slot panel,
+   * because the panel body is what it exists to keep mounted — unmounting it mid-drag would take
+   * every slot droppable with it and the drop would resolve against nothing.
+   */
+  isDragging: boolean
+  isEditMode: boolean
+  enterEditMode: () => void
+  exitEditMode: () => void
+}
+
+const DeskDndContext = createContext<DeskDndContextValue>({
+  isDragging: false,
+  isEditMode: false,
+  enterEditMode: () => {},
+  exitEditMode: () => {},
+})
+
+export function useDeskDnd() {
+  return useContext(DeskDndContext)
+}
+
+/**
+ * Pointer-first, centre-second.
+ *
+ * dnd-kit's default is `rectIntersection`, which compares the *dragged* rect against each droppable
+ * — fine for a grid of eight equal cells, wrong for a page of very unequal ones. A 20px column
+ * gutter can never win an area contest against the 300px column beside it, and `rectIntersection`
+ * answers nothing at all in the gaps between banks. `pointerWithin` asks "is the pointer inside
+ * this box", which makes a gutter and a column equally winnable; `closestCenter` catches the gaps,
+ * and would be the only answer for a keyboard sensor, which has no pointer to be within anything.
+ */
+const collisionDetection: CollisionDetection = (args) => {
+  const pointer = pointerWithin(args)
+  return pointer.length > 0 ? pointer : closestCenter(args)
+}
+
+/**
+ * The busk page changes its own geometry mid-drag — a drop slot opens, the "stack under" strips
+ * appear — and droppables are otherwise measured once, at drag start. `Always` is rAF-throttled by
+ * dnd-kit's default measuring frequency.
+ */
+const measuring = { droppable: { strategy: MeasuringStrategy.Always } }
+
+interface DeskDndProviderProps {
+  /** Whether the cue-slot overlay is on screen; hiding it leaves its edit mode. */
+  isVisible: boolean
+  children: React.ReactNode
+}
+
+export function DeskDndProvider({ isVisible, children }: DeskDndProviderProps) {
+  const { data: currentProject } = useCurrentProjectQuery()
+  const projectId = currentProject?.id
+  const [assignSlot] = useAssignCueSlotMutation()
+  const [swapSlots] = useSwapCueSlotsMutation()
+  const [active, setActive] = useState<Active | null>(null)
+  const [draggedLabel, setDraggedLabel] = useState<string | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [isEditMode, setIsEditMode] = useState(false)
+
+  const enterEditMode = useCallback(() => setIsEditMode(true), [])
+  const exitEditMode = useCallback(() => setIsEditMode(false), [])
+
+  // Auto-exit edit mode when the panel hides
+  useEffect(() => {
+    if (!isVisible) setIsEditMode(false)
+  }, [isVisible])
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
+
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    setIsDragging(true)
+    setActive(event.active)
+    const data = event.active.data.current
+    if (data?.type === 'slot-item') {
+      setDraggedLabel((data as CueSlotSwapDragData).slot.itemName)
+    } else if (data?.type === 'cue-slot-assign') {
+      setDraggedLabel((data as CueSlotAssignDragData).itemName)
+    }
+  }, [])
+
+  const clearDrag = useCallback(() => {
+    setIsDragging(false)
+    setDraggedLabel(null)
+    setActive(null)
+  }, [])
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      clearDrag()
+      if (!projectId) return
+
+      const { active: dragged, over } = event
+      if (!over) return
+
+      const activeData = dragged.data.current
+      const overData = over.data.current
+      if (!activeData || !overData) return
+
+      // Only handle drops onto slot targets — everything else belongs to another surface's monitor.
+      if (overData.type !== 'slot-target') return
+
+      const targetPage = (overData as CueSlotDropTargetData).page
+      const targetIndex = (overData as CueSlotDropTargetData).slotIndex
+
+      // External cue/stack → slot assignment
+      if (activeData.type === 'cue-slot-assign') {
+        const { itemType, itemId } = activeData as CueSlotAssignDragData
+        assignSlot({
+          projectId,
+          page: targetPage,
+          slotIndex: targetIndex,
+          cueId: itemType === 'cue' ? itemId : undefined,
+          cueStackId: itemType === 'cue_stack' ? itemId : undefined,
+        })
+        return
+      }
+
+      // Slot → slot swap/move
+      if (activeData.type === 'slot-item') {
+        const { page: fromPage, slotIndex: fromIndex } = activeData as CueSlotSwapDragData
+        if (fromPage === targetPage && fromIndex === targetIndex) return
+        swapSlots({
+          projectId,
+          fromPage,
+          fromSlotIndex: fromIndex,
+          toPage: targetPage,
+          toSlotIndex: targetIndex,
+        })
+      }
+    },
+    [projectId, assignSlot, swapSlots, clearDrag],
+  )
+
+  return (
+    <DeskDndContext.Provider value={{ isDragging, isEditMode, enterEditMode, exitEditMode }}>
+      {/* `onDragCancel` matters more than it looks: a cancelled drag (Escape, a lost pointer)
+          never reaches `onDragEnd`, so without it both the overlay and `isDragging` would stay
+          set — and `isDragging` is what holds the cue-slot panel body mounted. */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={collisionDetection}
+        measuring={measuring}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragCancel={clearDrag}
+      >
+        {children}
+        <DragOverlay dropAnimation={null}>
+          {renderDragOverlay(active) ??
+            (draggedLabel ? (
+              <div className="rounded-md border bg-background px-2 py-1.5 shadow-lg text-sm font-medium opacity-90">
+                {draggedLabel}
+              </div>
+            ) : null)}
+        </DragOverlay>
+      </DndContext>
+    </DeskDndContext.Provider>
+  )
+}

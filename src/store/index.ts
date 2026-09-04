@@ -6,6 +6,7 @@ import { errorToastMiddleware } from './errorToastMiddleware'
 import { saveStatusSlice } from './saveStatusSlice'
 import { selectionSlice } from './selectionSlice'
 import { editLockSlice } from './editLockSlice'
+import { buskEditSlice } from './buskEditSlice'
 
 export const store = configureStore({
   reducer: {
@@ -19,6 +20,9 @@ export const store = configureStore({
     // The show-editing lock, shared between Show and the Prompt Book so one GO ends a fix-it
     // session everywhere. Deliberately not persisted — see editLockSlice.
     editLock: editLockSlice.reducer,
+    // Busk "edit layout" mode. In the store because the FX cue-slot overlay reads it from
+    // outside the busk subtree — see buskEditSlice.
+    buskEdit: buskEditSlice.reducer,
   },
 
   middleware: (getDefaultMiddleware) => {
@@ -38,6 +42,7 @@ export const store = configureStore({
       'selection',
       'saveStatus',
       'editLock',
+      'buskEdit',
     ]
     return getDefaultMiddleware({
       serializableCheck: { ignoredPaths },
