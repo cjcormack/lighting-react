@@ -29,6 +29,7 @@ import {
 } from '../components/ViewSwitcher'
 import type { TemplateInUseError, TemplateInput, TemplateSummary } from '../api/templatesApi'
 import { parseFamilySlug, familySlug } from '../lib/attributeFamily'
+import { BuskPageCountWarning } from '@/components/busking/BuskPageCount'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { formatError } from '../lib/formatError'
 import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
@@ -293,6 +294,7 @@ export function ProjectTemplates() {
             {confirmDelete != null && confirmDelete.layerCount > 0 && (
               <> Layers apply it, so you will be asked to confirm again.</>
             )}
+            {confirmDelete != null && <BuskPageCountWarning count={confirmDelete.buskPageCount} />}
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmDelete(null)} disabled={isDeleting}>

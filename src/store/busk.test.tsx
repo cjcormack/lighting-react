@@ -54,6 +54,7 @@ function makeBackend() {
   }
 
   const bodies: BuskLayoutRequest[] = []
+  const appendBodies: Record<string, unknown>[] = []
   let failNext = false
   /** Set to hold every layout write open, so a second gesture can start while one is in flight. */
   let gate: Promise<void> | null = null
@@ -90,6 +91,17 @@ function makeBackend() {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const request = input as Request
     const url = request.url
+    if (url.includes('/pads') && request.method === 'POST') {
+      appendBodies.push((await request.json()) as Record<string, unknown>)
+      const bank = page.rows[0].columns[0].banks[0]
+      return new Response(
+        JSON.stringify({
+          ...page,
+          rows: [{ columns: [{ ...page.rows[0].columns[0], banks: [{ ...bank, pads: [...bank.pads, { id: nextId++, uuid: 'pnew', kind: 'CUE', cue: { id: 55 } }] }] }] }],
+        }),
+        { status: 201, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
     if (url.includes('/layout')) {
       if (failNext) {
         failNext = false
@@ -115,6 +127,7 @@ function makeBackend() {
   return {
     fetchMock,
     bodies,
+    appendBodies,
     page,
     failNextWrite: () => (failNext = true),
     holdWrites: () => {
@@ -322,5 +335,36 @@ describe('the busk.layoutChanged bridge', () => {
     // A multi-id frame is page CRUD or a reorder — never a layout write, so never ours to swallow.
     buskWs.callback!([1, 2])
     await waitFor(() => expect(pageReads()).toBeGreaterThan(before))
+  })
+
+  it('appends by bank id, sends exactly one record id, and takes the page from the response', async () => {
+    const { result } = renderHook(() => buskApi.endpoints.addBuskPad.useMutation(), { wrapper })
+
+    await result.current[0]({ projectId: 1, pageId: 1, bankId: 20, cueId: 55 }).unwrap()
+
+    // The URL names the *bank* — the address that survives a page being reshuffled underneath —
+    // and `pageId` is an argument for the echo bookkeeping, not part of the request.
+    const url = (backend.fetchMock.mock.calls.at(-1)![0] as Request).url
+    expect(url).toContain('projects/1/busk/banks/20/pads')
+    expect(url).not.toContain('20/pads/1')
+    expect(backend.appendBodies.at(-1)).toEqual({ cueId: 55 })
+
+    await waitFor(() => expect(cachedPage()!.rows[0].columns[0].banks[0].pads).toHaveLength(2))
+    // From the response, not from a refetch: the only reads were the initial list and the POST.
+    expect(backend.fetchMock.mock.calls.filter((call) => (call[0] as Request).method === 'GET')).toHaveLength(1)
+  })
+
+  it('swallows the layoutChanged frame its own append causes', async () => {
+    const { result } = renderHook(() => buskApi.endpoints.addBuskPad.useMutation(), { wrapper })
+    const before = backend.fetchMock.mock.calls.length
+
+    const inFlight = result.current[0]({ projectId: 1, pageId: 1, bankId: 20, cueId: 55 }).unwrap()
+    // The frame and the HTTP reply are not ordered against each other, so the server's echo can
+    // arrive first. Left alone it would start a refetch of the *pre-append* document and let that
+    // land after the response was written in.
+    buskWs.callback!([1])
+    await inFlight
+
+    expect(backend.fetchMock.mock.calls.length).toBe(before + 1)
   })
 })

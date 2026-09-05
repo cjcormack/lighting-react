@@ -10,6 +10,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { AddToBuskPageMenu } from '@/components/busking/AddToBuskPageMenu'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -466,6 +467,13 @@ export function TemplateEditor({
             </Button>
           )}
           <div className="flex gap-2">
+            {/* Only for a template that exists: `template == null` is a create draft, and a pad is a
+                reference to an id there is not one of yet. The create sheets place a pad by holding
+                the choice until their POST answers; this one has no POST of its own to wait for. */}
+            <AddToBuskPageMenu
+              projectId={projectId}
+              record={template == null ? null : { kind: 'TEMPLATE', id: template.id, name: template.name }}
+            />
             {/* Wrapped in SheetClose so Radix drives the close — which is what makes the unsaved
                 changes guard fire. A plain onOpenChange(false) bypasses it. */}
             <SheetClose asChild>

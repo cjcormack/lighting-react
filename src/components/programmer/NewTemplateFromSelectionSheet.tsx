@@ -14,7 +14,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Loader2 } from 'lucide-react'
-import { toast } from 'sonner'
+import { AlsoAddToBuskRow } from '@/components/busking/AlsoAddToBuskRow'
+import { useAddToBuskPage } from '@/components/busking/useAddToBuskPage'
+import type { BuskAddTarget } from '@/lib/buskAdd'
 import { ATTRIBUTE_FAMILIES, FAMILY_LABELS, type AttributeFamily } from '@/lib/attributeFamily'
 import { useCreateTemplateFromProgrammerMutation } from '@/store/templates'
 import { selectTargetKeys } from '@/store/selectionSlice'
@@ -60,11 +62,16 @@ export function NewTemplateFromSelectionSheet({
   useEffect(() => {
     if (!open) return
     setName('')
+    setBuskTarget(null)
     // Pre-chosen when the selection names exactly one — the common case, and the one the strip's
     // whole "the selection is the filter" idea rests on.
     setFamily(offered.length === 1 ? offered[0] : null)
     reset()
   }, [open, offered, reset])
+
+  // Held, not written: the pad names a template id that does not exist until `record` answers.
+  const [buskTarget, setBuskTarget] = useState<BuskAddTarget | null>(null)
+  const { placeAfterCreate } = useAddToBuskPage(projectId, null)
 
   const targets = useMemo(
     () => selectedKeys.map((key) => ({ type: 'fixture' as const, key })),
@@ -84,10 +91,16 @@ export function NewTemplateFromSelectionSheet({
       // The shape it came out as is worth saying: an operator who meant "one amber" and got a
       // per-fixture template has selected heads that disagree, and will want to know now rather
       // than when they apply it somewhere else.
-      toast.success(
-        result.isGeneric
-          ? `“${result.template.name}” — one value for any head`
-          : `“${result.template.name}” — per fixture, ${result.template.rows.length} heads`,
+      // The shape it came out as is worth saying: an operator who meant "one amber" and got a
+      // per-fixture template has selected heads that disagree, and will want to know now rather
+      // than when they apply it somewhere else.
+      const shape = result.isGeneric
+        ? 'one value for any head'
+        : `per fixture, ${result.template.rows.length} heads`
+      await placeAfterCreate(
+        buskTarget,
+        { kind: 'TEMPLATE', id: result.template.id, name: result.template.name },
+        `“${result.template.name}” — ${shape}`,
       )
       onOpenChange(false)
     } catch {
@@ -156,6 +169,8 @@ export function NewTemplateFromSelectionSheet({
               Nothing selected — there is nothing to record.
             </p>
           )}
+
+          <AlsoAddToBuskRow projectId={projectId} target={buskTarget} onChange={setBuskTarget} />
         </SheetBody>
         <SheetFooter className="flex-row justify-end gap-2">
           <SheetClose asChild>

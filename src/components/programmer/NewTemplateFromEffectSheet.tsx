@@ -15,7 +15,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Loader2 } from 'lucide-react'
-import { toast } from 'sonner'
+import { AlsoAddToBuskRow } from '@/components/busking/AlsoAddToBuskRow'
+import { useAddToBuskPage } from '@/components/busking/useAddToBuskPage'
+import type { BuskAddTarget } from '@/lib/buskAdd'
 import { effectSpeedLabel } from '@/components/fx/fxConstants'
 import { SpeedMasterChip } from '@/components/fx/SpeedMasterChip'
 import { findEffectEntry } from '@/components/busking/buskingTypes'
@@ -62,6 +64,9 @@ export function NewTemplateFromEffectSheet({
   const { data: library } = useEffectLibraryQuery()
 
   const [name, setName] = useState('')
+  // Held, not written: the pad names a template id that does not exist until `create` answers.
+  const [buskTarget, setBuskTarget] = useState<BuskAddTarget | null>(null)
+  const { placeAfterCreate } = useAddToBuskPage(projectIdNum, null)
 
   // Normalised, not `===`: a running instance spells its `effectType` as it was minted, which need
   // not match the library entry's `name` character for character — the divergence `ActiveEffectSheet`
@@ -79,6 +84,7 @@ export function NewTemplateFromEffectSheet({
     if (!open) return
     setName('')
     reset()
+    setBuskTarget(null)
   }, [open, reset])
 
 
@@ -118,7 +124,11 @@ export function NewTemplateFromEffectSheet({
     }
     try {
       const created = await create({ projectId: projectIdNum, name: name.trim(), effect: body }).unwrap()
-      toast.success(`“${created.name}” saved to the template library`)
+      await placeAfterCreate(
+        buskTarget,
+        { kind: 'TEMPLATE', id: created.id, name: created.name },
+        `“${created.name}” saved to the template library`,
+      )
       onOpenChange(false)
     } catch {
       // Rendered inline below; `formatError` handles the shape.
@@ -196,6 +206,10 @@ export function NewTemplateFromEffectSheet({
               category — and so the template&rsquo;s family — cannot be read.
             </p>
           )}
+          {Number.isFinite(projectIdNum) && (
+            <AlsoAddToBuskRow projectId={projectIdNum} target={buskTarget} onChange={setBuskTarget} />
+          )}
+
           {entry != null && (family == null || !familyCanHoldEffect(family)) && (
             <p className="text-[11px] text-destructive">
               A “{category}” effect cannot be a template — an effect template is banked by family,

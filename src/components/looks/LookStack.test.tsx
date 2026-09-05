@@ -27,6 +27,7 @@ function look(overrides: Partial<LookSummary> = {}): LookSummary {
     hasDeferredEffects: false,
     preview: [],
     layerCount: 1,
+    buskPageCount: 0,
     ...overrides,
   }
 }
@@ -56,6 +57,7 @@ function templateSummary(overrides: Partial<TemplateSummary> = {}): TemplateSumm
     ],
     effect: null,
     layerCount: 0,
+    buskPageCount: 0,
     ...overrides,
   }
 }

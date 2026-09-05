@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge'
+import { BuskPageCountBadge } from '@/components/busking/BuskPageCount'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -80,6 +81,11 @@ export function TemplateListRow({
           {template.layerCount} layer{template.layerCount === 1 ? '' : 's'}
         </Badge>
       )}
+
+      {/* A hint, not a use — so it sits with the descriptive badges and never with the layer count
+          that gates delete. Pages rather than pads: the operator is asking how many places they
+          would have to look, and two pads in one bank is still one place to go. */}
+      <BuskPageCountBadge count={template.buskPageCount} />
 
       {(onClick || onDelete) && (
         <DropdownMenu>

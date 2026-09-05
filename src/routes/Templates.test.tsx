@@ -46,6 +46,7 @@ function template(over: Partial<TemplateSummary> = {}): TemplateSummary {
     kind: 'value',
     effect: null,
     layerCount: 0,
+    buskPageCount: 0,
     ...over,
   }
 }
@@ -151,4 +152,31 @@ describe('ProjectTemplates', () => {
     expect(screen.getByText(/No templates yet/)).toBeInTheDocument()
   })
 
+
+  describe('the "on n pages" hint', () => {
+    it('says how many busk pages hold a pad, and says nothing at zero', () => {
+      templates = [template({ buskPageCount: 0 }), template({ id: 2, uuid: 'u2', name: 'Half Up', buskPageCount: 1 }), template({ id: 3, uuid: 'u3', name: 'Wash', buskPageCount: 2 })]
+      renderAt('/projects/1/templates')
+
+      expect(screen.getByText('on 1 page')).toBeInTheDocument()
+      expect(screen.getByText('on 2 pages')).toBeInTheDocument()
+      expect(screen.queryByText('on 0 pages')).not.toBeInTheDocument()
+    })
+
+    it('warns in the delete confirm, because the pads go silently and without a second ask', () => {
+      // A pad is an enrichment, not a use: it does not gate the delete and there is no 409 for it,
+      // so this sentence is the only warning an operator ever gets.
+      templates = [template({ buskPageCount: 2 })]
+      renderAt('/projects/1/templates')
+
+      fireEvent.pointerDown(screen.getAllByRole('button').find((b) => b.querySelector('svg.lucide-ellipsis'))!, {
+        button: 0,
+        ctrlKey: false,
+        pointerType: 'mouse',
+      })
+      fireEvent.click(screen.getByRole('menuitem', { name: /Delete/ }))
+
+      expect(screen.getByText(/It has pads on 2 busk pages; those go with it\./)).toBeInTheDocument()
+    })
+  })
 })

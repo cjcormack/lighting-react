@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CopyPlus, Download, Loader2, TriangleAlert, XCircle } from 'lucide-react'
+import { AddToBuskPageMenu } from '@/components/busking/AddToBuskPageMenu'
 import {
   Sheet,
   SheetBody,
@@ -232,6 +233,12 @@ export function LookDetailSheet({
               <CopyPlus className="size-3.5" />
               Duplicate
             </Button>
+            {/* Beside Include and Duplicate rather than in the footer: all three are things to *do*
+                with this Look, where the footer is about this sheet. */}
+            <AddToBuskPageMenu
+              projectId={projectId}
+              record={{ kind: 'LOOK', id: look.id, name: look.name }}
+            />
           </div>
 
           <div className="space-y-2">

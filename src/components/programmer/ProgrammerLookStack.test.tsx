@@ -52,6 +52,7 @@ function look(id: number, name: string): LookSummary {
     hasDeferredEffects: false,
     preview: [],
     layerCount: 1,
+    buskPageCount: 0,
   }
 }
 

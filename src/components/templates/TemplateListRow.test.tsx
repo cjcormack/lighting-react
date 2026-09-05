@@ -25,6 +25,7 @@ function template(over: Partial<TemplateSummary> = {}): TemplateSummary {
     ],
     effect: null,
     layerCount: 0,
+    buskPageCount: 0,
     ...over,
   }
 }

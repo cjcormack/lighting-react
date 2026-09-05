@@ -68,6 +68,12 @@ vi.mock('@/store/templates', () => ({
   useTemplateListQuery: () => ({ data: [], isLoading: false }),
 }))
 vi.mock('react-router', () => ({ useParams: () => ({ projectId: '1' }) }))
+// The footer's *Add to busk page* control subscribes to the page document. This suite is about the
+// form, and renders with no Provider, so the store module is stubbed like every other one here.
+vi.mock('@/store/busk', () => ({
+  useBuskPagesQuery: () => ({ data: [], isLoading: false }),
+  useAddBuskPadMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
+}))
 // The speed-master picker reaches for the live bank; the branch under test is the form around it.
 vi.mock('@/components/fx/SpeedMasterSelect', () => ({ SpeedMasterSelect: () => null }))
 
@@ -88,6 +94,7 @@ function template(over: Partial<TemplateSummary> = {}): TemplateSummary {
     ],
     effect: null,
     layerCount: 0,
+    buskPageCount: 0,
     ...over,
   }
 }

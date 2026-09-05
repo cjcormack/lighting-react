@@ -46,6 +46,7 @@ function template(over: Partial<TemplateSummary> = {}): TemplateSummary {
     kind: 'value',
     effect: null,
     layerCount: 0,
+    buskPageCount: 0,
     ...over,
   }
 }

@@ -182,6 +182,21 @@ export interface BuskLayoutRequest {
 }
 
 /**
+ * One pad appended to one bank, addressed by **bank id** rather than by a position in a document.
+ *
+ * The additive exception to the whole-page write: the surfaces that place a pad from outside the
+ * busk view (cue properties, the template editor, the Look sheet, the programmer's create sheets)
+ * hold no page document to splice and re-`PUT`, and an id survives any reshuffle of the page that
+ * keeps the bank alive. Exactly one of the three is set. The server answers the **whole page**, the
+ * same contract `BuskLayoutRequest` has and for the same reason: the ids it minted.
+ */
+export interface AddBuskPadRequest {
+  templateId?: number
+  lookId?: number
+  cueId?: number
+}
+
+/**
  * A press. `targets` is the busk view's selection; it is ignored for a cue pad, and may be empty
  * for a per-fixture template or a Look with no deferred effect — both of which name their own heads.
  */

@@ -25,6 +25,7 @@ import { TriggerSummary } from '@/components/cues/TriggerSummary'
 import {
   usePatchProjectCueMutation,
 } from '@/store/cues'
+import { AddToBuskPageMenu } from '@/components/busking/AddToBuskPageMenu'
 import type { Cue, CueTrigger, CueTriggerDetail } from '@/api/cuesApi'
 
 interface CuePropsPaneProps {
@@ -34,8 +35,9 @@ interface CuePropsPaneProps {
 
 /**
  * Properties pane: name, cue#, fade in/out, easing, notes,
- * auto-advance, script hooks. (There is no busk pin: a cue that wants a pad is placed in a bank on
- * a busk page, which is where pad placement lives now.) Every field auto-saves via PATCH — selects and
+ * auto-advance, *Add to busk page*, script hooks. There is no busk pin: a pad is a place in a bank
+ * the operator chose, so the control names a page and a bank rather than setting a flag — and the
+ * same cue may have pads in several banks, which a flag could not say. Every field auto-saves via PATCH — selects and
  * toggles on change, text fields on blur, on Enter, and a beat after typing
  * stops (`useFieldAutosave`). There is no Save button and none is wanted.
  *
@@ -328,6 +330,29 @@ export function CuePropsPane({ cue, projectId }: CuePropsPaneProps) {
           </div>
         )}
 
+        {/* Where the busk pin used to be, and doing its job the way the layout does it: naming a
+            bank rather than setting a flag. It says what pressing the pad will do, since a busk pad
+            fires its cue with no arming confirm (`busking-view-plan.md` D9).
+
+            Hidden on a MARKER, which `goToCue` refuses server-side, exactly as the pin was: the
+            append route validates references and not cue type, so this client guard is still the
+            only thing between an operator and a pad that could only ever fail. Hidden rather than
+            disabled, because a lone greyed-out control reads as breakage rather than as "not for
+            this kind of cue". */}
+        {cue.cueType !== 'MARKER' && (
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <Label>Add to busk page</Label>
+              <p className="text-xs text-muted-foreground">
+                Give this cue a pad in a bank. Pressing it fires the cue immediately.
+              </p>
+            </div>
+            <AddToBuskPageMenu
+              projectId={projectId}
+              record={{ kind: 'CUE', id: cue.id, name: cue.name }}
+            />
+          </div>
+        )}
       </div>
 
       {/* Script hooks */}

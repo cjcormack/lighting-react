@@ -115,6 +115,15 @@ export interface LookSummary {
    * a layer's FK is the only dependency a Look can have.
    */
   layerCount: number
+  /**
+   * How many busk pages hold a pad for this record — the row's "on *n* pages" hint, and the line
+   * the delete confirm shows before those pads go with it.
+   *
+   * A hint, never a guard: it does not gate delete, `layerCount` alone does. Pages, not pads, so
+   * two pads on one page count once — the question the operator is really asking is how many
+   * places they would have to go and look.
+   */
+  buskPageCount: number
 }
 
 /**

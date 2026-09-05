@@ -24,6 +24,7 @@ import { RecordLookSheet } from '../components/programmer/RecordLookSheet'
 import { CopyLookDialog } from '../components/looks/CopyLookDialog'
 import type { LookInUseError, LookSummary } from '../api/looksApi'
 import { useProgrammerSummaryQuery } from '../store/programmer'
+import { BuskPageCountWarning } from '@/components/busking/BuskPageCount'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { formatError } from '../lib/formatError'
 import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
@@ -271,6 +272,7 @@ export function ProjectLooks() {
             {confirmDelete != null && confirmDelete.layerCount > 0 && (
               <> Cues reference it, so you will be asked to confirm again.</>
             )}
+            {confirmDelete != null && <BuskPageCountWarning count={confirmDelete.buskPageCount} />}
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmDelete(null)} disabled={isDeleting}>

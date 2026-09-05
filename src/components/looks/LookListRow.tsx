@@ -1,6 +1,7 @@
 import type { MouseEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { BuskPageCountBadge } from '@/components/busking/BuskPageCount'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -84,6 +85,9 @@ export function LookListRow({
             {look.layerCount}
           </Badge>
         )}
+
+        {/* A hint about where to find it, never a use that gates delete. */}
+        <BuskPageCountBadge count={look.buskPageCount} />
 
         {(onEdit || onDelete || onCopy || onDuplicate) && (
           <DropdownMenu>

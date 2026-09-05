@@ -40,6 +40,7 @@ const LOOKS: LookSummary[] = [
     hasDeferredEffects: false,
     preview: [],
     layerCount: 1,
+    buskPageCount: 0,
   },
 ]
 
@@ -64,6 +65,7 @@ const TEMPLATES: TemplateSummary[] = [
       timingSource: 'BEAT',
     },
     layerCount: 1,
+    buskPageCount: 0,
   },
 ]
 
