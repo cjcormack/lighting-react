@@ -83,6 +83,31 @@ describe("navItems registry", () => {
     expect(program?.visibility).toBe("active-only")
   })
 
+  // The sidebar's four show modes must read in the same order as the in-view switcher's pills
+  // (`ShowView` / the JSX order in `components/ViewSwitcher.tsx`, which owns that order and says
+  // why). A test cannot read JSX order, so this pins the registry half against the list written
+  // out here; the two drifted apart once already, with Stage and Channels interleaved between them.
+  it("declares the four live views in ViewSwitcher order", () => {
+    // Historic ids: `program` is Show, `fx` is Busk. Both are deliberately stable handles.
+    expect(navItems.filter((i) => i.group === "live").map((i) => i.id)).toEqual([
+      "programmer",
+      "program",
+      "prompt-book",
+      "fx",
+    ])
+  })
+
+  // Stage and Channels are monitors, not show modes. The sidebar has no group headings — it draws a
+  // separator wherever `group` changes between adjacent visible items — so "their own section
+  // below the live views" *is* a distinct group plus declaration order, and both halves are pinned.
+  it("puts Stage and Channels in their own section below the live views", () => {
+    for (const id of ["stage-view", "channels"]) {
+      expect(navItems.find((i) => i.id === id)?.group).toBe("monitor")
+    }
+    const groups = navItems.map((i) => i.group)
+    expect(groups.indexOf("monitor")).toBeGreaterThan(groups.lastIndexOf("live"))
+  })
+
   it("hides Stage/Program (and other active-only items) when viewing a non-active project", () => {
     const ids = filterNavItems(navItems, false).map((i) => i.id)
     expect(ids).not.toContain("stage-view")

@@ -7,10 +7,10 @@ import {
   LayoutGrid,
   Move,
   Palette,
-  Pencil,
   SlidersVertical,
   Sun,
   TableProperties,
+  Theater,
 } from 'lucide-react'
 import { Link } from 'react-router'
 import { cn } from '@/lib/utils'
@@ -66,6 +66,11 @@ const LABEL_AT_820 = 'hidden @[820px]:inline' // Programmer · Show · Prompt Bo
  * the pills run in the order the work does. Busk comes last because it is the one you stand at
  * once the other three are done — and it is here at all because a live view reachable only from
  * the sidebar would be the one destination these pills could not get you to.
+ *
+ * This order is the sidebar's too: the `live` group in `navigation.ts` follows it, and
+ * `navigation.test.ts` pins the ids against this list. Each pill also carries the **same icon** as
+ * its sidebar row — Show's was `Pencil` here and `Theater` there, which made one destination read
+ * as two — so an icon change belongs in both files or neither.
  */
 export function ViewSwitcher({ current, projectId }: { current: ShowView; projectId: number }) {
   return (
@@ -81,7 +86,7 @@ export function ViewSwitcher({ current, projectId }: { current: ShowView; projec
         labelClass={LABEL_AT_820}
         active={current === 'show'}
         to={`/projects/${projectId}/show`}
-        icon={<Pencil className="size-3.5" />}
+        icon={<Theater className="size-3.5" />}
         label="Show"
       />
       <Segment

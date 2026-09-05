@@ -28,7 +28,7 @@ import { useAuthStatusQuery } from "./store/auth"
 import { useGetUniverseQuery } from "./store/universes"
 import { ATTRIBUTE_FAMILIES, FAMILY_LABELS, familySlug } from "./lib/attributeFamily"
 
-export type NavGroup = "setup" | "program" | "live" | "settings" | "install"
+export type NavGroup = "setup" | "program" | "live" | "monitor" | "settings" | "install"
 
 export interface NavItem {
   id: string
@@ -57,9 +57,10 @@ export interface NavItem {
  * When adding a new page/route, add an entry here and it will automatically
  * appear in both the sidebar navigation and the Cmd+K command palette.
  *
- * Items are grouped by workflow phase (setup → program → live). The sidebar
- * renders a thin separator between groups; the order within each group is
- * preserved as declared below.
+ * Items are grouped by workflow phase (setup → program → live → monitor). The
+ * sidebar renders a thin separator between groups; the order within each group
+ * is preserved as declared below. "live" is the four show modes and nothing
+ * else — it is ordered to match `components/ViewSwitcher.tsx`.
  */
 export const navItems: NavItem[] = [
   // ── Setup ───────────────────────────────────────────────────────────
@@ -146,29 +147,10 @@ export const navItems: NavItem[] = [
   },
 
   // ── Live ────────────────────────────────────────────────────────────
-  {
-    id: "stage-view",
-    label: "Stage",
-    icon: Boxes,
-    path: (p) => `/projects/${p}/stage`,
-    visibility: "active-only",
-    pathMatch: "/stage",
-    group: "live",
-  },
-  {
-    // `id` stays "fx" — the stable handle, the same call `program` made when Show was renamed.
-    // This is one destination under a new name, not a new one.
-    id: "fx",
-    // Busk: the pad-first performance surface, and the fourth live view. It was "FX", which named
-    // the machinery rather than the job and sat one hyphen from `/fx-library` — a genuinely
-    // different destination that the route match here got wrong twice.
-    label: "Busk",
-    icon: AudioWaveform,
-    path: (p) => `/projects/${p}/busk`,
-    visibility: "active-only",
-    pathMatch: "/busk",
-    group: "live",
-  },
+  // The four live views, in the order `ViewSwitcher` shows them — Programmer · Show · Prompt Book ·
+  // Busk. `components/ViewSwitcher.tsx` owns that order and states the reasoning ("the pills run in
+  // the order the work does"); this list follows it, so change one and change the other.
+  // Stage and Channels are NOT show modes and live in the Monitor group below.
   {
     id: "programmer",
     // The programmer: values, layers and effects on ONE screen. It was a page, then three tabs of
@@ -208,6 +190,35 @@ export const navItems: NavItem[] = [
     group: "live",
   },
   {
+    // `id` stays "fx" — the stable handle, the same call `program` made when Show was renamed.
+    // This is one destination under a new name, not a new one.
+    id: "fx",
+    // Busk: the pad-first performance surface, and the fourth live view. It was "FX", which named
+    // the machinery rather than the job and sat one hyphen from `/fx-library` — a genuinely
+    // different destination that the route match here got wrong twice.
+    label: "Busk",
+    icon: AudioWaveform,
+    path: (p) => `/projects/${p}/busk`,
+    visibility: "active-only",
+    pathMatch: "/busk",
+    group: "live",
+  },
+
+  // ── Monitor ─────────────────────────────────────────────────────────
+  // What the rig is actually doing, rather than a surface you drive it from. Their own section
+  // below the live views: they sat interleaved with the four show modes, which made neither group
+  // readable. Both are active-only, so this section disappears with the live one on an inactive
+  // project and its separator collapses with it.
+  {
+    id: "stage-view",
+    label: "Stage",
+    icon: Boxes,
+    path: (p) => `/projects/${p}/stage`,
+    visibility: "active-only",
+    pathMatch: "/stage",
+    group: "monitor",
+  },
+  {
     id: "channels",
     label: "Channels",
     icon: SlidersHorizontal,
@@ -216,7 +227,7 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/channels`,
     visibility: "active-only",
     pathMatch: "/channels",
-    group: "live",
+    group: "monitor",
   },
 
   // ── Settings (per-project) ──────────────────────────────────────────
@@ -338,7 +349,7 @@ export function useNavItems(): NavItem[] {
  * Returns per-universe navigation items ("Universe 0", "Universe 1", …).
  * Only consumed by the Cmd+K command palette so power users can jump
  * directly to a specific universe; the sidebar shows a single "Channels"
- * entry instead.
+ * entry instead — which is why these carry that row's "monitor" group.
  */
 export function useUniverseNavItems(): NavItem[] {
   const { data: universes } = useGetUniverseQuery()
@@ -352,7 +363,7 @@ export function useUniverseNavItems(): NavItem[] {
         path: (p: number) => `/projects/${p}/channels/${universe}`,
         visibility: "active-only" as const,
         pathMatch: `/channels/${universe}`,
-        group: "live" as const,
+        group: "monitor" as const,
       })),
     [universes],
   )
