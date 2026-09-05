@@ -17,10 +17,23 @@ import type { PadBehaviour } from './padBehaviour'
  * leave a quarter of the row empty, and a page drawn at desk width keeps its proportions on a
  * smaller screen until the columns stack.
  *
+ * **They stack below {@link STACK_BELOW_PX} of the page body's width**, one column under the next
+ * in document order, by a container query rather than a viewport one — the body is what the
+ * columns share, and how much of the viewport the rail or the palette has taken is not the
+ * viewport's business. The tracks travel as a CSS variable so the query can override them with a
+ * class; an inline `grid-template-columns` could not be overridden by anything. The threshold: at
+ * `md` beside the 288px speed rail the body is ~480px, and four quarter-columns need ~600px before
+ * each can hold one 110px pad inside its padding and border. Edit mode stacks too (the 360px
+ * palette leaves the body ~408px at `md`), and a gutter then reads as a strip *between* two stacked
+ * columns — still "the new column before column N", which is all its drop id ever said.
+ *
  * The gutters between columns are the *new column* drop zone. They are in the DOM for the whole of
  * edit mode rather than appearing when a bank is lifted — a droppable that mounts mid-drag has to
  * be measured mid-drag — and only their paint is conditional.
  */
+
+/** Below this many pixels of body width the columns of a row stack. See the docblock above. */
+export const STACK_BELOW_PX = 600
 
 function BuskGutter({ row, column }: { row: number; column: number }) {
   const { editing, source } = useBuskEdit()
@@ -40,7 +53,7 @@ function BuskGutter({ row, column }: { row: number; column: number }) {
       ref={setNodeRef}
       aria-hidden
       className={cn(
-        'rounded transition-colors',
+        'rounded transition-colors @max-[600px]:h-5',
         draggingBank && 'border-2 border-dashed',
         draggingBank && (isOver ? 'border-primary bg-primary/10' : 'border-border/70'),
       )}
@@ -72,8 +85,8 @@ function PageRow({
 
   return (
     <div
-      className="grid gap-3"
-      style={{ gridTemplateColumns: tracks.join(' ') }}
+      className="grid gap-3 [grid-template-columns:var(--busk-tracks)] @max-[600px]:grid-cols-1"
+      style={{ '--busk-tracks': tracks.join(' ') } as React.CSSProperties}
       data-testid={`busk-row-${rowIndex}`}
     >
       {row.columns.map((column, columnIndex) => (
@@ -97,7 +110,7 @@ function PageRow({
           <button
             type="button"
             onClick={() => commit((page) => addBankColumn(page, rowIndex))}
-            className="grid min-h-[100px] place-items-center rounded-[10px] border border-dashed text-[13px] font-medium text-muted-foreground hover:bg-accent/40 hover:text-foreground"
+            className="grid min-h-[100px] place-items-center rounded-[10px] border border-dashed text-[13px] font-medium text-muted-foreground hover:bg-accent/40 hover:text-foreground @max-[600px]:min-h-12"
           >
             <span className="flex items-center gap-1.5">
               <Plus className="size-3.5" /> Bank
@@ -147,7 +160,7 @@ export function BuskPageBody({
   const { editing } = useBuskEdit()
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pt-3 pb-4">
+    <div className="@container flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pt-3 pb-4">
       {page.rows.map((row, index) => (
         // A row has no id of its own — it is list position on both sides of the wire — so its key
         // comes from the first column, which the server's own rule guarantees exists. An index key

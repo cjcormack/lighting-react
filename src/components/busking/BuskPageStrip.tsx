@@ -251,10 +251,13 @@ export function BuskPageStrip({
           </Button>
         </>
       ) : (
+        // Desktop-only by decision: below `md` the library palette is not shown, and an edit mode
+        // with nothing to drag from is a trap rather than a feature. `Done` above stays at every
+        // width, so a window narrowed mid-edit can still leave the mode.
         <Button
           size="sm"
           variant="outline"
-          className="h-7 text-xs"
+          className="hidden h-7 text-xs md:inline-flex"
           onClick={onToggleEditing}
           disabled={pages.length === 0}
         >

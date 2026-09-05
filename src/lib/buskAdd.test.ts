@@ -50,8 +50,9 @@ describe('what the menu offers', () => {
   })
 
   it('names a nameless bank by its place, and disambiguates repeats', () => {
-    // `newBank()` defaults the name to empty and a bank's identity is its place, not its name, so
-    // both of these are legal pages rather than corrupt ones.
+    // A bank's identity is its place, not its name, so the repeat is a legal page rather than a
+    // corrupt one. The blank is not one any route mints — `newBank` requires a name and the server
+    // refuses a blank — so this pins the defensive arm, for an import or a hand-edited database.
     const targets = buskAddTargets(
       [page(1, 'Act 1', [bank({ id: 1, name: '' }), bank({ id: 2, name: 'Wash' }), bank({ id: 3, name: 'Wash' })])],
       amber,

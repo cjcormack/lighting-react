@@ -66,9 +66,11 @@ function padKey(pad: BuskPad): string | null {
  *   because the same types are the busk view's local draft, so a bank can exist client-side before
  *   the server has minted its id — and a bank with no id cannot be appended to by id.
  * - **Labels are disambiguated.** A bank's identity is its place, not its name (`DaoBuskBanks.name`
- *   "may repeat across banks"), and `newBank()` defaults the name to empty, so a page can legally
- *   hold two banks called the same thing or nothing at all. A blank name becomes its position, and
- *   a repeat gets a positional suffix, so no two items on one page ever read alike.
+ *   "may repeat across banks"), so a page can legally hold two banks called the same thing. A
+ *   repeat gets a positional suffix, so no two items on one page ever read alike. The blank-name
+ *   arm is defensive rather than routine: every minting path names its bank (`newBank` requires
+ *   one, `nextBankName` supplies it) and the server refuses a blank, so only a row no route wrote
+ *   — an import, a hand-edited database — reaches it. It becomes its position.
  */
 export function buskAddTargets(pages: BuskPage[], record: BuskAddRecord | null): BuskAddPage[] {
   // Null is the *create* case — the record does not exist yet, so nothing can already hold it. The

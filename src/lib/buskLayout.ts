@@ -234,8 +234,31 @@ export function newPad(record: PaletteRecord): BuskPad {
   return { ...base, cue: record.cue }
 }
 
-export function newBank(name = '', pads: BuskPad[] = []): BuskBank {
+/**
+ * `name` is required rather than defaulted, because the server refuses a blank one
+ * (`BUSK_LAYOUT_INVALID`, "A bank at row N, column M has a blank name") and a default of `''` is how
+ * `+ Bank` shipped never having succeeded once. Callers with nothing better say {@link nextBankName}.
+ */
+export function newBank(name: string, pads: BuskPad[] = []): BuskBank {
   return { localKey: mintLocalKey(), name, solo: false, flow: 'WRAP', pads }
+}
+
+/**
+ * `Bank N`, for the smallest N no bank on the page is already called — the positional vocabulary
+ * `buskAdd.ts` uses when it has to *label* a nameless bank, so a bank the operator never renames
+ * reads the same in the Add-to-page menu as on the page.
+ */
+export function nextBankName(page: BuskPage): string {
+  const taken = new Set<string>()
+  for (const row of page.rows) {
+    for (const column of row.columns) {
+      for (const bank of column.banks) taken.add(bank.name.trim())
+    }
+  }
+  for (let n = 1; ; n += 1) {
+    const candidate = `Bank ${n}`
+    if (!taken.has(candidate)) return candidate
+  }
 }
 
 export function newColumn(width: number, banks: BuskBank[]): BuskColumn {
@@ -390,7 +413,7 @@ export function addBankColumn(page: BuskPage, row: number): BuskPage {
   const next = clone(page)
   const target = next.rows[row]
   if (target == null) return page
-  target.columns.push(newColumn(3, [newBank()]))
+  target.columns.push(newColumn(3, [newBank(nextBankName(next))]))
   return normalisePage(next)
 }
 
@@ -400,7 +423,7 @@ export function addBankColumn(page: BuskPage, row: number): BuskPage {
  */
 export function addRow(page: BuskPage): BuskPage {
   const next = clone(page)
-  next.rows.push({ columns: [newColumn(12, [newBank()])] })
+  next.rows.push({ columns: [newColumn(12, [newBank(nextBankName(next))])] })
   return normalisePage(next)
 }
 

@@ -66,16 +66,25 @@ export function useDeskDnd() {
  * answers nothing at all in the gaps between banks. `pointerWithin` asks "is the pointer inside
  * this box", which makes a gutter and a column equally winnable; `closestCenter` catches the gaps,
  * and would be the only answer for a keyboard sensor, which has no pointer to be within anything.
+ *
+ * The fallback is cut to **one** collision. `closestCenter` answers with every droppable, nearest
+ * first, and a consumer that reads the whole list — the busk resolver takes the deepest thing in
+ * it — would then be looking at a pad three banks away while `over`, the nearest, lit a gutter: a
+ * highlight on one place and a slot in another, and a drop that did neither. `pointerWithin`'s list
+ * is left whole, because everything in it contains the pointer and the nesting is the information.
  */
 const collisionDetection: CollisionDetection = (args) => {
   const pointer = pointerWithin(args)
-  return pointer.length > 0 ? pointer : closestCenter(args)
+  return pointer.length > 0 ? pointer : closestCenter(args).slice(0, 1)
 }
 
 /**
  * The busk page changes its own geometry mid-drag — a drop slot opens, the "stack under" strips
- * appear — and droppables are otherwise measured once, at drag start. `Always` is rAF-throttled by
- * dnd-kit's default measuring frequency.
+ * appear — and droppables are otherwise measured once, at drag start. `Always` lifts the
+ * "not while dragging" gate; it is **not** a timer. dnd-kit measures on demand — when the set of
+ * droppables changes, or a droppable's own ResizeObserver fires — so a surface that moves things
+ * without resizing them has to ask, which `BuskEditProvider` does through
+ * `useDndContext().measureDroppableContainers` each time its slot moves.
  */
 const measuring = { droppable: { strategy: MeasuringStrategy.Always } }
 

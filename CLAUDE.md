@@ -578,6 +578,45 @@ droppable**, so it can never be the thing you are over, and the reducer answers 
 hover. The cost is honest — pads snap around the slot rather than sliding. If that ever reads badly,
 `view-transition-name` is the additive fix; do not reach back for `SortableContext`.
 
+**Legal targets follow the source, and the hover is fed from `onDragMove`.** Six things went wrong
+at once the first time a bank was dragged on a real desk, and each is now stated in code rather than
+assumed:
+
+- **A bank lands on the three bank zones and nothing else; a pad or palette row lands on a pad or a
+  bank body and nothing else.** `canLand` in `buskDnd.ts` filters the collisions *before* the
+  deepest-wins pick, and the pad and body droppables are `disabled` while a bank is lifted (the
+  strips, gutters and new-row zone were already disabled otherwise). Both halves are needed: the
+  filter is the half a test can reach, the `disabled` flag is what keeps dnd-kit's `over` — and so
+  `isOver` — off a place the drop would refuse. Before this, a bank over a pad resolved to a pad
+  target, opened a dashed slot inside the bank, and dropped nowhere: `dropBank` refuses a pad target,
+  so the monitor returned before `commit` and no request was sent.
+- **The `closestCenter` fallback returns one collision.** `closestCenter` answers with every
+  droppable nearest-first; a deepest-wins reader then took a pad three banks away while `over` lit the
+  nearest strip. `DeskDndProvider` slices it to one, so the highlight and the slot always name the
+  same place.
+- **`onDragOver` fires only when the over-id changes**, so the leading/trailing half-of-a-pad decision
+  was made on entry and never again. `BuskEditProvider` feeds `resolveDropTarget` from `onDragMove`
+  as well; `sameTarget` keeps the state write to the moves that change the answer.
+- **`MeasuringStrategy.Always` is not a timer.** dnd-kit re-measures when the set of droppables
+  changes or a droppable's own ResizeObserver fires — not when the slot opens and shifts every later
+  pad without resizing it. The provider calls `useDndContext().measureDroppableContainers()` in an
+  effect keyed on the target, after the commit that moved the slot.
+- **With fresh rects the open slot needs to be sticky.** Opening it shifts the hovered pad along and
+  leaves the pointer on the slot — which is no droppable — inside the bank body; collapsing that to
+  the body's append would throw the slot to the end of the bank the instant it opened.
+  `resolveDropTarget` takes `current` and keeps it while the pointer is in the body of the bank the
+  slot is open in. Entering another bank's body still appends, which is the only way into an empty one.
+- **The drop reads a ref.** `targetRef` is written in the same handler as the state, so a drop that
+  lands before the re-render following the last hover cannot read the target before that one.
+
+**`newBank` requires a name.** The server refuses a blank one (`BUSK_LAYOUT_INVALID`), and a
+default of `''` was how `+ Bank` and `+ Row` shipped never having succeeded once — the optimistic
+patch drew the bank, the PUT 400'd, the queue rolled back and toasted "A bank at row 1, column 5 has
+a blank name". `nextBankName` mints `Bank N` for the smallest free N, the vocabulary
+`lib/buskAdd.ts` already used to *label* a nameless bank; `BankNameField` reverts a blank rename
+rather than sending it. `buskLayout.test.ts` "mints documents the server would accept" now asserts
+the name, which is the assertion that was missing.
+
 **Every gesture saves the whole page, and the queue holds operations rather than documents.**
 `useBuskLayoutCommit` in `store/busk.ts` enqueues `(page) => page` so each gesture can be *replayed*
 against the freshest confirmed document at send time. A queue of pre-computed documents could not:
@@ -609,6 +648,17 @@ lives in `store/buskEditSlice.ts` rather than a React context, because the cue-s
 *sibling* of the routed page in `Layout.tsx` and could never read a context provided inside the busk
 view. It is never persisted, and `BuskingView` **must** exit it on unmount, or that overlay keeps
 drawing crosses on whatever page the operator went to next.
+
+**The columns of a row stack below 600px of the page body's width, and editing is desktop-only.**
+`PageRow` hands its twelfths → `fr` tracks to the grid through a CSS variable so a container query
+(`@max-[600px]:grid-cols-1`, on `BuskPageBody`'s `@container`) can override them — an inline
+`grid-template-columns` could be overridden by nothing. It is the body's width and not the
+viewport's because the rail or the palette has already taken its share: at `md` the body is ~480px
+beside the rail and ~408px beside the palette, and four quarter-columns need ~600px before each can
+hold one 110px pad. Edit mode stacks too, with a gutter drawn as a strip between two stacked columns
+(still "the new column before column N"). Below `md` the palette is not shown and *Edit layout* is
+hidden with it — by decision, narrow widths get play mode only, and an edit mode with nothing to
+drag from is a trap. `Done` stays at every width so a window narrowed mid-edit can leave.
 
 ### The two apply gestures
 

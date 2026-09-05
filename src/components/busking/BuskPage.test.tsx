@@ -12,9 +12,10 @@ import { store } from '@/store'
 import { buskApi, resetBuskCommitState } from '@/store/busk'
 import { restApi } from '@/store/restApi'
 import type { BuskPad, BuskPage } from '@/api/buskApi'
-import { BuskEditProvider } from './BuskEditProvider'
-import { BuskPageBody } from './BuskPage'
+import { BuskEditContext, BuskEditProvider } from './BuskEditProvider'
+import { BuskPageBody, STACK_BELOW_PX } from './BuskPage'
 import type { PadBehaviour } from './padBehaviour'
+import type { BuskDragData } from './buskDnd'
 
 /** Rows of columns of banks, from a document — and the width shares reaching the grid. */
 
@@ -115,7 +116,17 @@ describe('a page', () => {
   it('turns the width shares into grid tracks', () => {
     draw()
     const row = screen.getByTestId('busk-row-0')
-    expect(row.style.gridTemplateColumns).toBe('6fr 3fr')
+    expect(row.style.getPropertyValue('--busk-tracks')).toBe('6fr 3fr')
+  })
+
+  it('stacks the columns below the body width the docblock argues, by container query', () => {
+    // jsdom evaluates no container query, so this pins the mechanism: the tracks reach the grid
+    // through a variable a class can override, and the override is keyed on the body's width.
+    const { container } = draw()
+    expect(container.firstElementChild!.className).toContain('@container')
+    const row = screen.getByTestId('busk-row-0')
+    expect(row.className).toContain('[grid-template-columns:var(--busk-tracks)]')
+    expect(row.className).toContain(`@max-[${STACK_BELOW_PX}px]:grid-cols-1`)
   })
 
   it('holds all three pad kinds in one bank', () => {
@@ -155,7 +166,45 @@ describe('a page', () => {
     expect(screen.getAllByText('Bank').length).toBeGreaterThan(0)
     expect(screen.getAllByLabelText('Bank name')).toHaveLength(4)
     // The gutters are in the DOM for the whole of edit mode, not only during a drag.
-    expect(screen.getByTestId('busk-row-0').style.gridTemplateColumns).toBe('20px 6fr 20px 3fr 20px 3fr')
+    expect(screen.getByTestId('busk-row-0').style.getPropertyValue('--busk-tracks')).toBe(
+      '20px 6fr 20px 3fr 20px 3fr',
+    )
+  })
+})
+
+describe('the drop slot', () => {
+  function drawWith(source: BuskDragData | null) {
+    const target = { kind: 'pad' as const, at: { row: 0, column: 0, bank: 0, pad: 1 } }
+    return render(
+      <Provider store={store}>
+        <DndContext>
+          <BuskEditContext.Provider value={{ editing: true, source, target, commit: () => {} }}>
+            <BuskPageBody page={page} behaviour={behaviour} />
+          </BuskEditContext.Provider>
+        </DndContext>
+      </Provider>,
+    )
+  }
+
+  it('opens where a lifted pad would land', () => {
+    const { container } = drawWith({
+      type: 'busk-pad',
+      at: { row: 1, column: 0, bank: 0, pad: 0 },
+      face: { kind: 'TEMPLATE', name: 'Disco' } as never,
+    })
+    expect(container.querySelector('.border-dashed.border-primary')).toBeTruthy()
+  })
+
+  it('never opens for a lifted bank, which lands on the bank zones instead', () => {
+    // A bank over a pad used to open a slot there and then drop nowhere.
+    const { container } = drawWith({
+      type: 'busk-bank',
+      at: { row: 1, column: 0, bank: 0 },
+      name: 'Texture',
+      padCount: 1,
+    })
+    expect(container.querySelector('.border-dashed.border-primary')).toBeNull()
+    expect(screen.getAllByText('stack under').length).toBeGreaterThan(0)
   })
 })
 
@@ -197,6 +246,26 @@ describe('renaming a bank', () => {
 
     fireEvent.blur(field)
     await waitFor(() => expect(writes.filter((m) => m === 'PUT')).toHaveLength(1))
+  })
+
+  it('puts the stored name back when left blank, and writes nothing', async () => {
+    // The server refuses a blank name; the field reverting is the better answer than its toast.
+    const writes: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        writes.push('PUT')
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+    await store.dispatch(buskApi.util.upsertQueryData('buskPages', 1, [page]))
+
+    draw(true)
+    const field = screen.getAllByLabelText('Bank name')[0] as HTMLInputElement
+    fireEvent.change(field, { target: { value: '   ' } })
+    fireEvent.blur(field)
+    expect(field.value).toBe('Movement')
+    expect(writes).toHaveLength(0)
   })
 
   it('puts the stored name back on Escape and writes nothing', async () => {

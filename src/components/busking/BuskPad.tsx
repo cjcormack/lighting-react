@@ -8,6 +8,7 @@ import { registerDragOverlay } from '@/components/dnd/dragOverlayRegistry'
 import type { BuskPad } from '@/api/buskApi'
 import type { TemplateSummary } from '@/api/templatesApi'
 import { buskPadId, type PadAddress } from '@/lib/buskLayout'
+import { useBuskEdit } from './BuskEditProvider'
 import type { EffectPresence } from './buskingTypes'
 import { padFaceOf, padPresenceClass, type PadFace } from './padFace'
 import { buskDragData, DROP_DEPTH, type BuskDropData, type BuskPadDragData } from './buskDnd'
@@ -143,16 +144,20 @@ export function BuskPadButton({
   const face = padFaceOf(pad)
   const isCue = face.kind === 'CUE'
   const id = buskPadId(at)
+  const { source } = useBuskEdit()
+  const draggingBank = source?.type === 'busk-bank'
 
   const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
     id,
     data: { type: 'busk-pad', at, face } satisfies BuskPadDragData,
     disabled: !editing,
   })
+  // Not a droppable while a bank is lifted — a bank lands on the bank zones, and a pad that stayed
+  // droppable would win the collision (it is the deepest thing there) for a drop that then refuses.
   const { setNodeRef: setDropRef } = useDroppable({
     id,
     data: { type: 'busk-drop', target: { kind: 'pad', at }, depth: DROP_DEPTH.pad } satisfies BuskDropData,
-    disabled: !editing,
+    disabled: !editing || draggingBank,
   })
   const setRef = (node: HTMLElement | null) => {
     setDragRef(node)

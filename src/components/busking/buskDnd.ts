@@ -128,13 +128,28 @@ export function sameTarget(a: DropTarget | null, b: DropTarget | null): boolean 
   return JSON.stringify(a) === JSON.stringify(b)
 }
 
-/** The deepest busk landing place among everything the pointer is inside. */
-function deepest(collisionIds: readonly string[]): ParsedBuskId | null {
+/**
+ * Which droppable kinds a source can land on.
+ *
+ * A pad or a palette row lands in a bank — on a pad, or on the body for an append; a bank lands on
+ * the three bank zones. The droppables are also `disabled` per source in the components (so
+ * dnd-kit's `over` never lights an illegal target), but the rule is stated here as well because this
+ * is the half a test can reach: before it was, a bank drag over a pad resolved to a pad target,
+ * drew a dashed slot inside the bank, and then went nowhere on drop — `dropBank` refuses a pad
+ * target, so the gesture ended with no commit and no request.
+ */
+function canLand(source: DragSource['kind'], kind: ParsedBuskId['kind']): boolean {
+  if (source === 'bank') return kind === 'bank-under' || kind === 'gutter' || kind === 'new-row'
+  return kind === 'pad' || kind === 'bank-body'
+}
+
+/** The deepest landing place, among everything the pointer is inside, that the source may take. */
+function deepest(source: DragSource['kind'], collisionIds: readonly string[]): ParsedBuskId | null {
   let best: ParsedBuskId | null = null
   let bestDepth = -1
   for (const id of collisionIds) {
     const parsed = parseBuskDragId(id)
-    if (parsed == null) continue
+    if (parsed == null || !canLand(source, parsed.kind)) continue
     const depth = depthOf(parsed)
     if (depth > bestDepth) {
       best = parsed
@@ -144,27 +159,44 @@ function deepest(collisionIds: readonly string[]): ParsedBuskId | null {
   return best
 }
 
+function sameBank(a: BankAddress, b: BankAddress): boolean {
+  return a.row === b.row && a.column === b.column && a.bank === b.bank
+}
+
 /**
  * Where a hover would land, or null for no landing place.
  *
  * Pure, and separated from the monitor that calls it for the reason every reducer in this feature
  * is: the alternative is a jsdom pointer sequence against a `DndContext` whose rects are all zero,
  * which tests dnd-kit rather than this decision.
+ *
+ * `current` is the target already showing, and it matters for one case: the pointer is inside a
+ * bank's **body** but on no pad, while the slot is already open in that bank. Opening the slot is
+ * what put the pointer there — the pad it was over shifted along by one cell, and the dashed slot
+ * that took its place is not a droppable — so collapsing to the body's append would send the slot
+ * to the end of the bank the moment it opened. Keeping `current` is what makes the slot stay put.
+ * Entering a *different* bank's body still appends, which is the only way into an empty one.
  */
 export function resolveDropTarget(args: {
   page: BuskPage
+  source: DragSource['kind']
   activeId: string
   overId: string | null
   collisionIds: readonly string[]
   activeRect: ClientRect | null
   overRect: ClientRect | null
+  current?: DropTarget | null
 }): DropTarget | null {
-  const { page, activeId, overId, collisionIds, activeRect, overRect } = args
+  const { page, source, activeId, overId, collisionIds, activeRect, overRect, current = null } = args
   // A pad is its own droppable as well as a draggable, and hovering yourself is not a gesture.
   if (overId == null || overId === activeId) return null
 
-  const parsed = deepest(collisionIds.length > 0 ? collisionIds : [overId])
+  const parsed = deepest(source, collisionIds.length > 0 ? collisionIds : [overId])
   if (parsed == null) return null
+
+  if (parsed.kind === 'bank-body' && current?.kind === 'pad' && sameBank(current.at, parsed.at)) {
+    return current
+  }
 
   const target = dropTargetFor(parsed, page)
   if (target?.kind !== 'pad' || overRect == null) return target

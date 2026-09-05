@@ -60,6 +60,12 @@ function BankNameField({ bank, at }: { bank: BuskBankModel; at: BankAddress }) {
   useEffect(() => setDraft(bank.name), [bank.name])
 
   function save() {
+    // The server refuses a blank name (`BUSK_LAYOUT_INVALID`), and the field putting the stored
+    // name back is a better answer than a toast saying so after the optimistic patch rolled back.
+    if (draft.trim() === '') {
+      setDraft(bank.name)
+      return
+    }
     if (draft === bank.name) return
     commit((page) => setBank(page, at, { name: draft }))
   }
@@ -78,7 +84,10 @@ function BankNameField({ bank, at }: { bank: BuskBankModel; at: BankAddress }) {
           e.currentTarget.blur()
         }
       }}
-      className="h-7 min-w-0 flex-1 text-[13px]"
+      // A real minimum, not `min-w-0`: in a quarter-width column the field would otherwise shrink
+      // to nothing and the controls beside it would carry on past the bank's border. With a floor
+      // the header wraps instead (see `BankHeader`), which is the better failure.
+      className="h-7 min-w-[7rem] flex-1 text-[13px]"
     />
   )
 }
@@ -107,77 +116,82 @@ function BankHeader({
     )
   }
 
+  // The grip and the name take the first line; the controls are one group that stays on that line
+  // where there is room and wraps to a second, right-aligned, where there is not. A quarter-width
+  // column beside the palette has room for a name or for the controls, not both.
   return (
-    <div className="flex min-h-5 items-center gap-2">
+    <div className="flex min-h-5 flex-wrap items-center gap-x-2 gap-y-1.5">
       {dragHandle}
       <BankNameField bank={bank} at={at} />
-      <span className="text-[10px] text-muted-foreground">Solo</span>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={bank.solo}
-        aria-label={`Solo ${bank.name || 'bank'}`}
-        onClick={() => commit((page) => setBank(page, at, { solo: !bank.solo }))}
-        className={soloSwitchClass(bank.solo)}
-      >
-        <span
-          className={cn(
-            'absolute top-0.5 size-3 rounded-full transition-all',
-            bank.solo ? 'left-3.5 bg-card' : 'left-0.5 bg-muted-foreground',
-          )}
-        />
-      </button>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            aria-label={`Options for ${bank.name || 'bank'}`}
-            className="shrink-0 text-muted-foreground hover:text-foreground"
-          >
-            <MoreHorizontal className="size-4" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {/* Width belongs to the **column**, not the bank — a column can stack several banks and
-              they all share its share of the row. The control is here because this is where the
-              operator is looking; it reaches past the bank on purpose. */}
-          <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">
-            Column width
-          </DropdownMenuLabel>
-          <div className="flex gap-0.5 px-1 pb-1">
-            {BUSK_WIDTHS.map((width) => (
-              <button
-                key={width}
-                type="button"
-                onClick={() => commit((page) => setColumnWidth(page, at.row, at.column, width))}
-                className="rounded px-2 py-1 text-xs hover:bg-accent"
-              >
-                {BUSK_WIDTH_LABELS[width]}
-              </button>
-            ))}
-          </div>
-          <DropdownMenuSeparator />
-          <DropdownMenuRadioGroup
-            value={bank.flow}
-            onValueChange={(flow) =>
-              commit((page) => setBank(page, at, { flow: flow as BuskBankModel['flow'] }))
-            }
-          >
-            <DropdownMenuRadioItem value="WRAP">Flow: Wrap</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="COLUMN">Flow: Column</DropdownMenuRadioItem>
-          </DropdownMenuRadioGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => commit((page) => duplicateBank(page, at))}>
-            Duplicate
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            variant="destructive"
-            onSelect={() => commit((page) => removeBank(page, at))}
-          >
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <div className="ml-auto flex shrink-0 items-center gap-2">
+        <span className="text-[10px] text-muted-foreground">Solo</span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={bank.solo}
+          aria-label={`Solo ${bank.name || 'bank'}`}
+          onClick={() => commit((page) => setBank(page, at, { solo: !bank.solo }))}
+          className={soloSwitchClass(bank.solo)}
+        >
+          <span
+            className={cn(
+              'absolute top-0.5 size-3 rounded-full transition-all',
+              bank.solo ? 'left-3.5 bg-card' : 'left-0.5 bg-muted-foreground',
+            )}
+          />
+        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label={`Options for ${bank.name || 'bank'}`}
+              className="shrink-0 text-muted-foreground hover:text-foreground"
+            >
+              <MoreHorizontal className="size-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {/* Width belongs to the **column**, not the bank — a column can stack several banks and
+                they all share its share of the row. The control is here because this is where the
+                operator is looking; it reaches past the bank on purpose. */}
+            <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">
+              Column width
+            </DropdownMenuLabel>
+            <div className="flex gap-0.5 px-1 pb-1">
+              {BUSK_WIDTHS.map((width) => (
+                <button
+                  key={width}
+                  type="button"
+                  onClick={() => commit((page) => setColumnWidth(page, at.row, at.column, width))}
+                  className="rounded px-2 py-1 text-xs hover:bg-accent"
+                >
+                  {BUSK_WIDTH_LABELS[width]}
+                </button>
+              ))}
+            </div>
+            <DropdownMenuSeparator />
+            <DropdownMenuRadioGroup
+              value={bank.flow}
+              onValueChange={(flow) =>
+                commit((page) => setBank(page, at, { flow: flow as BuskBankModel['flow'] }))
+              }
+            >
+              <DropdownMenuRadioItem value="WRAP">Flow: Wrap</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="COLUMN">Flow: Column</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => commit((page) => duplicateBank(page, at))}>
+              Duplicate
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              variant="destructive"
+              onSelect={() => commit((page) => removeBank(page, at))}
+            >
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
   )
 }
@@ -204,6 +218,11 @@ export function BuskBankCluster({
     disabled: !editing,
   })
 
+  const draggingBank = source?.type === 'busk-bank'
+
+  // A bank cannot land in a bank, so the body is no droppable while one is lifted. Disabling it
+  // (rather than only ignoring it in `resolveDropTarget`) is what keeps dnd-kit's `over` — and so
+  // the highlight — off a place the drop would refuse. The pad droppables make the same call.
   const { setNodeRef: setBodyRef, isOver } = useDroppable({
     id: buskBankBodyId(at),
     data: {
@@ -211,10 +230,8 @@ export function BuskBankCluster({
       target: { kind: 'pad', at: { ...at, pad: bank.pads.length } },
       depth: DROP_DEPTH.bankBody,
     } satisfies BuskDropData,
-    disabled: !editing,
+    disabled: !editing || draggingBank,
   })
-
-  const draggingBank = source?.type === 'busk-bank'
   const { setNodeRef: setUnderRef, isOver: isOverUnder } = useDroppable({
     id: buskBankUnderId(at),
     data: {
@@ -225,7 +242,9 @@ export function BuskBankCluster({
     disabled: !editing || !draggingBank,
   })
 
+  // Only a pad or a palette row opens a slot; a bank lands on the bank zones, never between pads.
   const slotIndex =
+    !draggingBank &&
     target?.kind === 'pad' &&
     target.at.row === at.row &&
     target.at.column === at.column &&
@@ -259,6 +278,10 @@ export function BuskBankCluster({
         className={cn(
           'flex min-w-0 flex-col gap-2 rounded-[10px] border bg-muted/15 p-2.5',
           isDragging && 'opacity-40',
+          // Belt as well as braces: the body droppable is `disabled` while a bank is lifted, but
+          // dnd-kit only learns that an effect-cycle after the render that sets it — so `over` can
+          // still name this body for a frame at drag start, and the lifted bank would flash the
+          // drop ring on itself.
           isOver && editing && !draggingBank && 'bg-primary/5 ring-1 ring-inset ring-primary/40',
         )}
       >
@@ -299,7 +322,11 @@ export function BuskBankCluster({
           )}
         </div>
       </div>
-      {editing && draggingBank && (
+      {/* Not under the bank being lifted: its own strip would light and then refuse — `dropBank`
+          re-finds the anchor after the lift, and the anchor would be the bank that just left. With
+          no strip there the pointer is inside nothing and the nearest droppable answers, which is
+          at least a place the drop will go. */}
+      {editing && draggingBank && !isDragging && (
         <div
           ref={setUnderRef}
           className={cn(

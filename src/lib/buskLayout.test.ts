@@ -17,6 +17,7 @@ import {
   dropTargetFor,
   duplicateBank,
   libraryStarterLayout,
+  nextBankName,
   normalisePage,
   parseBuskDragId,
   recordsOnPage,
@@ -336,10 +337,27 @@ describe('the document rules', () => {
     expect(row.columns).toHaveLength(1)
     expect(row.columns[0].width).toBe(12)
     expect(row.columns[0].banks).toHaveLength(1)
+    // The server refuses a blank name, which is how neither button ever succeeded: the assertion
+    // that was missing here.
+    expect(row.columns[0].banks[0].name).toBe('Bank 1')
 
     const withBank = toLayoutRequest(addBankColumn(samplePage(), 1))
     expect(withBank.rows[1].columns).toHaveLength(2)
     expect(withBank.rows[1].columns[1].banks[0].pads).toEqual([])
+    expect(withBank.rows[1].columns[1].banks[0].name).toBe('Bank 1')
+  })
+
+  it('names each new bank past the ones the page already has', () => {
+    const twice = addBankColumn(addBankColumn(samplePage(), 0), 0)
+    expect(twice.rows[0].columns.map((c) => c.banks[0].name)).toEqual([
+      'Movement',
+      'Colour',
+      'Bank 1',
+      'Bank 2',
+    ])
+    // The smallest free number, not the count: a deleted bank leaves its name reusable.
+    const renamed = setBank(twice, { row: 0, column: 2, bank: 0 }, { name: 'Bank 3' })
+    expect(nextBankName(renamed)).toBe('Bank 1')
   })
 
   it('carries ids where it has them, omits them where it does not, and never leaks uuid or localKey', () => {

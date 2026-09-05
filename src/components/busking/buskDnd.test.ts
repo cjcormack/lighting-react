@@ -4,11 +4,13 @@ import type { BuskPage } from '@/api/buskApi'
 import {
   applyDrop,
   buskBankBodyId,
+  buskBankId,
   buskBankUnderId,
   buskGutterId,
   buskPadId,
   BUSK_NEW_ROW_ID,
 } from '@/lib/buskLayout'
+import type { DragSource, DropTarget } from '@/lib/buskLayout'
 import { insertionSide, resolveDropTarget, sameTarget } from './buskDnd'
 
 /**
@@ -55,15 +57,26 @@ function rect(left: number, top: number): ClientRect {
 }
 
 const PAD_1 = buskPadId({ row: 0, column: 0, bank: 0, pad: 1 })
+const BANK_0 = { row: 0, column: 0, bank: 0 }
 
-function hover(overId: string, opts: { activeId?: string; activeRect?: ClientRect | null } = {}) {
+function hover(
+  overId: string,
+  opts: {
+    source?: DragSource['kind']
+    activeId?: string
+    activeRect?: ClientRect | null
+    current?: DropTarget | null
+  } = {},
+) {
   return resolveDropTarget({
     page,
+    source: opts.source ?? 'palette',
     activeId: opts.activeId ?? 'palette:look:9',
     overId,
     collisionIds: [overId],
     activeRect: opts.activeRect ?? null,
     overRect: rect(100, 100),
+    current: opts.current ?? null,
   })
 }
 
@@ -97,18 +110,17 @@ describe('resolving a hover', () => {
     })
   })
 
-  it('reads the three bank zones', () => {
-    expect(hover(buskBankUnderId({ row: 0, column: 0, bank: 0 }))).toEqual({
-      kind: 'bank-under',
-      at: { row: 0, column: 0, bank: 0 },
-    })
-    expect(hover(buskGutterId(0, 1))).toEqual({ kind: 'new-column', row: 0, column: 1 })
-    expect(hover(BUSK_NEW_ROW_ID)).toEqual({ kind: 'new-row' })
+  it('reads the three bank zones for a lifted bank', () => {
+    const lifted = { source: 'bank' as const, activeId: 'bbank:1.0.0' }
+    expect(hover(buskBankUnderId(BANK_0), lifted)).toEqual({ kind: 'bank-under', at: BANK_0 })
+    expect(hover(buskGutterId(0, 1), lifted)).toEqual({ kind: 'new-column', row: 0, column: 1 })
+    expect(hover(BUSK_NEW_ROW_ID, lifted)).toEqual({ kind: 'new-row' })
   })
 
   it('takes the deepest thing the pointer is inside, whatever order they arrive in', () => {
     const target = resolveDropTarget({
       page,
+      source: 'palette',
       activeId: 'palette:look:9',
       // The bank body contains the pad; the pad must win however dnd-kit sorted them.
       collisionIds: [buskBankBodyId({ row: 0, column: 0, bank: 0 }), PAD_1],
@@ -124,6 +136,7 @@ describe('resolving a hover', () => {
     expect(
       resolveDropTarget({
         page,
+        source: 'palette',
         activeId: 'palette:look:9',
         overId: null,
         collisionIds: [],
@@ -132,6 +145,70 @@ describe('resolving a hover', () => {
       }),
     ).toBeNull()
     expect(hover('slot-0-3')).toBeNull()
+  })
+})
+
+describe('what each source may land on', () => {
+  /**
+   * The regression: a lifted bank over a pad resolved to a *pad* target, so a dashed slot opened
+   * inside the bank and the drop then went nowhere — `dropBank` refuses a pad target, and the
+   * monitor returned before committing. No request, no toast, a highlight that lied.
+   */
+  const lifted = { source: 'bank' as const, activeId: 'bbank:1.0.0' }
+
+  it('lets a bank land on no pad and no bank body, however deep they are', () => {
+    expect(hover(PAD_1, lifted)).toBeNull()
+    expect(hover(buskBankBodyId(BANK_0), lifted)).toBeNull()
+    // The pad and the body are the deepest things there; the strip must still win for a bank.
+    expect(
+      resolveDropTarget({
+        page,
+        source: 'bank',
+        activeId: 'bbank:1.0.0',
+        overId: buskBankUnderId(BANK_0),
+        collisionIds: [PAD_1, buskBankBodyId(BANK_0), buskBankUnderId(BANK_0)],
+        activeRect: null,
+        overRect: rect(100, 100),
+      }),
+    ).toEqual({ kind: 'bank-under', at: BANK_0 })
+  })
+
+  it('lets a pad and a palette row land on none of the bank zones', () => {
+    for (const source of ['pad', 'palette'] as const) {
+      const opts = { source, activeId: source === 'pad' ? buskPadId({ ...BANK_0, pad: 0 }) : 'palette:look:9' }
+      expect(hover(buskBankUnderId(BANK_0), opts)).toBeNull()
+      expect(hover(buskGutterId(0, 1), opts)).toBeNull()
+      expect(hover(BUSK_NEW_ROW_ID, opts)).toBeNull()
+    }
+  })
+})
+
+describe('the open slot stays put', () => {
+  /**
+   * Opening the slot shifts the pad the pointer was over along by one cell, leaving the pointer
+   * on the slot — which is no droppable — inside the bank's body. Collapsing that to the body's
+   * append would throw the slot to the end of the bank the instant it opened.
+   */
+  const current: DropTarget = { kind: 'pad', at: { ...BANK_0, pad: 1 } }
+
+  it('keeps the slot where it is over the body of the bank it is open in', () => {
+    expect(hover(buskBankBodyId(BANK_0), { current })).toEqual(current)
+  })
+
+  it('still appends when entering another bank, and when no slot is open', () => {
+    const elsewhere: DropTarget = { kind: 'pad', at: { row: 1, column: 0, bank: 0, pad: 0 } }
+    expect(hover(buskBankBodyId(BANK_0), { current: elsewhere })).toEqual({
+      kind: 'pad',
+      at: { ...BANK_0, pad: 2 },
+    })
+    expect(hover(buskBankBodyId(BANK_0))).toEqual({ kind: 'pad', at: { ...BANK_0, pad: 2 } })
+  })
+
+  it('moves on when the pointer reaches a pad', () => {
+    expect(hover(PAD_1, { current, activeRect: rect(140, 100) })).toEqual({
+      kind: 'pad',
+      at: { ...BANK_0, pad: 2 },
+    })
   })
 })
 
@@ -159,6 +236,7 @@ describe('the slot and the landing place agree', () => {
   function drop(fromPad: number, overPad: number, side: 'leading' | 'trailing') {
     const target = resolveDropTarget({
       page,
+      source: 'pad',
       activeId: buskPadId({ row: 0, column: 0, bank: 0, pad: fromPad }),
       overId: buskPadId({ row: 0, column: 0, bank: 0, pad: overPad }),
       collisionIds: [buskPadId({ row: 0, column: 0, bank: 0, pad: overPad })],
@@ -183,5 +261,61 @@ describe('the slot and the landing place agree', () => {
 
   it('treats the gap either side of the dragged pad as no move', () => {
     expect(drop(0, 1, 'leading').pads).toEqual([1, 2])
+  })
+
+  /**
+   * The same composition for a bank, which the pad tests never covered: the resolver and the
+   * mutator were each tested alone, and a bank drag resolving to a target the mutator refuses is
+   * exactly what "the drop looked live and nothing happened" was.
+   */
+  function twoColumns(): BuskPage {
+    const bank = (id: number, name: string) => ({
+      id,
+      uuid: `b${id}`,
+      name,
+      solo: false,
+      flow: 'WRAP' as const,
+      pads: [{ id: id * 10, uuid: `p${id}`, kind: 'TEMPLATE' as const, template: { id } as never }],
+    })
+    return {
+      ...page,
+      rows: [
+        {
+          columns: [
+            { id: 1, uuid: 'c1', width: 6, banks: [bank(1, 'Movement')] },
+            { id: 2, uuid: 'c2', width: 6, banks: [bank(2, 'Colour')] },
+          ],
+        },
+      ],
+    }
+  }
+
+  function dropBank(overId: string) {
+    const doc = twoColumns()
+    const target = resolveDropTarget({
+      page: doc,
+      source: 'bank',
+      activeId: buskBankId(BANK_0),
+      overId,
+      collisionIds: [overId],
+      activeRect: null,
+      overRect: rect(100, 100),
+    })
+    expect(target).not.toBeNull()
+    const next = applyDrop(doc, { kind: 'bank', at: BANK_0 }, target!)
+    expect(next).not.toBeNull()
+    return next!.rows.map((row) => row.columns.map((column) => column.banks.map((b) => b.name)))
+  }
+
+  it('stacks a bank under the one it was shown under', () => {
+    expect(dropBank(buskBankUnderId({ row: 0, column: 1, bank: 0 }))).toEqual([[['Colour', 'Movement']]])
+  })
+
+  it('opens the column at the gutter it was shown in', () => {
+    expect(dropBank(buskGutterId(0, 2))).toEqual([[['Colour'], ['Movement']]])
+  })
+
+  it('starts the row it was shown below the page', () => {
+    expect(dropBank(BUSK_NEW_ROW_ID)).toEqual([[['Colour']], [['Movement']]])
   })
 })
