@@ -13,6 +13,7 @@ import { Document, Page, pdfjs } from 'react-pdf'
 import 'react-pdf/dist/Page/TextLayer.css'
 import { Loader2 } from 'lucide-react'
 import { clamp, cn } from '@/lib/utils'
+import { useMountedRef } from '@/hooks/useMountedRef'
 import type { AnnotationDto, AnnotationKind, CueAnchorDto, Rect, Region } from '../../api/promptBooksApi'
 import {
   clientPointToNormalized,
@@ -177,6 +178,12 @@ interface ScriptViewerProps {
   onCreateAnnotation: (kind: AnnotationKind, region: Region) => void
   onAnnotationClick: (annotation: AnnotationDto) => void
   onDocumentError: () => void
+  /**
+   * The sheets are laid out, so `scrollToRegion` can be honoured from here on. Fires **once per
+   * mounted document** — the caller is expected to move the viewport, which must not happen again
+   * behind an operator reading ahead.
+   */
+  onPagesReady: () => void
 }
 
 /**
@@ -211,6 +218,7 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
     onCreateAnnotation,
     onAnnotationClick,
     onDocumentError,
+    onPagesReady,
   },
   ref,
 ) {
@@ -246,16 +254,72 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
     return () => observer.disconnect()
   }, [])
 
+  // Stable callbacks for the memoized PdfPage (identity must not change per render).
+  const handleHasText = useCallback((index: number, hasText: boolean) => {
+    setHasTextByPage((m) => (m.get(index) === hasText ? m : new Map(m).set(index, hasText)))
+  }, [])
+  const handleTextLayerRendered = useCallback((index: number) => {
+    if (measuredPagesRef.current.has(index)) return
+    const el = pageElsRef.current.get(index)
+    const bounds = el && measureTextBounds(el)
+    if (bounds) {
+      measuredPagesRef.current.add(index)
+      setTextBoundsByPage((m) => new Map(m).set(index, bounds))
+    }
+  }, [])
+
   // Measure every page's aspect up front rather than assuming the first page speaks for the
   // rest — a script with a landscape plan or an A3 fold-out would otherwise lay out at the
   // wrong height on the sheets that aren't mounted, and the scroll would jump as they came
   // in. It costs one `getPage` per page against the already-parsed document (~7ms for an
   // 84-page script), which is why it can be paid on load rather than lazily.
   const loadSeqRef = useRef(0)
-  const mountedRef = useRef(true)
-  useEffect(() => () => {
-    mountedRef.current = false
-  }, [])
+  // Both async walks below check this after every `await`; see the hook for why writing it on
+  // mount as well as clearing it on unmount is load-bearing rather than belt-and-braces.
+  // `ScriptViewer.test.tsx` renders the classification walk under `StrictMode` for that reason.
+  const mountedRef = useMountedRef()
+
+  /**
+   * Classify every page as text-bearing or scanned in the background, once the sheets are up.
+   *
+   * `<Page>`'s own `onGetTextSuccess` gives the same answer, but only for a page inside the render
+   * window — so with the window in place a page's classification settles when you *scroll* to it
+   * rather than at load, which reopens a gap `onPagePointerDown` has to guess in. It guesses "has
+   * text", so a click on a **scanned** page in that gap waits for a text selection that can never
+   * come: the click is swallowed and both scanned-page fallbacks — click to place an armed cue,
+   * drag a note/cut box — go with it.
+   *
+   * The DOM cannot answer it at gesture time either, tempting as that looks: react-pdf builds the
+   * text-layer spans *from* the very content this call resolves, so for as long as the answer is
+   * unknown there is provably nothing to count. And flipping the default is worse than the bug,
+   * because it puts a real anchor on a text page rather than doing nothing.
+   *
+   * So classification goes back to being settled at load, as it was when every page mounted at
+   * once — without the canvases that cost. This is text content only: a few small objects per
+   * page, parsed on the pdf.js worker and dropped again, not the ~18 MB backing store the render
+   * window exists to avoid. Per page rather than all-or-nothing, unlike the aspect walk above,
+   * because it is advisory: a page that will not yield its text is simply left unknown, and
+   * `<Page>` is still the backstop when it mounts.
+   */
+  const classifyPages = useCallback(
+    async (pdf: PdfDocumentProxy, seq: number) => {
+      for (let n = 1; n <= pdf.numPages; n += 1) {
+        try {
+          const text = await (await pdf.getPage(n)).getTextContent()
+          if (!mountedRef.current || seq !== loadSeqRef.current) return
+          handleHasText(n - 1, (text.items?.length ?? 0) >= MIN_TEXT_ITEMS)
+        } catch {
+          // An unmount rejects every request still in flight, and there is no one left to tell;
+          // a single unreadable page just stays unknown. Either way, stop walking a dead document.
+          if (!mountedRef.current || seq !== loadSeqRef.current) return
+        }
+      }
+    },
+    // `mountedRef` is a ref object, so listing it costs nothing — but it comes from a hook
+    // rather than a local `useRef`, which is the only reason the rule can't see that itself.
+    [handleHasText, mountedRef],
+  )
+
   const onDocumentLoad = useCallback(
     async (pdf: PdfDocumentProxy) => {
       const seq = ++loadSeqRef.current
@@ -276,9 +340,13 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
         return
       }
       // A second document may have loaded while we walked the first one's pages.
-      if (seq === loadSeqRef.current) setPageRatios(ratios)
+      if (seq !== loadSeqRef.current) return
+      setPageRatios(ratios)
+      // Deliberately not awaited: the sheets are usable now, and this only fills in the
+      // text-vs-scanned classification sitting behind them.
+      void classifyPages(pdf, seq)
     },
-    [onDocumentError],
+    [onDocumentError, classifyPages, mountedRef],
   )
 
   // The render window. Pages are mounted by proximity to the scroller rather than all at
@@ -339,20 +407,6 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
     }
   }, [])
 
-  // Stable callbacks for the memoized PdfPage (identity must not change per render).
-  const handleHasText = useCallback((index: number, hasText: boolean) => {
-    setHasTextByPage((m) => (m.get(index) === hasText ? m : new Map(m).set(index, hasText)))
-  }, [])
-  const handleTextLayerRendered = useCallback((index: number) => {
-    if (measuredPagesRef.current.has(index)) return
-    const el = pageElsRef.current.get(index)
-    const bounds = el && measureTextBounds(el)
-    if (bounds) {
-      measuredPagesRef.current.add(index)
-      setTextBoundsByPage((m) => new Map(m).set(index, bounds))
-    }
-  }, [])
-
   // Cue/cut markers hug the left edge of the highlighted text and overflow into
   // the left paper gutter; notes get the right gutter. When the pane is narrow
   // both gutters collapse and notes fall inline under their line. The page fills
@@ -373,6 +427,26 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
   }, [])
 
   useImperativeHandle(ref, () => ({ scrollToRegion }), [scrollToRegion])
+
+  /**
+   * Announce that `scrollToRegion` can now be honoured — the sheets exist, so every page has an
+   * element with a real offset, whether or not its canvas is inside the render window.
+   *
+   * The caller this exists for is the Prompt Book's jump-to-live: opening the book mid-show, the
+   * playhead is known well before the PDF is, so the effect that jumps to it fires into an empty
+   * pane and nothing re-runs it — `scrollToCue` holds one identity for the session on purpose, so
+   * that a book refetch can't yank the viewport out from under an operator reading ahead. Which is
+   * also why this is **one shot per mounted document** rather than a state the caller can poll: a
+   * jump that repeated on every refetch would be exactly the yank that identity prevents. The
+   * viewer is remounted per document (`key={scriptHash:retryNonce}`), so the latch is fresh where
+   * it needs to be.
+   */
+  const pagesReadyRef = useRef(false)
+  useEffect(() => {
+    if (pagesReadyRef.current || pageRatios.length === 0 || containerWidth === 0) return
+    pagesReadyRef.current = true
+    onPagesReady()
+  }, [pageRatios, containerWidth, onPagesReady])
 
   // ── Text-selection capture (edit mode, text pages) ──
   // The selection Region is captured into state on gesture end — eagerly, because

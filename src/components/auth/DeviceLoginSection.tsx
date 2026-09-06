@@ -3,6 +3,7 @@ import QRCode from "react-qr-code"
 import { AlertTriangle, Check, Copy, Loader2, RefreshCw } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { useMountedRef } from "@/hooks/useMountedRef"
 import { formatCountdown } from "@/lib/formatCountdown"
 import { formatError } from "@/lib/formatError"
 import {
@@ -79,21 +80,16 @@ export function DeviceLoginSection({
   // `activeRef` tracks the prop, assigned during render so it is already correct for a mint
   // that resolves before effects flush. It covers the parent sheet closing.
   //
-  // `mountedRef` covers unmount — being hidden, or the whole tree going away — which the
-  // render assignment cannot see, because a ref keeps its last value through unmount and
-  // would read `true` forever afterwards. It has to be re-set in the effect's *setup*, not
-  // only cleared in its teardown: React StrictMode mounts, tears down and remounts effects in
-  // development, and a teardown-only flag would be left `false` while the section is genuinely
-  // on screen — every code then cancelling itself the moment it arrived.
+  // `mountedRef` covers unmount — the whole tree going away — which the render assignment
+  // cannot see, because a ref keeps its last value through unmount and would read `true`
+  // forever afterwards. Its StrictMode trap (a teardown-only flag reads `false` for the life
+  // of a section that is genuinely on screen, so every code cancels itself the moment it
+  // arrives) is why it is a shared hook; the reasoning lives there now.
   const activeRef = useRef(active)
   activeRef.current = active
   /** One mint per mount. Declared here because `mint` below closes over it. */
   const mintedRef = useRef(false)
-  const mountedRef = useRef(true)
-  useEffect(() => {
-    mountedRef.current = true
-    return () => { mountedRef.current = false }
-  }, [])
+  const mountedRef = useMountedRef()
   const onScreen = () => activeRef.current && mountedRef.current
 
   const { data: status } = useDeviceLoginStatusQuery(

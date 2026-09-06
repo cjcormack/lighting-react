@@ -211,6 +211,21 @@ export function PromptBookViewerPage() {
   // can't re-run this and yank the viewport while the operator reads ahead.
   useEffect(jumpToLive, [jumpToLive])
 
+  /**
+   * …and the one case that stability makes unreachable: **opening the book while the show runs**.
+   * The playhead lands first — the program state is a far smaller query than the book — so the
+   * effect above fires while `viewerRef` is still null (the guards below are still rendering a
+   * spinner), and then never again, because neither `activeCueId` nor `scrollToCue` moves when the
+   * book finally arrives. The book sat at page one until the next GO.
+   *
+   * So the viewer says when its sheets exist and we jump then. Through a ref because this is a
+   * prop of the memoized viewer: it must keep one identity while still reading the playhead as it
+   * is at that moment rather than as it was at mount.
+   */
+  const jumpToLiveRef = useRef(jumpToLive)
+  jumpToLiveRef.current = jumpToLive
+  const handlePagesReady = useCallback(() => jumpToLiveRef.current(), [])
+
   // Arm a cue as the next GO (mirrors the Run page's standby). Does NOT fire it. The
   // transport ignores the live cue; we just also close the narrow drawer here.
   const handleSetStandby = useCallback(
@@ -525,6 +540,7 @@ export function PromptBookViewerPage() {
               onCreateAnnotation={ann.create}
               onAnnotationClick={ann.open}
               onDocumentError={doc.onDocumentError}
+              onPagesReady={handlePagesReady}
             />
           )}
         </div>
