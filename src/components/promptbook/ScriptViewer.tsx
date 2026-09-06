@@ -53,6 +53,20 @@ const PLACED_ANCHOR_RECT = { x: 0.04, w: 0.92, h: 0.025 }
  *  carry a few junk OCR items, so a bare `> 0` would misfire. */
 const MIN_TEXT_ITEMS = 5
 
+/**
+ * How far outside the scroller a page is still kept rendered, as a fraction of the
+ * scroller's own height — one viewport above and below, so a page is drawn well before
+ * it is scrolled to and a fast flick lands on paper rather than on a blank sheet.
+ *
+ * This is the whole reason the render window exists, so it is worth stating what it buys:
+ * a `<Page>` canvas is sized at `devicePixelRatio`, so at a 900px sheet on a retina screen
+ * each page holds an **18 MB** backing store. An 84-page panto script rendered whole is
+ * ~1.5 GB of canvas, which is slow to build, slow to scroll, and — the reported symptom —
+ * takes seconds to hand back when the operator navigates away and the browser has to
+ * reclaim all of it at once. Windowed, the same book holds five or six pages.
+ */
+const RENDER_MARGIN = '100% 0px'
+
 /** Normalized gap kept between the text's left edge and the marker rail. */
 const TEXT_EDGE_GAP = 0.006
 /** Cap on the marker lane's x — a centered/indented page must not push the rail
@@ -123,6 +137,10 @@ const PdfPage = memo(function PdfPage({
     />
   )
 })
+
+/** pdf.js's document proxy, taken from react-pdf's own pinned copy rather than by importing
+ *  `pdfjs-dist` directly — the two can't skew, and this repo has no direct dependency on it. */
+type PdfDocumentProxy = Awaited<ReturnType<typeof pdfjs.getDocument>['promise']>
 
 export interface ScriptViewerHandle {
   /** Smooth-scroll so the region's reading position sits ~40% down the viewport. */
@@ -198,7 +216,14 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
 ) {
   const containerRef = useRef<HTMLDivElement>(null)
   const pageElsRef = useRef(new Map<number, HTMLDivElement>())
-  const [numPages, setNumPages] = useState(0)
+  // Height/width of every page, read from the PDF up front — one entry per page, so its
+  // length is also the page count. Every sheet is therefore laid out at its true height
+  // whether or not its canvas is currently mounted, which is what keeps `scrollToRegion`
+  // exact and stops the render window shifting the page under the operator.
+  const [pageRatios, setPageRatios] = useState<number[]>([])
+  // The pages whose canvas + text layer are currently mounted — see RENDER_MARGIN.
+  const [rendered, setRendered] = useState<Set<number>>(new Set())
+  const renderWindowRef = useRef<IntersectionObserver | null>(null)
   const [containerWidth, setContainerWidth] = useState<number>(0)
   // Which pages have a usable text layer (vs scanned image). Drives the
   // selection-vs-box gesture and is reactive so the cursor updates on load.
@@ -219,6 +244,99 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
     const observer = new ResizeObserver(() => setContainerWidth(el.clientWidth))
     observer.observe(el)
     return () => observer.disconnect()
+  }, [])
+
+  // Measure every page's aspect up front rather than assuming the first page speaks for the
+  // rest — a script with a landscape plan or an A3 fold-out would otherwise lay out at the
+  // wrong height on the sheets that aren't mounted, and the scroll would jump as they came
+  // in. It costs one `getPage` per page against the already-parsed document (~7ms for an
+  // 84-page script), which is why it can be paid on load rather than lazily.
+  const loadSeqRef = useRef(0)
+  const mountedRef = useRef(true)
+  useEffect(() => () => {
+    mountedRef.current = false
+  }, [])
+  const onDocumentLoad = useCallback(
+    async (pdf: PdfDocumentProxy) => {
+      const seq = ++loadSeqRef.current
+      const ratios: number[] = []
+      try {
+        for (let n = 1; n <= pdf.numPages; n += 1) {
+          const viewport = (await pdf.getPage(n)).getViewport({ scale: 1 })
+          ratios.push(viewport.height / viewport.width)
+        }
+      } catch {
+        // Two failures arrive here and they are not the same. **Unmounting** destroys the
+        // loading task, which rejects every page request still in flight — nothing is wrong
+        // and there is no one left to tell. A **genuine** failure (one unreadable page object
+        // in an otherwise valid script) has to be reported, because this walk is all-or-nothing:
+        // one bad page leaves `pageRatios` empty and the pane blank, where the whole-book
+        // render it replaced would still have drawn the other eighty-three.
+        if (mountedRef.current && seq === loadSeqRef.current) onDocumentError()
+        return
+      }
+      // A second document may have loaded while we walked the first one's pages.
+      if (seq === loadSeqRef.current) setPageRatios(ratios)
+    },
+    [onDocumentError],
+  )
+
+  // The render window. Pages are mounted by proximity to the scroller rather than all at
+  // once; the sheet, its overlays and its measured text bounds all stay put either way, so
+  // only the canvas and text layer come and go.
+  useEffect(() => {
+    const root = containerRef.current
+    if (!root) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        setRendered((prev) => {
+          let next: Set<number> | null = null
+          for (const entry of entries) {
+            const index = Number((entry.target as HTMLElement).dataset.pageIndex)
+            if (entry.isIntersecting === prev.has(index)) continue
+            next ??= new Set(prev)
+            if (entry.isIntersecting) next.add(index)
+            else next.delete(index)
+          }
+          // Null means no entry changed the answer — a repeat callback writes no state.
+          return next ?? prev
+        })
+      },
+      { root, rootMargin: RENDER_MARGIN },
+    )
+    renderWindowRef.current = observer
+    // Sheets that mounted before this effect ran (the observer is created on mount, and the
+    // pages only exist once the document has loaded, but don't rely on that ordering).
+    for (const el of pageElsRef.current.values()) observer.observe(el)
+    return () => {
+      observer.disconnect()
+      renderWindowRef.current = null
+    }
+  }, [])
+
+  /**
+   * Track a sheet and put it in the render window — **one identity for the life of the
+   * component**, which is the whole point of it.
+   *
+   * An inline arrow in the render loop gets a fresh identity every render, and React answers a
+   * changed ref identity by detaching and re-attaching the ref on the *same* node. That was free
+   * while the body was two `Map` writes; with an observe/unobserve pair in it, it is one observer
+   * round-trip per sheet per render — ~84 of them at frame rate through an anchor drag, which
+   * `setDragOverride` drives from this component's own state, so the `memo` above does not stop
+   * it. The index is read off the element rather than closed over, which is what lets a single
+   * callback serve every page; the returned cleanup is React 19's form, so React runs it on a
+   * genuine detach instead of calling this with `null`.
+   */
+  const registerPageEl = useCallback((el: HTMLDivElement | null) => {
+    // React never passes null once a cleanup is returned; this satisfies `RefCallback`'s type.
+    if (!el) return
+    const index = Number(el.dataset.pageIndex)
+    pageElsRef.current.set(index, el)
+    renderWindowRef.current?.observe(el)
+    return () => {
+      pageElsRef.current.delete(index)
+      renderWindowRef.current?.unobserve(el)
+    }
   }, [])
 
   // Stable callbacks for the memoized PdfPage (identity must not change per render).
@@ -473,6 +591,13 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
     return anchors.map((a) => (a.cueId === dragOverride.cueId ? { ...a, region: dragOverride.region } : a))
   }, [anchors, dragOverride])
 
+  /** Shown for the document's own load and again while its pages are being measured. */
+  const spinner = (
+    <div className="flex items-center justify-center p-16">
+      <Loader2 className="size-6 animate-spin text-muted-foreground" />
+    </div>
+  )
+
   const anchorsByPage = useMemo(() => groupByPage(effectiveAnchors, (a) => a.region), [effectiveAnchors])
   const annotationsByPage = useMemo(() => groupByPage(annotations, (n) => n.region), [annotations])
   // Cue run-status keyed by cueId. Memoized on `anchors` (not effectiveAnchors) so
@@ -499,17 +624,18 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
     >
       <Document
         file={fileUrl}
-        onLoadSuccess={(doc) => setNumPages(doc.numPages)}
+        onLoadSuccess={onDocumentLoad}
         onLoadError={onDocumentError}
-        loading={
-          <div className="flex items-center justify-center p-16">
-            <Loader2 className="size-6 animate-spin text-muted-foreground" />
-          </div>
-        }
+        loading={spinner}
       >
         <div className="flex flex-col items-center gap-4 px-6 py-6">
+          {/* `Document` treats `onLoadSuccess` as fire-and-forget: it swaps this spinner in for
+              its own the instant the callback is invoked, without awaiting the promise
+              `onDocumentLoad` returns. Without this the measuring pass — however short — is a
+              pane with neither a spinner nor a sheet in it. */}
+          {pageRatios.length === 0 && spinner}
           {containerWidth > 0 &&
-            Array.from({ length: numPages }, (_, i) => {
+            pageRatios.map((ratio, i) => {
               const cues = anchorsByPage.get(i) ?? []
               const anns = annotationsByPage.get(i) ?? []
               const cuts = anns.filter((a) => a.item.kind === 'STRIKETHROUGH')
@@ -589,21 +715,25 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
 
                   {/* Page + on-page overlays (washes, cuts, markers, notes-when-narrow). */}
                   <div
-                    ref={(el) => {
-                      if (el) pageElsRef.current.set(i, el)
-                      else pageElsRef.current.delete(i)
-                    }}
+                    ref={registerPageEl}
                     data-page-index={i}
                     onPointerDown={(e) => onPagePointerDown(e, i)}
                     className={cn('relative shrink-0', boxCursor && 'cursor-crosshair')}
-                    style={{ width: pageWidth }}
+                    // The height is the sheet's, not the canvas's: it holds whether or not this
+                    // page is inside the render window, so the scroll height is right from the
+                    // first frame and every normalized overlay resolves against the same box.
+                    // Floored the way react-pdf floors its own canvas height, so a mounted page
+                    // sits flush in it.
+                    style={{ width: pageWidth, height: Math.floor(pageWidth * ratio) }}
                   >
-                    <PdfPage
-                      index={i}
-                      width={pageWidth}
-                      onHasText={handleHasText}
-                      onTextLayerRendered={handleTextLayerRendered}
-                    />
+                    {rendered.has(i) && (
+                      <PdfPage
+                        index={i}
+                        width={pageWidth}
+                        onHasText={handleHasText}
+                        onTextLayerRendered={handleTextLayerRendered}
+                      />
+                    )}
                     {/* Overlay sits ABOVE the text layer (z-index 2) but stays
                         click-through, so native text selection still reaches the
                         text layer; only the markers/bubbles capture pointers. */}
