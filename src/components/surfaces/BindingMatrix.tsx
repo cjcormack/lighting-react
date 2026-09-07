@@ -399,7 +399,7 @@ function CreateBindingSheet({
   )
 }
 
-function EditBindingSheet({
+export function EditBindingSheet({
   open,
   onOpenChange,
   projectId,

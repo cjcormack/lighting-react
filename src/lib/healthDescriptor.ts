@@ -31,6 +31,14 @@ export function describeHealth(health: BindingHealth | undefined): string | null
       // Unlike an effect, which degrades to master 1, a dead tempo binding does nothing —
       // silently retuning the global tempo instead would be worse than being visibly dead.
       return "The speed master this controls no longer exists"
+    case "unknownProperty":
+      // A selection or encoder-bank property, so there is no target to name — what makes it dead
+      // is that nothing in the patch has the property at all.
+      return `No fixture in this patch has a '${health.propertyName}' property`
+    case "unknownTarget":
+      // The row the backend's tolerant decode kept rather than failing the whole project on. It
+      // is dead here and rebindable; on the build that wrote it, it works.
+      return `This build does not understand '${health.targetType}' bindings — rebind it`
     default:
       // Not dead code: the backend's health ADT is versioned independently of this client, so
       // a newer server can send a variant TypeScript here has never heard of. Falling through

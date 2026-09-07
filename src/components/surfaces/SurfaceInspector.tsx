@@ -1,0 +1,403 @@
+import { useState } from "react"
+import { AlertTriangle, Radio, Trash2, Wand2 } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Separator } from "@/components/ui/separator"
+import { describeHealth } from "@/lib/healthDescriptor"
+import { cn } from "@/lib/utils"
+import {
+  useDeleteSurfaceBindingMutation,
+  useExpandSurfaceBindingMutation,
+  useUpdateSurfaceBindingMutation,
+} from "@/store/surfaces"
+import type {
+  ControlDescriptor,
+  ControlState,
+  ControlSurfaceBinding,
+  ControlSurfaceType,
+  PickupChange,
+} from "@/store/surfaces"
+import { useDeskSelection } from "@/store/selection"
+import { deriveStripTarget, type SurfaceBindingIndex } from "@/lib/surfaceResolve"
+import { resolveControl } from "@/lib/surfaceResolve"
+import { EditBindingSheet } from "./BindingMatrix"
+import { LearnModeOverlay } from "./LearnModeOverlay"
+import { describeTarget } from "./targetUtils"
+import { midiPercent } from "./surfacePanelGeometry"
+
+/**
+ * The clicked control: what it is, what it is bound to, and what it is doing.
+ *
+ * The **binding card** is where a strip stops being invisible. A strip is one row covering four
+ * controls, so an inspector that showed only "the binding on fader 5" would be describing a row
+ * whose other three effects the operator cannot see from anywhere — hence the four-line breakdown,
+ * and *Fader only…* beside it as the way back to single bindings.
+ */
+
+export interface SurfaceInspectorProps {
+  projectId: number
+  profile: ControlSurfaceType
+  controlId: string
+  index: SurfaceBindingIndex
+  activeBank: string | null
+  encoderBankProperty: string
+  state: ControlState | undefined
+  pickup: PickupChange | undefined
+  /** Every row on this device type, for the "other banks" line. */
+  bindings: readonly ControlSurfaceBinding[]
+}
+
+export function SurfaceInspector({
+  projectId,
+  profile,
+  controlId,
+  index,
+  activeBank,
+  encoderBankProperty,
+  state,
+  pickup,
+  bindings,
+}: SurfaceInspectorProps) {
+  const [editing, setEditing] = useState(false)
+  const [learning, setLearning] = useState(false)
+  const [updateBinding] = useUpdateSurfaceBindingMutation()
+  const [expandBinding] = useExpandSurfaceBindingMutation()
+  const [deleteBinding] = useDeleteSurfaceBindingMutation()
+
+  const descriptor = profile.controls.find((c) => c.controlId === controlId)
+  const resolved = resolveControl(controlId, index, activeBank, encoderBankProperty)
+  const onStrip = resolved?.via ?? null
+  const deadReason = resolved ? describeHealth(resolved.binding.health) : null
+
+  if (!descriptor) return null
+
+  return (
+    <div className="flex h-full flex-col gap-3 overflow-y-auto p-4">
+      <div>
+        <div className="text-[9px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+          Selected control{onStrip ? ` · ${onStrip.strip.id}` : ""}
+        </div>
+        <h3 className="text-sm font-semibold">
+          {descriptor.label}
+          {resolved && (
+            <span className="ml-1.5 font-normal text-muted-foreground">
+              — {describeTarget(resolved.target)}
+            </span>
+          )}
+        </h3>
+        <p className="font-mono text-[11px] text-muted-foreground">{addressing(descriptor)}</p>
+      </div>
+
+      {deadReason && (
+        <p className="flex items-start gap-1.5 rounded-md bg-destructive/10 p-2 text-xs text-destructive">
+          <AlertTriangle className="mt-px size-3.5 shrink-0" />
+          {deadReason}
+        </p>
+      )}
+
+      <Separator />
+
+      {!resolved ? (
+        <p className="text-xs text-muted-foreground">
+          Nothing is bound to this control on{" "}
+          {activeBank == null ? "the global bank" : `bank ${activeBank}`}.
+        </p>
+      ) : (
+        <BindingCard
+          binding={resolved.binding}
+          profile={profile}
+          onStrip={onStrip}
+          encoderBankProperty={encoderBankProperty}
+        />
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        {resolved && (
+          <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+            {onStrip ? "Change group" : "Change target"}
+          </Button>
+        )}
+        {onStrip && resolved?.binding.target.type === "strip" && (
+          <Button
+            size="sm"
+            variant="outline"
+            title="Replace this strip with the four single bindings it was deriving"
+            onClick={() => expandBinding({ projectId, bindingId: resolved.binding.id })}
+          >
+            Fader only…
+          </Button>
+        )}
+        <Button size="sm" variant="outline" onClick={() => setLearning(true)}>
+          <Radio className="size-3.5" />
+          MIDI Learn
+        </Button>
+        {resolved && (
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={() => deleteBinding({ projectId, bindingId: resolved.binding.id })}
+          >
+            <Trash2 className="size-3.5" />
+            {onStrip ? "Remove strip" : "Remove"}
+          </Button>
+        )}
+      </div>
+
+      {resolved && (
+        <OtherBanks
+          bindings={bindings}
+          controlId={onStrip ? onStrip.strip.id : controlId}
+          profile={profile}
+          activeBank={activeBank}
+        />
+      )}
+
+      <Separator />
+
+      <LiveCard descriptor={descriptor} state={state} pickup={pickup} resolved={resolved} />
+
+      {editing && resolved && (
+        <EditBindingSheet
+          open={editing}
+          onOpenChange={setEditing}
+          projectId={projectId}
+          binding={resolved.binding}
+          profile={profile}
+          onSave={async (target, bank, policy) => {
+            await updateBinding({
+              projectId,
+              bindingId: resolved.binding.id,
+              target,
+              bank,
+              bankPresent: true,
+              takeoverPolicy: policy,
+              takeoverPolicyPresent: true,
+            }).unwrap()
+            setEditing(false)
+          }}
+        />
+      )}
+
+      {learning && resolved && (
+        <LearnModeOverlay
+          open={learning}
+          onOpenChange={setLearning}
+          projectId={projectId}
+          deviceTypeKey={profile.typeKey}
+          target={resolved.binding.target}
+          bank={resolved.binding.bank}
+          takeoverPolicy={resolved.binding.takeoverPolicy}
+          profile={profile}
+          onCommitted={() => setLearning(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+/** `CC 5 · touch CC 105 · ch 1 · motor` — how the desk addresses this control. */
+function addressing(descriptor: ControlDescriptor): string {
+  switch (descriptor.type) {
+    case "fader": {
+      const parts = [`CC ${descriptor.cc}`]
+      if (descriptor.touchCc != null) parts.push(`touch CC ${descriptor.touchCc}`)
+      if (descriptor.touchNote != null) parts.push(`touch note ${descriptor.touchNote}`)
+      parts.push(`ch ${descriptor.channel}`)
+      if (descriptor.hasMotor) parts.push("motor")
+      return parts.join(" · ")
+    }
+    case "encoder": {
+      const parts = [`CC ${descriptor.cc}`, `ch ${descriptor.channel}`]
+      if (descriptor.ringCc != null) parts.push(`ring CC ${descriptor.ringCc}`)
+      if (descriptor.pushNote != null) parts.push(`push note ${descriptor.pushNote}`)
+      return parts.join(" · ")
+    }
+    case "button":
+      return `Note ${descriptor.note} · ch ${descriptor.channel}`
+    case "bankButton":
+      return [
+        descriptor.note != null ? `Note ${descriptor.note}` : `PC ${descriptor.programChange}`,
+        `ch ${descriptor.channel}`,
+        `bank ${descriptor.bankId}`,
+      ].join(" · ")
+  }
+}
+
+function BindingCard({
+  binding,
+  profile,
+  onStrip,
+  encoderBankProperty,
+}: {
+  binding: ControlSurfaceBinding
+  profile: ControlSurfaceType
+  onStrip: { strip: { id: string } } | null
+  encoderBankProperty: string
+}) {
+  const strip =
+    binding.target.type === "strip"
+      ? profile.strips?.find((s) => s.id === binding.controlId)
+      : undefined
+
+  return (
+    <div className="space-y-2 rounded-md border p-2.5">
+      <div className="flex items-center gap-2 text-xs">
+        <span className="font-medium">
+          {strip ? "Strip binding" : "Binding"}
+        </span>
+        <Badge variant="outline" className="text-[10px]">
+          {binding.bank == null ? "global" : `bank ${binding.bank}`}
+        </Badge>
+        {binding.health.type === "ok" ? (
+          <Badge variant="secondary" className="text-[10px]">ok</Badge>
+        ) : (
+          <Badge variant="destructive" className="text-[10px]">dead</Badge>
+        )}
+      </div>
+
+      {/* A strip's four effects, spelled out: they are the part of the row nothing else shows. */}
+      {strip && binding.target.type === "strip" ? (
+        <dl className="space-y-1 text-[11px]">
+          <div className="pb-1 text-muted-foreground">
+            {binding.target.target.key} · {binding.target.target.type}
+          </div>
+          {(["fader", "select", "encoder", "flash"] as const).map((role) => {
+            const controlId =
+              role === "fader"
+                ? strip.fader
+                : role === "select"
+                  ? strip.select
+                  : role === "encoder"
+                    ? strip.encoder
+                    : strip.flash
+            if (!controlId) return null
+            const label = profile.controls.find((c) => c.controlId === controlId)?.label ?? controlId
+            const target =
+              binding.target.type === "strip"
+                ? deriveStripTarget(role, binding.target.target, encoderBankProperty)
+                : null
+            return (
+              <div key={role} className="flex justify-between gap-2">
+                <dt className={cn("text-muted-foreground", onStrip && "shrink-0")}>{label}</dt>
+                <dd className="truncate text-right">
+                  {target ? describeTarget(target) : "—"}
+                  {role === "encoder" && (
+                    <span className="text-muted-foreground"> · from the encoder bank</span>
+                  )}
+                </dd>
+              </div>
+            )
+          })}
+        </dl>
+      ) : (
+        <p className="text-[11px]">{describeTarget(binding.target)}</p>
+      )}
+
+      <div className="flex justify-between gap-2 text-[11px]">
+        <span className="text-muted-foreground">Takeover</span>
+        <span>{binding.takeoverPolicy === "PICKUP" ? "Pickup" : "Immediate"}</span>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * What this control does on the *other* banks. Worth showing because the panel can only draw one
+ * bank at a time, and "unbound" on screen is easy to read as "unbound everywhere".
+ */
+function OtherBanks({
+  bindings,
+  controlId,
+  profile,
+  activeBank,
+}: {
+  bindings: readonly ControlSurfaceBinding[]
+  controlId: string
+  profile: ControlSurfaceType
+  activeBank: string | null
+}) {
+  const banks: (string | null)[] = [...profile.banks.map((b) => b.id), null]
+  const others = banks.filter((b) => b !== activeBank)
+  if (others.length === 0) return null
+
+  return (
+    <p className="text-[11px] text-muted-foreground">
+      <span className="mr-1.5 font-medium">Other banks</span>
+      {others
+        .map((bank) => {
+          const hit = bindings.find(
+            (b) =>
+              b.deviceTypeKey === profile.typeKey &&
+              b.controlId === controlId &&
+              b.bank === bank,
+          )
+          const name = bank ?? "Global"
+          return `${name} — ${hit ? describeTarget(hit.target) : "unbound"}`
+        })
+        .join(" · ")}
+    </p>
+  )
+}
+
+/**
+ * What the control is doing now, straight off the `surfaceControls` stream.
+ *
+ * The design's fourth line — the stage value behind the binding — is not here yet: reading it
+ * means resolving a fixture or group property descriptor, which is the `useTargetProperties`
+ * extraction session 3b does. Everything else the legend names is.
+ */
+function LiveCard({
+  descriptor,
+  state,
+  pickup,
+  resolved,
+}: {
+  descriptor: ControlDescriptor
+  state: ControlState | undefined
+  pickup: PickupChange | undefined
+  resolved: { target: { type: string } } | null
+}) {
+  const selection = useDeskSelection()
+  const isSelectionTarget =
+    resolved?.target.type === "selectionProperty" ||
+    resolved?.target.type === "selectTarget" ||
+    resolved?.target.type === "locateSelection"
+
+  const position = state?.physical ?? state?.value ?? null
+
+  return (
+    <div className="space-y-1 text-[11px]">
+      <div className="text-[9px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+        Live
+      </div>
+      <p>
+        {position == null ? (
+          <span className="text-muted-foreground">Nothing fed back</span>
+        ) : (
+          <>
+            Position {position} / 127 · {midiPercent(position)}%
+          </>
+        )}
+      </p>
+      {descriptor.type === "fader" && state?.touched && (
+        <p className="text-muted-foreground">Touch held — motor feedback paused</p>
+      )}
+      {pickup?.state === "AWAITING_PICKUP" && pickup.target != null && (
+        <p className="text-[var(--editor-warning)]">
+          Awaiting pickup — move to {midiPercent(pickup.target)}% to engage
+        </p>
+      )}
+      {state?.led !== "none" && state?.led != null && (
+        <p className="text-muted-foreground">LED {state.led}</p>
+      )}
+      {isSelectionTarget && (
+        <p className="flex items-center gap-1 text-muted-foreground">
+          <Wand2 className="size-3" />
+          {selection.length === 0
+            ? "Nothing selected — a move is dropped"
+            : `Acts on ${selection.map((t) => t.key).join(", ")}`}
+        </p>
+      )}
+    </div>
+  )
+}

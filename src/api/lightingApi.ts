@@ -22,6 +22,7 @@ import {createParkApi, ParkApi} from "./parkApi";
 import {createPromptBooksWsApi, PromptBooksWsApi} from "./promptBooksWsApi";
 import {createBootStatusWsApi, BootStatusWsApi} from "./bootStatusWsApi";
 import {createSurfacesWsApi, SurfacesWsApi} from "./surfacesApi";
+import {createSelectionWsApi, SelectionWsApi} from "./selectionApi";
 import {createCloudSyncWsApi, CloudSyncWsApi} from "./cloudSyncWsApi";
 import {createProgrammerApi, ProgrammerApi} from "./programmerWsApi";
 import {createSpeedMastersWsApi, SpeedMastersWsApi} from "./speedMastersWsApi";
@@ -58,6 +59,7 @@ interface LightingApi {
   park: ParkApi
   promptBooks: PromptBooksWsApi
   surfaces: SurfacesWsApi
+  selection: SelectionWsApi
   cloudSync: CloudSyncWsApi
   bootStatus: BootStatusWsApi
   programmer: ProgrammerApi
@@ -115,6 +117,7 @@ function createLightingApi(): LightingApi {
   const promptBooksWsApi = createPromptBooksWsApi(connection)
   const surfacesWsApi = createSurfacesWsApi(connection)
   const cloudSyncWsApi = createCloudSyncWsApi(connection)
+  const selectionWsApi = createSelectionWsApi(connection)
   const bootStatusWsApi = createBootStatusWsApi(connection)
   const programmerApi = createProgrammerApi(connection)
   const speedMastersWsApi = createSpeedMastersWsApi(connection)
@@ -147,6 +150,7 @@ function createLightingApi(): LightingApi {
     park: parkApi,
     promptBooks: promptBooksWsApi,
     surfaces: surfacesWsApi,
+    selection: selectionWsApi,
     cloudSync: cloudSyncWsApi,
     bootStatus: bootStatusWsApi,
     programmer: programmerApi,

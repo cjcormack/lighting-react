@@ -3,6 +3,7 @@ import type {
   ControlDescriptor,
   ControlSurfaceType,
 } from "@/store/surfaces"
+import { STRIP_FADER_PROPERTY } from "@/lib/surfaceResolve"
 
 /** Flash targets wrap an inner continuous target; return the meaningful target. */
 export function effectiveTarget(target: BindingTarget): BindingTarget {
@@ -15,6 +16,16 @@ export type BindingTargetMatcher =
   | { type: "fireCue"; cueId: number }
   | { type: "cueStack"; stackId: number }
 
+/**
+ * Does this binding drive what the caller is asking about?
+ *
+ * A **strip** row answers yes for its target's `dimmer` and nothing else. The strip's fader and
+ * flash button really do drive the dimmer, always; its encoder drives whichever property the
+ * device's encoder bank currently names, which this pure matcher cannot see and which would in any
+ * case make a badge on the fixtures page claim a binding that changes under the operator without
+ * the page moving. Coverage that shifts with a bank belongs on the surface panel, which redraws
+ * when the bank does.
+ */
 export function matchesBindingTarget(
   target: BindingTarget,
   match: BindingTargetMatcher,
@@ -23,15 +34,23 @@ export function matchesBindingTarget(
   switch (match.type) {
     case "fixtureProperty":
       return (
-        eff.type === "fixtureProperty" &&
-        eff.fixtureKey === match.fixtureKey &&
-        eff.propertyName === match.propertyName
+        (eff.type === "fixtureProperty" &&
+          eff.fixtureKey === match.fixtureKey &&
+          eff.propertyName === match.propertyName) ||
+        (eff.type === "strip" &&
+          eff.target.type === "fixture" &&
+          eff.target.key === match.fixtureKey &&
+          match.propertyName === STRIP_FADER_PROPERTY)
       )
     case "groupProperty":
       return (
-        eff.type === "groupProperty" &&
-        eff.groupName === match.groupName &&
-        eff.propertyName === match.propertyName
+        (eff.type === "groupProperty" &&
+          eff.groupName === match.groupName &&
+          eff.propertyName === match.propertyName) ||
+        (eff.type === "strip" &&
+          eff.target.type === "group" &&
+          eff.target.key === match.groupName &&
+          match.propertyName === STRIP_FADER_PROPERTY)
       )
     case "fireCue":
       return eff.type === "fireCue" && eff.cueId === match.cueId
@@ -76,15 +95,53 @@ export function describeTarget(target: BindingTarget): string {
       }`
     case "speedMasterTap":
       return `Speed master tap${target.masterUuid == null ? " · M1" : ""}`
+    // The selection-relative arms name no target of their own, so `Sel` is doing real work: it is
+    // the whole difference between "this control writes colour on the movers" and "this control
+    // writes colour on whatever is selected".
+    case "selectionProperty":
+      return `Sel · ${target.propertyName}`
+    case "selectTarget":
+      return `${target.mode === "replace" ? "Select only" : "Select"} ${target.target.key}`
+    case "clearSelection":
+      return "Clear selection"
+    case "locateSelection":
+      return "Locate selection"
+    // A strip row is never dispatched as it stands, so this is what the *row* is rather than what
+    // any one control does: for a control's own label the panel resolves through
+    // `lib/surfaceResolve.ts` first and describes the derived target.
+    case "strip":
+      return `Strip · ${target.target.key}`
+    case "encoderBankSet":
+      return `Encoder bank · ${target.propertyName}`
+    // A row this build cannot decode, kept by the tolerant decode so it can be rebound rather than
+    // silently dropped. Naming the discriminator is the only useful thing to say about it.
+    case "unknown":
+      return `Unknown target (${target.targetType})`
   }
 }
 
-/** Look up the human label for a control on a given device profile. */
+/**
+ * The human label for a control on a given device profile.
+ *
+ * A **strip id** is looked up second, because a strip binding's `controlId` holds one and strips
+ * are not in `controls` — without this arm every strip-bound badge reads its raw `strip-1`. It is
+ * named by its own fader ("Strip · Fader 1", "Strip · Master") rather than by parsing the id:
+ * the fader's label is real profile data, and it names the thing the operator can put a hand on.
+ */
 export function controlLabel(
   profile: ControlSurfaceType | null | undefined,
   controlId: string,
 ): string {
-  return profile?.controls.find((c: ControlDescriptor) => c.controlId === controlId)?.label ?? controlId
+  const control = profile?.controls.find((c: ControlDescriptor) => c.controlId === controlId)
+  if (control) return control.label
+
+  const strip = profile?.strips?.find((s) => s.id === controlId)
+  if (strip) {
+    const fader = profile?.controls.find((c: ControlDescriptor) => c.controlId === strip.fader)
+    return fader ? `Strip · ${fader.label}` : `Strip ${strip.id}`
+  }
+
+  return controlId
 }
 
 /** `"x-touch-compact-standard"` → `"XT"`. Used for chip abbreviations. */

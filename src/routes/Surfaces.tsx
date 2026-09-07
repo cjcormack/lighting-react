@@ -2,24 +2,37 @@ import { useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "react-router"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { Sliders, Zap, ZapOff, Power, AlertTriangle } from "lucide-react"
-import { useIsDeskConnected } from "@/store/status"
-import { DESK_OFFLINE_LABEL } from "@/api/wsGesture"
+import { AlertTriangle, Sliders } from "lucide-react"
 import {
   useSurfaceDevices,
   useActiveBanks,
-  useScalerState,
+  useEncoderBanks,
+  useSurfaceControls,
+  usePickupStates,
   useControlSurfaceTypeListQuery,
   useSurfaceBindingsQuery,
 } from "@/store/surfaces"
-import type { ControlSurfaceType, SurfaceDeviceInfo } from "@/store/surfaces"
+import type { ControlState, PickupChange, SurfaceDeviceInfo } from "@/store/surfaces"
 import { BankSwitcher } from "@/components/surfaces/BankSwitcher"
 import { BindingMatrix } from "@/components/surfaces/BindingMatrix"
+import { SurfacePanel } from "@/components/surfaces/SurfacePanel"
+import { SurfaceInspector } from "@/components/surfaces/SurfaceInspector"
+import { SelectionChip } from "@/components/surfaces/SelectionChip"
+import { buildBindingIndex, DEFAULT_ENCODER_BANK_PROPERTY } from "@/lib/surfaceResolve"
 import { lightingApi } from "@/api/lightingApi"
 import { cn } from "@/lib/utils"
 import { CurrentProjectRedirect } from "@/components/CurrentProjectRedirect"
+
+/**
+ * Settings › Surfaces — a picture of the attached desk, and an inspector for whichever control
+ * you click.
+ *
+ * The Blackout and grand-master buttons that used to sit in this header are **gone** (plan D1).
+ * The targets, the `surfaceScaler.*` family and the ShowBar's own toggles are untouched: this is
+ * where the operator wires the desk, not where they run it, and a live-rig control on a settings
+ * page is a control in the wrong place rather than a missing feature.
+ */
 
 // ─── Redirect ─────────────────────────────────────────────────────────
 
@@ -29,24 +42,28 @@ export function SurfacesRedirect() {
 
 // ─── Content ──────────────────────────────────────────────────────────
 
-export function SurfacesContent({
-  projectId,
-}: {
-  projectId: number
-}) {
+const NO_CONTROLS: Readonly<Record<string, ControlState>> = {}
+
+export function SurfacesContent({ projectId }: { projectId: number }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const devices = useSurfaceDevices()
   const banks = useActiveBanks()
+  const encoderBanks = useEncoderBanks()
+  const allControls = useSurfaceControls()
+  const pickups = usePickupStates()
   const { data: types } = useControlSurfaceTypeListQuery()
   const { data: bindings } = useSurfaceBindingsQuery(projectId)
 
-  // If a ?binding=<id> query param is present, auto-select that binding's device and bank.
+  // `?binding=<id>` is minted from the fixtures and groups pages (`BoundControlBadge`), so it is
+  // an in-app contract: it picks the binding's device, forces its bank, and now also opens the
+  // inspector on the control it names.
   const highlightBindingId = useMemo(() => {
     const v = searchParams.get("binding")
     return v ? Number(v) : null
   }, [searchParams])
 
   const [selectedDisplayKey, setSelectedDisplayKey] = useState<string | null>(null)
+  const [selectedControlId, setSelectedControlId] = useState<string | null>(null)
 
   // Pick first matched device if nothing selected yet.
   useEffect(() => {
@@ -55,13 +72,20 @@ export function SurfacesContent({
     if (first) setSelectedDisplayKey(first.displayKey)
   }, [devices, selectedDisplayKey])
 
-  // If a highlight binding exists, select that device and ensure the bank matches.
   useEffect(() => {
     if (!highlightBindingId || !bindings) return
     const binding = bindings.find((b) => b.id === highlightBindingId)
     if (!binding) return
     const device = devices.find((d) => d.typeKey === binding.deviceTypeKey)
     if (device) setSelectedDisplayKey(device.displayKey)
+    // A strip row's `controlId` is the *strip* id, which is in no profile's `controls` — so
+    // handing it straight to the inspector renders nothing at all. Land on the strip's fader
+    // instead: the badge that minted this link matched on the dimmer, and the fader is the
+    // dimmer. This is the common case rather than a corner, since a group on a strip is the
+    // shape the view is built around.
+    const linkProfile = (types ?? []).find((t) => t.typeKey === binding.deviceTypeKey)
+    const strip = linkProfile?.strips?.find((s) => s.id === binding.controlId)
+    setSelectedControlId(strip ? strip.fader : binding.controlId)
     if (binding.bank != null && binding.deviceTypeKey) {
       lightingApi.surfaces.setBank(binding.deviceTypeKey, binding.bank)
     }
@@ -69,11 +93,11 @@ export function SurfacesContent({
     const params = new URLSearchParams(searchParams)
     params.delete("binding")
     setSearchParams(params, { replace: true })
-  }, [highlightBindingId, bindings, devices, searchParams, setSearchParams])
+  }, [highlightBindingId, bindings, devices, types, searchParams, setSearchParams])
 
   const selectedDevice = devices.find((d) => d.displayKey === selectedDisplayKey) ?? null
   const selectedProfile = selectedDevice?.typeKey
-    ? (types ?? []).find((t) => t.typeKey === selectedDevice.typeKey) ?? null
+    ? ((types ?? []).find((t) => t.typeKey === selectedDevice.typeKey) ?? null)
     : null
 
   const deadBindingCount = useMemo(
@@ -81,126 +105,173 @@ export function SurfacesContent({
     [bindings],
   )
 
+  const activeBank = selectedDevice?.typeKey ? (banks[selectedDevice.typeKey] ?? null) : null
+  const encoderBankProperty = selectedDevice?.typeKey
+    ? (encoderBanks[selectedDevice.typeKey] ?? DEFAULT_ENCODER_BANK_PROPERTY)
+    : DEFAULT_ENCODER_BANK_PROPERTY
+
+  const index = useMemo(
+    () => buildBindingIndex(bindings ?? [], selectedProfile),
+    [bindings, selectedProfile],
+  )
+
+  // Pickup state is keyed by `displayKey|controlId` across every device; the panel wants one
+  // device's, keyed by control.
+  const devicePickups = useMemo(() => {
+    if (!selectedDevice) return {}
+    const out: Record<string, PickupChange> = {}
+    for (const change of Object.values(pickups)) {
+      if (change.displayKey === selectedDevice.displayKey) out[change.controlId] = change
+    }
+    return out
+  }, [pickups, selectedDevice])
+
+  const controls = selectedDevice
+    ? (allControls[selectedDevice.displayKey] ?? NO_CONTROLS)
+    : NO_CONTROLS
+
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="p-4 space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <p className="text-sm text-muted-foreground flex items-center gap-2">
-              <span>
-                {devices.length === 0
-                  ? "No MIDI devices connected."
-                  : `${devices.length} device${devices.length !== 1 ? "s" : ""} connected.`}
-              </span>
-              {deadBindingCount > 0 && (
-                <Badge variant="destructive" className="text-[10px] gap-1">
-                  <AlertTriangle className="size-3" />
-                  {deadBindingCount} dead binding{deadBindingCount === 1 ? "" : "s"}
-                </Badge>
-              )}
-            </p>
-          </div>
-          <ScalerToolbar />
+    <div className="flex h-full flex-col">
+      <div className="flex flex-wrap items-center gap-2 p-4">
+        {devices.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No MIDI devices connected — plug one in and it will appear here.
+          </p>
+        ) : (
+          devices.map((device) => (
+            <DeviceChip
+              key={device.displayKey}
+              device={device}
+              isSelected={device.displayKey === selectedDisplayKey}
+              onSelect={() => {
+                setSelectedDisplayKey(device.displayKey)
+                setSelectedControlId(null)
+              }}
+            />
+          ))
+        )}
+        {deadBindingCount > 0 && (
+          <Badge variant="destructive" className="gap-1 text-[10px]">
+            <AlertTriangle className="size-3" />
+            {deadBindingCount} dead binding{deadBindingCount === 1 ? "" : "s"}
+          </Badge>
+        )}
+        <div className="ml-auto flex items-center gap-2">
+          {selectedProfile && (
+            <BankSwitcher
+              deviceTypeKey={selectedProfile.typeKey}
+              banks={selectedProfile.banks}
+              activeBank={activeBank}
+            />
+          )}
         </div>
       </div>
 
       <Separator />
 
-      <div className="flex-1 overflow-hidden flex flex-col md:flex-row min-h-0">
-        {/* Left column: device list */}
-        <aside className="w-full md:w-72 md:border-r overflow-y-auto p-3 space-y-1 shrink-0">
-          {devices.length === 0 ? (
-            <p className="text-xs text-muted-foreground p-2">
-              Plug in a MIDI controller — it will appear here.
-            </p>
-          ) : (
-            devices.map((device) => (
-              <DeviceRow
-                key={device.displayKey}
-                device={device}
-                isSelected={device.displayKey === selectedDisplayKey}
-                activeBank={
-                  device.typeKey ? (banks[device.typeKey] ?? null) : null
-                }
-                onSelect={() => setSelectedDisplayKey(device.displayKey)}
-              />
-            ))
-          )}
-        </aside>
-
-        {/* Right column: selected device detail */}
-        <section className="flex-1 overflow-y-auto p-4">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
+        <section className="min-w-0 flex-1 overflow-auto p-4">
           {!selectedDevice ? (
             <EmptyState />
           ) : !selectedProfile ? (
             <UnmatchedDeviceState device={selectedDevice} />
           ) : (
-            <DeviceDetail
-              projectId={projectId}
-              device={selectedDevice}
-              profile={selectedProfile}
-              activeBank={
-                selectedDevice.typeKey ? (banks[selectedDevice.typeKey] ?? null) : null
-              }
-              highlightBindingId={highlightBindingId}
-            />
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                <p className="text-xs text-muted-foreground">
+                  {selectedProfile.vendor} · {selectedProfile.product} ·{" "}
+                  {activeBank == null ? "Global" : `Bank ${activeBank}`}
+                </p>
+                <SelectionChip />
+                <Legend />
+              </div>
+
+              {/*
+                The picture is the view; the grouped table is the narrow rendering and the
+                fallback for a profile with no layout. Both are hidden rather than reflowed,
+                because a panel drawn as a picture does not become a list by getting narrower.
+              */}
+              {selectedProfile.layout ? (
+                <>
+                  <div className="hidden overflow-x-auto md:block">
+                    <SurfacePanel
+                      profile={selectedProfile}
+                      controls={controls}
+                      index={index}
+                      activeBank={activeBank}
+                      encoderBankProperty={encoderBankProperty}
+                      pickups={devicePickups}
+                      selectedControlId={selectedControlId}
+                      onSelectControl={setSelectedControlId}
+                    />
+                  </div>
+                  <div className="md:hidden">
+                    <BindingMatrix
+                      projectId={projectId}
+                      device={selectedDevice}
+                      profile={selectedProfile}
+                      activeBank={activeBank}
+                      highlightBindingId={highlightBindingId}
+                    />
+                  </div>
+                </>
+              ) : (
+                <BindingMatrix
+                  projectId={projectId}
+                  device={selectedDevice}
+                  profile={selectedProfile}
+                  activeBank={activeBank}
+                  highlightBindingId={highlightBindingId}
+                />
+              )}
+            </div>
           )}
         </section>
+
+        {selectedProfile && selectedControlId && (
+          <aside className="hidden w-[360px] shrink-0 overflow-hidden border-l md:block">
+            <SurfaceInspector
+              projectId={projectId}
+              profile={selectedProfile}
+              controlId={selectedControlId}
+              index={index}
+              activeBank={activeBank}
+              encoderBankProperty={encoderBankProperty}
+              state={controls[selectedControlId]}
+              pickup={devicePickups[selectedControlId]}
+              bindings={bindings ?? []}
+            />
+          </aside>
+        )}
       </div>
     </div>
   )
 }
 
-function ScalerToolbar() {
-  const scaler = useScalerState()
-  // Blackout and the grand master are the two controls on this page that promise the rig will
-  // change *now*. Both are WebSocket writes, so with the socket down the press goes nowhere and
-  // the state they read back is whatever it was before the drop — an inert button that still
-  // paints as live. Disabled says so before the press instead of after it.
-  const connected = useIsDeskConnected()
-  const offlineTitle = connected ? undefined : DESK_OFFLINE_LABEL
+/** The legend the panel's states are read against — LED, touched, dead. */
+function Legend() {
   return (
-    <div className="flex items-center gap-2">
-      <Button
-        size="sm"
-        variant={scaler.blackoutEnabled ? "destructive" : "outline"}
-        onClick={() => lightingApi.surfaces.setBlackout(!scaler.blackoutEnabled)}
-        disabled={!connected}
-        title={offlineTitle}
-        className="gap-1.5"
-      >
-        <Power className="size-3.5" />
-        {scaler.blackoutEnabled ? "Blackout ON" : "Blackout"}
-      </Button>
-      <Button
-        size="sm"
-        variant={scaler.grandMasterEnabled ? "outline" : "default"}
-        onClick={() => lightingApi.surfaces.setGrandMaster(!scaler.grandMasterEnabled)}
-        disabled={!connected}
-        title={offlineTitle}
-        className="gap-1.5"
-      >
-        {scaler.grandMasterEnabled ? (
-          <Zap className="size-3.5" />
-        ) : (
-          <ZapOff className="size-3.5" />
-        )}
-        GM {scaler.grandMasterEnabled ? "open" : "kill"}
-      </Button>
-    </div>
+    <span className="flex items-center gap-3 text-[10px] text-muted-foreground">
+      <span className="flex items-center gap-1">
+        <span className="h-[3px] w-3 rounded-full bg-surface-led" /> LED lit
+      </span>
+      <span className="flex items-center gap-1">
+        <span className="size-2.5 rounded-[2px] outline-2 outline-ring" /> touched
+      </span>
+      <span className="flex items-center gap-1">
+        <span className="size-2.5 rounded-[2px] border border-destructive" /> dead binding
+      </span>
+    </span>
   )
 }
 
-function DeviceRow({
+function DeviceChip({
   device,
   isSelected,
-  activeBank,
   onSelect,
 }: {
   device: SurfaceDeviceInfo
   isSelected: boolean
-  activeBank: string | null
   onSelect: () => void
 }) {
   return (
@@ -208,40 +279,30 @@ function DeviceRow({
       type="button"
       onClick={onSelect}
       className={cn(
-        "w-full text-left p-2 rounded-md border transition-colors",
-        isSelected ? "bg-accent border-accent-foreground/20" : "hover:bg-accent/50 border-transparent",
+        "flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors",
+        isSelected ? "border-accent-foreground/20 bg-accent" : "border-transparent hover:bg-accent/50",
       )}
     >
-      <div className="flex items-center gap-2">
-        <Sliders className="size-3.5 shrink-0" />
-        <span className="font-medium text-sm truncate">{device.displayName}</span>
-      </div>
-      <div className="mt-1 flex items-center gap-1 flex-wrap">
-        {device.isMatched ? (
-          <Badge variant="secondary" className="text-[10px]">
-            {device.typeKey}
-          </Badge>
-        ) : (
-          <Badge variant="outline" className="text-[10px]">unmatched</Badge>
-        )}
-        {activeBank && (
-          <Badge variant="outline" className="text-[10px]">bank {activeBank}</Badge>
-        )}
-        {!device.hasInputPort && (
-          <Badge variant="outline" className="text-[10px]">no input</Badge>
-        )}
-        {!device.hasOutputPort && (
-          <Badge variant="outline" className="text-[10px]">no output</Badge>
-        )}
-      </div>
+      <Sliders className="size-3.5 shrink-0" />
+      <span className="font-medium">{device.displayName}</span>
+      {device.isMatched ? (
+        <Badge variant="secondary" className="text-[10px]">{device.typeKey}</Badge>
+      ) : (
+        <Badge variant="outline" className="text-[10px]">unmatched</Badge>
+      )}
+      {device.isMatched && (
+        <span className="text-[10px] text-muted-foreground">
+          {device.hasInputPort ? "in" : "no in"} · {device.hasOutputPort ? "out" : "no out"}
+        </span>
+      )}
     </button>
   )
 }
 
 function EmptyState() {
   return (
-    <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm">
-      <Sliders className="size-8 mb-2 opacity-40" />
+    <div className="flex h-full flex-col items-center justify-center text-sm text-muted-foreground">
+      <Sliders className="mb-2 size-8 opacity-40" />
       <p>Select a device to view and edit its bindings.</p>
     </div>
   )
@@ -249,54 +310,14 @@ function EmptyState() {
 
 function UnmatchedDeviceState({ device }: { device: SurfaceDeviceInfo }) {
   return (
-    <Card className="p-6 space-y-2">
+    <Card className="space-y-2 p-6">
       <h2 className="font-semibold">{device.displayName}</h2>
       <p className="text-sm text-muted-foreground">
         This device didn&rsquo;t match any registered <code>@ControlSurfaceType</code> profile.
         Add a Kotlin profile under <code>src/main/kotlin/uk/me/cormack/lighting7/midi/devices/</code>
         to bind controls on this device.
       </p>
-      <div className="text-xs font-mono text-muted-foreground">
-        displayKey: {device.displayKey}
-      </div>
+      <div className="font-mono text-xs text-muted-foreground">displayKey: {device.displayKey}</div>
     </Card>
-  )
-}
-
-function DeviceDetail({
-  projectId,
-  device,
-  profile,
-  activeBank,
-  highlightBindingId,
-}: {
-  projectId: number
-  device: SurfaceDeviceInfo
-  profile: ControlSurfaceType
-  activeBank: string | null
-  highlightBindingId: number | null
-}) {
-  return (
-    <div className="space-y-4 max-w-5xl">
-      <div>
-        <h2 className="font-semibold text-base">{device.displayName}</h2>
-        <p className="text-xs text-muted-foreground">
-          {profile.vendor} · {profile.product} · <span className="font-mono">{profile.typeKey}</span>
-        </p>
-      </div>
-      <BankSwitcher
-        deviceTypeKey={profile.typeKey}
-        banks={profile.banks}
-        activeBank={activeBank}
-      />
-      <Separator />
-      <BindingMatrix
-        projectId={projectId}
-        device={device}
-        profile={profile}
-        activeBank={activeBank}
-        highlightBindingId={highlightBindingId}
-      />
-    </div>
   )
 }

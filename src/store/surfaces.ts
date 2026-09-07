@@ -9,6 +9,7 @@ import type {
   SurfaceDeviceInfo,
   PickupChange,
   ScalerState,
+  SurfaceControlStates,
 } from "../api/surfacesApi"
 
 export type {
@@ -32,12 +33,28 @@ export type {
   SetBankTarget,
   SpeedMasterBpmTarget,
   SpeedMasterTapTarget,
+  SelectionPropertyTarget,
+  SelectTargetTarget,
+  SelectMode,
+  ClearSelectionTarget,
+  LocateSelectionTarget,
+  StripTarget,
+  EncoderBankSetTarget,
+  UnknownTarget,
   ControlDescriptor,
   FaderControl,
   EncoderControl,
   ButtonControl,
   BankButtonControl,
   BankDefinition,
+  StripDefinition,
+  LayoutCell,
+  LayoutRegion,
+  SurfaceLayout,
+  SurfaceControlStates,
+  ControlState,
+  LedState,
+  RingState,
   TakeoverPolicy,
   LearnEvent,
   BindingHealth,
@@ -57,6 +74,8 @@ export type PickupStates = Readonly<Record<string, PickupChange>>
 const NO_DEVICES: SurfaceDeviceInfo[] = []
 const NO_BANKS: Record<string, string> = {}
 const NO_PICKUPS: PickupStates = {}
+const NO_CONTROLS: SurfaceControlStates = {}
+const NO_ENCODER_BANKS: Record<string, string> = {}
 /** What the scaler is before its first frame: nothing blacked out, grand master live. */
 const SCALER_AT_REST: ScalerState = { blackoutEnabled: false, grandMasterEnabled: true }
 
@@ -128,6 +147,26 @@ export const surfacesApi = restApi.injectEndpoints({
       ],
     }),
 
+    /**
+     * *Fader only…* — replace a strip row with the four single rows it was deriving, in one
+     * transaction. The derivation happens server-side, at the encoder bank the device is on right
+     * now, so the four bindings the operator ends up with are the four they could see a moment
+     * ago; doing it here would be a second copy of `deriveStripTarget` that could disagree with
+     * the desk about what the encoder was doing.
+     */
+    expandSurfaceBinding: build.mutation<
+      ControlSurfaceBinding[],
+      { projectId: number; bindingId: number }
+    >({
+      query: ({ projectId, bindingId }) => ({
+        url: `projects/${projectId}/surface-bindings/${bindingId}/expand`,
+        method: 'POST',
+      }),
+      invalidatesTags: (_result, _error, { projectId }) => [
+        { type: 'SurfaceBinding', id: projectId },
+      ],
+    }),
+
     deleteSurfaceBinding: build.mutation<
       void,
       { projectId: number; bindingId: number }
@@ -141,7 +180,7 @@ export const surfacesApi = restApi.injectEndpoints({
       ],
     }),
 
-    // The four WS-driven live states below are cache entries rather than `useState` +
+    // The six WS-driven live states below are cache entries rather than `useState` +
     // `useEffect` hooks, so that two components reading one stream share a single
     // subscription and RTK Query owns the teardown — the pattern `speedMasters.ts`
     // documents and seven other slices follow.
@@ -203,6 +242,37 @@ export const surfacesApi = restApi.injectEndpoints({
       },
     }),
 
+    /**
+     * Every attached device's control state — what the hardware has been told (plan D7).
+     *
+     * The two-frame fold lives in the WS layer, not here, so this is the plain replacing
+     * subscription the other three are. See `SurfacesWsApi.subscribeControls`.
+     */
+    surfaceControls: build.query<SurfaceControlStates, void>({
+      queryFn: () => ({ data: lightingApi.surfaces.getControls() ?? NO_CONTROLS }),
+      async onCacheEntryAdded(_, { cacheDataLoaded, updateCachedData, cacheEntryRemoved }) {
+        await cacheDataLoaded
+        const subscription = lightingApi.surfaces.subscribeControls((controls) => {
+          updateCachedData(() => controls)
+        })
+        await cacheEntryRemoved
+        subscription.unsubscribe()
+      },
+    }),
+
+    /** Which attribute each device's strip encoders drive, `deviceTypeKey` → property name. */
+    surfaceEncoderBanks: build.query<Record<string, string>, void>({
+      queryFn: () => ({ data: lightingApi.surfaces.getEncoderBanks() ?? NO_ENCODER_BANKS }),
+      async onCacheEntryAdded(_, { cacheDataLoaded, updateCachedData, cacheEntryRemoved }) {
+        await cacheDataLoaded
+        const subscription = lightingApi.surfaces.subscribeEncoderBanks((properties) => {
+          updateCachedData(() => properties)
+        })
+        await cacheEntryRemoved
+        subscription.unsubscribe()
+      },
+    }),
+
     /** Global blackout / grand-master state. */
     surfaceScaler: build.query<ScalerState, void>({
       queryFn: () => ({ data: lightingApi.surfaces.getScaler() ?? SCALER_AT_REST }),
@@ -224,10 +294,13 @@ export const {
   useSurfaceBindingsQuery,
   useCreateSurfaceBindingMutation,
   useUpdateSurfaceBindingMutation,
+  useExpandSurfaceBindingMutation,
   useDeleteSurfaceBindingMutation,
   useSurfaceDevicesQuery,
   useSurfaceBanksQuery,
   useSurfacePickupsQuery,
+  useSurfaceControlsQuery,
+  useSurfaceEncoderBanksQuery,
   useSurfaceScalerQuery,
 } = surfacesApi
 
@@ -247,6 +320,21 @@ export function useActiveBanks(): Record<string, string> {
 export function usePickupStates(): PickupStates {
   const { data } = useSurfacePickupsQuery()
   return data ?? NO_PICKUPS
+}
+
+/**
+ * Every attached device's control state, keyed `displayKey` → `controlId`. What the hardware was
+ * told, never a recomputation from DMX (plan D7).
+ */
+export function useSurfaceControls(): SurfaceControlStates {
+  const { data } = useSurfaceControlsQuery()
+  return data ?? NO_CONTROLS
+}
+
+/** Which attribute each device's strip encoders drive, `deviceTypeKey` → property name. */
+export function useEncoderBanks(): Record<string, string> {
+  const { data } = useSurfaceEncoderBanksQuery()
+  return data ?? NO_ENCODER_BANKS
 }
 
 /** Global blackout / grand-master state. */

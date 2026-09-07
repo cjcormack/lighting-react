@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { describeTarget } from './targetUtils'
+import { controlLabel, describeTarget, matchesBindingTarget } from './targetUtils'
+import type { ControlSurfaceType } from '@/store/surfaces'
 
 describe('describeTarget', () => {
   it('describes the existing target kinds', () => {
@@ -42,5 +43,122 @@ describe('describeTarget', () => {
         target: { type: 'groupProperty', groupName: 'front', propertyName: 'dimmer' },
       }),
     ).toBe('Flash front.dimmer')
+  })
+})
+
+describe('describeTarget — the selection-relative arms', () => {
+  it('names the selection rather than a target', () => {
+    expect(describeTarget({ type: 'selectionProperty', propertyName: 'pan' })).toBe('Sel · pan')
+    expect(describeTarget({ type: 'clearSelection' })).toBe('Clear selection')
+    expect(describeTarget({ type: 'locateSelection' })).toBe('Locate selection')
+  })
+
+  it('distinguishes a toggling select button from a replacing one', () => {
+    const target = { type: 'group', key: 'front-wash' } as const
+    expect(describeTarget({ type: 'selectTarget', target, mode: 'toggle' }))
+      .toBe('Select front-wash')
+    expect(describeTarget({ type: 'selectTarget', target, mode: 'replace' }))
+      .toBe('Select only front-wash')
+  })
+
+  it('describes a strip row and an encoder bank button', () => {
+    expect(
+      describeTarget({ type: 'strip', target: { type: 'group', key: 'front-wash' } }),
+    ).toBe('Strip · front-wash')
+    expect(describeTarget({ type: 'encoderBankSet', propertyName: 'colour' }))
+      .toBe('Encoder bank · colour')
+  })
+
+  it('names the discriminator of a row it cannot decode', () => {
+    expect(describeTarget({ type: 'unknown', targetType: 'fromTheFuture', rawPayload: '{}' }))
+      .toBe('Unknown target (fromTheFuture)')
+  })
+})
+
+describe('matchesBindingTarget — a strip-bound target', () => {
+  const strip = {
+    type: 'strip',
+    target: { type: 'group', key: 'front-wash' },
+  } as const
+
+  // The regression this guards: before strips, a group's badge matched only `groupProperty`, so a
+  // group dropped on a strip — the shape the whole view is built around — reported no binding at
+  // all on the groups page.
+  it('reports the dimmer, which its fader and flash always drive', () => {
+    expect(
+      matchesBindingTarget(strip, {
+        type: 'groupProperty',
+        groupName: 'front-wash',
+        propertyName: 'dimmer',
+      }),
+    ).toBe(true)
+  })
+
+  it('does not claim the encoder’s property, which moves with the bank', () => {
+    expect(
+      matchesBindingTarget(strip, {
+        type: 'groupProperty',
+        groupName: 'front-wash',
+        propertyName: 'colour',
+      }),
+    ).toBe(false)
+  })
+
+  it('does not match another group, or a fixture of the same key', () => {
+    expect(
+      matchesBindingTarget(strip, {
+        type: 'groupProperty',
+        groupName: 'movers',
+        propertyName: 'dimmer',
+      }),
+    ).toBe(false)
+    expect(
+      matchesBindingTarget(strip, {
+        type: 'fixtureProperty',
+        fixtureKey: 'front-wash',
+        propertyName: 'dimmer',
+      }),
+    ).toBe(false)
+  })
+})
+
+describe('controlLabel', () => {
+  const profile = {
+    typeKey: 'xtc',
+    vendor: null,
+    product: null,
+    portPattern: null,
+    className: 'X',
+    banks: [],
+    layout: null,
+    controls: [
+      {
+        type: 'fader',
+        controlId: 'fader-1',
+        label: 'Fader 1',
+        cc: 1,
+        channel: 1,
+        hasMotor: true,
+        motorCc: null,
+        touchNote: null,
+        touchCc: null,
+        resolution: 'SEVEN_BIT',
+      },
+    ],
+    strips: [{ id: 'strip-1', fader: 'fader-1', select: 'btn-25', encoder: 'enc-1', flash: 'btn-1' }],
+  } satisfies ControlSurfaceType
+
+  it('names a control by its own label', () => {
+    expect(controlLabel(profile, 'fader-1')).toBe('Fader 1')
+  })
+
+  // A strip id shares the `controlId` column with control ids but is not in `controls`, so
+  // without the strip arm every strip-bound badge read its raw id.
+  it('names a strip by the fader the operator can put a hand on', () => {
+    expect(controlLabel(profile, 'strip-1')).toBe('Strip · Fader 1')
+  })
+
+  it('falls back to the raw id for anything it does not know', () => {
+    expect(controlLabel(profile, 'btn-99')).toBe('btn-99')
   })
 })

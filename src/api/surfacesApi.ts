@@ -2,6 +2,7 @@ import { InternalApiConnection } from "./internalApi"
 import { Subscription } from "./subscription"
 import { createWsSubscribable } from "./wsSubscriptionFactory"
 import { sendGesture } from "./wsGesture"
+import type { CueTarget } from "./cuesApi"
 
 // Types mirror `uk.me.cormack.lighting7.midi.BindingTarget` and related Kotlin
 // classes on the backend. Keep field names in sync with kotlinx.serialization.
@@ -20,24 +21,34 @@ export interface GroupPropertyTarget {
   propertyName: string
 }
 
+// The four below carry a uuid *beside* the int id rather than instead of it. The int is what a
+// pre-v11 project wrote and is still what dispatch falls back to; the uuid is what survives a
+// clone or a cross-install import, and the backend resolves uuid-first where both are present
+// (`FU-SYNC-BINDING-PAYLOAD-UUIDS`, first half). Nullable because a row written before format 11
+// has never been through the service that fills it in.
+
 export interface CueStackGoTarget {
   type: "cueStackGo"
   stackId: number
+  stackUuid?: string | null
 }
 
 export interface CueStackBackTarget {
   type: "cueStackBack"
   stackId: number
+  stackUuid?: string | null
 }
 
 export interface CueStackPauseTarget {
   type: "cueStackPause"
   stackId: number
+  stackUuid?: string | null
 }
 
 export interface FireCueTarget {
   type: "fireCue"
   cueId: number
+  cueUuid?: string | null
 }
 
 /** Flash wraps either a FixtureProperty or GroupProperty continuous target. */
@@ -82,6 +93,78 @@ export interface SpeedMasterTapTarget {
   masterUuid: string | null
 }
 
+// ─── Selection-relative targets ───────────────────────────────────────
+//
+// The layer beside the fixed bindings above: these name no fixture of their own, and what they
+// act on is whatever is in the desk selection when the control moves. See
+// `docs/plans/midi-surface-plan.md` D3 in lighting7.
+
+/**
+ * Write a continuous property on **every selected target** — a fixture directly, a group fanned
+ * to its members. An empty selection drops the write rather than widening it to everything, and
+ * the control reads as the legend's "no selection" state.
+ */
+export interface SelectionPropertyTarget {
+  type: "selectionProperty"
+  propertyName: string
+}
+
+/** How a {@link SelectTargetTarget} press changes the desk selection. */
+export type SelectMode = "toggle" | "replace"
+
+/**
+ * Put one group or fixture into (or out of) the desk selection on press. A `toggle` also fires a
+ * `replace` when held past the backend's `SELECT_HOLD_MS`, so the LED is immediate and the hold
+ * narrows; that is a router behaviour, not a second target.
+ */
+export interface SelectTargetTarget {
+  type: "selectTarget"
+  target: CueTarget
+  mode: SelectMode
+}
+
+/** Empty the desk selection on press. */
+export interface ClearSelectionTarget {
+  type: "clearSelection"
+}
+
+/** Locate every selected target on press; a second press releases them. */
+export interface LocateSelectionTarget {
+  type: "locateSelection"
+}
+
+/**
+ * One group or fixture on a whole **channel strip**. The row is addressed by the strip id rather
+ * than a control id and is never dispatched as it stands: it derives to the target each of the
+ * strip's controls behaves as — fader and flash on the dimmer, select, encoder on the device's
+ * current encoder bank. `lib/surfaceResolve.ts` is this side's copy of that rule.
+ */
+export interface StripTarget {
+  type: "strip"
+  target: CueTarget
+}
+
+/**
+ * Point the device's strip encoders at `propertyName` on press. Applies to the device the button
+ * is on, so the payload names no device; the LED is lit while this is that device's bank.
+ */
+export interface EncoderBankSetTarget {
+  type: "encoderBankSet"
+  propertyName: string
+}
+
+/**
+ * A persisted payload whose `type` this build does not know — produced only by the backend's
+ * tolerant per-row decode and re-encoded verbatim, so an older desk reading a newer project keeps
+ * the row instead of failing the load. It reads as health `unknownTarget`, draws dead, and is
+ * rebindable; that is the whole point of it existing rather than the row being dropped.
+ */
+export interface UnknownTarget {
+  type: "unknown"
+  targetType: string
+  rawPayload: string
+}
+
 export type BindingTarget =
   | FixturePropertyTarget
   | GroupPropertyTarget
@@ -95,6 +178,13 @@ export type BindingTarget =
   | SetBankTarget
   | SpeedMasterBpmTarget
   | SpeedMasterTapTarget
+  | SelectionPropertyTarget
+  | SelectTargetTarget
+  | ClearSelectionTarget
+  | LocateSelectionTarget
+  | StripTarget
+  | EncoderBankSetTarget
+  | UnknownTarget
 
 export type TakeoverPolicy = "IMMEDIATE" | "PICKUP"
 
@@ -120,6 +210,11 @@ export type BindingHealth =
   | { type: "missingCue"; cueId: number }
   | { type: "unknownBank"; deviceTypeKey: string; bankId: string }
   | { type: "missingSpeedMaster"; masterUuid: string }
+  // A selection or encoder-bank property no fixture in the patch declares. It names the property
+  // and no target, because there is no target: what makes it dead is the patch, not a reference.
+  | { type: "unknownProperty"; propertyName: string }
+  // The row the tolerant decode kept (see `UnknownTarget`). Dead, drawn, rebindable.
+  | { type: "unknownTarget"; targetType: string }
 
 /** A single persisted binding. */
 export interface ControlSurfaceBinding {
@@ -228,6 +323,44 @@ export interface BankDefinition {
   name: string
 }
 
+/**
+ * A channel strip: the controls one `strip` binding row covers. `id` is what that row's
+ * `controlId` holds — a strip id and a control id share one column and one namespace, which is
+ * why the backend registry refuses a strip whose id collides with a control's.
+ *
+ * `encoder` and `flash` are optional because the master strip has neither.
+ */
+export interface StripDefinition {
+  id: string
+  fader: string
+  select: string
+  encoder?: string | null
+  flash?: string | null
+}
+
+/** One control's place in the panel picture. */
+export interface LayoutCell {
+  controlId: string
+  col: number
+  row: number
+}
+
+export interface LayoutRegion {
+  name: string
+  columns: number
+  cells: LayoutCell[]
+}
+
+/**
+ * The panel picture, as profile data rather than a React component per device (plan D8). Absent
+ * when the profile declares none, and then the view falls back to the grouped table. A declared
+ * layout is complete — the backend registry refuses one with a control missing a cell, because a
+ * control absent from the picture would be unreachable with nothing saying so.
+ */
+export interface SurfaceLayout {
+  regions: LayoutRegion[]
+}
+
 export interface ControlSurfaceType {
   typeKey: string
   vendor: string | null
@@ -236,6 +369,16 @@ export interface ControlSurfaceType {
   className: string
   controls: ControlDescriptor[]
   banks: BankDefinition[]
+  /**
+   * Both optional, and not as a convenience: a desk running a build from before the strip
+   * session serves neither field, and this client talks to whatever desk it is pointed at. Left
+   * required, every reader would compile against a shape an older server does not send and throw
+   * on the first dereference — which is exactly what a `/control-surface-types` response from
+   * such a desk produces. Absent `layout` is also the documented fallback signal: no picture,
+   * the grouped table instead.
+   */
+  strips?: StripDefinition[]
+  layout?: SurfaceLayout | null
 }
 
 export interface SurfaceDeviceInfo {
@@ -247,6 +390,40 @@ export interface SurfaceDeviceInfo {
   hasOutputPort: boolean
   activeBank: string | null
 }
+
+// ─── The control-state stream ─────────────────────────────────────────
+
+/** What a button's LED has been told. `none` when the control has no LED-bearing binding. */
+export type LedState = "on" | "off" | "none"
+
+/**
+ * What an encoder's ring shows: a value (`on`), its off state for mixed / unbound / no selection
+ * (`off`), or nothing because the control has no ring or no binding (`none`).
+ */
+export type RingState = "on" | "off" | "none"
+
+/**
+ * One control's state **as the hardware has been told it**. The picture draws exactly this and
+ * never recomputes a control from DMX: if the screen and the desk disagree, the publisher is
+ * wrong, which is the bug worth finding (plan D7).
+ *
+ * `value` is the fed-back 7-bit position and is null for mixed, unbound or no selection — the
+ * three cases the legend draws differently and which a `0` would flatten into "at the bottom".
+ * `physical` is the last inbound position of a fader, which the hardware is never told, and which
+ * a non-motor fader's operator wants to see beside its pickup target.
+ */
+export interface ControlState {
+  value: number | null
+  physical: number | null
+  touched: boolean
+  led: LedState
+  ring: RingState
+}
+
+/** Every attached device's controls, keyed `displayKey` → `controlId` → state. */
+export type SurfaceControlStates = Readonly<
+  Record<string, Readonly<Record<string, ControlState>>>
+>
 
 export type PickupState = "ENGAGED" | "AWAITING_PICKUP"
 
@@ -302,6 +479,17 @@ export interface SurfacesWsApi {
   subscribeBanks(fn: (banks: Record<string, string>) => void): Subscription
   /** Pickup-state transitions (non-motor fader soft takeover). */
   subscribePickup(fn: (change: PickupChange) => void): Subscription
+  /**
+   * Every attached device's control state, already folded: `surfaceControls.state` replaces one
+   * device's map wholesale, `surfaceControls.changed` merges its partial delta into it. The fold
+   * lives here rather than in the store for the reason `surfaceBank.changed`'s does — one place
+   * that knows how the two frames of a family compose — and because merging is what keeps an
+   * untouched control's object identity stable across a 20 Hz delta, which is what lets a
+   * memoized control skip the render.
+   */
+  subscribeControls(fn: (controls: SurfaceControlStates) => void): Subscription
+  /** Which attribute each device's strip encoders drive, `deviceTypeKey` → property name. */
+  subscribeEncoderBanks(fn: (properties: Record<string, string>) => void): Subscription
 
   // The last snapshot of each cached stream, or null before its first frame. `subscribeX`
   // already replays that snapshot synchronously to a new subscriber; these exist so a reader
@@ -311,6 +499,8 @@ export interface SurfacesWsApi {
   getDevices(): SurfaceDeviceInfo[] | null
   getBanks(): Record<string, string> | null
   getScaler(): ScalerState | null
+  getControls(): SurfaceControlStates | null
+  getEncoderBanks(): Record<string, string> | null
 
   /** Binding list membership changed (added / updated / removed / reloaded). */
   subscribeBindingsChanged(fn: (event: BindingsChangeEvent) => void): Subscription
@@ -364,6 +554,9 @@ type InboundMessage =
   | { type: "surfaceBank.state"; activeBanks: Record<string, string> }
   | { type: "surfaceBank.changed"; deviceTypeKey: string; previousBank: string | null; newBank: string | null }
   | ({ type: "surfacePickup.changed" } & PickupChange)
+  | { type: "surfaceControls.state"; displayKey: string; controls: Record<string, ControlState> }
+  | { type: "surfaceControls.changed"; displayKey: string; controls: Record<string, ControlState> }
+  | { type: "surfaceEncoderBank.state"; properties: Record<string, string> }
   | ({ type: "surfaceBank.bindingsChanged" } & BindingsChangeEvent)
   | ({ type: "surfaceScaler.state" } & ScalerState)
   | ({ type: "surfaceLearn.started" } & LearnStartedEvent)
@@ -387,12 +580,16 @@ export function createSurfacesWsApi(conn: InternalApiConnection): SurfacesWsApi 
   const bindings = createWsSubscribable<BindingsChangeEvent>()
   const learn = createWsSubscribable<LearnEvent>()
   const scaler = createWsSubscribable<ScalerState>()
+  const controls = createWsSubscribable<SurfaceControlStates>()
+  const encoderBanks = createWsSubscribable<Record<string, string>>()
 
   // Cached latest snapshots so newly-mounted subscribers can read current
   // state synchronously without a round-trip.
   let lastDevices: SurfaceDeviceInfo[] | null = null
   let lastBanks: Record<string, string> | null = null
   let lastScaler: ScalerState | null = null
+  let lastControls: SurfaceControlStates | null = null
+  let lastEncoderBanks: Record<string, string> | null = null
 
   // No state requests on open: the server pushes `surfaceDevices.state`,
   // `surfaceBank.state` and `surfaceScaler.state` per connection.
@@ -422,6 +619,33 @@ export function createSurfacesWsApi(conn: InternalApiConnection): SurfacesWsApi 
         banks.notify(next)
         break
       }
+      // A whole device: the connect frame, and the frame after every full resync. An empty
+      // `controls` map means the device detached, so the key goes rather than being left behind
+      // as an attached-looking device with no controls.
+      case "surfaceControls.state": {
+        const next = { ...(lastControls ?? {}) }
+        if (Object.keys(parsed.controls).length === 0) delete next[parsed.displayKey]
+        else next[parsed.displayKey] = parsed.controls
+        lastControls = next
+        controls.notify(next)
+        break
+      }
+      // Only the controls that moved, at their current state. Merged, so every control the delta
+      // does not name keeps the object identity a memoized row is comparing against.
+      case "surfaceControls.changed": {
+        const device = lastControls?.[parsed.displayKey]
+        const next = {
+          ...(lastControls ?? {}),
+          [parsed.displayKey]: { ...(device ?? {}), ...parsed.controls },
+        }
+        lastControls = next
+        controls.notify(next)
+        break
+      }
+      case "surfaceEncoderBank.state":
+        lastEncoderBanks = parsed.properties
+        encoderBanks.notify(parsed.properties)
+        break
       case "surfacePickup.changed":
         pickup.notify({
           displayKey: parsed.displayKey,
@@ -468,9 +692,13 @@ export function createSurfacesWsApi(conn: InternalApiConnection): SurfacesWsApi 
     subscribeDevices: subscribeCached(devices.api, () => lastDevices),
     subscribeBanks: subscribeCached(banks.api, () => lastBanks),
     subscribePickup: pickup.api.subscribe,
+    subscribeControls: subscribeCached(controls.api, () => lastControls),
+    subscribeEncoderBanks: subscribeCached(encoderBanks.api, () => lastEncoderBanks),
     getDevices: () => lastDevices,
     getBanks: () => lastBanks,
     getScaler: () => lastScaler,
+    getControls: () => lastControls,
+    getEncoderBanks: () => lastEncoderBanks,
     subscribeBindingsChanged: bindings.api.subscribe,
     subscribeLearn: learn.api.subscribe,
     subscribeScaler: subscribeCached(scaler.api, () => lastScaler),
