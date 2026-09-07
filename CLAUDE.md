@@ -695,6 +695,15 @@ eligibility dim mirrors a backend rule rather than standing alone**: since sessi
 whichever door it comes through, and `controlKinds` / `targetControlKind` in `lib/surfaceDrop.ts`
 are the client copy of `midi/BindingControlKind.kt`.
 
+**A colour on a continuous control is one of four HSV axes** — hue (the default, and the only one
+a pre-axis row can mean), a fine hue trim, saturation, brightness — carried as an optional
+`colourAxis` on the four property targets and on the encoder bank; the bundled emitters (white,
+amber, UV) are offered as faders of their own, expanded off the colour descriptor's channels in
+`hooks/useTargetProperties.ts`. `lib/colourAxis.ts` mirrors `midi/ColourAxis.kt` and owns the
+null-is-hue rule; nothing on this side resolves an axis. The library is sectioned by kind with
+**Desk first**, and a row's chips are grouped by family with a hairline — see the two sections at
+the end of `docs/midi-surface-engineering.md`.
+
 A button can also press a **record**: `applyLook` onto the Look's *own* fixtures, `pressTemplate`
 onto the desk selection, `pressPad` through the pad's whole bank plan, plus the three busk-page
 targets. Four things follow on this side. Their library rows are **not** `TargetRowItem`s — that

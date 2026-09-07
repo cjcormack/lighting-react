@@ -10,6 +10,7 @@ import type {
   PickupChange,
   ScalerState,
   SurfaceControlStates,
+  EncoderBankSelection,
 } from "../api/surfacesApi"
 
 export type {
@@ -40,6 +41,8 @@ export type {
   LocateSelectionTarget,
   StripTarget,
   EncoderBankSetTarget,
+  ColourAxis,
+  EncoderBankSelection,
   UnknownTarget,
   ControlDescriptor,
   FaderControl,
@@ -75,7 +78,7 @@ const NO_DEVICES: SurfaceDeviceInfo[] = []
 const NO_BANKS: Record<string, string> = {}
 const NO_PICKUPS: PickupStates = {}
 const NO_CONTROLS: SurfaceControlStates = {}
-const NO_ENCODER_BANKS: Record<string, string> = {}
+const NO_ENCODER_BANKS: Record<string, EncoderBankSelection> = {}
 /** What the scaler is before its first frame: nothing blacked out, grand master live. */
 const SCALER_AT_REST: ScalerState = { blackoutEnabled: false, grandMasterEnabled: true }
 
@@ -260,8 +263,8 @@ export const surfacesApi = restApi.injectEndpoints({
       },
     }),
 
-    /** Which attribute each device's strip encoders drive, `deviceTypeKey` → property name. */
-    surfaceEncoderBanks: build.query<Record<string, string>, void>({
+    /** What each device's strip encoders drive, `deviceTypeKey` → selection; absent is `dimmer`. */
+    surfaceEncoderBanks: build.query<Record<string, EncoderBankSelection>, void>({
       queryFn: () => ({ data: lightingApi.surfaces.getEncoderBanks() ?? NO_ENCODER_BANKS }),
       async onCacheEntryAdded(_, { cacheDataLoaded, updateCachedData, cacheEntryRemoved }) {
         await cacheDataLoaded
@@ -331,8 +334,8 @@ export function useSurfaceControls(): SurfaceControlStates {
   return data ?? NO_CONTROLS
 }
 
-/** Which attribute each device's strip encoders drive, `deviceTypeKey` → property name. */
-export function useEncoderBanks(): Record<string, string> {
+/** What each device's strip encoders drive, `deviceTypeKey` → selection; absent is `dimmer`. */
+export function useEncoderBanks(): Record<string, EncoderBankSelection> {
   const { data } = useSurfaceEncoderBanksQuery()
   return data ?? NO_ENCODER_BANKS
 }

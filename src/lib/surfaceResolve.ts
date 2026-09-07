@@ -1,11 +1,14 @@
 import type {
   BindingTarget,
+  ColourAxis,
   ControlSurfaceBinding,
   ControlSurfaceType,
+  EncoderBankSelection,
   FixturePropertyTarget,
   GroupPropertyTarget,
   StripDefinition,
 } from '../api/surfacesApi'
+import { withAxis } from '@/lib/colourAxis'
 
 /**
  * Which binding a control is actually running, and what it behaves as.
@@ -28,8 +31,8 @@ import type {
 /** The property a strip fader and its flash button always drive (`STRIP_FADER_PROPERTY`). */
 export const STRIP_FADER_PROPERTY = 'dimmer'
 
-/** What the encoder bank holds before anything sets it (`EncoderBankState.DEFAULT_PROPERTY`). */
-export const DEFAULT_ENCODER_BANK_PROPERTY = 'dimmer'
+/** What the encoder bank holds before anything sets it (`EncoderBankState.DEFAULT`). */
+export const DEFAULT_ENCODER_BANK: EncoderBankSelection = { propertyName: 'dimmer' }
 
 /** The role a control plays within a strip. */
 export type StripRole = 'fader' | 'select' | 'encoder' | 'flash'
@@ -83,21 +86,26 @@ export function stripControlsByControlId(
 function propertyTarget(
   target: { type: 'group' | 'fixture'; key: string },
   propertyName: string,
+  colourAxis?: ColourAxis | null,
 ): FixturePropertyTarget | GroupPropertyTarget {
-  return target.type === 'group'
-    ? { type: 'groupProperty', groupName: target.key, propertyName }
-    : { type: 'fixtureProperty', fixtureKey: target.key, propertyName }
+  // `withAxis` leaves the field *absent* for hue rather than writing `null`: that is the form
+  // every pre-axis row has and the server writes, and `toEqual` in the tests tells the two apart.
+  const base: FixturePropertyTarget | GroupPropertyTarget =
+    target.type === 'group'
+      ? { type: 'groupProperty', groupName: target.key, propertyName }
+      : { type: 'fixtureProperty', fixtureKey: target.key, propertyName }
+  return withAxis(base, colourAxis)
 }
 
 /**
  * What a control on a strip behaves as: the fader and flash on the target's dimmer, the select
- * button a toggling `selectTarget`, the encoder on whichever attribute the device's encoder bank
- * currently names.
+ * button a toggling `selectTarget`, the encoder on whichever attribute — and, for a colour,
+ * whichever axis — the device's encoder bank currently names.
  */
 export function deriveStripTarget(
   role: StripRole,
   target: { type: 'group' | 'fixture'; key: string },
-  encoderBankProperty: string,
+  encoderBank: EncoderBankSelection,
 ): BindingTarget {
   switch (role) {
     case 'fader':
@@ -105,7 +113,7 @@ export function deriveStripTarget(
     case 'select':
       return { type: 'selectTarget', target, mode: 'toggle' }
     case 'encoder':
-      return propertyTarget(target, encoderBankProperty)
+      return propertyTarget(target, encoderBank.propertyName, encoderBank.colourAxis)
     case 'flash':
       return { type: 'flash', target: propertyTarget(target, STRIP_FADER_PROPERTY) }
   }
@@ -183,7 +191,7 @@ export function resolveControl(
   controlId: string,
   index: SurfaceBindingIndex,
   activeBank: string | null,
-  encoderBankProperty: string,
+  encoderBank: EncoderBankSelection,
 ): ResolvedControl | null {
   const directHit = activeBindingAt(index, controlId, activeBank)
   if (directHit) return { binding: directHit, target: directHit.target, via: null }
@@ -202,7 +210,7 @@ export function resolveControl(
 
   return {
     binding: stripHit,
-    target: deriveStripTarget(onStrip.role, stripHit.target.target, encoderBankProperty),
+    target: deriveStripTarget(onStrip.role, stripHit.target.target, encoderBank),
     via: onStrip,
   }
 }

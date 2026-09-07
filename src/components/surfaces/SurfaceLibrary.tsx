@@ -1,15 +1,23 @@
-import { memo, useMemo, useState } from "react"
+import { memo, useMemo, useState, type ReactNode } from "react"
 import { useDraggable, useDndMonitor } from "@dnd-kit/core"
 import { GripVertical, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { registerDragOverlay } from "@/components/dnd/dragOverlayRegistry"
+import { BuskLabel } from "@/components/busking/BuskLabel"
 import {
   ATTRIBUTE_FAMILIES,
   FAMILY_LABELS,
   familyForCategory,
   type AttributeFamily,
 } from "@/lib/attributeFamily"
+import {
+  COLOUR_AXES,
+  COLOUR_AXIS_LABELS,
+  COLOUR_AXIS_SWATCHES,
+  withAxis,
+  type ColourAxis,
+} from "@/lib/colourAxis"
 import { useFixtureListQuery } from "@/store/fixtures"
 import { useGroupListQuery } from "@/store/groups"
 import { useProjectCueStackListQuery } from "@/store/cueStacks"
@@ -17,7 +25,7 @@ import { useLookListQuery } from "@/store/looks"
 import { useTemplateListQuery } from "@/store/templates"
 import { useBuskPagesQuery } from "@/store/busk"
 import { allPads } from "@/lib/buskLayout"
-import { padFaceOf } from "@/components/busking/padFace"
+import { padFaceOf, templateSwatch } from "@/components/busking/padFace"
 import { useRigProperties, useTargetProperties, type AvailableProperty } from "@/hooks/useTargetProperties"
 import { surfaceDragData, type SurfaceDragData } from "@/lib/surfaceDrop"
 import type { BindingTarget, BankDefinition } from "@/store/surfaces"
@@ -35,10 +43,24 @@ import type { CueTarget } from "@/api/cuesApi"
  * `useDndMonitor` and never nested, for the busk page's reason. Foreign drags are ignored by id on
  * both sides.
  *
- * **The kind row stays at the artboard's six** — All · Groups · Fixtures · Looks · Cues · Desk —
+ * **The list is sectioned by kind, and Desk leads.** One sticky `BuskLabel` per kind that has rows,
+ * in the order of the kind row — `Desk · Groups · Fixtures · Looks · Cues` — so the whole library
+ * reads as five short lists rather than one long one. Desk (Selection, Encoder bank, the busk
+ * pages, the whole-rig row) moved to the front of both the sections and the segmented control
+ * because on a real rig it sat under every fixture in the patch, and the Selection row is the one
+ * a selection-driven desk reaches for first. Under a kind filter the one section shows without its
+ * heading; the control already says it.
+ *
+ * **The kind row stays at the artboard's six** — All · Desk · Groups · Fixtures · Looks · Cues —
  * so the two record kinds session 4 added fold into it rather than widening a 360px segmented
  * control to seven: a **template** files under *Looks*, the row of named recallable records, and a
  * **busk page** under *Desk*, which already holds the encoder bank.
+ *
+ * **Chips are grouped by family inside a row**, with a hairline between groups — intensity,
+ * position, colour, beam, then the actions — `TemplateStrip`'s split, sideways. It is what keeps a
+ * fixture row legible now that a colour is **four chips** (hue, hue fine, sat, bright: one per
+ * `ColourAxis`, each carrying its axis on the target and its own swatch) and the bundled emitters
+ * (white, amber, UV) sit beside them as faders of their own. `groupChipsByFamily` is the pure half.
  *
  * *Next page* / *Prev page* live on the Desk row and not on each page's row. `Edit.dc.html` draws
  * them on its single *Busk · Verse* row and so cannot distinguish "on this page's row" from "on
@@ -46,20 +68,24 @@ import type { CueTarget } from "@/api/cuesApi"
  * chip repeated per page reads as page-*specific*, which is the one thing those two are not.
  */
 
-/** The colour chip's swatch, from `midi-surface-design/Edit.dc.html`. */
-const COLOUR_SWATCH = "linear-gradient(90deg,#f43f5e,#3b82f6)"
+/** The `Strip` drag handle's label, lowercased — searchable, but not a chip. */
+const STRIP_HANDLE_LABEL = "strip"
 
-type KindFilter = "all" | "group" | "fixture" | "look" | "cue" | "desk"
+type KindFilter = "all" | "desk" | "group" | "fixture" | "look" | "cue"
 type FamilyFilter = "any" | AttributeFamily
 
+/** Insertion order is the segmented control's order and the sections' order. */
 const KIND_LABELS: Record<KindFilter, string> = {
   all: "All",
+  desk: "Desk",
   group: "Groups",
   fixture: "Fixtures",
   look: "Looks",
   cue: "Cues",
-  desk: "Desk",
 }
+
+/** The sections, in kind-row order. */
+const SECTION_KINDS = (Object.keys(KIND_LABELS) as KindFilter[]).filter((k) => k !== "all")
 
 interface LibraryChip {
   key: string
@@ -81,18 +107,50 @@ interface LibraryRow {
   chips: LibraryChip[]
 }
 
-function propertyChip(
+/**
+ * The chips one property offers. A slider is one chip; a **colour is four**, one per axis, each
+ * with its axis on the target (absent for hue — `withAxis`) and its own swatch. The label is the
+ * axis alone when the target has one colour property, which is nearly every head; a second colour
+ * property gets its name in front so the two rows of axes can be told apart.
+ */
+function propertyChips(
   keyPrefix: string,
   property: AvailableProperty,
-  target: BindingTarget,
-): LibraryChip {
-  return {
-    key: `${keyPrefix}:${property.name}`,
-    label: property.displayName,
-    target,
-    swatch: property.type === "colour" ? COLOUR_SWATCH : null,
-    family: familyForCategory(property.category),
+  targetFor: (propertyName: string) => BindingTarget & { colourAxis?: ColourAxis | null },
+  soleColour: boolean,
+): LibraryChip[] {
+  const family = familyForCategory(property.category)
+  if (property.type !== "colour") {
+    return [
+      {
+        key: `${keyPrefix}:${property.name}`,
+        label: property.displayName,
+        target: targetFor(property.name),
+        swatch: null,
+        family,
+      },
+    ]
   }
+  return COLOUR_AXES.map((axis) => ({
+    key: `${keyPrefix}:${property.name}:${axis}`,
+    label: soleColour
+      ? COLOUR_AXIS_LABELS[axis]
+      : `${property.displayName} ${COLOUR_AXIS_LABELS[axis]}`,
+    target: withAxis(targetFor(property.name), axis),
+    swatch: COLOUR_AXIS_SWATCHES[axis],
+    family,
+  }))
+}
+
+/** Every chip a list of properties offers — the one place the "sole colour" rule is decided. */
+function chipsForProperties(
+  keyPrefix: string,
+  properties: readonly AvailableProperty[],
+  targetFor: (propertyName: string) => BindingTarget & { colourAxis?: ColourAxis | null },
+): LibraryChip[] {
+  const continuous = properties.filter((property) => property.continuous)
+  const soleColour = continuous.filter((property) => property.type === "colour").length === 1
+  return continuous.flatMap((property) => propertyChips(keyPrefix, property, targetFor, soleColour))
 }
 
 /**
@@ -105,6 +163,22 @@ function propertyChip(
  */
 function actionChip(key: string, label: string, target: BindingTarget): LibraryChip {
   return { key, label, target, swatch: null, family: null }
+}
+
+/**
+ * A row's chips in family order — intensity, position, colour, beam — with the actions
+ * (`family: null`) last, empty groups dropped. Pure, so the hairline rule can be tested without a
+ * render: a hairline is drawn between neighbours, so there are `groups.length − 1` of them.
+ */
+export function groupChipsByFamily(chips: readonly LibraryChip[]): LibraryChip[][] {
+  const groups: LibraryChip[][] = []
+  for (const family of ATTRIBUTE_FAMILIES) {
+    const group = chips.filter((chip) => chip.family === family)
+    if (group.length > 0) groups.push(group)
+  }
+  const actions = chips.filter((chip) => chip.family === null)
+  if (actions.length > 0) groups.push(actions)
+  return groups
 }
 
 // ─── Drag sources ─────────────────────────────────────────────────────
@@ -120,7 +194,7 @@ function DragHandle({
   data: SurfaceDragData
   label: string
   className?: string
-  children: React.ReactNode
+  children: ReactNode
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id, data })
   return (
@@ -169,6 +243,11 @@ function ChipButton({
   )
 }
 
+/** `TemplateStrip`'s hairline, verbatim: drawn between two chip groups, never at an end. */
+function Hairline() {
+  return <span aria-hidden data-testid="chip-hairline" className="mx-0.5 h-5 w-px shrink-0 bg-border" />
+}
+
 function LibraryRowItem({
   row,
   onSurface,
@@ -179,6 +258,7 @@ function LibraryRowItem({
   onSurface: string | null
   dragging: boolean
 }) {
+  const groups = groupChipsByFamily(row.chips)
   return (
     <div
       data-testid={`library-row:${row.key}`}
@@ -215,7 +295,7 @@ function LibraryRowItem({
             {row.badge}
           </span>
         </div>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           {row.strip && (
             <DragHandle
               id={`surface-strip-chip:${row.key}`}
@@ -235,13 +315,18 @@ function LibraryRowItem({
               Strip
             </DragHandle>
           )}
-          {row.chips.map((chip) => (
-            <ChipButton
-              key={chip.key}
-              id={`surface-chip:${row.key}:${chip.key}`}
-              chip={chip}
-              dimmed={dragging}
-            />
+          {groups.map((group, i) => (
+            <span key={group[0].key} className="contents">
+              {i > 0 && <Hairline />}
+              {group.map((chip) => (
+                <ChipButton
+                  key={chip.key}
+                  id={`surface-chip:${row.key}:${chip.key}`}
+                  chip={chip}
+                  dimmed={dragging}
+                />
+              ))}
+            </span>
           ))}
         </div>
       </div>
@@ -261,6 +346,9 @@ function LibraryRowItem({
  * is a fresh identity every render, which defeats `useTargetProperties`' own memo *and* this
  * component's — so a keystroke in the search box would re-run the property map and sort for every
  * visible row on a rig with hundreds of fixtures.
+ *
+ * The search is finished here too: the caller can match a name, but only this component knows the
+ * row's chips, and `hue` should find every head that has one.
  */
 const TargetRowItem = memo(function TargetRowItem({
   targetType,
@@ -270,6 +358,7 @@ const TargetRowItem = memo(function TargetRowItem({
   badge,
   kind,
   family,
+  needle,
   onSurface,
   dragging,
 }: {
@@ -280,6 +369,7 @@ const TargetRowItem = memo(function TargetRowItem({
   badge: string
   kind: KindFilter
   family: FamilyFilter
+  needle: string
   onSurface: string | null
   dragging: boolean
 }) {
@@ -290,17 +380,11 @@ const TargetRowItem = memo(function TargetRowItem({
   const { properties } = useTargetProperties(target)
 
   const row = useMemo<LibraryRow>(() => {
-    const chips: LibraryChip[] = properties
-      .filter((property) => property.continuous)
-      .map((property) =>
-        propertyChip(
-          `${target.type}:${target.key}`,
-          property,
-          target.type === "group"
-            ? { type: "groupProperty", groupName: target.key, propertyName: property.name }
-            : { type: "fixtureProperty", fixtureKey: target.key, propertyName: property.name },
-        ),
-      )
+    const chips = chipsForProperties(`${target.type}:${target.key}`, properties, (propertyName) =>
+      target.type === "group"
+        ? { type: "groupProperty", groupName: target.key, propertyName }
+        : { type: "fixtureProperty", fixtureKey: target.key, propertyName },
+    )
     // The strip's own select role, offered on its own so a select button can be put anywhere.
     chips.push(actionChip("select", "select", { type: "selectTarget", target, mode: "toggle" }))
     return {
@@ -315,7 +399,7 @@ const TargetRowItem = memo(function TargetRowItem({
   }, [properties, target, name, detail, badge, kind])
 
   const shown = useMemo(() => filterChips(row, family), [row, family])
-  if (shown == null) return null
+  if (shown == null || !rowMatches(shown, needle)) return null
   return <LibraryRowItem row={shown} onSurface={onSurface} dragging={dragging} />
 })
 
@@ -332,6 +416,17 @@ function filterChips(row: LibraryRow, family: FamilyFilter): LibraryRow | null {
   const chips = row.chips.filter((chip) => chip.family === null || chip.family === family)
   if (chips.length === 0 && row.strip == null) return null
   return { ...row, chips }
+}
+
+/** The search matches a row's name **or any of its chip labels**, so `sat` finds every colour head. */
+function rowMatches(row: LibraryRow, needle: string): boolean {
+  if (needle.length === 0) return true
+  if (row.name.toLowerCase().includes(needle)) return true
+  // The `Strip` handle is a row affordance rather than a chip, but the palette predicts against a
+  // vocabulary that offers it, so a search for `strip` has to be answerable here too — otherwise
+  // every target row is kept as a candidate and then answers null, and the empty state never shows.
+  if (row.strip != null && STRIP_HANDLE_LABEL.includes(needle)) return true
+  return row.chips.some((chip) => chip.label.toLowerCase().includes(needle))
 }
 
 // ─── The palette ──────────────────────────────────────────────────────
@@ -366,11 +461,6 @@ export function SurfaceLibrary({
   const [family, setFamily] = useState<FamilyFilter>("any")
   const dragging = useSurfaceDragging()
 
-  const continuousProperties = useMemo(
-    () => rigProperties.filter((property) => property.continuous),
-    [rigProperties],
-  )
-
   /** The rows that are not one target's — Selection, Encoder bank, stacks, cues, Desk. */
   const rows = useMemo<LibraryRow[]>(() => {
     const out: LibraryRow[] = []
@@ -383,12 +473,10 @@ export function SurfaceLibrary({
       kind: "desk",
       strip: null,
       chips: [
-        ...continuousProperties.map((property) =>
-          propertyChip("sel", property, {
-            type: "selectionProperty",
-            propertyName: property.name,
-          }),
-        ),
+        ...chipsForProperties("sel", rigProperties, (propertyName) => ({
+          type: "selectionProperty",
+          propertyName,
+        })),
         actionChip("clear", "Clear", { type: "clearSelection" }),
         actionChip("locate", "Locate", { type: "locateSelection" }),
       ],
@@ -401,12 +489,10 @@ export function SurfaceLibrary({
       badge: "Desk",
       kind: "desk",
       strip: null,
-      chips: continuousProperties.map((property) =>
-        propertyChip("bank", property, {
-          type: "encoderBankSet",
-          propertyName: property.name,
-        }),
-      ),
+      chips: chipsForProperties("bank", rigProperties, (propertyName) => ({
+        type: "encoderBankSet",
+        propertyName,
+      })),
     })
 
     for (const stack of stacks ?? []) {
@@ -457,12 +543,13 @@ export function SurfaceLibrary({
           // A template is exactly one family (never `null` — the write boundary validates that),
           // unlike a Look's Apply chip below, which stays family-agnostic because a Look spans
           // families by nature. `actionChip` would give this `family: null` and the family filter
-          // would never hide it, so it's built by hand instead.
+          // would never hide it, so it's built by hand instead. The swatch is the busk pad's — the
+          // artboard drew one on this chip, and a colour template's chip should look like its pad.
           {
             key: "press",
             label: "Press",
             target: { type: "pressTemplate", templateUuid: template.uuid },
-            swatch: null,
+            swatch: templateSwatch(template),
             family: template.family,
           },
         ],
@@ -543,28 +630,95 @@ export function SurfaceLibrary({
     })
 
     return out
-  }, [continuousProperties, stacks, banks, deviceTypeKey, looks, templates, pages])
+  }, [rigProperties, stacks, banks, deviceTypeKey, looks, templates, pages])
 
   const needle = search.trim().toLowerCase()
-  const matches = (name: string) => needle.length === 0 || name.toLowerCase().includes(needle)
   const showKind = (rowKind: KindFilter) => kind === "all" || kind === rowKind
 
   const otherRows = rows
-    .filter((row) => showKind(row.kind) && matches(row.name))
+    .filter((row) => showKind(row.kind))
     .map((row) => filterChips(row, family))
-    .filter((row): row is LibraryRow => row != null)
+    .filter((row): row is LibraryRow => row != null && rowMatches(row, needle))
 
-  const shownGroups = showKind("group") ? (groups ?? []).filter((g) => matches(g.name)) : []
-  const shownFixtures = showKind("fixture") ? (fixtures ?? []).filter((f) => matches(f.name)) : []
+  // A target row's chips are known only inside `TargetRowItem`, which finishes the search itself.
+  // What the palette can say up front is whether the needle could match *any* chip a target row
+  // offers — the rig's vocabulary plus the two chips every such row carries — so a search for
+  // `hue` keeps the target rows in play and a search for `zzz` still reaches the empty state.
+  const targetChipVocabulary = useMemo(() => {
+    // Filtered by the family the same way `filterChips` filters a row, or the prediction disagrees
+    // with the per-row decision: `Position` + `sat` would keep every row as a candidate and then
+    // drop them all, leaving a blank list with the empty state suppressed.
+    const labels = chipsForProperties("", rigProperties, (propertyName) => ({
+      type: "selectionProperty",
+      propertyName,
+    }))
+      .filter((chip) => family === "any" || chip.family === family)
+      .map((chip) => chip.label)
+    return [...labels, STRIP_HANDLE_LABEL, "select"].map((label) => label.toLowerCase())
+  }, [rigProperties, family])
+  const targetChipsMatch = needle.length > 0 && targetChipVocabulary.some((l) => l.includes(needle))
+  const matchesName = (name: string) => needle.length === 0 || name.toLowerCase().includes(needle)
+  const targetCandidate = (name: string) => matchesName(name) || targetChipsMatch
+
+  const shownGroups = showKind("group") ? (groups ?? []).filter((g) => targetCandidate(g.name)) : []
+  const shownFixtures = showKind("fixture")
+    ? (fixtures ?? []).filter((f) => targetCandidate(f.name))
+    : []
   const isEmpty = shownGroups.length === 0 && shownFixtures.length === 0 && otherRows.length === 0
+
+  const sectionRows = (sectionKind: KindFilter): ReactNode[] => {
+    switch (sectionKind) {
+      case "group":
+        return shownGroups.map((group) => (
+          <TargetRowItem
+            key={`group:${group.name}`}
+            targetType="group"
+            targetKey={group.name}
+            name={group.name}
+            detail={`${group.memberCount} ${group.memberCount === 1 ? "fixture" : "fixtures"}`}
+            badge="Group"
+            kind="group"
+            family={family}
+            needle={needle}
+            onSurface={placements.get(`group:${group.name}`) ?? null}
+            dragging={dragging}
+          />
+        ))
+      case "fixture":
+        return shownFixtures.map((fixture) => (
+          <TargetRowItem
+            key={`fixture:${fixture.key}`}
+            targetType="fixture"
+            targetKey={fixture.key}
+            name={fixture.name}
+            detail={fixture.model ?? fixture.typeKey}
+            badge="Fixture"
+            kind="fixture"
+            family={family}
+            needle={needle}
+            onSurface={placements.get(`fixture:${fixture.key}`) ?? null}
+            dragging={dragging}
+          />
+        ))
+      default:
+        return otherRows
+          .filter((row) => row.kind === sectionKind)
+          .map((row) => (
+            <LibraryRowItem
+              key={row.key}
+              row={row}
+              onSurface={placements.get(row.key) ?? null}
+              dragging={dragging}
+            />
+          ))
+    }
+  }
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
       <div className="flex shrink-0 flex-col gap-2 border-b px-3 pt-3 pb-2">
         <div className="flex items-center gap-2">
-          <span className="text-[9px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
-            Library
-          </span>
+          <BuskLabel>Library</BuskLabel>
           <span className="flex-1" />
           <span className="text-[11px] text-muted-foreground">row → a strip · chip → one control</span>
         </div>
@@ -608,44 +762,26 @@ export function SurfaceLibrary({
             Nothing here matches. Clear the search or the filters.
           </p>
         ) : (
-          <>
-            {shownGroups.map((group) => (
-              <TargetRowItem
-                key={`group:${group.name}`}
-                targetType="group"
-                targetKey={group.name}
-                name={group.name}
-                detail={`${group.memberCount} ${group.memberCount === 1 ? "fixture" : "fixtures"}`}
-                badge="Group"
-                kind="group"
-                family={family}
-                onSurface={placements.get(`group:${group.name}`) ?? null}
-                dragging={dragging}
-              />
-            ))}
-            {shownFixtures.map((fixture) => (
-              <TargetRowItem
-                key={`fixture:${fixture.key}`}
-                targetType="fixture"
-                targetKey={fixture.key}
-                name={fixture.name}
-                detail={fixture.model ?? fixture.typeKey}
-                badge="Fixture"
-                kind="fixture"
-                family={family}
-                onSurface={placements.get(`fixture:${fixture.key}`) ?? null}
-                dragging={dragging}
-              />
-            ))}
-            {otherRows.map((row) => (
-              <LibraryRowItem
-                key={row.key}
-                row={row}
-                onSurface={placements.get(row.key) ?? null}
-                dragging={dragging}
-              />
-            ))}
-          </>
+          SECTION_KINDS.filter(showKind).map((sectionKind) => {
+            const children = sectionRows(sectionKind)
+            if (children.length === 0) return null
+            return (
+              // A target row can still answer null to the search after its chips are known, so a
+              // section whose rows all did hides itself with its heading rather than standing empty.
+              <section
+                key={sectionKind}
+                data-testid={`library-section:${sectionKind}`}
+                className="[&:not(:has([data-testid^=library-row]))]:hidden"
+              >
+                {kind === "all" && (
+                  <BuskLabel className="sticky top-0 z-10 border-b bg-background px-2.5 pt-2 pb-1">
+                    {KIND_LABELS[sectionKind]}
+                  </BuskLabel>
+                )}
+                {children}
+              </section>
+            )
+          })
         )}
       </div>
 
@@ -665,7 +801,7 @@ function SegButton({
 }: {
   active: boolean
   onClick: () => void
-  children: React.ReactNode
+  children: ReactNode
   className?: string
 }) {
   return (

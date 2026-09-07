@@ -37,6 +37,11 @@ copy. `surfaceResolve.test.ts` replays the Kotlin cases; keep it in step with
 The order is **the control's own row across both bank levels, then its strip's** — direct before
 strip at *both* levels, which an "obvious" bank-first reading gets backwards.
 
+The encoder bank it derives against is an `EncoderBankSelection` — a property and, for a colour, a
+`colourAxis` — and the axis goes on the strip's **encoder** and nowhere else. `propertyTarget`
+leaves the field *absent* for hue (`withAxis`): that is what every pre-axis row has and what the
+server writes, and `toEqual` in the tests tells absent from `null`.
+
 ## Editing: one context, two zones, one write
 
 Edit mode is **local state in `SurfacesContent`**, not a Redux slice. The busk view needs a slice
@@ -89,6 +94,12 @@ surprises:
   one and `BankButtonCell` draws its own label whatever row sits on its id — but it draws itself
   **dead** when one does, because the picture's promise is that it mirrors the desk and an orphaned
   row only the inspector mentions is one nobody scanning the surface would find.
+
+A colour axis does not change which half a target reaches — `targetControlKind` switches on the kind
+alone — but it is refused on a property that is not a colour, by name, at the same door
+(`BINDING_AXIS_NEEDS_COLOUR`, `refuseAxisOnNonColour`). The picker shows its *Colour axis* field only
+where the named property is a colour, and **drops the axis whenever the property changes**, so a
+colour → dimmer edit cannot save a 400.
 
 `controlKinds` and `targetControlKind` are now the **mirror** of `midi/BindingControlKind.kt`
 rather than the only copy: session 4 closed `FU-MIDI-BIND-CONTROL-KIND`, so
@@ -177,3 +188,39 @@ that *render* properties and need the descriptors, and `useTargetProperties` / `
 
 `continuous` mirrors `PropertyChannelResolver`: sliders and colours only. A position pair or a
 setting on a fader would be a control that does nothing, so the library does not offer one.
+
+**A colour descriptor expands to the colour plus its bundled emitters.** The fixture descriptor
+list omits a `bundleWithColour` slider — `white`, `amber`, `uv` — and folds its channel into the
+colour's `whiteChannel` / `amberChannel` / `uvChannel`; the desk drives each as a slider by that
+name, so the hook mints one `AvailableProperty` per present emitter (a group has one if any member
+does). The name is the category, which lighting7's `BundledEmitterNamesTest` pins across every
+fixture type. `SurfaceInspector`'s stage line mints the same descriptor off the colour's channel ref
+for those three names.
+
+## Colour axes
+
+A colour on a continuous control is one of four HSV axes — hue, a fine hue trim, saturation,
+brightness — and `lib/colourAxis.ts` is this side's whole vocabulary: the four wire strings
+(mirroring `midi/ColourAxis.kt`, pinned by `colourAxis.test.ts`), the chip labels and swatches,
+and the one rule everything compares through: **null is hue, and so is `'hue'`**. A binding never
+carries the field for hue; `withAxis` is how the picker, the library and the resolver keep it
+absent. This module labels and draws and never resolves — what a trim or a saturation position does
+to a head is `PropertyChannelResolver`'s in both directions, and the *Position* line on the
+inspector's live card is already that reading.
+
+The library offers a colour as **four chips**, one per axis with its own swatch, labelled by the
+axis alone when the target has one colour property; the Selection and Encoder bank rows get the
+same four from the rig vocabulary. `describeTarget` appends ` · sat` and the like for every axis but
+hue, so a hue binding reads exactly as it always did.
+
+## The library's sections and family groups
+
+The list is one sticky `BuskLabel` per kind that has rows, in kind-row order — **Desk · Groups ·
+Fixtures · Looks · Cues**, Desk moved to the front of both because the Selection row is what a
+selection-driven desk reaches for first and it used to sit under every fixture. Under a kind filter
+the one section shows without its heading. Inside a row the chips are grouped by family with a
+hairline between groups (`groupChipsByFamily`, `TemplateStrip`'s split sideways) and the actions
+last, which is what keeps a fixture row legible with four colour chips and the emitters beside them.
+The search matches chip labels as well as names; a target row's chips are known only inside
+`TargetRowItem`, which finishes the search itself, and a section whose rows all answered null hides
+with its heading (`:has`).

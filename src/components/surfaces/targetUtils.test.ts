@@ -61,6 +61,31 @@ describe('describeTarget — the selection-relative arms', () => {
       .toBe('Select only front-wash')
   })
 
+  it('spells out a colour axis other than hue on the four property kinds', () => {
+    // Hue is the default and carries no field, so a hue binding reads exactly as it always did —
+    // whether the field is absent, null, or spelled `'hue'`.
+    expect(describeTarget({ type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'rgbColour' }))
+      .toBe('hex-1.rgbColour')
+    expect(describeTarget({ type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'rgbColour', colourAxis: null }))
+      .toBe('hex-1.rgbColour')
+    expect(describeTarget({ type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'rgbColour', colourAxis: 'hue' }))
+      .toBe('hex-1.rgbColour')
+    expect(describeTarget({ type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'rgbColour', colourAxis: 'saturation' }))
+      .toBe('hex-1.rgbColour · sat')
+    expect(describeTarget({ type: 'groupProperty', groupName: 'front', propertyName: 'rgbColour', colourAxis: 'hueFine' }))
+      .toBe('front.rgbColour · hue fine')
+    expect(describeTarget({ type: 'selectionProperty', propertyName: 'rgbColour', colourAxis: 'brightness' }))
+      .toBe('Sel · rgbColour · bright')
+    expect(describeTarget({ type: 'encoderBankSet', propertyName: 'rgbColour', colourAxis: 'saturation' }))
+      .toBe('Encoder bank · rgbColour · sat')
+    expect(
+      describeTarget({
+        type: 'flash',
+        target: { type: 'groupProperty', groupName: 'front', propertyName: 'rgbColour', colourAxis: 'saturation' },
+      }),
+    ).toBe('Flash front.rgbColour · sat')
+  })
+
   it('describes a strip row and an encoder bank button', () => {
     expect(
       describeTarget({ type: 'strip', target: { type: 'group', key: 'front-wash' } }),
@@ -119,6 +144,24 @@ describe('matchesBindingTarget — a strip-bound target', () => {
         propertyName: 'dimmer',
       }),
     ).toBe(false)
+  })
+})
+
+describe('matchesBindingTarget — the colour axis', () => {
+  it('ignores the axis: a fine-hue binding still drives that property', () => {
+    // The fixtures-page badge asks "is this property bound", not how.
+    expect(
+      matchesBindingTarget(
+        { type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'rgbColour', colourAxis: 'hueFine' },
+        { type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'rgbColour' },
+      ),
+    ).toBe(true)
+    expect(
+      matchesBindingTarget(
+        { type: 'groupProperty', groupName: 'front-wash', propertyName: 'rgbColour', colourAxis: 'saturation' },
+        { type: 'groupProperty', groupName: 'front-wash', propertyName: 'rgbColour' },
+      ),
+    ).toBe(true)
   })
 })
 

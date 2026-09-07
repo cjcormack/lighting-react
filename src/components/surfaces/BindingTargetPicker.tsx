@@ -12,7 +12,14 @@ import { SpeedMasterSelect } from "@/components/fx/SpeedMasterSelect"
 import { useGroupListQuery } from "@/store/groups"
 import { usePatchListQuery } from "@/store/patches"
 import { useProjectCueStackListQuery } from "@/store/cueStacks"
-import { useRigProperties } from "@/hooks/useTargetProperties"
+import { useRigProperties, useTargetProperties, type AvailableProperty } from "@/hooks/useTargetProperties"
+import {
+  COLOUR_AXES,
+  COLOUR_AXIS_LONG_LABELS,
+  effectiveAxis,
+  withAxis,
+  type ColourAxis,
+} from "@/lib/colourAxis"
 import {
   useRecordBindingOptions,
   type RecordBindingOptions,
@@ -288,6 +295,55 @@ function TargetRefFields({
   )
 }
 
+/**
+ * Which axis of a colour property a continuous binding drives — shown only when the named property
+ * *is* a colour, since on anything else the write boundary refuses the axis by name
+ * (`BINDING_AXIS_NEEDS_COLOUR`). Hue is shown as the default and written as **absent**: the wire
+ * has no field for a hue binding, and `withAxis` is what keeps it that way.
+ */
+function ColourAxisField({
+  value,
+  onChange,
+}: {
+  value: ColourAxis | null | undefined
+  onChange: (axis: ColourAxis) => void
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">Colour axis</Label>
+      <Select value={effectiveAxis(value)} onValueChange={(v) => onChange(v as ColourAxis)}>
+        <SelectTrigger><SelectValue /></SelectTrigger>
+        <SelectContent>
+          {COLOUR_AXES.map((axis) => (
+            <SelectItem key={axis} value={axis}>{COLOUR_AXIS_LONG_LABELS[axis]}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  )
+}
+
+/**
+ * The axis field for a fixture or group target, whose property is a free-text `Input` rather than
+ * a pick from a list — so whether it names a colour is a per-target lookup, and `TargetBody` is an
+ * if-chain a hook cannot sit inside. A component so `useTargetProperties` can be called once, here.
+ */
+function TargetAxisField({
+  target,
+  propertyName,
+  value,
+  onChange,
+}: {
+  target: { type: "fixture" | "group"; key: string }
+  propertyName: string
+  value: ColourAxis | null | undefined
+  onChange: (axis: ColourAxis) => void
+}) {
+  const { properties } = useTargetProperties(target)
+  if (properties.find((p) => p.name === propertyName)?.type !== "colour") return null
+  return <ColourAxisField value={value} onChange={onChange} />
+}
+
 function PropertyField({
   value,
   onChange,
@@ -329,16 +385,27 @@ function TargetBody({
   fixtureOptions: { key: string; label: string }[]
   groupOptions: string[]
   stacks: { id: number; name: string }[]
-  properties: { name: string; displayName: string }[]
+  properties: AvailableProperty[]
 }) {
+  // Changing the property drops the axis: a colour → dimmer edit that kept `saturation` would save
+  // a 400 (`BINDING_AXIS_NEEDS_COLOUR`), and hue is the right default for a colour anyway. Changing
+  // the *fixture* or *group* drops it for the same reason — the same property name is a colour on
+  // one head and a slider on the next, so the swap can strand an axis the axis field then hides.
+  const isColour = (name: string) => properties.find((p) => p.name === name)?.type === "colour"
   if (kind === "selectionProperty" && value.type === "selectionProperty") {
     return (
       <div className="space-y-2">
         <PropertyField
           value={value.propertyName}
-          onChange={(propertyName) => onChange({ ...value, propertyName })}
+          onChange={(propertyName) => onChange(withAxis({ ...value, propertyName }, null))}
           properties={properties}
         />
+        {isColour(value.propertyName) && (
+          <ColourAxisField
+            value={value.colourAxis}
+            onChange={(axis) => onChange(withAxis(value, axis))}
+          />
+        )}
         <p className="text-xs text-muted-foreground">
           Writes this property on every selected target. With nothing selected the move is dropped.
         </p>
@@ -350,12 +417,18 @@ function TargetBody({
       <div className="space-y-2">
         <PropertyField
           value={value.propertyName}
-          onChange={(propertyName) => onChange({ ...value, propertyName })}
+          onChange={(propertyName) => onChange(withAxis({ ...value, propertyName }, null))}
           properties={properties}
         />
+        {isColour(value.propertyName) && (
+          <ColourAxisField
+            value={value.colourAxis}
+            onChange={(axis) => onChange(withAxis(value, axis))}
+          />
+        )}
         <p className="text-xs text-muted-foreground">
           Switches what every strip encoder on this device drives. Its LED lights while this
-          property is the active bank.
+          property — and, for a colour, this axis — is the active bank.
         </p>
       </div>
     )
@@ -396,7 +469,7 @@ function TargetBody({
           <Label className="text-xs">Fixture</Label>
           <Select
             value={value.fixtureKey}
-            onValueChange={(v) => onChange({ ...value, fixtureKey: v })}
+            onValueChange={(v) => onChange(withAxis({ ...value, fixtureKey: v }, null))}
           >
             <SelectTrigger><SelectValue placeholder="Select…" /></SelectTrigger>
             <SelectContent>
@@ -410,10 +483,16 @@ function TargetBody({
           <Label className="text-xs">Property</Label>
           <Input
             value={value.propertyName}
-            onChange={(e) => onChange({ ...value, propertyName: e.target.value })}
+            onChange={(e) => onChange(withAxis({ ...value, propertyName: e.target.value }, null))}
             placeholder="dimmer"
           />
         </div>
+        <TargetAxisField
+          target={{ type: "fixture", key: value.fixtureKey }}
+          propertyName={value.propertyName}
+          value={value.colourAxis}
+          onChange={(axis) => onChange(withAxis(value, axis))}
+        />
       </div>
     )
   }
@@ -424,7 +503,7 @@ function TargetBody({
           <Label className="text-xs">Group</Label>
           <Select
             value={value.groupName}
-            onValueChange={(v) => onChange({ ...value, groupName: v })}
+            onValueChange={(v) => onChange(withAxis({ ...value, groupName: v }, null))}
           >
             <SelectTrigger><SelectValue placeholder="Select…" /></SelectTrigger>
             <SelectContent>
@@ -438,10 +517,16 @@ function TargetBody({
           <Label className="text-xs">Property</Label>
           <Input
             value={value.propertyName}
-            onChange={(e) => onChange({ ...value, propertyName: e.target.value })}
+            onChange={(e) => onChange(withAxis({ ...value, propertyName: e.target.value }, null))}
             placeholder="dimmer"
           />
         </div>
+        <TargetAxisField
+          target={{ type: "group", key: value.groupName }}
+          propertyName={value.propertyName}
+          value={value.colourAxis}
+          onChange={(axis) => onChange(withAxis(value, axis))}
+        />
       </div>
     )
   }

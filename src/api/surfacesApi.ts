@@ -7,11 +7,31 @@ import type { CueTarget } from "./cuesApi"
 // Types mirror `uk.me.cormack.lighting7.midi.BindingTarget` and related Kotlin
 // classes on the backend. Keep field names in sync with kotlinx.serialization.
 
+/**
+ * Which axis of a **colour** property a continuous control drives — HSV, hue by default. Mirrors
+ * `midi/ColourAxis.kt`; `lib/colourAxis.ts` owns the labels and the null-is-hue rule. A binding
+ * carries no `colourAxis` for hue (the field is omitted on the wire, on both sides), and `| null`
+ * only because a hand-built payload may spell the absence out.
+ */
+export type ColourAxis = "hue" | "hueFine" | "saturation" | "brightness"
+
+/**
+ * What a device's strip encoders drive: a property and, for a colour, which axis (absent is hue).
+ * Mirrors `midi/EncoderBankSelection`; carried by `surfaceEncoderBank.state` and read back by
+ * `lib/surfaceResolve.ts` when it derives a strip's encoder.
+ */
+export interface EncoderBankSelection {
+  propertyName: string
+  colourAxis?: ColourAxis | null
+}
+
 /** Continuous target: fixture property driven by a fader/encoder. */
 export interface FixturePropertyTarget {
   type: "fixtureProperty"
   fixtureKey: string
   propertyName: string
+  /** On a colour property, which axis; absent is hue. Refused by name on anything else. */
+  colourAxis?: ColourAxis | null
 }
 
 /** Continuous target: fixture-group property driven by a fader/encoder. */
@@ -19,6 +39,8 @@ export interface GroupPropertyTarget {
   type: "groupProperty"
   groupName: string
   propertyName: string
+  /** As on {@link FixturePropertyTarget}; a member on which the property is not a colour is skipped. */
+  colourAxis?: ColourAxis | null
 }
 
 // The four below carry a uuid *beside* the int id rather than instead of it. The int is what a
@@ -107,6 +129,8 @@ export interface SpeedMasterTapTarget {
 export interface SelectionPropertyTarget {
   type: "selectionProperty"
   propertyName: string
+  /** As on {@link FixturePropertyTarget}; judged against the rig's colour vocabulary at bind time. */
+  colourAxis?: ColourAxis | null
 }
 
 /** How a {@link SelectTargetTarget} press changes the desk selection. */
@@ -151,6 +175,11 @@ export interface StripTarget {
 export interface EncoderBankSetTarget {
   type: "encoderBankSet"
   propertyName: string
+  /**
+   * Which axis of a colour property the bank points the encoders at; absent is hue. The LED
+   * lights when the property **and** the axis match the device's bank.
+   */
+  colourAxis?: ColourAxis | null
 }
 
 // ─── Records on buttons ───────────────────────────────────────────────
@@ -561,8 +590,8 @@ export interface SurfacesWsApi {
    * memoized control skip the render.
    */
   subscribeControls(fn: (controls: SurfaceControlStates) => void): Subscription
-  /** Which attribute each device's strip encoders drive, `deviceTypeKey` → property name. */
-  subscribeEncoderBanks(fn: (properties: Record<string, string>) => void): Subscription
+  /** What each device's strip encoders drive, `deviceTypeKey` → selection; absent is `dimmer`. */
+  subscribeEncoderBanks(fn: (properties: Record<string, EncoderBankSelection>) => void): Subscription
 
   // The last snapshot of each cached stream, or null before its first frame. `subscribeX`
   // already replays that snapshot synchronously to a new subscriber; these exist so a reader
@@ -573,7 +602,7 @@ export interface SurfacesWsApi {
   getBanks(): Record<string, string> | null
   getScaler(): ScalerState | null
   getControls(): SurfaceControlStates | null
-  getEncoderBanks(): Record<string, string> | null
+  getEncoderBanks(): Record<string, EncoderBankSelection> | null
 
   /** Binding list membership changed (added / updated / removed / reloaded). */
   subscribeBindingsChanged(fn: (event: BindingsChangeEvent) => void): Subscription
@@ -629,7 +658,7 @@ type InboundMessage =
   | ({ type: "surfacePickup.changed" } & PickupChange)
   | { type: "surfaceControls.state"; displayKey: string; controls: Record<string, ControlState> }
   | { type: "surfaceControls.changed"; displayKey: string; controls: Record<string, ControlState> }
-  | { type: "surfaceEncoderBank.state"; properties: Record<string, string> }
+  | { type: "surfaceEncoderBank.state"; properties: Record<string, EncoderBankSelection> }
   | ({ type: "surfaceBank.bindingsChanged" } & BindingsChangeEvent)
   | ({ type: "surfaceScaler.state" } & ScalerState)
   | ({ type: "surfaceLearn.started" } & LearnStartedEvent)
@@ -654,7 +683,7 @@ export function createSurfacesWsApi(conn: InternalApiConnection): SurfacesWsApi 
   const learn = createWsSubscribable<LearnEvent>()
   const scaler = createWsSubscribable<ScalerState>()
   const controls = createWsSubscribable<SurfaceControlStates>()
-  const encoderBanks = createWsSubscribable<Record<string, string>>()
+  const encoderBanks = createWsSubscribable<Record<string, EncoderBankSelection>>()
 
   // Cached latest snapshots so newly-mounted subscribers can read current
   // state synchronously without a round-trip.
@@ -662,7 +691,7 @@ export function createSurfacesWsApi(conn: InternalApiConnection): SurfacesWsApi 
   let lastBanks: Record<string, string> | null = null
   let lastScaler: ScalerState | null = null
   let lastControls: SurfaceControlStates | null = null
-  let lastEncoderBanks: Record<string, string> | null = null
+  let lastEncoderBanks: Record<string, EncoderBankSelection> | null = null
 
   // No state requests on open: the server pushes `surfaceDevices.state`,
   // `surfaceBank.state` and `surfaceScaler.state` per connection.

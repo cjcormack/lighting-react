@@ -32,7 +32,7 @@ import { SurfaceLibrary } from "@/components/surfaces/SurfaceLibrary"
 import { SelectionChip } from "@/components/surfaces/SelectionChip"
 import { effectiveTarget } from "@/components/surfaces/targetUtils"
 import { useRecordBindingOptions } from "@/components/surfaces/recordOptions"
-import { buildBindingIndex, DEFAULT_ENCODER_BANK_PROPERTY } from "@/lib/surfaceResolve"
+import { buildBindingIndex, DEFAULT_ENCODER_BANK } from "@/lib/surfaceResolve"
 import {
   bindingWriteFor,
   surfaceDragData,
@@ -138,9 +138,9 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
   )
 
   const activeBank = selectedDevice?.typeKey ? (banks[selectedDevice.typeKey] ?? null) : null
-  const encoderBankProperty = selectedDevice?.typeKey
-    ? (encoderBanks[selectedDevice.typeKey] ?? DEFAULT_ENCODER_BANK_PROPERTY)
-    : DEFAULT_ENCODER_BANK_PROPERTY
+  const encoderBank = selectedDevice?.typeKey
+    ? (encoderBanks[selectedDevice.typeKey] ?? DEFAULT_ENCODER_BANK)
+    : DEFAULT_ENCODER_BANK
 
   const index = useMemo(
     () => buildBindingIndex(bindings ?? [], selectedProfile),
@@ -305,7 +305,7 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
                       controls={controls}
                       index={index}
                       activeBank={activeBank}
-                      encoderBankProperty={encoderBankProperty}
+                      encoderBank={encoderBank}
                       pickups={devicePickups}
                       selectedControlId={selectedControlId}
                       onSelectControl={setSelectedControlId}
@@ -362,7 +362,7 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
                   controlId={selectedControlId}
                   index={index}
                   activeBank={activeBank}
-                  encoderBankProperty={encoderBankProperty}
+                  encoderBank={encoderBank}
                   state={controls[selectedControlId]}
                   pickup={devicePickups[selectedControlId]}
                   bindings={bindings ?? []}

@@ -14,6 +14,7 @@ import type {
   LayoutRegion,
   PickupChange,
   StripDefinition,
+  EncoderBankSelection,
 } from "@/store/surfaces"
 import type { ResolvedControl, SurfaceBindingIndex } from "@/lib/surfaceResolve"
 import { activeBindingAt, resolveControl } from "@/lib/surfaceResolve"
@@ -53,7 +54,7 @@ export interface SurfacePanelProps {
   controls: Readonly<Record<string, ControlState>>
   index: SurfaceBindingIndex
   activeBank: string | null
-  encoderBankProperty: string
+  encoderBank: EncoderBankSelection
   /** Soft-takeover state for this device, keyed by `controlId`. */
   pickups: Readonly<Record<string, PickupChange>>
   selectedControlId: string | null
@@ -80,7 +81,7 @@ export function SurfacePanel({
   controls,
   index,
   activeBank,
-  encoderBankProperty,
+  encoderBank,
   pickups,
   selectedControlId,
   onSelectControl,
@@ -110,7 +111,7 @@ export function SurfacePanel({
           controls={controls}
           index={index}
           activeBank={activeBank}
-          encoderBankProperty={encoderBankProperty}
+          encoderBank={encoderBank}
           pickups={pickups}
           selectedControlId={selectedControlId}
           onSelectControl={onSelectControl}
@@ -135,7 +136,7 @@ function PanelRegion({
   controls,
   index,
   activeBank,
-  encoderBankProperty,
+  encoderBank,
   pickups,
   selectedControlId,
   onSelectControl,
@@ -161,10 +162,10 @@ function PanelRegion({
   const resolved = useMemo(() => {
     const map = new Map<string, ResolvedControl | null>()
     for (const cell of region.cells) {
-      map.set(cell.controlId, resolveControl(cell.controlId, index, activeBank, encoderBankProperty))
+      map.set(cell.controlId, resolveControl(cell.controlId, index, activeBank, encoderBank))
     }
     return map
-  }, [region, index, activeBank, encoderBankProperty])
+  }, [region, index, activeBank, encoderBank])
 
   return (
     <div

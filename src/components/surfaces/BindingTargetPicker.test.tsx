@@ -7,8 +7,31 @@ import type { BindingTarget } from '@/store/surfaces'
 // which kinds are offered for which control type. The fixture list is behind
 // `useRigProperties`, which is where the target-less kinds (selection property, encoder bank)
 // get their vocabulary.
-vi.mock('@/store/groups', () => ({ useGroupListQuery: () => ({ data: [] }) }))
-vi.mock('@/store/fixtures', () => ({ useFixtureListQuery: () => ({ data: [] }) }))
+vi.mock('@/store/groups', () => ({
+  useGroupListQuery: () => ({ data: [{ name: 'front-wash', memberCount: 2 }] }),
+  // The axis field looks a group's property up to see whether it is a colour.
+  useGroupPropertiesQuery: () => ({
+    data: [
+      { type: 'slider', name: 'dimmer', displayName: 'dimmer', category: 'dimmer', min: 0, max: 255, memberChannels: [] },
+      { type: 'colour', name: 'rgbColour', displayName: 'colour', category: 'colour', memberColourChannels: [] },
+    ],
+  }),
+}))
+// One patched head, so the rig vocabulary has a colour for the axis field to show for.
+vi.mock('@/store/fixtures', () => ({
+  useFixtureListQuery: () => ({
+    data: [
+      {
+        key: 'hex-1',
+        name: 'Hex 1',
+        properties: [
+          { type: 'slider', name: 'dimmer', displayName: 'dimmer', category: 'dimmer', channel: { universe: 0, channelNo: 1 }, min: 0, max: 255 },
+          { type: 'colour', name: 'rgbColour', displayName: 'colour', category: 'colour', redChannel: { universe: 0, channelNo: 2 }, greenChannel: { universe: 0, channelNo: 3 }, blueChannel: { universe: 0, channelNo: 4 } },
+        ],
+      },
+    ],
+  }),
+}))
 vi.mock('@/store/patches', () => ({ usePatchListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/cueStacks', () => ({ useProjectCueStackListQuery: () => ({ data: [] }) }))
 // The three record libraries, behind `useRecordBindingOptions`.
@@ -164,5 +187,46 @@ describe('BindingTargetPicker record targets', () => {
     fireEvent.click(screen.getAllByRole('combobox')[1]!)
     const pulse = screen.getByRole('option', { name: /Pulse/ })
     expect(pulse.getAttribute('aria-disabled')).toBe('true')
+  })
+})
+
+describe('BindingTargetPicker colour axes', () => {
+  // The axis field appears only where the named property *is* a colour: on anything else the
+  // write boundary refuses the axis by name (`BINDING_AXIS_NEEDS_COLOUR`), and a field that led
+  // there would be a way to learn the rule from a 400.
+  it.each([
+    ['a fixture', { type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'rgbColour' } as BindingTarget, { type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'dimmer' } as BindingTarget],
+    ['a group', { type: 'groupProperty', groupName: 'front-wash', propertyName: 'rgbColour' } as BindingTarget, { type: 'groupProperty', groupName: 'front-wash', propertyName: 'dimmer' } as BindingTarget],
+    ['the selection', { type: 'selectionProperty', propertyName: 'rgbColour' } as BindingTarget, { type: 'selectionProperty', propertyName: 'dimmer' } as BindingTarget],
+    ['the encoder bank', { type: 'encoderBankSet', propertyName: 'rgbColour' } as BindingTarget, { type: 'encoderBankSet', propertyName: 'dimmer' } as BindingTarget],
+  ])('offers a colour axis on %s only for a colour property', (_what, onColour, onSlider) => {
+    const continuous = onColour.type !== 'encoderBankSet'
+    const { unmount } = render(
+      <BindingTargetPicker projectId={1} continuous={continuous} value={onColour} onChange={vi.fn()} policy={null} onPolicyChange={() => {}} />,
+    )
+    expect(screen.getByText('Colour axis')).toBeInTheDocument()
+    unmount()
+    render(
+      <BindingTargetPicker projectId={1} continuous={continuous} value={onSlider} onChange={vi.fn()} policy={null} onPolicyChange={() => {}} />,
+    )
+    expect(screen.queryByText('Colour axis')).toBeNull()
+  })
+
+  it('shows the axis a binding carries, and hue when it carries none', () => {
+    renderPicker(true, { type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'rgbColour', colourAxis: 'saturation' })
+    expect(screen.getByText('Saturation')).toBeInTheDocument()
+    cleanup()
+    renderPicker(true, { type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'rgbColour' })
+    expect(screen.getByText('Hue')).toBeInTheDocument()
+  })
+
+  it('drops the axis when the property changes', () => {
+    // A colour → dimmer edit that kept `saturation` would save a 400.
+    const onChange = renderPicker(true, {
+      type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'rgbColour', colourAxis: 'saturation',
+    })
+    fireEvent.change(screen.getByPlaceholderText('dimmer'), { target: { value: 'dimmer' } })
+    expect(onChange).toHaveBeenCalledWith({ type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'dimmer' })
+    expect('colourAxis' in onChange.mock.calls[0]![0]).toBe(false)
   })
 })

@@ -31,7 +31,7 @@ vi.mock('@/store/surfaces', async (importOriginal) => {
     ...actual,
     useSurfaceDevices: () => devices,
     useActiveBanks: () => activeBanks,
-    useEncoderBanks: () => ({ xtc: 'colour' }),
+    useEncoderBanks: () => ({ xtc: { propertyName: 'colour' } }),
     useSurfaceControls: () => controls,
     usePickupStates: () => ({}),
     useControlSurfaceTypeListQuery: () => ({ data: [profile] }),

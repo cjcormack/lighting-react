@@ -22,9 +22,18 @@ import type { GroupPropertyDescriptor } from '@/api/groupsApi'
  *   difference between the two kinds they would then have to flatten again.
  *
  * `continuous` mirrors `PropertyChannelResolver`: it writes a **slider** (one channel, scaled into
- * the property's own range) and a **colour** (the same value on R/G/B), refuses a **setting** by
- * name, and has no arm for a **position** pair. So a position or setting chip on a fader would be a
- * control that silently does nothing, and the library does not offer one.
+ * the property's own range) and a **colour** (one of four HSV axes — hue, a fine hue trim,
+ * saturation, brightness — moved on the head's current colour; `lib/colourAxis.ts` names them and
+ * the library offers a chip per axis), refuses a **setting** by name, and has no arm for a
+ * **position** pair. So a position or setting chip on a fader would be a control that silently
+ * does nothing, and the library does not offer one.
+ *
+ * **A colour descriptor expands to the colour plus its bundled emitters.** The fixture descriptor
+ * list omits a `bundleWithColour` slider — `white`, `amber`, `uv` — and folds its channel into the
+ * colour's `whiteChannel` / `amberChannel` / `uvChannel`; but the desk drives each as a slider by
+ * that name (`FixtureProperty(key, "white")` dispatches today), so [expand] mints one
+ * [AvailableProperty] per present emitter. The name is the category — every fixture type names its
+ * bundled emitter that way, and lighting7's `BundledEmitterNamesTest` pins it.
  */
 
 export type TargetPropertyType = PropertyDescriptor['type']
@@ -116,13 +125,46 @@ function toAvailable(property: AnyPropertyDescriptor): AvailableProperty {
   }
 }
 
+/** The bundled emitters, by the colour-descriptor key that says a head has one. */
+const EMITTERS = [
+  { key: 'whiteChannel', name: 'white' },
+  { key: 'amberChannel', name: 'amber' },
+  { key: 'uvChannel', name: 'uv' },
+] as const
+
+function hasEmitter(property: AnyPropertyDescriptor, key: (typeof EMITTERS)[number]['key']): boolean {
+  if (property.type !== 'colour') return false
+  if ('memberColourChannels' in property) {
+    return property.memberColourChannels.some((member) => member[key] != null)
+  }
+  return property[key] != null
+}
+
+/** A property as the binding surfaces see it — a colour brings its bundled emitters with it. */
+function expand(property: AnyPropertyDescriptor): AvailableProperty[] {
+  const out = [toAvailable(property)]
+  if (property.type !== 'colour') return out
+  for (const emitter of EMITTERS) {
+    if (!hasEmitter(property, emitter.key)) continue
+    out.push({
+      name: emitter.name,
+      displayName: emitter.name,
+      type: 'slider',
+      category: emitter.name,
+      continuous: true,
+    })
+  }
+  return out
+}
+
 /**
- * Display order: the three a busking operator reaches for first, then everything else by label.
+ * Display order: the three a busking operator reaches for first, then the colour and the emitters
+ * beside it, then everything else by label.
  *
  * Named categories rather than named properties, so a rig whose dimmer is called `intensity` still
  * sorts first. It is presentation only — nothing downstream reads the order.
  */
-const CATEGORY_RANK = ['dimmer', 'pan', 'tilt', 'colour']
+const CATEGORY_RANK = ['dimmer', 'pan', 'tilt', 'colour', 'white', 'amber', 'uv']
 
 function comparePropertyOrder(a: AvailableProperty, b: AvailableProperty): number {
   const ra = CATEGORY_RANK.indexOf(a.category)
@@ -172,7 +214,7 @@ export function useTargetProperties(target: PropertyTarget | null): TargetProper
       ? groupProperties
       : fixtures?.find((f) => f.key === target.key)?.properties
     if (descriptors == null) return NO_PROPERTIES
-    return descriptors.map(toAvailable).sort(comparePropertyOrder)
+    return descriptors.flatMap(expand).sort(comparePropertyOrder)
   }, [target, isGroup, fixtures, groupProperties])
 
   return { properties, isLoading: isGroup ? groupLoading : fixturesLoading }
@@ -198,7 +240,9 @@ export function useRigProperties(): AvailableProperty[] {
     const byName = new Map<string, AvailableProperty>()
     for (const fixture of fixtures ?? []) {
       for (const property of fixture.properties ?? []) {
-        if (!byName.has(property.name)) byName.set(property.name, toAvailable(property))
+        for (const available of expand(property)) {
+          if (!byName.has(available.name)) byName.set(available.name, available)
+        }
       }
     }
     return [...byName.values()].sort(comparePropertyOrder)

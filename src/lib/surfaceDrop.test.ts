@@ -255,3 +255,24 @@ describe('bindingWriteFor', () => {
     expect(bindingWriteFor(chip(fire), controlDrop(fader), index, null)).toBeNull()
   })
 })
+
+describe('colour axes', () => {
+  it('leaves an axis target continuous, so a fine-hue chip lands on a fader and not a button', () => {
+    // `targetControlKind` switches on the kind alone; an axis changes what the fader *means*, not
+    // which half of the dispatch reaches it — the mirror of `BindingControlKind.kt`.
+    const fine: BindingTarget = {
+      type: 'fixtureProperty',
+      fixtureKey: 'hex-1',
+      propertyName: 'rgbColour',
+      colourAxis: 'hueFine',
+    }
+    expect(targetControlKind(fine)).toBe('continuous')
+    expect(targetControlKind({ type: 'selectionProperty', propertyName: 'rgbColour', colourAxis: 'saturation' })).toBe('continuous')
+    expect(targetControlKind({ type: 'encoderBankSet', propertyName: 'rgbColour', colourAxis: 'brightness' })).toBe('button')
+    const chip: SurfaceChipDrag = { type: 'surface-chip', target: fine, label: 'hue fine', swatch: null }
+    const onFader: SurfaceControlDrop = { type: 'surface-control', controlId: 'fader-1', kinds: controlKinds(fader) }
+    const onButton: SurfaceControlDrop = { type: 'surface-control', controlId: 'btn-25', kinds: controlKinds(button) }
+    expect(canLand(chip, onFader)).toBe(true)
+    expect(canLand(chip, onButton)).toBe(false)
+  })
+})

@@ -4,6 +4,7 @@ import type {
   ControlSurfaceType,
 } from "@/store/surfaces"
 import { STRIP_FADER_PROPERTY } from "@/lib/surfaceResolve"
+import { axisSuffix } from "@/lib/colourAxis"
 
 /** Flash targets wrap an inner continuous target; return the meaningful target. */
 export function effectiveTarget(target: BindingTarget): BindingTarget {
@@ -18,6 +19,9 @@ export type BindingTargetMatcher =
 
 /**
  * Does this binding drive what the caller is asking about?
+ *
+ * The colour axis is deliberately **not** compared: a fine-hue or saturation binding still drives
+ * that property, and the fixtures-page badge this feeds asks "is this property bound", not how.
  *
  * A **strip** row answers yes for its target's `dimmer` and nothing else. The strip's fader and
  * flash button really do drive the dimmer, always; its encoder drives whichever property the
@@ -66,10 +70,11 @@ export function matchesBindingTarget(
 
 export function describeTarget(target: BindingTarget): string {
   switch (target.type) {
+    // A colour axis other than hue is spelled out; hue is the default and reads as it always has.
     case "fixtureProperty":
-      return `${target.fixtureKey}.${target.propertyName}`
+      return `${target.fixtureKey}.${target.propertyName}${axisSuffix(target.colourAxis)}`
     case "groupProperty":
-      return `${target.groupName}.${target.propertyName}`
+      return `${target.groupName}.${target.propertyName}${axisSuffix(target.colourAxis)}`
     case "cueStackGo":
       return `Go · stack ${target.stackId}`
     case "cueStackBack":
@@ -99,7 +104,7 @@ export function describeTarget(target: BindingTarget): string {
     // the whole difference between "this control writes colour on the movers" and "this control
     // writes colour on whatever is selected".
     case "selectionProperty":
-      return `Sel · ${target.propertyName}`
+      return `Sel · ${target.propertyName}${axisSuffix(target.colourAxis)}`
     case "selectTarget":
       return `${target.mode === "replace" ? "Select only" : "Select"} ${target.target.key}`
     case "clearSelection":
@@ -112,7 +117,7 @@ export function describeTarget(target: BindingTarget): string {
     case "strip":
       return `Strip · ${target.target.key}`
     case "encoderBankSet":
-      return `Encoder bank · ${target.propertyName}`
+      return `Encoder bank · ${target.propertyName}${axisSuffix(target.colourAxis)}`
     // The record variants name a **uuid**, and this function deliberately does not resolve it — the
     // same rule `speedMasterBpm` above follows, for the same reason: this is pure and has no
     // library to ask. A caller that wants "Apply Warm Wash" resolves it and says so itself, which

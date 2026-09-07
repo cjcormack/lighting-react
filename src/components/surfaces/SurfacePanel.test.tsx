@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { ControlState, ControlSurfaceBinding, ControlSurfaceType } from '@/store/surfaces'
+import type {
+  ColourAxis,
+  ControlState,
+  ControlSurfaceBinding,
+  ControlSurfaceType,
+  EncoderBankSelection,
+} from '@/store/surfaces'
 import { buildBindingIndex } from '@/lib/surfaceResolve'
 import { SurfacePanel } from './SurfacePanel'
 import { EMPTY_RECORD_OPTIONS } from './recordOptions'
@@ -115,10 +121,14 @@ const state = (over: Partial<ControlState> = {}): ControlState => ({
   ...over,
 })
 
+/** An encoder bank selection, `colourAxis` absent for hue. */
+const bank = (propertyName: string, colourAxis?: ColourAxis): EncoderBankSelection =>
+  colourAxis ? { propertyName, colourAxis } : { propertyName }
+
 function renderPanel({
   bindings = [] as ControlSurfaceBinding[],
   controls = {} as Record<string, ControlState>,
-  encoderBankProperty = 'colour',
+  encoderBank = bank('colour'),
   pickups = {},
   selectedControlId = null as string | null,
 } = {}) {
@@ -129,7 +139,7 @@ function renderPanel({
       controls={controls}
       index={buildBindingIndex(bindings, profile)}
       activeBank={null}
-      encoderBankProperty={encoderBankProperty}
+      encoderBank={encoderBank}
       pickups={pickups}
       selectedControlId={selectedControlId}
       onSelectControl={onSelect}
@@ -251,7 +261,7 @@ describe('SurfacePanel — the button LED', () => {
           profile,
         )}
         activeBank={null}
-        encoderBankProperty="colour"
+        encoderBank={bank('colour')}
         pickups={{}}
         selectedControlId={null}
         onSelectControl={() => {}}
@@ -273,7 +283,7 @@ function renderWithContainer(controls: Record<string, ControlState>) {
       controls={controls}
       index={buildBindingIndex([], profile)}
       activeBank={null}
-      encoderBankProperty="colour"
+      encoderBank={bank('colour')}
       pickups={{}}
       selectedControlId={null}
       onSelectControl={() => {}}

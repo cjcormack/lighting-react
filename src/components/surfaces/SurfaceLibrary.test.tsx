@@ -32,6 +32,8 @@ const stacks = [
 const targetProperties: AvailableProperty[] = [
   { name: 'dimmer', displayName: 'dimmer', type: 'slider', category: 'dimmer', continuous: true },
   { name: 'rgbColour', displayName: 'colour', type: 'colour', category: 'colour', continuous: true },
+  // A bundled emitter, as the hook expands it off the colour descriptor's `whiteChannel`.
+  { name: 'white', displayName: 'white', type: 'slider', category: 'white', continuous: true },
   { name: 'position', displayName: 'position', type: 'position', category: 'position', continuous: false },
   { name: 'gobo', displayName: 'gobo', type: 'setting', category: 'gobo', continuous: false },
 ]
@@ -41,7 +43,7 @@ const looks = [
   // refuses it by name — the row is offered with no Apply chip rather than one that 400s.
   { id: 2, uuid: 'look-pulse', name: 'Pulse', hasDeferredEffects: true },
 ]
-const templates = [{ id: 5, uuid: 'tmpl-red', name: 'Red', family: 'COLOUR' }]
+const templates = [{ id: 5, uuid: 'tmpl-red', name: 'Red', family: 'COLOUR', rows: [], isGeneric: true, kind: 'value' }]
 const pages = [
   {
     id: 7,
@@ -70,9 +72,12 @@ const pages = [
   },
 ]
 
+// The rig union — every property some patched head declares. The Movers' colour is in it, which is
+// what lets a search for `sat` keep the target rows in play before their own chips are known.
 const rigProperties: AvailableProperty[] = [
   { name: 'dimmer', displayName: 'dimmer', type: 'slider', category: 'dimmer', continuous: true },
   { name: 'pan', displayName: 'pan', type: 'slider', category: 'pan', continuous: true },
+  { name: 'rgbColour', displayName: 'colour', type: 'colour', category: 'colour', continuous: true },
 ]
 
 vi.mock('@/store/groups', () => ({ useGroupListQuery: () => ({ data: groups }) }))
@@ -86,7 +91,7 @@ vi.mock('@/hooks/useTargetProperties', () => ({
   useRigProperties: () => rigProperties,
 }))
 
-import { SurfaceLibrary } from './SurfaceLibrary'
+import { SurfaceLibrary, groupChipsByFamily } from './SurfaceLibrary'
 
 afterEach(cleanup)
 
@@ -179,7 +184,7 @@ describe('SurfaceLibrary', () => {
     draw()
     const chips = chipsOf('group:Movers')
     expect(chips).toContain('dimmer')
-    expect(chips).toContain('colour')
+    expect(chips).toContain('hue')
     expect(chips).toContain('select')
     expect(chips).not.toContain('position')
     expect(chips).not.toContain('gobo')
@@ -215,7 +220,7 @@ describe('SurfaceLibrary', () => {
     draw()
     fireEvent.click(screen.getByRole('button', { name: 'Colour' }))
     const chips = chipsOf('group:Movers')
-    expect(chips).toContain('colour')
+    expect(chips).toEqual(expect.arrayContaining(['hue', 'hue fine', 'sat', 'bright']))
     expect(chips).not.toContain('dimmer')
     expect(chips).toContain('Strip')
   })
@@ -267,5 +272,99 @@ describe('SurfaceLibrary', () => {
       'Place Movers on a strip',
     )
     expect(handles).toHaveLength(2)
+  })
+})
+
+describe('SurfaceLibrary — sections and colour', () => {
+  function sectionOrder(): string[] {
+    return [...document.querySelectorAll('[data-testid^="library-section:"]')].map(
+      (s) => s.getAttribute('data-testid')!.slice('library-section:'.length),
+    )
+  }
+
+  it('sections the list by kind, Desk first, with a heading per section', () => {
+    // Desk moved to the front of the kind row and the sections both: the Selection row is what a
+    // selection-driven desk reaches for first, and it used to sit under every fixture in the patch.
+    draw()
+    expect(sectionOrder()).toEqual(['desk', 'group', 'fixture', 'look', 'cue'])
+    const kindRow = screen.getByRole('button', { name: 'All' }).parentElement!
+    expect([...kindRow.querySelectorAll('button')].map((b) => b.textContent)).toEqual([
+      'All', 'Desk', 'Groups', 'Fixtures', 'Looks', 'Cues',
+    ])
+    const desk = screen.getByTestId('library-section:desk')
+    expect(within(desk).getByText('Desk', { selector: 'div' })).toBeInTheDocument()
+    expect(within(desk).getByTestId('library-row:selection')).toBeInTheDocument()
+    expect(within(desk).getByTestId('library-row:busk-page:page-verse')).toBeInTheDocument()
+    expect(within(screen.getByTestId('library-section:look')).getByTestId('library-row:template:tmpl-red')).toBeInTheDocument()
+  })
+
+  it('drops the heading under a kind filter, where the control already says it', () => {
+    draw()
+    fireEvent.click(screen.getByRole('button', { name: 'Cues' }))
+    expect(sectionOrder()).toEqual(['cue'])
+    expect(within(screen.getByTestId('library-section:cue')).queryByText('Cues', { selector: 'div' })).toBeNull()
+  })
+
+  it('offers a colour as four axis chips with their own swatches, and the emitter beside them', () => {
+    draw()
+    const chips = chipsOf('group:Movers')
+    expect(chips).toEqual(expect.arrayContaining(['hue', 'hue fine', 'sat', 'bright', 'white']))
+    expect(chips).not.toContain('colour')
+    const row = screen.getByTestId('library-row:group:Movers')
+    const swatchOf = (label: string) =>
+      within(row).getByRole('button', { name: `Bind ${label}` }).querySelector('span[aria-hidden]')
+    expect(swatchOf('hue')).not.toBeNull()
+    expect(swatchOf('sat')?.getAttribute('style')).not.toBe(swatchOf('hue')?.getAttribute('style'))
+    expect(swatchOf('white')).toBeNull()
+    expect(swatchOf('dimmer')).toBeNull()
+  })
+
+  it('groups a row’s chips by family with a hairline between groups, actions last', () => {
+    // Movers: intensity (dimmer) | colour (hue, hue fine, sat, bright, white) | actions (select).
+    draw()
+    const row = screen.getByTestId('library-row:group:Movers')
+    expect(within(row).getAllByTestId('chip-hairline')).toHaveLength(2)
+    const labels = chipsOf('group:Movers')
+    expect(labels.indexOf('dimmer')).toBeLessThan(labels.indexOf('hue'))
+    expect(labels.indexOf('white')).toBeLessThan(labels.indexOf('select'))
+    // A Look row is one group: no hairline at all.
+    expect(within(screen.getByTestId('library-row:look:look-warm')).queryAllByTestId('chip-hairline')).toHaveLength(0)
+  })
+
+  it('reaches the Strip handle and honours the family filter, so the search never blanks the list', () => {
+    // Both are the same defect: the palette predicts up front whether a target row *could* match,
+    // and a prediction wider than the row's own answer keeps every row as a candidate, drops them
+    // all inside `TargetRowItem`, and leaves an empty list with the empty state suppressed.
+    draw()
+    const search = screen.getByLabelText('Search the binding library')
+    fireEvent.change(search, { target: { value: 'strip' } })
+    expect(row('group:Movers')).not.toBeNull()
+    fireEvent.change(search, { target: { value: 'sat' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Position' }))
+    expect(screen.getByText(/Nothing here matches/)).toBeInTheDocument()
+  })
+
+  it('searches chip labels as well as names', () => {
+    draw()
+    fireEvent.change(screen.getByLabelText('Search the binding library'), { target: { value: 'sat' } })
+    expect(row('group:Movers')).not.toBeNull()
+    expect(row('fixture:par-1')).not.toBeNull()
+    expect(row('cue:12')).toBeNull()
+    expect(row('desk')).toBeNull()
+  })
+})
+
+describe('groupChipsByFamily', () => {
+  const chip = (key: string, family: 'INTENSITY' | 'POSITION' | 'COLOUR' | 'BEAM' | null) => ({
+    key, label: key, target: { type: 'blackout' as const }, swatch: null, family,
+  })
+
+  it('orders groups by family, drops empty ones, and puts the actions last', () => {
+    const groups = groupChipsByFamily([
+      chip('go', null), chip('sat', 'COLOUR'), chip('gobo', 'BEAM'), chip('dimmer', 'INTENSITY'), chip('hue', 'COLOUR'),
+    ])
+    expect(groups.map((g) => g.map((c) => c.key))).toEqual([['dimmer'], ['sat', 'hue'], ['gobo'], ['go']])
+    expect(groupChipsByFamily([chip('go', null)])).toEqual([[chip('go', null)]])
+    expect(groupChipsByFamily([])).toEqual([])
   })
 })

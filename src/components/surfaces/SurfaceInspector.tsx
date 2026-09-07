@@ -5,11 +5,14 @@ import { useGroupPropertiesQuery } from "@/store/groups"
 import { useColourValue, useSliderValue } from "@/hooks/usePropertyValues"
 import { useGroupColourValues, useGroupSliderValues } from "@/hooks/useGroupPropertyValues"
 import type {
+  ChannelRef,
   ColourPropertyDescriptor,
+  PropertyDescriptor,
   SliderPropertyDescriptor,
 } from "@/store/fixtures"
 import type {
   GroupColourPropertyDescriptor,
+  GroupPropertyDescriptor,
   GroupSliderPropertyDescriptor,
 } from "@/api/groupsApi"
 import { Badge } from "@/components/ui/badge"
@@ -22,12 +25,14 @@ import {
   useExpandSurfaceBindingMutation,
   useUpdateSurfaceBindingMutation,
 } from "@/store/surfaces"
+import { axisSuffix, type ColourAxis } from "@/lib/colourAxis"
 import type {
   BindingTarget,
   ControlDescriptor,
   ControlState,
   ControlSurfaceBinding,
   ControlSurfaceType,
+  EncoderBankSelection,
   PickupChange,
 } from "@/store/surfaces"
 import { useDeskSelection } from "@/store/selection"
@@ -54,7 +59,7 @@ export interface SurfaceInspectorProps {
   controlId: string
   index: SurfaceBindingIndex
   activeBank: string | null
-  encoderBankProperty: string
+  encoderBank: EncoderBankSelection
   state: ControlState | undefined
   pickup: PickupChange | undefined
   /** Every row on this device type, for the "other banks" line. */
@@ -67,7 +72,7 @@ export function SurfaceInspector({
   controlId,
   index,
   activeBank,
-  encoderBankProperty,
+  encoderBank,
   state,
   pickup,
   bindings,
@@ -85,7 +90,7 @@ export function SurfaceInspector({
   const describe = (target: BindingTarget) => describeBindingTarget(target, records)
 
   const descriptor = profile.controls.find((c) => c.controlId === controlId)
-  const resolved = resolveControl(controlId, index, activeBank, encoderBankProperty)
+  const resolved = resolveControl(controlId, index, activeBank, encoderBank)
   const onStrip = resolved?.via ?? null
   const deadReason = resolved ? describeHealth(resolved.binding.health) : null
 
@@ -127,7 +132,7 @@ export function SurfaceInspector({
           binding={resolved.binding}
           profile={profile}
           onStrip={onStrip}
-          encoderBankProperty={encoderBankProperty}
+          encoderBank={encoderBank}
           describe={describe}
         />
       )}
@@ -267,13 +272,13 @@ function BindingCard({
   binding,
   profile,
   onStrip,
-  encoderBankProperty,
+  encoderBank,
   describe,
 }: {
   binding: ControlSurfaceBinding
   profile: ControlSurfaceType
   onStrip: { strip: { id: string } } | null
-  encoderBankProperty: string
+  encoderBank: EncoderBankSelection
   describe: (target: BindingTarget) => string
 }) {
   const strip =
@@ -316,7 +321,7 @@ function BindingCard({
             const label = profile.controls.find((c) => c.controlId === controlId)?.label ?? controlId
             const target =
               binding.target.type === "strip"
-                ? deriveStripTarget(role, binding.target.target, encoderBankProperty)
+                ? deriveStripTarget(role, binding.target.target, encoderBank)
                 : null
             return (
               <div key={role} className="flex justify-between gap-2">
@@ -470,13 +475,80 @@ function StageValue({ target }: { target: BindingTarget }) {
       <FixtureStageValue
         fixtureKey={inner.fixtureKey}
         propertyName={inner.propertyName}
+        axis={inner.colourAxis}
       />
     )
   }
   if (inner.type === "groupProperty") {
-    return <GroupStageValue groupName={inner.groupName} propertyName={inner.propertyName} />
+    return (
+      <GroupStageValue
+        groupName={inner.groupName}
+        propertyName={inner.propertyName}
+        axis={inner.colourAxis}
+      />
+    )
   }
   return null
+}
+
+/**
+ * A bundled emitter — `white`, `amber`, `uv` — is not in the descriptor list (the fixture
+ * descriptor folds it into the colour's `whiteChannel` …), but it is a slider the desk drives by
+ * that name, so its stage line is drawn from a descriptor minted here off the colour's channel ref.
+ * The name → channel-key rule is the one `hooks/useTargetProperties.ts` offers the chips by.
+ */
+const EMITTER_CHANNELS = {
+  white: "whiteChannel",
+  amber: "amberChannel",
+  uv: "uvChannel",
+} as const
+
+function fixtureEmitterDescriptor(
+  properties: readonly PropertyDescriptor[] | undefined,
+  propertyName: string,
+): SliderPropertyDescriptor | undefined {
+  const key = EMITTER_CHANNELS[propertyName as keyof typeof EMITTER_CHANNELS]
+  if (key == null) return undefined
+  for (const property of properties ?? []) {
+    if (property.type !== "colour") continue
+    const channel = property[key]
+    if (channel == null) continue
+    return {
+      type: "slider",
+      name: propertyName,
+      displayName: propertyName,
+      category: propertyName as SliderPropertyDescriptor["category"],
+      channel,
+      min: 0,
+      max: 255,
+    }
+  }
+  return undefined
+}
+
+function groupEmitterDescriptor(
+  properties: readonly GroupPropertyDescriptor[] | undefined,
+  propertyName: string,
+): GroupSliderPropertyDescriptor | undefined {
+  const key = EMITTER_CHANNELS[propertyName as keyof typeof EMITTER_CHANNELS]
+  if (key == null) return undefined
+  for (const property of properties ?? []) {
+    if (property.type !== "colour") continue
+    const memberChannels = property.memberColourChannels
+      .map((member) => member[key])
+      .filter((channel): channel is ChannelRef => channel != null)
+    if (memberChannels.length === 0) continue
+    return {
+      type: "slider",
+      name: propertyName,
+      displayName: propertyName,
+      category: propertyName,
+      min: 0,
+      max: 255,
+      memberChannels,
+    }
+  }
+  return undefined
 }
 
 function StageLine({ label, value }: { label: string; value: string }) {
@@ -490,15 +562,21 @@ function StageLine({ label, value }: { label: string; value: string }) {
 function FixtureStageValue({
   fixtureKey,
   propertyName,
+  axis,
 }: {
   fixtureKey: string
   propertyName: string
+  axis: ColourAxis | null | undefined
 }) {
   const { data: fixtures } = useFixtureListQuery()
-  const property = fixtures
-    ?.find((f) => f.key === fixtureKey)
-    ?.properties?.find((p) => p.name === propertyName)
-  const label = `${fixtureKey}.${propertyName}`
+  const properties = fixtures?.find((f) => f.key === fixtureKey)?.properties
+  const property =
+    properties?.find((p) => p.name === propertyName) ??
+    fixtureEmitterDescriptor(properties, propertyName)
+  // The axis is on the label only. The *Position* line above is already the desk's reading on
+  // that axis (`ControlState.value` comes from `computeValue7Bit`); an HSV computed here would be
+  // a second copy of the read rule, and the two would drift.
+  const label = `${fixtureKey}.${propertyName}${axisSuffix(axis)}`
   if (property?.type === "slider") return <FixtureSliderValue property={property} label={label} />
   if (property?.type === "colour") return <FixtureColourValue property={property} label={label} />
   return null
@@ -528,13 +606,17 @@ function FixtureColourValue({
 function GroupStageValue({
   groupName,
   propertyName,
+  axis,
 }: {
   groupName: string
   propertyName: string
+  axis: ColourAxis | null | undefined
 }) {
   const { data: properties } = useGroupPropertiesQuery(groupName)
-  const property = properties?.find((p) => p.name === propertyName)
-  const label = `${groupName}.${propertyName}`
+  const property =
+    properties?.find((p) => p.name === propertyName) ??
+    groupEmitterDescriptor(properties, propertyName)
+  const label = `${groupName}.${propertyName}${axisSuffix(axis)}`
   if (property?.type === "slider") return <GroupSliderValue property={property} label={label} />
   if (property?.type === "colour") return <GroupColourValue property={property} label={label} />
   return null
