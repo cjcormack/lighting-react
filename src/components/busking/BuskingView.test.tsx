@@ -20,6 +20,7 @@ vi.mock('./LibraryPalette', () => ({ LibraryPalette: () => <div data-testid="pal
 
 import { store } from '@/store'
 import { restApi } from '@/store/restApi'
+import { lightingApi } from '@/api/lightingApi'
 import { BuskingView } from './BuskingView'
 import type { BuskPage } from '@/api/buskApi'
 
@@ -93,6 +94,10 @@ describe('the busk view', () => {
     cleanup()
     store.dispatch(restApi.util.resetApiState())
     vi.unstubAllGlobals()
+    // A couple of tests below monkey-patch the mock's `buskPage` namespace directly (there's no
+    // per-test way to seed a WS snapshot otherwise); put it back so test order can't matter.
+    lightingApi.buskPage.getState = () => null
+    lightingApi.buskPage.setPage = () => true
   })
 
   it('offers the two starting points when the project has no pages', async () => {
@@ -142,6 +147,30 @@ describe('the busk view', () => {
     draw([emptyPage, second], '/projects/1/busk?page=999')
     await screen.findByRole('button', { name: 'Ballads' })
     expect(screen.getByRole('button', { name: 'Ballads' }).getAttribute('aria-current')).toBe('page')
+  })
+
+  it('prefers the desk over the URL — a hardware next-page press and a tab click are one gesture', async () => {
+    // The desk already answers 5 before this tab ever mounts (e.g. another client moved it), and
+    // the URL still names 4 — the desk wins.
+    lightingApi.buskPage.getState = () => second.id
+    draw([emptyPage, second], `/projects/1/busk?page=${emptyPage.id}`)
+    await screen.findByRole('button', { name: 'Dance' })
+    expect(screen.getByRole('button', { name: 'Dance' }).getAttribute('aria-current')).toBe('page')
+  })
+
+  it('still switches this tab’s own view when a page click never reaches the desk', async () => {
+    // `setShowingBuskPage` returns `sendGesture`'s boolean; `false` means the socket was down and
+    // the desk never heard the click. Without a local fallback the tab strip would look like the
+    // click did nothing — see `onPageSelect` in BuskingView.tsx.
+    lightingApi.buskPage.setPage = () => false
+    draw([emptyPage, second])
+    await screen.findByRole('button', { name: 'Ballads' })
+    fireEvent.click(screen.getByRole('button', { name: 'Dance' }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Dance' }).getAttribute('aria-current')).toBe(
+        'page',
+      ),
+    )
   })
 
   it('swaps the speed rail for the library while editing, and puts it back', async () => {

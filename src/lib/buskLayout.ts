@@ -207,11 +207,29 @@ export function padRecordId(pad: BuskPad): number | null {
   return pad.cue?.id ?? null
 }
 
-function forEachPad(page: BuskPage, fn: (pad: BuskPad) => void): void {
+/**
+ * Every pad on the page, flat — the one place `rows → columns → banks → pads` is walked, so a
+ * change to the shape (or to what counts as a pad) lands here rather than in each of this
+ * traversal's several callers. {@link recordsOnPage} is `forEachPad` for the same reason; this is
+ * the array-returning form for a caller that wants to `.filter`/`.map` rather than fold, and does
+ * not need the bank each pad sits on.
+ */
+export function allPads(page: BuskPage): BuskPad[] {
+  const pads: BuskPad[] = []
+  forEachPad(page, (pad) => pads.push(pad))
+  return pads
+}
+
+/**
+ * The traversal itself, exported so a caller that *does* need the bank a pad sits on (a record
+ * binding's picker, which shows "`page` · `bank`" as the pad's detail line) is not left re-deriving
+ * `rows → columns → banks → pads` a second time by hand.
+ */
+export function forEachPad(page: BuskPage, fn: (pad: BuskPad, bank: BuskBank) => void): void {
   for (const row of page.rows) {
     for (const column of row.columns) {
       for (const bank of column.banks) {
-        for (const pad of bank.pads) fn(pad)
+        for (const pad of bank.pads) fn(pad, bank)
       }
     }
   }

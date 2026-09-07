@@ -144,6 +144,18 @@ describe('targetControlKind', () => {
     expect(targetControlKind({ type: 'strip', target: { type: 'group', key: 'Movers' } })).toBeNull()
     expect(targetControlKind({ type: 'unknown', targetType: 'future', rawPayload: '{}' })).toBeNull()
   })
+
+  it('puts every record and busk-page target on a button', () => {
+    // Each is a press, and a fader has no press. Pinned because the six were added to one run of
+    // `case` labels, where a slip lands a target on the wrong half with no compiler complaint —
+    // and the backend's `refuseWrongKind` would then refuse a drop the palette had just allowed.
+    expect(targetControlKind({ type: 'applyLook', lookUuid: 'l' })).toBe('button')
+    expect(targetControlKind({ type: 'pressTemplate', templateUuid: 't' })).toBe('button')
+    expect(targetControlKind({ type: 'pressPad', padUuid: 'p' })).toBe('button')
+    expect(targetControlKind({ type: 'buskPageNext' })).toBe('button')
+    expect(targetControlKind({ type: 'buskPagePrev' })).toBe('button')
+    expect(targetControlKind({ type: 'buskPageSet', pageUuid: 'g' })).toBe('button')
+  })
 })
 
 describe('canLand', () => {

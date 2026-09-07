@@ -36,6 +36,7 @@ import { resolveControl } from "@/lib/surfaceResolve"
 import { EditBindingSheet } from "./BindingMatrix"
 import { LearnModeOverlay } from "./LearnModeOverlay"
 import { describeTarget, effectiveTarget } from "./targetUtils"
+import { describeBindingTarget, useRecordBindingOptions } from "./recordOptions"
 import { midiPercent } from "./surfacePanelGeometry"
 
 /**
@@ -77,6 +78,12 @@ export function SurfaceInspector({
   const [expandBinding] = useExpandSurfaceBindingMutation()
   const [deleteBinding] = useDeleteSurfaceBindingMutation()
 
+  // One lookup for the whole inspector: the heading and the binding card both want a record's
+  // name where `describeTarget` can only give a uuid, and a hook per line would be two
+  // subscriptions to one library.
+  const records = useRecordBindingOptions(projectId)
+  const describe = (target: BindingTarget) => describeBindingTarget(target, records)
+
   const descriptor = profile.controls.find((c) => c.controlId === controlId)
   const resolved = resolveControl(controlId, index, activeBank, encoderBankProperty)
   const onStrip = resolved?.via ?? null
@@ -94,7 +101,7 @@ export function SurfaceInspector({
           {descriptor.label}
           {resolved && (
             <span className="ml-1.5 font-normal text-muted-foreground">
-              — {describeTarget(resolved.target)}
+              — {describe(resolved.target)}
             </span>
           )}
         </h3>
@@ -121,6 +128,7 @@ export function SurfaceInspector({
           profile={profile}
           onStrip={onStrip}
           encoderBankProperty={encoderBankProperty}
+          describe={describe}
         />
       )}
 
@@ -162,6 +170,7 @@ export function SurfaceInspector({
           controlId={onStrip ? onStrip.strip.id : controlId}
           profile={profile}
           activeBank={activeBank}
+          describe={describe}
         />
       )}
 
@@ -181,7 +190,7 @@ export function SurfaceInspector({
         >
           Bank buttons switch the device&rsquo;s bank. The router answers one before it resolves a
           binding, so a row on this control can never fire — the library will not offer it.
-          {resolved && ` This one holds ${describeTarget(resolved.target)}; remove it.`}
+          {resolved && ` This one holds ${describe(resolved.target)}; remove it.`}
         </p>
       )}
 
@@ -259,11 +268,13 @@ function BindingCard({
   profile,
   onStrip,
   encoderBankProperty,
+  describe,
 }: {
   binding: ControlSurfaceBinding
   profile: ControlSurfaceType
   onStrip: { strip: { id: string } } | null
   encoderBankProperty: string
+  describe: (target: BindingTarget) => string
 }) {
   const strip =
     binding.target.type === "strip"
@@ -321,7 +332,7 @@ function BindingCard({
           })}
         </dl>
       ) : (
-        <p className="text-[11px]">{describeTarget(binding.target)}</p>
+        <p className="text-[11px]">{describe(binding.target)}</p>
       )}
 
       <div className="flex justify-between gap-2 text-[11px]">
@@ -341,11 +352,13 @@ function OtherBanks({
   controlId,
   profile,
   activeBank,
+  describe,
 }: {
   bindings: readonly ControlSurfaceBinding[]
   controlId: string
   profile: ControlSurfaceType
   activeBank: string | null
+  describe: (target: BindingTarget) => string
 }) {
   const banks: (string | null)[] = [...profile.banks.map((b) => b.id), null]
   const others = banks.filter((b) => b !== activeBank)
@@ -363,7 +376,7 @@ function OtherBanks({
               b.bank === bank,
           )
           const name = bank ?? "Global"
-          return `${name} — ${hit ? describeTarget(hit.target) : "unbound"}`
+          return `${name} — ${hit ? describe(hit.target) : "unbound"}`
         })
         .join(" · ")}
     </p>

@@ -186,11 +186,47 @@ export const buskApi = restApi.injectEndpoints({
         body,
       }),
     }),
+
+    /**
+     * The **showing page**, streamed — see `api/buskPageApi.ts` for what it is and why it is
+     * server-owned.
+     *
+     * A cache entry rather than a hook's `useState`, following `deskSelection` and the surface
+     * streams: two readers share one subscription and RTK Query owns the teardown. There is no REST
+     * endpoint behind it and nothing to invalidate — the frame is the only source — so `queryFn`
+     * seeds from the WS layer's snapshot and everything after arrives by push.
+     *
+     * Not keyed by project: the desk holds one showing page and clears it on project switch, so a
+     * per-project entry would be a second, disagreeing answer.
+     */
+    buskShowingPage: build.query<number | null, void>({
+      queryFn: () => ({ data: lightingApi.buskPage.getState() ?? null }),
+      async onCacheEntryAdded(_, { cacheDataLoaded, updateCachedData, cacheEntryRemoved }) {
+        await cacheDataLoaded
+        const subscription = lightingApi.buskPage.subscribe((pageId) => {
+          updateCachedData(() => pageId)
+        })
+        await cacheEntryRemoved
+        subscription.unsubscribe()
+      },
+    }),
   }),
   overrideExisting: false,
 })
 
+/**
+ * Point every client at one busk page. The `busk.pageState` frame is the acknowledgement.
+ *
+ * Returns whether the gesture actually reached the desk (false when the socket is down) — see
+ * `BuskPageWsApi.setPage`'s doc for why `BuskingView` needs that boolean rather than treating this
+ * like every other fire-and-forget gesture.
+ */
+export function setShowingBuskPage(pageId: number): boolean {
+  return lightingApi.buskPage.setPage(pageId)
+}
+
 export const {
+  useBuskShowingPageQuery,
   useBuskPagesQuery,
   useCreateBuskPageMutation,
   useRenameBuskPageMutation,

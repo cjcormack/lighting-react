@@ -113,11 +113,36 @@ export function describeTarget(target: BindingTarget): string {
       return `Strip · ${target.target.key}`
     case "encoderBankSet":
       return `Encoder bank · ${target.propertyName}`
+    // The record variants name a **uuid**, and this function deliberately does not resolve it — the
+    // same rule `speedMasterBpm` above follows, for the same reason: this is pure and has no
+    // library to ask. A caller that wants "Apply Warm Wash" resolves it and says so itself, which
+    // is what the inspector's binding card does. The short uuid keeps a badge distinguishable
+    // between two bindings of the same kind without pretending to be a name.
+    case "applyLook":
+      return `Apply Look ${shortUuid(target.lookUuid)}`
+    case "pressTemplate":
+      return `Press template ${shortUuid(target.templateUuid)}`
+    case "pressPad":
+      return `Press pad ${shortUuid(target.padUuid)}`
+    case "buskPageNext":
+      return "Busk · next page"
+    case "buskPagePrev":
+      return "Busk · previous page"
+    case "buskPageSet":
+      return `Busk page ${shortUuid(target.pageUuid)}`
     // A row this build cannot decode, kept by the tolerant decode so it can be rebound rather than
     // silently dropped. Naming the discriminator is the only useful thing to say about it.
     case "unknown":
       return `Unknown target (${target.targetType})`
   }
+}
+
+/**
+ * The first group of a uuid — enough to tell two bindings apart in a badge, short enough not to
+ * read as a name. Anything that can resolve the record shows the name instead.
+ */
+function shortUuid(uuid: string): string {
+  return uuid.split("-")[0] ?? uuid
 }
 
 /**

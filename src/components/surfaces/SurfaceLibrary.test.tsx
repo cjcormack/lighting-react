@@ -35,6 +35,41 @@ const targetProperties: AvailableProperty[] = [
   { name: 'position', displayName: 'position', type: 'position', category: 'position', continuous: false },
   { name: 'gobo', displayName: 'gobo', type: 'setting', category: 'gobo', continuous: false },
 ]
+const looks = [
+  { id: 1, uuid: 'look-warm', name: 'Warm wash', hasDeferredEffects: false },
+  // A Look with a deferred effect presses onto targets it does not have, so the write boundary
+  // refuses it by name — the row is offered with no Apply chip rather than one that 400s.
+  { id: 2, uuid: 'look-pulse', name: 'Pulse', hasDeferredEffects: true },
+]
+const templates = [{ id: 5, uuid: 'tmpl-red', name: 'Red', family: 'COLOUR' }]
+const pages = [
+  {
+    id: 7,
+    uuid: 'page-verse',
+    name: 'Verse',
+    sortOrder: 0,
+    rows: [
+      {
+        columns: [
+          {
+            id: 1, uuid: 'col-1', width: 12,
+            banks: [
+              {
+                id: 2, uuid: 'bank-1', name: 'keys', solo: true, flow: 'WRAP',
+                pads: [
+                  { id: 3, uuid: 'pad-amber', kind: 'TEMPLATE', template: { ...templates[0], name: 'Amber', rows: [], isGeneric: true, kind: 'value' } },
+                  // No uuid: a pad this client minted and has not saved has nothing to bind to.
+                  { id: undefined, kind: 'TEMPLATE', template: { ...templates[0], name: 'Unsaved', rows: [], isGeneric: true, kind: 'value' } },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+]
+
 const rigProperties: AvailableProperty[] = [
   { name: 'dimmer', displayName: 'dimmer', type: 'slider', category: 'dimmer', continuous: true },
   { name: 'pan', displayName: 'pan', type: 'slider', category: 'pan', continuous: true },
@@ -43,6 +78,9 @@ const rigProperties: AvailableProperty[] = [
 vi.mock('@/store/groups', () => ({ useGroupListQuery: () => ({ data: groups }) }))
 vi.mock('@/store/fixtures', () => ({ useFixtureListQuery: () => ({ data: fixtures }) }))
 vi.mock('@/store/cueStacks', () => ({ useProjectCueStackListQuery: () => ({ data: stacks }) }))
+vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: looks }) }))
+vi.mock('@/store/templates', () => ({ useTemplateListQuery: () => ({ data: templates }) }))
+vi.mock('@/store/busk', () => ({ useBuskPagesQuery: () => ({ data: pages }) }))
 vi.mock('@/hooks/useTargetProperties', () => ({
   useTargetProperties: () => ({ properties: targetProperties, isLoading: false }),
   useRigProperties: () => rigProperties,
@@ -77,7 +115,7 @@ function row(key: string): HTMLElement | null {
 }
 
 describe('SurfaceLibrary', () => {
-  it('draws the seven kinds this pass carries and nothing that needs session 4', () => {
+  it('draws every kind the router can dispatch', () => {
     draw()
     for (const key of [
       'group:Movers',
@@ -86,13 +124,53 @@ describe('SurfaceLibrary', () => {
       'encoder-bank',
       'stack:3',
       'cue:12',
+      'template:tmpl-red',
+      'look:look-warm',
+      'busk-page:page-verse',
       'desk',
     ]) {
       expect(row(key)).not.toBeNull()
     }
-    // Templates, Looks and busk pages arrive in session 4, beside the targets they bind — the
-    // router cannot dispatch one yet, so a pad for one would be dead on arrival.
-    expect(screen.queryByText('Looks')).toBeNull()
+  })
+
+  it('offers no Apply on a Look that needs a selection', () => {
+    // It presses onto its **own** fixtures, and a Look with a deferred effect has none — the write
+    // boundary refuses it by name (`BINDING_LOOK_NEEDS_SELECTION`). Offering a chip that 400s is a
+    // worse way to learn the rule than the row saying so.
+    draw()
+    expect(chipsOf('look:look-warm')).toContain('Apply')
+    expect(chipsOf('look:look-pulse')).toEqual([])
+    expect(screen.getByText('needs a selection')).toBeInTheDocument()
+  })
+
+  it('gives a busk page its own chip and one per saved pad', () => {
+    draw()
+    const chips = chipsOf('busk-page:page-verse')
+    expect(chips).toContain('Page')
+    expect(chips).toContain('Amber')
+    // An unsaved pad has no uuid to bind to, so it is not offered rather than offered with `""`.
+    expect(chips).not.toContain('Unsaved')
+  })
+
+  it('puts the page-step chips on the Desk row, not on each page', () => {
+    // They are page-agnostic; repeated once per page they would read as page-specific.
+    draw()
+    expect(chipsOf('desk')).toEqual(expect.arrayContaining(['Next page', 'Prev page']))
+    expect(chipsOf('busk-page:page-verse')).not.toContain('Next page')
+  })
+
+  it('files a template under Looks and a busk page under Desk', () => {
+    // The kind row stays at the artboard's six, so the two record kinds fold into it rather than
+    // widening a 360px segmented control to seven.
+    draw()
+    fireEvent.click(screen.getByRole('button', { name: 'Looks' }))
+    expect(row('template:tmpl-red')).not.toBeNull()
+    expect(row('look:look-warm')).not.toBeNull()
+    expect(row('busk-page:page-verse')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Desk' }))
+    expect(row('busk-page:page-verse')).not.toBeNull()
+    expect(row('template:tmpl-red')).toBeNull()
   })
 
   it('offers only the properties a fader can actually drive', () => {
@@ -142,12 +220,26 @@ describe('SurfaceLibrary', () => {
     expect(chips).toContain('Strip')
   })
 
+  it('scopes a template row to the family it holds', () => {
+    // `tmpl-red` is `family: 'COLOUR'`. Unlike a Look's Apply chip (family-agnostic, since a Look
+    // can span several families), a template is exactly one family, so its Press chip should be
+    // scoped like any property chip rather than surviving every filter as an `actionChip` would.
+    draw()
+    fireEvent.click(screen.getByRole('button', { name: 'Position' }))
+    expect(row('template:tmpl-red')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Colour' }))
+    expect(row('template:tmpl-red')).not.toBeNull()
+    expect(chipsOf('template:tmpl-red')).toContain('Press')
+  })
+
   it('narrows to one kind', () => {
     draw()
     fireEvent.click(screen.getByRole('button', { name: 'Cues' }))
     expect(row('stack:3')).not.toBeNull()
     expect(row('group:Movers')).toBeNull()
     expect(row('desk')).toBeNull()
+    expect(row('look:look-warm')).toBeNull()
   })
 
   it('searches by name', () => {

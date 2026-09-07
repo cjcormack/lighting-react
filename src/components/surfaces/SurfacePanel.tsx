@@ -18,7 +18,7 @@ import type {
 import type { ResolvedControl, SurfaceBindingIndex } from "@/lib/surfaceResolve"
 import { activeBindingAt, resolveControl } from "@/lib/surfaceResolve"
 import { canLand, controlKinds, type SurfaceDragData } from "@/lib/surfaceDrop"
-import { describeTarget } from "./targetUtils"
+import { describeBindingTarget, type RecordBindingOptions } from "./recordOptions"
 import {
   FADER_FRAME_HEIGHT,
   RING_DOTS,
@@ -63,6 +63,8 @@ export interface SurfacePanelProps {
   /** The surface drag in flight, or null — what decides which droppables are live. */
   lifted: SurfaceDragData | null
   onRemoveBinding: (bindingId: number) => void
+  /** Resolves a record-addressed binding's uuid to a name — see `SurfaceInspector`'s `describe`. */
+  records: RecordBindingOptions
 }
 
 const UNBOUND: ControlState = {
@@ -85,6 +87,7 @@ export function SurfacePanel({
   editing,
   lifted,
   onRemoveBinding,
+  records,
 }: SurfacePanelProps) {
   const byControlId = useMemo(() => {
     const map = new Map<string, ControlDescriptor>()
@@ -114,6 +117,7 @@ export function SurfacePanel({
           editing={editing}
           lifted={lifted}
           onRemoveBinding={onRemoveBinding}
+          records={records}
         />
       ))}
     </div>
@@ -138,6 +142,7 @@ function PanelRegion({
   editing,
   lifted,
   onRemoveBinding,
+  records,
 }: RegionProps) {
   // A column whose controls all belong to one strip gets a backdrop spanning the whole column —
   // the thing session 3b outlines when a group row is dragged over it. Derived from the strips
@@ -210,6 +215,7 @@ function PanelRegion({
               activeBank={activeBank}
               selected={selectedControlId === cell.controlId}
               onSelect={onSelectControl}
+              records={records}
             />
           </ControlZone>
         )
@@ -395,13 +401,16 @@ interface ControlCellProps {
   activeBank: string | null
   selected: boolean
   onSelect: (controlId: string) => void
+  records: RecordBindingOptions
 }
 
 /**
  * Memoized on purpose: a `surfaceControls.changed` delta names only the controls that moved, and
  * the WS layer merges rather than rebuilds, so every untouched control's `state` keeps its
  * identity and skips the render. Without that pairing a fader drag re-renders the whole panel at
- * 20 Hz.
+ * 20 Hz. `records` is safe alongside that: it is a `useRecordBindingOptions` result, stable across
+ * every frame that only moves a channel value, and only changes identity when the Look/template/
+ * busk-page libraries themselves do.
  */
 const ControlCell = memo(function ControlCell({
   descriptor,
@@ -411,9 +420,10 @@ const ControlCell = memo(function ControlCell({
   activeBank,
   selected,
   onSelect,
+  records,
 }: ControlCellProps) {
   const dead = resolved != null && resolved.binding.health.type !== "ok"
-  const label = resolved ? describeTarget(resolved.target) : null
+  const label = resolved ? describeBindingTarget(resolved.target, records) : null
   const common = { descriptor, state, label, dead, selected, onSelect }
 
   switch (descriptor.type) {

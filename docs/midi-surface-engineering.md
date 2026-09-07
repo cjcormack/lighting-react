@@ -90,11 +90,13 @@ surprises:
   **dead** when one does, because the picture's promise is that it mirrors the desk and an orphaned
   row only the inspector mentions is one nobody scanning the surface would find.
 
-Nothing on the backend refuses a button target on a fader (`refuseWrongSlot` guards only the strip
-slot, `refuseUnknown` only the undecodable row), so **the eligibility dim is the whole warning**
-between the operator and a control that silently does nothing. That is a client-only guard on a
-real footgun, and any other write path to the same endpoint bypasses it —
-`FU-MIDI-BIND-CONTROL-KIND` in lighting7 is the backend half.
+`controlKinds` and `targetControlKind` are now the **mirror** of `midi/BindingControlKind.kt`
+rather than the only copy: session 4 closed `FU-MIDI-BIND-CONTROL-KIND`, so
+`ControlSurfaceBindingService.refuseWrongKind` refuses a mismatch at the write boundary whichever
+door it comes through — MIDI Learn, a script, a hand-rolled call. The dim is still worth having: it
+keeps the operator from dropping onto a control that would answer a 400, which is a worse way to
+learn the rule. Keep the two tables in step; a divergence here only makes the palette offer or
+withhold a chip the server would judge differently.
 
 ## The desk selection
 
@@ -110,6 +112,61 @@ rules each fail silently, and the first is the one the plan names: **rows are pu
 which `expandSelectionToTargets` has already flattened to member keys. Publish those and a marquee
 over *Front wash* arrives at the desk as eight loose fixtures, with the strip's group select LED
 dark.
+
+## Records on buttons
+
+Session 4 added six targets: `applyLook`, `pressTemplate`, `pressPad`, and the three busk-page ones.
+All are buttons. Five things about them on this side:
+
+- **The library rows are not `TargetRowItem`s.** That component exists to mount
+  `useTargetProperties` per group or fixture and is memoized on primitive target props for exactly
+  that reason; a template, Look or busk page has no per-target property lookup, so its row is built
+  in `SurfaceLibrary`'s `rows` memo from `actionChip` beside Selection and Desk.
+- **The kind row stays at the artboard's six.** *All · Groups · Fixtures · Looks · Cues · Desk* — a
+  template files under **Looks** (the row of named recallable records) and a busk page under
+  **Desk** (which already holds the encoder bank), rather than widening a 360px segmented control to
+  seven. *Next page* / *Prev page* sit on the Desk row **once**: they are page-agnostic, and a chip
+  repeated per page reads as page-specific.
+- **A Look with a deferred effect is offered with no chip at all**, and the picker disables it for
+  the same reason. `applyLook` presses onto the Look's *own* fixtures, and one with a deferred
+  effect has none — the write boundary refuses it by name (`BINDING_LOOK_NEEDS_SELECTION`). The
+  row's detail line says *needs a selection*, which is a better answer than a chip that 400s.
+- **A template's *Press* chip carries its family; a Look's *Apply* does not.** A template is in
+  exactly one family, so the palette's family filter can hide it honestly; a Look spans families by
+  nature, so its chip is built by `actionChip` with `family: null` and survives every filter.
+- **`describeTarget` will not resolve a uuid, and `recordOptions.ts` is where the name comes from.**
+  Same split as `speedMasterBpm` and `useSpeedMasterDisplay`: `describeTarget` is pure and has no
+  library to ask. `useRecordBindingOptions` is the one owner of the three lists, shared by the
+  picker (which offers them) and the inspector (which resolves the choice) — without it the
+  resolution would exist twice and the two would name one uuid differently. The picker starts a
+  record field **unset**, not on the first row: an empty uuid is refused by name, where a silent
+  first-row default would save and bind the button to something nobody picked.
+
+## The showing busk page
+
+`busk.pageState` / `busk.setPage` (`api/buskPageApi.ts`, `store/busk.ts`'s `buskShowingPage` entry)
+is the desk's own answer to "which busk page is showing", so a hardware *next page* button and a tab
+click are one gesture. `BuskingView` resolves in this order:
+
+```
+this tab's offline override  >  the desk's showing page  >  ?page=  >  the first page
+```
+
+and a tab click writes the **desk**, with the URL mirroring what comes back. Writing the URL
+directly would leave this tab on a page the desk and every other client disagreed about, which is
+what the shared state exists to prevent. `null` from the desk is not "the first page" — it means
+nothing has moved it, and each client falls back on its own.
+
+The **offline override** is the one thing that beats the desk on purpose. `setShowingBuskPage` goes
+through `sendGesture`, which drops the frame and toasts when the socket is down — so without a local
+escape hatch a tab click while offline would do nothing at all and the desk's last-known value,
+however stale, would keep winning. `onPageSelect` sets it *only* on that failure, and any change to
+`deskPageId` — a reconnect delivering the real answer, or this tab's own next successful click —
+clears it again.
+
+It is **unrelated to `busk.layoutChanged`'s echo suppression**, despite the namespace: that frame
+names pages whose *document* changed and is keyed on a page being saved. A page-state frame carries
+no layout.
 
 ## `hooks/useTargetProperties.ts`
 

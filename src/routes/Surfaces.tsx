@@ -31,6 +31,7 @@ import { SurfaceInspector } from "@/components/surfaces/SurfaceInspector"
 import { SurfaceLibrary } from "@/components/surfaces/SurfaceLibrary"
 import { SelectionChip } from "@/components/surfaces/SelectionChip"
 import { effectiveTarget } from "@/components/surfaces/targetUtils"
+import { useRecordBindingOptions } from "@/components/surfaces/recordOptions"
 import { buildBindingIndex, DEFAULT_ENCODER_BANK_PROPERTY } from "@/lib/surfaceResolve"
 import {
   bindingWriteFor,
@@ -75,6 +76,10 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
   const [createBinding] = useCreateSurfaceBindingMutation()
   const [updateBinding] = useUpdateSurfaceBindingMutation()
   const [deleteBinding] = useDeleteSurfaceBindingMutation()
+  // One subscription for the whole route: the picture and the table are both mounted at once
+  // (one CSS-hidden by breakpoint, not unmounted — see the layout below), and both want a
+  // record's name where `describeTarget` can only give a uuid.
+  const records = useRecordBindingOptions(projectId)
   // Edit mode is **local state**, deliberately not the busk view's Redux slice: that one exists
   // because the cue-slot overlay is a sibling of the routed page and could never read a context
   // provided inside it. Here the library and the picture are both inside this route, so a slice
@@ -307,6 +312,7 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
                       editing={editing}
                       lifted={lifted}
                       onRemoveBinding={removeBinding}
+                      records={records}
                     />
                   </div>
                   <div className="md:hidden">
@@ -316,6 +322,7 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
                       profile={selectedProfile}
                       activeBank={activeBank}
                       highlightBindingId={highlightBindingId}
+                      records={records}
                     />
                   </div>
                 </>
@@ -326,6 +333,7 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
                   profile={selectedProfile}
                   activeBank={activeBank}
                   highlightBindingId={highlightBindingId}
+                  records={records}
                 />
               )}
             </div>
@@ -381,6 +389,10 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
  * A strip wins over a count because it *is* the placement the library's row gesture makes; a target
  * that is only on single controls has no one place to name, so it gets the count instead. `flash`
  * is unwrapped so a flash button counts towards its own group rather than towards nothing.
+ *
+ * The record variants key by **uuid**, matching `SurfaceLibrary`'s row keys — a `pressPad` is
+ * deliberately not counted, because its library row is its *page* and badging that page "on 1
+ * control" for one of its pads would claim the page itself is bound.
  */
 function describePlacements(
   bindings: readonly ControlSurfaceBinding[],
@@ -397,6 +409,12 @@ function describePlacements(
     if (target.type === "strip" || target.type === "selectTarget") key = targetKey(target.target)
     else if (target.type === "fixtureProperty") key = `fixture:${target.fixtureKey}`
     else if (target.type === "groupProperty") key = `group:${target.groupName}`
+    // The record rows key by uuid, matching `SurfaceLibrary`'s own row keys. No collision with the
+    // two above: a `CueTarget` type is only ever `fixture` or `group`. A pad badges the **page** it
+    // sits on, which is the row the library draws it in.
+    else if (target.type === "pressTemplate") key = `template:${target.templateUuid}`
+    else if (target.type === "applyLook") key = `look:${target.lookUuid}`
+    else if (target.type === "buskPageSet") key = `busk-page:${target.pageUuid}`
     if (key == null) continue
     if (binding.target.type === "strip") {
       out.set(key, binding.controlId.replace(/^strip-/, "strip "))

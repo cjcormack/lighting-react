@@ -13,6 +13,11 @@ import {
 import { useFixtureListQuery } from "@/store/fixtures"
 import { useGroupListQuery } from "@/store/groups"
 import { useProjectCueStackListQuery } from "@/store/cueStacks"
+import { useLookListQuery } from "@/store/looks"
+import { useTemplateListQuery } from "@/store/templates"
+import { useBuskPagesQuery } from "@/store/busk"
+import { allPads } from "@/lib/buskLayout"
+import { padFaceOf } from "@/components/busking/padFace"
 import { useRigProperties, useTargetProperties, type AvailableProperty } from "@/hooks/useTargetProperties"
 import { surfaceDragData, type SurfaceDragData } from "@/lib/surfaceDrop"
 import type { BindingTarget, BankDefinition } from "@/store/surfaces"
@@ -30,21 +35,28 @@ import type { CueTarget } from "@/api/cuesApi"
  * `useDndMonitor` and never nested, for the busk page's reason. Foreign drags are ignored by id on
  * both sides.
  *
- * The library in this pass is **groups, fixtures, Selection, Encoder bank, stacks, cues and
- * Desk** — nothing that would drop a target the router cannot yet dispatch. §4's template, Look,
- * busk-page and pad rows arrive in session 4 with the targets they bind.
+ * **The kind row stays at the artboard's six** — All · Groups · Fixtures · Looks · Cues · Desk —
+ * so the two record kinds session 4 added fold into it rather than widening a 360px segmented
+ * control to seven: a **template** files under *Looks*, the row of named recallable records, and a
+ * **busk page** under *Desk*, which already holds the encoder bank.
+ *
+ * *Next page* / *Prev page* live on the Desk row and not on each page's row. `Edit.dc.html` draws
+ * them on its single *Busk · Verse* row and so cannot distinguish "on this page's row" from "on
+ * every page's row"; a project with ten pages would repeat two identical chips ten times, and a
+ * chip repeated per page reads as page-*specific*, which is the one thing those two are not.
  */
 
 /** The colour chip's swatch, from `midi-surface-design/Edit.dc.html`. */
 const COLOUR_SWATCH = "linear-gradient(90deg,#f43f5e,#3b82f6)"
 
-type KindFilter = "all" | "group" | "fixture" | "cue" | "desk"
+type KindFilter = "all" | "group" | "fixture" | "look" | "cue" | "desk"
 type FamilyFilter = "any" | AttributeFamily
 
 const KIND_LABELS: Record<KindFilter, string> = {
   all: "All",
   group: "Groups",
   fixture: "Fixtures",
+  look: "Looks",
   cue: "Cues",
   desk: "Desk",
 }
@@ -345,6 +357,9 @@ export function SurfaceLibrary({
   const { data: groups } = useGroupListQuery()
   const { data: fixtures } = useFixtureListQuery()
   const { data: stacks } = useProjectCueStackListQuery(projectId)
+  const { data: looks } = useLookListQuery({ projectId })
+  const { data: templates } = useTemplateListQuery({ projectId })
+  const { data: pages } = useBuskPagesQuery(projectId)
   const rigProperties = useRigProperties()
   const [search, setSearch] = useState("")
   const [kind, setKind] = useState<KindFilter>("all")
@@ -426,6 +441,74 @@ export function SurfaceLibrary({
       }
     }
 
+    // Records on buttons (D6). Each is a **plain row with chips** rather than a `TargetRowItem`:
+    // that component exists to mount `useTargetProperties` per group or fixture and is memoized on
+    // primitive target props for exactly that reason, and none of these has a per-target property
+    // lookup to do.
+    for (const template of templates ?? []) {
+      out.push({
+        key: `template:${template.uuid}`,
+        name: template.name,
+        detail: `${template.family?.toLowerCase() ?? "value"} template`,
+        badge: "Template",
+        kind: "look",
+        strip: null,
+        chips: [
+          // A template is exactly one family (never `null` — the write boundary validates that),
+          // unlike a Look's Apply chip below, which stays family-agnostic because a Look spans
+          // families by nature. `actionChip` would give this `family: null` and the family filter
+          // would never hide it, so it's built by hand instead.
+          {
+            key: "press",
+            label: "Press",
+            target: { type: "pressTemplate", templateUuid: template.uuid },
+            swatch: null,
+            family: template.family,
+          },
+        ],
+      })
+    }
+
+    for (const look of looks ?? []) {
+      out.push({
+        key: `look:${look.uuid}`,
+        name: look.name,
+        detail: look.hasDeferredEffects ? "needs a selection" : "bound",
+        badge: "Look",
+        kind: "look",
+        strip: null,
+        // A Look with a deferred effect presses onto targets it does not have, and the write
+        // boundary refuses it by name — so it is offered with no chip at all rather than with one
+        // that 400s. The detail line above is what says why.
+        chips: look.hasDeferredEffects
+          ? []
+          : [actionChip("apply", "Apply", { type: "applyLook", lookUuid: look.uuid })],
+      })
+    }
+
+    for (const page of pages ?? []) {
+      // A pad this client minted and has not saved has no uuid to bind to. It cannot occur in a
+      // fetched page, but the type allows it and an empty uuid would save.
+      const pads = allPads(page).filter((pad) => pad.uuid != null)
+      out.push({
+        key: `busk-page:${page.uuid}`,
+        name: `Busk · ${page.name}`,
+        detail: `page · ${pads.length} ${pads.length === 1 ? "pad" : "pads"}`,
+        badge: "Busk",
+        kind: "desk",
+        strip: null,
+        chips: [
+          actionChip("page", "Page", { type: "buskPageSet", pageUuid: page.uuid }),
+          ...pads.map((pad) =>
+            actionChip(`pad:${pad.uuid}`, padFaceOf(pad).name, {
+              type: "pressPad",
+              padUuid: pad.uuid!,
+            }),
+          ),
+        ],
+      })
+    }
+
     out.push({
       key: "desk",
       name: "Desk",
@@ -452,11 +535,15 @@ export function SurfaceLibrary({
           minBpm: 60,
           maxBpm: 180,
         }),
+        // Here, not on each page's row: they are page-agnostic, and a chip repeated once per page
+        // reads as page-specific.
+        actionChip("page-next", "Next page", { type: "buskPageNext" }),
+        actionChip("page-prev", "Prev page", { type: "buskPagePrev" }),
       ],
     })
 
     return out
-  }, [continuousProperties, stacks, banks, deviceTypeKey])
+  }, [continuousProperties, stacks, banks, deviceTypeKey, looks, templates, pages])
 
   const needle = search.trim().toLowerCase()
   const matches = (name: string) => needle.length === 0 || name.toLowerCase().includes(needle)
@@ -551,7 +638,12 @@ export function SurfaceLibrary({
               />
             ))}
             {otherRows.map((row) => (
-              <LibraryRowItem key={row.key} row={row} onSurface={null} dragging={dragging} />
+              <LibraryRowItem
+                key={row.key}
+                row={row}
+                onSurface={placements.get(row.key) ?? null}
+                dragging={dragging}
+              />
             ))}
           </>
         )}

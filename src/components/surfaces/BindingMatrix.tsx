@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/sheet"
 import { LearnModeOverlay } from "./LearnModeOverlay"
 import { BindingTargetPicker } from "./BindingTargetPicker"
-import { describeTarget } from "./targetUtils"
+import { describeBindingTarget, type RecordBindingOptions } from "./recordOptions"
 import {
   useSurfaceBindingsQuery,
   useCreateSurfaceBindingMutation,
@@ -47,6 +47,8 @@ interface BindingMatrixProps {
   activeBank: string | null
   /** ID of a binding to highlight on mount (from `?binding=…` query param). */
   highlightBindingId: number | null
+  /** Resolves a record-addressed binding's uuid to a name — see `SurfaceInspector`'s `describe`. */
+  records: RecordBindingOptions
 }
 
 export function BindingMatrix({
@@ -55,6 +57,7 @@ export function BindingMatrix({
   profile,
   activeBank,
   highlightBindingId,
+  records,
 }: BindingMatrixProps) {
   const { data: bindings } = useSurfaceBindingsQuery(projectId)
   const [createBinding] = useCreateSurfaceBindingMutation()
@@ -126,7 +129,7 @@ export function BindingMatrix({
                     <TableCell>
                       {active ? (
                         <div className="flex items-center gap-2">
-                          <BindingSummary binding={active} />
+                          <BindingSummary binding={active} records={records} />
                           {dead && (
                             <Badge
                               variant="destructive"
@@ -300,10 +303,16 @@ function ControlKindIcon({ control }: { control: ControlDescriptor }) {
   return <Square className="size-3" />
 }
 
-function BindingSummary({ binding }: { binding: ControlSurfaceBinding }) {
+function BindingSummary({
+  binding,
+  records,
+}: {
+  binding: ControlSurfaceBinding
+  records: RecordBindingOptions
+}) {
   return (
     <div className="flex flex-col leading-tight">
-      <span className="text-sm">{describeTarget(binding.target)}</span>
+      <span className="text-sm">{describeBindingTarget(binding.target, records)}</span>
       <span className="text-[10px] text-muted-foreground font-mono">
         {binding.bank ? `bank ${binding.bank}` : "global"}
         {binding.takeoverPolicy ? ` · ${binding.takeoverPolicy}` : ""}

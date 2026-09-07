@@ -368,6 +368,16 @@ export function lightingApiMock() {
         toggle: () => {},
         clear: () => {},
       },
+      // Spelled out for the `selection` reason above: `store/busk.ts`'s `buskShowingPage` query
+      // seeds its cache entry from `getState()`, and the fallback Proxy would hand it back a
+      // Subscription — not a `number | null` — which `BuskingView`'s `activePage` would then
+      // compare a page id against and never match, masking the gap rather than surfacing it as a
+      // wrong type. `setPage` returns `true` (a landed gesture), matching `sendGesture`'s shape.
+      buskPage: {
+        getState: () => null,
+        subscribe: noopSub,
+        setPage: () => true,
+      },
       cueStacks: {
         subscribe: noopSub,
         subscribeToProgramState: (fn: (e: unknown) => void) => {

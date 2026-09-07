@@ -484,7 +484,9 @@ the page, and the library went back to being a flat list.
 **A press goes through the pad, and the bank decides the siblings.**
 `POST /busk/pads/{padId}/press` is the *only* press on this surface — the three kind-specific
 mutations (`toggleTemplate`, `toggleLook`, `goToStack`) are the programmer's ⌥click strip's and the
-AI's now. The server reads the pad, its record and, when the bank is **solo**, the records on its
+AI's now. It has a second door since the MIDI surface's session 4: a `PressPad` binding runs the
+same `BuskPressService` with the desk selection as the targets, which is why that service exists at
+all — the solo rules and the refusals are the pad's behaviour, not the endpoint's. The server reads the pad, its record and, when the bank is **solo**, the records on its
 sibling pads in one transaction. Solo has one meaning for every kind: pressing one *on* turns its
 siblings off — a layer sibling narrowed on the pressed heads, a live cue sibling stopped, and a cue
 press taking its layer siblings off wholesale, because a cue has no targets to narrow by. An **off**
@@ -642,8 +644,19 @@ or within a short grace after its response, because our own write would otherwis
 gesture and could land between an optimistic patch and its own response. One page is the tell — a
 layout write announces exactly one, page CRUD and reorder announce several.
 
-**The showing page lives in `?page=`**, resolved against the fetched list so a stale bookmark lands
-on the first page, and written back with `replace` — flipping pages is not a history entry. Edit mode
+**The showing page is a *desk* fact, and `?page=` mirrors it.** `busk.pageState` / `busk.setPage`
+(`api/buskPageApi.ts`, `store/busk.ts`'s `buskShowingPage` entry) is server-owned for the reason the
+selection is: a hardware *next page* button and a tab click are two ways of making one gesture, so
+two answers would leave the button and the screen disagreeing the moment either was used. The order
+is **this tab's offline override > desk > `?page=` > the first page**, all resolved against the
+fetched list so a stale bookmark lands somewhere real; a tab click writes the desk and the URL is
+written back with `replace` — flipping pages is not a history entry. A `null` from the desk is *not*
+"the first page": it means nothing has moved it, and each client falls back on its own. The offline
+override exists because `setShowingBuskPage` goes through `sendGesture`, which drops the frame when
+the socket is down — without it a click while offline would silently do nothing; it is set only on
+that failure and cleared by any change to the desk's value. It shares only a namespace with
+`busk.layoutChanged`, which names pages whose *document* changed and is what the echo suppression is
+written against. Edit mode
 lives in `store/buskEditSlice.ts` rather than a React context, because the cue-slot overlay is a
 *sibling* of the routed page in `Layout.tsx` and could never read a context provided inside the busk
 view. It is never persisted, and `BuskingView` **must** exit it on unmount, or that overlay keeps
@@ -677,8 +690,21 @@ precedence read backwards paints a plausible label for a control the desk drives
 costs the whole panel at 20 Hz. **A drop patches the control's *own row at the exact bank* or
 creates** — `index.byControl.get(id)?.get(activeBank)`, never `resolveControl`, which would answer a
 strip's row or a global one and move a binding the operator was not pointing at. And **the
-eligibility dim is the whole warning**: nothing on the backend refuses a `fireCue` on a fader, it
-simply never dispatches.
+eligibility dim mirrors a backend rule rather than standing alone**: since session 4,
+`ControlSurfaceBindingService.refuseWrongKind` refuses a `fireCue` on a fader at the write boundary
+whichever door it comes through, and `controlKinds` / `targetControlKind` in `lib/surfaceDrop.ts`
+are the client copy of `midi/BindingControlKind.kt`.
+
+A button can also press a **record**: `applyLook` onto the Look's *own* fixtures, `pressTemplate`
+onto the desk selection, `pressPad` through the pad's whole bank plan, plus the three busk-page
+targets. Four things follow on this side. Their library rows are **not** `TargetRowItem`s — that
+component exists to mount `useTargetProperties` per target — so they are built in `SurfaceLibrary`'s
+`rows` memo from `actionChip`. The **kind row stays at six**: a template files under *Looks*, a busk
+page under *Desk*, and *Next page* / *Prev page* sit on the Desk row once, because a chip repeated
+per page reads as page-specific. A **Look with a deferred effect is offered with no chip**, since it
+has no own fixtures and the write boundary refuses it by name. And `describeTarget` **will not
+resolve a uuid to a name** — `components/surfaces/recordOptions.ts` is the one owner of that, shared
+by the picker and the inspector, the same split `useSpeedMasterDisplay` makes for a speed master.
 
 **One desk, one selection, server-owned** (`store/selection.ts`), and three surfaces move it: the
 busk target band, the programmer's fixture list, and a select button on the desk itself. The list

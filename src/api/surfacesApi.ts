@@ -153,6 +153,64 @@ export interface EncoderBankSetTarget {
   propertyName: string
 }
 
+// ─── Records on buttons ───────────────────────────────────────────────
+//
+// A named thing from the library, uuid-addressed, **each with exactly one behaviour** — see D6 in
+// `docs/plans/midi-surface-plan.md`. Uuids rather than int ids because a binding has to survive a
+// clone or a cross-install import, which is what `FU-SYNC-BINDING-PAYLOAD-UUIDS` records.
+
+/**
+ * Press a Look onto **its own fixtures** — never the selection.
+ *
+ * The opposite choice from {@link PressTemplateTarget}, and for the reason that makes each of them
+ * "one behaviour every press": a Look names its fixtures and a template names none. A Look with a
+ * deferred effect has no own targets, so it is refused at bind time
+ * (`BINDING_LOOK_NEEDS_SELECTION`) and reads as health `lookNeedsSelection` if it gains one later.
+ */
+export interface ApplyLookTarget {
+  type: "applyLook"
+  lookUuid: string
+}
+
+/**
+ * Press a template onto the **desk selection**, as a layer that tracks it — the ⌥click gesture.
+ *
+ * A generic template with nothing selected is dropped: its rows take their targets from the press.
+ * A per-fixture one names its own heads. The family mask is derived server-side from the
+ * template's rows, so nothing here sends one.
+ */
+export interface PressTemplateTarget {
+  type: "pressTemplate"
+  templateUuid: string
+}
+
+/**
+ * Press a busk pad — its own bank's plan, solo siblings included, on the desk selection.
+ *
+ * The same press `POST /busk/pads/{id}/press` makes, through one `BuskPressService`, so a hardware
+ * press and a screen press of one pad cannot diverge.
+ */
+export interface PressPadTarget {
+  type: "pressPad"
+  padUuid: string
+}
+
+/** Show the next busk page, wrapping. Page-agnostic, so it names none. */
+export interface BuskPageNextTarget {
+  type: "buskPageNext"
+}
+
+/** Show the previous busk page, wrapping. */
+export interface BuskPagePrevTarget {
+  type: "buskPagePrev"
+}
+
+/** Show one named busk page. Its LED is lit while that page is the one showing. */
+export interface BuskPageSetTarget {
+  type: "buskPageSet"
+  pageUuid: string
+}
+
 /**
  * A persisted payload whose `type` this build does not know — produced only by the backend's
  * tolerant per-row decode and re-encoded verbatim, so an older desk reading a newer project keeps
@@ -184,6 +242,12 @@ export type BindingTarget =
   | LocateSelectionTarget
   | StripTarget
   | EncoderBankSetTarget
+  | ApplyLookTarget
+  | PressTemplateTarget
+  | PressPadTarget
+  | BuskPageNextTarget
+  | BuskPagePrevTarget
+  | BuskPageSetTarget
   | UnknownTarget
 
 export type TakeoverPolicy = "IMMEDIATE" | "PICKUP"
@@ -213,6 +277,15 @@ export type BindingHealth =
   // A selection or encoder-bank property no fixture in the patch declares. It names the property
   // and no target, because there is no target: what makes it dead is the patch, not a reference.
   | { type: "unknownProperty"; propertyName: string }
+  // The record variants. Keyed by uuid because that is what the binding carries.
+  | { type: "missingLook"; lookUuid: string }
+  | { type: "missingTemplate"; templateUuid: string }
+  | { type: "missingPad"; padUuid: string }
+  | { type: "missingPage"; pageUuid: string }
+  // Not "missing": the Look is still there, but it has gained a deferred effect, so it has no own
+  // targets and a button has no selection to give it. A different state because it has a different
+  // fix — bind the effect's targets, rather than rebind the button.
+  | { type: "lookNeedsSelection"; lookUuid: string }
   // The row the tolerant decode kept (see `UnknownTarget`). Dead, drawn, rebindable.
   | { type: "unknownTarget"; targetType: string }
 

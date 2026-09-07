@@ -54,6 +54,11 @@ vi.mock('@/store/groups', () => ({
   useGroupPropertiesQuery: () => ({ data: [] }),
 }))
 vi.mock('@/store/fixtures', () => ({ useFixtureListQuery: () => ({ data: [] }) }))
+// The inspector resolves a record binding's uuid to a name through these three; empty is the arm
+// every case in this file takes, since none of them binds a record.
+vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: [] }) }))
+vi.mock('@/store/templates', () => ({ useTemplateListQuery: () => ({ data: [] }) }))
+vi.mock('@/store/busk', () => ({ useBuskPagesQuery: () => ({ data: [] }) }))
 // The narrow fallback and the inspector's two editing surfaces are stubbed: each drags in the
 // binding-target picker and, behind it, the speed-master bank, and none of them is what this file
 // is asserting about. `EditBindingSheet` lives in the matrix module, so the stub exports both.

@@ -17,6 +17,8 @@ import {
   useSaveBuskLayoutMutation,
   usePressBuskPadMutation,
   useCacheBuskPage,
+  useBuskShowingPageQuery,
+  setShowingBuskPage,
 } from '@/store/busk'
 import { libraryStarterLayout, recordsOnPage } from '@/lib/buskLayout'
 import type { BuskPad } from '@/api/buskApi'
@@ -87,13 +89,49 @@ export function BuskingView({ projectId }: { projectId: number }) {
   const [pressPad] = usePressBuskPadMutation()
   const cachePage = useCacheBuskPage(projectId)
 
-  // `?page=` is resolved against what actually came back, so a stale bookmark or a page deleted in
-  // another tab lands on the first page rather than on nothing.
+  // Which page is showing has **four** writers and one answer, and the precedence is what makes
+  // three of them one gesture rather than three:
+  //
+  //   this tab's offline override  >  the desk's showing page  >  `?page=`  >  the first page
+  //
+  // The **desk** wins over the URL because it is the shared fact a hardware *next page* button
+  // moves and every client follows (midi-surface plan D6); `?page=` is what a link carries and
+  // what this view falls back to before anything has moved the desk; and both are resolved
+  // against the fetched list, so a stale bookmark or a page deleted in another tab lands somewhere
+  // real.
+  //
+  // A tab click writes the **desk** rather than the URL, and the URL then mirrors what comes back.
+  // Writing the URL directly would leave this tab on a page the desk and every other client
+  // disagreed about, which is exactly what the shared state exists to prevent — *while connected*.
+  //
+  // The **offline override** is the one case that beats the desk on purpose: `setShowingBuskPage`
+  // fails outright when the socket is down (see `sendGesture`), so without a local escape hatch a
+  // click while offline would silently do nothing — the desk's last-known value, however stale,
+  // would keep winning. `onPageSelect` below sets it only on that failure; `deskPageId` changing at
+  // all — a reconnect delivering the real answer, or this tab's own next successful click — is
+  // trusted over it and clears it.
   const requestedPageId = Number(searchParams.get('page'))
+  const { data: deskPageId } = useBuskShowingPageQuery()
+  const [offlinePageId, setOfflinePageId] = useState<number | null>(null)
+  useEffect(() => {
+    setOfflinePageId(null)
+  }, [deskPageId])
   const activePage = useMemo(() => {
     if (pages == null || pages.length === 0) return null
-    return pages.find((page) => page.id === requestedPageId) ?? pages[0]
-  }, [pages, requestedPageId])
+    return (
+      pages.find((page) => page.id === offlinePageId) ??
+      pages.find((page) => page.id === deskPageId) ??
+      pages.find((page) => page.id === requestedPageId) ??
+      pages[0]
+    )
+  }, [pages, offlinePageId, deskPageId, requestedPageId])
+
+  const onPageSelect = useCallback(
+    (pageId: number) => {
+      if (!setShowingBuskPage(pageId)) setOfflinePageId(pageId)
+    },
+    [],
+  )
 
   useEffect(() => {
     if (activePage == null || activePage.id === requestedPageId) return
@@ -198,16 +236,9 @@ export function BuskingView({ projectId }: { projectId: number }) {
             pages={pages ?? []}
             activePageId={activePage?.id ?? null}
             editing={editing}
-            onSelect={(pageId) =>
-              setSearchParams(
-                (prev) => {
-                  const next = new URLSearchParams(prev)
-                  next.set('page', String(pageId))
-                  return next
-                },
-                { replace: true },
-              )
-            }
+            // The desk, not the URL: the effect above mirrors what comes back into `?page=`, and
+            // `onPageSelect` falls back to the offline override above when the gesture never left.
+            onSelect={onPageSelect}
             onCreate={(name) => createPage({ projectId, name }).unwrap()}
             onRename={(name) =>
               activePage == null

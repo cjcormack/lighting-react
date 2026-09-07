@@ -113,6 +113,12 @@ export function controlKinds(descriptor: ControlDescriptor): readonly ControlKin
  * `strip` is null because it addresses a strip id, never a control, and the backend refuses the
  * swap by name (`refuseWrongSlot`); `unknown` is null because `refuseUnknown` will not accept one
  * from a request at all — it exists to be *rebound*, not re-sent.
+ *
+ * This is now the **mirror** of `midi/BindingControlKind.kt` rather than the only copy: session 4
+ * closed `FU-MIDI-BIND-CONTROL-KIND`, so `ControlSurfaceBindingService.refuseWrongKind` refuses a
+ * mismatch at the write boundary whichever door it comes through. Keep the two tables in step; a
+ * divergence here only makes the palette offer or withhold a chip the server would have judged
+ * differently.
  */
 export function targetControlKind(target: BindingTarget): ControlKind | null {
   switch (target.type) {
@@ -121,6 +127,9 @@ export function targetControlKind(target: BindingTarget): ControlKind | null {
     case 'selectionProperty':
     case 'speedMasterBpm':
       return 'continuous'
+    // Every button target, records and busk pages included: each of those is a press, and a fader
+    // has no press. (One run of labels with no comment inside it — `no-fallthrough` reads a comment
+    // between two `case`s as the end of the run.)
     case 'flash':
     case 'cueStackGo':
     case 'cueStackBack':
@@ -134,6 +143,12 @@ export function targetControlKind(target: BindingTarget): ControlKind | null {
     case 'grandMasterToggle':
     case 'setBank':
     case 'speedMasterTap':
+    case 'applyLook':
+    case 'pressTemplate':
+    case 'pressPad':
+    case 'buskPageNext':
+    case 'buskPagePrev':
+    case 'buskPageSet':
       return 'button'
     case 'strip':
     case 'unknown':
@@ -150,10 +165,9 @@ export function targetControlKind(target: BindingTarget): ControlKind | null {
  * page's reason: `disabled` is what keeps `over` (and so the highlight) off a place the drop would
  * refuse, and this is the half a test can reach.
  *
- * Nothing on the backend enforces the chip half. `refuseWrongSlot` guards the strip slot, and
- * `refuseUnknown` the undecodable row, but a `fireCue` on a fader saves happily and then never
- * fires — so this predicate, and the dim it drives, are the whole of what stands between the
- * operator and a control that silently does nothing.
+ * The backend enforces the chip half too since session 4 (`refuseWrongKind`), so this is no longer
+ * the *whole* of the guard — but it is still the half that keeps the operator from dropping onto a
+ * control that would answer a 400, which is a worse way to learn the rule than a dimmed target.
  */
 export function canLand(drag: SurfaceDragData, drop: SurfaceDropData): boolean {
   if (drag.type === 'surface-row') return drop.type === 'surface-strip'

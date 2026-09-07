@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ControlState, ControlSurfaceBinding, ControlSurfaceType } from '@/store/surfaces'
 import { buildBindingIndex } from '@/lib/surfaceResolve'
 import { SurfacePanel } from './SurfacePanel'
+import { EMPTY_RECORD_OPTIONS } from './recordOptions'
 
 /**
  * Each state in `midi-surface-design/Legend.dc.html`, produced the only way the panel will ever
@@ -135,6 +136,7 @@ function renderPanel({
       editing={false}
       lifted={null}
       onRemoveBinding={() => {}}
+      records={EMPTY_RECORD_OPTIONS}
     />,
   )
   return onSelect
@@ -256,6 +258,7 @@ describe('SurfacePanel — the button LED', () => {
         editing={false}
         lifted={null}
         onRemoveBinding={() => {}}
+        records={EMPTY_RECORD_OPTIONS}
       />,
     )
     const lit = container.querySelectorAll('.bg-surface-led')
@@ -277,6 +280,7 @@ function renderWithContainer(controls: Record<string, ControlState>) {
       editing={false}
       lifted={null}
       onRemoveBinding={() => {}}
+      records={EMPTY_RECORD_OPTIONS}
     />,
   )
 }

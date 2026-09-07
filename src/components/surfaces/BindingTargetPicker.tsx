@@ -13,6 +13,11 @@ import { useGroupListQuery } from "@/store/groups"
 import { usePatchListQuery } from "@/store/patches"
 import { useProjectCueStackListQuery } from "@/store/cueStacks"
 import { useRigProperties } from "@/hooks/useTargetProperties"
+import {
+  useRecordBindingOptions,
+  type RecordBindingOptions,
+  type RecordOption,
+} from "./recordOptions"
 import type { BindingTarget, TakeoverPolicy } from "@/store/surfaces"
 import type { CueTarget } from "@/api/cuesApi"
 
@@ -41,24 +46,23 @@ interface BindingTargetPickerProps {
   onPolicyChange: (policy: TakeoverPolicy | null) => void
 }
 
-type TargetKind =
-  | "fixtureProperty"
-  | "groupProperty"
-  | "selectionProperty"
-  | "cueStackGo"
-  | "cueStackBack"
-  | "cueStackPause"
-  | "fireCue"
-  | "flash"
-  | "selectTarget"
-  | "clearSelection"
-  | "locateSelection"
-  | "encoderBankSet"
-  | "blackout"
-  | "grandMasterToggle"
-  | "setBank"
-  | "speedMasterBpm"
-  | "speedMasterTap"
+/**
+ * Every `BindingTarget` variant offerable from the "Target type" dropdown — everything except
+ * `strip` and `unknown`, which are rendered (see below) but never offered as a kind to switch to.
+ *
+ * **Derived from `BindingTarget["type"]` on purpose, not hand-copied.** It used to be a literal
+ * union kept in step by hand, and the gap that leaves is exactly what bit once already (see the
+ * test file's comment on session 3a): a `BindingTarget` variant added in `surfacesApi.ts` with no
+ * matching addition here compiled cleanly and opened an empty body under "Fixture property". Tying
+ * the two together turns that into a compiler error instead — `KIND_LABELS` below is a `Record`
+ * over this type, so a new variant with no label is a missing-key error, and `defaultForKind`'s
+ * switch has no `default` case, so a new variant with no default is `TS2366` (verified: deleting a
+ * case from that switch does not compile). `CONTINUOUS_KINDS`/`BUTTON_KINDS` are still plain
+ * arrays a new variant could go missing from silently — the two checks above are what matters,
+ * because a kind absent from both never reaches either list-driven Select, so its label and default
+ * are what a reviewer would notice missing.
+ */
+type TargetKind = Exclude<BindingTarget["type"], "strip" | "unknown">
 
 const CONTINUOUS_KINDS: TargetKind[] = [
   "fixtureProperty",
@@ -80,6 +84,12 @@ const BUTTON_KINDS: TargetKind[] = [
   "grandMasterToggle",
   "setBank",
   "speedMasterTap",
+  "applyLook",
+  "pressTemplate",
+  "pressPad",
+  "buskPageSet",
+  "buskPageNext",
+  "buskPagePrev",
 ]
 
 const KIND_LABELS: Record<TargetKind, string> = {
@@ -100,6 +110,12 @@ const KIND_LABELS: Record<TargetKind, string> = {
   setBank: "Set bank",
   speedMasterBpm: "Speed master — BPM",
   speedMasterTap: "Speed master — Tap",
+  applyLook: "Look — apply",
+  pressTemplate: "Template — press",
+  pressPad: "Busk pad — press",
+  buskPageSet: "Busk page — show",
+  buskPageNext: "Busk page — next",
+  buskPagePrev: "Busk page — previous",
 }
 
 export function BindingTargetPicker({
@@ -121,6 +137,9 @@ export function BindingTargetPicker({
   // nor an encoder bank names a head to ask. A property no selected head declares simply drops its
   // move (D3), which is a fact about the selection rather than a bad binding.
   const rigProperties = useRigProperties()
+  // The four uuid-addressed variants need a library to pick from; one owner for the lists and for
+  // the name they resolve to, shared with the inspector's binding card.
+  const records = useRecordBindingOptions(projectId)
 
   const fixtureOptions = useMemo(
     () => (patches ?? []).map((p) => ({ key: p.key, label: p.displayName })),
@@ -183,6 +202,7 @@ export function BindingTargetPicker({
           groupOptions={groupOptions}
           stacks={stacks ?? []}
           properties={continuousProperties}
+          records={records}
         />
       ) : (
         <p className="text-xs text-muted-foreground">
@@ -300,10 +320,12 @@ function TargetBody({
   groupOptions,
   stacks,
   properties,
+  records,
 }: {
   kind: TargetKind
   value: BindingTarget
   onChange: (v: BindingTarget) => void
+  records: RecordBindingOptions
   fixtureOptions: { key: string; label: string }[]
   groupOptions: string[]
   stacks: { id: number; name: string }[]
@@ -472,6 +494,7 @@ function TargetBody({
           groupOptions={groupOptions}
           stacks={stacks}
           properties={properties}
+          records={records}
         />
         <div className="space-y-1.5">
           <Label className="text-xs">Max (0–255)</Label>
@@ -540,6 +563,77 @@ function TargetBody({
     )
   }
 
+  if (kind === "applyLook" && value.type === "applyLook") {
+    return (
+      <div className="space-y-2">
+        <RecordField
+          label="Look"
+          value={value.lookUuid}
+          onChange={(lookUuid) => onChange({ ...value, lookUuid })}
+          options={records.looks}
+        />
+        <p className="text-xs text-muted-foreground">
+          Presses the Look onto <em>its own fixtures</em>, the same every press — never onto the
+          selection. A Look with a deferred effect has none of its own, and is refused.
+        </p>
+      </div>
+    )
+  }
+  if (kind === "pressTemplate" && value.type === "pressTemplate") {
+    return (
+      <div className="space-y-2">
+        <RecordField
+          label="Template"
+          value={value.templateUuid}
+          onChange={(templateUuid) => onChange({ ...value, templateUuid })}
+          options={records.templates}
+        />
+        <p className="text-xs text-muted-foreground">
+          Presses onto the desk selection as a layer that tracks the template. With nothing
+          selected a generic template&rsquo;s press is dropped.
+        </p>
+      </div>
+    )
+  }
+  if (kind === "pressPad" && value.type === "pressPad") {
+    return (
+      <div className="space-y-2">
+        <RecordField
+          label="Busk pad"
+          value={value.padUuid}
+          onChange={(padUuid) => onChange({ ...value, padUuid })}
+          options={records.pads}
+        />
+        <p className="text-xs text-muted-foreground">
+          The pad&rsquo;s own press, solo siblings included — exactly what pressing it on the busk page
+          does.
+        </p>
+      </div>
+    )
+  }
+  if (kind === "buskPageSet" && value.type === "buskPageSet") {
+    return (
+      <div className="space-y-2">
+        <RecordField
+          label="Page"
+          value={value.pageUuid}
+          onChange={(pageUuid) => onChange({ ...value, pageUuid })}
+          options={records.pages}
+        />
+        <p className="text-xs text-muted-foreground">
+          Shows this page on every client. Its LED is lit while it is the one showing.
+        </p>
+      </div>
+    )
+  }
+  if (kind === "buskPageNext" || kind === "buskPagePrev") {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Moves the showing busk page by one, wrapping at the ends.
+      </p>
+    )
+  }
+
   if (kind === "speedMasterTap" && value.type === "speedMasterTap") {
     return (
       <SpeedMasterSelect
@@ -563,6 +657,45 @@ function clampBpm(raw: string, fallback: number): number {
   const parsed = Number(raw)
   if (!Number.isFinite(parsed)) return fallback
   return Math.min(300, Math.max(20, parsed))
+}
+
+/**
+ * A uuid-addressed library choice.
+ *
+ * Starts **unset** rather than on the first row, and the placeholder says so: an empty uuid is
+ * refused by name at the write boundary, where a silently-defaulted first row would save and bind
+ * the button to something nobody picked.
+ */
+function RecordField({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  options: RecordOption[]
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">{label}</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger><SelectValue placeholder="Choose…" /></SelectTrigger>
+        <SelectContent>
+          {options.map((o) => (
+            <SelectItem key={o.uuid} value={o.uuid} disabled={o.disabled}>
+              {o.label}
+              {o.detail && <span className="text-muted-foreground"> · {o.detail}</span>}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {options.length === 0 && (
+        <p className="text-xs text-muted-foreground">Nothing in this library yet.</p>
+      )}
+    </div>
+  )
 }
 
 function defaultForKind(
@@ -618,5 +751,20 @@ function defaultForKind(
       return { type: "speedMasterBpm", masterUuid: null, minBpm: 60, maxBpm: 180 }
     case "speedMasterTap":
       return { type: "speedMasterTap", masterUuid: null }
+    // The record variants start **empty**, not on the first row of their library: an empty uuid
+    // is refused by name at the write boundary, where the first row would save silently and bind
+    // the button to something the operator never picked. The body below insists on a choice.
+    case "applyLook":
+      return { type: "applyLook", lookUuid: "" }
+    case "pressTemplate":
+      return { type: "pressTemplate", templateUuid: "" }
+    case "pressPad":
+      return { type: "pressPad", padUuid: "" }
+    case "buskPageSet":
+      return { type: "buskPageSet", pageUuid: "" }
+    case "buskPageNext":
+      return { type: "buskPageNext" }
+    case "buskPagePrev":
+      return { type: "buskPagePrev" }
   }
 }

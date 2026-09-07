@@ -11,6 +11,28 @@ vi.mock('@/store/groups', () => ({ useGroupListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/fixtures', () => ({ useFixtureListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/patches', () => ({ usePatchListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/cueStacks', () => ({ useProjectCueStackListQuery: () => ({ data: [] }) }))
+// The three record libraries, behind `useRecordBindingOptions`.
+vi.mock('@/store/looks', () => ({
+  useLookListQuery: () => ({
+    data: [
+      { id: 1, uuid: 'look-warm', name: 'Warm wash', hasDeferredEffects: false },
+      { id: 2, uuid: 'look-pulse', name: 'Pulse', hasDeferredEffects: true },
+    ],
+  }),
+}))
+vi.mock('@/store/templates', () => ({
+  useTemplateListQuery: () => ({ data: [{ id: 5, uuid: 'tmpl-red', name: 'Red', family: 'COLOUR' }] }),
+}))
+vi.mock('@/store/busk', () => ({
+  useBuskPagesQuery: () => ({
+    data: [
+      {
+        id: 7, uuid: 'page-verse', name: 'Verse', sortOrder: 0,
+        rows: [{ columns: [{ id: 1, uuid: 'c', width: 12, banks: [{ id: 2, uuid: 'b', name: 'keys', solo: true, flow: 'WRAP', pads: [] }] }] }],
+      },
+    ],
+  }),
+}))
 vi.mock('@/store/speedMasters', () => ({
   useSpeedMasterLiveQuery: () => ({
     data: [
@@ -93,5 +115,54 @@ describe('BindingTargetPicker speed-master targets', () => {
 
     expect(screen.getByText('Speed Master')).toBeInTheDocument()
     expect(screen.queryByText('Min BPM')).not.toBeInTheDocument()
+  })
+})
+
+describe('BindingTargetPicker record targets', () => {
+  // 3a widened the union without widening this list, so *Change target* on a selection binding
+  // opened an empty body under a kind Select reading "Fixture property". Session 4 mints four more
+  // variants by the handful, so the same hole would reopen four times.
+  //
+  // Rendering *with* each value catches both halves at once: `kind` falls back to `options[0]` when
+  // the value's type is not offered, and the body only renders while `value.type === kind` — so an
+  // unlisted variant shows "Fixture property" and nothing else.
+  it.each([
+    ['Look — apply', 'Look', { type: 'applyLook', lookUuid: 'look-warm' } as BindingTarget],
+    ['Template — press', 'Template', { type: 'pressTemplate', templateUuid: 'tmpl-red' } as BindingTarget],
+    ['Busk pad — press', 'Busk pad', { type: 'pressPad', padUuid: 'pad-1' } as BindingTarget],
+    ['Busk page — show', 'Page', { type: 'buskPageSet', pageUuid: 'page-verse' } as BindingTarget],
+  ])('offers %s and renders its body', (kindLabel, fieldLabel, value) => {
+    renderPicker(false, value)
+    expect(screen.getByText(kindLabel)).toBeInTheDocument()
+    expect(screen.getByText(fieldLabel)).toBeInTheDocument()
+  })
+
+  it('renders the page-step kinds, which have no body to fill in', () => {
+    renderPicker(false, { type: 'buskPageNext' })
+    expect(screen.getByText('Busk page — next')).toBeInTheDocument()
+    expect(screen.getByText(/wrapping at the ends/)).toBeInTheDocument()
+  })
+
+  it('does not offer a record kind on a fader', () => {
+    // Every one is a press, and a fader has no press — `refuseWrongKind` would refuse the row.
+    renderPicker(true, { type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'dimmer' })
+    expect(screen.queryByText('Look — apply')).toBeNull()
+  })
+
+  it('names the record rather than its uuid', () => {
+    renderPicker(false, { type: 'applyLook', lookUuid: 'look-warm' })
+    expect(screen.getByText('Warm wash')).toBeInTheDocument()
+  })
+
+  it('offers a Look that needs a selection, but not as a choosable option', () => {
+    // `SurfaceLibrary`'s drag chip already excludes one of these outright, to avoid the write
+    // boundary's `BINDING_LOOK_NEEDS_SELECTION`. The picker's manual "Change target" door has to
+    // enforce the same rule itself rather than let the operator pick it and hit the 400 on save.
+    renderPicker(false, { type: 'applyLook', lookUuid: 'look-warm' })
+    // Two comboboxes are on screen: "Target type" and this body's own "Look" field — the second
+    // is the one that lists the library.
+    fireEvent.click(screen.getAllByRole('combobox')[1]!)
+    const pulse = screen.getByRole('option', { name: /Pulse/ })
+    expect(pulse.getAttribute('aria-disabled')).toBe('true')
   })
 })
