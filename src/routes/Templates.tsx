@@ -57,7 +57,7 @@ export function TemplatesRedirect() {
  * **The list is flat and ordered by name**, and there is nothing to drag. Templates used to carry
  * an operator-set position and could sit in a *group* whose pads released each other on the busk
  * view; the busk page took both jobs when the operator took ownership of the layout
- * (`docs/plans/busk-layout-plan.md` D1), so order is a pad's place in a bank and exclusivity is a
+ * (`docs/plans/completed/busk-layout-plan.md` D1), so order is a pad's place in a bank and exclusivity is a
  * solo bank's. This route is a library to find things in, not a layout to arrange.
  */
 export function ProjectTemplates() {

@@ -473,7 +473,7 @@ has a name, a `solo` flag and a `flow` (`WRAP` | `COLUMN`) and holds ordered **p
 reference to exactly one template, Look or cue. One record may sit on several pads, on several
 pages. Backend contract in `lighting7/models/buskLayout.kt` and
 `lighting7/docs/lighting-composition-model.md` §"The busk layout"; the plan is
-`lighting7/docs/plans/busk-layout-plan.md` and the design authority is `look-groups-design/`.
+`lighting7/docs/plans/completed/busk-layout-plan.md` and the design authority is `look-groups-design/`.
 
 It replaced an automatic layout — four family columns of templates, a Looks pool, a cue column of
 stack cards and pinned-cue pads. The reason is the one a template group could not meet: a group
@@ -680,8 +680,8 @@ drag from is a trap. `Done` stays at every width so a window narrowed mid-edit c
 rules, and — under *Edit bindings* — lets a library be dragged onto it: **a row lands on a strip, a
 chip lands on one control**. Read
 [`docs/midi-surface-engineering.md`](docs/midi-surface-engineering.md) before touching it; the plan
-is `lighting7/docs/plans/midi-surface-plan.md` and the layout authority
-`lighting7/docs/plans/midi-surface-design/`.
+is `lighting7/docs/plans/completed/midi-surface-plan.md` and the layout authority
+`lighting7/docs/plans/completed/midi-surface-design/`.
 
 The four things that bite, in one line each. **`lib/surfaceResolve.ts` is a mirror of
 `ControlSurfaceBindingService.resolve` and `deriveStripTarget`** and its failure is silent — a

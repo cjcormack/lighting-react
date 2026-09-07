@@ -45,7 +45,7 @@
 
   /* Surface panel only — the MIDI picture in Settings › Surfaces draws a piece of hardware, so
      it needs a plastic ground, knob and cap shades and an LED colour that no other surface has a
-     use for. Taken verbatim from `lighting7/docs/plans/midi-surface-design/`. `--surface-led` is
+     use for. Taken verbatim from `lighting7/docs/plans/completed/midi-surface-design/`. `--surface-led` is
      amber because that is what an X-Touch's buttons actually light, and reading the picture
      against the desk is the whole point of it. */
   --surface-panel: oklch(0.955 0.003 286);

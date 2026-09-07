@@ -97,7 +97,7 @@ export interface SpeedMasterTapTarget {
 //
 // The layer beside the fixed bindings above: these name no fixture of their own, and what they
 // act on is whatever is in the desk selection when the control moves. See
-// `docs/plans/midi-surface-plan.md` D3 in lighting7.
+// `docs/plans/completed/midi-surface-plan.md` D3 in lighting7.
 
 /**
  * Write a continuous property on **every selected target** — a fixture directly, a group fanned
@@ -156,7 +156,7 @@ export interface EncoderBankSetTarget {
 // ─── Records on buttons ───────────────────────────────────────────────
 //
 // A named thing from the library, uuid-addressed, **each with exactly one behaviour** — see D6 in
-// `docs/plans/midi-surface-plan.md`. Uuids rather than int ids because a binding has to survive a
+// `docs/plans/completed/midi-surface-plan.md`. Uuids rather than int ids because a binding has to survive a
 // clone or a cross-install import, which is what `FU-SYNC-BINDING-PAYLOAD-UUIDS` records.
 
 /**

@@ -3,8 +3,8 @@
 `/projects/:id/settings/surfaces` (`routes/Surfaces.tsx`). A picture of the attached MIDI desk, an
 inspector for whichever control you click, and — under *Edit bindings* — a library you drag onto it.
 
-The plan and the decisions are `lighting7/docs/plans/midi-surface-plan.md`; the layout authority is
-`lighting7/docs/plans/midi-surface-design/` (`Main.dc.html` run mode, `Edit.dc.html` edit mode,
+The plan and the decisions are `lighting7/docs/plans/completed/midi-surface-plan.md`; the layout authority is
+`lighting7/docs/plans/completed/midi-surface-design/` (`Main.dc.html` run mode, `Edit.dc.html` edit mode,
 `Legend.dc.html` the control-state vocabulary). The backend contract is
 `lighting7/docs/midi-control-surface-engineering.md`. This file is the client half: the things that
 will bite.
