@@ -12,7 +12,24 @@ import { SpeedMasterSelect } from "@/components/fx/SpeedMasterSelect"
 import { useGroupListQuery } from "@/store/groups"
 import { usePatchListQuery } from "@/store/patches"
 import { useProjectCueStackListQuery } from "@/store/cueStacks"
+import { useRigProperties } from "@/hooks/useTargetProperties"
 import type { BindingTarget, TakeoverPolicy } from "@/store/surfaces"
+import type { CueTarget } from "@/api/cuesApi"
+
+/**
+ * The form behind *Change target* and MIDI Learn's commit.
+ *
+ * The library's drag is how a binding is normally made now (D9); this is the other door, and it has
+ * to stay able to say what comes through it. It carried the twelve variants that existed before the
+ * selection and strip work, so the five the drag mints — selection property, select, clear, locate
+ * and encoder bank — read as *Fixture property* over an empty body until session 3b widened it.
+ *
+ * Two variants are deliberately **not** offerable, and each is rendered rather than offered:
+ * `strip` addresses a strip id and the backend refuses it on a control (`refuseWrongSlot`), so it
+ * appears only when it is already the value and edits its group; and `unknown` is a row this build
+ * could not decode, which `refuseUnknown` will not accept back — it exists to be *rebound*, which
+ * is what the notice below invites.
+ */
 
 interface BindingTargetPickerProps {
   projectId: number
@@ -27,20 +44,34 @@ interface BindingTargetPickerProps {
 type TargetKind =
   | "fixtureProperty"
   | "groupProperty"
+  | "selectionProperty"
   | "cueStackGo"
   | "cueStackBack"
   | "cueStackPause"
   | "fireCue"
   | "flash"
+  | "selectTarget"
+  | "clearSelection"
+  | "locateSelection"
+  | "encoderBankSet"
   | "blackout"
   | "grandMasterToggle"
   | "setBank"
   | "speedMasterBpm"
   | "speedMasterTap"
 
-const CONTINUOUS_KINDS: TargetKind[] = ["fixtureProperty", "groupProperty", "speedMasterBpm"]
+const CONTINUOUS_KINDS: TargetKind[] = [
+  "fixtureProperty",
+  "groupProperty",
+  "selectionProperty",
+  "speedMasterBpm",
+]
 const BUTTON_KINDS: TargetKind[] = [
   "flash",
+  "selectTarget",
+  "clearSelection",
+  "locateSelection",
+  "encoderBankSet",
   "cueStackGo",
   "cueStackBack",
   "cueStackPause",
@@ -54,11 +85,16 @@ const BUTTON_KINDS: TargetKind[] = [
 const KIND_LABELS: Record<TargetKind, string> = {
   fixtureProperty: "Fixture property",
   groupProperty: "Group property",
+  selectionProperty: "Selection — property",
   cueStackGo: "Cue stack — Go",
   cueStackBack: "Cue stack — Back",
   cueStackPause: "Cue stack — Pause",
   fireCue: "Fire cue",
   flash: "Flash",
+  selectTarget: "Selection — select",
+  clearSelection: "Selection — clear",
+  locateSelection: "Selection — locate",
+  encoderBankSet: "Encoder bank",
   blackout: "Blackout",
   grandMasterToggle: "Grand Master",
   setBank: "Set bank",
@@ -81,6 +117,10 @@ export function BindingTargetPicker({
   const { data: groups } = useGroupListQuery()
   const { data: patches } = usePatchListQuery(projectId)
   const { data: stacks } = useProjectCueStackListQuery(projectId)
+  // The rig union is the only vocabulary a target-*less* binding has: neither a selection property
+  // nor an encoder bank names a head to ask. A property no selected head declares simply drops its
+  // move (D3), which is a fact about the selection rather than a bad binding.
+  const rigProperties = useRigProperties()
 
   const fixtureOptions = useMemo(
     () => (patches ?? []).map((p) => ({ key: p.key, label: p.displayName })),
@@ -90,6 +130,30 @@ export function BindingTargetPicker({
     () => (groups ?? []).map((g) => g.name),
     [groups],
   )
+  const continuousProperties = useMemo(
+    () => rigProperties.filter((p) => p.continuous),
+    [rigProperties],
+  )
+
+  // A strip row edits its group and nothing else — that is what the inspector's *Change group*
+  // means. It is never offered as a kind: a strip target on a control is refused by name
+  // (`BINDING_STRIP_NEEDS_STRIP`), so putting it in the list would only be a way to hit a 400.
+  if (value.type === "strip") {
+    return (
+      <div className="space-y-3">
+        <p className="text-xs text-muted-foreground">
+          A strip binding covers the whole channel strip — fader, select, encoder and flash. Change
+          the group or fixture it follows; <em>Fader only…</em> is how it becomes single bindings.
+        </p>
+        <TargetRefFields
+          value={value.target}
+          onChange={(next) => onChange({ ...value, target: next })}
+          fixtureOptions={fixtureOptions}
+          groupOptions={groupOptions}
+        />
+      </div>
+    )
+  }
 
   function changeKind(next: TargetKind) {
     setKind(next)
@@ -110,16 +174,30 @@ export function BindingTargetPicker({
         </Select>
       </div>
 
-      <TargetBody
-        kind={kind}
-        value={value}
-        onChange={onChange}
-        fixtureOptions={fixtureOptions}
-        groupOptions={groupOptions}
-        stacks={stacks ?? []}
-      />
+      {value.type === kind ? (
+        <TargetBody
+          kind={kind}
+          value={value}
+          onChange={onChange}
+          fixtureOptions={fixtureOptions}
+          groupOptions={groupOptions}
+          stacks={stacks ?? []}
+          properties={continuousProperties}
+        />
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          {value.type === "unknown"
+            ? `This control holds a “${value.targetType}” target that this build cannot decode. Pick a target type above to rebind it.`
+            : "Pick a target type above."}
+        </p>
+      )}
 
-      {continuous && (value.type === "fixtureProperty" || value.type === "groupProperty") && (
+      {/* D10: a selection property arms takeover exactly as a fixed one does — against the
+          selection's common value, and against nothing when it is mixed. */}
+      {continuous &&
+        (value.type === "fixtureProperty" ||
+          value.type === "groupProperty" ||
+          value.type === "selectionProperty") && (
         <div className="space-y-1.5">
           <Label className="text-xs">Takeover policy</Label>
           <Select
@@ -139,6 +217,81 @@ export function BindingTargetPicker({
   )
 }
 
+/** A group-or-fixture picker over the shared `{ type, key }` target shape. */
+function TargetRefFields({
+  value,
+  onChange,
+  fixtureOptions,
+  groupOptions,
+}: {
+  value: CueTarget
+  onChange: (v: CueTarget) => void
+  fixtureOptions: { key: string; label: string }[]
+  groupOptions: string[]
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      <div className="space-y-1.5">
+        <Label className="text-xs">Kind</Label>
+        <Select
+          value={value.type}
+          onValueChange={(v) =>
+            onChange({
+              type: v as CueTarget["type"],
+              key: v === "group" ? (groupOptions[0] ?? "") : (fixtureOptions[0]?.key ?? ""),
+            })
+          }
+        >
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="group">Group</SelectItem>
+            <SelectItem value="fixture">Fixture</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs">{value.type === "group" ? "Group" : "Fixture"}</Label>
+        <Select value={value.key} onValueChange={(v) => onChange({ ...value, key: v })}>
+          <SelectTrigger><SelectValue placeholder="Select…" /></SelectTrigger>
+          <SelectContent>
+            {value.type === "group"
+              ? groupOptions.map((g) => (
+                  <SelectItem key={g} value={g}>{g}</SelectItem>
+                ))
+              : fixtureOptions.map((f) => (
+                  <SelectItem key={f.key} value={f.key}>{f.label}</SelectItem>
+                ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  )
+}
+
+function PropertyField({
+  value,
+  onChange,
+  properties,
+}: {
+  value: string
+  onChange: (v: string) => void
+  properties: { name: string; displayName: string }[]
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">Property</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger><SelectValue placeholder="Select…" /></SelectTrigger>
+        <SelectContent>
+          {properties.map((p) => (
+            <SelectItem key={p.name} value={p.name}>{p.displayName}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  )
+}
+
 function TargetBody({
   kind,
   value,
@@ -146,6 +299,7 @@ function TargetBody({
   fixtureOptions,
   groupOptions,
   stacks,
+  properties,
 }: {
   kind: TargetKind
   value: BindingTarget
@@ -153,7 +307,66 @@ function TargetBody({
   fixtureOptions: { key: string; label: string }[]
   groupOptions: string[]
   stacks: { id: number; name: string }[]
+  properties: { name: string; displayName: string }[]
 }) {
+  if (kind === "selectionProperty" && value.type === "selectionProperty") {
+    return (
+      <div className="space-y-2">
+        <PropertyField
+          value={value.propertyName}
+          onChange={(propertyName) => onChange({ ...value, propertyName })}
+          properties={properties}
+        />
+        <p className="text-xs text-muted-foreground">
+          Writes this property on every selected target. With nothing selected the move is dropped.
+        </p>
+      </div>
+    )
+  }
+  if (kind === "encoderBankSet" && value.type === "encoderBankSet") {
+    return (
+      <div className="space-y-2">
+        <PropertyField
+          value={value.propertyName}
+          onChange={(propertyName) => onChange({ ...value, propertyName })}
+          properties={properties}
+        />
+        <p className="text-xs text-muted-foreground">
+          Switches what every strip encoder on this device drives. Its LED lights while this
+          property is the active bank.
+        </p>
+      </div>
+    )
+  }
+  if (kind === "selectTarget" && value.type === "selectTarget") {
+    return (
+      <div className="space-y-2">
+        <TargetRefFields
+          value={value.target}
+          onChange={(target) => onChange({ ...value, target })}
+          fixtureOptions={fixtureOptions}
+          groupOptions={groupOptions}
+        />
+        <div className="space-y-1.5">
+          <Label className="text-xs">On press</Label>
+          <Select
+            value={value.mode}
+            onValueChange={(v) => onChange({ ...value, mode: v as typeof value.mode })}
+          >
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="toggle">Toggle</SelectItem>
+              <SelectItem value="replace">Replace the selection</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            A toggle also replaces if you hold it, so both are on one button either way.
+          </p>
+        </div>
+      </div>
+    )
+  }
+  if (kind === "clearSelection" || kind === "locateSelection") return null
   if (kind === "fixtureProperty" && value.type === "fixtureProperty") {
     return (
       <div className="grid grid-cols-2 gap-2">
@@ -258,6 +471,7 @@ function TargetBody({
           fixtureOptions={fixtureOptions}
           groupOptions={groupOptions}
           stacks={stacks}
+          properties={properties}
         />
         <div className="space-y-1.5">
           <Label className="text-xs">Max (0–255)</Label>
@@ -382,6 +596,22 @@ function defaultForKind(
       return { type: "grandMasterToggle" }
     case "setBank":
       return { type: "setBank", deviceTypeKey: "", bank: "" }
+    // `dimmer` is `EncoderBankState.DEFAULT_PROPERTY` and the one property every rig has, so both
+    // of these start somewhere the desk can already dispatch.
+    case "selectionProperty":
+      return { type: "selectionProperty", propertyName: "dimmer" }
+    case "encoderBankSet":
+      return { type: "encoderBankSet", propertyName: "dimmer" }
+    case "selectTarget":
+      return {
+        type: "selectTarget",
+        target: { type: "group", key: groups[0] ?? "" },
+        mode: "toggle",
+      }
+    case "clearSelection":
+      return { type: "clearSelection" }
+    case "locateSelection":
+      return { type: "locateSelection" }
     // null = master 1, which always exists — so the default binding is useful before the
     // live bank has even loaded, and the picker never starts in an unresolvable state.
     case "speedMasterBpm":

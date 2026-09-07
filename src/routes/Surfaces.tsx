@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { useDndMonitor } from "@dnd-kit/core"
 import { useSearchParams } from "react-router"
+import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
@@ -12,14 +14,31 @@ import {
   usePickupStates,
   useControlSurfaceTypeListQuery,
   useSurfaceBindingsQuery,
+  useCreateSurfaceBindingMutation,
+  useUpdateSurfaceBindingMutation,
+  useDeleteSurfaceBindingMutation,
 } from "@/store/surfaces"
-import type { ControlState, PickupChange, SurfaceDeviceInfo } from "@/store/surfaces"
+import type {
+  ControlState,
+  ControlSurfaceBinding,
+  PickupChange,
+  SurfaceDeviceInfo,
+} from "@/store/surfaces"
 import { BankSwitcher } from "@/components/surfaces/BankSwitcher"
 import { BindingMatrix } from "@/components/surfaces/BindingMatrix"
 import { SurfacePanel } from "@/components/surfaces/SurfacePanel"
 import { SurfaceInspector } from "@/components/surfaces/SurfaceInspector"
+import { SurfaceLibrary } from "@/components/surfaces/SurfaceLibrary"
 import { SelectionChip } from "@/components/surfaces/SelectionChip"
+import { effectiveTarget } from "@/components/surfaces/targetUtils"
 import { buildBindingIndex, DEFAULT_ENCODER_BANK_PROPERTY } from "@/lib/surfaceResolve"
+import {
+  bindingWriteFor,
+  surfaceDragData,
+  surfaceDropData,
+  type SurfaceDragData,
+} from "@/lib/surfaceDrop"
+import { targetKey } from "@/lib/targetKey"
 import { lightingApi } from "@/api/lightingApi"
 import { cn } from "@/lib/utils"
 import { CurrentProjectRedirect } from "@/components/CurrentProjectRedirect"
@@ -53,6 +72,14 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
   const pickups = usePickupStates()
   const { data: types } = useControlSurfaceTypeListQuery()
   const { data: bindings } = useSurfaceBindingsQuery(projectId)
+  const [createBinding] = useCreateSurfaceBindingMutation()
+  const [updateBinding] = useUpdateSurfaceBindingMutation()
+  const [deleteBinding] = useDeleteSurfaceBindingMutation()
+  // Edit mode is **local state**, deliberately not the busk view's Redux slice: that one exists
+  // because the cue-slot overlay is a sibling of the routed page and could never read a context
+  // provided inside it. Here the library and the picture are both inside this route, so a slice
+  // would be state outliving both of its readers for nothing.
+  const [editing, setEditing] = useState(false)
 
   // `?binding=<id>` is minted from the fixtures and groups pages (`BoundControlBadge`), so it is
   // an in-app contract: it picks the binding's device, forces its bank, and now also opens the
@@ -115,6 +142,65 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
     [bindings, selectedProfile],
   )
 
+  const deviceTypeKey = selectedProfile?.typeKey ?? null
+  const [lifted, setLifted] = useState<SurfaceDragData | null>(null)
+
+  /**
+   * The library's drops, resolved here rather than in the palette.
+   *
+   * `useDndMonitor` on the app's one `DndContext` (`dnd/DeskDndProvider.tsx`), never a nested one,
+   * for the busk page's reason — and foreign drags are ignored by id on the way in, exactly as the
+   * cue-slot handler ignores ours. The mapping itself is pure in `lib/surfaceDrop.ts`; what is left
+   * here is the two mutations and the device this page is showing.
+   */
+  const handleDragEnd = useCallback(
+    (drag: SurfaceDragData, over: Parameters<typeof surfaceDropData>[0]) => {
+      const drop = surfaceDropData(over)
+      if (drop == null || deviceTypeKey == null) return
+      const write = bindingWriteFor(drag, drop, index, activeBank)
+      if (write == null) return
+      if (write.kind === "update") {
+        updateBinding({ projectId, bindingId: write.bindingId, target: write.target })
+        return
+      }
+      createBinding({
+        projectId,
+        deviceTypeKey,
+        controlId: write.controlId,
+        bank: write.bank,
+        target: write.target,
+      })
+    },
+    [projectId, deviceTypeKey, index, activeBank, createBinding, updateBinding],
+  )
+
+  useDndMonitor({
+    onDragStart(event) {
+      setLifted(surfaceDragData(event.active))
+    },
+    onDragEnd(event) {
+      const drag = surfaceDragData(event.active)
+      setLifted(null)
+      if (drag != null) handleDragEnd(drag, event.over)
+    },
+    onDragCancel() {
+      setLifted(null)
+    },
+  })
+
+  const removeBinding = useCallback(
+    (bindingId: number) => {
+      deleteBinding({ projectId, bindingId })
+    },
+    [projectId, deleteBinding],
+  )
+
+  /** Where each library row already sits — `strip 3`, `on 2 controls`. */
+  const placements = useMemo(
+    () => describePlacements(bindings ?? [], deviceTypeKey, activeBank),
+    [bindings, deviceTypeKey, activeBank],
+  )
+
   // Pickup state is keyed by `displayKey|controlId` across every device; the panel wants one
   // device's, keyed by control.
   const devicePickups = useMemo(() => {
@@ -164,6 +250,21 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
               activeBank={activeBank}
             />
           )}
+          {/*
+            Hidden below `md` with the picture it edits — there is nothing to drag onto down
+            there — but *Done* stays at every width, so a window narrowed mid-edit can still leave.
+            The busk view's *Edit layout* makes the same pair of calls for the same reason.
+          */}
+          {selectedProfile?.layout && (
+            <Button
+              size="sm"
+              variant={editing ? "default" : "outline"}
+              className={cn("h-7 text-xs", !editing && "hidden md:inline-flex")}
+              onClick={() => setEditing((on) => !on)}
+            >
+              {editing ? "Done" : "Edit bindings"}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -203,6 +304,9 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
                       pickups={devicePickups}
                       selectedControlId={selectedControlId}
                       onSelectControl={setSelectedControlId}
+                      editing={editing}
+                      lifted={lifted}
+                      onRemoveBinding={removeBinding}
                     />
                   </div>
                   <div className="md:hidden">
@@ -228,24 +332,83 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
           )}
         </section>
 
-        {selectedProfile && selectedControlId && (
+        {/*
+          One slot, two occupants (D9): *Edit bindings* replaces the inspector with the library,
+          rather than opening a second panel beside it. The picture is what both are about, and
+          two 360px columns would leave it nothing.
+        */}
+        {selectedProfile && (editing || selectedControlId) && (
           <aside className="hidden w-[360px] shrink-0 overflow-hidden border-l md:block">
-            <SurfaceInspector
-              projectId={projectId}
-              profile={selectedProfile}
-              controlId={selectedControlId}
-              index={index}
-              activeBank={activeBank}
-              encoderBankProperty={encoderBankProperty}
-              state={controls[selectedControlId]}
-              pickup={devicePickups[selectedControlId]}
-              bindings={bindings ?? []}
-            />
+            {editing ? (
+              <SurfaceLibrary
+                projectId={projectId}
+                banks={selectedProfile.banks}
+                deviceTypeKey={selectedProfile.typeKey}
+                placements={placements}
+              />
+            ) : (
+              selectedControlId && (
+                <SurfaceInspector
+                  projectId={projectId}
+                  profile={selectedProfile}
+                  controlId={selectedControlId}
+                  index={index}
+                  activeBank={activeBank}
+                  encoderBankProperty={encoderBankProperty}
+                  state={controls[selectedControlId]}
+                  pickup={devicePickups[selectedControlId]}
+                  bindings={bindings ?? []}
+                />
+              )
+            )}
           </aside>
         )}
       </div>
     </div>
   )
+}
+
+/**
+ * "This is already on the surface, and where" — `strip 3`, `on 2 controls`, keyed by the row's
+ * `type:key`.
+ *
+ * **Only rows in force on the bank being drawn**, which is the exact-bank ones plus the
+ * bank-agnostic ones — the same rule `activeBindingAt` applies to the picture. Counting every bank
+ * would badge a group *strip 3* while the panel beside it shows strip 3 empty, and a drop there
+ * would then create a second, separate binding rather than the one the badge implied was already
+ * present.
+ *
+ * A strip wins over a count because it *is* the placement the library's row gesture makes; a target
+ * that is only on single controls has no one place to name, so it gets the count instead. `flash`
+ * is unwrapped so a flash button counts towards its own group rather than towards nothing.
+ */
+function describePlacements(
+  bindings: readonly ControlSurfaceBinding[],
+  deviceTypeKey: string | null,
+  activeBank: string | null,
+): ReadonlyMap<string, string> {
+  const out = new Map<string, string>()
+  const counts = new Map<string, number>()
+  for (const binding of bindings) {
+    if (deviceTypeKey != null && binding.deviceTypeKey !== deviceTypeKey) continue
+    if (binding.bank != null && binding.bank !== activeBank) continue
+    const target = effectiveTarget(binding.target)
+    let key: string | null = null
+    if (target.type === "strip" || target.type === "selectTarget") key = targetKey(target.target)
+    else if (target.type === "fixtureProperty") key = `fixture:${target.fixtureKey}`
+    else if (target.type === "groupProperty") key = `group:${target.groupName}`
+    if (key == null) continue
+    if (binding.target.type === "strip") {
+      out.set(key, binding.controlId.replace(/^strip-/, "strip "))
+      continue
+    }
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  // Strips are already in `out` and win, so a count only fills a gap — no write-then-overwrite.
+  for (const [key, count] of counts) {
+    if (!out.has(key)) out.set(key, `on ${count} control${count === 1 ? "" : "s"}`)
+  }
+  return out
 }
 
 /** The legend the panel's states are read against — LED, touched, dead. */

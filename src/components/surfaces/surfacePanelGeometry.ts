@@ -74,10 +74,17 @@ export function knobPointer(dotIndex: number): { x: number; y: number } {
 /**
  * Which strip, if any, each column of a region is a picture of.
  *
- * Derived from the data rather than from the region being called `strips`: a column is a strip
- * exactly when every control in it belongs to the same one. That is what lets a whole column be
- * outlined as one drop target without the panel hard-coding a region name — and it answers
- * nothing for the right-hand block, which is what should happen there.
+ * Derived from the data rather than from the region being called `strips`, so a second device's
+ * profile needs no component here and the right-hand block correctly answers nothing.
+ *
+ * The rule is **claimed by exactly one strip**, not *every control belongs to it*. A strip declares
+ * four roles and a physical channel strip has more buttons than that: the X-Touch's column 0 is
+ * `enc-1`, `btn-1` (the strip's flash), `btn-9`, `btn-17`, `fader-1`, `btn-25` (its select) — two
+ * of six unclaimed, because the profile leaves them free for fixed bindings. Requiring every cell
+ * meant this function returned an **empty map** for the only profile that has strips, so the
+ * backdrop it exists to place never rendered on real hardware and there was nothing to outline as
+ * a drop target. Unclaimed controls sit in the strip's column and read as part of it; two different
+ * strips in one column would not, and still answer null.
  */
 export function columnStrips(
   region: LayoutRegion,
@@ -85,13 +92,14 @@ export function columnStrips(
 ): Map<number, StripDefinition> {
   const byColumn = new Map<number, StripDefinition | null>()
   for (const cell of region.cells) {
-    const strip = stripControls.get(cell.controlId)?.strip ?? null
+    const strip = stripControls.get(cell.controlId)?.strip
+    if (strip == null) continue
     if (!byColumn.has(cell.col)) {
       byColumn.set(cell.col, strip)
       continue
     }
-    // A column mixing strips, or mixing strip and non-strip controls, is not a strip.
-    if (byColumn.get(cell.col)?.id !== strip?.id) byColumn.set(cell.col, null)
+    // A column two strips share is a picture of neither.
+    if (byColumn.get(cell.col)?.id !== strip.id) byColumn.set(cell.col, null)
   }
 
   const result = new Map<number, StripDefinition>()

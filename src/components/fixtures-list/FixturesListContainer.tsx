@@ -18,7 +18,6 @@ import {
 } from './ColumnsMenu'
 import {
   buildRows,
-  coveredFixtureKeys,
   expandSelectionToTargets,
   fixtureRowId,
   groupRowId,
@@ -26,7 +25,7 @@ import {
   parseSelectParam,
   planBatchWrites,
   resolveTargetCells,
-  rowLocateTarget,
+  selectedRowTargets,
   rowWriteTargets,
 } from './rowModel'
 import { isEditableTarget } from '../../lib/domUtils'
@@ -44,6 +43,7 @@ import { SelectionToolbar } from './SelectionToolbar'
 import { FixtureDetailModal } from '../groups/FixtureDetailModal'
 import { GroupDetailModal } from '../fixtures/GroupDetailModal'
 import type { ColumnKey } from './columns'
+import { useDeskSelectionBridge } from './useDeskSelectionBridge'
 import type {
   CellCommit,
   FixtureRow,
@@ -53,7 +53,6 @@ import type {
   RowId,
 } from './rowModel'
 import type { LocateTarget } from '../../store/locate'
-import { targetKey } from '../../lib/targetKey'
 import type { Fixture } from '../../store/fixtures'
 import type { GroupSummary } from '../../api/groupsApi'
 
@@ -223,26 +222,21 @@ export function FixturesListContainer({
   )
   usePublishSelectionTargets(selectionScope, selectedTargetKeys)
 
-  const locateTargets = useMemo<LocateTarget[]>(() => {
-    // Deduped by (type, key): a fixture selected via two group memberships
-    // must toggle locate once, not twice (two toggles cancel out). Element
-    // rows under a covered parent are dropped for the same reason — locating
-    // a parent resolves every element, so both together would double-toggle.
-    const covered = coveredFixtureKeys(rows, selection.selectedIds)
-    const seen = new Set<string>()
-    const targets: LocateTarget[] = []
-    for (const row of rows) {
-      if (!selection.selectedIds.has(row.id)) continue
-      if (row.kind === 'element' && covered.has(row.fixture.key)) continue
-      const target = rowLocateTarget(row)
-      if (!target) continue
-      const dedupeKey = targetKey(target)
-      if (seen.has(dedupeKey)) continue
-      seen.add(dedupeKey)
-      targets.push(target)
-    }
-    return targets
-  }, [rows, selection.selectedIds])
+  // The dedupe and the element-row drop live in `selectedRowTargets`, which the desk-selection
+  // bridge below is the third caller of: locate and the desk must never disagree about what a
+  // selected group row *is*.
+  const locateTargets = useMemo<LocateTarget[]>(
+    () => selectedRowTargets(rows, selection.selectedIds),
+    [rows, selection.selectedIds],
+  )
+
+  // One desk, one selection (plan D2) — the programmer scope only; see the hook.
+  useDeskSelectionBridge(
+    selectionScope === 'programmer',
+    rows,
+    selection.selectedIds,
+    selection.setSelection,
+  )
 
   const writers = useCellWriters()
 

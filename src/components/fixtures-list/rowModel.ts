@@ -4,6 +4,7 @@ import type { CellResolution, ColumnKey } from './columns'
 import type { ElementDescriptor, Fixture, PropertyDescriptor } from '../../store/fixtures'
 import type { GroupSummary } from '../../api/groupsApi'
 import type { LocateTarget } from '../../store/locate'
+import { targetKey } from '../../lib/targetKey'
 
 /**
  * Stable row identity: `group:` and `fixture:` rows are top-level; `member:`
@@ -270,6 +271,82 @@ export function coveredFixtureKeys(
 }
 
 /**
+ * What the selected rows *are*, as targets — a group row one `group` entry, never its members.
+ *
+ * Three callers, and the third is why this is a function rather than a memo in one of them: the
+ * locate toolbar, the per-row locate button, and the desk-selection bridge
+ * (`useDeskSelectionBridge`). §3.2 of `midi-surface-plan.md` names the mistake it exists to
+ * prevent — publishing the `programmer` scope's `targetKeys` instead, which
+ * `expandSelectionToTargets` has already flattened to member keys carrying no group entry and no
+ * discriminator. A marquee over *Front wash* would then arrive at the desk as eight loose
+ * fixtures, the strip's group select LED would stay dark, and nothing would light the group row
+ * again on the way back.
+ *
+ * Element rows under a covered parent are dropped and the result is deduped by `(type, key)`, both
+ * for locate's reason: a fixture selected through two group memberships must toggle once, and
+ * locating a parent already resolves its elements.
+ */
+export function selectedRowTargets(
+  rows: readonly Row[],
+  selectedIds: ReadonlySet<RowId>,
+): LocateTarget[] {
+  const seen = new Set<string>()
+  const targets: LocateTarget[] = []
+  for (const row of selectedContributingRows(rows, selectedIds)) {
+    const target = rowLocateTarget(row)
+    if (!target) continue
+    const key = targetKey(target)
+    if (seen.has(key)) continue
+    seen.add(key)
+    targets.push(target)
+  }
+  return targets
+}
+
+/**
+ * The selected rows that stand for something, in visible order — the subtle half of every
+ * selection-wide action, factored out so it is written once.
+ *
+ * A row contributes when it is selected **and** is not an element row whose parent fixture is
+ * already covered. That second clause is the one worth having in one place: ⌘A selects a parent and
+ * its children together, so acting on both double-writes a value or cancels a locate toggle
+ * outright. [selectedRowTargets] and [expandSelectionToTargets] differ only in what they extract
+ * per row and how they dedupe; they used to differ in this too, by copy.
+ */
+function selectedContributingRows(
+  rows: readonly Row[],
+  selectedIds: ReadonlySet<RowId>,
+): Row[] {
+  const covered = coveredFixtureKeys(rows, selectedIds)
+  return rows.filter(
+    (row) =>
+      selectedIds.has(row.id) && !(row.kind === 'element' && covered.has(row.fixture.key)),
+  )
+}
+
+/**
+ * [selectedRowTargets] read backwards: which rows stand for these targets.
+ *
+ * Every row that answers a target, not the first — a fixture in two expanded groups is two rows and
+ * both are the same head, so lighting one and not the other would look like a bug. A target with no
+ * row (filtered out, or a group this list is not showing) contributes nothing, which is what keeps
+ * the desk's list wider than the view rather than the view narrowing the desk's.
+ */
+export function rowIdsForTargets(
+  rows: readonly Row[],
+  targets: readonly LocateTarget[],
+): RowId[] {
+  if (targets.length === 0) return []
+  const wanted = new Set(targets.map(targetKey))
+  const ids: RowId[] = []
+  for (const row of rows) {
+    const target = rowLocateTarget(row)
+    if (target && wanted.has(targetKey(target))) ids.push(row.id)
+  }
+  return ids
+}
+
+/**
  * Expand a selection to the distinct write targets it covers, in visible row
  * order: group rows contribute their members (fixture-list order),
  * fixture/member rows contribute their fixture, element rows contribute their
@@ -280,12 +357,9 @@ export function expandSelectionToTargets(
   rows: readonly Row[],
   selectedIds: ReadonlySet<RowId>,
 ): WriteTarget[] {
-  const covered = coveredFixtureKeys(rows, selectedIds)
   const seen = new Set<string>()
   const out: WriteTarget[] = []
-  for (const row of rows) {
-    if (!selectedIds.has(row.id)) continue
-    if (row.kind === 'element' && covered.has(row.fixture.key)) continue
+  for (const row of selectedContributingRows(rows, selectedIds)) {
     for (const target of rowWriteTargets(row)) {
       if (seen.has(target.key)) continue
       seen.add(target.key)

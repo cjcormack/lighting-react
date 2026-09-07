@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
+  activeBindingAt,
   buildBindingIndex,
   deriveStripTarget,
+  exactBindingAt,
   resolveControl,
   stripControlsByControlId,
 } from './surfaceResolve'
@@ -238,5 +240,34 @@ describe('a profile from a pre-strip desk', () => {
     const i = buildBindingIndex([binding(1, 'fader-1', { type: 'blackout' })], older)
     expect(resolveControl('fader-1', i, null, 'dimmer')?.binding.id).toBe(1)
     expect(resolveControl('btn-25', i, null, 'dimmer')).toBeNull()
+  })
+})
+
+/**
+ * The two slot lookups, which differ by exactly one fallback and must not be confused.
+ *
+ * A *write* replaces the row at the bank it is aimed at and nothing else, or retargeting a control
+ * on bank A would silently retarget it on every other bank. A *read* — the label under a control,
+ * the cross that removes it — has to see the bank-agnostic row, because that row really is driving
+ * the slot on every bank.
+ */
+describe('exactBindingAt vs activeBindingAt', () => {
+  const globalRow = binding(1, 'fader-1', { type: 'blackout' }, null)
+  const bankRow = binding(2, 'fader-1', { type: 'grandMasterToggle' }, 'layer-b')
+  const i = index([globalRow, bankRow])
+
+  it('agree where an exact-bank row exists', () => {
+    expect(exactBindingAt(i, 'fader-1', 'layer-b')?.id).toBe(2)
+    expect(activeBindingAt(i, 'fader-1', 'layer-b')?.id).toBe(2)
+  })
+
+  it('disagree where only the bank-agnostic row does', () => {
+    expect(exactBindingAt(i, 'fader-1', 'layer-a')).toBeNull()
+    expect(activeBindingAt(i, 'fader-1', 'layer-a')?.id).toBe(1)
+  })
+
+  it('both answer null for a slot with nothing on it', () => {
+    expect(exactBindingAt(i, 'btn-1', null)).toBeNull()
+    expect(activeBindingAt(i, 'btn-1', null)).toBeNull()
   })
 })

@@ -45,13 +45,27 @@ export function useDeskSelection(): CueTarget[] {
 }
 
 /**
- * Empty the desk selection.
+ * The three writes, as plain functions rather than hooks.
  *
- * The one selection *write* this pass carries, and deliberately: it is a single gesture with no
- * mapping to get wrong, where the two-way wiring session 3b adds — `useBuskingSelection` over this
- * cache, and the programmer list's publish through `rowLocateTarget` — is where a lossy conversion
- * would be silent.
+ * There is nothing to subscribe to and no cache to patch optimistically: `selection.state` is the
+ * acknowledgement, so a write is a socket send and the frame that comes back is what moves every
+ * reader. A `useX` wrapper would only be a stable identity around `lightingApi`, which is already
+ * a module singleton.
+ *
+ * [toggleDeskSelection] is **not** "add if absent, remove if present". The desk narrows a partly
+ * covered group head by head (D2, through `fx/TargetCoverage`), so pressing a fixture that a
+ * selected group already covers takes that one head *out of the group's coverage* rather than
+ * adding a duplicate entry. That is the behaviour a select button on the surface has, and the
+ * reason the busk band's toggle goes through here rather than keeping its own Map.
  */
+export function setDeskSelection(targets: readonly CueTarget[]): void {
+  lightingApi.selection.set([...targets])
+}
+
+export function toggleDeskSelection(target: CueTarget): void {
+  lightingApi.selection.toggle(target)
+}
+
 export function clearDeskSelection(): void {
   lightingApi.selection.clear()
 }

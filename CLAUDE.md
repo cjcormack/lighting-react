@@ -660,6 +660,34 @@ hold one 110px pad. Edit mode stacks too, with a gutter drawn as a strip between
 hidden with it — by decision, narrow widths get play mode only, and an edit mode with nothing to
 drag from is a trap. `Done` stays at every width so a window narrowed mid-edit can leave.
 
+### The MIDI surface view
+
+`/projects/:id/settings/surfaces` draws the attached desk as **a picture built from profile data**
+(`ControlSurfaceType.layout`), labels every control by re-deriving the backend's own resolution
+rules, and — under *Edit bindings* — lets a library be dragged onto it: **a row lands on a strip, a
+chip lands on one control**. Read
+[`docs/midi-surface-engineering.md`](docs/midi-surface-engineering.md) before touching it; the plan
+is `lighting7/docs/plans/midi-surface-plan.md` and the layout authority
+`lighting7/docs/plans/midi-surface-design/`.
+
+The four things that bite, in one line each. **`lib/surfaceResolve.ts` is a mirror of
+`ControlSurfaceBindingService.resolve` and `deriveStripTarget`** and its failure is silent — a
+precedence read backwards paints a plausible label for a control the desk drives differently.
+**Droppables sit on the grid-cell wrapper, never inside the memoized `ControlCell`**, or a hover
+costs the whole panel at 20 Hz. **A drop patches the control's *own row at the exact bank* or
+creates** — `index.byControl.get(id)?.get(activeBank)`, never `resolveControl`, which would answer a
+strip's row or a global one and move a binding the operator was not pointing at. And **the
+eligibility dim is the whole warning**: nothing on the backend refuses a `fireCue` on a fader, it
+simply never dispatches.
+
+**One desk, one selection, server-owned** (`store/selection.ts`), and three surfaces move it: the
+busk target band, the programmer's fixture list, and a select button on the desk itself. The list
+half is `useDeskSelectionBridge`, whose load-bearing rule is that rows publish through
+`rowLocateTarget` — never the `programmer` scope's `targetKeys`, which is already flattened to
+member keys, so a marquee over *Front wash* would reach the desk as eight loose fixtures with the
+group's select LED dark. Edit mode there is **local state**, deliberately not the busk view's Redux
+slice: that one exists only because the cue-slot overlay is a sibling of the routed page.
+
 ### The two apply gestures
 
 A template has **two** presses, and the difference is invisible on screen — only the route called

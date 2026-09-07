@@ -1,18 +1,23 @@
 import { memo, useMemo } from "react"
+import { useDroppable } from "@dnd-kit/core"
+import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type {
   BankButtonControl,
   ButtonControl,
   ControlDescriptor,
   ControlState,
+  ControlSurfaceBinding,
   ControlSurfaceType,
   EncoderControl,
   FaderControl,
   LayoutRegion,
   PickupChange,
+  StripDefinition,
 } from "@/store/surfaces"
 import type { ResolvedControl, SurfaceBindingIndex } from "@/lib/surfaceResolve"
-import { resolveControl } from "@/lib/surfaceResolve"
+import { activeBindingAt, resolveControl } from "@/lib/surfaceResolve"
+import { canLand, controlKinds, type SurfaceDragData } from "@/lib/surfaceDrop"
 import { describeTarget } from "./targetUtils"
 import {
   FADER_FRAME_HEIGHT,
@@ -53,6 +58,11 @@ export interface SurfacePanelProps {
   pickups: Readonly<Record<string, PickupChange>>
   selectedControlId: string | null
   onSelectControl: (controlId: string) => void
+  /** *Edit bindings* is on: controls take drops and bound rows grow a remove cross. */
+  editing: boolean
+  /** The surface drag in flight, or null — what decides which droppables are live. */
+  lifted: SurfaceDragData | null
+  onRemoveBinding: (bindingId: number) => void
 }
 
 const UNBOUND: ControlState = {
@@ -72,6 +82,9 @@ export function SurfacePanel({
   pickups,
   selectedControlId,
   onSelectControl,
+  editing,
+  lifted,
+  onRemoveBinding,
 }: SurfacePanelProps) {
   const byControlId = useMemo(() => {
     const map = new Map<string, ControlDescriptor>()
@@ -98,6 +111,9 @@ export function SurfacePanel({
           pickups={pickups}
           selectedControlId={selectedControlId}
           onSelectControl={onSelectControl}
+          editing={editing}
+          lifted={lifted}
+          onRemoveBinding={onRemoveBinding}
         />
       ))}
     </div>
@@ -119,6 +135,9 @@ function PanelRegion({
   pickups,
   selectedControlId,
   onSelectControl,
+  editing,
+  lifted,
+  onRemoveBinding,
 }: RegionProps) {
   // A column whose controls all belong to one strip gets a backdrop spanning the whole column —
   // the thing session 3b outlines when a group row is dragged over it. Derived from the strips
@@ -152,35 +171,219 @@ function PanelRegion({
       data-region={region.name}
     >
       {[...strips.entries()].map(([col, strip]) => (
-        <div
+        <StripZone
           key={`strip-${strip.id}`}
-          className="rounded-[10px]"
-          style={{ gridColumn: col + 1, gridRow: `1 / ${rows + 1}` }}
-          data-strip={strip.id}
+          strip={strip}
+          col={col}
+          rows={rows}
+          editing={editing}
+          lifted={lifted}
+          // `activeBindingAt`, not `exactBindingAt`: this is the *reading* question, and a strip
+          // driven by a bank-agnostic row is drawn on every bank — so a cross that only saw the
+          // exact-bank row would leave a visibly bound strip with no way to unbind it.
+          binding={activeBindingAt(index, strip.id, activeBank)}
+          onRemoveBinding={onRemoveBinding}
         />
       ))}
       {region.cells.map((cell) => {
         const descriptor = byControlId.get(cell.controlId)
         if (!descriptor) return null
+        const hit = resolved.get(cell.controlId) ?? null
         return (
-          <div
+          <ControlZone
             key={cell.controlId}
-            style={{ gridColumn: cell.col + 1, gridRow: cell.row + 1 }}
-            className="min-w-0"
+            descriptor={descriptor}
+            col={cell.col}
+            row={cell.row}
+            editing={editing}
+            lifted={lifted}
+            // Only a row the *control itself* owns can be crossed off here; a strip's row is
+            // crossed off on the strip, where one cross means one row rather than four controls.
+            ownBinding={hit?.via == null ? (hit?.binding ?? null) : null}
+            onRemoveBinding={onRemoveBinding}
           >
             <ControlCell
               descriptor={descriptor}
-              resolved={resolved.get(cell.controlId) ?? null}
+              resolved={hit}
               state={controls[cell.controlId] ?? UNBOUND}
               pickup={pickups[cell.controlId]}
               activeBank={activeBank}
               selected={selectedControlId === cell.controlId}
               onSelect={onSelectControl}
             />
-          </div>
+          </ControlZone>
         )
       })}
     </div>
+  )
+}
+
+/**
+ * The grid cell around one control: a plain wrapper in run mode, a drop zone while editing.
+ *
+ * **The droppable never lives inside `ControlCell`.** That cell is memoized precisely so a 20 Hz
+ * `surfaceControls` delta re-renders only the controls that moved, and `useDroppable` re-renders
+ * its host every time `isOver` flips — inside, a hover would cost the whole panel.
+ *
+ * Out here it costs something too, and that is why the two modes are **two components rather than
+ * one with a `disabled` flag**: `PanelRegion` reads `controls[…]` and so re-renders on every frame,
+ * which would re-run `useDroppable` for every control on the device sixty times a second while
+ * nobody is dragging anything. Run mode is the state the panel spends its life in, and there is no
+ * drop target in it at all, so it renders no hook. Switching modes remounts the wrappers, which is
+ * what a mode switch is.
+ */
+function ControlZone(props: ControlZoneProps) {
+  return props.editing ? <EditableControlZone {...props} /> : <PlainControlZone {...props} />
+}
+
+interface ControlZoneProps {
+  descriptor: ControlDescriptor
+  col: number
+  row: number
+  editing: boolean
+  lifted: SurfaceDragData | null
+  ownBinding: ControlSurfaceBinding | null
+  onRemoveBinding: (bindingId: number) => void
+  children: React.ReactNode
+}
+
+function PlainControlZone({ col, row, children }: ControlZoneProps) {
+  return (
+    <div style={{ gridColumn: col + 1, gridRow: row + 1 }} className="relative min-w-0">
+      {children}
+    </div>
+  )
+}
+
+/**
+ * `disabled` is dnd-kit's own, and it is the half `canLand` cannot do: it keeps `over` — and so the
+ * highlight — off a place the drop would refuse, rather than showing the operator a landing that
+ * then does nothing.
+ */
+function EditableControlZone({
+  descriptor,
+  col,
+  row,
+  lifted,
+  ownBinding,
+  onRemoveBinding,
+  children,
+}: ControlZoneProps) {
+  const kinds = useMemo(() => controlKinds(descriptor), [descriptor])
+  const drop = useMemo(
+    () => ({ type: "surface-control" as const, controlId: descriptor.controlId, kinds }),
+    [descriptor.controlId, kinds],
+  )
+  const eligible = lifted != null && canLand(lifted, drop)
+  const { setNodeRef, isOver } = useDroppable({
+    id: `surface-control:${descriptor.controlId}`,
+    data: drop,
+    disabled: !eligible,
+  })
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ gridColumn: col + 1, gridRow: row + 1 }}
+      className={cn(
+        "relative min-w-0 rounded-lg",
+        // A chip in flight that cannot land here says so by receding — nothing on the backend
+        // refuses a cue on a fader, so this dim is the whole warning.
+        lifted?.type === "surface-chip" && !eligible && "opacity-40",
+        isOver && "bg-primary/10 outline-2 outline-offset-2 outline-dashed outline-primary",
+      )}
+    >
+      {children}
+      {ownBinding && (
+        <RemoveCross
+          label={`Remove the binding on ${descriptor.label}`}
+          onClick={() => onRemoveBinding(ownBinding.id)}
+        />
+      )}
+    </div>
+  )
+}
+
+/**
+ * The column backdrop behind a strip: its drop zone while a row is lifted, and where its one row
+ * is crossed off.
+ *
+ * Split by mode for `ControlZone`'s reason — nine strips is nine fewer per-frame `useDroppable`
+ * calls in run mode, where nothing can be dropped anyway.
+ *
+ * `pointer-events-none` on the backdrop so it never steals a click from the controls painted over
+ * it — dnd-kit measures rects rather than hit-testing, so the droppable is unaffected — with the
+ * cross opting back in.
+ */
+function StripZone(props: StripZoneProps) {
+  if (!props.editing) {
+    return (
+      <div
+        className="pointer-events-none rounded-[10px]"
+        style={{ gridColumn: props.col + 1, gridRow: `1 / ${props.rows + 1}` }}
+        data-strip={props.strip.id}
+      />
+    )
+  }
+  return <EditableStripZone {...props} />
+}
+
+interface StripZoneProps {
+  strip: StripDefinition
+  col: number
+  rows: number
+  editing: boolean
+  lifted: SurfaceDragData | null
+  binding: ControlSurfaceBinding | null
+  onRemoveBinding: (bindingId: number) => void
+}
+
+function EditableStripZone({
+  strip,
+  col,
+  rows,
+  lifted,
+  binding,
+  onRemoveBinding,
+}: StripZoneProps) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `surface-strip:${strip.id}`,
+    data: { type: "surface-strip", stripId: strip.id },
+    disabled: lifted?.type !== "surface-row",
+  })
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "pointer-events-none relative rounded-[10px]",
+        isOver && "bg-primary/10 outline-2 outline-dashed outline-primary",
+      )}
+      style={{ gridColumn: col + 1, gridRow: `1 / ${rows + 1}` }}
+      data-strip={strip.id}
+    >
+      {binding && (
+        <RemoveCross
+          label={`Remove the ${strip.id} binding`}
+          onClick={() => onRemoveBinding(binding.id)}
+        />
+      )}
+    </div>
+  )
+}
+
+/** The busk pad's remove cross, at the top-left corner of whatever it is placed in. */
+function RemoveCross({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="pointer-events-auto absolute -top-1.5 -left-1.5 z-10 grid size-[18px] place-items-center rounded-full border bg-muted text-muted-foreground hover:bg-destructive hover:text-destructive-foreground"
+    >
+      <X className="size-2.5" />
+    </button>
   )
 }
 
@@ -506,28 +709,42 @@ function ButtonCell({
 }
 
 /**
- * A bank button is the profile's, not a binding's: it names the bank it switches to, and lights
- * while that bank is active. It can still carry a binding of its own — the panel shows that
- * instead, because it is what the press will do.
+ * A bank button is the profile's, never a binding's: it names the bank it switches to, and lights
+ * while that bank is active.
+ *
+ * It draws its own label **whatever row sits on its control id**, because a binding there can never
+ * fire: `SurfaceInputRouter.route` matches a bank button to `ResolvedInput.BankButton` and switches
+ * the bank before resolving anything — "bank buttons short-circuit binding resolution", in its own
+ * words. Showing a bound target here (as this cell did) promised a press that the desk does not
+ * make; `controlKinds` returns `[]` for one so the library will not offer it either, and the
+ * inspector says so for a row an older build or a hand edit left behind.
  */
 function BankButtonCell({
   descriptor,
   state,
   label,
-  dead,
   selected,
   onSelect,
   activeBank,
 }: CellCommon & { descriptor: BankButtonControl; activeBank: string | null }) {
   const isActiveBank = activeBank === descriptor.bankId
+  // A row that resolves here is one an older build or a hand edit left behind. It is drawn as
+  // **dead** rather than hidden: the picture's whole promise is that it mirrors the desk, and an
+  // orphaned row that only the inspector mentions is one an operator scanning the surface would
+  // never find. The *label* stays the bank's, because that is still what the press does.
+  const orphaned = label != null
   return (
     <ButtonFace
       controlId={descriptor.controlId}
-      title={`${descriptor.label} · bank ${descriptor.bankId}`}
-      text={label ?? descriptor.label}
-      state={label == null ? { ...state, led: isActiveBank ? "on" : "off" } : state}
+      title={
+        orphaned
+          ? `${descriptor.label} · bank ${descriptor.bankId} — holds a binding that can never fire`
+          : `${descriptor.label} · bank ${descriptor.bankId}`
+      }
+      text={descriptor.label}
+      state={{ ...state, led: isActiveBank ? "on" : "off" }}
       bound
-      dead={dead}
+      dead={orphaned}
       selected={selected}
       onSelect={onSelect}
     />

@@ -14,6 +14,7 @@ import {
   useFixtureTypeListQuery,
 } from '../../store/fixtures'
 import type { GroupPropertyDescriptor, GroupColourPropertyDescriptor } from '../../api/groupsApi'
+import { categoriseProperties } from '../../hooks/useTargetProperties'
 import { useChannelValue } from '../../hooks/usePropertyValues'
 import { useIsDeskConnected } from '../../store/status'
 import { useUpdateChannel } from '../../hooks/usePropertyValues'
@@ -72,38 +73,6 @@ export function FixtureContent({
   )
 }
 
-/** Categorize element group properties by the same categories as fixture properties */
-function categorizeGroupProperties(properties: GroupPropertyDescriptor[]) {
-  const result = {
-    colour: [] as GroupPropertyDescriptor[],
-    position: [] as GroupPropertyDescriptor[],
-    dimmer: [] as GroupPropertyDescriptor[],
-    slider: [] as GroupPropertyDescriptor[],
-    setting: [] as GroupPropertyDescriptor[],
-  }
-  for (const prop of properties) {
-    switch (prop.type) {
-      case 'colour':
-        result.colour.push(prop)
-        break
-      case 'position':
-        result.position.push(prop)
-        break
-      case 'slider':
-        if (prop.category === 'dimmer') {
-          result.dimmer.push(prop)
-        } else {
-          result.slider.push(prop)
-        }
-        break
-      case 'setting':
-        result.setting.push(prop)
-        break
-    }
-  }
-  return result
-}
-
 function PropertiesView({
   fixture,
   hasElements,
@@ -116,17 +85,17 @@ function PropertiesView({
   onGroupClick?: (groupName: string) => void
 }) {
   // Group fixture-level properties by category (memoized to avoid re-filtering on every render)
-  const { colourProps, positionProps, dimmerProps, otherSliders, settingProps } = useMemo(() => ({
-    colourProps: fixture.properties?.filter((p) => p.type === 'colour') ?? [],
-    positionProps: fixture.properties?.filter((p) => p.type === 'position') ?? [],
-    dimmerProps: fixture.properties?.filter((p) => p.type === 'slider' && p.category === 'dimmer') ?? [],
-    otherSliders: fixture.properties?.filter((p) => p.type === 'slider' && p.category !== 'dimmer') ?? [],
-    settingProps: fixture.properties?.filter((p) => p.type === 'setting') ?? [],
-  }), [fixture.properties])
+  const {
+    colour: colourProps,
+    position: positionProps,
+    dimmer: dimmerProps,
+    slider: otherSliders,
+    setting: settingProps,
+  } = useMemo(() => categoriseProperties(fixture.properties), [fixture.properties])
 
   // Categorize element group properties (all-heads virtual properties)
   const egp = useMemo(
-    () => fixture.elementGroupProperties ? categorizeGroupProperties(fixture.elementGroupProperties) : null,
+    () => fixture.elementGroupProperties ? categoriseProperties(fixture.elementGroupProperties) : null,
     [fixture.elementGroupProperties],
   )
 
@@ -487,15 +456,13 @@ function PropertiesList({
   }
 
   // Group by category
-  const colourProps = properties.filter((p) => p.type === 'colour')
-  const positionProps = properties.filter((p) => p.type === 'position')
-  const dimmerProps = properties.filter(
-    (p) => p.type === 'slider' && p.category === 'dimmer'
-  )
-  const otherSliders = properties.filter(
-    (p) => p.type === 'slider' && p.category !== 'dimmer'
-  )
-  const settingProps = properties.filter((p) => p.type === 'setting')
+  const {
+    colour: colourProps,
+    position: positionProps,
+    dimmer: dimmerProps,
+    slider: otherSliders,
+    setting: settingProps,
+  } = categoriseProperties(properties)
 
   // Virtual dimmer for elements with colour but no dimmer
   const elementColourProp = dimmerProps.length === 0

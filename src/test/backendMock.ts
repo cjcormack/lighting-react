@@ -358,6 +358,16 @@ export function lightingApiMock() {
         moveLayer: () => {},
         patchLayer: () => {},
       },
+      // Spelled out for the reason `status` is: `store/selection.ts`'s `queryFn` seeds its cache
+      // entry from `getState()`, and the fallback Proxy would hand it back a Subscription — which
+      // then reaches `useBuskingSelection` as a list of targets and is not iterable.
+      selection: {
+        getState: () => null,
+        subscribe: noopSub,
+        set: () => {},
+        toggle: () => {},
+        clear: () => {},
+      },
       cueStacks: {
         subscribe: noopSub,
         subscribeToProgramState: (fn: (e: unknown) => void) => {

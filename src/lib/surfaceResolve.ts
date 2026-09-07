@@ -111,6 +111,44 @@ export function deriveStripTarget(
   }
 }
 
+/**
+ * The row on this slot for **exactly** this bank, with no fallback — what a *write* replaces.
+ *
+ * Paired with [activeBindingAt] and deliberately not the same question, because reading and
+ * writing want opposite answers about the bank-agnostic row. A drop must **create** an exact-bank
+ * row rather than patch the global one, or retargeting a control on bank A silently retargets it
+ * on every other bank too. `bindingWriteFor` is the caller.
+ *
+ * A named primitive rather than an inline `index.byControl.get(id)?.get(bank)` at each site: the
+ * index's shape (`null` is a real key, so it is a `Map`) is otherwise an implementation detail
+ * leaking into two unrelated files, where a partial change to it would silently reintroduce
+ * exactly the "moved a binding the operator was not pointing at" bug.
+ */
+export function exactBindingAt(
+  index: SurfaceBindingIndex,
+  controlId: string,
+  bank: string | null,
+): ControlSurfaceBinding | null {
+  return index.byControl.get(controlId)?.get(bank) ?? null
+}
+
+/**
+ * The row **driving** this slot right now: this bank's, else the bank-agnostic one.
+ *
+ * The *reading* question, and the fallback is the whole of the difference from [exactBindingAt]: a
+ * global row really is in force on every bank, so anything that says what a slot is currently doing
+ * — the label under a control, the cross that removes it — has to see it. `resolveControl` applies
+ * this at both of its levels.
+ */
+export function activeBindingAt(
+  index: SurfaceBindingIndex,
+  controlId: string,
+  bank: string | null,
+): ControlSurfaceBinding | null {
+  const byBank = index.byControl.get(controlId)
+  return byBank?.get(bank) ?? byBank?.get(null) ?? null
+}
+
 /** One control's answer: the row driving it, and the target that row means *for this control*. */
 export interface ResolvedControl {
   /** The persisted row — a strip row keeps its own id, bank, policy and health. */
@@ -147,14 +185,12 @@ export function resolveControl(
   activeBank: string | null,
   encoderBankProperty: string,
 ): ResolvedControl | null {
-  const direct = index.byControl.get(controlId)
-  const directHit = direct?.get(activeBank) ?? direct?.get(null)
+  const directHit = activeBindingAt(index, controlId, activeBank)
   if (directHit) return { binding: directHit, target: directHit.target, via: null }
 
   const onStrip = index.stripControls.get(controlId)
   if (!onStrip) return null
-  const byBank = index.byControl.get(onStrip.strip.id)
-  const stripHit = byBank?.get(activeBank) ?? byBank?.get(null)
+  const stripHit = activeBindingAt(index, onStrip.strip.id, activeBank)
   if (!stripHit) return null
 
   // A row on a strip id that is not a `strip` target cannot be derived — bind-time validation

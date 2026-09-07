@@ -132,6 +132,9 @@ function renderPanel({
       pickups={pickups}
       selectedControlId={selectedControlId}
       onSelectControl={onSelect}
+      editing={false}
+      lifted={null}
+      onRemoveBinding={() => {}}
     />,
   )
   return onSelect
@@ -250,6 +253,9 @@ describe('SurfacePanel — the button LED', () => {
         pickups={{}}
         selectedControlId={null}
         onSelectControl={() => {}}
+        editing={false}
+        lifted={null}
+        onRemoveBinding={() => {}}
       />,
     )
     const lit = container.querySelectorAll('.bg-surface-led')
@@ -268,6 +274,9 @@ function renderWithContainer(controls: Record<string, ControlState>) {
       pickups={{}}
       selectedControlId={null}
       onSelectControl={() => {}}
+      editing={false}
+      lifted={null}
+      onRemoveBinding={() => {}}
     />,
   )
 }

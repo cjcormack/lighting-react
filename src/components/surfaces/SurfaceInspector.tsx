@@ -1,5 +1,17 @@
 import { useState } from "react"
 import { AlertTriangle, Radio, Trash2, Wand2 } from "lucide-react"
+import { useFixtureListQuery } from "@/store/fixtures"
+import { useGroupPropertiesQuery } from "@/store/groups"
+import { useColourValue, useSliderValue } from "@/hooks/usePropertyValues"
+import { useGroupColourValues, useGroupSliderValues } from "@/hooks/useGroupPropertyValues"
+import type {
+  ColourPropertyDescriptor,
+  SliderPropertyDescriptor,
+} from "@/store/fixtures"
+import type {
+  GroupColourPropertyDescriptor,
+  GroupSliderPropertyDescriptor,
+} from "@/api/groupsApi"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -11,6 +23,7 @@ import {
   useUpdateSurfaceBindingMutation,
 } from "@/store/surfaces"
 import type {
+  BindingTarget,
   ControlDescriptor,
   ControlState,
   ControlSurfaceBinding,
@@ -22,7 +35,7 @@ import { deriveStripTarget, type SurfaceBindingIndex } from "@/lib/surfaceResolv
 import { resolveControl } from "@/lib/surfaceResolve"
 import { EditBindingSheet } from "./BindingMatrix"
 import { LearnModeOverlay } from "./LearnModeOverlay"
-import { describeTarget } from "./targetUtils"
+import { describeTarget, effectiveTarget } from "./targetUtils"
 import { midiPercent } from "./surfacePanelGeometry"
 
 /**
@@ -153,6 +166,24 @@ export function SurfaceInspector({
       )}
 
       <Separator />
+
+      {/*
+        Two arms, because "bank buttons can't be bound" and "this one is carrying a row that will
+        never fire" are different things to be told, and only the second is actionable. The panel
+        draws the second as dead; this says what to do about it, and *Remove* above is how.
+      */}
+      {descriptor.type === "bankButton" && (
+        <p
+          className={cn(
+            "rounded-md p-2 text-[11px]",
+            resolved ? "bg-destructive/10 text-destructive" : "bg-muted/60 text-muted-foreground",
+          )}
+        >
+          Bank buttons switch the device&rsquo;s bank. The router answers one before it resolves a
+          binding, so a row on this control can never fire — the library will not offer it.
+          {resolved && ` This one holds ${describeTarget(resolved.target)}; remove it.`}
+        </p>
+      )}
 
       <LiveCard descriptor={descriptor} state={state} pickup={pickup} resolved={resolved} />
 
@@ -340,11 +371,14 @@ function OtherBanks({
 }
 
 /**
- * What the control is doing now, straight off the `surfaceControls` stream.
+ * What the control is doing now: three lines straight off the `surfaceControls` stream — what the
+ * hardware was told, never a recomputation from DMX (D7) — and a fourth that is the opposite, the
+ * value on the *stage* behind the binding.
  *
- * The design's fourth line — the stage value behind the binding — is not here yet: reading it
- * means resolving a fixture or group property descriptor, which is the `useTargetProperties`
- * extraction session 3b does. Everything else the legend names is.
+ * That fourth line is the one place this panel reads DMX, and deliberately: the other three answer
+ * "what is the desk doing with this control", and it answers "and what came of it". A fader at 66%
+ * over a dimmer reading 0 is a bound control writing into a park or a blackout, which is exactly
+ * the question an operator asks the surface page.
  */
 function LiveCard({
   descriptor,
@@ -355,7 +389,7 @@ function LiveCard({
   descriptor: ControlDescriptor
   state: ControlState | undefined
   pickup: PickupChange | undefined
-  resolved: { target: { type: string } } | null
+  resolved: { target: BindingTarget } | null
 }) {
   const selection = useDeskSelection()
   const isSelectionTarget =
@@ -390,6 +424,7 @@ function LiveCard({
       {state?.led !== "none" && state?.led != null && (
         <p className="text-muted-foreground">LED {state.led}</p>
       )}
+      {resolved && <StageValue target={resolved.target} />}
       {isSelectionTarget && (
         <p className="flex items-center gap-1 text-muted-foreground">
           <Wand2 className="size-3" />
@@ -399,5 +434,124 @@ function LiveCard({
         </p>
       )}
     </div>
+  )
+}
+
+/**
+ * `Movers.dimmer = 168` — what the binding's property is currently at on the rig.
+ *
+ * **A component, and four leaves, because the value hooks take a descriptor and hooks cannot be
+ * conditional.** `useSliderValue` and `useGroupColourValues` want different shapes and subscribe to
+ * different channel sets, so choosing between them inside one component would mean calling one of
+ * them with a fabricated descriptor. `EffectPadDetail` is the same shape for the same reason.
+ *
+ * Only **slider** and **colour** are drawn, which is not a simplification: those are exactly the
+ * two `PropertyChannelResolver` writes from a continuous control, so a binding on anything else has
+ * no stage value to report. A `flash` is unwrapped first — its inner target is the property it
+ * drives.
+ */
+function StageValue({ target }: { target: BindingTarget }) {
+  const inner = effectiveTarget(target)
+  if (inner.type === "fixtureProperty") {
+    return (
+      <FixtureStageValue
+        fixtureKey={inner.fixtureKey}
+        propertyName={inner.propertyName}
+      />
+    )
+  }
+  if (inner.type === "groupProperty") {
+    return <GroupStageValue groupName={inner.groupName} propertyName={inner.propertyName} />
+  }
+  return null
+}
+
+function StageLine({ label, value }: { label: string; value: string }) {
+  return (
+    <p className="font-mono text-[11px] text-muted-foreground">
+      {label} = {value}
+    </p>
+  )
+}
+
+function FixtureStageValue({
+  fixtureKey,
+  propertyName,
+}: {
+  fixtureKey: string
+  propertyName: string
+}) {
+  const { data: fixtures } = useFixtureListQuery()
+  const property = fixtures
+    ?.find((f) => f.key === fixtureKey)
+    ?.properties?.find((p) => p.name === propertyName)
+  const label = `${fixtureKey}.${propertyName}`
+  if (property?.type === "slider") return <FixtureSliderValue property={property} label={label} />
+  if (property?.type === "colour") return <FixtureColourValue property={property} label={label} />
+  return null
+}
+
+function FixtureSliderValue({
+  property,
+  label,
+}: {
+  property: SliderPropertyDescriptor
+  label: string
+}) {
+  return <StageLine label={label} value={String(useSliderValue(property))} />
+}
+
+function FixtureColourValue({
+  property,
+  label,
+}: {
+  property: ColourPropertyDescriptor
+  label: string
+}) {
+  const { r, g, b } = useColourValue(property)
+  return <StageLine label={label} value={`${r}, ${g}, ${b}`} />
+}
+
+function GroupStageValue({
+  groupName,
+  propertyName,
+}: {
+  groupName: string
+  propertyName: string
+}) {
+  const { data: properties } = useGroupPropertiesQuery(groupName)
+  const property = properties?.find((p) => p.name === propertyName)
+  const label = `${groupName}.${propertyName}`
+  if (property?.type === "slider") return <GroupSliderValue property={property} label={label} />
+  if (property?.type === "colour") return <GroupColourValue property={property} label={label} />
+  return null
+}
+
+function GroupSliderValue({
+  property,
+  label,
+}: {
+  property: GroupSliderPropertyDescriptor
+  label: string
+}) {
+  // The group hook already answers "do the members agree", which is the same question D10 puts to
+  // the motor: a mixed group is why the encoder ring beside this line is dark.
+  const { min, max, isUniform } = useGroupSliderValues(property)
+  return <StageLine label={label} value={isUniform ? String(min) : `${min}–${max} (mixed)`} />
+}
+
+function GroupColourValue({
+  property,
+  label,
+}: {
+  property: GroupColourPropertyDescriptor
+  label: string
+}) {
+  const { avgR, avgG, avgB, isUniform } = useGroupColourValues(property)
+  return (
+    <StageLine
+      label={label}
+      value={`${avgR}, ${avgG}, ${avgB}${isUniform ? "" : " (mixed)"}`}
+    />
   )
 }

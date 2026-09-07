@@ -10,6 +10,7 @@ import { LocateButton } from '../fixtures/LocateButton'
 import { FxBadge } from '../fx/FxBadge'
 import { FxSection } from '../fx/FxSection'
 import { BoundControlBadge } from '../surfaces/BoundControlBadge'
+import { categoriseProperties } from '@/hooks/useTargetProperties'
 import type { GroupSummary, GroupPropertyDescriptor, GroupColourPropertyDescriptor } from '../../api/groupsApi'
 
 interface GroupCardProps {
@@ -118,7 +119,7 @@ export function GroupPropertiesSection({
     return null
   }
 
-  const grouped = groupPropertiesByCategory(properties)
+  const grouped = categoriseProperties(properties)
 
   // Virtual dimmer: group has colour but no dimmer
   const hasRealDimmer = grouped.dimmer.length > 0
@@ -212,38 +213,3 @@ export function GroupPropertiesSection({
   )
 }
 
-/**
- * Group properties by category for organized display
- */
-function groupPropertiesByCategory(properties: GroupPropertyDescriptor[]) {
-  const result = {
-    colour: [] as GroupPropertyDescriptor[],
-    position: [] as GroupPropertyDescriptor[],
-    dimmer: [] as GroupPropertyDescriptor[],
-    slider: [] as GroupPropertyDescriptor[],
-    setting: [] as GroupPropertyDescriptor[],
-  }
-
-  for (const prop of properties) {
-    switch (prop.type) {
-      case 'colour':
-        result.colour.push(prop)
-        break
-      case 'position':
-        result.position.push(prop)
-        break
-      case 'slider':
-        if (prop.category === 'dimmer') {
-          result.dimmer.push(prop)
-        } else {
-          result.slider.push(prop)
-        }
-        break
-      case 'setting':
-        result.setting.push(prop)
-        break
-    }
-  }
-
-  return result
-}

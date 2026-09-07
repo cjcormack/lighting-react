@@ -3,9 +3,12 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { BindingTarget } from '@/store/surfaces'
 
-// The picker is store-connected on four axes; stub them all so this stays a unit test of
-// which kinds are offered for which control type.
+// The picker is store-connected on five axes; stub them all so this stays a unit test of
+// which kinds are offered for which control type. The fixture list is behind
+// `useRigProperties`, which is where the target-less kinds (selection property, encoder bank)
+// get their vocabulary.
 vi.mock('@/store/groups', () => ({ useGroupListQuery: () => ({ data: [] }) }))
+vi.mock('@/store/fixtures', () => ({ useFixtureListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/patches', () => ({ usePatchListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/cueStacks', () => ({ useProjectCueStackListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/speedMasters', () => ({
