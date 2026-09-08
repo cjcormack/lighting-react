@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useState } from 'react'
-import { useSelector } from 'react-redux'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { AudioWaveform, Plus } from 'lucide-react'
@@ -14,7 +13,6 @@ import {
   useTemplateListQuery,
   useToggleTemplateMutation,
 } from '@/store/templates'
-import { selectTargetKeys } from '@/store/selectionSlice'
 import { formatError } from '@/lib/formatError'
 import { NewTemplateFromSelectionSheet } from './NewTemplateFromSelectionSheet'
 import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
@@ -25,7 +23,14 @@ import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
  * **The selection is the filter**, which is the whole design: select colour cells and only colour
  * templates are offered, so there is no picker to open and no family dropdown to get wrong. It reads
  * the *cell* selection where there is one (the marquee says which attribute you mean) and falls back
- * to the fixture selection's whole vocabulary where there is not.
+ * to what the selected fixtures **can take** where there is not — a rig of RGB pars with no mover
+ * on it is offered no position template, because "does this head have the family at all" is the
+ * whole of template compatibility (fx-templates D6).
+ *
+ * **The selection is the target too**, by the same rule: a marquee over three colour cells lands
+ * the press on those three heads, whatever the checkboxes name, and a row selection lands it on
+ * the rows. The container derives both (`templateTargets`, `targetFamilies` on `renderToolbar`)
+ * because only it knows which rows the cells sit on; the strip reads nothing from Redux.
  *
  * **Two gestures, because there are two things you might mean**, and they are the reason a template
  * is not just a value you paste:
@@ -41,38 +46,39 @@ import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
 export function TemplateStrip({
   projectId,
   cells,
+  targets,
+  targetFamilies,
 }: {
   projectId: number
   /** The marquee's cells. Empty when the operator has selected rows but not cells. */
   cells: readonly CellRef[]
+  /** Where a press lands: the cells' heads when there is a marquee, the selected rows' otherwise. */
+  targets: readonly TemplateTarget[]
+  /** The families those heads have at all. Empty when nothing is selected. */
+  targetFamilies: readonly AttributeFamily[]
 }) {
   const { data: templates } = useTemplateListQuery({ projectId }, { skip: !projectId })
   const [applyTemplate] = useApplyTemplateMutation()
   const [toggleTemplate] = useToggleTemplateMutation()
   const [newOpen, setNewOpen] = useState(false)
 
-  const selectedKeys = useSelector((s: Parameters<typeof selectTargetKeys>[0]) =>
-    selectTargetKeys(s, 'programmer'),
-  )
-
   /**
    * The families the selection is asking about.
    *
    * From the **cells** when there are any — a marquee across the Colour column means colour, and
-   * nothing else. With rows selected but no cells there is no attribute in the gesture, so every
-   * family is offered rather than guessing one.
+   * nothing else. With rows selected but no cells there is no attribute in the gesture, so the
+   * answer is what those heads *have*: every family they could take, none they could not. With
+   * nothing selected at all there is no question yet, and the whole library shows.
    */
   const families = useMemo<AttributeFamily[] | null>(() => {
-    if (cells.length === 0) return null
-    const out = new Set<AttributeFamily>()
-    for (const cell of cells) out.add(familyForCategory(COLUMN_CATEGORY[cell.col as ColumnKey]))
-    return [...out]
-  }, [cells])
-
-  const targets = useMemo<TemplateTarget[]>(
-    () => selectedKeys.map((key) => ({ type: 'fixture' as const, key })),
-    [selectedKeys],
-  )
+    if (cells.length > 0) {
+      const out = new Set<AttributeFamily>()
+      for (const cell of cells) out.add(familyForCategory(COLUMN_CATEGORY[cell.col as ColumnKey]))
+      return [...out]
+    }
+    if (targets.length > 0) return [...targetFamilies]
+    return null
+  }, [cells, targets.length, targetFamilies])
 
   const visible = useMemo(() => {
     // The library's own order, which is by name — the same list `/templates` draws. There is no
@@ -102,10 +108,10 @@ export function TemplateStrip({
         ? toggleTemplate({
             projectId,
             templateId: template.id,
-            targets,
+            targets: [...targets],
             propertyMask: template.family ?? undefined,
           })
-        : applyTemplate({ projectId, templateId: template.id, targets })
+        : applyTemplate({ projectId, templateId: template.id, targets: [...targets] })
       request
         .unwrap()
         .then((result) => {
@@ -124,7 +130,12 @@ export function TemplateStrip({
           // An *empty* list is reported too, and that is the half worth keeping: a press that
           // started nothing looks exactly like a press that started everything, and the value arm
           // above has `skipped` to say so where this one has only the count.
-          if ('effectIds' in result && result.effectIds != null) {
+          //
+          // Gated on the template's **kind**, not on the field being present: the desk answers a
+          // value press with `effectIds: []` as well, and reading that as "nothing started" put a
+          // failure toast on every successful value press. Found on a desk, not by a test —
+          // the mock here answered without the field.
+          if (template.kind === 'effect' && 'effectIds' in result && result.effectIds != null) {
             const count = result.effectIds.length
             if (count === 0) {
               toast.warning('Nothing started — no selected head could take this effect')
@@ -143,10 +154,17 @@ export function TemplateStrip({
   return (
     <>
       <div className="flex flex-wrap items-center gap-1.5">
-        {families != null && (
+        {/* Named only when the cells said it: a family list derived from what the heads have is
+            the strip's filter, not the operator's statement, and badging it would read as one. */}
+        {cells.length > 0 && families != null && (
           <Badge variant="outline" className="shrink-0 px-1.5 py-0 text-[10px]">
             {families.map((f) => FAMILY_LABELS[f].singular).join(' · ')}
           </Badge>
+        )}
+        {visible.length === 0 && targets.length > 0 && (templates?.length ?? 0) > 0 && (
+          <span className="text-[11px] text-muted-foreground">
+            No template fits what is selected.
+          </span>
         )}
 
         {valueChips.map((template) => (
@@ -184,7 +202,10 @@ export function TemplateStrip({
         open={newOpen}
         onOpenChange={setNewOpen}
         projectId={projectId}
-        families={families}
+        // The *asked* families, not the capability list: with rows selected and no cells the
+        // gesture named no attribute, and the sheet should ask rather than pre-pick one of several.
+        families={cells.length > 0 ? families : null}
+        targets={targets}
       />
     </>
   )

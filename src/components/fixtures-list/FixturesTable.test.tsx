@@ -233,6 +233,33 @@ describe('FixturesTable cell gesture', () => {
     expect(onBeginCellEdit).not.toHaveBeenCalled()
   })
 
+  it('a marquee ends with focus on the document, not on the trigger the press began on', () => {
+    // Chromium focuses a `<button>` on mousedown, and every cell trigger is one — so without this
+    // a mouse-drawn marquee left that button focused and the container's window handler read the
+    // operator's Enter as "from a focused control", opening one cell's popover instead of the
+    // typed-value field. Safari does not focus buttons on mousedown, which hid it there.
+    render(<Harness />)
+    const cell = cellButton()
+    cell.focus()
+    expect(document.activeElement).toBe(cell)
+    fireEvent.pointerDown(cell, { button: 0, clientX: 300, clientY: 100 })
+    fireEvent.pointerMove(cell, { button: 0, buttons: 1, clientX: 380, clientY: 160 })
+    fireEvent.pointerUp(cell, { button: 0, clientX: 380, clientY: 160 })
+    expect(document.activeElement).toBe(document.body)
+    // The trailing click a real release generates; the drag's one-shot swallower is waiting for
+    // it, and would otherwise eat the next test's first click.
+    fireEvent.click(cell)
+  })
+
+  it('a press with no travel leaves focus where the browser put it — Tab-then-Enter still opens the editor', () => {
+    render(<Harness />)
+    const cell = cellButton()
+    cell.focus()
+    fireEvent.pointerDown(cell, { button: 0, clientX: 300, clientY: 100 })
+    fireEvent.pointerUp(cell, { button: 0, clientX: 300, clientY: 100 })
+    expect(document.activeElement).toBe(cell)
+  })
+
   it('disarms a press whose release it never saw, rather than marqueeing on hover', () => {
     // Release over the sticky header, the scrollbar or outside the window: no pointer capture was
     // taken (that only happens past the threshold), so no `pointerup` reaches the rows wrapper. The
@@ -357,6 +384,23 @@ describe('FixturesTable scopes', () => {
     scopeState.current = { kind: 'output' }
     render(<Harness />)
     expect(cellButton()).toBeDisabled()
+  })
+
+  it('badges an effect-driven cell with the FX wave, and nothing else', () => {
+    // The violet ring alone was too quiet beside the blue ones; the badge is what says "this value
+    // is moving and Record will not take it" without a hover.
+    ownership.current = {
+      dimmer: { source: 'effect', touched: false, isUniform: true, owners: [] },
+      colour: { source: 'programmer', touched: true, isUniform: true, owners: [] },
+    }
+    render(<Harness />)
+    // One per effect-owned cell (the harness renders more than one row), and never on the
+    // programmer-owned colour cells beside them.
+    const badges = screen.getAllByTestId('effect-badge')
+    expect(badges.length).toBeGreaterThan(0)
+    for (const badge of badges) {
+      expect(badge.closest('[data-cell]')).toHaveAttribute('data-cell', 'dimmer')
+    }
   })
 
   it('makes an Output tint a destination — clicking jumps to the layer that won it', () => {

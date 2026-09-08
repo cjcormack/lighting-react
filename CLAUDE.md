@@ -740,11 +740,28 @@ says which happened, so both are stated on the chip's title:
   mechanism — it already was, for Looks — so "a colour I can change everywhere later" and "a colour I
   want right now" are two gestures on one chip rather than two kinds of template.
 
-`TemplateStrip` lives in `ProgrammerGrid`'s `renderToolbar`, which already hands down the marquee's
-`cells` — so **the selection is the filter** with no new plumbing: select colour cells and only
-colour templates are offered, and there is no picker to open or family dropdown to get wrong. Rows
-selected but no cells means the gesture names no attribute, so everything is offered rather than a
-family being guessed. `TemplateStrip.test.tsx` pins the filter and the click/⌥click split.
+`TemplateStrip` lives in `ProgrammerGrid`'s `renderToolbar`, which hands down the marquee's
+`cells` **and two things the container derives from them** — so **the selection is the filter and
+the target**, and there is no picker to open or family dropdown to get wrong:
+
+- **Cells selected**: only that family is offered, and the press lands on the cells' heads —
+  three colour cells means those three fixtures, whatever the checkboxes name.
+- **Rows selected, no cells**: the gesture names no attribute, so the filter is what the heads
+  *can take* (`targetFamilies`, from descriptors — capability-only, fx-templates D6): a rig of
+  dimmer-only pars is offered no colour template, and nothing with a mover on it offers a position
+  one. The press lands on the rows.
+- **Nothing selected**: the whole library shows, and a press toasts that it has nowhere to land.
+
+`templateTargetsFor` in `rowModel.ts` is the target rule, and it is neither sibling: a group row
+lands on its *visible* members (the filter rule every group-row action keeps), and an element row
+lands on its fixture, because the template route resolves keys against the patch and would drop an
+element key silently. The strip reads nothing from Redux; `NewTemplateFromSelectionSheet` takes the
+same targets so a press and its "new from selection" cannot name different heads.
+`TemplateStrip.test.tsx` pins the filter, the target and the click/⌥click split.
+
+One trap on the response: the desk answers a **value** apply with `effectIds: []` as well as
+`written`, so the "nothing started" warning is gated on `template.kind === 'effect'`, not on the
+field being present — it toasted red on every successful value press before that.
 
 **New from selection** is server-side (`POST /templates/from-programmer`), for the same reason apply
 is: converting a recorded *literal* back into an **intent** is per-head arithmetic that has to agree
@@ -753,6 +770,39 @@ where every selected head agrees, one row per head where they do not — rather 
 because the operator already said which they meant by putting the heads where they are. The
 colour inverse is a documented heuristic (fold the emitters back into RGB, policy `extract` when
 either was driven); it lives in one place, `templateRecord.kt`.
+
+### The programmer's keyboard
+
+**The marquee has a keyboard.** Select cells, press Enter (or a digit), type, press Enter, and the
+value lands on every selected cell through the same `commitToCells` a popover inside the marquee
+uses — the field adds a keyboard to the marquee, not a second path to the rig. The grammar is
+`lib`-free and pure in `fixtures-list/cellEntry.ts` (`127`, `50%`, `full`/`out`, `#ff8800`,
+`r,g,b`, `pan,tilt` with either axis blank) and it becomes **one** `CellCommit`, so
+`commitMatchesResolution` drops it from any column it does not fit: `127` at a Dimmer + Colour
+marquee sets the dimmers and leaves the colours alone. Two grammar traps its tests pin: a bare
+three-digit number is a level, not a short hex (`127` was matching `[0-9a-f]{3}`), and a percentage
+is scaled by integers (`50 * 2.55` is 127.49999… in floating point).
+
+The editor is a **popover anchored at the first selected cell** (`CellEntryPopover`, owned by the
+container, which finds the cell through the table's `data-row-id` / `data-cell` attributes) — the
+same picture, size and "Applying to N targets" line a click on a cell inside the marquee opens, so
+Enter and a click read as one kind of thing. It was a small input in the selection bar first, which
+was too far from the cells and too quiet to read as "this is where your keystrokes go"; the bar
+keeps only the key hints. Enter applies and closes; the marquee stays. **`cellKeyboardPermission`
+in `cellEntry.ts` is the scope gate**,
+the fourth place "read-only" is said (§The programmer's scoped grid): both keys in Local, neither in
+Output, entry only into a focused Look layer (its draft has no removal), neither on a focused
+template layer. The container reports `cellEntryKey` / `cellClearKey` false where a key is
+refused, and the grid's hints read those rather than restating the rule — so no hint can advertise
+a key that does nothing. The window handler only moves focus into the field, and **not
+from a focused control** (a button, a link, a menu or menu item) on any arm: a cell trigger is
+tabbable and Tab-then-Enter opening its popover is a path the grid already promises, and Backspace
+is the destructive arm. A value that parses but fits none of the selected columns is reported as
+such rather than cleared as if it had landed (`commitToCells` returns the write count for exactly
+this). **Backspace / Delete takes the selected cells out of Local** (`CellWriters.clearValue` →
+`programmer.clearEntry`, by the programmer fade — the same store the action bar's Clear fades by).
+The reset of typed text is keyed on the cells array, not the count: a same-size replace-marquee is
+a new set with the same count.
 
 ### The programmer's scoped grid
 
@@ -812,13 +862,18 @@ Things that will bite:
   writing straight to Local while the band overhead says "One layer" — the notice had been claiming
   the opposite since it shipped.
 
-  **"Read-only" has to be said in three places, not one.** `CellState.editable` reaches only the
+  **"Read-only" has to be said in four places, not one.** `CellState.editable` reaches only the
   pointer (`pointer-events-none` on the wrapper); the cell trigger stays tabbable, so `PropertyCell`
-  takes `disabled` from it too, and `FanPopover` — which writes through `useCellWriters` from the
-  toolbar, nowhere near a cell — gates on the focused template as well. A commit through either hole
+  takes `disabled` from it too; `FanPopover` — which writes through `useCellWriters` from the
+  toolbar, nowhere near a cell — gates on the focused template as well; and the marquee's
+  **keyboard** (`CellEntryField`, §The programmer's keyboard) gates on `cellKeyboardPermission`,
+  because the marquee itself arms in every scope — its `pointerdown` sits on the rows wrapper and a
+  read-only cell's `pointer-events-none` only retargets the press there. A commit through any hole
   is not dropped: `useCellWriters` has no arm for a template layer, so it falls through to a **live**
   write and puts literals in Local. The Fan gate is on the *template* case only, not on layer scope
-  generally: a focused Look layer has a row draft and the fan correctly lands in it.
+  generally: a focused Look layer has a row draft and the fan correctly lands in it — and the
+  keyboard makes the same split, taking a typed value into a Look layer's draft and refusing it on
+  a template layer and in Output.
 
   An untargeted row in a template layer is painted dashed like any other, so `AddToTargetsButton`
   reads whichever layer context is live — it is the only way a layer widens, and a tone with no way
@@ -830,6 +885,15 @@ Things that will bite:
 - **In Output scope every tint is a destination**: clicking a cell jumps the scope to whatever won
   it. Three guards, and the middle one bites — `ProvenanceEntry.layerId` is present for a **cue's**
   layers too, so `focusLayer` checks membership in the programmer's own stack and reports failure.
+
+**The FX band's row is two lines**, because one could not hold it: name, tempo and division with
+the menu on the first, and property, **target** and home on a wrapping second. It was one flex line
+of `shrink-0` chips in a 404px rail, so the name — the only thing allowed to give — was squeezed to
+nothing and the menu button was pushed past the rail's edge; a `@[320px]` on the home detail was
+meant to hide it narrow but the nearest `@container` is the whole workspace. The target is new:
+`ActiveEffect` is one instance per target, so eight loose heads under one chase are eight rows, and
+the key is what tells them apart. Only the layer *position* is written out beside the home badge;
+the other two details ride the badge's title.
 
 `+ Effect` follows the same rule as a value edit: focused layer → into that Look (via
 `POST /looks/{id}/absorb-effects`, which *moves* the running instance); Local → the programmer band,

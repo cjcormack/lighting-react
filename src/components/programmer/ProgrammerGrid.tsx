@@ -66,6 +66,9 @@ export function ProgrammerGrid({
   )
 }
 
+/** The ShowBar's key-cap styling, so the two hints read as one vocabulary. */
+const KBD_CLASS = 'rounded border bg-muted/50 px-1.5 py-px text-[9.5px]'
+
 function ProgrammerGridBody({
   projectId,
   grouped,
@@ -91,7 +94,16 @@ function ProgrammerGridBody({
         enableDeepLinkSelect={false}
         // Include auto-selects the heads it pulled in — this is where you then edit them.
         respondToIncludeSelection
-        renderToolbar={({ filter, lit, selection, cells }) => (
+        renderToolbar={({
+          filter,
+          lit,
+          selection,
+          cells,
+          cellEntryKey,
+          cellClearKey,
+          templateTargets,
+          targetFamilies,
+        }) => (
           <div className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center gap-2">
               {filter}
@@ -101,7 +113,12 @@ function ProgrammerGridBody({
             {/* The template strip, above the grid and below the filter. It reads the *cell*
                 selection — which `renderToolbar` already hands down, so the strip needs no new
                 plumbing into the table's own state — and the selection is what filters it. */}
-            <TemplateStrip projectId={projectId} cells={cells} />
+            <TemplateStrip
+              projectId={projectId}
+              cells={cells}
+              targets={templateTargets}
+              targetFamilies={targetFamilies}
+            />
             {/* Two selections, both live at once, so both are named. FIXTURE selection is what
                 Record scopes on; CELL selection is a transient edit scope that only says where the
                 next value goes. Leaving either to be inferred from the buttons beside it is how an
@@ -119,6 +136,25 @@ function ProgrammerGridBody({
                     <span className="text-xs text-muted-foreground">
                       {describeCellScope(cells, columnLabel)} — edit once, applies to all
                     </span>
+                    {/* The keyboard half: the two keys that reach the marquee's editor from the
+                        grid. The editor itself is a popover the container opens at the first
+                        selected cell. Both hints follow the container's own answer — each flag is
+                        false where its key is refused — so this cannot advertise a key that does
+                        nothing, and the rule (`cellKeyboardPermission`) is not restated here. */}
+                    {(cellEntryKey || cellClearKey) && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                        {cellEntryKey && (
+                          <>
+                            <kbd className={KBD_CLASS}>⏎</kbd> type a value
+                          </>
+                        )}
+                        {cellClearKey && (
+                          <>
+                            <kbd className={`${KBD_CLASS} ml-1`}>⌫</kbd> clear
+                          </>
+                        )}
+                      </span>
+                    )}
                   </>
                 )}
                 <span className="flex-1" />

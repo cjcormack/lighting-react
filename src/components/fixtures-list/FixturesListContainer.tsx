@@ -9,7 +9,12 @@ import { useGroupListQuery } from '../../store/groups'
 import { usePersistentState } from '../../hooks/usePersistentState'
 import { useCellSelection } from './useCellSelection'
 import { useProgrammerScope } from '../programmer/ProgrammerScope'
+import { useFocusedTemplateLayer } from '../programmer/FocusedTemplateLayer'
+import { CellEntryPopover } from './CellEntryPopover'
+import { cellEntryHint, cellKeyboardPermission, parseCellEntry } from './cellEntry'
+import { resolutionPropertyNames } from './columns'
 import type { CellRef } from './cellSelectionModel'
+import type { AttributeFamily } from '../../lib/attributeFamily'
 import {
   ColumnsMenu,
   useColumnVisibility,
@@ -27,6 +32,8 @@ import {
   resolveTargetCells,
   selectedRowTargets,
   rowWriteTargets,
+  targetFamilies,
+  templateTargetsFor,
 } from './rowModel'
 import { isEditableTarget } from '../../lib/domUtils'
 import { useIncludeSelectionRequest } from '../../store/includeSelection'
@@ -111,6 +118,22 @@ export interface FixturesListContainerProps {
     selection: React.ReactNode | null
     /** The marquee's cells, for a scope label beside the fixture count. Empty when none. */
     cells: readonly CellRef[]
+    /**
+     * True when Enter (or a digit) opens the marquee's typed-value editor: cells are selected and
+     * the scope can take a typed value (`cellKeyboardPermission`). The editor itself is a popover
+     * the container renders at the first selected cell; the caller only draws the hint, from this
+     * flag, so the hint and the key agree by construction.
+     */
+    cellEntryKey: boolean
+    /** True when Backspace / Delete would take the selected cells out of Local — same rule. */
+    cellClearKey: boolean
+    /**
+     * Where a template press lands: the cells' fixtures when there is a marquee, otherwise the
+     * selected rows'. Already `{type: 'fixture', key}`, so the strip sends it as it is.
+     */
+    templateTargets: readonly LocateTarget[]
+    /** The families those targets can take at all — the capability half of the strip's filter. */
+    targetFamilies: readonly AttributeFamily[]
   }) => React.ReactNode
   /**
    * Let the table fill its flex parent instead of capping at `calc(100vh - 14rem)`.
@@ -230,6 +253,39 @@ export function FixturesListContainer({
     [rows, selection.selectedIds],
   )
 
+  // Where a template press lands, and what those heads can take. The marquee is the narrower
+  // statement when there is one — three colour cells means those three heads, not the eight rows
+  // the checkboxes happen to name — and the row selection otherwise. Published through
+  // `renderToolbar` rather than read from Redux by the strip: `selectTargetKeys` is already
+  // flattened to member keys and knows nothing about cells.
+  const cellRowIds = useMemo(
+    () => new Set(cellSelection.cells.map((cell) => cell.rowId)),
+    [cellSelection.cells],
+  )
+  const templateTargets = useMemo(
+    () =>
+      cellRowIds.size > 0
+        ? templateTargetsFor(rows, cellRowIds)
+        : templateTargetsFor(rows, selection.selectedIds),
+    [rows, cellRowIds, selection.selectedIds],
+  )
+  // From the **same list** the press is sent to, resolved back to whole fixtures, so the two
+  // cannot disagree: a lone element row lands on its fixture above, and its families are the
+  // fixture's — parent properties and every element's — not the one element's. Deriving them from
+  // `selectedTargets` instead (which holds the element) under-reported a bar whose dimmer sits on
+  // the parent, and offered no intensity template for a press that would have set it.
+  const fixtureByKey = useMemo(() => new Map(fixtures.map((f) => [f.key, f])), [fixtures])
+  const templateFamilies = useMemo(
+    () =>
+      targetFamilies(
+        templateTargets.flatMap((target) => {
+          const fixture = fixtureByKey.get(target.key)
+          return fixture ? [fixture] : []
+        }),
+      ),
+    [templateTargets, fixtureByKey],
+  )
+
   // One desk, one selection (plan D2) — the programmer scope only; see the hook.
   useDeskSelectionBridge(
     selectionScope === 'programmer',
@@ -286,22 +342,41 @@ export function FixturesListContainer({
     [cellSelection, selection],
   )
 
+  /**
+   * One commit, every selected cell. Grouped BY COLUMN so each column is exactly one
+   * `planBatchWrites` call, keeping `resolveTargetCells`' parent-first precedence and per-target
+   * clamping intact. A commit whose shape doesn't fit a column (a colour dragged across Colour and
+   * Position, or `127` typed at a marquee that includes Colour) is filtered out inside
+   * `planBatchWrites` — so the chip's cell count is an upper bound on what any ONE commit writes,
+   * which the design's wording already allows for.
+   *
+   * Two callers: a popover opened on a cell inside the marquee, and the typed-value field. Both
+   * are the same write, and that is the point of the field — it adds a keyboard to the marquee,
+   * not a second path to the rig.
+   */
+  const commitToCells = useCallback(
+    (commit: CellCommit): number => {
+      let written = 0
+      for (const { col: c, rowIds } of cellSelection.byColumn()) {
+        const targets = expandSelectionToTargets(rows, new Set(rowIds))
+        for (const planned of planBatchWrites(targets, c, commit)) {
+          applyPlannedWrite(writers, planned)
+          written += 1
+        }
+      }
+      // How many writes were planned. A popover's caller has no use for it; the typed field does,
+      // because a value that fitted no selected column looks exactly like one that landed.
+      return written
+    },
+    [cellSelection, rows, writers],
+  )
+
   const commitNow = useCallback(
     (row: Row, col: ColumnKey, commit: CellCommit) => {
       // Three scopes, most specific first. The marquee wins over the row selection because it is
       // the narrower, more deliberate statement of what this edit is for.
       if (cellSelection.isSelected(row.id, col)) {
-        // Grouped BY COLUMN so each column is exactly one `planBatchWrites` call, keeping
-        // `resolveTargetCells`' parent-first precedence and per-target clamping intact. A commit
-        // whose shape doesn't fit a column (a colour dragged across Colour and Position) is
-        // filtered out inside `planBatchWrites` — so the chip's cell count is an upper bound on
-        // what any ONE commit writes, which the design's wording already allows for.
-        for (const { col: c, rowIds } of cellSelection.byColumn()) {
-          const targets = expandSelectionToTargets(rows, new Set(rowIds))
-          for (const planned of planBatchWrites(targets, c, commit)) {
-            applyPlannedWrite(writers, planned)
-          }
-        }
+        commitToCells(commit)
         return
       }
       const targets =
@@ -313,8 +388,126 @@ export function FixturesListContainer({
         applyPlannedWrite(writers, planned)
       }
     },
-    [cellSelection, rows, selectedTargets, selection, writers],
+    [cellSelection, commitToCells, selectedTargets, selection, writers],
   )
+
+  // ── The keyboard half of the marquee ──────────────────────────────────────────────────────
+  //
+  // Select cells, press Enter (or a digit), type, press Enter: the value lands on every selected
+  // cell through `commitToCells`. The editor is a popover anchored at the first selected cell —
+  // the same picture a click on a cell inside the marquee opens — and the selection bar's hint says
+  // Enter opens it. The window handler below opens it and seeds it; it does nothing else.
+  //
+  // **The scope gate is `cellKeyboardPermission`**, and it is the fourth place "read-only" has to
+  // be said (see CLAUDE.md §The programmer's scoped grid): the marquee arms in Output and on a
+  // focused template layer too, and `useCellWriters` would take a commit from either as a live
+  // write. Both keys read the same answer, and the field is simply not rendered where Enter would
+  // be refused, so the hint beside it cannot promise a key that does nothing.
+  const focusedTemplate = useFocusedTemplateLayer()
+  const keys = cellKeyboardPermission(scope, focusedTemplate != null)
+  const [entryOpen, setEntryOpen] = useState(false)
+  const [entryAnchor, setEntryAnchor] = useState<{
+    left: number
+    top: number
+    width: number
+    height: number
+  } | null>(null)
+  const [entryText, setEntryText] = useState('')
+  const [entryProblem, setEntryProblem] = useState<'unreadable' | 'nowhere' | null>(null)
+  const entryHint = useMemo(
+    () => cellEntryHint([...new Set(cellSelection.cells.map((c) => c.col))]),
+    [cellSelection.cells],
+  )
+  // A new marquee is a new question; text typed for the last one must not land on this one.
+  // Keyed on the cells' *contents*, not their count and not the array's identity: a replace-marquee
+  // of the same size over other cells is a new set with the same `cellCount`, while the `cells`
+  // array is rebuilt on every `rows` rebuild — each filter keystroke, and under Lit every head that
+  // crosses zero while an effect runs — and wiping a half-typed value on those would be a bug of
+  // its own. The signature changes exactly when the set does.
+  const cellsSignature = useMemo(
+    () => cellSelection.cells.map((cell) => `${cell.rowId}\u0000${cell.col}`).join('\n'),
+    [cellSelection.cells],
+  )
+  useEffect(() => {
+    setEntryText('')
+    setEntryProblem(null)
+    setEntryOpen(false)
+  }, [cellsSignature])
+
+  /**
+   * Open the editor at the first selected cell in visible order, seeded with whatever key opened
+   * it. The cell is found by `(rowId, col)` through the `data-row-id` / `data-cell` attributes the
+   * table puts on its rows — the container knows cells only by id, and the rows are virtualised —
+   * and a cell that is scrolled out of the rendered window anchors the popover at the grid's top
+   * instead of not opening.
+   */
+  const openEntry = useCallback(
+    (seed: string) => {
+      const cells = cellSelection.cells
+      const first =
+        rows.map((row) => cells.find((cell) => cell.rowId === row.id)).find((cell) => cell != null) ??
+        cells[0]
+      const el = first
+        ? document.querySelector(
+            `[data-row-id="${CSS.escape(first.rowId)}"] [data-cell="${CSS.escape(first.col)}"]`,
+          )
+        : null
+      const rect = el?.getBoundingClientRect()
+      setEntryAnchor(
+        rect ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height } : null,
+      )
+      setEntryText(seed)
+      setEntryProblem(null)
+      setEntryOpen(true)
+    },
+    [cellSelection.cells, rows],
+  )
+
+  const submitEntry = useCallback(() => {
+    if (!keys.entry) return
+    const commit = parseCellEntry(entryText)
+    if (commit == null) {
+      setEntryProblem('unreadable')
+      return
+    }
+    if (commitToCells(commit) === 0) {
+      // Parsed, planned, and fitted nothing — `127` at a colour-only marquee. Said, and the text
+      // kept, rather than cleared as though it had landed.
+      setEntryProblem('nowhere')
+      return
+    }
+    // Applied: the editor closes, the way a spreadsheet's does, and the marquee stays so a second
+    // Enter can open it again for the next value.
+    setEntryText('')
+    setEntryProblem(null)
+    setEntryOpen(false)
+  }, [keys.entry, entryText, commitToCells])
+
+  /**
+   * Backspace / Delete on a marquee: take the selected cells out of Local — the spreadsheet's
+   * "clear contents", and the one gesture the popovers have no button for. A cleared entry is
+   * what stops a value being recorded, so this is how a busked colour that should *not* go into
+   * the cue is un-busked without touching the fixtures around it.
+   *
+   * Local only (`cellKeyboardPermission`): Output is a read, and a Look layer's row draft has no
+   * removal — `LookRowStore` exposes `setValue` alone — so rather than a key that silently does
+   * nothing there, the gesture is not offered, and `cellClearKey` tells the toolbar so the hint
+   * names it only where it works.
+   */
+  const canClearCells = keys.clear
+  const canTypeCells = keys.entry
+  const clearSelectedCells = useCallback(() => {
+    if (!canClearCells) return
+    for (const { col, rowIds } of cellSelection.byColumn()) {
+      for (const outer of expandSelectionToTargets(rows, new Set(rowIds))) {
+        for (const { target, resolution } of resolveTargetCells(outer, col)) {
+          for (const propertyName of resolutionPropertyNames(resolution)) {
+            writers.clearValue(target.key, propertyName)
+          }
+        }
+      }
+    }
+  }, [canClearCells, cellSelection, rows, writers])
 
   // Continuous drag commits (slider/colour/position editors fire per pointer
   // move) are throttled to ~30Hz with a trailing call, because each commit
@@ -550,6 +743,39 @@ export function FixturesListContainer({
         else selection.clear()
         return
       }
+      if (cellCount > 0) {
+        // Enter moves focus into the field; a character the grammar can start with is carried in
+        // as its first character, so typing at the grid just works the way it does in a
+        // spreadsheet. Plain keys only — ⌘/Ctrl combinations are someone else's shortcut.
+        //
+        // **Not from a focused control**, for every arm: a cell trigger is tabbable and
+        // Tab-then-Enter opening its popover is a path the grid already promises, and a Radix menu
+        // is `role="menu"`, not `dialog`, so the guard above does not cover a menu item. Backspace
+        // is the destructive one — a live `clearEntry` per cell — so it is the arm that most needs
+        // to know a chip, a checkbox or a menu item had the focus.
+        const onControl =
+          e.target instanceof HTMLElement &&
+          e.target.closest('button, a, [role="menuitem"], [role="menu"]') != null
+        if (e.metaKey || e.ctrlKey || e.altKey || onControl) {
+          // fall through to the row shortcuts below
+        } else if (e.key === 'Enter') {
+          if (!canTypeCells) return
+          e.preventDefault()
+          openEntry('')
+          return
+        } else if (/^[0-9#.,]$/.test(e.key)) {
+          if (!canTypeCells) return
+          e.preventDefault()
+          openEntry(e.key)
+          return
+        } else if (e.key === 'Backspace' || e.key === 'Delete') {
+          if (canClearCells) {
+            e.preventDefault()
+            clearSelectedCells()
+          }
+          return
+        }
+      }
       if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
         e.preventDefault()
         selection.selectAll()
@@ -587,7 +813,13 @@ export function FixturesListContainer({
     // Narrowed to the two fields this reads rather than the whole `cellSelection`: its identity
     // changes with the selection, and re-binding a window listener on every marquee tick is a cost
     // with no payoff. `clearCells` is stable; `cellCount` is the only value that has to be fresh.
-  }, [selection, selectableOrder, cellCount, clearCells])
+    // `clearSelectedCells` is the exception this accepts: it closes over `cellSelection`, `rows`
+    // and `writers`, so it rebinds on every marquee change, a filter or expansion change, and a
+    // scope change — more often than `cellCount` — because the alternative is reading the current
+    // selection through a ref inside a handler that also has to plan writes against `rows`, and a
+    // rebind is cheaper than that second copy of the state. `openEntry` follows the same cadence
+    // for the same reason. `canTypeCells` is a boolean.
+  }, [selection, selectableOrder, cellCount, clearCells, canClearCells, canTypeCells, clearSelectedCells, openEntry])
 
   if (fixturesLoading || groupsLoading) {
     return <div>Loading...</div>
@@ -636,8 +868,29 @@ export function FixturesListContainer({
       />
     ) : null
 
+  const cellEntryControl = (
+    <CellEntryPopover
+      open={entryOpen && cellCount > 0 && keys.entry}
+      onOpenChange={(next) => {
+        if (!next) setEntryOpen(false)
+      }}
+      anchor={entryAnchor}
+      value={entryText}
+      onChange={(next) => {
+        setEntryText(next)
+        setEntryProblem(null)
+      }}
+      onSubmit={submitEntry}
+      hint={entryHint}
+      problem={entryProblem}
+      // Write resolutions, not cells — the same number the slider editor shows for the marquee.
+      count={marqueeBatchCount}
+    />
+  )
+
   return (
     <div className={cn('space-y-3', fill && 'flex min-h-0 flex-1 flex-col')}>
+      {cellEntryControl}
       {renderToolbar ? (
         renderToolbar({
           filter: filterControl,
@@ -645,6 +898,10 @@ export function FixturesListContainer({
           columns: columnsControl,
           selection: selectionControl,
           cells: cellSelection.cells,
+          cellEntryKey: cellCount > 0 && keys.entry,
+          cellClearKey: cellCount > 0 && keys.clear,
+          templateTargets,
+          targetFamilies: templateFamilies,
         })
       ) : (
         /* Default toolbar. At phone widths the filter takes a full row of its own — sharing one

@@ -511,6 +511,17 @@ function useCellMarquee({
       }
       if (!drag.dragged) return
 
+      // A marquee ends with focus on the document, not on the cell trigger the press began on.
+      // Chromium (and Firefox on Windows) focus a `<button>` on mousedown, and every cell's editor
+      // trigger is a button filling its cell — so a mouse-drawn marquee left that button focused,
+      // and the container's window handler then read the operator's Enter as "from a focused
+      // control" and handed it to the button, which opened one cell's popover instead of the typed
+      // field. Safari does not focus buttons on mousedown, which is why the gesture worked there
+      // and nowhere else. Blurring only after a real drag keeps Tab-then-Enter on a trigger intact.
+      if (document.activeElement instanceof HTMLElement && scrollRef.current?.contains(document.activeElement)) {
+        document.activeElement.blur()
+      }
+
       // Swallow the click this release is about to generate, or the cell under the pointer opens
       // its editor on top of the selection just made.
       const swallow = (ev: MouseEvent) => {
@@ -523,7 +534,7 @@ function useCellMarquee({
       // would sit there and eat the operator's next one.
       window.setTimeout(() => window.removeEventListener('click', swallow, true), 0)
     },
-    [stopAutoScroll],
+    [stopAutoScroll, scrollRef],
   )
 
   useEffect(() => stopAutoScroll, [stopAutoScroll])
@@ -682,6 +693,9 @@ const RowView = React.memo(function RowView({
       }`}
       style={{ gridTemplateColumns }}
       data-state={selected ? 'selected' : undefined}
+      // With `data-cell` on each value cell, this is how the container finds the DOM cell to anchor
+      // the marquee's typed-value editor at, without the table knowing that editor exists.
+      data-row-id={row.id}
     >
       {/* Name cell (sticky left, carries selection affordances) */}
       <div
@@ -829,6 +843,21 @@ const RowView = React.memo(function RowView({
                   layer.mixed ? 'text-muted-foreground/50' : 'text-muted-foreground'
                 }`}
               />
+            )}
+            {/* An effect-driven cell wears the FX wave as a badge, top-right — the opposite corner
+                from the Layers glyph, so a cell that is both (a Look layer's effect) shows both.
+                The violet ring on its own was too quiet beside the blue ones: at a glance a cell
+                the effect is animating and a cell you set read as one picture, and "this value is
+                moving and Record will not take it" is the fact the operator most needs to see
+                without hovering. A badge and not a louder ring, because the ring vocabulary is
+                six colours already and a seventh weight would not have said *effect*. */}
+            {owned?.source === 'effect' && (
+              <span
+                data-testid="effect-badge"
+                className="pointer-events-none absolute right-0.5 top-0.5 flex size-3.5 items-center justify-center rounded-sm bg-violet-500/90 text-white"
+              >
+                <AudioWaveform className="size-2.5" />
+              </span>
             )}
             {/* The same corner, and never both: ownership is switched off in layer scope, so the
                 glyph above is undefined exactly where this one draws. Around the cell rather than

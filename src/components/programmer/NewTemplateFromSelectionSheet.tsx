@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useSelector } from 'react-redux'
 import {
   Sheet,
   SheetBody,
@@ -19,8 +18,8 @@ import { useAddToBuskPage } from '@/components/busking/useAddToBuskPage'
 import type { BuskAddTarget } from '@/lib/buskAdd'
 import { ATTRIBUTE_FAMILIES, FAMILY_LABELS, type AttributeFamily } from '@/lib/attributeFamily'
 import { useCreateTemplateFromProgrammerMutation } from '@/store/templates'
-import { selectTargetKeys } from '@/store/selectionSlice'
 import { formatError } from '@/lib/formatError'
+import type { TemplateTarget } from '@/api/templatesApi'
 
 /**
  * Record the selection as a new template — the strip's *New from selection* chip.
@@ -39,17 +38,21 @@ export function NewTemplateFromSelectionSheet({
   onOpenChange,
   projectId,
   families,
+  targets,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   projectId: number
   /** The families the selection is asking about, or null when the gesture named none. */
   families: AttributeFamily[] | null
+  /**
+   * The heads to record from — the strip's own targets, so a marquee over three colour cells
+   * records those three and not every checked row. The strip and the sheet must agree on this or
+   * a press and its "new from selection" would name different heads.
+   */
+  targets: readonly TemplateTarget[]
 }) {
   const [record, { isLoading, error, reset }] = useCreateTemplateFromProgrammerMutation()
-  const selectedKeys = useSelector((s: Parameters<typeof selectTargetKeys>[0]) =>
-    selectTargetKeys(s, 'programmer'),
-  )
 
   const [name, setName] = useState('')
   const [family, setFamily] = useState<AttributeFamily | null>(null)
@@ -73,10 +76,6 @@ export function NewTemplateFromSelectionSheet({
   const [buskTarget, setBuskTarget] = useState<BuskAddTarget | null>(null)
   const { placeAfterCreate } = useAddToBuskPage(projectId, null)
 
-  const targets = useMemo(
-    () => selectedKeys.map((key) => ({ type: 'fixture' as const, key })),
-    [selectedKeys],
-  )
   const canSubmit = name.trim() !== '' && family != null && targets.length > 0 && !isLoading
 
   const submit = async () => {
@@ -86,7 +85,7 @@ export function NewTemplateFromSelectionSheet({
         projectId,
         name: name.trim(),
         mask: [family],
-        targets,
+        targets: [...targets],
       }).unwrap()
       // The shape it came out as is worth saying: an operator who meant "one amber" and got a
       // per-fixture template has selected heads that disagree, and will want to know now rather

@@ -113,7 +113,9 @@ export function ProgrammerActionBar({
                 <SelectTrigger
                   size="sm"
                   aria-label="Fade time"
-                  className="h-8 w-[72px] rounded-none border-0 border-l bg-muted/40 font-mono text-xs focus-visible:ring-0"
+                  // Wide enough for "Snap" beside the chevron at the trigger's own padding; at 72px
+                  // the longest label clipped to "Sna".
+                  className="h-8 w-[86px] rounded-none border-0 border-l bg-muted/40 font-mono text-xs focus-visible:ring-0"
                 >
                   <SelectValue />
                 </SelectTrigger>

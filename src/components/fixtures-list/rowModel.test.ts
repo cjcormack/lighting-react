@@ -11,6 +11,8 @@ import {
   groupSelectParam,
   parseSelectParam,
   planBatchWrites,
+  targetFamilies,
+  templateTargetsFor,
   type RowId,
 } from './rowModel'
 import { resolveCell } from './columns'
@@ -572,6 +574,61 @@ describe('batch write planning with multi-head fixtures', () => {
       { kind: 'slider', value: 100 },
       { kind: 'slider', value: 255 },
     ])
+  })
+})
+
+describe('templateTargetsFor', () => {
+  const spotA = makeFixture('spotA', dimmerOnly(), { groups: ['Spots'] })
+  const spotB = makeFixture('spotB', dimmerOnly(), { groups: ['Spots'] })
+  const bar = makePixelBar('bar', 2)
+  const fixtures = [spotA, spotB, bar]
+  const groups = [groupSummary('Spots', 2)]
+
+  it('lands a group row on its visible members, as fixtures, deduped', () => {
+    const rows = buildRows({
+      fixtures,
+      groups,
+      expandedGroups: new Set(['Spots']),
+      textFilter: '',
+    })
+    const selected = new Set(['group:Spots', 'member:Spots:spotB'])
+    expect(templateTargetsFor(rows, selected)).toEqual([
+      { type: 'fixture', key: 'spotA' },
+      { type: 'fixture', key: 'spotB' },
+    ])
+  })
+
+  it('respects the filter through the group row, like every other group-row action', () => {
+    const rows = buildRows({ fixtures, groups, expandedGroups: new Set(), textFilter: 'spotA' })
+    expect(templateTargetsFor(rows, new Set(['group:Spots']))).toEqual([
+      { type: 'fixture', key: 'spotA' },
+    ])
+  })
+
+  it('lands a lone element row on its fixture — a template cannot address one head', () => {
+    const rows = buildRows({
+      fixtures,
+      groups,
+      expandedGroups: new Set(),
+      expandedFixtures: new Set(['bar']),
+      textFilter: '',
+    })
+    expect(templateTargetsFor(rows, new Set(['element:fixture:bar:bar.pixel-1']))).toEqual([
+      { type: 'fixture', key: 'bar' },
+    ])
+  })
+})
+
+describe('targetFamilies', () => {
+  it('answers what the heads have, elements included, in family order', () => {
+    const spot = makeFixture('spot', [
+      sliderProp('dimmer', 'dimmer', chan(1)),
+      settingProp('gobo', 'gobo', chan(2)),
+    ])
+    const bar = makePixelBar('bar', 2)
+    expect(targetFamilies([spot, bar])).toEqual(['INTENSITY', 'COLOUR', 'BEAM'])
+    expect(targetFamilies([bar])).toEqual(['COLOUR'])
+    expect(targetFamilies([])).toEqual([])
   })
 })
 

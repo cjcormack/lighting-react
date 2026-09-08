@@ -33,4 +33,13 @@ function PopoverContent({
   )
 }
 
-export { Popover, PopoverTrigger, PopoverContent }
+/**
+ * An anchor that is not a trigger — for a popover opened by something other than a click on the
+ * element it should sit beside (the marquee's typed-value editor, opened by Enter and anchored at
+ * the first selected cell).
+ */
+function PopoverAnchor({ ...props }: React.ComponentProps<typeof PopoverPrimitive.Anchor>) {
+  return <PopoverPrimitive.Anchor data-slot="popover-anchor" {...props} />
+}
+
+export { Popover, PopoverTrigger, PopoverContent, PopoverAnchor }

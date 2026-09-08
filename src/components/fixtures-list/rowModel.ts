@@ -5,6 +5,7 @@ import type { ElementDescriptor, Fixture, PropertyDescriptor } from '../../store
 import type { GroupSummary } from '../../api/groupsApi'
 import type { LocateTarget } from '../../store/locate'
 import { targetKey } from '../../lib/targetKey'
+import { ATTRIBUTE_FAMILIES, familyForCategory, type AttributeFamily } from '../../lib/attributeFamily'
 
 /**
  * Stable row identity: `group:` and `fixture:` rows are top-level; `member:`
@@ -301,6 +302,70 @@ export function selectedRowTargets(
     targets.push(target)
   }
   return targets
+}
+
+/**
+ * Where a **template** press lands for these rows: the fixtures they stand for, as
+ * `{type: 'fixture', key}` — the shape `POST /templates/{id}/apply` and `/toggle` take.
+ *
+ * Neither of its two siblings answers this. [selectedRowTargets] keeps a group row *as a group*,
+ * which the desk then expands to every member — including the ones an active filter hides, and
+ * "editing a group row while a filter is active must not write to hidden fixtures" is the rule
+ * every other group-row action here keeps (`GroupRow.members`). [expandSelectionToTargets]
+ * respects the filter but hands back an *element* for a lone element row, and an element key is
+ * not a fixture key: the template route resolves targets against the patch and would drop it
+ * silently. A template cannot address one head of a fixture anyway, so an element row lands on
+ * its fixture.
+ *
+ * Deduped by key: a fixture selected through two group memberships is one head.
+ */
+export function templateTargetsFor(
+  rows: readonly Row[],
+  selectedIds: ReadonlySet<RowId>,
+): LocateTarget[] {
+  const seen = new Set<string>()
+  const out: LocateTarget[] = []
+  const add = (key: string) => {
+    if (seen.has(key)) return
+    seen.add(key)
+    out.push({ type: 'fixture', key })
+  }
+  for (const row of selectedContributingRows(rows, selectedIds)) {
+    switch (row.kind) {
+      case 'group':
+        for (const member of row.members) add(member.key)
+        break
+      case 'fixture':
+      case 'element':
+        add(row.fixture.key)
+        break
+      case 'divider':
+        break
+    }
+  }
+  return out
+}
+
+/**
+ * The attribute families these targets can take at all — what a head *has*, never what it is
+ * currently showing. An element's properties count for its fixture, so a pixel bar whose colour
+ * lives on its elements is a colour target.
+ *
+ * This is the capability half of template compatibility (fx-templates D6): a template is in exactly
+ * one family, so "does the selection have anything in that family" is the whole question, and it is
+ * answered from descriptors rather than from `Fixture.capabilities` because BEAM has no capability
+ * string — `fixturesSupportingFamily` counts every head for it, where a descriptor set can say
+ * whether a head has a wheel, a zoom, an iris.
+ */
+export function targetFamilies(targets: readonly WriteTarget[]): AttributeFamily[] {
+  const out = new Set<AttributeFamily>()
+  for (const target of targets) {
+    for (const property of target.properties) out.add(familyForCategory(property.category))
+    for (const element of target.elements ?? []) {
+      for (const property of element.properties) out.add(familyForCategory(property.category))
+    }
+  }
+  return ATTRIBUTE_FAMILIES.filter((family) => out.has(family))
 }
 
 /**

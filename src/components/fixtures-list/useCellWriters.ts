@@ -9,6 +9,7 @@ import {
   serializePosition,
 } from '../../lib/programmerValue'
 import { lookRowKey, useLookRowStore } from '../programmer/LookRowStore'
+import { getProgrammerFadeMs } from '../../lib/programmerFade'
 import type { PlannedWrite } from './rowModel'
 import type { ChannelRef, ColourPropertyDescriptor } from '../../store/fixtures'
 
@@ -37,6 +38,13 @@ export interface CellWriters {
     axisProperties?: { pan?: string; tilt?: string },
   ): void
   writeSetting(fixtureKey: string, propertyName: string, ref: ChannelRef, level: number): void
+  /**
+   * Take a property out of Local — the marquee's Backspace. Live only: a Look layer's row draft
+   * has no removal (`LookRowStore` exposes `setValue` alone), so in that context this is a no-op
+   * and the container does not offer the key there. A no-op rather than a throw because the
+   * writers are one object serving every cell, and the gate belongs where the gesture is.
+   */
+  clearValue(fixtureKey: string, propertyName: string): void
 }
 
 /**
@@ -137,6 +145,14 @@ export function useCellWriters(): CellWriters {
     return {
       writeSlider: writeChannelValue,
       writeSetting: writeChannelValue,
+
+      clearValue(fixtureKey, propertyName) {
+        if (setLookValue) return
+        // By the programmer fade, read at press time — the same store the action bar's Clear and
+        // the ShowBar's Blind fade by. A release that snapped while the two beside it faded would
+        // make the keyboard the odd one out.
+        lightingApi.programmer.clearEntry('fixture', fixtureKey, propertyName, getProgrammerFadeMs())
+      },
 
       writeColour(fixtureKey, property, r, g, b, w, a, uv) {
         if (setLookValue) {

@@ -59,16 +59,16 @@ export function ProgrammerScopeBand() {
           // dropping the operator into a scope they didn't ask for.
         }}
       >
-        <ToggleGroupItem value="output" aria-label="Show the composed output">
+        <ToggleGroupItem value="output" aria-label="Show the composed output" className="gap-1.5">
           <Eye className="size-3.5" />
           <span className="hidden @[520px]:inline">Output</span>
         </ToggleGroupItem>
-        <ToggleGroupItem value="local" aria-label="Show only the values you set">
+        <ToggleGroupItem value="local" aria-label="Show only the values you set" className="gap-1.5">
           <Hand className="size-3.5" />
           <span className="hidden @[520px]:inline">Local</span>
         </ToggleGroupItem>
         {scope.kind === 'layer' && (
-          <ToggleGroupItem value="layer" aria-label="Show the focused layer">
+          <ToggleGroupItem value="layer" aria-label="Show the focused layer" className="gap-1.5">
             <Layers className="size-3.5" />
             <span className="hidden @[520px]:inline">One layer</span>
           </ToggleGroupItem>

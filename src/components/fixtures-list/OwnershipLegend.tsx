@@ -1,4 +1,4 @@
-import { Layers } from 'lucide-react'
+import { AudioWaveform, Layers } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { OWNERSHIP_LABELS, layerCellClass, ownershipCellClass } from './ownership'
 import {
@@ -37,12 +37,16 @@ export function OwnershipLegend({ className }: { className?: string }) {
           <span
             aria-hidden="true"
             className={cn(
-              'size-3 rounded-sm',
+              'flex size-3 items-center justify-center rounded-sm',
               source === 'baseline'
                 ? 'bg-muted'
                 : ownershipCellClass(swatchOwnership(source)),
+              // The badge the cell wears, so the legend teaches the mark and not only the ring.
+              source === 'effect' && 'bg-violet-500/90 text-white',
             )}
-          />
+          >
+            {source === 'effect' && <AudioWaveform className="size-2.5" />}
+          </span>
           {LEGEND_GLOSS[source]}
         </span>
       ))}

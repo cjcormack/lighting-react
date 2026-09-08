@@ -1,7 +1,8 @@
 import { useCallback, useMemo, useState } from 'react'
-import { AudioWaveform, MoreHorizontal, Pencil, Plus, Square } from 'lucide-react'
+import { AudioWaveform, Layers, LayoutGrid, MoreHorizontal, Pencil, Plus, Square } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -93,7 +94,7 @@ export function ProgrammerFxList() {
           Nothing running. Effects arrive from a busking pad, a Look, or the cue on stage.
         </p>
       ) : (
-        <div className="flex min-h-0 flex-col gap-1 overflow-y-auto">
+        <div className="flex min-h-0 min-w-0 flex-col gap-1 overflow-y-auto">
           {running.map((effect) => (
             <FxRow
               key={effect.id}
@@ -202,6 +203,27 @@ function homeOf(
   return { label: 'base' }
 }
 
+/**
+ * One running effect, on two lines, because one line could not hold it.
+ *
+ * The row used to be a single flex line — dot, name, property badge, tempo, division, home badge,
+ * home detail, menu — with every chip `shrink-0` and only the name allowed to give. In a 404px
+ * rail that is more chips than width: the name was squeezed to nothing (it was the only thing
+ * that *could* shrink) and the menu button, the one control on the row, was pushed off the right
+ * edge and clipped by the rail's scroller. The home detail had a `@[320px]` container query on it
+ * that was meant to hide it in a narrow rail, but the nearest `@container` is the whole workspace,
+ * so it was always on.
+ *
+ * Now: line one is **what** and **how fast** — name, tempo, division — and the menu, which is
+ * `shrink-0` beside a name that truncates. Line two is **where** and **whose** — the property, the
+ * target, the home — and it wraps, so a long fixture key or a wide badge costs a line rather than
+ * a control. Nothing here is hidden by width; the row simply gets taller.
+ *
+ * The target is new. `ActiveEffect` is one instance per target, so a chase over eight loose heads
+ * is eight rows, and eight rows all reading *sinewave · dimmer · programmer band* could not be told
+ * apart — the key is what says which head this one is on. A paused instance dims, as it does in
+ * `FxSheet`.
+ */
 function FxRow({
   effect,
   home,
@@ -217,72 +239,89 @@ function FxRow({
   onSaveAsTemplate: () => void
   onStop: () => void
 }) {
+  const TargetGlyph = effect.isGroupTarget ? Layers : LayoutGrid
   return (
-    <div className="flex items-center gap-2 rounded-md border bg-card px-2 py-1.5 text-xs">
-      <span className="size-1.5 shrink-0 rounded-full bg-violet-500" />
-      <span className="truncate font-medium">{effect.effectType}</span>
-      <Badge variant="outline" className="shrink-0 font-mono text-[10px]">
-        → {effect.propertyName}
-      </Badge>
-      <span className="flex-1" />
-      {effect.timingSource === 'WALL_CLOCK' ? (
-        // A wall-clock effect has no beat division to show; its rate master is the interesting
-        // number, and `SpeedMasterChip` already knows to stay silent at master 1.
-        <SpeedMasterChip speedMasterUuid={effect.rateSpeedMasterUuid} kind="rate" />
-      ) : (
-        <>
-          <SpeedMasterChip speedMasterUuid={effect.speedMasterUuid} />
-          <Badge variant="outline" className="shrink-0 font-mono text-[10px]">
-            {getBeatDivisionLabel(effect.beatDivision)}
-          </Badge>
-        </>
+    <div
+      className={cn(
+        'min-w-0 rounded-md border bg-card px-2 py-1.5 text-xs',
+        !effect.isRunning && 'opacity-60',
       )}
-      {/* Where it lives is the answer to "why can't I delete this?". */}
-      <Badge
-        variant={effect.programmerOwned ? 'default' : 'secondary'}
-        className="shrink-0 text-[10px]"
-        title={[home.label, home.detail].filter(Boolean).join(' · ')}
-      >
-        {home.label}
-      </Badge>
-      {home.detail && (
-        <span className="hidden shrink-0 text-[10px] text-muted-foreground @[320px]:inline">
-          {home.detail}
+      title={!effect.isRunning ? 'Paused' : undefined}
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="size-1.5 shrink-0 rounded-full bg-violet-500" />
+        <span className="min-w-0 flex-1 truncate font-medium">{effect.effectType}</span>
+        {effect.timingSource === 'WALL_CLOCK' ? (
+          // A wall-clock effect has no beat division to show; its rate master is the interesting
+          // number, and `SpeedMasterChip` already knows to stay silent at master 1.
+          <SpeedMasterChip speedMasterUuid={effect.rateSpeedMasterUuid} kind="rate" />
+        ) : (
+          <>
+            <SpeedMasterChip speedMasterUuid={effect.speedMasterUuid} />
+            <Badge variant="outline" className="shrink-0 font-mono text-[10px]">
+              {getBeatDivisionLabel(effect.beatDivision)}
+            </Badge>
+          </>
+        )}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="-my-1 -mr-1 size-6 shrink-0"
+              aria-label={`Actions for ${effect.effectType}`}
+            >
+              <MoreHorizontal className="size-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={onEdit}>
+              <Pencil className="size-3.5" />
+              Edit…
+            </DropdownMenuItem>
+            {/* Shown disabled with the reason rather than omitted, so "why is this not offered?"
+                is answerable from the menu itself. `title` carries it — a disabled item takes no
+                hover card, and the reasons are a sentence rather than a label. */}
+            <DropdownMenuItem
+              disabled={!saveAsTemplate.enabled}
+              onClick={onSaveAsTemplate}
+              title={saveAsTemplate.reason}
+            >
+              <Plus className="size-3.5" />
+              Save as template…
+            </DropdownMenuItem>
+            <DropdownMenuItem variant="destructive" onClick={onStop}>
+              <Square className="size-3.5" />
+              Stop
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 pl-3.5 text-[10px] text-muted-foreground">
+        <span className="font-mono">→ {effect.propertyName}</span>
+        <span
+          className="flex min-w-0 items-center gap-0.5 font-mono"
+          title={effect.isGroupTarget ? `Group ${effect.targetKey}` : `Fixture ${effect.targetKey}`}
+        >
+          <TargetGlyph className="size-3 shrink-0" />
+          <span className="truncate">{effect.targetKey}</span>
         </span>
-      )}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-6 shrink-0"
-            aria-label={`Actions for ${effect.effectType}`}
-          >
-            <MoreHorizontal className="size-3.5" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={onEdit}>
-            <Pencil className="size-3.5" />
-            Edit…
-          </DropdownMenuItem>
-          {/* Shown disabled with the reason rather than omitted, so "why is this not offered?" is
-              answerable from the menu itself. `title` carries it — a disabled item takes no hover
-              card, and the reasons are a sentence rather than a label. */}
-          <DropdownMenuItem
-            disabled={!saveAsTemplate.enabled}
-            onClick={onSaveAsTemplate}
-            title={saveAsTemplate.reason}
-          >
-            <Plus className="size-3.5" />
-            Save as template…
-          </DropdownMenuItem>
-          <DropdownMenuItem variant="destructive" onClick={onStop}>
-            <Square className="size-3.5" />
-            Stop
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+        {/* Where it lives is the answer to "why can't I delete this?". */}
+        <Badge
+          variant={effect.programmerOwned ? 'default' : 'secondary'}
+          className="shrink-0 text-[10px]"
+          title={[home.label, home.detail].filter(Boolean).join(' · ')}
+        >
+          {home.label}
+        </Badge>
+        {/* Only the layer *position* is written out — it is short, and it is the half that says
+            which stack line to look at. The other two details ("yours until recorded", "ad-hoc")
+            are explanations, and they live in the badge's title: written out beside a fixture key
+            and a property name they pushed every programmer-band row onto a third line. */}
+        {effect.programmerLayerId != null && home.detail && (
+          <span className="shrink-0">{home.detail}</span>
+        )}
+      </div>
     </div>
   )
 }
