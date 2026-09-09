@@ -20,6 +20,7 @@ function template(over: Partial<TemplateSummary> = {}): TemplateSummary {
     family: 'COLOUR',
     isGeneric: true,
     kind: 'value',
+    requiredEmitters: [],
     rows: [
       { targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#FF9D4A;policy=extract' },
     ],

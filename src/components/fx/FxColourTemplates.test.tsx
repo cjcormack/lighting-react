@@ -44,6 +44,7 @@ function template(over: Partial<TemplateSummary> = {}): TemplateSummary {
       { targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#ff9d4a;policy=extract' },
     ],
     kind: 'value',
+    requiredEmitters: [],
     effect: null,
     layerCount: 0,
     buskPageCount: 0,
@@ -91,24 +92,32 @@ describe('useColourTemplates offerability', () => {
     expect(render().result.current.templates).toEqual([])
   })
 
-  it('excludes a multi-row template', () => {
-    // Everything downstream reads `rows[0]` — the swatch, the chip's tooltip — so a second row
-    // would be silently ignored under a name that claims to cover it.
+  it('offers a colour template that also names an emitter', () => {
+    // The row count used to exclude this, because everything downstream read `rows[0]`. Both halves
+    // now fold the whole colour-family row set into one colour — `templateRowsSwatch` here,
+    // `resolveColourGeneric` on the desk — so the template means something exact to a single-colour
+    // output rather than "one of these".
     templates = [
       template({
+        requiredEmitters: ['uv'],
         rows: [
           { targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#ff9d4a' },
-          { targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#4a9dff' },
+          { targetType: 'deferred', targetKey: '', propertyName: 'uv', value: 'dmx:200' },
         ],
       }),
     ]
-    expect(render().result.current.templates).toEqual([])
+    const { result } = render()
+    expect(result.current.templates.map((t) => t.name)).toEqual(['Warm Key'])
+    // The hex, not the UV row that follows it.
+    expect(result.current.swatchFor('tmpl:u1')).toBe('#ff9d4a')
   })
 
   it('excludes an effect template — an effect is not a colour', () => {
-    // fx-templates D12, and pinned rather than left to the row count that currently implements it:
-    // an effect template holds no rows, so it is excluded today by `rows.length === 1`. This is the
-    // assertion that fails if that clause is ever relaxed without an explicit kind check.
+    // fx-templates D12. This used to pass by accident, through the `rows.length === 1` clause that
+    // an effect template fails by holding no rows; that clause is gone and `kind !== 'effect'` is
+    // the explicit check its own docblock said to put in its place. An effect template has nothing
+    // for a fixture-agnostic colour output to take, and `resolveTemplateColour` refuses one
+    // server-side for the same reason.
     templates = [template({ id: 9, uuid: 'u9', name: 'Amber Breathe', kind: 'effect', rows: [] })]
     expect(render().result.current.templates).toEqual([])
   })

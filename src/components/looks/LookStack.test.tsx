@@ -47,6 +47,7 @@ function templateSummary(overrides: Partial<TemplateSummary> = {}): TemplateSumm
     family: 'COLOUR',
     isGeneric: true,
     kind: 'value',
+    requiredEmitters: [],
     rows: [
       {
         targetType: 'deferred',

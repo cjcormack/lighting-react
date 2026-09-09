@@ -10,7 +10,7 @@ import {
 import { AudioWaveform, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { FAMILY_LABELS, type AttributeFamily } from '@/lib/attributeFamily'
-import { describeTemplateIntent, templateIntentSwatch } from '@/lib/templateIntent'
+import { describeTemplateIntent, describeTemplateRows, templateRowsSwatch } from '@/lib/templateIntent'
 import { effectSpeedLabel } from '@/components/fx/fxConstants'
 import { useSpeedMasterDisplay } from '@/store/speedMasters'
 import type { TemplateSummary } from '@/api/templatesApi'
@@ -141,7 +141,11 @@ function TemplateValuePreview({ template }: { template: TemplateSummary }) {
 
   const first = template.rows[0]
   if (first == null) return null
-  const swatch = templateIntentSwatch(first.value)
+  // The template's swatch and the template's description — not the first row's. A colour template
+  // holding a hex and an explicit amber shows the hex whichever of the two was authored first, and
+  // says both in its title rather than hiding the row it was made for.
+  const swatch = templateRowsSwatch(template.rows)
+  const described = describeTemplateRows(template.rows)
 
   return (
     <div className="flex items-center gap-1.5 shrink-0">
@@ -149,7 +153,7 @@ function TemplateValuePreview({ template }: { template: TemplateSummary }) {
         <span
           className="size-4 rounded-sm border border-border/60"
           style={{ background: swatch }}
-          title={describeTemplateIntent(first.value)}
+          title={described}
         />
       ) : (
         <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
@@ -157,7 +161,9 @@ function TemplateValuePreview({ template }: { template: TemplateSummary }) {
         </span>
       )}
       {template.rows.length > 1 && (
-        <span className="text-[10px] text-muted-foreground">+{template.rows.length - 1}</span>
+        <span className="text-[10px] text-muted-foreground" title={described}>
+          +{template.rows.length - 1}
+        </span>
       )}
     </div>
   )

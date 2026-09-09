@@ -33,6 +33,7 @@ import {
   selectedRowTargets,
   rowWriteTargets,
   targetFamilies,
+  targetEmitters,
   templateTargetsFor,
 } from './rowModel'
 import { isEditableTarget } from '../../lib/domUtils'
@@ -134,6 +135,13 @@ export interface FixturesListContainerProps {
     templateTargets: readonly LocateTarget[]
     /** The families those targets can take at all — the capability half of the strip's filter. */
     targetFamilies: readonly AttributeFamily[]
+    /**
+     * The bundled colour emitters those targets have — `white` / `amber` / `uv`.
+     *
+     * The rest of that filter. A template naming an emitter refuses on a head without it *whole*,
+     * and the family cannot say which: every emitter is COLOUR.
+     */
+    targetEmitters: readonly string[]
   }) => React.ReactNode
   /**
    * Let the table fill its flex parent instead of capping at `calc(100vh - 14rem)`.
@@ -275,16 +283,18 @@ export function FixturesListContainer({
   // `selectedTargets` instead (which holds the element) under-reported a bar whose dimmer sits on
   // the parent, and offered no intensity template for a press that would have set it.
   const fixtureByKey = useMemo(() => new Map(fixtures.map((f) => [f.key, f])), [fixtures])
-  const templateFamilies = useMemo(
+  const templateWriteTargets = useMemo(
     () =>
-      targetFamilies(
-        templateTargets.flatMap((target) => {
-          const fixture = fixtureByKey.get(target.key)
-          return fixture ? [fixture] : []
-        }),
-      ),
+      templateTargets.flatMap((target) => {
+        const fixture = fixtureByKey.get(target.key)
+        return fixture ? [fixture] : []
+      }),
     [templateTargets, fixtureByKey],
   )
+  const templateFamilies = useMemo(() => targetFamilies(templateWriteTargets), [templateWriteTargets])
+  // The family alone cannot filter a template that names an emitter: white, amber, UV and the hex
+  // are all COLOUR. Derived from the same list for the same reason the families are.
+  const templateEmitters = useMemo(() => targetEmitters(templateWriteTargets), [templateWriteTargets])
 
   // One desk, one selection (plan D2) — the programmer scope only; see the hook.
   useDeskSelectionBridge(
@@ -902,6 +912,7 @@ export function FixturesListContainer({
           cellClearKey: cellCount > 0 && keys.clear,
           templateTargets,
           targetFamilies: templateFamilies,
+          targetEmitters: templateEmitters,
         })
       ) : (
         /* Default toolbar. At phone widths the filter takes a full row of its own — sharing one

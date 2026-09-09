@@ -125,6 +125,9 @@ export function ColourEditorBody({
       <FxColourTemplateRow
         templates={templates}
         currentHex={colour.hex}
+        // The sliders below are part of the colour being dialled in, so *Save as template…* saves
+        // them too — it used to keep the hex and silently drop the amber the operator had just set.
+        currentEmitters={{ white: colour.white, amber: colour.amber, uv: colour.uv }}
         selectedUuid={parseTemplateRefUuid(rawValue)}
         onPick={onPickTemplate}
       />

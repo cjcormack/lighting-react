@@ -33,6 +33,8 @@ import {
   type AttributeFamily,
 } from '@/lib/attributeFamily'
 import {
+  EMITTER_PROPERTIES,
+  EMITTER_TINTS,
   TEMPLATE_EXCLUSIONS,
   WHITE_POLICIES,
   WHITE_POLICY_LABELS,
@@ -40,6 +42,7 @@ import {
   parseTemplateIntent,
   serializeTemplateIntent,
   templatePropertiesForFamily,
+  templatePropertyFor,
   type TemplateIntent,
   type WhitePolicy,
 } from '@/lib/templateIntent'
@@ -182,15 +185,24 @@ export function TemplateEditor({
   const rows = useMemo<TemplateRow[]>(() => {
     if (holdsEffect) return []
     if (!isGeneric) return template?.rows ?? []
+    // Through the same derivation the policy buttons read, so what is shown and what is saved cannot
+    // disagree — see [effectiveColourPolicy] for why the rule is derived rather than written into
+    // `values` at the point an emitter is set.
+    const policy = effectiveColourPolicy(values)
     return properties
       .filter((p) => values[p.propertyName] != null)
-      .map((p, index) => ({
-        targetType: DEFERRED_TARGET_TYPE,
-        targetKey: '',
-        propertyName: p.propertyName,
-        value: serializeTemplateIntent(values[p.propertyName]),
-        sortOrder: index,
-      }))
+      .map((p, index) => {
+        const intent = values[p.propertyName]
+        return {
+          targetType: DEFERRED_TARGET_TYPE,
+          targetKey: '',
+          propertyName: p.propertyName,
+          value: serializeTemplateIntent(
+            intent.kind === 'colour' ? { ...intent, policy } : intent,
+          ),
+          sortOrder: index,
+        }
+      })
   }, [holdsEffect, isGeneric, properties, values, template])
 
   const fadeMs = useMemo(() => {
@@ -629,7 +641,7 @@ function FamilyControls({
 }) {
   switch (family) {
     case 'COLOUR':
-      return <ColourControl value={values.rgbColour} onChange={(i) => onChange('rgbColour', i)} />
+      return <ColourControl values={values} onChange={onChange} />
     case 'INTENSITY':
       return (
         <div className="space-y-4">
@@ -653,23 +665,90 @@ function FamilyControls({
   }
 }
 
+/**
+ * Does this draft set an emitter that a white/amber policy would otherwise derive?
+ *
+ * UV is deliberately not counted: `mixColour` routes the neutral to white or amber and has never
+ * touched UV, so a `uv` row conflicts with nothing.
+ */
+function colourPolicyLocked(values: Record<string, TemplateIntent>): boolean {
+  return values.white != null || values.amber != null
+}
+
+/**
+ * The colour policy this draft actually asserts, given its emitter rows.
+ *
+ * **Derived at every read rather than written into `values` when an emitter is set.** The draft has
+ * two writers — `setIntent` and `seedValues`, which parses stored rows straight in — so a rule
+ * enforced in only the first is a rule with a hole: a stored template carrying both an explicit
+ * `white` row and `policy=extract` (a hand-edited row, or some future write path) would open
+ * showing Extract selected *and* disabled, and save that same refused combination straight back.
+ * One reader means the buttons, the saved rows and the resolves-to panel cannot disagree.
+ */
+function effectiveColourPolicy(values: Record<string, TemplateIntent>): WhitePolicy {
+  const colour = values.rgbColour
+  // **Two different "no policy", and they take opposite defaults.** A *stored* row with no policy
+  // token parses as `rgbonly`, matching every other reader of that string — so it must display as
+  // RGB only. A draft with no colour row at all has not been authored yet, and there `extract` is
+  // the default a wash wants (the same one `TemplateIntent.Colour`'s Kotlin constructor takes).
+  // Collapsing the two made every new colour template default to RGB only.
+  const stored: WhitePolicy = colour?.kind === 'colour' ? colour.policy : 'extract'
+  return colourPolicyLocked(values) ? 'rgbonly' : stored
+}
+
+/**
+ * The colour family: a hex with a white/amber policy, plus the three emitters set outright.
+ *
+ * **Absent is not zero**, which is why each emitter has a switch of its own rather than a slider
+ * resting at 0. No row means the template says nothing about that emitter and leaves whatever is
+ * under it alone; a row at 0 means drive it to 0. That difference is the whole reason a UV-only
+ * template can sit *over* an amber wash instead of replacing it.
+ *
+ * **An explicit white or amber replaces the policy** rather than joining it — Extract and Additive
+ * drive the same emitter byte, so the desk refuses the pair at the write boundary. Said here first,
+ * with the buttons disabled and a line explaining it, so a 400 is a backstop rather than the first
+ * an operator hears of the rule. UV never conflicts: no policy has ever driven it.
+ */
 function ColourControl({
-  value,
+  values,
   onChange,
 }: {
-  value: TemplateIntent | undefined
-  onChange: (intent: TemplateIntent | null) => void
+  values: Record<string, TemplateIntent>
+  onChange: (propertyName: string, intent: TemplateIntent | null) => void
 }) {
+  const value = values.rgbColour
   const current = value?.kind === 'colour' ? value : null
   const hex = current?.hex ?? '#FF9D4A'
-  const policy: WhitePolicy = current?.policy ?? 'extract'
+  // Seeded from the parsed value, not from a UI default. `parseTemplateIntent` reads a stored colour
+  // with no policy token as `rgbonly` — matching every other reader of that string — so defaulting
+  // the buttons to `extract` here showed Extract selected for a row that was not, and wrote Extract
+  // on the next edit the operator made for some other reason. `effectiveColourPolicy` then collapses
+  // it to `rgbonly` while an emitter is set, so the buttons say what will actually be saved.
+  const policy = effectiveColourPolicy(values)
+  const policyLocked = colourPolicyLocked(values)
+
+  const setColour = (next: Partial<{ hex: string; policy: WhitePolicy }>) =>
+    onChange('rgbColour', { kind: 'colour', hex, policy, ...next })
 
   return (
     <div className="space-y-3">
-      <Label>Colour</Label>
+      <div className="flex items-center justify-between gap-2">
+        <Label>Colour</Label>
+        {current != null && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label="Clear colour"
+            onClick={() => onChange('rgbColour', null)}
+          >
+            Clear
+          </Button>
+        )}
+      </div>
       <div className="flex items-start gap-3">
         <div className="[&_.react-colorful]:!w-40 [&_.react-colorful]:!h-32">
-          <HexColorPicker color={hex} onChange={(next) => onChange({ kind: 'colour', hex: next, policy })} />
+          <HexColorPicker color={hex} onChange={(next) => setColour({ hex: next })} />
         </div>
         <div className="space-y-2 min-w-0 flex-1">
           <Input
@@ -677,7 +756,7 @@ function ColourControl({
             onChange={(e) => {
               const next = e.target.value.trim()
               if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(next)) {
-                onChange({ kind: 'colour', hex: next, policy })
+                setColour({ hex: next })
               }
             }}
             className="font-mono"
@@ -698,14 +777,80 @@ function ColourControl({
               key={p}
               type="button"
               size="sm"
+              disabled={policyLocked && p !== 'rgbonly'}
               variant={policy === p ? 'default' : 'outline'}
-              onClick={() => onChange({ kind: 'colour', hex, policy: p })}
+              onClick={() => setColour({ policy: p })}
             >
               {WHITE_POLICY_LABELS[p].label}
             </Button>
           ))}
         </div>
-        <p className="text-[11px] text-muted-foreground">{WHITE_POLICY_LABELS[policy].hint}</p>
+        <p className="text-[11px] text-muted-foreground">
+          {policyLocked
+            ? 'This template sets an emitter directly, so there is nothing left for the policy to derive — it would drive the same channel.'
+            : WHITE_POLICY_LABELS[policy].hint}
+        </p>
+      </div>
+
+      <div className="space-y-2.5 rounded-md border p-2.5">
+        <div className="space-y-0.5">
+          <Label>Emitters set directly</Label>
+          <p className="text-[11px] text-muted-foreground">
+            Switch one on and this template can only be applied to heads that have it — the whole
+            template, not just that value.
+          </p>
+        </div>
+        {/* Set / Clear beside the value, and the slider only once set — `PercentControl`'s shape,
+            deliberately, rather than `ExtendedChannelSlider`'s. That component always shows a
+            slider, and a slider resting at 0 is exactly the reading this control must not give:
+            here "off" means the template does not mention the emitter, not that it drives it to 0. */}
+        {EMITTER_PROPERTIES.map((name) => {
+          const intent = values[name]
+          const level = intent?.kind === 'level' ? intent.value : null
+          const label = templatePropertyFor(name)?.label ?? name
+          return (
+            <div key={name} className="space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-1.5 text-xs">
+                  <span
+                    className="inline-block size-2 rounded-full border border-border"
+                    style={{ backgroundColor: EMITTER_TINTS[name] }}
+                    aria-hidden
+                  />
+                  {label}
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                    {level ?? '—'}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    // Named, not bare: three "Set" buttons in a row are indistinguishable to a
+                    // screen reader, and one of them sits beside the colour's own Clear.
+                    aria-label={`${level == null ? 'Set' : 'Clear'} ${label}`}
+                    onClick={() =>
+                      onChange(name, level == null ? { kind: 'level', value: 255 } : null)
+                    }
+                  >
+                    {level == null ? 'Set' : 'Clear'}
+                  </Button>
+                </div>
+              </div>
+              {level != null && (
+                <Slider
+                  aria-label={label}
+                  min={0}
+                  max={255}
+                  step={1}
+                  value={[level]}
+                  onValueChange={([next]) => onChange(name, { kind: 'level', value: next })}
+                />
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )

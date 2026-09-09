@@ -103,6 +103,7 @@ function ProgrammerGridBody({
           cellClearKey,
           templateTargets,
           targetFamilies,
+          targetEmitters,
         }) => (
           <div className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center gap-2">
@@ -118,6 +119,7 @@ function ProgrammerGridBody({
               cells={cells}
               targets={templateTargets}
               targetFamilies={targetFamilies}
+              targetEmitters={targetEmitters}
             />
             {/* Two selections, both live at once, so both are named. FIXTURE selection is what
                 Record scopes on; CELL selection is a transient edit scope that only says where the

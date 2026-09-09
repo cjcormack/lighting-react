@@ -70,9 +70,16 @@ function strip(
   cells: CellRef[],
   targets: TemplateTarget[] = HEX_1,
   targetFamilies: AttributeFamily[] = ['INTENSITY', 'COLOUR'],
+  targetEmitters: string[] = ['white', 'amber', 'uv'],
 ) {
   return (
-    <TemplateStrip projectId={1} cells={cells} targets={targets} targetFamilies={targetFamilies} />
+    <TemplateStrip
+      projectId={1}
+      cells={cells}
+      targets={targets}
+      targetFamilies={targetFamilies}
+      targetEmitters={targetEmitters}
+    />
   )
 }
 
@@ -89,6 +96,7 @@ function template(over: Partial<TemplateSummary> = {}): TemplateSummary {
       { targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#FF9D4A;policy=extract' },
     ],
     kind: 'value',
+    requiredEmitters: [],
     effect: null,
     layerCount: 0,
     buskPageCount: 0,
@@ -112,6 +120,7 @@ const BREATHE = template({
   name: 'Amber Breathe',
   family: 'COLOUR',
   kind: 'effect',
+  requiredEmitters: [],
   rows: [],
   effect: {
     effectType: 'ColourPulse',
@@ -161,6 +170,30 @@ describe('TemplateStrip', () => {
     render(strip([], HEX_1, ['INTENSITY']))
     expect(screen.getByText('Half Up')).toBeInTheDocument()
     expect(screen.queryByText('Amber Key')).not.toBeInTheDocument()
+  })
+
+  it('withholds a template naming an emitter the selection does not have', () => {
+    // The family cannot draw this line — the hex, white, amber and UV are all COLOUR. A template
+    // that names an emitter refuses on a head without it *whole*, not row by row, so offering it
+    // to an RGB-only par would be offering a press that does nothing.
+    templates = [template({ name: 'UV Blast', requiredEmitters: ['uv'] })]
+    render(strip(COLOUR_CELL, HEX_1, ['COLOUR'], []))
+    expect(screen.queryByText('UV Blast')).not.toBeInTheDocument()
+  })
+
+  it('offers it once one selected head has that emitter', () => {
+    // A union over the selection, like `targetFamilies`: with a UV hex and a plain par selected
+    // together the template is still offered, and the par reports a skip on the press. Requiring
+    // every head to have it would hide most of the library from most mixed selections.
+    templates = [template({ name: 'UV Blast', requiredEmitters: ['uv'] })]
+    render(strip(COLOUR_CELL, HEX_1, ['COLOUR'], ['uv']))
+    expect(screen.getByText('UV Blast')).toBeInTheDocument()
+  })
+
+  it('needs every emitter it names, not just one of them', () => {
+    templates = [template({ name: 'Warm Wash', requiredEmitters: ['white', 'uv'] })]
+    render(strip(COLOUR_CELL, HEX_1, ['COLOUR'], ['white']))
+    expect(screen.queryByText('Warm Wash')).not.toBeInTheDocument()
   })
 
   it('says so when nothing fits, rather than showing an empty strip', () => {

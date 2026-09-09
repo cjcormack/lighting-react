@@ -9,8 +9,9 @@ import { DEFERRED_TARGET_TYPE, type TemplateSummary } from '@/api/templatesApi'
 import { useCreateTemplateMutation, useTemplateListQuery } from '@/store/templates'
 import {
   serializeTemplateIntent,
-  templateIntentSwatch,
-  describeTemplateIntent,
+  templateRowsSwatch,
+  describeTemplateRows,
+  EMITTER_PROPERTIES,
 } from '@/lib/templateIntent'
 import { parseTemplateRefUuid, serializeTemplateRef } from './colourUtils'
 
@@ -36,23 +37,24 @@ import { parseTemplateRefUuid, serializeTemplateRef } from './colourUtils'
  */
 
 /**
- * A template this picker can offer: the colour family, generic, and **exactly one row**.
+ * A template this picker can offer: the colour family, generic, and holding **values**.
  *
- * The row count is not a simplification waiting to be lifted. Everything downstream reads `rows[0]`
- * and only `rows[0]` — `swatchFor`, the chip's swatch, the chip's tooltip — so a two-row template
- * would be offered under a name that claims both rows and would apply one of them. Lifting the
- * clause means deciding what a multi-row colour template *means* to a single-colour output first.
+ * The third clause used to be `rows.length === 1`, because everything downstream read `rows[0]` and
+ * only `rows[0]`. That is no longer true in either half. A colour template can now hold a hex *and*
+ * explicit `white` / `amber` / `uv` rows, and both sides fold the whole set into one colour —
+ * `templateRowsSwatch` here, `TemplateResolver.resolveColourGeneric` on the desk — so a multi-row
+ * colour template means something exact to a single-colour output rather than "one of these".
  *
- * It is also what excludes an **effect** template (fx-templates D12), which holds no rows at all —
- * and that exclusion is deliberate rather than a by-product. An effect template is not a colour: it
- * has nothing for a fixture-agnostic colour output to take, and `resolveColourGeneric` refuses one
- * server-side for the same reason. So if the row-count clause is ever relaxed, put an explicit
- * `kind !== 'effect'` back in its place. The other direction stays allowed and useful: an effect
- * template's own colour parameter may name a **value** colour template, which is what this picker
- * offers it.
+ * The old clause was also what excluded an **effect** template (fx-templates D12), by the accident
+ * that it holds no rows at all; that file's own note said to put `kind !== 'effect'` in its place if
+ * the count were ever relaxed, and this is that. The exclusion is deliberate and not a by-product:
+ * an effect template is not a colour, has nothing for a fixture-agnostic colour output to take, and
+ * `resolveTemplateColour` refuses one server-side for the same reason. The other direction stays
+ * allowed and useful: an effect template's own colour parameter may name a **value** colour
+ * template, which is what this picker offers it.
  */
 function isOfferable(template: TemplateSummary): boolean {
-  return template.family === 'COLOUR' && template.isGeneric && template.rows.length === 1
+  return template.family === 'COLOUR' && template.isGeneric && template.kind === 'value'
 }
 
 export interface ColourTemplates {
@@ -111,7 +113,7 @@ export function useColourTemplates(): ColourTemplates {
   const swatchFor = useCallback(
     (value: string) => {
       const template = templateFor(value)
-      return template ? templateIntentSwatch(template.rows[0].value) : null
+      return template ? templateRowsSwatch(template.rows) : null
     },
     [templateFor],
   )
@@ -124,19 +126,32 @@ export function useColourTemplates(): ColourTemplates {
  * just dialled in.
  *
  * The save affordance mirrors `TemplateStrip`'s new-from-selection chip, and for the same reason —
- * it is how the library fills up without anyone visiting `/templates`. It writes `policy=extract`,
- * the default a wash wants, which the template editor can retune afterwards.
+ * it is how the library fills up without anyone visiting `/templates`. It saves **what the picker is
+ * showing**: the hex, plus a row per emitter the operator has dialled up. That means `policy=rgbonly`
+ * rather than the `extract` it used to hard-code — an explicit white row and a policy that derives
+ * one are refused together, and here the explicit value is the one the operator can actually see.
+ * With no emitter dialled up there is nothing to conflict with, so the colour keeps `extract`, which
+ * is what a wash wants and what the template editor can retune afterwards.
  */
 export function FxColourTemplateRow({
   templates,
   /** The colour currently in the picker, offered as the body of a new template. */
   currentHex,
+  /**
+   * The emitter bytes currently in the picker, offered alongside [currentHex].
+   *
+   * Optional because two of the three pickers that mount this row have no emitter sliders to read —
+   * the FX library page has no head to expand them off. Absent and all-zero mean the same thing
+   * here: no emitter row, and the colour keeps its `extract` policy.
+   */
+  currentEmitters,
   onPick,
   /** Highlighted chip, when the parameter already references a template. */
   selectedUuid,
 }: {
   templates: TemplateSummary[]
   currentHex: string
+  currentEmitters?: Partial<Record<string, number>>
   onPick: (value: string) => void
   selectedUuid?: string | null
 }) {
@@ -152,6 +167,7 @@ export function FxColourTemplateRow({
     const trimmed = name.trim()
     if (!trimmed) return
     try {
+      const emitters = EMITTER_PROPERTIES.filter((name) => (currentEmitters?.[name] ?? 0) > 0)
       const created = await createTemplate({
         projectId: projectIdNum,
         name: trimmed,
@@ -160,8 +176,21 @@ export function FxColourTemplateRow({
             targetType: DEFERRED_TARGET_TYPE,
             targetKey: '',
             propertyName: 'rgbColour',
-            value: serializeTemplateIntent({ kind: 'colour', hex: currentHex, policy: 'extract' }),
+            value: serializeTemplateIntent({
+              kind: 'colour',
+              hex: currentHex,
+              // An explicit white or amber row drives the emitter the policy would have derived, and
+              // the write boundary refuses the pair. UV never conflicts, but sending `extract`
+              // beside a UV row would still promise a white this template does not set.
+              policy: emitters.length > 0 ? 'rgbonly' : 'extract',
+            }),
           },
+          ...emitters.map((name) => ({
+            targetType: DEFERRED_TARGET_TYPE,
+            targetKey: '',
+            propertyName: name,
+            value: serializeTemplateIntent({ kind: 'level', value: currentEmitters?.[name] ?? 0 }),
+          })),
         ],
       }).unwrap()
       onPick(serializeTemplateRef(created.uuid))
@@ -170,7 +199,7 @@ export function FxColourTemplateRow({
     } catch (err) {
       toast.error(formatError(err))
     }
-  }, [createTemplate, currentHex, name, onPick, projectIdNum])
+  }, [createTemplate, currentEmitters, currentHex, name, onPick, projectIdNum])
 
   if (!canCreate && templates.length === 0) return null
 
@@ -180,12 +209,12 @@ export function FxColourTemplateRow({
       {templates.length > 0 && (
         <div className="flex gap-1 flex-wrap">
           {templates.map((template) => {
-            const hex = templateIntentSwatch(template.rows[0].value)
+            const hex = templateRowsSwatch(template.rows)
             return (
               <button
                 key={template.uuid}
                 type="button"
-                title={`${template.name} — ${describeTemplateIntent(template.rows[0].value)}`}
+                title={`${template.name} — ${describeTemplateRows(template.rows)}`}
                 onClick={() => onPick(serializeTemplateRef(template.uuid))}
                 className={
                   'flex items-center gap-1 h-6 pl-1 pr-1.5 rounded border text-[11px] hover:bg-accent/50 transition-colors ' +

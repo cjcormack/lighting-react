@@ -14,7 +14,14 @@ import type { AttributeFamily } from './attributeFamily'
  * backend's list the way `maskPicker.test.ts` pins the family list.
  */
 
-/** How a colour intent uses a head's white / amber emitters, on the heads that have them. */
+/**
+ * How a colour intent uses a head's white / amber emitters, on the heads that have them.
+ *
+ * The *derived* half of a template's emitter story. The other half is an explicit `white` / `amber`
+ * / `uv` row carrying a [level] intent, and the two must not both drive one emitter: an explicit
+ * white or amber row forces the colour row to `rgbonly`, which the editor enforces and the backend
+ * refuses by name. UV is exempt — no policy has ever driven it.
+ */
 export type WhitePolicy = 'extract' | 'additive' | 'rgbonly'
 
 export const WHITE_POLICIES: readonly WhitePolicy[] = ['extract', 'additive', 'rgbonly']
@@ -36,6 +43,15 @@ export const WHITE_POLICY_LABELS: Record<WhitePolicy, { label: string; hint: str
 
 export type TemplateIntent =
   | { kind: 'colour'; hex: string; policy: WhitePolicy }
+  /**
+   * A DMX byte, 0–255 — the bundled colour emitters only, and the one literal in this grammar.
+   *
+   * Deliberate: the rest of the grammar exists so a value can mean the same thing on heads that
+   * differ, and an emitter has nothing to re-derive. It is one LED, its slider is 0–255 on every
+   * head in this rig, and the operator setting it is matching a colour by eye. What *is* per head —
+   * whether the emitter exists at all — is answered by resolution, not by the value.
+   */
+  | { kind: 'level'; value: number }
   /** A proportion of whatever range the target property has, 0–100. */
   | { kind: 'percent'; value: number }
   /** Pan and tilt in **degrees**, resolved through each head's own annotated range. */
@@ -62,6 +78,9 @@ export const TEMPLATE_PROPERTIES: readonly TemplateProperty[] = [
   { propertyName: 'strobe', family: 'INTENSITY', label: 'Strobe', intent: 'percent' },
   { propertyName: 'position', family: 'POSITION', label: 'Position', intent: 'position' },
   { propertyName: 'rgbColour', family: 'COLOUR', label: 'Colour', intent: 'colour' },
+  { propertyName: 'white', family: 'COLOUR', label: 'White', intent: 'level' },
+  { propertyName: 'amber', family: 'COLOUR', label: 'Amber', intent: 'level' },
+  { propertyName: 'uv', family: 'COLOUR', label: 'UV', intent: 'level' },
   { propertyName: 'zoom', family: 'BEAM', label: 'Zoom', intent: 'percent' },
   { propertyName: 'focus', family: 'BEAM', label: 'Focus', intent: 'percent' },
   { propertyName: 'iris', family: 'BEAM', label: 'Iris', intent: 'percent' },
@@ -103,6 +122,11 @@ export function serializeTemplateIntent(intent: TemplateIntent): string {
   switch (intent.kind) {
     case 'colour':
       return `${intent.hex.toUpperCase()};policy=${intent.policy}`
+    case 'level':
+      // Clamped on the way out as well as the way in. The editor's slider cannot leave 0–255, but a
+      // value written out of range would only be corrected the *next* time the row was parsed — so
+      // what was saved and what is redisplayed would disagree, with nothing reporting it.
+      return `dmx:${Math.min(255, Math.max(0, Math.round(intent.value)))}`
     case 'percent':
       return `pct:${trimNumber(intent.value)}`
     case 'position':
@@ -139,6 +163,11 @@ export function parseTemplateIntent(raw: string): TemplateIntent | null {
   if (lower === 'on') return { kind: 'switch', on: true }
   if (lower === 'off') return { kind: 'switch', on: false }
 
+  if (lower.startsWith('dmx:')) {
+    const value = strictNumber(lower.slice(4))
+    if (value == null) return null
+    return { kind: 'level', value: Math.min(255, Math.max(0, Math.round(value))) }
+  }
   if (lower.startsWith('pct:')) {
     const value = strictNumber(lower.slice(4))
     if (value == null) return null
@@ -176,6 +205,8 @@ export function describeTemplateIntent(raw: string): string {
   switch (intent.kind) {
     case 'colour':
       return `${intent.hex.toUpperCase()} · ${WHITE_POLICY_LABELS[intent.policy].label}`
+    case 'level':
+      return String(intent.value)
     case 'percent':
       return `${trimNumber(intent.value)}%`
     case 'position':
@@ -189,6 +220,65 @@ export function describeTemplateIntent(raw: string): string {
 export function templateIntentSwatch(raw: string): string | null {
   const intent = parseTemplateIntent(raw)
   return intent?.kind === 'colour' ? intent.hex : null
+}
+
+/**
+ * A whole template's rows in one line — `#FF9D4A · RGB only · White 180`.
+ *
+ * The tooltip and title text beside [templateRowsSwatch]'s dot. Naming only the first row was
+ * accurate while a colour template held exactly one; it now hides the very rows an operator added a
+ * template for.
+ */
+export function describeTemplateRows(
+  rows: readonly { propertyName: string; value: string }[],
+): string {
+  return rows
+    .map((row) => {
+      const property = templatePropertyFor(row.propertyName)
+      const described = describeTemplateIntent(row.value)
+      // The colour row's own description already says what it is; an emitter's is a bare number and
+      // needs its name in front of it.
+      return property != null && property.intent === 'level'
+        ? `${property.label} ${described}`
+        : described
+    })
+    .join(' · ')
+}
+
+/** The bundled emitters a template may name outright, in the order every surface shows them. */
+export const EMITTER_PROPERTIES: readonly string[] = ['white', 'amber', 'uv']
+
+/**
+ * The tint each emitter is drawn in — a swatch dot, a slider track, a pad face.
+ *
+ * Lives here rather than in a component so the five surfaces that draw an emitter agree. The values
+ * are `ColourEditorBody`'s, which had them first.
+ */
+export const EMITTER_TINTS: Record<string, string> = {
+  white: '#fffbe6',
+  amber: '#ffbf00',
+  uv: '#7f00ff',
+}
+
+/**
+ * The swatch for a whole template's rows — the colour row's hex, or an emitter's tint.
+ *
+ * **Not `rows[0]`**, which is what every caller did while a colour template could hold exactly one
+ * row. A template may now hold a hex *and* explicit emitters, and row order is authoring order: a
+ * template whose `uv` row happens to sort first would otherwise be drawn purple under a name whose
+ * colour is amber. An emitter-only template has no hex to draw, so it falls back to the tint of the
+ * first emitter it names — which is the whole of what it asserts, not a stand-in for it.
+ */
+export function templateRowsSwatch(
+  rows: readonly { propertyName: string; value: string }[],
+): string | null {
+  const colourRow = rows.find((row) => templatePropertyFor(row.propertyName)?.intent === 'colour')
+  if (colourRow != null) return templateIntentSwatch(colourRow.value)
+  // Compared against the row's own spelling rather than through `templatePropertyFor`: an emitter
+  // has no aliases (only the three colour spellings collapse), so the lookup could only ever hand
+  // back the string it was given.
+  const emitter = EMITTER_PROPERTIES.find((name) => rows.some((row) => row.propertyName === name))
+  return emitter != null ? EMITTER_TINTS[emitter] : null
 }
 
 function trimNumber(value: number): string {

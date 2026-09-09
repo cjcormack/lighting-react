@@ -2,7 +2,7 @@ import type { BuskPad, BuskPadKind } from '@/api/buskApi'
 import type { LookSummary } from '@/api/looksApi'
 import type { TemplateSummary } from '@/api/templatesApi'
 import { FAMILY_LABELS } from '@/lib/attributeFamily'
-import { templateIntentSwatch } from '@/lib/templateIntent'
+import { templateRowsSwatch } from '@/lib/templateIntent'
 import { effectSpeedLabel } from '@/components/fx/fxConstants'
 import { cn } from '@/lib/utils'
 import type { EffectPresence } from './buskingTypes'
@@ -31,16 +31,17 @@ export interface PadFace {
 }
 
 /**
- * A generic, single-row colour template's colour.
+ * A generic colour template's colour.
  *
- * The same two exclusions `isOfferable` makes in `FxColourTemplates.tsx`, for the same reason: a
- * per-fixture template holds one colour *per head*, so there is no single one to show, and a
- * multi-row template would have `rows[0]` stated under a name that covers all of them. An effect
- * template falls out through `rows.length !== 1` — it has none.
+ * Keeps `isOfferable`'s per-fixture exclusion, for its reason: such a template holds one colour
+ * *per head*, so there is no single one to show. The row-count exclusion is gone with the rule that
+ * made it necessary — [templateRowsSwatch] reads the *colour* row rather than `rows[0]`, so a
+ * template holding a hex plus an explicit amber draws its hex instead of whichever row sorted first.
+ * An effect template holds no rows at all and falls out of that function as null.
  */
 export function templateSwatch(template: TemplateSummary): string | null {
-  if (!template.isGeneric || template.rows.length !== 1) return null
-  return templateIntentSwatch(template.rows[0].value)
+  if (!template.isGeneric) return null
+  return templateRowsSwatch(template.rows)
 }
 
 /** `2 effects · 3 values`, or `empty`. */

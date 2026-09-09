@@ -12,6 +12,7 @@ import {
   parseSelectParam,
   planBatchWrites,
   targetFamilies,
+  targetEmitters,
   templateTargetsFor,
   type RowId,
 } from './rowModel'
@@ -629,6 +630,40 @@ describe('targetFamilies', () => {
     expect(targetFamilies([spot, bar])).toEqual(['INTENSITY', 'COLOUR', 'BEAM'])
     expect(targetFamilies([bar])).toEqual(['COLOUR'])
     expect(targetFamilies([])).toEqual([])
+  })
+})
+
+describe('targetEmitters', () => {
+  it('reads the colour descriptor, where a bundled emitter actually lives', () => {
+    // The `bundleWithColour` sliders are *omitted* from the flat descriptor list and folded into
+    // the colour's channel fields, so scanning categories the way `targetFamilies` does would find
+    // no emitter on any head. This is the assertion that would fail if it were rewritten that way.
+    const rgbwau = makeFixture('hex', [
+      colourProp('rgbColour', chan(1), chan(2), chan(3), {
+        whiteChannel: chan(4),
+        amberChannel: chan(5),
+        uvChannel: chan(6),
+      }),
+    ])
+    expect(targetEmitters([rgbwau])).toEqual(['white', 'amber', 'uv'])
+  })
+
+  it('is empty for an RGB-only head', () => {
+    const rgb = makeFixture('par', [colourProp('rgbColour', chan(1), chan(2), chan(3))])
+    expect(targetEmitters([rgb])).toEqual([])
+    expect(targetEmitters([])).toEqual([])
+  })
+
+  it('unions across the selection, in emitter order', () => {
+    // A union, like `targetFamilies`: offer the template if any selected head can serve it, and let
+    // the per-head refusal report the rest. Order is the vocabulary's, not the selection's.
+    const uvOnly = makeFixture('uv', [
+      colourProp('rgbColour', chan(1), chan(2), chan(3), { uvChannel: chan(4) }),
+    ])
+    const whiteOnly = makeFixture('w', [
+      colourProp('rgbColour', chan(5), chan(6), chan(7), { whiteChannel: chan(8) }),
+    ])
+    expect(targetEmitters([uvOnly, whiteOnly])).toEqual(['white', 'uv'])
   })
 })
 

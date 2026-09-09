@@ -129,6 +129,16 @@ export interface TemplateSummary {
    * never neither.
    */
   kind: 'value' | 'effect'
+  /**
+   * The bundled colour emitters this template names outright — a subset of `white`, `amber`, `uv`,
+   * **derived** from its rows the way `family` is, and in that order.
+   *
+   * The offer filter's other half. A template that names an emitter cannot be served by a head
+   * without it — the *whole* template refuses on that head, not just the row — so a surface offering
+   * templates has to check this as well as the family, which cannot say: white, amber, UV and the
+   * hex are all `COLOUR`. Pair it with `targetEmitters` from `fixtures-list/rowModel`.
+   */
+  requiredEmitters: string[]
   rows: TemplateRow[]
   effect: TemplateEffect | null
   /**

@@ -231,11 +231,37 @@ three consumers go through it: cook, `POST /templates/{id}/apply`, and the edito
 panel via `POST /templates/resolve`. Two deliberate degradations in that grammar are documented in
 `TemplateIntent.kt`; do not "fix" either by teaching the literal parsers about intents.
 
+**The one literal is a bundled emitter — `dmx:180`.** White, amber and UV are rows of the closed
+vocabulary in their own right, family COLOUR, and the departure from "an intent, not a literal" is
+deliberate: an emitter has no range to be a proportion of and no room to be a position in, so there
+is nothing to re-derive per head. Keep the `dmx:` prefix — a bare `180` is what the *literal* parser
+reads, so the two grammars would agree on some rows and silently disagree on others. Rows rather
+than fields on the colour intent, because each then writes only its own channel: that is what lets a
+UV-only template sit **over** an amber wash instead of replacing it, and it is the only way to say
+"UV at 200" at all, since no `WhitePolicy` has ever driven UV. An explicit `white` or `amber` row
+**forces the colour row to `rgbonly`** — the policy drives the same byte — which `ColourControl`
+enforces by rewriting the stored intent (not just the button's variant: showing RGB only while the
+value still said `extract` produced an editor displaying a template it could not save) and the write
+boundary refuses by name. UV is exempt.
+
+**A colour template refuses as a whole**, and this is the one place compatibility is finer than D6.
+A head missing any emitter the template names takes *none* of its colour rows —
+`TemplateResolver.unmetColourRequirement`, folded in by cook, apply and the resolves-to panel alike —
+because the rows are facets of one output and half a colour is a wrong answer, not a partial one.
+Scoped to COLOUR: zoom and frost are independent roles and keep their per-row skip.
+`TemplateSummary.requiredEmitters` is the derived form the client filters on, paired with
+`targetEmitters` in `fixtures-list/rowModel.ts` — a **union** over the selection, like
+`targetFamilies` beside it, so a mixed selection still offers the template and the head that cannot
+take it reports a skip. `targetEmitters` must read the **colour descriptor's** `whiteChannel` /
+`amberChannel` / `uvChannel`: bundled emitters are omitted from the flat descriptor list, so
+scanning categories the way `targetFamilies` does finds no emitter on any head.
+
 **A template's property vocabulary is closed** (`TemplateProperty`), and that is where "a template
 cannot carry a gobo" actually lives: gobo, colour-wheel and macro slots are per-model, so they are
 refused by name at the write boundary and shown *disabled with the reason* in the beam editor
-rather than omitted. Compatibility is **capability-only** (D6): "does this head have colour at
-all", never "was this authored against that model".
+rather than omitted. The three emitters are *in* the vocabulary — not slotted, and the only
+per-model question about them is presence. Compatibility is otherwise **capability-only** (D6):
+"does this head have colour at all", never "was this authored against that model".
 
 There is **no stored attribute type on either**. `LookSummary.families` is derived server-side from
 the rows, so a Look spanning colour and position reports both. A template's single family is derived
@@ -328,13 +354,16 @@ entity that became a Look in session 4. **Don't reintroduce it in either sense.*
   are literals; the dependency mechanism for a *value* is a layer. `validateLookRows` refuses a
   `tmpl:`-shaped value beside its `ref:` refusal, and `parseAssignmentValue` returns null for one
   rather than letting `parseExtendedColour` answer white.
-- **Only single-row generic colour templates are offerable.** `family === 'COLOUR' && isGeneric`
+- **Only generic colour *value* templates are offerable.** `family === 'COLOUR' && isGeneric`
   holds on both sides — a per-fixture template holds no single colour, so there is nothing for a
-  fixture-agnostic output to take. The third clause, `rows.length === 1`, is this side's alone and
-  is deliberate rather than a simplification: every consumer here reads `rows[0]` and only `rows[0]`
-  — `swatchFor`, the chip's swatch, the chip's tooltip — so offering a two-row template would apply
-  one of its rows under a name that claims both, silently. All three exclusions are pinned in
-  `FxColourTemplates.test.tsx`.
+  fixture-agnostic output to take. The third clause was `rows.length === 1` and is now
+  `kind === 'value'`, which is exactly the swap that clause's own docblock said to make if it were
+  ever relaxed: it excluded an effect template only by the accident of holding no rows. The count
+  went because a colour template may hold a hex *and* explicit emitters, and both sides now fold the
+  whole colour-family row set into one colour — `templateRowsSwatch` here, `resolveColourGeneric`
+  there. **Never read `rows[0]` for a template's swatch**: row order is authoring order, so a
+  template whose `uv` row sorted first was drawn purple under an amber name. All three exclusions
+  are pinned in `FxColourTemplates.test.tsx`.
 - **There is no successor to `P*`.** A template holds one colour, so there is no set to expand; a
   colour list is an explicit ordered mix of literals and references. `FxColourListPicker`'s
   "Use entire palette" checkbox and its `savedValue` machinery went with it.
@@ -741,7 +770,7 @@ says which happened, so both are stated on the chip's title:
   want right now" are two gestures on one chip rather than two kinds of template.
 
 `TemplateStrip` lives in `ProgrammerGrid`'s `renderToolbar`, which hands down the marquee's
-`cells` **and two things the container derives from them** — so **the selection is the filter and
+`cells` **and three things the container derives from them** — so **the selection is the filter and
 the target**, and there is no picker to open or family dropdown to get wrong:
 
 - **Cells selected**: only that family is offered, and the press lands on the cells' heads —
@@ -751,6 +780,11 @@ the target**, and there is no picker to open or family dropdown to get wrong:
   dimmer-only pars is offered no colour template, and nothing with a mover on it offers a position
   one. The press lands on the rows.
 - **Nothing selected**: the whole library shows, and a press toasts that it has nowhere to land.
+
+**`targetEmitters` narrows it further, in every one of those arms.** A template naming `white`,
+`amber` or `uv` is withheld unless some selected head has every emitter it names — the family cannot
+draw that line, since the hex and all three emitters are COLOUR. See §Looks, templates and layers
+for why it is a union and why the probe reads the colour descriptor rather than a category.
 
 `templateTargetsFor` in `rowModel.ts` is the target rule, and it is neither sibling: a group row
 lands on its *visible* members (the filter rule every group-row action keeps), and an element row

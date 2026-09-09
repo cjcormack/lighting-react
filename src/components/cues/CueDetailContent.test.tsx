@@ -54,6 +54,7 @@ const TEMPLATES: TemplateSummary[] = [
     family: 'COLOUR',
     isGeneric: true,
     kind: 'effect',
+    requiredEmitters: [],
     rows: [],
     effect: {
       effectType: 'ColourPulse',

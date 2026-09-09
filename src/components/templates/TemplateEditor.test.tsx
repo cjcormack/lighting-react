@@ -89,6 +89,7 @@ function template(over: Partial<TemplateSummary> = {}): TemplateSummary {
     family: 'COLOUR',
     isGeneric: true,
     kind: 'value',
+    requiredEmitters: [],
     rows: [
       { targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#FF9D4A;policy=extract' },
     ],
@@ -136,6 +137,119 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals()
   cleanup()
+})
+
+/** The rows a save produced, keyed by property — the shape every colour assertion below reads. */
+async function savedRows(onSave: ReturnType<typeof vi.fn>) {
+  await waitFor(() => expect(onSave).toHaveBeenCalled())
+  const body = onSave.mock.calls[onSave.mock.calls.length - 1][0] as TemplateInput
+  return Object.fromEntries((body.rows ?? []).map((row) => [row.propertyName, row.value]))
+}
+
+describe('the colour control', () => {
+  it('seeds the policy from the stored value, not from a UI default', () => {
+    // `parseTemplateIntent` reads a colour with no policy token as `rgbonly`, matching every other
+    // reader of that string. The control defaulted to `extract`, so a token-less row opened showing
+    // Extract selected and was rewritten as Extract on the next unrelated edit.
+    renderEditor({
+      template: template({
+        rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#FF9D4A' }],
+      }),
+    })
+    expect(screen.getByRole('button', { name: 'RGB only' })).toHaveAttribute('data-variant', 'default')
+    expect(screen.getByRole('button', { name: 'Extract' })).toHaveAttribute('data-variant', 'outline')
+  })
+
+  it('starts a new colour template on Extract, the default a wash wants', () => {
+    // Distinct from the stored-value case below: a draft with *no* colour row has not been authored
+    // yet, so it takes the authoring default rather than the `rgbonly` a token-less stored row
+    // parses as. Collapsing the two made every new colour template default to RGB only.
+    renderEditor()
+    expect(screen.getByRole('button', { name: 'Extract' })).toHaveAttribute('data-variant', 'default')
+  })
+
+  it('locks the policy to RGB only once an emitter is set directly', async () => {
+    // Extract and Additive drive the same emitter byte the explicit row names, so the desk refuses
+    // the pair at the write boundary. Said here first, or a 400 is the first an operator hears of it.
+    const { onSave } = renderEditor({ template: template() })
+    fireEvent.click(screen.getByRole('button', { name: 'Set White' }))
+    expect(screen.getByRole('button', { name: 'Extract' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Additive' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'RGB only' })).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    const rows = await savedRows(onSave as ReturnType<typeof vi.fn>)
+    expect(rows.rgbColour).toBe('#FF9D4A;policy=rgbonly')
+    expect(rows.white).toBe('dmx:255')
+  })
+
+  it('collapses a stored Extract-beside-white to RGB only on open, not just on edit', async () => {
+    // The seed path is the editor's *second* writer: `seedValues` parses stored rows straight into
+    // the draft without going through `setIntent`. While the rule lived in that setter, a template
+    // carrying both would open showing Extract selected *and* disabled — and save the same refused
+    // combination straight back into a 400. Deriving it at every read is what closes that.
+    const { onSave } = renderEditor({
+      template: template({
+        rows: [
+          { targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#FF9D4A;policy=extract' },
+          { targetType: 'deferred', targetKey: '', propertyName: 'white', value: 'dmx:180' },
+        ],
+      }),
+    })
+    expect(screen.getByRole('button', { name: 'RGB only' })).toHaveAttribute('data-variant', 'default')
+    expect(screen.getByRole('button', { name: 'Extract' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    const rows = await savedRows(onSave as ReturnType<typeof vi.fn>)
+    expect(rows.rgbColour).toBe('#FF9D4A;policy=rgbonly')
+    expect(rows.white).toBe('dmx:180')
+  })
+
+  it('restores the stored policy when the emitter is cleared again', async () => {
+    // The other half of deriving rather than mutating: nothing overwrote `extract`, so removing the
+    // emitter puts the operator back where they were instead of silently leaving them on RGB only.
+    const { onSave } = renderEditor({ template: template() })
+    fireEvent.click(screen.getByRole('button', { name: 'Set White' }))
+    expect(screen.getByRole('button', { name: 'Extract' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear White' }))
+    expect(screen.getByRole('button', { name: 'Extract' })).toHaveAttribute('data-variant', 'default')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    const rows = await savedRows(onSave as ReturnType<typeof vi.fn>)
+    expect(rows.rgbColour).toBe('#FF9D4A;policy=extract')
+  })
+
+  it('leaves UV free to sit beside a policy — no policy has ever driven it', () => {
+    renderEditor({ template: template() })
+    fireEvent.click(screen.getByRole('button', { name: 'Set UV' }))
+    expect(screen.getByRole('button', { name: 'Extract' })).toBeEnabled()
+  })
+
+  it('clears the colour row, so a UV-only template is authorable', async () => {
+    // The reason this control needed a Clear at all: without one the colour row cannot be removed,
+    // and a template of emitters alone cannot be made.
+    const { onSave } = renderEditor({ template: template() })
+    fireEvent.click(screen.getByRole('button', { name: 'Set UV' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Clear colour' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    const rows = await savedRows(onSave as ReturnType<typeof vi.fn>)
+    expect(rows).toEqual({ uv: 'dmx:255' })
+  })
+
+  it('distinguishes an emitter left off from one set to zero', async () => {
+    // Absent is not zero: no row means the template says nothing about that emitter and leaves what
+    // is under it alone, which is what lets a UV template sit over an amber wash. A row at 0 drives
+    // it to 0. Setting then clearing must land back at "no row", not at `dmx:0`.
+    const { onSave } = renderEditor({ template: template() })
+    fireEvent.click(screen.getByRole('button', { name: 'Set Amber' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Clear Amber' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    const rows = await savedRows(onSave as ReturnType<typeof vi.fn>)
+    expect(rows.amber).toBeUndefined()
+    expect(Object.keys(rows)).toEqual(['rgbColour'])
+  })
 })
 
 describe('the Holds choice', () => {

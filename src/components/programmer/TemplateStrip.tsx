@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import { COLUMN_CATEGORY, type ColumnKey } from '@/components/fixtures-list/columns'
 import type { CellRef } from '@/components/fixtures-list/cellSelectionModel'
 import { familyForCategory, FAMILY_LABELS, type AttributeFamily } from '@/lib/attributeFamily'
-import { templateIntentSwatch, describeTemplateIntent } from '@/lib/templateIntent'
+import { templateRowsSwatch, describeTemplateIntent } from '@/lib/templateIntent'
 import {
   useApplyTemplateMutation,
   useTemplateListQuery,
@@ -25,12 +25,18 @@ import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
  * the *cell* selection where there is one (the marquee says which attribute you mean) and falls back
  * to what the selected fixtures **can take** where there is not — a rig of RGB pars with no mover
  * on it is offered no position template, because "does this head have the family at all" is the
- * whole of template compatibility (fx-templates D6).
+ * first half of template compatibility (fx-templates D6).
+ *
+ * The **second half is the emitters**. A template may name `white`, `amber` or `uv` outright, and a
+ * head without that emitter refuses the *whole* template rather than the row — so an RGB-only par is
+ * offered no "Amber Key", even though amber is COLOUR and the par has colour. The family alone
+ * cannot draw that line: the hex and all three emitters are one family.
  *
  * **The selection is the target too**, by the same rule: a marquee over three colour cells lands
  * the press on those three heads, whatever the checkboxes name, and a row selection lands it on
- * the rows. The container derives both (`templateTargets`, `targetFamilies` on `renderToolbar`)
- * because only it knows which rows the cells sit on; the strip reads nothing from Redux.
+ * the rows. The container derives all three (`templateTargets`, `targetFamilies`, `targetEmitters`
+ * on `renderToolbar`) because only it knows which rows the cells sit on; the strip reads nothing
+ * from Redux.
  *
  * **Two gestures, because there are two things you might mean**, and they are the reason a template
  * is not just a value you paste:
@@ -48,6 +54,7 @@ export function TemplateStrip({
   cells,
   targets,
   targetFamilies,
+  targetEmitters = [],
 }: {
   projectId: number
   /** The marquee's cells. Empty when the operator has selected rows but not cells. */
@@ -56,6 +63,8 @@ export function TemplateStrip({
   targets: readonly TemplateTarget[]
   /** The families those heads have at all. Empty when nothing is selected. */
   targetFamilies: readonly AttributeFamily[]
+  /** The bundled emitters those heads have — `white` / `amber` / `uv`. Empty when none does. */
+  targetEmitters?: readonly string[]
 }) {
   const { data: templates } = useTemplateListQuery({ projectId }, { skip: !projectId })
   const [applyTemplate] = useApplyTemplateMutation()
@@ -85,8 +94,24 @@ export function TemplateStrip({
     // operator-set order to honour any more: order belongs to a pad's place in a busk bank.
     const all = templates ?? []
     if (families == null) return all
-    return all.filter((t) => t.family != null && families.includes(t.family))
-  }, [templates, families])
+    return all.filter(
+      (t) =>
+        t.family != null &&
+        families.includes(t.family) &&
+        // Every emitter the template names has to be somewhere in the selection. A **union** over
+        // the heads, matching how `targetFamilies` is built: with a hex and a par selected together
+        // the amber template is still offered, and the par reports a skip on the press. Requiring
+        // every head to have it would hide most of the library from most mixed selections.
+        //
+        // `?? []` is not defensive noise. `templateList` has no `transformResponse`, so this field
+        // is whatever the desk sent — and lighting7 hot-swaps changed handler bodies but *not* new
+        // response fields, so a desk mid-upgrade serves rows without it. Reading `.every` off
+        // undefined there would take out the whole programmer toolbar until someone restarted the
+        // backend. Absent means "names no emitter", which is what every template predating this
+        // field actually is.
+        (t.requiredEmitters ?? []).every((emitter) => targetEmitters.includes(emitter)),
+    )
+  }, [templates, families, targetEmitters])
 
   /**
    * Values, then a hairline, then effects (fx-templates D10) — the busk column's split, sideways.
@@ -218,6 +243,7 @@ function TemplateChip({
   template: TemplateSummary
   onPress: (template: TemplateSummary, additive: boolean) => void
 }) {
+  const swatch = templateRowsSwatch(template.rows)
   return (
     <button
       type="button"
@@ -240,11 +266,8 @@ function TemplateChip({
           desk uses for FX says what the press will do instead of a blank gap. */}
       {template.kind === 'effect' ? (
         <AudioWaveform className="size-3 shrink-0 text-muted-foreground" />
-      ) : templateIntentSwatch(template.rows[0]?.value ?? '') != null ? (
-        <span
-          className="size-3 rounded-sm border border-border/60"
-          style={{ background: templateIntentSwatch(template.rows[0].value) ?? undefined }}
-        />
+      ) : swatch != null ? (
+        <span className="size-3 rounded-sm border border-border/60" style={{ background: swatch }} />
       ) : (
         <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
           {template.rows[0] != null ? describeTemplateIntent(template.rows[0].value) : ''}

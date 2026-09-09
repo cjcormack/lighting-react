@@ -6,6 +6,7 @@ import type { GroupSummary } from '../../api/groupsApi'
 import type { LocateTarget } from '../../store/locate'
 import { targetKey } from '../../lib/targetKey'
 import { ATTRIBUTE_FAMILIES, familyForCategory, type AttributeFamily } from '../../lib/attributeFamily'
+import { EMITTER_PROPERTIES } from '../../lib/templateIntent'
 
 /**
  * Stable row identity: `group:` and `fixture:` rows are top-level; `member:`
@@ -366,6 +367,47 @@ export function targetFamilies(targets: readonly WriteTarget[]): AttributeFamily
     }
   }
   return ATTRIBUTE_FAMILIES.filter((family) => out.has(family))
+}
+
+/**
+ * Which bundled colour emitters these targets have — the other half of template compatibility.
+ *
+ * A **union**, exactly like [targetFamilies] beside it: offer the template if *any* selected head
+ * can serve it, and let the per-head refusal report the rest as skips. An intersection would make a
+ * mixed selection offer almost nothing, which is the state an operator busks in most of the time.
+ *
+ * Answered from descriptors, and it has to be: `bundleWithColour` sliders are **omitted** from the
+ * flat descriptor list and folded into the colour descriptor's `whiteChannel` / `amberChannel` /
+ * `uvChannel` (see `hooks/useTargetProperties`), so scanning categories the way [targetFamilies]
+ * does would find no emitter on any head. The `slider`-with-that-category arm is the belt to that
+ * braces — it costs one comparison and catches a head that publishes an emitter as a plain slider
+ * rather than folding it in. Same probe as `detectExtendedChannels` in `components/fx/colourUtils`,
+ * which asks it of a whole picker rather than of a selection.
+ */
+export function targetEmitters(targets: readonly WriteTarget[]): string[] {
+  const out = new Set<string>()
+  // Narrowed on `type`, never cast. `PropertyDescriptor`'s colour arm declares the three channel
+  // fields, so this type-checks for free — and an earlier version that reached them through an
+  // `as Record<string, unknown>` also read a `memberColourChannels` that is not on this union at
+  // all (it belongs to `GroupColourPropertyDescriptor`, which never reaches a `WriteTarget`: group
+  // rows are expanded to member fixtures before they get here). The cast is what let that dead
+  // branch compile.
+  const scan = (properties: readonly PropertyDescriptor[]) => {
+    for (const property of properties) {
+      if (property.type === 'colour') {
+        if (property.whiteChannel != null) out.add('white')
+        if (property.amberChannel != null) out.add('amber')
+        if (property.uvChannel != null) out.add('uv')
+      } else if (property.type === 'slider' && EMITTER_PROPERTIES.includes(property.category)) {
+        out.add(property.category)
+      }
+    }
+  }
+  for (const target of targets) {
+    scan(target.properties)
+    for (const element of target.elements ?? []) scan(element.properties)
+  }
+  return EMITTER_PROPERTIES.filter((emitter) => out.has(emitter))
 }
 
 /**

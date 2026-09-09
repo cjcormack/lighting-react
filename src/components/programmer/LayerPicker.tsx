@@ -11,7 +11,7 @@ import { TimingFields } from '@/components/cues/TimingEditor'
 import { SpeedMasterSelect } from '@/components/fx/SpeedMasterSelect'
 import { useSpeedMasterLiveQuery } from '@/store/speedMasters'
 import { FAMILY_LABELS, type AttributeFamily } from '@/lib/attributeFamily'
-import { describeTemplateIntent } from '@/lib/templateIntent'
+import { describeTemplateRows } from '@/lib/templateIntent'
 import type { CueLayer, CueTarget } from '@/api/cuesApi'
 import type { LookSummary } from '@/api/looksApi'
 import type { TemplateSummary } from '@/api/templatesApi'
@@ -465,9 +465,13 @@ function TemplateGroup({
                     ? 'Generic'
                     : `Per fixture · ${template.rows.length}`}
               </span>
-              {template.rows[0] != null && (
+              {template.rows.length > 0 && (
                 <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-                  {describeTemplateIntent(template.rows[0].value)}
+                  {/* The whole row set, not `rows[0]`: a colour template may hold a hex plus
+                      explicit white / amber / uv rows, and row order is authoring order — so
+                      naming the first row would describe a template by whichever part of it
+                      happened to be saved first. */}
+                  {describeTemplateRows(template.rows)}
                 </span>
               )}
             </div>

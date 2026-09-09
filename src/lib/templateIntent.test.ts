@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
+  EMITTER_PROPERTIES,
+  EMITTER_TINTS,
   TEMPLATE_PROPERTIES,
   WHITE_POLICIES,
   describeTemplateIntent,
+  describeTemplateRows,
   parseTemplateIntent,
   serializeTemplateIntent,
   templateIntentSwatch,
+  templateRowsSwatch,
   templatePropertiesForFamily,
   templatePropertyFor,
   type TemplateIntent,
@@ -101,6 +105,9 @@ describe('templateIntent', () => {
         'strobe',
         'position',
         'rgbColour',
+        'white',
+        'amber',
+        'uv',
         'zoom',
         'focus',
         'iris',
@@ -140,6 +147,74 @@ describe('templateIntent', () => {
 
     it('has exactly three white policies, matching WhitePolicy', () => {
       expect([...WHITE_POLICIES]).toEqual(['extract', 'additive', 'rgbonly'])
+    })
+
+    it('puts the three emitters in colour, taking a level', () => {
+      // Mirrors `PropertyCategory.WHITE.maskGroup()`: emitters of the same mixed colour, so a
+      // template naming a hex *and* an amber is still one family and still one named thing.
+      for (const name of EMITTER_PROPERTIES) {
+        expect(templatePropertyFor(name)?.family, name).toBe('COLOUR')
+        expect(templatePropertyFor(name)?.intent, name).toBe('level')
+      }
+    })
+
+    it('gives every emitter a tint, so no surface has to invent one', () => {
+      for (const name of EMITTER_PROPERTIES) {
+        expect(EMITTER_TINTS[name], name).toMatch(/^#[0-9a-f]{6}$/i)
+      }
+    })
+  })
+
+  describe('the level arm', () => {
+    it('round-trips a DMX byte', () => {
+      expect(serializeTemplateIntent({ kind: 'level', value: 180 })).toBe('dmx:180')
+      expect(parseTemplateIntent('dmx:180')).toEqual({ kind: 'level', value: 180 })
+      expect(parseTemplateIntent('dmx:0')).toEqual({ kind: 'level', value: 0 })
+    })
+
+    it('clamps to 0–255, matching the Kotlin parser', () => {
+      expect(parseTemplateIntent('dmx:400')).toEqual({ kind: 'level', value: 255 })
+      expect(parseTemplateIntent('dmx:-10')).toEqual({ kind: 'level', value: 0 })
+    })
+
+    it('keeps its prefix — a bare number is not an intent', () => {
+      // The whole reason `dmx:` carries a prefix its payload does not need: a bare `180` is what the
+      // *literal* parser reads, so the two grammars would agree on some rows and not others.
+      expect(parseTemplateIntent('180')).toBeNull()
+      expect(parseTemplateIntent('dmx:')).toBeNull()
+      expect(parseTemplateIntent('dmx:abc')).toBeNull()
+    })
+
+    it('describes itself as a bare byte, and names the emitter in a row description', () => {
+      expect(describeTemplateIntent('dmx:180')).toBe('180')
+      expect(
+        describeTemplateRows([
+          { propertyName: 'rgbColour', value: '#FF9D4A;policy=rgbonly' },
+          { propertyName: 'uv', value: 'dmx:255' },
+        ]),
+      ).toBe('#FF9D4A · RGB only · UV 255')
+    })
+  })
+
+  describe('templateRowsSwatch', () => {
+    it('reads the colour row, not the first row', () => {
+      // Row order is authoring order. Reading `rows[0]` drew a template holding a hex and a UV row
+      // as purple whenever the UV row happened to sort first.
+      expect(
+        templateRowsSwatch([
+          { propertyName: 'uv', value: 'dmx:255' },
+          { propertyName: 'rgbColour', value: '#FF9D4A;policy=rgbonly' },
+        ]),
+      ).toBe('#FF9D4A')
+    })
+
+    it('falls back to an emitter tint when there is no colour row', () => {
+      expect(templateRowsSwatch([{ propertyName: 'uv', value: 'dmx:255' }])).toBe(EMITTER_TINTS.uv)
+    })
+
+    it('is null for rows with no colour in them at all', () => {
+      expect(templateRowsSwatch([{ propertyName: 'dimmer', value: 'pct:50' }])).toBeNull()
+      expect(templateRowsSwatch([])).toBeNull()
     })
   })
 })
