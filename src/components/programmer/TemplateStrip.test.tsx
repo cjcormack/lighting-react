@@ -7,6 +7,10 @@ import type { TemplateSummary } from '@/api/templatesApi'
  * The strip's three load-bearing behaviours: **the selection is the filter**, **the selection is
  * the target**, and **the two gestures are two routes**.
  *
+ * Since session 2 of the space plan there is a fourth: **it renders nothing with no targets**
+ * (D3), which reverses the rule it shipped with. That one is pinned because it is a reversal a
+ * reader will otherwise take for a bug and "fix".
+ *
  * The filter is what makes the strip usable without a picker — select colour cells and only colour
  * templates are offered, select RGB pars and no position template is — so a regression there turns
  * it back into a list of everything. The target rule is what makes a marquee mean something: three
@@ -61,6 +65,7 @@ const { TemplateStrip } = await import('./TemplateStrip')
 import type { TemplateTarget } from '@/api/templatesApi'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import type { CellRef } from '@/components/fixtures-list/cellSelectionModel'
+import { cellFamilies } from '@/components/fixtures-list/columns'
 
 const HEX_1: TemplateTarget[] = [{ type: 'fixture', key: 'hex-1' }]
 const COLOUR_CELL: CellRef[] = [{ rowId: 'fixture:hex-1', col: 'colour' }]
@@ -76,6 +81,10 @@ function strip(
     <TemplateStrip
       projectId={1}
       cells={cells}
+      // What the bar derives for its own badge and hands down, so the two answer from one
+      // evaluation. `cellFamilies` is the real helper — a hand-written literal here would let the
+      // strip's filter and the bar's badge drift apart in exactly the way sharing it prevents.
+      askedFamilies={cells.length > 0 ? cellFamilies(cells) : null}
       targets={targets}
       targetFamilies={targetFamilies}
       targetEmitters={targetEmitters}
@@ -197,14 +206,25 @@ describe('TemplateStrip', () => {
   })
 
   it('says so when nothing fits, rather than showing an empty strip', () => {
+    // Targets but no fitting template is a *statement*, not a blank bar — and `New` stays beside
+    // it, because recording one is how the operator answers it.
     render(strip([], HEX_1, ['POSITION']))
     expect(screen.getByText('No template fits what is selected.')).toBeInTheDocument()
+    expect(screen.getByText('New')).toBeInTheDocument()
   })
 
-  it('shows the whole library when nothing is selected — there is no question yet', () => {
-    render(strip([], [], []))
-    expect(screen.getByText('Amber Key')).toBeInTheDocument()
-    expect(screen.getByText('Half Up')).toBeInTheDocument()
+  it('renders nothing with no targets — a press needs somewhere to land', () => {
+    // Space plan D3, and a reversal: the strip used to show the *whole* library with nothing
+    // selected, for a press that could only toast. That was the most expensive line on the page —
+    // a row of chips wrapping to four rows on a real library — and the library is browsed on
+    // `/templates`. Nothing renders here at all now, `New` included.
+    // `toBeEmptyDOMElement` and not merely "no chips": the whole band has to cost nothing, which
+    // is the point of D3. The sheet below the guard renders null while closed, so it adds no node.
+    const { container } = render(strip([], [], []))
+    expect(container).toBeEmptyDOMElement()
+    expect(screen.queryByText('Amber Key')).not.toBeInTheDocument()
+    expect(screen.queryByText('Half Up')).not.toBeInTheDocument()
+    expect(screen.queryByText('New')).not.toBeInTheDocument()
   })
 
   it('offers both families when the marquee spans two columns', () => {
@@ -257,11 +277,21 @@ describe('TemplateStrip', () => {
     expect(applyTemplate).not.toHaveBeenCalled()
   })
 
-  it('presses nothing without a selection — there is nowhere for it to land', () => {
-    render(strip([], [], []))
-    fireEvent.click(screen.getByText('Amber Key'))
-    expect(applyTemplate).not.toHaveBeenCalled()
-    expect(toggleTemplate).not.toHaveBeenCalled()
+  it('keeps the half-typed template when the selection is pulled out from under it', () => {
+    // The sheet is rendered OUTSIDE the D3 guard, and this is why. The desk selection is
+    // server-owned and shared — another client, a MIDI select button, a group whose membership
+    // changed — so `targets` can empty while the operator is mid-name. Unmounting the sheet with
+    // the strip discarded that draft with no "Discard changes?" prompt, because `Sheet`'s guard
+    // only intercepts the closes Radix drives, never a parent unmount.
+    const { rerender } = render(strip(COLOUR_CELL))
+    fireEvent.click(screen.getByText('New'))
+    expect(screen.getByTestId('new-sheet')).toBeInTheDocument()
+
+    rerender(strip(COLOUR_CELL, []))
+
+    // The chips are gone — D3 — but the sheet is still standing.
+    expect(screen.queryByText('Amber Key')).not.toBeInTheDocument()
+    expect(screen.getByTestId('new-sheet')).toBeInTheDocument()
   })
 
   /**
@@ -275,7 +305,7 @@ describe('TemplateStrip', () => {
     const names = screen
       .getAllByRole('button')
       .map((b) => b.textContent)
-      .filter((t) => t !== 'New from selection')
+      .filter((t) => t !== 'New')
     expect(names).toEqual(['Amber Key', 'Amber Breathe'])
   })
 
@@ -345,13 +375,11 @@ describe('TemplateStrip', () => {
     )
   })
 
-  it('disables New from selection without a selection, and enables it with one', () => {
-    const { unmount } = render(strip([], [], []))
-    expect(screen.getByText('New from selection').closest('button')).toBeDisabled()
-    unmount()
-
+  it('opens the new-template sheet from the pinned New chip', () => {
+    // `New` is outside the chip scroller on purpose: the control that *fills* the library must not
+    // be the one that scrolls off the end of it.
     render(strip([]))
-    const chip = screen.getByText('New from selection').closest('button')
+    const chip = screen.getByText('New').closest('button')
     expect(chip).not.toBeDisabled()
     fireEvent.click(chip!)
     expect(screen.getByTestId('new-sheet')).toBeInTheDocument()

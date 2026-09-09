@@ -31,6 +31,7 @@ import { BLEND_MODE_OPTIONS } from '@/components/fx/fxConstants'
 import { MaskPicker } from '@/components/programmer/maskPicker'
 import {
   FAMILY_LABELS,
+  formatFamilyList,
   parsePropertyMask,
   serializePropertyMask,
 } from '@/lib/attributeFamily'
@@ -391,9 +392,7 @@ export function LayerRow({
                   {/* The same label the editable trigger shows, not the raw wire string. Wording one
                       surface `[COLOUR]` and the other `[Colour]` would undo the reason this row is
                       shared between them. */}
-                  [{parsePropertyMask(layer.propertyMask)
-                    .map((f) => FAMILY_LABELS[f].singular)
-                    .join(', ')}]
+                  [{formatFamilyList(parsePropertyMask(layer.propertyMask))}]
                 </Badge>
               )}
               {layer.blendMode && layer.blendMode !== 'OVERRIDE' && (
@@ -599,7 +598,7 @@ function LayerBlendMaskPopover({
   const masked = families.length > 0
   const nonDefaultBlend = blendMode !== 'OVERRIDE'
   const label = masked
-    ? `[${families.map((f) => FAMILY_LABELS[f].singular).join(', ')}]`
+    ? `[${formatFamilyList(families)}]`
     : nonDefaultBlend
       ? blendMode
       : 'Mix'

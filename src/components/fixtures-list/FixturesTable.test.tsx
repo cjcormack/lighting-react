@@ -521,3 +521,97 @@ describe('FixturesTable with the desk unreachable', () => {
     expect(cellWrapper().className).not.toContain('pointer-events-none')
   })
 })
+
+/**
+ * **Selection is neutral, ownership is colour** — space plan D4.
+ *
+ * These pin a *colour*, which normally is not worth a test. This one is: the whole session exists
+ * because a selected row and a row whose values you own were both `--primary`, and the two facts
+ * the grid most needs to keep apart looked alike. A well-meant "make the selection stand out more"
+ * that reaches for the accent again would undo it silently — nothing else on this page would
+ * break, and the failure only shows at a desk in a blacked-out room.
+ *
+ * They live here rather than in a programmer suite because `FixturesTable` is shared: D4 reaches
+ * `/fixtures/list` and `/groups/list` too, which is intended — a selected row should look the same
+ * everywhere.
+ */
+describe('FixturesTable neutral selection', () => {
+  /** The row wrapper — the grid div carrying the wash. */
+  const rowOf = (name: string) => screen.getByText(name).closest('.group\\/row')!
+
+  function SelectedHarness() {
+    const cellSelection = useCellSelection(new Set(ROWS.map((r) => r.id)))
+    return (
+      <FixturesTable
+        rows={ROWS}
+        visibleColumns={['dimmer'] as ColumnKey[]}
+        isSelected={(id) => id === 'fixture:a'}
+        onRowClick={() => {}}
+        onToggleExpand={() => {}}
+        onBeginCellEdit={onBeginCellEdit}
+        onCellCommit={() => {}}
+        batchCountFor={() => 1}
+        onShowInfo={() => {}}
+        showOwnership
+        cellSelection={cellSelection}
+      />
+    )
+  }
+
+  it('washes a selected row in foreground, never in the ownership accent', () => {
+    render(<SelectedHarness />)
+    const row = rowOf('SL Wash 1')
+    expect(row.className).toContain('bg-foreground/[0.06]')
+    expect(row.className).not.toContain('primary')
+    // And an unselected row is untouched by any of it.
+    expect(rowOf('SL Wash 2').className).not.toContain('bg-foreground')
+  })
+
+  it('draws the 3px edge on the sticky cell’s overlay, where the opaque background cannot hide it', () => {
+    // On the row itself the inset shadow paints under the name cell's `bg-background` and is
+    // invisible at every width — the same reason that overlay exists for the wash.
+    render(<SelectedHarness />)
+    const overlay = rowOf('SL Wash 1').querySelector('.pointer-events-none.absolute.inset-0')!
+    expect(overlay.className).toContain('shadow-[inset_3px_0_0_var(--foreground)]')
+  })
+
+  it('fills the checkbox with foreground and bolds the name', () => {
+    render(<SelectedHarness />)
+    const checkbox = screen.getByLabelText('Select SL Wash 1')
+    expect(checkbox.className).toContain('accent-foreground')
+    expect(checkbox.className).not.toContain('accent-primary')
+    expect(screen.getByText('SL Wash 1').className).toContain('font-semibold')
+    expect(screen.getByText('SL Wash 2').className).not.toContain('font-semibold')
+  })
+
+  it('draws the marquee band in foreground, with no primary anywhere on it', () => {
+    // The band is set from the pointer alone, which is the one part of the gesture jsdom can see
+    // (its geometry is covered for real in `cellMarquee.test.ts`).
+    render(<Harness />)
+    const cell = cellButton()
+    fireEvent.pointerDown(cell, { button: 0, clientX: 300, clientY: 100 })
+    fireEvent.pointerMove(cell, { buttons: 1, clientX: 380, clientY: 160 })
+
+    const band = screen.getByTestId('cell-marquee')
+    expect(band.className).toContain('border-foreground')
+    expect(band.className).toContain('bg-foreground/5')
+    expect(band.className).not.toContain('border-primary')
+    expect(band.className).not.toContain('primary')
+    // Both corner handles are foreground too — they were `bg-primary`.
+    for (const handle of band.querySelectorAll('span')) {
+      expect(handle.className).toContain('bg-foreground')
+    }
+
+    fireEvent.pointerUp(cell, { button: 0, clientX: 380, clientY: 160 })
+  })
+
+  it('reserves a marks gutter wide enough for the widest mark', () => {
+    // D5: the effect badge and the layer glyph float over the value's last characters otherwise.
+    // On the wrapper, so the ownership ring and the selection outline still trace the whole cell.
+    //
+    // 18px and not the plan's 16: the effect badge is `size-3.5` at `right-1`, i.e. 18px from the
+    // edge, so a 16px gutter still let it overlap the value by 2px — the exact defect D5 removes.
+    render(<Harness />)
+    expect(cellWrapper().className).toContain('pr-[18px]')
+  })
+})

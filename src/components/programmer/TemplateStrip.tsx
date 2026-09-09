@@ -1,12 +1,10 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { AudioWaveform, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { COLUMN_CATEGORY, type ColumnKey } from '@/components/fixtures-list/columns'
 import type { CellRef } from '@/components/fixtures-list/cellSelectionModel'
-import { familyForCategory, FAMILY_LABELS, type AttributeFamily } from '@/lib/attributeFamily'
+import { type AttributeFamily } from '@/lib/attributeFamily'
 import { templateRowsSwatch, describeTemplateIntent } from '@/lib/templateIntent'
 import {
   useApplyTemplateMutation,
@@ -47,11 +45,31 @@ import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
  *    template's family. Retune the template and every layer moves.
  *
  * The last chip records the selection as a new template, which is how the library fills up without
- * anyone visiting it.
+ * anyone visiting it. It is drawn **outside** the scroller, pinned to its right: it is the one
+ * control here that is not a member of the library, and a chip that fills the library must not be
+ * the chip that scrolls off the end of it.
+ *
+ * **It renders nothing with no targets, which is a reversal.** Until session 2 of the space plan
+ * the strip showed the *whole* library with nothing selected and a press toasted "select the
+ * fixtures this should land on first". That was the single most expensive line on the page: a row
+ * of chips — wrapping to four rows on a real library — spending 43px of a grid's height on a
+ * gesture that could only fail. The library is browsed on `/templates`; this strip is where a
+ * template is *pressed*, and a press needs a target (space plan D3). The `targets.length === 0`
+ * guard in `press` stays as defence in depth, and so does `New`'s disabled arm — neither is
+ * reachable through the UI now, and both are one careless host away from being reachable again.
+ *
+ * **It is a row of the selection bar, not a band of its own.** It renders a leading hairline, then
+ * the chips in a `flex-1 min-w-0 overflow-x-auto` scroller under a right-edge mask, then `New` —
+ * three siblings of one flex line that `ProgrammerGrid` owns, which is why there is no wrapper
+ * element around them. The hairline belongs to the strip rather than to the bar so that the two
+ * appear and disappear together: the bar renders whenever anything is selected, and the strip
+ * whenever a press has somewhere to land, and those are not quite the same condition (a selected
+ * group row with no visible members resolves to no targets at all).
  */
 export function TemplateStrip({
   projectId,
   cells,
+  askedFamilies,
   targets,
   targetFamilies,
   targetEmitters = [],
@@ -59,6 +77,13 @@ export function TemplateStrip({
   projectId: number
   /** The marquee's cells. Empty when the operator has selected rows but not cells. */
   cells: readonly CellRef[]
+  /**
+   * The families those cells name, already derived by the bar for its own badge — `null` when
+   * there are no cells. Passed in rather than recomputed so the badge and these chips answer from
+   * one evaluation: they sit a few pixels apart, and a marquee drag mints a fresh `cells` array
+   * every animation frame, so deriving it twice was two passes per frame to say one thing.
+   */
+  askedFamilies: readonly AttributeFamily[] | null
   /** Where a press lands: the cells' heads when there is a marquee, the selected rows' otherwise. */
   targets: readonly TemplateTarget[]
   /** The families those heads have at all. Empty when nothing is selected. */
@@ -70,24 +95,29 @@ export function TemplateStrip({
   const [applyTemplate] = useApplyTemplateMutation()
   const [toggleTemplate] = useToggleTemplateMutation()
   const [newOpen, setNewOpen] = useState(false)
+  const scrollerRef = useRef<HTMLDivElement>(null)
 
   /**
    * The families the selection is asking about.
    *
    * From the **cells** when there are any — a marquee across the Colour column means colour, and
-   * nothing else. With rows selected but no cells there is no attribute in the gesture, so the
-   * answer is what those heads *have*: every family they could take, none they could not. With
-   * nothing selected at all there is no question yet, and the whole library shows.
+   * nothing else. That arm arrives as `askedFamilies` from the bar, which needs the same answer
+   * for its badge, so the filter and the label beside it answer from one evaluation rather than
+   * two that could drift. With rows selected but no cells there is no attribute in the gesture, so
+   * the answer is what those heads *have*: every family they could take, none they could not.
+   *
+   * The third arm — `null`, "no question yet" — no longer reaches the screen: with no targets the
+   * strip renders nothing. It still *runs*, because hooks execute before the early return that
+   * discards their result, so this is dead output rather than dead code — do not "simplify" it on
+   * the assumption that the branch cannot be taken. It is kept because `null` is also what the
+   * *sheet* below is handed for "the operator named no attribute", which the rows-only arm
+   * produces, and collapsing the two would make that prop lie.
    */
-  const families = useMemo<AttributeFamily[] | null>(() => {
-    if (cells.length > 0) {
-      const out = new Set<AttributeFamily>()
-      for (const cell of cells) out.add(familyForCategory(COLUMN_CATEGORY[cell.col as ColumnKey]))
-      return [...out]
-    }
-    if (targets.length > 0) return [...targetFamilies]
+  const families = useMemo<readonly AttributeFamily[] | null>(() => {
+    if (askedFamilies != null) return askedFamilies
+    if (targets.length > 0) return targetFamilies
     return null
-  }, [cells, targets.length, targetFamilies])
+  }, [askedFamilies, targets.length, targetFamilies])
 
   const visible = useMemo(() => {
     // The library's own order, which is by name — the same list `/templates` draws. There is no
@@ -174,55 +204,94 @@ export function TemplateStrip({
     [applyTemplate, toggleTemplate, projectId, targets],
   )
 
-  if ((templates?.length ?? 0) === 0 && targets.length === 0) return null
+  // The chips are a *scroller*, so the mask has to be conditional. A fade drawn over content that
+  // fits says "there is more to the right" when there is not, and after the two-flex-1 fix below
+  // the scroller is wide enough that a short library routinely fits — so the false affordance
+  // would have been the common case, not the edge one. Measured rather than guessed: neither the
+  // chip count nor the container width predicts it on its own.
+  const overflows = useScrollerOverflows(scrollerRef)
 
-  return (
-    <>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {/* Named only when the cells said it: a family list derived from what the heads have is
-            the strip's filter, not the operator's statement, and badging it would read as one. */}
-        {cells.length > 0 && families != null && (
-          <Badge variant="outline" className="shrink-0 px-1.5 py-0 text-[10px]">
-            {families.map((f) => FAMILY_LABELS[f].singular).join(' · ')}
-          </Badge>
-        )}
-        {visible.length === 0 && targets.length > 0 && (templates?.length ?? 0) > 0 && (
-          <span className="text-[11px] text-muted-foreground">
-            No template fits what is selected.
-          </span>
-        )}
+  // D3. Not "and the library is empty" as well: a press needs a target whatever the library holds,
+  // and the family badge, the counts and Deselect beside it still have something to say without it.
+  //
+  // **The sheet is deliberately OUTSIDE this guard.** It is rendered below, past the early return,
+  // because it holds a draft: the desk selection is server-owned and shared (another client, a
+  // MIDI select button, a group whose membership changed), so `targets` can empty while the
+  // operator is halfway through typing a template name. Unmounting the sheet with the strip
+  // discarded that name silently — `Sheet`'s `unsavedChanges` guard only intercepts the closes
+  // *Radix* drives (Escape, outside-click, the X), never a parent unmount, so not even the
+  // "Discard changes?" prompt would have fired. The old guard hid this: it also required the
+  // library to be empty, which on a real project it never is.
+  const strip =
+    targets.length === 0 ? null : (
+      <>
+        {/* The hairline that separates what is selected from what can be pressed onto it. Drawn
+            here rather than by the bar so it cannot outlive the chips — see the doc comment. The
+            class is the internal separator's, verbatim, so this file has one hairline style and
+            `SurfaceLibrary`'s "TemplateStrip's hairline, verbatim" keeps naming one thing. */}
+        <span aria-hidden className={HAIRLINE_CLASS} />
+        {/* The chips, on one line, scrolling sideways under a fade rather than wrapping. Wrapping
+            is what made the old band cost four rows on a forty-template library; the mask says
+            there is more to the right without spending a scrollbar's height on saying so, and the
+            row is short enough that a trackpad or a shift-wheel is the whole gesture.
 
-        {valueChips.map((template) => (
-          <TemplateChip key={template.id} template={template} onPress={press} />
-        ))}
+            `min-w-0` is load-bearing beside `flex-1`: a flex item's default `min-width: auto` is
+            its content, so without it the chips would push the bar wider than the grid instead of
+            scrolling inside it, and the mask would never have anything to fade. */}
+        <div
+          ref={scrollerRef}
+          className={cn(
+            'flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto',
+            overflows && [
+              '[mask-image:linear-gradient(90deg,#000_92%,transparent)]',
+              '[-webkit-mask-image:linear-gradient(90deg,#000_92%,transparent)]',
+            ],
+            // The scrollbar is the horizontal one on a 26px-tall row: showing it would take a
+            // third of the chips' height. The overflow is still scrollable by wheel, trackpad
+            // and keyboard.
+            '[scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+          )}
+        >
+          {visible.length === 0 && (templates?.length ?? 0) > 0 && (
+            <span className="whitespace-nowrap text-[11px] text-muted-foreground">
+              No template fits what is selected.
+            </span>
+          )}
 
-        {valueChips.length > 0 && effectChips.length > 0 && (
-          <span aria-hidden className="mx-0.5 h-5 w-px shrink-0 bg-border" />
-        )}
+          {valueChips.map((template) => (
+            <TemplateChip key={template.id} template={template} onPress={press} />
+          ))}
 
-        {effectChips.map((template) => (
-          <TemplateChip key={template.id} template={template} onPress={press} />
-        ))}
+          {valueChips.length > 0 && effectChips.length > 0 && (
+            <span aria-hidden className={HAIRLINE_CLASS} />
+          )}
 
-        {/* The chip that fills the library. Disabled without a selection for the same reason the
-            presses are: there is nothing to record. */}
+          {effectChips.map((template) => (
+            <TemplateChip key={template.id} template={template} onPress={press} />
+          ))}
+        </div>
+
+        {/* The chip that fills the library, pinned outside the scroller. No `disabled` arm: the
+            guard above has already returned, so it could only ever have rendered enabled, and a
+            dead conditional whose `title` no longer explains the state it guards is worse than no
+            conditional. `press`'s guard is the one that stays — it is the only one a future host
+            rendering this component differently could still reach. */}
         <Button
           variant="outline"
           size="sm"
-          className="h-7 gap-1 border-dashed px-2 text-xs"
-          disabled={targets.length === 0}
-          title={
-            targets.length === 0
-              ? 'Select the fixtures whose values you want to keep'
-              : 'Record what you have selected as a new template'
-          }
+          className="h-[26px] shrink-0 gap-1 border-dashed px-2 text-xs"
+          title="Record what you have selected as a new template"
           onClick={() => setNewOpen(true)}
         >
           <Plus className="size-3.5" />
-          New from selection
+          New
         </Button>
-      </div>
+      </>
+    )
 
+  return (
+    <>
+      {strip}
       <NewTemplateFromSelectionSheet
         open={newOpen}
         onOpenChange={setNewOpen}
@@ -234,6 +303,49 @@ export function TemplateStrip({
       />
     </>
   )
+}
+
+/**
+ * One hairline style for this file: the bar's leading separator and the values/effects divider.
+ * They are the same kind of line at the same rank, and `SurfaceLibrary`'s hairline copies this
+ * one by name — two sizes here would make that reference ambiguous about which it meant.
+ */
+const HAIRLINE_CLASS = 'mx-0.5 h-5 w-px shrink-0 bg-border'
+
+/**
+ * Whether a horizontal scroller has anything to scroll to.
+ *
+ * Measured, because nothing else answers it: the scroller is `flex-1`, so its own box does not
+ * change when its contents do, and a `ResizeObserver` on it alone would miss a chip list growing
+ * or shrinking. So the check runs in a layout effect on every render *and* on a resize, and only
+ * writes state when the answer actually flips — which is what keeps it from looping.
+ *
+ * `useLayoutEffect` rather than `useEffect` so the mask is right in the frame the chips land in;
+ * with `useEffect` a newly-overflowing row paints once unfaded first.
+ */
+function useScrollerOverflows(ref: React.RefObject<HTMLElement | null>): boolean {
+  const [overflows, setOverflows] = useState(false)
+  const measure = useCallback(() => {
+    const el = ref.current
+    if (!el) return
+    // 1px of slack: sub-pixel layout routinely leaves `scrollWidth` a hair over `clientWidth`
+    // on a row that fits exactly, which would fade a chip nothing is hiding.
+    setOverflows(el.scrollWidth > el.clientWidth + 1)
+  }, [ref])
+
+  useLayoutEffect(measure)
+
+  useEffect(() => {
+    const el = ref.current
+    // Guarded: jsdom has no ResizeObserver unless a suite stubs one, and this component renders in
+    // suites that do not.
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [ref, measure])
+
+  return overflows
 }
 
 function TemplateChip({
@@ -258,7 +370,9 @@ function TemplateChip({
           : `Click to set these values · ⌥click to add a layer that tracks “${template.name}”`
       }
       className={cn(
-        'flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors',
+        // `shrink-0` is what makes the row a scroller rather than a squeezer: without it flex
+        // would compress every chip to fit and the mask would never fade anything.
+        'flex h-[26px] shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs transition-colors',
         'hover:bg-accent/60 active:scale-95',
       )}
     >

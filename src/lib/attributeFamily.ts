@@ -21,6 +21,27 @@ export const FAMILY_LABELS: Record<AttributeFamily, { singular: string; plural: 
 }
 
 /**
+ * A family list as one display string — `Intensity, Colour`.
+ *
+ * One helper rather than the `.map(f => FAMILY_LABELS[f].singular).join(…)` that had been retyped
+ * at four call sites across three files. The point is not the two lines it saves: it is that
+ * `FAMILY_LABELS[f].singular` is the *only* casing anyone may show. `LookStack`'s doc comment
+ * already records why — one surface rendering `[COLOUR]` beside another rendering `[Colour]` reads
+ * as two different vocabularies — and a shared helper is what stops the next caller reaching for
+ * the raw enum.
+ *
+ * The separator is a parameter because the two contexts genuinely differ: prose and badges take
+ * the default comma, while the programmer's selection bar takes a middot to match the interpuncts
+ * already separating its counts.
+ */
+export function formatFamilyList(
+  families: readonly AttributeFamily[],
+  separator = ', ',
+): string {
+  return families.map((f) => FAMILY_LABELS[f].singular).join(separator)
+}
+
+/**
  * Which attribute family a property belongs to, from its category.
  *
  * A direct mirror of the backend's `PropertyCategory.maskGroup()` (`fx/PropertyMask.kt`), which

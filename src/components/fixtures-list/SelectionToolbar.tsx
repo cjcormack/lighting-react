@@ -18,6 +18,23 @@ export interface SelectionToolbarProps {
   onClear: () => void
 }
 
+/**
+ * When the two verbs keep their words.
+ *
+ * `hidden sm:inline` is the viewport rule this bar has always had: on a phone the icons and their
+ * tooltips carry it. `@max-[1100px]:hidden` is the *container* rule the programmer's selection bar
+ * adds on top — that bar is one 34px line that must not wrap, and these two words are the widest
+ * thing on it that a tooltip already says. The two compose: a word shows only when the viewport is
+ * at least `sm` **and** the container is at least 1100px wide.
+ *
+ * On `/fixtures/list` and `/groups/list` there is no query container above this toolbar at all, so
+ * the container half is *unknown* and never applies — those routes keep exactly today's behaviour,
+ * which is what §5 of the space plan asks for. That is a real dependency on those pages not
+ * gaining an ancestor `@container`; if one ever does, these words vanish there and the fix is to
+ * name the container rather than to widen the threshold.
+ */
+const WORD_CLASS = 'hidden sm:inline @max-[1100px]:hidden'
+
 export function SelectionToolbar({ locateTargets, targets, onClear }: SelectionToolbarProps) {
   const { data: locateState } = useLocateStateQuery()
   const [toggleLocate] = useToggleLocateMutation()
@@ -38,11 +55,20 @@ export function SelectionToolbar({ locateTargets, targets, onClear }: SelectionT
     }
   }
 
+  // `shrink-0`: in the programmer's one-line selection bar this sits at the right end of a row
+  // whose middle is a scroller, and a flex item that gives would be squeezed by the chips it is
+  // supposed to sit beside. In the default wrapping toolbar it simply wraps instead.
   return (
-    <div className="flex items-center gap-1.5 sm:gap-2">
+    <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
       {/* "12 selected" is three times the width of "12" and says the same thing next to a
-          row of selection actions. Narrow viewports get the number alone. */}
-      <span className="text-xs text-muted-foreground tabular-nums">
+          row of selection actions. Narrow viewports get the number alone.
+
+          And in the programmer's selection bar it goes entirely, on the same `@max-[1100px]`
+          rule as the two verbs' words: that bar counts the selection itself, at its left end, as
+          "4 fixtures" — the heads a press lands on — and the same number twice at opposite ends of
+          one 34px line reads as two different facts that happen to agree. The list routes have no
+          such count of their own, so there it stays. */}
+      <span className="text-xs text-muted-foreground tabular-nums @max-[1100px]:hidden">
         {targets.length}
         <span className="hidden sm:inline"> selected</span>
       </span>
@@ -61,7 +87,7 @@ export function SelectionToolbar({ locateTargets, targets, onClear }: SelectionT
             className={allLocated ? 'bg-sky-500 text-white hover:bg-sky-600' : ''}
           >
             <Crosshair className="size-3.5" />
-            <span className="hidden sm:inline">Locate</span>
+            <span className={WORD_CLASS}>Locate</span>
           </Button>
         </TooltipTrigger>
         <TooltipContent>
@@ -79,7 +105,7 @@ export function SelectionToolbar({ locateTargets, targets, onClear }: SelectionT
             onPointerLeave={highlight.release}
           >
             <Flashlight className="size-3.5" />
-            <span className="hidden sm:inline">Highlight</span>
+            <span className={WORD_CLASS}>Highlight</span>
           </Button>
         </TooltipTrigger>
         <TooltipContent>Hold: full intensity on the selection, restored on release</TooltipContent>

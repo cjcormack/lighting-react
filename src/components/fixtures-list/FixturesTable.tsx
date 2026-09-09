@@ -215,15 +215,25 @@ export function FixturesTable({
           onPointerUp={marquee.onPointerUp}
           onPointerCancel={marquee.onPointerUp}
         >
+          {/* The rubber band. **Neutral, not primary** (space plan D4): a solid 2px `--foreground`
+              frame with foreground corner handles over a `foreground/5` fill. It was a dashed
+              primary border over a `primary/[0.13]` fill, which put the accent colour on the one
+              thing that is never a value — and dragged it across cells whose *rings* use the same
+              accent to mean "you own this". A selection marquee and an ownership ring are the two
+              facts the grid most needs to keep apart, so they no longer share a hue.
+
+              The 1px `--background` ring is what keeps a near-white frame legible where it crosses
+              a selected row's near-white wash: two neutrals a few percent apart need a dark line
+              between them, and a heavier frame would have read as a border rather than a band. */}
           {marquee.band && (
             <div
               aria-hidden="true"
               data-testid="cell-marquee"
-              className="pointer-events-none absolute z-30 rounded-sm border-[1.5px] border-dashed border-primary bg-primary/[0.13]"
+              className="pointer-events-none absolute z-30 rounded-sm border-2 border-foreground bg-foreground/5 shadow-[0_0_0_1px_var(--background)]"
               style={marquee.band}
             >
-              <span className="absolute -left-px -top-px size-[7px] bg-primary" />
-              <span className="absolute -bottom-px -right-px size-[7px] bg-primary" />
+              <span className="absolute -left-px -top-px size-[7px] rounded-[1px] bg-foreground" />
+              <span className="absolute -bottom-px -right-px size-[7px] rounded-[1px] bg-foreground" />
             </div>
           )}
           {virtualizer.getVirtualItems().map((virtualRow) => {
@@ -257,6 +267,11 @@ export function FixturesTable({
 
       {/* Scope chip, following the pointer. `fixed`, so it is never clipped by the scroller, and
           `pointer-events-none` so it can sit under the cursor without eating the drag.
+
+          **It stays primary**, alone among the selection affordances, and that is deliberate
+          rather than an oversight of D4: it exists only while a drag is in flight, it moves with
+          the pointer, and it never comes to rest beside an owned cell — so it cannot be confused
+          with a ring the way a row wash sitting still under one could.
 
           PORTALLED to `document.body`, which is load-bearing rather than tidiness: its coordinates
           are the pointer's `clientX/clientY`, i.e. viewport space, and `ProgrammerWorkspace` — the
@@ -689,10 +704,16 @@ const RowView = React.memo(function RowView({
   const badgeCount = isGroup ? row.members.length : elementCount > 0 ? elementCount : undefined
   const locate = rowLocateTarget(row)
 
+  // **Selection is neutral** (space plan D4). The wash was `bg-primary/10` — the same accent, at
+  // nearly the same strength, as the `programmer` ownership ring sitting inside it — so a row you
+  // had selected and a row you owned every value of were one picture. `--primary` now means
+  // exactly one thing on this grid, "you own this value", and everything that means "selected" is
+  // a neutral: a `foreground/6%` wash, a 3px foreground left edge, a bold name. The edge is drawn
+  // on the sticky cell's overlay rather than here; see below for why.
   return (
     <div
       className={`group/row grid h-full border-b border-border text-sm ${
-        selected ? 'bg-primary/10' : 'hover:bg-accent/30'
+        selected ? 'bg-foreground/[0.06]' : 'hover:bg-accent/30'
       }`}
       style={{ gridTemplateColumns }}
       data-state={selected ? 'selected' : undefined}
@@ -705,10 +726,17 @@ const RowView = React.memo(function RowView({
         className="sticky left-0 z-10 flex h-full cursor-pointer items-center gap-1.5 bg-background px-2"
         onClick={(e) => onRowClick(row.id, e)}
       >
-        {/* Selection tint needs to survive the opaque sticky background. */}
+        {/* Selection tint needs to survive the opaque sticky background — and so does the 3px
+            edge, which is why it is here and not on the row. An inset shadow on the row paints on
+            the row's own background layer, underneath every child, and this cell's `bg-background`
+            is opaque: the edge would have been invisible at exactly the widths the name column is
+            pinned at, which is all of them. Drawn on the overlay it sits above that background and
+            below the checkbox and the name, which is where a selection edge belongs. */}
         <div
           className={`pointer-events-none absolute inset-0 ${
-            selected ? 'bg-primary/10' : 'group-hover/row:bg-accent/30'
+            selected
+              ? 'bg-foreground/[0.06] shadow-[inset_3px_0_0_var(--foreground)]'
+              : 'group-hover/row:bg-accent/30'
           }`}
         />
         <input
@@ -719,7 +747,12 @@ const RowView = React.memo(function RowView({
             e.stopPropagation()
             onRowClick(row.id, e, true)
           }}
-          className={`relative size-3.5 shrink-0 accent-primary ${INDENT_CLASS[indentLevel] ?? ''}`}
+          // `accent-foreground`, not `accent-primary` (D4): a foreground-filled box with a dark
+          // tick. The browser derives the tick's colour from the accent's luminance, so this is
+          // white-box-dark-tick on the desk and dark-box-white-tick in light mode, both without a
+          // second class. It was the accent blue, which made the one control that says "this row
+          // is selected" the same colour as the ring that says "you own this value".
+          className={`relative size-3.5 shrink-0 accent-foreground ${INDENT_CLASS[indentLevel] ?? ''}`}
           aria-label={`Select ${qualifiedName}`}
         />
         {/* `expandable` already narrows row to GroupRow | FixtureRow. */}
@@ -740,10 +773,16 @@ const RowView = React.memo(function RowView({
             )}
           </button>
         )}
+        {/* `font-semibold` when selected is the third of D4's three neutral signals, and the one
+            that survives a colour-blind read and a badly calibrated house monitor: a 6% wash and a
+            3px edge are both easy to lose, weight is not. It beats a group row's `font-medium`
+            deliberately — selected is the louder fact. */}
         <span
-          className={`relative min-w-0 flex-1 truncate ${
-            isGroup ? 'font-medium' : isElement ? 'text-muted-foreground' : ''
-          }`}
+          className={cn(
+            'relative min-w-0 flex-1 truncate',
+            isElement && 'text-muted-foreground',
+            selected ? 'font-semibold' : isGroup && 'font-medium',
+          )}
         >
           {rowName}
         </span>
@@ -811,7 +850,34 @@ const RowView = React.memo(function RowView({
             key={col}
             data-cell={col}
             className={cn(
-              'relative h-full min-w-0 py-0.5',
+              // The **marks gutter** (space plan D5). The value inside a cell is centred across the
+              // whole width, and the effect badge and the layer glyph float over its right-hand
+              // end — so a colour cell reading `255,157,74` had its last characters under a violet
+              // wave badge, and the operator could not tell `74` from `7` on the one cell the
+              // badge is there to draw attention to.
+              //
+              // **18px, not the plan's `pr-4`.** The widest mark is the effect badge at
+              // `size-3.5` (14px), inset `right-1` (4px) — 18px from the edge — so a 16px gutter
+              // left it overlapping the last 2px of the value's own space, which is the defect
+              // D5 was written to remove. 18px is also what the artboard reserves
+              // (`Main.dc.html`'s `.ci { padding: 0 18px 0 6px }`); the plan's `pr-4` was a
+              // rounding of it that nobody checked against the badge's own size. Any new mark has
+              // to fit `right-1` plus its own width inside this number, or widen both together.
+              //
+              // It goes on the *wrapper* rather than inside `PropertyCell`: padding is inside the
+              // border box, so the ownership ring and the selection outline still trace the full
+              // cell, and absolutely-positioned marks still measure `right` from the same edge
+              // they always did. Only the content moves. That is the same choice
+              // `ownershipCellClass` documents — the four cell editors encode value shape, and a
+              // gutter carved inside one of them would have to be carved four times.
+              //
+              // The one mark it does **not** contain is the focused-template layer's division
+              // label below: that is an icon *plus* text ("½", "1/4"), so no fixed gutter sized
+              // for a badge could hold it. It is better off than before — it had no gutter at all
+              // — and it draws only in a focused *template* layer, where ownership is switched off
+              // and the corner is otherwise empty. Containing it would mean a scope-dependent
+              // gutter, which is a design decision rather than a rounding fix.
+              'relative h-full min-w-0 py-0.5 pr-[18px]',
               ownershipCellClass(owned),
               layerCellClass(scope?.kind === 'layer' ? state : undefined),
               cellSelectionClass(selectedCell === true),
@@ -842,7 +908,7 @@ const RowView = React.memo(function RowView({
                 the hover text names the look, and a name would not fit here at this density. */}
             {layer && (
               <Layers
-                className={`pointer-events-none absolute bottom-0.5 right-0.5 size-2.5 ${
+                className={`pointer-events-none absolute bottom-0.5 right-1 size-2.5 ${
                   layer.mixed ? 'text-muted-foreground/50' : 'text-muted-foreground'
                 }`}
               />
@@ -857,7 +923,7 @@ const RowView = React.memo(function RowView({
             {owned?.source === 'effect' && (
               <span
                 data-testid="effect-badge"
-                className="pointer-events-none absolute right-0.5 top-0.5 flex size-3.5 items-center justify-center rounded-sm bg-violet-500/90 text-white"
+                className="pointer-events-none absolute right-1 top-0.5 flex size-3.5 items-center justify-center rounded-sm bg-violet-500/90 text-white"
               >
                 <AudioWaveform className="size-2.5" />
               </span>
@@ -868,7 +934,7 @@ const RowView = React.memo(function RowView({
                 shape, and a marker drawn inside one of them would have to be drawn four times. */}
             {effectDriven && state?.value != null && (
               <span
-                className="pointer-events-none absolute bottom-0.5 right-0.5 flex items-center gap-0.5 text-[9px] leading-none text-muted-foreground"
+                className="pointer-events-none absolute bottom-0.5 right-1 flex items-center gap-0.5 text-[9px] leading-none text-muted-foreground"
                 title={`Driven by “${focusedTemplate?.name ?? 'this template'}”`}
               >
                 <AudioWaveform className="size-2.5" />

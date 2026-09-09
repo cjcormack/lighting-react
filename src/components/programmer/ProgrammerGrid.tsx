@@ -1,8 +1,14 @@
+import { useMemo } from 'react'
 import { Layers, MousePointerSquareDashed } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { LayerLegend, OwnershipLegend } from '@/components/fixtures-list/OwnershipLegend'
-import { describeCellScope } from '@/components/fixtures-list/cellSelectionModel'
-import { COLUMN_DEFS, type ColumnKey } from '@/components/fixtures-list/columns'
+import { Badge } from '@/components/ui/badge'
+import {
+  describeCellScope,
+  type CellRef,
+} from '@/components/fixtures-list/cellSelectionModel'
+import { formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
+import { cellFamilies, COLUMN_DEFS, type ColumnKey } from '@/components/fixtures-list/columns'
 import type { ColumnVisibility } from '@/components/fixtures-list/ColumnsMenu'
 import { FixturesListContainer } from '@/components/fixtures-list/FixturesListContainer'
 import { EditorContextProvider } from '@/components/programmer/EditorContext'
@@ -12,6 +18,7 @@ import { TemplateStrip } from './TemplateStrip'
 import { useLookRowStore } from './LookRowStore'
 import { useProgrammerScope } from './ProgrammerScope'
 import type { EditorContextValue } from '@/components/programmer/EditorContext'
+import type { LocateTarget } from '@/store/locate'
 
 /**
  * The programmer's value grid: the fixtures-list spreadsheet with per-cell ownership colouring,
@@ -156,63 +163,26 @@ function ProgrammerGridBody({
                 <MakeLayerButton />
               </div>
             </div>
-            {/* The notices, the template strip and the selection bar. `empty:hidden` because all
-                three can render nothing at once — an always-on wrapper would spend 16px of padding
-                on a page whose budget is the reason this session exists. */}
+            {/* The layer notices keep their padded block. They are prose, not chrome — a sentence
+                about what a focused layer will and will not take — and they wrap. `empty:hidden`
+                because outside layer scope they render nothing, and an always-on wrapper would
+                spend 16px of padding on a page whose budget is the reason this session exists. */}
             <div className="flex flex-col gap-2 px-3 py-2 empty:hidden">
               <LayerRowNotices projectId={projectId} />
-              {/* The template strip, above the grid and below the filter. It reads the *cell*
-                  selection — which `renderToolbar` already hands down, so the strip needs no new
-                  plumbing into the table's own state — and the selection is what filters it. */}
-              <TemplateStrip
+            </div>
+            {/* Row C: the selection bar, and the templates ride it. Its own `@container`, with
+                the queries on the child — the wrapper trap again. See `SelectionBar` below. */}
+            <div className="@container">
+              <SelectionBar
                 projectId={projectId}
+                selection={selection}
                 cells={cells}
-                targets={templateTargets}
+                cellEntryKey={cellEntryKey}
+                cellClearKey={cellClearKey}
+                templateTargets={templateTargets}
                 targetFamilies={targetFamilies}
                 targetEmitters={targetEmitters}
               />
-              {/* Two selections, both live at once, so both are named. FIXTURE selection is what
-                  Record scopes on; CELL selection is a transient edit scope that only says where the
-                  next value goes. Leaving either to be inferred from the buttons beside it is how an
-                  operator ends up recording a different set from the one they meant. */}
-              {(selection || cells.length > 0) && (
-                <div className="flex flex-wrap items-center gap-2 rounded-md bg-primary/[0.09] px-2 py-1.5">
-                  <MousePointerSquareDashed className="size-3.5 shrink-0 text-primary" />
-                  {selection && <span className="text-xs font-medium">Selected fixtures</span>}
-                  {cells.length > 0 && (
-                    <>
-                      {selection && <span className="text-muted-foreground/40">·</span>}
-                      <span className="text-xs font-medium text-primary">
-                        {cells.length} cell{cells.length === 1 ? '' : 's'}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {describeCellScope(cells, columnLabel)} — edit once, applies to all
-                      </span>
-                      {/* The keyboard half: the two keys that reach the marquee's editor from the
-                          grid. The editor itself is a popover the container opens at the first
-                          selected cell. Both hints follow the container's own answer — each flag is
-                          false where its key is refused — so this cannot advertise a key that does
-                          nothing, and the rule (`cellKeyboardPermission`) is not restated here. */}
-                      {(cellEntryKey || cellClearKey) && (
-                        <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                          {cellEntryKey && (
-                            <>
-                              <kbd className={KBD_CLASS}>⏎</kbd> type a value
-                            </>
-                          )}
-                          {cellClearKey && (
-                            <>
-                              <kbd className={`${KBD_CLASS} ml-1`}>⌫</kbd> clear
-                            </>
-                          )}
-                        </span>
-                      )}
-                    </>
-                  )}
-                  <span className="flex-1" />
-                  {selection}
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -220,6 +190,147 @@ function ProgrammerGridBody({
           <ScopedLegend fixtureCount={fixtureCount} selectedCount={selectedCount} />
         )}
       />
+    </div>
+  )
+}
+
+/**
+ * Row C — the selection bar, which is also where the templates now live.
+ *
+ * **One 34px line, and it never wraps**, which is the change session 2 of the space plan is for.
+ * It used to be two bands: a full-width template strip that showed the whole library with nothing
+ * selected (and wrapped to four rows on a real one), and a rounded selection card below it.
+ * Together they cost ~90px of a grid's height, permanently, for a strip whose press could only
+ * toast. Now the bar appears with the selection, the chips scroll sideways inside it under a fade,
+ * and with nothing selected there is no band here at all.
+ *
+ * It is full-bleed with a `border-b` rather than a rounded card inset in a padded block: it is a
+ * *rung of the grid's chrome* like row B above it, not an object floating over the page, and the
+ * card's 16px of surrounding padding was height.
+ *
+ * **The wash is `foreground/5`, not a primary tint** (D4). Selection is neutral on this page now,
+ * so that `--primary` can mean one thing — you own this value — from the ownership rings down to
+ * the row wash. A blue bar over blue-ringed cells was the two facts the grid most needs to keep
+ * apart sharing one colour.
+ *
+ * **It is a component rather than JSX inside `renderToolbar`, and that is load-bearing.**
+ * `renderToolbar` is a render prop invoked during `FixturesListContainer`'s render, so a hook in
+ * its body is a hook of *that* component and `react-hooks/rules-of-hooks` rejects it outright.
+ * The families the marquee named have to be memoised somewhere — they are derived once here and
+ * handed to `TemplateStrip` — and this is the nearest place a hook may legally live. It returns
+ * `null` itself rather than being mounted conditionally, so its own hooks run in a stable order.
+ */
+function SelectionBar({
+  projectId,
+  selection,
+  cells,
+  cellEntryKey,
+  cellClearKey,
+  templateTargets,
+  targetFamilies,
+  targetEmitters,
+}: {
+  projectId: number
+  selection: React.ReactNode | null
+  cells: readonly CellRef[]
+  cellEntryKey: boolean
+  cellClearKey: boolean
+  templateTargets: readonly LocateTarget[]
+  targetFamilies: readonly AttributeFamily[]
+  targetEmitters: readonly string[]
+}) {
+  // Derived once and shared with the strip below, so the badge and the chips beside it cannot
+  // disagree about what is being offered — and so a marquee drag, which mints a fresh `cells`
+  // array on every animation frame, pays for one pass rather than two.
+  const askedFamilies = useMemo(
+    () => (cells.length > 0 ? cellFamilies(cells) : null),
+    [cells],
+  )
+
+  if (!selection && cells.length === 0) return null
+
+  return (
+    <div className="flex h-[34px] min-w-0 items-center gap-2 border-b bg-foreground/5 px-3">
+      <MousePointerSquareDashed className="size-3.5 shrink-0" />
+      {/* Two selections, both live at once, so both are counted. FIXTURE selection is what Record
+          scopes on; CELL selection is a transient edit scope that only says where the next value
+          goes. Leaving either to be inferred from the buttons beside it is how an operator ends up
+          recording a different set from the one they meant.
+
+          The fixture count is `templateTargets` — the heads a press actually lands on, which is
+          the cells' heads under a marquee and the selected rows' otherwise — and deliberately not
+          the footer's `selectedCount`, which counts visible *rows* with a group as one. Two
+          numbers, two questions: the footer says how much of the list you have picked, this says
+          how many heads your next gesture reaches. It replaced the bare label "Selected fixtures",
+          which named the fact without answering the only question anyone asks of it. */}
+      {templateTargets.length > 0 && (
+        <span className="whitespace-nowrap text-xs font-semibold tabular-nums">
+          {templateTargets.length} fixture{templateTargets.length === 1 ? '' : 's'}
+        </span>
+      )}
+      {cells.length > 0 && (
+        <>
+          {templateTargets.length > 0 && <span className="text-muted-foreground/50">·</span>}
+          <span
+            className="whitespace-nowrap text-xs font-semibold tabular-nums"
+            // Session 1's rule: the sentence becomes the hover. `describeCellScope` is the same
+            // string the drag chip shows, so the two agree by construction.
+            title={`${describeCellScope(cells, columnLabel)} — edit once, applies to all`}
+          >
+            {cells.length} cell{cells.length === 1 ? '' : 's'}
+          </span>
+          {/* The family the marquee named. The *asked* families, never the capability list a
+              rows-only selection produces — badging that would read as the operator's statement
+              when it is only the strip's filter. */}
+          {askedFamilies != null && (
+            <Badge variant="outline" className="shrink-0 whitespace-nowrap px-1.5 py-0 text-[10px]">
+              {formatFamilyList(askedFamilies, ' · ')}
+            </Badge>
+          )}
+          {/* The keyboard half: the two keys that reach the marquee's editor from the grid. The
+              editor itself is a popover the container opens at the first selected cell. Both hints
+              follow the container's own answer — each flag is false where its key is refused — so
+              this cannot advertise a key that does nothing, and the rule
+              (`cellKeyboardPermission`) is not restated here.
+
+              `@[1100px]` is the artboard's threshold, kept literally the way session 1 kept the
+              legend's: on a bar whose container is the grid column this is the first thing to go,
+              and it is the right first thing — a hint, not a control. It does mean the hints are
+              unreachable at today's rail width; session 3's 300px rail is what brings them back on
+              a wide desk. */}
+          {(cellEntryKey || cellClearKey) && (
+            <span className="hidden shrink-0 items-center gap-1 whitespace-nowrap text-[10px] text-muted-foreground @[1100px]:inline-flex">
+              {cellEntryKey && (
+                <>
+                  <kbd className={KBD_CLASS}>⏎</kbd> type a value
+                </>
+              )}
+              {cellClearKey && (
+                <>
+                  <kbd className={`${KBD_CLASS} ml-1`}>⌫</kbd> clear
+                </>
+              )}
+            </span>
+          )}
+        </>
+      )}
+      {/* The templates, on this line since session 2: a hairline, the chips in a scroller, then
+          New. It renders nothing when a press has nowhere to land, so the bar can still be here
+          for the counts and Deselect alone. */}
+      <TemplateStrip
+        projectId={projectId}
+        cells={cells}
+        askedFamilies={askedFamilies}
+        targets={templateTargets}
+        targetFamilies={targetFamilies}
+        targetEmitters={targetEmitters}
+      />
+      {/* `ml-auto`, not a `flex-1` spacer. The strip's chip scroller is itself `flex-1`, and two
+          `flex: 1 1 0%` siblings *split* the row's free space rather than one of them taking it
+          all — so a spacer here silently stole roughly half the scroller's width and opened a
+          blank gap before these buttons. An auto margin is resolved after flex growth, so it
+          takes the whole slack when the strip is absent and exactly nothing when it is there. */}
+      {selection && <div className="ml-auto flex shrink-0 items-center">{selection}</div>}
     </div>
   )
 }

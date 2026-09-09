@@ -97,6 +97,31 @@ export function columnFamily(col: ColumnKey): AttributeFamily {
 }
 
 /**
+ * The attribute families a marquee names.
+ *
+ * The *asked* families — what the operator pointed at — never what the selected heads happen to
+ * have: a marquee across the Colour column means colour and nothing else.
+ *
+ * Shared because two callers a few pixels apart on one line of the selection bar must not answer
+ * differently — `TemplateStrip` filters its chips by it, and the bar badges it beside the counts,
+ * and a disagreement between them would read as a bug. What is shared is the **rule**, not one
+ * evaluation of it: each call site still runs its own pass. Cheap enough (a `Set` over the
+ * marquee's cells) that the bar's own `SelectionBar` memoises it once and hands it down rather
+ * than the two deriving it independently.
+ *
+ * It lives here rather than in `cellSelectionModel`, which is where a function of `CellRef[]`
+ * would otherwise belong, because that module is pure and node-tested — pulling `COLUMN_CATEGORY`
+ * into it drags `store/fixtures` and the WebSocket API in behind it, and its suite fails on
+ * `window is not defined`. `columns.ts` already reaches both sides.
+ *
+ * Empty for an empty selection, which is not the same as "every family" — the callers decide what
+ * no question means.
+ */
+export function cellFamilies(cells: readonly { col: ColumnKey }[]): AttributeFamily[] {
+  return [...new Set(cells.map((cell) => columnFamily(cell.col)))]
+}
+
+/**
  * How one fixture's descriptors satisfy one column. Position is synthesised to
  * plain channel refs + ranges so cells don't care whether the fixture exposes a
  * `position`-type descriptor or separate pan/tilt sliders.

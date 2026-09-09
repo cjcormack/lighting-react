@@ -44,7 +44,7 @@ export function NewTemplateFromSelectionSheet({
   onOpenChange: (open: boolean) => void
   projectId: number
   /** The families the selection is asking about, or null when the gesture named none. */
-  families: AttributeFamily[] | null
+  families: readonly AttributeFamily[] | null
   /**
    * The heads to record from — the strip's own targets, so a marquee over three colour cells
    * records those three and not every checked row. The strip and the sheet must agree on this or

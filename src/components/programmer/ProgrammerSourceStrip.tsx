@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { FAMILY_LABELS } from '@/lib/attributeFamily'
+import { formatFamilyList } from '@/lib/attributeFamily'
 import { canClaimInSync, resolveProgrammerSource } from '@/lib/programmerSource'
 import type { ProgrammerSource } from '@/lib/programmerSource'
 import { includedCueId } from '@/lib/includedTarget'
@@ -97,7 +97,7 @@ export function ProgrammerSourceStrip({
     if (lookId == null) return undefined
     const families = looks?.find((l) => l.id === lookId)?.families
     if (!families?.length) return undefined
-    return families.map((f) => FAMILY_LABELS[f].singular).join(', ')
+    return formatFamilyList(families)
   }, [lookId, looks])
 
   const source = resolveProgrammerSource({
