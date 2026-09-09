@@ -42,3 +42,19 @@ export function formatRotation(
   const fmt = (v: number | null) => (v == null ? "—" : `${v.toFixed(0)}°`)
   return `${fmt(yaw)}/${fmt(pitch)}/${fmt(roll)}`
 }
+
+/**
+ * A control's word: hidden, unless the caller says it has room.
+ *
+ * The idiom four controls had a copy of — `Lit`, `Columns` and the scope band's two pills — each
+ * pairing a `compact` flag from its caller with its own breakpoint. `compact` wins outright,
+ * because it is a caller saying "I know something the query does not": on the programmer's folded
+ * row the viewport is wide and the *row* is not.
+ *
+ * `showAt` stays a literal at the call site rather than being computed here, and must: Tailwind
+ * scans source text for class names, so a breakpoint assembled in this function would generate no
+ * CSS and the word would never appear at any width.
+ */
+export function labelUnlessCompact(compact: boolean, showAt: string): string {
+  return cn('hidden', !compact && showAt)
+}

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
+import { useScrollEdges } from '@/hooks/useScrollEdges'
 import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -61,27 +62,12 @@ export function StackTabStrip({
   unlockedWarning?: boolean
 }) {
   const scrollerRef = useRef<HTMLDivElement>(null)
-  const [overflow, setOverflow] = useState({ left: false, right: false })
-
-  const measure = useCallback(() => {
-    const el = scrollerRef.current
-    if (!el) return
-    const maxScroll = el.scrollWidth - el.clientWidth
-    setOverflow({
-      // A sub-pixel slack: fractional layout widths otherwise leave a chevron permanently lit.
-      left: el.scrollLeft > 1,
-      right: el.scrollLeft < maxScroll - 1,
-    })
-  }, [])
-
-  useLayoutEffect(() => {
-    const el = scrollerRef.current
-    if (!el) return
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [measure, stacks])
+  // The shared hook, since session 4 of the space plan: this component, `TemplateStrip` and
+  // `FixturesTable` each had their own copy of the same scroll/resize/measure machinery. It
+  // observes the tab row inside the scroller as well as the scroller itself, which is what used
+  // to be the `stacks` dependency on the layout effect here, and it owns the scroll listener that
+  // was this element's `onScroll` prop.
+  const { attach, ...overflow } = useScrollEdges(scrollerRef)
 
   // Reveal the selected tab, including when something other than a click moved it.
   useEffect(() => {
@@ -106,8 +92,9 @@ export function StackTabStrip({
       )}
     >
       <div
-        ref={scrollerRef}
-        onScroll={measure}
+        // `attach`, not `scrollerRef` — see `useScrollEdges`; it fills that ref too, which the
+        // scroll-into-view and paging effects below still read.
+        ref={attach}
         aria-label="Stack tabs"
         className="flex flex-1 items-stretch overflow-x-auto"
       >

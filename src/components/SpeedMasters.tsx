@@ -142,7 +142,7 @@ export const SpeedMasters = memo(function SpeedMasters() {
       </div>
 
       {/* <440px — one chip; the popover carries the whole bank. */}
-      <SpeedMastersChip className="@[440px]:hidden" />
+      <SpeedMastersChip className="@[440px]:hidden" compact />
     </>
   )
 })
@@ -156,7 +156,24 @@ export const SpeedMasters = memo(function SpeedMasters() {
  * readout beside the strip, which meant neither could see any master but 1; this is how they gain
  * the rest of the bank.
  */
-export function SpeedMastersChip({ className }: { className?: string }) {
+export function SpeedMastersChip({
+  className,
+  compact = false,
+}: {
+  className?: string
+  /**
+   * The ShowBar's bottom rung, where the whole bar is one 56px row (space plan D8): tighter
+   * padding, no `+n`, and no chevron.
+   *
+   * Both of the things it drops are *hints* rather than information — that there are other
+   * masters, and that this opens something — and between them they are 30px of a live block that
+   * has about 70 to say `Q4 → Q5` in. The popover still lists every master and the whole chip is
+   * still the button, so nothing here becomes unreachable; it becomes unadvertised, at the one
+   * width where nothing else fits either. Default false, so the three other callers
+   * (`RunMobile`, `CueStackPanel`, and this file's own `@[440px]:hidden` arm) are unchanged.
+   */
+  compact?: boolean
+}) {
   const { data: live } = useSpeedMasterLiveQuery()
   const masters: TileMaster[] = live?.length ? live : [PENDING_MASTER_1]
   const primary = masters.find((m) => m.index === 1) ?? masters[0]
@@ -170,7 +187,8 @@ export function SpeedMastersChip({ className }: { className?: string }) {
           type="button"
           aria-label="Speed masters"
           className={cn(
-            'flex shrink-0 items-center gap-1.5 rounded-md border bg-card px-2 py-1 transition-colors hover:bg-muted/40',
+            'flex shrink-0 items-center gap-1.5 rounded-md border bg-card py-1 transition-colors hover:bg-muted/40',
+            compact ? 'px-1.5' : 'px-2',
             className,
           )}
         >
@@ -179,8 +197,10 @@ export function SpeedMastersChip({ className }: { className?: string }) {
             {primary.bpm == null ? '—' : formatBpm(primary.bpm)}
           </span>
           {/* The one thing today's phone ladder cannot say: there ARE other masters. */}
-          {extra > 0 && <span className="text-[10px] text-muted-foreground">+{extra}</span>}
-          <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
+          {!compact && extra > 0 && (
+            <span className="text-[10px] text-muted-foreground">+{extra}</span>
+          )}
+          {!compact && <ChevronDown className="size-3 shrink-0 text-muted-foreground" />}
         </button>
       </PopoverTrigger>
       <PopoverContent

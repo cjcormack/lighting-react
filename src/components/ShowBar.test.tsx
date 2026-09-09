@@ -49,10 +49,31 @@ describe('ShowBar', () => {
     render(<ShowBar {...PROPS} />)
     const go = screen.getByRole('button', { name: 'GO' })
     expect(screen.getByRole('button', { name: 'Back' })).toBeTruthy()
-    // `flex-1` below 700px and `flex-none` above it — GO gets bigger as room runs out, which is
-    // the right way round for a control pressed in the dark.
-    expect(go.className).toMatch(/(^|\s)flex-1(\s|$)/)
+    // `flex-1` in the 440–700 band and `flex-none` above it — GO gets bigger as room runs out,
+    // which is the right way round for a control pressed in the dark. Below 440 it stops growing
+    // and takes a fixed 84px instead, because that rung is one row and the live block needs the
+    // rest of it; see the rung test below.
+    expect(go.className).toContain('@[440px]:flex-1')
     expect(go.className).toContain('@[700px]:flex-none')
+  })
+
+  it('gives the narrowest rung one row: an 84×44 GO and a transport that does not break the line', () => {
+    // Space plan D8. The bar used to spend two lines and 118px below 440px — the 440–700 arm plus
+    // a 52px GO — which on an 852px phone is a seventh of the screen before a fixture. jsdom lays
+    // nothing out, so what is pinned is the contract the container queries are written against:
+    // GO's fixed size at the bottom rung, and that the `basis-full` transport line still arrives
+    // at 440 rather than having been deleted from the ladder.
+    render(<ShowBar {...PROPS} />)
+    const go = screen.getByRole('button', { name: 'GO' })
+    expect(go.className).toContain('w-[84px]')
+    expect(go.className).toContain('h-11')
+    expect(go.className).toMatch(/(^|\s)flex-none(\s|$)/)
+
+    const transport = go.parentElement as HTMLElement
+    expect(transport.className).toMatch(/(^|\s)basis-auto(\s|$)/)
+    // The fallback the ladder's own history says must never be removed from the middle band.
+    expect(transport.className).toContain('@[440px]:basis-full')
+    expect(transport.className).toContain('@[700px]:basis-auto')
   })
 
   it('renders the speed masters rather than a BPM tile of its own', () => {

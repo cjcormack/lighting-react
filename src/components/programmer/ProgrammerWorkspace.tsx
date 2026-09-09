@@ -16,12 +16,13 @@ import { cn } from '@/lib/utils'
 export const RAIL_MIN_WIDTH = 260
 export const RAIL_MAX_WIDTH = 480
 export const RAIL_DEFAULT_WIDTH = 300
-// Two more numbers govern the rail and are deliberately NOT constants here: the 1200px dock
-// breakpoint and the overlay's 300px width. Both are container-query geometry, so they live as
-// Tailwind literals — `@min-[1200px]:` / `@max-[1200px]:` on the frames below and on the per-arm
-// chevrons in `ProgrammerRail`, and `@max-[1200px]:w-[300px]` on the body frame. A JS constant
-// beside them would read as the authority while moving nothing; `grep 1200px` is how the arms are
-// found, and `ProgrammerWorkspace.test.tsx` pins the class strings.
+// Three more numbers govern the rail and are deliberately NOT constants here: the 1200px dock
+// breakpoint, the 704px bottom-sheet breakpoint and the overlay's 300px width. All three are
+// container-query geometry, so they live as Tailwind literals — `@min-[1200px]:` /
+// `@max-[1200px]:` and `@min-[704px]:` / `@max-[704px]:` on the frames below and on the per-arm
+// controls in `ProgrammerRail`, and `@max-[1200px]:w-[300px]` on the body frame. A JS constant
+// beside them would read as the authority while moving nothing; `grep 1200px` / `grep 704px` is
+// how the arms are found, and `ProgrammerWorkspace.test.tsx` pins the class strings.
 
 const WIDTH_KEY = 'programmer.rail.width'
 const COLLAPSED_KEY = 'programmer.rail.collapsed'
@@ -35,11 +36,17 @@ export function clampRailWidth(value: unknown): number {
 /**
  * The rail's state and the gestures on it, as `ProgrammerRail` reads them.
  *
- * `collapsed` and `overlayOpen` are two facts, not one with two names, and only one of them is
- * ever *drawn* at a time: the wide arm reads `collapsed`, the narrow arm reads `overlayOpen`.
- * They are written by different controls too — `collapse` / `expand` are offered only where the
- * rail docks, `openOverlay` / `closeOverlay` only where it overlays — so closing an overlay on an
- * iPad never writes "collapsed" into the preference a wide desk will read tomorrow.
+ * `collapsed`, `overlayOpen` and `sheetOpen` are three facts, not one with three names, and only
+ * one of them is ever *drawn* at a time: the docked arm reads `collapsed`, the overlay arm reads
+ * `overlayOpen`, the phone arm reads `sheetOpen`. They are written by different controls too —
+ * `collapse` / `expand` are offered only where the rail docks, `openOverlay` / `closeOverlay`
+ * only where it overlays, `openSheet` / `closeSheet` only from the bottom handle — so closing an
+ * overlay on an iPad never writes "collapsed" into the preference a wide desk will read tomorrow,
+ * and a phone's bottom sheet writes no preference at all.
+ *
+ * `sheetOpen` belongs **here and not in `RailGeometry`**: it is a gesture, like the other two, and
+ * the geometry context exists solely to keep the dragged width away from everything that reads an
+ * arm.
  *
  * **The width is not in here.** It changes sixty times a second under a drag, and `ProgrammerRail`
  * reads this context at its top, above every layer row and every FX row; a width in this object
@@ -50,10 +57,14 @@ export function clampRailWidth(value: unknown): number {
 export interface RailArm {
   collapsed: boolean
   overlayOpen: boolean
+  /** The phone arm's bottom sheet. Transient, and reachable only from the bottom handle. */
+  sheetOpen: boolean
   collapse: () => void
   expand: () => void
   openOverlay: () => void
   closeOverlay: () => void
+  openSheet: () => void
+  closeSheet: () => void
 }
 
 /** The docked width and the drag that sets it. Read by the body frame alone — see `RailArm`. */
@@ -99,15 +110,27 @@ function useRailGeometry(): RailGeometry {
  * and may re-render the rail; `RailGeometry` (the width) changes per pointer move and reaches only
  * `RailBodyFrame`, whose children are the rail's already-rendered elements.
  *
- * **Three arms, by the workspace's own width** (space plan D6), all container queries on the
- * child of the `@container` wrapper — see the trap below:
+ * **Three arms, by the workspace's own width** (space plan D6 and D8), all container queries on
+ * the child of the `@container` wrapper — see the trap below:
  *
  * - **≥1200px, docked.** The rail sits beside the grid at the stored width, with a 5px handle on
  *   its left edge that sets it. Collapsed, it is a 40px strip carrying the two counts and a `+`.
  * - **≥1200px, collapsed.** The strip alone; the grid takes the rest.
- * - **<1200px.** The strip always, and opening it mounts the rail as a 300px `absolute` overlay
+ * - **704–1200px.** The strip always, and opening it mounts the rail as a 300px `absolute` overlay
  *   with a shadow over the grid's right edge, left of the strip. It closes from the strip's
  *   chevron, from its own header's chevron, on Escape, or on a press anywhere on the grid.
+ * - **<704px — the phone.** The row turns into a column: the grid takes the whole width and the
+ *   rail becomes a 44px **handle across the bottom**, which opens the same body in a
+ *   `Sheet side="bottom"` at 80% height. A 300px overlay over a 393px screen is not an overlay,
+ *   it is a takeover with a sliver of grid showing at its left, and the 40px right strip took an
+ *   eighth of the value columns for two badges.
+ *
+ * **704px is the workspace's width, not the viewport's**, because that is what a container query
+ * can ask. With the sidebar on its 64px rail — which is where D7 starts every live view — 704 of
+ * workspace is a **768px viewport**, i.e. Tailwind's `md`, which is what the plan says. Below
+ * `md` the sidebar is off-canvas and the workspace *is* the viewport, so on a phone the same
+ * number is read directly: 393 and 852 land either side of it exactly as the `Phone` and
+ * `PhoneLandscape` artboards do.
  *
  * The rail stays on the **right**: that keeps `FixturesTable`'s sticky name column against the
  * page edge, and it is the only side that can collapse without moving the grid.
@@ -146,6 +169,7 @@ export function ProgrammerWorkspace({ grid, rail }: { grid: ReactNode; rail: Rea
   const [storedWidth, setStoredWidth] = usePersistentState<number>(WIDTH_KEY, RAIL_DEFAULT_WIDTH)
   const [collapsed, setCollapsed] = usePersistentState<boolean>(COLLAPSED_KEY, false)
   const [overlayOpen, setOverlayOpen] = useState(false)
+  const [sheetOpen, setSheetOpen] = useState(false)
   /** The width under the pointer while a drag runs; null when one is not. */
   const [dragWidth, setDragWidth] = useState<number | null>(null)
   const drag = useRef<{ startX: number; startWidth: number; width: number } | null>(null)
@@ -211,12 +235,15 @@ export function ProgrammerWorkspace({ grid, rail }: { grid: ReactNode; rail: Rea
     () => ({
       collapsed,
       overlayOpen,
+      sheetOpen,
       collapse: () => setCollapsed(true),
       expand: () => setCollapsed(false),
       openOverlay: () => setOverlayOpen(true),
       closeOverlay: () => setOverlayOpen(false),
+      openSheet: () => setSheetOpen(true),
+      closeSheet: () => setSheetOpen(false),
     }),
-    [collapsed, overlayOpen, setCollapsed],
+    [collapsed, overlayOpen, sheetOpen, setCollapsed],
   )
   const geometry = useMemo<RailGeometry>(
     () => ({ width, resizing, onResizeStart }),
@@ -227,8 +254,15 @@ export function ProgrammerWorkspace({ grid, rail }: { grid: ReactNode; rail: Rea
     <div className="@container flex min-h-0 flex-1 flex-col">
       {/* `relative` is the overlay's containing block. `select-none` while resizing keeps the
           drag from painting a text selection across the grid it crosses. */}
+      {/* `@max-[704px]:flex-col` is the whole of the phone arm's layout: the same two children,
+          stacked, so the rail's strip frame lands *under* the grid as a full-width bar instead of
+          beside it as a column. Nothing is hoisted, nothing is portalled, and the grid element
+          never moves in the tree. */}
       <div
-        className={cn('relative flex min-h-0 flex-1', resizing && 'cursor-col-resize select-none')}
+        className={cn(
+          'relative flex min-h-0 flex-1 @max-[704px]:flex-col',
+          resizing && 'cursor-col-resize select-none',
+        )}
       >
         {/* Capture, not bubble: a press on a cell that stops propagation must still close the
             overlay, and the press itself goes on to land. In the wide arm `overlayOpen` is only
@@ -255,9 +289,11 @@ export function ProgrammerWorkspace({ grid, rail }: { grid: ReactNode; rail: Rea
  * The width reaches the docked arm through a CSS variable rather than an inline `width`, because
  * an inline width could be overridden by nothing — the narrow arm has to be able to set its own.
  *
- * Mounted by `ProgrammerRail` only while it can be seen in some arm (`!collapsed || overlayOpen`).
- * The one case that leaves it mounted and hidden — the narrow arm with the overlay shut and the
- * wide preference un-collapsed — is accepted: nothing in the rail owns a selection, and the
+ * Mounted by `ProgrammerRail` only while it can be seen in some arm (`!collapsed || overlayOpen`),
+ * and not at all while the phone arm's sheet is open — that arm renders the same body inside the
+ * sheet, and mounting it twice would be two layer lists, two FX lists and two subscriptions to
+ * each. The one case that leaves it mounted and hidden — an arm where its own flag says show and
+ * the container query says otherwise — is accepted: nothing in the rail owns a selection, and the
  * alternative is a JS measurement of the width the container query already answers.
  */
 export function RailBodyFrame({ children }: { children: ReactNode }) {
@@ -280,6 +316,8 @@ export function RailBodyFrame({ children }: { children: ReactNode }) {
         // <1200: over the grid's right edge, left of the 40px strip, and gone unless opened.
         '@max-[1200px]:absolute @max-[1200px]:inset-y-0 @max-[1200px]:right-10 @max-[1200px]:z-20 @max-[1200px]:w-[300px] @max-[1200px]:shadow-[-12px_0_32px_rgba(0,0,0,0.55)]',
         !arm.overlayOpen && '@max-[1200px]:hidden',
+        // <704: never here. The body is the bottom sheet's, and the sheet is a portal.
+        '@max-[704px]:hidden',
       )}
     >
       {/* The 5px handle, straddling the border. Docked arm only: the overlay is not sized. */}
@@ -296,7 +334,10 @@ export function RailBodyFrame({ children }: { children: ReactNode }) {
   )
 }
 
-/** The 40px strip: on screen whenever the body is not docked — collapsed in the wide arm, always in the narrow one. */
+/**
+ * The 40px strip: on screen whenever the body is not docked — collapsed in the docked arm, always
+ * in the overlay one, and never on the phone, where the bottom handle takes its place.
+ */
 export function RailStripFrame({ children }: { children: ReactNode }) {
   const arm = useRailArm()
   return (
@@ -304,7 +345,60 @@ export function RailStripFrame({ children }: { children: ReactNode }) {
       className={cn(
         'flex w-10 shrink-0 flex-col items-center border-l bg-card/40',
         !arm.collapsed && '@min-[1200px]:hidden',
+        '@max-[704px]:hidden',
       )}
+    >
+      {children}
+    </div>
+  )
+}
+
+/**
+ * The phone arm's 44px handle, across the bottom of the page.
+ *
+ * A sibling frame rather than a mode of `RailStripFrame`, for the same reason the two chevrons
+ * are two buttons: the arms are CSS, so both are always in the tree and each is hidden where it
+ * does not belong. It is the row's *second* child either way — the row goes `flex-col` below
+ * 704px, which is what puts this under the grid instead of beside it — so nothing about the
+ * grid's position changes as the arm does.
+ *
+ * 44px, not the strip's 40: this one is a touch target rather than a column of glyphs.
+ *
+ * **It closes the sheet when it stops being drawn**, and that is not decoration. `sheetOpen` is
+ * the one arm flag a stale `true` is not harmless for: `collapsed` and `overlayOpen` are read by
+ * frames whose *arms are CSS*, so a stale one changes nothing on screen — but `ProgrammerRail`
+ * picks the sheet with a JS ternary, so a sheet opened on a phone that is then rotated or resized
+ * past 704px would keep covering 80% of a desktop layout **and** skip the docked frame, with the
+ * only control that closes it hidden by the query above. (It is still dismissible — Escape, a
+ * click outside, the sheet's own X — so this is a wrong picture, not a trap.)
+ *
+ * It watches **this element's own height**, not the workspace's width, and that is the point: the
+ * 704 lives in exactly one place, the Tailwind class above, so there is no JS threshold beside it
+ * to drift. Nor is it the width measurement the plan forbids — that rule is about *choosing* an
+ * arm, and this reads the arm CSS has already chosen. `ResizeObserver` is guarded for jsdom, which
+ * lays nothing out and would otherwise report every handle as hidden and close every sheet on
+ * arrival.
+ */
+export function RailHandleFrame({ children }: { children: ReactNode }) {
+  const arm = useRailArm()
+  const ref = useRef<HTMLDivElement>(null)
+  const { sheetOpen, closeSheet } = arm
+
+  useEffect(() => {
+    const el = ref.current
+    if (!sheetOpen || !el || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => {
+      // `display: none` reports a zero box, which is how the container query's answer reaches JS.
+      if (el.getBoundingClientRect().height === 0) closeSheet()
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [sheetOpen, closeSheet])
+
+  return (
+    <div
+      ref={ref}
+      className="flex h-11 shrink-0 items-center gap-2.5 border-t bg-card/40 px-3 @min-[704px]:hidden"
     >
       {children}
     </div>

@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Hand,
   Layers,
   Palette,
@@ -19,8 +20,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import type { ProgrammerLayer } from '@/api/programmerWsApi'
 import { useActiveEffectsQuery } from '@/store/fixtureFx'
 import { useProgrammerLayersQuery } from '@/store/programmer'
 import { FxSheet } from './FxSheet'
@@ -35,7 +38,7 @@ import { ProgrammerLookStack } from './ProgrammerLookStack'
 import { useProgrammerScope, useProgrammerScopeActions } from './ProgrammerScope'
 import { useProgrammerSheets } from './ProgrammerSheets'
 import { useLocalValueCount } from './useLocalFamilyCounts'
-import { RailBodyFrame, RailStripFrame, useRailArm } from './ProgrammerWorkspace'
+import { RailBodyFrame, RailHandleFrame, RailStripFrame, useRailArm } from './ProgrammerWorkspace'
 
 /** One label for every band of the rail: the busk view's `BuskLabel`, in a rail that has no icon room. */
 const LABEL_CLASS =
@@ -58,12 +61,28 @@ type AddKind = ProgrammerAddLayerKind | 'effect'
  * amber boundary that says values beat effects whatever the order, and the effects. The rule the
  * old stack's paragraph stated is the label's two words and its hover.
  *
- * **The strip is drawn here too.** Collapsed — or narrow, where the rail is an overlay — the rail
- * is a 40px strip carrying the two counts as badges under their glyphs and one `+` that opens the
- * same three doors as the footer, so nothing is reachable only with the rail open. Which arm is
- * showing is `ProgrammerWorkspace`'s: it owns the width, the collapsed flag and the overlay flag,
- * and this component reads them through `useRailArm`. The frames are the workspace's as well;
- * this component decides what goes in them.
+ * **The strip is drawn here too.** Collapsed — or at 704–1200, where the rail is an overlay — the
+ * rail is a 40px strip carrying the two counts as badges under their glyphs and one `+` that opens
+ * the same three doors as the footer, so nothing is reachable only with the rail open. Which arm
+ * is showing is `ProgrammerWorkspace`'s: it owns the width, the collapsed flag, the overlay flag
+ * and the sheet flag, and this component reads them through `useRailArm`. The frames are the
+ * workspace's as well; this component decides what goes in them.
+ *
+ * **And so is the phone's handle** (space plan D8, session 4). Below 704px of workspace the strip
+ * is hidden and `RailHandle` takes the bottom of the page instead: 44px, the same two counts, the
+ * layer names truncated after them, the same `+`, and a chevron that opens the *same body* in a
+ * `Sheet side="bottom"` at 80% height. The names are there because a 40px column of two badges
+ * said only *how many*, and on the one screen where the stack is never visible beside the grid
+ * *which* is the question worth 44px. They are drawn strongest-first, like the dense rows above
+ * them, because the stack reads top wins.
+ *
+ * **The sheet and the docked body are one body in two places, never two.** `sheetOpen` is
+ * reachable only from the handle, and the handle only exists below 704 where `RailBodyFrame` is
+ * hidden — so the two are mutually exclusive by construction and the render below states that as
+ * a ternary rather than trusting it. Mounting both would be two `ProgrammerLookStack`s, two
+ * `ProgrammerFxList`s and two of every subscription under them. There is no guarded close on it
+ * (`CLAUDE.md` §Sheets vs Dialogs): the rail holds no draft — a layer-scope edit writes through
+ * `LookRowDraft`, which is the grid's, not the rail's.
  *
  * **The two sheets are mounted here and not in the body**, because the body unmounts when the
  * rail collapses and the strip's `+` has to open them while it is gone. `useProgrammerAddEffect`
@@ -95,18 +114,44 @@ export function ProgrammerRail() {
   const addEffect = useProgrammerAddEffect()
   const closeAdd = useCallback(() => setAdding(null), [])
 
+  const body = (
+    <RailBody
+      projectId={projectId}
+      diagnosticOpen={diagnosticOpen}
+      onDiagnosticOpenChange={setDiagnosticOpen}
+    />
+  )
+
   return (
     <>
-      {(!arm.collapsed || arm.overlayOpen) && (
-        <RailBodyFrame>
-          <RailHeader layerCount={layerCount} fxCount={fxCount} />
-          <RailBody
-            projectId={projectId}
-            diagnosticOpen={diagnosticOpen}
-            onDiagnosticOpenChange={setDiagnosticOpen}
-          />
-          <RailFooter onAdd={setAdding} addEffect={addEffect} />
-        </RailBodyFrame>
+      {arm.sheetOpen ? (
+        <Sheet open onOpenChange={(next) => !next && arm.closeSheet()}>
+          {/* `p-0 gap-0` because the body and the footer bring their own padding, and the rail's
+              own 36px header is replaced by the sheet's — two headings stacked would be the
+              phone's scarcest 36px spent saying "Layers" twice. */}
+          <SheetContent side="bottom" className="h-[80%] gap-0 p-0">
+            <SheetHeader className="shrink-0 border-b px-3 py-2">
+              <SheetTitle className={cn(LABEL_CLASS, 'text-foreground')}>
+                <Layers className="size-3" />
+                Layers
+                <CountBadge count={layerCount} />
+                <AudioWaveform className="ml-1.5 size-3 text-violet-400" />
+                <span className="text-violet-400">FX</span>
+                <CountBadge count={fxCount} />
+              </SheetTitle>
+            </SheetHeader>
+            {body}
+            <RailFooter onAdd={setAdding} addEffect={addEffect} />
+          </SheetContent>
+        </Sheet>
+      ) : (
+        (!arm.collapsed || arm.overlayOpen) && (
+          <RailBodyFrame>
+            <RailHeader layerCount={layerCount} fxCount={fxCount} />
+            {body}
+            <RailFooter onAdd={setAdding} addEffect={addEffect} />
+          </RailBodyFrame>
+        )
       )}
       <RailStripFrame>
         <RailStrip
@@ -116,6 +161,15 @@ export function ProgrammerRail() {
           addEffect={addEffect}
         />
       </RailStripFrame>
+      <RailHandleFrame>
+        <RailHandle
+          layers={layers}
+          layerCount={layerCount}
+          fxCount={fxCount}
+          onAdd={setAdding}
+          addEffect={addEffect}
+        />
+      </RailHandleFrame>
       <ProgrammerAddLayerSheet
         projectId={projectId}
         kind={adding === 'look' || adding === 'template' ? adding : null}
@@ -435,47 +489,166 @@ function RailStrip({
         className="text-violet-400"
       />
       <span className="flex-1" />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-10 rounded-none text-muted-foreground"
-            aria-label="Add a layer or an effect"
-            title="Add a look, a template or an effect"
-          >
-            <Plus className="size-3.5" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent side="left" align="end">
-          <DropdownMenuItem onClick={() => onAdd('look')}>
-            <Layers className="size-3.5" />
-            Look
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onAdd('template')}>
-            <Palette className="size-3.5" />
-            Template
-          </DropdownMenuItem>
-          {/* Disabled with the reason *written under it* rather than omitted: a menu that
-              silently loses an entry teaches nobody why. Not a `title` — a disabled Radix item
-              is `pointer-events-none`, so a native tooltip on it can never show. */}
-          <DropdownMenuItem
-            disabled={addEffect.disabled}
-            onClick={() => onAdd('effect')}
-            className="items-start"
-          >
-            <AudioWaveform className="mt-0.5 size-3.5" />
-            <span className="flex max-w-[16rem] flex-col">
-              <span>Effect</span>
-              {addEffect.disabled && (
-                <span className="text-[10px] leading-snug text-muted-foreground whitespace-normal">
-                  {addEffect.reason}
-                </span>
-              )}
-            </span>
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <AddDoorsMenu
+        onAdd={onAdd}
+        addEffect={addEffect}
+        label="Add a layer or an effect"
+        title="Add a look, a template or an effect"
+        side="left"
+        className="h-9 w-10 rounded-none"
+      />
+    </>
+  )
+}
+
+/**
+ * The three doors as a menu — the footer's row of buttons, for the two arms that have no footer
+ * on screen: the 40px strip and the phone's 44px handle.
+ *
+ * One component rather than two copies, so the doors cannot drift apart; the *label* is the
+ * caller's, because both arms can be in the DOM at once (they are hidden by container queries,
+ * not by JavaScript) and two controls announced by the same words is the thing the chevrons above
+ * already avoid.
+ */
+function AddDoorsMenu({
+  onAdd,
+  addEffect,
+  label,
+  title,
+  side,
+  className,
+}: {
+  onAdd: (kind: AddKind) => void
+  addEffect: AddEffectOffer
+  /** The `aria-label`, and the arm's own — see the note above. */
+  label: string
+  /**
+   * The hover text, which is deliberately allowed to differ from the label and to be the *same*
+   * on both arms: it can name all three doors where the label has to stay short enough to be a
+   * distinct control name. Collapsing the two into one string cost the strip's `+` its
+   * "Add a look, a template or an effect" hover, which is information the label does not carry.
+   */
+  title: string
+  side: 'left' | 'top'
+  className?: string
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn('text-muted-foreground', className)}
+          aria-label={label}
+          title={title}
+        >
+          <Plus className="size-3.5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side={side} align="end">
+        <DropdownMenuItem onClick={() => onAdd('look')}>
+          <Layers className="size-3.5" />
+          Look
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onAdd('template')}>
+          <Palette className="size-3.5" />
+          Template
+        </DropdownMenuItem>
+        {/* Disabled with the reason *written under it* rather than omitted: a menu that
+            silently loses an entry teaches nobody why. Not a `title` — a disabled Radix item
+            is `pointer-events-none`, so a native tooltip on it can never show. */}
+        <DropdownMenuItem
+          disabled={addEffect.disabled}
+          onClick={() => onAdd('effect')}
+          className="items-start"
+        >
+          <AudioWaveform className="mt-0.5 size-3.5" />
+          <span className="flex max-w-[16rem] flex-col">
+            <span>Effect</span>
+            {addEffect.disabled && (
+              <span className="text-[10px] leading-snug text-muted-foreground whitespace-normal">
+                {addEffect.reason}
+              </span>
+            )}
+          </span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+/**
+ * The phone arm's 44px bottom handle: `LAYERS n · FX n · the layer names · + · ^`.
+ *
+ * The names are the one thing here the 40px strip could not carry, and they are **reversed**
+ * before they are joined — the layer array is `sortOrder` ascending and later wins, so a summary
+ * of a stack the rail draws top-wins has to name the strongest first or it reads as the opposite
+ * of the list it opens.
+ *
+ * The `+` is the strip's own menu, unchanged: every door has to be reachable without opening the
+ * rail, and on this arm "opening the rail" covers the grid entirely. The chevron is the opener,
+ * and it is a separate control from the `+` rather than the whole bar being a button, so the
+ * menu's trigger is not nested inside a button that also opens the sheet.
+ */
+function RailHandle({
+  layers,
+  layerCount,
+  fxCount,
+  onAdd,
+  addEffect,
+}: {
+  layers: readonly ProgrammerLayer[] | undefined
+  layerCount: number
+  fxCount: number
+  onAdd: (kind: AddKind) => void
+  addEffect: AddEffectOffer
+}) {
+  const arm = useRailArm()
+  const names = layers?.length
+    ? [...layers]
+        .reverse()
+        .map((l) => l.source.name)
+        .join(' · ')
+    : null
+  return (
+    <>
+      <span className={LABEL_CLASS} title={`${layerCount} layer${layerCount === 1 ? '' : 's'}`}>
+        <Layers className="size-3" />
+        Layers
+        <CountBadge count={layerCount} />
+      </span>
+      <span
+        className={cn(LABEL_CLASS, 'text-violet-400')}
+        title={`${fxCount} effect${fxCount === 1 ? '' : 's'} running`}
+      >
+        <AudioWaveform className="size-3" />
+        FX
+        <CountBadge count={fxCount} />
+      </span>
+      {/* `min-w-0` and a truncate: the names give before the counts and the two controls do, and
+          they are the only thing on this bar whose length is the rig's business. */}
+      <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground" title={names ?? undefined}>
+        {names ?? 'No layers'}
+      </span>
+      <AddDoorsMenu
+        onAdd={onAdd}
+        addEffect={addEffect}
+        label="Add a look, a template or an effect"
+        title="Add a look, a template or an effect"
+        side="top"
+        className="size-8 shrink-0"
+      />
+      <Button
+        variant="ghost"
+        size="icon"
+        className="size-8 shrink-0 text-muted-foreground"
+        aria-label="Open the layers and effects"
+        aria-expanded={arm.sheetOpen}
+        title="Show the layers and effects"
+        onClick={arm.openSheet}
+      >
+        <ChevronUp className="size-4" />
+      </Button>
     </>
   )
 }

@@ -30,6 +30,22 @@ import type { CellOwnership, CellOwnershipSource } from './useRowOwnership'
  * and nothing to say it existed — and the counts, which are leftmost and the only thing here that
  * changes minute to minute, are what has to survive to the last.
  */
+function OwnershipSwatch({ source }: { source: CellOwnershipSource }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        'flex size-3 shrink-0 items-center justify-center rounded-sm',
+        source === 'baseline' ? 'bg-muted' : ownershipCellClass(swatchOwnership(source)),
+        // The badge the cell wears, so the legend teaches the mark and not only the ring.
+        source === 'effect' && 'bg-violet-500/90 text-white',
+      )}
+    >
+      {source === 'effect' && <AudioWaveform className="size-2.5" />}
+    </span>
+  )
+}
+
 export function OwnershipLegend({
   className,
   fixtureCount,
@@ -44,19 +60,7 @@ export function OwnershipLegend({
           title={OWNERSHIP_LABELS[source]}
           className={cn('flex shrink-0 items-center gap-1.5', source === 'baseline' && 'opacity-62')}
         >
-          <span
-            aria-hidden="true"
-            className={cn(
-              'flex size-3 items-center justify-center rounded-sm',
-              source === 'baseline'
-                ? 'bg-muted'
-                : ownershipCellClass(swatchOwnership(source)),
-              // The badge the cell wears, so the legend teaches the mark and not only the ring.
-              source === 'effect' && 'bg-violet-500/90 text-white',
-            )}
-          >
-            {source === 'effect' && <AudioWaveform className="size-2.5" />}
-          </span>
+          <OwnershipSwatch source={source} />
           <span className="@[1100px]:hidden">{LEGEND_SHORT[source]}</span>
           <span className="hidden @[1100px]:inline">{LEGEND_GLOSS[source]}</span>
         </span>
@@ -144,10 +148,7 @@ export function LayerLegend({
           title={LAYER_LEGEND_GLOSS[key]}
           className="flex shrink-0 items-center gap-1.5"
         >
-          <span
-            aria-hidden="true"
-            className={cn('size-3 rounded-sm', layerCellClass(swatchState(key)) || 'bg-muted')}
-          />
+          <LayerSwatch legendKey={key} />
           {/* No short form: these four are already short, and unlike the ownership glosses there
               is no longer sentence to trade against. They stay whole at every width. */}
           {LAYER_LEGEND_GLOSS[key]}
@@ -172,3 +173,63 @@ function swatchState(key: LayerLegendKey): CellState {
 
 /** Any value at all — `layerCellClass` only asks whether one is present. */
 const SWATCH_VALUE = { kind: 'slider', min: 255, max: 255, isUniform: true } as const
+
+function LayerSwatch({ legendKey }: { legendKey: LayerLegendKey }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn('size-3 shrink-0 rounded-sm', layerCellClass(swatchState(legendKey)) || 'bg-muted')}
+    />
+  )
+}
+
+/**
+ * The same key, stacked — for the phone, where the 22px footer is not rendered at all and the
+ * grid's toolbar offers a key button instead (space plan D8).
+ *
+ * A separate shape rather than a `vertical` prop on the footer, because the footer's whole
+ * construction *is* the horizontal one: one 22px line, `overflow-hidden`, every item `shrink-0`,
+ * and three width queries deciding which words survive. None of that means anything in a popover,
+ * where there is room for the long gloss and no reason to drop an item. What the two share is the
+ * part that must not drift: both style their swatches with the **real** `ownershipCellClass` /
+ * `layerCellClass`, through the two components above.
+ */
+export function OwnershipKey() {
+  return (
+    <KeyList heading="Owned by">
+      {LEGEND_ORDER.map((source) => (
+        <li key={source} className="flex items-center gap-2">
+          <OwnershipSwatch source={source} />
+          <span className={cn(source === 'baseline' && 'opacity-62')}>{LEGEND_GLOSS[source]}</span>
+        </li>
+      ))}
+      <li className="flex items-center gap-2">
+        <Layers aria-hidden="true" className="size-3 shrink-0" />
+        came from a Look layer
+      </li>
+    </KeyList>
+  )
+}
+
+/** Its sibling, for a focused Look layer — the same swap `ScopedLegend` makes on the footer. */
+export function LayerKey() {
+  return (
+    <KeyList heading="In this look">
+      {LAYER_LEGEND_ORDER.map((key) => (
+        <li key={key} className="flex items-center gap-2">
+          <LayerSwatch legendKey={key} />
+          {LAYER_LEGEND_GLOSS[key]}
+        </li>
+      ))}
+    </KeyList>
+  )
+}
+
+function KeyList({ heading, children }: { heading: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5 text-[11px] text-muted-foreground">
+      <p className="text-[9px] font-bold uppercase tracking-[0.1em]">{heading}</p>
+      <ul className="flex flex-col gap-1.5">{children}</ul>
+    </div>
+  )
+}

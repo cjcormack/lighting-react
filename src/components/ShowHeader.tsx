@@ -102,9 +102,14 @@ export function ShowHeader({
   return (
     // The transparent border is always present so colouring it cannot shift the layout by a pixel
     // when the lock flips.
+    //
+    // `py-2` under 500px of viewport height, with the rest of the short-height arm (space plan
+    // D8): a landscape phone spends 16px above and below this row on nothing, and the row's own
+    // controls are 32px tall either way, so it is 16px of pure air on the screen with the least.
+    // Nothing is removed — the same header, tighter.
     <div
       className={cn(
-        '@container flex items-center gap-3 border-b border-transparent p-4 transition-colors',
+        '@container flex items-center gap-3 border-b border-transparent p-4 transition-colors [@media(max-height:500px)]:py-2',
         unlockedWarning && UNLOCKED_WARNING_CLASS,
       )}
     >

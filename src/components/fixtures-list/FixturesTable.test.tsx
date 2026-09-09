@@ -615,3 +615,68 @@ describe('FixturesTable neutral selection', () => {
     expect(cellWrapper().className).toContain('pr-[18px]')
   })
 })
+
+describe('FixturesTable sideways scroll fade', () => {
+  const scroller = () => document.querySelector('.overflow-auto') as HTMLElement
+  const fade = () => screen.queryByTestId('column-scroll-fade')
+
+  /** jsdom lays nothing out, so the numbers the fade is derived from are stubbed. */
+  function layOut(el: HTMLElement, scrollWidth: number, clientWidth: number) {
+    Object.defineProperty(el, 'scrollWidth', { value: scrollWidth, configurable: true })
+    Object.defineProperty(el, 'clientWidth', { value: clientWidth, configurable: true })
+  }
+
+  it('says there are more columns only while there are, and only to the right', () => {
+    // Space plan D8: on a phone the value columns run off the right of the screen, and the fade
+    // is the only thing that says so.
+    render(<Harness />)
+    const el = scroller()
+    // Everything fits: no fade at all. A permanent gradient at a desk width would read as a
+    // rendering fault rather than as a promise of more.
+    expect(fade()).toBeNull()
+
+    layOut(el, 900, 400)
+    el.scrollLeft = 120
+    fireEvent.scroll(el)
+    expect(fade()).toBeTruthy()
+    expect(fade()!.className).toContain('w-6')
+    // Never eats a press on the last column.
+    expect(fade()!.className).toContain('pointer-events-none')
+    // On the scroller's WRAPPER, not inside it — which is the whole reason the wrapper exists.
+    // Drawn within the scroller it would slide away with the columns it is describing.
+    expect(fade()!.parentElement).toBe(el.parentElement)
+    expect(el.contains(fade())).toBe(false)
+
+    // Scrolled to the end, there is nothing left to promise.
+    el.scrollLeft = 500
+    fireEvent.scroll(el)
+    expect(fade()).toBeNull()
+  })
+
+  it('reads nothing on a scroll that did not move the columns', () => {
+    // `horizontalOnly` in `useScrollEdges`: this scroller is the virtualizer's as well, so most
+    // scroll events on it are a fixture list moving vertically and say nothing about the columns.
+    // Measuring on each of those is work on the one path this codebase treats as
+    // performance-critical.
+    render(<Harness />)
+    const el = scroller()
+    layOut(el, 900, 400)
+    el.scrollLeft = 120
+    fireEvent.scroll(el)
+    expect(fade()).toBeTruthy()
+
+    // A vertical tick. `scrollWidth` is re-defined to count reads *and* to report a width that
+    // would hide the fade — so if the guard ever stops working, this fails twice over.
+    let reads = 0
+    Object.defineProperty(el, 'scrollWidth', {
+      get() {
+        reads += 1
+        return 400
+      },
+      configurable: true,
+    })
+    fireEvent.scroll(el)
+    expect(reads).toBe(0)
+    expect(fade()).toBeTruthy()
+  })
+})

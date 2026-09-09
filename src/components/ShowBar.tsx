@@ -83,7 +83,7 @@ interface ShowBarProps {
  * | ≥1000      | a tile each, named*            | 1    | `min-w-[120px]`           |
  * | 700–1000   | one railed tile                | 1    | `min-w-[100px]`           |
  * | 440–700    | one railed tile, compact       | 2    | `flex-1`, h-10            |
- * | <440       | a chip + popover               | 2    | `flex-1`, h-[52px], 22px  |
+ * | <440       | a chip, no `+n`                | 1    | `w-[84px]`, h-11          |
  *
  * \* The masters column is the one thing here that is not purely a width decision: a tile each is
  * only affordable if the bank is small, so `SpeedMasters` raises its own threshold with the count
@@ -100,7 +100,17 @@ interface ShowBarProps {
  * Q number is worse than a truncated name, so names go first.
  *
  * GO gets **wider** as the bar narrows, which is the right way round for a control pressed in the
- * dark: below 700 it is a `flex-1` item sharing a line with nothing but BACK.
+ * dark: in the 440–700 band it is a `flex-1` item sharing a line with nothing but BACK.
+ *
+ * **The bottom rung is one row again, and that is a rung added rather than a fallback removed**
+ * (space plan D8). It used to be the 440–700 arm plus a bigger GO — two lines, 118px of an 852px
+ * phone, before a single fixture. Now everything below 440 shrinks to its chip size instead: the
+ * two tiles centre their initials with no word above them, `SpeedMastersChip` drops its `+n`, the
+ * live block says `Q4 → Q5` and nothing else (the pulse, both names and the stack are already
+ * gated above it), BACK is its glyph, and GO is a fixed 84×44 — 44px of controls in a 56px band.
+ * The `basis-full` transport line is untouched in the 440–700 band, which is where the ladder's
+ * own history says it has to stay: the bar wraps rather than deleting, and a rung is added to the
+ * bottom of the ladder rather than taken out of the middle.
  *
  * Two thresholds here are deliberately not rungs. `ProgrammerIndicator` queries `@[760px]`, which is
  * the *app header's* number (it is shared with `connection.tsx`); it lands mid-band here and that is
@@ -135,7 +145,7 @@ export const ShowBar = memo(function ShowBar({
   return (
     <div
       className={cn(
-        '@container flex flex-wrap items-stretch gap-1.5 border-b px-2.5 py-1.5 transition-colors @[440px]:gap-2 @[440px]:px-4 @[440px]:py-2',
+        '@container flex flex-wrap items-stretch gap-1.5 border-b px-2 py-1.5 transition-colors @[440px]:gap-2 @[440px]:px-4 @[440px]:py-2',
         unlockedWarning && UNLOCKED_WARNING_CLASS,
       )}
     >
@@ -148,7 +158,7 @@ export const ShowBar = memo(function ShowBar({
         aria-pressed={dbo}
         title="Toggle blackout"
         className={cn(
-          'flex shrink-0 flex-col items-start justify-start gap-px rounded-md border px-2 py-1 transition-colors @[440px]:px-2.5 @[700px]:px-3 @[700px]:py-1.5',
+          'flex shrink-0 flex-col items-start justify-center gap-px rounded-md border px-2 py-1 transition-colors @[440px]:justify-start @[440px]:px-2.5 @[700px]:px-3 @[700px]:py-1.5',
           'bg-card hover:bg-muted/40',
           dbo && 'border-red-700 bg-red-950/40 hover:bg-red-950/50 shadow-[0_0_12px_rgba(239,68,68,0.25)]',
         )}
@@ -194,7 +204,7 @@ export const ShowBar = memo(function ShowBar({
                 : 'Blind — edit without the rig showing it'
           }
           className={cn(
-            'flex shrink-0 flex-col items-start justify-start gap-px rounded-md border px-2 py-1 transition-colors @[440px]:px-2.5 @[700px]:px-3 @[700px]:py-1.5',
+            'flex shrink-0 flex-col items-start justify-center gap-px rounded-md border px-2 py-1 transition-colors @[440px]:justify-start @[440px]:px-2.5 @[700px]:px-3 @[700px]:py-1.5',
             'bg-card hover:bg-muted/40',
             blind &&
               'border-amber-600 bg-amber-950/40 hover:bg-amber-950/50 shadow-[0_0_12px_rgba(245,158,11,0.25)]',
@@ -233,11 +243,20 @@ export const ShowBar = memo(function ShowBar({
           reports only the value count here. Two amber badges saying the same word is worse than
           one. Conditional on the tile actually being drawn — a host that supplies no `onBlind` gets
           no tile, and hardcoding the flag would leave blind reported nowhere in this bar. */}
-      <ProgrammerIndicator className="px-2.5 py-2" blindShownSeparately={onBlind != null} />
+      {/* Gone on the bottom rung, and it is the one thing D8's enumerated row leaves out. At 393px
+          the tiles, the tempo chip and an 84px GO leave the live block about 70px, and this tile
+          is 50 of them — so keeping it is a two-line bar, which is the whole of what that rung
+          exists to remove. It is also the item that costs least there: blind is the BLIND tile
+          two along, the value count is on the Programmer page this links to, and the link itself
+          is the view switcher one row up. Nothing else on the bar is allowed to go this way. */}
+      <ProgrammerIndicator
+        className="px-2.5 py-2 @max-[440px]:hidden"
+        blindShownSeparately={onBlind != null}
+      />
 
       {/* Live state — flexes to fill, and is never hidden. `overflow-hidden` is load-bearing: every
           child below is `shrink-0`, so without it they escape the border rather than clipping. */}
-      <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 overflow-hidden rounded-md @[440px]:justify-start @[440px]:gap-2 @[440px]:border @[440px]:bg-card @[440px]:px-3 @[440px]:py-1.5 @[700px]:gap-3.5">
+      <div className="flex min-w-0 flex-1 items-center justify-center gap-1.5 overflow-hidden rounded-md border bg-card px-2 @[440px]:justify-start @[440px]:gap-2 @[440px]:px-3 @[440px]:py-1.5 @[700px]:gap-3.5">
         {stackName && (
           <>
             <span className="hidden max-w-[160px] shrink-0 truncate text-sm font-medium @[700px]:block">
@@ -299,7 +318,7 @@ export const ShowBar = memo(function ShowBar({
             </div>
           </>
         ) : (
-          <span className="text-sm text-muted-foreground">No cue running</span>
+          <span className="truncate text-sm text-muted-foreground">No cue running</span>
         )}
 
         <span className="hidden flex-1 @[440px]:block" />
@@ -314,16 +333,18 @@ export const ShowBar = memo(function ShowBar({
         )}
       </div>
 
-      {/* Transport. `basis-full` below 700 puts it on its own line deterministically, and GO takes
-          the whole width that buys — the inversion the ladder exists for. `h-auto` above 700 lets it
-          match the tile heights, overriding Button's default h-10. */}
-      <div className="flex shrink-0 basis-full items-stretch gap-2 @[700px]:ml-auto @[700px]:basis-auto">
+      {/* Transport. `basis-full` in the 440–700 band puts it on its own line deterministically, and
+          GO takes the whole width that buys — the inversion the ladder exists for. Below 440 it
+          comes back onto the one row at a fixed 84×44, which is the bottom rung (D8): a phone has
+          no line to spare, and GO at 84px is still the widest thing on the bar. `h-auto` above 700
+          lets it match the tile heights, overriding Button's default h-10. */}
+      <div className="flex shrink-0 basis-auto items-stretch gap-2 @[440px]:basis-full @[700px]:ml-auto @[700px]:basis-auto">
         <Button
           variant="outline"
           onClick={onBack}
           disabled={goDisabled}
           aria-label="Back"
-          className="h-[52px] px-4 text-sm font-semibold uppercase tracking-wider @[440px]:h-10 @[700px]:h-auto @[1000px]:px-5"
+          className="h-11 px-2.5 text-sm font-semibold uppercase tracking-wider @[440px]:h-10 @[440px]:px-4 @[700px]:h-auto @[1000px]:px-5"
         >
           <span aria-hidden="true">◀</span>
           <span className="hidden @[440px]:inline">BACK</span>
@@ -332,8 +353,8 @@ export const ShowBar = memo(function ShowBar({
           onClick={onGo}
           disabled={goDisabled}
           className={cn(
-            'h-[52px] flex-1 text-[22px] font-bold uppercase tracking-[0.16em]',
-            '@[440px]:h-10 @[440px]:text-base',
+            'h-11 w-[84px] flex-none text-base font-bold uppercase tracking-[0.16em]',
+            '@[440px]:h-10 @[440px]:w-auto @[440px]:flex-1',
             '@[700px]:h-auto @[700px]:flex-none @[700px]:px-6 @[700px]:min-w-[100px]',
             '@[1000px]:px-8 @[1000px]:min-w-[120px]',
             !goDisabled && 'shadow-[0_6px_14px_rgba(59,130,246,0.35)]',

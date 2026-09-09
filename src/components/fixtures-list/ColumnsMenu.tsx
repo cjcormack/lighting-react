@@ -1,4 +1,5 @@
 import { Columns3 } from 'lucide-react'
+import { labelUnlessCompact } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -35,16 +36,23 @@ export function visibleColumnsFrom(visibility: ColumnVisibility): ColumnKey[] {
 export function ColumnsMenu({
   visibility,
   onChange,
+  compact = false,
 }: {
   visibility: ColumnVisibility
   onChange: (next: ColumnVisibility) => void
+  /**
+   * Icon only, whatever the viewport. The programmer's short-height arm asks for it (space plan
+   * D8): rows A and B are one line there, and this button's word is 60px of the room the source
+   * box needs to name the cue you are about to overwrite. The `title` already carries it.
+   */
+  compact?: boolean
 }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" title="Choose visible columns">
           <Columns3 className="size-3.5" />
-          <span className="hidden sm:inline">Columns</span>
+          <span className={labelUnlessCompact(compact, 'sm:inline')}>Columns</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

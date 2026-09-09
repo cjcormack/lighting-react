@@ -1,12 +1,19 @@
-import { useMemo } from 'react'
-import { Layers, MousePointerSquareDashed } from 'lucide-react'
+import { useMemo, type ReactNode } from 'react'
+import { KeyRound, Layers, MousePointerSquareDashed, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { LayerLegend, OwnershipLegend } from '@/components/fixtures-list/OwnershipLegend'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import {
+  LayerKey,
+  LayerLegend,
+  OwnershipKey,
+  OwnershipLegend,
+} from '@/components/fixtures-list/OwnershipLegend'
 import { Badge } from '@/components/ui/badge'
 import {
   describeCellScope,
   type CellRef,
 } from '@/components/fixtures-list/cellSelectionModel'
+import { cn } from '@/lib/utils'
 import { formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
 import { cellFamilies, COLUMN_DEFS, type ColumnKey } from '@/components/fixtures-list/columns'
 import type { ColumnVisibility } from '@/components/fixtures-list/ColumnsMenu'
@@ -43,6 +50,15 @@ import type { LocateTarget } from '@/store/locate'
  *
  * The *state* behind Groups and Columns still lives in `ProgrammerBody`, inside the memo barrier
  * — this component renders the controls, it does not own them.
+ *
+ * **Row B has a phone arm and a folded arm, and they are different questions.** Below `@[600px]`
+ * of *this column* the filter becomes a search icon over a popover and a key button appears,
+ * because the 22px ownership footer is not rendered at that width (space plan D8). The folded arm
+ * is about *height*: under `@media (max-height: 500px)` `ProgrammerBody` stops drawing row A and
+ * hands its two halves here as `leading`, so the page's two rows of chrome are one 36px line —
+ * which on an 852×393 landscape phone is the difference between three fixture rows and eight.
+ * Height is the one thing a container query cannot ask, so that arm is a `useMediaQuery` above
+ * the barrier; the grid element itself never moves, so the grid never remounts.
  */
 /** Column labels for the scope description, from the same table the header renders. */
 const COLUMN_LABELS = new Map(COLUMN_DEFS.map((d) => [d.key, d.label]))
@@ -54,12 +70,21 @@ export function ProgrammerGrid({
   onGroupedChange,
   columnVisibility,
   onColumnVisibilityChange,
+  leading,
 }: {
   projectId: number
   grouped: boolean
   onGroupedChange: (next: boolean) => void
   columnVisibility: ColumnVisibility
   onColumnVisibilityChange: (next: ColumnVisibility) => void
+  /**
+   * Row A's two halves, when the page is too short to give them a row of their own — the
+   * short-height arm of space plan D8. `null` at every ordinary height, where `ProgrammerBody`
+   * draws them above the workspace as it always has. They arrive as an *element* rather than as
+   * a flag because they are the page's components, created above the memo barrier: this grid
+   * mounts them, it does not know what they are.
+   */
+  leading?: ReactNode
 }) {
   const scope = useProgrammerScope()
   const store = useLookRowStore()
@@ -79,6 +104,7 @@ export function ProgrammerGrid({
         onGroupedChange={onGroupedChange}
         columnVisibility={columnVisibility}
         onColumnVisibilityChange={onColumnVisibilityChange}
+        leading={leading}
       />
     </EditorContextProvider>
   )
@@ -93,12 +119,14 @@ function ProgrammerGridBody({
   onGroupedChange,
   columnVisibility,
   onColumnVisibilityChange,
+  leading,
 }: {
   projectId: number
   grouped: boolean
   onGroupedChange: (next: boolean) => void
   columnVisibility: ColumnVisibility
   onColumnVisibilityChange: (next: ColumnVisibility) => void
+  leading?: ReactNode
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -109,6 +137,7 @@ function ProgrammerGridBody({
         fill
         columnVisibility={columnVisibility}
         onColumnVisibilityChange={onColumnVisibilityChange}
+        compactControls={!!leading}
         // Cmd+K's ?select= links target the fixtures/groups pair; consuming them here would bounce
         // a group select straight back out to /groups/list.
         enableDeepLinkSelect={false}
@@ -131,7 +160,29 @@ function ProgrammerGridBody({
                 be measured by the classes it hosts (`ProgrammerWorkspace`'s doc comment). */}
             <div className="@container">
               <div className="flex h-9 items-center gap-2 border-b px-3">
-                <ProgrammerScopeBand />
+                {/* The short-height arm: row A has no row of its own and its two halves lead this
+                    one (space plan D8), and they get an `@container` of their own — because the
+                    question their thresholds ask ("has this box room for the word `Editing`?") is
+                    about the ~380px the flex gives them here, not about the 750px grid column. It
+                    is measured, so it cannot be wrong about a rig whose verbs are wider than the
+                    artboard's.
+
+                    Everything after this separator goes to its icon arm while the row is folded —
+                    the scope pills through `compact`, `Lit` and `Columns` through
+                    `compactControls`, the filter as its search icon — which is what
+                    `PhoneLandscape` draws. It is not decoration: the tools' three words are 130px,
+                    and the leading block is what pays for them. Without it the source box, a
+                    `flex-1` sharing its block with a 230px action bar, rendered four pixels wide
+                    on an 852×393 phone. */}
+                {leading && (
+                  <>
+                    <div className="@container flex min-w-0 flex-1 items-center gap-2">
+                      {leading}
+                    </div>
+                    <span className="h-[22px] w-px shrink-0 self-center bg-border" />
+                  </>
+                )}
+                <ProgrammerScopeBand compact={!!leading} />
                 {/* The filter gives before anything else does: it is the one control here whose
                     width is a preference rather than a size. */}
                 {/* `max-w-[340px]` is the artboard's: past that the field is wider than any
@@ -143,11 +194,30 @@ function ProgrammerGridBody({
                     painted its placeholder under the Lit button. Row B has no second line to give
                     it, so the field gives instead — and session 4 replaces it with a search icon
                     at the width where even that stops being enough. */}
-                <div className="flex min-w-0 max-w-[340px] flex-1 items-center gap-2 [&>div]:min-w-0">
-                  {filter}
-                </div>
+                {/* Two arms of one control. Above `@[600px]` the field is on the row; below it
+                    the field is a search icon that opens the same node in a popover — the icon
+                    arm session 4 promised, and the real answer to the `min-w-48` squeeze the note
+                    above records. Radix mounts popover content only while it is open, so there is
+                    one filter input in the document except during the moment it is being used.
+
+                    The **folded row always takes the icon**, and that is a JS test rather than a
+                    third class because it cannot be written as one: the field would have to be
+                    shown at `width ≥ 600 AND height > 500`, and a container query and a media
+                    query cannot be ANDed in a single Tailwind class — written as two conflicting
+                    rules it would come down to whichever Tailwind happened to order last. It also
+                    fixes a real squeeze: the field is `flex-1` and so is the leading block, so on
+                    an 852×393 phone the two split the row and the source box — `flex-1` inside a
+                    block sharing it with a 230px action bar — collapsed to four pixels. */}
+                {!leading && (
+                  <div className="hidden min-w-0 max-w-[340px] flex-1 items-center gap-2 [&>div]:min-w-0 @[600px]:flex">
+                    {filter}
+                  </div>
+                )}
+                <FilterPopover className={cn(!leading && '@[600px]:hidden')}>{filter}</FilterPopover>
                 {lit}
-                <span className="flex-1" />
+                {/* Dropped in the folded arm: the leading block is already `flex-1` there, and two
+                    competing `flex-1` siblings is the bug session 2 found on this very row. */}
+                <span className={cn('flex-1', leading && 'hidden')} />
                 <Button
                   variant={grouped ? 'default' : 'outline'}
                   size="sm"
@@ -160,6 +230,12 @@ function ProgrammerGridBody({
                   <span className="hidden @[800px]:inline">Groups</span>
                 </Button>
                 {columns}
+                {/* The key, exactly where the 22px footer that normally carries it is not drawn
+                    (see `renderFooter`) — narrow, or short. A grid whose tints are *navigational*
+                    has to keep them learnable somewhere, so the two conditions are written as
+                    two "show" rules over a hidden base rather than as a hide and an un-hide:
+                    both set the same `display`, so neither can lose to the other's ordering. */}
+                <ScopedKeyPopover className="hidden @max-[600px]:inline-flex [@media(max-height:500px)]:inline-flex" />
                 {/* `Make layer` was this row's right end until session 3 of the space plan moved
                     it onto the rail's Local values row — the row it promotes. See `LocalValuesRow`
                     in `ProgrammerRail` for the one rule that changed with the move. */}
@@ -189,7 +265,24 @@ function ProgrammerGridBody({
           </div>
         )}
         renderFooter={({ fixtureCount, selectedCount }) => (
-          <ScopedLegend fixtureCount={fixtureCount} selectedCount={selectedCount} />
+          /* The wrapper's `@container` exists only so the legend can be hidden *by its own
+             column's* width: `LegendFooter` declares a container itself, and a container query
+             never matches the element that declares one. Below 600 the key is on row B behind a
+             button instead, and the 22px this footer costs is a row and a half of fixtures on a
+             393px phone. The counts go with it — they are the least of what a phone needs.
+
+             The height clause is the short-height arm, and it is the same 22px for the same
+             reason: a landscape phone is 393px tall and this is the one band on it that is a
+             *key* rather than the show. `ScopedKeyPopover` carries the same pair of conditions
+             the other way round, so the button arrives wherever this footer goes — the key
+             moves, it is never simply absent. */
+          <div className="@container">
+            <ScopedLegend
+              className="@max-[600px]:hidden [@media(max-height:500px)]:hidden"
+              fixtureCount={fixtureCount}
+              selectedCount={selectedCount}
+            />
+          </div>
         )}
       />
     </div>
@@ -343,14 +436,88 @@ function SelectionBar({
  * Layer scope switches the ownership rings off — the engine has no opinion about a Look's stored
  * rows — so leaving the six-colour key underneath would document colours that are not on screen.
  */
+/**
+ * Which of the two keys the grid's scope wants — the footer legend and the phone's key popover
+ * are two renderings of one question, and this is where it is answered.
+ *
+ * They had the branch each. A third scope kind would have had to be added to both, and a version
+ * that reached only one of them would put a footer and a popover on the same page disagreeing
+ * about what the cells mean.
+ */
+function useLayerScopeKey(): boolean {
+  return useProgrammerScope()?.kind === 'layer'
+}
+
 function ScopedLegend({
+  className,
   fixtureCount,
   selectedCount,
 }: {
+  className?: string
   fixtureCount: number
   selectedCount: number
 }) {
-  const scope = useProgrammerScope()
-  const Legend = scope?.kind === 'layer' ? LayerLegend : OwnershipLegend
-  return <Legend fixtureCount={fixtureCount} selectedCount={selectedCount} />
+  const Legend = useLayerScopeKey() ? LayerLegend : OwnershipLegend
+  return (
+    <Legend className={className} fixtureCount={fixtureCount} selectedCount={selectedCount} />
+  )
+}
+
+/**
+ * The filter as a search icon, for the phone's arm of row B.
+ *
+ * It holds the container's *own* filter node rather than a second input, so there is one piece of
+ * state and one placeholder however this is drawn — the field the popover opens is the field the
+ * row shows a hundred pixels wider. `w-72` because the node carries `min-w-48` and a popover is
+ * the one place that floor is simply right.
+ */
+function FilterPopover({ className, children }: { className?: string; children: ReactNode }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className={cn('h-7 shrink-0', className)}
+          aria-label="Filter fixtures"
+          title="Filter fixtures by name, manufacturer, or type"
+        >
+          <Search className="size-3.5" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-72 p-2">
+        {children}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+/**
+ * The ownership key behind a button — the phone's answer to the footer legend, and the same
+ * scope swap `ScopedLegend` makes.
+ *
+ * Stacked rather than the footer's one line: a popover has room for the long glosses, which is
+ * the form the footer only reaches at `@[1100px]`. The swatches are the footer's own components,
+ * so both are still styled by the real `ownershipCellClass` / `layerCellClass`.
+ */
+function ScopedKeyPopover({ className }: { className?: string }) {
+  const layerScope = useLayerScopeKey()
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className={cn('h-7 shrink-0', className)}
+          aria-label="Key to the cell colours"
+          title="Key to the cell colours"
+        >
+          <KeyRound className="size-3.5" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-56 p-3">
+        {layerScope ? <LayerKey /> : <OwnershipKey />}
+      </PopoverContent>
+    </Popover>
+  )
 }

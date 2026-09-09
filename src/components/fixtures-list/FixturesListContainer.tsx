@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { cn } from '@/lib/utils'
+import { cn, labelUnlessCompact } from '@/lib/utils'
 import { Lightbulb, Search } from 'lucide-react'
 import { useFixtureListQuery } from '../../store/fixtures'
 import { useGroupListQuery } from '../../store/groups'
@@ -166,6 +166,16 @@ export interface FixturesListContainerProps {
    * view whose grid owns the remaining space, and the cap there leaves dead air below the rows.
    */
   fill?: boolean
+  /**
+   * Draw `Lit` and `Columns` as icons alone, whatever the viewport says.
+   *
+   * The two carry `sm:inline` words, which asks the viewport whether there is room — and a caller
+   * can know better. The programmer's short-height arm does (space plan D8): rows A and B are one
+   * 36px line under `max-height: 500px`, so on an 852×393 landscape phone the viewport is wide
+   * and the *row* is not, and those two words plus the scope pills' were 130px of the room the
+   * source box needs to name the cue you are about to overwrite. Both keep their `title`.
+   */
+  compactControls?: boolean
 }
 
 /**
@@ -184,6 +194,7 @@ export function FixturesListContainer({
   renderToolbar,
   renderFooter,
   fill = false,
+  compactControls = false,
 }: FixturesListContainerProps) {
   const { data: maybeFixtures, isLoading: fixturesLoading } = useFixtureListQuery()
   const { data: maybeGroups, isLoading: groupsLoading } = useGroupListQuery()
@@ -880,13 +891,18 @@ export function FixturesListContainer({
     >
       <Lightbulb className="size-3.5" />
       {/* Icon-only on phones: the toolbar is already several rows deep there, and both of these
-          carry a title/tooltip. */}
-      <span className="hidden sm:inline">Lit</span>
+          carry a title/tooltip. `compactControls` is the same answer asked for by a caller whose
+          toolbar is short of width for a reason the viewport cannot see — see the prop. */}
+      <span className={labelUnlessCompact(compactControls, 'sm:inline')}>Lit</span>
     </Button>
   )
 
   const columnsControl = (
-    <ColumnsMenu visibility={columnVisibility} onChange={setColumnVisibility} />
+    <ColumnsMenu
+      visibility={columnVisibility}
+      onChange={setColumnVisibility}
+      compact={compactControls}
+    />
   )
 
   // Gate on VISIBLE selected rows, not the raw selection count — filtering away every selected row

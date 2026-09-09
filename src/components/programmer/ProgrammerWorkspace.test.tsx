@@ -7,6 +7,7 @@ import {
   RAIL_MAX_WIDTH,
   RAIL_MIN_WIDTH,
   RailBodyFrame,
+  RailHandleFrame,
   RailStripFrame,
   useRailArm,
 } from './ProgrammerWorkspace'
@@ -18,7 +19,7 @@ import {
  * jsdom lays nothing out, so the arms cannot be pinned by *measuring*: what is pinned instead is
  * the contract the container queries are written against — which classes the frames carry in
  * each state, on the child of the `@container` wrapper — plus everything that is JavaScript: the
- * two flags, what writes each, the drag's arithmetic and its two endings, and that the stored
+ * three flags, what writes each, the drag's arithmetic and its two endings, and that the stored
  * width survives a remount. The widths themselves are measured in a browser (space plan §6).
  */
 let railRenders = 0
@@ -28,16 +29,26 @@ function TestRail() {
   railRenders += 1
   return (
     <>
-      {(!arm.collapsed || arm.overlayOpen) && (
-        <RailBodyFrame>
-          <button onClick={arm.collapse}>collapse</button>
-          <button onClick={arm.closeOverlay}>close</button>
-        </RailBodyFrame>
+      {/* The real rail's ternary: the sheet and the docked body are one body in two places. */}
+      {arm.sheetOpen ? (
+        <div data-testid="sheet">
+          <button onClick={arm.closeSheet}>close sheet</button>
+        </div>
+      ) : (
+        (!arm.collapsed || arm.overlayOpen) && (
+          <RailBodyFrame>
+            <button onClick={arm.collapse}>collapse</button>
+            <button onClick={arm.closeOverlay}>close</button>
+          </RailBodyFrame>
+        )
       )}
       <RailStripFrame>
         <button onClick={arm.expand}>expand</button>
         <button onClick={arm.openOverlay}>open</button>
       </RailStripFrame>
+      <RailHandleFrame>
+        <button onClick={arm.openSheet}>open sheet</button>
+      </RailHandleFrame>
     </>
   )
 }
@@ -50,6 +61,7 @@ function draw() {
 
 const body = () => screen.getByRole('complementary', { name: 'Layers and effects' })
 const strip = () => screen.getByText('expand').parentElement as HTMLElement
+const bottomHandle = () => screen.getByText('open sheet').parentElement as HTMLElement
 const handle = () => screen.getByRole('separator', { name: 'Resize the rail' })
 /** The row carries `select-none` only while a drag runs — the drag's one visible trace. */
 const resizing = () => body().parentElement!.className.includes('select-none')
@@ -192,6 +204,51 @@ describe('ProgrammerWorkspace', () => {
     window.localStorage.setItem('programmer.rail.width', '"wide"')
     draw()
     expect(body().style.getPropertyValue('--rail-w')).toBe(`${RAIL_DEFAULT_WIDTH}px`)
+  })
+
+  it('turns the row into a column below 704px, with a bottom handle instead of the strip', () => {
+    // Space plan D8's third arm. 704 of workspace is a 768px viewport with the sidebar on its
+    // 64px rail — Tailwind's `md` — and below `md` the sidebar is off-canvas so the workspace is
+    // the viewport. `flex-col` is the whole of the layout change: the same two children of the
+    // same row, stacked, so the strip frame's sibling lands under the grid rather than beside it.
+    draw()
+    expect(body().parentElement!.className).toContain('@max-[704px]:flex-col')
+    // The two right-hand frames are gone at that width; the handle is gone at every other.
+    expect(strip().className).toContain('@max-[704px]:hidden')
+    expect(body().className).toContain('@max-[704px]:hidden')
+    expect(bottomHandle().className).toContain('@min-[704px]:hidden')
+    expect(bottomHandle().className).toContain('h-11')
+  })
+
+  it('opens the bottom sheet from the handle, and mounts the body in exactly one place', () => {
+    draw()
+    // Docked to start with: the body is in its frame and there is no sheet.
+    expect(screen.queryByTestId('sheet')).toBeNull()
+    expect(screen.queryByRole('complementary')).not.toBeNull()
+
+    fireEvent.click(screen.getByText('open sheet'))
+    expect(screen.getByTestId('sheet')).toBeTruthy()
+    // The one that matters: two bodies would be two layer lists, two FX lists and two of every
+    // subscription under them.
+    expect(screen.queryByRole('complementary')).toBeNull()
+
+    fireEvent.click(screen.getByText('close sheet'))
+    expect(screen.queryByTestId('sheet')).toBeNull()
+    expect(screen.queryByRole('complementary')).not.toBeNull()
+  })
+
+  it('writes no preference from the bottom sheet', () => {
+    // The phone arm is transient, like the overlay: closing a sheet on a phone must not collapse
+    // the rail on the desk that shares this desk's localStorage.
+    draw()
+    fireEvent.click(screen.getByText('open sheet'))
+    fireEvent.click(screen.getByText('close sheet'))
+    // `usePersistentState` seeds its key on mount, so the assertion is on the VALUE: the phone's
+    // gesture must never write `true` into the preference a wide desk reads tomorrow.
+    expect(JSON.parse(window.localStorage.getItem('programmer.rail.collapsed') ?? 'null')).toBe(
+      false,
+    )
+    expect(window.localStorage.getItem('programmer.rail.width')).toBe(String(RAIL_DEFAULT_WIDTH))
   })
 
   it('renders the grid exactly once, and never inside the rail', () => {

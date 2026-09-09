@@ -172,8 +172,24 @@ export default function Layout() {
               row 320px, and the row grows to ~455px once the status and programmer chips
               show their labels. So the title appears at 620px (fits untruncated even with
               the mobile hamburger) and the chips expand at 760px (title + expanded row +
-              padding ≈ 691px, with margin). */}
-          <header className="@container sticky top-0 z-40 border-b bg-primary px-2 py-2 text-primary-foreground sm:px-4">
+              padding ≈ 691px, with margin).
+
+              **It stops being sticky under 500px of viewport HEIGHT** (space plan D8). On a
+              landscape phone this bar is 53 of 393px, and it is the one band on the page that
+              says nothing about the show — the project, the view and the transport are all in
+              the two headers below it. So on a page that scrolls it goes with the page there,
+              instead of holding a seventh of the screen for a title and a theme toggle. A media
+              query, not a container query: height is the one thing a container query cannot ask.
+              `ProgrammerPage` and `ShowHeader` fold at the same 500.
+
+              **It buys nothing on the four live views, and that is not a bug in this line.** They
+              are `h-full` and own their own scrollers, so `<main>` never overflows and there is
+              no scroll for the header to leave in — measured at 852×393, the header is 53px
+              whether it is `sticky` or `static`. The routes that do scroll (Fixtures, Scripts,
+              the patch list) get the whole 53 back. Making it *disappear* on a short screen would
+              be a different decision, and a worse one below 768px of width, where the hamburger
+              inside it is the only navigation there is. */}
+          <header className="@container sticky top-0 z-40 border-b bg-primary px-2 py-2 text-primary-foreground sm:px-4 [@media(max-height:500px)]:static">
             <div className="flex items-center gap-x-2 sm:gap-x-4">
               {/* Mobile hamburger button */}
               {!isDesktop && (

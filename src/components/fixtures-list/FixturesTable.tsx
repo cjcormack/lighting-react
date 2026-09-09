@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import { useScrollEdges } from '@/hooks/useScrollEdges'
 import { AudioWaveform, ChevronDown, ChevronRight, Info, Layers } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -162,139 +163,166 @@ export function FixturesTable({
   )
 
   const inertColumns = useInertColumns(visibleColumns)
+  // `horizontalOnly`: this scroller is the virtualizer's too, so most scroll events on it are
+  // vertical and say nothing about the columns. See `useScrollEdges`.
+  const { right: moreColumnsRight, attach: attachScroller } = useScrollEdges(scrollRef, {
+    horizontalOnly: true,
+  })
 
   return (
-    <div
-      ref={scrollRef}
-      className={cn(
-        'overflow-auto',
-        // `fill` is the programmer, whose grid owns the remaining height of a full-page view. The
-        // viewport cap is tuned for a list embedded in a scrolling page and leaves dead air there.
-        // It is also the arm with no card around it: since the space plan's session 1 the grid runs
-        // edge to edge between the page edge and the rail's `border-l`, so a rounded box drawn hard
-        // against both reads as a card that failed to inset rather than as a table.
-        fill ? 'min-h-0 flex-1 border-t border-border' : 'rounded-md border border-border',
-      )}
-      style={fill ? undefined : { maxHeight: 'calc(100vh - 14rem)' }}
-    >
-      <div style={{ minWidth: `calc(${NAME_COLUMN_WIDTH} + ${visibleColumns.length * 96}px)` }}>
-        {/* Header */}
-        <div
-          data-grid-header
-          className="sticky top-0 z-20 grid border-b border-border bg-background"
-          style={{ gridTemplateColumns }}
-        >
-          <div className="sticky left-0 z-10 bg-background px-2 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            Fixture
-          </div>
-          {columnLabels.map(({ col, label }) => (
-            <div
-              key={col}
-              // The marquee measures its column bands from these — see `useCellMarquee`.
-              data-column-header={col}
-              className={cn(
-                'px-1.5 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground',
-                // Greyed rather than hidden: an operator looking for Colour in a
-                // POSITION-masked layer needs to learn *why* it is unavailable, and a column that
-                // vanished would read as a broken grid. The cells beneath say the same thing.
-                inertColumns.has(col) && 'opacity-40',
-              )}
-              title={inertColumns.has(col) ? 'Outside this layer’s mask' : undefined}
-            >
-              {label}
-            </div>
-          ))}
-        </div>
-
-        {/* Virtualized rows. The marquee handlers live here rather than on the scroller so the
-            sticky header is excluded by geometry rather than by a hit test. */}
-        <div
-          style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}
-          onPointerDown={marquee.onPointerDown}
-          onPointerMove={marquee.onPointerMove}
-          onPointerUp={marquee.onPointerUp}
-          onPointerCancel={marquee.onPointerUp}
-        >
-          {/* The rubber band. **Neutral, not primary** (space plan D4): a solid 2px `--foreground`
-              frame with foreground corner handles over a `foreground/5` fill. It was a dashed
-              primary border over a `primary/[0.13]` fill, which put the accent colour on the one
-              thing that is never a value — and dragged it across cells whose *rings* use the same
-              accent to mean "you own this". A selection marquee and an ownership ring are the two
-              facts the grid most needs to keep apart, so they no longer share a hue.
-
-              The 1px `--background` ring is what keeps a near-white frame legible where it crosses
-              a selected row's near-white wash: two neutrals a few percent apart need a dark line
-              between them, and a heavier frame would have read as a border rather than a band. */}
-          {marquee.band && (
-            <div
-              aria-hidden="true"
-              data-testid="cell-marquee"
-              className="pointer-events-none absolute z-30 rounded-sm border-2 border-foreground bg-foreground/5 shadow-[0_0_0_1px_var(--background)]"
-              style={marquee.band}
-            >
-              <span className="absolute -left-px -top-px size-[7px] rounded-[1px] bg-foreground" />
-              <span className="absolute -bottom-px -right-px size-[7px] rounded-[1px] bg-foreground" />
-            </div>
-          )}
-          {virtualizer.getVirtualItems().map((virtualRow) => {
-            const row = rows[virtualRow.index]
-            return (
-              <div
-                key={row.id}
-                className="absolute inset-x-0"
-                style={{ height: `${ROW_HEIGHT}px`, transform: `translateY(${virtualRow.start}px)` }}
-              >
-                <RowView
-                  row={row}
-                  visibleColumns={visibleColumns}
-                  gridTemplateColumns={gridTemplateColumns}
-                  selected={row.kind !== 'divider' && isSelected(row.id)}
-                  onRowClick={onRowClick}
-                  onToggleExpand={onToggleExpand}
-                  onBeginCellEdit={onBeginCellEdit}
-                  onCellCommit={onCellCommit}
-                  batchCountFor={batchCountFor}
-                  onShowInfo={onShowInfo}
-                  showOwnership={showOwnership}
-                  cellSelection={cellSelection}
-                  deskConnected={deskConnected}
-                />
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Scope chip, following the pointer. `fixed`, so it is never clipped by the scroller, and
-          `pointer-events-none` so it can sit under the cursor without eating the drag.
-
-          **It stays primary**, alone among the selection affordances, and that is deliberate
-          rather than an oversight of D4: it exists only while a drag is in flight, it moves with
-          the pointer, and it never comes to rest beside an owned cell — so it cannot be confused
-          with a ring the way a row wash sitting still under one could.
-
-          PORTALLED to `document.body`, which is load-bearing rather than tidiness: its coordinates
-          are the pointer's `clientX/clientY`, i.e. viewport space, and `ProgrammerWorkspace` — the
-          only host that enables cell selection — is a Tailwind `@container`. `container-type:
-          inline-size` applies layout containment, which makes that element the containing block for
-          `fixed` descendants, so an in-tree chip would be offset by the workspace's own top-left
-          (the header, source strip, action bar and `p-4`) and sit well below the cursor. */}
-      {marquee.chip &&
-        cellSelection &&
-        cellSelection.count > 0 &&
-        createPortal(
-          <div
-            className="pointer-events-none fixed z-50 flex items-center gap-1.5 rounded-full bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground shadow-lg"
-            style={{ left: marquee.chip.x + 12, top: marquee.chip.y + 12 }}
-          >
-            <span className="font-mono tabular-nums">
-              {cellSelection.count} cell{cellSelection.count === 1 ? '' : 's'}
-            </span>
-            <span className="opacity-60">·</span>
-            <span>{describeCellScope(cellSelection.cells, columnLabelFor)}</span>
-          </div>,
-          document.body,
+    /* The scroller's WRAPPER, and it exists for the fade below: a gradient drawn inside the
+       scroller would scroll away with the columns it is meant to be covering, which on a phone
+       means the one hint that there are more columns disappears the moment you use it. It also
+       gives the `fill` arm its own flex column so the scroller keeps `min-h-0 flex-1`. */
+    <div className={cn('relative', fill && 'flex min-h-0 flex-1 flex-col')}>
+      <div
+        // `attach` rather than `scrollRef` — it fills that ref AND tells `useScrollEdges` the
+        // node exists, which a `RefObject` alone cannot.
+        ref={attachScroller}
+        className={cn(
+          'overflow-auto',
+          // `fill` is the programmer, whose grid owns the remaining height of a full-page view. The
+          // viewport cap is tuned for a list embedded in a scrolling page and leaves dead air there.
+          // It is also the arm with no card around it: since the space plan's session 1 the grid runs
+          // edge to edge between the page edge and the rail's `border-l`, so a rounded box drawn hard
+          // against both reads as a card that failed to inset rather than as a table.
+          fill ? 'min-h-0 flex-1 border-t border-border' : 'rounded-md border border-border',
         )}
+        style={fill ? undefined : { maxHeight: 'calc(100vh - 14rem)' }}
+      >
+        <div style={{ minWidth: `calc(${NAME_COLUMN_WIDTH} + ${visibleColumns.length * 96}px)` }}>
+          {/* Header */}
+          <div
+            data-grid-header
+            className="sticky top-0 z-20 grid border-b border-border bg-background"
+            style={{ gridTemplateColumns }}
+          >
+            <div className="sticky left-0 z-10 bg-background px-2 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              Fixture
+            </div>
+            {columnLabels.map(({ col, label }) => (
+              <div
+                key={col}
+                // The marquee measures its column bands from these — see `useCellMarquee`.
+                data-column-header={col}
+                className={cn(
+                  'px-1.5 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground',
+                  // Greyed rather than hidden: an operator looking for Colour in a
+                  // POSITION-masked layer needs to learn *why* it is unavailable, and a column that
+                  // vanished would read as a broken grid. The cells beneath say the same thing.
+                  inertColumns.has(col) && 'opacity-40',
+                )}
+                title={inertColumns.has(col) ? 'Outside this layer’s mask' : undefined}
+              >
+                {label}
+              </div>
+            ))}
+          </div>
+
+          {/* Virtualized rows. The marquee handlers live here rather than on the scroller so the
+              sticky header is excluded by geometry rather than by a hit test. */}
+          <div
+            style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}
+            onPointerDown={marquee.onPointerDown}
+            onPointerMove={marquee.onPointerMove}
+            onPointerUp={marquee.onPointerUp}
+            onPointerCancel={marquee.onPointerUp}
+          >
+            {/* The rubber band. **Neutral, not primary** (space plan D4): a solid 2px `--foreground`
+                frame with foreground corner handles over a `foreground/5` fill. It was a dashed
+                primary border over a `primary/[0.13]` fill, which put the accent colour on the one
+                thing that is never a value — and dragged it across cells whose *rings* use the same
+                accent to mean "you own this". A selection marquee and an ownership ring are the two
+                facts the grid most needs to keep apart, so they no longer share a hue.
+
+                The 1px `--background` ring is what keeps a near-white frame legible where it crosses
+                a selected row's near-white wash: two neutrals a few percent apart need a dark line
+                between them, and a heavier frame would have read as a border rather than a band. */}
+            {marquee.band && (
+              <div
+                aria-hidden="true"
+                data-testid="cell-marquee"
+                className="pointer-events-none absolute z-30 rounded-sm border-2 border-foreground bg-foreground/5 shadow-[0_0_0_1px_var(--background)]"
+                style={marquee.band}
+              >
+                <span className="absolute -left-px -top-px size-[7px] rounded-[1px] bg-foreground" />
+                <span className="absolute -bottom-px -right-px size-[7px] rounded-[1px] bg-foreground" />
+              </div>
+            )}
+            {virtualizer.getVirtualItems().map((virtualRow) => {
+              const row = rows[virtualRow.index]
+              return (
+                <div
+                  key={row.id}
+                  className="absolute inset-x-0"
+                  style={{ height: `${ROW_HEIGHT}px`, transform: `translateY(${virtualRow.start}px)` }}
+                >
+                  <RowView
+                    row={row}
+                    visibleColumns={visibleColumns}
+                    gridTemplateColumns={gridTemplateColumns}
+                    selected={row.kind !== 'divider' && isSelected(row.id)}
+                    onRowClick={onRowClick}
+                    onToggleExpand={onToggleExpand}
+                    onBeginCellEdit={onBeginCellEdit}
+                    onCellCommit={onCellCommit}
+                    batchCountFor={batchCountFor}
+                    onShowInfo={onShowInfo}
+                    showOwnership={showOwnership}
+                    cellSelection={cellSelection}
+                    deskConnected={deskConnected}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Scope chip, following the pointer. `fixed`, so it is never clipped by the scroller, and
+            `pointer-events-none` so it can sit under the cursor without eating the drag.
+
+            **It stays primary**, alone among the selection affordances, and that is deliberate
+            rather than an oversight of D4: it exists only while a drag is in flight, it moves with
+            the pointer, and it never comes to rest beside an owned cell — so it cannot be confused
+            with a ring the way a row wash sitting still under one could.
+
+            PORTALLED to `document.body`, which is load-bearing rather than tidiness: its coordinates
+            are the pointer's `clientX/clientY`, i.e. viewport space, and `ProgrammerWorkspace` — the
+            only host that enables cell selection — is a Tailwind `@container`. `container-type:
+            inline-size` applies layout containment, which makes that element the containing block for
+            `fixed` descendants, so an in-tree chip would be offset by the workspace's own top-left
+            (the header, source strip, action bar and `p-4`) and sit well below the cursor. */}
+        {marquee.chip &&
+          cellSelection &&
+          cellSelection.count > 0 &&
+          createPortal(
+            <div
+              className="pointer-events-none fixed z-50 flex items-center gap-1.5 rounded-full bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground shadow-lg"
+              style={{ left: marquee.chip.x + 12, top: marquee.chip.y + 12 }}
+            >
+              <span className="font-mono tabular-nums">
+                {cellSelection.count} cell{cellSelection.count === 1 ? '' : 's'}
+              </span>
+              <span className="opacity-60">·</span>
+              <span>{describeCellScope(cellSelection.cells, columnLabelFor)}</span>
+            </div>,
+            document.body,
+          )}
+      </div>
+      {/* "There are more columns to the right", 24px wide, on the wrapper rather than in the
+          scroller — so it stays pinned to the grid's right edge instead of sliding away with the
+          content it is describing. It is drawn only while there is something still to the right,
+          which is why the overflow is measured rather than assumed: at a desk width with three
+          columns showing there is nothing off-screen, and a permanent gradient there would read
+          as a rendering fault. `pointer-events-none` so it never eats a press on the last
+          column. */}
+      {moreColumnsRight && (
+        <div
+          aria-hidden="true"
+          data-testid="column-scroll-fade"
+          className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-background to-transparent"
+        />
+      )}
     </div>
   )
 }

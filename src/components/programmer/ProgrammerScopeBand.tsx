@@ -1,4 +1,5 @@
 import { Eye, Hand } from 'lucide-react'
+import { labelUnlessCompact } from '@/lib/utils'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { LookNameBadge } from '@/components/looks/LookNameBadge'
 import { FAMILY_LABELS, parsePropertyMask } from '@/lib/attributeFamily'
@@ -39,8 +40,14 @@ const SAVE_LABELS: Record<Exclude<LookSaveState, 'clean'>, string> = {
  * The layer segment appears only while a layer is focused. Focusing happens in the rail, on the
  * stack row itself — a picker here would be a second way to say the same thing, and the stack is
  * the one that shows order, mask and amount alongside.
+ *
+ * `compact` drops the two pills' words whatever the width. It exists for the short-height arm
+ * (space plan D8), where this band shares one 36px line with the whole of row A: the row is then
+ * short of width for a reason its container's width does not show, so the question `@[520px]`
+ * asks — "is this column wide?" — has the wrong answer on an 852×393 phone. The `aria-label`s and
+ * `title`s are unchanged, which is where those two words already live at every narrow width.
  */
-export function ProgrammerScopeBand() {
+export function ProgrammerScopeBand({ compact = false }: { compact?: boolean }) {
   const scope = useProgrammerScope()
   const actions = useProgrammerScopeActions()
   const { data: layers } = useProgrammerLayersQuery()
@@ -97,7 +104,7 @@ export function ProgrammerScopeBand() {
           className="gap-1.5"
         >
           <Eye className="size-3.5" />
-          <span className="hidden @[520px]:inline">Output</span>
+          <span className={labelUnlessCompact(compact, '@[520px]:inline')}>Output</span>
         </ToggleGroupItem>
         <ToggleGroupItem
           value="local"
@@ -112,7 +119,7 @@ export function ProgrammerScopeBand() {
           className="gap-1.5"
         >
           <Hand className="size-3.5" />
-          <span className="hidden @[520px]:inline">Local</span>
+          <span className={labelUnlessCompact(compact, '@[520px]:inline')}>Local</span>
         </ToggleGroupItem>
         {scope.kind === 'layer' && (
           <ToggleGroupItem

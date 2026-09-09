@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { AudioWaveform, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { useScrollEdges } from '@/hooks/useScrollEdges'
 import type { CellRef } from '@/components/fixtures-list/cellSelectionModel'
 import { type AttributeFamily } from '@/lib/attributeFamily'
 import { templateRowsSwatch, describeTemplateIntent } from '@/lib/templateIntent'
@@ -209,7 +210,9 @@ export function TemplateStrip({
   // the scroller is wide enough that a short library routinely fits — so the false affordance
   // would have been the common case, not the edge one. Measured rather than guessed: neither the
   // chip count nor the container width predicts it on its own.
-  const overflows = useScrollerOverflows(scrollerRef)
+  // `measureOnRender`: the chip list changes without the scroller resizing, and the mask has to
+  // be right in the frame the chips land in. See `useScrollEdges`.
+  const { overflows, attach } = useScrollEdges(scrollerRef, { measureOnRender: true })
 
   // D3. Not "and the library is empty" as well: a press needs a target whatever the library holds,
   // and the family badge, the counts and Deselect beside it still have something to say without it.
@@ -239,7 +242,9 @@ export function TemplateStrip({
             its content, so without it the chips would push the bar wider than the grid instead of
             scrolling inside it, and the mask would never have anything to fade. */}
         <div
-          ref={scrollerRef}
+          // `attach`, not `scrollerRef` — see `useScrollEdges`. This scroller mounts with the
+          // selection, so the hook has to be told when it arrives.
+          ref={attach}
           className={cn(
             'flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto',
             overflows && [
@@ -311,42 +316,6 @@ export function TemplateStrip({
  * one by name — two sizes here would make that reference ambiguous about which it meant.
  */
 const HAIRLINE_CLASS = 'mx-0.5 h-5 w-px shrink-0 bg-border'
-
-/**
- * Whether a horizontal scroller has anything to scroll to.
- *
- * Measured, because nothing else answers it: the scroller is `flex-1`, so its own box does not
- * change when its contents do, and a `ResizeObserver` on it alone would miss a chip list growing
- * or shrinking. So the check runs in a layout effect on every render *and* on a resize, and only
- * writes state when the answer actually flips — which is what keeps it from looping.
- *
- * `useLayoutEffect` rather than `useEffect` so the mask is right in the frame the chips land in;
- * with `useEffect` a newly-overflowing row paints once unfaded first.
- */
-function useScrollerOverflows(ref: React.RefObject<HTMLElement | null>): boolean {
-  const [overflows, setOverflows] = useState(false)
-  const measure = useCallback(() => {
-    const el = ref.current
-    if (!el) return
-    // 1px of slack: sub-pixel layout routinely leaves `scrollWidth` a hair over `clientWidth`
-    // on a row that fits exactly, which would fade a chip nothing is hiding.
-    setOverflows(el.scrollWidth > el.clientWidth + 1)
-  }, [ref])
-
-  useLayoutEffect(measure)
-
-  useEffect(() => {
-    const el = ref.current
-    // Guarded: jsdom has no ResizeObserver unless a suite stubs one, and this component renders in
-    // suites that do not.
-    if (!el || typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(measure)
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [ref, measure])
-
-  return overflows
-}
 
 function TemplateChip({
   template,

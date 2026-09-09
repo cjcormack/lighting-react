@@ -19,6 +19,7 @@ import {
 import { ProgrammerSourceStrip } from '@/components/programmer/ProgrammerSourceStrip'
 import { ProgrammerWorkspace } from '@/components/programmer/ProgrammerWorkspace'
 import { useInclude } from '@/components/programmer/useInclude'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { usePersistentState } from '@/hooks/usePersistentState'
 import { useShowBarProps } from '@/hooks/useShowBarProps'
 import { lightingApi } from '@/api/lightingApi'
@@ -28,6 +29,14 @@ import { useCurrentProjectQuery, useProjectQuery } from '@/store/projects'
 import { CurrentProjectRedirect } from '@/components/CurrentProjectRedirect'
 
 const GROUPED_KEY = 'programmer.grouped'
+
+/**
+ * The short-height arm's threshold (space plan D8). A landscape phone is ~393px tall and an app
+ * header, a ShowHeader, a ShowBar and two rows of chrome leave it three fixture rows; 500 is the
+ * artboard's number and the one `Layout` and `ShowHeader` unstick and tighten themselves at, so
+ * the three surfaces fold together rather than at three nearby numbers.
+ */
+const SHORT_VIEWPORT = '(max-height: 500px)'
 
 /** Bare `/programmer` → the current project's programmer. Mirrors `ShowRedirect`. */
 export function ProgrammerRedirect() {
@@ -135,6 +144,15 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
   // barrier, and state held above it in `ProgrammerPage` would put every ShowBar re-render through
   // the whole grid/rail subtree. The *controls* render on row B, inside the grid's own toolbar.
   const [columnVisibility, setColumnVisibility] = useColumnVisibility()
+  // Short-height mode (space plan D8): under 500px of viewport height rows A and B are one row,
+  // and row A's two halves are handed to the grid's toolbar as `leading` rather than drawn here.
+  // A media query rather than a container query because HEIGHT is the question and a container
+  // query cannot ask it; a hook here rather than CSS because the fold is a change of *place*, not
+  // of appearance — and it is safe here specifically because this component is the memo barrier,
+  // so the media change re-renders the subtree once and never the ShowBar above it. The
+  // `ProgrammerWorkspace`/`ProgrammerGrid` elements keep their slots either way, so the grid
+  // re-renders and never remounts — the rule `ProgrammerPage.test.tsx` gates on.
+  const shortViewport = useMediaQuery(SHORT_VIEWPORT)
 
   // Revert is drop-everything-then-re-Include. There is no server-side revert, and those two steps
   // in that order are what the operator means: throw away the busk, load the cue again.
@@ -150,23 +168,37 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
     if (cueId != null) void includeCue(cueId)
   }
 
+  // The two halves of row A, built once: drawn on their own row at an ordinary height, and handed
+  // to row B as its leading block when the viewport is too short for two rows of chrome.
+  const rowA = (
+    <>
+      <ProgrammerSourceStrip
+        projectId={projectId}
+        onUpdate={sheets.openUpdate}
+        onRevert={handleRevert}
+        onRecord={() => sheets.openRecord()}
+      />
+      <span className="h-[22px] w-px shrink-0 self-center bg-border" />
+      <ProgrammerActionBar projectId={projectId} />
+    </>
+  )
+
   return (
     <ProgrammerScopeProvider>
       {/* Row A: the noun and the verbs, on one 40px line. It declares the `@container` both
           halves query — neither may declare its own, or each would measure itself instead of the
-          width it has to share (see `ProgrammerWorkspace`'s doc comment for that bug). */}
-      <div className="@container shrink-0 border-b bg-card/50 px-3">
-        <div className="flex h-10 items-center gap-2">
-          <ProgrammerSourceStrip
-            projectId={projectId}
-            onUpdate={sheets.openUpdate}
-            onRevert={handleRevert}
-            onRecord={() => sheets.openRecord()}
-          />
-          <span className="h-[22px] w-px shrink-0 self-center bg-border" />
-          <ProgrammerActionBar projectId={projectId} />
+          width it has to share (see `ProgrammerWorkspace`'s doc comment for that bug).
+
+          Under 500px of viewport height it is not drawn at all: the same two components go into
+          row B's leading slot, which is `ProgrammerGrid`'s `leading` prop, and the page's chrome
+          is one line rather than two. `null` in that arm rather than a hidden div, because the
+          components are mounted in the other place and two copies would be two of every query
+          behind them. */}
+      {!shortViewport && (
+        <div className="@container shrink-0 border-b bg-card/50 px-3">
+          <div className="flex h-10 items-center gap-2">{rowA}</div>
         </div>
-      </div>
+      )}
 
       {/* The outer editor context stays `live` for the *rail* — its FX controls write the
           programmer whatever the grid is pointed at. `ProgrammerGrid` provides its own inner
@@ -193,6 +225,7 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
                   onGroupedChange={setGrouped}
                   columnVisibility={columnVisibility}
                   onColumnVisibilityChange={setColumnVisibility}
+                  leading={shortViewport ? rowA : null}
                 />
               }
               rail={<ProgrammerRail />}

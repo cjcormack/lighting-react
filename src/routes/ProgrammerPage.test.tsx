@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * The successor to `ProgrammerPane.test.tsx`.
@@ -11,8 +11,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
  * discarded the fixture selection Record scopes on. The pane needed a `forceMount` escape hatch for
  * exactly that. Here there is nothing to force, and these assertions are what keeps it that way:
  * all three surfaces on screen at once, and the grid mounted exactly once — across a scope
- * switch, a rail collapse, a drag on the rail's handle and an overlay open/close, which are the
- * three ways session 3 of the space plan added for the page to change shape around it.
+ * switch, a rail collapse, a drag on the rail's handle, an overlay open/close (session 3), and
+ * the two ways session 4 added for the page to change shape around it: the phone's bottom sheet,
+ * and the short-height fold that moves row A into row B.
  */
 const gridMounts = vi.fn()
 vi.mock('@/components/programmer/ProgrammerGrid', async () => {
@@ -26,15 +27,20 @@ vi.mock('@/components/programmer/ProgrammerGrid', async () => {
     ProgrammerGrid: ({
       grouped,
       onGroupedChange,
+      leading,
     }: {
       grouped: boolean
       onGroupedChange: (next: boolean) => void
+      leading?: React.ReactNode
     }) => {
       // In an effect, not in the render body: a re-render is fine and expected, a re-MOUNT is the
       // thing that would throw the selection away.
       useEffect(() => gridMounts(), [])
       return (
         <div data-testid="grid">
+          {/* Row A's two halves, in the short-height arm. The stand-in has to render them or the
+              fold is invisible to this suite while being a real change of place in the page. */}
+          {leading}
           <ProgrammerScopeBand />
           <button
             type="button"
@@ -125,9 +131,46 @@ vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).li
 
 import { ProgrammerPage } from './ProgrammerPage'
 
+/**
+ * jsdom has no `matchMedia`, and `ProgrammerBody` asks it whether the viewport is short enough to
+ * fold rows A and B into one (space plan D8). The stand-in below is live rather than a constant:
+ * `setShortViewport` flips the answer AND fires the `change` the hook subscribes to, which is
+ * what lets the fold be exercised as a transition rather than only as two separate mounts — and
+ * a transition is where a remount would hide.
+ */
+let shortViewport = false
+const mediaListeners = new Set<(event: MediaQueryListEvent) => void>()
+
+beforeEach(() => {
+  shortViewport = false
+  mediaListeners.clear()
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    get matches() {
+      return query === '(max-height: 500px)' ? shortViewport : false
+    },
+    media: query,
+    addEventListener: (_: string, cb: (event: MediaQueryListEvent) => void) =>
+      mediaListeners.add(cb),
+    removeEventListener: (_: string, cb: (event: MediaQueryListEvent) => void) =>
+      mediaListeners.delete(cb),
+    addListener: () => {},
+    removeListener: () => {},
+    onchange: null,
+    dispatchEvent: () => false,
+  }))
+})
+
+function setShortViewport(next: boolean) {
+  shortViewport = next
+  act(() => {
+    for (const cb of mediaListeners) cb({ matches: next } as MediaQueryListEvent)
+  })
+}
+
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  vi.unstubAllGlobals()
   window.localStorage.clear()
 })
 
@@ -247,6 +290,50 @@ describe('ProgrammerPage', () => {
     fireEvent.click(stripToggle())
     fireEvent.click(screen.getByLabelText('Close the rail'))
     expect(screen.queryByTestId('layers')).toBeNull()
+    expect(gridMounts).toHaveBeenCalledTimes(1)
+  })
+
+  it('mounts the value grid exactly once across the bottom sheet opening and closing', () => {
+    // Session 4's arm. Below 704px of workspace the rail is a 44px handle across the bottom and
+    // the body moves into a `Sheet side="bottom"` — a change of *place* for the rail, which must
+    // still be no change at all for the grid. Both arms are in the DOM under jsdom (they are
+    // container queries), so this drives the handle's own controls directly.
+    draw()
+    expect(gridMounts).toHaveBeenCalledTimes(1)
+
+    const opener = screen.getByRole('button', { name: 'Open the layers and effects' })
+    expect(opener).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(opener)
+    expect(screen.getByTestId('layers')).toBeTruthy()
+    // One body, not two: the docked frame is not rendered while the sheet holds it.
+    expect(screen.getAllByTestId('layers')).toHaveLength(1)
+    expect(screen.queryByRole('complementary', { name: 'Layers and effects' })).toBeNull()
+    expect(gridMounts).toHaveBeenCalledTimes(1)
+
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(screen.getAllByTestId('layers')).toHaveLength(1)
+    expect(screen.getByRole('complementary', { name: 'Layers and effects' })).toBeTruthy()
+    expect(gridMounts).toHaveBeenCalledTimes(1)
+  })
+
+  it('mounts the value grid exactly once across the short-height fold, both ways', () => {
+    // Row A stops being drawn above the workspace and its two halves are handed to the grid's
+    // toolbar as `leading`. The components move; the grid element does not, and that is the whole
+    // of the rule. Driven as a live media change so the transition is what is asserted.
+    draw()
+    expect(gridMounts).toHaveBeenCalledTimes(1)
+    expect(screen.getAllByTestId('source-strip')).toHaveLength(1)
+
+    setShortViewport(true)
+    // Still exactly one of each — folded means moved, never duplicated.
+    expect(screen.getAllByTestId('source-strip')).toHaveLength(1)
+    expect(screen.getAllByTestId('action-bar')).toHaveLength(1)
+    // And now inside the grid's own toolbar rather than above the workspace.
+    expect(screen.getByTestId('grid').contains(screen.getByTestId('source-strip'))).toBe(true)
+    expect(gridMounts).toHaveBeenCalledTimes(1)
+
+    setShortViewport(false)
+    expect(screen.getByTestId('grid').contains(screen.getByTestId('source-strip'))).toBe(false)
     expect(gridMounts).toHaveBeenCalledTimes(1)
   })
 

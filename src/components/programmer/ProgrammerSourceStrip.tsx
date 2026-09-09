@@ -47,10 +47,24 @@ const EMPTY_SENTENCE = `${EMPTY_PREFIX}Include${EMPTY_SUFFIX}`
  * `boxTitle` — `Update Q4` shortens to `Update` below
  * `@[800px]`, and Revert becomes its icon below `@[1100px]` with the word on its `aria-label`.
  *
+ * **Below `@[600px]` it is the phone's arm** (space plan D8, session 4): the `Editing` label and
+ * the cue/Look glyph go, and every verb here is its icon. What is left is `Q4 · name · badge`,
+ * which is the shortest thing that still answers "will Record overwrite Q4?" — the question the
+ * whole box exists for. The two that went are the two that say the *same* thing twice: the label
+ * is a word for a state the blue rim already draws, and the glyph is a picture of the `Q4` beside
+ * it. Both are still on the `title` the name carries, which is where every sentence this plan
+ * moved went.
+ *
  * The container queried is **row A's**, declared by the wrapper in `ProgrammerPage` — this
  * component must not declare one of its own, or every query here would measure the box rather
  * than the row it has to share (`ProgrammerWorkspace`'s doc comment has the long version of that
- * bug).
+ * bug). In the short-height arm row A does not exist and this box leads row B instead, where
+ * `ProgrammerGrid` wraps the pair in an `@container` of **its own** — so these queries measure the
+ * ~380px the folded row's flex gives the pair, not the ~750px grid column around them, and this
+ * box is in its icon arm on an 852×393 landscape phone. That is one step narrower than
+ * `PhoneLandscape` draws, and it is measured rather than assumed on purpose: the artboard's action
+ * bar is ~155px against this one's ~230, so a container the width of the whole row would have
+ * promised `Editing` and `Update` room that this rig's verbs have already taken.
  *
  * Two states the design drew are absent, and `lib/programmerSource.ts` says why: a real
  * "changed on another desk" conflict, and Detach. Neither is reachable without the backend, and
@@ -128,15 +142,24 @@ export function ProgrammerSourceStrip({
     }, nothing to update`
     return (
       <Strip tone="neutral">
-        <span className={cn(ZONE_LABEL, 'shrink-0 text-muted-foreground')}>Busking</span>
-        <span className="truncate text-xs text-muted-foreground" title={busking}>
+        {/* The label survives the phone's arm where `Editing` does not, and the SENTENCE is what
+            goes instead. They are not the same trade: `Editing` is a word for a state the blue rim
+            and the `Q4` beside it already draw, while `Busking` is the only thing in this arm of
+            the box that names the state at all — and the sentence beside it, at the 100px the box
+            has left once the verbs have theirs, truncated to `No so…`. The count it carries is on
+            the rail's Local values row and in the programmer tile; the whole sentence is on the
+            label's `title`, which is where this plan puts everything it moves. */}
+        <span
+          className={cn(ZONE_LABEL, 'shrink-0 text-muted-foreground')}
+          title={busking}
+        >
+          Busking
+        </span>
+        <span className="hidden truncate text-xs text-muted-foreground @[600px]:inline">
           {busking}
         </span>
         <span className="flex-1" />
-        <Button size="sm" className="h-7 shrink-0" onClick={onRecord}>
-          <Circle className="size-3 fill-current" />
-          Record…
-        </Button>
+        <RecordButton onRecord={onRecord} />
       </Strip>
     )
   }
@@ -150,9 +173,7 @@ export function ProgrammerSourceStrip({
           {gone}
         </span>
         <span className="flex-1" />
-        <Button size="sm" variant="outline" className="h-7 shrink-0" onClick={onRecord}>
-          Record…
-        </Button>
+        <RecordButton onRecord={onRecord} variant="outline" />
       </Strip>
     )
   }
@@ -178,13 +199,16 @@ export function ProgrammerSourceStrip({
 
   return (
     <Strip tone="editing">
-      <span className={cn(ZONE_LABEL, 'shrink-0 text-blue-300')} title={boxTitle}>
+      <span
+        className={cn(ZONE_LABEL, 'hidden shrink-0 text-blue-300 @[600px]:inline')}
+        title={boxTitle}
+      >
         Editing
       </span>
       {source.kind === 'look' ? (
-        <Layers className="size-3.5 shrink-0 text-blue-300" />
+        <Layers className="hidden size-3.5 shrink-0 text-blue-300 @[600px]:block" />
       ) : (
-        <Download className="size-3.5 shrink-0 text-blue-300" />
+        <Download className="hidden size-3.5 shrink-0 text-blue-300 @[600px]:block" />
       )}
       {source.kind === 'cue' && source.number && (
         <span className="shrink-0 font-mono text-sm font-bold">{source.number}</span>
@@ -211,7 +235,7 @@ export function ProgrammerSourceStrip({
           <div className="shrink-0">
             <Button
               size="sm"
-              className="h-7"
+              className="h-7 @max-[600px]:w-7 @max-[600px]:px-0"
               disabled={inSync}
               onClick={onUpdate}
               // The full label whatever the width: below `@[800px]` the cue number is dropped from
@@ -221,7 +245,7 @@ export function ProgrammerSourceStrip({
               }
             >
               <Upload className="size-3" />
-              {label}
+              <span className="hidden @[600px]:inline">{label}</span>
               {source.kind === 'cue' && source.number && (
                 <span className="hidden @[800px]:inline">{source.number}</span>
               )}
@@ -253,6 +277,43 @@ export function ProgrammerSourceStrip({
         </Button>
       )}
     </Strip>
+  )
+}
+
+/**
+ * The box's own Record, for the two states that have nothing to Update.
+ *
+ * One component rather than a copy per state, because what the two share is the part that has to
+ * stay in step: below `@[600px]` it is a 28px square with the word on its `aria-label`, which is
+ * the same shrink `Update` makes two states along. Only the tone differs — `busking` is a primary
+ * button because Record is the thing to do next; the deleted-source state offers it in outline,
+ * beside a warning that is the more important half of that row.
+ *
+ * The **glyph** is the one thing the outline arm draws differently: with `Record…` shown it has a
+ * word to be recognised by, so the dot would only add ink beside an amber warning triangle — but
+ * once the word goes, a button with nothing in it is not a button. So it appears exactly where
+ * the word disappears.
+ */
+function RecordButton({
+  onRecord,
+  variant,
+}: {
+  onRecord: () => void
+  variant?: 'outline'
+}) {
+  return (
+    <Button
+      size="sm"
+      variant={variant}
+      className="h-7 shrink-0 @max-[600px]:w-7 @max-[600px]:px-0"
+      aria-label="Record…"
+      onClick={onRecord}
+    >
+      <Circle
+        className={cn('size-3 fill-current', variant === 'outline' && 'hidden @max-[600px]:block')}
+      />
+      <span className="hidden @[600px]:inline">Record…</span>
+    </Button>
   )
 }
 

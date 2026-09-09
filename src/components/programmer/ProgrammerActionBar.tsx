@@ -73,8 +73,17 @@ const FADE_OPTIONS = [
  * last four buttons behind a `MoreHorizontal` below `sm`, which put the entire point of the
  * programmer one tap further away on the surface most likely to be used standing up.
  *
+ * **The phone's icon arm (space plan D8) therefore needs nothing here.** Session 4 puts rows A and
+ * B on icons below `@[600px]`, and 600 is inside the band this bar is already iconic in — the one
+ * verb that had to change was `Update`, which lives in the source box next door. Adding a second
+ * threshold that says the same thing at a lower number would be two answers to one question.
+ *
  * The container queried is **row A's**, declared by the wrapper in `ProgrammerPage`; this
- * component must not declare one of its own, for the reason `ProgrammerWorkspace` documents.
+ * component must not declare one of its own, for the reason `ProgrammerWorkspace` documents. In
+ * the short-height arm there is no row A and this pair leads row B instead, inside an `@container`
+ * `ProgrammerGrid` puts around the two of them — so the queries here measure the ~380px the folded
+ * row gives the pair rather than the row's own ~750px, and these three stay icons on an 852×393
+ * phone by measurement rather than by luck.
  */
 export function ProgrammerActionBar({ projectId }: { projectId: number }) {
   const { data: summary } = useProgrammerSummaryQuery()
@@ -126,7 +135,9 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
                 size="sm"
                 aria-label="Fade time"
                 // Wide enough for "Snap" beside the chevron at the trigger's own padding; at 72px
-                // the longest label clipped to "Sna".
+                // the longest label clipped to "Sna" — and 64px with `px-2` on the phone's arm
+                // clipped it to "Sna" again, which is why there is no narrow arm here. The fade is
+                // the one thing on this row that has to be *read* before Clear is pressed.
                 className="h-8 w-[86px] rounded-none border-0 border-l bg-muted/40 font-mono text-xs focus-visible:ring-0"
               >
                 <SelectValue />
