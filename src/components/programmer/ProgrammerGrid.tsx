@@ -1,4 +1,5 @@
-import { MousePointerSquareDashed } from 'lucide-react'
+import { Layers, MousePointerSquareDashed } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { LayerLegend, OwnershipLegend } from '@/components/fixtures-list/OwnershipLegend'
 import { describeCellScope } from '@/components/fixtures-list/cellSelectionModel'
 import { COLUMN_DEFS, type ColumnKey } from '@/components/fixtures-list/columns'
@@ -6,6 +7,7 @@ import type { ColumnVisibility } from '@/components/fixtures-list/ColumnsMenu'
 import { FixturesListContainer } from '@/components/fixtures-list/FixturesListContainer'
 import { EditorContextProvider } from '@/components/programmer/EditorContext'
 import { LayerRowNotices } from './LayerRowNotices'
+import { MakeLayerButton, ProgrammerScopeBand } from './ProgrammerScopeBand'
 import { TemplateStrip } from './TemplateStrip'
 import { useLookRowStore } from './LookRowStore'
 import { useProgrammerScope } from './ProgrammerScope'
@@ -26,8 +28,14 @@ import type { EditorContextValue } from '@/components/programmer/EditorContext'
  * silently discards the fixture selection that Record and Record-look scope on. The pane this
  * replaced needed a `forceMount` escape hatch for exactly that; here there is nothing to force.
  *
- * The column menu is *not* here: it renders in the action bar's Sheet zone, a full-width band above
- * the workspace, so the page owns that state and passes it down.
+ * **Row B is the toolbar's first line**, and it is here rather than above the workspace because
+ * everything on it — the scope, the filter, Lit, Groups, Columns — is a fact about *this grid*,
+ * and a band spanning the page reached across the rail to say it. The scope band was a
+ * full-width sibling of the action bar until session 1 of the space plan; `sheetControls` on the
+ * action bar (which hosted Groups and Columns) went at the same time and for the same reason.
+ *
+ * The *state* behind Groups and Columns still lives in `ProgrammerBody`, inside the memo barrier
+ * — this component renders the controls, it does not own them.
  */
 /** Column labels for the scope description, from the same table the header renders. */
 const COLUMN_LABELS = new Map(COLUMN_DEFS.map((d) => [d.key, d.label]))
@@ -36,11 +44,13 @@ const columnLabel = (col: ColumnKey) => COLUMN_LABELS.get(col) ?? col
 export function ProgrammerGrid({
   projectId,
   grouped,
+  onGroupedChange,
   columnVisibility,
   onColumnVisibilityChange,
 }: {
   projectId: number
   grouped: boolean
+  onGroupedChange: (next: boolean) => void
   columnVisibility: ColumnVisibility
   onColumnVisibilityChange: (next: ColumnVisibility) => void
 }) {
@@ -59,6 +69,7 @@ export function ProgrammerGrid({
       <ProgrammerGridBody
         projectId={projectId}
         grouped={grouped}
+        onGroupedChange={onGroupedChange}
         columnVisibility={columnVisibility}
         onColumnVisibilityChange={onColumnVisibilityChange}
       />
@@ -72,16 +83,18 @@ const KBD_CLASS = 'rounded border bg-muted/50 px-1.5 py-px text-[9.5px]'
 function ProgrammerGridBody({
   projectId,
   grouped,
+  onGroupedChange,
   columnVisibility,
   onColumnVisibilityChange,
 }: {
   projectId: number
   grouped: boolean
+  onGroupedChange: (next: boolean) => void
   columnVisibility: ColumnVisibility
   onColumnVisibilityChange: (next: ColumnVisibility) => void
 }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2">
+    <div className="flex min-h-0 flex-1 flex-col">
       <FixturesListContainer
         grouped={grouped}
         selectionScope="programmer"
@@ -97,6 +110,7 @@ function ProgrammerGridBody({
         renderToolbar={({
           filter,
           lit,
+          columns,
           selection,
           cells,
           cellEntryKey,
@@ -105,68 +119,107 @@ function ProgrammerGridBody({
           targetFamilies,
           targetEmitters,
         }) => (
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              {filter}
-              {lit}
-            </div>
-            <LayerRowNotices projectId={projectId} />
-            {/* The template strip, above the grid and below the filter. It reads the *cell*
-                selection — which `renderToolbar` already hands down, so the strip needs no new
-                plumbing into the table's own state — and the selection is what filters it. */}
-            <TemplateStrip
-              projectId={projectId}
-              cells={cells}
-              targets={templateTargets}
-              targetFamilies={targetFamilies}
-              targetEmitters={targetEmitters}
-            />
-            {/* Two selections, both live at once, so both are named. FIXTURE selection is what
-                Record scopes on; CELL selection is a transient edit scope that only says where the
-                next value goes. Leaving either to be inferred from the buttons beside it is how an
-                operator ends up recording a different set from the one they meant. */}
-            {(selection || cells.length > 0) && (
-              <div className="flex flex-wrap items-center gap-2 rounded-md bg-primary/[0.09] px-2 py-1.5">
-                <MousePointerSquareDashed className="size-3.5 shrink-0 text-primary" />
-                {selection && <span className="text-xs font-medium">Selected fixtures</span>}
-                {cells.length > 0 && (
-                  <>
-                    {selection && <span className="text-muted-foreground/40">·</span>}
-                    <span className="text-xs font-medium text-primary">
-                      {cells.length} cell{cells.length === 1 ? '' : 's'}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {describeCellScope(cells, columnLabel)} — edit once, applies to all
-                    </span>
-                    {/* The keyboard half: the two keys that reach the marquee's editor from the
-                        grid. The editor itself is a popover the container opens at the first
-                        selected cell. Both hints follow the container's own answer — each flag is
-                        false where its key is refused — so this cannot advertise a key that does
-                        nothing, and the rule (`cellKeyboardPermission`) is not restated here. */}
-                    {(cellEntryKey || cellClearKey) && (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                        {cellEntryKey && (
-                          <>
-                            <kbd className={KBD_CLASS}>⏎</kbd> type a value
-                          </>
-                        )}
-                        {cellClearKey && (
-                          <>
-                            <kbd className={`${KBD_CLASS} ml-1`}>⌫</kbd> clear
-                          </>
-                        )}
-                      </span>
-                    )}
-                  </>
-                )}
+          <div className="flex flex-col">
+            {/* Row B. Its own `@container`, with every query on the child — the wrapper can never
+                be measured by the classes it hosts (`ProgrammerWorkspace`'s doc comment). */}
+            <div className="@container">
+              <div className="flex h-9 items-center gap-2 border-b px-3">
+                <ProgrammerScopeBand />
+                {/* The filter gives before anything else does: it is the one control here whose
+                    width is a preference rather than a size. */}
+                {/* `max-w-[340px]` is the artboard's: past that the field is wider than any
+                    fixture name and the row's right end starts to feel unanchored.
+
+                    `[&>div]:min-w-0` unpicks the filter's own `min-w-48`. That floor is right in
+                    the default toolbar, which *wraps*, and wrong here, where the row does not:
+                    below ~1300px of page width the 192px input simply overran its flex track and
+                    painted its placeholder under the Lit button. Row B has no second line to give
+                    it, so the field gives instead — and session 4 replaces it with a search icon
+                    at the width where even that stops being enough. */}
+                <div className="flex min-w-0 max-w-[340px] flex-1 items-center gap-2 [&>div]:min-w-0">
+                  {filter}
+                </div>
+                {lit}
                 <span className="flex-1" />
-                {selection}
+                <Button
+                  variant={grouped ? 'default' : 'outline'}
+                  size="sm"
+                  className="h-7 shrink-0"
+                  aria-pressed={grouped}
+                  onClick={() => onGroupedChange(!grouped)}
+                  title="Show group rows with their members"
+                >
+                  <Layers className="size-3.5" />
+                  <span className="hidden @[800px]:inline">Groups</span>
+                </Button>
+                {columns}
+                <MakeLayerButton />
               </div>
-            )}
+            </div>
+            {/* The notices, the template strip and the selection bar. `empty:hidden` because all
+                three can render nothing at once — an always-on wrapper would spend 16px of padding
+                on a page whose budget is the reason this session exists. */}
+            <div className="flex flex-col gap-2 px-3 py-2 empty:hidden">
+              <LayerRowNotices projectId={projectId} />
+              {/* The template strip, above the grid and below the filter. It reads the *cell*
+                  selection — which `renderToolbar` already hands down, so the strip needs no new
+                  plumbing into the table's own state — and the selection is what filters it. */}
+              <TemplateStrip
+                projectId={projectId}
+                cells={cells}
+                targets={templateTargets}
+                targetFamilies={targetFamilies}
+                targetEmitters={targetEmitters}
+              />
+              {/* Two selections, both live at once, so both are named. FIXTURE selection is what
+                  Record scopes on; CELL selection is a transient edit scope that only says where the
+                  next value goes. Leaving either to be inferred from the buttons beside it is how an
+                  operator ends up recording a different set from the one they meant. */}
+              {(selection || cells.length > 0) && (
+                <div className="flex flex-wrap items-center gap-2 rounded-md bg-primary/[0.09] px-2 py-1.5">
+                  <MousePointerSquareDashed className="size-3.5 shrink-0 text-primary" />
+                  {selection && <span className="text-xs font-medium">Selected fixtures</span>}
+                  {cells.length > 0 && (
+                    <>
+                      {selection && <span className="text-muted-foreground/40">·</span>}
+                      <span className="text-xs font-medium text-primary">
+                        {cells.length} cell{cells.length === 1 ? '' : 's'}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {describeCellScope(cells, columnLabel)} — edit once, applies to all
+                      </span>
+                      {/* The keyboard half: the two keys that reach the marquee's editor from the
+                          grid. The editor itself is a popover the container opens at the first
+                          selected cell. Both hints follow the container's own answer — each flag is
+                          false where its key is refused — so this cannot advertise a key that does
+                          nothing, and the rule (`cellKeyboardPermission`) is not restated here. */}
+                      {(cellEntryKey || cellClearKey) && (
+                        <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                          {cellEntryKey && (
+                            <>
+                              <kbd className={KBD_CLASS}>⏎</kbd> type a value
+                            </>
+                          )}
+                          {cellClearKey && (
+                            <>
+                              <kbd className={`${KBD_CLASS} ml-1`}>⌫</kbd> clear
+                            </>
+                          )}
+                        </span>
+                      )}
+                    </>
+                  )}
+                  <span className="flex-1" />
+                  {selection}
+                </div>
+              )}
+            </div>
           </div>
         )}
+        renderFooter={({ fixtureCount, selectedCount }) => (
+          <ScopedLegend fixtureCount={fixtureCount} selectedCount={selectedCount} />
+        )}
       />
-      <ScopedLegend />
     </div>
   )
 }
@@ -177,7 +230,14 @@ function ProgrammerGridBody({
  * Layer scope switches the ownership rings off — the engine has no opinion about a Look's stored
  * rows — so leaving the six-colour key underneath would document colours that are not on screen.
  */
-function ScopedLegend() {
+function ScopedLegend({
+  fixtureCount,
+  selectedCount,
+}: {
+  fixtureCount: number
+  selectedCount: number
+}) {
   const scope = useProgrammerScope()
-  return scope?.kind === 'layer' ? <LayerLegend /> : <OwnershipLegend />
+  const Legend = scope?.kind === 'layer' ? LayerLegend : OwnershipLegend
+  return <Legend fixtureCount={fixtureCount} selectedCount={selectedCount} />
 }

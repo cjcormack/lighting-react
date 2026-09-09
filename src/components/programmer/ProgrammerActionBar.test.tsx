@@ -3,6 +3,16 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { IncludedTarget } from '@/api/programmerWsApi'
 
+// Radix positions its tooltip content with `useSize`, which needs a `ResizeObserver` jsdom has no
+// implementation of. Only the *content* needs one — every other assertion here reads the trigger —
+// so a no-op stub is enough to let the one hover assertion below open the card.
+class NoopResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+vi.stubGlobal('ResizeObserver', NoopResizeObserver)
+
 let summary = { blind: false, entryCount: 0, lastIncluded: null as IncludedTarget | null }
 let effects: { programmerOwned: boolean }[] = []
 
@@ -56,12 +66,32 @@ const CUE: IncludedTarget = {
 }
 
 describe('ProgrammerActionBar', () => {
-  it('labels its three zones so staging and writing tell apart', () => {
-    // Seven identical outline buttons in one row was the complaint; the labels are the fix.
+  it('carries the three zone labels on the controls they introduced', async () => {
+    // The zones were the fix for seven identical outline buttons in one row. Session 1 of the space
+    // plan deletes the *labels* — a 9px word above every control is 20px of a 900px screen, on a
+    // page whose whole point is the grid below — but not what they said: each one now rides the
+    // control it named, as that control's hover text. That is the promise, so this is the test.
     render(<ProgrammerActionBar projectId={1} />)
-    expect(screen.getByText('Stage')).toBeTruthy()
-    expect(screen.getByText('Load')).toBeTruthy()
-    expect(screen.getByText('Save')).toBeTruthy()
+    expect(screen.getByTitle('Load')).toHaveAccessibleName('Include…')
+    expect(screen.getByTitle('Save')).toHaveAccessibleName('Record')
+
+    // Stage leads Clear's *Radix* tooltip instead, because Clear is the one control here already
+    // inside a `TooltipTrigger` — a native `title` beside it would mean the browser's balloon and
+    // Radix's card both answering one hover.
+    const clear = screen.getByRole('button', { name: 'Clear' })
+    expect(clear.closest('[title]')).toBeNull()
+    fireEvent.focus(screen.getByRole('button', { name: 'Clear' }).parentElement!)
+    expect((await screen.findAllByText(/Stage —/))[0]).toBeTruthy()
+  })
+
+  it('keeps every control reachable by name when its word is hidden', () => {
+    // Below `@[800px]` Clear loses its word and Include and Record become icons. An `aria-label`
+    // on each is what makes that a *visual* shrink rather than an information one — and it is what
+    // these tests address the buttons by, since jsdom applies no container query at all.
+    render(<ProgrammerActionBar projectId={1} />)
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Include…' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Record' })).toBeTruthy()
   })
 
   it('keeps every control on the surface — no overflow kebab', () => {
@@ -69,10 +99,16 @@ describe('ProgrammerActionBar', () => {
     // which put the whole point of the programmer one tap further away on the surface most likely
     // to be used standing up.
     render(<ProgrammerActionBar projectId={1} />)
-    expect(screen.getByText('Clear')).toBeTruthy()
-    expect(screen.getByText('Include…')).toBeTruthy()
-    expect(screen.getByText('Record')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /more/i })).toBeNull()
+  })
+
+  it('hosts no grid tools — Groups and Columns are row B\'s', () => {
+    // `sheetControls` went with the zones. Groups and Columns describe what the *grid* shows, and
+    // a band spanning the whole page reached across the rail to say it; they render in the grid's
+    // own toolbar now, beside the filter and the scope.
+    render(<ProgrammerActionBar projectId={1} />)
+    expect(screen.queryByTitle('Show group rows with their members')).toBeNull()
+    expect(screen.queryByTitle('Choose visible columns')).toBeNull()
   })
 
   it('has no Update — that moved to the source strip, beside what it writes to', () => {
@@ -86,7 +122,7 @@ describe('ProgrammerActionBar', () => {
     // the escape hatch in exactly the case an operator most needs it.
     effects = [{ programmerOwned: true }]
     render(<ProgrammerActionBar projectId={1} />)
-    const clear = screen.getByText('Clear').closest('button')!
+    const clear = screen.getByRole('button', { name: 'Clear' })
     expect(clear).not.toBeDisabled()
     fireEvent.click(clear)
     expect(programmerClearAll).toHaveBeenCalled()
@@ -94,12 +130,12 @@ describe('ProgrammerActionBar', () => {
 
   it('disables Clear only when there is neither a value nor an effect', () => {
     render(<ProgrammerActionBar projectId={1} />)
-    expect(screen.getByText('Clear').closest('button')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled()
   })
 
   it('leaves Include enabled on an empty programmer — it is how you fill it', () => {
     render(<ProgrammerActionBar projectId={1} />)
-    const include = screen.getByText('Include…').closest('button')!
+    const include = screen.getByRole('button', { name: 'Include…' })
     expect(include).not.toBeDisabled()
     fireEvent.click(include)
     expect(sheets.openInclude).toHaveBeenCalled()

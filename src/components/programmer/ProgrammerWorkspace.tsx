@@ -3,16 +3,20 @@ import { type ReactNode } from 'react'
 /**
  * Where the rail sits relative to the grid.
  *
- * **Session 2 replaces this.** The right-hand Layers + FX rail becomes a ~322px LEFT-hand stack
- * rail merging both bands into one list under a shared `+ Look / + Template / + Effect` footer.
- * Both facts — the side and the width — live here and in the JSX order below, on purpose: nothing
- * downstream may assume either.
+ * **Session 3 of the space plan replaces this.** The rail becomes 300px, drag-to-size within
+ * 260–480, collapsible to a 40px strip, and an overlay over the grid below 1200px of content
+ * width; the two bands merge into one list under a shared `+ Look / + Template / + Effect` footer.
+ * It stays on the **right**: that is what keeps `FixturesTable`'s sticky name column against the
+ * page edge, and it is the only side that can collapse without moving the grid. The width lives
+ * here and the side lives in the JSX order below, on purpose: nothing downstream may assume
+ * either.
  *
  * `flex min-h-0 flex-col` is not decoration: the rail inside scrolls itself, and a block wrapper
  * gives its child an AUTO height, under which `overflow-y-auto` never engages — a long layer stack
  * would simply run off the bottom of the page with no scrollbar anywhere.
  */
-const RAIL_CLASS = 'flex min-h-0 w-[404px] shrink-0 flex-col @max-[900px]:w-full'
+const RAIL_CLASS =
+  'flex min-h-0 w-[404px] shrink-0 flex-col border-l p-3 @max-[900px]:w-full @max-[900px]:border-l-0 @max-[900px]:border-t'
 
 /**
  * The grid and the rail, on one screen.
@@ -21,9 +25,17 @@ const RAIL_CLASS = 'flex min-h-0 w-[404px] shrink-0 flex-col @max-[900px]:w-full
  * the three readings of one live object could never be seen together, and editing values while
  * watching the layer stack that produced them was impossible by construction.
  *
- * Below 900px the rail drops beneath the grid rather than hiding — same rule as the show bar. The
- * page keeps the region above the grid extensible for the same reason the rail is a slot: Session 2
- * inserts a scope band and a template strip between the action bar and the grid.
+ * Below 900px the rail drops beneath the grid rather than hiding — same rule as the show bar.
+ * Session 3 of the space plan replaces that arm with a collapsible, overlay-able rail; it stays
+ * until then.
+ *
+ * **No padding and no gap.** Both went in session 1: `p-4` and `gap-3` cost 16px of height, 32px
+ * of width and a 12px trench down the middle of a page whose whole point is the grid, and they
+ * bought a floating card look on a surface that is not a card. The seam between the two columns is
+ * the rail's `border-l` instead — a line, not a gutter — and each column pads its own contents
+ * (the grid's toolbar rows and its footer carry `px-3`, the rail carries `p-3`). Stacked below
+ * 900px that border would be a hairline down the left of a full-width rail, which reads as a
+ * mistake, so it becomes a `border-t` there.
  *
  * **The `@container` is a wrapper, and the queried classes are on its child.** A container query
  * matches an element's *ancestor* containers, never the element that declares the container, so
@@ -48,7 +60,7 @@ const RAIL_CLASS = 'flex min-h-0 w-[404px] shrink-0 flex-col @max-[900px]:w-full
 export function ProgrammerWorkspace({ grid, rail }: { grid: ReactNode; rail: ReactNode }) {
   return (
     <div className="@container flex min-h-0 flex-1 flex-col">
-      <div className="flex min-h-0 flex-1 gap-3 p-4 @max-[900px]:flex-col @max-[900px]:overflow-y-auto">
+      <div className="flex min-h-0 flex-1 @max-[900px]:flex-col @max-[900px]:overflow-y-auto">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col @max-[900px]:min-h-[26rem] @max-[900px]:shrink-0">
           {grid}
         </div>

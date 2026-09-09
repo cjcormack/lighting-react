@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, lazy, Suspense } from "react"
+import { useState, useEffect, useCallback, lazy, Suspense } from "react"
 import { Outlet, useLocation } from "react-router"
 import { ChevronLeft, Menu, Sparkles, Loader2 } from "lucide-react"
 
@@ -8,6 +8,7 @@ import { FeatureErrorBoundary } from "./components/FeatureErrorBoundary"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { useMediaQuery } from "@/hooks/useMediaQuery"
+import { useSidebarOpen } from "@/hooks/useSidebarOpen"
 
 import { ConnectionStatus } from "./connection"
 import { ProgrammerIndicator } from './components/ProgrammerIndicator'
@@ -29,6 +30,7 @@ import { SyncReauthBanner } from "./components/cloudSync/SyncReauthBanner"
 
 const DRAWER_WIDTH = 240
 const DRAWER_COLLAPSED_WIDTH = 64
+
 
 /**
  * The AI chat panel behind a lazy boundary — react-markdown and its remark/micromark stack are
@@ -56,7 +58,10 @@ function RouteFallback() {
 }
 
 export default function Layout() {
-  const [open, setOpen] = React.useState(true)
+  // Two persisted preferences, one per route group, and the hook decides which the toggle writes.
+  // See `hooks/useSidebarOpen.ts`: the four live views start on the 64px rail, the rest of the app
+  // starts open.
+  const { open, toggle: toggleDrawer } = useSidebarOpen()
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [selectedFixture, setSelectedFixture] = useState<string | null>(null)
   const [isAiChatVisible, setIsAiChatVisible] = useState(false)
@@ -77,10 +82,6 @@ export default function Layout() {
   useEffect(() => {
     setMobileDrawerOpen(false)
   }, [location.pathname])
-
-  const toggleDrawer = () => {
-    setOpen(!open)
-  }
 
   const sidebarWidth = open ? DRAWER_WIDTH : DRAWER_COLLAPSED_WIDTH
 

@@ -15,12 +15,32 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 const gridMounts = vi.fn()
 vi.mock('@/components/programmer/ProgrammerGrid', async () => {
   const { useEffect } = await import('react')
+  // Row B — the scope pills and the Groups toggle — lives in the grid's own `renderToolbar` slot
+  // since the space plan's session 1, so the page reaches both *through* this stand-in. The band
+  // itself is the real one: the assertions below are about which scope the page is in, and a
+  // second fake would only pin the fake.
+  const { ProgrammerScopeBand } = await import('@/components/programmer/ProgrammerScopeBand')
   return {
-    ProgrammerGrid: () => {
+    ProgrammerGrid: ({
+      grouped,
+      onGroupedChange,
+    }: {
+      grouped: boolean
+      onGroupedChange: (next: boolean) => void
+    }) => {
       // In an effect, not in the render body: a re-render is fine and expected, a re-MOUNT is the
       // thing that would throw the selection away.
       useEffect(() => gridMounts(), [])
-      return <div data-testid="grid" />
+      return (
+        <div data-testid="grid">
+          <ProgrammerScopeBand />
+          <button
+            type="button"
+            title="Show group rows with their members"
+            onClick={() => onGroupedChange(!grouped)}
+          />
+        </div>
+      )
     },
   }
 })
@@ -34,9 +54,7 @@ vi.mock('@/components/programmer/ProgrammerSourceStrip', () => ({
   ProgrammerSourceStrip: () => <div data-testid="source-strip" />,
 }))
 vi.mock('@/components/programmer/ProgrammerActionBar', () => ({
-  ProgrammerActionBar: ({ sheetControls }: { sheetControls?: React.ReactNode }) => (
-    <div data-testid="action-bar">{sheetControls}</div>
-  ),
+  ProgrammerActionBar: () => <div data-testid="action-bar" />,
 }))
 vi.mock('@/components/programmer/ProgrammerSheets', () => ({
   ProgrammerSheetsProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -45,6 +63,7 @@ vi.mock('@/components/programmer/ProgrammerSheets', () => ({
     openRecordLook: vi.fn(),
     openInclude: vi.fn(),
     openUpdate: vi.fn(),
+    openMakeLayer: vi.fn(),
   }),
 }))
 vi.mock('@/components/ShowHeader', () => ({
@@ -130,7 +149,9 @@ describe('ProgrammerPage', () => {
     // The load-bearing one. `useListSelection` clears its Redux scope on unmount, so anything that
     // remounts the grid — a tab, a collapse, a conditional — silently discards the fixture
     // selection Record and Record-look scope on. Toggling Groups is a real page-state change; the
-    // grid must re-render through it, never remount.
+    // grid must re-render through it, never remount. The toggle now renders on row B, inside the
+    // grid's toolbar — which is exactly why it is a page-state change worth asserting: the state
+    // still lives in `ProgrammerBody`, above the grid.
     draw()
     expect(gridMounts).toHaveBeenCalledTimes(1)
 

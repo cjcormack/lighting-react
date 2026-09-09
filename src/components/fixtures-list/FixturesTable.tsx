@@ -167,10 +167,13 @@ export function FixturesTable({
     <div
       ref={scrollRef}
       className={cn(
-        'overflow-auto rounded-md border border-border',
+        'overflow-auto',
         // `fill` is the programmer, whose grid owns the remaining height of a full-page view. The
         // viewport cap is tuned for a list embedded in a scrolling page and leaves dead air there.
-        fill && 'min-h-0 flex-1',
+        // It is also the arm with no card around it: since the space plan's session 1 the grid runs
+        // edge to edge between the page edge and the rail's `border-l`, so a rounded box drawn hard
+        // against both reads as a card that failed to inset rather than as a table.
+        fill ? 'min-h-0 flex-1 border-t border-border' : 'rounded-md border border-border',
       )}
       style={fill ? undefined : { maxHeight: 'calc(100vh - 14rem)' }}
     >

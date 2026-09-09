@@ -38,33 +38,45 @@ const FADE_OPTIONS = [
 
 
 /**
- * The programmer's verbs, in three labelled zones.
+ * The programmer's verbs — **the right half of row A**.
  *
  * Brief item 2: `Clear`, fade, `Blind`, `Record`, `Record look`, `Include` and `Update` used to sit
  * in one row as seven identical `variant="outline" size="sm"` peers, so nothing distinguished what
  * *stages* from what *writes*, and "Record" and "Record look" read as a pair when they are two
- * destinations for one act. Now:
+ * destinations for one act. Three zones under `STAGE · LOAD · SAVE` labels fixed that, and cost a
+ * whole extra text line across the page to do it.
  *
- *  - **Stage** changes what the rig is doing right now. Blind used to sit here too; session 2b
- *    moved it into the `ShowBar` beside blackout, so there is one Blind in one place on every
- *    view rather than one location on the Programmer and another on Show.
- *  - **Load** is the only way in, and the only control never disabled.
- *  - **Save** is one primary button with a destination menu.
+ * **The zones are gone, and the labels with them** (`ActionZone` and `Divider` are deleted).
+ * Session 1 of the space plan gives the grid the page: this bar shares one 40px row with the
+ * source box rather than owning a 68px band of its own, so a 9px label above every control is
+ * 20px of every screen spent on a word. Nothing they said was deleted — each label now rides the
+ * control it introduced, as that control's hover text:
  *
- * `Update` is not here at all — it moved onto the source strip, beside the thing it writes to.
+ *  - **Stage** — leading Clear's *Radix* tooltip rather than a native `title`, because Clear is the
+ *    one control here already wrapped in a `TooltipTrigger` and two tooltip mechanisms answering
+ *    one hover is a bug, not two explanations. It changes what the rig is doing right now. Blind
+ *    used to sit here too; session 2b moved it into the `ShowBar` beside blackout, so there is one
+ *    Blind in one place on every view rather than one location on the Programmer and another on
+ *    Show.
+ *  - **Load** — a native `title` on Include, which is not wrapped: the only way in, and the only
+ *    control never disabled.
+ *  - **Save** — the same, on Record: one primary button with a destination menu, unchanged.
  *
- * Nothing collapses into an overflow kebab. The old bar hid its last four buttons behind a
- * `MoreHorizontal` below `sm`, which put the entire point of the programmer one tap further away on
- * the surface most likely to be used standing up; these wrap instead.
+ * `Update` is not here at all — it lives inside the source box, beside the thing it writes to.
+ *
+ * `sheetControls` is gone too: Groups and Columns are the *grid's* tools, not the programmer's
+ * verbs, and they moved to row B where the filter already was.
+ *
+ * Below `@[800px]` Clear keeps its fade segment and loses its word, and Include and Record become
+ * their icons; every one of those carries an `aria-label` so the shrink costs a sighted operator a
+ * word and a screen reader nothing. Nothing collapses into an overflow kebab — the old bar hid its
+ * last four buttons behind a `MoreHorizontal` below `sm`, which put the entire point of the
+ * programmer one tap further away on the surface most likely to be used standing up.
+ *
+ * The container queried is **row A's**, declared by the wrapper in `ProgrammerPage`; this
+ * component must not declare one of its own, for the reason `ProgrammerWorkspace` documents.
  */
-export function ProgrammerActionBar({
-  projectId,
-  sheetControls,
-}: {
-  projectId: number
-  /** The grid's own Groups / Columns controls, hosted here rather than above the grid. */
-  sheetControls?: ReactNode
-}) {
+export function ProgrammerActionBar({ projectId }: { projectId: number }) {
   const { data: summary } = useProgrammerSummaryQuery()
   const { data: activeEffects } = useActiveEffectsQuery()
   const { data: stacks } = useProjectCueStackListQuery(projectId)
@@ -94,161 +106,141 @@ export function ProgrammerActionBar({
       : undefined
 
   return (
-    <div className="@container flex flex-wrap items-center gap-3 border-b bg-card/50 px-4 py-2">
-      <ActionZone label="Stage">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            {/* Wrapped so the disabled state can still explain itself. */}
-            <div className="inline-flex h-8 items-stretch overflow-hidden rounded-md border">
-              <button
-                type="button"
-                disabled={!hasSomethingToClear}
-                onClick={() => programmerClearAll(fade)}
-                className="inline-flex items-center gap-1.5 px-2.5 text-xs font-medium transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
-              >
-                <Eraser className="size-3.5" />
-                Clear
-              </button>
-              <Select value={fadeMs} onValueChange={setProgrammerFade}>
-                <SelectTrigger
-                  size="sm"
-                  aria-label="Fade time"
-                  // Wide enough for "Snap" beside the chevron at the trigger's own padding; at 72px
-                  // the longest label clipped to "Sna".
-                  className="h-8 w-[86px] rounded-none border-0 border-l bg-muted/40 font-mono text-xs focus-visible:ring-0"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {FADE_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent>
-            {!hasSomethingToClear
-              ? 'The programmer is empty'
-              : [
-                  'Release',
-                  entryCount > 0
-                    ? `${entryCount} programmer value${entryCount === 1 ? '' : 's'}`
-                    : null,
-                  entryCount > 0 && programmerFxCount > 0 ? 'and' : null,
-                  programmerFxCount > 0 ? `${programmerFxCount} programmer FX` : null,
-                  fade > 0 ? `over ${fade / 1000}s` : null,
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-          </TooltipContent>
-        </Tooltip>
-
-      </ActionZone>
-
-      <Divider />
-
-      <ActionZone label="Load">
-        <Button variant="outline" size="sm" onClick={sheets.openInclude}>
-          <Download className="size-3.5" />
-          Include…
-        </Button>
-      </ActionZone>
-
-      <Divider />
-
-      <ActionZone label="Save">
-        <div className="inline-flex h-8 items-stretch overflow-hidden rounded-md">
-          <Button
-            size="sm"
-            disabled={!hasContent}
-            onClick={() => sheets.openRecord()}
-            className="rounded-none px-3 font-semibold"
-          >
-            <Circle className="size-3 fill-current" />
-            Record
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
+    <div className="flex shrink-0 items-center gap-2">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          {/* Wrapped so the disabled state can still explain itself. */}
+          <div className="inline-flex h-8 items-stretch overflow-hidden rounded-md border">
+            <button
+              type="button"
+              disabled={!hasSomethingToClear}
+              onClick={() => programmerClearAll(fade)}
+              aria-label="Clear"
+              className="inline-flex items-center gap-1.5 px-2.5 text-xs font-medium transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+            >
+              <Eraser className="size-3.5" />
+              <span className="hidden @[800px]:inline">Clear</span>
+            </button>
+            <Select value={fadeMs} onValueChange={setProgrammerFade}>
+              <SelectTrigger
                 size="sm"
-                disabled={!hasContent}
-                aria-label="Record destination"
-                className="rounded-none border-l border-primary-foreground/25 px-1.5"
+                aria-label="Fade time"
+                // Wide enough for "Snap" beside the chevron at the trigger's own padding; at 72px
+                // the longest label clipped to "Sna".
+                className="h-8 w-[86px] rounded-none border-0 border-l bg-muted/40 font-mono text-xs focus-visible:ring-0"
               >
-                <ChevronDown className="size-3.5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-[238px]">
-              <DropdownMenuLabel className="text-[9px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                Write {entryCount} value{entryCount === 1 ? '' : 's'} into
-              </DropdownMenuLabel>
-              {cueId != null && (
-                <MenuItem
-                  icon={<Upload className="size-3.5" />}
-                  title={[includedCue?.number, includedCue?.name].filter(Boolean).join(' ')}
-                  sub="Update the cue you are editing"
-                  onSelect={() =>
-                    sheets.openRecord({ targetCueId: cueId, targetCueName: includedCue?.name })
-                  }
-                />
-              )}
-              {includedStack && (
-                <MenuItem
-                  icon={<Plus className="size-3.5" />}
-                  title={`A new cue after ${includedCue?.number ?? includedCue?.name ?? 'this one'}`}
-                  // NOT "becomes Q4.5": the server assigns the number, and `lib/cueNumber.ts` has
-                  // no between-two-numbers arithmetic. Predicting one the server then ignores is
-                  // worse than not predicting.
-                  sub={`${includedStack.name} · appended`}
-                  onSelect={() => sheets.openRecord({ defaultCueStackId: includedStack.id })}
-                />
-              )}
-              <MenuItem
-                icon={<Layers className="size-3.5" />}
-                title="A new Look"
-                sub="Names its own fixtures"
-                onSelect={sheets.openRecordLook}
-              />
-              <DropdownMenuSeparator />
-              <MenuItem
-                icon={<Circle className="size-3.5" />}
-                title="An existing cue…"
-                sub="Pick from any stack"
-                onSelect={() => sheets.openRecord()}
-              />
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </ActionZone>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {FADE_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </TooltipTrigger>
+        {/* The retired **Stage** zone label leads this tooltip rather than sitting on the button
+            as a native `title`: this button is the one control here already inside a
+            `TooltipTrigger`, and a `title` beside it means the browser's own balloon and Radix's
+            floating card both answer one hover. Include and Record carry theirs as `title`s
+            because neither is wrapped. */}
+        <TooltipContent>
+          {'Stage — '}
+          {!hasSomethingToClear
+            ? 'the programmer is empty'
+            : [
+                'Release',
+                entryCount > 0
+                  ? `${entryCount} programmer value${entryCount === 1 ? '' : 's'}`
+                  : null,
+                entryCount > 0 && programmerFxCount > 0 ? 'and' : null,
+                programmerFxCount > 0 ? `${programmerFxCount} programmer FX` : null,
+                fade > 0 ? `over ${fade / 1000}s` : null,
+              ]
+                .filter(Boolean)
+                .join(' ')}
+        </TooltipContent>
+      </Tooltip>
 
-      {sheetControls && (
-        <>
-          <span className="flex-1" />
-          <ActionZone label="Sheet">{sheetControls}</ActionZone>
-        </>
-      )}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={sheets.openInclude}
+        title="Load"
+        aria-label="Include…"
+      >
+        <Download className="size-3.5" />
+        <span className="hidden @[800px]:inline">Include…</span>
+      </Button>
+
+      <div className="inline-flex h-8 shrink-0 items-stretch overflow-hidden rounded-md">
+        <Button
+          size="sm"
+          disabled={!hasContent}
+          onClick={() => sheets.openRecord()}
+          title="Save"
+          aria-label="Record"
+          className="rounded-none px-3 font-semibold"
+        >
+          <Circle className="size-3 fill-current" />
+          <span className="hidden @[800px]:inline">Record</span>
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size="sm"
+              disabled={!hasContent}
+              aria-label="Record destination"
+              className="rounded-none border-l border-primary-foreground/25 px-1.5"
+            >
+              <ChevronDown className="size-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-[238px]">
+            <DropdownMenuLabel className="text-[9px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+              Write {entryCount} value{entryCount === 1 ? '' : 's'} into
+            </DropdownMenuLabel>
+            {cueId != null && (
+              <MenuItem
+                icon={<Upload className="size-3.5" />}
+                title={[includedCue?.number, includedCue?.name].filter(Boolean).join(' ')}
+                sub="Update the cue you are editing"
+                onSelect={() =>
+                  sheets.openRecord({ targetCueId: cueId, targetCueName: includedCue?.name })
+                }
+              />
+            )}
+            {includedStack && (
+              <MenuItem
+                icon={<Plus className="size-3.5" />}
+                title={`A new cue after ${includedCue?.number ?? includedCue?.name ?? 'this one'}`}
+                // NOT "becomes Q4.5": the server assigns the number, and `lib/cueNumber.ts` has
+                // no between-two-numbers arithmetic. Predicting one the server then ignores is
+                // worse than not predicting.
+                sub={`${includedStack.name} · appended`}
+                onSelect={() => sheets.openRecord({ defaultCueStackId: includedStack.id })}
+              />
+            )}
+            <MenuItem
+              icon={<Layers className="size-3.5" />}
+              title="A new Look"
+              sub="Names its own fixtures"
+              onSelect={sheets.openRecordLook}
+            />
+            <DropdownMenuSeparator />
+            <MenuItem
+              icon={<Circle className="size-3.5" />}
+              title="An existing cue…"
+              sub="Pick from any stack"
+              onSelect={() => sheets.openRecord()}
+            />
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
   )
-}
-
-/** One labelled group of controls. The label is what makes staging and writing tell apart. */
-function ActionZone({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-[8.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-        {label}
-      </span>
-      <div className="flex items-center gap-2">{children}</div>
-    </div>
-  )
-}
-
-/** Hidden below the wrap point, where the zone labels already do the separating. */
-function Divider() {
-  return <span className="hidden w-px self-stretch bg-border @[560px]:block" />
 }
 
 function MenuItem({

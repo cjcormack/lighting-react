@@ -56,7 +56,7 @@ describe('ProgrammerSourceStrip', () => {
   it('offers Record when busking with no source', () => {
     summary = { ...summary, entryCount: 12 }
     draw()
-    expect(screen.getByText(/No source — 12 values, nothing to update/)).toBeTruthy()
+    expect(screen.getByText('No source — 12 values, nothing to update')).toBeTruthy()
     expect(screen.getByRole('button', { name: /Record/ })).toBeTruthy()
   })
 
@@ -65,11 +65,42 @@ describe('ProgrammerSourceStrip', () => {
     dirty = 3
     stacks = [STACK]
     draw()
-    expect(screen.getByText('Q4')).toBeTruthy()
+    // Two `Q4`s on screen since session 1: the cue number in the box, and the one appended to
+    // Update at `@[800px]`. Both are the same fact, so the assertion is that at least one is there.
+    expect(screen.getAllByText('Q4').length).toBeGreaterThan(0)
     expect(screen.getByText('Warm Wash')).toBeTruthy()
     expect(screen.getByText('Act 1 · cue 1 of 2')).toBeTruthy()
-    expect(screen.getByText('3 changes not written back')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Update Q4' })).not.toBeDisabled()
+  })
+
+  it('carries every sentence a narrow width hides on a title or an aria-label', () => {
+    // The promise of session 1: rows A and B lost their labels and their explanatory sentences to
+    // gain the page back, and *nothing they said was deleted*. Each one is on hover instead, so
+    // these assertions are what stops a later shrink quietly taking the words with it.
+    summary = { ...summary, entryCount: 9, lastIncluded: CUE }
+    dirty = 3
+    stacks = [STACK]
+    draw()
+    // The long dirty wording — visible only at `@[1100px]`.
+    expect(screen.getByTitle('3 changes not written back')).toBeTruthy()
+    // Revert is an icon below `@[1100px]`; the word is its accessible name at every width.
+    expect(screen.getByRole('button', { name: 'Revert' })).toBeTruthy()
+    // The whole state as one sentence, for the widths where the location line is gone — on the
+    // *text*, never on the box: a native `title` on an ancestor is what the browser shows for a
+    // descendant that has none, and the Update button below is already inside a Radix tooltip.
+    const sentence = screen.getAllByTitle('Editing · Q4 · Warm Wash · Act 1 · cue 1 of 2')
+    expect(sentence.length).toBeGreaterThan(0)
+    for (const el of sentence) expect(el.querySelector('button')).toBeNull()
+  })
+
+  it('keeps the cue number on Update\'s accessible name when the visible text drops it', () => {
+    // Below `@[800px]` the button reads just "Update". Which cue it writes to is the one thing an
+    // operator must not have to guess, so it stays on the label rather than only in the box.
+    summary = { ...summary, entryCount: 9, lastIncluded: CUE }
+    dirty = 2
+    stacks = [STACK]
+    draw()
+    expect(screen.getByRole('button', { name: 'Update Q4' })).toBeTruthy()
   })
 
   it('disables Update and says "in sync" only when a baseline proves it', () => {

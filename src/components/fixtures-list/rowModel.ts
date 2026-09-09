@@ -273,6 +273,29 @@ export function coveredFixtureKeys(
 }
 
 /**
+ * How many distinct **fixtures** the rows in front of the operator stand for.
+ *
+ * Deduped by fixture key, and that is the whole point of it being a function rather than a
+ * `rows.filter(r => r.kind === 'fixture').length` at the call site. `buildRows` calls
+ * `pushFixtureRows` once per group membership, so a head patched into two expanded groups is two
+ * `fixture` rows; counting rows would report 26 heads on a rig of 25. It sits beside
+ * [selectedRowTargets], which dedupes by the same key for the same reason ("a fixture selected
+ * through two group memberships is one head") — and the two are rendered *side by side* in the
+ * programmer's legend footer as `N fixtures · M selected`, so one deduping and the other not is
+ * how that footer comes to read "26 fixtures · 25 selected" with everything on screen selected.
+ *
+ * Group and element rows are not fixtures and do not count: a group is a way of naming heads, and
+ * an element is one head's sub-row. Dividers are not rows of anything.
+ */
+export function countFixtureRows(rows: readonly Row[]): number {
+  const seen = new Set<string>()
+  for (const row of rows) {
+    if (row.kind === 'fixture') seen.add(row.fixture.key)
+  }
+  return seen.size
+}
+
+/**
  * What the selected rows *are*, as targets — a group row one `group` entry, never its members.
  *
  * Three callers, and the third is why this is a function rather than a memo in one of them: the

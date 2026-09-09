@@ -6,6 +6,7 @@ import {
   buildRows,
   clampCommitToResolution,
   commitMatchesResolution,
+  countFixtureRows,
   expandSelectionToTargets,
   fixtureSelectParam,
   groupSelectParam,
@@ -683,5 +684,47 @@ describe('select params', () => {
     expect(parseSelectParam('nonsense')).toBeNull()
     expect(parseSelectParam('fixture:')).toBeNull()
     expect(parseSelectParam('cue:5')).toBeNull()
+  })
+})
+
+describe('countFixtureRows', () => {
+  // The programmer's legend footer reads "N fixtures · M selected", and the two numbers sit side by
+  // side. `selectedRowTargets` — which the second one comes from — dedupes by fixture key ("a
+  // fixture selected through two group memberships is one head"); if this one counted rows instead,
+  // the footer would read "26 fixtures · 25 selected" with everything on screen selected.
+  const shared = makeFixture('shared', dimmerOnly(), { groups: ['Spots', 'Washes'] })
+  const only = makeFixture('only', dimmerOnly(), { groups: ['Spots'] })
+  const loose = makeFixture('loose', dimmerOnly())
+  const fixtures = [shared, only, loose]
+  const groups = [groupSummary('Spots', 2), groupSummary('Washes', 1)]
+
+  it('counts a fixture patched into two expanded groups once', () => {
+    const rows = buildRows({
+      fixtures,
+      groups,
+      expandedGroups: new Set(['Spots', 'Washes']),
+      textFilter: '',
+    })
+    // Four `fixture` rows are rendered — `shared` appears under both groups — for three heads.
+    expect(rows.filter((r) => r.kind === 'fixture')).toHaveLength(4)
+    expect(countFixtureRows(rows)).toBe(3)
+  })
+
+  it('counts neither group rows, element rows nor dividers', () => {
+    const bar = makePixelBar('bar', 2)
+    const rows = buildRows({
+      fixtures: [bar, loose],
+      groups: [],
+      expandedGroups: new Set(),
+      expandedFixtures: new Set(['bar']),
+      textFilter: '',
+    })
+    expect(rows.some((r) => r.kind === 'element')).toBe(true)
+    expect(countFixtureRows(rows)).toBe(2)
+  })
+
+  it('follows the filter — it answers "how much is in front of me"', () => {
+    const rows = buildRows({ fixtures, groups, expandedGroups: new Set(), textFilter: 'loose' })
+    expect(countFixtureRows(rows)).toBe(1)
   })
 })

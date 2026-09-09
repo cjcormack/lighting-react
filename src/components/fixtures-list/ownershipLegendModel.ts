@@ -19,6 +19,23 @@ export const LEGEND_GLOSS: Record<CellOwnershipSource, string> = {
   baseline: 'Nothing asserts it',
 }
 
+/**
+ * The same five, as the words the artboard actually draws.
+ *
+ * The legend is a 22px footer since the space plan's session 1, so it has one line and no wrap.
+ * `LEGEND_GLOSS` is what an operator needs the *first* time; this is what fits once they know it,
+ * and the two differ in exactly one place — "You" against "You — Record takes this". The rest are
+ * the same string in both maps on purpose: a short form invented for its own sake would be a
+ * second vocabulary for one idea. The long form is still one hover away at every width.
+ */
+export const LEGEND_SHORT: Record<CellOwnershipSource, string> = {
+  programmer: 'You',
+  cue: 'Cue',
+  effect: 'Effect',
+  parked: 'Parked',
+  baseline: 'Nothing asserts it',
+}
+
 /** Draw order — loudest claim first, "nothing" last. */
 export const LEGEND_ORDER: readonly CellOwnershipSource[] = [
   'programmer',

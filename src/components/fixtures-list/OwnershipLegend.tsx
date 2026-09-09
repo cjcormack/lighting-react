@@ -6,33 +6,43 @@ import {
   LAYER_LEGEND_ORDER,
   LEGEND_GLOSS,
   LEGEND_ORDER,
+  LEGEND_SHORT,
 } from './ownershipLegendModel'
 import type { LayerLegendKey } from './ownershipLegendModel'
 import type { CellState } from './scopedCellValue'
 import type { CellOwnership, CellOwnershipSource } from './useRowOwnership'
 
 /**
- * The key beneath the value grid.
+ * The key beneath the value grid — **a 22px footer** since the space plan's session 1.
  *
  * Each swatch is styled by the **real** `ownershipCellClass`, not a hand-copied colour, so
- * retuning a ring moves the legend with it. Session 2 makes these tints navigational — clicking a
- * tinted cell jumps the grid's scope to whatever won it — which is exactly why they have to be
- * learnable now.
+ * retuning a ring moves the legend with it. The tints are navigational — clicking a tinted cell
+ * jumps the grid's scope to whatever won it — which is exactly why they have to be learnable.
+ *
+ * It used to wrap onto as many lines as it needed, below a grid that had no height to spare. Now
+ * it is one line that never wraps, it carries the row and selection counts at its left, and the
+ * long glosses appear only at `@[1100px]` — below that the swatches carry them on their `title`,
+ * which is the plan's rule for every sentence this session moved: on hover, not gone.
+ *
+ * Narrower still, it **drops whole items rather than letting the row clip them**: the header word
+ * at `@[420px]`, the trailing layer badge at `@[520px]`. The row is `overflow-hidden` with every
+ * item `shrink-0`, so anything that does not fit is otherwise sliced off mid-word with no ellipsis
+ * and nothing to say it existed — and the counts, which are leftmost and the only thing here that
+ * changes minute to minute, are what has to survive to the last.
  */
-export function OwnershipLegend({ className }: { className?: string }) {
+export function OwnershipLegend({
+  className,
+  fixtureCount,
+  selectedCount,
+}: LegendCountProps & { className?: string }) {
   return (
-    <div
-      className={cn(
-        'flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[10.5px] text-muted-foreground',
-        className,
-      )}
-    >
-      <span className="font-medium">Owned by</span>
+    <LegendFooter className={className} fixtureCount={fixtureCount} selectedCount={selectedCount}>
+      <span className="hidden font-medium @[420px]:inline">Owned by</span>
       {LEGEND_ORDER.map((source) => (
         <span
           key={source}
           title={OWNERSHIP_LABELS[source]}
-          className={cn('flex items-center gap-1.5', source === 'baseline' && 'opacity-62')}
+          className={cn('flex shrink-0 items-center gap-1.5', source === 'baseline' && 'opacity-62')}
         >
           <span
             aria-hidden="true"
@@ -47,13 +57,64 @@ export function OwnershipLegend({ className }: { className?: string }) {
           >
             {source === 'effect' && <AudioWaveform className="size-2.5" />}
           </span>
-          {LEGEND_GLOSS[source]}
+          <span className="@[1100px]:hidden">{LEGEND_SHORT[source]}</span>
+          <span className="hidden @[1100px]:inline">{LEGEND_GLOSS[source]}</span>
         </span>
       ))}
-      <span className="ml-auto flex items-center gap-1.5">
+      {/* Hidden below `@[520px]` rather than left to be clipped: the row is `overflow-hidden` and
+          every item is `shrink-0`, so the alternative is this badge sliced off mid-word with
+          nothing saying it was there. It is the item furthest from the counts and the one whose
+          glyph the cells themselves already carry, so it is the right one to drop first. */}
+      <span
+        className="ml-auto hidden shrink-0 items-center gap-1.5 @[520px]:flex"
+        title="came from a Look layer"
+      >
         <Layers aria-hidden="true" className="size-3" />
-        came from a Look layer
+        <span className="@[1100px]:hidden">from a layer</span>
+        <span className="hidden @[1100px]:inline">came from a Look layer</span>
       </span>
+    </LegendFooter>
+  )
+}
+
+/** The two counts every legend leads with. Optional so the plain lists can mount one without. */
+interface LegendCountProps {
+  /** Fixture rows currently in the grid, after the filter. */
+  fixtureCount?: number
+  /** Visibly selected rows — the same set the selection toolbar gates on. */
+  selectedCount?: number
+}
+
+/**
+ * The shared footer shape: one 22px line, its own `@container`, never wrapping.
+ *
+ * Both legends use it so they cannot drift into two different footers — they occupy the same slot
+ * and swap only on the scope.
+ *
+ * The `@container` is declared here and every width query is on a descendant — the shape
+ * `ProgrammerWorkspace`'s doc comment records the bug for. It measures **the footer's own column**
+ * rather than the page, because fitting inside the grid column is the actual question: measuring
+ * the page would show the long glosses at 1180 of viewport, where the column is 712 and they clip
+ * mid-word. So at 1440 and at 1180 this draws `LEGEND_SHORT`, which is exactly what the `Main` and
+ * `TabletLandscape` artboards draw, and the long glosses arrive on a wider desk.
+ */
+function LegendFooter({
+  className,
+  fixtureCount,
+  selectedCount,
+  children,
+}: LegendCountProps & { className?: string; children: React.ReactNode }) {
+  return (
+    <div className={cn('@container shrink-0 border-t', className)}>
+      <div className="flex h-[22px] items-center gap-3 overflow-hidden whitespace-nowrap px-3 text-[10.5px] text-muted-foreground">
+        {fixtureCount != null && (
+          <span className="shrink-0 tabular-nums">
+            {fixtureCount} fixture{fixtureCount === 1 ? '' : 's'}
+            {selectedCount != null && selectedCount > 0 && ` · ${selectedCount} selected`}
+          </span>
+        )}
+        {children}
+      </div>
     </div>
   )
 }
@@ -69,25 +130,30 @@ function swatchOwnership(source: CellOwnershipSource): CellOwnership {
  * Same construction as its sibling — swatches styled by the real `layerCellClass` — so the two
  * legends cannot drift from the cells they describe.
  */
-export function LayerLegend({ className }: { className?: string }) {
+export function LayerLegend({
+  className,
+  fixtureCount,
+  selectedCount,
+}: LegendCountProps & { className?: string }) {
   return (
-    <div
-      className={cn(
-        'flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[10.5px] text-muted-foreground',
-        className,
-      )}
-    >
-      <span className="font-medium">In this look</span>
+    <LegendFooter className={className} fixtureCount={fixtureCount} selectedCount={selectedCount}>
+      <span className="hidden font-medium @[420px]:inline">In this look</span>
       {LAYER_LEGEND_ORDER.map((key) => (
-        <span key={key} className="flex items-center gap-1.5">
+        <span
+          key={key}
+          title={LAYER_LEGEND_GLOSS[key]}
+          className="flex shrink-0 items-center gap-1.5"
+        >
           <span
             aria-hidden="true"
             className={cn('size-3 rounded-sm', layerCellClass(swatchState(key)) || 'bg-muted')}
           />
+          {/* No short form: these four are already short, and unlike the ownership glosses there
+              is no longer sentence to trade against. They stay whole at every width. */}
           {LAYER_LEGEND_GLOSS[key]}
         </span>
       ))}
-    </div>
+    </LegendFooter>
   )
 }
 

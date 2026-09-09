@@ -1,19 +1,17 @@
 import { memo } from 'react'
-import { Layers, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { Navigate, useParams } from 'react-router'
-import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ShowBar } from '@/components/ShowBar'
 import { ShowHeader } from '@/components/ShowHeader'
 import { EditorContextProvider } from '@/components/programmer/EditorContext'
 import { ProgrammerActionBar } from '@/components/programmer/ProgrammerActionBar'
-import { ColumnsMenu, useColumnVisibility } from '@/components/fixtures-list/ColumnsMenu'
+import { useColumnVisibility } from '@/components/fixtures-list/ColumnsMenu'
 import { ProgrammerGrid } from '@/components/programmer/ProgrammerGrid'
 import { LookRowStoreProvider } from '@/components/programmer/LookRowStore'
 import { FocusedTemplateLayerProvider } from '@/components/programmer/FocusedTemplateLayer'
 import { ProgrammerRail } from '@/components/programmer/ProgrammerRail'
 import { ProgrammerScopeProvider } from '@/components/programmer/ProgrammerScope'
-import { ProgrammerScopeBand } from '@/components/programmer/ProgrammerScopeBand'
 import {
   ProgrammerSheetsProvider,
   useProgrammerSheets,
@@ -55,8 +53,15 @@ export function ProgrammerFxRedirect() {
  * putting them behind a switcher meant the operator could never watch the layer stack that produced
  * the values they were editing. Everything is on screen at once here, which is the entire point.
  *
- * Six bands, deliberately separate siblings rather than one header component — Session 2 inserts a
- * scope band and a contextual template strip between the action bar and the workspace.
+ * **Two rows of chrome, not six bands.** It shipped as six deliberately separate siblings — source
+ * strip, action bar, scope band, filter row, template strip, column header — each designed on its
+ * own, each spending a line on a label or a sentence, and together 489px of a 900px screen before
+ * the first fixture. The space plan's session 1 folds them: **row A** is the noun and the verbs
+ * (the source box on the left, Clear / Include / Record on the right, one 40px line), and **row B**
+ * is what the grid shows (scope, filter, Lit, Groups, Columns) — which lives *inside*
+ * `ProgrammerGrid`'s toolbar, because it describes the grid and has no business spanning the rail.
+ * Nothing the labels and sentences said was deleted; every one of them is a `title` or an
+ * `aria-label` now, and each component's doc comment says which.
  */
 export function ProgrammerPage() {
   const { projectId } = useParams()
@@ -126,8 +131,9 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
   // Grouping is a toggle rather than a route split: busking a whole wash wants group rows, plotting
   // an individual mover wants the flat list, and both are the same grid.
   const [grouped, setGrouped] = usePersistentState<boolean>(GROUPED_KEY, false)
-  // Owned here rather than inside the grid because the menu renders in the action bar, which is a
-  // full-width band above the workspace the grid sits in.
+  // Owned here rather than inside the grid, and it must stay here: this component is the memo
+  // barrier, and state held above it in `ProgrammerPage` would put every ShowBar re-render through
+  // the whole grid/rail subtree. The *controls* render on row B, inside the grid's own toolbar.
   const [columnVisibility, setColumnVisibility] = useColumnVisibility()
 
   // Revert is drop-everything-then-re-Include. There is no server-side revert, and those two steps
@@ -146,31 +152,21 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
 
   return (
     <ProgrammerScopeProvider>
-      <ProgrammerSourceStrip
-        projectId={projectId}
-        onUpdate={sheets.openUpdate}
-        onRevert={handleRevert}
-        onRecord={() => sheets.openRecord()}
-      />
-
-      <ProgrammerActionBar
-        projectId={projectId}
-        sheetControls={
-          <>
-            <Button
-              variant={grouped ? 'default' : 'outline'}
-              size="sm"
-              aria-pressed={grouped}
-              onClick={() => setGrouped(!grouped)}
-              title="Show group rows with their members"
-            >
-              <Layers className="size-3.5" />
-              <span className="hidden @[560px]:inline">Groups</span>
-            </Button>
-            <ColumnsMenu visibility={columnVisibility} onChange={setColumnVisibility} />
-          </>
-        }
-      />
+      {/* Row A: the noun and the verbs, on one 40px line. It declares the `@container` both
+          halves query — neither may declare its own, or each would measure itself instead of the
+          width it has to share (see `ProgrammerWorkspace`'s doc comment for that bug). */}
+      <div className="@container shrink-0 border-b bg-card/50 px-3">
+        <div className="flex h-10 items-center gap-2">
+          <ProgrammerSourceStrip
+            projectId={projectId}
+            onUpdate={sheets.openUpdate}
+            onRevert={handleRevert}
+            onRecord={() => sheets.openRecord()}
+          />
+          <span className="h-[22px] w-px shrink-0 self-center bg-border" />
+          <ProgrammerActionBar projectId={projectId} />
+        </div>
+      </div>
 
       {/* The outer editor context stays `live` for the *rail* — its FX controls write the
           programmer whatever the grid is pointed at. `ProgrammerGrid` provides its own inner
@@ -185,15 +181,13 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
           the grid, the notices and the scope band all need to know what it holds. */}
       <LookRowStoreProvider projectId={projectId}>
         <FocusedTemplateLayerProvider projectId={projectId}>
-          {/* Session 2's scope band. */}
-          <ProgrammerScopeBand />
-
           <EditorContextProvider value={{ kind: 'live' }}>
             <ProgrammerWorkspace
               grid={
                 <ProgrammerGrid
                   projectId={projectId}
                   grouped={grouped}
+                  onGroupedChange={setGrouped}
                   columnVisibility={columnVisibility}
                   onColumnVisibilityChange={setColumnVisibility}
                 />

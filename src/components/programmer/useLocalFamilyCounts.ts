@@ -25,7 +25,21 @@ import type { AttributeFamily } from '@/lib/attributeFamily'
  * a group up properly would mean fetching every group's detail to serve a hint. Where two fixtures
  * disagree on a name's category the first wins, and `familyForCategory`'s catch-all means the
  * answer is always a family, never a blank.
+ *
+ * **The scan is shared between call sites at one revision.** The loop below walks the whole entry
+ * map, and `useProgrammerRevision` ticks on every programmer write — so on the live-busking hot
+ * path it runs per value set, per cell commit, per fader tick. A `useMemo` is per *instance*, and
+ * row B mounts two independent callers (`ProgrammerScopeBand` and `MakeLayerButton`), which made
+ * that scan run twice per tick for one answer. The module-level cache collapses them: same revision
+ * and same property index, same object. It holds exactly one entry, so it cannot grow, and it is
+ * keyed on the revision, so it can never serve a stale count.
  */
+let cachedCounts: {
+  categoryByProperty: Map<string, string>
+  revision: number
+  counts: Partial<Record<AttributeFamily, number>>
+} | null = null
+
 export function useLocalFamilyCounts(): Partial<Record<AttributeFamily, number>> {
   const { data: fixtures } = useFixtureListQuery()
   // The entry map lives outside Redux, so a revision tick is how a component knows to re-read it.
@@ -42,7 +56,13 @@ export function useLocalFamilyCounts(): Partial<Record<AttributeFamily, number>>
   }, [fixtures])
 
   return useMemo(() => {
-    void revision
+    if (
+      cachedCounts &&
+      cachedCounts.revision === revision &&
+      cachedCounts.categoryByProperty === categoryByProperty
+    ) {
+      return cachedCounts.counts
+    }
     const counts: Partial<Record<AttributeFamily, number>> = {}
     for (const entry of lightingApi.programmer.getState().entries.values()) {
       if (entry.owner === 'layers') continue
@@ -50,6 +70,7 @@ export function useLocalFamilyCounts(): Partial<Record<AttributeFamily, number>>
       const family = familyForCategory(category)
       counts[family] = (counts[family] ?? 0) + 1
     }
+    cachedCounts = { categoryByProperty, revision, counts }
     return counts
   }, [categoryByProperty, revision])
 }

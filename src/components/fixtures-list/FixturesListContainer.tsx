@@ -23,6 +23,7 @@ import {
 } from './ColumnsMenu'
 import {
   buildRows,
+  countFixtureRows,
   expandSelectionToTargets,
   fixtureRowId,
   groupRowId,
@@ -144,6 +145,21 @@ export interface FixturesListContainerProps {
     targetEmitters: readonly string[]
   }) => React.ReactNode
   /**
+   * Replace nothing — *add* a footer strip under the table, receiving the two counts only this
+   * component can compute.
+   *
+   * Exists for the programmer's ownership legend, which the space plan turns into a 22px footer
+   * reading `24 fixtures · 4 selected` beside its swatches. The legend used to be a sibling of
+   * this container, which is why it could not say either number; both come from `rows` and the
+   * selection, and lifting them out would mean a second row build or a second selection read.
+   *
+   * `fixtureCount` counts **fixture rows after filtering** — not groups, elements or dividers, and
+   * not the whole patch: the number answers "how much is in front of me", which is what a filtered
+   * list changes. `selectedCount` is the *visible* selection, the same set the selection toolbar
+   * gates on, so a filter that hides every selected row reads 0 rather than lying.
+   */
+  renderFooter?: (parts: { fixtureCount: number; selectedCount: number }) => React.ReactNode
+  /**
    * Let the table fill its flex parent instead of capping at `calc(100vh - 14rem)`.
    *
    * That cap is tuned for a list embedded in a scrolling page. The programmer is a full-height
@@ -166,6 +182,7 @@ export function FixturesListContainer({
   columnVisibility: controlledColumnVisibility,
   onColumnVisibilityChange,
   renderToolbar,
+  renderFooter,
   fill = false,
 }: FixturesListContainerProps) {
   const { data: maybeFixtures, isLoading: fixturesLoading } = useFixtureListQuery()
@@ -256,6 +273,11 @@ export function FixturesListContainer({
   // The dedupe and the element-row drop live in `selectedRowTargets`, which the desk-selection
   // bridge below is the third caller of: locate and the desk must never disagree about what a
   // selected group row *is*.
+  // Memoized on `rows` alongside every other derivation of it: this component re-renders on each
+  // pointermove of a marquee drag, and an inline reduce in the return would rescan the whole row
+  // list per frame to feed one footer string.
+  const fixtureCount = useMemo(() => countFixtureRows(rows), [rows])
+
   const locateTargets = useMemo<LocateTarget[]>(
     () => selectedRowTargets(rows, selection.selectedIds),
     [rows, selection.selectedIds],
@@ -899,7 +921,10 @@ export function FixturesListContainer({
   )
 
   return (
-    <div className={cn('space-y-3', fill && 'flex min-h-0 flex-1 flex-col')}>
+    // `space-y-3` only off `fill`. The programmer's grid runs edge to edge under a 22px footer
+    // that has to sit hard against the table's own border, and a rhythm applied to every child
+    // would push a 12px gap under it.
+    <div className={cn(fill ? 'flex min-h-0 flex-1 flex-col' : 'space-y-3')}>
       {cellEntryControl}
       {renderToolbar ? (
         renderToolbar({
@@ -952,6 +977,8 @@ export function FixturesListContainer({
           cellSelection={showOwnership ? cellSelection : undefined}
         />
       )}
+
+      {renderFooter?.({ fixtureCount, selectedCount: locateTargets.length })}
 
       <FixtureDetailModal fixtureKey={infoFixtureKey} onClose={() => setInfoFixtureKey(null)} />
       <GroupDetailModal groupName={infoGroupName} onClose={() => setInfoGroupName(null)} />
