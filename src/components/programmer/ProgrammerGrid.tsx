@@ -13,7 +13,7 @@ import type { ColumnVisibility } from '@/components/fixtures-list/ColumnsMenu'
 import { FixturesListContainer } from '@/components/fixtures-list/FixturesListContainer'
 import { EditorContextProvider } from '@/components/programmer/EditorContext'
 import { LayerRowNotices } from './LayerRowNotices'
-import { MakeLayerButton, ProgrammerScopeBand } from './ProgrammerScopeBand'
+import { ProgrammerScopeBand } from './ProgrammerScopeBand'
 import { TemplateStrip } from './TemplateStrip'
 import { useLookRowStore } from './LookRowStore'
 import { useProgrammerScope } from './ProgrammerScope'
@@ -160,7 +160,9 @@ function ProgrammerGridBody({
                   <span className="hidden @[800px]:inline">Groups</span>
                 </Button>
                 {columns}
-                <MakeLayerButton />
+                {/* `Make layer` was this row's right end until session 3 of the space plan moved
+                    it onto the rail's Local values row — the row it promotes. See `LocalValuesRow`
+                    in `ProgrammerRail` for the one rule that changed with the move. */}
               </div>
             </div>
             {/* The layer notices keep their padded block. They are prose, not chrome — a sentence

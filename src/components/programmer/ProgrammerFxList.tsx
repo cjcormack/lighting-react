@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from 'react'
-import { AudioWaveform, Layers, LayoutGrid, MoreHorizontal, Pencil, Plus, Square } from 'lucide-react'
+import { memo, useCallback, useMemo, useState } from 'react'
+import { Layers, LayoutGrid, MoreHorizontal, Pencil, Plus, Square } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -17,7 +17,6 @@ import { useProgrammerLayersQuery } from '@/store/programmer'
 import { familyCanHoldEffect, familyForEffectCategory } from '@/lib/attributeFamily'
 import { ActiveEffectSheet } from '../busking/ActiveEffectSheet'
 import { findEffectEntry, toEffectContext } from '../busking/buskingTypes'
-import { ProgrammerAddEffect } from './ProgrammerAddEffect'
 import { NewTemplateFromEffectSheet } from './NewTemplateFromEffectSheet'
 import type { ActiveEffect, EffectLibraryEntry } from '@/store/fixtureFx'
 
@@ -35,6 +34,12 @@ import type { ActiveEffect, EffectLibraryEntry } from '@/store/fixtureFx'
  * `FxSheet` stays available beneath it as a mount-on-demand diagnostic, which is where the old
  * "don't mount two row models" argument now lives.
  *
+ * **Rows only, since session 3 of the space plan.** The band used to draw its own heading — a wave,
+ * *FX running*, the count and `+ Effect` — above the rows, which made it the second of two
+ * separately-headed lists in one rail. The rail is one list now: its header carries the count
+ * beside the layer count, its `EFFECTS` label sits over these rows under the values/effects
+ * boundary, and its footer owns `+ Effect` (`useProgrammerAddEffect`).
+ *
  * The row menu keeps to that, and each item pays for itself. **Edit…** goes through
  * `toEffectContext`, which maps an `ActiveEffect` to the parameter sheet's shape with no fixture or
  * group lookup at all — the sheet it opens does subscribe to the fixture list, which is why it is
@@ -43,7 +48,7 @@ import type { ActiveEffect, EffectLibraryEntry } from '@/store/fixtureFx'
  * *Save as template…* needs to read an effect's category: a single shared cache entry the whole app
  * already subscribes to, not a fetch per row.
  */
-export function ProgrammerFxList() {
+export const ProgrammerFxList = memo(function ProgrammerFxList() {
   const { data: effects } = useActiveEffectsQuery()
   const { data: layers } = useProgrammerLayersQuery()
   const { data: library } = useEffectLibraryQuery()
@@ -79,22 +84,15 @@ export function ProgrammerFxList() {
   )
 
   return (
-    <div className="flex min-h-0 flex-col">
-      <div className="flex items-center gap-2 px-1 pb-1.5">
-        <AudioWaveform className="size-3.5 text-muted-foreground" />
-        <span className="text-xs font-semibold">FX running</span>
-        <Badge variant="secondary" className="px-1.5 text-[10px] tabular-nums">
-          {running.length}
-        </Badge>
-        <span className="flex-1" />
-        <ProgrammerAddEffect />
-      </div>
+    <div className="flex flex-col">
       {running.length === 0 ? (
         <p className="px-1 text-[11px] text-muted-foreground">
           Nothing running. Effects arrive from a busking pad, a Look, or the cue on stage.
         </p>
       ) : (
-        <div className="flex min-h-0 min-w-0 flex-col gap-1 overflow-y-auto">
+        // No scroller of its own: the rail is the one scroller, and a second inside it would
+        // trap the wheel over a long effect list.
+        <div className="flex min-w-0 flex-col gap-1">
           {running.map((effect) => (
             <FxRow
               key={effect.id}
@@ -122,7 +120,7 @@ export function ProgrammerFxList() {
       />
     </div>
   )
-}
+})
 
 /**
  * Whether this effect can become a template, and why not when it cannot.

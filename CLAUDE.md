@@ -281,8 +281,12 @@ already: `Number('')` is 0 where Kotlin's `toDoubleOrNull()` is null, so the cli
 **Within a cue, later layers win — for every attribute, intensity included**, and the cue's
 own `propertyAssignments` are the last layer and beat all of them. Across cues, HTP still
 governs intensity. That flip is the change an operator coming from presets is most likely to
-be surprised by, so `LookStack`'s `precedenceNote` says it in the section body rather than leaving
-it implied (it was `LayersPane` that said so until session 2a deleted that pane).
+be surprised by, so it is said out loud rather than left implied: the programmer rail draws its
+stack **top wins** — the Local values row first, then the layers strongest to weakest — under a
+`VALUES · top wins` label whose hover is the full sentence, and `LookStack`'s wide density keeps
+the sentence as its `precedenceNote` paragraph (it was `LayersPane` that said so until session 2a
+deleted that pane). The dense density *reverses only the rendering*: the order badge and every
+index a handler receives are still the array's, which is `sortOrder` ascending.
 A layer's `sortOrder` is authoritative, not its array position: two layers sharing one leaves the
 tie to insertion order in the cook step. Nothing renumbers client-side today — the programmer
 stack asks the server to move a layer and takes the order back — so a client-side reorder would
@@ -295,8 +299,9 @@ hatch. Effects are Layer 3 and values Layer 4, so a lower layer's colour *effect
 layer's static colour whatever the order says; `stomp` on the higher layer switches off the effects
 of every layer below it, on every property it asserts. It is **suppression, not removal** — the
 instance keeps running, so clearing the stomp brings it back mid-phase — and it applies to the
-programmer stack as well as to a cue. `LookStack`'s `onSetStomp` is the toggle; the badge is what a
-read-only row draws instead. Backend contract in `lighting7/docs/lighting-composition-model.md`
+programmer stack as well as to a cue. `LookStack`'s `onSetStomp` is the toggle; a read-only row
+draws a badge instead, and the dense row draws both — the badge on the row, because stomp is the
+one setting that changes what the rows *below* do, and the toggle in its popover. Backend contract in `lighting7/docs/lighting-composition-model.md`
 §Stomp, which is also where the *other* stomp lives — the cue-level, cross-cue, removing one. Don't
 conflate them.
 
@@ -382,7 +387,8 @@ cue *is* a saved programmer stack. Its seam is `LayerHandlers`, which is **index
 purpose**: the rows render a list and the operator acts on a position in it, so translating
 index → whatever addresses a layer in that world is the host's job. The cue's host PATCHes
 whole arrays through `buildCueInput`; `ProgrammerLookStack`'s maps index → `layerId` and sends
-`programmer.addLayer` / `removeLayer` / `moveLayer` / `patchLayer`. It must not renumber
+`programmer.removeLayer` / `moveLayer` / `patchLayer` (`addLayer` is `ProgrammerAddLayerSheet`'s,
+since the rail's footer and strip own adding). It must not renumber
 `sortOrder` client-side the way the cue path does — the server renumbers the stack and re-ranks
 the running effects **in place**, so a drag doesn't restart any effect's phase.
 

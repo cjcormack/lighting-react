@@ -1,12 +1,10 @@
-import { Eye, Hand, Layers } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Eye, Hand } from 'lucide-react'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { LookNameBadge } from '@/components/looks/LookNameBadge'
 import { FAMILY_LABELS, parsePropertyMask } from '@/lib/attributeFamily'
 import { useProgrammerLayersQuery } from '@/store/programmer'
 import { useLookSaveState } from './LookRowStore'
 import { useFocusedTemplateLayer } from './FocusedTemplateLayer'
-import { useProgrammerSheets } from './ProgrammerSheets'
 import { useLocalValueCount } from './useLocalFamilyCounts'
 import { useProgrammerScope, useProgrammerScopeActions } from './ProgrammerScope'
 import type { LookSaveState } from './LookRowStore'
@@ -162,43 +160,5 @@ export function ProgrammerScopeBand() {
         </span>
       )}
     </div>
-  )
-}
-
-/**
- * Promote what you have busked into a named Look, applied here as a layer.
- *
- * A separate export rather than part of the band above, because it belongs at **row B's right
- * end** — past the filter, Lit, Groups and Columns — while the scope pills lead the row. It is
- * still the one action whose subject is the scope you are looking at, which is why it is on this
- * row at all rather than among the programmer's verbs; the plan moves it onto the rail's Local
- * values row in session 3, and it stays here until then.
- *
- * Disabled rather than hidden with nothing to promote: it is how the gesture is discovered, and an
- * affordance that only appears once you already know to busk first teaches nobody.
- */
-export function MakeLayerButton() {
-  const scope = useProgrammerScope()
-  const sheets = useProgrammerSheets()
-  const localCount = useLocalValueCount()
-
-  if (scope?.kind !== 'local') return null
-
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      className="h-7 shrink-0"
-      disabled={localCount === 0}
-      onClick={sheets.openMakeLayer}
-      title={
-        localCount === 0
-          ? 'Set some values first, then promote them into a shared look'
-          : 'Save these values as a look and apply it here as a layer'
-      }
-    >
-      <Layers className="size-3.5" />
-      <span className="hidden @[800px]:inline">Make layer</span>
-    </Button>
   )
 }

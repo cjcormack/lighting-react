@@ -10,7 +10,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
  * and `useListSelection` clears its Redux scope on unmount — so glancing at the layer stack silently
  * discarded the fixture selection Record scopes on. The pane needed a `forceMount` escape hatch for
  * exactly that. Here there is nothing to force, and these assertions are what keeps it that way:
- * all three surfaces on screen at once, and the grid mounted exactly once.
+ * all three surfaces on screen at once, and the grid mounted exactly once — across a scope
+ * switch, a rail collapse, a drag on the rail's handle and an overlay open/close, which are the
+ * three ways session 3 of the space plan added for the page to change shape around it.
  */
 const gridMounts = vi.fn()
 vi.mock('@/components/programmer/ProgrammerGrid', async () => {
@@ -50,6 +52,22 @@ vi.mock('@/components/programmer/ProgrammerLookStack', () => ({
 vi.mock('@/components/programmer/ProgrammerFxList', () => ({
   ProgrammerFxList: () => <div data-testid="fx" />,
 }))
+// The rail's `+ Effect` offer reads the Redux selection; the sheets behind the footer drag in the
+// whole picker and the FX authoring form. The rail itself is real — its header, strip and footer
+// are what the collapse and overlay cases below press.
+vi.mock('@/components/programmer/ProgrammerAddEffect', () => ({
+  useProgrammerAddEffect: () => ({
+    disabled: true,
+    reason: 'no selection',
+    target: null,
+    onCreated: vi.fn(),
+  }),
+  ProgrammerAddEffectSheet: () => null,
+}))
+vi.mock('@/components/programmer/ProgrammerAddLayerSheet', () => ({
+  ProgrammerAddLayerSheet: () => null,
+}))
+vi.mock('@/store/fixtureFx', () => ({ useActiveEffectsQuery: () => ({ data: [] }) }))
 vi.mock('@/components/programmer/ProgrammerSourceStrip', () => ({
   ProgrammerSourceStrip: () => <div data-testid="source-strip" />,
 }))
@@ -169,6 +187,76 @@ describe('ProgrammerPage', () => {
     fireEvent.click(screen.getByLabelText('Show the composed output'))
     fireEvent.click(screen.getByLabelText('Show only the values you set'))
     expect(gridMounts).toHaveBeenCalledTimes(1)
+  })
+
+  it('mounts the value grid exactly once across a rail collapse and expand', () => {
+    // Session 3's rule, stated in the plan: the *rail's* contents may unmount freely — nothing in
+    // it owns a selection — but the grid beside it must only re-render as the rail comes and
+    // goes. A `key` on the row, or a conditional around the grid column, would fail this.
+    draw()
+    expect(gridMounts).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('layers')).toBeTruthy()
+
+    fireEvent.click(screen.getByLabelText('Collapse the rail'))
+    expect(screen.queryByTestId('layers')).toBeNull()
+    expect(gridMounts).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(screen.getByLabelText('Expand the rail'))
+    expect(screen.getByTestId('layers')).toBeTruthy()
+    expect(gridMounts).toHaveBeenCalledTimes(1)
+  })
+
+  it('mounts the value grid exactly once across a drag on the rail handle', () => {
+    // The width is state held below the memo barrier and reaches the rail as a CSS variable;
+    // every pointer move re-renders the workspace frame and must reach the grid as nothing.
+    draw()
+    fireEvent.pointerDown(screen.getByRole('separator', { name: 'Resize the rail' }), {
+      button: 0,
+      clientX: 1000,
+    })
+    fireEvent.pointerMove(window, { clientX: 900 })
+    fireEvent.pointerMove(window, { clientX: 850 })
+    fireEvent.pointerUp(window)
+    expect(gridMounts).toHaveBeenCalledTimes(1)
+    expect(window.localStorage.getItem('programmer.rail.width')).toBe('450')
+  })
+
+  it('mounts the value grid exactly once across an overlay open and close', () => {
+    // The narrow arm: the strip opens the rail *over* the grid, and Escape, the strip, the
+    // rail's own chevron or a press on the grid close it. Both flags are in the DOM under jsdom
+    // (the arms are container queries), so this drives the narrow arm's controls directly.
+    draw()
+    fireEvent.click(screen.getByLabelText('Collapse the rail'))
+    const stripToggle = () => screen.getByRole('button', { name: 'Open the rail' })
+    fireEvent.click(stripToggle())
+    expect(screen.getByTestId('layers')).toBeTruthy()
+    expect(stripToggle()).toHaveAttribute('aria-expanded', 'true')
+    expect(gridMounts).toHaveBeenCalledTimes(1)
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByTestId('layers')).toBeNull()
+
+    fireEvent.click(stripToggle())
+    fireEvent.pointerDown(screen.getByTestId('grid'))
+    expect(screen.queryByTestId('layers')).toBeNull()
+
+    // The strip's chevron closes it too, and the overlay's own header chevron.
+    fireEvent.click(stripToggle())
+    fireEvent.click(stripToggle())
+    expect(screen.queryByTestId('layers')).toBeNull()
+    fireEvent.click(stripToggle())
+    fireEvent.click(screen.getByLabelText('Close the rail'))
+    expect(screen.queryByTestId('layers')).toBeNull()
+    expect(gridMounts).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps every door reachable from the strip', () => {
+    // The strip's `+` opens the same three doors as the footer, so nothing is reachable only with
+    // the rail open. `+ Effect` says why it cannot open rather than vanishing.
+    draw()
+    fireEvent.click(screen.getByLabelText('Collapse the rail'))
+    expect(screen.queryByLabelText('Add a look layer')).toBeNull()
+    expect(screen.getByLabelText('Add a layer or an effect')).toBeTruthy()
   })
 
   it('names what the grid is pointed at', () => {

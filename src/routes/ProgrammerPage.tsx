@@ -171,6 +171,9 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
       {/* The outer editor context stays `live` for the *rail* — its FX controls write the
           programmer whatever the grid is pointed at. `ProgrammerGrid` provides its own inner
           context derived from the scope. */}
+      {/* The rail's width, collapsed flag and overlay flag are `ProgrammerWorkspace`'s, below
+          this barrier — deliberately not state of this component or of `ProgrammerPage`, where a
+          drag on the rail's handle would re-render the grid per pointer move. */}
       {/* Above the workspace, not inside the grid: the rail's own layer chrome reads the same
           store, and one fetch per focused layer is the point of it living here. The **scope band is
           inside it too**, and must stay there: it reads `useLookSaveState()`, which outside the

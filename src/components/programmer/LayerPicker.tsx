@@ -37,6 +37,18 @@ interface LayerPickerProps {
    * ignore it, so they are not offered.
    */
   allowTiming?: boolean
+  /**
+   * Open on one library rather than both. The programmer rail's doors — `+ Look` and
+   * `+ Template`, in its footer and behind the strip's `+` menu — are each named for a kind, and
+   * a door that then offered the other kind too would make the name a lie.
+   *
+   * Unset, the first step offers both libraries. No production caller leaves it unset today:
+   * `ProgrammerAddLayerSheet` is the only host and always names a kind, and the cue editor has
+   * had no add-layer gesture since session 2a made a cue read-only. The general form is kept
+   * because it is the shape a future host without kind-named doors would want, not because
+   * anything reaches it.
+   */
+  kind?: 'look' | 'template'
 }
 
 type Step = 'look' | 'targets' | 'timing'
@@ -60,6 +72,7 @@ export function LayerPicker({
   onCancel,
   preselectedTarget,
   allowTiming = true,
+  kind,
 }: LayerPickerProps) {
   const { data: looks } = useLookListQuery({ projectId })
   const { data: templates } = useTemplateListQuery({ projectId })
@@ -193,7 +206,9 @@ export function LayerPicker({
               <ChevronLeft className="size-5" />
             </button>
             <div>
-              <h3 className="font-medium text-sm">Choose a look</h3>
+              <h3 className="font-medium text-sm">
+                {kind === 'template' ? 'Choose a template' : 'Choose a look'}
+              </h3>
               <p className="text-xs text-muted-foreground">
                 Layers compose in order — a later one wins over an earlier one.
               </p>
@@ -202,23 +217,32 @@ export function LayerPicker({
 
           <div className="flex-1 overflow-y-auto">
             <div className="flex flex-col gap-1 p-4 pt-0">
-              {(looks?.length ?? 0) === 0 && (templates?.length ?? 0) === 0 && (
-                <div className="py-8 text-center text-sm text-muted-foreground">
-                  Nothing to layer yet. Record a look from the programmer, or create a template.
-                </div>
+              {(kind === 'template' || (looks?.length ?? 0) === 0) &&
+                (kind === 'look' || (templates?.length ?? 0) === 0) && (
+                  <div className="py-8 text-center text-sm text-muted-foreground">
+                    {kind === 'look'
+                      ? 'No looks yet. Record one from the programmer.'
+                      : kind === 'template'
+                        ? 'No templates yet. Create one in the template library.'
+                        : 'Nothing to layer yet. Record a look from the programmer, or create a template.'}
+                  </div>
+                )}
+              {kind !== 'template' && (
+                <LookGroup
+                  title="Looks"
+                  hint="These name their own fixtures. Targets narrow them."
+                  looks={looks ?? []}
+                  onSelect={handleSelectLook}
+                />
               )}
-              <LookGroup
-                title="Looks"
-                hint="These name their own fixtures. Targets narrow them."
-                looks={looks ?? []}
-                onSelect={handleSelectLook}
-              />
-              <TemplateGroup
-                title="Templates"
-                hint="One value or effect each. These take their fixtures from the layer."
-                templates={templates ?? []}
-                onSelect={handleSelectTemplate}
-              />
+              {kind !== 'look' && (
+                <TemplateGroup
+                  title="Templates"
+                  hint="One value or effect each. These take their fixtures from the layer."
+                  templates={templates ?? []}
+                  onSelect={handleSelectTemplate}
+                />
+              )}
             </div>
           </div>
         </>

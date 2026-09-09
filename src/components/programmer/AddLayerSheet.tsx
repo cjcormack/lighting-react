@@ -13,6 +13,8 @@ interface AddLayerSheetProps {
    * against, and it drops the timing fields on the way out.
    */
   allowTiming?: boolean
+  /** Passed straight to [LayerPicker]: open on one library. The programmer rail's footer sets it. */
+  kind?: 'look' | 'template'
 }
 
 /**
@@ -29,12 +31,13 @@ export function AddLayerSheet({
   defaultTarget,
   onAdd,
   allowTiming = true,
+  kind,
 }: AddLayerSheetProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="sm:max-w-lg flex flex-col p-0">
         <SheetHeader className="sr-only">
-          <SheetTitle>Add layer</SheetTitle>
+          <SheetTitle>{kind === 'template' ? 'Add template layer' : 'Add layer'}</SheetTitle>
         </SheetHeader>
         {open && (
           <LayerPicker
@@ -43,6 +46,7 @@ export function AddLayerSheet({
             onConfirm={onAdd}
             onCancel={() => onOpenChange(false)}
             allowTiming={allowTiming}
+            kind={kind}
           />
         )}
       </SheetContent>
