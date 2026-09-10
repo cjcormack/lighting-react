@@ -93,6 +93,9 @@ vi.mock('@/components/programmer/ProgrammerSheets', () => ({
 vi.mock('@/components/ShowHeader', () => ({
   ShowHeader: ({ view }: { view: string }) => <div data-testid="header">{view}</div>,
 }))
+// Mocked so a stray import can never quietly mount the real one behind the "no show bar" case
+// below — this page is the only live view that draws no `ShowBar`, and the assertion that it does
+// not is worth more than a mock that would render nothing anyway.
 vi.mock('@/components/ShowBar', () => ({ ShowBar: () => <div data-testid="show-bar" /> }))
 vi.mock('@/components/programmer/EditorContext', () => ({
   EditorContextProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -190,6 +193,20 @@ describe('ProgrammerPage', () => {
     expect(screen.getByTestId('grid')).toBeTruthy()
     expect(screen.getByTestId('layers')).toBeTruthy()
     expect(screen.getByTestId('fx')).toBeTruthy()
+  })
+
+  it('draws no show bar — the one live view without one', () => {
+    // The space plan's session 5, as it was actually decided at the desk: rather than folding
+    // `ShowHeader` into `ShowBar` on all four live views, the programmer simply stops drawing the
+    // bar and the other three are left alone. That is ~60px of blackout, Blind, tempo, cue numbers
+    // and transport returned to the grid, on the one page whose whole subject is editing values.
+    //
+    // The header stays, because the switcher in it is how you reach a view that HAS the bar. If
+    // this ever fails, check that nobody answered "the programmer has no Blind" by putting the bar
+    // back rather than by leaving it out — see the note beside the header in `ProgrammerPage`.
+    draw()
+    expect(screen.queryByTestId('show-bar')).toBeNull()
+    expect(screen.getByTestId('header')).toBeTruthy()
   })
 
   it('has no tabs at all', () => {

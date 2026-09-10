@@ -55,9 +55,12 @@ const FADE_OPTIONS = [
  *  - **Stage** — leading Clear's *Radix* tooltip rather than a native `title`, because Clear is the
  *    one control here already wrapped in a `TooltipTrigger` and two tooltip mechanisms answering
  *    one hover is a bug, not two explanations. It changes what the rig is doing right now. Blind
- *    used to sit here too; session 2b moved it into the `ShowBar` beside blackout, so there is one
- *    Blind in one place on every view rather than one location on the Programmer and another on
- *    Show.
+ *    used to sit here too; session 2b moved it into the `ShowBar` beside blackout, so that one
+ *    control was in one place rather than one location on the Programmer and another on Show.
+ *    **It did not come back when the space plan's session 5 took the bar off this page**, and it
+ *    must not: the programmer has no Blind at all now, and putting a second toggle back in this
+ *    zone would recreate the exact split moving it ended. Blind returns as the bar or not at all
+ *    — see `ProgrammerPage`'s note beside the header.
  *  - **Load** — a native `title` on Include, which is not wrapped: the only way in, and the only
  *    control never disabled.
  *  - **Save** — the same, on Record: one primary button with a destination menu, unchanged.

@@ -1206,19 +1206,45 @@ Six things about it are load-bearing:
   depending on the view. It carries the Prompt Book's extra case: where the backend will not accept
   edits, the control is shown but **inert**, because it is the only thing saying why.
 
-**One `ShowBar`, identical on all four live views.** Every host spreads `showBarProps` from
-`useShowBarProps` and overrides exactly one prop — `showShortcuts`, which advertises keys and so can
-only be answered by the host that binds them. Everything else comes from the hook, which is what
-stops the bar drifting into three near-copies: it previously had no Blind on the Prompt Book, a
-different stack-name rule on Show, and a hand-wired transport on the Prompt Book that gave that page
-two transport instances.
+**One `ShowBar`, identical on the three live views that have one.** Every host spreads
+`showBarProps` from `useShowBarProps` and overrides exactly one prop — `showShortcuts`, which
+advertises keys and so can only be answered by the host that binds them. Everything else comes from
+the hook, which is what stops the bar drifting into three near-copies: it previously had no Blind on
+the Prompt Book, a different stack-name rule on Show, and a hand-wired transport on the Prompt Book
+that gave that page two transport instances.
+
+**The programmer is the exception, and draws no bar at all.** It keeps `ShowHeader` — the breadcrumb,
+the save pill, the view switcher, Start/Stop and the live dot — and nothing below it until row A.
+That is the space plan's session 5, and it is *not* what D9 proposed: D9 was to fold `ShowHeader`
+into `ShowBar` on all four views, which was built and then rejected at the desk in favour of this.
+The reasoning is D1 applied to a band rather than to a row — everything above the grid earns its
+place by the line, and ~60px of blackout, Blind, tempo, cue numbers and transport is the largest
+thing on that page that is not about editing values. Three consequences, each of which reads as a
+bug if you do not know it is a decision:
+
+- **Blind cannot be toggled on the programmer, and blackout is gone outright.** Blind is still
+  *reported* there — the app header's `ProgrammerIndicator` passes no `blindShownSeparately`, so it
+  draws its amber Blind badge, and on the programmer that badge is now the only blind signal there
+  is. What went is the press. Do not answer that by putting a second Blind toggle in the action
+  bar: one control in two places, differing by view, is the drift `useShowBarProps` exists to end.
+  It comes back as the bar or not at all.
+- **GO and BACK are not on the programmer**, which binds no transport keys either
+  (`useTransportKeys` is Show's and the Prompt Book's). The switcher in the header is one pill from
+  three views that do have a transport.
+- **The speed masters are not on the programmer.** `ProgrammerFxList` names each effect's master,
+  and `/speed-masters` manages the bank.
+
+`ProgrammerPage.test.tsx` pins the absence; `ProgrammerPage.tsx`'s note beside the header is the
+long form of all three.
 
 - **The bar is not gated on the show running.** It carries blackout, Blind, the speed masters and the
   programmer chip, all of which mean something with the show down, and `goDisabled` already mutes
   BACK/GO. Gating it was what made **Blind's location depend on the show's state**.
 - **Blind lives in the bar, beside blackout** — the same class of thing (a gate on what reaches the
-  rig) in the one piece of chrome every live view shares. It was in the programmer's action-bar Stage
-  zone, which meant the same control was in one place on the Programmer and another on Show. It still
+  rig) in the one piece of chrome the *running* views share. It was in the programmer's action-bar
+  Stage zone, which meant the same control was in one place on the Programmer and another on Show;
+  since session 5 the programmer has neither, which is a deliberate absence rather than a return to
+  that split (see above). It still
   fades by the programmer's own fade time: `useShowBarProps` reads it at press time from the
   `programmerFade` store the action bar's picker writes, so moving the button did not turn a fade
   into a snap. That store is module-level for a reason — as two `usePersistentState` instances of

@@ -182,11 +182,16 @@ export const ShowBar = memo(function ShowBar({
       </button>
 
       {/* Blind, beside blackout because they are the same class of thing: a gate on what reaches
-          the rig. The tile is conditional on the prop, not on the host: every live view gets it,
-          because they all take their props from `useShowBarProps`, which supplies `blind` and
-          `onBlind` unconditionally. Host-conditional rendering is exactly the drift that hook
-          exists to prevent — it used to put Blind in one place on the Programmer and another on
-          Show. Do not reintroduce a per-host arm here.
+          the rig. The tile is conditional on the prop, not on the host: every host that draws this
+          bar gets it, because they all take their props from `useShowBarProps`, which supplies
+          `blind` and `onBlind` unconditionally. Host-conditional rendering is exactly the drift
+          that hook exists to prevent — it used to put Blind in one place on the Programmer and
+          another on Show. Do not reintroduce a per-host arm here.
+
+          Three hosts draw this bar, not four: the programmer draws none at all since the space
+          plan's session 5, so it has no Blind rather than a differently-placed one. That is a
+          decision recorded in `ProgrammerPage`, and the rule above is what stops it being
+          "fixed" by giving one host its own arm.
 
           Note for whoever wires blackout up: DBO above is currently local state with no side
           effect, so these two look like peers while only one of them does anything. */}

@@ -211,7 +211,7 @@ API Layer          Type definitions + WebSocket subscription factories
 | `src/routes/ShowPage.tsx` | Route for `/projects/:projectId/show` (and `/show/stacks/:stackId`) — **the whole of Show Mode's UI since the Run merge**. Header (with the lock control) + `ShowBar`, then either the phone runner or the tab strip / off-playhead banner / `ShowView`. Owns the drill state, the `?cue=` contract, the playhead follow, the edit lock, the transport keyboard, Blind, make-live, and the two `RecordSheet` mounts. |
 | `src/routes/ProgrammerPage.tsx` | Route for `/projects/:projectId/programmer`. **Two rows of chrome, not six bands** since the space plan's session 1: row A (the source box and the verbs, one 40px line), then the workspace (grid + layer/FX rail). Row B — the scope toggle, filter, Lit, Groups, Columns — is *not* a band here: it lives inside `ProgrammerGrid`'s own toolbar, because it describes the grid and has no business spanning the rail. |
 | `src/routes/legacyRedirects.tsx` | **Redirects only.** Every retired path that lands on Show — `/run`, `/cue-stacks`, `/cues*`, `/program*` — collected in one module rather than parked in whichever page happens to be the destination. `/program*` carries its search string, because `?cue=` is an external contract. |
-| `src/components/ShowBar.tsx` | Row 3, **identical on all three live views**: DBO, **BLIND**, speed masters, programmer chip, active→next, BACK/GO. Every host spreads `showBarProps`; only `showShortcuts` is overridden. |
+| `src/components/ShowBar.tsx` | Row 3, **identical on the three live views that have one** — Show, the Prompt Book and Busk: DBO, **BLIND**, speed masters, programmer chip, active→next, BACK/GO. Every host spreads `showBarProps`; only `showShortcuts` is overridden. The **programmer draws no bar at all** since the space plan's session 5; see this repo's `CLAUDE.md` §Cues, Stacks & Triggers for what that deliberately costs. |
 | `src/lib/programmerFade.ts` | The programmer's fade time, as a `lib/syncStore.ts` singleton: the action bar's picker writes it, the bar's Blind reads it at press time. A store, not two `usePersistentState` calls, so the picker actually reaches Blind. |
 | `src/components/runner/StackTabStrip.tsx` | Sibling-stack switcher. `selectedStackId` owns the underline, `liveStackId` the green pip — **selecting never moves the playhead**. |
 | `src/components/runner/OffPlayheadBanner.tsx` | Shown while reading a stack that is not the playhead: *Jump to live* (navigation) and *Make this stack live* (confirm-gated `go-to`). |
@@ -483,7 +483,8 @@ chrome, so there is nothing an unlocked state could reveal. Its `MobileExpansion
 (`{card, mode}` across two hero cards) is untouched by the desktop expansion rules — it is not a
 cue-list model at all.
 
-**The ShowBar** (Row 3) is **identical on all three live views**. Every host spreads
+**The ShowBar** (Row 3) is **identical on the three live views that have one** — Show, the Prompt
+Book and Busk; the programmer has drawn none since the space plan's session 5. Every host spreads
 `showBarProps` from `useShowBarProps` and overrides exactly one prop — `showShortcuts`, which
 advertises keys and can only be answered by the host that binds them.
 
@@ -500,7 +501,11 @@ Two 2b changes worth knowing:
   the programmer chip, all of which mean something with the show down, and `goDisabled` already mutes
   BACK/GO. Gating it was what made Blind's *location* depend on the show's state.
 - **Blind moved into it**, beside blackout, out of the programmer's action-bar Stage zone — so one
-  control is in one place on every view instead of one place on the Programmer and another on Show.
+  control is in one place on every view *that has the bar*, instead of one place on the Programmer
+  and another on Show. Since the space plan's session 5 the programmer has neither: it draws no bar,
+  and the action-bar Stage zone did not come back. That absence is deliberate — restoring a second
+  Blind toggle there would recreate exactly the split this bullet describes ending. See this repo's
+  `CLAUDE.md` §Cues, Stacks & Triggers.
   It still fades by the programmer's own fade time, read at press time from the `programmerFade`
   store the action bar's picker writes; without that, moving the button would have turned a fade
   into a snap. The store replaced a second `usePersistentState` instance of the key, which only ever

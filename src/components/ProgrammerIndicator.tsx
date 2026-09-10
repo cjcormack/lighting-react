@@ -20,6 +20,12 @@ import { useCurrentProjectQuery } from '../store/projects'
  * Two amber badges saying the same word is worse than one, and the tile is both louder and
  * actionable. The app-header mount passes nothing, because there is no tile there and blind must
  * still be visible from `/fixtures`.
+ *
+ * That last clause got sharper with the space plan's session 5: the **programmer** draws no
+ * `ShowBar` any more, so the app-header mount's badge is the only thing on that page saying the
+ * programmer is blind — and it is a page where being blind and not knowing it is the whole hazard.
+ * Do not pass `blindShownSeparately` from the app header on the theory that some other chrome
+ * covers it.
  */
 export function ProgrammerIndicator({
   className,

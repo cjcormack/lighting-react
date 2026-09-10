@@ -135,9 +135,12 @@ describe('useShowTransport', () => {
   })
 
   it('keeps the frame-rate values null for an opted-out host, but still hands over the descriptor', () => {
-    // The Programmer page mounts the transport purely for the ShowBar's props: it must not pay a
-    // per-rAF re-render for a fade it doesn't draw. The bar's countdown comes from `fade`, which
-    // stays live regardless.
+    // The Programmer page opts out: it must not pay a per-rAF re-render for a fade it does not
+    // draw. It used to mount the transport for the ShowBar's props; since the space plan's session
+    // 5 it draws no bar at all and reads only `showHeaderProps`, so it consumes nothing frame-rate
+    // whatsoever — which makes the opt-out more clearly right there, not less. Busk and the Prompt
+    // Book are the other two opted-out hosts, and for them the bar's countdown still comes from
+    // `fade`, which stays live regardless.
     const { result } = draw({
       activeStackId: 10,
       stacks: [mkStack({ activeCueId: 1, nextCueId: 2 })],

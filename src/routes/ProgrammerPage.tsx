@@ -2,7 +2,6 @@ import { memo } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Navigate, useParams } from 'react-router'
 import { Card } from '@/components/ui/card'
-import { ShowBar } from '@/components/ShowBar'
 import { ShowHeader } from '@/components/ShowHeader'
 import { EditorContextProvider } from '@/components/programmer/EditorContext'
 import { ProgrammerActionBar } from '@/components/programmer/ProgrammerActionBar'
@@ -31,10 +30,13 @@ import { CurrentProjectRedirect } from '@/components/CurrentProjectRedirect'
 const GROUPED_KEY = 'programmer.grouped'
 
 /**
- * The short-height arm's threshold (space plan D8). A landscape phone is ~393px tall and an app
- * header, a ShowHeader, a ShowBar and two rows of chrome leave it three fixture rows; 500 is the
- * artboard's number and the one `Layout` and `ShowHeader` unstick and tighten themselves at, so
- * the three surfaces fold together rather than at three nearby numbers.
+ * The short-height arm's threshold (space plan D8). A landscape phone is ~393px tall, and an app
+ * header, a `ShowHeader` and two rows of chrome leave it four fixture rows and part of a fifth;
+ * 500 is the artboard's number and the one `Layout` and `ShowHeader` unstick and tighten
+ * themselves at, so the three surfaces fold together rather than at three nearby numbers.
+ *
+ * That count was three until this page stopped drawing a `ShowBar` (see the note beside the
+ * header below) — the band was ~60px of the same 393.
  */
 const SHORT_VIEWPORT = '(max-height: 500px)'
 
@@ -62,10 +64,11 @@ export function ProgrammerFxRedirect() {
  * putting them behind a switcher meant the operator could never watch the layer stack that produced
  * the values they were editing. Everything is on screen at once here, which is the entire point.
  *
- * **Two rows of chrome, not six bands.** It shipped as six deliberately separate siblings — source
- * strip, action bar, scope band, filter row, template strip, column header — each designed on its
- * own, each spending a line on a label or a sentence, and together 489px of a 900px screen before
- * the first fixture. The space plan's session 1 folds them: **row A** is the noun and the verbs
+ * **One header and two rows of chrome, not a header, a show bar and six bands.** It shipped as six
+ * deliberately separate siblings — source strip, action bar, scope band, filter row, template
+ * strip, column header — each designed on its own, each spending a line on a label or a sentence,
+ * and together 489px of a 900px screen before the first fixture, under 115px of `ShowHeader` and
+ * `ShowBar` besides. The space plan's session 1 folds the six: **row A** is the noun and the verbs
  * (the source box on the left, Clear / Include / Record on the right, one 40px line), and **row B**
  * is what the grid shows (scope, filter, Lit, Groups, Columns) — which lives *inside*
  * `ProgrammerGrid`'s toolbar, because it describes the grid and has no business spanning the rail.
@@ -77,11 +80,16 @@ export function ProgrammerPage() {
   const projectIdNum = Number(projectId)
   const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
-  // `frameRateProgress: false` — this page mounts the hook only for the bar's props and never
-  // reads the transport, so without it a running fade re-renders the whole page (and everything
-  // under `ProgrammerBody`) per rAF, exactly while channel frames are also landing. The bar's
-  // FADING countdown is unaffected: it animates itself from the write-once `fade` descriptor.
-  const { showBarProps, showHeaderProps } = useShowBarProps(projectIdNum, {
+  // Only `showHeaderProps` is read: this page draws no `ShowBar` (see the note beside the header
+  // below). The hook is still the right source for the header's Start/Stop — the same derivation
+  // the other three views get, and hand-rolling it here is the drift `useShowBarProps` exists to
+  // prevent.
+  //
+  // `frameRateProgress: false` mattered when this page mounted the hook for a bar it no longer
+  // draws, and matters more now that nothing here reads the transport at all: without it a running
+  // fade re-renders the whole page (and everything under `ProgrammerBody`) per rAF, exactly while
+  // channel frames are also landing.
+  const { showHeaderProps } = useShowBarProps(projectIdNum, {
     frameRateProgress: false,
   })
 
@@ -116,10 +124,35 @@ export function ProgrammerPage() {
           projectName={project.name}
           {...showHeaderProps}
         />
-        {/* Not gated on the show running — see the note in `ShowPage`. Blind lives in this bar
-            now, and a programmer with no Blind before the show starts is the gap that gating it
-            created. */}
-        <ShowBar {...showBarProps} />
+        {/* **No `ShowBar` here, and this is the only view without one.** The space plan's session 5
+            asked whether `ShowHeader` should fold into the bar on all four live views; the answer
+            taken at the desk was narrower and blunter — the *programmer* does not want the show
+            chrome at all, and the other three keep both bands exactly as they were.
+
+            The reasoning is the plan's own D1, applied to a band rather than to a row: everything
+            above the grid earns its place by the line, and 60px of blackout, Blind, tempo, cue
+            numbers and a transport is the largest thing on this page that is not about editing
+            values. It is not lost, it is one pill away — the switcher in the header above reaches
+            Show, the Prompt Book and Busk, all three of which carry the full bar.
+
+            What genuinely goes with it, so nobody rediscovers it as a bug:
+
+             - **Blind cannot be *toggled* on this page, and blackout is gone outright.** Blind is
+               still *reported*: the app header's `ProgrammerIndicator` passes no
+               `blindShownSeparately` (there is no tile beside it there), so it draws its amber
+               Blind badge — and on this page that badge is now the only blind signal there is,
+               which makes that argument load-bearing rather than incidental. What went is the
+               press. Blind is the sharper loss of the two because it is a *programmer* idea
+               ("edit without the rig showing it") and the bar is where the control has lived since
+               it left the action bar's Stage zone. Do NOT answer that by putting a second Blind
+               toggle back in the action bar: one control in two places, differing by view, is
+               exactly the drift `useShowBarProps` was written to end. It comes back as the bar, or
+               not at all.
+             - **GO and BACK are not on this page**, and the programmer binds no transport keys —
+               `useTransportKeys` is Show's and the Prompt Book's. Busking from the grid means
+               keeping Show or Busk on screen, or a MIDI surface.
+             - **The speed masters are not on this page.** `ProgrammerFxList`'s own rows name each
+               effect's master, and `/speed-masters` manages the bank. */}
         <ProgrammerBody projectId={projectIdNum} />
       </div>
     </ProgrammerSheetsProvider>
@@ -141,15 +174,19 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
   // an individual mover wants the flat list, and both are the same grid.
   const [grouped, setGrouped] = usePersistentState<boolean>(GROUPED_KEY, false)
   // Owned here rather than inside the grid, and it must stay here: this component is the memo
-  // barrier, and state held above it in `ProgrammerPage` would put every ShowBar re-render through
-  // the whole grid/rail subtree. The *controls* render on row B, inside the grid's own toolbar.
+  // barrier, and state held above it in `ProgrammerPage` would put every re-render of the chrome
+  // above — `ShowHeader`, and the `useShowBarProps` call feeding it — through the whole grid/rail
+  // subtree. That used to read "every ShowBar re-render", which was the loudest source of them
+  // until this page stopped drawing one; the barrier is no less load-bearing for it, since the
+  // hook still runs here and still moves on every cue change. The *controls* render on row B,
+  // inside the grid's own toolbar.
   const [columnVisibility, setColumnVisibility] = useColumnVisibility()
   // Short-height mode (space plan D8): under 500px of viewport height rows A and B are one row,
   // and row A's two halves are handed to the grid's toolbar as `leading` rather than drawn here.
   // A media query rather than a container query because HEIGHT is the question and a container
   // query cannot ask it; a hook here rather than CSS because the fold is a change of *place*, not
   // of appearance — and it is safe here specifically because this component is the memo barrier,
-  // so the media change re-renders the subtree once and never the ShowBar above it. The
+  // so the media change re-renders the subtree once and never the chrome above it. The
   // `ProgrammerWorkspace`/`ProgrammerGrid` elements keep their slots either way, so the grid
   // re-renders and never remounts — the rule `ProgrammerPage.test.tsx` gates on.
   const shortViewport = useMediaQuery(SHORT_VIEWPORT)

@@ -167,8 +167,13 @@ describe('ProgrammerActionBar', () => {
   it('has no Blind — that moved to the ShowBar, beside blackout', () => {
     // Blind sat in the Stage zone here, which meant the same control was in one place on the
     // Programmer and another on Show. It is the same class of thing as blackout (a gate on what
-    // reaches the rig) and belongs in the one piece of chrome every live view shares. It still
-    // fades by *this* bar's fade time — `useShowBarProps` reads the same persisted key.
+    // reaches the rig) and belongs beside it, in the bar. It still fades by *this* bar's fade time
+    // — `useShowBarProps` reads the same persisted key.
+    //
+    // Since the space plan's session 5 the programmer draws no `ShowBar` either, so this assertion
+    // now fences something stronger than it was written for: the programmer has Blind in NO place,
+    // deliberately, and a second toggle re-added here would rebuild the split rather than close a
+    // gap. See `ProgrammerPage`'s note beside the header.
     render(<ProgrammerActionBar projectId={1} />)
     expect(screen.queryByText('Blind')).toBeNull()
     expect(programmerSetBlind).not.toHaveBeenCalled()

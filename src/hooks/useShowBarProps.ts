@@ -91,8 +91,12 @@ export function useShowBarProps(
    * It sat in the programmer's action bar and, briefly, in the ShowBar on Show only — so the same
    * control moved location depending on which view you were on. It belongs with blackout: they are
    * the same class of thing (a gate on what reaches the rig), and the bar is the one piece of chrome
-   * every live view shares. Needs no new API surface — a fire-and-forget WS op and the programmer's
-   * own summary.
+   * the views that draw it share. Needs no new API surface — a fire-and-forget WS op and the
+   * programmer's own summary.
+   *
+   * That was "every live view" until the space plan's session 5, which took the bar off the
+   * programmer entirely; the programmer now has no Blind at all, which is a stated absence rather
+   * than a return to the old split. See `ProgrammerPage`'s note beside its header.
    */
   const { data: programmerSummary } = useProgrammerSummaryQuery()
   const blind = programmerSummary?.blind ?? false

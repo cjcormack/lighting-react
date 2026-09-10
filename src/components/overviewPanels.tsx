@@ -72,9 +72,12 @@ export interface OverviewPanel extends OverviewPanelDescriptor {
  * Visibility for all three panels.
  *
  * There was a fourth, Effects Overview: a beat dot, master 1's bpm, a TAP, a running-effect count
- * and a Kill All. The ShowBar carries the tempo half on every live view — the whole speed-master
- * bank, each tile with its own beat dot and TAP — so the panel was a second, narrower answer to
- * "what tempo is the desk at", and one that only ever spoke for master 1. It went, and the count
+ * and a Kill All. The ShowBar carries the tempo half on the live views that have a bar — Show, the
+ * Prompt Book and Busk, the whole speed-master bank with a beat dot and TAP per tile — so the panel
+ * was a second, narrower answer to "what tempo is the desk at", and one that only ever spoke for
+ * master 1. (The programmer draws no bar since the space plan's session 5 and so carries no tempo
+ * readout; that is not an argument for bringing this panel back, since `/speed-masters` and the FX
+ * band's per-effect master both reach the bank from there.) It went, and the count
  * and Kill All went with it rather than moving: the programmer's FX band and the busk view's
  * presence rings say what is running, and each lists the effects individually so they can be
  * removed by name. If a "stop everything" gesture is wanted again it belongs beside blackout in

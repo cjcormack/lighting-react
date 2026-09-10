@@ -103,7 +103,11 @@ function useRailGeometry(): RailGeometry {
  * **This component owns the rail's state, and it must stay here.** `programmer.rail.width`
  * (260–480, default 300) and `programmer.rail.collapsed` persist per desk; `overlayOpen` is
  * transient. All three are new pieces of state that sit *inside* `ProgrammerBody`'s memo barrier
- * — held above it, in `ProgrammerPage`, every ShowBar re-render would reach the grid again. The
+ * — held above it, in `ProgrammerPage`, every re-render of that component would reach the grid
+ * again, and `useShowBarProps` up there moves on every cue change. That used to read "every
+ * ShowBar re-render", which was the loudest source of them until the space plan's session 5
+ * took the bar off this page; the barrier is no less load-bearing for it, because the hook
+ * still runs there and still feeds `ShowHeader`. The
  * `grid` and `rail` elements are created by `ProgrammerBody` and arrive here as props, so a state
  * change here re-renders this frame and nothing inside the grid. The rail reads two contexts, and
  * which one carries what is the reason there are two: `RailArm` (the flags) changes on a gesture
