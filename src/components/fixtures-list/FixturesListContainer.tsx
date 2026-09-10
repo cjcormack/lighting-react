@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn, labelUnlessCompact } from '@/lib/utils'
+import { FIXTURE_FILTER_HINT, FIXTURE_FILTER_PLACEHOLDER } from '@/lib/fixtureFilterCopy'
 import { Lightbulb, Search } from 'lucide-react'
 import { useFixtureListQuery } from '../../store/fixtures'
 import { useGroupListQuery } from '../../store/groups'
@@ -874,7 +875,8 @@ export function FixturesListContainer({
     <div className="relative w-full min-w-48 sm:w-auto sm:flex-1">
       <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
       <Input
-        placeholder="Filter fixtures by name, manufacturer, or type..."
+        placeholder={FIXTURE_FILTER_PLACEHOLDER}
+        title={FIXTURE_FILTER_HINT}
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
         className="h-8 pl-9"

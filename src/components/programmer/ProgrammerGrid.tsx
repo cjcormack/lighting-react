@@ -14,6 +14,7 @@ import {
   type CellRef,
 } from '@/components/fixtures-list/cellSelectionModel'
 import { cn } from '@/lib/utils'
+import { FIXTURE_FILTER_HINT } from '@/lib/fixtureFilterCopy'
 import { formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
 import { cellFamilies, COLUMN_DEFS, type ColumnKey } from '@/components/fixtures-list/columns'
 import type { ColumnVisibility } from '@/components/fixtures-list/ColumnsMenu'
@@ -52,8 +53,11 @@ import type { LocateTarget } from '@/store/locate'
  * — this component renders the controls, it does not own them.
  *
  * **Row B has a phone arm and a folded arm, and they are different questions.** Below `@[600px]`
- * of *this column* the filter becomes a search icon over a popover and a key button appears,
- * because the 22px ownership footer is not rendered at that width (space plan D8). The folded arm
+ * of *this column* a key button appears, because the 22px ownership footer is not rendered at that
+ * width (space plan D8). The filter becomes a search icon over a popover too, but at `@[800px]`
+ * and not here — the two used to be one threshold and are now two, because one is about a footer
+ * being absent and the other about a placeholder fitting (see the note beside the field). The
+ * folded arm
  * is about *height*: under `@media (max-height: 500px)` `ProgrammerBody` stops drawing row A and
  * hands its two halves here as `leading`, so the page's two rows of chrome are one 36px line —
  * which on an 852×393 landscape phone is the difference between three fixture rows and eight.
@@ -194,11 +198,33 @@ function ProgrammerGridBody({
                     painted its placeholder under the Lit button. Row B has no second line to give
                     it, so the field gives instead — and session 4 replaces it with a search icon
                     at the width where even that stops being enough. */}
-                {/* Two arms of one control. Above `@[600px]` the field is on the row; below it
+                {/* Two arms of one control. Above `@[800px]` the field is on the row; below it
                     the field is a search icon that opens the same node in a popover — the icon
                     arm session 4 promised, and the real answer to the `min-w-48` squeeze the note
                     above records. Radix mounts popover content only while it is open, so there is
                     one filter input in the document except during the moment it is being used.
+
+                    **The threshold is `@[800px]`, and it is measured.** It was `@[600px]`, and
+                    the desk pass found the field still clipping its placeholder mid-word there
+                    (`PD-FILTER-PLACEHOLDER-CLIP`): at the tablet preset the input has about 72px
+                    of room behind its 36px search icon, for a placeholder that needs 96px. At a
+                    row B of 800 it has ~113px, so the threshold clears the need with roughly a
+                    fifth to spare, and it is a number this row already uses, for `Groups`.
+
+                    **The crossover itself is deliberately not quoted here.** Two sweeps of it
+                    disagreed by ~30px — it is only reachable by forcing a width, and the answer
+                    moves with how you force it — so a precise figure in a comment that says
+                    *measured* would be a claim the next reader cannot reproduce. What is stable
+                    is the pair above: 96px needed, ~113px given at 800. Re-measure those two if
+                    you move it, rather than trusting a crossover.
+
+                    Below the threshold the popover's field is `w-72` and has room for the whole
+                    placeholder, which is the point of the icon arm: the field gives all the way,
+                    rather than staying on the row saying half a word. Note the field is
+                    *also* being shorted by roughly half at every width, because its `flex-1`
+                    splits the row's slack with the plain `flex-1` spacer below — a real
+                    pre-existing bug, not this threshold's, and fixing it would let the field stay
+                    on the row a good deal narrower.
 
                     The **folded row always takes the icon**, and that is a JS test rather than a
                     third class because it cannot be written as one: the field would have to be
@@ -209,11 +235,11 @@ function ProgrammerGridBody({
                     an 852×393 phone the two split the row and the source box — `flex-1` inside a
                     block sharing it with a 230px action bar — collapsed to four pixels. */}
                 {!leading && (
-                  <div className="hidden min-w-0 max-w-[340px] flex-1 items-center gap-2 [&>div]:min-w-0 @[600px]:flex">
+                  <div className="hidden min-w-0 max-w-[340px] flex-1 items-center gap-2 [&>div]:min-w-0 @[800px]:flex">
                     {filter}
                   </div>
                 )}
-                <FilterPopover className={cn(!leading && '@[600px]:hidden')}>{filter}</FilterPopover>
+                <FilterPopover className={cn(!leading && '@[800px]:hidden')}>{filter}</FilterPopover>
                 {lit}
                 {/* Dropped in the folded arm: the leading block is already `flex-1` there, and two
                     competing `flex-1` siblings is the bug session 2 found on this very row. */}
@@ -480,7 +506,7 @@ function FilterPopover({ className, children }: { className?: string; children: 
           size="sm"
           className={cn('h-7 shrink-0', className)}
           aria-label="Filter fixtures"
-          title="Filter fixtures by name, manufacturer, or type"
+          title={FIXTURE_FILTER_HINT}
         >
           <Search className="size-3.5" />
         </Button>

@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardAction } from "@/componen
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { FIXTURE_FILTER_HINT, FIXTURE_FILTER_PLACEHOLDER } from '@/lib/fixtureFilterCopy'
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { Search, Loader2, Settings2, SlidersHorizontal, Pencil, Check } from "lucide-react"
@@ -110,7 +111,8 @@ function FixturesContainer() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Filter fixtures by name, manufacturer, or type..."
+            placeholder={FIXTURE_FILTER_PLACEHOLDER}
+            title={FIXTURE_FILTER_HINT}
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             className="pl-9"

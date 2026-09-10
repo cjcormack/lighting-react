@@ -56,8 +56,93 @@ describe('ProgrammerSourceStrip', () => {
   it('offers Record when busking with no source', () => {
     summary = { ...summary, entryCount: 12 }
     draw()
-    expect(screen.getByText('No source — 12 values, nothing to update')).toBeTruthy()
+    // The sentence is assembled from spans now (see the drop-order test below), so it is matched
+    // on the label's `title` — the copy that has to stay whole at every width.
+    expect(screen.getByTitle('No source — 12 values, nothing to update')).toBeTruthy()
     expect(screen.getByRole('button', { name: /Record/ })).toBeTruthy()
+  })
+
+  it('drops the busking count as a whole part rather than ellipsing the sentence', () => {
+    // `PD-SOURCE-TRUNCATION`. The rule is that every rung is still a true sentence, so the count
+    // has to be its own element — a `truncate` on one string can only slice it mid-word. This
+    // asserts both halves: that the part is separable, and that what is left reads correctly.
+    summary = { ...summary, entryCount: 12 }
+    draw()
+    const sentence = screen.getByText(/No source/)
+    const text = sentence.textContent ?? ''
+    expect(text).toBe('No source — 12 values, nothing to update')
+    const part = (content: string) =>
+      [...sentence.querySelectorAll('span')].find((el) => el.textContent === content)
+    expect(part('12 values, ')?.className).toContain('@[260px]:inline')
+    // Every rung, in the order they drop. The dash goes WITH the clause, not after it: dropping
+    // the clause alone would leave a dangling `No source — `, which is the bare-punctuation trap
+    // the empty arm's full stop avoids from the other side.
+    expect(text.replace('12 values, ', '')).toBe('No source — nothing to update')
+    expect(part(' — 12 values, nothing to update')?.className).toContain('@[200px]:inline')
+    expect(sentence.firstChild?.textContent).toBe('No source')
+  })
+
+  it('never leaves the busking box rendering nothing at all', () => {
+    // The floor, and the reason it is not just `Busking` said twice: row A crosses its own
+    // `@[600px]` gate at about the width where this box is 120-195px, so without a rung below
+    // 200px the box switches on already under it — a bordered strip showing ~195px of nothing
+    // between the label and Record. A dead gap is a different fault from a redundant word.
+    summary = { ...summary, entryCount: 12 }
+    draw()
+    const floor = screen.getByText(/No source/)
+    expect(floor.className).toContain('@[80px]:inline')
+    expect(floor.firstChild?.textContent).toBe('No source')
+  })
+
+  it("drops the empty state's parts whole, and never leaves a bare full stop", () => {
+    // Same rule, three rungs, and the punctuation is the trap twice over: the stop is drawn
+    // outside the clauses that drop, and `Include` is INSIDE the droppable group so the shortest
+    // rung is `Programmer is empty.` rather than `Programmer is empty. .`
+    draw()
+    const sentence = screen.getByText(/Programmer is empty/)
+    const text = sentence.textContent ?? ''
+    expect(text).toBe('Programmer is empty. Include a cue or a Look, or start busking.')
+    const part = (content: string) =>
+      [...sentence.querySelectorAll('span')].find((el) => el.textContent === content)
+    expect(part(', or start busking')?.className).toContain('@[380px]:inline')
+    expect(part(' a cue or a Look')?.className).toContain('@[280px]:inline')
+    // Every rung, in the order they drop.
+    expect(text.replace(', or start busking', '')).toBe(
+      'Programmer is empty. Include a cue or a Look.',
+    )
+    expect(text.replace(' a cue or a Look, or start busking', '')).toBe(
+      'Programmer is empty. Include.',
+    )
+    expect(sentence.firstChild?.textContent).toBe('Programmer is empty.')
+  })
+
+  it('measures the sentence against its own box, not the row the box shares', () => {
+    // The defect the desk pass found and a threshold change could not have fixed: row A holds
+    // this strip beside the action bar and the two split it about 50/50, so an `@[Npx]` resolved
+    // against row A is asking about twice the width the sentence has. `SentenceBox` is the
+    // container, and `flex-1 min-w-0` is what gives it a size at all — under `inline-size`
+    // containment an auto-width flex item collapses to zero and every rung would vanish.
+    draw()
+    const sentence = screen.getByText(/Programmer is empty/)
+    let box: HTMLElement | null = sentence
+    while (box && !box.className.includes('@container')) box = box.parentElement
+    expect(box?.className).toContain('flex-1')
+    expect(box?.className).toContain('min-w-0')
+    // The hover lives on the box, not on the text: below the floor the text is gone, and a title
+    // on a hidden span is no title at all. This arm has no label to carry it the way busking does.
+    expect(box?.getAttribute('title')).toBe(
+      'Programmer is empty. Include a cue or a Look, or start busking.',
+    )
+  })
+
+  it('never leaves the empty box rendering a sliced word either', () => {
+    // The fourth review round's find: busking got an engineered floor and this arm did not, so
+    // `Programmer is empty.` (~124px) was drawn into a box measured at 117px on an 852×393 phone
+    // and 64px in portrait — `Programmer is em…`. Both arms now have a floor.
+    draw()
+    const floor = screen.getByText(/Programmer is empty/)
+    expect(floor.className).toContain('@[140px]:inline')
+    expect(floor.firstChild?.textContent).toBe('Programmer is empty.')
   })
 
   it('names the cue, its stack and its position, and labels Update with it', () => {

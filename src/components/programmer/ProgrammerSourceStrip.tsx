@@ -17,13 +17,34 @@ import { useIncludeBaseline } from './useIncludeBaseline'
 const ZONE_LABEL = 'text-[9px] font-bold uppercase tracking-[0.1em]'
 
 /**
- * The empty state's one sentence, split so the visible copy can bold `Include` without the `title`
- * becoming a second hand-typed copy of it. Its three sibling states each extract a plain `const`
- * for the same reason; this one needs the split because its middle word is a `<span>`.
+ * The two sentences this box says, each split into the parts it **drops whole** as it narrows.
+ *
+ * `PD-SOURCE-TRUNCATION`: a sentence sliced mid-word (`…or start buski…`) reads as breakage, so
+ * each one degrades through rungs that are all still true sentences, and the whole thing stays on
+ * a `title` at every width. The rule and its worked example are session 1's — `LEGEND_SHORT` and
+ * the legend footer *dropping* items rather than slicing one.
+ *
+ * Every fixed word is a `const` shared by the visible spans and the `title`, so the two cannot
+ * drift into saying different things. The busking half was hand-typed twice until the review
+ * caught it; the empty half had been doing this since session 1, and its comment is why.
+ *
+ * Two traps in the punctuation, both of which only show at the narrow rungs:
+ *
+ * - **The full stop is drawn outside the parts that drop**, or the short form ends bare.
+ * - **`Include` is inside the droppable group**, not before it, so the shortest empty rung is
+ *   `Programmer is empty.` rather than `Programmer is empty. .`
+ *
+ * Rung widths are measured, not guessed — see `SentenceBox` for what they are measured against.
+ * At the strip's 12px they are: empty 359 / 263 / 174 / 124, busking 243 (a three-digit count) / 176 / 58.
  */
-const EMPTY_PREFIX = 'Programmer is empty. '
-const EMPTY_SUFFIX = ' a cue or a Look, or start busking.'
-const EMPTY_SENTENCE = `${EMPTY_PREFIX}Include${EMPTY_SUFFIX}`
+const EMPTY_LEAD = 'Programmer is empty.'
+const EMPTY_MID = ' a cue or a Look'
+const EMPTY_TAIL = ', or start busking'
+const EMPTY_SENTENCE = `${EMPTY_LEAD} Include${EMPTY_MID}${EMPTY_TAIL}.`
+
+const BUSK_STATE = 'No source'
+const BUSK_DASH = ' — '
+const BUSK_TAIL = 'nothing to update'
 
 /**
  * What the programmer is holding, said out loud and permanently — **the left half of row A**.
@@ -127,19 +148,39 @@ export function ProgrammerSourceStrip({
     return (
       <Strip tone="neutral">
         <CirclePlus className="size-3.5 shrink-0 text-muted-foreground" />
-        <span className="truncate text-xs text-muted-foreground" title={EMPTY_SENTENCE}>
-          {EMPTY_PREFIX}
-          <span className="font-medium text-foreground">Include</span>
-          {EMPTY_SUFFIX}
-        </span>
+        {/* The `title` is on the BOX rather than on the text — the opposite of every other state
+            here, and the point: this arm has no always-visible label to hang it on (the busking
+            arm's `Busking` is what carries the sentence once its text goes), so a `title` on a
+            span that can itself be hidden would take the hover away exactly when it is the only
+            thing left. The box is `flex-1`, so the whole width answers the hover. Safe here and
+            *only* here, for the reason `boxTitle` gives below: nothing in this arm is a button or
+            a Radix tooltip trigger, so there is no descendant to inherit it. */}
+        <SentenceBox title={EMPTY_SENTENCE}>
+          <span className="block truncate text-xs text-muted-foreground">
+            {/* The floor, and this arm had none until the fourth review round found it missing.
+                `Programmer is empty.` is ~124px and the box goes below that on a real phone —
+                117px at 852×393, 64px in portrait — so it drew `Programmer is em…`, the exact
+                slice this change exists to remove. Below the floor the strip is the `CirclePlus`
+                alone, which is what the busking arm does below *its* floor: nothing is left
+                half-said, and the sentence is still one hover away. */}
+            <span className="hidden @[140px]:inline">
+              {EMPTY_LEAD}
+              <span className="hidden @[190px]:inline">
+                {' '}
+                <span className="font-medium text-foreground">Include</span>
+                <span className="hidden @[280px]:inline">{EMPTY_MID}</span>
+                <span className="hidden @[380px]:inline">{EMPTY_TAIL}</span>.
+              </span>
+            </span>
+          </span>
+        </SentenceBox>
       </Strip>
     )
   }
 
   if (source.kind === 'busking') {
-    const busking = `No source — ${source.valueCount} value${
-      source.valueCount === 1 ? '' : 's'
-    }, nothing to update`
+    const count = `${source.valueCount} value${source.valueCount === 1 ? '' : 's'}, `
+    const busking = `${BUSK_STATE}${BUSK_DASH}${count}${BUSK_TAIL}`
     return (
       <Strip tone="neutral">
         {/* The label survives the phone's arm where `Editing` does not, and the SENTENCE is what
@@ -155,10 +196,34 @@ export function ProgrammerSourceStrip({
         >
           Busking
         </span>
-        <span className="hidden truncate text-xs text-muted-foreground @[600px]:inline">
-          {busking}
-        </span>
-        <span className="flex-1" />
+        {/* The count drops first, because it is the part said twice — it is on the rail's Local
+            values row and in the programmer tile, while `nothing to update` is the only thing here
+            that explains the missing Update button. Then the clause goes, **and the dash with
+            it**: the two are one drop rather than the two the finding lists, because dropping the
+            clause alone leaves a dangling `No source — `, which is the same bare-punctuation trap
+            the empty arm's full stop avoids from the other side.
+
+            `No source` is the floor, and it is not redundant beside the label. Row A crosses its
+            own `@[600px]` gate at about the width where this box is 120–195px, so without a floor
+            the box switches on and is *immediately* under the 200px rung — a bordered strip
+            rendering up to ~195px of nothing between the label and Record. A dead gap is a
+            different fault from a sentence said twice, and it is the one that looks broken.
+
+            That `@[600px]` is **row A's** width and not this box's: it is the phone arm,
+            deliberately unchanged, and it reads the outer container because a class on the element
+            that declares a container still resolves against its ancestor's. */}
+        <SentenceBox className="hidden @[600px]:block">
+          <span className="block truncate text-xs text-muted-foreground">
+            <span className="hidden @[80px]:inline">
+              {BUSK_STATE}
+              <span className="hidden @[200px]:inline">
+                {BUSK_DASH}
+                <span className="hidden @[260px]:inline">{count}</span>
+                {BUSK_TAIL}
+              </span>
+            </span>
+          </span>
+        </SentenceBox>
         <RecordButton onRecord={onRecord} />
       </Strip>
     )
@@ -305,7 +370,13 @@ function RecordButton({
     <Button
       size="sm"
       variant={variant}
-      className="h-7 shrink-0 @max-[600px]:w-7 @max-[600px]:px-0"
+      // `ml-auto` rather than a `flex-1` spacer: the busking arm's spacer WAS that spacer, and it
+      // had to go — `SentenceBox` is `flex-1`, and two `flex: 1 1 0%` siblings split the row's free
+      // space rather than one taking it (the bug `ProgrammerGrid`'s template strip records). An
+      // auto margin is resolved after flex growth, so it takes the slack only when the box is not
+      // there, which below `@[600px]` it is not. The deleted-source arm keeps its own spacer and
+      // this resolves to nothing there.
+      className="ml-auto h-7 shrink-0 @max-[600px]:w-7 @max-[600px]:px-0"
       aria-label="Record…"
       onClick={onRecord}
     >
@@ -370,6 +441,49 @@ function DirtyBadge({ dirty, inSync }: { dirty: number | null; inSync: boolean }
       {dirty} change{plural}
       <span className="hidden @[1100px]:inline">not written back</span>
     </span>
+  )
+}
+
+/**
+ * The width the sentence actually gets — and the only `@container` this component declares.
+ *
+ * **The rule it threads.** `Strip`'s doc comment forbids a container at this component's root,
+ * because every query here (`Editing`, the glyph, `Update`, `Revert`) asks "has this box room for
+ * that word?" *relative to the row it shares*, and a container here would re-point all of them.
+ * This one is scoped to the sentence alone, so nothing else moves: the sentence's own rungs are
+ * the one set of queries whose subject is the sentence's box rather than the row.
+ *
+ * **Why they cannot be row A's.** Row A holds this box (`flex-1`) beside `ProgrammerActionBar`,
+ * and measured live the two come out about 50/50 — so at a row A of 836px the sentence has ~355px,
+ * not 836. Worse, the action bar's own width moves independently as *its* labels collapse
+ * (`Update Q4` → `Update`, Revert → its icon), so no number chosen against row A can be right at
+ * every width. That is the general hazard `ProgrammerWorkspace`'s doc comment names: a container
+ * query matches an ancestor, never the element that declares the container. Wrapping is the fix;
+ * re-tuning the outer numbers is not, and the desk pass proved it by finding the sentence still
+ * sliced at three separate widths.
+ *
+ * **`flex-1 min-w-0` is load-bearing, not layout taste.** `container-type: inline-size` brings
+ * size containment, so the element's inline size may not come from its contents: an auto-width
+ * flex item under it collapses to **zero**, and every rung would then be hidden at every width.
+ * The size has to come from the parent, which is what `flex-1` does — and being the row's only
+ * `flex: 1 1 0%` is what makes it the *available* width rather than half of it.
+ *
+ * A `@[Npx]` on this element itself still measures row A, since an element is not its own
+ * container. The busking arm relies on that for its phone rule.
+ */
+function SentenceBox({
+  className,
+  title,
+  children,
+}: {
+  className?: string
+  title?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className={cn('@container min-w-0 flex-1', className)} title={title}>
+      {children}
+    </div>
   )
 }
 
