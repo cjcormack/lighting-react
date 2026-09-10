@@ -14,6 +14,17 @@ import { ShowBar } from './ShowBar'
 
 afterEach(cleanup)
 
+/**
+ * The bar itself, which is the wrapper's only child rather than the render root.
+ *
+ * That wrapper is what lets the bar's `@[440px]:` padding and gap classes match at all: a
+ * container query resolves against the nearest *ancestor* container, never the element declaring
+ * one, so while `@container` and those classes shared an element they matched nothing. Reaching
+ * past it here rather than asserting on `container.firstElementChild` keeps these tests about the
+ * bar and not about how many elements deep it happens to sit.
+ */
+const bar = (container: HTMLElement) => container.firstElementChild!.firstElementChild as HTMLElement
+
 const PROPS = {
   stackName: 'Act 1',
   dbo: false,
@@ -112,12 +123,12 @@ describe('ShowBar unlocked warning', () => {
     // Every bar in the band takes the same flag and the same class, or the header tints and the
     // rows below it do not — which reads as stripes rather than as one state.
     const { container } = render(<ShowBar {...PROPS} unlockedWarning />)
-    expect(container.firstElementChild!.className).toContain('bg-amber-400/15')
-    expect(container.firstElementChild!.className).toContain('border-amber-500/50')
+    expect(bar(container).className).toContain('bg-amber-400/15')
+    expect(bar(container).className).toContain('border-amber-500/50')
   })
 
   it('stays quiet by default', () => {
     const { container } = render(<ShowBar {...PROPS} />)
-    expect(container.firstElementChild!.className).not.toContain('amber')
+    expect(bar(container).className).not.toContain('amber')
   })
 })
