@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 
 /**
  * A press-and-hold gesture, as the busk view's pads have always drawn it.
@@ -28,6 +28,13 @@ export interface PressOrigin {
   x: number
   y: number
 }
+
+/**
+ * How long a fired hold's flag outlives the release, waiting for the click that release may
+ * generate. A click that is coming lands in the same task or the next; this is the bound for one
+ * that never comes.
+ */
+const LONG_PRESS_FLAG_MS = 350
 
 export interface LongPressOptions {
   /**
@@ -84,11 +91,23 @@ export function useLongPress({
     }
   }, [])
 
+  // The timer must not outlive the component: a hold that matures after unmount would call
+  // `onLongPress` for an element that is gone — on a template chip, that is a live request.
+  useEffect(() => cancel, [cancel])
+
   const handlers = useMemo<LongPressHandlers>(
     () => ({
       onPointerDown: (e: React.PointerEvent) => {
         didLongPress.current = false
         didMove.current = false
+        // A second pointer while one is down is a pinch or a fumble, not a hold: the first
+        // press's timer is dropped rather than left to fire early against the newcomer, and no
+        // new one is armed. `didMove` marks the gesture spent so the release fires no press.
+        if (startPos.current) {
+          cancel()
+          didMove.current = true
+          return
+        }
         if (disabledRef.current) return
         startPos.current = { x: e.clientX, y: e.clientY }
         const origin = { x: e.clientX, y: e.clientY }
@@ -110,6 +129,16 @@ export function useLongPress({
       onPointerUp: () => {
         cancel()
         if (!didLongPress.current && !didMove.current) pressRef.current?.()
+        // A fired hold's flag waits for the click this release generates, and the click may
+        // never come — a finger that lifts off the element (implicit capture still delivers the
+        // `pointerup` here) produces none. Left set, the flag would eat the next keyboard
+        // activation of the same element. Cleared after a short window instead: the click, when
+        // there is one, lands well inside it.
+        if (didLongPress.current) {
+          setTimeout(() => {
+            didLongPress.current = false
+          }, LONG_PRESS_FLAG_MS)
+        }
         startPos.current = null
       },
       onPointerLeave: () => {

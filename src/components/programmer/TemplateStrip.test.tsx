@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TemplateSummary } from '@/api/templatesApi'
 
@@ -371,7 +371,7 @@ describe('TemplateStrip', () => {
     render(strip(COLOUR_CELL))
     expect(screen.getByText('Amber Breathe').closest('button')).toHaveAttribute(
       'title',
-      'Click to run a copy of “Amber Breathe” on the selection · ⌥click to add a layer that tracks it',
+      'Click to run a copy of “Amber Breathe” on the selection · hold or ⌥click to add a layer that tracks it',
     )
   })
 
@@ -398,5 +398,96 @@ describe('TemplateStrip', () => {
     expect(newSheetProps).toHaveBeenLastCalledWith(
       expect.objectContaining({ targets: HEX_1, families: null }),
     )
+  })
+})
+
+/**
+ * `PD-TRACKING-GESTURE-TOUCH`: a hold on a chip is ⌥click's touch twin. Two halves — the hold
+ * reaches the toggle route, and the click the release then generates reaches nothing, or a hold
+ * would add the layer *and* set the literals.
+ */
+describe('TemplateStrip hold', () => {
+  const TOUCH = { pointerType: 'touch' }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.runOnlyPendingTimers()
+    vi.useRealTimers()
+  })
+
+  it('a hold adds the tracking layer, and the release’s click sets nothing', () => {
+    render(strip(COLOUR_CELL))
+    const chip = screen.getByText('Amber Key').closest('button')!
+    fireEvent.pointerDown(chip, { ...TOUCH, clientX: 10, clientY: 10 })
+    act(() => {
+      vi.advanceTimersByTime(499)
+    })
+    expect(toggleTemplate).not.toHaveBeenCalled()
+    act(() => {
+      vi.advanceTimersByTime(2)
+    })
+    expect(toggleTemplate).toHaveBeenCalledWith({
+      projectId: 1,
+      templateId: 1,
+      targets: HEX_1,
+      propertyMask: 'COLOUR',
+    })
+    fireEvent.pointerUp(chip, TOUCH)
+    fireEvent.click(chip)
+    expect(applyTemplate).not.toHaveBeenCalled()
+  })
+
+  it('a tap is still the click — the hold takes nothing from it', () => {
+    render(strip(COLOUR_CELL))
+    const chip = screen.getByText('Amber Key').closest('button')!
+    fireEvent.pointerDown(chip, { ...TOUCH, clientX: 10, clientY: 10 })
+    fireEvent.pointerUp(chip, TOUCH)
+    fireEvent.click(chip)
+    expect(applyTemplate).toHaveBeenCalledTimes(1)
+    expect(toggleTemplate).not.toHaveBeenCalled()
+  })
+
+  it('a finger scrolling the chips past one holds nothing', () => {
+    render(strip(COLOUR_CELL))
+    const chip = screen.getByText('Amber Key').closest('button')!
+    fireEvent.pointerDown(chip, { ...TOUCH, clientX: 10, clientY: 10 })
+    fireEvent.pointerMove(chip, { ...TOUCH, clientX: 40, clientY: 10 })
+    act(() => {
+      vi.advanceTimersByTime(600)
+    })
+    expect(toggleTemplate).not.toHaveBeenCalled()
+  })
+
+  it('a slow MOUSE press is still a click — a mouse has ⌥, and a hold there would be a silent second door', () => {
+    render(strip(COLOUR_CELL))
+    const chip = screen.getByText('Amber Key').closest('button')!
+    fireEvent.pointerDown(chip, { pointerType: 'mouse', clientX: 10, clientY: 10 })
+    act(() => {
+      vi.advanceTimersByTime(800)
+    })
+    expect(toggleTemplate).not.toHaveBeenCalled()
+    fireEvent.pointerUp(chip, { pointerType: 'mouse' })
+    fireEvent.click(chip)
+    expect(applyTemplate).toHaveBeenCalledTimes(1)
+  })
+
+  it('a hold released off the chip does not eat the next keyboard press of it', () => {
+    render(strip(COLOUR_CELL))
+    const chip = screen.getByText('Amber Key').closest('button')!
+    fireEvent.pointerDown(chip, { ...TOUCH, clientX: 10, clientY: 10 })
+    act(() => {
+      vi.advanceTimersByTime(501)
+    })
+    expect(toggleTemplate).toHaveBeenCalledTimes(1)
+    // Implicit capture delivers the release here even off the element, and no click follows.
+    fireEvent.pointerUp(chip, TOUCH)
+    act(() => {
+      vi.advanceTimersByTime(400)
+    })
+    // Enter on the focused chip is a click with no pointer sequence before it.
+    fireEvent.click(chip)
+    expect(applyTemplate).toHaveBeenCalledTimes(1)
   })
 })

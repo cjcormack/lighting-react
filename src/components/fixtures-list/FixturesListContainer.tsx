@@ -131,6 +131,13 @@ export interface FixturesListContainerProps {
     /** True when Backspace / Delete would take the selected cells out of Local — same rule. */
     cellClearKey: boolean
     /**
+     * Drops the marquee and nothing else — the first rung of the Escape ladder, for a toolbar
+     * that wants a Deselect beside a cells-only selection. `selection` is null then (it is
+     * gated on selected *rows*), so without this a marquee drawn on a phone had no control that
+     * could dismiss it (`PD-CLEAR-SELECTION-TOUCH`).
+     */
+    clearCells: () => void
+    /**
      * Where a template press lands: the cells' fixtures when there is a marquee, otherwise the
      * selected rows'. Already `{type: 'fixture', key}`, so the strip sends it as it is.
      */
@@ -272,6 +279,16 @@ export function FixturesListContainer({
   useEffect(() => {
     clearCells()
   }, [scope, clearCells])
+
+  // Cells first, rows second. Spreadsheet convention, and it stops one gesture destroying two
+  // independent states — an operator dismissing a marquee rarely means "and deselect every
+  // fixture too". One function for Escape and for a click on the grid's empty background
+  // (`PD-CLEAR-SELECTION-TOUCH`): a phone has the second and not the first, and the two must not
+  // be allowed to climb the ladder differently.
+  const clearByLadder = useCallback(() => {
+    if (cellCount > 0) clearCells()
+    else selection.clear()
+  }, [cellCount, clearCells, selection])
 
   // Selected ids whose rows are hidden (collapsed group, active filter) are
   // inert everywhere below — every consumer intersects with `rows` — so no
@@ -792,11 +809,7 @@ export function FixturesListContainer({
       if (e.target instanceof HTMLElement && e.target.closest('[role="dialog"]')) return
 
       if (e.key === 'Escape') {
-        // Cells first, rows second. Spreadsheet convention, and it stops one keystroke destroying
-        // two independent states — an operator dismissing a marquee rarely means "and deselect
-        // every fixture too".
-        if (cellCount > 0) clearCells()
-        else selection.clear()
+        clearByLadder()
         return
       }
       if (cellCount > 0) {
@@ -875,7 +888,7 @@ export function FixturesListContainer({
     // selection through a ref inside a handler that also has to plan writes against `rows`, and a
     // rebind is cheaper than that second copy of the state. `openEntry` follows the same cadence
     // for the same reason. `canTypeCells` is a boolean.
-  }, [selection, selectableOrder, cellCount, clearCells, canClearCells, canTypeCells, clearSelectedCells, openEntry])
+  }, [selection, selectableOrder, cellCount, clearByLadder, canClearCells, canTypeCells, clearSelectedCells, openEntry])
 
   if (fixturesLoading || groupsLoading) {
     return <div>Loading...</div>
@@ -965,6 +978,7 @@ export function FixturesListContainer({
           cells: cellSelection.cells,
           cellEntryKey: cellCount > 0 && keys.entry,
           cellClearKey: cellCount > 0 && keys.clear,
+          clearCells,
           templateTargets,
           targetFamilies: templateFamilies,
           targetEmitters: templateEmitters,
@@ -1007,6 +1021,7 @@ export function FixturesListContainer({
           fill={fill}
           cellSelection={showOwnership ? cellSelection : undefined}
           onMarqueeDragChange={setMarqueeDragging}
+          onBackgroundClick={clearByLadder}
         />
       )}
 

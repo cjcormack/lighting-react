@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import { Crosshair, Flashlight, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { cn } from '@/lib/utils'
 import { useLocateStateQuery, useToggleLocateMutation } from '../../store/locate'
 import { FanPopover } from './FanPopover'
 import { useHighlight } from './useHighlight'
@@ -34,6 +35,28 @@ export interface SelectionToolbarProps {
  * name the container rather than to widen the threshold.
  */
 const WORD_CLASS = 'hidden sm:inline @max-[1100px]:hidden'
+
+/**
+ * Where Locate, Highlight and Fan go on a phone-width programmer bar, and Deselect does not.
+ *
+ * `PD-SELECTION-BAR-DENSITY` and `PD-CLEAR-SELECTION-TOUCH`, decided together because they pull
+ * against each other: the chips are the only thing on that row an operator presses, so the width
+ * goes to them, and the one control the row keeps at every width is the one a phone has no other
+ * way to do — Escape is a key, and "click off" needs empty grid space a full list has none of.
+ * This is what the `Phone` artboard draws: glyph · count · chips · New · X. The three folded here
+ * are not lost — Locate and Highlight are on the busk target band, and Fan comes back with the
+ * width.
+ *
+ * Same container rule as `WORD_CLASS`, with the same dependency: with no ancestor `@container`
+ * the query is false and `/fixtures/list` and `/groups/list` keep every button at every width.
+ * `@[600px]` is the bar's phone arm — the threshold row B's key button already uses for "this grid
+ * column is a phone's".
+ *
+ * Exported because the programmer's `SelectionBar` folds its own counts and badge at the same
+ * width: one constant, so the two halves of one row cannot fold at different thresholds. The
+ * import runs this way round — the bar already depends on this toolbar, never the reverse.
+ */
+export const PHONE_FOLDED_CLASS = '@max-[600px]:hidden'
 
 export function SelectionToolbar({ locateTargets, targets, onClear }: SelectionToolbarProps) {
   const { data: locateState } = useLocateStateQuery()
@@ -72,7 +95,7 @@ export function SelectionToolbar({ locateTargets, targets, onClear }: SelectionT
         {targets.length}
         <span className="hidden sm:inline"> selected</span>
       </span>
-      <FanPopover targets={targets} />
+      <FanPopover targets={targets} className={PHONE_FOLDED_CLASS} />
       {/* No "Apply palette" or "Record palette" here any more. Both authored value-level
           references, which layers replace: applying a look to a cue is a layer, and recording the
           programmer into a look is the record rewrite. Leaving Record in place would have been
@@ -84,7 +107,7 @@ export function SelectionToolbar({ locateTargets, targets, onClear }: SelectionT
             variant={allLocated ? 'default' : 'outline'}
             size="sm"
             onClick={locateSelection}
-            className={allLocated ? 'bg-sky-500 text-white hover:bg-sky-600' : ''}
+            className={cn(PHONE_FOLDED_CLASS, allLocated && 'bg-sky-500 text-white hover:bg-sky-600')}
           >
             <Crosshair className="size-3.5" />
             <span className={WORD_CLASS}>Locate</span>
@@ -99,6 +122,7 @@ export function SelectionToolbar({ locateTargets, targets, onClear }: SelectionT
           <Button
             variant={highlight.isActive ? 'default' : 'outline'}
             size="sm"
+            className={PHONE_FOLDED_CLASS}
             onPointerDown={highlight.press}
             onPointerUp={highlight.release}
             onPointerCancel={highlight.release}

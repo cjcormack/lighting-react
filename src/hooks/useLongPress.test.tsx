@@ -177,3 +177,48 @@ describe('useLongPress — consumeLongPress', () => {
     expect(onChild).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('useLongPress, the edges the grid reached', () => {
+  it('a second pointer drops the pending hold instead of firing it early for the newcomer', () => {
+    const onLongPress = vi.fn()
+    const onPress = vi.fn()
+    render(<Pad onLongPress={onLongPress} onPress={onPress} />)
+    fireEvent.pointerDown(screen.getByRole('button'), { pointerId: 1, clientX: 0, clientY: 0 })
+    tick(300)
+    fireEvent.pointerDown(screen.getByRole('button'), { pointerId: 2, clientX: 40, clientY: 0 })
+    tick(600)
+    expect(onLongPress).not.toHaveBeenCalled()
+    fireEvent.pointerUp(screen.getByRole('button'))
+    expect(onPress).not.toHaveBeenCalled()
+  })
+
+  it('cancels the hold when the element unmounts under the finger', () => {
+    const onLongPress = vi.fn()
+    const { unmount } = render(<Pad onLongPress={onLongPress} />)
+    down()
+    tick(200)
+    unmount()
+    tick(600)
+    expect(onLongPress).not.toHaveBeenCalled()
+  })
+
+  it('forgets a fired hold after a short window, so an unclicked release does not eat the next activation', () => {
+    const onLongPress = vi.fn()
+    function Chip() {
+      const { handlers, consumeLongPress } = useLongPress({ onLongPress })
+      return (
+        <button {...handlers} type="button" onClick={() => (consumeLongPress() ? null : onLongPress('click'))}>
+          pad
+        </button>
+      )
+    }
+    render(<Chip />)
+    down()
+    tick(501)
+    expect(onLongPress).toHaveBeenCalledTimes(1)
+    fireEvent.pointerUp(screen.getByRole('button'))
+    tick(400)
+    fireEvent.click(screen.getByRole('button'))
+    expect(onLongPress).toHaveBeenLastCalledWith('click')
+  })
+})

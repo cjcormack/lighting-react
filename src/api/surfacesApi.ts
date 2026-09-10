@@ -202,7 +202,8 @@ export interface ApplyLookTarget {
 }
 
 /**
- * Press a template onto the **desk selection**, as a layer that tracks it — the ⌥click gesture.
+ * Press a template onto the **desk selection**, as a layer that tracks it — the strip's ⌥click
+ * (or touch-hold) gesture.
  *
  * A generic template with nothing selected is dropped: its rows take their targets from the press.
  * A per-fixture one names its own heads. The family mask is derived server-side from the

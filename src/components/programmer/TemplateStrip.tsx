@@ -1,9 +1,10 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { AudioWaveform, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useScrollEdges } from '@/hooks/useScrollEdges'
+import { useLongPress } from '@/hooks/useLongPress'
 import type { CellRef } from '@/components/fixtures-list/cellSelectionModel'
 import { type AttributeFamily } from '@/lib/attributeFamily'
 import { templateRowsSwatch, describeTemplateIntent } from '@/lib/templateIntent'
@@ -42,8 +43,10 @@ import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
  *
  *  - **click** sets literal values in Local. Retuning the template later does not move them. This is
  *    the busking gesture, and it is why the retired `ref:` grammar is not missed here.
- *  - **⌥click** adds a layer that *tracks* it, targeted at the selection and masked to the
- *    template's family. Retune the template and every layer moves.
+ *  - **⌥click — or a hold, which is the same press on a touchscreen** — adds a layer that
+ *    *tracks* it, targeted at the selection and masked to the template's family. Retune the
+ *    template and every layer moves. The hold is stated on the chip's `title` beside ⌥click, and
+ *    the reason it is a hold rather than a Set/Track switch is in `TemplateChip`.
  *
  * The last chip records the selection as a new template, which is how the library fills up without
  * anyone visiting it. It is drawn **outside** the scroller, pinned to its right: it is the one
@@ -325,18 +328,45 @@ function TemplateChip({
   onPress: (template: TemplateSummary, additive: boolean) => void
 }) {
   const swatch = templateRowsSwatch(template.rows)
+  // The hold is ⌥click's touch twin (`PD-TRACKING-GESTURE-TOUCH`): a phone has no Option key, so
+  // without it the tracking half of the design was unreachable from the surface built for it. It
+  // is a hold and not a mode switch in the bar because ⌥ is per-press, and a sticky Set/Track
+  // toggle is the kind of state an operator forgets they set. A hold means the press's second
+  // meaning everywhere on the desk — a pad's hold inspects it, a speed card's hold is its fader,
+  // the grid's hold is its marquee — and the chip and the grid never share a point, so the hold
+  // cannot mean two things anywhere a finger lands. `consumeLongPress` swallows the click the
+  // release then generates, or a hold would add the layer *and* set the literals.
+  //
+  // **Touch and pen only — the same gate the grid's marquee arm makes, and the same list.** A
+  // mouse has ⌥, so a mouse hold would be a second, silent door to the tracking mutation: an
+  // operator who paused on a chip for half a second would get a layer where they meant literals,
+  // and nothing on screen says which happened. The busk pads keep their mouse hold because theirs
+  // opens an inspector; this one changes the rig.
+  const { handlers: hold, consumeLongPress } = useLongPress({
+    onLongPress: () => onPress(template, true),
+  })
+  const handlers = {
+    ...hold,
+    onPointerDown: (e: ReactPointerEvent) => {
+      if (e.pointerType === 'touch' || e.pointerType === 'pen') hold.onPointerDown(e)
+    },
+  }
   return (
     <button
       type="button"
-      onClick={(e) => onPress(template, e.altKey)}
+      {...handlers}
+      onClick={(e) => {
+        if (consumeLongPress()) return
+        onPress(template, e.altKey)
+      }}
       title={
         // The two gestures, stated on the chip rather than left to be discovered: ⌥click is not a
         // thing an operator guesses, and it is the one that creates a dependency. For an effect the
         // click half says **a copy**, which is the whole difference between the two: the instance a
         // click mints carries no `LayerSource`, so retuning the template afterwards never moves it.
         template.kind === 'effect'
-          ? `Click to run a copy of “${template.name}” on the selection · ⌥click to add a layer that tracks it`
-          : `Click to set these values · ⌥click to add a layer that tracks “${template.name}”`
+          ? `Click to run a copy of “${template.name}” on the selection · hold or ⌥click to add a layer that tracks it`
+          : `Click to set these values · hold or ⌥click to add a layer that tracks “${template.name}”`
       }
       className={cn(
         // `shrink-0` is what makes the row a scroller rather than a squeezer: without it flex

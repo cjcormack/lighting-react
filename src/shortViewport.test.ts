@@ -7,6 +7,7 @@ import programmerPageSrc from './routes/ProgrammerPage.tsx?raw'
 import layoutSrc from './Layout.tsx?raw'
 import showHeaderSrc from './components/ShowHeader.tsx?raw'
 import programmerGridSrc from './components/programmer/ProgrammerGrid.tsx?raw'
+import selectionBarSrc from './components/programmer/SelectionBar.tsx?raw'
 
 /**
  * The short-viewport fold is one decision written in four places, and this is what keeps them one
@@ -59,10 +60,11 @@ describe('the short-viewport fold', () => {
     // `useMediaQuery` passes this straight to `window.matchMedia`, which answers `false` for a
     // string it cannot parse rather than throwing — so a typo here is a fold that silently never
     // happens. Two sites hand it a string: `ProgrammerBody`, which moves rows A and B, and
-    // `SelectionBar`, which decides whether row C is permanently in the flow
-    // (`selectionBandState`). The test above already holds them to one *number*; this holds them
-    // to one *spelling*, which the number check cannot see.
-    for (const src of [programmerPageSrc, programmerGridSrc]) {
+    // `SelectionBar` (its own module since the desk-findings' group B), which decides whether
+    // row C is permanently in the flow (`selectionBandState`). The test above already holds
+    // `ProgrammerGrid`'s class-name arms to one *number*; this holds the two strings to one
+    // *spelling*, which the number check cannot see.
+    for (const src of [programmerPageSrc, selectionBarSrc]) {
       expect(src).toContain("const SHORT_VIEWPORT = '(max-height: 500px)'")
     }
   })

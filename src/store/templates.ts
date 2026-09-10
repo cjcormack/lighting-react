@@ -178,7 +178,8 @@ export const templatesApi = restApi.injectEndpoints({
     }),
 
     /**
-     * **⌥click**: add (or remove) a layer that *tracks* the template, targeted at the selection.
+     * **⌥click — or a hold on a touchscreen**: add (or remove) a layer that *tracks* the
+     * template, targeted at the selection.
      *
      * The layer is the dependency mechanism — it already is, for Looks — so "a colour I can change
      * everywhere later" and "a colour I want right now" are two gestures on one chip rather than two

@@ -29,9 +29,11 @@ interface FanPopoverProps {
    *  order; the Reverse toggle covers the other direction). A multi-head
    *  fixture target fans across its elements, one point per head. */
   targets: readonly WriteTarget[]
+  /** For the trigger button — the programmer's selection bar folds it away at phone widths. */
+  className?: string
 }
 
-export function FanPopover({ targets }: FanPopoverProps) {
+export function FanPopover({ targets, className }: FanPopoverProps) {
   const writers = useCellWriters()
   const [isOpen, setIsOpen] = useState(false)
   const [column, setColumn] = useState<ColumnKey>('dimmer')
@@ -107,6 +109,7 @@ export function FanPopover({ targets }: FanPopoverProps) {
         <Button
           variant="outline"
           size="sm"
+          className={className}
           disabled={!canFan}
           title={
             readOnlyScope

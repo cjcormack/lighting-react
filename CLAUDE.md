@@ -518,8 +518,8 @@ the page, and the library went back to being a flat list.
 
 **A press goes through the pad, and the bank decides the siblings.**
 `POST /busk/pads/{padId}/press` is the *only* press on this surface — the three kind-specific
-mutations (`toggleTemplate`, `toggleLook`, `goToStack`) are the programmer's ⌥click strip's and the
-AI's now. It has a second door since the MIDI surface's session 4: a `PressPad` binding runs the
+mutations (`toggleTemplate`, `toggleLook`, `goToStack`) are the programmer's ⌥click / touch-hold
+strip's and the AI's now. It has a second door since the MIDI surface's session 4: a `PressPad` binding runs the
 same `BuskPressService` with the desk selection as the targets, which is why that service exists at
 all — the solo rules and the refusals are the pad's behaviour, not the endpoint's. The server reads the pad, its record and, when the bank is **solo**, the records on its
 sibling pads in one transaction. Solo has one meaning for every kind: pressing one *on* turns its
@@ -766,7 +766,7 @@ says which happened, so both are stated on the chip's title:
 - **click** → `POST /templates/{id}/apply`. Sets **literal** values in Local. Retuning the template
   later does not move them; this is the busking gesture, and it is why the retired `ref:` grammar is
   not missed.
-- **⌥click** → `POST /templates/{id}/toggle`. Adds a layer that **tracks** it, targeted at the
+- **⌥click, or a hold** → `POST /templates/{id}/toggle`. Adds a layer that **tracks** it, targeted at the
   selection and masked to the template's family — **the server derives the mask** from the
   template's own rows, because which family a template layer belongs to is a fact about the
   template, not about the press. This repo sends its `propertyMask` anyway, as the belief it is
@@ -774,6 +774,23 @@ says which happened, so both are stated on the chip's title:
   than silently on the rig. Retune the template and every layer moves. The layer *is* the dependency
   mechanism — it already was, for Looks — so "a colour I can change everywhere later" and "a colour I
   want right now" are two gestures on one chip rather than two kinds of template.
+
+**The hold is ⌥click's touch twin — `touch` and `pen` only, never a mouse.** It goes through
+`useLongPress` on the chip, and it is a hold rather than a Set/Track switch in the bar because ⌥ is
+per-press and a mode is state an operator forgets. It is gated on pointer type because a mouse has
+⌥: a mouse hold would be a second, silent door to the tracking mutation, and a slow click on a live
+rig would add a layer where literals were meant. That is the same gate, and the same list, the
+grid's marquee arm makes, and it is the one place the desk's holds differ — a busk pad's mouse hold
+opens an inspector, which changes nothing. A hold is otherwise the press's second meaning everywhere
+on the desk: a pad's inspects it, a speed card's is its fader, and since the desk-findings' group B
+the **grid's is its marquee**: on a touchscreen a finger pans and only a held one marquees
+(`touch-action` cannot say that, so `useCellMarquee` arms by time for `touch`/`pen` and refuses
+`touchmove` only while a marquee is live). A chip and a cell never share a point, so the hold never
+means two things where a finger lands. The other phone rules on that row: below `@[600px]` the bar
+is glyph · cell count · chips · New · Deselect (`SelectionBar.tsx`, with a Deselect of its own for a
+cells-only marquee, which the row toolbar has none for), and a tap on the grid's empty background
+runs the same cells-then-rows ladder Escape does — only on the grid's own DOM, since React bubbles
+a click inside a portalled cell editor up the same tree.
 
 `TemplateStrip` lives in `ProgrammerGrid`'s `renderToolbar`, which hands down the marquee's
 `cells` **and three things the container derives from them** — so **the selection is the filter and

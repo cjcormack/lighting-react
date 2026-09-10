@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useScrollEdges } from '@/hooks/useScrollEdges'
+import { useLongPress } from '@/hooks/useLongPress'
 import { AudioWaveform, ChevronDown, ChevronRight, Info, Layers } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -54,6 +55,24 @@ const ROW_HEIGHT = 36
  */
 const DRAG_THRESHOLD_PX = 5
 
+/**
+ * How long a finger must hold still before a touch press becomes a marquee rather than a scroll.
+ *
+ * A touch has no "travelled 5px" that a scroll does not also have — a flick crosses the threshold
+ * before the browser has decided the gesture is a pan — so on a touchscreen the marquee is armed
+ * by **time**, not distance (`PD-MARQUEE-TOUCH`): touch pans, and only a hold marquees. The number
+ * is `useLongPress`'s default, which is what the busk view's pads and the speed rail's hold-to-slide
+ * already answer to, so one hold means one thing across the desk.
+ */
+const TOUCH_HOLD_MS = 500
+
+/**
+ * How long, after a marquee is released, the click that release generates is still swallowed.
+ * An upper bound only — the click itself or the next `pointerdown` ends it sooner. See
+ * `onPointerUp` in `useCellMarquee` for why a zero timer was not enough.
+ */
+const SWALLOW_WINDOW_MS = 350
+
 /** How close to an edge the pointer must get before the marquee scrolls the list. */
 const AUTOSCROLL_EDGE_PX = 24
 const AUTOSCROLL_SPEED_PX = 14
@@ -104,6 +123,18 @@ export interface FixturesTableProps {
    * (`selectionBandState`). The gesture itself stays here — only the fact of it is lifted.
    */
   onMarqueeDragChange?: (dragging: boolean) => void
+  /**
+   * A click landed on the grid's own background — under the last row, or beside the last column —
+   * on nothing that is a row or the header.
+   *
+   * The container answers it with the same ladder Escape runs (cells first, rows second). It
+   * exists because a phone has no Escape and no "click off" (`PD-CLEAR-SELECTION-TOUCH`): the only
+   * way to drop a selection there was the bar's Deselect, and on a short list the empty space
+   * under the rows is the larger target. Not fired for the click that ends a marquee — that one
+   * is swallowed before it reaches here, or a drag released over empty space would clear the
+   * selection it just made.
+   */
+  onBackgroundClick?: () => void
 }
 
 /**
@@ -128,6 +159,7 @@ export function FixturesTable({
   fill = false,
   cellSelection,
   onMarqueeDragChange,
+  onBackgroundClick,
 }: FixturesTableProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   // One subscription for the whole grid; every row takes the answer as a prop.
@@ -226,6 +258,23 @@ export function FixturesTable({
           fill ? 'min-h-0 flex-1 border-t border-border' : 'rounded-md border border-border',
         )}
         style={fill ? undefined : { maxHeight: 'calc(100vh - 14rem)' }}
+        // On the scroller, not the rows wrapper: a short list leaves the wrapper shorter than the
+        // scroller, and the empty space under the last row — the target this is for — is the
+        // scroller's own. The header and every row stop it by ancestry rather than by
+        // `stopPropagation`, so a cell editor's trigger or a checkbox never has to know this
+        // exists.
+        onClick={(e) => {
+          if (!onBackgroundClick) return
+          const target = e.target as Element
+          // React bubbles a synthetic event up the *React* tree, portals included — and every
+          // cell editor is a Radix popover portalled to `body`. A click on the slider inside an
+          // open editor therefore reaches this handler with a target that has no row above it in
+          // the DOM, and read as background it would drop the marquee mid-edit. The DOM subtree
+          // is the question here, so the DOM is what is asked.
+          if (!e.currentTarget.contains(target)) return
+          if (target.closest('[data-row-id], [data-grid-header]')) return
+          onBackgroundClick()
+        }}
       >
         <div style={{ minWidth: `calc(${NAME_COLUMN_WIDTH} + ${visibleColumns.length * 96}px)` }}>
           {/* Header */}
@@ -257,13 +306,30 @@ export function FixturesTable({
           </div>
 
           {/* Virtualized rows. The marquee handlers live here rather than on the scroller so the
-              sticky header is excluded by geometry rather than by a hit test. */}
+              sticky header is excluded by geometry rather than by a hit test.
+
+              Three touch declarations, each for a browser default the marquee was losing to
+              (`PD-MARQUEE-TOUCH`). `select-none`: a drag — mouse or finger — was selecting the
+              text under it as well as the cells, and nothing in a grid of values wants text
+              selection. `[-webkit-touch-callout:none]`: the hold that arms a touch marquee is the
+              same hold iOS answers with its own callout. `touch-manipulation`: pan and pinch stay
+              the browser's, which is the decision — a finger scrolls, and only a held one
+              marquees — while the double-tap-to-zoom delay goes, so a tap on a cell is a click
+              at once. The hold itself takes the pan away in the move handler, not here:
+              `touch-action` is read once, at the start of the touch, and the start of this touch
+              is a scroll until it has been held.
+
+              Only where there is a marquee to lose them to. The two plain list routes and the cue
+              value grid mount this table with no `cellSelection`, so nothing drags there and a
+              fixture name can still be selected and copied. */}
           <div
+            className={cn(cellSelection && 'select-none touch-manipulation [-webkit-touch-callout:none]')}
             style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}
             onPointerDown={marquee.onPointerDown}
             onPointerMove={marquee.onPointerMove}
             onPointerUp={marquee.onPointerUp}
             onPointerCancel={marquee.onPointerUp}
+            onPointerLeave={marquee.onPointerLeave}
           >
             {/* The rubber band. **Neutral, not primary** (space plan D4): a solid 2px `--foreground`
                 frame with foreground corner handles over a `foreground/5` fill. It was a dashed
@@ -380,6 +446,20 @@ export function FixturesTable({
  *    would swallow the click that opens an editor, so a plain click would stop working entirely.
  *  - After a real drag the trailing `click` is suppressed in the capture phase, or the editor under
  *    the release point opens on top of the selection just made.
+ *
+ * **A touch arms by time, a mouse by distance** (`PD-MARQUEE-TOUCH`). `button === 0` is true of a
+ * finger too, and a scroll flick crosses `DRAG_THRESHOLD_PX` at once, so a distance-armed marquee
+ * on a touchscreen selected cells on every scroll. Now a `touch` or `pen` press is handed to
+ * `useLongPress` — the hook the busk pads and the speed rail's hold-to-slide already
+ * use, so a hold means the same thing everywhere on the desk — and the browser keeps the touch
+ * until the hold fires: a finger that moves first is a pan, which ends in `pointercancel` and
+ * disarms it. Once the hold has fired the marquee needs the *rest* of the touch, and `touch-action`
+ * cannot give it — it is read once, at touch start — so a non-passive `touchmove` guard on the
+ * scroller cancels the pan for exactly as long as a marquee is live. A pen takes the touch arm
+ * too: on an iPad it scrolls the page the way a finger does.
+ *
+ * The hold selects the cell under the finger the moment it fires — a zero-size rectangle still
+ * covers one cell — which is the only acknowledgement a touchscreen gets that the hold took.
  */
 function useCellMarquee({
   scrollRef,
@@ -402,8 +482,14 @@ function useCellMarquee({
   const [chip, setChip] = useState<{ x: number; y: number } | null>(null)
   const dragRef = useRef<{
     pointerId: number
+    /** The rows wrapper the press landed on — the hold arms from a timer, with no event to read it from. */
+    el: HTMLElement
     start: { x: number; y: number }
+    /** The same point in viewport space, for the scope chip the hold draws before any move. */
+    client: { x: number; y: number }
     intent: ReturnType<typeof listSelectionIntentFor>
+    /** A touch or pen press: armed by the hold, never by distance. */
+    hold: boolean
     dragged: boolean
   } | null>(null)
   const bandsRef = useRef<ColumnBand[] | null>(null)
@@ -533,11 +619,83 @@ function useCellMarquee({
   const updateFromPointerRef = useRef(updateFromPointer)
   updateFromPointerRef.current = updateFromPointer
 
+  /**
+   * The armed press becomes a marquee: the one place both arms — distance for a mouse, time for a
+   * touch — go through, so capture and the edge-scroll loop cannot be set up by one and forgotten
+   * by the other.
+   */
+  const arm = useCallback(() => {
+    const drag = dragRef.current
+    if (!drag || drag.dragged) return
+    drag.dragged = true
+    setDragging(true)
+    try {
+      drag.el.setPointerCapture(drag.pointerId)
+    } catch {
+      // Safari throws when the pointer has already been released. Losing capture only means
+      // the drag ends at the edge of the element, which is survivable.
+    }
+  }, [setDragging])
+
+  /**
+   * The edge-scroll loop, started by the first move of a live marquee rather than by `arm()`.
+   * Without it a selection can never exceed one viewport of rows, which on a real rig is the
+   * normal case. It waits for a move because the hold arms with the finger still on the press
+   * point: started from there, a hold within `AUTOSCROLL_EDGE_PX` of the bottom would begin
+   * scrolling — and growing the selection — before the operator had moved at all.
+   */
+  const startAutoScroll = useCallback(() => {
+    if (autoScrollRef.current != null) return
+    const step = () => {
+      const el = scrollRef.current
+      if (!el || !dragRef.current?.dragged) return
+      const { y: yNow } = lastPosRef.current
+      const before = el.scrollTop
+      if (yNow < AUTOSCROLL_EDGE_PX) el.scrollTop -= AUTOSCROLL_SPEED_PX
+      else if (yNow > el.clientHeight - AUTOSCROLL_EDGE_PX) el.scrollTop += AUTOSCROLL_SPEED_PX
+      // Re-resolve after scrolling: the pointer has not moved, but the CONTENT under it has, so
+      // without this the marquee would stop growing the moment the operator held still at the
+      // edge — which looks exactly like autoscroll being broken.
+      if (el.scrollTop !== before) updateFromPointerRef.current()
+      autoScrollRef.current = requestAnimationFrame(step)
+    }
+    autoScrollRef.current = requestAnimationFrame(step)
+  }, [scrollRef])
+
+  // The touch arm. The hook's handlers are called from this hook's own, and only for a press whose
+  // `hold` is set — a mouse never reaches them. `onPress` is deliberately not given: a touch that
+  // was neither held nor moved is a tap, and a tap is the cell's `click`, which the browser is
+  // already about to deliver.
+  const { handlers: hold } = useLongPress({
+    delayMs: TOUCH_HOLD_MS,
+    onLongPress: () => {
+      const drag = dragRef.current
+      if (!drag || drag.dragged) return
+      arm()
+      // Select the cell under the finger now, before any move: the acknowledgement that the hold
+      // took, and the start of the rectangle the finger is about to draw.
+      lastPosRef.current = drag.start
+      setChip({ x: drag.client.x, y: drag.client.y })
+      updateFromPointerRef.current()
+    },
+  })
+
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (!selectionRef.current || e.button !== 0) return
       const scroller = scrollRef.current
       if (!scroller) return
+      // A second pointer while one is already down. A live marquee keeps the pointer it has and
+      // ignores the newcomer; a *pending* hold is dropped outright, because two fingers are the
+      // start of a pinch, not of a hold — and left alone the first finger's timer would have fired
+      // for a press it no longer describes.
+      const current = dragRef.current
+      if (current) {
+        if (current.dragged) return
+        if (current.hold) hold.onPointerCancel()
+        dragRef.current = null
+        return
+      }
       bandsRef.current = measureBands()
       headerHeightRef.current =
         scroller.querySelector('[data-grid-header]')?.getBoundingClientRect().height ?? 0
@@ -547,14 +705,22 @@ function useCellMarquee({
       const first = bandsRef.current[0]
       if (!first || x < first.left) return
       coveredCellsRef.current = 0
+      // Touch *and* pen: a pen scrolls like a finger on the one tablet this runs on. Named
+      // positively rather than as `!== 'mouse'` because a `pointerType` can be empty — jsdom's
+      // always is — and an unknown device is a mouse's kind of thing, not a scroller's.
+      const isHold = e.pointerType === 'touch' || e.pointerType === 'pen'
       dragRef.current = {
         pointerId: e.pointerId,
+        el: e.currentTarget as HTMLElement,
         start: { x, y: e.clientY - origin.top },
+        client: { x: e.clientX, y: e.clientY },
         intent: listSelectionIntentFor(e),
+        hold: isHold,
         dragged: false,
       }
+      if (isHold) hold.onPointerDown(e)
     },
-    [measureBands, scrollRef],
+    [hold, measureBands, scrollRef],
   )
 
   const onPointerMove = useCallback(
@@ -562,6 +728,8 @@ function useCellMarquee({
       const drag = dragRef.current
       const scroller = scrollRef.current
       if (!drag || !scroller) return
+      // Another finger's move says nothing about this gesture.
+      if (e.pointerId !== drag.pointerId) return
       // No button held any more: the release happened somewhere this element never saw — over the
       // sticky header, the scrollbar, or outside the window — before the threshold was crossed, so
       // no pointer capture was taken and no `pointerup` arrived here. Without this the armed press
@@ -585,49 +753,41 @@ function useCellMarquee({
       lastPosRef.current = { x, y }
 
       if (!drag.dragged) {
+        if (drag.hold) {
+          // A touch that moves before the hold has fired is the browser's scroll, not ours. The
+          // hook drops the hold past its own slop; the pan, if the scroller takes it, arrives as
+          // `pointercancel` and tears the press down. Either way nothing is armed by distance.
+          hold.onPointerMove(e)
+          return
+        }
         if (Math.hypot(x - drag.start.x, y - drag.start.y) < DRAG_THRESHOLD_PX) return
-        drag.dragged = true
-        setDragging(true)
-        try {
-          ;(e.currentTarget as HTMLElement).setPointerCapture(drag.pointerId)
-        } catch {
-          // Safari throws when the pointer has already been released. Losing capture only means
-          // the drag ends at the edge of the element, which is survivable.
-        }
-        // Start the edge-scroll loop only once a marquee actually exists. Without it a selection
-        // can never exceed one viewport of rows, which on a real rig is the normal case.
-        const step = () => {
-          const el = scrollRef.current
-          if (!el || !dragRef.current?.dragged) return
-          const { y: yNow } = lastPosRef.current
-          const before = el.scrollTop
-          if (yNow < AUTOSCROLL_EDGE_PX) el.scrollTop -= AUTOSCROLL_SPEED_PX
-          else if (yNow > el.clientHeight - AUTOSCROLL_EDGE_PX) el.scrollTop += AUTOSCROLL_SPEED_PX
-          // Re-resolve after scrolling: the pointer has not moved, but the CONTENT under it has, so
-          // without this the marquee would stop growing the moment the operator held still at the
-          // edge — which looks exactly like autoscroll being broken.
-          if (el.scrollTop !== before) updateFromPointerRef.current()
-          autoScrollRef.current = requestAnimationFrame(step)
-        }
-        autoScrollRef.current = requestAnimationFrame(step)
+        arm()
       }
 
       e.preventDefault()
+      // The first move of a live marquee — a mouse's arming move, or a held finger's first
+      // travel — is what starts the edge-scroll loop. See `startAutoScroll`.
+      startAutoScroll()
       setChip({ x: e.clientX, y: e.clientY })
       updateFromPointer()
     },
-    [scrollRef, setDragging, stopAutoScroll, updateFromPointer],
+    [arm, hold, scrollRef, setDragging, startAutoScroll, stopAutoScroll, updateFromPointer],
   )
 
   const onPointerUp = useCallback(
     (e: React.PointerEvent) => {
       const drag = dragRef.current
+      // Lifting a second finger must not end the gesture the first one owns.
+      if (drag && e.pointerId !== drag.pointerId) return
       dragRef.current = null
       setBand(null)
       setChip(null)
       stopAutoScroll()
       setDragging(false)
       if (!drag) return
+      // A pending hold dies with the press — this is the `pointercancel` path too, which is the
+      // one a scroller's pan ends a touch with, and the reason the hook has a cancel at all.
+      if (drag.hold) hold.onPointerCancel()
       try {
         ;(e.currentTarget as HTMLElement).releasePointerCapture(drag.pointerId)
       } catch {
@@ -648,15 +808,29 @@ function useCellMarquee({
 
       // Swallow the click this release is about to generate, or the cell under the pointer opens
       // its editor on top of the selection just made.
+      //
+      // It lives until the click arrives, the next pointer goes down, or `SWALLOW_WINDOW_MS`
+      // passes — whichever is first. A mouse's click lands in the same task as this release, but
+      // a touch's compatibility click is the browser's to schedule and a zero timer could lose
+      // the race to it, in which case the click would hit the auto-opened editor's trigger and
+      // toggle it straight back shut. The next `pointerdown` is the one certain bound: a click
+      // belonging to this release cannot come after the press that starts the next gesture. A
+      // drag that ends outside the document generates no click at all, which is what the timer
+      // is for — without it the listener would sit there and eat the operator's next one.
+      let dispose = () => {}
       const swallow = (ev: MouseEvent) => {
         ev.preventDefault()
         ev.stopPropagation()
+        dispose()
+      }
+      const timer = window.setTimeout(() => dispose(), SWALLOW_WINDOW_MS)
+      dispose = () => {
+        window.clearTimeout(timer)
         window.removeEventListener('click', swallow, true)
+        window.removeEventListener('pointerdown', dispose, true)
       }
       window.addEventListener('click', swallow, true)
-      // A drag that ends outside the document generates no click at all; without this the listener
-      // would sit there and eat the operator's next one.
-      window.setTimeout(() => window.removeEventListener('click', swallow, true), 0)
+      window.addEventListener('pointerdown', dispose, true)
 
       // The gesture has already said what to edit, so open that column's editor rather than making
       // the operator click a cell for a decision they have made (`PD-POPUP-AFTER-DRAG`). Reported
@@ -683,8 +857,38 @@ function useCellMarquee({
         if (anchor) onSingleColumnDragRef.current?.(anchor)
       }
     },
-    [scrollRef, setDragging, stopAutoScroll],
+    [hold, scrollRef, setDragging, stopAutoScroll],
   )
+
+  /**
+   * A finger that leaves the rows before its hold fires has not held anything. Only the *pending*
+   * hold is dropped: an armed marquee holds pointer capture, so the pointer cannot leave it in
+   * any sense this handler should act on.
+   */
+  const onPointerLeave = useCallback(() => {
+    const drag = dragRef.current
+    // A mouse press is left alone: it arms by distance, and a press that strays over the sticky
+    // header and back was always allowed to become a marquee.
+    if (!drag || drag.dragged || !drag.hold) return
+    hold.onPointerLeave()
+    dragRef.current = null
+  }, [hold])
+
+  // The pan guard. `touch-action` is decided when the touch starts, and at that moment this touch
+  // is a scroll — it becomes a marquee only once held — so the scroll has to be refused per move
+  // instead, and only a non-passive listener can refuse it. Registered natively: React's own
+  // touch listeners are passive, so an `onTouchMove` prop could not call `preventDefault`. On the
+  // scroller rather than the rows wrapper because that is the element the pan belongs to. It
+  // prevents nothing while no marquee is live, which is the whole time a mouse is in use.
+  useEffect(() => {
+    const scroller = scrollRef.current
+    if (!scroller) return
+    const guard = (e: TouchEvent) => {
+      if (dragRef.current?.dragged) e.preventDefault()
+    }
+    scroller.addEventListener('touchmove', guard, { passive: false })
+    return () => scroller.removeEventListener('touchmove', guard)
+  }, [scrollRef])
 
   useEffect(
     () => () => {
@@ -692,11 +896,18 @@ function useCellMarquee({
       // A grid that unmounts mid-drag would otherwise leave the consumer believing one is still
       // in flight, and the selection bar holding a place for a gesture that has gone.
       setDragging(false)
+      // And a grid that unmounts mid-*hold* must not arm afterwards: `useLongPress` cancels its
+      // own timer on unmount, but this ref is what `onLongPress` would read if it fired, so the
+      // press is dropped here too. The unmount is reachable with a finger down — the table
+      // leaves the tree whenever the container's row list empties, which a live channel push
+      // can do under `onlyLit`.
+      if (dragRef.current?.hold) hold.onPointerCancel()
+      dragRef.current = null
     },
-    [setDragging, stopAutoScroll],
+    [hold, setDragging, stopAutoScroll],
   )
 
-  return { band, chip, onPointerDown, onPointerMove, onPointerUp }
+  return { band, chip, onPointerDown, onPointerMove, onPointerUp, onPointerLeave }
 }
 
 interface RowViewProps {
@@ -821,7 +1032,12 @@ const RowView = React.memo(function RowView({
 
   if (row.kind === 'divider') {
     return (
-      <div className="flex h-full items-center border-b border-border bg-muted/30 px-2">
+      // `data-row-id` here too: the scroller's background-click test reads it, and a divider is a
+      // row of the list, not empty space — a tap on "Ungrouped" must not drop the selection.
+      <div
+        className="flex h-full items-center border-b border-border bg-muted/30 px-2"
+        data-row-id={row.id}
+      >
         <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
           {row.label}
         </span>

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Everything store-connected is mocked away: the point of this suite is the GESTURE, not the data.
@@ -151,12 +151,13 @@ const ROWS: Row[] = [
 
 const onBeginCellEdit = vi.fn()
 const onMarqueeDragChange = vi.fn()
+const onBackgroundClick = vi.fn()
 
-function Harness() {
-  const cellSelection = useCellSelection(new Set(ROWS.map(r => r.id)))
+function Harness({ rows = ROWS }: { rows?: Row[] }) {
+  const cellSelection = useCellSelection(new Set(rows.map(r => r.id)))
   return (
     <FixturesTable
-      rows={ROWS}
+      rows={rows}
       visibleColumns={['dimmer'] as ColumnKey[]}
       isSelected={() => false}
       onRowClick={() => {}}
@@ -168,6 +169,7 @@ function Harness() {
       showOwnership
       cellSelection={cellSelection}
       onMarqueeDragChange={onMarqueeDragChange}
+      onBackgroundClick={onBackgroundClick}
     />
   )
 }
@@ -832,5 +834,196 @@ describe('FixturesTable sideways scroll fade', () => {
     fireEvent.scroll(el)
     expect(reads).toBe(0)
     expect(fade()).toBeTruthy()
+  })
+})
+
+/**
+ * The touch arm (`PD-MARQUEE-TOUCH`): a finger pans, and only a held one marquees. jsdom has no
+ * touch behaviour of its own — no pan, no `pointercancel` from a scroller — so what is pinned here
+ * is the arming rule: distance never arms a touch press, the hold does, and the browser's own
+ * `touchmove` is refused only while a marquee is live.
+ */
+describe('FixturesTable touch', () => {
+  const TOUCH = { pointerType: 'touch', button: 0, buttons: 1 }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    // A release schedules the click-swallow's own teardown on a timer. Under fake timers that
+    // teardown would be discarded with the clock, leaving a capture-phase window listener to eat
+    // the first click of whichever test runs next — so the pending timers run out first.
+    vi.runOnlyPendingTimers()
+    vi.useRealTimers()
+  })
+
+  it('a finger that moves is a scroll — distance never arms a touch marquee', () => {
+    render(<Harness />)
+    const cell = cellButton()
+    fireEvent.pointerDown(cell, { ...TOUCH, clientX: 300, clientY: 100 })
+    fireEvent.pointerMove(cell, { ...TOUCH, clientX: 380, clientY: 160 })
+    fireEvent.pointerMove(cell, { ...TOUCH, clientX: 460, clientY: 240 })
+    expect(onMarqueeDragChange).not.toHaveBeenCalled()
+    // The move also dropped the hold, so nothing arms later either.
+    act(() => {
+      vi.advanceTimersByTime(600)
+    })
+    fireEvent.pointerUp(cell, { ...TOUCH, buttons: 0, clientX: 460, clientY: 240 })
+    expect(onMarqueeDragChange).not.toHaveBeenCalled()
+  })
+
+  it('a held finger arms the marquee, and selects the cell under it before it moves', () => {
+    stubFlatLayout()
+    render(<Harness />)
+    const cell = cellButton()
+    fireEvent.pointerDown(cell, { ...TOUCH, clientX: 300, clientY: 10 })
+    act(() => {
+      vi.advanceTimersByTime(499)
+    })
+    expect(onMarqueeDragChange).not.toHaveBeenCalled()
+    act(() => {
+      vi.advanceTimersByTime(2)
+    })
+    expect(onMarqueeDragChange.mock.calls).toEqual([[true]])
+    // Released without moving. The hold alone covered one cell, so the single-column auto-open
+    // has an anchor — the proof that the zero-size rectangle selected the cell under the finger.
+    fireEvent.pointerUp(cell, { ...TOUCH, buttons: 0, clientX: 300, clientY: 10 })
+    expect(onMarqueeDragChange.mock.calls).toEqual([[true], [false]])
+    expect(openCellRowId()).toBe('fixture:a')
+  })
+
+  it('a pan reclaiming the touch before the hold fires disarms it', () => {
+    render(<Harness />)
+    const cell = cellButton()
+    fireEvent.pointerDown(cell, { ...TOUCH, clientX: 300, clientY: 100 })
+    fireEvent.pointerCancel(cell, { ...TOUCH, buttons: 0 })
+    act(() => {
+      vi.advanceTimersByTime(600)
+    })
+    expect(onMarqueeDragChange).not.toHaveBeenCalled()
+  })
+
+  it('a finger that leaves the rows before the hold fires has held nothing', () => {
+    render(<Harness />)
+    const cell = cellButton()
+    fireEvent.pointerDown(cell, { ...TOUCH, clientX: 300, clientY: 100 })
+    fireEvent.pointerLeave(cell, { ...TOUCH })
+    act(() => {
+      vi.advanceTimersByTime(600)
+    })
+    expect(onMarqueeDragChange).not.toHaveBeenCalled()
+  })
+
+  it('refuses the browser’s scroll only while a marquee is live', () => {
+    stubFlatLayout()
+    render(<Harness />)
+    const cell = cellButton()
+    const scroller = cell.closest('.overflow-auto')!
+    // Before the hold the touch is the browser's: a touchmove scrolls.
+    fireEvent.pointerDown(cell, { ...TOUCH, clientX: 300, clientY: 10 })
+    expect(fireEvent.touchMove(scroller)).toBe(true)
+    act(() => {
+      vi.advanceTimersByTime(501)
+    })
+    // Live: the pan is refused, so the finger draws the rectangle rather than scrolling it away.
+    expect(fireEvent.touchMove(scroller)).toBe(false)
+    fireEvent.pointerUp(cell, { ...TOUCH, buttons: 0, clientX: 300, clientY: 10 })
+    // Released: the browser has its scroll back.
+    expect(fireEvent.touchMove(scroller)).toBe(true)
+  })
+})
+
+/**
+ * `PD-CLEAR-SELECTION-TOUCH`: a click on the grid's own empty background is reported, so the
+ * container can run its Escape ladder on a device that has no Escape.
+ */
+describe('FixturesTable background click', () => {
+  it('a click on the empty grid reports it; a click on a row does not', () => {
+    render(<Harness />)
+    const cell = cellButton()
+    const scroller = cell.closest('.overflow-auto')!
+    fireEvent.click(cell)
+    expect(onBackgroundClick).not.toHaveBeenCalled()
+    fireEvent.click(scroller)
+    expect(onBackgroundClick).toHaveBeenCalledTimes(1)
+  })
+
+  it('the click that ends a marquee is not a background click', () => {
+    // A drag released over empty space must not clear the selection it just made.
+    render(<Harness />)
+    const cell = cellButton()
+    const scroller = cell.closest('.overflow-auto')!
+    fireEvent.pointerDown(cell, { button: 0, clientX: 300, clientY: 100 })
+    fireEvent.pointerMove(cell, { button: 0, buttons: 1, clientX: 380, clientY: 160 })
+    fireEvent.pointerUp(cell, { button: 0, clientX: 380, clientY: 160 })
+    fireEvent.click(scroller)
+    expect(onBackgroundClick).not.toHaveBeenCalled()
+  })
+})
+
+describe('FixturesTable background click, the two false positives', () => {
+  it('ignores a click inside a portalled cell editor — React bubbles it here through the portal', () => {
+    // Every cell editor is a Radix popover portalled to `body`. The synthetic click still reaches
+    // the scroller's handler up the *React* tree, and read as background it would drop the
+    // marquee the editor is committing to.
+    render(<Harness />)
+    fireEvent.click(cellButton())
+    const editor = document.querySelector('[data-radix-popper-content-wrapper]')
+    expect(editor).not.toBeNull()
+    fireEvent.click(editor!.firstElementChild ?? editor!)
+    expect(onBackgroundClick).not.toHaveBeenCalled()
+  })
+
+  it('ignores a click on a divider row — "Ungrouped" is a row, not empty space', () => {
+    render(
+      <Harness
+        rows={[...ROWS, { kind: 'divider', id: 'divider:ungrouped', label: 'Ungrouped' } as unknown as Row]}
+      />,
+    )
+    fireEvent.click(screen.getByText('Ungrouped'))
+    expect(onBackgroundClick).not.toHaveBeenCalled()
+  })
+})
+
+describe('FixturesTable two fingers', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.runOnlyPendingTimers()
+    vi.useRealTimers()
+  })
+
+  it('a second finger drops a pending hold rather than arming early against it', () => {
+    render(<Harness />)
+    const cell = cellButton()
+    fireEvent.pointerDown(cell, { pointerType: 'touch', pointerId: 1, button: 0, buttons: 1, clientX: 300, clientY: 20 })
+    act(() => {
+      vi.advanceTimersByTime(300)
+    })
+    fireEvent.pointerDown(cell, { pointerType: 'touch', pointerId: 2, button: 0, buttons: 1, clientX: 380, clientY: 50 })
+    act(() => {
+      vi.advanceTimersByTime(600)
+    })
+    expect(onMarqueeDragChange).not.toHaveBeenCalled()
+    fireEvent.pointerUp(cell, { pointerType: 'touch', pointerId: 2, button: 0, buttons: 0 })
+    fireEvent.pointerUp(cell, { pointerType: 'touch', pointerId: 1, button: 0, buttons: 0 })
+    expect(onMarqueeDragChange).not.toHaveBeenCalled()
+  })
+
+  it('lifting a second finger does not end the marquee the first one owns', () => {
+    stubFlatLayout()
+    render(<Harness />)
+    const cell = cellButton()
+    fireEvent.pointerDown(cell, { pointerType: 'touch', pointerId: 1, button: 0, buttons: 1, clientX: 300, clientY: 10 })
+    act(() => {
+      vi.advanceTimersByTime(501)
+    })
+    expect(onMarqueeDragChange.mock.calls).toEqual([[true]])
+    fireEvent.pointerDown(cell, { pointerType: 'touch', pointerId: 2, button: 0, buttons: 1, clientX: 380, clientY: 50 })
+    fireEvent.pointerUp(cell, { pointerType: 'touch', pointerId: 2, button: 0, buttons: 0, clientX: 380, clientY: 50 })
+    expect(onMarqueeDragChange.mock.calls).toEqual([[true]])
+    fireEvent.pointerUp(cell, { pointerType: 'touch', pointerId: 1, button: 0, buttons: 0, clientX: 300, clientY: 10 })
+    expect(onMarqueeDragChange.mock.calls).toEqual([[true], [false]])
   })
 })
