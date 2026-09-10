@@ -27,6 +27,14 @@ interface ColourPickerPopoverProps {
    * ignorant of palettes.
    */
   notice?: React.ReactNode
+  /**
+   * Drive the popover from outside instead of letting it keep its own open state. Pass both or
+   * neither — `ColourCell` does, so a released single-column marquee can open the picker with no
+   * click (`PD-POPUP-AFTER-DRAG`); the two property visualizers have no such door to offer and
+   * leave it uncontrolled.
+   */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   /** The trigger element (swatch) */
   children: React.ReactNode
 }
@@ -63,9 +71,25 @@ export function ColourPickerPopover({
   hasUvChannel,
   onColourChange,
   notice,
+  open: controlledOpen,
+  onOpenChange,
   children,
 }: ColourPickerPopoverProps) {
-  const [isOpen, setIsOpen] = useState(false)
+  // Radix owns the open state for an uncontrolled caller — `open` below is `undefined` for them,
+  // which is exactly how `Popover` asks for its own internal state. What is mirrored here is only
+  // what *this* component still has to know: the reset effect wants "is it open", and Radix
+  // exposes that nowhere but the callback. So the mirror is written only when there is no
+  // controlling caller to ask instead, and never beside one — a write there would be state nothing
+  // can ever read, since `controlledOpen` wins the `??`.
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
+  const isOpen = controlledOpen ?? uncontrolledOpen
+  const setIsOpen = useCallback(
+    (next: boolean) => {
+      if (onOpenChange) onOpenChange(next)
+      else setUncontrolledOpen(next)
+    },
+    [onOpenChange],
+  )
   // Track the picker's internal colour state (initialized from combined preview)
   const [pickerColor, setPickerColor] = useState<RgbColor>(() => parseCssColour(combinedCss))
   // Track if user has made a change since opening
@@ -126,7 +150,7 @@ export function ColourPickerPopover({
   const hasExtendedChannels = hasWhiteChannel || hasAmberChannel || hasUvChannel
 
   return (
-    <Popover open={isOpen} onOpenChange={setIsOpen}>
+    <Popover open={controlledOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent className="w-auto" align="start">
         <div className="space-y-3">

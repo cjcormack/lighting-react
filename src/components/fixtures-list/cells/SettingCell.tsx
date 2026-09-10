@@ -1,10 +1,11 @@
-import { memo, useState } from 'react'
+import { memo } from 'react'
 import { Check } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import type { CellResolution } from '../columns'
 import type { CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
 import { UNSET_CELL_TITLE, UnsetCellMark } from './UnsetCellMark'
+import { useCellEditorOpen } from './useCellEditorOpen'
 
 interface SettingCellProps {
   value: Extract<CellValue, { kind: 'setting' }>
@@ -18,6 +19,11 @@ interface SettingCellProps {
    * mouse and not the keyboard, and this trigger is tabbable.
    */
   disabled?: boolean
+  /**
+   * A released single-column marquee named this cell: open the editor without a click.
+   * See `useCellEditorOpen`.
+   */
+  autoOpen?: boolean
   onCommit: (commit: CellCommit) => void
   onBeginEdit: () => void
 }
@@ -35,10 +41,11 @@ export const SettingCell = memo(function SettingCell({
   batchCount,
   placeholder,
   disabled = false,
+  autoOpen,
   onCommit,
   onBeginEdit,
 }: SettingCellProps) {
-  const [isOpen, setIsOpen] = useState(false)
+  const { isOpen, setOpen } = useCellEditorOpen({ autoOpen, disabled })
   const first = resolutions[0]
   const options = first.kind === 'setting' || first.kind === 'colour-setting' ? first.property.options : []
 
@@ -46,7 +53,7 @@ export const SettingCell = memo(function SettingCell({
     <Popover
       open={isOpen}
       onOpenChange={(open) => {
-        setIsOpen(open)
+        setOpen(open)
         if (open) onBeginEdit()
       }}
     >
@@ -90,7 +97,7 @@ export const SettingCell = memo(function SettingCell({
                 className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-accent"
                 onClick={() => {
                   onCommit({ kind: 'setting', level: option.level })
-                  setIsOpen(false)
+                  setOpen(false)
                 }}
               >
                 {option.colourPreview ? (

@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react'
+import { useMemo, useRef, type ReactNode } from 'react'
 import { KeyRound, Layers, MousePointerSquareDashed, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -14,6 +14,7 @@ import {
   type CellRef,
 } from '@/components/fixtures-list/cellSelectionModel'
 import { cn } from '@/lib/utils'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { FIXTURE_FILTER_HINT } from '@/lib/fixtureFilterCopy'
 import { formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
 import { cellFamilies, COLUMN_DEFS, type ColumnKey } from '@/components/fixtures-list/columns'
@@ -25,6 +26,7 @@ import { ProgrammerScopeBand } from './ProgrammerScopeBand'
 import { TemplateStrip } from './TemplateStrip'
 import { useLookRowStore } from './LookRowStore'
 import { useProgrammerScope } from './ProgrammerScope'
+import { selectionBandState } from './selectionBand'
 import type { EditorContextValue } from '@/components/programmer/EditorContext'
 import type { LocateTarget } from '@/store/locate'
 
@@ -117,6 +119,17 @@ export function ProgrammerGrid({
 /** The ShowBar's key-cap styling, so the two hints read as one vocabulary. */
 const KBD_CLASS = 'rounded border bg-muted/50 px-1.5 py-px text-[9.5px]'
 
+/**
+ * The short-viewport fold, spelled for `matchMedia` — a second copy of `ProgrammerPage`'s own
+ * constant, and `shortViewport.test.ts` is what keeps the two one number. It cannot be imported
+ * from there: this module is part of that page's own tree, and `import/no-cycle` is an error here.
+ *
+ * Row C asks it for a different reason than the rest of D8 does. The others fold *chrome* to buy
+ * height; this one decides whether the selection bar is permanently in the flow or held back until
+ * a drag ends — see `selectionBandState`.
+ */
+const SHORT_VIEWPORT = '(max-height: 500px)'
+
 function ProgrammerGridBody({
   projectId,
   grouped,
@@ -158,6 +171,7 @@ function ProgrammerGridBody({
           templateTargets,
           targetFamilies,
           targetEmitters,
+          marqueeDragging,
         }) => (
           <div className="flex flex-col">
             {/* Row B. Its own `@container`, with every query on the child — the wrapper can never
@@ -286,6 +300,7 @@ function ProgrammerGridBody({
                 templateTargets={templateTargets}
                 targetFamilies={targetFamilies}
                 targetEmitters={targetEmitters}
+                marqueeDragging={marqueeDragging}
               />
             </div>
           </div>
@@ -322,8 +337,16 @@ function ProgrammerGridBody({
  * It used to be two bands: a full-width template strip that showed the whole library with nothing
  * selected (and wrapped to four rows on a real one), and a rounded selection card below it.
  * Together they cost ~90px of a grid's height, permanently, for a strip whose press could only
- * toast. Now the bar appears with the selection, the chips scroll sideways inside it under a fade,
- * and with nothing selected there is no band here at all.
+ * toast. Now the chips scroll sideways inside it under a fade, and the bar carries only what a
+ * live selection has to say.
+ *
+ * **Whether it is in the flow with nothing selected is `selectionBandState`'s answer, not a
+ * constant** (`PD-SELECTION-BAR-SHIFT`). It used to be simply absent, which meant the first cell
+ * of a marquee mounted it and pushed every row down 34px under a pointer that was mid-drag. On a
+ * desk the band is now always in the flow — reserved and quiet when there is no selection, since
+ * the height is only saved at a moment the grid is not being used anyway. On a landscape phone the
+ * 34px is worth more than that, so there it stays out of the flow and its presence is *held* for
+ * the duration of a drag instead: it arrives on pointer-up, not on the first cell.
  *
  * It is full-bleed with a `border-b` rather than a rounded card inset in a padded block: it is a
  * *rung of the grid's chrome* like row B above it, not an object floating over the page, and the
@@ -350,6 +373,7 @@ function SelectionBar({
   templateTargets,
   targetFamilies,
   targetEmitters,
+  marqueeDragging,
 }: {
   projectId: number
   selection: React.ReactNode | null
@@ -359,6 +383,7 @@ function SelectionBar({
   templateTargets: readonly LocateTarget[]
   targetFamilies: readonly AttributeFamily[]
   targetEmitters: readonly string[]
+  marqueeDragging: boolean
 }) {
   // Derived once and shared with the strip below, so the badge and the chips beside it cannot
   // disagree about what is being offered — and so a marquee drag, which mints a fresh `cells`
@@ -368,7 +393,40 @@ function SelectionBar({
     [cells],
   )
 
-  if (!selection && cells.length === 0) return null
+  const shortViewport = useMediaQuery(SHORT_VIEWPORT)
+  const hasSelection = !!selection || cells.length > 0
+  // The presence from *before* the drag, which is the whole trick: the drag flag and the marquee's
+  // first cells arrive in one commit, so a latch taken when `marqueeDragging` flips would already
+  // read `true` and hold exactly the arrival it is meant to hold back. Writing a ref during render
+  // is safe here — it is idempotent and touches nothing outside this component. The same idiom,
+  // hand-rolled the same way, is `lastCueRef` in `components/cues/CueRowParts.tsx`; a third
+  // occurrence is the point at which it is worth a hook of its own.
+  //
+  // It is latched on **every** arm and not only the short one, even though `selectionBandState`
+  // reads `heldPresence` past its tall-viewport early return alone. A phone can be rotated between
+  // one gesture and the next, and a latch that only ran while short would answer the first drag
+  // after the fold with whatever was true whenever it last happened to be short.
+  const idlePresenceRef = useRef(hasSelection)
+  if (!marqueeDragging) idlePresenceRef.current = hasSelection
+  const band = selectionBandState({
+    shortViewport,
+    heldPresence: marqueeDragging ? idlePresenceRef.current : null,
+    hasSelection,
+  })
+
+  if (band === 'absent') return null
+
+  // Holding the height with nothing to say. No `bg-foreground/5` wash: that wash *is* the selection
+  // (D4), so wearing it over an empty bar would say there is one. The sentence is there because
+  // 34px of otherwise blank strip above a grid reads as a rendering fault rather than as a rung.
+  if (band === 'reserved') {
+    return (
+      <div className="flex h-[34px] min-w-0 items-center gap-2 border-b px-3 text-muted-foreground">
+        <MousePointerSquareDashed className="size-3.5 shrink-0 opacity-60" />
+        <span className="text-xs">Nothing selected</span>
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-[34px] min-w-0 items-center gap-2 border-b bg-foreground/5 px-3">

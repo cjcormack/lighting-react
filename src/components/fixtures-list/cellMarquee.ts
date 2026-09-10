@@ -1,4 +1,6 @@
 import type { ColumnKey } from './columns'
+import type { CellRef } from './cellSelectionModel'
+import type { RowId } from './rowModel'
 
 /** One column's horizontal extent, measured from the sticky header. */
 export interface ColumnBand {
@@ -78,4 +80,49 @@ export function columnRange(
   bands: readonly ColumnBand[],
 ): ColumnKey[] {
   return bands.filter((b) => b.left < rect.right && b.right > rect.left).map((b) => b.col)
+}
+
+/**
+ * The cell a completed marquee should open its editor at, or null when there is no one editor to
+ * open.
+ *
+ * A drag has already said what the operator wants to edit, so making them click a cell afterwards
+ * is a second gesture for a decision already made (`PD-POPUP-AFTER-DRAG`). The condition is the
+ * selection sitting inside **one column**: the four cell editors encode value shape, so a
+ * selection spanning Dimmer and Colour has no single editor to open. That is only about which
+ * editor to *show* — a commit from whichever one opens still reaches every selected cell, because
+ * `commitToCells` groups by column and `planBatchWrites` drops the columns the value does not fit.
+ *
+ * **It takes the whole accumulated selection, not the drag's own hits**, and the difference is a
+ * ⌘-drag: `applyCellSelection` unions a `toggle` or `range-add` drag into what was already there,
+ * so a second rectangle drawn over another column leaves a genuinely two-column selection while
+ * that rectangle's own hits are one column. Asking the rectangle would open an editor for one of
+ * the operator's two attributes and silently ignore the other.
+ *
+ * [rowOrder] is the rows as displayed, and the anchor is the selected cell in the **first** of
+ * them — deliberately the same rule `openEntry` applies for the typed-value editor, so Enter and a
+ * released drag open in the same place. Reading `cells[0]` instead would anchor at whichever block
+ * the operator drew last.
+ */
+export function singleColumnAnchor(
+  cells: readonly CellRef[],
+  rowOrder: readonly RowId[],
+): CellRef | null {
+  const first = cells[0]
+  if (!first) return null
+  if (!cells.every((cell) => cell.col === first.col)) return null
+  const rank = new Map(rowOrder.map((id, index) => [id, index]))
+  let best = first
+  // `Infinity` for a row that is not on display at all, so a selected-but-filtered-out cell never
+  // wins the anchor — and so a selection of nothing but such cells still falls back to `cells[0]`
+  // rather than to null.
+  let bestRank = rank.get(first.rowId) ?? Infinity
+  for (const cell of cells) {
+    const candidate = rank.get(cell.rowId) ?? Infinity
+    if (candidate < bestRank) {
+      best = cell
+      bestRank = candidate
+    }
+  }
+  return best
 }

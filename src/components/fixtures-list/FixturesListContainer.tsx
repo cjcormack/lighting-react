@@ -144,6 +144,14 @@ export interface FixturesListContainerProps {
      * and the family cannot say which: every emitter is COLOUR.
      */
     targetEmitters: readonly string[]
+    /**
+     * A marquee drag is in flight.
+     *
+     * For a toolbar whose own arrival or departure would move the grid under the pointer that is
+     * drawing the marquee — the programmer's selection bar, which holds its place for the duration
+     * (`selectionBandState`). Two changes per gesture, not one per pointer move.
+     */
+    marqueeDragging: boolean
   }) => React.ReactNode
   /**
    * Replace nothing — *add* a footer strip under the table, receiving the two counts only this
@@ -449,6 +457,10 @@ export function FixturesListContainer({
   // be refused, so the hint beside it cannot promise a key that does nothing.
   const focusedTemplate = useFocusedTemplateLayer()
   const keys = cellKeyboardPermission(scope, focusedTemplate != null)
+  // Whether the table's marquee is mid-gesture. Kept here rather than in the table because the
+  // only consumer is a *toolbar* — a sibling above the rows, which `renderToolbar` builds — and
+  // the table sets it twice a drag, so nothing renders at pointer rate for it.
+  const [marqueeDragging, setMarqueeDragging] = useState(false)
   const [entryOpen, setEntryOpen] = useState(false)
   const [entryAnchor, setEntryAnchor] = useState<{
     left: number
@@ -956,6 +968,7 @@ export function FixturesListContainer({
           templateTargets,
           targetFamilies: templateFamilies,
           targetEmitters: templateEmitters,
+          marqueeDragging,
         })
       ) : (
         /* Default toolbar. At phone widths the filter takes a full row of its own — sharing one
@@ -993,6 +1006,7 @@ export function FixturesListContainer({
           showOwnership={showOwnership}
           fill={fill}
           cellSelection={showOwnership ? cellSelection : undefined}
+          onMarqueeDragChange={setMarqueeDragging}
         />
       )}
 

@@ -58,8 +58,13 @@ describe('the short-viewport fold', () => {
   it('spells the JS constant the way `matchMedia` needs it', () => {
     // `useMediaQuery` passes this straight to `window.matchMedia`, which answers `false` for a
     // string it cannot parse rather than throwing — so a typo here is a fold that silently never
-    // happens.
-    expect(programmerPageSrc).toContain("const SHORT_VIEWPORT = '(max-height: 500px)'")
+    // happens. Two sites hand it a string: `ProgrammerBody`, which moves rows A and B, and
+    // `SelectionBar`, which decides whether row C is permanently in the flow
+    // (`selectionBandState`). The test above already holds them to one *number*; this holds them
+    // to one *spelling*, which the number check cannot see.
+    for (const src of [programmerPageSrc, programmerGridSrc]) {
+      expect(src).toContain("const SHORT_VIEWPORT = '(max-height: 500px)'")
+    }
   })
 
   it('keeps the other three sites as literal Tailwind class names', () => {

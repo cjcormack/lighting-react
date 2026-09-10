@@ -4,6 +4,7 @@ import type { CellResolution } from '../columns'
 import type { CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
 import { UNSET_CELL_TITLE, UnsetCellMark } from './UnsetCellMark'
+import { useCellEditorOpen } from './useCellEditorOpen'
 
 interface ColourCellProps {
   value: Extract<CellValue, { kind: 'colour' }>
@@ -17,6 +18,11 @@ interface ColourCellProps {
    * mouse and not the keyboard, and this trigger is tabbable.
    */
   disabled?: boolean
+  /**
+   * A released single-column marquee named this cell: open the editor without a click.
+   * See `useCellEditorOpen`.
+   */
+  autoOpen?: boolean
   onCommit: (commit: CellCommit) => void
   onBeginEdit: () => void
 }
@@ -32,9 +38,13 @@ export const ColourCell = memo(function ColourCell({
   batchCount,
   placeholder,
   disabled = false,
+  autoOpen,
   onCommit,
   onBeginEdit,
 }: ColourCellProps) {
+  // Driven from here since `PD-POPUP-AFTER-DRAG`: the picker keeps its own state when no `open` is
+  // passed, and the other two call sites still leave it to.
+  const { isOpen, setOpen } = useCellEditorOpen({ autoOpen, disabled })
   // A member "has" an extended channel when any backing colour property does —
   // the picker then offers the slider, and members without the channel skip it
   // at write time.
@@ -44,6 +54,8 @@ export const ColourCell = memo(function ColourCell({
 
   return (
     <ColourPickerPopover
+      open={isOpen}
+      onOpenChange={setOpen}
       r={value.r}
       g={value.g}
       b={value.b}

@@ -6,6 +6,7 @@ import type { CellResolution } from '../columns'
 import type { CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
 import { UNSET_CELL_TITLE, UnsetCellMark } from './UnsetCellMark'
+import { useCellEditorOpen } from './useCellEditorOpen'
 
 interface SliderCellProps {
   value: Extract<CellValue, { kind: 'slider' }>
@@ -23,6 +24,11 @@ interface SliderCellProps {
    * mouse and not the keyboard, and this trigger is tabbable.
    */
   disabled?: boolean
+  /**
+   * A released single-column marquee named this cell: open the editor without a click.
+   * See `useCellEditorOpen`.
+   */
+  autoOpen?: boolean
   onCommit: (commit: CellCommit) => void
   onBeginEdit: () => void
 }
@@ -42,11 +48,18 @@ export const SliderCell = memo(function SliderCell({
   batchCount,
   placeholder,
   disabled = false,
+  autoOpen,
   onCommit,
   onBeginEdit,
 }: SliderCellProps) {
-  const [isOpen, setIsOpen] = useState(false)
   const [inputText, setInputText] = useState<string | null>(null)
+  // The typed input is reset on every open, by a click or by a marquee alike — which is why it is
+  // `onOpen` on the hook rather than part of the `onOpenChange` handler below.
+  const { isOpen, setOpen } = useCellEditorOpen({
+    autoOpen,
+    disabled,
+    onOpen: () => setInputText(null),
+  })
 
   const first = resolutions[0]
   const range = first.kind === 'slider' ? { min: first.property.min, max: first.property.max } : { min: 0, max: 255 }
@@ -63,11 +76,8 @@ export const SliderCell = memo(function SliderCell({
     <Popover
       open={isOpen}
       onOpenChange={(open) => {
-        setIsOpen(open)
-        if (open) {
-          setInputText(null)
-          onBeginEdit()
-        }
+        setOpen(open)
+        if (open) onBeginEdit()
       }}
     >
       <PopoverTrigger asChild>

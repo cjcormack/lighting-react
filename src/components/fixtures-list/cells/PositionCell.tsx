@@ -5,6 +5,7 @@ import type { CellResolution } from '../columns'
 import type { CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
 import { UNSET_CELL_TITLE, UnsetCellMark } from './UnsetCellMark'
+import { useCellEditorOpen } from './useCellEditorOpen'
 
 interface PositionCellProps {
   value: Extract<CellValue, { kind: 'position' }>
@@ -18,6 +19,11 @@ interface PositionCellProps {
    * mouse and not the keyboard, and this trigger is tabbable.
    */
   disabled?: boolean
+  /**
+   * A released single-column marquee named this cell: open the editor without a click.
+   * See `useCellEditorOpen`.
+   */
+  autoOpen?: boolean
   onCommit: (commit: CellCommit) => void
   onBeginEdit: () => void
 }
@@ -33,9 +39,13 @@ export const PositionCell = memo(function PositionCell({
   batchCount,
   placeholder,
   disabled = false,
+  autoOpen,
   onCommit,
   onBeginEdit,
 }: PositionCellProps) {
+  // Controlled since `PD-POPUP-AFTER-DRAG`: a released marquee has to be able to open this from
+  // outside, which an uncontrolled Radix popover offers no door for.
+  const { isOpen, setOpen } = useCellEditorOpen({ autoOpen, disabled })
   const first = resolutions[0]
   const ranges =
     first.kind === 'position'
@@ -43,7 +53,13 @@ export const PositionCell = memo(function PositionCell({
       : { panMin: 0, panMax: 255, tiltMin: 0, tiltMax: 255 }
 
   return (
-    <Popover onOpenChange={(open) => open && onBeginEdit()}>
+    <Popover
+      open={isOpen}
+      onOpenChange={(open) => {
+        setOpen(open)
+        if (open) onBeginEdit()
+      }}
+    >
       <PopoverTrigger asChild>
         <button
           type="button"

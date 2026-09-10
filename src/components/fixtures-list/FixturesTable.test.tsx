@@ -150,6 +150,7 @@ const ROWS: Row[] = [
 ] as unknown as Row[]
 
 const onBeginCellEdit = vi.fn()
+const onMarqueeDragChange = vi.fn()
 
 function Harness() {
   const cellSelection = useCellSelection(new Set(ROWS.map(r => r.id)))
@@ -166,8 +167,60 @@ function Harness() {
       onShowInfo={() => {}}
       showOwnership
       cellSelection={cellSelection}
+      onMarqueeDragChange={onMarqueeDragChange}
     />
   )
+}
+
+/**
+ * Give the grid a layout, for the two tests that need the marquee to actually resolve to cells.
+ *
+ * jsdom reports every rect as zero, which is why the rest of this suite asserts the *gesture* and
+ * leaves the geometry to `cellMarquee.test.ts`. One flat rect is enough here: the scroller's
+ * origin becomes (0, 0) so client coordinates pass through unchanged, the sticky header measures
+ * zero high, and the single `dimmer` column spans the full width — so a drag anywhere inside the
+ * first two rows' 72px covers exactly that column.
+ */
+function stubFlatLayout() {
+  const rect = {
+    left: 0,
+    top: 0,
+    right: 1000,
+    bottom: 0,
+    width: 1000,
+    height: 0,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
+  } as DOMRect
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+}
+
+/**
+ * A press, a real drag and the release that ends it, between two y positions inside the rendered
+ * rows. Rows are `ROW_HEIGHT` (36px) tall from a zero-height header, so 0-36 is row a and 36-72 is
+ * row b. `mod` carries ⌘ for the accumulating-intent cases.
+ */
+function dragRows(
+  cell: Element,
+  fromY: number,
+  toY: number,
+  mod: { metaKey?: boolean } = {},
+) {
+  fireEvent.pointerDown(cell, { button: 0, clientX: 300, clientY: fromY, ...mod })
+  fireEvent.pointerMove(cell, { button: 0, buttons: 1, clientX: 380, clientY: toY, ...mod })
+  fireEvent.pointerUp(cell, { button: 0, clientX: 380, clientY: toY, ...mod })
+}
+
+/** A drag down the whole of the one visible column, covering both rows. */
+function dragWithinFirstColumn(cell: Element) {
+  dragRows(cell, 10, 50)
+}
+
+/** Radix marks the trigger of an open popover, which is how a test says WHICH cell opened. */
+function openCellRowId(): string | null {
+  const trigger = document.querySelector('[data-cell] [data-state="open"]')
+  return trigger?.closest('[data-row-id]')?.getAttribute('data-row-id') ?? null
 }
 
 beforeEach(() => {
@@ -184,6 +237,10 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  // `clearAllMocks` resets call history and NOT a spy's installed implementation, so without this
+  // `stubFlatLayout`'s `getBoundingClientRect` would keep answering with its fake flat rect for
+  // every test that ran after it in this file — including Radix's own popover positioning.
+  vi.restoreAllMocks()
   vi.unstubAllGlobals()
   scopeState.current = null
   lookStore.current = null
@@ -278,6 +335,103 @@ describe('FixturesTable cell gesture', () => {
 
     fireEvent.click(cell)
     expect(onBeginCellEdit).toHaveBeenCalled()
+  })
+
+  it('reports the drag starting and ending, twice and no more', () => {
+    // The programmer's selection bar holds its place for the duration of a drag
+    // (`selectionBandState`), and it can only do that if the fact of one crosses out of here. It
+    // must cost two renders a gesture, not one a pointer move — this is the assertion that says so.
+    render(<Harness />)
+    const cell = cellButton()
+    fireEvent.pointerDown(cell, { button: 0, clientX: 300, clientY: 100 })
+    expect(onMarqueeDragChange).not.toHaveBeenCalled()
+
+    fireEvent.pointerMove(cell, { button: 0, buttons: 1, clientX: 380, clientY: 160 })
+    fireEvent.pointerMove(cell, { button: 0, buttons: 1, clientX: 420, clientY: 200 })
+    fireEvent.pointerMove(cell, { button: 0, buttons: 1, clientX: 460, clientY: 240 })
+    expect(onMarqueeDragChange.mock.calls).toEqual([[true]])
+
+    fireEvent.pointerUp(cell, { button: 0, clientX: 460, clientY: 240 })
+    expect(onMarqueeDragChange.mock.calls).toEqual([[true], [false]])
+    fireEvent.click(cell)
+  })
+
+  it('says nothing when a press never becomes a drag', () => {
+    render(<Harness />)
+    const cell = cellButton()
+    fireEvent.pointerDown(cell, { button: 0, clientX: 300, clientY: 100 })
+    fireEvent.pointerUp(cell, { button: 0, clientX: 300, clientY: 100 })
+    fireEvent.click(cell)
+    expect(onMarqueeDragChange).not.toHaveBeenCalled()
+  })
+
+  it('ends the drag when a press is released where this element never saw it', () => {
+    // The `buttons === 0` teardown. Without this arm the consumer believes a drag is still in
+    // flight and the selection bar holds a place for a gesture that has gone.
+    render(<Harness />)
+    const cell = cellButton()
+    fireEvent.pointerDown(cell, { button: 0, clientX: 300, clientY: 100 })
+    fireEvent.pointerMove(cell, { button: 0, buttons: 1, clientX: 380, clientY: 160 })
+    expect(onMarqueeDragChange.mock.calls).toEqual([[true]])
+    fireEvent.pointerMove(cell, { buttons: 0, clientX: 420, clientY: 200 })
+    expect(onMarqueeDragChange.mock.calls).toEqual([[true], [false]])
+  })
+
+  it('opens the first selected cell\'s editor when the drag stayed in one column', () => {
+    // `PD-POPUP-AFTER-DRAG`: the gesture has already said what to edit, so the click that used to
+    // follow it was a second gesture for a decision already made.
+    stubFlatLayout()
+    render(<Harness />)
+    dragWithinFirstColumn(cellButton())
+    expect(screen.getByRole('slider')).toBeInTheDocument()
+    // `onBeginEdit` is deliberately NOT part of the auto-open: it exists to move the selection to
+    // the cell a click landed on, and this cell is inside the marquee by construction.
+    expect(onBeginCellEdit).not.toHaveBeenCalled()
+    fireEvent.click(cellButton())
+  })
+
+  it('anchors at the topmost SELECTED cell, not at the last block dragged', () => {
+    // A ⌘-drag unions into what was already selected, so after drawing a second block above or
+    // below the first the selection is wider than the rectangle that just ended. The editor has to
+    // open where the typed-value field would open — the first selected cell in display order —
+    // which after this gesture is row a, not the row b block the operator drew last.
+    stubFlatLayout()
+    render(<Harness />)
+    dragRows(cellButton(), 2, 30) // row a alone
+    expect(openCellRowId()).toBe('fixture:a')
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+    fireEvent.click(cellButton())
+
+    dragRows(cellButton(), 40, 68, { metaKey: true }) // row b, accumulating
+    expect(openCellRowId()).toBe('fixture:a')
+    fireEvent.click(cellButton())
+  })
+
+  it('opens nothing when a ⌘-drag over empty space changed no selection', () => {
+    // The drag covered no cells, so it made no statement — but the selection it left behind is
+    // still single-column, and reading that alone would open an editor for a gesture that did
+    // nothing.
+    stubFlatLayout()
+    render(<Harness />)
+    dragRows(cellButton(), 2, 30)
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+    fireEvent.click(cellButton())
+    expect(openCellRowId()).toBeNull()
+
+    dragRows(cellButton(), 200, 260, { metaKey: true }) // below the last row
+    expect(openCellRowId()).toBeNull()
+    fireEvent.click(cellButton())
+  })
+
+  it('opens nothing when the scope has made the cells read-only', () => {
+    // Output is a read of the cook. The auto-open is a fifth door into the four cell editors, and
+    // it has to be shut in the same places the other four are.
+    scopeState.current = { kind: 'output' }
+    stubFlatLayout()
+    render(<Harness />)
+    dragWithinFirstColumn(cellButton())
+    expect(screen.queryByRole('slider')).toBeNull()
+    fireEvent.click(cellButton())
   })
 
   it('ignores a non-primary button', () => {
