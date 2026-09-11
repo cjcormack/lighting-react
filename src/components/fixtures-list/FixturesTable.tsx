@@ -82,7 +82,7 @@ export interface FixturesTableProps {
   /** Name-cell click — the caller derives the intent from the mouse event. */
   onRowClick: (id: RowId, e: React.MouseEvent) => void
   onToggleExpand: (row: GroupRow | FixtureRow) => void
-  /** A cell editor is opening on this cell — the caller adjusts the selection. */
+  /** A cell editor is opening on this cell — the caller selects the cell, unless it is already in the marquee. */
   onBeginCellEdit: (row: Row, col: ColumnKey) => void
   onCellCommit: (row: Row, col: ColumnKey, commit: CellCommit) => void
   /** How many write targets a commit from this row's cell in this column

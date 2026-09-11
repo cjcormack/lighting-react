@@ -872,8 +872,8 @@ an inline width, so `maxWidth: 'none'` goes with it — the symptom of forgettin
 stays narrow and scrolls, which looks exactly like the width never being applied.
 
 **An editor closes when the selection it was opened for goes away** (`selectionEmpty`, threaded to
-`useCellEditorOpen`). Opening one on an unselected row selects that row, and opening one inside a
-marquee is the whole marquee's editor, so a Deselect used to leave an editor on screen still
+`useCellEditorOpen`). Opening one on an unselected cell selects that cell (a one-cell marquee, which drops any row
+selection), and opening one inside a marquee is the whole marquee's editor, so a Deselect used to leave an editor on screen still
 writing — to something narrower than its own "Applying to N targets" line had just claimed. It is
 **edge-triggered**, on the false→true crossing and not on the state, or a grid with no selection at
 all could never open one: the close would land in the effect immediately after the click that

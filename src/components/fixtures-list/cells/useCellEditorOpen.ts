@@ -11,12 +11,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  * a per-cell hook rather than a coordinator above the table, because `CueValueGrid` mounts these
  * same four components directly, with no `FixturesTable` over them to coordinate from.
  *
- * **`onBeginEdit` is deliberately not part of it.** That callback exists to move the selection to
- * the cell a click landed on, and each cell still calls it from its own `onOpenChange` — but an
- * auto-open must not. Its cell is inside the marquee by construction, where `handleBeginCellEdit`
- * short-circuits, so calling it would be a no-op at best; at worst, if the drag's cells had not yet
- * reached the selection it reads, it would take the "clicked outside" arm and clear the very
- * selection the gesture just made. [onOpen] is for the rest of what a click's open does —
+ * **`onBeginEdit` is deliberately not part of it.** That callback exists to select the cell a click
+ * landed on, and each cell still calls it from its own `onOpenChange` — but an auto-open must
+ * not. Its cell is inside the marquee by construction, where `handleBeginCellEdit`
+ * short-circuits, so calling it would be a no-op at best; at worst, if the marquee's cells had not
+ * yet reached the selection it reads, it would take the "clicked outside" arm and replace the very
+ * selection the gesture just made with one cell. [onOpen] is for the rest of what a click's open does —
  * `SliderCell`'s typed-input reset — which an auto-open *does* want.
  *
  * A [disabled] cell ignores the signal: Output scope, a focused template layer and an unreachable
@@ -52,7 +52,7 @@ export function useCellEditorOpen({
    * Nothing at all is selected — neither a marquee nor a row. Undefined where the question does
    * not arise (`CueValueGrid` mounts these cells with no selection above them).
    *
-   * An open editor is open *for* a selection: opening one on an unselected row selects that row,
+   * An open editor is open *for* a selection: opening one on an unselected cell selects that cell,
    * and opening one inside a marquee is the whole marquee's editor. So Deselect leaves an editor
    * on screen that still writes — but to something narrower than the count above it claimed, and
    * with no visible selection left to explain what. That was true of the popover long before the

@@ -448,22 +448,23 @@ export function FixturesListContainer({
     else setExpandedFixtures((prev) => toggled(prev, row.fixture.key))
   }, [])
 
-  // Opening an editor on an unselected row targets just that row (and the selection follows,
-  // standard spreadsheet feel); on a selected row the whole selection is the target.
+  // Opening an editor on a cell selects **that cell** — a one-cell marquee, which by the shared
+  // rule drops any row selection — so what the editor writes is what is outlined, and nothing
+  // else. It used to select the cell's *row* (spreadsheet feel, from when rows had checkboxes),
+  // which put a row wash under a click that was about one attribute, and made a click on a cell
+  // of an already-selected row write every head in the row selection.
   const handleBeginCellEdit = useCallback(
     (row: Row, col: ColumnKey) => {
-      // A cell inside the marquee is the WHOLE marquee's editor, so neither selection moves.
-      // Without this, clicking one of your own selected cells would collapse the row selection to
-      // that single row and the commit would write only it — silently discarding the marquee.
+      if (row.kind === 'divider') return
+      // A cell inside the marquee is the WHOLE marquee's editor, so the selection does not move.
+      // Without this, clicking one of your own selected cells would collapse the marquee to that
+      // single cell and the commit would write only it — silently discarding the rest.
       if (cellSelection.isSelected(row.id, col)) return
-      // A click outside it abandons the marquee, the way a click outside a spreadsheet range does,
-      // and the row rule then applies unchanged.
-      cellSelection.clear()
-      if (row.kind !== 'divider' && !selection.isSelected(row.id)) {
-        selectRow(row.id, 'replace')
-      }
+      // A click outside it replaces the marquee with this cell, the way a click outside a
+      // spreadsheet range does.
+      selectCells([{ rowId: row.id, col }], 'replace')
     },
-    [cellSelection, selection, selectRow],
+    [cellSelection, selectCells],
   )
 
   /**
