@@ -95,8 +95,13 @@ const FADE_OPTIONS = [
  * `ProgrammerGrid` puts around the two of them — so the queries here measure the ~420px the folded
  * row gives the pair rather than the row's own ~750px, and these four stay icons on an 852×393
  * phone by measurement rather than by luck. Measured with Blind back in the bar
- * (`PD-BLIND-ON-PROGRAMMER`): the bar is 285px iconic, the leading container 419px, and the source
- * box keeps 117px beside it; the first fixture row still lands at the same y it did before.
+ * (`PD-BLIND-ON-PROGRAMMER`): the bar is 285px iconic and the leading container 419px; the first
+ * fixture row still lands at the same y it did before. The source box took the remaining 117px
+ * back when it filled in every state, and it no longer does: with nothing included it is as wide
+ * as its words (102px for `No source`) and the rest goes to the row's filter field. So 117 is the
+ * ceiling that arithmetic leaves it rather than the width it takes. The two figures that still
+ * hold unconditionally are this bar's 285 and the container's 419 — `ProgrammerGrid`'s floor for
+ * the pair is derived from them.
  */
 export function ProgrammerActionBar({ projectId }: { projectId: number }) {
   const { data: summary } = useProgrammerSummaryQuery()

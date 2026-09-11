@@ -8,7 +8,7 @@ import {
   OwnershipKey,
   OwnershipLegend,
 } from '@/components/fixtures-list/OwnershipLegend'
-import { cn } from '@/lib/utils'
+import { cn, labelUnlessCompact } from '@/lib/utils'
 import { FIXTURE_FILTER_HINT } from '@/lib/fixtureFilterCopy'
 import type { ColumnVisibility } from '@/components/fixtures-list/ColumnsMenu'
 import { FixturesListContainer } from '@/components/fixtures-list/FixturesListContainer'
@@ -140,7 +140,6 @@ function ProgrammerGridBody({
           cells,
           cellEntryKey,
           cellClearKey,
-          clearCells,
           templateTargets,
           targetFamilies,
           targetEmitters,
@@ -150,7 +149,22 @@ function ProgrammerGridBody({
             {/* Row B. Its own `@container`, with every query on the child — the wrapper can never
                 be measured by the classes it hosts (`ProgrammerWorkspace`'s doc comment). */}
             <div className="@container">
-              <div className="flex h-9 items-center gap-2 border-b px-3">
+              {/* The folded row **wraps rather than overlaps**, and only the folded row can:
+                  unfolded, row B's tools have a hard minimum of ~290px and there is no width this
+                  app is usable at where that does not fit on one line.
+
+                  `h-9` becomes `min-h-9` in that arm because a wrapped row is two lines tall; with
+                  one line it is the same 36px, since the tallest control here is 32px and there is
+                  no vertical padding to add to it. `gap-y-1.5` is the gap *between* the lines, and
+                  is stated separately from `gap-2` so the two can be read apart: at 6px a wrapped
+                  folded row is 70px against the 76px row A and row B cost unfolded, so the fold
+                  still pays for itself at the widths where it has to take a second line. */}
+              <div
+                className={cn(
+                  'flex items-center gap-2 border-b px-3',
+                  leading ? 'min-h-9 flex-wrap gap-y-1.5' : 'h-9',
+                )}
+              >
                 {/* The short-height arm: row A has no row of its own and its two halves lead this
                     one (space plan D8), and they get an `@container` of their own — because the
                     question their thresholds ask ("has this box room for the word `Editing`?") is
@@ -166,91 +180,276 @@ function ProgrammerGridBody({
                     `flex-1` sharing its block with a 230px action bar, rendered four pixels wide
                     on an 852×393 phone. (The bar is 285px since Blind came back into it —
                     `PD-BLIND-ON-PROGRAMMER` — and the source box measures 117px beside it in the
-                    419px this container gets there.) */}
+                    419px this container gets there.)
+
+                    **An explicit `min-width` floor is what stops the action bar painting over these tools**, and
+                    it cannot be zero or be left to the intrinsic minimum. (Written as a
+                    `min-width`, not as the utility itself: Tailwind scans *comments*, so a
+                    complete utility spelled in prose is emitted as a real CSS rule — and when the
+                    number is later retuned, as this one was from 360 to 410, the stale rule
+                    outlives the class and ships as dead CSS. The repo's `CLAUDE.md` states the
+                    rule for container queries; it is the same hazard here.) `container-type:
+                    inline-size` brings size containment, so this block's min-content size is
+                    **zero** whatever it holds — the trap that also cost the source box its rungs, and with
+                    them its `flex-1`. Its contents are not zero: the action bar is `shrink-0` and 285px
+                    wide once iconic, so the flex squeezed this block to 283px on a 612×457 window
+                    while the bar kept its size and drew its Record button across the scope pills
+                    and the search icon beside it. An explicit floor makes the block push back, and
+                    the row's `flex-wrap` turns that push into a second line instead of an overlap.
+
+                    **The number is the pair's *legible* minimum, not its absolute one**, and that
+                    is a second decision on top of the first. 285 (the iconic bar) + 17 (the
+                    divider and two gaps) + 36 (the source box as a bare glyph) is 338, and a floor
+                    there does stop the overlap — but it also leaves a band, about 700 to 800px of
+                    row, where the row still fits on one line and the box in it is too narrow to
+                    say `No source`. The words then vanished between 612 and 945 and came back
+                    either side, which reads as a bug however well it is explained.
+
+                    So the floor is the box at its 102px full size instead: 285 + 17 + 102 = 404,
+                    and **410** is that with a few pixels of slack — deliberately the same number as
+                    the box's own rung in `ProgrammerSourceStrip`, because they are the same
+                    question asked from the two ends. Wherever the row is on one line the box has
+                    its words, and wherever it has not got the room the row wraps and the box gets
+                    a whole line. It still clears the 419px the block gets on an 852×393 phone, so
+                    that arm stays on one line — by nine pixels, which is why both numbers are
+                    measured rather than rounded.
+
+                    It is a floor for the *pair*. The box in the two states that fill (a cue, a
+                    Look) still truncates and clips as it always did.
+
+                    **And it is a floor rather than a share**, which is the second half of the same
+                    fix. `flex-1` here meant this block took every spare pixel of the row while its
+                    own contents stayed a fixed 404px — so the slack pooled *inside* it, behind the
+                    verbs, and drew a 204px hole at 1024×457 wherever there was room to spare.
+                    `flex-initial` under size containment resolves its base to zero, so the block
+                    now sits at exactly its floor and the slack goes past it to the tools, where
+                    the filter field spends it. `has-[[data-fills]]` puts the growth back for the
+                    two states that can use it: a cue or a Look wants the width, and
+                    `ProgrammerSourceStrip` marks those with `data-fills` precisely so this block
+                    can ask — a parent cannot read a child's props, but it can read its DOM.
+
+                    `min(410px, 100%)` rather than a bare 410, because a floor taller than the
+                    room cannot be met and simply overflows again — a window both short enough to
+                    fold and under ~393px wide is an ordinary desktop resize away. Clamped, the
+                    block fills its line instead, which is the most it could have had. */}
                 {leading && (
                   <>
-                    <div className="@container flex min-w-0 flex-1 items-center gap-2">
+                    <div className="@container flex min-w-[min(410px,100%)] flex-initial items-center gap-2 has-[[data-fills]]:flex-1">
                       {leading}
                     </div>
                     <span className="h-[22px] w-px shrink-0 self-center bg-border" />
                   </>
                 )}
-                <ProgrammerScopeBand compact={!!leading} />
-                {/* The filter gives before anything else does: it is the one control here whose
-                    width is a preference rather than a size. */}
-                {/* `max-w-[340px]` is the artboard's: past that the field is wider than any
-                    fixture name and the row's right end starts to feel unanchored.
+                {/* The tools travel together, so that what wraps is **the whole of row B's right
+                    half rather than whichever buttons happened not to fit** — the folded row then
+                    breaks back into the two rows it was folded from, which is the one two-line
+                    shape an operator has already seen.
 
-                    `[&>div]:min-w-0` unpicks the filter's own `min-w-48`. That floor is right in
-                    the default toolbar, which *wraps*, and wrong here, where the row does not:
-                    below ~1300px of page width the 192px input simply overran its flex track and
-                    painted its placeholder under the Lit button. Row B has no second line to give
-                    it, so the field gives instead — and session 4 replaces it with a search icon
-                    at the width where even that stops being enough. */}
-                {/* Two arms of one control. Above `@[800px]` the field is on the row; below it
-                    the field is a search icon that opens the same node in a popover — the icon
-                    arm session 4 promised, and the real answer to the `min-w-48` squeeze the note
-                    above records. Radix mounts popover content only while it is open, so there is
-                    one filter input in the document except during the moment it is being used.
+                    It is also what decides *when* to break, with no threshold to tune: this block
+                    is `shrink-0`, so its flex base size is its own content width, and the line
+                    breaks exactly when that plus the leading block's 410px floor no longer fit.
+                    Move a control on or off this row and the break moves with it.
 
-                    **The threshold is `@[800px]`, and it is measured.** It was `@[600px]`, and
-                    the desk pass found the field still clipping its placeholder mid-word there
-                    (`PD-FILTER-PLACEHOLDER-CLIP`): at the tablet preset the input has about 72px
-                    of room behind its 36px search icon, for a placeholder that needs 96px. At a
-                    row B of 800 it has ~113px, so the threshold clears the need with roughly a
-                    fifth to spare, and it is a number this row already uses, for `Groups`.
+                    `contents` in the unfolded arm, not a second class of layout: the wrapper then
+                    generates no box at all and every child lays out against row B exactly as it
+                    did before — including the `flex-1` spacer below, which has to be a sibling of
+                    `Groups` in the row itself to push it right.
 
-                    **The crossover itself is deliberately not quoted here.** Two sweeps of it
-                    disagreed by ~30px — it is only reachable by forcing a width, and the answer
-                    moves with how you force it — so a precise figure in a comment that says
-                    *measured* would be a claim the next reader cannot reproduce. What is stable
-                    is the pair above: 96px needed, ~113px given at 800. Re-measure those two if
-                    you move it, rather than trusting a crossover.
+                    **And when it has wrapped, these controls stop being icons.** `compact` is the
+                    caller saying "the row is narrower than the viewport", which stops being true
+                    the moment this block gets a line of its own — so the words come back, through
+                    the `CONTROL_LABEL_CLASS` hook `labelUnlessCompact` puts on every one of them.
+                    It has to be an ancestor that says so: a boolean prop cannot tell one line from
+                    the other, and Tailwind scans source text, so the query cannot be composed
+                    anywhere but in a literal like this one.
 
-                    Below the threshold the popover's field is `w-72` and has room for the whole
-                    placeholder, which is the point of the icon arm: the field gives all the way,
-                    rather than staying on the row saying half a word. Note the field is
-                    *also* being shorted by roughly half at every width, because its `flex-1`
-                    splits the row's slack with the plain `flex-1` spacer below — a real
-                    pre-existing bug, not this threshold's, and fixing it would let the field stay
-                    on the row a good deal narrower.
+                    Both ends of that range are measured, and both are measured against **row B's
+                    container**, which is this row plus its own `px-3` — not the workspace's, which
+                    is 40px wider again wherever the rail's collapsed strip is docked. Reading the
+                    wrong one is how the first cut of this put the upper bound 33px low and left
+                    the words off at exactly the width the user reported.
 
-                    The **folded row always takes the icon**, and that is a JS test rather than a
-                    third class because it cannot be written as one: the field would have to be
-                    shown at `width ≥ 600 AND height > 500`, and a container query and a media
-                    query cannot be ANDed in a single Tailwind class — written as two conflicting
-                    rules it would come down to whichever Tailwind happened to order last. It also
-                    fixes a real squeeze: the field is `flex-1` and so is the leading block, so on
-                    an 852×393 phone the two split the row and the source box — `flex-1` inside a
-                    block sharing it with a 230px action bar — collapsed to four pixels. */}
-                {!leading && (
-                  <div className="hidden min-w-0 max-w-[340px] flex-1 items-center gap-2 [&>div]:min-w-0 @[800px]:flex">
+                    `@max-[739px]` **is** "it wrapped": the break comes when the leading block's
+                    410px floor and this block's 288px of icons exceed the row's
+                    24px-inset content box — plus the divider and two gaps between them, which is
+                    the same 17 counted inside that block above. 410 + 17 + 288 is 715, so 739 is
+                    the first container width that fits on one line. **The literal is that number,
+                    not the one below it**: Tailwind's `@max-*` compiles to a strict `width < N`,
+                    so `@max-[739px]` reads as "narrower than the first width that fits", which is
+                    exactly "it wrapped". Written as 738 — the last width that does *not* fit,
+                    which looks like the right number to reach for — the two disagree at exactly
+                    738, where the row wraps and the words stay hidden.
+                    It moves with that floor: raise one without the other and a wrapped row keeps
+                    its icons — which is what the first cut did, counting 706 here and 17 four
+                    paragraphs up. Dropping the divider in one place and not the other left a
+                    ten-pixel band that wrapped and stayed iconic. `@[560px]` is this block *with* its words —
+                    522px measured, plus that same inset and a little slack — because below it the
+                    words would not fit on the line they were brought back for.
+
+                    The two failure modes either side are both benign, which is what makes a pair
+                    of measured numbers safe here: too high, and a wrapped row keeps its icons for
+                    a few pixels; too low, and the words make this block wider, which forces the
+                    very wrap they are shown for. `flex-wrap` is the backstop under both — a line
+                    this block genuinely cannot fit becomes a third line rather than something
+                    clipped at the row's edge.
+
+                    **`min-w-[384px]` is what stops that backstop firing instead of the outer
+                    wrap**, and it is the half that was missing. Once this block grows at
+                    `@[840px]` its flex-basis is 0, so for the *row's* line-breaking its
+                    hypothetical size is zero and it can never be the thing that pushes the row
+                    onto a second line. Squeezed below its own content it therefore stayed on line
+                    one and shed its **last child** — the key button, alone at the far left of a
+                    second line — which is exactly the "whichever buttons happened not to fit"
+                    failure this block exists to prevent, arriving through the block itself. The
+                    floor is this block's content with the field at the field's own 132px minimum:
+                    244 of icons once the search icon has given way, a gap, and 132. With it the
+                    row breaks as a unit when it must. Reproduced at a container of 830 and 834
+                    before it was added — two lines, with one icon on the second. */}
+                <div
+                  className={cn(
+                    leading
+                      ? 'flex shrink-0 flex-wrap items-center gap-2 @[560px]:@max-[739px]:[&_.control-label]:inline @[840px]:min-w-[384px] @[840px]:flex-1'
+                      : 'contents',
+                  )}
+                >
+                  <ProgrammerScopeBand compact={!!leading} />
+                  {/* The filter gives before anything else does: it is the one control here whose
+                      width is a preference rather than a size — **and for the same reason it is
+                      what takes the room back**. On the folded row it is the only elastic thing
+                      left once the leading block sits at its floor, so every spare pixel becomes
+                      field rather than a hole, at every width, with no threshold to tune.
+
+                      That is why it has no `max-w` in the folded arm. The 340px ceiling is right
+                      in the unfolded row, where a `flex-1` spacer follows the field and an
+                      unbounded field would leave the row's right end unanchored; here the field IS
+                      the spacer and the tools anchor the end, so a ceiling would only put the hole
+                      back beyond it.
+
+                      `@[840px]` is where a field is worth having instead of the icon, and it has
+                      **two** needs to clear rather than one. The first is
+                      `PD-FILTER-PLACEHOLDER-CLIP`'s: the placeholder wants 96px behind a 36px
+                      search icon, so 132px of field. The second is that revealing the field puts
+                      this block's floor at 384px, and the row must still hold the leading block's
+                      410 and the 17 between them — 811 of content, so 835 of container, and 840
+                      clears that with a few pixels rather than landing on it. The two move
+                      together: reveal the field a moment before the row can hold it and the row
+                      breaks, which is the 830–834 band this number replaced. What the field gets is the
+                      row's 24px-inset content less the leading block's 410px floor, the tools'
+                      288px and two gaps — **plus the 44px the icon gives back**, since the field
+                      replaces it rather than joining it. That is 670 of furniture, so a container
+                      of 830 leaves about 136px.
+
+                      Both of the first two numbers were too high, and both for the same reason —
+                      arithmetic that forgot the icon. 890 and then 860 left 945×457 (a container
+                      of 841, and one of the two widths this whole fix started from) below the
+                      threshold, still carrying its hole for want of a field it had the room for.
+
+                      **The floor is what makes that threshold hold when a cue is included.** Then
+                      the leading block is growing too (`has-[[data-fills]]`), so the two share the
+                      slack rather than it all arriving here — at a container of 841 that is about
+                      73px each, and a 73px field is the clipped placeholder the threshold exists
+                      to avoid. The floor is the same 132 the threshold is derived from, so the
+                      field stays readable and the block takes what is left. It cannot overflow: at
+                      830 there are 136px to share, which is the floor plus four.
+
+                      Below the threshold this reverts to exactly today's behaviour — the search
+                      icon — which is what keeps the change additive: 860 is well clear of the 729
+                      where the row wraps, so nothing about the wrap can be disturbed by it. There
+                      is still a band just under it where the row ends short, but that slack now
+                      sits **after** the tools rather than inside the leading block, which is a
+                      toolbar ending rather than a hole between two controls. */}
+                  {/* `max-w-[340px]` is the artboard's: past that the field is wider than any
+                      fixture name and the row's right end starts to feel unanchored.
+
+                      `[&>div]:min-w-0` unpicks the filter's own `min-w-48`. That floor is right in
+                      the default toolbar, which *wraps*, and wrong here, where the row does not:
+                      below ~1300px of page width the 192px input simply overran its flex track and
+                      painted its placeholder under the Lit button. The *unfolded* row B has no
+                      second line to give it — the folded one wraps, but this arm does not — so the
+                      field gives instead — and session 4 replaces it with a search icon
+                      at the width where even that stops being enough. */}
+                  {/* Two arms of one control. Above `@[800px]` the field is on the row; below it
+                      the field is a search icon that opens the same node in a popover — the icon
+                      arm session 4 promised, and the real answer to the `min-w-48` squeeze the note
+                      above records. Radix mounts popover content only while it is open, so there is
+                      one filter input in the document except during the moment it is being used.
+
+                      **The threshold is `@[800px]`, and it is measured.** It was `@[600px]`, and
+                      the desk pass found the field still clipping its placeholder mid-word there
+                      (`PD-FILTER-PLACEHOLDER-CLIP`): at the tablet preset the input has about 72px
+                      of room behind its 36px search icon, for a placeholder that needs 96px. At a
+                      row B of 800 it has ~113px, so the threshold clears the need with roughly a
+                      fifth to spare, and it is a number this row already uses, for `Groups`.
+
+                      **The crossover itself is deliberately not quoted here.** Two sweeps of it
+                      disagreed by ~30px — it is only reachable by forcing a width, and the answer
+                      moves with how you force it — so a precise figure in a comment that says
+                      *measured* would be a claim the next reader cannot reproduce. What is stable
+                      is the pair above: 96px needed, ~113px given at 800. Re-measure those two if
+                      you move it, rather than trusting a crossover.
+
+                      Below the threshold the popover's field is `w-72` and has room for the whole
+                      placeholder, which is the point of the icon arm: the field gives all the way,
+                      rather than staying on the row saying half a word. Note the field is
+                      *also* being shorted by roughly half at every width, because its `flex-1`
+                      splits the row's slack with the plain `flex-1` spacer below — a real
+                      pre-existing bug, not this threshold's, and fixing it would let the field stay
+                      on the row a good deal narrower.
+
+                      The folded row took the icon at **every** width until the hole above it was
+                      closed, and the reason was never that a field is wrong there: "wide enough
+                      AND short enough" cannot be written as one Tailwind class, because a
+                      container query and a media query cannot be ANDed in one. That still holds,
+                      and it is why the two arms are split in JS on `leading` — the height half —
+                      and then given different container thresholds for the width half, rather than
+                      by a third class. It also
+                      fixes a real squeeze: the field is `flex-1` and so is the leading block, so on
+                      an 852×393 phone the two split the row and the source box — `flex-1` inside a
+                      block sharing it with a 230px action bar — collapsed to four pixels. */}
+                  <div
+                    className={cn(
+                      'hidden min-w-0 flex-1 items-center gap-2 [&>div]:min-w-0',
+                      leading
+                        ? '@[840px]:flex @[840px]:min-w-[132px]'
+                        : 'max-w-[340px] @[800px]:flex',
+                    )}
+                  >
                     {filter}
                   </div>
-                )}
-                <FilterPopover className={cn(!leading && '@[800px]:hidden')}>{filter}</FilterPopover>
-                {lit}
-                {/* Dropped in the folded arm: the leading block is already `flex-1` there, and two
-                    competing `flex-1` siblings is the bug session 2 found on this very row. */}
-                <span className={cn('flex-1', leading && 'hidden')} />
-                <Button
-                  variant={grouped ? 'default' : 'outline'}
-                  size="sm"
-                  className="h-7 shrink-0"
-                  aria-pressed={grouped}
-                  onClick={() => onGroupedChange(!grouped)}
-                  title="Show group rows with their members"
-                >
-                  <Layers className="size-3.5" />
-                  <span className="hidden @[800px]:inline">Groups</span>
-                </Button>
-                {columns}
-                {/* The key, exactly where the 22px footer that normally carries it is not drawn
-                    (see `renderFooter`) — narrow, or short. A grid whose tints are *navigational*
-                    has to keep them learnable somewhere, so the two conditions are written as
-                    two "show" rules over a hidden base rather than as a hide and an un-hide:
-                    both set the same `display`, so neither can lose to the other's ordering. */}
-                <ScopedKeyPopover className="hidden @max-[600px]:inline-flex [@media(max-height:500px)]:inline-flex" />
+                  <FilterPopover className={leading ? '@[840px]:hidden' : '@[800px]:hidden'}>
+                    {filter}
+                  </FilterPopover>
+                  {lit}
+                  {/* Dropped in the folded arm: the leading block is already `flex-1` there, and two
+                      competing `flex-1` siblings is the bug session 2 found on this very row. */}
+                  <span className={cn('flex-1', leading && 'hidden')} />
+                  <Button
+                    variant={grouped ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-7 shrink-0"
+                    aria-pressed={grouped}
+                    onClick={() => onGroupedChange(!grouped)}
+                    title="Show group rows with their members"
+                  >
+                    <Layers className="size-3.5" />
+                    {/* The one control after the divider that was *not* keeping the folded row's
+                        icon rule the comment above states, and the fifth hand-rolled copy of an
+                      idiom `labelUnlessCompact` already owned. Its `@[800px]` reads row B's width,
+                      and a
+                        folded row B is the whole grid column — 841px on a 945×457 window — so the
+                        word appeared exactly where the row has least to spare. The 54px it cost was
+                        the difference between the source box saying `Programmer is empty.` and
+                        rendering a 156px bordered rectangle with nothing in it. */}
+                    <span className={labelUnlessCompact(!!leading, '@[800px]:inline')}>Groups</span>
+                  </Button>
+                  {columns}
+                  {/* The key, exactly where the 22px footer that normally carries it is not drawn
+                      (see `renderFooter`) — narrow, or short. A grid whose tints are *navigational*
+                      has to keep them learnable somewhere, so the two conditions are written as
+                      two "show" rules over a hidden base rather than as a hide and an un-hide:
+                      both set the same `display`, so neither can lose to the other's ordering. */}
+                  <ScopedKeyPopover className="hidden @max-[600px]:inline-flex [@media(max-height:500px)]:inline-flex" />
+                </div>
                 {/* `Make layer` was this row's right end until session 3 of the space plan moved
                     it onto the rail's Local values row — the row it promotes. See `LocalValuesRow`
                     in `ProgrammerRail` for the one rule that changed with the move. */}
@@ -272,7 +471,6 @@ function ProgrammerGridBody({
                 cells={cells}
                 cellEntryKey={cellEntryKey}
                 cellClearKey={cellClearKey}
-                clearCells={clearCells}
                 templateTargets={templateTargets}
                 targetFamilies={targetFamilies}
                 targetEmitters={targetEmitters}

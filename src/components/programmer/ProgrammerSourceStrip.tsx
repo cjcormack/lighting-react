@@ -17,34 +17,58 @@ import { useIncludeBaseline } from './useIncludeBaseline'
 const ZONE_LABEL = 'text-[9px] font-bold uppercase tracking-[0.1em]'
 
 /**
- * The two sentences this box says, each split into the parts it **drops whole** as it narrows.
+ * **The two sourceless states report; they do not instruct.**
  *
- * `PD-SOURCE-TRUNCATION`: a sentence sliced mid-word (`…or start buski…`) reads as breakage, so
- * each one degrades through rungs that are all still true sentences, and the whole thing stays on
- * a `title` at every width. The rule and its worked example are session 1's — `LEGEND_SHORT` and
- * the legend footer *dropping* items rather than slicing one.
+ * This box has two jobs — name what Record will write back to, and say how far the programmer has
+ * drifted from it — and measured against those, the copy used to be exactly inverted: the two
+ * states with *no* source were the wordiest on the row, and the two with a real one the tersest.
+ * The empty arm was the only thing on this desk that taught rather than reported, and it did it
+ * permanently, in chrome, beside the `Include` button it was describing.
  *
- * Every fixed word is a `const` shared by the visible spans and the `title`, so the two cannot
- * drift into saying different things. The busking half was hand-typed twice until the review
- * caught it; the empty half had been doing this since session 1, and its comment is why.
+ * So the answer to "what is the source?" with no source is two words, and everything the sentence
+ * used to say is on the box's `title`. What that deletes is the whole reason this file was hard:
+ * `EMPTY_MID` / `EMPTY_TAIL` / `BUSK_DASH` / `BUSK_TAIL`, the eight nested `@[Npx]` rungs
+ * (`PD-SOURCE-TRUNCATION`), the engineered floor under each ladder, `SentenceBox` and its
+ * `@container`, and with them the reason the box had to be `flex-1` at all — a container under
+ * `inline-size` containment cannot be sized by its contents, so the rungs needed a width handed
+ * down from the row. Two words need no rungs, so the box is simply as wide as its words.
  *
- * Two traps in the punctuation, both of which only show at the narrow rungs:
+ * One rung survives in each arm, and it is the same rung both arms always had at the bottom of
+ * their ladder: below the width where the words fit, the box is its glyph or its label alone —
+ * never a word sliced in half.
  *
- * - **The full stop is drawn outside the parts that drop**, or the short form ends bare.
- * - **`Include` is inside the droppable group**, not before it, so the shortest empty rung is
- *   `Programmer is empty.` rather than `Programmer is empty. .`
+ * **Both numbers are measured, and both have a ceiling as well as a floor** — which is the trap,
+ * because a rung is naturally written with slack *above* what it needs and here that is the wrong
+ * direction. The block these boxes sit in is **419px** on an 852×393 landscape phone (the figure
+ * `ProgrammerActionBar`'s doc comment records, and the arm this fold exists for), so a threshold
+ * chosen a comfortable 20px above the need lands *over* 419 and silently takes the words off the
+ * one screen they were re-measured for. The first cut did exactly that, at 420 against a need of
+ * 404, and lost `No source` on the phone by a single pixel.
  *
- * Rung widths are measured, not guessed — see `SentenceBox` for what they are measured against.
- * At the strip's 12px they are: empty 359 / 263 / 174 / 124, busking 243 (a three-digit count) / 176 / 58.
+ * So: rendered at these styles, `No source` is 58px and the whole box 102px, and the box sits
+ * beside the 285px iconic action bar with 17px of divider and gaps between — 404. `@[410px]`
+ * clears that by six pixels **and stays under 419**, which is the half that matters: the empty box
+ * is what is on screen when the desk is idle, and that is the arm the phone shows.
+ *
+ * The busking box with a three-digit count is 139px by the same measurement, so it needs 441 —
+ * and `@[450px]` therefore serves the **unfolded** row only. Say that plainly, because the
+ * arithmetic is not obvious and an earlier version of this note implied the opposite: in the
+ * folded arm `ProgrammerGrid` pins the block this box shares at its 410px floor (`flex-initial`
+ * under size containment, so it is that width and no other), which leaves the box 108px whatever
+ * the window is doing. 139 does not fit in 108 at any width, so there the count never draws and
+ * `Busking` carries the state alone.
+ *
+ * **And the floor cannot rise to admit it.** 410 + 17 + the tools' 288 is 715, against the 724 of
+ * content an 852×393 landscape phone has — nine pixels of headroom. A floor of 441 needs 746 and
+ * folds that arm onto two lines, which is the row the fold exists to prevent. So this is a real
+ * constraint rather than a number to re-tune: at 108px the box chooses between naming the state
+ * and giving a count that is *already* on the rail's Local values row and in the programmer tile,
+ * and it names the state. The count is still on the `title` and in the `sr-only` sentence.
  */
-const EMPTY_LEAD = 'Programmer is empty.'
-const EMPTY_MID = ' a cue or a Look'
-const EMPTY_TAIL = ', or start busking'
-const EMPTY_SENTENCE = `${EMPTY_LEAD} Include${EMPTY_MID}${EMPTY_TAIL}.`
+const EMPTY_STATE = 'No source'
+const EMPTY_SENTENCE = 'Programmer is empty. Include a cue or a Look, or start busking.'
 
-const BUSK_STATE = 'No source'
-const BUSK_DASH = ' — '
-const BUSK_TAIL = 'nothing to update'
+const BUSK_STATE = 'Busking'
 
 /**
  * What the programmer is holding, said out loud and permanently — **the left half of row A**.
@@ -78,9 +102,11 @@ const BUSK_TAIL = 'nothing to update'
  *
  * **It was a full-width band of its own until the space plan's session 1**, sitting above a
  * second full-width band of verbs. Two bands each spending a line on one sentence is 101px of an
- * 900px screen, and the grid below them is the page. So the strip is now a bordered 32px box that
- * `flex-1`s across the left of row A and truncates its *name* before its badges — the badge is the
- * part that changes, the name is the part you can usually still guess. Nothing it said was
+ * 900px screen, and the grid below them is the page. So the strip is now a bordered 32px box at
+ * the left of row A, which truncates its *name* before its badges — the badge is the part that
+ * changes, the name is the part you can usually still guess. It fills the width it is given only
+ * in the two states that have something to fill it with (a cue, a Look); the two sourceless ones
+ * are as wide as their words. See `fill` on `Strip`. Nothing it said was
  * deleted: the location line and the long "3 changes not written back" wording appear at
  * `@[1100px]` and ride the *text's* `title` below that — never the box's, for the reason beside
  * `boxTitle` — `Update Q4` shortens to `Update` below
@@ -162,84 +188,45 @@ export function ProgrammerSourceStrip({
 
   if (source.kind === 'empty') {
     return (
-      <Strip tone="neutral">
+      <Strip tone="neutral" fill={false} title={EMPTY_SENTENCE}>
         <CirclePlus className="size-3.5 shrink-0 text-muted-foreground" />
-        {/* The `title` is on the BOX rather than on the text — the opposite of every other state
-            here, and the point: this arm has no always-visible label to hang it on (the busking
-            arm's `Busking` is what carries the sentence once its text goes), so a `title` on a
-            span that can itself be hidden would take the hover away exactly when it is the only
-            thing left. The box is `flex-1`, so the whole width answers the hover. Safe here and
-            *only* here, for the reason `boxTitle` gives below: nothing in this arm is a button or
-            a Radix tooltip trigger, so there is no descendant to inherit it. */}
-        <SentenceBox title={EMPTY_SENTENCE}>
-          <span className="block truncate text-xs text-muted-foreground">
-            {/* The floor, and this arm had none until the fourth review round found it missing.
-                `Programmer is empty.` is ~124px and the box goes below that on a real phone —
-                117px at 852×393, 64px in portrait — so it drew `Programmer is em…`, the exact
-                slice this change exists to remove. Below the floor the strip is the `CirclePlus`
-                alone, which is what the busking arm does below *its* floor: nothing is left
-                half-said, and the sentence is still one hover away. */}
-            <span className="hidden @[140px]:inline">
-              {EMPTY_LEAD}
-              <span className="hidden @[190px]:inline">
-                {' '}
-                <span className="font-medium text-foreground">Include</span>
-                <span className="hidden @[280px]:inline">{EMPTY_MID}</span>
-                <span className="hidden @[380px]:inline">{EMPTY_TAIL}</span>.
-              </span>
-            </span>
-          </span>
-        </SentenceBox>
+        {/* Shortening this to two words is a **visual** decision, so assistive tech still gets the
+            whole sentence — `TruncateStart` makes the same split for the same reason, and this
+            file's own rule is that what the box says must never need a hover. A `title` on a plain
+            `div` is not that: it is mouse-only and inconsistently exposed, so it serves the
+            pointer and this serves everyone else. The visible words are `aria-hidden` so the two
+            are not announced as a stutter. */}
+        <span className="sr-only">{EMPTY_SENTENCE}</span>
+        <span
+          aria-hidden="true"
+          className="hidden min-w-0 truncate text-xs text-muted-foreground @[410px]:block"
+        >
+          {EMPTY_STATE}
+        </span>
       </Strip>
     )
   }
 
   if (source.kind === 'busking') {
-    const count = `${source.valueCount} value${source.valueCount === 1 ? '' : 's'}, `
-    const busking = `${BUSK_STATE}${BUSK_DASH}${count}${BUSK_TAIL}`
+    const count = `${source.valueCount} value${source.valueCount === 1 ? '' : 's'}`
+    // One string for the hover and for assistive tech, built from the same two pieces the visible
+    // spans render — so the short form and the long one cannot drift into disagreeing.
+    const busking = `${BUSK_STATE} — ${count}, with no source to update`
     return (
-      <Strip tone="neutral">
-        {/* The label survives the phone's arm where `Editing` does not, and the SENTENCE is what
-            goes instead. They are not the same trade: `Editing` is a word for a state the blue rim
-            and the `Q4` beside it already draw, while `Busking` is the only thing in this arm of
-            the box that names the state at all — and the sentence beside it, at the 100px the box
-            has left once the verbs have theirs, truncated to `No so…`. The count it carries is on
-            the rail's Local values row and in the programmer tile; the whole sentence is on the
-            label's `title`, which is where this plan puts everything it moves. */}
-        <span
-          className={cn(ZONE_LABEL, 'shrink-0 text-muted-foreground')}
-          title={busking}
-        >
-          Busking
+      <Strip tone="neutral" fill={false} title={busking}>
+        <span className="sr-only">{busking}</span>
+        {/* The label is the state's name and never drops; the count is the part said twice — it is
+            on the rail's Local values row and in the programmer tile — so it is what goes when the
+            box is narrow. That order is unchanged from the ladder this replaced. */}
+        <span aria-hidden="true" className={cn(ZONE_LABEL, 'shrink-0 text-muted-foreground')}>
+          {BUSK_STATE}
         </span>
-        {/* The count drops first, because it is the part said twice — it is on the rail's Local
-            values row and in the programmer tile, while `nothing to update` is the only thing here
-            that explains the missing Update button. Then the clause goes, **and the dash with
-            it**: the two are one drop rather than the two the finding lists, because dropping the
-            clause alone leaves a dangling `No source — `, which is the same bare-punctuation trap
-            the empty arm's full stop avoids from the other side.
-
-            `No source` is the floor, and it is not redundant beside the label. Row A crosses its
-            own `@[600px]` gate at about the width where this box is 120–195px, so without a floor
-            the box switches on and is *immediately* under the 200px rung — a bordered strip
-            rendering up to ~195px of nothing after the label. A dead gap is a
-            different fault from a sentence said twice, and it is the one that looks broken.
-
-            That `@[600px]` is **row A's** width and not this box's: it is the phone arm,
-            deliberately unchanged, and it reads the outer container because a class on the element
-            that declares a container still resolves against its ancestor's. */}
-        <SentenceBox className="hidden @[600px]:block">
-          <span className="block truncate text-xs text-muted-foreground">
-            <span className="hidden @[80px]:inline">
-              {BUSK_STATE}
-              <span className="hidden @[200px]:inline">
-                {BUSK_DASH}
-                <span className="hidden @[260px]:inline">{count}</span>
-                {BUSK_TAIL}
-              </span>
-            </span>
-          </span>
-        </SentenceBox>
+        <span
+          aria-hidden="true"
+          className="hidden min-w-0 truncate text-xs text-muted-foreground @[450px]:block"
+        >
+          {count}
+        </span>
       </Strip>
     )
   }
@@ -415,56 +402,15 @@ function DirtyBadge({ dirty, inSync }: { dirty: number | null; inSync: boolean }
 }
 
 /**
- * The width the sentence actually gets — and the only `@container` this component declares.
- *
- * **The rule it threads.** `Strip`'s doc comment forbids a container at this component's root,
- * because every query here (`Editing`, the glyph, `Update`, `Revert`) asks "has this box room for
- * that word?" *relative to the row it shares*, and a container here would re-point all of them.
- * This one is scoped to the sentence alone, so nothing else moves: the sentence's own rungs are
- * the one set of queries whose subject is the sentence's box rather than the row.
- *
- * **Why they cannot be row A's.** Row A holds this box (`flex-1`) beside `ProgrammerActionBar`,
- * and measured live the two come out about 50/50 — so at a row A of 836px the sentence has ~355px,
- * not 836. Worse, the action bar's own width moves independently as *its* labels collapse
- * (`Update Q4` → `Update`, Revert → its icon), so no number chosen against row A can be right at
- * every width. That is the general hazard `ProgrammerWorkspace`'s doc comment names: a container
- * query matches an ancestor, never the element that declares the container. Wrapping is the fix;
- * re-tuning the outer numbers is not, and the desk pass proved it by finding the sentence still
- * sliced at three separate widths.
- *
- * **`flex-1 min-w-0` is load-bearing, not layout taste.** `container-type: inline-size` brings
- * size containment, so the element's inline size may not come from its contents: an auto-width
- * flex item under it collapses to **zero**, and every rung would then be hidden at every width.
- * The size has to come from the parent, which is what `flex-1` does — and being the row's only
- * `flex: 1 1 0%` is what makes it the *available* width rather than half of it.
- *
- * A `@[Npx]` on this element itself still measures row A, since an element is not its own
- * container. The busking arm relies on that for its phone rule.
- */
-function SentenceBox({
-  className,
-  title,
-  children,
-}: {
-  className?: string
-  title?: string
-  children: React.ReactNode
-}) {
-  return (
-    <div className={cn('@container min-w-0 flex-1', className)} title={title}>
-      {children}
-    </div>
-  )
-}
-
-/**
  * The box itself: a bordered 32px control that takes the left of row A.
  *
- * It takes **no `title`**, on purpose — see the note beside `boxTitle` above. Each state puts its
- * hover text on the span it belongs to.
+ * It takes a `title` only in the two arms that pass one — the sourceless pair, whose visible words
+ * abbreviate it and which hold nothing interactive to inherit it. The three arms with a source put
+ * their hover on the span it belongs to; the note beside `boxTitle` above says why that is a rule
+ * rather than a preference.
  *
  * It was a full-width band with a bottom border. Session 1 makes it a peer of the verbs beside it,
- * so the tone that used to wash a whole row now rims a box — and `flex-1 overflow-hidden` with
+ * so the tone that used to wash a whole row now rims a box — and `fill` with `overflow-hidden` and
  * `truncate` on the name is what lets the badges and the two buttons keep their width when the
  * name is long, which is the priority the plan sets ("truncates its name before its badges").
  *
@@ -472,15 +418,46 @@ function SentenceBox({
  */
 function Strip({
   tone,
+  fill = true,
+  title,
   children,
 }: {
   tone: 'neutral' | 'editing' | 'warning'
+  /**
+   * Whether the box takes the row's spare width.
+   *
+   * True by default, and so for all three arms that have a source to talk about — a cue, a Look,
+   * and the one whose source has been **deleted**, which needs the room most of all because its
+   * sentence is the longest thing this box ever says. False only for the two sourceless arms:
+   * they say two words, so `flex-initial` makes the box as wide as those words and no wider —
+   * which is what the `ml-auto` on the divider in `ProgrammerPage`'s `rowA` then hands to the
+   * verbs beside it. Count the *arms*, not the four `ProgrammerSource` kinds: `missing` splits
+   * off cue and look, and it is the one an "exactly two and two" reading forgets.
+   */
+  fill?: boolean
+  /**
+   * The whole state as one sentence, for the arms whose visible words are an abbreviation of it.
+   *
+   * **Only safe on an arm with no interactive descendant**, which is why the two states with a
+   * source pass their hover down to the text instead: a browser shows an ancestor's native
+   * `title` for any descendant that has none, so a `title` here would be inherited by `Update`,
+   * which already sits inside a Radix `Tooltip` — two tooltip surfaces answering one hover.
+   */
+  title?: string
   children: React.ReactNode
 }) {
   return (
     <div
+      title={title}
+      // The one thing outside this component that has to know which way `fill` went. The block
+      // this box sits in must grow when the box can use the room and stand still when it cannot —
+      // and a parent cannot read a child's props, so it reads this instead, through `:has()`.
+      // Without it the block grows in every state and parks the row's whole slack behind the
+      // verbs, which is the hole this attribute exists to close.
+      data-fills={fill ? '' : undefined}
       className={cn(
-        'flex h-8 min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-md border px-2.5',
+        'flex h-8 min-w-0 items-center gap-2 overflow-hidden rounded-md border px-2.5',
+        fill ? 'flex-1' : 'flex-initial',
         tone === 'editing' && 'border-blue-900/70 bg-blue-950/30',
         tone === 'warning' && 'border-amber-800 bg-amber-950/40',
         tone === 'neutral' && 'bg-card/50',

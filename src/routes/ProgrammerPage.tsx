@@ -18,6 +18,7 @@ import {
 import { ProgrammerSourceStrip } from '@/components/programmer/ProgrammerSourceStrip'
 import { ProgrammerWorkspace } from '@/components/programmer/ProgrammerWorkspace'
 import { useInclude } from '@/components/programmer/useInclude'
+import { cn } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { usePersistentState } from '@/hooks/usePersistentState'
 import { useShowBarProps } from '@/hooks/useShowBarProps'
@@ -219,7 +220,24 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
         onUpdate={sheets.openUpdate}
         onRevert={handleRevert}
       />
-      <span className="h-[22px] w-px shrink-0 self-center bg-border" />
+      {/* **Where the row's spare width goes**, which is a question only since the two sourceless
+          states became `flex-initial` — as wide as the two words they say. Until then the box was
+          `flex-1` in every state and simply ate the slack, so there was none to place.
+
+          It goes wherever the seam is. Unfolded, row A holds nothing but these two halves, so the
+          slack belongs behind the verbs and `ml-auto` puts them at the right edge, exactly where
+          the `flex-1` box used to leave them. Folded, row B's tools follow on the same line and
+          are already at that edge — so `ml-auto` there would push the verbs up against them and
+          open the whole row's slack as a hole *between the box and its own verbs*, which is the
+          one place it reads as a mistake rather than as a gutter. Left off, the gap falls at the
+          seam the divider after the verbs already marks: what the programmer is holding and what
+          you do to it on one side, the grid's own tools on the other. */}
+      <span
+        className={cn(
+          'h-[22px] w-px shrink-0 self-center bg-border',
+          !shortViewport && 'ml-auto',
+        )}
+      />
       <ProgrammerActionBar projectId={projectId} />
     </>
   )
