@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { Input } from '@/components/ui/input'
 import { useNumberFieldDraft } from '@/hooks/useNumberFieldDraft'
 import { cn } from '@/lib/utils'
@@ -23,6 +23,7 @@ export function ChannelNumberInput({
   hideLabel,
   value,
   onChange,
+  seed,
   disabled,
   className,
 }: {
@@ -36,6 +37,13 @@ export function ChannelNumberInput({
   hideLabel?: boolean
   value: number
   onChange: (next: number) => void
+  /**
+   * A character typed at the grid that opened this editor, to land in the field as though it had
+   * been typed here — which means it commits, the way every keystroke in this field does. Only the
+   * colour editor's **R** box is ever given one: it is the first field, and the keyboard opens on
+   * the first field. See `useCellEditorKeyboard`.
+   */
+  seed?: string | null
   disabled?: boolean
   className?: string
 }) {
@@ -43,6 +51,14 @@ export function ChannelNumberInput({
     String(Math.round(value)),
     useCallback((parsed: number) => onChange(Math.max(0, Math.min(255, Math.round(parsed)))), [onChange]),
   )
+
+  // Through a ref so the effect depends on the seed alone: `draft` is rebuilt on every render, and
+  // depending on it would re-seed the field on the operator's next keystroke.
+  const draftRef = useRef(draft)
+  draftRef.current = draft
+  useEffect(() => {
+    if (seed) draftRef.current.onChange(seed)
+  }, [seed])
 
   return (
     <label className={cn('flex items-center gap-1.5', className)}>

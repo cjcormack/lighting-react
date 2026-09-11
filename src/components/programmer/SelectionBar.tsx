@@ -205,7 +205,7 @@ export function SelectionBar({
             <span className="hidden shrink-0 items-center gap-1 whitespace-nowrap text-[10px] text-muted-foreground @[1100px]:inline-flex">
               {cellEntryKey && (
                 <>
-                  <kbd className={KBD_CLASS}>⏎</kbd> type a value
+                  <kbd className={KBD_CLASS}>⏎</kbd> edit
                 </>
               )}
               {cellClearKey && (

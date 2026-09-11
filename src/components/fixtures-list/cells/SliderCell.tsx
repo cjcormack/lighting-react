@@ -1,4 +1,4 @@
-import { memo, useCallback } from 'react'
+import { memo, useCallback, useEffect, useRef } from 'react'
 import { Slider } from '@/components/ui/slider'
 import { Input } from '@/components/ui/input'
 import { useNumberFieldDraft } from '@/hooks/useNumberFieldDraft'
@@ -7,6 +7,7 @@ import type { CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
 import { CellEditorSurface } from './CellEditorSurface'
 import { UNSET_CELL_TITLE, UnsetCellMark } from './UnsetCellMark'
+import { numericSeed, useCellEditorKeyboard } from './useCellEditorKeyboard'
 import { useCellEditorOpen } from './useCellEditorOpen'
 
 interface SliderCellProps {
@@ -38,6 +39,12 @@ interface SliderCellProps {
    */
   autoOpen?: boolean
   /**
+   * The auto-open came from a character typed at the grid, which lands in the number field as its
+   * first keystroke. Focus is not its business — the field is focused however the editor was
+   * opened. See `useCellEditorKeyboard`.
+   */
+  keyboardSeed?: string | null
+  /**
    * Nothing is selected any more, so this editor's targets are gone with it — close.
    * See `useCellEditorOpen`.
    */
@@ -63,6 +70,7 @@ export const SliderCell = memo(function SliderCell({
   placeholder,
   disabled = false,
   autoOpen,
+  keyboardSeed,
   selectionEmpty,
   onCommit,
   onBeginEdit,
@@ -84,7 +92,26 @@ export const SliderCell = memo(function SliderCell({
   const draft = useNumberFieldDraft(String(current), commit)
   // The typed input is reset on every open, by a click or by a marquee alike — which is why it is
   // `onOpen` on the hook rather than part of the `onOpenChange` handler below.
-  const { isOpen, setOpen } = useCellEditorOpen({ autoOpen, disabled, selectionEmpty, onOpen: draft.reset })
+  const { isOpen, setOpen, keyboardOpen } = useCellEditorOpen({
+    autoOpen,
+    keyboardSeed,
+    disabled,
+    selectionEmpty,
+    onOpen: draft.reset,
+  })
+  const { contentRef, onKeyDown, onOpenAutoFocus } = useCellEditorKeyboard({
+    onDone: () => setOpen(false),
+  })
+  // The character that opened this editor lands in the field as though it had been typed there —
+  // which means it commits, because every field here writes as it is typed. Through a ref so the
+  // effect depends on the open alone: `draft` is rebuilt on every render, and depending on it
+  // would re-seed the field on the operator's next keystroke.
+  const draftRef = useRef(draft)
+  draftRef.current = draft
+  useEffect(() => {
+    const seed = numericSeed(keyboardOpen)
+    if (seed) draftRef.current.onChange(seed)
+  }, [keyboardOpen])
 
   const display = value.isUniform ? `${toPct(value.min)}%` : `${toPct(value.min)}–${toPct(value.max)}%`
 
@@ -96,7 +123,8 @@ export const SliderCell = memo(function SliderCell({
         if (open) onBeginEdit()
       }}
       title={label}
-      contentClassName="w-64 space-y-3"
+      contentClassName="w-64"
+      onOpenAutoFocus={onOpenAutoFocus}
       trigger={
         <button
           type="button"
@@ -126,27 +154,32 @@ export const SliderCell = memo(function SliderCell({
         </button>
       }
     >
-      {batchCount > 1 && (
-        <p className="text-xs text-muted-foreground">Applying to {batchCount} targets</p>
-      )}
-      <div className="flex items-center gap-3">
-        <Slider
-          min={range.min}
-          max={range.max}
-          step={1}
-          value={[current]}
-          onValueChange={([next]) => commit(next)}
-          className="flex-1"
-        />
-        <Input
-          type="number"
-          min={range.min}
-          max={range.max}
-          className="h-8 w-20 tabular-nums"
-          value={draft.value}
-          onChange={(e) => draft.onChange(e.target.value)}
-          onBlur={draft.onBlur}
-        />
+      {/* The wrapper is the editor's keyboard: Enter closes, comma steps between fields, and a
+          keyboard-opened editor focuses the first of them. See `useCellEditorKeyboard`. */}
+      <div ref={contentRef} onKeyDown={onKeyDown} className="space-y-3">
+        {batchCount > 1 && (
+          <p className="text-xs text-muted-foreground">Applying to {batchCount} targets</p>
+        )}
+        <div className="flex items-center gap-3">
+          <Slider
+            min={range.min}
+            max={range.max}
+            step={1}
+            value={[current]}
+            onValueChange={([next]) => commit(next)}
+            className="flex-1"
+          />
+          <Input
+            type="number"
+            min={range.min}
+            max={range.max}
+            aria-label={label}
+            className="h-8 w-20 tabular-nums"
+            value={draft.value}
+            onChange={(e) => draft.onChange(e.target.value)}
+            onBlur={draft.onBlur}
+          />
+        </div>
       </div>
     </CellEditorSurface>
   )

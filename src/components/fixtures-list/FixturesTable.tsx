@@ -125,6 +125,16 @@ export interface FixturesTableProps {
    */
   cellSelection?: CellSelection
   /**
+   * The keyboard asked for a cell's editor: Enter (or a character) over a cell selection, from
+   * `FixturesListContainer`'s window handler. `seed` is the character that started it, or `''` for
+   * a bare Enter.
+   *
+   * A one-shot, like `autoOpenCell` below, which is what it is folded into — so the keyboard and a
+   * released marquee open an editor by exactly one mechanism. The container is the one that knows
+   * *which* cell (it owns the selection and the scope gate); this knows how to open one.
+   */
+  keyboardOpen?: { rowId: RowId; col: ColumnKey; seed: string } | null
+  /**
    * A marquee drag has started or ended.
    *
    * Fires twice per gesture, never per pointer move: the container keeps the answer so the
@@ -168,6 +178,7 @@ export function FixturesTable({
   fill = false,
   selectionEmpty,
   cellSelection,
+  keyboardOpen,
   onMarqueeDragChange,
   onBackgroundClick,
 }: FixturesTableProps) {
@@ -222,10 +233,25 @@ export function FixturesTable({
    * them, so the named cell's effect still runs even though this one has already asked for the
    * signal to go.
    */
-  const [autoOpenCell, setAutoOpenCell] = useState<CellRef | null>(null)
+  const [autoOpenCell, setAutoOpenCell] = useState<(CellRef & { seed: string | null }) | null>(null)
   useEffect(() => {
     if (autoOpenCell) setAutoOpenCell(null)
   }, [autoOpenCell])
+
+  /**
+   * The keyboard's request, folded into the same one-shot. The two open an editor identically;
+   * `seed` differs only in carrying the character that started it, for the editor's first field.
+   */
+  useEffect(() => {
+    if (keyboardOpen) setAutoOpenCell({ ...keyboardOpen })
+  }, [keyboardOpen])
+
+  // A released drag names a cell and nothing more: `seed` is null, so the editor opens the way a
+  // click opens it.
+  const onSingleColumnDrag = useCallback(
+    (cell: CellRef) => setAutoOpenCell({ ...cell, seed: null }),
+    [],
+  )
 
   const marquee = useCellMarquee({
     scrollRef,
@@ -233,7 +259,7 @@ export function FixturesTable({
     visibleColumns,
     cellSelection,
     onDragChange: onMarqueeDragChange,
-    onSingleColumnDrag: setAutoOpenCell,
+    onSingleColumnDrag,
   })
 
   const columnLabelFor = useCallback((col: ColumnKey) => columnLabel(col), [])
@@ -382,6 +408,7 @@ export function FixturesTable({
                     cellSelection={cellSelection}
                     deskConnected={deskConnected}
                     autoOpenCol={autoOpenCell?.rowId === row.id ? autoOpenCell.col : null}
+                    autoOpenSeed={autoOpenCell?.rowId === row.id ? autoOpenCell.seed : null}
                     selectionEmpty={selectionEmpty}
                   />
                 </div>
@@ -954,6 +981,11 @@ interface RowViewProps {
    * memo still holds for the rest of the grid.
    */
   autoOpenCol: ColumnKey | null
+  /**
+   * That auto-open came from a character typed at the grid, which the editor seeds its first field
+   * with. Null for a released marquee, and for every row but the named one.
+   */
+  autoOpenSeed: string | null
   /** Nothing is selected — any open cell editor in this row must go. See `useCellEditorOpen`. */
   selectionEmpty?: boolean
 }
@@ -1003,6 +1035,7 @@ const RowView = React.memo(function RowView({
   cellSelection,
   deskConnected,
   autoOpenCol,
+  autoOpenSeed,
   selectionEmpty,
 }: RowViewProps) {
   // Hooks run unconditionally; divider rows just have no cells.
@@ -1351,6 +1384,7 @@ const RowView = React.memo(function RowView({
               // drawing itself as read-only.
               disabled={cellsInert || state?.editable === false}
               autoOpen={autoOpenCol === col}
+              keyboardSeed={autoOpenCol === col ? autoOpenSeed : null}
               selectionEmpty={selectionEmpty}
               onBeginEdit={() => onBeginCellEdit(row, col)}
               onCommit={(commit) => onCellCommit(row, col, commit)}
@@ -1417,6 +1451,7 @@ function PropertyCell({
   batchCount,
   disabled,
   autoOpen,
+  keyboardSeed,
   selectionEmpty,
   onBeginEdit,
   onCommit,
@@ -1449,6 +1484,11 @@ function PropertyCell({
    * much as through the pointer.
    */
   autoOpen: boolean
+  /**
+   * That open came from a character typed at the grid, which the editor seeds its first field
+   * with — see `useCellEditorKeyboard`. Null for a click or a released marquee.
+   */
+  keyboardSeed: string | null
   /** Nothing is selected, so an open editor here has lost what it was editing for. */
   selectionEmpty?: boolean
   onBeginEdit: () => void
@@ -1465,6 +1505,7 @@ function PropertyCell({
           placeholder={placeholder}
           disabled={disabled}
           autoOpen={autoOpen}
+          keyboardSeed={keyboardSeed}
           selectionEmpty={selectionEmpty}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
@@ -1480,6 +1521,7 @@ function PropertyCell({
           placeholder={placeholder}
           disabled={disabled}
           autoOpen={autoOpen}
+          keyboardSeed={keyboardSeed}
           selectionEmpty={selectionEmpty}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
@@ -1495,6 +1537,7 @@ function PropertyCell({
           placeholder={placeholder}
           disabled={disabled}
           autoOpen={autoOpen}
+          keyboardSeed={keyboardSeed}
           selectionEmpty={selectionEmpty}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
@@ -1510,6 +1553,7 @@ function PropertyCell({
           placeholder={placeholder}
           disabled={disabled}
           autoOpen={autoOpen}
+          keyboardSeed={keyboardSeed}
           selectionEmpty={selectionEmpty}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}

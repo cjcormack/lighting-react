@@ -832,10 +832,11 @@ either was driven); it lives in one place, `templateRecord.kt`.
 
 **A cell editor is a popover on a desk, a bottom sheet on an upright phone, and a right-hand sheet
 where the viewport is short.** `components/fixtures-list/cells/CellEditorSurface.tsx` is the one
-place that decides, and all five editors go through it: the four value cells (`SliderCell`,
-`ColourCell` via `ColourPickerPopover`, `PositionCell`, `SettingCell`) and the marquee's typed field
-(`CellEntryPopover`). That sharing is the point rather than a saving — §The programmer's keyboard
-says Enter and a click must read as one kind of thing, and they only do if the fold happens once.
+place that decides, and all four value cells go through it (`SliderCell`, `ColourCell` via
+`ColourPickerPopover`, `PositionCell`, `SettingCell`). There were **five**: the marquee's own typed
+field, `CellEntryPopover`, drawn through this same surface precisely so that Enter and a click
+would read as one kind of thing. It is gone, and the reason is the stronger form of that argument —
+§The programmer's keyboard.
 
 Three rules, each of which was learned rather than designed:
 
@@ -887,41 +888,96 @@ wrapper needs it too.
 
 ### The programmer's keyboard
 
-**The marquee has a keyboard.** Select cells, press Enter (or a digit), type, press Enter, and the
-value lands on every selected cell through the same `commitToCells` a popover inside the marquee
-uses — the field adds a keyboard to the marquee, not a second path to the rig. The grammar is
-`lib`-free and pure in `fixtures-list/cellEntry.ts` (`127`, `50%`, `full`/`out`, `#ff8800`,
-`r,g,b`, `pan,tilt` with either axis blank) and it becomes **one** `CellCommit`, so
-`commitMatchesResolution` drops it from any column it does not fit: `127` at a Dimmer + Colour
-marquee sets the dimmers and leaves the colours alone. Two grammar traps its tests pin: a bare
-three-digit number is a level, not a short hex (`127` was matching `[0-9a-f]{3}`), and a percentage
-is scaled by integers (`50 * 2.55` is 127.49999… in floating point).
+**There is one editor per column, and the keyboard opens it.** Select cells, press Enter (or just
+start typing), and the cell editor for the first selected cell opens with its first text field
+focused and selected; what it commits lands on every selected cell through `commitToCells`. Enter
+in any field applies and closes, comma steps to the next field, and the marquee stays so the next
+Enter opens it again.
 
-The editor opens in **the same surface a cell editor opens in** (`CellEditorSurface` — see §The
-cell editor's three forms), which on a desk is a popover anchored at the first selected cell
-(`CellEntryPopover`, owned by the container, which finds the cell through the table's `data-row-id`
-/ `data-cell` attributes) and on a phone is the same sheet a tapped cell gives you. The anchor is
-simply ignored by a sheet, which is fixed to an edge of the screen. Same picture, same size, same
-"Applying to N targets" line a click on a cell inside the marquee opens, so Enter and a click read
-as one kind of thing — and that is *why* it goes through the shared surface rather than owning a
-popover of its own: if a tapped cell folds to a sheet and the typed field does not, the two
-gestures stop matching. It was a small input in the selection bar first, which
-was too far from the cells and too quiet to read as "this is where your keystrokes go"; the bar
-keeps only the key hints. Enter applies and closes; the marquee stays. **`cellKeyboardPermission`
-in `cellEntry.ts` is the scope gate**,
-the fourth place "read-only" is said (§The programmer's scoped grid): both keys in Local, neither in
-Output, entry only into a focused Look layer (its draft has no removal), neither on a focused
-template layer. The container reports `cellEntryKey` / `cellClearKey` false where a key is
-refused, and the grid's hints read those rather than restating the rule — so no hint can advertise
-a key that does nothing. The window handler only moves focus into the field, and **not
-from a focused control** (a button, a link, a menu or menu item) on any arm: a cell trigger is
-tabbable and Tab-then-Enter opening its popover is a path the grid already promises, and Backspace
-is the destructive arm. A value that parses but fits none of the selected columns is reported as
-such rather than cleared as if it had landed (`commitToCells` returns the write count for exactly
-this). **Backspace / Delete takes the selected cells out of Local** (`CellWriters.clearValue` →
+**It used to be two editors**, and that is the thing to understand before touching any of this. A
+click opened the column's editor; Enter opened `CellEntryPopover`, a single line of text with a
+grammar of its own (`parseCellEntry`: `127`, `50%`, `full`/`out`, `#ff8800`, `r,g,b`, `pan,tilt`).
+Both are deleted. Two editors for one job drift, only one of them can be improved at a time, and
+the text one could only ever set what a line of text can say. What went with the grammar, and where
+it went instead:
+
+- **Hex typed as text** — replaced in kind: the picker and the R/G/B boxes say the same thing.
+- **`pan,tilt` and `r,g,b`** survive as a **gesture** rather than a grammar: comma steps to the
+  next field. That is what `PositionCell`'s new pair of boxes is for — it had none, only a drag —
+  and what makes the colour editor's R → G → B → emitters a typed sequence.
+- **`50%`, `full` and `out` are gone, and nothing replaced them.** The level editor's box is
+  `type="number"`, so those characters cannot be typed into it at all. Said plainly because it is
+  the one part of the deletion that was a real loss rather than a relocation: it was put to the
+  desk as a question and answered *leave it as built*, on the same reasoning as hex. Getting them
+  back means a text grammar in the byte field, which costs that field its spinner and its
+  arrow-key increment — so ask before reaching for it.
+
+`components/fixtures-list/cells/useCellEditorKeyboard.ts` is the one copy of the rule, shared by
+all four cells **and by `FanPopover`**, which is the same kind of panel and had the same gap. Two
+things in it are not arbitrary. The focus is taken in **`onOpenAutoFocus`**, not in an effect:
+Radix's own auto-focus is a *parent* effect and parent effects run after a child's, so a focus set
+from inside the content is taken straight back off it. And **comma is left alone in a one-field
+editor** — there is nowhere to step to, and a type-ahead may want the character.
+
+**The panel behaves the same however it was opened** — a click, a released marquee, a keystroke.
+The first field is focused in all three, and that is not a nicety: a single-column marquee
+auto-opens its editor behind the release (`PD-POPUP-AFTER-DRAG`), so *drag three dimmer cells, type
+`128`, Enter* is the ordinary desk gesture, and it only works if the release leaves the field
+focused. A first cut focused the field only for a keystroke, on the reasoning that a tap must not
+summon the on-screen keyboard, and quietly broke exactly that. Refuse any change that makes focus a
+function of the gesture again.
+
+**The one thing that does differ is the *form*, not the gesture.** Focus is taken in the popover
+and in neither sheet (`useCellEditorForm`), because both sheets are reached by a finger and there
+the keyboard rises over the grid for nothing. That is a question about the surface, so on any one
+surface every way in still behaves identically. `FanPopover` opts out with `autoFocus: false` for a
+reason of its own: its first question is *which column*, and jumping to the From box would skip the
+chooser that decides what From means.
+
+**`keyboardSeed` carries the character and nothing else.** A string (`''` for a bare Enter, null
+for a click or a drag) threaded container → table → cell, latched by `useCellEditorOpen` into
+`keyboardOpen` for as long as the editor is open, and read only to seed the first field.
+
+**A character typed at the grid opens the editor and lands in its first field**, committing as
+though it had been typed there — every field on this desk writes as it is typed. Digits, `.` and
+**letters**: a letter is the first character of `SettingCell`'s type-ahead, and a numeric editor
+simply ignores one (`numericSeed`). `#` and `,` went with the grammar — there is no hex to start,
+and comma now means something inside an editor.
+
+**`SettingCell` is a type-ahead** above three options (below that there is nothing to narrow): the
+filter matches on display name, ↑/↓ move the highlight, and Enter takes the highlighted option —
+the top match by default. An Enter that matches nothing is swallowed rather than closing, because
+closing would throw away a search halfway through being fixed. It answers Enter and the arrows
+itself and says so with `preventDefault()`, which is how the shared wrapper knows to stand aside.
+
+**One column's editor for a selection that spans several is not a narrowing.** `commitToCells` fans
+a commit across every selected column and drops it from the ones whose shape it does not fit — so a
+Dimmer + Colour marquee opens the dimmer's slider, and moving it sets the dimmers and leaves the
+colours alone, exactly as `127` did. `orderedSelectedCells` picks the order — topmost displayed
+row, leftmost visible column, the same display-order rule `singleColumnAnchor` applies to a
+released drag, extended to the column axis — and the container takes the first cell that **has an
+editor**. That second half is load-bearing: a marquee is geometric (`hitsFor` sweeps a rectangle
+over rows and column bands), so it covers Colour cells on dimmer-only pars, and taking the
+display-first cell flatly would leave Enter doing nothing on an ordinary mixed selection.
+
+**`cellKeyboardPermission` in `cellEntry.ts` is the scope gate**, the fourth place "read-only" is
+said (§The programmer's scoped grid): both keys in Local, neither in Output, entry only into a
+focused Look layer (its draft has no removal), neither on a focused template layer. The container
+reports `cellEntryKey` / `cellClearKey` false where a key is refused, and the grid's hints read
+those rather than restating the rule — so no hint can advertise a key that does nothing. The window
+handler only names a cell, and **not from a focused control** (a button, a link, a menu or menu
+item) on any arm: a cell trigger is tabbable and Tab-then-Enter opening its popover is a path the
+grid already promises, and Backspace is the destructive arm. The one exemption is a cell trigger the
+marquee itself covers (`marqueeOwnsKeyTarget`), or Enter there would fall through to that button's
+own activation and open *that* cell's editor with nothing focused.
+
+**Backspace / Delete takes the selected cells out of Local** (`CellWriters.clearValue` →
 `programmer.clearEntry`, by the programmer fade — the same store the action bar's Clear fades by).
-The reset of typed text is keyed on the cells array, not the count: a same-size replace-marquee is
-a new set with the same count.
+
+The request itself is a **one-shot** on both halves: the container drops it on the commit after it
+is set, and `FixturesTable` folds it into the very `autoOpenCell` a released marquee uses, so there
+is one mechanism for "open that editor with no click". A request left standing re-opens the editor
+the next time the virtualiser renders the row it names.
 
 ### The programmer's scoped grid
 
@@ -985,7 +1041,8 @@ Things that will bite:
   pointer (`pointer-events-none` on the wrapper); the cell trigger stays tabbable, so `PropertyCell`
   takes `disabled` from it too; `FanPopover` — which writes through `useCellWriters` from the
   toolbar, nowhere near a cell — gates on the focused template as well; and the marquee's
-  **keyboard** (`CellEntryField`, §The programmer's keyboard) gates on `cellKeyboardPermission`,
+  **keyboard** (the Enter/character arm of the grid's window handler, §The programmer's keyboard)
+  gates on `cellKeyboardPermission`,
   because the marquee itself arms in every scope — its `pointerdown` sits on the rows wrapper and a
   read-only cell's `pointer-events-none` only retargets the press there. A commit through any hole
   is not dropped: `useCellWriters` has no arm for a template layer, so it falls through to a **live**

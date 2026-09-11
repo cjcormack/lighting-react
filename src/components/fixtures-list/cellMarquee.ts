@@ -100,9 +100,11 @@ export function columnRange(
  * the operator's two attributes and silently ignore the other.
  *
  * [rowOrder] is the rows as displayed, and the anchor is the selected cell in the **first** of
- * them — deliberately the same rule `openEntry` applies for the typed-value editor, so Enter and a
- * released drag open in the same place. Reading `cells[0]` instead would anchor at whichever block
- * the operator drew last.
+ * them — deliberately the same rule the keyboard applies (`orderedSelectedCells`, taken by
+ * `openCellEditor` in `FixturesListContainer`), so Enter and a released drag open in the same
+ * place. That one extends the rule to the column axis, which this one never needs: its cells are
+ * all in one column by definition. Reading `cells[0]` instead would anchor at whichever block the
+ * operator drew last.
  */
 export function singleColumnAnchor(
   cells: readonly CellRef[],

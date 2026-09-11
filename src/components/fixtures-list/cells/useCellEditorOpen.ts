@@ -28,11 +28,22 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  */
 export function useCellEditorOpen({
   autoOpen,
+  keyboardSeed,
   disabled,
   onOpen,
   selectionEmpty,
 }: {
   autoOpen?: boolean
+  /**
+   * The auto-open came from a **character typed at the grid**, and this is that character (`''`
+   * for a bare Enter). Null for a released marquee or a click, which carry none.
+   *
+   * Seeding only: which field has focus is not a function of how the editor was opened — see
+   * `useCellEditorKeyboard`. Latched into [keyboardOpen] at the moment the editor opens, because
+   * the signal itself is a one-shot the table drops on the very next commit while the editor
+   * stays open for as long as the operator is typing into it.
+   */
+  keyboardSeed?: string | null
   disabled?: boolean
   /** State a click's `onOpenChange(true)` resets, that an auto-open must reset too. */
   onOpen?: () => void
@@ -47,13 +58,25 @@ export function useCellEditorOpen({
    * sheet, and it is worse in a sheet, which covers the grid that would otherwise show you.
    */
   selectionEmpty?: boolean
-}): { isOpen: boolean; setOpen: (open: boolean) => void } {
+}): {
+  isOpen: boolean
+  setOpen: (open: boolean) => void
+  /**
+   * Non-null while an editor opened by a typed character is open, holding that character, for the
+   * editor to seed its first field with — see [keyboardSeed].
+   */
+  keyboardOpen: string | null
+} {
   const [isOpen, setIsOpen] = useState(false)
+  const [keyboardOpen, setKeyboardOpen] = useState<string | null>(null)
 
   const onOpenRef = useRef(onOpen)
   onOpenRef.current = onOpen
-  const setOpen = useCallback((next: boolean) => {
+  // `viaKeyboard` is the auto-open's own business: every other caller is a click, and passing it
+  // as a second argument keeps `setOpen` assignable to Radix's `(open: boolean) => void`.
+  const setOpen = useCallback((next: boolean, viaKeyboard: string | null = null) => {
     if (next) onOpenRef.current?.()
+    setKeyboardOpen(next ? viaKeyboard : null)
     setIsOpen(next)
   }, [])
 
@@ -62,9 +85,13 @@ export function useCellEditorOpen({
   // later must not spring open on the strength of a drag that has long since ended.
   const disabledRef = useRef(disabled)
   disabledRef.current = disabled
+  // Read through a ref for the same reason `disabled` is: it is wanted as it is at the instant the
+  // signal flips, and a later change to it is not a reason to reopen anything.
+  const keyboardSeedRef = useRef(keyboardSeed)
+  keyboardSeedRef.current = keyboardSeed
   useEffect(() => {
     if (!autoOpen || disabledRef.current) return
-    setOpen(true)
+    setOpen(true, keyboardSeedRef.current ?? null)
   }, [autoOpen, setOpen])
 
   // **The edge, not the state.** Closing whenever `selectionEmpty` is merely *true* would refuse
@@ -75,8 +102,11 @@ export function useCellEditorOpen({
   useEffect(() => {
     const deselected = selectionEmpty === true && hadSelectionRef.current
     hadSelectionRef.current = selectionEmpty === false
-    if (deselected) setIsOpen(false)
+    if (deselected) {
+      setIsOpen(false)
+      setKeyboardOpen(null)
+    }
   }, [selectionEmpty])
 
-  return { isOpen, setOpen }
+  return { isOpen, setOpen, keyboardOpen }
 }

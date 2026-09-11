@@ -3,6 +3,7 @@ import { RgbColorPicker, type RgbColor } from 'react-colorful'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Slider } from '@/components/ui/slider'
 import { CellEditorSurface } from '@/components/fixtures-list/cells/CellEditorSurface'
+import { numericSeed, useCellEditorKeyboard } from '@/components/fixtures-list/cells/useCellEditorKeyboard'
 import { cn } from '@/lib/utils'
 import { ChannelNumberInput } from './ChannelNumberInput'
 import { ExtendedChannelSlider } from './ExtendedChannelSlider'
@@ -76,6 +77,14 @@ interface ColourPickerPopoverProps {
    * form one — see that hook.
    */
   compact?: boolean
+  /**
+   * This editor was opened by a character typed at the grid, which lands in the **R** box as its
+   * first keystroke. Null or absent for a click or a released marquee, which carry no character.
+   *
+   * It says nothing about *focus* — R is focused however the editor was opened; see
+   * `useCellEditorKeyboard`. `ColourCell`'s alone, like [channelFields].
+   */
+  keyboardOpen?: string | null
   /** The trigger element (swatch) */
   children: React.ReactNode
 }
@@ -128,6 +137,7 @@ export function ColourPickerPopover({
   sheetWhenNarrow = false,
   title = 'Colour',
   compact = false,
+  keyboardOpen = null,
   children,
 }: ColourPickerPopoverProps) {
   // Radix owns the open state for an uncontrolled caller — `open` below is `undefined` for them,
@@ -252,6 +262,17 @@ export function ColourPickerPopover({
     send({ ...currentChannels(), [channel]: value })
   }
 
+  // Enter closes, comma steps R → G → B → the emitters and round again, and a keyboard-opened
+  // editor focuses R. Shared with the four cell editors, which is the point: this popover *is* the
+  // colour cell's editor. The two property visualizers pass no `keyboardOpen`, so nothing here
+  // takes focus for them; their popovers hold no text field to type Enter or a comma into either.
+  const { contentRef, onKeyDown, onOpenAutoFocus } = useCellEditorKeyboard({
+    // The two property visualizers draw no text fields here (see [channelFields]), so there is
+    // nothing for focus to land on and taking it would only move it off the swatch they opened.
+    autoFocus: channelFields,
+    onDone: useCallback(() => setIsOpen(false), [setIsOpen]),
+  })
+
   const hasExtendedChannels = hasWhiteChannel || hasAmberChannel || hasUvChannel
   // Which emitters this head has, and what each is at — one lookup, so the row list, the value and
   // the write can't disagree by a transposed ternary. Presence comes from the caller's **colour
@@ -270,7 +291,11 @@ export function ColourPickerPopover({
     // under was taking something away. Side by side it is the height of the picker alone. The
     // wrap is what makes it one layout rather than two — a narrow sheet stacks it again, which is
     // the portrait arrangement unchanged.
-    <div className={compact ? 'flex flex-wrap items-start gap-4' : 'space-y-3'}>
+    <div
+      ref={contentRef}
+      onKeyDown={onKeyDown}
+      className={compact ? 'flex flex-wrap items-start gap-4' : 'space-y-3'}
+    >
       {notice}
       {/* The picker leads and the numbers sit beside it: nobody thinks in bytes when they are
           choosing a colour, and nobody wants a picker when they already know the number. The
@@ -295,7 +320,12 @@ export function ColourPickerPopover({
         <RgbColorPicker color={pickerColor} onChange={handleColourChange} />
         {channelFields && (
           <div className={cn('w-20 shrink-0', compact ? 'space-y-2.5' : 'space-y-1.5')}>
-            <ChannelNumberInput label="R" value={channels.r} onChange={(v) => setChannel('r', v)} />
+            <ChannelNumberInput
+              label="R"
+              value={channels.r}
+              onChange={(v) => setChannel('r', v)}
+              seed={numericSeed(keyboardOpen)}
+            />
             <ChannelNumberInput label="G" value={channels.g} onChange={(v) => setChannel('g', v)} />
             <ChannelNumberInput label="B" value={channels.b} onChange={(v) => setChannel('b', v)} />
           </div>
@@ -365,6 +395,7 @@ export function ColourPickerPopover({
         onOpenChange={setIsOpen}
         title={title}
         contentClassName="w-auto"
+        onOpenAutoFocus={onOpenAutoFocus}
         trigger={children}
         // Alone among the cell editors: see [compact], and `wide` on the surface.
         wide
@@ -377,7 +408,7 @@ export function ColourPickerPopover({
   return (
     <Popover open={controlledOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent className="w-auto" align="start">
+      <PopoverContent className="w-auto" align="start" onOpenAutoFocus={onOpenAutoFocus}>
         {body}
       </PopoverContent>
     </Popover>

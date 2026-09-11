@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
-import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Sheet,
   SheetBody,
@@ -203,14 +203,6 @@ function useKeyboardInset(open: boolean | undefined): number {
   return inset
 }
 
-/** Viewport rect of the cell a trigger-less editor should point at. */
-export interface CellEditorAnchorRect {
-  left: number
-  top: number
-  width: number
-  height: number
-}
-
 interface CellEditorSurfaceProps {
   /** Undefined leaves the popover to hold its own state — the two property visualizers do. */
   open?: boolean
@@ -221,19 +213,32 @@ interface CellEditorSurfaceProps {
    * dialog with no title is unreadable to a screen reader.
    */
   title: string
-  /** The cell's own button. Omitted by an editor opened from elsewhere — see [anchor]. */
+  /**
+   * The cell's own button.
+   *
+   * Required in practice, though the type still allows its absence: this surface also took an
+   * `anchor` rect for a trigger-less popover, which existed for `CellEntryPopover` alone — an
+   * editor opened by Enter over a marquee, pointed at a cell it knew only by `(rowId, col)`. The
+   * keyboard opens the cell's own editor now, so every caller has a trigger and that branch went
+   * with it.
+   */
   trigger?: ReactNode
   /**
-   * Where a trigger-less popover should point, or null for the top-left of the viewport. Ignored
-   * by both sheets, which are anchored to an edge of the screen by definition. Pass it only
-   * alongside no [trigger].
+   * Popover only: its **width**. A sheet sizes itself against the screen.
+   *
+   * Not its rhythm any more. Each editor wraps its own controls in the element that carries
+   * `useCellEditorKeyboard`'s ref and key handler, and the spacing rides on that — so one number
+   * applies in all three forms, rather than the popover's coming from here and both sheets'
+   * from `SheetBody`'s own `space-y-4` between what used to be its direct children.
    */
-  anchor?: CellEditorAnchorRect | null
-  /** Popover only: its width and rhythm. A sheet sizes itself against the screen. */
   contentClassName?: string
   /** Popover only. */
   align?: 'start' | 'center' | 'end'
-  /** Both primitives spell this the same way; the marquee's typed field uses it to take focus. */
+  /**
+   * Both primitives spell this the same way. Every cell editor passes `useCellEditorKeyboard`'s,
+   * which is how the first text field takes focus on open — in that callback rather than in an
+   * effect, because Radix's own auto-focus is a parent effect and would take it straight back.
+   */
   onOpenAutoFocus?: (event: Event) => void
   /**
    * This editor's content needs the **wide** side sheet.
@@ -252,10 +257,12 @@ interface CellEditorSurfaceProps {
  * The one surface every cell editor opens in: a floating popover on a desk, a bottom sheet on a
  * phone held upright, a right-hand sheet where the viewport is short.
  *
- * Written once rather than five times — the four cell editors plus the marquee's typed field —
- * because they are deliberately *one kind of thing*: `CellEntryPopover`'s docblock says the typed
- * field is drawn the way the cell editors are drawn, so that pressing Enter and clicking a cell
- * read as the same event. That invariant is only kept if the fold happens in one place.
+ * Written once rather than four times, for the four cell editors — `SliderCell`, `PositionCell`,
+ * `SettingCell`, and `ColourCell` through `ColourPickerPopover`. There was a fifth, the marquee's
+ * own typed-value field (`CellEntryPopover`), drawn through this surface precisely so that Enter
+ * and a click would produce the same picture. It is deleted: the keyboard now opens the cell's
+ * *own* editor, which is the stronger form of that argument — one editor per column rather than
+ * two that have to be kept looking alike. See §The programmer's keyboard in CLAUDE.md.
  *
  * The two sheet forms share a component so a rotation between them cannot be the moment one of
  * them grows a rule the other has not got; the popover is its own branch so that a desk pays for
@@ -266,7 +273,6 @@ export function CellEditorSurface({
   onOpenChange,
   title,
   trigger,
-  anchor,
   contentClassName,
   align = 'start',
   onOpenAutoFocus,
@@ -294,19 +300,6 @@ export function CellEditorSurface({
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       {trigger != null && <PopoverTrigger asChild>{trigger}</PopoverTrigger>}
-      {trigger == null && (
-        <PopoverAnchor asChild>
-          <div
-            aria-hidden
-            className="pointer-events-none fixed"
-            style={
-              anchor
-                ? { left: anchor.left, top: anchor.top, width: anchor.width, height: anchor.height }
-                : { left: 16, top: 16, width: 0, height: 0 }
-            }
-          />
-        </PopoverAnchor>
-      )}
       <PopoverContent
         data-cell-editor-surface="popover"
         align={align}

@@ -11,12 +11,10 @@ import { usePersistentState } from '../../hooks/usePersistentState'
 import { useCellSelection } from './useCellSelection'
 import { useProgrammerScope } from '../programmer/ProgrammerScope'
 import { useFocusedTemplateLayer } from '../programmer/FocusedTemplateLayer'
-import { CellEntryPopover } from './CellEntryPopover'
 import {
-  cellEntryHint,
   cellKeyboardPermission,
   marqueeOwnsKeyTarget,
-  parseCellEntry,
+  orderedSelectedCells,
 } from './cellEntry'
 import { resolutionPropertyNames } from './columns'
 import type { CellRef } from './cellSelectionModel'
@@ -43,6 +41,7 @@ import {
   targetEmitters,
   templateTargetsFor,
 } from './rowModel'
+import { buildRowCells } from './useRowValues'
 import { isEditableTarget } from '../../lib/domUtils'
 import { useIncludeSelectionRequest } from '../../store/includeSelection'
 import {
@@ -467,99 +466,101 @@ export function FixturesListContainer({
 
   // ── The keyboard half of the marquee ──────────────────────────────────────────────────────
   //
-  // Select cells, press Enter (or a digit), type, press Enter: the value lands on every selected
-  // cell through `commitToCells`. The editor is a popover anchored at the first selected cell —
-  // the same picture a click on a cell inside the marquee opens — and the selection bar's hint says
-  // Enter opens it. The window handler below opens it and seeds it; it does nothing else.
+  // Select cells, press Enter (or just start typing): the cell editor for the first selected cell
+  // opens, focused on its first field, and what it commits lands on every selected cell through
+  // `commitToCells`. There is no second editor any more — see `cellEntry.ts` for what was deleted
+  // and why one column's editor is the right answer for a selection that spans several. The window
+  // handler below names the cell and seeds it; it does nothing else.
   //
   // **The scope gate is `cellKeyboardPermission`**, and it is the fourth place "read-only" has to
   // be said (see CLAUDE.md §The programmer's scoped grid): the marquee arms in Output and on a
   // focused template layer too, and `useCellWriters` would take a commit from either as a live
-  // write. Both keys read the same answer, and the field is simply not rendered where Enter would
-  // be refused, so the hint beside it cannot promise a key that does nothing.
+  // write. Both keys read the same answer, and no editor is opened where Enter would be refused,
+  // so the hint beside it cannot promise a key that does nothing.
   const focusedTemplate = useFocusedTemplateLayer()
   const keys = cellKeyboardPermission(scope, focusedTemplate != null)
   // Whether the table's marquee is mid-gesture. Kept here rather than in the table because the
   // only consumer is a *toolbar* — a sibling above the rows, which `renderToolbar` builds — and
   // the table sets it twice a drag, so nothing renders at pointer rate for it.
   const [marqueeDragging, setMarqueeDragging] = useState(false)
-  const [entryOpen, setEntryOpen] = useState(false)
-  const [entryAnchor, setEntryAnchor] = useState<{
-    left: number
-    top: number
-    width: number
-    height: number
+  /**
+   * The cell whose editor the keyboard has asked for — a one-shot handed to `FixturesTable`, which
+   * folds it into the same signal a released marquee uses. `seed` is the character that opened it,
+   * `''` for a bare Enter.
+   *
+   * Dropped on the commit after it is set, for `autoOpenCell`'s reason and one of its own: the
+   * request names a cell by `(rowId, col)`, and a request left standing would re-open that editor
+   * the next time the row it names is re-rendered into the virtualiser's window.
+   */
+  const [keyboardOpen, setKeyboardOpen] = useState<{
+    rowId: RowId
+    col: ColumnKey
+    seed: string
   } | null>(null)
-  const [entryText, setEntryText] = useState('')
-  const [entryProblem, setEntryProblem] = useState<'unreadable' | 'nowhere' | null>(null)
-  const entryHint = useMemo(
-    () => cellEntryHint([...new Set(cellSelection.cells.map((c) => c.col))]),
-    [cellSelection.cells],
-  )
-  // A new marquee is a new question; text typed for the last one must not land on this one.
-  // Keyed on the cells' *contents*, not their count and not the array's identity: a replace-marquee
-  // of the same size over other cells is a new set with the same `cellCount`, while the `cells`
-  // array is rebuilt on every `rows` rebuild — each filter keystroke, and under Lit every head that
-  // crosses zero while an effect runs — and wiping a half-typed value on those would be a bug of
-  // its own. The signature changes exactly when the set does.
-  const cellsSignature = useMemo(
-    () => cellSelection.cells.map((cell) => `${cell.rowId}\u0000${cell.col}`).join('\n'),
-    [cellSelection.cells],
-  )
   useEffect(() => {
-    setEntryText('')
-    setEntryProblem(null)
-    setEntryOpen(false)
-  }, [cellsSignature])
+    if (keyboardOpen) setKeyboardOpen(null)
+  }, [keyboardOpen])
 
   /**
-   * Open the editor at the first selected cell in visible order, seeded with whatever key opened
-   * it. The cell is found by `(rowId, col)` through the `data-row-id` / `data-cell` attributes the
-   * table puts on its rows — the container knows cells only by id, and the rows are virtualised —
-   * and a cell that is scrolled out of the rendered window anchors the popover at the grid's top
-   * instead of not opening.
+   * Open the editor for the first selected cell in display order **that has one**, carrying
+   * whatever character opened it.
+   *
+   * The "that has one" is not a nicety. A marquee is geometric, so a rectangle drawn across a rig
+   * of mixed heads covers Colour cells on dimmer-only pars and Position cells on everything that
+   * cannot move — and taking the display-first cell flatly would leave Enter doing nothing on a
+   * perfectly ordinary selection. `buildRowCells` omits a column a row resolves nothing for, which
+   * is the same answer the grid draws by, and it is memoised per row here because the search stops
+   * at the first hit and usually never leaves the top row.
+   *
+   * Opening one column's editor for a selection that spans several is not a narrowing — see
+   * `cellEntry.ts` and `commitToCells`.
+   *
+   * **A cell that is not on screen is scrolled to rather than opened.** The rows are virtualised,
+   * so an operator who selects cells, scrolls away and then presses Enter names a row that no
+   * `RowView` is mounted for — and the request, being a one-shot the table drops on the very next
+   * commit, would be swallowed in silence. It cannot simply be held until the row mounts: that is
+   * precisely the standing signal `autoOpenCell` is a one-shot to avoid, which would spring an
+   * editor open minutes later on an unrelated scroll. Nor can the two be done in one press: the
+   * virtualiser learns its new offset from a *scroll event*, so the row is a commit or two behind
+   * the request whatever order they are issued in. So the first press brings the cell into view
+   * and the second opens it — visibly doing something, which is the part that was missing.
    */
-  const openEntry = useCallback(
+  const openCellEditor = useCallback(
     (seed: string) => {
-      const cells = cellSelection.cells
-      const first =
-        rows.map((row) => cells.find((cell) => cell.rowId === row.id)).find((cell) => cell != null) ??
-        cells[0]
-      const el = first
-        ? document.querySelector(
-            `[data-row-id="${CSS.escape(first.rowId)}"] [data-cell="${CSS.escape(first.col)}"]`,
-          )
-        : null
-      const rect = el?.getBoundingClientRect()
-      setEntryAnchor(
-        rect ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height } : null,
+      const ordered = orderedSelectedCells(
+        cellSelection.cells,
+        rows.map((row) => row.id),
+        visibleColumns,
       )
-      setEntryText(seed)
-      setEntryProblem(null)
-      setEntryOpen(true)
+      const rowById = new Map(rows.map((row) => [row.id, row]))
+      const editableCols = new Map<RowId, ReadonlySet<ColumnKey>>()
+      const first = ordered.find((cell) => {
+        let cols = editableCols.get(cell.rowId)
+        if (!cols) {
+          const row = rowById.get(cell.rowId)
+          cols = new Set(
+            row == null || row.kind === 'divider'
+              ? []
+              : buildRowCells(row, visibleColumns).map((rowCell) => rowCell.col),
+          )
+          editableCols.set(cell.rowId, cols)
+        }
+        return cols.has(cell.col)
+      })
+      if (!first) return
+      // The DOM is the only thing that knows what the virtualiser rendered, and `data-row-id` is
+      // the grid's own addressing contract — the same attribute `marqueeOwnsKeyTarget` reads,
+      // walked the other way. Asked rather than always scrolling, because recentring the list
+      // under an operator who pressed Enter on a cell they were already looking at is worse than
+      // the problem.
+      if (document.querySelector(`[data-row-id="${CSS.escape(first.rowId)}"]`) == null) {
+        setScrollToRowId(first.rowId)
+        return
+      }
+      setKeyboardOpen({ rowId: first.rowId, col: first.col, seed })
     },
-    [cellSelection.cells, rows],
+    [cellSelection.cells, rows, visibleColumns],
   )
-
-  const submitEntry = useCallback(() => {
-    if (!keys.entry) return
-    const commit = parseCellEntry(entryText)
-    if (commit == null) {
-      setEntryProblem('unreadable')
-      return
-    }
-    if (commitToCells(commit) === 0) {
-      // Parsed, planned, and fitted nothing — `127` at a colour-only marquee. Said, and the text
-      // kept, rather than cleared as though it had landed.
-      setEntryProblem('nowhere')
-      return
-    }
-    // Applied: the editor closes, the way a spreadsheet's does, and the marquee stays so a second
-    // Enter can open it again for the next value.
-    setEntryText('')
-    setEntryProblem(null)
-    setEntryOpen(false)
-  }, [keys.entry, entryText, commitToCells])
 
   /**
    * Backspace / Delete on a marquee: take the selected cells out of Local — the spreadsheet's
@@ -839,12 +840,17 @@ export function FixturesListContainer({
         } else if (e.key === 'Enter') {
           if (!canTypeCells) return
           e.preventDefault()
-          openEntry('')
+          openCellEditor('')
           return
-        } else if (/^[0-9#.,]$/.test(e.key)) {
+        } else if (/^[0-9a-z.]$/i.test(e.key)) {
+          // A digit or a dot is the start of a number, and a letter is the start of a gobo
+          // wheel's type-ahead — so the character that opens an editor is anything a field on the
+          // other side could want, and each editor takes the ones it can use (`numericSeed`).
+          // `#` and `,` went with the typed-value grammar: there is no hex to start, and comma is
+          // now the step-to-the-next-field key *inside* an editor.
           if (!canTypeCells) return
           e.preventDefault()
-          openEntry(e.key)
+          openCellEditor(e.key)
           return
         } else if (e.key === 'Backspace' || e.key === 'Delete') {
           if (canClearCells) {
@@ -895,11 +901,11 @@ export function FixturesListContainer({
     // and `writers`, so it rebinds on every marquee change, a filter or expansion change, and a
     // scope change — more often than `cellCount` — because the alternative is reading the current
     // selection through a ref inside a handler that also has to plan writes against `rows`, and a
-    // rebind is cheaper than that second copy of the state. `openEntry` follows the same cadence
+    // rebind is cheaper than that second copy of the state. `openCellEditor` follows the same cadence
     // for the same reason. `canTypeCells` is a boolean, and `isCellSelected` is stable for the
     // mount — it reads `useCellSelection`'s own ref, which is why the marquee test above costs
     // this listener no extra rebinds.
-  }, [selection, selectableOrder, cellCount, clearByLadder, canClearCells, canTypeCells, clearSelectedCells, isCellSelected, openEntry])
+  }, [selection, selectableOrder, cellCount, clearByLadder, canClearCells, canTypeCells, clearSelectedCells, isCellSelected, openCellEditor])
 
   if (fixturesLoading || groupsLoading) {
     return <div>Loading...</div>
@@ -954,32 +960,11 @@ export function FixturesListContainer({
       />
     ) : null
 
-  const cellEntryControl = (
-    <CellEntryPopover
-      open={entryOpen && cellCount > 0 && keys.entry}
-      onOpenChange={(next) => {
-        if (!next) setEntryOpen(false)
-      }}
-      anchor={entryAnchor}
-      value={entryText}
-      onChange={(next) => {
-        setEntryText(next)
-        setEntryProblem(null)
-      }}
-      onSubmit={submitEntry}
-      hint={entryHint}
-      problem={entryProblem}
-      // Write resolutions, not cells — the same number the slider editor shows for the marquee.
-      count={marqueeBatchCount}
-    />
-  )
-
   return (
     // `space-y-3` only off `fill`. The programmer's grid runs edge to edge under a 22px footer
     // that has to sit hard against the table's own border, and a rhythm applied to every child
     // would push a 12px gap under it.
     <div className={cn(fill ? 'flex min-h-0 flex-1 flex-col' : 'space-y-3')}>
-      {cellEntryControl}
       {renderToolbar ? (
         renderToolbar({
           filter: filterControl,
@@ -1036,6 +1021,7 @@ export function FixturesListContainer({
           // claimed. Both selections, because either is enough to keep an editor honest.
           selectionEmpty={selection.count === 0 && cellCount === 0}
           cellSelection={showOwnership ? cellSelection : undefined}
+          keyboardOpen={keyboardOpen}
           onMarqueeDragChange={setMarqueeDragging}
           onBackgroundClick={clearByLadder}
         />

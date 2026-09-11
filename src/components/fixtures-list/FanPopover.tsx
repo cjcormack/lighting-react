@@ -1,13 +1,15 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { RgbColorPicker, type RgbColor } from 'react-colorful'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Slider } from '@/components/ui/slider'
+import { useNumberFieldDraft } from '@/hooks/useNumberFieldDraft'
 import { GitCommitHorizontal } from 'lucide-react'
 import { COLUMN_DEFS } from './columns'
 import { fanColours, fanValues } from './fanMath'
 import { clampCommitToResolution, planBatchWrites } from './rowModel'
+import { useCellEditorKeyboard } from './cells/useCellEditorKeyboard'
+import { ValueFieldRow } from './cells/ValueFieldRow'
 import { applyPlannedWrite, useCellWriters } from './useCellWriters'
 import { useFocusedTemplateLayer } from '../programmer/FocusedTemplateLayer'
 import type { ColumnKey } from './columns'
@@ -75,7 +77,7 @@ export function FanPopover({ targets, className }: FanPopoverProps) {
   const readOnlyScope = focusedTemplate != null
   const canFan = !readOnlyScope && columnPlans.some((plan) => plan.planned.length >= 2)
 
-  const apply = () => {
+  const apply = useCallback(() => {
     if (!activePlan) return
     // Fan across the planned writes (same path as cell edits), so a target
     // without the property doesn't leave a hole in the gradient.
@@ -101,7 +103,35 @@ export function FanPopover({ targets, className }: FanPopoverProps) {
       const commit = clampCommitToResolution({ kind: 'slider', value: values[i] }, write.resolution)
       applyPlannedWrite(writers, { ...write, commit })
     })
-  }
+  }, [activePlan, fromColour, fromValue, reverse, toColour, toValue, writers])
+
+  /**
+   * The fan's ends are typed as well as dragged, and the keyboard behaves as it does in a cell
+   * editor: comma steps From → To, Enter applies. Shared with the four of them
+   * (`useCellEditorKeyboard`) rather than restated, because this is the same kind of panel — a set
+   * of values with a slider and a box each — and two spellings of one gesture is what the
+   * typed-value popover was.
+   *
+   * Enter *applies* rather than merely closing, unlike a cell editor's: a fan is the one value
+   * panel on this grid that does not write as it is edited, so there is a press to stand in for.
+   * And it takes no focus, alone among the panels that use this hook: a fan's first question is
+   * *which column*, and jumping to the From box would skip the chooser that decides what From
+   * means.
+   */
+  const { contentRef, onKeyDown } = useCellEditorKeyboard({
+    autoFocus: false,
+    onDone: () => {
+      if (plannedCount < 2) return
+      apply()
+      setIsOpen(false)
+    },
+  })
+
+  // A fan's ends are plain numbers held here until Apply, but the retype trap is the same one
+  // every live field has — `Number('')` is 0, so an emptied box would silently move the end to
+  // black before the first digit of its replacement arrived.
+  const fromDraft = useNumberFieldDraft(String(fromValue), (n) => setFromValue(clampByte(n)))
+  const toDraft = useNumberFieldDraft(String(toValue), (n) => setToValue(clampByte(n)))
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -121,78 +151,86 @@ export function FanPopover({ targets, className }: FanPopoverProps) {
           <span className="hidden sm:inline">Fan</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto space-y-3" align="end">
-        <p className="text-xs text-muted-foreground">
-          Spread first→last across {plannedCount} target{plannedCount === 1 ? '' : 's'}
-        </p>
-        <div className="flex items-center gap-2">
-          <Select value={activePlan?.col ?? column} onValueChange={(v) => setColumn(v as ColumnKey)}>
-            <SelectTrigger size="sm" className="w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {columnPlans.map(({ col, label }) => (
-                <SelectItem key={col} value={col}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <label className="flex items-center gap-1.5 text-xs">
-            <input
-              type="checkbox"
-              checked={reverse}
-              onChange={(e) => setReverse(e.target.checked)}
-              className="size-3.5 accent-primary"
-            />
-            Reverse
-          </label>
-        </div>
+      <PopoverContent className="w-auto" align="end">
+        <div ref={contentRef} onKeyDown={onKeyDown} className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Spread first→last across {plannedCount} target{plannedCount === 1 ? '' : 's'}
+          </p>
+          <div className="flex items-center gap-2">
+            <Select value={activePlan?.col ?? column} onValueChange={(v) => setColumn(v as ColumnKey)}>
+              <SelectTrigger size="sm" className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {columnPlans.map(({ col, label }) => (
+                  <SelectItem key={col} value={col}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <label className="flex items-center gap-1.5 text-xs">
+              <input
+                type="checkbox"
+                checked={reverse}
+                onChange={(e) => setReverse(e.target.checked)}
+                className="size-3.5 accent-primary"
+              />
+              Reverse
+            </label>
+          </div>
 
-        {activePlan?.col === 'colour' ? (
-          <div className="flex gap-4">
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">From</p>
-              <RgbColorPicker
-                color={fromColour}
-                onChange={setFromColour}
-                style={{ width: 150, height: 120 }}
+          {activePlan?.col === 'colour' ? (
+            <div className="flex gap-4">
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">From</p>
+                <RgbColorPicker
+                  color={fromColour}
+                  onChange={setFromColour}
+                  style={{ width: 150, height: 120 }}
+                />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">To</p>
+                <RgbColorPicker
+                  color={toColour}
+                  onChange={setToColour}
+                  style={{ width: 150, height: 120 }}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="w-72 space-y-3">
+              <ValueFieldRow
+                label="From"
+                min={0}
+                max={255}
+                value={fromValue}
+                draft={fromDraft}
+                onSlide={setFromValue}
+              />
+              <ValueFieldRow
+                label="To"
+                min={0}
+                max={255}
+                value={toValue}
+                draft={toDraft}
+                onSlide={setToValue}
               />
             </div>
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">To</p>
-              <RgbColorPicker
-                color={toColour}
-                onChange={setToColour}
-                style={{ width: 150, height: 120 }}
-              />
-            </div>
-          </div>
-        ) : (
-          <div className="w-72 space-y-3">
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>From</span>
-                <span className="tabular-nums">{fromValue}</span>
-              </div>
-              <Slider min={0} max={255} step={1} value={[fromValue]} onValueChange={([v]) => setFromValue(v)} />
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>To</span>
-                <span className="tabular-nums">{toValue}</span>
-              </div>
-              <Slider min={0} max={255} step={1} value={[toValue]} onValueChange={([v]) => setToValue(v)} />
-            </div>
-          </div>
-        )}
+          )}
 
-        <div className="flex justify-end">
-          <Button size="sm" onClick={apply} disabled={plannedCount < 2}>
-            Apply
-          </Button>
+          <div className="flex justify-end">
+            <Button size="sm" onClick={apply} disabled={plannedCount < 2}>
+              Apply
+            </Button>
+          </div>
         </div>
       </PopoverContent>
     </Popover>
   )
+}
+
+function clampByte(raw: number): number {
+  return Math.max(0, Math.min(255, Math.round(raw)))
 }

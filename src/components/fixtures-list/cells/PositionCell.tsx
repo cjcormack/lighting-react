@@ -1,11 +1,13 @@
-import { memo } from 'react'
-import { Slider } from '@/components/ui/slider'
+import { memo, useCallback, useEffect, useRef } from 'react'
+import { useNumberFieldDraft } from '@/hooks/useNumberFieldDraft'
 import type { CellResolution } from '../columns'
 import type { CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
 import { CellEditorSurface } from './CellEditorSurface'
 import { UNSET_CELL_TITLE, UnsetCellMark } from './UnsetCellMark'
+import { numericSeed, useCellEditorKeyboard } from './useCellEditorKeyboard'
 import { useCellEditorOpen } from './useCellEditorOpen'
+import { ValueFieldRow } from './ValueFieldRow'
 
 interface PositionCellProps {
   value: Extract<CellValue, { kind: 'position' }>
@@ -27,6 +29,12 @@ interface PositionCellProps {
    */
   autoOpen?: boolean
   /**
+   * The auto-open came from a character typed at the grid, which lands in Pan as its first
+   * keystroke. Focus is not its business — Pan is focused however the editor was opened. See
+   * `useCellEditorKeyboard`.
+   */
+  keyboardSeed?: string | null
+  /**
    * Nothing is selected any more, so this editor's targets are gone with it — close.
    * See `useCellEditorOpen`.
    */
@@ -36,9 +44,14 @@ interface PositionCellProps {
 }
 
 /**
- * Mini crosshair pad + pan/tilt readout; edit via pan/tilt sliders in the shared cell-editor
- * surface, committing continuously. Writes drive the coarse channels only (fine
- * channels fold into the column and are left untouched).
+ * Mini crosshair pad + pan/tilt readout; edit via pan/tilt sliders **and typed fields** in the
+ * shared cell-editor surface, committing continuously. Writes drive the coarse channels only
+ * (fine channels fold into the column and are left untouched).
+ *
+ * The two fields are what `pan,tilt` used to be: the deleted typed-value popover could take a
+ * position as one line of text, and this editor could not take one at all — only a drag. So the
+ * pair came here, as the *gesture* rather than the grammar: Pan is focused when the editor is
+ * opened from the keyboard, comma steps to Tilt, Enter is done.
  */
 export const PositionCell = memo(function PositionCell({
   value,
@@ -48,18 +61,64 @@ export const PositionCell = memo(function PositionCell({
   placeholder,
   disabled = false,
   autoOpen,
+  keyboardSeed,
   selectionEmpty,
   onCommit,
   onBeginEdit,
 }: PositionCellProps) {
-  // Controlled since `PD-POPUP-AFTER-DRAG`: a released marquee has to be able to open this from
-  // outside, which an uncontrolled Radix popover offers no door for.
-  const { isOpen, setOpen } = useCellEditorOpen({ autoOpen, disabled, selectionEmpty })
   const first = resolutions[0]
   const ranges =
     first.kind === 'position'
       ? { panMin: first.panMin, panMax: first.panMax, tiltMin: first.tiltMin, tiltMax: first.tiltMax }
       : { panMin: 0, panMax: 255, tiltMin: 0, tiltMax: 255 }
+
+  // Per-axis, exactly as the sliders are: sending the row's aggregate for the axis that did not
+  // move would overwrite every batch target's value for it with one number.
+  const commitPan = useCallback(
+    (raw: number) =>
+      onCommit({
+        kind: 'position',
+        pan: Math.max(ranges.panMin, Math.min(ranges.panMax, Math.round(raw))),
+      }),
+    [onCommit, ranges.panMin, ranges.panMax],
+  )
+  const commitTilt = useCallback(
+    (raw: number) =>
+      onCommit({
+        kind: 'position',
+        tilt: Math.max(ranges.tiltMin, Math.min(ranges.tiltMax, Math.round(raw))),
+      }),
+    [onCommit, ranges.tiltMin, ranges.tiltMax],
+  )
+  // `useNumberFieldDraft` owns the "an emptied box must not commit" rule; the clamp above stays
+  // here, because a position's bounds come from its resolution rather than being a flat byte.
+  const panDraft = useNumberFieldDraft(String(value.pan), commitPan)
+  const tiltDraft = useNumberFieldDraft(String(value.tilt), commitTilt)
+  const resetDrafts = useCallback(() => {
+    panDraft.reset()
+    tiltDraft.reset()
+  }, [panDraft, tiltDraft])
+
+  // Controlled since `PD-POPUP-AFTER-DRAG`: a released marquee has to be able to open this from
+  // outside, which an uncontrolled Radix popover offers no door for.
+  const { isOpen, setOpen, keyboardOpen } = useCellEditorOpen({
+    autoOpen,
+    keyboardSeed,
+    disabled,
+    selectionEmpty,
+    onOpen: resetDrafts,
+  })
+  const { contentRef, onKeyDown, onOpenAutoFocus } = useCellEditorKeyboard({
+    onDone: () => setOpen(false),
+  })
+  // The character that opened the editor lands in Pan as though it had been typed there. Through a
+  // ref so the effect depends on the open alone — see `SliderCell`, which does the same.
+  const panDraftRef = useRef(panDraft)
+  panDraftRef.current = panDraft
+  useEffect(() => {
+    const seed = numericSeed(keyboardOpen)
+    if (seed) panDraftRef.current.onChange(seed)
+  }, [keyboardOpen])
 
   return (
     <CellEditorSurface
@@ -69,7 +128,8 @@ export const PositionCell = memo(function PositionCell({
         if (open) onBeginEdit()
       }}
       title={label}
-      contentClassName="w-64 space-y-3"
+      contentClassName="w-64"
+      onOpenAutoFocus={onOpenAutoFocus}
       trigger={
         <button
           type="button"
@@ -98,35 +158,27 @@ export const PositionCell = memo(function PositionCell({
         </button>
       }
     >
-      {batchCount > 1 && (
-        <p className="text-xs text-muted-foreground">Applying to {batchCount} targets</p>
-      )}
-      <div className="space-y-1">
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>Pan</span>
-          <span className="tabular-nums">{value.pan}</span>
-        </div>
-        <Slider
+      {/* The wrapper is the editor's keyboard: Enter closes, comma steps Pan → Tilt, and a
+          keyboard-opened editor focuses Pan. See `useCellEditorKeyboard`. */}
+      <div ref={contentRef} onKeyDown={onKeyDown} className="space-y-3">
+        {batchCount > 1 && (
+          <p className="text-xs text-muted-foreground">Applying to {batchCount} targets</p>
+        )}
+        <ValueFieldRow
+          label="Pan"
           min={ranges.panMin}
           max={ranges.panMax}
-          step={1}
-          value={[value.pan]}
-          // Per-axis commit: sending the row's aggregate tilt alongside
-          // would overwrite every batch target's tilt with one value.
-          onValueChange={([pan]) => onCommit({ kind: 'position', pan })}
+          value={value.pan}
+          draft={panDraft}
+          onSlide={commitPan}
         />
-      </div>
-      <div className="space-y-1">
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>Tilt</span>
-          <span className="tabular-nums">{value.tilt}</span>
-        </div>
-        <Slider
+        <ValueFieldRow
+          label="Tilt"
           min={ranges.tiltMin}
           max={ranges.tiltMax}
-          step={1}
-          value={[value.tilt]}
-          onValueChange={([tilt]) => onCommit({ kind: 'position', tilt })}
+          value={value.tilt}
+          draft={tiltDraft}
+          onSlide={commitTilt}
         />
       </div>
     </CellEditorSurface>

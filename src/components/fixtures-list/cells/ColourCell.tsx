@@ -27,6 +27,12 @@ interface ColourCellProps {
    */
   autoOpen?: boolean
   /**
+   * The auto-open came from a character typed at the grid, which lands in the R box as its first
+   * keystroke. Focus is not its business — R is focused however the editor was opened. See
+   * `useCellEditorKeyboard`.
+   */
+  keyboardSeed?: string | null
+  /**
    * Nothing is selected any more, so this editor's targets are gone with it — close.
    * See `useCellEditorOpen`.
    */
@@ -49,13 +55,19 @@ export const ColourCell = memo(function ColourCell({
   placeholder,
   disabled = false,
   autoOpen,
+  keyboardSeed,
   selectionEmpty,
   onCommit,
   onBeginEdit,
 }: ColourCellProps) {
   // Driven from here since `PD-POPUP-AFTER-DRAG`: the picker keeps its own state when no `open` is
   // passed, and the other two call sites still leave it to.
-  const { isOpen, setOpen } = useCellEditorOpen({ autoOpen, disabled, selectionEmpty })
+  const { isOpen, setOpen, keyboardOpen } = useCellEditorOpen({
+    autoOpen,
+    keyboardSeed,
+    disabled,
+    selectionEmpty,
+  })
   // The colour editor is the only one of the four tall enough to run out of room, so it alone has
   // a compact layout. Keyed on the viewport's **height** rather than on which form it is in: a
   // short desktop window is still a popover, and there the full layout clips off the top of the
@@ -93,6 +105,9 @@ export const ColourCell = memo(function ColourCell({
       sheetWhenNarrow
       title={label}
       compact={compact}
+      // R is focused on open and Enter closes; a character typed at the grid arrives there as its
+      // first keystroke, which is all this carries. See `useCellEditorKeyboard`.
+      keyboardOpen={keyboardOpen}
       onColourChange={(r, g, b, w, a, uv) => onCommit({ kind: 'colour', r, g, b, w, a, uv })}
     >
       <button
