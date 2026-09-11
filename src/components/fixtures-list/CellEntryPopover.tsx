@@ -1,17 +1,19 @@
 import { useEffect, useRef } from 'react'
-import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { CellEditorSurface } from './cells/CellEditorSurface'
 
 /**
  * The typed-value editor for a cell selection — the keyboard half of the marquee, drawn the way the
  * cell editors are drawn.
  *
  * Opened by Enter (or a digit) from the grid and **anchored at the first selected cell**, in the
- * same popover, at the same size, with the same "Applying to N targets" line the slider editor
+ * same surface, at the same size, with the same "Applying to N targets" line the slider editor
  * opens with — so the operator sees one kind of thing happen whether they clicked a cell or
- * pressed Enter. It replaced a small input in the selection bar, which was too far from the cells
- * and too quiet to read as "this is where your keystrokes are going".
+ * pressed Enter. That is what makes it `CellEditorSurface`'s rather than a popover of its own:
+ * where a cell editor folds to a bottom sheet, so does this, or the two gestures stop matching.
+ * It replaced a small input in the selection bar, which was too far from the cells and too quiet
+ * to read as "this is where your keystrokes are going".
  *
  * Enter applies and closes, Escape closes, and a value that could not be read or fitted nothing
  * stays in the field with the reason on it. Controlled from the container because the container
@@ -20,7 +22,9 @@ import { cn } from '@/lib/utils'
  * The anchor is a fixed-position box over the cell's measured rect rather than the cell itself:
  * the rows are virtualised and belong to the table, and the container that owns this editor only
  * knows the cell by `(rowId, col)`. Radix positions against the box; it goes stale if the list
- * scrolls while open, and a click outside closes it then as always.
+ * scrolls while open, and a click outside closes it then as always. A bottom sheet ignores it —
+ * it is anchored to the screen — which also disposes of the staleness on the surface that has it
+ * worst, a phone.
  */
 export function CellEntryPopover({
   open,
@@ -67,50 +71,40 @@ export function CellEntryPopover({
         : hint
 
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverAnchor asChild>
-        <div
-          aria-hidden
-          className="pointer-events-none fixed"
-          style={
-            anchor
-              ? { left: anchor.left, top: anchor.top, width: anchor.width, height: anchor.height }
-              : { left: 16, top: 16, width: 0, height: 0 }
+    <CellEditorSurface
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Set value"
+      anchor={anchor}
+      contentClassName="w-64 space-y-3"
+      onOpenAutoFocus={(e) => {
+        e.preventDefault()
+        inputRef.current?.focus()
+      }}
+    >
+      <p className="text-xs text-muted-foreground">Applying to {count} targets</p>
+      <Input
+        ref={inputRef}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            onSubmit()
           }
-        />
-      </PopoverAnchor>
-      <PopoverContent
-        align="start"
-        className="w-64 space-y-3"
-        onOpenAutoFocus={(e) => {
-          e.preventDefault()
-          inputRef.current?.focus()
         }}
-      >
-        <p className="text-xs text-muted-foreground">Applying to {count} targets</p>
-        <Input
-          ref={inputRef}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              onSubmit()
-            }
-          }}
-          aria-label={`Value for ${count} selected cells`}
-          aria-invalid={problem != null || undefined}
-          spellCheck={false}
-          autoComplete="off"
-          className={cn(
-            'h-9 font-mono tabular-nums',
-            problem != null && 'border-destructive ring-1 ring-destructive/40',
-          )}
-        />
-        <p className={cn('text-[11px]', problem != null ? 'text-destructive' : 'text-muted-foreground')}>
-          {message}
-        </p>
-      </PopoverContent>
-    </Popover>
+        aria-label={`Value for ${count} selected cells`}
+        aria-invalid={problem != null || undefined}
+        spellCheck={false}
+        autoComplete="off"
+        className={cn(
+          'h-9 font-mono tabular-nums',
+          problem != null && 'border-destructive ring-1 ring-destructive/40',
+        )}
+      />
+      <p className={cn('text-[11px]', problem != null ? 'text-destructive' : 'text-muted-foreground')}>
+        {message}
+      </p>
+    </CellEditorSurface>
   )
 }

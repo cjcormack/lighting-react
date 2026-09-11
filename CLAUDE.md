@@ -828,6 +828,63 @@ because the operator already said which they meant by putting the heads where th
 colour inverse is a documented heuristic (fold the emitters back into RGB, policy `extract` when
 either was driven); it lives in one place, `templateRecord.kt`.
 
+### The cell editor's three forms
+
+**A cell editor is a popover on a desk, a bottom sheet on an upright phone, and a right-hand sheet
+where the viewport is short.** `components/fixtures-list/cells/CellEditorSurface.tsx` is the one
+place that decides, and all five editors go through it: the four value cells (`SliderCell`,
+`ColourCell` via `ColourPickerPopover`, `PositionCell`, `SettingCell`) and the marquee's typed field
+(`CellEntryPopover`). That sharing is the point rather than a saving — §The programmer's keyboard
+says Enter and a click must read as one kind of thing, and they only do if the fold happens once.
+
+Three rules, each of which was learned rather than designed:
+
+- **Short beats narrow.** A landscape phone matches both queries — 852×393 — and the bottom sheet is
+  the one shape that needs the vertical room a short viewport has not got. The width query is the
+  `sm` breakpoint the sheet primitive itself uses (`max-width: 639px`); the height one is the space
+  plan's own `max-height: 500px` fold, duplicated and pinned by `shortViewport.test.ts` like every
+  other site of that number.
+- **Width is the content's to ask for, and so is the compact layout.** `wide` on the surface is the
+  colour editor's alone — 35rem against 22rem for the other three, which looked absurd in that much
+  room. `useCellEditorCramped()` is a *separate* `max-height: 750px` question, because all three
+  forms can be short of height: below it the colour editor draws a two-column layout with its
+  emitter rows beside the picker. 750 and not 500 because **a popover must fit beside its cell, and
+  a cell can be any row**, so the room it really gets is about half the viewport — below ~725 there
+  is a band where neither side holds the full 357px editor, Radix flips it above the cell, and
+  `limitShift` then refuses to slide it back down because that would cover the anchor. It renders at
+  a negative `top` and the window clips it, silently. Found on a 852×524 screen, not by a test.
+- **"Is this a touch surface" is the form, never a `sm:` variant.** `SettingCell`'s option rows are
+  the one control that *is* the list, so they need a finger-sized height on both sheets and not in
+  the popover. A `sm:` variant says `min-width: 640px`, which is true of the landscape phone the
+  side sheet exists for — so the first version shrank the rows on the very surface they were added
+  for. Width cannot answer that question on this desk.
+
+Two things the sheets carry that a popover never needed. **The keyboard's bite** is measured from
+`visualViewport` and given back — the bottom sheet rises by it, the side sheet shortens — because a
+`position: fixed` sheet is laid out against the *layout* viewport, which does not shrink when iOS
+opens the keyboard, so a sheet holding a number field would slide neatly behind it. And the
+**safe-area inset is added to the side sheet's width rather than padded into it**: as padding alone
+it came off the content box and the colour picker no longer fitted, so the sheet scrolled sideways
+on whichever rotation puts the notch on that edge. `SheetContent`'s own `sm:max-w-sm` silently caps
+an inline width, so `maxWidth: 'none'` goes with it — the symptom of forgetting is a sheet that
+stays narrow and scrolls, which looks exactly like the width never being applied.
+
+**An editor closes when the selection it was opened for goes away** (`selectionEmpty`, threaded to
+`useCellEditorOpen`). Opening one on an unselected row selects that row, and opening one inside a
+marquee is the whole marquee's editor, so a Deselect used to leave an editor on screen still
+writing — to something narrower than its own "Applying to N targets" line had just claimed. It is
+**edge-triggered**, on the false→true crossing and not on the state, or a grid with no selection at
+all could never open one: the close would land in the effect immediately after the click that
+opened it, and the editor would flicker rather than fail in a way anyone could report. `undefined`
+is a third state meaning "the question does not arise", which is what `CueValueGrid` passes.
+
+**React bubbles synthetic events through portals**, and every cell editor is rendered from inside a
+row — so the grid's marquee saw a drag on the dimmer slider as a press on the grid, and selected
+cells under the operator while they were setting a value. `useCellMarquee`'s `onPointerDown` asks
+the DOM (`e.currentTarget.contains(e.target)`), which is the same guard the scroller's background
+`onClick` beside it already documented and this one was simply missing. Any new handler on the rows
+wrapper needs it too.
+
 ### The programmer's keyboard
 
 **The marquee has a keyboard.** Select cells, press Enter (or a digit), type, press Enter, and the
@@ -840,10 +897,15 @@ marquee sets the dimmers and leaves the colours alone. Two grammar traps its tes
 three-digit number is a level, not a short hex (`127` was matching `[0-9a-f]{3}`), and a percentage
 is scaled by integers (`50 * 2.55` is 127.49999… in floating point).
 
-The editor is a **popover anchored at the first selected cell** (`CellEntryPopover`, owned by the
-container, which finds the cell through the table's `data-row-id` / `data-cell` attributes) — the
-same picture, size and "Applying to N targets" line a click on a cell inside the marquee opens, so
-Enter and a click read as one kind of thing. It was a small input in the selection bar first, which
+The editor opens in **the same surface a cell editor opens in** (`CellEditorSurface` — see §The
+cell editor's three forms), which on a desk is a popover anchored at the first selected cell
+(`CellEntryPopover`, owned by the container, which finds the cell through the table's `data-row-id`
+/ `data-cell` attributes) and on a phone is the same sheet a tapped cell gives you. The anchor is
+simply ignored by a sheet, which is fixed to an edge of the screen. Same picture, same size, same
+"Applying to N targets" line a click on a cell inside the marquee opens, so Enter and a click read
+as one kind of thing — and that is *why* it goes through the shared surface rather than owning a
+popover of its own: if a tapped cell folds to a sheet and the typed field does not, the two
+gestures stop matching. It was a small input in the selection bar first, which
 was too far from the cells and too quiet to read as "this is where your keystrokes go"; the bar
 keeps only the key hints. Enter applies and closes; the marquee stays. **`cellKeyboardPermission`
 in `cellEntry.ts` is the scope gate**,

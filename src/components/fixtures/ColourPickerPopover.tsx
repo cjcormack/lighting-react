@@ -2,6 +2,8 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { RgbColorPicker, type RgbColor } from 'react-colorful'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Slider } from '@/components/ui/slider'
+import { CellEditorSurface } from '@/components/fixtures-list/cells/CellEditorSurface'
+import { cn } from '@/lib/utils'
 import { ChannelNumberInput } from './ChannelNumberInput'
 import { ExtendedChannelSlider } from './ExtendedChannelSlider'
 
@@ -47,6 +49,33 @@ interface ColourPickerPopoverProps {
    * whole reason the numbers had nowhere to be typed.
    */
   channelFields?: boolean
+  /**
+   * Open in the shared cell-editor surface, which folds to a bottom sheet at phone widths
+   * (`CellEditorSurface`) — instead of always being a floating popover.
+   *
+   * **Opt-in, and off by default**, on the same reasoning as [channelFields] and for the same two
+   * other callers. The fold exists because a grid cell's popover has nowhere good to sit on a
+   * 390px screen; `PropertyVisualizers` and `GroupPropertyVisualizers` open this from a page they
+   * already own the width of, beside their own always-visible channel bank, and a modal sheet over
+   * that bank would cover the very thing it is editing.
+   */
+  sheetWhenNarrow?: boolean
+  /** Titles the editor where it is a bottom sheet — required by [sheetWhenNarrow], unused without. */
+  title?: string
+  /**
+   * Spend less height: a shorter picker, tighter emitter rows, and no explanatory line.
+   *
+   * For any viewport too short to hold the full editor — a landscape phone's sheet leaves ~330px
+   * and a 524px-tall window's popover gets about half of that, against a full editor of ~430.
+   * Scrolling is the wrong answer for this one: every control here is live, so a hidden emitter
+   * slider is a channel the operator cannot see themselves driving; and a popover does not even
+   * scroll, it clips. The picker is the part that gives height up most cheaply, because the typed
+   * R/G/B boxes beside it say the same thing exactly.
+   *
+   * Set by `ColourCell` from `useCellEditorCramped()`, which is a height question rather than a
+   * form one — see that hook.
+   */
+  compact?: boolean
   /** The trigger element (swatch) */
   children: React.ReactNode
 }
@@ -96,6 +125,9 @@ export function ColourPickerPopover({
   open: controlledOpen,
   onOpenChange,
   channelFields = false,
+  sheetWhenNarrow = false,
+  title = 'Colour',
+  compact = false,
   children,
 }: ColourPickerPopoverProps) {
   // Radix owns the open state for an uncontrolled caller — `open` below is `undefined` for them,
@@ -231,68 +263,122 @@ export function ColourPickerPopover({
     uv: { has: hasUvChannel, value: channels.uv },
   }
 
+  const body = (
+    // Compact turns the column into a **wrapping row**, so the emitter sliders sit beside the
+    // picker instead of under it. That is the change that makes it fit: stacked, the editor is
+    // ~260px in the ~285px a landscape iPhone has left after Safari, and every trim that got it
+    // under was taking something away. Side by side it is the height of the picker alone. The
+    // wrap is what makes it one layout rather than two — a narrow sheet stacks it again, which is
+    // the portrait arrangement unchanged.
+    <div className={compact ? 'flex flex-wrap items-start gap-4' : 'space-y-3'}>
+      {notice}
+      {/* The picker leads and the numbers sit beside it: nobody thinks in bytes when they are
+          choosing a colour, and nobody wants a picker when they already know the number. The
+          numbers are opt-in — see `channelFields`. */}
+      {/* `react-colorful` sizes itself in CSS, and `index.css` already pins it — with `!important` —
+          so the compact size is a class defined beside those rules rather than a Tailwind arbitrary
+          variant, which would lose to them. It goes on the row that is here anyway rather than on a
+          wrapper of its own: this `body` is shared by all three callers, so a wrapper would have
+          added a bare `<div>` to the two property visualizers as a side effect of a change that is
+          none of their business. The row is an ancestor of `.react-colorful` either way.
+
+          The title sits here for the same reason, and reads better for it — it is about the picker
+          *and* the boxes beside it, which is precisely this row. */}
+      <div
+        className={cn('flex items-start gap-3', compact && 'colour-picker-compact')}
+        title={
+          channelFields && hasWhiteChannel
+            ? 'Pure white in the picker drives the white LED; the boxes set one channel each.'
+            : undefined
+        }
+      >
+        <RgbColorPicker color={pickerColor} onChange={handleColourChange} />
+        {channelFields && (
+          <div className={cn('w-20 shrink-0', compact ? 'space-y-2.5' : 'space-y-1.5')}>
+            <ChannelNumberInput label="R" value={channels.r} onChange={(v) => setChannel('r', v)} />
+            <ChannelNumberInput label="G" value={channels.g} onChange={(v) => setChannel('g', v)} />
+            <ChannelNumberInput label="B" value={channels.b} onChange={(v) => setChannel('b', v)} />
+          </div>
+        )}
+      </div>
+      {channelFields ? (
+        // Dropped when [compact], which is the one piece of guidance here rather than a control:
+        // it is also on the picker's own title, so it is moved rather than lost.
+        hasWhiteChannel &&
+        !compact && (
+          <p className="text-[11px] text-muted-foreground/60">
+            Pure white in the picker drives the white LED; the boxes set one channel each.
+          </p>
+        )
+      ) : (
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span className="font-mono">
+            R:{r} G:{g} B:{b}
+          </span>
+          {hasWhiteChannel && (
+            <span className="text-muted-foreground/60">White = use white LED</span>
+          )}
+        </div>
+      )}
+      {hasExtendedChannels && (
+        <div
+          className={cn(
+            compact
+              // `min-w` is the wrap threshold: below it the emitters drop under the picker rather
+              // than being squeezed to a slider nothing could drag. No rule, either — a border
+              // above a column that is *beside* its neighbour separates nothing.
+              ? 'min-w-[13rem] flex-1 space-y-3'
+              : 'space-y-2 border-t border-border pt-2',
+          )}
+        >
+          {EMITTERS.filter(({ key }) => emitters[key].has).map(({ key, label, tint }) =>
+            channelFields ? (
+              <EmitterRow
+                key={key}
+                label={label}
+                tint={tint}
+                value={emitters[key].value}
+                onChange={(v) => setChannel(key, v)}
+              />
+            ) : (
+              // The readout row the two property visualizers have always had. They own their
+              // own full channel bank outside this popover, so a field here would be a second
+              // live editor for the same byte — see `channelFields`.
+              <ExtendedChannelSlider
+                key={key}
+                label={label}
+                value={emitters[key].value}
+                onChange={(v) => setChannel(key, v)}
+                color={tint}
+              />
+            ),
+          )}
+        </div>
+      )}
+    </div>
+  )
+
+  if (sheetWhenNarrow) {
+    return (
+      <CellEditorSurface
+        open={controlledOpen}
+        onOpenChange={setIsOpen}
+        title={title}
+        contentClassName="w-auto"
+        trigger={children}
+        // Alone among the cell editors: see [compact], and `wide` on the surface.
+        wide
+      >
+        {body}
+      </CellEditorSurface>
+    )
+  }
+
   return (
     <Popover open={controlledOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent className="w-auto" align="start">
-        <div className="space-y-3">
-          {notice}
-          {/* The picker leads and the numbers sit beside it: nobody thinks in bytes when they are
-              choosing a colour, and nobody wants a picker when they already know the number. The
-              numbers are opt-in — see `channelFields`. */}
-          <div className="flex items-start gap-3">
-            <RgbColorPicker color={pickerColor} onChange={handleColourChange} />
-            {channelFields && (
-              <div className="w-20 shrink-0 space-y-1.5">
-                <ChannelNumberInput label="R" value={channels.r} onChange={(v) => setChannel('r', v)} />
-                <ChannelNumberInput label="G" value={channels.g} onChange={(v) => setChannel('g', v)} />
-                <ChannelNumberInput label="B" value={channels.b} onChange={(v) => setChannel('b', v)} />
-              </div>
-            )}
-          </div>
-          {channelFields ? (
-            hasWhiteChannel && (
-              <p className="text-[11px] text-muted-foreground/60">
-                Pure white in the picker drives the white LED; the boxes set one channel each.
-              </p>
-            )
-          ) : (
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span className="font-mono">
-                R:{r} G:{g} B:{b}
-              </span>
-              {hasWhiteChannel && (
-                <span className="text-muted-foreground/60">White = use white LED</span>
-              )}
-            </div>
-          )}
-          {hasExtendedChannels && (
-            <div className="space-y-2 pt-2 border-t border-border">
-              {EMITTERS.filter(({ key }) => emitters[key].has).map(({ key, label, tint }) =>
-                channelFields ? (
-                  <EmitterRow
-                    key={key}
-                    label={label}
-                    tint={tint}
-                    value={emitters[key].value}
-                    onChange={(v) => setChannel(key, v)}
-                  />
-                ) : (
-                  // The readout row the two property visualizers have always had. They own their
-                  // own full channel bank outside this popover, so a field here would be a second
-                  // live editor for the same byte — see `channelFields`.
-                  <ExtendedChannelSlider
-                    key={key}
-                    label={label}
-                    value={emitters[key].value}
-                    onChange={(v) => setChannel(key, v)}
-                    color={tint}
-                  />
-                ),
-              )}
-            </div>
-          )}
-        </div>
+        {body}
       </PopoverContent>
     </Popover>
   )

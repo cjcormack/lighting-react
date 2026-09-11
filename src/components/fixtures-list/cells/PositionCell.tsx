@@ -1,15 +1,17 @@
 import { memo } from 'react'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Slider } from '@/components/ui/slider'
 import type { CellResolution } from '../columns'
 import type { CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
+import { CellEditorSurface } from './CellEditorSurface'
 import { UNSET_CELL_TITLE, UnsetCellMark } from './UnsetCellMark'
 import { useCellEditorOpen } from './useCellEditorOpen'
 
 interface PositionCellProps {
   value: Extract<CellValue, { kind: 'position' }>
   resolutions: NonNullable<CellResolution>[]
+  /** The column's name, titling the editor where it is a bottom sheet. See `SliderCell`. */
+  label?: string
   batchCount: number
   /** No value in the current scope — see `UnsetCellMark`. */
   placeholder?: boolean
@@ -24,28 +26,35 @@ interface PositionCellProps {
    * See `useCellEditorOpen`.
    */
   autoOpen?: boolean
+  /**
+   * Nothing is selected any more, so this editor's targets are gone with it — close.
+   * See `useCellEditorOpen`.
+   */
+  selectionEmpty?: boolean
   onCommit: (commit: CellCommit) => void
   onBeginEdit: () => void
 }
 
 /**
- * Mini crosshair pad + pan/tilt readout; edit via popover pan/tilt sliders
- * committing continuously. Writes drive the coarse channels only (fine
+ * Mini crosshair pad + pan/tilt readout; edit via pan/tilt sliders in the shared cell-editor
+ * surface, committing continuously. Writes drive the coarse channels only (fine
  * channels fold into the column and are left untouched).
  */
 export const PositionCell = memo(function PositionCell({
   value,
   resolutions,
+  label = 'Position',
   batchCount,
   placeholder,
   disabled = false,
   autoOpen,
+  selectionEmpty,
   onCommit,
   onBeginEdit,
 }: PositionCellProps) {
   // Controlled since `PD-POPUP-AFTER-DRAG`: a released marquee has to be able to open this from
   // outside, which an uncontrolled Radix popover offers no door for.
-  const { isOpen, setOpen } = useCellEditorOpen({ autoOpen, disabled })
+  const { isOpen, setOpen } = useCellEditorOpen({ autoOpen, disabled, selectionEmpty })
   const first = resolutions[0]
   const ranges =
     first.kind === 'position'
@@ -53,14 +62,15 @@ export const PositionCell = memo(function PositionCell({
       : { panMin: 0, panMax: 255, tiltMin: 0, tiltMax: 255 }
 
   return (
-    <Popover
+    <CellEditorSurface
       open={isOpen}
       onOpenChange={(open) => {
         setOpen(open)
         if (open) onBeginEdit()
       }}
-    >
-      <PopoverTrigger asChild>
+      title={label}
+      contentClassName="w-64 space-y-3"
+      trigger={
         <button
           type="button"
           disabled={disabled}
@@ -86,40 +96,39 @@ export const PositionCell = memo(function PositionCell({
             </>
           )}
         </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-64 space-y-3" align="start">
-        {batchCount > 1 && (
-          <p className="text-xs text-muted-foreground">Applying to {batchCount} targets</p>
-        )}
-        <div className="space-y-1">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>Pan</span>
-            <span className="tabular-nums">{value.pan}</span>
-          </div>
-          <Slider
-            min={ranges.panMin}
-            max={ranges.panMax}
-            step={1}
-            value={[value.pan]}
-            // Per-axis commit: sending the row's aggregate tilt alongside
-            // would overwrite every batch target's tilt with one value.
-            onValueChange={([pan]) => onCommit({ kind: 'position', pan })}
-          />
+      }
+    >
+      {batchCount > 1 && (
+        <p className="text-xs text-muted-foreground">Applying to {batchCount} targets</p>
+      )}
+      <div className="space-y-1">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>Pan</span>
+          <span className="tabular-nums">{value.pan}</span>
         </div>
-        <div className="space-y-1">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>Tilt</span>
-            <span className="tabular-nums">{value.tilt}</span>
-          </div>
-          <Slider
-            min={ranges.tiltMin}
-            max={ranges.tiltMax}
-            step={1}
-            value={[value.tilt]}
-            onValueChange={([tilt]) => onCommit({ kind: 'position', tilt })}
-          />
+        <Slider
+          min={ranges.panMin}
+          max={ranges.panMax}
+          step={1}
+          value={[value.pan]}
+          // Per-axis commit: sending the row's aggregate tilt alongside
+          // would overwrite every batch target's tilt with one value.
+          onValueChange={([pan]) => onCommit({ kind: 'position', pan })}
+        />
+      </div>
+      <div className="space-y-1">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>Tilt</span>
+          <span className="tabular-nums">{value.tilt}</span>
         </div>
-      </PopoverContent>
-    </Popover>
+        <Slider
+          min={ranges.tiltMin}
+          max={ranges.tiltMax}
+          step={1}
+          value={[value.tilt]}
+          onValueChange={([tilt]) => onCommit({ kind: 'position', tilt })}
+        />
+      </div>
+    </CellEditorSurface>
   )
 })

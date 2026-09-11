@@ -178,7 +178,18 @@
 .react-colorful__hue {
   height: 12px !important;
   border-radius: var(--radius-sm);
-  margin-top: 12px;
+  /* The gap is smaller than it reads here: the round thumb below is 20px on a 12px bar, so it
+     overhangs by 4px at each end and eats a third of this margin. 16px is what leaves the hue
+     strip looking like a separate control from the saturation square above it.
+
+     **This rule is every picker's, deliberately**, and the selector is unscoped so that it stays
+     that way: the grid's cell editor, `fixtures/PropertyVisualizers` and its group twin through
+     `ColourPickerPopover`, plus `fx/ColourEditorBody`, `templates/TemplateEditor` and
+     `fixtures-list/FanPopover`, which mount `react-colorful` directly. The gap was equally tight in
+     all six and one app should not hold two answers to how far a hue strip sits from its square.
+     The cost is 4px off the saturation square, which `.react-colorful`'s `!important` height fixes
+     — checked in each of them, and invisible. Anything added here lands on all six: check them. */
+  margin-top: 16px;
 }
 
 .react-colorful__pointer {
@@ -186,6 +197,27 @@
   height: 20px;
   border: 2px solid white;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* The compact picker: the colour cell editor on any viewport too short for its full layout,
+   whichever of the three forms it is wearing (`useCellEditorCramped`). Here rather
+   than as a Tailwind arbitrary variant because the rules above are `!important` and would win —
+   and because a reader looking for the picker's size will look here. Height only: the width is
+   what keeps the hue bar draggable.
+
+   11rem is what the height budget allows, not a guess: the compact editor puts its emitter rows
+   beside the picker (they wrap back under it when there is no width), so the picker alone is the
+   editor's height, and a landscape iPhone leaves ~236px of sheet body after Safari and the header.
+   Raising it past ~13rem starts to scroll again on the shortest screens this runs on.
+
+   The hue bar goes the other way and grows. 12px is a mouse's target; this is the one arm that is
+   always a thumb. */
+.colour-picker-compact .react-colorful {
+  height: 11rem !important;
+}
+
+.colour-picker-compact .react-colorful__hue {
+  height: 20px !important;
 }
 
 /* Cue slot edit mode wiggle animation */

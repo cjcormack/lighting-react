@@ -6,15 +6,11 @@ import { cn } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
 import { describeCellScope, type CellRef } from '@/components/fixtures-list/cellSelectionModel'
-import { cellFamilies, COLUMN_DEFS, type ColumnKey } from '@/components/fixtures-list/columns'
+import { cellFamilies, columnLabel } from '@/components/fixtures-list/columns'
 import { PHONE_FOLDED_CLASS } from '@/components/fixtures-list/SelectionToolbar'
 import { TemplateStrip } from './TemplateStrip'
 import { selectionBandState } from './selectionBand'
 import type { LocateTarget } from '@/store/locate'
-
-/** Column labels for the scope description, from the same table the header renders. */
-const COLUMN_LABELS = new Map(COLUMN_DEFS.map((d) => [d.key, d.label]))
-const columnLabel = (col: ColumnKey) => COLUMN_LABELS.get(col) ?? col
 
 /** The ShowBar's key-cap styling, so the two hints read as one vocabulary. */
 const KBD_CLASS = 'rounded border bg-muted/50 px-1.5 py-px text-[9.5px]'

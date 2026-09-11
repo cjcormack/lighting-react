@@ -22,16 +22,31 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  * desk stay read-only through this door as much as through the pointer. Nothing needs consuming
  * here, because `FixturesTable` drops the signal itself the moment it has been delivered — see the
  * `autoOpenCell` docblock there for why that job cannot be left to whichever cell it names.
+ *
+ * It also owns the closing rule that is nobody's click: **an editor belongs to a selection, so it
+ * goes when the selection does** — see [selectionEmpty].
  */
 export function useCellEditorOpen({
   autoOpen,
   disabled,
   onOpen,
+  selectionEmpty,
 }: {
   autoOpen?: boolean
   disabled?: boolean
   /** State a click's `onOpenChange(true)` resets, that an auto-open must reset too. */
   onOpen?: () => void
+  /**
+   * Nothing at all is selected — neither a marquee nor a row. Undefined where the question does
+   * not arise (`CueValueGrid` mounts these cells with no selection above them).
+   *
+   * An open editor is open *for* a selection: opening one on an unselected row selects that row,
+   * and opening one inside a marquee is the whole marquee's editor. So Deselect leaves an editor
+   * on screen that still writes — but to something narrower than the count above it claimed, and
+   * with no visible selection left to explain what. That was true of the popover long before the
+   * sheet, and it is worse in a sheet, which covers the grid that would otherwise show you.
+   */
+  selectionEmpty?: boolean
 }): { isOpen: boolean; setOpen: (open: boolean) => void } {
   const [isOpen, setIsOpen] = useState(false)
 
@@ -51,6 +66,17 @@ export function useCellEditorOpen({
     if (!autoOpen || disabledRef.current) return
     setOpen(true)
   }, [autoOpen, setOpen])
+
+  // **The edge, not the state.** Closing whenever `selectionEmpty` is merely *true* would refuse
+  // to open at all in a grid that has no selection to begin with — and the close would land in the
+  // effect after the very click that opened it, so the editor would flicker rather than fail
+  // visibly. Only the false→true crossing is a deselection.
+  const hadSelectionRef = useRef(selectionEmpty === false)
+  useEffect(() => {
+    const deselected = selectionEmpty === true && hadSelectionRef.current
+    hadSelectionRef.current = selectionEmpty === false
+    if (deselected) setIsOpen(false)
+  }, [selectionEmpty])
 
   return { isOpen, setOpen }
 }

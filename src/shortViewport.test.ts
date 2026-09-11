@@ -8,6 +8,7 @@ import layoutSrc from './Layout.tsx?raw'
 import showHeaderSrc from './components/ShowHeader.tsx?raw'
 import programmerGridSrc from './components/programmer/ProgrammerGrid.tsx?raw'
 import selectionBarSrc from './components/programmer/SelectionBar.tsx?raw'
+import cellEditorSurfaceSrc from './components/fixtures-list/cells/CellEditorSurface.tsx?raw'
 
 /**
  * The short-viewport fold is one decision written in four places, and this is what keeps them one
@@ -57,14 +58,19 @@ describe('the short-viewport fold', () => {
   })
 
   it('spells the JS constant the way `matchMedia` needs it', () => {
-    // `useMediaQuery` passes this straight to `window.matchMedia`, which answers `false` for a
-    // string it cannot parse rather than throwing — so a typo here is a fold that silently never
-    // happens. Two sites hand it a string: `ProgrammerBody`, which moves rows A and B, and
-    // `SelectionBar` (its own module since the desk-findings' group B), which decides whether
-    // row C is permanently in the flow (`selectionBandState`). The test above already holds
-    // `ProgrammerGrid`'s class-name arms to one *number*; this holds the two strings to one
-    // *spelling*, which the number check cannot see.
-    for (const src of [programmerPageSrc, selectionBarSrc]) {
+    // `useMediaQuery` — or, in the third case, a `matchMedia` store of its own — passes this
+    // straight to `window.matchMedia`, which answers `false` for a string it cannot parse rather
+    // than throwing, so a typo here is a fold that silently never happens. Three sites hand it a
+    // string: `ProgrammerBody`, which moves rows A and B; `SelectionBar` (its own module since the
+    // desk-findings' group B), which decides whether row C is permanently in the flow
+    // (`selectionBandState`); and `CellEditorSurface`, which swaps a cell editor's bottom sheet
+    // for a right-hand one, because a short viewport has no vertical room to give a bottom sheet.
+    // The test above already holds `ProgrammerGrid`'s class-name arms to one *number*; this holds
+    // the three strings to one *spelling*, which the number check cannot see.
+    //
+    // Like `SelectionBar`, the third is pinned by spelling and not by `SITES`: it carries no
+    // Tailwind variant, and `SITES` is also what the class-name test below slices.
+    for (const src of [programmerPageSrc, selectionBarSrc, cellEditorSurfaceSrc]) {
       expect(src).toContain("const SHORT_VIEWPORT = '(max-height: 500px)'")
     }
   })

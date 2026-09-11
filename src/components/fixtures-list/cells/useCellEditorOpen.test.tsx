@@ -4,8 +4,10 @@ import { describe, expect, it, vi } from 'vitest'
 import { useCellEditorOpen } from './useCellEditorOpen'
 
 /**
- * The rule behind `PD-POPUP-AFTER-DRAG`'s auto-open, tested where it is one rule rather than four.
- * That it opens a real editor is asserted through a real cell in `FixturesTable.test.tsx`.
+ * The two rules that open and close a cell editor without anybody clicking it — `PD-POPUP-AFTER-
+ * DRAG`'s auto-open, and the close that follows a deselect — tested where each is one rule rather
+ * than four. That the first opens a real editor is asserted through a real cell in
+ * `FixturesTable.test.tsx`.
  */
 describe('useCellEditorOpen', () => {
   it('opens when the signal arrives', () => {
@@ -63,6 +65,41 @@ describe('useCellEditorOpen', () => {
     expect(onOpen).toHaveBeenCalledTimes(1)
     act(() => result.current.setOpen(true))
     expect(onOpen).toHaveBeenCalledTimes(2)
+  })
+
+  it('closes when the selection it was opened for goes away', () => {
+    const { result, rerender } = renderHook(
+      ({ selectionEmpty }) => useCellEditorOpen({ selectionEmpty }),
+      { initialProps: { selectionEmpty: false } },
+    )
+    act(() => result.current.setOpen(true))
+    expect(result.current.isOpen).toBe(true)
+
+    rerender({ selectionEmpty: true })
+    expect(result.current.isOpen).toBe(false)
+  })
+
+  it('opens normally in a grid that has no selection at all', () => {
+    // The edge and not the state, which is the whole reason the ref exists: a cell that mounts
+    // with nothing selected — and stays that way — must still open on a click. Closing on the
+    // *state* would land in the effect right after the click that opened it, so the editor would
+    // flicker rather than fail in a way anyone could report.
+    const { result, rerender } = renderHook(
+      ({ selectionEmpty }) => useCellEditorOpen({ selectionEmpty }),
+      { initialProps: { selectionEmpty: true } },
+    )
+    act(() => result.current.setOpen(true))
+    rerender({ selectionEmpty: true })
+    expect(result.current.isOpen).toBe(true)
+  })
+
+  it('leaves an editor alone where there is no selection to speak of', () => {
+    // `CueValueGrid` mounts these cells with no selection above them, so the prop is undefined —
+    // which is not the same as "empty" and must never close anything.
+    const { result, rerender } = renderHook(() => useCellEditorOpen({}))
+    act(() => result.current.setOpen(true))
+    rerender()
+    expect(result.current.isOpen).toBe(true)
   })
 
   it('keeps `setOpen` stable across a changing `onOpen`', () => {

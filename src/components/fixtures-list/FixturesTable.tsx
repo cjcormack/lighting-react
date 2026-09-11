@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { LocateButton } from '../fixtures/LocateButton'
-import { COLUMN_DEFS, columnFamily } from './columns'
+import { COLUMN_DEFS, columnFamily, columnLabel } from './columns'
 import { rowLocateTarget } from './rowModel'
 import { buildRowCells, useRowValues } from './useRowValues'
 import { useScopedRowValues } from './useScopedRowValues'
@@ -111,6 +111,15 @@ export interface FixturesTableProps {
   /** Fill the flex parent instead of the embedded-list viewport cap. See FixturesListContainer. */
   fill?: boolean
   /**
+   * Neither a row nor a cell is selected any more. Any open cell editor closes on the crossing
+   * into this — see `useCellEditorOpen`, which owns the rule and the reason.
+   *
+   * Passed as a plain boolean rather than as a one-shot the way `autoOpenCell` is: it changes only
+   * on the 0 ↔ non-0 boundary, so the rows' memo holds through every ordinary selection change,
+   * and nothing has to consume it.
+   */
+  selectionEmpty?: boolean
+  /**
    * Drag-select across cells. Absent on the two plain list routes, which have no use for an edit
    * scope narrower than a row.
    */
@@ -157,6 +166,7 @@ export function FixturesTable({
   onScrolledToRow,
   showOwnership = false,
   fill = false,
+  selectionEmpty,
   cellSelection,
   onMarqueeDragChange,
   onBackgroundClick,
@@ -226,10 +236,7 @@ export function FixturesTable({
     onSingleColumnDrag: setAutoOpenCell,
   })
 
-  const columnLabelFor = useCallback(
-    (col: ColumnKey) => COLUMN_DEFS.find((d) => d.key === col)?.label ?? col,
-    [],
-  )
+  const columnLabelFor = useCallback((col: ColumnKey) => columnLabel(col), [])
 
   const inertColumns = useInertColumns(visibleColumns)
   // `horizontalOnly`: this scroller is the virtualizer's too, so most scroll events on it are
@@ -375,6 +382,7 @@ export function FixturesTable({
                     cellSelection={cellSelection}
                     deskConnected={deskConnected}
                     autoOpenCol={autoOpenCell?.rowId === row.id ? autoOpenCell.col : null}
+                    selectionEmpty={selectionEmpty}
                   />
                 </div>
               )
@@ -682,6 +690,14 @@ function useCellMarquee({
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
+      // Same portal trap the scroller's background `onClick` documents, and the one this handler
+      // was missing: React bubbles a synthetic event up the *React* tree, and every cell editor is
+      // rendered from inside a row — so a press on the dimmer slider, the colour picker or the hue
+      // bar arrived here as a press on the grid, started a marquee from wherever the editor
+      // happened to be over, and selected cells while the operator was dragging a value. Invisible
+      // in a popover, which is small and beside its own cell; obvious in a sheet, which is not.
+      // The DOM subtree is the question, so the DOM is what is asked.
+      if (!e.currentTarget.contains(e.target as Node)) return
       if (!selectionRef.current || e.button !== 0) return
       const scroller = scrollRef.current
       if (!scroller) return
@@ -938,6 +954,8 @@ interface RowViewProps {
    * memo still holds for the rest of the grid.
    */
   autoOpenCol: ColumnKey | null
+  /** Nothing is selected — any open cell editor in this row must go. See `useCellEditorOpen`. */
+  selectionEmpty?: boolean
 }
 
 const NO_INERT_COLUMNS: ReadonlySet<ColumnKey> = new Set()
@@ -985,6 +1003,7 @@ const RowView = React.memo(function RowView({
   cellSelection,
   deskConnected,
   autoOpenCol,
+  selectionEmpty,
 }: RowViewProps) {
   // Hooks run unconditionally; divider rows just have no cells.
   const cells = useMemo(() => buildRowCells(row, visibleColumns), [row, visibleColumns])
@@ -1305,6 +1324,7 @@ const RowView = React.memo(function RowView({
             )}
             <PropertyCell
               cell={cell}
+              label={columnLabel(col)}
               // The staged overlay is applied to whatever the scope resolved, not only to the live
               // read: in Output — where `state.value` is always set — short-circuiting past
               // `applyStagedValue` dropped the optimistic feedback for a write still in flight, and
@@ -1331,6 +1351,7 @@ const RowView = React.memo(function RowView({
               // drawing itself as read-only.
               disabled={cellsInert || state?.editable === false}
               autoOpen={autoOpenCol === col}
+              selectionEmpty={selectionEmpty}
               onBeginEdit={() => onBeginCellEdit(row, col)}
               onCommit={(commit) => onCellCommit(row, col, commit)}
             />
@@ -1390,15 +1411,24 @@ function OwnerJumpOverlay({ owned }: { owned?: CellOwnership }) {
 
 function PropertyCell({
   cell,
+  label,
   value,
   placeholder,
   batchCount,
   disabled,
   autoOpen,
+  selectionEmpty,
   onBeginEdit,
   onCommit,
 }: {
   cell: RowCell
+  /**
+   * The column's display name. Only the *sheet* form of a cell editor shows it — a popover has no
+   * header — but it is threaded from here rather than derived in the cells, because a cell is
+   * given a `CellResolution` and not a `ColumnKey`, and one `slider` cell is a dimmer where the
+   * next is an iris. See `CellEditorSurface`.
+   */
+  label: string
   /**
    * What the editor opens at. In a scope that holds nothing here this is still the *live* value,
    * with [placeholder] suppressing its display — so clicking an em-dash starts the slider where
@@ -1419,6 +1449,8 @@ function PropertyCell({
    * much as through the pointer.
    */
   autoOpen: boolean
+  /** Nothing is selected, so an open editor here has lost what it was editing for. */
+  selectionEmpty?: boolean
   onBeginEdit: () => void
   onCommit: (commit: CellCommit) => void
 }) {
@@ -1428,10 +1460,12 @@ function PropertyCell({
         <SliderCell
           value={value}
           resolutions={cell.resolutions}
+          label={label}
           batchCount={batchCount}
           placeholder={placeholder}
           disabled={disabled}
           autoOpen={autoOpen}
+          selectionEmpty={selectionEmpty}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
         />
@@ -1441,10 +1475,12 @@ function PropertyCell({
         <ColourCell
           value={value}
           resolutions={cell.resolutions}
+          label={label}
           batchCount={batchCount}
           placeholder={placeholder}
           disabled={disabled}
           autoOpen={autoOpen}
+          selectionEmpty={selectionEmpty}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
         />
@@ -1454,10 +1490,12 @@ function PropertyCell({
         <PositionCell
           value={value}
           resolutions={cell.resolutions}
+          label={label}
           batchCount={batchCount}
           placeholder={placeholder}
           disabled={disabled}
           autoOpen={autoOpen}
+          selectionEmpty={selectionEmpty}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
         />
@@ -1467,10 +1505,12 @@ function PropertyCell({
         <SettingCell
           value={value}
           resolutions={cell.resolutions}
+          label={label}
           batchCount={batchCount}
           placeholder={placeholder}
           disabled={disabled}
           autoOpen={autoOpen}
+          selectionEmpty={selectionEmpty}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
         />

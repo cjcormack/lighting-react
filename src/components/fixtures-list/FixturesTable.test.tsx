@@ -319,6 +319,30 @@ describe('FixturesTable cell gesture', () => {
     expect(document.activeElement).toBe(cell)
   })
 
+  it('ignores a press inside an open cell editor, which React bubbles here through its portal', () => {
+    // React bubbles a synthetic event up the *React* tree, portals included — and a cell editor is
+    // rendered from inside its row. So a drag on the dimmer slider, the colour picker or the hue
+    // bar arrived at the rows wrapper as a press on the grid, started a marquee from wherever the
+    // editor happened to be over, and selected cells under the operator while they were setting a
+    // value. Barely visible in a popover, which is small and sits beside its own cell; plainly
+    // wrong in the phone's sheet, which covers the grid it was scribbling on.
+    //
+    // The scroller's background `onClick` already guards the same trap; this is the handler that
+    // was missing it.
+    stubFlatLayout()
+    render(<Harness />)
+    fireEvent.click(cellButton())
+    const editor = document.querySelector('[data-cell-editor-surface]')
+    expect(editor, 'the editor did not open, so this asserts nothing').not.toBeNull()
+
+    fireEvent.pointerDown(editor!, { button: 0, clientX: 300, clientY: 10 })
+    fireEvent.pointerMove(editor!, { button: 0, buttons: 1, clientX: 380, clientY: 50 })
+
+    expect(screen.queryByTestId('cell-marquee')).toBeNull()
+
+    fireEvent.pointerUp(editor!, { button: 0, clientX: 380, clientY: 50 })
+  })
+
   it('disarms a press whose release it never saw, rather than marqueeing on hover', () => {
     // Release over the sticky header, the scrollbar or outside the window: no pointer capture was
     // taken (that only happens past the threshold), so no `pointerup` reaches the rows wrapper. The

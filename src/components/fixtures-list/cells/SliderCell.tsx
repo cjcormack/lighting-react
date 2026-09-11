@@ -1,17 +1,24 @@
 import { memo, useCallback } from 'react'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Slider } from '@/components/ui/slider'
 import { Input } from '@/components/ui/input'
 import { useNumberFieldDraft } from '@/hooks/useNumberFieldDraft'
 import type { CellResolution } from '../columns'
 import type { CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
+import { CellEditorSurface } from './CellEditorSurface'
 import { UNSET_CELL_TITLE, UnsetCellMark } from './UnsetCellMark'
 import { useCellEditorOpen } from './useCellEditorOpen'
 
 interface SliderCellProps {
   value: Extract<CellValue, { kind: 'slider' }>
   resolutions: NonNullable<CellResolution>[]
+  /**
+   * The column's name — "Dimmer", "Zoom" — which titles the editor where it is a bottom sheet.
+   * See `CellEditorSurface`. Defaulted rather than required because the value's `kind` cannot
+   * supply it (one `slider` cell is a dimmer and the next is an iris) and two callers mount these
+   * components read-only, where the editor never opens.
+   */
+  label?: string
   /** How many fixtures a commit from this cell will write to. */
   batchCount: number
   /**
@@ -30,6 +37,11 @@ interface SliderCellProps {
    * See `useCellEditorOpen`.
    */
   autoOpen?: boolean
+  /**
+   * Nothing is selected any more, so this editor's targets are gone with it — close.
+   * See `useCellEditorOpen`.
+   */
+  selectionEmpty?: boolean
   onCommit: (commit: CellCommit) => void
   onBeginEdit: () => void
 }
@@ -40,16 +52,18 @@ function toPct(value: number): number {
 
 /**
  * Display: compact fill bar + percentage; a group with mixed values renders a
- * min–max range bar and "lo–hi%". Edit: popover slider + numeric input,
- * committing continuously while dragging (the ChannelSlider convention).
+ * min–max range bar and "lo–hi%". Edit: a slider + numeric input in the shared cell-editor
+ * surface, committing continuously while dragging (the ChannelSlider convention).
  */
 export const SliderCell = memo(function SliderCell({
   value,
   resolutions,
+  label = 'Value',
   batchCount,
   placeholder,
   disabled = false,
   autoOpen,
+  selectionEmpty,
   onCommit,
   onBeginEdit,
 }: SliderCellProps) {
@@ -70,19 +84,20 @@ export const SliderCell = memo(function SliderCell({
   const draft = useNumberFieldDraft(String(current), commit)
   // The typed input is reset on every open, by a click or by a marquee alike — which is why it is
   // `onOpen` on the hook rather than part of the `onOpenChange` handler below.
-  const { isOpen, setOpen } = useCellEditorOpen({ autoOpen, disabled, onOpen: draft.reset })
+  const { isOpen, setOpen } = useCellEditorOpen({ autoOpen, disabled, selectionEmpty, onOpen: draft.reset })
 
   const display = value.isUniform ? `${toPct(value.min)}%` : `${toPct(value.min)}–${toPct(value.max)}%`
 
   return (
-    <Popover
+    <CellEditorSurface
       open={isOpen}
       onOpenChange={(open) => {
         setOpen(open)
         if (open) onBeginEdit()
       }}
-    >
-      <PopoverTrigger asChild>
+      title={label}
+      contentClassName="w-64 space-y-3"
+      trigger={
         <button
           type="button"
           disabled={disabled}
@@ -109,31 +124,30 @@ export const SliderCell = memo(function SliderCell({
             </>
           )}
         </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-64 space-y-3" align="start">
-        {batchCount > 1 && (
-          <p className="text-xs text-muted-foreground">Applying to {batchCount} targets</p>
-        )}
-        <div className="flex items-center gap-3">
-          <Slider
-            min={range.min}
-            max={range.max}
-            step={1}
-            value={[current]}
-            onValueChange={([next]) => commit(next)}
-            className="flex-1"
-          />
-          <Input
-            type="number"
-            min={range.min}
-            max={range.max}
-            className="h-8 w-20 tabular-nums"
-            value={draft.value}
-            onChange={(e) => draft.onChange(e.target.value)}
-            onBlur={draft.onBlur}
-          />
-        </div>
-      </PopoverContent>
-    </Popover>
+      }
+    >
+      {batchCount > 1 && (
+        <p className="text-xs text-muted-foreground">Applying to {batchCount} targets</p>
+      )}
+      <div className="flex items-center gap-3">
+        <Slider
+          min={range.min}
+          max={range.max}
+          step={1}
+          value={[current]}
+          onValueChange={([next]) => commit(next)}
+          className="flex-1"
+        />
+        <Input
+          type="number"
+          min={range.min}
+          max={range.max}
+          className="h-8 w-20 tabular-nums"
+          value={draft.value}
+          onChange={(e) => draft.onChange(e.target.value)}
+          onBlur={draft.onBlur}
+        />
+      </div>
+    </CellEditorSurface>
   )
 })

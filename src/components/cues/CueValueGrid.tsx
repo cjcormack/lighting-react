@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Layers } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { COLUMN_DEFS } from '@/components/fixtures-list/columns'
+import { COLUMN_DEFS, columnLabel } from '@/components/fixtures-list/columns'
 import { buildRows } from '@/components/fixtures-list/rowModel'
 import { buildRowCells } from '@/components/fixtures-list/useRowValues'
 import { cellValueFromParts, stagedPartFor } from '@/components/fixtures-list/scopedCellValue'
@@ -126,7 +126,7 @@ export function CueValueGrid({
             <div className="px-1.5 py-1">Fixture</div>
             {model.columns.map((col) => (
               <div key={col} className="px-1.5 py-1">
-                {LABELS.get(col)}
+                {columnLabel(col)}
               </div>
             ))}
           </div>
@@ -154,7 +154,7 @@ export function CueValueGrid({
                 return (
                   <div key={col} className="h-full min-w-0 py-0.5">
                     {value && cell ? (
-                      <ReadOnlyCell cell={cell} value={value} />
+                      <ReadOnlyCell cell={cell} label={columnLabel(col)} value={value} />
                     ) : (
                       <span className="flex h-full items-center px-1.5 text-muted-foreground/50">
                         —
@@ -177,8 +177,6 @@ export function CueValueGrid({
 }
 
 const ALL_COLUMNS: readonly ColumnKey[] = COLUMN_DEFS.map((d) => d.key)
-const LABELS = new Map(COLUMN_DEFS.map((d) => [d.key, d.label]))
-
 function rowName(row: ReturnType<typeof buildRows>[number]): string {
   if (row.kind === 'fixture') return row.fixture.name
   if (row.kind === 'element') return `${row.fixture.name} ${row.element.displayName}`
@@ -208,9 +206,10 @@ function layerFor(
  * programmer's are the same swatch. `pointer-events-none` is what makes it a read: the editors are
  * Popover triggers, and a cue is edited by Including it into the programmer, not here.
  */
-function ReadOnlyCell({ cell, value }: { cell: RowCell; value: CellValue }) {
+function ReadOnlyCell({ cell, label, value }: { cell: RowCell; label: string; value: CellValue }) {
   const shared = {
     resolutions: cell.resolutions,
+    label,
     batchCount: 1,
     onCommit: () => {},
     onBeginEdit: () => {},

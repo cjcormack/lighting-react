@@ -1030,6 +1030,11 @@ export function FixturesListContainer({
           onScrolledToRow={() => setScrollToRowId(null)}
           showOwnership={showOwnership}
           fill={fill}
+          // An open cell editor belongs to whatever is selected — the marquee it sits in, or the
+          // row selection its own click created. Deselect while one is open and it stays on
+          // screen still writing, to something narrower than its own "Applying to N" line just
+          // claimed. Both selections, because either is enough to keep an editor honest.
+          selectionEmpty={selection.count === 0 && cellCount === 0}
           cellSelection={showOwnership ? cellSelection : undefined}
           onMarqueeDragChange={setMarqueeDragging}
           onBackgroundClick={clearByLadder}
