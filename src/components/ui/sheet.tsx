@@ -208,7 +208,15 @@ function SheetContent({
         {...props}
       >
         {children}
-        <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none">
+        {/* `top-4` is measured against `SheetHeader`'s own `p-4` and a 14px title — the header
+            almost every sheet here uses. A sheet that deliberately draws a shorter header (the
+            programmer rail's, at `py-2` around a 9px label) can move it with a scoped rule
+            against this `data-slot`; the slot is a hook, and the offset above stays the default
+            every other sheet is aligned to. See `PD-SHEET-CLOSE-ALIGN`. */}
+        <SheetPrimitive.Close
+          data-slot="sheet-close-x"
+          className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none"
+        >
           <XIcon className="size-4" />
           <span className="sr-only">Close</span>
         </SheetPrimitive.Close>

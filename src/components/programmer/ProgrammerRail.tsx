@@ -1,4 +1,4 @@
-import { memo, useCallback, useState, type ReactNode } from 'react'
+import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useParams } from 'react-router'
 import {
   ArrowDownUp,
@@ -47,6 +47,17 @@ const LABEL_CLASS =
 type AddKind = ProgrammerAddLayerKind | 'effect'
 
 /**
+ * Which half of the one scroller a gesture asked for.
+ *
+ * `PD-SHEET-ICONS-OPEN`: the collapsed arms draw the two bands as two glyph-and-count pairs, so
+ * pressing one has to open the rail — and open it *at that band*, since the two are the body's two
+ * halves and a press on FX that lands on the top of the layer stack has answered a different
+ * question. It is a one-shot request rather than a stored position: `RailBody` scrolls to it and
+ * clears it, so the operator's own scrolling afterwards is never undone.
+ */
+type RailBand = 'layers' | 'fx'
+
+/**
  * The layer stack and the running effects, side by side with the value grid rather than behind
  * tabs — the three readings of one live object, all on screen.
  *
@@ -63,17 +74,19 @@ type AddKind = ProgrammerAddLayerKind | 'effect'
  *
  * **The strip is drawn here too.** Collapsed — or at 704–1200, where the rail is an overlay — the
  * rail is a 40px strip carrying the two counts as badges under their glyphs and one `+` that opens
- * the same three doors as the footer, so nothing is reachable only with the rail open. Which arm
- * is showing is `ProgrammerWorkspace`'s: it owns the width, the collapsed flag, the overlay flag
- * and the sheet flag, and this component reads them through `useRailArm`. The frames are the
- * workspace's as well; this component decides what goes in them.
+ * the same three doors as the footer, so nothing is reachable only with the rail open. **The two
+ * counts are doors as well** (`PD-SHEET-ICONS-OPEN`): pressing one opens the rail scrolled to that
+ * band, because a glyph that names half the body and does nothing when pressed reads as broken.
+ * Which arm is showing is `ProgrammerWorkspace`'s: it owns the width, the collapsed flag, the
+ * overlay flag and the sheet flag, and this component reads them through `useRailArm`. The frames
+ * are the workspace's as well; this component decides what goes in them.
  *
  * **And so is the phone's handle** (space plan D8, session 4). Below 704px of workspace the strip
- * is hidden and `RailHandle` takes the bottom of the page instead: 44px, the same two counts, the
- * layer names truncated after them, the same `+`, and a chevron that opens the *same body* in a
- * `Sheet side="bottom"` at 80% height. The names are there because a 40px column of two badges
- * said only *how many*, and on the one screen where the stack is never visible beside the grid
- * *which* is the question worth 44px. They are drawn strongest-first, like the dense rows above
+ * is hidden and `RailHandle` takes the bottom of the page instead: 44px, the same two counts —
+ * pressable there too, and to the same band — the layer names truncated after them, the same `+`,
+ * and a chevron that opens the *same body* in a `Sheet side="bottom"` at 80% height. The names
+ * are there because a 40px column of two badges said only *how many*, and on the one screen where
+ * the stack is never visible beside the grid *which* is the question worth 44px. They are drawn strongest-first, like the dense rows above
  * them, because the stack reads top wins.
  *
  * **The sheet and the docked body are one body in two places, never two.** `sheetOpen` is
@@ -111,14 +124,20 @@ export function ProgrammerRail() {
   const fxCount = effects?.length ?? 0
   const [adding, setAdding] = useState<AddKind | null>(null)
   const [diagnosticOpen, setDiagnosticOpen] = useState(false)
+  const [band, setBand] = useState<RailBand | null>(null)
   const addEffect = useProgrammerAddEffect()
   const closeAdd = useCallback(() => setAdding(null), [])
+  // Stable, because `RailBody` is memoised against a parent that re-renders on every selection
+  // change — a fresh closure here would defeat that memo at marquee rate.
+  const clearBand = useCallback(() => setBand(null), [])
 
   const body = (
     <RailBody
       projectId={projectId}
       diagnosticOpen={diagnosticOpen}
       onDiagnosticOpenChange={setDiagnosticOpen}
+      band={band}
+      onBandShown={clearBand}
     />
   )
 
@@ -128,8 +147,19 @@ export function ProgrammerRail() {
         <Sheet open onOpenChange={(next) => !next && arm.closeSheet()}>
           {/* `p-0 gap-0` because the body and the footer bring their own padding, and the rail's
               own 36px header is replaced by the sheet's — two headings stacked would be the
-              phone's scarcest 36px spent saying "Layers" twice. */}
-          <SheetContent side="bottom" className="h-[80%] gap-0 p-0">
+              phone's scarcest 36px spent saying "Layers" twice.
+
+              `PD-SHEET-CLOSE-ALIGN`: that header is ~32px (8px of padding either side of a 9px
+              label), where `SheetContent`'s shared close button is pinned at `top-4` — an offset
+              measured against the default `p-4` header, which is ~48px. So the X sat 8px below
+              its own centre line and all but touched the bottom border. The divergence is this
+              header's and the fix is scoped to it: raising the primitive's `top-4` would move the
+              X in every other sheet in the app, none of which has this problem, and padding this
+              header out to 48px would spend 16px of the phone's scarcest space on it. */}
+          <SheetContent
+            side="bottom"
+            className="h-[80%] gap-0 p-0 [&>[data-slot=sheet-close-x]]:top-2"
+          >
             <SheetHeader className="shrink-0 border-b px-3 py-2">
               <SheetTitle className={cn(LABEL_CLASS, 'text-foreground')}>
                 <Layers className="size-3" />
@@ -158,6 +188,7 @@ export function ProgrammerRail() {
           layerCount={layerCount}
           fxCount={fxCount}
           onAdd={setAdding}
+          onBand={setBand}
           addEffect={addEffect}
         />
       </RailStripFrame>
@@ -167,6 +198,7 @@ export function ProgrammerRail() {
           layerCount={layerCount}
           fxCount={fxCount}
           onAdd={setAdding}
+          onBand={setBand}
           addEffect={addEffect}
         />
       </RailHandleFrame>
@@ -248,14 +280,31 @@ const RailBody = memo(function RailBody({
   projectId,
   diagnosticOpen,
   onDiagnosticOpenChange,
+  band,
+  onBandShown,
 }: {
   projectId: number
   diagnosticOpen: boolean
   onDiagnosticOpenChange: (open: boolean) => void
+  band: RailBand | null
+  onBandShown: () => void
 }) {
+  const layersRef = useRef<HTMLDivElement>(null)
+  const fxRef = useRef<HTMLDivElement>(null)
+
+  // The band a collapsed arm's glyph asked for, honoured once and then released. It fires on
+  // mount in the case that matters — a press on the strip or the handle opens the body in the
+  // same batch that sets it — and again on a later press while the body is already up.
+  useEffect(() => {
+    if (band == null) return
+    const el = band === 'fx' ? fxRef.current : layersRef.current
+    el?.scrollIntoView({ block: 'start' })
+    onBandShown()
+  }, [band, onBandShown])
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-2.5 py-2">
-      <div className="flex items-center gap-1.5 px-0.5">
+      <div ref={layersRef} className="flex items-center gap-1.5 px-0.5">
         <span className={cn(LABEL_CLASS, 'text-primary')}>Values</span>
         {/* The precedence rule, in two words; the sentence the stack's paragraph used to spend a
             line on is its hover. Session 1's rule for every band of this page. */}
@@ -272,7 +321,13 @@ const RailBody = memo(function RailBody({
           Layer 4, so a value above beats an effect below whatever the rows say. Drawn as a band
           across the rail rather than a caption, because it is the one thing dragging cannot
           change; per-layer stomp is the escape hatch, on the row. */}
-      <div className="-mx-2.5 mt-1 flex items-center gap-1.5 border-y border-amber-800/70 bg-amber-950/40 px-2.5 py-[5px]">
+      {/* The FX band's scroll anchor is this bar and not the `Effects` label below it: the bar is
+          what introduces the half, so landing on the label instead would open the band with the
+          one rule that explains it just above the fold. */}
+      <div
+        ref={fxRef}
+        className="-mx-2.5 mt-1 flex items-center gap-1.5 border-y border-amber-800/70 bg-amber-950/40 px-2.5 py-[5px]"
+      >
         <ArrowDownUp className="size-3 shrink-0 text-amber-300" />
         <span className={cn(LABEL_CLASS, 'tracking-[0.06em] text-amber-300')}>
           Values above beat effects below
@@ -431,17 +486,20 @@ function RailFooter({
 /**
  * The 40px strip. Its chevron is two buttons, one per arm, like the header's: the docked arm's
  * expands, the narrow arm's toggles the overlay — the plan names the strip's chevron as a way to
- * close it as well as open it.
+ * close it as well as open it. The two counts split the same way, and for the same reason —
+ * `StripCount` owns that split so each band is written once here.
  */
 function RailStrip({
   layerCount,
   fxCount,
   onAdd,
+  onBand,
   addEffect,
 }: {
   layerCount: number
   fxCount: number
   onAdd: (kind: AddKind) => void
+  onBand: (band: RailBand) => void
   addEffect: AddEffectOffer
 }) {
   const arm = useRailArm()
@@ -478,14 +536,18 @@ function RailStrip({
         )}
       </Button>
       <StripCount
+        band="layers"
         glyph={<Layers className="size-3.5" />}
         count={layerCount}
         title={`${layerCount} layer${layerCount === 1 ? '' : 's'}`}
+        onBand={onBand}
       />
       <StripCount
+        band="fx"
         glyph={<AudioWaveform className="size-3.5" />}
         count={fxCount}
         title={`${fxCount} effect${fxCount === 1 ? '' : 's'} running`}
+        onBand={onBand}
         className="text-violet-400"
       />
       <span className="flex-1" />
@@ -588,19 +650,22 @@ function AddDoorsMenu({
  * The `+` is the strip's own menu, unchanged: every door has to be reachable without opening the
  * rail, and on this arm "opening the rail" covers the grid entirely. The chevron is the opener,
  * and it is a separate control from the `+` rather than the whole bar being a button, so the
- * menu's trigger is not nested inside a button that also opens the sheet.
+ * menu's trigger is not nested inside a button that also opens the sheet — which is also why the
+ * two counts are their own buttons rather than the bar being one.
  */
 function RailHandle({
   layers,
   layerCount,
   fxCount,
   onAdd,
+  onBand,
   addEffect,
 }: {
   layers: readonly ProgrammerLayer[] | undefined
   layerCount: number
   fxCount: number
   onAdd: (kind: AddKind) => void
+  onBand: (band: RailBand) => void
   addEffect: AddEffectOffer
 }) {
   const arm = useRailArm()
@@ -610,21 +675,40 @@ function RailHandle({
         .map((l) => l.source.name)
         .join(' · ')
     : null
+  const open = (band: RailBand) => {
+    onBand(band)
+    arm.openSheet()
+  }
   return (
     <>
-      <span className={LABEL_CLASS} title={`${layerCount} layer${layerCount === 1 ? '' : 's'}`}>
+      {/* `PD-SHEET-ICONS-OPEN`: on this arm the chevron was the only way in, so a press on the
+          band you were reading did nothing. One button each rather than the strip's pair — the
+          handle has a single arm, and `openSheet` is written from nowhere else. */}
+      <button
+        type="button"
+        className={cn(LABEL_CLASS, 'rounded px-1 py-1 transition-colors hover:bg-accent/40')}
+        title={`${layerCount} layer${layerCount === 1 ? '' : 's'}`}
+        aria-label="Show the layers"
+        onClick={() => open('layers')}
+      >
         <Layers className="size-3" />
         Layers
         <CountBadge count={layerCount} />
-      </span>
-      <span
-        className={cn(LABEL_CLASS, 'text-violet-400')}
+      </button>
+      <button
+        type="button"
+        className={cn(
+          LABEL_CLASS,
+          'rounded px-1 py-1 text-violet-400 transition-colors hover:bg-accent/40',
+        )}
         title={`${fxCount} effect${fxCount === 1 ? '' : 's'} running`}
+        aria-label="Show the effects"
+        onClick={() => open('fx')}
       >
         <AudioWaveform className="size-3" />
         FX
         <CountBadge count={fxCount} />
-      </span>
+      </button>
       {/* `min-w-0` and a truncate: the names give before the counts and the two controls do, and
           they are the only thing on this bar whose length is the rig's business. */}
       <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground" title={names ?? undefined}>
@@ -653,21 +737,93 @@ function RailHandle({
   )
 }
 
+/**
+ * One band's glyph and count, as the two buttons that open the rail at it (`PD-SHEET-ICONS-OPEN`).
+ *
+ * **Two buttons, hidden by the arms' own container queries**, exactly as the two chevrons above
+ * them are: `expand` writes the docked desk's stored preference and `openOverlay` does not, so a
+ * single button covering both arms would have to know which one is on screen — and a wrong answer
+ * would carry an iPad's press onto tomorrow's wide desk as a "collapsed" it never asked for.
+ *
+ * The split lives **here** rather than at the call site so the glyph, the count and the title are
+ * written once per band. Written twice, a change to either twin — a new icon, a plural rule — is
+ * one that has to be made by hand in two adjacent blocks, and the arm that missed it goes stale
+ * silently. Only the label differs between the two on purpose: both arms are in the DOM at once
+ * (they are hidden by CSS, not by JavaScript), and two controls announced by the same words is
+ * what that whole split exists to avoid.
+ */
 function StripCount({
+  band,
   glyph,
   count,
   title,
+  onBand,
+  className,
+}: {
+  band: RailBand
+  glyph: ReactNode
+  count: number
+  title: string
+  onBand: (band: RailBand) => void
+  className?: string
+}) {
+  const arm = useRailArm()
+  const noun = band === 'fx' ? 'effects' : 'layers'
+  const press = (open: () => void) => () => {
+    onBand(band)
+    open()
+  }
+  return (
+    <>
+      <CountButton
+        glyph={glyph}
+        count={count}
+        title={title}
+        label={`Expand the rail at the ${noun}`}
+        onClick={press(arm.expand)}
+        className={cn(className, '@max-[1200px]:hidden')}
+      />
+      <CountButton
+        glyph={glyph}
+        count={count}
+        title={title}
+        label={`Open the rail at the ${noun}`}
+        onClick={press(arm.openOverlay)}
+        className={cn(className, '@min-[1200px]:hidden')}
+      />
+    </>
+  )
+}
+
+function CountButton({
+  glyph,
+  count,
+  title,
+  label,
+  onClick,
   className,
 }: {
   glyph: ReactNode
   count: number
   title: string
+  label: string
+  onClick: () => void
   className?: string
 }) {
   return (
-    <span className={cn('flex flex-col items-center gap-0.5 py-2', className)} title={title}>
+    <button
+      type="button"
+      // Full width of the 40px strip, so the press target is the column rather than the glyph.
+      className={cn(
+        'flex w-full flex-col items-center gap-0.5 py-2 transition-colors hover:bg-accent/40',
+        className,
+      )}
+      title={title}
+      aria-label={label}
+      onClick={onClick}
+    >
       {glyph}
       <CountBadge count={count} />
-    </span>
+    </button>
   )
 }
