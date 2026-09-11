@@ -13,7 +13,6 @@ import { useSidebarOpen } from "@/hooks/useSidebarOpen"
 import { ConnectionStatus } from "./connection"
 import { ProgrammerIndicator } from './components/ProgrammerIndicator'
 import ProjectSwitcher from "./ProjectSwitcher"
-import ThemeToggle from "./ThemeToggle"
 import { UserMenu } from "./components/auth/UserMenu"
 import { FixtureOverviewPanel } from "./components/FixtureOverviewPanel"
 import { StageOverviewPanel } from "./components/StageOverviewPanel"
@@ -21,6 +20,7 @@ import { FixtureDetailModal } from "./components/groups/FixtureDetailModal"
 import { OverviewToggle, useOverviewPanels } from "./components/overviewPanels"
 import { AiChatToggle } from "./components/ai/AiChatToggle"
 import { CueSlotOverviewPanel } from "./components/CueSlotOverviewPanel"
+import { SpeedMasterOverviewPanel } from "./components/SpeedMasterOverviewPanel"
 import { DeskDndProvider } from "./components/dnd/DeskDndProvider"
 import CommandPalette from "./components/CommandPalette"
 import { AddEditFxSheet, type FxTarget } from "./components/fx/AddEditFxSheet"
@@ -216,16 +216,20 @@ export default function Layout() {
                   <OverviewToggle key={panel.id} panel={panel} />
                 ))}
                 <AiChatToggle isVisible={isAiChatVisible} onToggle={() => setAiChatVisible(!isAiChatVisible)} />
-                <ThemeToggle />
+                {/* The theme control is inside this menu, not beside it — see `ThemeMenuItem`.
+                    This row is `shrink-0` around an `overflow-x-auto` that therefore cannot
+                    engage, so anything added here pushes the header wider than the screen rather
+                    than scrolling; at 375px the avatar was the part pushed off. */}
                 <UserMenu />
               </div>
             </div>
           </header>
 
-          {/* The three overview panels. Each is always rendered — but only its animated wrapper
-              is: every one of them puts its live body behind `CollapsiblePanel`, which unmounts
-              it once the collapse has finished. Adding a panel here means doing the same, or the
-              rig pays for it on every route the operator is on. */}
+          {/* The four overview panels, stacked in `DESCRIPTORS`' order so the toolbar reads left
+              to right as these read top to bottom. Each is always rendered — but only its animated
+              wrapper is: every one of them puts its live body behind `CollapsiblePanel`, which
+              unmounts it once the collapse has finished. Adding a panel here means doing the same,
+              or the rig pays for it on every route the operator is on. */}
           <StageOverviewPanel
             isVisible={byId.stage.isVisible}
             selectedFixtureKey={selectedFixture}
@@ -236,6 +240,12 @@ export default function Layout() {
             onFixtureClick={setSelectedFixture}
             isVisible={byId.fixtures.isVisible}
           />
+
+          {/* The speed-master bank, summoned (`PD-SPEED-OVERLAY`). Outside `DeskDndProvider`,
+              unlike the cue-slot panel: that one is inside because its slots are droppables a
+              busk-page drag must reach, and this panel has no drag at all — nothing in it is
+              draggable and nothing may be dropped on it. */}
+          <SpeedMasterOverviewPanel isVisible={byId.speedMasters.isVisible} />
 
           {/* The app's one DndContext, wrapping the cue-slot overlay and the routed page together:
               a drag started in either must be able to land in the other. See DeskDndProvider. */}
@@ -290,7 +300,7 @@ export default function Layout() {
           onParkChannelAtValue={() => setChannelDialogMode("park")}
           onSetChannelValue={() => setChannelDialogMode("set")}
           toggles={[
-            // The same three panels the toolbar renders, from the same array — the palette used to
+            // The same four panels the toolbar renders, from the same array — the palette used to
             // declare its own copy, which is how the Stage entry drifted onto a second icon.
             ...panels.map((panel) => ({
               label: panel.label,

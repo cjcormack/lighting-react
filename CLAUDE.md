@@ -973,15 +973,48 @@ now. Rows show the live one and edit it with tap / click-to-type; the stored def
 editable only in the detail sheet, where it can be labelled as such.
 
 `/projects/:id/speed-masters` manages the bank — one nav entry, one route, no sibling
-switcher. `components/SpeedMasters.tsx` is the ShowBar's performance surface, and it shows
+switcher. `components/SpeedMasters.tsx` is the desk's performance surface, with **two hosts**
+since `PD-SPEED-OVERLAY` — the ShowBar, and the Speed Masters *overview panel* that reaches the
+bank from a view with no bar (see §Navigation Registry) — and it shows
 **every** master, master 1 included. It used to render 2..N on the reasoning that the
 ShowBar's own BPM tile *was* master 1; that tile is gone, and the split was the width bug —
 two thresholds fired at 560px in opposite directions, so between 560 and 900px the tiles and
 the transport left the live-state block nothing and its cue numbers spilled. Don't
 reintroduce it: the component's docblock is the record of why. It picks one of three arms
-from the bar's `@container` width **and** the master count (`TILED_ARM`, because a container
+from the bar's `@container` width **and** the master count (`ARMS.shared`, because a container
 query cannot see how many masters there are): a named tile each, one railed tile with a pill
-per master, or `SpeedMastersChip` below 440px.
+per master, or `SpeedMastersChip` at the bottom.
+
+**A host states one thing — `room` — and it picks a width ladder, not an arm.** `ARMS.shared` is
+the bar's and `ARMS.dedicated` the overview panel's. The bar's thresholds were never about whether
+the tiles *fit*: a tile is ~150px and every one of them comes out of the live-state block, the only
+`flex-1` item on that row, so 1600px for four masters is what they cost the cue numbers beside
+them. A panel owns its row and is competing with nothing — measured, four masters are 464px of
+tiles at a narrow container and 711px at a wide one — so it tiles from 620px and rails from 240px
+instead of 440px. 620 rather than something rounder because 788px is a real panel: what a
+landscape phone at 852 leaves after the rail. Each dedicated threshold is sized against the tile's width *at* that threshold,
+since the tile grows with its room; a flat per-tile figure is wrong at both ends. **The 5+ ceiling
+does not move**, because that one was never a width judgment. What a host must never gain is an
+*arm* of its own — its own readout, tile or ladder shape — which is how the split brain comes back.
+No dedicated threshold may equal its rail width: the chip's hide class and the rail's show class
+are a min-width pair at one breakpoint on one element, at equal specificity, so Tailwind's utility
+sort would decide it. Write no container-query class in prose, here or in a comment — Tailwind
+scans comments, and a placeholder in that shape is emitted as a real rule that fails the build in
+`lightningcss`.
+
+**Which master the rail is showing is a `createSyncStore` singleton**, not `usePersistentState` —
+the same move `useVisSource` made, for the same reason and now for a second pair of surfaces. Two
+mounted hosts each read the key once in a `useState` initialiser with no storage listener, so they
+drift the moment one writes, and here the drift is not cosmetic: the selected master *is* the tile,
+so its TAP and click-to-edit BPM are the controls on screen, and a press in one host would retune a
+master the operator is reading in the other. The key is unchanged (both paths decode with the same
+`JSON.parse`), so desks keep the master they were on. `SpeedMasters.test.tsx` mounts both hosts and
+pins that they move together; the store is exported so a suite can `reset()` it, because a
+module-level cache outlives `localStorage.clear()`.
+
+**The count of surfaces offering TAP and click-to-type stays at four.** The overview panel mounts
+`SpeedMasters` whole — the same `MasterTile` and `MasterRow`, not a copy — so it is one of the
+four relocated, never a fifth.
 
 **A master can also declare a `usage` and follow another master.** Both landed with the busking
 view's speed-master work, and both are edited only in `SpeedMasterDetailSheet`:
@@ -1111,7 +1144,17 @@ recovery. Frontend shape:
   `UserDetailSheet` still rely on the server's 400. Don't read it as "every
   display-name field is bounded".
 - **`ProfileSheet` is the only self-service surface**, reached from the user menu,
-  which holds nothing else but Log out. Four tabs — **Profile / Password / Devices /
+  which holds Log out and the **theme toggle** — the latter since `PD-SPEED-OVERLAY`
+  added a ninth icon button to the app header and the row stopped fitting a phone
+  (nine controls came to 439px against a 375px viewport, and the avatar was what got
+  pushed off). Theme went because it is the one thing on that row that is not a desk
+  control but a per-*viewer* display preference, which is what the rest of this menu
+  is. `ThemeToggle` still exists as a standalone button for one case: `UserMenu`
+  renders it instead of `null` when there is no signed-in user, or a bootstrap-open
+  desk would have no way to change theme at all. Exactly one of the two is ever
+  mounted — the theme is a `useState` seeded once from storage, so two would drift —
+  and it is deliberately **not** on `syncStore`, which JSON-encodes: `theme` is stored
+  as the bare string `dark` and read at module scope in `main.tsx` before React exists. Four tabs — **Profile / Password / Devices /
   Sign-in** — and **each tab owns its own action button**; the footer is just Close,
   because a footer Save would have to mean "save the display name" while you were
   looking at the devices list. Errors are per-tab state for the same reason: one
@@ -1256,8 +1299,10 @@ do not know it is a decision:
 - **GO and BACK are not on the programmer**, which binds no transport keys either
   (`useTransportKeys` is Show's and the Prompt Book's). The switcher in the header is one pill from
   three views that do have a transport.
-- **The speed masters are not on the programmer.** `ProgrammerFxList` names each effect's master,
-  and `/speed-masters` manages the bank.
+- **The speed masters are not *resident* on the programmer**, and `PD-SPEED-OVERLAY` did not put
+  them there: the bank is summoned from the app header's **Speed Masters overview panel**, which
+  hangs over every route and is nobody's view chrome — the programmer gained nothing of its own.
+  `ProgrammerFxList` still names each effect's master, and `/speed-masters` still manages the bank.
 
 `ProgrammerPage.test.tsx` pins the absence; `ProgrammerPage.tsx`'s note beside the header is the
 long form of all three.
@@ -1690,8 +1735,9 @@ path may quietly change where it lands.
     `useShowTransport` through `useShowBarProps` — a second instance would mean a second rAF loop
     and a second reconcile effect on one runner slice — but nothing below it needs one.
 
-  **The Effects Overview panel is gone, and there are three overview panels now** — Stage,
-  Fixture, Cue Slots. It held a beat dot, master 1's bpm, a TAP, a running-effect count and a
+  **The Effects Overview panel is gone, and there are four overview panels now** — Stage,
+  Fixture, Speed Masters, Cue Slots. Effects Overview held a beat dot, master 1's bpm, a TAP, a
+  running-effect count and a
   Kill All, and `/fx` used to force it open and its toggle inert for as long as that route was
   mounted, because the busk view had no tempo readout and no view of what was running. Both
   halves of that reason expired: the ShowBar carries the whole speed-master bank on every live
@@ -1703,6 +1749,26 @@ path may quietly change where it lands.
   again, belongs beside blackout in the ShowBar rather than in a panel the operator has to open
   first. `store/fx.ts` (the `fxState` RTK Query wrapper) went with it — `api/fxApi` stays, since
   `store/groups.ts` still subscribes to the frame.
+
+  **Speed Masters is the fourth, and it is not that panel returning** (`PD-SPEED-OVERLAY`). The
+  difference is the whole of why it is allowed: Effects Overview drew a tempo readout *of its own*,
+  narrower than the bar's; `SpeedMasterOverviewPanel` mounts `components/SpeedMasters.tsx` — the
+  bar's own component, every master, unchanged — in a wider box, so it is the same answer reached
+  from a view that has no bar rather than a second one. It hangs under the app header beside the
+  other three, which is what makes it *every* view's and no view's: the programmer gains no chrome.
+  Nothing came back with it — no count, no Kill All, no readout of its own — and no tempo is
+  computed client-side; the live frame is still the readout, and master 1 and the follower rules
+  are `SpeedMasters`' unchanged.
+
+  It passes `room="dedicated"`, which is the only thing it tells the component — see §Speed
+  Masters for what that picks and why the panel's thresholds are not the bar's.
+
+  **Its visibility persists per panel and app-wide, which is a feature and a cost, and both are
+  accepted.** Opened once it stays open on every view and across reloads: on the programmer that is
+  a tempo band on screen, and on Show, the Prompt Book and Busk it is the bank drawn twice until
+  dismissed. Neither is a defect and neither is session 5's band returning — the difference is a
+  door the operator opened and can close. Do not "fix" it by making visibility per-view; that puts
+  one surface in two states again.
 
   **Run is gone as a route, replaced by a mode.** Run and Show were never different
   destinations — the only real distinction was whether a stray click can change the

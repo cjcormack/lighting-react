@@ -151,8 +151,13 @@ export function ProgrammerPage() {
              - **GO and BACK are not on this page**, and the programmer binds no transport keys —
                `useTransportKeys` is Show's and the Prompt Book's. Busking from the grid means
                keeping Show or Busk on screen, or a MIDI surface.
-             - **The speed masters are not on this page.** `ProgrammerFxList`'s own rows name each
-               effect's master, and `/speed-masters` manages the bank. */}
+             - **The speed masters are not resident on this page**, and `PD-SPEED-OVERLAY` did not
+               change that: the bank is *summoned*, from the app header's Speed Masters overview
+               panel, which hangs over every route and is nobody's view chrome. Nothing was added
+               to this page for it. `ProgrammerFxList`'s own rows still name each effect's master,
+               and `/speed-masters` still manages the bank. The panel's toggle persists app-wide,
+               so an operator who opens it here has a tempo band on screen until they close it —
+               by their own door, which is what makes it not session 5's band returning. */}
         <ProgrammerBody projectId={projectIdNum} />
       </div>
     </ProgrammerSheetsProvider>

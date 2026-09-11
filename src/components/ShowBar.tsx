@@ -76,7 +76,8 @@ interface ShowBarProps {
  *
  * \* The masters column is the one thing here that is not purely a width decision: a tile each is
  * only affordable if the bank is small, so `SpeedMasters` raises its own threshold with the count
- * and falls back to the railed tile. See `TILED_ARM`.
+ * and falls back to the railed tile. See `ARMS.shared` — the bar's ladder; the speed-master
+ * overview panel has its own, because it owns its row and none of the widths above apply to it.
  *
  * **The bar wraps rather than deleting.** It used to hide the live-state block below 560px, and
  * four *width-adding* rules fired at that same boundary in the other direction — so in the 560–900

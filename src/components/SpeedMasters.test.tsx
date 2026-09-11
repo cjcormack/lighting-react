@@ -33,12 +33,16 @@ vi.mock('../store/status', () => ({
   useIsDeskConnected: () => deskConnected.current,
 }))
 
-import { SpeedMasters, SpeedMastersChip } from './SpeedMasters'
+import { SpeedMasters, SpeedMastersChip, selectedMasterStore } from './SpeedMasters'
 
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
   window.localStorage.clear()
+  // The selected master is a `createSyncStore` singleton, so its value is cached at module level
+  // and outlives `localStorage.clear()` — without this reset the first test to pick a master
+  // would leak that choice into every test after it.
+  selectedMasterStore.reset()
   deskConnected.current = true
 })
 
@@ -110,6 +114,74 @@ describe('SpeedMasters — the tile arms', () => {
     for (const index of [1, 2, 3, 4]) {
       expect(screen.getByRole('button', { name: `M${index}` })).toBeTruthy()
     }
+  })
+
+  it('keeps two mounted hosts on the same selected master', () => {
+    // The regression this guards is not cosmetic. `PD-SPEED-OVERLAY` gave this component a second
+    // host — the overview panel, mounted by `Layout` on every route — so on Show, the Prompt Book
+    // and Busk both hosts are on screen together. The selected master IS the tile, so it is that
+    // master's TAP and click-to-edit BPM that render: two hosts disagreeing means a press in one
+    // retunes a master the operator is reading in the other, with nothing on screen saying so.
+    //
+    // It was `usePersistentState`, which reads its key once in a `useState` initialiser and has no
+    // storage listener — so the second host kept its mount-time snapshot forever. A
+    // `createSyncStore` singleton is what makes both hosts one reader.
+    // Five masters, so neither host renders a tiled arm and the only tile on screen in each is
+    // the rail's. With a small bank both arms are in the DOM at once (deliberately), and every
+    // master would have a tile regardless of what the rail is pointing at — which would make the
+    // assertions below pass without saying anything.
+    liveMasters = [1, 2, 3, 4, 5].map((i) => master(i))
+    render(
+      <>
+        <SpeedMasters />
+        <SpeedMasters room="dedicated" />
+      </>,
+    )
+
+    // Both hosts start on M1 and both offer the rail.
+    expect(screen.getAllByRole('button', { name: 'M1', pressed: true })).toHaveLength(2)
+
+    // Move one host's rail to M2; the other must follow.
+    fireEvent.click(screen.getAllByRole('button', { name: 'M2' })[0])
+
+    expect(screen.getAllByRole('button', { name: 'M2', pressed: true })).toHaveLength(2)
+    expect(screen.queryByRole('button', { name: 'M1', pressed: true })).toBeNull()
+    // The tile that renders is the selected one, in both — which is the half that makes the
+    // disagreement dangerous rather than untidy.
+    expect(screen.getAllByLabelText('Tap tempo for master 2')).toHaveLength(2)
+    expect(screen.queryByLabelText('Tap tempo for master 1')).toBeNull()
+    expect(screen.getAllByLabelText(/^Tap tempo for master/)).toHaveLength(2)
+  })
+
+  it('tiles a four-master bank far earlier in a dedicated row than in a shared one', () => {
+    // The thresholds are not about whether the tiles fit: measured in the panel, four masters are
+    // 464px of tiles at a narrow container and 711px at a wide one, and the shared ladder made
+    // them clear 1600px. That 1600 is what they would cost the ShowBar's live-state block, which
+    // a panel owning its own row does not have. Same arms, same components, different width.
+    //
+    // Asserted on the class strings because jsdom applies no CSS and resolves no container query,
+    // so the width at which an arm turns on is only observable as the literal Tailwind class —
+    // which is also the thing that has to stay a whole literal for Tailwind to emit it at all.
+    liveMasters = [master(1), master(2), master(3), master(4)]
+
+    const dedicated = render(<SpeedMasters room="dedicated" />).container.innerHTML
+    expect(dedicated).toContain('@[620px]:flex')
+    expect(dedicated).not.toContain('@[1600px]:flex')
+
+    cleanup()
+    const shared = render(<SpeedMasters />).container.innerHTML
+    expect(shared).toContain('@[1600px]:flex')
+    expect(shared).not.toContain('@[620px]:flex')
+  })
+
+  it('keeps the 5+ ceiling in a dedicated row, because that one is not about width', () => {
+    // Every other threshold moves with the room. This one does not: the rail reaches every master,
+    // so consolidating loses nothing, and a bank that big is one you manage on its own page.
+    liveMasters = [master(1), master(2), master(3), master(4), master(5)]
+    render(<SpeedMasters room="dedicated" />)
+
+    expect(screen.getAllByLabelText(/^Tap tempo for master/)).toHaveLength(1)
+    expect(screen.queryByText(/Master 5/)).toBeNull()
   })
 
   it('the railed tile defaults to master 1', () => {

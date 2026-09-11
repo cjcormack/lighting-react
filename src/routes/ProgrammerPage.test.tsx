@@ -206,6 +206,11 @@ describe('ProgrammerPage', () => {
     // own control (pinned in `ProgrammerActionBar.test.tsx`), so if this ever fails, check that
     // nobody brought the bar back for some other tile — see the note beside the header in
     // `ProgrammerPage`.
+    //
+    // Tempo is not an argument for it either, and `PD-SPEED-OVERLAY` is why: the bank is reached
+    // from the Speed Masters *overview panel*, which `Layout` hangs under the app header on every
+    // route. That is not this page's chrome and is not rendered by this page, so it cannot show
+    // up here — which is exactly what keeps this assertion true through that change.
     draw()
     expect(screen.queryByTestId('show-bar')).toBeNull()
     expect(screen.getByTestId('header')).toBeTruthy()

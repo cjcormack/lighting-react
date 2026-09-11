@@ -1,11 +1,11 @@
-import { memo, useRef } from 'react'
+import { memo, useRef, useSyncExternalStore } from 'react'
 import { Link, useParams } from 'react-router'
 import { ChevronDown, Settings2 } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { BeatIndicator } from './BeatIndicator'
 import { formatBpm, useBpmDraft } from '../hooks/useBpmDraft'
-import { usePersistentState } from '../hooks/usePersistentState'
+import { createSyncStore } from '../lib/syncStore'
 import { setSpeedMasterBpm, tapSpeedMaster, useSpeedMasterLiveQuery } from '../store/speedMasters'
 import {
   followRatioOf,
@@ -25,6 +25,137 @@ import type { SpeedMasterLiveState } from '../api/speedMastersWsApi'
 type TileMaster = Omit<SpeedMasterLiveState, 'bpm'> & { bpm: number | null }
 
 /**
+ * How much of its host's row is this component's to spend.
+ *
+ * `shared` is the ShowBar, where blackout, the programmer chip, BACK and GO are all `shrink-0`
+ * and the live-state block is the only `flex-1` item — so every tile comes straight out of the
+ * one thing an operator reads mid-show. `dedicated` is the overview panel, which owns its row
+ * outright and is competing with nothing.
+ *
+ * This is **not** a per-host arm, which is the thing `SpeedMasters`' docblock refuses. The arms,
+ * the components and the ladder's shape are identical in both; what differs is the width at which
+ * each step is affordable, and that is a fact about the *row*, which only the host can state.
+ */
+export type SpeedMasterRoom = 'shared' | 'dedicated'
+
+interface ArmLadder {
+  /** Chip below this width, railed tile from it up. */
+  rail: { show: string; hide: string }
+  /** Tiled from this width up, by master count. Absent means never tile — see the ceiling below. */
+  tiled: Record<number, { show: string; hide: string }>
+  /**
+   * The manage-page shortcut inside the railed arm, which only renders for a bank too big to tile
+   * — the tiled arm carries its own. It is width-gated because on a shared row it is the least
+   * important thing there; on a dedicated row almost nothing is competing, so it appears far
+   * earlier rather than leaving a five-master panel with no route to the bank page at all.
+   */
+  manage: string
+}
+
+/**
+ * The width ladders, per room.
+ *
+ * Width alone was the wrong test for the shared row. A named tile runs ~150px, so at 1000px a
+ * four-master bank ate ~600px of the bar and left its cue numbers clipping. A container query
+ * cannot see how many masters there are, so the count picks the threshold and the query applies it.
+ *
+ * The dedicated numbers are measured rather than scaled down from those: in a panel the railed arm
+ * is a flat 168px whatever the width, and the tiled arm for four masters is 464px up to a ~700px
+ * container and 533px from there to ~1100, where the tile's own queries let it grow to 711px. Each
+ * threshold is therefore sized against the tile's width *at that threshold*, not against its widest
+ * form — a flat per-tile figure would have been wrong at both ends — with roughly 15% headroom for
+ * longer master names than this rig's.
+ *
+ * The four-master step is 620 and not, say, 800 because 788px is a real panel: that is what a
+ * landscape phone at 852 leaves after the rail, and 533px of tiles were being sent to the pill rail
+ * to save 255px of empty row.
+ *
+ * **The 5+ ceiling holds in both**, and it is not a width judgment: the rail reaches every master,
+ * so consolidating loses nothing, and a bank that big is one you manage on its own page rather
+ * than read off a strip. It is the only rule here that does not move with the room.
+ *
+ * **No dedicated threshold may equal its `rail` width.** The rail's show class and the chip's
+ * hide class are a min-width pair at the same breakpoint on the same element, at equal
+ * specificity, so which wins would be decided by Tailwind's own utility sort rather than by
+ * anything stated here. The 1-master dedicated step is 300px against a 240px rail for that reason.
+ *
+ * (And note the classes above must be the only bracket-syntax spellings in this file: Tailwind
+ * scans comments too, so a placeholder written in that shape in prose is emitted as a real rule —
+ * `min-width:Npx` is not a length, and the build fails in `lightningcss` rather than here.)
+ *
+ * Both halves of each pair live on one line because they must stay exact complements, and Tailwind
+ * only sees whole literal class strings, so neither can be computed from the other.
+ */
+const ARMS: Record<SpeedMasterRoom, ArmLadder> = {
+  shared: {
+    rail: { show: 'hidden @[440px]:flex', hide: '@[440px]:hidden' },
+    tiled: {
+      1: { show: 'hidden @[1000px]:flex', hide: '@[1000px]:hidden' },
+      2: { show: 'hidden @[1000px]:flex', hide: '@[1000px]:hidden' },
+      3: { show: 'hidden @[1300px]:flex', hide: '@[1300px]:hidden' },
+      4: { show: 'hidden @[1600px]:flex', hide: '@[1600px]:hidden' },
+    },
+    manage: 'hidden @[1000px]:flex',
+  },
+  dedicated: {
+    rail: { show: 'hidden @[240px]:flex', hide: '@[240px]:hidden' },
+    tiled: {
+      1: { show: 'hidden @[300px]:flex', hide: '@[300px]:hidden' },
+      2: { show: 'hidden @[360px]:flex', hide: '@[360px]:hidden' },
+      3: { show: 'hidden @[500px]:flex', hide: '@[500px]:hidden' },
+      4: { show: 'hidden @[620px]:flex', hide: '@[620px]:hidden' },
+    },
+    manage: 'hidden @[440px]:flex',
+  },
+}
+
+/**
+ * Which master the railed arm is showing.
+ *
+ * A `createSyncStore` singleton rather than `usePersistentState`, and the reason is the same one
+ * `useVisSource` gives for the stage vis source: two surfaces read it — the ShowBar and the
+ * globally-mounted overview panel — and `usePersistentState` reads its key once in a `useState`
+ * initialiser with no storage listener, so two mounted instances hold two snapshots and drift the
+ * moment one writes. Here that drift is not cosmetic: the selected master *is* the tile, so its
+ * TAP and its click-to-edit BPM are the controls on screen. Two hosts disagreeing means a press in
+ * one of them retunes a master the operator is reading in the other, with nothing saying so.
+ *
+ * **The key is unchanged**, so desks keep the master they were on: both paths decode with the same
+ * `JSON.parse` over the same raw string. It was versioned away from `showbar.speedMaster.selected`
+ * once, because existing desks had `2` stored — still a *valid* index — so reusing that key would
+ * have silently landed them on M2 and defeated the rail now starting at M1. That reasoning applies
+ * to the name, not to the storage mechanism, so the `.v2` name carries across the move.
+ *
+ * Exported for tests: the cached value is module-level, so it outlives `localStorage.clear()` in
+ * a suite's `afterEach` and has to be `reset()` alongside it.
+ */
+export const selectedMasterStore = createSyncStore<number>({
+  key: 'showbar.speedMaster.selected.v2',
+  fallback: 1,
+  // Narrowed rather than cast: an index has to be a positive integer, and a value written by a
+  // later build (or typed into devtools) must not reach `masters.find` as a string or a float.
+  parse: (parsed) =>
+    typeof parsed === 'number' && Number.isInteger(parsed) && parsed >= 1 ? parsed : 1,
+})
+
+function useSelectedMasterIndex(): number {
+  return useSyncExternalStore(
+    selectedMasterStore.subscribe,
+    selectedMasterStore.getSnapshot,
+    selectedMasterStore.getServerSnapshot,
+  )
+}
+
+interface SpeedMastersProps {
+  /**
+   * How much of the host's row belongs to this component. Defaults to `shared` so the ShowBar —
+   * which had the only mount for this component's whole life — needs no change and behaves exactly
+   * as before.
+   */
+  room?: SpeedMasterRoom
+}
+
+/**
  * What to draw before the first `speedMasters` frame arrives.
  *
  * The ShowBar used to read `fxState.bpm`, which defaults to a hardcoded 120 — so for a frame or
@@ -32,30 +163,6 @@ type TileMaster = Omit<SpeedMasterLiveState, 'bpm'> & { bpm: number | null }
  * a null bpm renders "—". TAP still works (a null uuid *is* master 1 on the wire); click-to-edit
  * does not, because there is no current value to seed the draft from.
  */
-/**
- * How wide the bar must be before a bank of *this many* masters each gets a tile.
- *
- * Width alone was the wrong test. A named tile runs ~150px and everything else on the bar —
- * blackout, the programmer chip, BACK and GO — is `shrink-0`, so every extra tile comes straight
- * out of the live-state block, which is the only `flex-1` item and the one thing an operator
- * actually reads mid-show. At 1000px a four-master bank ate ~600px and left its cue numbers
- * clipping. A container query cannot see how many masters there are, so the count picks the
- * threshold and the query applies it.
- *
- * Indexed by master count. Absent — five or more — means never tile at any width: the rail reaches
- * every master anyway, so consolidating loses nothing, and a bank that big is a bank you manage on
- * its own page rather than read off the show bar.
- *
- * Both halves of each pair live on one line because they must stay exact complements, and Tailwind
- * only sees whole literal class strings, so neither can be computed from the other.
- */
-const TILED_ARM: Record<number, { show: string; hide: string }> = {
-  1: { show: 'hidden @[1000px]:flex', hide: '@[1000px]:hidden' },
-  2: { show: 'hidden @[1000px]:flex', hide: '@[1000px]:hidden' },
-  3: { show: 'hidden @[1300px]:flex', hide: '@[1300px]:hidden' },
-  4: { show: 'hidden @[1600px]:flex', hide: '@[1600px]:hidden' },
-}
-
 const PENDING_MASTER_1: TileMaster = {
   uuid: null,
   index: 1,
@@ -75,37 +182,48 @@ const PENDING_MASTER_1: TileMaster = {
  * removes the split brain, at the cost of nothing — master 1 is still what a null uuid means on a
  * tempo write, so TAP and setBpm are unchanged.
  *
- * Self-contained like `ProgrammerIndicator`: reads its own state and takes no data props. Three
- * arms, chosen by the ShowBar's `@container` width *and* by how many masters there are:
+ * **It has two hosts** since `PD-SPEED-OVERLAY`: the `ShowBar`, and `SpeedMasterOverviewPanel` —
+ * the summoned panel that reaches the bank from a view with no bar, the programmer included. The
+ * panel mounts this component whole rather than drawing a readout of its own, which is the entire
+ * reason it is allowed to exist; see that file, and the Effects Overview paragraph in
+ * `overviewPanels.tsx` for what the last near-copy of a speed surface cost.
+ *
+ * **A host states how much of its row is this component's, and nothing more** — `room`, which
+ * picks a width ladder out of `ARMS`. That is the one thing a host is allowed to say, and it is
+ * said because only the host can know it: the bar's row carries the transport and the live-state
+ * block, the panel's row carries nothing else at all, so the same tile is affordable at very
+ * different widths. What a host must never gain is an *arm* of its own — a readout, a tile or a
+ * ladder shape only it has — because that is how the split brain comes back, and it is what
+ * `overviewPanels.tsx` records the cost of.
+ *
+ * Reads its own state and takes no data props. Three arms, chosen by **the host's** `@container`
+ * width *and* by how many masters there are — the bar declares that container on itself, the
+ * panel declares one on its own body:
  *
  *  - **wide enough for this bank** — one tile per master, each named, plus the manage shortcut.
- *    "Wide enough" comes from `TILED_ARM`, because it depends on the count; five or more never
- *    qualifies.
- *  - **≥440px otherwise** — one railed tile: a pill per master picks which one it shows.
- *  - **<440px** — `SpeedMastersChip`, a single readout that opens every master in a popover.
+ *    "Wide enough" comes from `ARMS[room].tiled`, because it depends on the count; five or more
+ *    never qualifies, in either room.
+ *  - **narrower** — one railed tile: a pill per master picks which one it shows.
+ *  - **narrowest** — `SpeedMastersChip`, a single readout that opens every master in a popover.
+ *    Where those last two boundaries fall is `ARMS[room].rail`.
  *
  * Every arm that can render is in the DOM at once. That is deliberate and cheap: `BeatIndicator`
  * subscribables are shared per master, so the total is N however many arms are mounted, and an
  * unopened Radix popover mounts only its trigger.
  *
- * Memoized (it takes no props) because its host is the ShowBar, which re-renders ~10×/s while a
- * cue fades to run its FADING countdown — the masters have nothing to say about a fade, and this
- * subtree is the bar's biggest.
+ * Memoized because its host may be the ShowBar, which re-renders ~10×/s while a cue fades to run
+ * its FADING countdown — the masters have nothing to say about a fade, and this subtree is the
+ * bar's biggest. `room` is a string literal at both call sites, so the memo still holds.
  */
-export const SpeedMasters = memo(function SpeedMasters() {
+export const SpeedMasters = memo(function SpeedMasters({ room = 'shared' }: SpeedMastersProps) {
   const { data: live } = useSpeedMasterLiveQuery()
-  // A new key rather than a migration of `showbar.speedMaster.selected`: existing desks have `2`
-  // stored, which is still a *valid* index, so reusing the key would silently land them on M2 and
-  // defeat the whole point of the rail now starting at M1.
-  const [selectedIndex, setSelectedIndex] = usePersistentState<number>(
-    'showbar.speedMaster.selected.v2',
-    1,
-  )
+  const selectedIndex = useSelectedMasterIndex()
 
   const masters: TileMaster[] = live?.length ? live : [PENDING_MASTER_1]
   const selected = masters.find((m) => m.index === selectedIndex) ?? masters[0]
 
-  const tiledArm = TILED_ARM[masters.length]
+  const ladder = ARMS[room]
+  const tiledArm = ladder.tiled[masters.length]
 
   return (
     <>
@@ -124,25 +242,29 @@ export const SpeedMasters = memo(function SpeedMasters() {
         </div>
       )}
 
-      {/* One tile with a rail to pick which master it shows. Takes over from 440px up — and all the
-          way up, on a bank too big to tile. Nothing is lost either way: the rail reaches every
-          master, which is the whole point of consolidating rather than dropping. */}
-      <div className={cn('hidden @[440px]:flex items-stretch gap-2 shrink-0', tiledArm?.hide)}>
+      {/* One tile with a rail to pick which master it shows. Takes over from the room's rail width
+          up — and all the way up, on a bank too big to tile. Nothing is lost either way: the rail
+          reaches every master, which is the whole point of consolidating rather than dropping. */}
+      <div className={cn('items-stretch gap-2 shrink-0', ladder.rail.show, tiledArm?.hide)}>
         <div className="flex items-stretch rounded-md border bg-card overflow-hidden">
-          <MasterRail masters={masters} selected={selected} onSelect={setSelectedIndex} />
+          <MasterRail
+            masters={masters}
+            selected={selected}
+            onSelect={selectedMasterStore.set}
+          />
           <MasterTile master={selected} bank={masters} />
         </div>
         {/* A bank too big to tile never renders the arm that carries this, and would otherwise
             lose its only route to the bank page. */}
         {!tiledArm && (
-          <span className="hidden @[1000px]:flex">
+          <span className={ladder.manage}>
             <ManageMastersLink />
           </span>
         )}
       </div>
 
-      {/* <440px — one chip; the popover carries the whole bank. */}
-      <SpeedMastersChip className="@[440px]:hidden" compact />
+      {/* Below the room's rail width — one chip; the popover carries the whole bank. */}
+      <SpeedMastersChip className={ladder.rail.hide} compact />
     </>
   )
 })

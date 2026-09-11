@@ -63,8 +63,11 @@ function readStored<T>(key: string, fallback: T, merge: boolean): T {
 
 /**
  * The collapsible-panel pattern: one persisted boolean plus `toggle` / `hide`.
- * Used by the stage, fixture, effects and cue-slot overview panels, which were
- * four byte-identical copies of this before.
+ * Called once per panel from `components/overviewPanels.tsx`, which is the one
+ * owner of that list — stage, fixture, speed masters and cue slots today. They
+ * were four byte-identical copies of this before, and the list is named here
+ * rather than counted, since it has already outlived one panel (Effects
+ * Overview, deleted) and gained another.
  *
  * Booleans round-trip through JSON as the bare strings `"true"` / `"false"`,
  * which is exactly what those copies wrote, so previously-stored preferences

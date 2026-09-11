@@ -22,6 +22,19 @@ vi.mock('@/store/auth', () => ({
 
 import { UserMenu } from './UserMenu'
 
+// jsdom has no `matchMedia`. The bootstrap-open branch renders `ThemeToggle`, whose
+// `getInitialTheme` falls back to the OS preference when nothing is stored — so without this the
+// branch throws `not a function` and reads as a component bug rather than a missing browser API.
+// Per-file rather than in `test/setup.ts`, which is the convention the other callers follow
+// (`ProgrammerPage.test.tsx`, `BuskingView.test.tsx`) and which `lib/theme.test.ts` depends on,
+// since it stubs `window` wholesale.
+vi.stubGlobal('matchMedia', (query: string) => ({
+  matches: false,
+  media: query,
+  addEventListener: () => {},
+  removeEventListener: () => {},
+}))
+
 function signedInAs(displayName: string) {
   statusResult = {
     data: {
@@ -38,11 +51,15 @@ afterEach(() => {
 })
 
 describe('UserMenu', () => {
-  it('renders nothing on a bootstrap-open desk', () => {
-    // No users exist yet, so there is no identity to show; the setup screen asks for one.
+  it('keeps the theme control reachable on a bootstrap-open desk', () => {
+    // No users exist yet, so there is no identity to show; the setup screen asks for one. This
+    // used to render nothing at all, which was right while the theme toggle was its own button in
+    // the header. It moved into the menu, so nothing-at-all would now mean no way to change theme.
     statusResult = { data: { setupRequired: true, authenticated: false } }
-    const { container } = render(<UserMenu />)
-    expect(container).toBeEmptyDOMElement()
+    render(<UserMenu />)
+
+    expect(screen.queryByRole('button', { name: /^Signed in as/ })).toBeNull()
+    expect(screen.getByRole('button')).toBeTruthy()
   })
 
   describe('the avatar initials', () => {
