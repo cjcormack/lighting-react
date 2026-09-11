@@ -1,7 +1,6 @@
 import { useMemo, useRef } from 'react'
-import { MousePointerSquareDashed, X } from 'lucide-react'
+import { MousePointerSquareDashed } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
@@ -48,14 +47,17 @@ const SHORT_VIEWPORT = '(max-height: 500px)'
  * *rung of the grid's chrome* like row B above it, not an object floating over the page, and the
  * card's 16px of surrounding padding was height.
  *
- * **Below `@[600px]` it is glyph · count · chips · New · X**, which is the `Phone` artboard
- * (`PD-SELECTION-BAR-DENSITY`). The fixture count folds into the cell count's hover, the family
- * badge goes (the chips are already filtered by it), and `SelectionToolbar` folds Locate,
- * Highlight and Fan — the chips are the only thing on this row an operator presses, and on a
- * 393px phone the detail was taking the width they needed. Deselect is the one control kept at
- * every width, because on a phone it and a tap on the grid's empty background are the only ways
- * to drop a selection (`PD-CLEAR-SELECTION-TOUCH`): Escape is a key. Decided together, since
- * "make Deselect reachable" and "give the chips the width" pull on the same row.
+ * **Below `@[600px]` it is glyph · count · chips · New · Set · Clear · X**, which is the `Phone`
+ * artboard (`PD-SELECTION-BAR-DENSITY`) plus the two cell verbs. The fixture count folds into the
+ * cell count's hover, the family badge goes (the chips are already filtered by it), and Locate,
+ * Highlight and Fan fold (`SelectionToolbar` and `CellSelectionActions`) — the chips are the only
+ * thing on this row an operator presses, and on a 393px phone the detail was taking the width
+ * they needed. Three controls are kept at every width. Deselect, because on a phone it and a tap
+ * on the grid's empty background are the only ways to drop a selection
+ * (`PD-CLEAR-SELECTION-TOUCH`): Escape is a key. And Set and Clear for the same reason: Enter and
+ * Backspace are keys, a released drag no longer opens an editor, so on a phone these two icons
+ * are the only way into a marquee's editor and the only way to un-busk one cell. Decided together,
+ * since "make the gestures reachable" and "give the chips the width" pull on the same row.
  *
  * **The wash is `foreground/5`, not a primary tint** (D4). Selection is neutral on this page now,
  * so that `--primary` can mean one thing — you own this value — from the ownership rings down to
@@ -75,7 +77,6 @@ export function SelectionBar({
   cells,
   cellEntryKey,
   cellClearKey,
-  clearCells,
   templateTargets,
   targetFamilies,
   targetEmitters,
@@ -86,8 +87,6 @@ export function SelectionBar({
   cells: readonly CellRef[]
   cellEntryKey: boolean
   cellClearKey: boolean
-  /** Drops the marquee — the Deselect for a cells-only selection, which `selection` has none for. */
-  clearCells: () => void
   templateTargets: readonly LocateTarget[]
   targetFamilies: readonly AttributeFamily[]
   targetEmitters: readonly string[]
@@ -139,10 +138,10 @@ export function SelectionBar({
   return (
     <div className="flex h-[34px] min-w-0 items-center gap-2 border-b bg-foreground/5 px-3">
       <MousePointerSquareDashed className="size-3.5 shrink-0" />
-      {/* Two selections, both live at once, so both are counted. FIXTURE selection is what Record
-          scopes on; CELL selection is a transient edit scope that only says where the next value
-          goes. Leaving either to be inferred from the buttons beside it is how an operator ends up
-          recording a different set from the one they meant.
+      {/* One selection, counted two ways under a marquee: the heads it reaches, and the cells it
+          names on them. Rows and cells are one state now (`FixturesListContainer`), so the head
+          count is what Record and Locate see whichever way the operator selected, and the cell
+          count says how much of those heads the next value touches.
 
           The fixture count is `templateTargets` — the heads a press actually lands on, which is
           the cells' heads under a marquee and the selected rows' otherwise — and deliberately not
@@ -233,23 +232,10 @@ export function SelectionBar({
           all — so a spacer here silently stole roughly half the scroller's width and opened a
           blank gap before these buttons. An auto margin is resolved after flex growth, so it
           takes the whole slack when the strip is absent and exactly nothing when it is there. */}
+      {/* The toolbar serves a marquee as well as a row selection since the two became one, so its
+          Deselect is the way out on a phone (`PD-CLEAR-SELECTION-TOUCH`) whichever shape the
+          selection is in; this bar used to draw a second X for the cells-only case. */}
       {selection && <div className="ml-auto flex shrink-0 items-center">{selection}</div>}
-      {/* A marquee with no row selected has no toolbar — `selection` is gated on selected rows —
-          and so, until `PD-CLEAR-SELECTION-TOUCH`, no Deselect: the only ways out were Escape and
-          a click off, neither of which a full-height phone list has. The same ghost X the toolbar
-          draws, with the same `ml-auto` reason, dropping the first rung of the ladder only. */}
-      {!selection && cells.length > 0 && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="ml-auto shrink-0"
-          onClick={clearCells}
-          title="Deselect cells"
-          aria-label="Deselect cells"
-        >
-          <X className="size-3.5" />
-        </Button>
-      )}
     </div>
   )
 }

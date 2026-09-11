@@ -152,50 +152,77 @@ const ROWS: Row[] = [
 const onBeginCellEdit = vi.fn()
 const onMarqueeDragChange = vi.fn()
 const onBackgroundClick = vi.fn()
+const onRowMarquee = vi.fn()
+/** Which rows the harness reports selected — the base a ⌘-drag from the name column accumulates onto. */
+const selectedRows = vi.hoisted(() => ({ current: new Set<string>() }))
 
-function Harness({ rows = ROWS }: { rows?: Row[] }) {
+function Harness({
+  rows = ROWS,
+  keyboardOpen = null,
+}: {
+  rows?: Row[]
+  keyboardOpen?: { rowId: string; col: ColumnKey; seed: string } | null
+}) {
   const cellSelection = useCellSelection(new Set(rows.map(r => r.id)))
   return (
-    <FixturesTable
-      rows={rows}
-      visibleColumns={['dimmer'] as ColumnKey[]}
-      isSelected={() => false}
-      onRowClick={() => {}}
-      onToggleExpand={() => {}}
-      onBeginCellEdit={onBeginCellEdit}
-      onCellCommit={() => {}}
-      batchCountFor={() => 1}
-      onShowInfo={() => {}}
-      showOwnership
-      cellSelection={cellSelection}
-      onMarqueeDragChange={onMarqueeDragChange}
-      onBackgroundClick={onBackgroundClick}
-    />
+    <>
+      <FixturesTable
+        rows={rows}
+        visibleColumns={['dimmer'] as ColumnKey[]}
+        isSelected={(id) => selectedRows.current.has(id)}
+        onRowClick={() => {}}
+        onToggleExpand={() => {}}
+        onBeginCellEdit={onBeginCellEdit}
+        onCellCommit={() => {}}
+        batchCountFor={() => 1}
+        onShowInfo={() => {}}
+        showOwnership
+        cellSelection={cellSelection}
+        onRowMarquee={onRowMarquee}
+        keyboardOpen={keyboardOpen}
+        onMarqueeDragChange={onMarqueeDragChange}
+        onBackgroundClick={onBackgroundClick}
+      />
+      {/* jsdom cannot see the outline a selected cell draws, so the count is the proof. */}
+      <span data-testid="cell-count">{cellSelection.count}</span>
+    </>
   )
 }
 
+const cellCount = () => Number(screen.getByTestId('cell-count').textContent)
+
 /**
- * Give the grid a layout, for the two tests that need the marquee to actually resolve to cells.
+ * Give the grid a layout, for the tests that need the marquee to actually resolve to cells or rows.
  *
  * jsdom reports every rect as zero, which is why the rest of this suite asserts the *gesture* and
- * leaves the geometry to `cellMarquee.test.ts`. One flat rect is enough here: the scroller's
- * origin becomes (0, 0) so client coordinates pass through unchanged, the sticky header measures
- * zero high, and the single `dimmer` column spans the full width — so a drag anywhere inside the
- * first two rows' 72px covers exactly that column.
+ * leaves the geometry to `cellMarquee.test.ts`. Two rects are enough here: the scroller's origin
+ * becomes (0, 0) so client coordinates pass through unchanged, the sticky header measures zero
+ * high, the name column's header spans x = 0..200 and the single `dimmer` column's header
+ * x = 200..1000 — so a press left of 200 is in the name column and selects rows, and a press right
+ * of it selects cells (strictly inside, so the suite's x = 300 presses cover the column even before
+ * they move). A drag anywhere inside the first two rows' 72px covers exactly those rows.
+ *
+ * `scrolledBy` moves the value column's header left, the way a sideways scroll does, while the
+ * sticky name header stays where it is — the case the mode test has to survive.
  */
-function stubFlatLayout() {
-  const rect = {
-    left: 0,
-    top: 0,
-    right: 1000,
-    bottom: 0,
-    width: 1000,
-    height: 0,
-    x: 0,
-    y: 0,
-    toJSON: () => ({}),
-  } as DOMRect
-  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+function stubFlatLayout({ scrolledBy = 0 }: { scrolledBy?: number } = {}) {
+  const rect = (left: number, right: number) =>
+    ({
+      left,
+      top: 0,
+      right,
+      bottom: 0,
+      width: right - left,
+      height: 0,
+      x: left,
+      y: 0,
+      toJSON: () => ({}),
+    }) as DOMRect
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+    if (this.hasAttribute('data-grid-name-header')) return rect(0, 200)
+    if (this.hasAttribute('data-column-header')) return rect(200 - scrolledBy, 1000 - scrolledBy)
+    return rect(0, 1000)
+  })
 }
 
 /**
@@ -226,6 +253,11 @@ function openCellRowId(): string | null {
 }
 
 beforeEach(() => {
+  // The container puts what the marquee sends into the row selection, and the table dedupes its
+  // next send against that — so the harness has to mirror it, or every move looks like a change.
+  onRowMarquee.mockImplementation((ids: string[]) => {
+    selectedRows.current = new Set(ids)
+  })
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -249,6 +281,7 @@ afterEach(() => {
   focusedTemplate.current = null
   ownership.current = {}
   deskConnected.current = true
+  selectedRows.current = new Set()
 })
 
 /** The value cell's popover trigger — the button the marquee must not fight with. */
@@ -403,61 +436,102 @@ describe('FixturesTable cell gesture', () => {
     expect(onMarqueeDragChange.mock.calls).toEqual([[true], [false]])
   })
 
-  it('opens the first selected cell\'s editor when the drag stayed in one column', () => {
-    // `PD-POPUP-AFTER-DRAG`: the gesture has already said what to edit, so the click that used to
-    // follow it was a second gesture for a decision already made.
+  it('a released drag opens nothing — the selection bar\'s Set and Enter do that', () => {
+    // `PD-POPUP-AFTER-DRAG` used to open the first selected cell\'s editor behind the release of a
+    // single-column drag. The drag says *what* to edit and the bar says *do it* now, so a
+    // rectangle released over one column leaves the cells selected and no editor open.
     stubFlatLayout()
     render(<Harness />)
     dragWithinFirstColumn(cellButton())
-    expect(screen.getByRole('slider')).toBeInTheDocument()
-    // `onBeginEdit` is deliberately NOT part of the auto-open: it exists to move the selection to
-    // the cell a click landed on, and this cell is inside the marquee by construction.
-    expect(onBeginCellEdit).not.toHaveBeenCalled()
-    fireEvent.click(cellButton())
-  })
-
-  it('anchors at the topmost SELECTED cell, not at the last block dragged', () => {
-    // A ⌘-drag unions into what was already selected, so after drawing a second block above or
-    // below the first the selection is wider than the rectangle that just ended. The editor has to
-    // open where the typed-value field would open — the first selected cell in display order —
-    // which after this gesture is row a, not the row b block the operator drew last.
-    stubFlatLayout()
-    render(<Harness />)
-    dragRows(cellButton(), 2, 30) // row a alone
-    expect(openCellRowId()).toBe('fixture:a')
-    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
-    fireEvent.click(cellButton())
-
-    dragRows(cellButton(), 40, 68, { metaKey: true }) // row b, accumulating
-    expect(openCellRowId()).toBe('fixture:a')
-    fireEvent.click(cellButton())
-  })
-
-  it('opens nothing when a ⌘-drag over empty space changed no selection', () => {
-    // The drag covered no cells, so it made no statement — but the selection it left behind is
-    // still single-column, and reading that alone would open an editor for a gesture that did
-    // nothing.
-    stubFlatLayout()
-    render(<Harness />)
-    dragRows(cellButton(), 2, 30)
-    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
-    fireEvent.click(cellButton())
-    expect(openCellRowId()).toBeNull()
-
-    dragRows(cellButton(), 200, 260, { metaKey: true }) // below the last row
-    expect(openCellRowId()).toBeNull()
-    fireEvent.click(cellButton())
-  })
-
-  it('opens nothing when the scope has made the cells read-only', () => {
-    // Output is a read of the cook. The auto-open is a fifth door into the four cell editors, and
-    // it has to be shut in the same places the other four are.
-    scopeState.current = { kind: 'output' }
-    stubFlatLayout()
-    render(<Harness />)
-    dragWithinFirstColumn(cellButton())
+    expect(cellCount()).toBe(2)
     expect(screen.queryByRole('slider')).toBeNull()
+    expect(openCellRowId()).toBeNull()
     fireEvent.click(cellButton())
+  })
+
+  it('opens the cell the container names, when the request comes through `keyboardOpen`', () => {
+    // The one door left into an editor without a click — Enter over a selection, or the bar\'s
+    // Set — and it is the container\'s to open, not the drag\'s.
+    stubFlatLayout()
+    render(<Harness keyboardOpen={{ rowId: 'fixture:b', col: 'dimmer' as ColumnKey, seed: '' }} />)
+    expect(openCellRowId()).toBe('fixture:b')
+    // `onBeginEdit` is deliberately NOT part of a requested open: it exists to move the selection
+    // to the cell a click landed on, and this cell is inside the selection by construction.
+    expect(onBeginCellEdit).not.toHaveBeenCalled()
+  })
+
+  it('a drag from the name column selects the rows it covers, not cells', () => {
+    stubFlatLayout()
+    render(<Harness />)
+    const name = screen.getByText('SL Wash 1')
+    fireEvent.pointerDown(name, { button: 0, clientX: 100, clientY: 10 })
+    fireEvent.pointerMove(name, { button: 0, buttons: 1, clientX: 120, clientY: 50 })
+    expect(onRowMarquee).toHaveBeenLastCalledWith(['fixture:a', 'fixture:b'])
+    expect(cellCount()).toBe(0)
+    // A move that changes no row sends nothing — the container dispatches on every call.
+    fireEvent.pointerMove(name, { button: 0, buttons: 1, clientX: 140, clientY: 60 })
+    expect(onRowMarquee).toHaveBeenCalledTimes(1)
+    fireEvent.pointerUp(name, { button: 0, clientX: 140, clientY: 60 })
+    // The trailing click is swallowed, or the name cell\'s own click would replace the selection
+    // the drag just made with the one row under the release.
+    fireEvent.click(name)
+    expect(onMarqueeDragChange.mock.calls).toEqual([[true], [false]])
+  })
+
+  it('a ⌘-drag from the name column accumulates onto the selection it began over, and shrinking un-selects', () => {
+    stubFlatLayout()
+    selectedRows.current = new Set(['fixture:b'])
+    render(<Harness />)
+    const name = screen.getByText('SL Wash 1')
+    fireEvent.pointerDown(name, { button: 0, clientX: 100, clientY: 10, metaKey: true })
+    fireEvent.pointerMove(name, { button: 0, buttons: 1, clientX: 120, clientY: 50, metaKey: true })
+    expect(onRowMarquee).toHaveBeenLastCalledWith(['fixture:a', 'fixture:b'])
+    fireEvent.pointerMove(name, { button: 0, buttons: 1, clientX: 120, clientY: 20, metaKey: true })
+    // Back to one covered row: the base row plus the row under the pointer, in display order.
+    expect(onRowMarquee).toHaveBeenLastCalledWith(['fixture:a', 'fixture:b'])
+    fireEvent.pointerUp(name, { button: 0, clientX: 120, clientY: 20, metaKey: true })
+    fireEvent.click(name)
+  })
+
+  it('reads the sticky name column from its own rect, so a sideways-scrolled grid still selects rows', () => {
+    // The name cell is `sticky left-0` while the value bands scroll under it: scrolled right, the
+    // first band's left edge is at or left of zero, and a mode test against that edge would call a
+    // press on the still-visible name cell a cell press — and rubber-band the cells hidden behind it.
+    stubFlatLayout({ scrolledBy: 300 })
+    render(<Harness />)
+    const name = screen.getByText('SL Wash 1')
+    fireEvent.pointerDown(name, { button: 0, clientX: 100, clientY: 10 })
+    fireEvent.pointerMove(name, { button: 0, buttons: 1, clientX: 120, clientY: 50 })
+    expect(onRowMarquee).toHaveBeenLastCalledWith(['fixture:a', 'fixture:b'])
+    expect(cellCount()).toBe(0)
+    fireEvent.pointerUp(name, { button: 0, clientX: 120, clientY: 50 })
+    fireEvent.click(name)
+  })
+
+  it('counts the accumulated rows on the chip, not the rectangle', () => {
+    stubFlatLayout()
+    selectedRows.current = new Set(['fixture:b'])
+    render(<Harness />)
+    const name = screen.getByText('SL Wash 1')
+    fireEvent.pointerDown(name, { button: 0, clientX: 100, clientY: 10, metaKey: true })
+    fireEvent.pointerMove(name, { button: 0, buttons: 1, clientX: 120, clientY: 20, metaKey: true })
+    expect(screen.getByText('2 rows')).toBeInTheDocument()
+    fireEvent.pointerUp(name, { button: 0, clientX: 120, clientY: 20, metaKey: true })
+    fireEvent.click(name)
+  })
+
+  it('a drag from a value column into the name column is still a cell marquee', () => {
+    // Which of the two a press is for is decided at the press, the way a spreadsheet decides
+    // between a row-header drag and a range drag.
+    stubFlatLayout()
+    render(<Harness />)
+    const cell = cellButton()
+    fireEvent.pointerDown(cell, { button: 0, clientX: 400, clientY: 10 })
+    fireEvent.pointerMove(cell, { button: 0, buttons: 1, clientX: 100, clientY: 50 })
+    expect(onRowMarquee).not.toHaveBeenCalled()
+    expect(cellCount()).toBe(2)
+    fireEvent.pointerUp(cell, { button: 0, clientX: 100, clientY: 50 })
+    fireEvent.click(cell)
   })
 
   it('ignores a non-primary button', () => {
@@ -755,11 +829,12 @@ describe('FixturesTable neutral selection', () => {
     expect(overlay.className).toContain('shadow-[inset_3px_0_0_var(--foreground)]')
   })
 
-  it('fills the checkbox with foreground and bolds the name', () => {
+  it('bolds the name, and draws no checkbox to say it twice', () => {
+    // The checkbox went when rows and cells became one selection: a drag from the name column
+    // selects rows now, and a box beside a name that already says "selected" was a second
+    // vocabulary for one fact.
     render(<SelectedHarness />)
-    const checkbox = screen.getByLabelText('Select SL Wash 1')
-    expect(checkbox.className).toContain('accent-foreground')
-    expect(checkbox.className).not.toContain('accent-primary')
+    expect(screen.queryByRole('checkbox')).toBeNull()
     expect(screen.getByText('SL Wash 1').className).toContain('font-semibold')
     expect(screen.getByText('SL Wash 2').className).not.toContain('font-semibold')
   })
@@ -909,11 +984,11 @@ describe('FixturesTable touch', () => {
       vi.advanceTimersByTime(2)
     })
     expect(onMarqueeDragChange.mock.calls).toEqual([[true]])
-    // Released without moving. The hold alone covered one cell, so the single-column auto-open
-    // has an anchor — the proof that the zero-size rectangle selected the cell under the finger.
+    // Released without moving. The hold alone covered one cell — the proof that the zero-size
+    // rectangle selected the cell under the finger.
+    expect(cellCount()).toBe(1)
     fireEvent.pointerUp(cell, { ...TOUCH, buttons: 0, clientX: 300, clientY: 10 })
     expect(onMarqueeDragChange.mock.calls).toEqual([[true], [false]])
-    expect(openCellRowId()).toBe('fixture:a')
   })
 
   it('a pan reclaiming the touch before the hold fires disarms it', () => {

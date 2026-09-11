@@ -23,13 +23,16 @@ export interface CellSelection {
 }
 
 /**
- * Cell selection — a transient edit scope, orthogonal to fixture (row) selection.
+ * Cell selection — the other shape of the one selection (CLAUDE.md §One selection, two shapes).
  *
- * **Local state, not Redux.** Row selection lives in `selectionSlice` for one named reason:
- * `RecordSheet` opens outside this component and needs the targets. That does not apply here —
- * fixture selection is still what Record scopes on, and nothing outside the grid reads cell
- * selection. Redux would also inherit `useListSelection`'s unmount-clear hazard for no benefit, and
- * Session 2's scope-swappable grid wants per-instance state anyway.
+ * It was a transient edit scope orthogonal to the row selection; it is exclusive with it now, and
+ * a marquee's rows *are* the fixture selection, narrowed to some of their attributes. Nothing
+ * outside the grid reads the cells themselves: what leaves the container is the rows they sit on,
+ * folded into `selectedRowIds` and published as targets — which is why this can stay **local
+ * state, not Redux**. Row selection lives in `selectionSlice` because `RecordSheet` opens outside
+ * the grid and needs the targets; the container publishes the marquee's rows through that same
+ * door. Redux here would also inherit `useListSelection`'s unmount-clear hazard for no benefit,
+ * and the scope-swappable grid wants per-instance state anyway.
  */
 export function useCellSelection(visibleRowIds: ReadonlySet<string>): CellSelection {
   const [state, setState] = useState<CellSelectionState>(() => new Set<string>())

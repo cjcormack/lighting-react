@@ -23,13 +23,13 @@ const FIELD_SELECTOR =
  *
  *  - **Opening focuses the first field**, and selects it, so the value the operator is replacing
  *    is already highlighted — **however the editor was opened**. That is the whole gesture on a
- *    desk: drag three dimmer cells, the editor opens behind the release (`PD-POPUP-AFTER-DRAG`),
- *    type `128`, press Enter. A first cut focused the field only when a *keystroke* had opened it,
- *    on the reasoning that a tap must not summon the on-screen keyboard — which quietly broke
- *    exactly that gesture, because the auto-open after a drag is not a keystroke. Done in
- *    `onOpenAutoFocus` rather than in an effect, because Radix's own auto-focus is a *parent*
- *    effect and parent effects run after a child's — a focus set from inside the content would be
- *    taken straight back off it.
+ *    desk: drag three dimmer cells, press Enter (or the bar's Set), type `128`, press Enter. A
+ *    first cut focused the field only when a *keystroke* had opened it, on the reasoning that a
+ *    tap must not summon the on-screen keyboard — which quietly broke the bar's Set, which is a
+ *    click, and at the time the release-open too (a drag opened its editor behind the release,
+ *    `PD-POPUP-AFTER-DRAG`, until the bar gained Set). Done in `onOpenAutoFocus` rather than in
+ *    an effect, because Radix's own auto-focus is a *parent* effect and parent effects run after a
+ *    child's — a focus set from inside the content would be taken straight back off it.
  *  - **Enter in any field applies and closes.** Every field on this desk writes as it is typed
  *    (`useNumberFieldDraft`), so there is nothing left to flush: Enter is the operator saying
  *    "that's the value", which is the editor's job done.
@@ -54,11 +54,12 @@ export function useCellEditorKeyboard({
 }: {
   /**
    * Take focus on open at all. Defaults to true, which is every cell editor; `FanPopover` opts out
-   * because its first control is the column chooser rather than a value, and `ColourPickerPopover`
-   * does for its two non-cell callers, which draw no text fields to focus.
+   * only when its marquee spans several fannable columns, because then its first control is the
+   * column chooser rather than a value, and `ColourPickerPopover` does for its two non-cell
+   * callers, which draw no text fields to focus.
    *
-   * It is not a *gesture* switch — see the docblock. Whether this editor was opened by a click, a
-   * released marquee or a keystroke makes no difference to focus, only to [seeding][numericSeed].
+   * It is not a *gesture* switch — see the docblock. Whether this editor was opened by a click, the
+   * bar's Set or a keystroke makes no difference to focus, only to [seeding][numericSeed].
    */
   autoFocus?: boolean
   /** Enter: the operator is finished. Every caller closes; nothing else has to happen. */

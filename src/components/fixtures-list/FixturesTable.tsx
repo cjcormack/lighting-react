@@ -25,13 +25,7 @@ import { DESK_OFFLINE_LABEL } from '../../api/wsGesture'
 import { useRowOwnership } from './useRowOwnership'
 import { applyStagedValue, layerCellClass, ownershipCellClass, ownershipTitle } from './ownership'
 import { cellSelectionClass } from './cellSelection'
-import {
-  columnRange,
-  rectFrom,
-  rowIndexRange,
-  singleColumnAnchor,
-  type ColumnBand,
-} from './cellMarquee'
+import { columnRange, rectFrom, rowIndexRange, type ColumnBand } from './cellMarquee'
 import { listSelectionIntentFor } from './listSelectionModel'
 import { describeCellScope, type CellRef } from './cellSelectionModel'
 import type { CellSelection } from './useCellSelection'
@@ -85,9 +79,8 @@ export interface FixturesTableProps {
   rows: Row[]
   visibleColumns: readonly ColumnKey[]
   isSelected: (id: RowId) => boolean
-  /** Name-cell or checkbox click — the caller derives the intent from the
-   *  mouse event; a checkbox click defaults to toggle instead of replace. */
-  onRowClick: (id: RowId, e: React.MouseEvent, viaCheckbox?: boolean) => void
+  /** Name-cell click — the caller derives the intent from the mouse event. */
+  onRowClick: (id: RowId, e: React.MouseEvent) => void
   onToggleExpand: (row: GroupRow | FixtureRow) => void
   /** A cell editor is opening on this cell — the caller adjusts the selection. */
   onBeginCellEdit: (row: Row, col: ColumnKey) => void
@@ -124,6 +117,16 @@ export interface FixturesTableProps {
    * scope narrower than a row.
    */
   cellSelection?: CellSelection
+  /**
+   * Drag-select across **rows**: a press in the sticky name column that travels selects the rows
+   * the rectangle covers, exactly as one in a value column selects cells. Called with the whole
+   * selection the drag has arrived at — the modifiers are already folded in, so a ⌘-drag unions
+   * with what was selected when it began — and only when that list changed since the last call.
+   *
+   * It is what replaced the row checkbox: accumulate by ⌘-click or by dragging, and a plain drag
+   * replaces, the way a spreadsheet's row header does.
+   */
+  onRowMarquee?: (ids: RowId[]) => void
   /**
    * The keyboard asked for a cell's editor: Enter (or a character) over a cell selection, from
    * `FixturesListContainer`'s window handler. `seed` is the character that started it, or `''` for
@@ -178,6 +181,7 @@ export function FixturesTable({
   fill = false,
   selectionEmpty,
   cellSelection,
+  onRowMarquee,
   keyboardOpen,
   onMarqueeDragChange,
   onBackgroundClick,
@@ -219,47 +223,40 @@ export function FixturesTable({
   }, [visibleColumns])
 
   /**
-   * The cell a just-released single-column marquee wants to open its editor at, and null the rest
-   * of the time (`PD-POPUP-AFTER-DRAG`).
+   * The cell whose editor the container has asked for — Enter over a selection, or the selection
+   * bar's Set — and null the rest of the time.
    *
    * **One-shot, and dropped by this component rather than by the cell that acts on it.** A signal
    * left standing is not merely untidy: the rows are virtualised and the list is filtered, so the
-   * cell it names may not be mounted when the drag ends — an autoscrolled drag leaves its first
-   * row above the `overscan` window — and nothing would then consume it. Minutes later, on a
-   * scroll back up or a cleared filter, that row mounts with the signal still set and its editor
-   * springs open unprompted, with no gesture behind it.
+   * cell it names may not be mounted when the request is made, and nothing would then consume it.
+   * Minutes later, on a scroll back up or a cleared filter, that row mounts with the signal still
+   * set and its editor springs open unprompted, with no gesture behind it.
    *
    * Clearing it here cannot lose the open, either: effects belong to the commit that scheduled
    * them, so the named cell's effect still runs even though this one has already asked for the
    * signal to go.
+   *
+   * A released marquee used to feed this too (`PD-POPUP-AFTER-DRAG`): a single-column drag opened
+   * its first cell's editor behind the release. That went when the selection bar gained a Set of
+   * its own — the drag says *what* to edit and the bar says *do it* — so the request now comes
+   * from the container alone, whichever way the operator made it.
    */
   const [autoOpenCell, setAutoOpenCell] = useState<(CellRef & { seed: string | null }) | null>(null)
   useEffect(() => {
     if (autoOpenCell) setAutoOpenCell(null)
   }, [autoOpenCell])
-
-  /**
-   * The keyboard's request, folded into the same one-shot. The two open an editor identically;
-   * `seed` differs only in carrying the character that started it, for the editor's first field.
-   */
   useEffect(() => {
     if (keyboardOpen) setAutoOpenCell({ ...keyboardOpen })
   }, [keyboardOpen])
-
-  // A released drag names a cell and nothing more: `seed` is null, so the editor opens the way a
-  // click opens it.
-  const onSingleColumnDrag = useCallback(
-    (cell: CellRef) => setAutoOpenCell({ ...cell, seed: null }),
-    [],
-  )
 
   const marquee = useCellMarquee({
     scrollRef,
     rows,
     visibleColumns,
     cellSelection,
+    isRowSelected: isSelected,
+    onRowMarquee,
     onDragChange: onMarqueeDragChange,
-    onSingleColumnDrag,
   })
 
   const columnLabelFor = useCallback((col: ColumnKey) => columnLabel(col), [])
@@ -316,7 +313,11 @@ export function FixturesTable({
             className="sticky top-0 z-20 grid border-b border-border bg-background"
             style={{ gridTemplateColumns }}
           >
-            <div className="sticky left-0 z-10 bg-background px-2 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            <div
+              // The marquee measures the name column from this — see `useCellMarquee`.
+              data-grid-name-header
+              className="sticky left-0 z-10 bg-background px-2 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
+            >
               Fixture
             </div>
             {columnLabels.map(({ col, label }) => (
@@ -352,11 +353,18 @@ export function FixturesTable({
               `touch-action` is read once, at the start of the touch, and the start of this touch
               is a scroll until it has been held.
 
-              Only where there is a marquee to lose them to. The two plain list routes and the cue
-              value grid mount this table with no `cellSelection`, so nothing drags there and a
-              fixture name can still be selected and copied. */}
+              Only where there is a marquee to lose them to, and only for as long as there is: the
+              programmer (`cellSelection`) carries all three always, as it did. The two plain list
+              routes have the row marquee alone, and there the names stay selectable and copyable
+              — which their old comment named as deliberate — by refusing text selection only
+              while a row drag is live (`select-none` from `marquee.dragging`, and `arm()` drops
+              whatever the browser had started selecting in the five pixels before it). The cue
+              value grid has neither and nothing drags there. */}
           <div
-            className={cn(cellSelection && 'select-none touch-manipulation [-webkit-touch-callout:none]')}
+            className={cn(
+              cellSelection && 'select-none touch-manipulation [-webkit-touch-callout:none]',
+              !cellSelection && marquee.dragging && 'select-none',
+            )}
             style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}
             onPointerDown={marquee.onPointerDown}
             onPointerMove={marquee.onPointerMove}
@@ -432,18 +440,27 @@ export function FixturesTable({
             `fixed` descendants, so an in-tree chip would be offset by the workspace's own top-left
             (the header, source strip, action bar and `p-4`) and sit well below the cursor. */}
         {marquee.chip &&
-          cellSelection &&
-          cellSelection.count > 0 &&
+          (marquee.rowCount != null
+            ? marquee.rowCount > 0
+            : cellSelection != null && cellSelection.count > 0) &&
           createPortal(
             <div
               className="pointer-events-none fixed z-50 flex items-center gap-1.5 rounded-full bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground shadow-lg"
               style={{ left: marquee.chip.x + 12, top: marquee.chip.y + 12 }}
             >
-              <span className="font-mono tabular-nums">
-                {cellSelection.count} cell{cellSelection.count === 1 ? '' : 's'}
-              </span>
-              <span className="opacity-60">·</span>
-              <span>{describeCellScope(cellSelection.cells, columnLabelFor)}</span>
+              {marquee.rowCount != null ? (
+                <span className="font-mono tabular-nums">
+                  {marquee.rowCount} row{marquee.rowCount === 1 ? '' : 's'}
+                </span>
+              ) : (
+                <>
+                  <span className="font-mono tabular-nums">
+                    {cellSelection!.count} cell{cellSelection!.count === 1 ? '' : 's'}
+                  </span>
+                  <span className="opacity-60">·</span>
+                  <span>{describeCellScope(cellSelection!.cells, columnLabelFor)}</span>
+                </>
+              )}
             </div>,
             document.body,
           )}
@@ -495,26 +512,40 @@ export function FixturesTable({
  *
  * The hold selects the cell under the finger the moment it fires — a zero-size rectangle still
  * covers one cell — which is the only acknowledgement a touchscreen gets that the hold took.
+ *
+ * **The same gesture selects rows from the name column.** Which of the two a press is for is
+ * decided once, at the press, by which side of the first value column it landed on — a rectangle
+ * dragged from the name column into the values is still a row marquee, the way a spreadsheet's
+ * row-header drag is. A row drag resolves the same `rowIndexRange` to row ids, folds the press's
+ * modifier in against the selection it began over, and hands the whole list to `onRowMarquee`;
+ * the container puts it in the row selection, which is what the checkbox column used to be for.
  */
 function useCellMarquee({
   scrollRef,
   rows,
   visibleColumns,
   cellSelection,
+  isRowSelected,
+  onRowMarquee,
   onDragChange,
-  onSingleColumnDrag,
 }: {
   scrollRef: React.RefObject<HTMLDivElement | null>
   rows: Row[]
   visibleColumns: readonly ColumnKey[]
   cellSelection?: CellSelection
+  /** The row selection a ⌘-drag accumulates over, read at the press. */
+  isRowSelected: (id: RowId) => boolean
+  /** The rows a name-column drag has arrived at. See `FixturesTableProps`. */
+  onRowMarquee?: (ids: RowId[]) => void
   /** A drag started or ended — twice per gesture, never per move. See `FixturesTableProps`. */
   onDragChange?: (dragging: boolean) => void
-  /** A drag ended inside one column: which cell its editor should open at. */
-  onSingleColumnDrag?: (cell: CellRef) => void
 }) {
   const [band, setBand] = useState<React.CSSProperties | null>(null)
   const [chip, setChip] = useState<{ x: number; y: number } | null>(null)
+  /** How many rows a live *row* marquee has selected, for the chip; null while a cell marquee is live. */
+  const [rowCount, setRowCount] = useState<number | null>(null)
+  /** Mirrors `draggingRef` as state, for the one class that wants it (see the rows wrapper). */
+  const [dragging, setDraggingState] = useState(false)
   const dragRef = useRef<{
     pointerId: number
     /** The rows wrapper the press landed on — the hold arms from a timer, with no event to read it from. */
@@ -526,6 +557,10 @@ function useCellMarquee({
     /** A touch or pen press: armed by the hold, never by distance. */
     hold: boolean
     dragged: boolean
+    /** Rows from the name column, cells from the values — fixed at the press. */
+    mode: 'cells' | 'rows'
+    /** A row drag's base: the ids selected when it began, which a ⌘-drag unions into. */
+    baseRowIds: readonly RowId[]
   } | null>(null)
   const bandsRef = useRef<ColumnBand[] | null>(null)
   const headerHeightRef = useRef(0)
@@ -540,8 +575,10 @@ function useCellMarquee({
   selectionRef.current = cellSelection
   const onDragChangeRef = useRef(onDragChange)
   onDragChangeRef.current = onDragChange
-  const onSingleColumnDragRef = useRef(onSingleColumnDrag)
-  onSingleColumnDragRef.current = onSingleColumnDrag
+  const onRowMarqueeRef = useRef(onRowMarquee)
+  onRowMarqueeRef.current = onRowMarquee
+  const isRowSelectedRef = useRef(isRowSelected)
+  isRowSelectedRef.current = isRowSelected
 
   /**
    * Whether a marquee is live, mirrored outside React state so the handlers keep their identity.
@@ -553,20 +590,9 @@ function useCellMarquee({
   const setDragging = useCallback((next: boolean) => {
     if (draggingRef.current === next) return
     draggingRef.current = next
+    setDraggingState(next)
     onDragChangeRef.current?.(next)
   }, [])
-  /**
-   * Whether this drag has resolved to any cell at all — the *only* thing the release still needs
-   * to know about the rectangle itself, now that the auto-open's anchor comes from the accumulated
-   * selection instead.
-   *
-   * Remembered rather than re-derived at the release, which looks equivalent and is not:
-   * `bandsRef` is cleared by an effect whenever `visibleColumns` changes identity, and renders
-   * happen between the last pointer move and the pointer up. Calling `hitsFor` again at that point
-   * can find no column bands and answer "covered nothing" for a drag that covered the whole grid.
-   */
-  const coveredCellsRef = useRef(0)
-
   /**
    * Column extents, measured from the sticky header.
    *
@@ -600,8 +626,9 @@ function useCellMarquee({
     }
   }, [])
 
-  const hitsFor = useCallback(
-    (endX: number, endY: number): CellRef[] => {
+  /** The non-divider rows the rectangle covers, in display order. */
+  const rowsFor = useCallback(
+    (endX: number, endY: number): Row[] => {
       const scroller = scrollRef.current
       const drag = dragRef.current
       if (!scroller || !drag) return []
@@ -613,19 +640,31 @@ function useCellMarquee({
         rowCount: rowsRef.current.length,
       })
       if (!range) return []
-      const cols = columnRange(rect, bandsRef.current ?? [])
-      if (cols.length === 0) return []
-
-      const hits: CellRef[] = []
+      const out: Row[] = []
       for (let i = range[0]; i <= range[1]; i++) {
         const row = rowsRef.current[i]
-        // Dividers hold no values, so they must not inflate the count.
-        if (!row || row.kind === 'divider') continue
+        // Dividers hold no values and cannot be selected, so they must not inflate either count.
+        if (row && row.kind !== 'divider') out.push(row)
+      }
+      return out
+    },
+    [scrollRef],
+  )
+
+  const hitsFor = useCallback(
+    (endX: number, endY: number): CellRef[] => {
+      const drag = dragRef.current
+      if (!drag) return []
+      const rect = rectFrom(drag.start, { x: endX, y: endY })
+      const cols = columnRange(rect, bandsRef.current ?? [])
+      if (cols.length === 0) return []
+      const hits: CellRef[] = []
+      for (const row of rowsFor(endX, endY)) {
         for (const col of cols) hits.push({ rowId: row.id, col })
       }
       return hits
     },
-    [scrollRef],
+    [rowsFor],
   )
 
   /** Redraw the band and re-resolve the hits from the last known pointer position. */
@@ -644,10 +683,35 @@ function useCellMarquee({
       width: rect.right - rect.left,
       height: rect.bottom - rect.top,
     })
-    const hits = hitsFor(x, y)
-    coveredCellsRef.current = hits.length
-    selectionRef.current?.select(hits, drag.intent)
-  }, [hitsFor, scrollRef])
+    if (drag.mode === 'rows') {
+      const covered = rowsFor(x, y).map((row) => row.id)
+      // Shift has no distinct meaning for a rectangle — the rectangle *is* the range — so it
+      // replaces, as it does for cells (`applyCellSelection`). ⌘ accumulates onto the selection
+      // the drag began over, not onto its own last frame, so shrinking the rectangle un-selects.
+      const accumulate = drag.intent === 'toggle' || drag.intent === 'range-add'
+      // In display order either way, so the comparison below is order-insensitive by construction.
+      const ids = accumulate
+        ? (() => {
+            const wanted = new Set([...drag.baseRowIds, ...covered])
+            return rowsRef.current.filter((row) => wanted.has(row.id)).map((row) => row.id)
+          })()
+        : covered
+      // The chip counts what the drag has *selected* — the accumulated list under ⌘ — the way the
+      // cell arm counts the accumulated cells, not the rectangle alone.
+      setRowCount(ids.length)
+      // Sent only when it differs from what the container holds *now*, not from what this drag
+      // last sent: a dispatch per move would re-render every consumer for nothing, and a memory of
+      // our own last send would fall silent exactly when another writer (the desk bridge) moved
+      // the selection under a live drag.
+      const current = rowsRef.current
+        .filter((row) => isRowSelectedRef.current(row.id))
+        .map((row) => row.id)
+      if (current.length === ids.length && ids.every((id, i) => current[i] === id)) return
+      onRowMarqueeRef.current?.(ids)
+      return
+    }
+    selectionRef.current?.select(hitsFor(x, y), drag.intent)
+  }, [hitsFor, rowsFor, scrollRef])
 
   // The rAF loop closes over its first `step`, so it reads the callback through a ref rather than
   // capturing a stale one.
@@ -664,6 +728,9 @@ function useCellMarquee({
     if (!drag || drag.dragged) return
     drag.dragged = true
     setDragging(true)
+    // On the plain lists text stays selectable until this moment (see the rows wrapper), so the
+    // five pixels before the threshold may have started a text selection; drop it.
+    window.getSelection()?.removeAllRanges()
     try {
       drag.el.setPointerCapture(drag.pointerId)
     } catch {
@@ -725,7 +792,7 @@ function useCellMarquee({
       // in a popover, which is small and beside its own cell; obvious in a sheet, which is not.
       // The DOM subtree is the question, so the DOM is what is asked.
       if (!e.currentTarget.contains(e.target as Node)) return
-      if (!selectionRef.current || e.button !== 0) return
+      if ((!selectionRef.current && !onRowMarqueeRef.current) || e.button !== 0) return
       const scroller = scrollRef.current
       if (!scroller) return
       // A second pointer while one is already down. A live marquee keeps the pointer it has and
@@ -744,10 +811,22 @@ function useCellMarquee({
         scroller.querySelector('[data-grid-header]')?.getBoundingClientRect().height ?? 0
       const origin = scroller.getBoundingClientRect()
       const x = e.clientX - origin.left
-      // Left of the first value column is the sticky name cell, which owns row selection.
-      const first = bandsRef.current[0]
-      if (!first || x < first.left) return
-      coveredCellsRef.current = 0
+      // On the sticky name column a drag selects rows; on a value column it selects cells. The
+      // name column is measured from its *own* header cell, not inferred from the first value
+      // band's left edge: the name cell is `sticky left-0` and stays put while the bands scroll
+      // under it, so once the grid is scrolled sideways the first band's edge is at or left of
+      // zero and a press on the still-visible name cell would have read as a cell press — and
+      // rubber-banded the cells hidden behind it. Each arm needs its consumer, or the press is
+      // nobody's.
+      const nameRight =
+        (scroller.querySelector('[data-grid-name-header]')?.getBoundingClientRect().right ?? origin.left) -
+        origin.left
+      const mode: 'cells' | 'rows' = x < nameRight ? 'rows' : 'cells'
+      if (mode === 'rows' ? !onRowMarqueeRef.current : !selectionRef.current) return
+      // The base a ⌘-drag accumulates onto, taken now: the selection can move under a live drag
+      // (the container clears the *other* kind the moment this one selects anything).
+      const baseRowIds =
+        mode === 'rows' ? rowsRef.current.filter((row) => isRowSelectedRef.current(row.id)).map((row) => row.id) : []
       // Touch *and* pen: a pen scrolls like a finger on the one tablet this runs on. Named
       // positively rather than as `!== 'mouse'` because a `pointerType` can be empty — jsdom's
       // always is — and an unknown device is a mouse's kind of thing, not a scroller's.
@@ -760,6 +839,8 @@ function useCellMarquee({
         intent: listSelectionIntentFor(e),
         hold: isHold,
         dragged: false,
+        mode,
+        baseRowIds,
       }
       if (isHold) hold.onPointerDown(e)
     },
@@ -786,6 +867,7 @@ function useCellMarquee({
         dragRef.current = null
         setBand(null)
         setChip(null)
+        setRowCount(null)
         stopAutoScroll()
         setDragging(false)
         return
@@ -825,6 +907,7 @@ function useCellMarquee({
       dragRef.current = null
       setBand(null)
       setChip(null)
+      setRowCount(null)
       stopAutoScroll()
       setDragging(false)
       if (!drag) return
@@ -874,31 +957,11 @@ function useCellMarquee({
       }
       window.addEventListener('click', swallow, true)
       window.addEventListener('pointerdown', dispose, true)
-
-      // The gesture has already said what to edit, so open that column's editor rather than making
-      // the operator click a cell for a decision they have made (`PD-POPUP-AFTER-DRAG`). Reported
-      // rather than done here: the editors belong to the cells, and the cell this names may not
-      // even be rendered — a drag that autoscrolled downwards leaves its first row off screen,
-      // where nothing opens and nothing breaks.
-      //
-      // Announced in the same handler as `setDragging(false)` on purpose. React batches the two
-      // into one commit, so the selection bar has already taken its place in the flow by the time
-      // the cell's effect opens anything — which is what keeps the popover from anchoring 34px off
-      // on the short-viewport arm that holds the bar back until now.
-      //
-      // The anchor is read from the **accumulated selection**, which is what an editor opened here
-      // would write to — not from this drag's own rectangle. A ⌘-drag unions into what was already
-      // selected, so a second block drawn over another column leaves a two-column selection that
-      // its own rectangle cannot see. The coverage count is still this drag's, and gates the whole
-      // thing: a ⌘-drag over empty space changes nothing, and must not open an editor for a
-      // selection it did not make.
-      if (coveredCellsRef.current > 0) {
-        const anchor = singleColumnAnchor(
-          selectionRef.current?.cells ?? [],
-          rowsRef.current.map((row) => row.id),
-        )
-        if (anchor) onSingleColumnDragRef.current?.(anchor)
-      }
+      // And that is all a release does. It used to open the first selected cell's editor when the
+      // drag stayed in one column (`PD-POPUP-AFTER-DRAG`); the selection bar's Set is that gesture
+      // now, and Enter its key. For a row marquee the swallow above is load-bearing twice over:
+      // the name cell's own `onClick` would otherwise select the row under the release, replacing
+      // the very selection the drag just made.
     },
     [hold, scrollRef, setDragging, stopAutoScroll],
   )
@@ -950,7 +1013,7 @@ function useCellMarquee({
     [hold, setDragging, stopAutoScroll],
   )
 
-  return { band, chip, onPointerDown, onPointerMove, onPointerUp, onPointerLeave }
+  return { band, chip, rowCount, dragging, onPointerDown, onPointerMove, onPointerUp, onPointerLeave }
 }
 
 interface RowViewProps {
@@ -958,7 +1021,7 @@ interface RowViewProps {
   visibleColumns: readonly ColumnKey[]
   gridTemplateColumns: string
   selected: boolean
-  onRowClick: (id: RowId, e: React.MouseEvent, viaCheckbox?: boolean) => void
+  onRowClick: (id: RowId, e: React.MouseEvent) => void
   onToggleExpand: (row: GroupRow | FixtureRow) => void
   onBeginCellEdit: (row: Row, col: ColumnKey) => void
   onCellCommit: (row: Row, col: ColumnKey, commit: CellCommit) => void
@@ -976,14 +1039,14 @@ interface RowViewProps {
    */
   deskConnected: boolean
   /**
-   * A just-released single-column marquee wants this row's cell in this column to open its editor
-   * (`PD-POPUP-AFTER-DRAG`), and null on every other row — which is all of them but one, so the
-   * memo still holds for the rest of the grid.
+   * The container asked for this row's cell in this column to open its editor — Enter over the
+   * selection, or the selection bar's Set — and null on every other row, which is all of them but
+   * one, so the memo still holds for the rest of the grid.
    */
   autoOpenCol: ColumnKey | null
   /**
-   * That auto-open came from a character typed at the grid, which the editor seeds its first field
-   * with. Null for a released marquee, and for every row but the named one.
+   * That request came from a character typed at the grid, which the editor seeds its first field
+   * with. `''` for a bare Enter or the bar's Set, and null for every row but the named one.
    */
   autoOpenSeed: string | null
   /** Nothing is selected — any open cell editor in this row must go. See `useCellEditorOpen`. */
@@ -1014,7 +1077,7 @@ function useInertColumns(visibleColumns: readonly ColumnKey[]): ReadonlySet<Colu
   }, [inLayerScope, mask, visibleColumns])
 }
 
-/** Checkbox indent per nesting depth (member rows 1, element rows 2). */
+/** Name-cell indent per nesting depth (member rows 1, element rows 2). */
 const INDENT_CLASS = ['', 'ml-5', 'ml-10']
 
 /** Stable identity for the ownership-off path, so the hook's memos never churn. */
@@ -1145,7 +1208,7 @@ const RowView = React.memo(function RowView({
             the row's own background layer, underneath every child, and this cell's `bg-background`
             is opaque: the edge would have been invisible at exactly the widths the name column is
             pinned at, which is all of them. Drawn on the overlay it sits above that background and
-            below the checkbox and the name, which is where a selection edge belongs. */}
+            below the name, which is where a selection edge belongs. */}
         <div
           className={`pointer-events-none absolute inset-0 ${
             selected
@@ -1153,22 +1216,21 @@ const RowView = React.memo(function RowView({
               : 'group-hover/row:bg-accent/30'
           }`}
         />
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={() => undefined}
-          onClick={(e) => {
-            e.stopPropagation()
-            onRowClick(row.id, e, true)
-          }}
-          // `accent-foreground`, not `accent-primary` (D4): a foreground-filled box with a dark
-          // tick. The browser derives the tick's colour from the accent's luminance, so this is
-          // white-box-dark-tick on the desk and dark-box-white-tick in light mode, both without a
-          // second class. It was the accent blue, which made the one control that says "this row
-          // is selected" the same colour as the ring that says "you own this value".
-          className={`relative size-3.5 shrink-0 accent-foreground ${INDENT_CLASS[indentLevel] ?? ''}`}
-          aria-label={`Select ${qualifiedName}`}
-        />
+        {/* There was a checkbox here — the accumulating half of row selection, beside a name click
+            that replaced. It went when the row and cell selections became one: a drag from this
+            column selects rows now (`useCellMarquee`), ⌘-click still toggles, and a box that said
+            "this row is selected" beside cells that say the same thing with an outline was two
+            vocabularies for one fact. The indent it carried moves to the name.
+
+            It was also the row's one tabbable, screen-reader-announced selector, and nothing here
+            replaces it per row — decided, not overlooked: the keyboard path is the window-level
+            ⌘A, ↑/↓ (Shift extends) and →/← (open and close the anchor row) in
+            `FixturesListContainer`; the first two existed alongside the checkbox and are the
+            whole of it now. A tabbable name cell would put a stop per row in
+            the tab order for a gesture those keys already cover. */}
+        {indentLevel > 0 && (
+          <span aria-hidden="true" className={`shrink-0 ${INDENT_CLASS[indentLevel] ?? ''}`} />
+        )}
         {/* `expandable` already narrows row to GroupRow | FixtureRow. */}
         {expandable && (
           <button
@@ -1207,7 +1269,7 @@ const RowView = React.memo(function RowView({
         )}
         {/* Hover actions: the span's stopPropagation keeps both buttons from
             reaching the name cell's selection click. focus-within keeps the
-            buttons tabbable — once the row's checkbox has focus they display,
+            buttons tabbable — once anything in the row has focus they display,
             entering the tab order for keyboard users. */}
         {locate && (
           <span
@@ -1475,7 +1537,8 @@ function PropertyCell({
   /** The desk is unreachable, so an edit here would go nowhere. */
   disabled: boolean
   /**
-   * Open this cell's editor without a click — a released single-column marquee, and nothing else.
+   * Open this cell's editor without a click — the container's request (Enter over the selection,
+   * or the bar's Set), and nothing else.
    *
    * Threaded to all four rather than solved once above them because the popover is each editor's
    * own — and because `CueValueGrid` mounts these same four components with no table over them.
@@ -1486,7 +1549,7 @@ function PropertyCell({
   autoOpen: boolean
   /**
    * That open came from a character typed at the grid, which the editor seeds its first field
-   * with — see `useCellEditorKeyboard`. Null for a click or a released marquee.
+   * with — see `useCellEditorKeyboard`. `''` for a bare Enter or Set; null for a click.
    */
   keyboardSeed: string | null
   /** Nothing is selected, so an open editor here has lost what it was editing for. */

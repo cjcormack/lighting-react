@@ -1,10 +1,9 @@
-import { useCallback } from 'react'
+import { useCallback, type ReactNode } from 'react'
 import { Crosshair, Flashlight, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { useLocateStateQuery, useToggleLocateMutation } from '../../store/locate'
-import { FanPopover } from './FanPopover'
 import { useHighlight } from './useHighlight'
 import type { LocateTarget } from '../../store/locate'
 import type { WriteTarget } from './rowModel'
@@ -16,7 +15,14 @@ export interface SelectionToolbarProps {
   /** Distinct write targets (fixtures or elements) the selection expands to,
    *  in visible row order. */
   targets: readonly WriteTarget[]
+  /** Drops the selection — cells if there are any, the rows otherwise. */
   onClear: () => void
+  /**
+   * The selection's own verbs, drawn before Locate and Highlight. On the programmer a cell
+   * selection's Set · Clear · Fan (`CellSelectionActions`) and nothing for rows; on the two plain
+   * list routes, which cannot select a cell, the row Fan they have always had.
+   */
+  actions?: ReactNode
 }
 
 /**
@@ -34,10 +40,11 @@ export interface SelectionToolbarProps {
  * gaining an ancestor `@container`; if one ever does, these words vanish there and the fix is to
  * name the container rather than to widen the threshold.
  */
-const WORD_CLASS = 'hidden sm:inline @max-[1100px]:hidden'
+export const WORD_CLASS = 'hidden sm:inline @max-[1100px]:hidden'
 
 /**
  * Where Locate, Highlight and Fan go on a phone-width programmer bar, and Deselect does not.
+ * Set and Clear stay too — see `CellSelectionActions`.
  *
  * `PD-SELECTION-BAR-DENSITY` and `PD-CLEAR-SELECTION-TOUCH`, decided together because they pull
  * against each other: the chips are the only thing on that row an operator presses, so the width
@@ -58,7 +65,12 @@ const WORD_CLASS = 'hidden sm:inline @max-[1100px]:hidden'
  */
 export const PHONE_FOLDED_CLASS = '@max-[600px]:hidden'
 
-export function SelectionToolbar({ locateTargets, targets, onClear }: SelectionToolbarProps) {
+export function SelectionToolbar({
+  locateTargets,
+  targets,
+  onClear,
+  actions,
+}: SelectionToolbarProps) {
   const { data: locateState } = useLocateStateQuery()
   const [toggleLocate] = useToggleLocateMutation()
   const getTargets = useCallback(() => [...targets], [targets])
@@ -90,12 +102,15 @@ export function SelectionToolbar({ locateTargets, targets, onClear }: SelectionT
           rule as the two verbs' words: that bar counts the selection itself, at its left end, as
           "4 fixtures" — the heads a press lands on — and the same number twice at opposite ends of
           one 34px line reads as two different facts that happen to agree. The list routes have no
-          such count of their own, so there it stays. */}
+          such count of their own, so there it stays.
+
+          Since the two selections became one (`FixturesListContainer`), a marquee's rows are the
+          selection too, so this counts the cells' heads under a marquee and the rows' otherwise. */}
       <span className="text-xs text-muted-foreground tabular-nums @max-[1100px]:hidden">
         {targets.length}
         <span className="hidden sm:inline"> selected</span>
       </span>
-      <FanPopover targets={targets} className={PHONE_FOLDED_CLASS} />
+      {actions}
       {/* No "Apply palette" or "Record palette" here any more. Both authored value-level
           references, which layers replace: applying a look to a cue is a layer, and recording the
           programmer into a look is the record rewrite. Leaving Record in place would have been

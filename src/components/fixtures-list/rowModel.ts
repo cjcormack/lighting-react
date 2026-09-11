@@ -617,6 +617,45 @@ export function planBatchWrites(
 // and parsed by the Fixtures List route; both sides go through these helpers
 // so the format lives in exactly one place.
 
+/** What ← or → does to the anchor row. See [treeKeyAction]. */
+export type TreeKeyAction =
+  | { kind: 'expand'; row: GroupRow | FixtureRow }
+  | { kind: 'collapse'; row: GroupRow | FixtureRow }
+  | { kind: 'select-parent'; rowId: RowId }
+
+/**
+ * The tree half of the list's keyboard: → opens the anchor row, ← closes it or climbs to its parent.
+ *
+ * The ARIA tree convention, applied to the two kinds of row that open — a group row over its
+ * members, and a multi-head fixture over its elements. → on a closed one opens it and does nothing
+ * on anything else; ← on an open one closes it, and on a row that is *inside* something — a member
+ * of a group, an element of a fixture — moves the selection up to the parent instead, so a second
+ * ← then closes it. Null where the key means nothing here, so the caller leaves the event alone.
+ *
+ * A member's parent is its group row; an element's is the fixture row it was rendered under, which
+ * is the member row when that fixture sits in a group (`elementRowId` scopes by the parent row for
+ * the same reason). Ids are built by the same helpers `buildRows` uses, so the two cannot drift.
+ */
+export function treeKeyAction(row: Row, key: 'ArrowLeft' | 'ArrowRight'): TreeKeyAction | null {
+  if (row.kind === 'divider') return null
+  const expandable =
+    row.kind === 'group' || (row.kind === 'fixture' && (row.fixture.elements?.length ?? 0) > 0)
+  if (key === 'ArrowRight') {
+    return expandable && !row.isExpanded ? { kind: 'expand', row } : null
+  }
+  if (expandable && row.isExpanded) return { kind: 'collapse', row }
+  if (row.kind === 'element') {
+    const parent = row.parentGroup
+      ? memberRowId(row.parentGroup, row.fixture.key)
+      : fixtureRowId(row.fixture.key)
+    return { kind: 'select-parent', rowId: parent }
+  }
+  if (row.kind === 'fixture' && row.parentGroup !== undefined) {
+    return { kind: 'select-parent', rowId: groupRowId(row.parentGroup) }
+  }
+  return null
+}
+
 export type SelectParam = { kind: 'fixture' | 'group'; key: string }
 
 export function fixtureSelectParam(key: string): string {

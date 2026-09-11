@@ -1,6 +1,11 @@
 // @vitest-environment jsdom — `marqueeOwnsKeyTarget` reads the DOM; the rest needs none.
 import { describe, expect, it } from 'vitest'
-import { cellKeyboardPermission, marqueeOwnsKeyTarget, orderedSelectedCells } from './cellEntry'
+import {
+  cellActionCopy,
+  cellKeyboardPermission,
+  marqueeOwnsKeyTarget,
+  orderedSelectedCells,
+} from './cellEntry'
 import type { CellRef } from './cellSelectionModel'
 
 /**
@@ -127,5 +132,35 @@ describe('marqueeOwnsKeyTarget', () => {
     const orphan = document.createElement('div')
     orphan.innerHTML = '<div data-cell="dimmer"><button id="o">x</button></div>'
     expect(marqueeOwnsKeyTarget(orphan.querySelector('#o'), () => true)).toBe(false)
+  })
+})
+
+/**
+ * The bar's Set and Clear say where the value lands, and say why when they cannot — following the
+ * permission above rather than restating it, so a title can never promise a refused gesture.
+ */
+describe('cellActionCopy', () => {
+  it('names Local as the destination in Local, and for the (unreachable) no-scope default', () => {
+    expect(cellActionCopy({ kind: 'local' }, false, 3).setTitle).toMatch(/3 selected cells in Local/)
+    expect(cellActionCopy(null, false, 1).setTitle).toMatch(/1 selected cell in Local/)
+    expect(cellActionCopy({ kind: 'local' }, false, 3).clearTitle).toMatch(/out of Local/)
+  })
+
+  it('gives Output the read-only reason on both verbs', () => {
+    const copy = cellActionCopy({ kind: 'output' }, false, 2)
+    expect(copy.setTitle).toMatch(/read of the cook/)
+    expect(copy.clearTitle).toBe(copy.setTitle)
+  })
+
+  it('names the layer as the destination on a focused Look, and refuses only Clear there', () => {
+    const copy = cellActionCopy({ kind: 'layer', layerId: 7 }, false, 2)
+    expect(copy.setTitle).toMatch(/focused layer/)
+    expect(copy.clearTitle).toMatch(/switch to Local/)
+  })
+
+  it("uses Fan's own template wording on a focused template layer", () => {
+    const copy = cellActionCopy({ kind: 'layer', layerId: 7 }, true, 2)
+    expect(copy.setTitle).toMatch(/applies a template/)
+    expect(copy.clearTitle).toBe(copy.setTitle)
   })
 })

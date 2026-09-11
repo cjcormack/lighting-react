@@ -160,6 +160,66 @@ describe('useDeskSelectionBridge', () => {
     expect(setDeskSelection).toHaveBeenCalledWith([{ type: 'group', key: 'Front wash' }])
   })
 
+  /**
+   * The desk acknowledges a `set` with a `selection.state` frame, so after a publish the next frame
+   * is usually our own words coming back. A marquee publishes at every row boundary, and the
+   * echoes arrive in order but late — so without the bridge remembering what it sent, the echo of
+   * an earlier frame reaches a selection that has moved on and is applied as though the desk had
+   * moved it, which destroys the marquee that caused it.
+   */
+  it('drops the echo of its own publish rather than applying it', () => {
+    const { setSelection, select, render } = drive()
+    select(['fixture:par-9'])
+    expect(setDeskSelection).toHaveBeenCalledWith([{ type: 'fixture', key: 'par-9' }])
+    deskTargets = [{ type: 'fixture', key: 'par-9' }]
+    render()
+    expect(setSelection).not.toHaveBeenCalled()
+  })
+
+  it('drops a late echo of an earlier publish, and does not roll the selection back to it', () => {
+    const { setSelection, select, render } = drive()
+    select(['fixture:par-9'])
+    select(['fixture:par-9', 'group:Front wash'])
+    expect(setDeskSelection).toHaveBeenCalledTimes(2)
+    // The first frame's echo arrives after the second publish went out.
+    deskTargets = [{ type: 'fixture', key: 'par-9' }]
+    render()
+    expect(setSelection).not.toHaveBeenCalled()
+    // And the second's.
+    deskTargets = [{ type: 'fixture', key: 'par-9' }, { type: 'group', key: 'Front wash' }]
+    render()
+    expect(setSelection).not.toHaveBeenCalled()
+  })
+
+  it('treats an echo the desk narrowed — a target it could not resolve — as an echo still', () => {
+    const { setSelection, select, render } = drive()
+    select(['fixture:par-9', 'group:Front wash'])
+    deskTargets = [{ type: 'fixture', key: 'par-9' }]
+    render()
+    expect(setSelection).not.toHaveBeenCalled()
+  })
+
+  it('applies a deselect-all from the desk even while its own publish is unacknowledged', () => {
+    // An empty frame is a subset of everything; read as an echo it would leave the list selected
+    // against a desk that has cleared.
+    const { setSelection, select, render } = drive()
+    select(['fixture:par-9'])
+    deskTargets = []
+    render()
+    expect(setSelection).toHaveBeenCalledWith([])
+  })
+
+  it('still applies a frame the desk originated after an echo has been acknowledged', () => {
+    const { setSelection, select, render } = drive()
+    select(['fixture:par-9'])
+    deskTargets = [{ type: 'fixture', key: 'par-9' }]
+    render()
+    // Now the surface moves it.
+    deskTargets = [{ type: 'group', key: 'Front wash' }]
+    render()
+    expect(setSelection).toHaveBeenCalledWith(['group:Front wash'])
+  })
+
   it('does nothing at all for a list that is not the programmer’s', () => {
     // `/fixtures/list` and `/groups/list` are browsing surfaces; two lists moving one desk-wide
     // fact would fight.

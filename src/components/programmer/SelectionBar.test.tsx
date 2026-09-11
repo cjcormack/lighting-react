@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CellRef } from '@/components/fixtures-list/cellSelectionModel'
 
@@ -7,9 +7,9 @@ import type { CellRef } from '@/components/fixtures-list/cellSelectionModel'
  * Row C's phone arm (`PD-SELECTION-BAR-DENSITY`, `PD-CLEAR-SELECTION-TOUCH`).
  *
  * jsdom evaluates no container query, so what is pinned is *which* element carries the fold
- * class — the fixture count and the family badge do, the cell count and the Deselect do not — and
- * the one control this bar draws itself: a Deselect for a cells-only marquee, which the row
- * toolbar (`selection`) has none for because it is gated on selected rows.
+ * class — the fixture count and the family badge do, the cell count does not. The Deselect is the
+ * toolbar's (`selection`) whichever shape the selection is in, since rows and cells became one
+ * selection; this bar drew a second X for the cells-only case until then.
  */
 vi.mock('./TemplateStrip', () => ({ TemplateStrip: () => <div data-testid="strip" /> }))
 const shortViewport = vi.hoisted(() => ({ current: false }))
@@ -22,7 +22,6 @@ const CELLS: CellRef[] = [
   { rowId: 'fixture:a', col: 'colour' },
   { rowId: 'fixture:b', col: 'colour' },
 ]
-const clearCells = vi.fn()
 
 function bar(over: Partial<React.ComponentProps<typeof SelectionBar>> = {}) {
   return (
@@ -32,7 +31,6 @@ function bar(over: Partial<React.ComponentProps<typeof SelectionBar>> = {}) {
       cells={CELLS}
       cellEntryKey={false}
       cellClearKey={false}
-      clearCells={clearCells}
       templateTargets={[
         { type: 'fixture', key: 'a' },
         { type: 'fixture', key: 'b' },
@@ -46,7 +44,6 @@ function bar(over: Partial<React.ComponentProps<typeof SelectionBar>> = {}) {
 }
 
 beforeEach(() => {
-  clearCells.mockClear()
   shortViewport.current = false
 })
 afterEach(cleanup)
@@ -73,15 +70,7 @@ describe('SelectionBar', () => {
     )
   })
 
-  it('draws a Deselect for a cells-only marquee, at every width, and it drops the cells', () => {
-    render(bar())
-    const x = screen.getByRole('button', { name: 'Deselect cells' })
-    expect(x).not.toHaveClass(PHONE_FOLDED_CLASS)
-    fireEvent.click(x)
-    expect(clearCells).toHaveBeenCalledTimes(1)
-  })
-
-  it('leaves Deselect to the row toolbar when there is one', () => {
+  it('draws no Deselect of its own — the toolbar carries it for cells and rows alike', () => {
     render(bar({ selection: <button type="button">Deselect all</button> }))
     expect(screen.queryByRole('button', { name: 'Deselect cells' })).not.toBeInTheDocument()
     expect(screen.getByText('Deselect all')).toBeInTheDocument()
@@ -89,7 +78,7 @@ describe('SelectionBar', () => {
 
   it('draws no Deselect of its own with nothing selected', () => {
     render(bar({ cells: [], templateTargets: [] }))
-    expect(screen.queryByRole('button', { name: 'Deselect cells' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
     expect(screen.getByText('Nothing selected')).toBeInTheDocument()
   })
 })

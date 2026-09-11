@@ -45,9 +45,10 @@ import type { ProgrammerScope } from '../programmer/ProgrammerScope'
  * selection. Which columns a row resolves is `buildRowCells`' answer and needs the rows, so it is
  * the container's half rather than this one's.
  *
- * The ordering itself is deliberately the same rule `singleColumnAnchor` applies to a released
- * drag — the first cell in display order — extended to the column axis, which that one never needs
- * (its cells are all in one column by definition). [rowOrder] and [columnOrder] are as displayed;
+ * The ordering is the first cell in display order, on both axes. (It was shared with
+ * `singleColumnAnchor`, which anchored the editor a released drag used to open; that open and
+ * that function are gone, and this is the one copy of the rule.) [rowOrder] and [columnOrder] are
+ * as displayed;
  * a selected cell that is filtered out or in a hidden column ranks last rather than being dropped,
  * so a selection made entirely of such cells is still offered rather than silently empty.
  */
@@ -78,7 +79,8 @@ export interface CellKeyboardPermission {
 }
 
 /**
- * The scope gate for the marquee's keyboard — the fourth place "read-only" has to be said.
+ * The scope gate for the marquee's keyboard — and for the selection bar's Set and Clear, which are
+ * the same two gestures with a button on them. The fourth place "read-only" has to be said.
  *
  * The marquee itself arms in every scope (its `pointerdown` sits on the rows wrapper, and a
  * read-only cell's `pointer-events-none` only retargets the press there), so the keyboard cannot
@@ -86,9 +88,10 @@ export interface CellKeyboardPermission {
  * *template* layer — `ProgrammerGrid` supplies a `live` context for both — so a commit taken in
  * either would put literals into Local under a grid drawing itself as a read. That is the hole
  * `PropertyCell`'s `disabled` and `FanPopover`'s template gate each close for their own path, and
- * this closes it for the keyboard.
+ * this closes it for the keyboard and the bar.
  *
- *  - **Local**, or no scope at all (the two plain list routes, which never have a marquee): both.
+ *  - **Local**, or no scope at all (unreachable today — a marquee exists only on the programmer,
+ *    which always has a scope — and answered as Local so the default is the permissive one): both.
  *  - **Output**: neither. It is a read of the cook.
  *  - **A focused Look layer**: entry only. A value typed there lands in the row draft the way a
  *    cell edit does; Backspace does not, because the draft has no removal (`LookRowStore` exposes
@@ -104,21 +107,67 @@ export function cellKeyboardPermission(
   return focusedTemplate ? { entry: false, clear: false } : { entry: true, clear: false }
 }
 
+/** The hovers on the selection bar's two cell verbs, per scope. */
+export interface CellActionCopy {
+  /** Set's hover, or the reason it is disabled. */
+  setTitle: string
+  /** Clear's hover, or the reason it is disabled. */
+  clearTitle: string
+}
+
+/**
+ * What the selection bar's Set and Clear say, given where the grid is pointed.
+ *
+ * Set is one gesture — open the first selected cell's editor over the whole selection, which is
+ * what Enter does — and the title names where the value lands, because that is the scope's
+ * answer and not the button's: Local, or the focused Look's rows. Where the gesture is refused the
+ * title carries the reason, in the words `FanPopover` already uses for its own template gate, so
+ * the three disabled controls on one bar do not explain themselves three ways. The reasons follow
+ * [cellKeyboardPermission] rather than restating it: a title can never promise a gesture the gate
+ * refuses.
+ */
+export function cellActionCopy(
+  scope: ProgrammerScope | null,
+  focusedTemplate: boolean,
+  cellCount: number,
+): CellActionCopy {
+  const cells = `${cellCount} selected cell${cellCount === 1 ? '' : 's'}`
+  if (scope?.kind === 'output') {
+    const reason = 'Output is a read of the cook — switch to Local to set these cells'
+    return { setTitle: reason, clearTitle: reason }
+  }
+  if (scope?.kind === 'layer') {
+    if (focusedTemplate) {
+      const reason = 'This layer applies a template — switch to Local to set these cells'
+      return { setTitle: reason, clearTitle: reason }
+    }
+    return {
+      setTitle: `Set the ${cells} in the focused layer's rows (Enter)`,
+      clearTitle: "A layer's rows cannot be cleared from here — switch to Local",
+    }
+  }
+  return {
+    setTitle: `Set the ${cells} in Local — this is what Record will take (Enter)`,
+    clearTitle: `Take the ${cells} out of Local (Backspace)`,
+  }
+}
+
 /**
  * Is a keystroke's target a cell the live marquee already covers?
  *
  * The DOM half of the grid's "not from a focused control" guard, and the reason it needs a half at
  * all. A cell trigger is a `<button>`, so a bare `closest('button')` test calls it someone else's
- * control — and after a marquee drag it is *exactly* where the focus is: the press focuses the
- * button under it, and the editor `PD-POPUP-AFTER-DRAG` auto-opens hands focus back to that button
- * when it closes. Every arm of the marquee keyboard then fell through from there, Enter to the
- * button's own default activation — which opens *that* cell's editor with nothing focused, rather
- * than the first selected cell's with its first field focused and waiting.
+ * control — and after a marquee drag it can be *exactly* where the focus is: the press focuses the
+ * button under it (Chromium does, on mousedown; the release blurs it, but an editor closed by
+ * Escape hands focus back to its trigger). Every arm of the marquee keyboard then fell through
+ * from there, Enter to the button's own default activation — which opens *that* cell's editor
+ * with nothing focused, rather than the first selected cell's with its first field focused and
+ * waiting.
  *
  * The exemption is exactly as wide as the marquee and no wider, which is what keeps the rest of
- * the guard intact: a checkbox, a chip and a menu item are not inside a cell at all; a cell
- * *outside* the selection, tabbed to while one is live, is still its own editor's trigger; and
- * with no cells selected the caller never asks, so plain Tab-then-Enter is untouched.
+ * the guard intact: a template chip, the bar's own Set and a menu item are not inside a cell at
+ * all; a cell *outside* the selection, tabbed to while one is live, is still its own editor's
+ * trigger; and with no cells selected the caller never asks, so plain Tab-then-Enter is untouched.
  *
  * **It claims any control inside a covered cell, not the editor trigger specifically**, and that
  * is a deliberate width rather than an oversight: all four cell editors are Popover triggers

@@ -60,8 +60,9 @@ export const ColourCell = memo(function ColourCell({
   onCommit,
   onBeginEdit,
 }: ColourCellProps) {
-  // Driven from here since `PD-POPUP-AFTER-DRAG`: the picker keeps its own state when no `open` is
-  // passed, and the other two call sites still leave it to.
+  // Driven from here so the container's request (Enter over a selection, or the bar's Set) can
+  // open it: the picker keeps its own state when no `open` is passed, and the other two call
+  // sites still leave it to.
   const { isOpen, setOpen, keyboardOpen } = useCellEditorOpen({
     autoOpen,
     keyboardSeed,

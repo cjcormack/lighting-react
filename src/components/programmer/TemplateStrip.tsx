@@ -33,8 +33,9 @@ import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
  * cannot draw that line: the hex and all three emitters are one family.
  *
  * **The selection is the target too**, by the same rule: a marquee over three colour cells lands
- * the press on those three heads, whatever the checkboxes name, and a row selection lands it on
- * the rows. The container derives all three (`templateTargets`, `targetFamilies`, `targetEmitters`
+ * the press on those three heads — which, since the two selections became one, are also the
+ * fixture selection — and a row selection lands it on the rows. The container derives all three
+ * (`templateTargets`, `targetFamilies`, `targetEmitters`
  * on `renderToolbar`) because only it knows which rows the cells sit on; the strip reads nothing
  * from Redux.
  *

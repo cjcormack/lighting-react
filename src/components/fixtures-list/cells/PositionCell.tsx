@@ -99,8 +99,8 @@ export const PositionCell = memo(function PositionCell({
     tiltDraft.reset()
   }, [panDraft, tiltDraft])
 
-  // Controlled since `PD-POPUP-AFTER-DRAG`: a released marquee has to be able to open this from
-  // outside, which an uncontrolled Radix popover offers no door for.
+  // Controlled, because the container has to be able to open this from outside — Enter over a
+  // selection, or the bar's Set — which an uncontrolled Radix popover offers no door for.
   const { isOpen, setOpen, keyboardOpen } = useCellEditorOpen({
     autoOpen,
     keyboardSeed,

@@ -139,10 +139,11 @@ describe('a keyboard-opened slider editor', () => {
     expect(screen.queryByRole('spinbutton', { name: 'Dimmer' })).not.toBeInTheDocument()
   })
 
-  it('focuses the field when a released marquee opened it, with no character typed', async () => {
-    // The gesture this exists for: drag three dimmer cells, the editor opens behind the release
-    // (`PD-POPUP-AFTER-DRAG`), type `128`, press Enter. A first cut focused the field only when a
-    // *keystroke* had opened it, which broke exactly this — the auto-open after a drag is not one.
+  it('focuses the field when the editor was opened without a keystroke and with no character', async () => {
+    // The hook's contract: focus does not depend on how the editor was opened. `autoOpen` with a
+    // null seed was a released marquee's open (`PD-POPUP-AFTER-DRAG`, since deleted — the bar's
+    // Set and Enter both seed `''`); it is kept as the contract's own case, because a first cut
+    // focused the field only when a *keystroke* had opened it, and that is the regression to pin.
     const onCommit = vi.fn()
     render(
       <SliderCell

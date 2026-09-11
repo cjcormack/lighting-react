@@ -5,10 +5,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  *
  * All four cell editors are popovers over a trigger inside the cell, and all four now need the
  * same three things: local open state, a handler for the popover's `onOpenChange`, and the
- * auto-open a released single-column marquee asks for (`PD-POPUP-AFTER-DRAG`). Written once here
- * rather than four times, because it is one rule — and as a per-cell hook rather than a
- * coordinator above the table, because `CueValueGrid` mounts these same four components directly,
- * with no `FixturesTable` over them to coordinate from.
+ * auto-open the container asks for over a selection — Enter, or the selection bar's Set. (A
+ * released single-column marquee used to ask for it too, `PD-POPUP-AFTER-DRAG`; that went when
+ * the bar gained Set.) Written once here rather than four times, because it is one rule — and as
+ * a per-cell hook rather than a coordinator above the table, because `CueValueGrid` mounts these
+ * same four components directly, with no `FixturesTable` over them to coordinate from.
  *
  * **`onBeginEdit` is deliberately not part of it.** That callback exists to move the selection to
  * the cell a click landed on, and each cell still calls it from its own `onOpenChange` — but an
@@ -36,7 +37,7 @@ export function useCellEditorOpen({
   autoOpen?: boolean
   /**
    * The auto-open came from a **character typed at the grid**, and this is that character (`''`
-   * for a bare Enter). Null for a released marquee or a click, which carry none.
+   * for a bare Enter or the bar's Set). Null for a click, which carries none.
    *
    * Seeding only: which field has focus is not a function of how the editor was opened — see
    * `useCellEditorKeyboard`. Latched into [keyboardOpen] at the moment the editor opens, because

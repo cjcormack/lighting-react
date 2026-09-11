@@ -8,16 +8,18 @@ import { Lightbulb, Search } from 'lucide-react'
 import { useFixtureListQuery } from '../../store/fixtures'
 import { useGroupListQuery } from '../../store/groups'
 import { usePersistentState } from '../../hooks/usePersistentState'
-import { useCellSelection } from './useCellSelection'
+import { useCellSelection, type CellSelection } from './useCellSelection'
 import { useProgrammerScope } from '../programmer/ProgrammerScope'
 import { useFocusedTemplateLayer } from '../programmer/FocusedTemplateLayer'
 import {
+  cellActionCopy,
   cellKeyboardPermission,
   marqueeOwnsKeyTarget,
   orderedSelectedCells,
 } from './cellEntry'
 import { resolutionPropertyNames } from './columns'
 import type { CellRef } from './cellSelectionModel'
+import type { ListSelectIntent } from './listSelectionModel'
 import type { AttributeFamily } from '../../lib/attributeFamily'
 import {
   ColumnsMenu,
@@ -40,6 +42,7 @@ import {
   targetFamilies,
   targetEmitters,
   templateTargetsFor,
+  treeKeyAction,
 } from './rowModel'
 import { buildRowCells } from './useRowValues'
 import { isEditableTarget } from '../../lib/domUtils'
@@ -54,6 +57,8 @@ import { applyPlannedWrite, useCellWriters } from './useCellWriters'
 import { useLitFixtureKeys } from './useLitFixtureKeys'
 import { FixturesTable } from './FixturesTable'
 import { SelectionToolbar } from './SelectionToolbar'
+import { CellSelectionActions } from './CellSelectionActions'
+import { FanPopover, fanColumnsForTargets, type FanColumn } from './FanPopover'
 import { FixtureDetailModal } from '../groups/FixtureDetailModal'
 import { GroupDetailModal } from '../fixtures/GroupDetailModal'
 import type { ColumnKey } from './columns'
@@ -121,26 +126,23 @@ export interface FixturesListContainerProps {
     filter: React.ReactNode
     lit: React.ReactNode
     columns: React.ReactNode
-    /** Null when nothing *visible* is selected; the caller should render nothing rather than a shell. */
+    /**
+     * Null when nothing *visible* is selected; the caller should render nothing rather than a
+     * shell. Rows or cells — the two are one selection, and this toolbar serves both, with the
+     * cell verbs (Set · Clear · Fan) drawn first when it is cells.
+     */
     selection: React.ReactNode | null
     /** The marquee's cells, for a scope label beside the fixture count. Empty when none. */
     cells: readonly CellRef[]
     /**
-     * True when Enter (or a digit) opens the marquee's typed-value editor: cells are selected and
-     * the scope can take a typed value (`cellKeyboardPermission`). The editor itself is a popover
-     * the container renders at the first selected cell; the caller only draws the hint, from this
-     * flag, so the hint and the key agree by construction.
+     * True when Enter (or a digit) — or the toolbar's Set — opens the marquee's editor: cells are
+     * selected and the scope can take a value (`cellKeyboardPermission`). The editor itself is the
+     * first selected cell's own; the caller only draws the hint, from this flag, so the hint and
+     * the key agree by construction.
      */
     cellEntryKey: boolean
-    /** True when Backspace / Delete would take the selected cells out of Local — same rule. */
+    /** True when Backspace / Delete — or the toolbar's Clear — would take the selected cells out of Local. */
     cellClearKey: boolean
-    /**
-     * Drops the marquee and nothing else — the first rung of the Escape ladder, for a toolbar
-     * that wants a Deselect beside a cells-only selection. `selection` is null then (it is
-     * gated on selected *rows*), so without this a marquee drawn on a phone had no control that
-     * could dismiss it (`PD-CLEAR-SELECTION-TOUCH`).
-     */
-    clearCells: () => void
     /**
      * Where a template press lands: the cells' fixtures when there is a marquee, otherwise the
      * selected rows'. Already `{type: 'fixture', key}`, so the strip sends it as it is.
@@ -267,12 +269,77 @@ export function FixturesListContainer({
     [rows],
   )
   const selection = useListSelection(selectableOrder, selectionScope)
-  // Cell selection is a transient EDIT SCOPE and is orthogonal to fixture selection, which keeps
-  // its checkboxes and keeps driving Record. Enabled only where a scope narrower than a row means
-  // something — the programmer.
   const visibleRowIds = useMemo(() => new Set(rows.map((r) => r.id)), [rows])
   const cellSelection = useCellSelection(visibleRowIds)
   const { count: cellCount, clear: clearCells, isSelected: isCellSelected } = cellSelection
+
+  // ── One selection, two shapes ─────────────────────────────────────────────────────────────
+  //
+  // Rows and cells used to be two independent states — cells a transient edit scope drawn over a
+  // row selection that kept its checkboxes and kept driving Record — and an operator had to hold
+  // both in their head to know what the next gesture would reach. They are one now: selecting
+  // cells clears the rows, selecting rows clears the cells, and every consumer below reads
+  // `selectedRowIds`, which is the cells' rows when there is a marquee and the row selection
+  // otherwise. So a marquee *is* the fixture selection, narrowed to some of their attributes —
+  // Record, Locate, the desk's select LEDs and the template strip all see the same heads.
+  //
+  // Enforced at the two doors rather than by an effect reconciling after the fact, because an
+  // effect would have to guess which of two non-empty states was the newer one. The cell door
+  // clears the rows only when a hit arrives and there are rows to clear, so an idle marquee frame
+  // costs no dispatch; the row doors clear the cells, whose `clear` bails when there are none.
+  const rowCountRef = useRef(selection.count)
+  rowCountRef.current = selection.count
+  const { select: selectRowRaw, selectAll: selectAllRaw, setSelection: setRowsRaw, clear: clearRows } = selection
+  const selectCells = useCallback(
+    (hits: readonly CellRef[], intent: ListSelectIntent) => {
+      if (hits.length > 0 && rowCountRef.current > 0) clearRows()
+      cellSelection.select(hits, intent)
+    },
+    [cellSelection, clearRows],
+  )
+  const tableCellSelection = useMemo<CellSelection>(
+    () => ({ ...cellSelection, select: selectCells }),
+    [cellSelection, selectCells],
+  )
+  const selectRow = useCallback(
+    (id: RowId, intent?: ListSelectIntent) => {
+      clearCells()
+      selectRowRaw(id, intent)
+    },
+    [clearCells, selectRowRaw],
+  )
+  const selectAllRows = useCallback(() => {
+    clearCells()
+    selectAllRaw()
+  }, [clearCells, selectAllRaw])
+  // Stable, which `useDeskSelectionBridge` depends on: it is a dep of both of that hook's effects.
+  const setRows = useCallback(
+    (ids: readonly RowId[]) => {
+      clearCells()
+      setRowsRaw(ids)
+    },
+    [clearCells, setRowsRaw],
+  )
+  /**
+   * The rows the marquee's cells sit on, identity-stable while the *set* is unchanged. A drag
+   * mints a fresh `cells` array per pointer move, and everything derived from these ids — the
+   * desk publish, the locate targets, the Record scope — would otherwise recompute and re-send on
+   * every move rather than only when the rectangle crosses a row boundary.
+   *
+   * Held in state and re-derived during render (React's own "derive state from props" idiom,
+   * which re-renders at once) rather than through a ref written inside `useMemo`: a memo body can
+   * run for a render that is never committed, and a ref bumped there would hand the next committed
+   * render a fresh identity for an unchanged set — one redundant desk publish.
+   */
+  const nextCellRowIds = useMemo(
+    () => new Set(cellSelection.cells.map((cell) => cell.rowId)),
+    [cellSelection.cells],
+  )
+  const [cellRowIds, setCellRowIds] = useState<ReadonlySet<RowId>>(nextCellRowIds)
+  if (cellRowIds !== nextCellRowIds && !sameSet(cellRowIds, nextCellRowIds)) {
+    setCellRowIds(nextCellRowIds)
+  }
+  const selectedRowIds = cellRowIds.size > 0 ? cellRowIds : selection.selectedIds
 
   // Null outside the programmer, so the plain fixtures and groups lists are unaffected.
   const scope = useProgrammerScope()
@@ -284,22 +351,21 @@ export function FixturesListContainer({
     clearCells()
   }, [scope, clearCells])
 
-  // Cells first, rows second. Spreadsheet convention, and it stops one gesture destroying two
-  // independent states — an operator dismissing a marquee rarely means "and deselect every
-  // fixture too". One function for Escape and for a click on the grid's empty background
-  // (`PD-CLEAR-SELECTION-TOUCH`): a phone has the second and not the first, and the two must not
-  // be allowed to climb the ladder differently.
+  // Whichever shape the selection is in. The two are exclusive now, so this is no longer a ladder
+  // with two rungs — but it stays one function for Escape, for a click on the grid's empty
+  // background (`PD-CLEAR-SELECTION-TOUCH`) and for the toolbar's Deselect, so the three cannot
+  // drop different things.
   const clearByLadder = useCallback(() => {
     if (cellCount > 0) clearCells()
-    else selection.clear()
-  }, [cellCount, clearCells, selection])
+    else clearRows()
+  }, [cellCount, clearCells, clearRows])
 
   // Selected ids whose rows are hidden (collapsed group, active filter) are
   // inert everywhere below — every consumer intersects with `rows` — so no
   // aggressive reconcile is needed when visibility changes.
   const selectedTargets = useMemo(
-    () => expandSelectionToTargets(rows, selection.selectedIds),
-    [rows, selection.selectedIds],
+    () => expandSelectionToTargets(rows, selectedRowIds),
+    [rows, selectedRowIds],
   )
 
   // Publish the expansion for consumers outside this container — RecordSheet's "selected
@@ -320,25 +386,16 @@ export function FixturesListContainer({
   const fixtureCount = useMemo(() => countFixtureRows(rows), [rows])
 
   const locateTargets = useMemo<LocateTarget[]>(
-    () => selectedRowTargets(rows, selection.selectedIds),
-    [rows, selection.selectedIds],
+    () => selectedRowTargets(rows, selectedRowIds),
+    [rows, selectedRowIds],
   )
 
-  // Where a template press lands, and what those heads can take. The marquee is the narrower
-  // statement when there is one — three colour cells means those three heads, not the eight rows
-  // the checkboxes happen to name — and the row selection otherwise. Published through
-  // `renderToolbar` rather than read from Redux by the strip: `selectTargetKeys` is already
-  // flattened to member keys and knows nothing about cells.
-  const cellRowIds = useMemo(
-    () => new Set(cellSelection.cells.map((cell) => cell.rowId)),
-    [cellSelection.cells],
-  )
+  // Where a template press lands, and what those heads can take — the one selection's rows, which
+  // under a marquee are the cells' rows. Published through `renderToolbar` rather than read from
+  // Redux by the strip: `selectTargetKeys` is already flattened to member keys.
   const templateTargets = useMemo(
-    () =>
-      cellRowIds.size > 0
-        ? templateTargetsFor(rows, cellRowIds)
-        : templateTargetsFor(rows, selection.selectedIds),
-    [rows, cellRowIds, selection.selectedIds],
+    () => templateTargetsFor(rows, selectedRowIds),
+    [rows, selectedRowIds],
   )
   // From the **same list** the press is sent to, resolved back to whole fixtures, so the two
   // cannot disagree: a lone element row lands on its fixture above, and its families are the
@@ -359,24 +416,18 @@ export function FixturesListContainer({
   // are all COLOUR. Derived from the same list for the same reason the families are.
   const templateEmitters = useMemo(() => targetEmitters(templateWriteTargets), [templateWriteTargets])
 
-  // One desk, one selection (plan D2) — the programmer scope only; see the hook.
-  useDeskSelectionBridge(
-    selectionScope === 'programmer',
-    rows,
-    selection.selectedIds,
-    selection.setSelection,
-  )
+  // One desk, one selection (plan D2) — the programmer scope only; see the hook. It sees the
+  // unified ids, so a marquee lights the strip's select LEDs for its rows, and a select button
+  // pressed on the desk lands as a row selection (which drops the marquee, as any row door does).
+  useDeskSelectionBridge(selectionScope === 'programmer', rows, selectedRowIds, setRows)
 
   const writers = useCellWriters()
 
   const handleRowClick = useCallback(
-    (id: RowId, e: React.MouseEvent, viaCheckbox = false) => {
-      const intent = listSelectionIntentFor(e)
-      // A plain checkbox click means toggle — checkboxes accumulate, they
-      // don't replace. Modifier clicks keep their usual meaning.
-      selection.select(id, viaCheckbox && intent === 'replace' ? 'toggle' : intent)
+    (id: RowId, e: React.MouseEvent) => {
+      selectRow(id, listSelectionIntentFor(e))
     },
-    [selection],
+    [selectRow],
   )
 
   // Element rows open the PARENT fixture's sheet — FixtureDetailModal resolves
@@ -409,10 +460,24 @@ export function FixturesListContainer({
       // and the row rule then applies unchanged.
       cellSelection.clear()
       if (row.kind !== 'divider' && !selection.isSelected(row.id)) {
-        selection.select(row.id, 'replace')
+        selectRow(row.id, 'replace')
       }
     },
-    [cellSelection, selection],
+    [cellSelection, selection, selectRow],
+  )
+
+  /**
+   * The marquee by column, each with the heads its cells stand for in visible row order. The one
+   * expansion behind every per-column consumer — the commit, Backspace, the batch count and Fan —
+   * so a fan and a typed value cannot reach different heads for one selection.
+   */
+  const columnTargets = useMemo<FanColumn[]>(
+    () =>
+      cellSelection.byColumn().map(({ col, rowIds }) => ({
+        col,
+        targets: expandSelectionToTargets(rows, new Set(rowIds)),
+      })),
+    [cellSelection, rows],
   )
 
   /**
@@ -423,15 +488,14 @@ export function FixturesListContainer({
    * `planBatchWrites` — so the chip's cell count is an upper bound on what any ONE commit writes,
    * which the design's wording already allows for.
    *
-   * Two callers: a popover opened on a cell inside the marquee, and the typed-value field. Both
-   * are the same write, and that is the point of the field — it adds a keyboard to the marquee,
-   * not a second path to the rig.
+   * One caller: an editor opened on a cell inside the marquee — by a click, by Enter, or by the
+   * bar's Set, which are one request. It is the same write however it was opened, and that is the
+   * point: the keyboard and the bar add ways into the marquee, not a second path to the rig.
    */
   const commitToCells = useCallback(
     (commit: CellCommit): number => {
       let written = 0
-      for (const { col: c, rowIds } of cellSelection.byColumn()) {
-        const targets = expandSelectionToTargets(rows, new Set(rowIds))
+      for (const { col: c, targets } of columnTargets) {
         for (const planned of planBatchWrites(targets, c, commit)) {
           applyPlannedWrite(writers, planned)
           written += 1
@@ -441,7 +505,7 @@ export function FixturesListContainer({
       // because a value that fitted no selected column looks exactly like one that landed.
       return written
     },
-    [cellSelection, rows, writers],
+    [columnTargets, writers],
   )
 
   const commitNow = useCallback(
@@ -525,6 +589,7 @@ export function FixturesListContainer({
    * the request whatever order they are issued in. So the first press brings the cell into view
    * and the second opens it — visibly doing something, which is the part that was missing.
    */
+  const rowById = useMemo(() => new Map(rows.map((row) => [row.id, row])), [rows])
   const openCellEditor = useCallback(
     (seed: string) => {
       const ordered = orderedSelectedCells(
@@ -532,7 +597,6 @@ export function FixturesListContainer({
         rows.map((row) => row.id),
         visibleColumns,
       )
-      const rowById = new Map(rows.map((row) => [row.id, row]))
       const editableCols = new Map<RowId, ReadonlySet<ColumnKey>>()
       const first = ordered.find((cell) => {
         let cols = editableCols.get(cell.rowId)
@@ -559,7 +623,7 @@ export function FixturesListContainer({
       }
       setKeyboardOpen({ rowId: first.rowId, col: first.col, seed })
     },
-    [cellSelection.cells, rows, visibleColumns],
+    [cellSelection.cells, rows, rowById, visibleColumns],
   )
 
   /**
@@ -577,8 +641,8 @@ export function FixturesListContainer({
   const canTypeCells = keys.entry
   const clearSelectedCells = useCallback(() => {
     if (!canClearCells) return
-    for (const { col, rowIds } of cellSelection.byColumn()) {
-      for (const outer of expandSelectionToTargets(rows, new Set(rowIds))) {
+    for (const { col, targets } of columnTargets) {
+      for (const outer of targets) {
         for (const { target, resolution } of resolveTargetCells(outer, col)) {
           for (const propertyName of resolutionPropertyNames(resolution)) {
             writers.clearValue(target.key, propertyName)
@@ -586,7 +650,7 @@ export function FixturesListContainer({
         }
       }
     }
-  }, [canClearCells, cellSelection, rows, writers])
+  }, [canClearCells, columnTargets, writers])
 
   // Continuous drag commits (slider/colour/position editors fire per pointer
   // move) are throttled to ~30Hz with a trailing call, because each commit
@@ -650,6 +714,10 @@ export function FixturesListContainer({
     [flushPendingCommit],
   )
 
+  // The plain routes' whole-selection fan, memoised so `FanPopover`'s per-column plans are not
+  // re-probed on every render of the container.
+  const rowFanColumns = useMemo(() => fanColumnsForTargets(selectedTargets), [selectedTargets])
+
   // The marquee has to be counted, or the popover says "Applying to 1" while the commit writes
   // six hundred. An upper bound: cross-column commits are shape-filtered at write time, so a
   // colour edit over a Colour+Position marquee reaches fewer than this says. It's the same total
@@ -658,11 +726,12 @@ export function FixturesListContainer({
   // per render, and each recompute here was itself O(rows × columns).
   const marqueeBatchCount = useMemo(
     () =>
-      cellSelection.byColumn().reduce((n, group) => {
-        const targets = expandSelectionToTargets(rows, new Set(group.rowIds))
-        return n + targets.reduce((m, t) => m + resolveTargetCells(t, group.col).length, 0)
-      }, 0),
-    [cellSelection, rows],
+      columnTargets.reduce(
+        (n, { col, targets }) =>
+          n + targets.reduce((m, t) => m + resolveTargetCells(t, col).length, 0),
+        0,
+      ),
+    [columnTargets],
   )
 
   // Counts write RESOLUTIONS for the column, not rows — a collapsed 12-head
@@ -723,7 +792,7 @@ export function FixturesListContainer({
     if (rowId) {
       setFilter('')
       setOnlyLit(false)
-      selection.select(rowId, 'replace')
+      selectRow(rowId, 'replace')
       setScrollToRowId(rowId)
     }
     setSearchParams(
@@ -733,8 +802,8 @@ export function FixturesListContainer({
       },
       { replace: true },
     )
-    // selection.select is referentially stable (a useCallback over dispatch and the scope,
-    // both fixed for the mount); setOnlyLit/setSearchParams are stable setters;
+    // selectRow is referentially stable (a useCallback over the slice's own stable select and
+    // the cell clear); setOnlyLit/setSearchParams are stable setters;
     // navigate/projectId only feed the group-forwarding branch, which leaves
     // this route anyway; groups/fixtures/loading flags/grouped cover
     // everything else read here.
@@ -797,18 +866,20 @@ export function FixturesListContainer({
     // A filter would hide most of what we just selected, and the operator did not ask for it.
     setFilter('')
     setOnlyLit(false)
-    selection.setSelection(wanted)
+    setRows(wanted)
     setScrollToRowId(wanted[0])
     // `includeSelection` is read fresh rather than depended on: its identity changes with every
     // publish, and the arrays inside it are the same data the nonce already tracks.
-    // `selection.setSelection` and `setOnlyLit` are referentially stable (the former is a
-    // useCallback over dispatch and the scope, both fixed for the mount).
+    // `setRows` and `setOnlyLit` are referentially stable (the former is a useCallback over the
+    // slice's own stable setter and the cell clear, both fixed for the mount).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [includeNonce, fixtures, groups, grouped])
 
   // View-level shortcuts: Escape clears, ⌘/Ctrl+A selects all visible rows,
-  // ↑/↓ move the selection (Shift extends the range from the anchor). Guarded
-  // so typing in inputs or interacting inside popovers/dialogs never triggers.
+  // ↑/↓ move the selection (Shift extends the range from the anchor), and →/← open and close the
+  // anchor row — a group over its members, a multi-head fixture over its elements — with ← on a
+  // member or element climbing to its parent (`treeKeyAction`). Guarded so typing in inputs or
+  // interacting inside popovers/dialogs never triggers.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (isEditableTarget(e.target instanceof Element ? e.target : null)) return
@@ -827,7 +898,7 @@ export function FixturesListContainer({
         // Tab-then-Enter opening its popover is a path the grid already promises, and a Radix menu
         // is `role="menu"`, not `dialog`, so the guard above does not cover a menu item. Backspace
         // is the destructive one — a live `clearEntry` per cell — so it is the arm that most needs
-        // to know a chip, a checkbox or a menu item had the focus.
+        // to know a chip, the bar's own Set or a menu item had the focus.
         //
         // **Except a cell trigger the marquee itself covers** — `marqueeOwnsKeyTarget`, which is
         // where the whole of that exception is written down and pinned.
@@ -862,7 +933,28 @@ export function FixturesListContainer({
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
         e.preventDefault()
-        selection.selectAll()
+        selectAllRows()
+        return
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        // Not from a focused control: a Select or a menu answers these keys itself, and a chip
+        // does not want its row opened under it.
+        if (
+          e.target instanceof HTMLElement &&
+          e.target.closest('button, a, [role="menuitem"], [role="menu"]') != null
+        ) {
+          return
+        }
+        const anchorRow = selection.anchor ? rowById.get(selection.anchor) : undefined
+        const action = anchorRow ? treeKeyAction(anchorRow, e.key) : null
+        if (!action) return
+        e.preventDefault()
+        if (action.kind === 'select-parent') {
+          selectRow(action.rowId, 'replace')
+          setScrollToRowId(action.rowId)
+        } else {
+          handleToggleExpand(action.row)
+        }
         return
       }
       if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
@@ -888,7 +980,7 @@ export function FixturesListContainer({
               ? 0
               : selectableOrder.length - 1
             : Math.max(0, Math.min(selectableOrder.length - 1, fromIdx + delta))
-        selection.select(selectableOrder[nextIdx], e.shiftKey ? 'range' : 'replace')
+        selectRow(selectableOrder[nextIdx], e.shiftKey ? 'range' : 'replace')
         setScrollToRowId(selectableOrder[nextIdx])
       }
     }
@@ -905,7 +997,7 @@ export function FixturesListContainer({
     // for the same reason. `canTypeCells` is a boolean, and `isCellSelected` is stable for the
     // mount — it reads `useCellSelection`'s own ref, which is why the marquee test above costs
     // this listener no extra rebinds.
-  }, [selection, selectableOrder, cellCount, clearByLadder, canClearCells, canTypeCells, clearSelectedCells, isCellSelected, openCellEditor])
+  }, [selection, selectRow, selectAllRows, selectableOrder, rowById, handleToggleExpand, cellCount, clearByLadder, canClearCells, canTypeCells, clearSelectedCells, isCellSelected, openCellEditor])
 
   if (fixturesLoading || groupsLoading) {
     return <div>Loading...</div>
@@ -949,6 +1041,27 @@ export function FixturesListContainer({
     />
   )
 
+  // The cell verbs — Set, Clear, Fan — with the container's own gate and words behind them, so a
+  // button cannot promise a gesture the keyboard refuses. Set *is* Enter: the same request, the
+  // same first cell, the same commit to every selected cell.
+  //
+  // On the programmer a rows-only selection gets none of them: Fan reads the marquee there, which
+  // is what the selection is for. The two plain list routes cannot select a cell at all, so they
+  // keep the row Fan they always had — over the whole selection, column chosen in the panel.
+  const selectionActions =
+    cellCount > 0 ? (
+      <CellSelectionActions
+        copy={cellActionCopy(scope, focusedTemplate != null, cellCount)}
+        canSet={canTypeCells}
+        onSet={() => openCellEditor('')}
+        canClear={canClearCells}
+        onClear={clearSelectedCells}
+        fanColumns={columnTargets}
+      />
+    ) : !showOwnership && selectedTargets.length > 0 ? (
+      <FanPopover columns={rowFanColumns} />
+    ) : null
+
   // Gate on VISIBLE selected rows, not the raw selection count — filtering away every selected row
   // must not leave a live toolbar acting on an empty set.
   const selectionControl =
@@ -956,7 +1069,8 @@ export function FixturesListContainer({
       <SelectionToolbar
         locateTargets={locateTargets}
         targets={selectedTargets}
-        onClear={selection.clear}
+        onClear={clearByLadder}
+        actions={selectionActions}
       />
     ) : null
 
@@ -974,7 +1088,6 @@ export function FixturesListContainer({
           cells: cellSelection.cells,
           cellEntryKey: cellCount > 0 && keys.entry,
           cellClearKey: cellCount > 0 && keys.clear,
-          clearCells,
           templateTargets,
           targetFamilies: templateFamilies,
           targetEmitters: templateEmitters,
@@ -1004,6 +1117,10 @@ export function FixturesListContainer({
         <FixturesTable
           rows={rows}
           visibleColumns={visibleColumns}
+          // The row slice, deliberately — not `selectedRowIds`. Under a marquee the cells' outline
+          // is the selection, and the rows they sit on draw no wash, edge or bold name even
+          // though Locate, Highlight, Record and the count act on them: drawing both would be the
+          // two vocabularies for one fact that removed the checkbox. Decided at the desk pass.
           isSelected={selection.isSelected}
           onRowClick={handleRowClick}
           onToggleExpand={handleToggleExpand}
@@ -1020,7 +1137,11 @@ export function FixturesListContainer({
           // screen still writing, to something narrower than its own "Applying to N" line just
           // claimed. Both selections, because either is enough to keep an editor honest.
           selectionEmpty={selection.count === 0 && cellCount === 0}
-          cellSelection={showOwnership ? cellSelection : undefined}
+          cellSelection={showOwnership ? tableCellSelection : undefined}
+          // A drag from the name column selects rows, on every list this table serves: it is what
+          // the checkbox column was for, and a list with no way to accumulate a selection by
+          // touch would be a regression on the two plain routes.
+          onRowMarquee={setRows}
           keyboardOpen={keyboardOpen}
           onMarqueeDragChange={setMarqueeDragging}
           onBackgroundClick={clearByLadder}
@@ -1033,4 +1154,10 @@ export function FixturesListContainer({
       <GroupDetailModal groupName={infoGroupName} onClose={() => setInfoGroupName(null)} />
     </div>
   )
+}
+
+function sameSet(a: ReadonlySet<RowId>, b: ReadonlySet<RowId>): boolean {
+  if (a.size !== b.size) return false
+  for (const id of a) if (!b.has(id)) return false
+  return true
 }

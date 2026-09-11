@@ -15,7 +15,9 @@ import {
   targetFamilies,
   targetEmitters,
   templateTargetsFor,
+  type Row,
   type RowId,
+  treeKeyAction,
 } from './rowModel'
 import { resolveCell } from './columns'
 import type { ColumnKey } from './columns'
@@ -726,5 +728,72 @@ describe('countFixtureRows', () => {
   it('follows the filter — it answers "how much is in front of me"', () => {
     const rows = buildRows({ fixtures, groups, expandedGroups: new Set(), textFilter: 'loose' })
     expect(countFixtureRows(rows)).toBe(1)
+  })
+})
+
+/**
+ * ← and → on the anchor row: the ARIA tree convention over the two kinds of row that open.
+ */
+describe('treeKeyAction', () => {
+  const group = {
+    kind: 'group',
+    id: 'group:Wash',
+    name: 'Wash',
+    members: [],
+    isExpanded: false,
+  } as unknown as Row
+  const bar = {
+    kind: 'fixture',
+    id: 'member:Wash:bar-1',
+    fixture: { key: 'bar-1', elements: [{ key: 'bar-1.head-0' }] },
+    parentGroup: 'Wash',
+    isExpanded: true,
+  } as unknown as Row
+  const par = {
+    kind: 'fixture',
+    id: 'fixture:par-1',
+    fixture: { key: 'par-1' },
+    isExpanded: false,
+  } as unknown as Row
+  const head = {
+    kind: 'element',
+    id: 'element:member:Wash:bar-1:bar-1.head-0',
+    fixture: { key: 'bar-1' },
+    element: { key: 'bar-1.head-0' },
+    parentGroup: 'Wash',
+  } as unknown as Row
+
+  it('→ opens a closed group or multi-head fixture, and nothing else', () => {
+    expect(treeKeyAction(group, 'ArrowRight')).toEqual({ kind: 'expand', row: group })
+    expect(treeKeyAction(bar, 'ArrowRight')).toBeNull() // already open
+    expect(treeKeyAction(par, 'ArrowRight')).toBeNull() // nothing to open
+    expect(treeKeyAction(head, 'ArrowRight')).toBeNull()
+  })
+
+  it('← closes an open row', () => {
+    expect(treeKeyAction(bar, 'ArrowLeft')).toEqual({ kind: 'collapse', row: bar })
+  })
+
+  it('← on a member or an element climbs to its parent row, by the ids buildRows mints', () => {
+    expect(treeKeyAction(head, 'ArrowLeft')).toEqual({
+      kind: 'select-parent',
+      rowId: 'member:Wash:bar-1',
+    })
+    expect(treeKeyAction({ ...(bar as object), isExpanded: false } as Row, 'ArrowLeft')).toEqual({
+      kind: 'select-parent',
+      rowId: 'group:Wash',
+    })
+    // A flat fixture's element climbs to the plain fixture row.
+    expect(
+      treeKeyAction({ ...(head as object), parentGroup: undefined } as Row, 'ArrowLeft'),
+    ).toEqual({ kind: 'select-parent', rowId: 'fixture:bar-1' })
+  })
+
+  it('← is nothing on a closed top-level row, and either key is nothing on a divider', () => {
+    expect(treeKeyAction(group, 'ArrowLeft')).toBeNull()
+    expect(treeKeyAction(par, 'ArrowLeft')).toBeNull()
+    const divider = { kind: 'divider', id: 'divider:x', label: 'x' } as Row
+    expect(treeKeyAction(divider, 'ArrowLeft')).toBeNull()
+    expect(treeKeyAction(divider, 'ArrowRight')).toBeNull()
   })
 })

@@ -34,9 +34,9 @@ interface ColourPickerPopoverProps {
   notice?: React.ReactNode
   /**
    * Drive the popover from outside instead of letting it keep its own open state. Pass both or
-   * neither — `ColourCell` does, so a released single-column marquee can open the picker with no
-   * click (`PD-POPUP-AFTER-DRAG`); the two property visualizers have no such door to offer and
-   * leave it uncontrolled.
+   * neither — `ColourCell` does, so the container's request (Enter over a selection, or the
+   * selection bar's Set) can open the picker with no click; the two property visualizers have no
+   * such door to offer and leave it uncontrolled.
    */
   open?: boolean
   onOpenChange?: (open: boolean) => void

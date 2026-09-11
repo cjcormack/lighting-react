@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { setDeskSelection, useDeskSelection } from '../../store/selection'
+import type { LocateTarget } from '../../store/locate'
 import { rowIdsForTargets, selectedRowTargets, type Row, type RowId } from './rowModel'
 
 /**
@@ -32,6 +33,22 @@ import { rowIdsForTargets, selectedRowTargets, type Row, type RowId } from './ro
  *   is released by *either* outcome — the applied ids arriving, or the operator getting there first
  *   — because a mute that only ever lifted on an exact match would latch forever the first time a
  *   click raced a frame, silently disabling the publish direction for the rest of the mount.
+ * - **The bridge remembers what it published, and drops its own echoes.** The desk acknowledges
+ *   every `selection.set` with a `selection.state` broadcast and nothing else, so a frame that
+ *   equals something this bridge sent is the desk agreeing, not the desk moving. Until the
+ *   selection could change several times a second that never mattered: a click published once and
+ *   its echo matched. A marquee publishes at every row boundary it crosses, and two things then go
+ *   wrong without this. Echoes arrive in order but late, so the echo of an earlier frame reaches a
+ *   selection that has moved on, "mismatches", and is applied — replacing the marquee with a stale
+ *   row selection the instant the drag ends. And the id round trip is lossy by design: a marquee
+ *   over a parent and its element rows publishes the parent alone, and a fixture in two expanded
+ *   groups answers `rowIdsForTargets` as two rows, so even the *final* echo can resolve to a
+ *   different id set than the one that produced it. Both are one problem — "is this frame mine?" —
+ *   and both close at the **target** level, where our own `set` echoes verbatim: `publishedRef` is
+ *   a short FIFO of the target sets sent and not yet seen back; a frame matching any of them (or a
+ *   subset, since the desk drops a target it cannot resolve) is an echo, everything up to and
+ *   including it is acknowledged, and nothing is applied. A desk-side change that happens to equal
+ *   a pending publish is skipped, which is a no-op.
  */
 export function useDeskSelectionBridge(
   enabled: boolean,
@@ -57,6 +74,8 @@ export function useDeskSelectionBridge(
    */
   const dispatchedOverRef = useRef<ReadonlySet<RowId> | null>(null)
   const publishedOnceRef = useRef(false)
+  /** Target sets this bridge has sent and not yet seen echoed, oldest first. See the docblock. */
+  const publishedRef = useRef<Set<string>[]>([])
 
   // Desk → list. Declared first so a frame and the publish that would answer it resolve in that
   // order within one commit.
@@ -69,6 +88,13 @@ export function useDeskSelectionBridge(
   const rowsEmpty = rows.length === 0
   useEffect(() => {
     if (!enabled) return
+    // Our own echo: acknowledge it and every publish before it, and apply nothing.
+    const frame = new Set(targets.map(targetKey))
+    const echoOf = publishedRef.current.findIndex((sent) => isSubset(frame, sent))
+    if (echoOf !== -1) {
+      publishedRef.current.splice(0, echoOf + 1)
+      return
+    }
     const ids = rowIdsForTargets(rowsRef.current, targets)
     const current = selectedRef.current
     if (ids.length === current.size && ids.every((id) => current.has(id))) {
@@ -102,8 +128,33 @@ export function useDeskSelectionBridge(
       // flight, and that is theirs to publish.
       if (landed) return
     }
-    setDeskSelection(selectedRowTargets(rowsRef.current, selectedIds))
+    const published = selectedRowTargets(rowsRef.current, selectedIds)
+    publishedRef.current.push(new Set(published.map(targetKey)))
+    // A bounded memory: an echo that never comes (the socket dropped mid-drag) must not let the
+    // list grow for the life of the page. Well past the frames a drag can have in flight.
+    if (publishedRef.current.length > MAX_PENDING_PUBLISHES) publishedRef.current.shift()
+    setDeskSelection(published)
   }, [enabled, selectedIds])
+}
+
+const MAX_PENDING_PUBLISHES = 64
+
+function targetKey(target: LocateTarget): string {
+  return `${target.type}:${target.key}`
+}
+
+/**
+ * Every key of [frame] is in [sent] — equal, or the desk dropped a target it could not resolve.
+ *
+ * An **empty** frame is an echo only of an empty publish. It is trivially a subset of anything, and
+ * reading it as one would swallow a genuine deselect-all from the desk that lands inside one
+ * unacknowledged round trip — and leave the list selected against a desk that is not.
+ */
+function isSubset(frame: ReadonlySet<string>, sent: ReadonlySet<string>): boolean {
+  if (frame.size === 0) return sent.size === 0
+  if (frame.size > sent.size) return false
+  for (const key of frame) if (!sent.has(key)) return false
+  return true
 }
 
 function sameSet(a: ReadonlySet<RowId> | null, b: ReadonlySet<RowId>): boolean {

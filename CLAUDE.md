@@ -787,8 +787,8 @@ the **grid's is its marquee**: on a touchscreen a finger pans and only a held on
 (`touch-action` cannot say that, so `useCellMarquee` arms by time for `touch`/`pen` and refuses
 `touchmove` only while a marquee is live). A chip and a cell never share a point, so the hold never
 means two things where a finger lands. The other phone rules on that row: below `@[600px]` the bar
-is glyph · cell count · chips · New · Deselect (`SelectionBar.tsx`, with a Deselect of its own for a
-cells-only marquee, which the row toolbar has none for), and a tap on the grid's empty background
+is glyph · cell count · chips · New · Deselect (`SelectionBar.tsx`; the toolbar's Deselect serves
+rows and cells alike since the two became one selection), and a tap on the grid's empty background
 runs the same cells-then-rows ladder Escape does — only on the grid's own DOM, since React bubbles
 a click inside a portalled cell editor up the same tree.
 
@@ -797,7 +797,8 @@ a click inside a portalled cell editor up the same tree.
 the target**, and there is no picker to open or family dropdown to get wrong:
 
 - **Cells selected**: only that family is offered, and the press lands on the cells' heads —
-  three colour cells means those three fixtures, whatever the checkboxes name.
+  three colour cells means those three fixtures (which, since the two selections became one, are
+  also the fixture selection; see §One selection, two shapes).
 - **Rows selected, no cells**: the gesture names no attribute, so the filter is what the heads
   *can take* (`targetFamilies`, from descriptors — capability-only, fx-templates D6): a rig of
   dimmer-only pars is offered no colour template, and nothing with a mover on it offers a position
@@ -919,20 +920,28 @@ Radix's own auto-focus is a *parent* effect and parent effects run after a child
 from inside the content is taken straight back off it. And **comma is left alone in a one-field
 editor** — there is nowhere to step to, and a type-ahead may want the character.
 
-**The panel behaves the same however it was opened** — a click, a released marquee, a keystroke.
-The first field is focused in all three, and that is not a nicety: a single-column marquee
-auto-opens its editor behind the release (`PD-POPUP-AFTER-DRAG`), so *drag three dimmer cells, type
-`128`, Enter* is the ordinary desk gesture, and it only works if the release leaves the field
-focused. A first cut focused the field only for a keystroke, on the reasoning that a tap must not
-summon the on-screen keyboard, and quietly broke exactly that. Refuse any change that makes focus a
-function of the gesture again.
+**The panel behaves the same however it was opened** — a click, the selection bar's Set, a
+keystroke. The first field is focused in all three, and that is not a nicety: *drag three dimmer
+cells, Enter, type `128`, Enter* is the ordinary desk gesture, and it only works if the open leaves
+the field focused. A first cut focused the field only for a keystroke, on the reasoning that a tap
+must not summon the on-screen keyboard, and quietly broke exactly that. Refuse any change that
+makes focus a function of the gesture again.
+
+**A released drag opens nothing.** It did (`PD-POPUP-AFTER-DRAG`: a single-column marquee opened its
+first cell's editor behind the release) until the selection bar gained a **Set** of its own. The
+drag says *what* to edit and Set — or Enter, its key — says *do it*; a popover springing open under
+a pointer that had just finished drawing a rectangle was the second gesture being made for the
+operator, and it had no equivalent for a drag that spanned two columns. `singleColumnAnchor` and
+`onSingleColumnDrag` went with it; `autoOpenCell` in `FixturesTable` is fed by the container's
+`keyboardOpen` alone now, whichever way the operator asked.
 
 **The one thing that does differ is the *form*, not the gesture.** Focus is taken in the popover
 and in neither sheet (`useCellEditorForm`), because both sheets are reached by a finger and there
 the keyboard rises over the grid for nothing. That is a question about the surface, so on any one
-surface every way in still behaves identically. `FanPopover` opts out with `autoFocus: false` for a
-reason of its own: its first question is *which column*, and jumping to the From box would skip the
-chooser that decides what From means.
+surface every way in still behaves identically. `FanPopover` opts out with `autoFocus: false` only
+when the marquee spans several fannable columns: then its first question is *which column*, and
+jumping to the From box would skip the chooser that decides what From means. With one column the
+selection has answered that, and From is focused like any editor's first field.
 
 **`keyboardSeed` carries the character and nothing else.** A string (`''` for a bare Enter, null
 for a click or a drag) threaded container → table → cell, latched by `useCellEditorOpen` into
@@ -954,9 +963,9 @@ itself and says so with `preventDefault()`, which is how the shared wrapper know
 a commit across every selected column and drops it from the ones whose shape it does not fit — so a
 Dimmer + Colour marquee opens the dimmer's slider, and moving it sets the dimmers and leaves the
 colours alone, exactly as `127` did. `orderedSelectedCells` picks the order — topmost displayed
-row, leftmost visible column, the same display-order rule `singleColumnAnchor` applies to a
-released drag, extended to the column axis — and the container takes the first cell that **has an
-editor**. That second half is load-bearing: a marquee is geometric (`hitsFor` sweeps a rectangle
+row, leftmost visible column — the display-order rule a released drag's auto-open once shared,
+extended to the column axis — and the container takes the first cell that **has an editor**.
+That second half is load-bearing: a marquee is geometric (`hitsFor` sweeps a rectangle
 over rows and column bands), so it covers Colour cells on dimmer-only pars, and taking the
 display-first cell flatly would leave Enter doing nothing on an ordinary mixed selection.
 
@@ -975,9 +984,60 @@ own activation and open *that* cell's editor with nothing focused.
 `programmer.clearEntry`, by the programmer fade — the same store the action bar's Clear fades by).
 
 The request itself is a **one-shot** on both halves: the container drops it on the commit after it
-is set, and `FixturesTable` folds it into the very `autoOpenCell` a released marquee uses, so there
-is one mechanism for "open that editor with no click". A request left standing re-opens the editor
-the next time the virtualiser renders the row it names.
+is set, and `FixturesTable` folds it into `autoOpenCell`, so there is one mechanism for "open that
+editor with no click" — Enter and the bar's Set are the same request. A request left standing
+re-opens the editor the next time the virtualiser renders the row it names.
+
+### One selection, two shapes
+
+**Rows and cells are one selection**, and either clears the other. They were two independent states
+— a row selection with checkboxes that Record scoped on, and a cell marquee drawn over it as a
+transient edit scope — and an operator had to hold both in their head to know what the next gesture
+reached. Now `FixturesListContainer` derives one `selectedRowIds` (the cells' rows under a marquee,
+the row selection otherwise) and every consumer reads it: Record's published targets, Locate and
+Highlight, the desk-selection bridge, the template strip and the footer count. A marquee *is* the
+fixture selection, narrowed to some of their attributes. Enforced at the doors, not by an effect:
+the cell door (`selectCells`) clears the rows only when a hit arrives and there are rows to clear,
+and every row door (`selectRow`, `selectAllRows`, `setRows`) clears the cells, whose `clear` bails
+when there are none. `cellRowIds` is identity-stable while its *members* are unchanged, or a drag
+would republish to the desk on every pointer move rather than at each row boundary.
+
+**The checkbox column is gone, and a drag from the name column selects rows** — the same
+`useCellMarquee`, which decides at the press which side of the first value column it landed on and
+never changes its mind mid-gesture (a rectangle dragged from the name column into the values is
+still a row marquee, the way a spreadsheet's row-header drag is). A plain drag replaces; a ⌘-drag
+unions onto the selection it *began* over, so shrinking the rectangle un-selects, which the cell
+marquee's per-frame accumulation does not do. The list hands the whole id list to `onRowMarquee`
+only when it changed, and the release's click-swallow is load-bearing twice over there: the name
+cell's own `onClick` would otherwise select the one row under the release. Enabled on all three
+lists, since the checkbox went from all three: without it the two plain routes would have had no
+way to accumulate a selection by touch. The keyboard path is window-level and deliberately has no
+per-row control: ⌘A, ↑/↓ with Shift extending, and **→/← open and close the anchor row** — a group
+over its members, a multi-head fixture over its elements — with ← on a member or element climbing
+to its parent first, the ARIA tree convention (`treeKeyAction` in `rowModel.ts` is the rule).
+
+**The selection bar's cell verbs are Set · Clear · Fan** (`CellSelectionActions`), drawn before
+Locate and Highlight when the selection is cells. Set and Clear are Enter and Backspace with a
+button on them, and take the container's gate (`cellKeyboardPermission`) and words
+(`cellActionCopy`) so a button cannot promise a gesture the keyboard refuses; Output and a focused
+template layer show them disabled with the reason, and Fan makes the same two refusals itself
+(it is also drawn on the two plain routes, which have no scope). There is **one** Set —
+its title names where the value lands (Local, or the focused Look's rows), and that is the scope's
+answer rather than the press's. A "track it" arm the way a template chip has (⌥click) makes no
+sense on a value: a typed number has no referent for a layer to follow, and *Make layer* on the
+rail is how local literals become something trackable afterwards. Set and Clear keep their icons
+at every width and only Fan folds on the phone arm, because on a phone Set is the only way into a
+selection's editor now that a drag opens nothing.
+
+**Fan reads the marquee, not the fixture selection**, and opens in `CellEditorSurface` like the four
+cell editors. The column comes from the selection — `FanPopover` takes one `FanColumn` per selected
+column, targets in visible row order, from the same `columnTargets` expansion `commitToCells`,
+Backspace and the batch count use — and the chooser is drawn only when the selection spans more
+than one fannable column. Focus follows: with one column the first question is From and it is
+focused on open; with several it is still *which column*, so nothing is. Enter still *applies*,
+since a fan is the one panel here that does not write as it is edited. The two plain list routes
+cannot select a cell, so they keep the row Fan they always had (`fanColumnsForTargets`), drawn in
+the toolbar's `actions` slot where the programmer draws the cell verbs.
 
 ### The programmer's scoped grid
 
@@ -1497,7 +1557,7 @@ Includes it) and **Cue properties…** (`CuePropertiesSheet`). Consequences wort
   layer order, masks, per-layer amount and blend, group expansion and specificity would all have to
   be reimplemented, and each is a place for the desk and the display to disagree. It borrows the
   four cell components rather than mounting `FixturesListContainer`: that container owns a filter,
-  checkboxes and a marquee, and its selection is Redux-scoped to one of three scopes.
+  a row marquee and a cell marquee, and its selection is Redux-scoped to one of three scopes.
 - **"Add Cue" is gone.** A cue is a captured state, so recording is the only way one is made;
   `StackDetail` offers *Record into `<stack>`*. Separators and stacks keep their create buttons —
   neither is a captured state, and that is the line rather than "no new buttons". The Prompt Book's
