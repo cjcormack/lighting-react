@@ -871,12 +871,52 @@ on whichever rotation puts the notch on that edge. `SheetContent`'s own `sm:max-
 an inline width, so `maxWidth: 'none'` goes with it — the symptom of forgetting is a sheet that
 stays narrow and scrolls, which looks exactly like the width never being applied.
 
-**On the programmer's grid a click on a cell selects it, and opens nothing.** The whole of a click
-is the selection: one cell, replacing whatever was there — including when the cell is already in
-the marquee, which is how a rectangle is narrowed to one of its own cells, the one thing a
-rectangle cannot say. The editor is opened by the selection bar's **Set**, by Enter, or by typing
-(§The programmer's keyboard), so the drag, the click and the keys all say *what* to edit and one
-gesture says *edit it*. Three consequences worth knowing before touching any of it:
+**On the programmer's grid a single click on a cell selects it, and a double click opens its
+editor.** The whole of a single click is the selection: one cell, replacing whatever was there —
+including when the cell is already in the marquee, which is how a rectangle is narrowed to one of
+its own cells, the one thing a rectangle cannot say. The editor is opened by the selection bar's
+**Set**, by Enter, by typing (§The programmer's keyboard), or by a **double** click, so the drag,
+the single click and the keys all say *what* to edit and one gesture says *edit it*.
+
+**The double click is that second gesture made with the pointer alone**, and it is the surface's
+rather than the four cells': `CellEditorSurface` decides it once, above the form branch, so all
+three forms and all four value kinds answer it identically — the reason `CellClickBehaviour` is one
+type rather than four copies of two props. It opens through the same `onOpenChange` every other
+opener uses, so it lands in `useCellEditorOpen`'s click path: beside the cell (Set's toolbar anchor
+is Set's alone), with no typed seed, and with whatever a click's open resets reset. It is wired
+**only where a single click selects** — on the two plain list routes and in `CueValueGrid` a single
+click already opens, and two of them would toggle the editor shut and back open. And it needs no
+*permission* gate of its own: a `disabled` trigger fires no click and therefore no double click,
+which is how Output scope, a focused template layer and an unreachable desk stay read-only through
+this door as much as through the other three.
+
+**The handler is withheld while that cell's editor is already open**, because `setOpen(true)` is
+not idempotent: it re-runs the cell's own open reset (`SliderCell`'s `draft.reset`, `SettingCell`'s
+filter) over what the operator had half-typed, and re-latches `atButton` to false — which swings a
+Set-anchored panel across the screen *and* swaps the branch from `TriggerState` to `PopoverAnchor`,
+two component types at one JSX slot, so React remounts the operator's own button under their finger.
+
+**Do not delete the guard on the grounds that Radix already closes the editor first.** At the desk
+it does: the gesture's first `pointerdown` is an outside press on the open content, and
+`DismissableLayer` listens for `pointerdown` on the document, so the `dblclick` lands on an editor
+that has already shut and simply opens it again — verified in the browser on this change and on the
+commit before it, where a single click on an open cell behaves identically. But that dismissal is
+the *environment's* and not a rule this code states, and a test never reaches it: `fireEvent`
+dispatches exactly the one event it names, so no `pointerdown` is seen, the listener never runs, and
+the second open goes straight through. Both tests in `CellEditorSurface.test.tsx` fail if the guard
+is dropped. **The difference is not Radix rescuing the browser case** — `PopoverContent` suppresses
+an outside press only where it lands on a real `PopoverTrigger`, and this grid renders none in
+either environment.
+
+**The handler goes on the wrappers that already clone the trigger, never in a wrapper of its own.**
+Each branch hands the trigger through a `Slot` as it is (`PopoverAnchor asChild`, `TriggerState`),
+so a `<TriggerDoubleClick>` around it — which is how this was first built — meant a *second* clone
+per cell per render, on a grid that mounts one of these per visible cell and re-renders the whole
+viewport on every frame of a marquee drag. The nested slot was a trap besides: an outer slot hands
+its child the anchor `ref` and `data-state` as props, so the wrapper had to forward them or the
+popover would never be positioned and no cell would be marked open.
+
+Three consequences worth knowing before touching any of it:
 
 - **The trigger is a `PopoverAnchor`, not a `PopoverTrigger`** (`triggerOpens` on
   `CellEditorSurface`, set from `CellClickBehaviour`, which is one type rather than four copies of
@@ -994,14 +1034,16 @@ it only works if the open leaves the field focused. A first cut focused the fiel
 keystroke, on the reasoning that a tap must not summon the on-screen keyboard, and quietly broke
 exactly that. Refuse any change that makes focus a function of the gesture again.
 
-**A released drag opens nothing, and neither does a click.** The drag half went first
+**A released drag opens nothing, and neither does a single click.** The drag half went first
 (`PD-POPUP-AFTER-DRAG`: a single-column marquee opened its first cell's editor behind the release)
 when the selection bar gained a **Set** of its own; the click followed it, for the same reason. The
-drag and the click say *what* to edit and Set — or Enter, its key — says *do it*; a popover
-springing open under a pointer that had just finished drawing a rectangle was the second gesture
-being made for the operator, and it had no equivalent for a drag that spanned two columns. `singleColumnAnchor` and
+drag and the click say *what* to edit and Set — or Enter, its key, or a **double** click — says
+*do it*; a popover springing open under a pointer that had just finished drawing a rectangle was
+the second gesture being made for the operator, and it had no equivalent for a drag that spanned
+two columns. `singleColumnAnchor` and
 `onSingleColumnDrag` went with it; `autoOpenCell` in `FixturesTable` is fed by the container's
-`keyboardOpen` alone now, whichever way the operator asked.
+`keyboardOpen` alone now, whichever way the operator asked — the double click never reaches it,
+being the surface's own.
 
 **The one thing that does differ is the *form*, not the gesture.** Focus is taken in the popover
 and in neither sheet (`useCellEditorForm`), because both sheets are reached by a finger and there

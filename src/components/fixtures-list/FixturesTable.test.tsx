@@ -548,6 +548,23 @@ describe('FixturesTable cell gesture', () => {
     fireEvent.click(cellButton())
   })
 
+  it('a double click on a cell opens that cell\'s editor', () => {
+    // The pointer's own way of saying Set. It never reaches the container — `CellEditorSurface`
+    // answers it — so the proof is that the cell the gesture landed on is the one marked open,
+    // while the clicks that carried it still selected it.
+    stubFlatLayout()
+    render(<Harness />)
+    const cell = cellButton()
+    fireEvent.pointerDown(cell, { button: 0, clientX: 300, clientY: 100 })
+    fireEvent.pointerUp(cell, { button: 0, clientX: 300, clientY: 100 })
+    fireEvent.click(cell)
+    fireEvent.click(cell)
+    fireEvent.doubleClick(cell)
+
+    expect(openCellRowId()).toBe('fixture:a')
+    expect(onBeginCellEdit).toHaveBeenCalled()
+  })
+
   it('opens the cell the container names, when the request comes through `keyboardOpen`', () => {
     // The one door left into an editor without a click — Enter over a selection, or the bar\'s
     // Set — and it is the container\'s to open, not the drag\'s.

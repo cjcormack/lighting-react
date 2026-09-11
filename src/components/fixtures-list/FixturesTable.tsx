@@ -1123,11 +1123,13 @@ interface RowViewProps {
   /** Nothing is selected — any open cell editor in this row must go. See `useCellEditorOpen`. */
   selectionEmpty?: boolean
   /**
-   * A click on one of this row's value cells **selects** it instead of opening its editor.
+   * A **single** click on one of this row's value cells **selects** it instead of opening its
+   * editor; a double click on the cell opens it.
    *
    * True exactly where the grid has a cell selection to put it in. The editor is then opened by
-   * the selection bar's Set, by Enter, or by typing — so the drag, the click and the keys all say
-   * *what* to edit and one gesture says *edit it*. See `CellClickBehaviour`.
+   * the selection bar's Set, by Enter, by typing, or by that double click — so the drag, the single
+   * click and the keys all say *what* to edit and one gesture says *edit it*. The double click is
+   * the surface's own and never reaches this component. See `CellClickBehaviour`.
    */
   clickSelectsCell: boolean
   /** Where a requested editor opens. See `FixturesTableProps`. */
@@ -1653,8 +1655,9 @@ function PropertyCell({
    * scope, a focused template layer and an unreachable desk stay read-only through this door as
    * much as through the pointer.
    *
-   * On the programmer this is the **only** door: a click there selects the cell and opens nothing.
-   * See `CellClickBehaviour`.
+   * On the programmer this is the only door the *container* holds: a single click there selects the
+   * cell, and the only pointer gesture that opens an editor is a **double** click, which the
+   * surface answers itself without passing through here. See `CellClickBehaviour`.
    */
   autoOpen: boolean
   /** The container asked this cell's editor to close — Set pressed again. */

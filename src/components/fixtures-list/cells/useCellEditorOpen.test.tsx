@@ -62,6 +62,18 @@ describe('useCellEditorOpen', () => {
     expect(result.current.atButton).toBe(false)
   })
 
+  it('leaves the editor at its cell, unseeded, for a bare open — the double click\'s call', () => {
+    // `CellEditorSurface` opens a double click straight through `onOpenChange`, which is this
+    // `setOpen` with neither extra argument. That has to land in the click path: beside the cell
+    // (the Set button's anchor is Set's alone) and with no typed character to seed a field with.
+    const { result } = renderHook(() => useCellEditorOpen({}))
+    act(() => result.current.setOpen(true))
+
+    expect(result.current.isOpen).toBe(true)
+    expect(result.current.atButton).toBe(false)
+    expect(result.current.keyboardOpen).toBeNull()
+  })
+
   it('closes on the close signal, and the signal is a one-shot like the open', () => {
     // Set is the only thing that can shut what it opened: the Set button is the open popover's own
     // anchor, so a press on it is not the outside click that dismisses one. Verified on the desk —

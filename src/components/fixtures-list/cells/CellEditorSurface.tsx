@@ -1,4 +1,11 @@
-import { useEffect, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type RefObject } from 'react'
+import {
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+} from 'react'
 import { Slot } from '@radix-ui/react-slot'
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
@@ -102,8 +109,9 @@ export function cellEditorIsOpen(): boolean {
  */
 export interface CellClickBehaviour {
   /**
-   * A click on this cell **selects** it rather than opening its editor. See [triggerOpens], which
-   * is the half of it the surface implements; the cell's own trigger button supplies the `onClick`.
+   * A single click on this cell **selects** it rather than opening its editor; a **double** click
+   * opens it, beside the cell. See [triggerOpens], which is the half of it the surface implements;
+   * the cell's own trigger button supplies the `onClick`.
    */
   clickSelects?: boolean
   /** Where the editor opens when it does open. See [anchorRef]. */
@@ -298,17 +306,31 @@ interface CellEditorSurfaceProps {
    */
   wide?: boolean
   /**
-   * Whether a click on [trigger] opens this editor.
+   * Whether a **single** click on [trigger] opens this editor.
    *
    * **False in the programmer's grid, and that is a decision rather than a detail.** There a click
-   * on a cell *selects* it and nothing else; the editor is opened by the selection bar's Set, by
-   * Enter, or by typing — one gesture for "say what to edit" and another for "edit it". So the
-   * trigger stops being a `PopoverTrigger` and becomes a `PopoverAnchor`: it still positions the
-   * popover (which is what [anchorRef] then overrides), it still takes focus and Tab, and its own
-   * `onClick` is free to mean "select this cell".
+   * on a cell *selects* it; the editor is opened by the selection bar's Set, by Enter, by typing —
+   * or by a **double** click on the cell, which is the pointer's own way of saying the second
+   * gesture. One gesture for "say what to edit" and another for "edit it", rather than a click
+   * doing both. So the trigger stops being a `PopoverTrigger` and becomes a `PopoverAnchor`: it
+   * still positions the popover (which is what [anchorRef] then overrides), it still takes focus
+   * and Tab, and its own `onClick` is free to mean "select this cell".
+   *
+   * The double click is the surface's rather than the four cells', for the reason [CellClickBehaviour]
+   * itself exists: one rule, or a grid where the dimmer opens on two clicks and the colour does not.
+   * It opens through [onOpenChange] like any other opener, so it lands in `useCellEditorOpen`'s
+   * click path — beside the cell, with no typed seed, and with whatever a click's open resets reset.
+   * It is withheld while this editor is already open, which is not tidiness — see the guard at
+   * `onTriggerDoubleClick` for what a second open does to a panel the operator is typing into.
    *
    * True everywhere else — the two plain list routes, which cannot select a cell at all and would
-   * otherwise lose every way into an editor, and `ColourPickerPopover`'s two visualizer callers.
+   * otherwise lose every way into an editor, and `CueValueGrid`, which passes no `clickSelects`.
+   * There a single click already opens, so no double click is wired: two clicks would toggle the
+   * editor shut and back open again, which is a worse answer than the one a click already gives.
+   *
+   * `ColourPickerPopover`'s two visualizer callers are **not** in that list, though its own doc
+   * comment says they are: they pass no `sheetWhenNarrow`, so they take its plain-`Popover` branch
+   * and never mount this component at all. Nothing here decides anything for them.
    */
   triggerOpens?: boolean
   /**
@@ -363,6 +385,32 @@ export function CellEditorSurface({
 }: CellEditorSurfaceProps) {
   const form = useCellEditorForm()
 
+  // One handler, written once and handed to whichever element is the trigger in each of the three
+  // branches, so all three answer a double click identically. **Not a wrapper around the trigger**,
+  // which is what this was first: every branch already clones the trigger through a `Slot`, so a
+  // wrapper meant a second clone per cell per render — and the grid mounts one of these per visible
+  // cell, in a viewport that re-renders on every frame of a marquee drag.
+  //
+  // **Undefined while this editor is already open.** A double click opens; there is nothing for it
+  // to do to an editor that is open, and `setOpen(true)` is not idempotent — it re-runs the cell's
+  // own open reset (`SliderCell`'s `draft.reset`, `SettingCell`'s filter) over what the operator
+  // had half-typed, and re-latches `atButton` to false, which swings a Set-anchored panel to the
+  // cell and swaps the branch below from `TriggerState` to `PopoverAnchor`. Those are two component
+  // types at one slot, so React remounts the operator's own button under their pointer.
+  //
+  // **Whether the gesture ever gets that far depends on the environment, which is why the guard is
+  // here rather than left to Radix.** At the desk the first `pointerdown` of the double click is an
+  // outside press on the open content, and `DismissableLayer` — which listens for `pointerdown` on
+  // the document — closes the editor, so the `dblclick` lands on one that has already shut and
+  // simply opens it again (checked in the browser, popover form, on this change and on the commit
+  // before it). A test never gets that far: `fireEvent` dispatches exactly the one event it names,
+  // so no `pointerdown` is ever seen, that listener does not run, and the second open goes straight
+  // through — which is what the two tests in `CellEditorSurface.test.tsx` catch, and both fail if
+  // this guard is dropped. **Don't read that as Radix protecting the desk case**: `PopoverContent`
+  // suppresses an outside press only where it lands on a real `PopoverTrigger`, and this grid
+  // renders none in either environment. See [triggerOpens].
+  const onTriggerDoubleClick = triggerOpens || open === true ? undefined : () => onOpenChange(true)
+
   if (form !== 'popover') {
     return (
       <SheetSurface
@@ -371,6 +419,7 @@ export function CellEditorSurface({
         onOpenChange={onOpenChange}
         title={title}
         trigger={trigger}
+        onTriggerDoubleClick={onTriggerDoubleClick}
         onOpenAutoFocus={onOpenAutoFocus}
         wide={wide}
         triggerOpens={triggerOpens}
@@ -404,9 +453,15 @@ export function CellEditorSurface({
           // `computePosition` per open, and the first of the two could paint: the panel appeared at
           // the cell and jumped to the button. `TriggerState` is how the trigger still takes
           // `data-state` while being no anchor at all.
-          <TriggerState open={open}>{trigger}</TriggerState>
+          <TriggerState open={open} onDoubleClick={onTriggerDoubleClick}>
+            {trigger}
+          </TriggerState>
         ) : (
-          <PopoverAnchor asChild data-state={open ? 'open' : 'closed'}>
+          <PopoverAnchor
+            asChild
+            data-state={open ? 'open' : 'closed'}
+            onDoubleClick={onTriggerDoubleClick}
+          >
             {trigger}
           </PopoverAnchor>
         ))}
@@ -435,9 +490,23 @@ export function CellEditorSurface({
  * straight onto the cloned `<button>` and React would warn about an unknown DOM attribute on every
  * open — silently, since the default test reporter swallows it.
  */
-function TriggerState({ open, children }: { open?: boolean; children: ReactNode }) {
-  return <Slot data-state={open ? 'open' : 'closed'}>{children}</Slot>
+function TriggerState({
+  open,
+  onDoubleClick,
+  children,
+}: {
+  open?: boolean
+  /** The double click that opens this editor, where a single click selects. See `triggerOpens`. */
+  onDoubleClick?: () => void
+  children: ReactNode
+}) {
+  return (
+    <Slot data-state={open ? 'open' : 'closed'} onDoubleClick={onDoubleClick}>
+      {children}
+    </Slot>
+  )
 }
+
 
 function SheetSurface({
   form,
@@ -445,6 +514,7 @@ function SheetSurface({
   onOpenChange,
   title,
   trigger,
+  onTriggerDoubleClick,
   onOpenAutoFocus,
   wide,
   triggerOpens,
@@ -459,7 +529,15 @@ function SheetSurface({
   | 'wide'
   | 'triggerOpens'
   | 'children'
-> & { form: Exclude<CellEditorForm, 'popover'> }) {
+> & {
+  form: Exclude<CellEditorForm, 'popover'>
+  /**
+   * The double click that opens this editor, already decided above — undefined where a single
+   * click opens, and while this editor is open. Passed down rather than recomputed here so the
+   * gesture cannot come to mean one thing in a popover and another in a sheet.
+   */
+  onTriggerDoubleClick?: () => void
+}) {
   const keyboardInset = useKeyboardInset(open)
   const atBottom = form === 'bottom-sheet'
 
@@ -513,7 +591,9 @@ function SheetSurface({
           gesture has to work in all three. */}
       {trigger != null &&
         (triggerOpens === false ? (
-          <TriggerState open={open}>{trigger}</TriggerState>
+          <TriggerState open={open} onDoubleClick={onTriggerDoubleClick}>
+            {trigger}
+          </TriggerState>
         ) : (
           <SheetTrigger asChild>{trigger}</SheetTrigger>
         ))}

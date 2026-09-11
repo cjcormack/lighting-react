@@ -10,6 +10,7 @@ import {
   resetCellEditorSurfaceMedia,
 } from './CellEditorSurface'
 import { openCellEditorTarget } from '../cellEntry'
+import { useCellEditorOpen } from './useCellEditorOpen'
 
 /**
  * Which of the three shapes a cell editor takes, and the listeners behind the decision.
@@ -79,20 +80,30 @@ afterEach(() => {
  * cell. `openFromOutside` stands in for the selection bar's Set.
  */
 function SelectOnlySurface({ withAnchor = true }: { withAnchor?: boolean }) {
-  const [open, setOpen] = useState(false)
+  // **The real hook, not a `useState` standing in for it.** Whether the panel is anchored at the
+  // Set button is `useCellEditorOpen`'s latched `atButton`, and the cells forward the ref only
+  // while it holds — so a harness that kept its own boolean would put every test on the
+  // Set-anchored branch, including the ones about gestures that never take it, and would go on
+  // passing if the latch itself regressed. `autoOpen` is the one-shot the table raises for Set.
+  const [setPressed, setSetPressed] = useState(false)
   const anchorRef = useRef<HTMLButtonElement | null>(null)
+  const { isOpen, setOpen, atButton } = useCellEditorOpen({
+    autoOpen: setPressed,
+    anchorAtButton: true,
+  })
   return (
     <>
-      <button type="button" ref={anchorRef} onClick={() => setOpen(true)}>
+      <button type="button" ref={anchorRef} onClick={() => setSetPressed(true)}>
         Set
       </button>
       <CellEditorSurface
-        open={open}
+        open={isOpen}
         onOpenChange={setOpen}
         title="Dimmer"
         contentClassName="w-64"
         triggerOpens={false}
-        anchorRef={withAnchor ? anchorRef : undefined}
+        // Production's own expression, verbatim — see `SliderCell`.
+        anchorRef={withAnchor && atButton ? anchorRef : undefined}
         trigger={
           <button type="button" onClick={() => selected()}>
             cell
@@ -106,6 +117,22 @@ function SelectOnlySurface({ withAnchor = true }: { withAnchor?: boolean }) {
 }
 
 const selected = vi.fn()
+
+/** A cell the way the two plain list routes mount it: a single click is the way into the editor. */
+function ClickOpensSurface() {
+  const [open, setOpen] = useState(false)
+  return (
+    <CellEditorSurface
+      open={open}
+      onOpenChange={setOpen}
+      title="Dimmer"
+      contentClassName="w-64"
+      trigger={<button type="button">cell</button>}
+    >
+      <p>editor body</p>
+    </CellEditorSurface>
+  )
+}
 
 describe('CellEditorSurface', () => {
   it('floats a popover at desk sizes', () => {
@@ -188,6 +215,91 @@ describe('CellEditorSurface click behaviour', () => {
     render(<SelectOnlySurface />)
     fireEvent.click(screen.getByText('cell'))
     expect(selected).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText('editor body')).toBeNull()
+  })
+
+  it('a double click on the trigger opens the editor, where a single click only selects', () => {
+    // The second gesture made with the pointer alone. A real browser sends both clicks and then
+    // `dblclick`, so the test does too: the clicks must still select — the double click composes
+    // onto the cell's own `onClick` rather than replacing it — and the editor must end up open.
+    render(<SelectOnlySurface />)
+    const cell = screen.getByText('cell')
+    fireEvent.click(cell)
+    expect(screen.queryByText('editor body')).toBeNull()
+    fireEvent.click(cell)
+    fireEvent.doubleClick(cell)
+
+    expect(selected).toHaveBeenCalledTimes(2)
+    expect(screen.getByText('editor body')).toBeVisible()
+  })
+
+  it('leaves an already-open editor alone — a double click opens, it does not re-open', () => {
+    // The bug the guard exists for: a second `onOpenChange(true)` would re-run the cell's own open
+    // reset (`SliderCell`'s `draft.reset`) over what the operator had half-typed, and re-latch the
+    // anchor to the cell, swinging a Set-anchored panel across the screen and remounting the cell's
+    // button under the pointer.
+    //
+    // **This reaches the second open only because `fireEvent` does not synthesise a gesture.** It
+    // dispatches exactly the one event it names, so no `pointerdown` precedes the `dblclick` and
+    // `DismissableLayer`'s `pointerdown` listener — the thing that closes an open editor when the
+    // press lands outside it — never runs. At the desk that listener does run and the editor is
+    // already shut by the time `dblclick` arrives, so this is the guard's narrow case rather than
+    // its everyday one. Not `triggerRef`: `PopoverContent` suppresses an outside press only where
+    // it lands on a real `PopoverTrigger`, and this grid renders none in either environment.
+    const opens: boolean[] = []
+    function Harness() {
+      const [open, setOpen] = useState(false)
+      return (
+        <CellEditorSurface
+          open={open}
+          onOpenChange={(next) => {
+            opens.push(next)
+            setOpen(next)
+          }}
+          title="Dimmer"
+          contentClassName="w-64"
+          triggerOpens={false}
+          trigger={<button type="button">cell</button>}
+        >
+          <p>editor body</p>
+        </CellEditorSurface>
+      )
+    }
+    render(<Harness />)
+    const cell = screen.getByText('cell')
+    fireEvent.doubleClick(cell)
+    expect(opens).toEqual([true])
+
+    // Still open, and the gesture repeated on it changes nothing.
+    fireEvent.doubleClick(cell)
+    expect(opens).toEqual([true])
+    expect(screen.getByText('editor body')).toBeVisible()
+  })
+
+  it('does not remount the cell under the pointer when a Set-anchored editor is double clicked', () => {
+    // The visible half of the same bug. Re-opening re-latches `atButton` to false, which swaps the
+    // rendered branch from `TriggerState` to `PopoverAnchor` — different component types at one
+    // JSX slot, so React tears the subtree down and builds it again and the operator's own button
+    // is replaced under their finger, mid-gesture. Node identity is the assertion because it is
+    // the half jsdom can see: it lays nothing out, so the anchor swap itself is unobservable.
+    render(<SelectOnlySurface />)
+    fireEvent.click(screen.getByText('Set'))
+    const cell = screen.getByText('cell')
+    expect(screen.getByText('editor body')).toBeVisible()
+
+    fireEvent.doubleClick(cell)
+
+    expect(screen.getByText('editor body')).toBeVisible()
+    expect(screen.getByText('cell')).toBe(cell)
+  })
+
+  it('wires no double click where a single click already opens', () => {
+    // Two clicks there toggle the editor shut again, and a double click that re-opened it would
+    // make the second click of the gesture do nothing visible. `dblclick` alone is the proof: it
+    // is the only event this would have to be listening to.
+    render(<ClickOpensSurface />)
+    fireEvent.doubleClick(screen.getByText('cell'))
+
     expect(screen.queryByText('editor body')).toBeNull()
   })
 

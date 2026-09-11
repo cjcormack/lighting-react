@@ -575,9 +575,11 @@ export function FixturesListContainer({
   /**
    * The selection bar's **Set** button, which is where a requested editor opens.
    *
-   * Every editor on this grid is opened by Set or by its key now — a click selects — and anchoring
-   * the panel at the cell put it wherever in the grid the first selected cell happened to be,
-   * which for a marquee near the bottom of a long list is nowhere near the hand that pressed Set.
+   * Every editor on this grid is opened by Set, by its key, or by a double click on the cell now —
+   * a single click selects — and anchoring the panel at the cell put it wherever in the grid the
+   * first selected cell happened to be, which for a marquee near the bottom of a long list is
+   * nowhere near the hand that pressed Set. Only Set anchors here: a double click is made at the
+   * cell, so its editor opens there, like Enter's.
    * Fan already opened at its own button; this is the two behaving alike. Threaded down to the
    * cells rather than resolved here, because the popover belongs to the cell that owns the editor.
    */
