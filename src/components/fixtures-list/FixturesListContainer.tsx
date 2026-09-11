@@ -9,12 +9,14 @@ import { useFixtureListQuery } from '../../store/fixtures'
 import { useGroupListQuery } from '../../store/groups'
 import { usePersistentState } from '../../hooks/usePersistentState'
 import { useCellSelection, type CellSelection } from './useCellSelection'
+import { useEscapeEditorSnapshot } from './useEscapeEditorSnapshot'
 import { useProgrammerScope } from '../programmer/ProgrammerScope'
 import { useFocusedTemplateLayer } from '../programmer/FocusedTemplateLayer'
 import {
   cellActionCopy,
   cellKeyboardPermission,
   marqueeOwnsKeyTarget,
+  openCellEditorTarget,
   orderedSelectedCells,
 } from './cellEntry'
 import { resolutionPropertyNames } from './columns'
@@ -448,23 +450,36 @@ export function FixturesListContainer({
     else setExpandedFixtures((prev) => toggled(prev, row.fixture.key))
   }, [])
 
-  // Opening an editor on a cell selects **that cell** — a one-cell marquee, which by the shared
-  // rule drops any row selection — so what the editor writes is what is outlined, and nothing
-  // else. It used to select the cell's *row* (spreadsheet feel, from when rows had checkboxes),
-  // which put a row wash under a click that was about one attribute, and made a click on a cell
-  // of an already-selected row write every head in the row selection.
+  // **A click on a cell selects that one cell, and does nothing else.** Not its row (the
+  // spreadsheet feel from when rows had checkboxes, which put a row wash under a click that was
+  // about one attribute), and — since this session — not the editor either: on a grid that can
+  // select cells the trigger no longer opens, so the whole of a click is this. Set, Enter and a
+  // typed character are how an editor is opened, over whatever the selection has arrived at.
+  //
+  // That is also why there is no longer an exception for a cell already in the marquee. It used to
+  // short-circuit, on the reasoning that clicking one of your own selected cells was the *whole*
+  // marquee's editor and collapsing to one cell would silently discard the rest — true while the
+  // click was the way in. With the editor elsewhere, a click inside the marquee is an operator
+  // narrowing it to one cell, which is the one thing a rectangle cannot express.
   const handleBeginCellEdit = useCallback(
     (row: Row, col: ColumnKey) => {
       if (row.kind === 'divider') return
-      // A cell inside the marquee is the WHOLE marquee's editor, so the selection does not move.
-      // Without this, clicking one of your own selected cells would collapse the marquee to that
-      // single cell and the commit would write only it — silently discarding the rest.
-      if (cellSelection.isSelected(row.id, col)) return
-      // A click outside it replaces the marquee with this cell, the way a click outside a
-      // spreadsheet range does.
+      // **The two plain list routes keep the row rule, and must.** They are not given a
+      // `cellSelection` (see the table below), so a cell selection made here would be one nothing
+      // draws — and it would still reach the toolbar, which counts cells to choose between the cell
+      // verbs and the row Fan. What a click there *does* mean is the spreadsheet feel it always
+      // had: the clicked row becomes the selection, unless it is already in it. That is not
+      // decoration — `commitNow` and `batchCountFor` both write to the whole row selection when the
+      // clicked row is part of it, so the editor's own "Applying to N targets" line is only honest
+      // while the selection and the click agree. Left out, a click on row D's cell while rows A–C
+      // were selected opened an editor headed "1 target" over three highlighted rows.
+      if (!showOwnership) {
+        if (!selection.isSelected(row.id)) selectRow(row.id, 'replace')
+        return
+      }
       selectCells([{ rowId: row.id, col }], 'replace')
     },
-    [cellSelection, selectCells],
+    [showOwnership, selectCells, selection, selectRow],
   )
 
   /**
@@ -557,10 +572,34 @@ export function FixturesListContainer({
    * request names a cell by `(rowId, col)`, and a request left standing would re-open that editor
    * the next time the row it names is re-rendered into the virtualiser's window.
    */
+  /**
+   * The selection bar's **Set** button, which is where a requested editor opens.
+   *
+   * Every editor on this grid is opened by Set or by its key now — a click selects — and anchoring
+   * the panel at the cell put it wherever in the grid the first selected cell happened to be,
+   * which for a marquee near the bottom of a long list is nowhere near the hand that pressed Set.
+   * Fan already opened at its own button; this is the two behaving alike. Threaded down to the
+   * cells rather than resolved here, because the popover belongs to the cell that owns the editor.
+   */
+  const setButtonRef = useRef<HTMLButtonElement | null>(null)
+  /**
+   * Close the editor Set opened — a one-shot handed to `FixturesTable`, the mirror of `keyboardOpen`.
+   *
+   * **Set has to close it, because nothing else does.** The Set button is the open popover's own
+   * anchor, and a press on it is not treated as the outside click that dismisses one — verified on
+   * the desk: pressing Set twice left the panel open with focus on the button. So the second press
+   * asks the cell to close, which is what makes Set behave the way Fan's own button always has.
+   */
+  const [closeEditorCell, setCloseEditorCell] = useState<CellRef | null>(null)
+  useEffect(() => {
+    if (closeEditorCell) setCloseEditorCell(null)
+  }, [closeEditorCell])
   const [keyboardOpen, setKeyboardOpen] = useState<{
     rowId: RowId
     col: ColumnKey
     seed: string
+    /** Set's press, which opens the editor at that button. See `useCellEditorOpen`. */
+    atButton: boolean
   } | null>(null)
   useEffect(() => {
     if (keyboardOpen) setKeyboardOpen(null)
@@ -591,27 +630,36 @@ export function FixturesListContainer({
    * and the second opens it — visibly doing something, which is the part that was missing.
    */
   const rowById = useMemo(() => new Map(rows.map((row) => [row.id, row])), [rows])
+  /**
+   * The cell Set, Enter and a typed character all name: first in display order **that has an
+   * editor**. Shared with the close request below, so the press that shuts the panel cannot name a
+   * different cell from the press that opened it.
+   */
+  const firstEditableSelectedCell = useCallback((): CellRef | undefined => {
+    const ordered = orderedSelectedCells(
+      cellSelection.cells,
+      rows.map((row) => row.id),
+      visibleColumns,
+    )
+    const editableCols = new Map<RowId, ReadonlySet<ColumnKey>>()
+    return ordered.find((cell) => {
+      let cols = editableCols.get(cell.rowId)
+      if (!cols) {
+        const row = rowById.get(cell.rowId)
+        cols = new Set(
+          row == null || row.kind === 'divider'
+            ? []
+            : buildRowCells(row, visibleColumns).map((rowCell) => rowCell.col),
+        )
+        editableCols.set(cell.rowId, cols)
+      }
+      return cols.has(cell.col)
+    })
+  }, [cellSelection.cells, rows, rowById, visibleColumns])
+
   const openCellEditor = useCallback(
-    (seed: string) => {
-      const ordered = orderedSelectedCells(
-        cellSelection.cells,
-        rows.map((row) => row.id),
-        visibleColumns,
-      )
-      const editableCols = new Map<RowId, ReadonlySet<ColumnKey>>()
-      const first = ordered.find((cell) => {
-        let cols = editableCols.get(cell.rowId)
-        if (!cols) {
-          const row = rowById.get(cell.rowId)
-          cols = new Set(
-            row == null || row.kind === 'divider'
-              ? []
-              : buildRowCells(row, visibleColumns).map((rowCell) => rowCell.col),
-          )
-          editableCols.set(cell.rowId, cols)
-        }
-        return cols.has(cell.col)
-      })
+    (seed: string, atButton = false) => {
+      const first = firstEditableSelectedCell()
       if (!first) return
       // The DOM is the only thing that knows what the virtualiser rendered, and `data-row-id` is
       // the grid's own addressing contract — the same attribute `marqueeOwnsKeyTarget` reads,
@@ -622,10 +670,29 @@ export function FixturesListContainer({
         setScrollToRowId(first.rowId)
         return
       }
-      setKeyboardOpen({ rowId: first.rowId, col: first.col, seed })
+      setKeyboardOpen({ rowId: first.rowId, col: first.col, seed, atButton })
     },
-    [cellSelection.cells, rows, rowById, visibleColumns],
+    [firstEditableSelectedCell],
   )
+
+  /**
+   * The selection bar's **Set**: open the selection's editor, or close the one it opened.
+   *
+   * Asked at click time, which is only safe because a press on Set does *not* dismiss the panel —
+   * Set is that popover's own anchor. `cellEditorIsOpen()` would answer true for `FanPopover` too,
+   * which is a cell editor in every way but this one, so the question is scoped to a cell's own
+   * anchor through the grid's addressing contract.
+   */
+  const toggleCellEditor = useCallback(() => {
+    const open = openCellEditorTarget()
+    if (open) {
+      setCloseEditorCell(open)
+      return
+    }
+    // Set is pressed at the toolbar, so its editor opens there. Enter and a typed character are
+    // made at the selection and open beside the cell — see `anchorAtButton` in `useCellEditorOpen`.
+    openCellEditor('', true)
+  }, [openCellEditor])
 
   /**
    * Backspace / Delete on a marquee: take the selected cells out of Local — the spreadsheet's
@@ -881,12 +948,27 @@ export function FixturesListContainer({
   // anchor row — a group over its members, a multi-head fixture over its elements — with ← on a
   // member or element climbing to its parent (`treeKeyAction`). Guarded so typing in inputs or
   // interacting inside popovers/dialogs never triggers.
+  /** Was a cell editor open when Escape was pressed? See the Escape arm below, and the hook. */
+  const escapeFoundEditorRef = useEscapeEditorSnapshot()
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (isEditableTarget(e.target instanceof Element ? e.target : null)) return
       if (e.target instanceof HTMLElement && e.target.closest('[role="dialog"]')) return
 
       if (e.key === 'Escape') {
+        // **An open editor takes Escape first, and keeps the selection.** The clear used to be
+        // guarded only by *where the key was pressed* (`isEditableTarget`, `closest('[role=dialog]')`
+        // above), which is a different question and answers wrongly the moment focus is not inside
+        // the panel — on the Set button that opened it, say. Escape then closed the editor **and**
+        // took the selection it was opened for.
+        //
+        // **The answer is snapshotted in the capture phase, not read here.** Radix listens on the
+        // *document* and this handler is on the *window*, so Radix runs first on the way up and has
+        // already closed the panel — and React has already flushed the unmount, this being a
+        // discrete event — by the time this line runs. Asking now would always answer "nothing
+        // open". See `escapeFoundEditorRef`.
+        if (escapeFoundEditorRef.current) return
         clearByLadder()
         return
       }
@@ -896,7 +978,7 @@ export function FixturesListContainer({
         // spreadsheet. Plain keys only — ⌘/Ctrl combinations are someone else's shortcut.
         //
         // **Not from a focused control**, for every arm: a cell trigger is tabbable and
-        // Tab-then-Enter opening its popover is a path the grid already promises, and a Radix menu
+        // Tab-then-Enter selecting that cell is a path the grid already promises, and a Radix menu
         // is `role="menu"`, not `dialog`, so the guard above does not cover a menu item. Backspace
         // is the destructive one — a live `clearEntry` per cell — so it is the arm that most needs
         // to know a chip, the bar's own Set or a menu item had the focus.
@@ -998,7 +1080,7 @@ export function FixturesListContainer({
     // for the same reason. `canTypeCells` is a boolean, and `isCellSelected` is stable for the
     // mount — it reads `useCellSelection`'s own ref, which is why the marquee test above costs
     // this listener no extra rebinds.
-  }, [selection, selectRow, selectAllRows, selectableOrder, rowById, handleToggleExpand, cellCount, clearByLadder, canClearCells, canTypeCells, clearSelectedCells, isCellSelected, openCellEditor])
+  }, [selection, selectRow, selectAllRows, selectableOrder, rowById, handleToggleExpand, cellCount, clearByLadder, escapeFoundEditorRef, canClearCells, canTypeCells, clearSelectedCells, isCellSelected, openCellEditor])
 
   if (fixturesLoading || groupsLoading) {
     return <div>Loading...</div>
@@ -1054,7 +1136,8 @@ export function FixturesListContainer({
       <CellSelectionActions
         copy={cellActionCopy(scope, focusedTemplate != null, cellCount)}
         canSet={canTypeCells}
-        onSet={() => openCellEditor('')}
+        setRef={setButtonRef}
+        onSet={toggleCellEditor}
         canClear={canClearCells}
         onClear={clearSelectedCells}
         fanColumns={columnTargets}
@@ -1143,7 +1226,9 @@ export function FixturesListContainer({
           // the checkbox column was for, and a list with no way to accumulate a selection by
           // touch would be a regression on the two plain routes.
           onRowMarquee={setRows}
+          editorAnchorRef={setButtonRef}
           keyboardOpen={keyboardOpen}
+          closeEditorCell={closeEditorCell}
           onMarqueeDragChange={setMarqueeDragging}
           onBackgroundClick={clearByLadder}
         />

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useStableCallback } from '@/hooks/useStableCallback'
 import { useNavigate, useParams } from 'react-router'
 import { Loader2, Trash2 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
@@ -222,9 +223,7 @@ export function PromptBookViewerPage() {
    * prop of the memoized viewer: it must keep one identity while still reading the playhead as it
    * is at that moment rather than as it was at mount.
    */
-  const jumpToLiveRef = useRef(jumpToLive)
-  jumpToLiveRef.current = jumpToLive
-  const handlePagesReady = useCallback(() => jumpToLiveRef.current(), [])
+  const handlePagesReady = useStableCallback(jumpToLive)
 
   // Arm a cue as the next GO (mirrors the Run page's standby). Does NOT fire it. The
   // transport ignores the live cue; we just also close the narrow drawer here.

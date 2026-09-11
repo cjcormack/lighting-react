@@ -32,6 +32,57 @@ describe('useCellEditorOpen', () => {
     expect(result.current.isOpen).toBe(false)
   })
 
+  it('latches where the editor was anchored, so the panel cannot jump after it opens', () => {
+    // `anchorAtButton` arrives on a one-shot the table drops on the very next commit. Read per
+    // render instead of latched, the popover would re-anchor from the Set button to the cell a
+    // frame after opening — the panel visibly jumping across the screen.
+    const { result, rerender } = renderHook(
+      ({ autoOpen, anchorAtButton }) => useCellEditorOpen({ autoOpen, anchorAtButton }),
+      { initialProps: { autoOpen: false, anchorAtButton: true } },
+    )
+    rerender({ autoOpen: true, anchorAtButton: true })
+    expect(result.current.atButton).toBe(true)
+
+    rerender({ autoOpen: false, anchorAtButton: false })
+    expect(result.current.isOpen).toBe(true)
+    expect(result.current.atButton).toBe(true)
+
+    act(() => result.current.setOpen(false))
+    expect(result.current.atButton).toBe(false)
+  })
+
+  it('leaves the editor at its cell for a keyboard open', () => {
+    // Enter and a typed character are made at the selection, so the panel opens beside the cell.
+    const { result, rerender } = renderHook(
+      ({ autoOpen }) => useCellEditorOpen({ autoOpen, keyboardSeed: '' }),
+      { initialProps: { autoOpen: false } },
+    )
+    rerender({ autoOpen: true })
+    expect(result.current.isOpen).toBe(true)
+    expect(result.current.atButton).toBe(false)
+  })
+
+  it('closes on the close signal, and the signal is a one-shot like the open', () => {
+    // Set is the only thing that can shut what it opened: the Set button is the open popover's own
+    // anchor, so a press on it is not the outside click that dismisses one. Verified on the desk —
+    // pressing Set twice used to leave the panel open with focus stranded on the button.
+    const { result, rerender } = renderHook(
+      ({ autoOpen, autoClose }) => useCellEditorOpen({ autoOpen, autoClose }),
+      { initialProps: { autoOpen: false, autoClose: false } },
+    )
+    rerender({ autoOpen: true, autoClose: false })
+    expect(result.current.isOpen).toBe(true)
+
+    rerender({ autoOpen: false, autoClose: true })
+    expect(result.current.isOpen).toBe(false)
+
+    // Dropped by the caller on the next commit, and it must not hold the editor shut: the next
+    // open request has to work.
+    rerender({ autoOpen: false, autoClose: false })
+    rerender({ autoOpen: true, autoClose: false })
+    expect(result.current.isOpen).toBe(true)
+  })
+
   it('ignores the signal on a cell that cannot be edited', () => {
     // Output scope, a focused template layer, an unreachable desk.
     const { result } = renderHook(() => useCellEditorOpen({ autoOpen: true, disabled: true }))

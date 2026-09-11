@@ -3,11 +3,11 @@ import { ColourPickerPopover } from '../../fixtures/ColourPickerPopover'
 import type { CellResolution } from '../columns'
 import type { CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
-import { useCellEditorCramped } from './CellEditorSurface'
+import { useCellEditorCramped, type CellClickBehaviour } from './CellEditorSurface'
 import { UNSET_CELL_TITLE, UnsetCellMark } from './UnsetCellMark'
 import { useCellEditorOpen } from './useCellEditorOpen'
 
-interface ColourCellProps {
+interface ColourCellOwnProps {
   value: Extract<CellValue, { kind: 'colour' }>
   resolutions: NonNullable<CellResolution>[]
   /** The column's name, titling the editor where it is a bottom sheet. See `SliderCell`. */
@@ -26,6 +26,10 @@ interface ColourCellProps {
    * See `useCellEditorOpen`.
    */
   autoOpen?: boolean
+  /** The container asked this editor to close — Set pressed again. See `useCellEditorOpen`. */
+  autoClose?: boolean
+  /** That open came from the bar's Set, so the editor is anchored there. See `useCellEditorOpen`. */
+  anchorAtButton?: boolean
   /**
    * The auto-open came from a character typed at the grid, which lands in the R box as its first
    * keystroke. Focus is not its business — R is focused however the editor was opened. See
@@ -41,6 +45,8 @@ interface ColourCellProps {
   onBeginEdit: () => void
 }
 
+type ColourCellProps = ColourCellOwnProps & CellClickBehaviour
+
 /**
  * Swatch + RGB readout; a non-uniform group shows a "Mixed" badge over the
  * averaged swatch. Editing reuses ColourPickerPopover (pure props), through the shared
@@ -55,16 +61,22 @@ export const ColourCell = memo(function ColourCell({
   placeholder,
   disabled = false,
   autoOpen,
+  autoClose,
+  anchorAtButton,
   keyboardSeed,
   selectionEmpty,
+  clickSelects,
+  editorAnchorRef,
   onCommit,
   onBeginEdit,
 }: ColourCellProps) {
   // Driven from here so the container's request (Enter over a selection, or the bar's Set) can
   // open it: the picker keeps its own state when no `open` is passed, and the other two call
   // sites still leave it to.
-  const { isOpen, setOpen, keyboardOpen } = useCellEditorOpen({
+  const { isOpen, setOpen, keyboardOpen, atButton } = useCellEditorOpen({
     autoOpen,
+    autoClose,
+    anchorAtButton,
     keyboardSeed,
     disabled,
     selectionEmpty,
@@ -109,11 +121,22 @@ export const ColourCell = memo(function ColourCell({
       // R is focused on open and Enter closes; a character typed at the grid arrives there as its
       // first keystroke, which is all this carries. See `useCellEditorKeyboard`.
       keyboardOpen={keyboardOpen}
+      // This cell's button already carried the click, so unlike the other three there is nothing
+      // to add here beyond telling the surface to stop opening on it. See `CellClickBehaviour`.
+      triggerOpens={!clickSelects}
+      // Only where the press was made — the bar's Set; see the other three cells.
+      editorAnchorRef={atButton ? editorAnchorRef : undefined}
       onColourChange={(r, g, b, w, a, uv) => onCommit({ kind: 'colour', r, g, b, w, a, uv })}
     >
       <button
         type="button"
         disabled={disabled}
+        // **The whole of what a click does, in every mode.** Where a click selects, the trigger
+        // is only an anchor and `onOpenChange` never sees a `true`; where it opens the editor
+        // (the two plain list routes) it fires alongside that open, which is where this used to
+        // live. Unconditional, and identical in all four cells, because the alternative was two
+        // mechanisms for one contract — `ColourCell` already did it this way, and a fifth cell
+        // modelled on either half could have double-fired or missed. See `CellClickBehaviour`.
         onClick={onBeginEdit}
         className="flex h-full w-full items-center gap-1.5 rounded text-left hover:bg-accent/50"
         title={

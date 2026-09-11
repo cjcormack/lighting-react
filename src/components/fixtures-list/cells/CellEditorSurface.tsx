@@ -1,5 +1,6 @@
-import { useEffect, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { useEffect, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type RefObject } from 'react'
+import { Slot } from '@radix-ui/react-slot'
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Sheet,
   SheetBody,
@@ -62,6 +63,52 @@ const CRAMPED_VIEWPORT = '(max-height: 750px)'
 
 /** Which of the three shapes a cell editor is drawing itself as. */
 export type CellEditorForm = 'popover' | 'bottom-sheet' | 'side-sheet'
+
+/**
+ * Stamped on whichever of the three shapes is mounted, and the DOM contract [cellEditorIsOpen]
+ * reads. Spread rather than written out at the two sites, so the attribute and its reader cannot
+ * drift apart.
+ */
+const SURFACE_ATTR = 'data-cell-editor-surface'
+
+/**
+ * Is a cell editor — or `FanPopover`, which is one in every way that matters — on screen?
+ *
+ * The grid's window-level **Escape** asks this. Radix closes an open editor from a listener on the
+ * document, so it closes wherever focus happens to be; the selection clear beside it was guarded
+ * only by *where the key was pressed* (`isEditableTarget`, `closest('[role=dialog]')`), which is a
+ * different question and answers wrongly the moment focus is anywhere else — on the Set button
+ * that opened the editor, or on the body after a close and re-open. Escape then closed the panel
+ * **and** took the selection the panel was opened for. Asking whether the editor is open is the
+ * question that was meant, and it does not depend on focus at all.
+ *
+ * The DOM rather than React state because the state is per cell, hundreds of instances down, and
+ * the asker is the container above the table; lifting a boolean through five layers to answer
+ * "is anything open" would be a subscription per cell for one bit.
+ */
+export function cellEditorIsOpen(): boolean {
+  return typeof document !== 'undefined' && document.querySelector(`[${SURFACE_ATTR}]`) != null
+}
+
+/**
+ * What a **click** on a cell does, and where the editor then appears.
+ *
+ * One type rather than four copies of two props, because the four cell editors have to answer this
+ * identically: a grid where the dimmer selects and the colour opens would be two gestures wearing
+ * one shape. `PropertyCell` spreads it into whichever of them a cell's value kind picks.
+ *
+ * Absent means the old behaviour — a click opens the editor, anchored at the cell — which is what
+ * the two plain list routes and `CueValueGrid` want and get by passing nothing.
+ */
+export interface CellClickBehaviour {
+  /**
+   * A click on this cell **selects** it rather than opening its editor. See [triggerOpens], which
+   * is the half of it the surface implements; the cell's own trigger button supplies the `onClick`.
+   */
+  clickSelects?: boolean
+  /** Where the editor opens when it does open. See [anchorRef]. */
+  editorAnchorRef?: RefObject<HTMLElement | null>
+}
 
 /**
  * One `matchMedia` and one listener **per query**, however many cells are mounted.
@@ -250,6 +297,39 @@ interface CellEditorSurfaceProps {
    * bottom sheet (as wide as the screen) or the popover (sized by `contentClassName`).
    */
   wide?: boolean
+  /**
+   * Whether a click on [trigger] opens this editor.
+   *
+   * **False in the programmer's grid, and that is a decision rather than a detail.** There a click
+   * on a cell *selects* it and nothing else; the editor is opened by the selection bar's Set, by
+   * Enter, or by typing — one gesture for "say what to edit" and another for "edit it". So the
+   * trigger stops being a `PopoverTrigger` and becomes a `PopoverAnchor`: it still positions the
+   * popover (which is what [anchorRef] then overrides), it still takes focus and Tab, and its own
+   * `onClick` is free to mean "select this cell".
+   *
+   * True everywhere else — the two plain list routes, which cannot select a cell at all and would
+   * otherwise lose every way into an editor, and `ColourPickerPopover`'s two visualizer callers.
+   */
+  triggerOpens?: boolean
+  /**
+   * Position the popover at **this** element rather than at the cell it belongs to.
+   *
+   * The programmer passes its Set button, and only for an open that button made: anchoring at the
+   * cell put the panel wherever in the grid the first selected cell happened to be — often nowhere
+   * near the hand that pressed Set, and for a marquee drawn near the bottom of a tall list, off the
+   * top of the editor's reach entirely. Enter and a typed character are gestures made at the
+   * selection and keep the cell anchor; the cells decide, by withholding this.
+   *
+   * Fan lands beside its own button *by default*, that button being its own `PopoverTrigger`.
+   * **This is new machinery rather than that idea reused** — the only `virtualRef` in the repo — so
+   * don't read `FanPopover` as a precedent for pointing a panel at an element elsewhere in the
+   * tree. It has never needed to.
+   *
+   * Read at render time and only while [open]: a `virtualRef` whose `current` is null would set
+   * Radix's anchor to null and leave the content unpositioned, so a missing button falls back to
+   * the trigger anchor instead. Popover form only — a sheet is anchored to the screen edge.
+   */
+  anchorRef?: RefObject<HTMLElement | null>
   children: ReactNode
 }
 
@@ -277,6 +357,8 @@ export function CellEditorSurface({
   align = 'start',
   onOpenAutoFocus,
   wide,
+  triggerOpens = true,
+  anchorRef,
   children,
 }: CellEditorSurfaceProps) {
   const form = useCellEditorForm()
@@ -291,17 +373,46 @@ export function CellEditorSurface({
         trigger={trigger}
         onOpenAutoFocus={onOpenAutoFocus}
         wide={wide}
+        triggerOpens={triggerOpens}
       >
         {children}
       </SheetSurface>
     )
   }
 
+  // Reading a ref during render, deliberately: the question is only asked on the commit that
+  // flips [open] to true, and by then the Set button has long been on screen — the selection it
+  // acts on is what put it there. A null answer is the honest fallback rather than a bug, because
+  // a `virtualRef` pointing at nothing sets Radix's anchor to null and the content is then never
+  // positioned at all.
+  const atButton = open === true && anchorRef?.current != null
+
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
-      {trigger != null && <PopoverTrigger asChild>{trigger}</PopoverTrigger>}
+      {trigger != null &&
+        (triggerOpens ? (
+          <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+        ) : atButton ? (
+          // `data-state` is Radix's, and neither of these sets it — so it is restored by hand. It
+          // is what says *which cell* the open editor belongs to, which nothing else on screen does
+          // once the panel is anchored at the Set button instead of at the cell; the grid's own
+          // addressing contract (`data-cell` / `data-row-id`) is read through it, by the tests and
+          // by the bar's Set deciding which editor to shut.
+          //
+          // **Exactly one anchor is mounted.** Rendering both and letting the virtual one win by
+          // effect order — a ref callback commits before a passive effect — cost a second
+          // `computePosition` per open, and the first of the two could paint: the panel appeared at
+          // the cell and jumped to the button. `TriggerState` is how the trigger still takes
+          // `data-state` while being no anchor at all.
+          <TriggerState open={open}>{trigger}</TriggerState>
+        ) : (
+          <PopoverAnchor asChild data-state={open ? 'open' : 'closed'}>
+            {trigger}
+          </PopoverAnchor>
+        ))}
+      {atButton && <PopoverAnchor virtualRef={anchorRef} />}
       <PopoverContent
-        data-cell-editor-surface="popover"
+        {...{ [SURFACE_ATTR]: 'popover' }}
         align={align}
         className={contentClassName}
         onOpenAutoFocus={onOpenAutoFocus}
@@ -312,6 +423,22 @@ export function CellEditorSurface({
   )
 }
 
+/**
+ * The cell's trigger, marked with the editor's open state and nothing else.
+ *
+ * `data-state` is Radix's word, and it comes free from a `PopoverTrigger`; neither a `PopoverAnchor`
+ * carrying a virtual anchor nor a sheet's bare trigger sets one. It is what says *which cell* the
+ * open editor belongs to — the grid's addressing contract, read by `openCellEditorTarget` so the
+ * bar's Set can close what it opened, and by the tests.
+ *
+ * `Slot` and not `<Comp asChild>`: `Slot` has no `asChild` of its own, so the prop would be spread
+ * straight onto the cloned `<button>` and React would warn about an unknown DOM attribute on every
+ * open — silently, since the default test reporter swallows it.
+ */
+function TriggerState({ open, children }: { open?: boolean; children: ReactNode }) {
+  return <Slot data-state={open ? 'open' : 'closed'}>{children}</Slot>
+}
+
 function SheetSurface({
   form,
   open,
@@ -320,10 +447,18 @@ function SheetSurface({
   trigger,
   onOpenAutoFocus,
   wide,
+  triggerOpens,
   children,
 }: Pick<
   CellEditorSurfaceProps,
-  'open' | 'onOpenChange' | 'title' | 'trigger' | 'onOpenAutoFocus' | 'wide' | 'children'
+  | 'open'
+  | 'onOpenChange'
+  | 'title'
+  | 'trigger'
+  | 'onOpenAutoFocus'
+  | 'wide'
+  | 'triggerOpens'
+  | 'children'
 > & { form: Exclude<CellEditorForm, 'popover'> }) {
   const keyboardInset = useKeyboardInset(open)
   const atBottom = form === 'bottom-sheet'
@@ -365,9 +500,25 @@ function SheetSurface({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      {trigger != null && <SheetTrigger asChild>{trigger}</SheetTrigger>}
+      {/* No `SheetTrigger` where a click selects instead of opening: a sheet has no anchor to be,
+          so the cell's own button is all that is left of the trigger. Its `onClick` is the
+          selection, exactly as in the popover form — one gesture, whichever shape the editor is
+          about to take.
+
+          It still carries `data-state`, and that is not cosmetic: the selection bar's Set finds the
+          editor to shut by looking for an open cell (`openCellEditorTarget`), and a sheet is
+          portalled to `body` like a popover — so with the marker left off, nothing inside
+          `[data-cell]` said an editor was open and Set's second press could never close a sheet.
+          Both sheet forms are first-class (a phone held upright, and any short viewport), so the
+          gesture has to work in all three. */}
+      {trigger != null &&
+        (triggerOpens === false ? (
+          <TriggerState open={open}>{trigger}</TriggerState>
+        ) : (
+          <SheetTrigger asChild>{trigger}</SheetTrigger>
+        ))}
       <SheetContent
-        data-cell-editor-surface={form}
+        {...{ [SURFACE_ATTR]: form }}
         side={atBottom ? 'bottom' : 'right'}
         // A cell editor is its own description: there is nothing to say beyond the title, and
         // Radix warns about a dialog that neither describes itself nor opts out.

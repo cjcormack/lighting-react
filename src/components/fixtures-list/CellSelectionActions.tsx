@@ -1,3 +1,4 @@
+import type { Ref } from 'react'
 import { Delete, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { FanPopover, type FanColumn } from './FanPopover'
@@ -22,6 +23,7 @@ import type { CellActionCopy } from './cellEntry'
 export function CellSelectionActions({
   copy,
   canSet,
+  setRef,
   onSet,
   canClear,
   onClear,
@@ -29,6 +31,13 @@ export function CellSelectionActions({
 }: {
   copy: CellActionCopy
   canSet: boolean
+  /**
+   * The Set button itself, which is where the editor it opens is anchored — see `editorAnchorRef`
+   * on `FixturesTable`. The panel belongs to the cell that owns it, so the button is handed down
+   * to the grid rather than the editor being hoisted up here.
+   */
+  setRef?: Ref<HTMLButtonElement>
+  /** Open the selection's editor, or close the one this button opened. */
   onSet: () => void
   canClear: boolean
   onClear: () => void
@@ -37,6 +46,7 @@ export function CellSelectionActions({
   return (
     <>
       <Button
+        ref={setRef}
         variant="outline"
         size="sm"
         disabled={!canSet}

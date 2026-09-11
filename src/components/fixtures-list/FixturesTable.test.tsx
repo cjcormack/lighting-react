@@ -159,16 +159,26 @@ const selectedRows = vi.hoisted(() => ({ current: new Set<string>() }))
 function Harness({
   rows = ROWS,
   keyboardOpen = null,
+  closeEditorCell = null,
+  visibleColumns = ['dimmer'] as ColumnKey[],
 }: {
   rows?: Row[]
-  keyboardOpen?: { rowId: string; col: ColumnKey; seed: string } | null
+  keyboardOpen?: { rowId: string; col: ColumnKey; seed: string; atButton: boolean } | null
+  /** The bar's Set pressed a second time — the close half of the same one-shot channel. */
+  closeEditorCell?: { rowId: string; col: ColumnKey } | null
+  /**
+   * The mocked `useRowValues` answers for `dimmer` and nothing else, so any second column here is
+   * a column these rows resolve nothing for — which is the blank cell the clear-on-click case
+   * needs, and the one a dimmer-only par really has under Colour.
+   */
+  visibleColumns?: ColumnKey[]
 }) {
   const cellSelection = useCellSelection(new Set(rows.map(r => r.id)))
   return (
     <>
       <FixturesTable
         rows={rows}
-        visibleColumns={['dimmer'] as ColumnKey[]}
+        visibleColumns={visibleColumns}
         isSelected={(id) => selectedRows.current.has(id)}
         onRowClick={() => {}}
         onToggleExpand={() => {}}
@@ -180,6 +190,7 @@ function Harness({
         cellSelection={cellSelection}
         onRowMarquee={onRowMarquee}
         keyboardOpen={keyboardOpen}
+        closeEditorCell={closeEditorCell}
         onMarqueeDragChange={onMarqueeDragChange}
         onBackgroundClick={onBackgroundClick}
       />
@@ -190,6 +201,28 @@ function Harness({
 }
 
 const cellCount = () => Number(screen.getByTestId('cell-count').textContent)
+
+/**
+ * The table as the two plain list routes mount it: no `cellSelection`, so a click still opens the
+ * editor at the cell and a blank cell is inert.
+ */
+function PlainHarness({ visibleColumns = ['dimmer'] as ColumnKey[] }: { visibleColumns?: ColumnKey[] }) {
+  return (
+    <FixturesTable
+      rows={ROWS}
+      visibleColumns={visibleColumns}
+      isSelected={() => false}
+      onRowClick={() => {}}
+      onToggleExpand={() => {}}
+      onBeginCellEdit={onBeginCellEdit}
+      onCellCommit={() => {}}
+      batchCountFor={() => 1}
+      onShowInfo={() => {}}
+      onRowMarquee={onRowMarquee}
+      onBackgroundClick={onBackgroundClick}
+    />
+  )
+}
 
 /**
  * Give the grid a layout, for the tests that need the marquee to actually resolve to cells or rows.
@@ -246,7 +279,11 @@ function dragWithinFirstColumn(cell: Element) {
   dragRows(cell, 10, 50)
 }
 
-/** Radix marks the trigger of an open popover, which is how a test says WHICH cell opened. */
+/**
+ * Which cell's editor is open. `data-state` is Radix's on a `PopoverTrigger` and restored by hand
+ * on the anchor this grid uses instead (`CellEditorSurface`), precisely so this stays answerable
+ * once the panel itself is anchored at the Set button rather than at the cell.
+ */
 function openCellRowId(): string | null {
   const trigger = document.querySelector('[data-cell] [data-state="open"]')
   return trigger?.closest('[data-row-id]')?.getAttribute('data-row-id') ?? null
@@ -296,13 +333,75 @@ const cellButton = () =>
  * would start opening editors mid-drag and no geometry test would notice.
  */
 describe('FixturesTable cell gesture', () => {
-  it('a press with no travel is still a click, and opens the editor', () => {
+  it('a press with no travel is still a click, and a click selects the cell — opening nothing', () => {
+    // Both halves matter. The click has to *arrive* (the gesture discriminator), and it has to
+    // arrive as a selection: on a grid that can select cells the trigger is an anchor rather than
+    // a `PopoverTrigger`, so a click moves the marquee and the editor is Set's to open.
     render(<Harness />)
     const cell = cellButton()
     fireEvent.pointerDown(cell, { button: 0, clientX: 300, clientY: 100 })
     fireEvent.pointerUp(cell, { button: 0, clientX: 300, clientY: 100 })
     fireEvent.click(cell)
     expect(onBeginCellEdit).toHaveBeenCalled()
+    expect(document.querySelector('[data-cell-editor-surface]')).toBeNull()
+  })
+
+  it('a click on a cell already in the marquee is still reported — it narrows to that one cell', () => {
+    // The table must not suppress it. It used to be suppressed *above* it — a cell inside the
+    // marquee was the whole marquee's editor, so moving the selection would have discarded the
+    // rest of it silently. With the editor opened by Set instead, a click inside the marquee is
+    // the operator narrowing a rectangle to one cell, which is the one thing a rectangle cannot
+    // say; the container then replaces the selection with it.
+    stubFlatLayout()
+    render(<Harness />)
+    const cell = cellButton()
+    dragWithinFirstColumn(cell)
+    expect(cellCount()).toBe(2)
+    // A fresh press disposes the drag's click-swallow, which is what a second gesture really does.
+    fireEvent.pointerDown(cell, { button: 0, clientX: 300, clientY: 10 })
+    fireEvent.pointerUp(cell, { button: 0, clientX: 300, clientY: 10 })
+    fireEvent.click(cell)
+    expect(onBeginCellEdit).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'fixture:a' }),
+      'dimmer',
+    )
+    expect(document.querySelector('[data-cell-editor-surface]')).toBeNull()
+  })
+
+  it('a click on a column the row resolves nothing for clears the selection', () => {
+    // A dimmer-only par's Colour cell. It is blank rather than an em-dash — there is nothing here
+    // to set — and it is not background in the DOM either, since the row above it carries
+    // `data-row-id` and the scroller's handler stops there. So it says so itself; without this a
+    // click on it did nothing at all and left the old selection standing.
+    stubFlatLayout()
+    render(<Harness visibleColumns={['dimmer', 'colour'] as ColumnKey[]} />)
+    const row = document.querySelector('[data-row-id="fixture:a"]')!
+    // name, dimmer, colour — and the third is the blank one, since the mock resolves only dimmer.
+    const blank = row.children[2]
+    expect(blank.querySelector('button')).toBeNull()
+    fireEvent.click(blank)
+    expect(onBackgroundClick).toHaveBeenCalled()
+  })
+
+  it('still opens the editor on a click where the grid has no cell selection', () => {
+    // The two plain list routes have no marquee and no Set button, so the click *is* the way in —
+    // the trigger stays a `PopoverTrigger` there, and losing that would leave those routes with no
+    // way to edit a value at all.
+    render(<PlainHarness />)
+    fireEvent.click(cellButton())
+    expect(onBeginCellEdit).toHaveBeenCalled()
+    expect(document.querySelector('[data-cell-editor-surface]')).not.toBeNull()
+  })
+
+  it('leaves a blank cell inert where the grid has no cell selection', () => {
+    // The two plain list routes. Their ladder has only its row rung, so clearing from a blank cell
+    // could not narrow anything — it could only take away a multi-row selection that was about to
+    // be acted on, which is a new destructive gesture rather than the clear this is.
+    stubFlatLayout()
+    render(<PlainHarness visibleColumns={['dimmer', 'colour'] as ColumnKey[]} />)
+    const row = document.querySelector('[data-row-id="fixture:a"]')!
+    fireEvent.click(row.children[2])
+    expect(onBackgroundClick).not.toHaveBeenCalled()
   })
 
   it('a press that travels is a marquee, and the trailing click is swallowed', () => {
@@ -363,8 +462,8 @@ describe('FixturesTable cell gesture', () => {
     // The scroller's background `onClick` already guards the same trap; this is the handler that
     // was missing it.
     stubFlatLayout()
-    render(<Harness />)
-    fireEvent.click(cellButton())
+    // Opened the only way it can be: the container's request. A click selects the cell now.
+    render(<Harness keyboardOpen={{ rowId: 'fixture:a', col: 'dimmer' as ColumnKey, seed: '', atButton: true }} />)
     const editor = document.querySelector('[data-cell-editor-surface]')
     expect(editor, 'the editor did not open, so this asserts nothing').not.toBeNull()
 
@@ -453,11 +552,40 @@ describe('FixturesTable cell gesture', () => {
     // The one door left into an editor without a click — Enter over a selection, or the bar\'s
     // Set — and it is the container\'s to open, not the drag\'s.
     stubFlatLayout()
-    render(<Harness keyboardOpen={{ rowId: 'fixture:b', col: 'dimmer' as ColumnKey, seed: '' }} />)
+    render(<Harness keyboardOpen={{ rowId: 'fixture:b', col: 'dimmer' as ColumnKey, seed: '', atButton: true }} />)
     expect(openCellRowId()).toBe('fixture:b')
     // `onBeginEdit` is deliberately NOT part of a requested open: it exists to move the selection
     // to the cell a click landed on, and this cell is inside the selection by construction.
     expect(onBeginCellEdit).not.toHaveBeenCalled()
+  })
+
+  it('closes the cell the container names, and lets it be reopened afterwards', () => {
+    // The second press of the bar's Set. It needs a channel of its own because a press on Set is
+    // NOT the outside click that dismisses a popover — Set is that popover's own anchor — so
+    // without this the second press left the panel open with focus stranded on the button, which
+    // is what made the grid's Escape clear the selection out from under it.
+    stubFlatLayout()
+    const request = { rowId: 'fixture:b', col: 'dimmer' as ColumnKey, seed: '', atButton: true }
+    const { rerender } = render(<Harness keyboardOpen={request} />)
+    expect(openCellRowId()).toBe('fixture:b')
+
+    rerender(<Harness closeEditorCell={{ rowId: 'fixture:b', col: 'dimmer' as ColumnKey }} />)
+    expect(openCellRowId()).toBeNull()
+
+    // And the close must not latch: Set pressed a third time opens it again.
+    rerender(<Harness keyboardOpen={{ ...request }} />)
+    expect(openCellRowId()).toBe('fixture:b')
+  })
+
+  it('leaves a cell alone when the close names a different one', () => {
+    stubFlatLayout()
+    render(
+      <Harness
+        keyboardOpen={{ rowId: 'fixture:b', col: 'dimmer' as ColumnKey, seed: '', atButton: true }}
+        closeEditorCell={{ rowId: 'fixture:a', col: 'dimmer' as ColumnKey }}
+      />,
+    )
+    expect(openCellRowId()).toBe('fixture:b')
   })
 
   it('a drag from the name column selects the rows it covers, not cells', () => {
@@ -1065,8 +1193,7 @@ describe('FixturesTable background click, the two false positives', () => {
     // Every cell editor is a Radix popover portalled to `body`. The synthetic click still reaches
     // the scroller's handler up the *React* tree, and read as background it would drop the
     // marquee the editor is committing to.
-    render(<Harness />)
-    fireEvent.click(cellButton())
+    render(<Harness keyboardOpen={{ rowId: 'fixture:a', col: 'dimmer' as ColumnKey, seed: '', atButton: true }} />)
     const editor = document.querySelector('[data-radix-popper-content-wrapper]')
     expect(editor).not.toBeNull()
     fireEvent.click(editor!.firstElementChild ?? editor!)

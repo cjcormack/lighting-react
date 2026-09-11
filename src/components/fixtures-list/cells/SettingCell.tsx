@@ -5,12 +5,12 @@ import { cn } from '@/lib/utils'
 import type { CellResolution } from '../columns'
 import type { CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
-import { CellEditorSurface, useCellEditorForm } from './CellEditorSurface'
+import { CellEditorSurface, useCellEditorForm, type CellClickBehaviour } from './CellEditorSurface'
 import { UNSET_CELL_TITLE, UnsetCellMark } from './UnsetCellMark'
 import { useCellEditorKeyboard } from './useCellEditorKeyboard'
 import { useCellEditorOpen } from './useCellEditorOpen'
 
-interface SettingCellProps {
+interface SettingCellOwnProps {
   value: Extract<CellValue, { kind: 'setting' }>
   resolutions: NonNullable<CellResolution>[]
   /** The column's name, titling the editor where it is a bottom sheet. See `SliderCell`. */
@@ -29,6 +29,10 @@ interface SettingCellProps {
    * See `useCellEditorOpen`.
    */
   autoOpen?: boolean
+  /** The container asked this editor to close — Set pressed again. See `useCellEditorOpen`. */
+  autoClose?: boolean
+  /** That open came from the bar's Set, so the editor is anchored there. See `useCellEditorOpen`. */
+  anchorAtButton?: boolean
   /**
    * The auto-open came from a character typed at the grid, which here is the first character of
    * the type-ahead. Focus is not its business — the filter is focused however the editor was
@@ -43,6 +47,8 @@ interface SettingCellProps {
   onCommit: (commit: CellCommit) => void
   onBeginEdit: () => void
 }
+
+type SettingCellProps = SettingCellOwnProps & CellClickBehaviour
 
 /**
  * Below this many options the filter is not drawn: there is nothing to narrow, and a search box
@@ -67,8 +73,12 @@ export const SettingCell = memo(function SettingCell({
   placeholder,
   disabled = false,
   autoOpen,
+  autoClose,
+  anchorAtButton,
   keyboardSeed,
   selectionEmpty,
+  clickSelects,
+  editorAnchorRef,
   onCommit,
   onBeginEdit,
 }: SettingCellProps) {
@@ -83,8 +93,10 @@ export const SettingCell = memo(function SettingCell({
     setQuery('')
     setHighlight(0)
   }, [])
-  const { isOpen, setOpen, keyboardOpen } = useCellEditorOpen({
+  const { isOpen, setOpen, keyboardOpen, atButton } = useCellEditorOpen({
     autoOpen,
+    autoClose,
+    anchorAtButton,
     keyboardSeed,
     disabled,
     selectionEmpty,
@@ -174,17 +186,25 @@ export const SettingCell = memo(function SettingCell({
   return (
     <CellEditorSurface
       open={isOpen}
-      onOpenChange={(open) => {
-        setOpen(open)
-        if (open) onBeginEdit()
-      }}
+      onOpenChange={setOpen}
       title={label}
       contentClassName="w-56 p-1"
       onOpenAutoFocus={onOpenAutoFocus}
+      triggerOpens={!clickSelects}
+      // Only where the press was made — the bar's Set. Enter and a typed character are gestures
+      // made at the selection, so their editor opens beside the cell.
+      anchorRef={atButton ? editorAnchorRef : undefined}
       trigger={
         <button
           type="button"
           disabled={disabled}
+          // **The whole of what a click does, in every mode.** Where a click selects, the trigger
+          // is only an anchor and `onOpenChange` never sees a `true`; where it opens the editor
+          // (the two plain list routes) it fires alongside that open, which is where this used to
+          // live. Unconditional, and identical in all four cells, because the alternative was two
+          // mechanisms for one contract — `ColourCell` already did it this way, and a fifth cell
+          // modelled on either half could have double-fired or missed. See `CellClickBehaviour`.
+          onClick={onBeginEdit}
           className="flex h-full w-full items-center gap-1.5 rounded text-left hover:bg-accent/50"
           title={placeholder ? UNSET_CELL_TITLE : undefined}
         >

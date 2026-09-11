@@ -52,4 +52,23 @@ describe('CellSelectionActions', () => {
     expect(set).toHaveAttribute('title', expect.stringContaining('read of the cook'))
     expect(screen.getByRole('button', { name: 'Clear cells' })).toBeDisabled()
   })
+
+  it('hands the Set button up as a ref — it is where the editor it opens is anchored', () => {
+    // The panel opens at this button rather than at the cell, so the ref is not decoration: without
+    // it `CellEditorSurface` falls back to the cell anchor and the editor lands wherever in the grid
+    // the first selected cell happens to be.
+    const ref = { current: null as HTMLButtonElement | null }
+    render(
+      <CellSelectionActions
+        copy={cellActionCopy({ kind: 'local' }, false, 1)}
+        canSet
+        setRef={ref}
+        onSet={() => {}}
+        canClear
+        onClear={() => {}}
+        fanColumns={[]}
+      />,
+    )
+    expect(ref.current).toBe(screen.getByRole('button', { name: 'Set' }))
+  })
 })

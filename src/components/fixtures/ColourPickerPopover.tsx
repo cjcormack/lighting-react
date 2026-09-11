@@ -85,6 +85,13 @@ interface ColourPickerPopoverProps {
    * `useCellEditorKeyboard`. `ColourCell`'s alone, like [channelFields].
    */
   keyboardOpen?: string | null
+  /**
+   * `ColourCell`'s, and meaningless without [sheetWhenNarrow] — the plain-popover branch below is
+   * the two visualizers', where a click on the swatch is the only way in. See `CellClickBehaviour`.
+   */
+  triggerOpens?: boolean
+  /** `ColourCell`'s. See `CellEditorSurface`'s own `anchorRef`. */
+  editorAnchorRef?: React.RefObject<HTMLElement | null>
   /** The trigger element (swatch) */
   children: React.ReactNode
 }
@@ -138,6 +145,8 @@ export function ColourPickerPopover({
   title = 'Colour',
   compact = false,
   keyboardOpen = null,
+  triggerOpens,
+  editorAnchorRef,
   children,
 }: ColourPickerPopoverProps) {
   // Radix owns the open state for an uncontrolled caller — `open` below is `undefined` for them,
@@ -397,6 +406,8 @@ export function ColourPickerPopover({
         contentClassName="w-auto"
         onOpenAutoFocus={onOpenAutoFocus}
         trigger={children}
+        triggerOpens={triggerOpens}
+        anchorRef={editorAnchorRef}
         // Alone among the cell editors: see [compact], and `wide` on the surface.
         wide
       >

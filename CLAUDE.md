@@ -871,9 +871,76 @@ on whichever rotation puts the notch on that edge. `SheetContent`'s own `sm:max-
 an inline width, so `maxWidth: 'none'` goes with it — the symptom of forgetting is a sheet that
 stays narrow and scrolls, which looks exactly like the width never being applied.
 
+**On the programmer's grid a click on a cell selects it, and opens nothing.** The whole of a click
+is the selection: one cell, replacing whatever was there — including when the cell is already in
+the marquee, which is how a rectangle is narrowed to one of its own cells, the one thing a
+rectangle cannot say. The editor is opened by the selection bar's **Set**, by Enter, or by typing
+(§The programmer's keyboard), so the drag, the click and the keys all say *what* to edit and one
+gesture says *edit it*. Three consequences worth knowing before touching any of it:
+
+- **The trigger is a `PopoverAnchor`, not a `PopoverTrigger`** (`triggerOpens` on
+  `CellEditorSurface`, set from `CellClickBehaviour`, which is one type rather than four copies of
+  two props precisely so the four cells cannot answer this differently). Radix then has nothing to
+  toggle and the button's own `onClick` is free to be the selection. `data-state` is restored by
+  hand on the anchor: it is the only thing that says *which cell* the open editor belongs to, and
+  the grid's addressing contract is read through it.
+- **The two plain list routes keep click-to-open, and keep the row rule with it.** They are given no
+  `cellSelection`, so a click is the only way into an editor there; the table derives one from the
+  other (`clickSelectsCell={cellSelection != null}`) so the two can never disagree. There
+  `handleBeginCellEdit` selects the clicked **row** instead — the spreadsheet feel it has always had
+  — and that is load-bearing rather than decorative: `commitNow` and `batchCountFor` both write to
+  the whole row selection when the clicked row is part of it, so the editor's own "Applying to N
+  targets" line is honest only while the selection and the click agree. What it must *not* do there
+  is make a cell selection: nothing draws one on those routes, and it would still reach the toolbar,
+  which counts cells to choose between the cell verbs and the row Fan.
+- **A blank cell clears only where there is a cell selection to clear.** On the plain routes the
+  ladder has just its row rung, so wiring it up there would make a click on a dimmer-only par's
+  Colour column *drop* a multi-row selection about to be acted on — a new destructive gesture rather
+  than the clear this is.
+- **A click on a column the row resolves nothing for clears the selection** — a dimmer-only par's
+  Colour cell. It is blank rather than an em-dash, and it is *not* background in the DOM (the row
+  carries `data-row-id`, which the scroller's background handler stops at), so it carries
+  `onEmptyCellClick` itself. That callback reaches `RowView` through a ref, because the container's
+  answer is the cells-then-rows ladder and so changes identity on every marquee frame — passed
+  straight down it would re-render every visible row at pointer rate.
+- **Escape is a rung longer than it looks.** An open editor takes it first and the selection
+  survives; a second Escape, with nothing open, clears as it always did. The question is *is an
+  editor open* (`cellEditorIsOpen()`, a DOM read of the surface's own attribute) and not *where was
+  the key pressed*, which is what `isEditableTarget` and `closest('[role=dialog]')` answer — a
+  different question, and one that answers wrongly the moment focus is not inside the panel.
+  **The answer is snapshotted in the window's capture phase**, because Radix listens on the
+  *document* and the grid's handler on the *window*: on the way up Radix closes the panel first, and
+  a keydown is discrete so React has already flushed the unmount — asking in the bubble handler
+  always answers "nothing open" and clears anyway. Capture on the window is the first thing any
+  keydown in the document reaches.
+- **Set closes the editor it opened**, the way Fan's own button always has — through a `close`
+  one-shot mirroring `keyboardOpen` (`closeEditorCell` → `autoClose`). It needs one: a press on Set
+  is **not** the outside click that dismisses a popover, because Set is that popover's own anchor.
+  Verified at the desk rather than reasoned — pressing Set twice left the panel open with focus
+  stranded on the button, which is what made Escape clear the selection. Which cell to shut is read
+  from the `data-state` the cell's anchor carries, scoped `[data-cell]` so `FanPopover`'s own panel
+  — a cell editor in every way but this one — does not read as one.
+
+**The editor opens where the gesture was made.** Set is pressed at the toolbar, so its editor opens
+at the Set button (`anchorRef` on `CellEditorSurface`, `editorAnchorRef` threaded container → table
+→ row → cell); **Enter and a typed character are made at the selection, with the operator's eye on
+the grid, so theirs opens beside the cell** — the cells express that by withholding the anchor
+(`atButton ? editorAnchorRef : undefined`) rather than by a second prop on the surface. Anchoring
+*everything* at the cell was the original defect: for a marquee near the bottom of a long list the
+panel landed nowhere near the hand that pressed Set. Three rules in it:
+
+- **The choice is latched at open**, in `useCellEditorOpen`, exactly as `keyboardSeed` is. The
+  request is a one-shot the table drops on the very next commit, so a per-render read would
+  re-anchor the panel from the button to the cell a frame after opening — visibly jumping across
+  the screen.
+- **The ref is read at render time and only while open**, because a `virtualRef` whose `current` is
+  null sets Radix's anchor to null and the content is then never positioned at all. So no button
+  means the cell, which is also what the two plain list routes get.
+- **The virtual anchor is rendered after the cell's**, which is what makes it win: it claims the
+  anchor from an effect, and effects run after the refs of the same commit.
+
 **An editor closes when the selection it was opened for goes away** (`selectionEmpty`, threaded to
-`useCellEditorOpen`). Opening one on an unselected cell selects that cell (a one-cell marquee, which drops any row
-selection), and opening one inside a marquee is the whole marquee's editor, so a Deselect used to leave an editor on screen still
+`useCellEditorOpen`). An editor is open *for* a selection, so a Deselect used to leave one on screen still
 writing — to something narrower than its own "Applying to N targets" line had just claimed. It is
 **edge-triggered**, on the false→true crossing and not on the state, or a grid with no selection at
 all could never open one: the close would land in the effect immediately after the click that
@@ -920,18 +987,19 @@ Radix's own auto-focus is a *parent* effect and parent effects run after a child
 from inside the content is taken straight back off it. And **comma is left alone in a one-field
 editor** — there is nowhere to step to, and a type-ahead may want the character.
 
-**The panel behaves the same however it was opened** — a click, the selection bar's Set, a
-keystroke. The first field is focused in all three, and that is not a nicety: *drag three dimmer
-cells, Enter, type `128`, Enter* is the ordinary desk gesture, and it only works if the open leaves
-the field focused. A first cut focused the field only for a keystroke, on the reasoning that a tap
-must not summon the on-screen keyboard, and quietly broke exactly that. Refuse any change that
-makes focus a function of the gesture again.
+**The panel behaves the same however it was opened** — the selection bar's Set, a keystroke, or a
+click on one of the two plain list routes. The first field is focused in all of them, and that is
+not a nicety: *drag three dimmer cells, Enter, type `128`, Enter* is the ordinary desk gesture, and
+it only works if the open leaves the field focused. A first cut focused the field only for a
+keystroke, on the reasoning that a tap must not summon the on-screen keyboard, and quietly broke
+exactly that. Refuse any change that makes focus a function of the gesture again.
 
-**A released drag opens nothing.** It did (`PD-POPUP-AFTER-DRAG`: a single-column marquee opened its
-first cell's editor behind the release) until the selection bar gained a **Set** of its own. The
-drag says *what* to edit and Set — or Enter, its key — says *do it*; a popover springing open under
-a pointer that had just finished drawing a rectangle was the second gesture being made for the
-operator, and it had no equivalent for a drag that spanned two columns. `singleColumnAnchor` and
+**A released drag opens nothing, and neither does a click.** The drag half went first
+(`PD-POPUP-AFTER-DRAG`: a single-column marquee opened its first cell's editor behind the release)
+when the selection bar gained a **Set** of its own; the click followed it, for the same reason. The
+drag and the click say *what* to edit and Set — or Enter, its key — says *do it*; a popover
+springing open under a pointer that had just finished drawing a rectangle was the second gesture
+being made for the operator, and it had no equivalent for a drag that spanned two columns. `singleColumnAnchor` and
 `onSingleColumnDrag` went with it; `autoOpenCell` in `FixturesTable` is fed by the container's
 `keyboardOpen` alone now, whichever way the operator asked.
 

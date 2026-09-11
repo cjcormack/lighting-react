@@ -5,12 +5,12 @@ import { useNumberFieldDraft } from '@/hooks/useNumberFieldDraft'
 import type { CellResolution } from '../columns'
 import type { CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
-import { CellEditorSurface } from './CellEditorSurface'
+import { CellEditorSurface, type CellClickBehaviour } from './CellEditorSurface'
 import { UNSET_CELL_TITLE, UnsetCellMark } from './UnsetCellMark'
 import { numericSeed, useCellEditorKeyboard } from './useCellEditorKeyboard'
 import { useCellEditorOpen } from './useCellEditorOpen'
 
-interface SliderCellProps {
+interface SliderCellOwnProps {
   value: Extract<CellValue, { kind: 'slider' }>
   resolutions: NonNullable<CellResolution>[]
   /**
@@ -38,6 +38,10 @@ interface SliderCellProps {
    * See `useCellEditorOpen`.
    */
   autoOpen?: boolean
+  /** The container asked this editor to close — Set pressed again. See `useCellEditorOpen`. */
+  autoClose?: boolean
+  /** That open came from the bar's Set, so the editor is anchored there. See `useCellEditorOpen`. */
+  anchorAtButton?: boolean
   /**
    * The auto-open came from a character typed at the grid, which lands in the number field as its
    * first keystroke. Focus is not its business — the field is focused however the editor was
@@ -52,6 +56,8 @@ interface SliderCellProps {
   onCommit: (commit: CellCommit) => void
   onBeginEdit: () => void
 }
+
+type SliderCellProps = SliderCellOwnProps & CellClickBehaviour
 
 function toPct(value: number): number {
   return Math.round((value / 255) * 100)
@@ -70,8 +76,12 @@ export const SliderCell = memo(function SliderCell({
   placeholder,
   disabled = false,
   autoOpen,
+  autoClose,
+  anchorAtButton,
   keyboardSeed,
   selectionEmpty,
+  clickSelects,
+  editorAnchorRef,
   onCommit,
   onBeginEdit,
 }: SliderCellProps) {
@@ -92,8 +102,10 @@ export const SliderCell = memo(function SliderCell({
   const draft = useNumberFieldDraft(String(current), commit)
   // The typed input is reset on every open, by a click or by a marquee alike — which is why it is
   // `onOpen` on the hook rather than part of the `onOpenChange` handler below.
-  const { isOpen, setOpen, keyboardOpen } = useCellEditorOpen({
+  const { isOpen, setOpen, keyboardOpen, atButton } = useCellEditorOpen({
     autoOpen,
+    autoClose,
+    anchorAtButton,
     keyboardSeed,
     disabled,
     selectionEmpty,
@@ -118,17 +130,25 @@ export const SliderCell = memo(function SliderCell({
   return (
     <CellEditorSurface
       open={isOpen}
-      onOpenChange={(open) => {
-        setOpen(open)
-        if (open) onBeginEdit()
-      }}
+      onOpenChange={setOpen}
       title={label}
       contentClassName="w-64"
       onOpenAutoFocus={onOpenAutoFocus}
+      triggerOpens={!clickSelects}
+      // Only where the press was made — the bar's Set. Enter and a typed character are gestures
+      // made at the selection, so their editor opens beside the cell.
+      anchorRef={atButton ? editorAnchorRef : undefined}
       trigger={
         <button
           type="button"
           disabled={disabled}
+          // **The whole of what a click does, in every mode.** Where a click selects, the trigger
+          // is only an anchor and `onOpenChange` never sees a `true`; where it opens the editor
+          // (the two plain list routes) it fires alongside that open, which is where this used to
+          // live. Unconditional, and identical in all four cells, because the alternative was two
+          // mechanisms for one contract — `ColourCell` already did it this way, and a fifth cell
+          // modelled on either half could have double-fired or missed. See `CellClickBehaviour`.
+          onClick={onBeginEdit}
           className="flex h-full w-full items-center gap-1.5 rounded text-left hover:bg-accent/50"
           title={placeholder ? UNSET_CELL_TITLE : undefined}
         >

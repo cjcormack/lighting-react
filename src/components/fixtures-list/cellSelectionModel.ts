@@ -45,7 +45,16 @@ export function applyCellSelection(
   intent: ListSelectIntent,
 ): CellSelectionState {
   const keys = hits.map((h) => cellKey(h.rowId, h.col))
-  if (intent === 'replace' || intent === 'range') return new Set(keys)
+  if (intent === 'replace' || intent === 'range') {
+    // Bail out rather than allocate when the answer is the selection we already have — the same
+    // rule `useCellSelection.clear()` keeps, and for a sharper reason. A click on a cell *replaces*
+    // the selection with that one cell, so re-clicking the cell you already have selected (to
+    // confirm it before pressing Set, or by double-clicking) recomputes an identical set. A fresh
+    // `Set` is a new identity for `cellSelection`, which every `RowView` takes as a prop — so the
+    // whole visible list of a virtualised grid re-renders for no change at all.
+    if (keys.length === current.size && keys.every((key) => current.has(key))) return current
+    return new Set(keys)
+  }
   const next = new Set(current)
   for (const key of keys) next.add(key)
   return next

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useScrollEdges } from '@/hooks/useScrollEdges'
+import { useStableCallback } from '@/hooks/useStableCallback'
 import { useLongPress } from '@/hooks/useLongPress'
 import { AudioWaveform, ChevronDown, ChevronRight, Info, Layers } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -29,6 +30,7 @@ import { columnRange, rectFrom, rowIndexRange, type ColumnBand } from './cellMar
 import { listSelectionIntentFor } from './listSelectionModel'
 import { describeCellScope, type CellRef } from './cellSelectionModel'
 import type { CellSelection } from './useCellSelection'
+import type { CellClickBehaviour } from './cells/CellEditorSurface'
 import { SliderCell } from './cells/SliderCell'
 import { ColourCell } from './cells/ColourCell'
 import { PositionCell } from './cells/PositionCell'
@@ -82,7 +84,12 @@ export interface FixturesTableProps {
   /** Name-cell click — the caller derives the intent from the mouse event. */
   onRowClick: (id: RowId, e: React.MouseEvent) => void
   onToggleExpand: (row: GroupRow | FixtureRow) => void
-  /** A cell editor is opening on this cell — the caller selects the cell, unless it is already in the marquee. */
+  /**
+   * A click landed on this cell. Where the grid has a [cellSelection] that is the *whole* of what
+   * the click does — the caller selects the one cell, and the editor is opened by Set, Enter or a
+   * typed character instead. Where it has not (the two plain list routes) the click is still the
+   * way into the editor, and this fires as it opens.
+   */
   onBeginCellEdit: (row: Row, col: ColumnKey) => void
   onCellCommit: (row: Row, col: ColumnKey, commit: CellCommit) => void
   /** How many write targets a commit from this row's cell in this column
@@ -136,7 +143,25 @@ export interface FixturesTableProps {
    * released marquee open an editor by exactly one mechanism. The container is the one that knows
    * *which* cell (it owns the selection and the scope gate); this knows how to open one.
    */
-  keyboardOpen?: { rowId: RowId; col: ColumnKey; seed: string } | null
+  keyboardOpen?: { rowId: RowId; col: ColumnKey; seed: string; atButton: boolean } | null
+  /**
+   * Close the editor on this cell — the selection bar's **Set** pressed a second time.
+   *
+   * A one-shot of its own rather than a `null` on [keyboardOpen], which means "nobody is asking"
+   * rather than "shut it". Set is the only thing that can close what it opened: clicking the Set
+   * button while the editor is open does not dismiss it the way clicking the grid does, because
+   * the button is this popover's own anchor.
+   */
+  closeEditorCell?: { rowId: RowId; col: ColumnKey } | null
+  /**
+   * Where a requested editor should open — the selection bar's Set button.
+   *
+   * Only meaningful with [cellSelection], which is what makes a click select rather than open:
+   * every editor on that grid is then opened by Set (or by its key), and anchoring at the cell
+   * put the panel wherever in the grid the first selected cell happened to be. See `anchorRef` on
+   * `CellEditorSurface` for the fallback when the button is not mounted.
+   */
+  editorAnchorRef?: React.RefObject<HTMLElement | null>
   /**
    * A marquee drag has started or ended.
    *
@@ -182,7 +207,9 @@ export function FixturesTable({
   selectionEmpty,
   cellSelection,
   onRowMarquee,
+  editorAnchorRef,
   keyboardOpen,
+  closeEditorCell,
   onMarqueeDragChange,
   onBackgroundClick,
 }: FixturesTableProps) {
@@ -241,13 +268,34 @@ export function FixturesTable({
    * its own — the drag says *what* to edit and the bar says *do it* — so the request now comes
    * from the container alone, whichever way the operator made it.
    */
-  const [autoOpenCell, setAutoOpenCell] = useState<(CellRef & { seed: string | null }) | null>(null)
+  const [autoOpenCell, setAutoOpenCell] = useState<
+    (CellRef & { seed: string | null; atButton: boolean }) | null
+  >(null)
   useEffect(() => {
     if (autoOpenCell) setAutoOpenCell(null)
   }, [autoOpenCell])
   useEffect(() => {
     if (keyboardOpen) setAutoOpenCell({ ...keyboardOpen })
   }, [keyboardOpen])
+
+  /** The close request, dropped on the commit after it is delivered — `autoOpenCell`'s rule. */
+  const [closeCell, setCloseCell] = useState<CellRef | null>(null)
+  useEffect(() => {
+    if (closeCell) setCloseCell(null)
+  }, [closeCell])
+  useEffect(() => {
+    if (closeEditorCell) setCloseCell({ ...closeEditorCell })
+  }, [closeEditorCell])
+
+  /**
+   * A click on a column this row resolves nothing for — the Colour cell of a dimmer-only par —
+   * clears the selection, exactly as the empty space under the last row does.
+   *
+   * Stabilised because it is a *row* prop and `RowView` is memoized: the container's answer is a
+   * ladder that re-reads the cell count, so it changes identity on every marquee frame, and passing
+   * it straight down would re-render every visible row at pointer rate.
+   */
+  const onEmptyCellClick = useStableCallback(onBackgroundClick)
 
   const marquee = useCellMarquee({
     scrollRef,
@@ -417,7 +465,21 @@ export function FixturesTable({
                     deskConnected={deskConnected}
                     autoOpenCol={autoOpenCell?.rowId === row.id ? autoOpenCell.col : null}
                     autoOpenSeed={autoOpenCell?.rowId === row.id ? autoOpenCell.seed : null}
+                    autoOpenAtButton={autoOpenCell?.rowId === row.id && autoOpenCell.atButton}
+                    autoCloseCol={closeCell?.rowId === row.id ? closeCell.col : null}
                     selectionEmpty={selectionEmpty}
+                    // A grid that can select cells is a grid where a click selects one. Derived
+                    // from the same prop rather than asked for separately, so the two can never
+                    // disagree — a cell click that opened an editor *and* moved the marquee under
+                    // it is exactly the confusion this replaced.
+                    clickSelectsCell={cellSelection != null}
+                    editorAnchorRef={editorAnchorRef}
+                    // Only where there is a cell selection to clear. On the two plain list routes
+                    // a blank cell was inert, and the ladder there has only its row rung — so
+                    // wiring it up would have made clicking the Colour column of a dimmer-only par
+                    // *drop* a multi-row selection that was about to be acted on, which is a new
+                    // destructive gesture rather than the clear this is.
+                    onEmptyCellClick={cellSelection != null ? onEmptyCellClick : undefined}
                   />
                 </div>
               )
@@ -928,6 +990,8 @@ function useCellMarquee({
       // control" and handed it to the button, which opened one cell's popover instead of the typed
       // field. Safari does not focus buttons on mousedown, which is why the gesture worked there
       // and nowhere else. Blurring only after a real drag keeps Tab-then-Enter on a trigger intact.
+      // (Since a click on a cell selects rather than opening, what Enter on a focused trigger does
+      // there is select that one cell — still not the marquee's editor, and still wrong.)
       if (document.activeElement instanceof HTMLElement && scrollRef.current?.contains(document.activeElement)) {
         document.activeElement.blur()
       }
@@ -1049,8 +1113,31 @@ interface RowViewProps {
    * with. `''` for a bare Enter or the bar's Set, and null for every row but the named one.
    */
   autoOpenSeed: string | null
+  /** That request was the bar's Set rather than a key, so its editor opens at the button. */
+  autoOpenAtButton: boolean
+  /**
+   * The container asked this row's cell in this column to close its editor — Set pressed a second
+   * time — and null on every other row, so the memo holds for the rest of the grid.
+   */
+  autoCloseCol: ColumnKey | null
   /** Nothing is selected — any open cell editor in this row must go. See `useCellEditorOpen`. */
   selectionEmpty?: boolean
+  /**
+   * A click on one of this row's value cells **selects** it instead of opening its editor.
+   *
+   * True exactly where the grid has a cell selection to put it in. The editor is then opened by
+   * the selection bar's Set, by Enter, or by typing — so the drag, the click and the keys all say
+   * *what* to edit and one gesture says *edit it*. See `CellClickBehaviour`.
+   */
+  clickSelectsCell: boolean
+  /** Where a requested editor opens. See `FixturesTableProps`. */
+  editorAnchorRef?: React.RefObject<HTMLElement | null>
+  /**
+   * A click on a column this row resolves nothing for. Stable, so the memo holds — see the
+   * table's own `onEmptyCellClick`. Absent on the two plain list routes, where a blank cell was
+   * inert and clearing there could only take a row selection away.
+   */
+  onEmptyCellClick?: () => void
 }
 
 const NO_INERT_COLUMNS: ReadonlySet<ColumnKey> = new Set()
@@ -1099,7 +1186,12 @@ const RowView = React.memo(function RowView({
   deskConnected,
   autoOpenCol,
   autoOpenSeed,
+  autoOpenAtButton,
+  autoCloseCol,
   selectionEmpty,
+  clickSelectsCell,
+  editorAnchorRef,
+  onEmptyCellClick,
 }: RowViewProps) {
   // Hooks run unconditionally; divider rows just have no cells.
   const cells = useMemo(() => buildRowCells(row, visibleColumns), [row, visibleColumns])
@@ -1314,7 +1406,12 @@ const RowView = React.memo(function RowView({
         const live = liveValues[col]
         const state = scoped[col]
         if (!cell || !live) {
-          return <div key={col} className="h-full" />
+          // Nothing here to set — and a click on it clears the selection, the way a click on the
+          // grid's own background does. It is not background in the DOM (the row carries
+          // `data-row-id`, which the scroller's handler stops at), so it has to say so itself;
+          // without this a click on the Colour column of a dimmer-only par did nothing at all and
+          // left the previous selection standing under a pointer that had plainly moved on.
+          return <div key={col} className="h-full" onClick={onEmptyCellClick} />
         }
         const owned = ownership[col]
         const layer = owned?.layer
@@ -1437,6 +1534,8 @@ const RowView = React.memo(function RowView({
               // Belt and braces with the wrapper's `pointer-events-none` below: that stops the
               // mouse, this stops the keyboard. The trigger is tabbable, so Tab-then-Enter would
               // otherwise walk straight past the guard and open an editor whose commit is dropped.
+              // It also stops the trigger's own `onClick` — which on this grid is the selection —
+              // so a read-only cell cannot be selected by keyboard either.
               //
               // **Both reasons a cell takes no edit, not just the offline one.** `editable: false`
               // is the *scope's* statement — Output is a read of the cook, and a focused template
@@ -1446,8 +1545,12 @@ const RowView = React.memo(function RowView({
               // drawing itself as read-only.
               disabled={cellsInert || state?.editable === false}
               autoOpen={autoOpenCol === col}
+              autoClose={autoCloseCol === col}
+              anchorAtButton={autoOpenCol === col && autoOpenAtButton}
               keyboardSeed={autoOpenCol === col ? autoOpenSeed : null}
               selectionEmpty={selectionEmpty}
+              clickSelects={clickSelectsCell}
+              editorAnchorRef={editorAnchorRef}
               onBeginEdit={() => onBeginCellEdit(row, col)}
               onCommit={(commit) => onCellCommit(row, col, commit)}
             />
@@ -1513,8 +1616,12 @@ function PropertyCell({
   batchCount,
   disabled,
   autoOpen,
+  autoClose,
+  anchorAtButton,
   keyboardSeed,
   selectionEmpty,
+  clickSelects,
+  editorAnchorRef,
   onBeginEdit,
   onCommit,
 }: {
@@ -1545,8 +1652,19 @@ function PropertyCell({
    * The rule itself is shared, in `useCellEditorOpen`. A [disabled] cell ignores it, so Output
    * scope, a focused template layer and an unreachable desk stay read-only through this door as
    * much as through the pointer.
+   *
+   * On the programmer this is the **only** door: a click there selects the cell and opens nothing.
+   * See `CellClickBehaviour`.
    */
   autoOpen: boolean
+  /** The container asked this cell's editor to close — Set pressed again. */
+  autoClose: boolean
+  /**
+   * That open came from the bar's **Set**, so the editor is anchored at that button. Enter and a
+   * typed character leave it false: those are made at the selection, so the panel opens beside the
+   * cell. See `useCellEditorOpen`.
+   */
+  anchorAtButton: boolean
   /**
    * That open came from a character typed at the grid, which the editor seeds its first field
    * with — see `useCellEditorKeyboard`. `''` for a bare Enter or Set; null for a click.
@@ -1556,7 +1674,7 @@ function PropertyCell({
   selectionEmpty?: boolean
   onBeginEdit: () => void
   onCommit: (commit: CellCommit) => void
-}) {
+} & CellClickBehaviour) {
   switch (value.kind) {
     case 'slider':
       return (
@@ -1568,8 +1686,12 @@ function PropertyCell({
           placeholder={placeholder}
           disabled={disabled}
           autoOpen={autoOpen}
+          autoClose={autoClose}
+          anchorAtButton={anchorAtButton}
           keyboardSeed={keyboardSeed}
           selectionEmpty={selectionEmpty}
+          clickSelects={clickSelects}
+          editorAnchorRef={editorAnchorRef}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
         />
@@ -1584,8 +1706,12 @@ function PropertyCell({
           placeholder={placeholder}
           disabled={disabled}
           autoOpen={autoOpen}
+          autoClose={autoClose}
+          anchorAtButton={anchorAtButton}
           keyboardSeed={keyboardSeed}
           selectionEmpty={selectionEmpty}
+          clickSelects={clickSelects}
+          editorAnchorRef={editorAnchorRef}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
         />
@@ -1600,8 +1726,12 @@ function PropertyCell({
           placeholder={placeholder}
           disabled={disabled}
           autoOpen={autoOpen}
+          autoClose={autoClose}
+          anchorAtButton={anchorAtButton}
           keyboardSeed={keyboardSeed}
           selectionEmpty={selectionEmpty}
+          clickSelects={clickSelects}
+          editorAnchorRef={editorAnchorRef}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
         />
@@ -1616,8 +1746,12 @@ function PropertyCell({
           placeholder={placeholder}
           disabled={disabled}
           autoOpen={autoOpen}
+          autoClose={autoClose}
+          anchorAtButton={anchorAtButton}
           keyboardSeed={keyboardSeed}
           selectionEmpty={selectionEmpty}
+          clickSelects={clickSelects}
+          editorAnchorRef={editorAnchorRef}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
         />

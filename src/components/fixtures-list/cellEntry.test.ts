@@ -1,9 +1,10 @@
 // @vitest-environment jsdom — `marqueeOwnsKeyTarget` reads the DOM; the rest needs none.
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import {
   cellActionCopy,
   cellKeyboardPermission,
   marqueeOwnsKeyTarget,
+  openCellEditorTarget,
   orderedSelectedCells,
 } from './cellEntry'
 import type { CellRef } from './cellSelectionModel'
@@ -162,5 +163,38 @@ describe('cellActionCopy', () => {
     const copy = cellActionCopy({ kind: 'layer', layerId: 7 }, true, 2)
     expect(copy.setTitle).toMatch(/applies a template/)
     expect(copy.clearTitle).toBe(copy.setTitle)
+  })
+})
+
+describe('openCellEditorTarget', () => {
+  // Which editor the bar's Set shuts. Set has to be able to close what it opened, because a press
+  // on that button is not the outside click that dismisses a popover — the button is that popover's
+  // own anchor — and the DOM is where the answer lives, the open state being per cell.
+  afterEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  function grid(html: string) {
+    document.body.innerHTML = html
+  }
+
+  it('is null with nothing open', () => {
+    grid('<div data-row-id="fixture:a"><div data-cell="dimmer"><button data-state="closed"></button></div></div>')
+    expect(openCellEditorTarget()).toBeNull()
+  })
+
+  it('names the row and column of the open cell', () => {
+    grid(
+      '<div data-row-id="fixture:a"><div data-cell="dimmer"><button data-state="closed"></button></div></div>' +
+        '<div data-row-id="fixture:b"><div data-cell="colour"><button data-state="open"></button></div></div>',
+    )
+    expect(openCellEditorTarget()).toEqual({ rowId: 'fixture:b', col: 'colour' })
+  })
+
+  it('ignores an open panel that is not a cell\'s — Fan opens from the toolbar', () => {
+    // `FanPopover` is a cell editor in every way but this one: its trigger lives in the selection
+    // bar, outside any `[data-cell]`. Set must not try to close it.
+    grid('<div><button data-state="open" aria-label="Fan"></button></div>')
+    expect(openCellEditorTarget()).toBeNull()
   })
 })
