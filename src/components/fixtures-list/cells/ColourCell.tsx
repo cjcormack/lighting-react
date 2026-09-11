@@ -66,6 +66,10 @@ export const ColourCell = memo(function ColourCell({
       hasWhiteChannel={hasWhite}
       hasAmberChannel={hasAmber}
       hasUvChannel={hasUv}
+      // The grid cell's only editor, so this is where the typed R/G/B and emitter boxes belong
+      // (`PD-COLOUR-EDITOR-INPUTS`). The two property visualizers leave it off: they draw their own
+      // channel bank beside the swatch already.
+      channelFields
       onColourChange={(r, g, b, w, a, uv) => onCommit({ kind: 'colour', r, g, b, w, a, uv })}
     >
       <button

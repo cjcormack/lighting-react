@@ -11,6 +11,8 @@ function Slider({
   value,
   min = 0,
   max = 100,
+  "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledBy,
   ...props
 }: React.ComponentProps<typeof SliderPrimitive.Root>) {
   const _values = React.useMemo(
@@ -53,6 +55,14 @@ function Slider({
         <SliderPrimitive.Thumb
           data-slot="slider-thumb"
           key={index}
+          // The name goes on the THUMB, not on `Root`. `Root` renders a plain wrapper; the
+          // `role="slider"` element a screen reader lands on is this thumb, and Radix reads its
+          // accessible name from the thumb's own props. Spread onto `Root` with the rest of
+          // `...props` — which is how every caller passes it — an `aria-label` reached a div and
+          // the control the user actually focuses had no name at all. Only for a single-thumb
+          // slider: one label repeated across a range's two thumbs would name them identically.
+          aria-label={_values.length === 1 ? ariaLabel : undefined}
+          aria-labelledby={_values.length === 1 ? ariaLabelledBy : undefined}
           className="border-primary ring-ring/50 block size-4 shrink-0 rounded-full border bg-white shadow-sm transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
         />
       ))}

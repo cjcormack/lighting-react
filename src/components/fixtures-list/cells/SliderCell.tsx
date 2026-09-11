@@ -1,7 +1,8 @@
-import { memo, useState } from 'react'
+import { memo, useCallback } from 'react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Slider } from '@/components/ui/slider'
 import { Input } from '@/components/ui/input'
+import { useNumberFieldDraft } from '@/hooks/useNumberFieldDraft'
 import type { CellResolution } from '../columns'
 import type { CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
@@ -52,23 +53,24 @@ export const SliderCell = memo(function SliderCell({
   onCommit,
   onBeginEdit,
 }: SliderCellProps) {
-  const [inputText, setInputText] = useState<string | null>(null)
-  // The typed input is reset on every open, by a click or by a marquee alike — which is why it is
-  // `onOpen` on the hook rather than part of the `onOpenChange` handler below.
-  const { isOpen, setOpen } = useCellEditorOpen({
-    autoOpen,
-    disabled,
-    onOpen: () => setInputText(null),
-  })
-
   const first = resolutions[0]
   const range = first.kind === 'slider' ? { min: first.property.min, max: first.property.max } : { min: 0, max: 255 }
   const current = value.max
 
-  const commit = (raw: number) => {
-    const clamped = Math.max(range.min, Math.min(range.max, Math.round(raw)))
-    onCommit({ kind: 'slider', value: clamped })
-  }
+  const commit = useCallback(
+    (raw: number) => {
+      const clamped = Math.max(range.min, Math.min(range.max, Math.round(raw)))
+      onCommit({ kind: 'slider', value: clamped })
+    },
+    [onCommit, range.min, range.max],
+  )
+  // The field's own draft text — `useNumberFieldDraft` owns the "an emptied box must not commit"
+  // rule, shared with the colour editor's channel fields; the clamp above stays here, because
+  // this cell's bounds come from its resolution rather than being a flat byte.
+  const draft = useNumberFieldDraft(String(current), commit)
+  // The typed input is reset on every open, by a click or by a marquee alike — which is why it is
+  // `onOpen` on the hook rather than part of the `onOpenChange` handler below.
+  const { isOpen, setOpen } = useCellEditorOpen({ autoOpen, disabled, onOpen: draft.reset })
 
   const display = value.isUniform ? `${toPct(value.min)}%` : `${toPct(value.min)}–${toPct(value.max)}%`
 
@@ -126,16 +128,9 @@ export const SliderCell = memo(function SliderCell({
             min={range.min}
             max={range.max}
             className="h-8 w-20 tabular-nums"
-            value={inputText ?? String(current)}
-            onChange={(e) => {
-              setInputText(e.target.value)
-              // An empty field (mid-retype) must not commit — Number('') is 0,
-              // which would black out the whole selection.
-              if (e.target.value.trim() === '') return
-              const parsed = Number(e.target.value)
-              if (Number.isFinite(parsed)) commit(parsed)
-            }}
-            onBlur={() => setInputText(null)}
+            value={draft.value}
+            onChange={(e) => draft.onChange(e.target.value)}
+            onBlur={draft.onBlur}
           />
         </div>
       </PopoverContent>

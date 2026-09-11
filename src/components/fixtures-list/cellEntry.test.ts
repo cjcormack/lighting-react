@@ -1,5 +1,11 @@
+// @vitest-environment jsdom — `marqueeOwnsKeyTarget` reads the DOM; the grammar half needs none.
 import { describe, expect, it } from 'vitest'
-import { cellEntryHint, cellKeyboardPermission, parseCellEntry } from './cellEntry'
+import {
+  cellEntryHint,
+  cellKeyboardPermission,
+  marqueeOwnsKeyTarget,
+  parseCellEntry,
+} from './cellEntry'
 
 /**
  * The typed-value grammar. Each arm is pinned on its own because the field is one input for four
@@ -97,5 +103,61 @@ describe('cellKeyboardPermission', () => {
       entry: false,
       clear: false,
     })
+  })
+})
+
+/**
+ * The DOM half of the marquee-keyboard guard (`PD-ENTER-FOCUS`).
+ *
+ * Pinned here rather than through the container because the whole defect was one `closest`: a cell
+ * trigger is a `<button>`, so the guard that keeps chips and menu items from stealing Enter also
+ * kept the marquee's *own* cells from taking it — and that is precisely where the focus sits after
+ * a drag.
+ */
+describe('marqueeOwnsKeyTarget', () => {
+  function grid(): HTMLElement {
+    const root = document.createElement('div')
+    root.innerHTML = `
+      <div data-row-id="fixture:a">
+        <div data-cell="dimmer"><button id="a-dimmer">x</button></div>
+        <div data-cell="colour"><button id="a-colour">x</button></div>
+      </div>
+      <div data-row-id="fixture:b">
+        <div data-cell="dimmer"><button id="b-dimmer">x</button></div>
+        <input id="b-check" type="checkbox" />
+      </div>
+      <button id="toolbar-chip">chip</button>
+    `
+    return root
+  }
+  const selected = (rowId: string, col: string) => rowId === 'fixture:a' && col === 'dimmer'
+
+  it('claims a cell trigger the marquee covers, however deep the press landed', () => {
+    const root = grid()
+    const button = root.querySelector('#a-dimmer')!
+    expect(marqueeOwnsKeyTarget(button, selected)).toBe(true)
+    // The label span inside the trigger, which is what a real click's target usually is.
+    const inner = document.createElement('span')
+    button.appendChild(inner)
+    expect(marqueeOwnsKeyTarget(inner, selected)).toBe(true)
+  })
+
+  it('does not claim a cell outside the selection — Tab-then-Enter still opens its own editor', () => {
+    const root = grid()
+    expect(marqueeOwnsKeyTarget(root.querySelector('#a-colour'), selected)).toBe(false)
+    expect(marqueeOwnsKeyTarget(root.querySelector('#b-dimmer'), selected)).toBe(false)
+  })
+
+  it('does not claim a control that is in no cell at all', () => {
+    const root = grid()
+    expect(marqueeOwnsKeyTarget(root.querySelector('#toolbar-chip'), selected)).toBe(false)
+    expect(marqueeOwnsKeyTarget(root.querySelector('#b-check'), selected)).toBe(false)
+    expect(marqueeOwnsKeyTarget(null, selected)).toBe(false)
+  })
+
+  it('does not claim a cell with no row above it — neither attribute is enough alone', () => {
+    const orphan = document.createElement('div')
+    orphan.innerHTML = '<div data-cell="dimmer"><button id="o">x</button></div>'
+    expect(marqueeOwnsKeyTarget(orphan.querySelector('#o'), () => true)).toBe(false)
   })
 })

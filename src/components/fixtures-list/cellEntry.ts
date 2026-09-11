@@ -1,5 +1,5 @@
 import type { ColumnKey } from './columns'
-import type { CellCommit } from './rowModel'
+import type { CellCommit, RowId } from './rowModel'
 import type { ProgrammerScope } from '../programmer/ProgrammerScope'
 
 /**
@@ -166,4 +166,48 @@ function entryKindOf(col: ColumnKey): 'level' | 'colour' | 'position' | 'wheel' 
     default:
       return 'level'
   }
+}
+
+/**
+ * Is a keystroke's target a cell the live marquee already covers?
+ *
+ * The DOM half of the grid's "not from a focused control" guard, and the reason it needs a half at
+ * all. A cell trigger is a `<button>`, so a bare `closest('button')` test calls it someone else's
+ * control — and after a marquee drag it is *exactly* where the focus is: the press focuses the
+ * button under it, and the editor `PD-POPUP-AFTER-DRAG` auto-opens hands focus back to that button
+ * when it closes. Every arm of the marquee keyboard then fell through from there, Enter to the
+ * button's own default activation, which re-opened that one cell's editor with its field unfocused
+ * instead of the typed-value field the selection bar promises.
+ *
+ * The exemption is exactly as wide as the marquee and no wider, which is what keeps the rest of
+ * the guard intact: a checkbox, a chip and a menu item are not inside a cell at all; a cell
+ * *outside* the selection, tabbed to while one is live, is still its own editor's trigger; and
+ * with no cells selected the caller never asks, so plain Tab-then-Enter is untouched.
+ *
+ * **It claims any control inside a covered cell, not the editor trigger specifically**, and that
+ * is a deliberate width rather than an oversight: all four cell editors are Popover triggers
+ * today, but naming the trigger — by `data-slot`, or by "the only button here" — would make this
+ * exemption lapse silently the day one of them became a Select or a Dialog, which is the very
+ * defect it exists to fix. The cost is the other direction: the grid's *second* in-cell control,
+ * `OwnerJumpOverlay` (`FixturesTable.tsx`), would have its Enter and Backspace taken by the
+ * marquee too. It does not today, because it renders only in Output scope, where
+ * `cellKeyboardPermission` refuses both keys — so **a third in-cell control added in an editable
+ * scope needs its own answer here**, and that is the check to make rather than a narrower
+ * predicate now.
+ *
+ * Reads `data-cell` and `data-row-id` — the same two attributes `openEntry` finds the popover's
+ * anchor by, walked the other way. Two hand-rolled traversals of one addressing contract, kept in
+ * step by this sentence: rename either attribute and both have to move, and the forward half is
+ * the `document.querySelector` in `FixturesListContainer`'s `openEntry`.
+ */
+export function marqueeOwnsKeyTarget(
+  target: EventTarget | null,
+  isCellSelected: (rowId: RowId, col: ColumnKey) => boolean,
+): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  const cell = target.closest<HTMLElement>('[data-cell]')
+  const col = cell?.dataset.cell
+  const rowId = cell?.closest<HTMLElement>('[data-row-id]')?.dataset.rowId
+  if (col == null || rowId == null) return false
+  return isCellSelected(rowId, col as ColumnKey)
 }

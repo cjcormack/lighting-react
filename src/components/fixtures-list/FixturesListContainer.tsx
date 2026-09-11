@@ -12,7 +12,12 @@ import { useCellSelection } from './useCellSelection'
 import { useProgrammerScope } from '../programmer/ProgrammerScope'
 import { useFocusedTemplateLayer } from '../programmer/FocusedTemplateLayer'
 import { CellEntryPopover } from './CellEntryPopover'
-import { cellEntryHint, cellKeyboardPermission, parseCellEntry } from './cellEntry'
+import {
+  cellEntryHint,
+  cellKeyboardPermission,
+  marqueeOwnsKeyTarget,
+  parseCellEntry,
+} from './cellEntry'
 import { resolutionPropertyNames } from './columns'
 import type { CellRef } from './cellSelectionModel'
 import type { AttributeFamily } from '../../lib/attributeFamily'
@@ -268,7 +273,7 @@ export function FixturesListContainer({
   // something — the programmer.
   const visibleRowIds = useMemo(() => new Set(rows.map((r) => r.id)), [rows])
   const cellSelection = useCellSelection(visibleRowIds)
-  const { count: cellCount, clear: clearCells } = cellSelection
+  const { count: cellCount, clear: clearCells, isSelected: isCellSelected } = cellSelection
 
   // Null outside the programmer, so the plain fixtures and groups lists are unaffected.
   const scope = useProgrammerScope()
@@ -822,7 +827,11 @@ export function FixturesListContainer({
         // is `role="menu"`, not `dialog`, so the guard above does not cover a menu item. Backspace
         // is the destructive one — a live `clearEntry` per cell — so it is the arm that most needs
         // to know a chip, a checkbox or a menu item had the focus.
+        //
+        // **Except a cell trigger the marquee itself covers** — `marqueeOwnsKeyTarget`, which is
+        // where the whole of that exception is written down and pinned.
         const onControl =
+          !marqueeOwnsKeyTarget(e.target, isCellSelected) &&
           e.target instanceof HTMLElement &&
           e.target.closest('button, a, [role="menuitem"], [role="menu"]') != null
         if (e.metaKey || e.ctrlKey || e.altKey || onControl) {
@@ -887,8 +896,10 @@ export function FixturesListContainer({
     // scope change — more often than `cellCount` — because the alternative is reading the current
     // selection through a ref inside a handler that also has to plan writes against `rows`, and a
     // rebind is cheaper than that second copy of the state. `openEntry` follows the same cadence
-    // for the same reason. `canTypeCells` is a boolean.
-  }, [selection, selectableOrder, cellCount, clearByLadder, canClearCells, canTypeCells, clearSelectedCells, openEntry])
+    // for the same reason. `canTypeCells` is a boolean, and `isCellSelected` is stable for the
+    // mount — it reads `useCellSelection`'s own ref, which is why the marquee test above costs
+    // this listener no extra rebinds.
+  }, [selection, selectableOrder, cellCount, clearByLadder, canClearCells, canTypeCells, clearSelectedCells, isCellSelected, openEntry])
 
   if (fixturesLoading || groupsLoading) {
     return <div>Loading...</div>
