@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { AlertTriangle, CirclePlus, Circle, Download, Layers, RefreshCw, Upload } from 'lucide-react'
+import { AlertTriangle, CirclePlus, Download, Layers, RefreshCw, Upload } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -58,6 +58,24 @@ const BUSK_TAIL = 'nothing to update'
  * two actions whose subject is the thing this names, so they belong *inside* the box rather than
  * among the verbs that act on the rig.
  *
+ * **Record is not one of them, and that is `PD-TWO-RECORD-BUTTONS`.** The two states with nothing
+ * to Update — busking, and a source that has been deleted — used to offer their own `Record…`
+ * here, wired to the same `sheets.openRecord()` with the same no arguments as the action bar's,
+ * so row A drew two enabled primary Record buttons about 120px apart and, below `@[800px]`, two
+ * identical filled-circle icons. Two controls that are one act is the thing this page keeps
+ * refusing (the chevrons, the doors, `useShowBarProps`); the action bar's is the one that stays,
+ * because Record is a verb that acts on the rig and because only it carries the destination menu.
+ * So these two states simply have no verb, which is correct: neither has anything to *update*,
+ * and the box's job is to name the source, not to duplicate the bar.
+ *
+ * One consequence worth stating, since it is the only reach the deletion actually changed: the
+ * bar's Record is `disabled` on an empty programmer, while the deleted-source Record here was
+ * unconditionally enabled. So a source deleted with *nothing busked behind it* now offers no
+ * Record anywhere — which is the rule the bar already keeps (Record reads the programmer, so it
+ * is meaningless when the programmer is empty) finally applying to this state too, rather than a
+ * gap. The busking arm never had the question: `resolveProgrammerSource` only answers `busking`
+ * when there are entries or programmer FX, which is `hasContent` exactly.
+ *
  * **It was a full-width band of its own until the space plan's session 1**, sitting above a
  * second full-width band of verbs. Two bands each spending a line on one sentence is 101px of an
  * 900px screen, and the grid below them is the page. So the strip is now a bordered 32px box that
@@ -95,12 +113,10 @@ export function ProgrammerSourceStrip({
   projectId,
   onUpdate,
   onRevert,
-  onRecord,
 }: {
   projectId: number
   onUpdate: () => void
   onRevert: () => void
-  onRecord: () => void
 }) {
   const { data: summary } = useProgrammerSummaryQuery()
   const { data: activeEffects } = useActiveEffectsQuery()
@@ -206,7 +222,7 @@ export function ProgrammerSourceStrip({
             `No source` is the floor, and it is not redundant beside the label. Row A crosses its
             own `@[600px]` gate at about the width where this box is 120–195px, so without a floor
             the box switches on and is *immediately* under the 200px rung — a bordered strip
-            rendering up to ~195px of nothing between the label and Record. A dead gap is a
+            rendering up to ~195px of nothing after the label. A dead gap is a
             different fault from a sentence said twice, and it is the one that looks broken.
 
             That `@[600px]` is **row A's** width and not this box's: it is the phone arm,
@@ -224,7 +240,6 @@ export function ProgrammerSourceStrip({
             </span>
           </span>
         </SentenceBox>
-        <RecordButton onRecord={onRecord} />
       </Strip>
     )
   }
@@ -237,8 +252,6 @@ export function ProgrammerSourceStrip({
         <span className="truncate text-xs text-amber-200" title={gone}>
           {gone}
         </span>
-        <span className="flex-1" />
-        <RecordButton onRecord={onRecord} variant="outline" />
       </Strip>
     )
   }
@@ -342,49 +355,6 @@ export function ProgrammerSourceStrip({
         </Button>
       )}
     </Strip>
-  )
-}
-
-/**
- * The box's own Record, for the two states that have nothing to Update.
- *
- * One component rather than a copy per state, because what the two share is the part that has to
- * stay in step: below `@[600px]` it is a 28px square with the word on its `aria-label`, which is
- * the same shrink `Update` makes two states along. Only the tone differs — `busking` is a primary
- * button because Record is the thing to do next; the deleted-source state offers it in outline,
- * beside a warning that is the more important half of that row.
- *
- * The **glyph** is the one thing the outline arm draws differently: with `Record…` shown it has a
- * word to be recognised by, so the dot would only add ink beside an amber warning triangle — but
- * once the word goes, a button with nothing in it is not a button. So it appears exactly where
- * the word disappears.
- */
-function RecordButton({
-  onRecord,
-  variant,
-}: {
-  onRecord: () => void
-  variant?: 'outline'
-}) {
-  return (
-    <Button
-      size="sm"
-      variant={variant}
-      // `ml-auto` rather than a `flex-1` spacer: the busking arm's spacer WAS that spacer, and it
-      // had to go — `SentenceBox` is `flex-1`, and two `flex: 1 1 0%` siblings split the row's free
-      // space rather than one taking it (the bug `ProgrammerGrid`'s template strip records). An
-      // auto margin is resolved after flex growth, so it takes the slack only when the box is not
-      // there, which below `@[600px]` it is not. The deleted-source arm keeps its own spacer and
-      // this resolves to nothing there.
-      className="ml-auto h-7 shrink-0 @max-[600px]:w-7 @max-[600px]:px-0"
-      aria-label="Record…"
-      onClick={onRecord}
-    >
-      <Circle
-        className={cn('size-3 fill-current', variant === 'outline' && 'hidden @max-[600px]:block')}
-      />
-      <span className="hidden @[600px]:inline">Record…</span>
-    </Button>
   )
 }
 

@@ -32,7 +32,6 @@ function draw() {
       projectId={1}
       onUpdate={() => {}}
       onRevert={() => {}}
-      onRecord={() => {}}
     />,
   )
 }
@@ -53,13 +52,16 @@ describe('ProgrammerSourceStrip', () => {
     expect(screen.getByText('Include')).toBeTruthy()
   })
 
-  it('offers Record when busking with no source', () => {
+  it('names the busking state, and offers no verb of its own', () => {
     summary = { ...summary, entryCount: 12 }
     draw()
     // The sentence is assembled from spans now (see the drop-order test below), so it is matched
     // on the label's `title` — the copy that has to stay whole at every width.
     expect(screen.getByTitle('No source — 12 values, nothing to update')).toBeTruthy()
-    expect(screen.getByRole('button', { name: /Record/ })).toBeTruthy()
+    // `PD-TWO-RECORD-BUTTONS`: this box used to carry its own Record here, calling the identical
+    // `openRecord()` the action bar's primary does. One act, one control — the bar's, which is
+    // also the only one with the destination menu. The box names the source and stops.
+    expect(screen.queryByRole('button', { name: /Record/ })).toBeNull()
   })
 
   it('drops the busking count as a whole part rather than ellipsing the sentence', () => {
@@ -86,7 +88,7 @@ describe('ProgrammerSourceStrip', () => {
     // The floor, and the reason it is not just `Busking` said twice: row A crosses its own
     // `@[600px]` gate at about the width where this box is 120-195px, so without a rung below
     // 200px the box switches on already under it — a bordered strip showing ~195px of nothing
-    // between the label and Record. A dead gap is a different fault from a redundant word.
+    // after the label. A dead gap is a different fault from a redundant word.
     summary = { ...summary, entryCount: 12 }
     draw()
     const floor = screen.getByText(/No source/)
@@ -217,5 +219,21 @@ describe('ProgrammerSourceStrip', () => {
     stacks = []
     draw()
     expect(screen.getByText(/has been deleted/)).toBeTruthy()
+    // `PD-TWO-RECORD-BUTTONS` again: this arm carried the second Record too, in outline. The
+    // warning is the whole row now — the verb is the action bar's, at every entry count.
+    expect(screen.queryByRole('button', { name: /Record/ })).toBeNull()
+  })
+
+  it('still reports a deleted source with nothing busked behind it', () => {
+    // The one state the deletion actually changed the reach of: `missing` at zero entries, where
+    // the box's old Record was unconditionally enabled and the action bar's is `disabled` on
+    // `!hasContent`. Losing it is correct rather than a gap — Record reads the programmer, and
+    // an enabled Record over an empty one contradicts the rule the action bar already keeps —
+    // but it was untested on both sides of the change, so it is pinned here.
+    summary = { ...summary, entryCount: 0, lastIncluded: CUE }
+    stacks = []
+    draw()
+    expect(screen.getByText(/has been deleted/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Record/ })).toBeNull()
   })
 })

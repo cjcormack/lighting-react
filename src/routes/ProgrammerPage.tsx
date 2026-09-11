@@ -213,7 +213,6 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
         projectId={projectId}
         onUpdate={sheets.openUpdate}
         onRevert={handleRevert}
-        onRecord={() => sheets.openRecord()}
       />
       <span className="h-[22px] w-px shrink-0 self-center bg-border" />
       <ProgrammerActionBar projectId={projectId} />
