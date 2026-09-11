@@ -198,12 +198,14 @@ describe('ProgrammerPage', () => {
   it('draws no show bar — the one live view without one', () => {
     // The space plan's session 5, as it was actually decided at the desk: rather than folding
     // `ShowHeader` into `ShowBar` on all four live views, the programmer simply stops drawing the
-    // bar and the other three are left alone. That is ~60px of blackout, Blind, tempo, cue numbers
-    // and transport returned to the grid, on the one page whose whole subject is editing values.
+    // bar and the other three are left alone. That is ~60px of blackout, tempo, cue numbers and
+    // transport returned to the grid, on the one page whose whole subject is editing values.
     //
-    // The header stays, because the switcher in it is how you reach a view that HAS the bar. If
-    // this ever fails, check that nobody answered "the programmer has no Blind" by putting the bar
-    // back rather than by leaving it out — see the note beside the header in `ProgrammerPage`.
+    // The header stays, because the switcher in it is how you reach a view that HAS the bar. Blind
+    // is not an argument for the bar any more: `PD-BLIND-ON-PROGRAMMER` made it the action bar's
+    // own control (pinned in `ProgrammerActionBar.test.tsx`), so if this ever fails, check that
+    // nobody brought the bar back for some other tile — see the note beside the header in
+    // `ProgrammerPage`.
     draw()
     expect(screen.queryByTestId('show-bar')).toBeNull()
     expect(screen.getByTestId('header')).toBeTruthy()

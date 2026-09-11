@@ -208,11 +208,11 @@ API Layer          Type definitions + WebSocket subscription factories
 #### Component Layer (UI)
 | File | Purpose |
 |------|---------|
-| `src/routes/ShowPage.tsx` | Route for `/projects/:projectId/show` (and `/show/stacks/:stackId`) — **the whole of Show Mode's UI since the Run merge**. Header (with the lock control) + `ShowBar`, then either the phone runner or the tab strip / off-playhead banner / `ShowView`. Owns the drill state, the `?cue=` contract, the playhead follow, the edit lock, the transport keyboard, Blind, make-live, and the two `RecordSheet` mounts. |
+| `src/routes/ShowPage.tsx` | Route for `/projects/:projectId/show` (and `/show/stacks/:stackId`) — **the whole of Show Mode's UI since the Run merge**. Header (with the lock control) + `ShowBar`, then either the phone runner or the tab strip / off-playhead banner / `ShowView`. Owns the drill state, the `?cue=` contract, the playhead follow, the edit lock, the transport keyboard, make-live, and the two `RecordSheet` mounts. |
 | `src/routes/ProgrammerPage.tsx` | Route for `/projects/:projectId/programmer`. **Two rows of chrome, not six bands** since the space plan's session 1: row A (the source box and the verbs, one 40px line), then the workspace (grid + layer/FX rail). Row B — the scope toggle, filter, Lit, Groups, Columns — is *not* a band here: it lives inside `ProgrammerGrid`'s own toolbar, because it describes the grid and has no business spanning the rail. |
 | `src/routes/legacyRedirects.tsx` | **Redirects only.** Every retired path that lands on Show — `/run`, `/cue-stacks`, `/cues*`, `/program*` — collected in one module rather than parked in whichever page happens to be the destination. `/program*` carries its search string, because `?cue=` is an external contract. |
-| `src/components/ShowBar.tsx` | Row 3, **identical on the three live views that have one** — Show, the Prompt Book and Busk: DBO, **BLIND**, speed masters, programmer chip, active→next, BACK/GO. Every host spreads `showBarProps`; only `showShortcuts` is overridden. The **programmer draws no bar at all** since the space plan's session 5; see this repo's `CLAUDE.md` §Cues, Stacks & Triggers for what that deliberately costs. |
-| `src/lib/programmerFade.ts` | The programmer's fade time, as a `lib/syncStore.ts` singleton: the action bar's picker writes it, the bar's Blind reads it at press time. A store, not two `usePersistentState` calls, so the picker actually reaches Blind. |
+| `src/components/ShowBar.tsx` | Row 3, **identical on the three live views that have one** — Show, the Prompt Book and Busk: DBO, speed masters, programmer chip, active→next, BACK/GO. Every host spreads `showBarProps`; only `showShortcuts` is overridden. **No Blind tile, for any host** — Blind is the programmer's action bar's since `PD-BLIND-ON-PROGRAMMER`, and the programmer chip is how a bar reports it. The **programmer draws no bar at all** since the space plan's session 5; see this repo's `CLAUDE.md` §Cues, Stacks & Triggers for what that deliberately costs. |
+| `src/lib/programmerFade.ts` | The programmer's fade time, as a `lib/syncStore.ts` singleton: the action bar's picker writes it, Clear and Blind beside it subscribe, and the marquee's Backspace reads it at press time. A store, not a `usePersistentState` per reader, so a value the picker writes reaches every reader. |
 | `src/components/runner/StackTabStrip.tsx` | Sibling-stack switcher. `selectedStackId` owns the underline, `liveStackId` the green pip — **selecting never moves the playhead**. |
 | `src/components/runner/OffPlayheadBanner.tsx` | Shown while reading a stack that is not the playhead: *Jump to live* (navigation) and *Make this stack live* (confirm-gated `go-to`). |
 | `src/components/runner/ShowLockControl.tsx` | The lock toggle and its re-lock countdown, for `ShowHeader`'s `actions` slot. |
@@ -497,26 +497,26 @@ book-level permission, and re-locking on GO.
 
 Two 2b changes worth knowing:
 
-- **It is no longer gated on the show running.** It carries blackout, Blind, the speed masters and
-  the programmer chip, all of which mean something with the show down, and `goDisabled` already mutes
-  BACK/GO. Gating it was what made Blind's *location* depend on the show's state.
-- **Blind moved into it**, beside blackout, out of the programmer's action-bar Stage zone — so one
-  control is in one place on every view *that has the bar*, instead of one place on the Programmer
-  and another on Show. Since the space plan's session 5 the programmer has neither: it draws no bar,
-  and the action-bar Stage zone did not come back. That absence is deliberate — restoring a second
-  Blind toggle there would recreate exactly the split this bullet describes ending. See this repo's
-  `CLAUDE.md` §Cues, Stacks & Triggers.
-  It still fades by the programmer's own fade time, read at press time from the `programmerFade`
-  store the action bar's picker writes; without that, moving the button would have turned a fade
-  into a snap. The store replaced a second `usePersistentState` instance of the key, which only ever
-  held the value as it stood when the bar mounted. `ProgrammerIndicator` sits two elements along and normally draws its own
-  amber "Blind" badge, so the bar passes it `blindShownSeparately` and it reports only the value count
-  there — the tile is the louder and the actionable one. The app-header mount keeps its badge, because
-  there is no tile there and blind has to be visible from `/fixtures`.
+- **It is no longer gated on the show running.** It carries blackout, the speed masters and the
+  programmer chip, all of which mean something with the show down, and `goDisabled` already mutes
+  BACK/GO. Gating it was what once made Blind's *location* depend on the show's state.
+- **Blind moved into it in 2b, and out again with `PD-BLIND-ON-PROGRAMMER`.** 2b took it out of the
+  programmer's action-bar Stage zone so one control was in one place on every view *that has the
+  bar* — and when the space plan's session 5 took the bar off the programmer, that left the press on
+  the three views whose programmer is usually empty and off the one whose output it gates, which the
+  desk pass found unliveable. Blind is a programmer fact (`ProgrammerSummary.blind`,
+  `programmerSetBlind`, the programmer's fade), so it is the action bar's control again, and the bar
+  *reports* it: `useShowBarProps` supplies no `onBlind` for any host, no tile is drawn, and
+  `ProgrammerIndicator` — which lost its `blindShownSeparately` arm with the tile — draws its amber
+  badge in the bar exactly as it does in the app header. One control, one place, still; the place
+  changed. See this repo's `CLAUDE.md` §Cues, Stacks & Triggers.
+  The fade is the thing to keep an eye on across any further move: `lib/programmerFade.ts` is a
+  store rather than a `usePersistentState` per reader, because two instances of one key held two
+  mount-time snapshots and Blind snapped for the rest of the visit.
 
 > Note for whoever wires blackout up: **DBO is currently local state with no side effect** in every
-> host. After 2b a functional Blind tile sits immediately beside a cosmetic DBO and the two read as
-> peers — `FU-FE-DBO-INERT`.
+> host — `FU-FE-DBO-INERT`. Between 2b and `PD-BLIND-ON-PROGRAMMER` a functional Blind tile sat
+> immediately beside it and the two read as peers; DBO stands alone now, and still does nothing.
 
 
 ## Playback Flow

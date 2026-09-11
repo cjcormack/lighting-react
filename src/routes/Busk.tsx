@@ -71,8 +71,8 @@ export function ProjectBusk() {
         projectName={project.name}
         {...showHeaderProps}
       />
-      {/* Not gated on the show running — same reasoning as `ShowPage` and `ProgrammerPage`.
-          Blackout, Blind and the speed masters all mean something with the show down, and
+      {/* Not gated on the show running — same reasoning as `ShowPage` and the Prompt Book.
+          Blackout and the speed masters both mean something with the show down, and
           `goDisabled` already mutes BACK/GO. */}
       <ShowBar {...showBarProps} />
       <BuskingView projectId={projectIdNum} />

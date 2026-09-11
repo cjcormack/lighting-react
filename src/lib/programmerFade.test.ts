@@ -50,18 +50,20 @@ describe('useProgrammerFade', () => {
     expect(window.localStorage.getItem(PROGRAMMER_FADE_KEY)).toBe(JSON.stringify('1000'))
   })
 
-  it('reaches Blind without a remount when the picker moves', () => {
-    // The bug this store replaced: the action bar's picker and `useShowBarProps`'s Blind were two
-    // `usePersistentState` instances of one key, each holding a mount-time snapshot. Moving the
-    // picker never reached Blind, so it snapped for the rest of the page visit.
+  it('reaches a press-time reader without a remount when the picker moves', () => {
+    // The bug this store replaced: the action bar's picker and the ShowBar's Blind (where Blind
+    // lived from session 2b to `PD-BLIND-ON-PROGRAMMER`) were two `usePersistentState` instances of
+    // one key, each holding a mount-time snapshot. Moving the picker never reached Blind, so it
+    // snapped for the rest of the page visit. Blind subscribes beside the picker now; the reader
+    // with this shape today is the marquee's Backspace (`useCellWriters.clearValue`).
     const picker = renderHook(() => useProgrammerFade())
-    // Blind's shape: a callback memoised on mount that reads the fade when it is pressed.
-    const blind = renderHook(() => useCallback(() => getProgrammerFadeMs(), []))
-    const onBlindAtMount = blind.result.current
+    // The press-time shape: a callback memoised on mount that reads the fade when it is pressed.
+    const reader = renderHook(() => useCallback(() => getProgrammerFadeMs(), []))
+    const readAtMount = reader.result.current
 
     act(() => setProgrammerFade('5000'))
 
     expect(picker.result.current).toBe('5000')
-    expect(onBlindAtMount()).toBe(5000)
+    expect(readAtMount()).toBe(5000)
   })
 })

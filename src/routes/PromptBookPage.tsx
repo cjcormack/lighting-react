@@ -155,9 +155,9 @@ export function PromptBookViewerPage() {
    * One transport and one show bar, from the same hook every other live view uses.
    *
    * This page used to call `useShowTransport` directly and hand-wire twelve `ShowBar` props, which
-   * is how it ended up as the only view whose bar had no Blind tile and the only one deriving the
-   * stack name differently. `canOperate` and `onBeforeGo` are the two things that are genuinely
-   * this page's — book-level permission, and re-locking on GO.
+   * is how it ended up as the only view whose bar lacked a tile the others had (Blind, at the time)
+   * and the only one deriving the stack name differently. `canOperate` and `onBeforeGo` are the
+   * two things that are genuinely this page's — book-level permission, and re-locking on GO.
    */
   // `frameRateProgress: false` — the rail's live card reads its own fade via `useCueFade`
   // (see `railProps`/`CueStackPanel` below), so this page never needs `fadeProgress`/
@@ -446,8 +446,8 @@ export function PromptBookViewerPage() {
         }
       />
       {/* Not gated on the show running, and not hand-wired: the same bar the other two views get,
-          from the same hook. It carries blackout, Blind, the speed masters and the programmer chip,
-          all of which mean something with the show down. */}
+          from the same hook. It carries blackout, the speed masters and the programmer chip, all of
+          which mean something with the show down. */}
       <ShowBar {...showBarProps} showShortcuts={locked} unlockedWarning={unlockedWarning} />
       <PromptBookToolbar
         scriptFileName={book.scriptFileName}

@@ -1235,16 +1235,24 @@ the save pill, the view switcher, Start/Stop and the live dot — and nothing be
 That is the space plan's session 5, and it is *not* what D9 proposed: D9 was to fold `ShowHeader`
 into `ShowBar` on all four views, which was built and then rejected at the desk in favour of this.
 The reasoning is D1 applied to a band rather than to a row — everything above the grid earns its
-place by the line, and ~60px of blackout, Blind, tempo, cue numbers and transport is the largest
-thing on that page that is not about editing values. Three consequences, each of which reads as a
-bug if you do not know it is a decision:
+place by the line, and ~60px of blackout, tempo, cue numbers and transport is the largest thing on
+that page that is not about editing values. Three consequences, each of which reads as a bug if you
+do not know it is a decision:
 
-- **Blind cannot be toggled on the programmer, and blackout is gone outright.** Blind is still
-  *reported* there — the app header's `ProgrammerIndicator` passes no `blindShownSeparately`, so it
-  draws its amber Blind badge, and on the programmer that badge is now the only blind signal there
-  is. What went is the press. Do not answer that by putting a second Blind toggle in the action
-  bar: one control in two places, differing by view, is the drift `useShowBarProps` exists to end.
-  It comes back as the bar or not at all.
+- **Blind is toggled on the programmer, and only there; blackout is gone outright.** Blind is a
+  *programmer* fact, not show chrome — `ProgrammerSummary.blind`, written by `programmerSetBlind`,
+  faded by the programmer's own fade — and session 5 leaving the programmer with no press was the
+  one failed check of the desk pass (`PD-BLIND-ON-PROGRAMMER`). The control is the action bar's, in
+  row A's Stage zone beside Clear and the fade picker; `useShowBarProps` supplies no `onBlind` **for
+  any host**, so no bar draws a tile, and Show, Busk and the Prompt Book *report* it through the
+  `ProgrammerIndicator` their bar already mounts. That is session 2b's arrangement exactly inverted,
+  and the rule it was written for still holds: one control, one place. The drift to refuse now is
+  the reverse one — a Blind tile back in the bar for one host. Do **not** make `ProgrammerIndicator`
+  the toggle either: it is also the link to the programmer, and one control cannot be both without
+  one of the two jobs becoming a surprise. It has no `blindShownSeparately` any more — the ShowBar
+  tile was its only true caller, and a badge that can be told to stay quiet is one a host can silence
+  with nothing else saying it. On the programmer the header's badge and the action bar's button are
+  both amber when blind: the reporter and the control, one row apart.
 - **GO and BACK are not on the programmer**, which binds no transport keys either
   (`useTransportKeys` is Show's and the Prompt Book's). The switcher in the header is one pill from
   three views that do have a transport.
@@ -1254,24 +1262,20 @@ bug if you do not know it is a decision:
 `ProgrammerPage.test.tsx` pins the absence; `ProgrammerPage.tsx`'s note beside the header is the
 long form of all three.
 
-- **The bar is not gated on the show running.** It carries blackout, Blind, the speed masters and the
+- **The bar is not gated on the show running.** It carries blackout, the speed masters and the
   programmer chip, all of which mean something with the show down, and `goDisabled` already mutes
-  BACK/GO. Gating it was what made **Blind's location depend on the show's state**.
-- **Blind lives in the bar, beside blackout** — the same class of thing (a gate on what reaches the
-  rig) in the one piece of chrome the *running* views share. It was in the programmer's action-bar
-  Stage zone, which meant the same control was in one place on the Programmer and another on Show;
-  since session 5 the programmer has neither, which is a deliberate absence rather than a return to
-  that split (see above). It still
-  fades by the programmer's own fade time: `useShowBarProps` reads it at press time from the
-  `programmerFade` store the action bar's picker writes, so moving the button did not turn a fade
-  into a snap. That store is module-level for a reason — as two `usePersistentState` instances of
-  one key it was two mount-time snapshots, and Blind snapped for the rest of the visit. Do **not** make `ProgrammerIndicator` the toggle — it is also the link to the programmer, and
-  one control cannot be both without one of the two jobs becoming a surprise. That indicator instead
-  takes `blindShownSeparately` in the bar, so it reports only the value count there: it normally
-  draws its own amber Blind badge, which beside the tile was the same word twice.
-- **DBO beside it is still inert** in every host — local state, no side effect
-  ([`FU-FE-DBO-INERT`](../lighting7/docs/plans/followups.md)). Two identically-styled adjacent tiles
-  of which one works is the part that must not stand.
+  BACK/GO. Gating it was what once made **Blind's location depend on the show's state**.
+- **Blind is not in the bar.** From session 2b to `PD-BLIND-ON-PROGRAMMER` it was, beside blackout,
+  on the reasoning that the two are the same class of thing (a gate on what reaches the rig) — and
+  that put the press on the three views whose programmer is usually empty and off the one whose
+  whole subject it gates. See the programmer bullet above for where it is now. The fade survived
+  both moves and must survive any next one: `lib/programmerFade.ts` is a module-level store, not a
+  `usePersistentState` per reader, because as two instances of one key it was two mount-time
+  snapshots, and Blind snapped for the rest of the visit. The action bar's Blind and Clear read one
+  subscribed value from it; the marquee's Backspace reads it at press time.
+- **DBO is still inert** in every host — local state, no side effect
+  ([`FU-FE-DBO-INERT`](../lighting7/docs/plans/followups.md)). It no longer has a working Blind tile
+  beside it to read as a peer of, but a tile that does nothing is still the part that must not stand.
 
 **Browsing a stack never moves the playhead.** A tab click used to run
 `deactivate(old) → goToStack → deactivate(target)`, so one unconfirmed press took the live cue off

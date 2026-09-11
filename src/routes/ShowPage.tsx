@@ -453,9 +453,10 @@ export function ShowPage() {
         {...showHeaderProps}
       />
 
-      {/* Not gated on the show running. The bar carries blackout, Blind, the speed masters and the
-          programmer chip, all of which mean something with the show down — and gating it was what
-          made Blind's location depend on the show's state. `goDisabled` already mutes BACK/GO.
+      {/* Not gated on the show running. The bar carries blackout, the speed masters and the
+          programmer chip — which is also where Blind is *reported* here; the press is the
+          programmer's — all of which mean something with the show down, and gating it was what
+          once made Blind's location depend on the show's state. `goDisabled` already mutes BACK/GO.
           Still hidden on the phone, where `RunMobile` brings its own transport footer. */}
       {!isNarrow && (
         <ShowBar

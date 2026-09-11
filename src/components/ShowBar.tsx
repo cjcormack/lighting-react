@@ -7,7 +7,6 @@ import { useFadeRemainMs } from '@/hooks/useAnimatedProgress'
 import type { RunnerAnimSpan } from '@/store/runnerSlice'
 import { ProgrammerIndicator } from './ProgrammerIndicator'
 import { SpeedMasters } from './SpeedMasters'
-import { DESK_OFFLINE_LABEL } from '@/api/wsGesture'
 
 interface ShowBarProps {
   /** Leading "current stack" segment. Rendered only when non-null — Run passes it only when
@@ -41,25 +40,6 @@ interface ShowBarProps {
    */
   showShortcuts?: boolean
   /**
-   * Whether the programmer is gated out of the stage output.
-   *
-   * The tile appears only when `onBlind` is supplied, so a host that merely wants to *read* the
-   * state uses `ProgrammerIndicator` instead. Do not make that indicator the toggle: it is also the
-   * link to the programmer, and one control cannot be both without one of the two jobs becoming a
-   * surprise.
-   */
-  blind?: boolean
-  onBlind?: () => void
-  /**
-   * The desk is unreachable, so the Blind tile can't act. Default false.
-   *
-   * Blind is a WebSocket write and the programmer's blind flag is server-owned, so a press made
-   * while the socket is down neither reaches the rig nor moves the tile — it just looks broken.
-   * The tile stays *visible* (blind is show-critical state the operator needs to keep reading);
-   * it only stops taking the press. Supplied by `useShowBarProps`, like everything else here.
-   */
-  blindDisabled?: boolean
-  /**
    * A running show is unlocked. Washes the bar amber to match the header above it — the chrome has
    * to tint as one band, or it reads as stripes.
    */
@@ -70,7 +50,16 @@ interface ShowBarProps {
  * Universal "show bar" (Row 3) shared across the live-show views:
  * BLACKOUT · speed masters · programmer · active → Next · BACK · GO.
  * GO is the largest, most prominent affordance. It reflects show state, not mode state, so it
- * renders identically in Programmer, Show, Run and Prompt Book.
+ * renders identically in Show, Busk and the Prompt Book.
+ *
+ * **There is no Blind tile, and there must not be one for any host.** From session 2b to
+ * `PD-BLIND-ON-PROGRAMMER` a BLIND tile sat beside blackout, drawn under `{onBlind && …}` with
+ * `useShowBarProps` supplying the press to every host — and the programmer, which draws no bar since
+ * the space plan's session 5, had nowhere to press it. Blind is a programmer fact, so the toggle is
+ * the programmer's action bar's now, and this bar *reports* it through the `ProgrammerIndicator`
+ * below, which draws its amber badge whenever the programmer is blind. Do not reintroduce a tile
+ * for one host: one control in one place on the programmer and another here is the drift
+ * `useShowBarProps` exists to prevent, and it is exactly what that tile was the first time round.
  *
  * ## The rungs
  *
@@ -105,7 +94,7 @@ interface ShowBarProps {
  * **The bottom rung is one row again, and that is a rung added rather than a fallback removed**
  * (space plan D8). It used to be the 440–700 arm plus a bigger GO — two lines, 118px of an 852px
  * phone, before a single fixture. Now everything below 440 shrinks to its chip size instead: the
- * two tiles centre their initials with no word above them, `SpeedMastersChip` drops its `+n`, the
+ * DBO tile centres its initials with no word above them, `SpeedMastersChip` drops its `+n`, the
  * live block says `Q4 → Q5` and nothing else (the pulse, both names and the stack are already
  * gated above it), BACK is its glyph, and GO is a fixed 84×44 — 44px of controls in a 56px band.
  * The `basis-full` transport line is untouched in the 440–700 band, which is where the ladder's
@@ -131,9 +120,6 @@ export const ShowBar = memo(function ShowBar({
   onBack,
   goDisabled = false,
   showShortcuts = false,
-  blind,
-  onBlind,
-  blindDisabled = false,
   unlockedWarning = false,
 }: ShowBarProps) {
   // The one frame-rate-adjacent thing in the bar, kept at the 10 Hz the 0.1 s readout can show.
@@ -208,59 +194,10 @@ export const ShowBar = memo(function ShowBar({
           </span>
         </button>
 
-        {/* Blind, beside blackout because they are the same class of thing: a gate on what reaches
-            the rig. The tile is conditional on the prop, not on the host: every host that draws this
-            bar gets it, because they all take their props from `useShowBarProps`, which supplies
-            `blind` and `onBlind` unconditionally. Host-conditional rendering is exactly the drift
-            that hook exists to prevent — it used to put Blind in one place on the Programmer and
-            another on Show. Do not reintroduce a per-host arm here.
-
-            Three hosts draw this bar, not four: the programmer draws none at all since the space
-            plan's session 5, so it has no Blind rather than a differently-placed one. That is a
-            decision recorded in `ProgrammerPage`, and the rule above is what stops it being
-            "fixed" by giving one host its own arm.
-
-            Note for whoever wires blackout up: DBO above is currently local state with no side
-            effect, so these two look like peers while only one of them does anything. */}
-        {onBlind && (
-          <button
-            type="button"
-            onClick={onBlind}
-            disabled={blindDisabled}
-            aria-pressed={blind ?? false}
-            title={
-              blindDisabled
-                ? `${DESK_OFFLINE_LABEL} — Blind cannot be changed`
-                : blind
-                  ? 'Blind is on — programmer values are gated out of the stage output'
-                  : 'Blind — edit without the rig showing it'
-            }
-            className={cn(
-              'flex shrink-0 flex-col items-start justify-center gap-px rounded-md border px-2 py-1 transition-colors @[440px]:justify-start @[440px]:px-2.5 @[700px]:px-3 @[700px]:py-1.5',
-              'bg-card hover:bg-muted/40',
-              blind &&
-                'border-amber-600 bg-amber-950/40 hover:bg-amber-950/50 shadow-[0_0_12px_rgba(245,158,11,0.25)]',
-              blindDisabled && 'opacity-50',
-            )}
-          >
-            <span
-              className={cn(
-                'hidden text-[9px] font-bold uppercase tracking-[0.08em] text-muted-foreground @[440px]:block',
-                blind && 'text-amber-300',
-              )}
-            >
-              Stage
-            </span>
-            <span
-              className={cn(
-                'font-mono text-[11px] font-bold leading-none tracking-wider @[440px]:text-base @[700px]:text-lg',
-                blind ? 'text-amber-300' : 'text-foreground',
-              )}
-            >
-              BLIND
-            </span>
-          </button>
-        )}
+        {/* Note for whoever wires blackout up: DBO above is local state with no side effect, so it
+            is a tile that does nothing (`FU-FE-DBO-INERT`). It used to have a working BLIND tile
+            beside it, which made the two read as peers; that tile is the programmer's action bar's
+            now, so DBO stands alone — still inert, just no longer beside something that works. */}
 
         {/* Every speed master, master 1 included. Self-contained; picks its own arm from the width
             above. The ShowBar used to own an M1 readout beside this, which is the split that made the
@@ -270,21 +207,18 @@ export const ShowBar = memo(function ShowBar({
         {/* Programmer tile — renders itself only when the programmer holds something or blind is
             engaged, so it costs no width during a clean show. It reads its own state, which is why it
             takes no props from here. It is a direct child rather than living in a wrapper div: a
-            wrapper always rendered, and so always ate a gap, even when the indicator drew nothing. */}
-        {/* `blindShownSeparately`: the BLIND tile above is this bar's blind signal, so the indicator
-            reports only the value count here. Two amber badges saying the same word is worse than
-            one. Conditional on the tile actually being drawn — a host that supplies no `onBlind` gets
-            no tile, and hardcoding the flag would leave blind reported nowhere in this bar. */}
+            wrapper always rendered, and so always ate a gap, even when the indicator drew nothing.
+
+            This is the bar's blind signal: with no BLIND tile, the indicator's amber badge is how a
+            view with a bar learns the programmer is blind, and the press is on the programmer. */}
         {/* Gone on the bottom rung, and it is the one thing D8's enumerated row leaves out. At 393px
-            the tiles, the tempo chip and an 84px GO leave the live block about 70px, and this tile
+            the tile, the tempo chip and an 84px GO leave the live block about 70px, and this tile
             is 50 of them — so keeping it is a two-line bar, which is the whole of what that rung
-            exists to remove. It is also the item that costs least there: blind is the BLIND tile
-            two along, the value count is on the Programmer page this links to, and the link itself
-            is the view switcher one row up. Nothing else on the bar is allowed to go this way. */}
-        <ProgrammerIndicator
-          className="px-2.5 py-2 @max-[440px]:hidden"
-          blindShownSeparately={onBlind != null}
-        />
+            exists to remove. It is also the item that costs least there: blind is still reported by
+            the app header's own mount of this indicator one row up, the value count is on the
+            Programmer page this links to, and the link itself is the view switcher beside it.
+            Nothing else on the bar is allowed to go this way. */}
+        <ProgrammerIndicator className="px-2.5 py-2 @max-[440px]:hidden" />
 
         {/* Live state — flexes to fill, and is never hidden. `overflow-hidden` is load-bearing: every
             child below is `shrink-0`, so without it they escape the border rather than clipping. */}

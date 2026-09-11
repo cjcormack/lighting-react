@@ -164,7 +164,9 @@ function ProgrammerGridBody({
                     `PhoneLandscape` draws. It is not decoration: the tools' three words are 130px,
                     and the leading block is what pays for them. Without it the source box, a
                     `flex-1` sharing its block with a 230px action bar, rendered four pixels wide
-                    on an 852×393 phone. */}
+                    on an 852×393 phone. (The bar is 285px since Blind came back into it —
+                    `PD-BLIND-ON-PROGRAMMER` — and the source box measures 117px beside it in the
+                    419px this container gets there.) */}
                 {leading && (
                   <>
                     <div className="@container flex min-w-0 flex-1 items-center gap-2">

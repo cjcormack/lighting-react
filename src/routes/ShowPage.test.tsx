@@ -45,10 +45,8 @@ vi.mock('../store/promptBooks', () => ({
   useProjectPromptBookQuery: () => ({ data: undefined }),
 }))
 const blindState = { blind: false }
-const setBlind = vi.fn()
 vi.mock('../store/programmer', () => ({
   useProgrammerSummaryQuery: () => ({ data: blindState }),
-  programmerSetBlind: (v: boolean) => setBlind(v),
 }))
 // Desktop by default; one case flips it to exercise the phone layout.
 const narrow = { value: false }
@@ -118,8 +116,6 @@ vi.mock('../hooks/useShowBarProps', () => ({
       onDbo: vi.fn(),
       goDisabled: false,
       stackName: 'Act 1',
-      blind: false,
-      onBlind: vi.fn(),
       fade: null,
     },
     showHeaderProps: { isShowActive: false, canStart: false, onStart: vi.fn(), onStop: vi.fn() },
@@ -159,7 +155,6 @@ vi.mock('../components/ShowHeader', () => ({
   ),
 }))
 const barProps: {
-  blind?: boolean
   onBlind?: () => void
   showShortcuts?: boolean
   stackName?: string | null
@@ -167,13 +162,11 @@ const barProps: {
 } = {}
 vi.mock('../components/ShowBar', () => ({
   ShowBar: (p: {
-    blind?: boolean
     onBlind?: () => void
     showShortcuts?: boolean
     stackName?: string | null
     unlockedWarning?: boolean
   }) => {
-    barProps.blind = p.blind
     barProps.onBlind = p.onBlind
     barProps.showShortcuts = p.showShortcuts
     barProps.stackName = p.stackName
@@ -425,9 +418,9 @@ describe('ShowPage URL contract', () => {
   })
 
   it('shows the bar whether or not the show is running', () => {
-    // Changed in 2b. The bar carries blackout, Blind, the speed masters and the programmer chip —
-    // all meaningful with the show down — and gating it was what made Blind's *location* depend on
-    // the show's state. `goDisabled` already mutes BACK/GO.
+    // Changed in 2b. The bar carries blackout, the speed masters and the programmer chip — all
+    // meaningful with the show down — and gating it was what once made Blind's *location* depend
+    // on the show's state. `goDisabled` already mutes BACK/GO.
     draw(['/projects/1/show/stacks/10'])
     expect(screen.getByTestId('show-bar')).toBeTruthy()
 
@@ -475,13 +468,16 @@ describe('ShowPage as the merged run/edit surface', () => {
     expect(probe.locked).toBe(true)
   })
 
-  it('takes the bar whole from the shared hook, Blind included', () => {
-    // The bar is identical on all three live views. Blind is supplied by `useShowBarProps`, not by
-    // this page, so it cannot be present on one view and missing on another — which is what
-    // happened when each host wired the bar itself.
+  it('takes the bar whole from the shared hook, and adds no Blind of its own', () => {
+    // The bar is identical on all three live views because everything but `showShortcuts` comes
+    // from `useShowBarProps`, so nothing can be present on one view and missing on another — which
+    // is what happened when each host wired the bar itself. Blind is the case that proves it from
+    // the other side: the hook supplies no press for ANY host (`PD-BLIND-ON-PROGRAMMER` made it the
+    // programmer's action bar's, reported elsewhere by `ProgrammerIndicator`), and this page must
+    // not hand-wire one back in.
     programState.data = { activeStackId: 10, canEdit: true }
     draw(['/projects/1/show/stacks/10'])
-    expect(barProps.onBlind).toBeTypeOf('function')
+    expect(barProps.onBlind).toBeUndefined()
     expect(barProps.stackName).toBe('Act 1')
   })
 

@@ -130,24 +130,24 @@ export function ProgrammerPage() {
             chrome at all, and the other three keep both bands exactly as they were.
 
             The reasoning is the plan's own D1, applied to a band rather than to a row: everything
-            above the grid earns its place by the line, and 60px of blackout, Blind, tempo, cue
-            numbers and a transport is the largest thing on this page that is not about editing
-            values. It is not lost, it is one pill away — the switcher in the header above reaches
-            Show, the Prompt Book and Busk, all three of which carry the full bar.
+            above the grid earns its place by the line, and 60px of blackout, tempo, cue numbers
+            and a transport is the largest thing on this page that is not about editing values. It
+            is not lost, it is one pill away — the switcher in the header above reaches Show, the
+            Prompt Book and Busk, all three of which carry the full bar.
 
             What genuinely goes with it, so nobody rediscovers it as a bug:
 
-             - **Blind cannot be *toggled* on this page, and blackout is gone outright.** Blind is
-               still *reported*: the app header's `ProgrammerIndicator` passes no
-               `blindShownSeparately` (there is no tile beside it there), so it draws its amber
-               Blind badge — and on this page that badge is now the only blind signal there is,
-               which makes that argument load-bearing rather than incidental. What went is the
-               press. Blind is the sharper loss of the two because it is a *programmer* idea
-               ("edit without the rig showing it") and the bar is where the control has lived since
-               it left the action bar's Stage zone. Do NOT answer that by putting a second Blind
-               toggle back in the action bar: one control in two places, differing by view, is
-               exactly the drift `useShowBarProps` was written to end. It comes back as the bar, or
-               not at all.
+             - **Blind is here, and blackout is gone outright.** Blind is *not* show chrome: it is
+               a programmer fact — `ProgrammerSummary.blind`, written by `programmerSetBlind`, faded
+               by the programmer's own fade — and the desk pass that followed session 5 found a
+               programmer you could not go blind on unliveable (`PD-BLIND-ON-PROGRAMMER`). So the
+               one Blind control in the app is the action bar's, in row A's Stage zone beside Clear
+               and the fade, and the bar draws no tile for any host; the other three views *report*
+               it through `ProgrammerIndicator`, as the app header does here. Session 5's note used
+               to refuse exactly this as "a second Blind toggle" — it is not second, because
+               `useShowBarProps` supplies none. What must not happen is the reverse drift: a Blind
+               tile creeping back into the bar for one host, which would put one control in two
+               places again. Blackout is a genuine absence; it was confirmed unimportant here.
              - **GO and BACK are not on this page**, and the programmer binds no transport keys —
                `useTransportKeys` is Show's and the Prompt Book's. Busking from the grid means
                keeping Show or Busk on screen, or a MIDI surface.

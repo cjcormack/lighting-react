@@ -6,10 +6,7 @@ import {
   useProjectProgramStateQuery,
 } from '../store/cueStacks'
 import { useShowTransport } from './useShowTransport'
-import { programmerSetBlind, useProgrammerSummaryQuery } from '../store/programmer'
-import { getProgrammerFadeMs } from '../lib/programmerFade'
 import { ignoreReportedError } from '../store/errorToastMiddleware'
-import { useIsDeskConnected } from '../store/status'
 
 /**
  * Everything `ShowBar` needs, derived from a project id.
@@ -26,8 +23,18 @@ import { useIsDeskConnected } from '../store/status'
  * book-level permission, and re-locking on GO.
  *
  * `isShowActive` is returned rather than applied here because the *caller* decides what an inactive
- * show looks like. No current host hides the bar on it — blackout, Blind and the speed masters all
- * mean something with the show down — but that is their call, not the hook's.
+ * show looks like. No current host hides the bar on it — blackout and the speed masters both mean
+ * something with the show down — but that is their call, not the hook's.
+ *
+ * **Blind is not supplied from here, for any host.** It was, from session 2b until
+ * `PD-BLIND-ON-PROGRAMMER`: the bar drew a BLIND tile beside blackout on every view that had a bar,
+ * and the programmer — the view without one since the space plan's session 5 — had no press at all.
+ * Blind is a *programmer* fact (`ProgrammerSummary.blind`, written by `programmerSetBlind`, faded by
+ * the programmer's own fade), so the toggle now lives in the programmer's action bar and the other
+ * three views only *report* it, through the `ProgrammerIndicator` the bar already mounts. Uniformity
+ * still holds: no host gets a tile, rather than some. Do not bring `onBlind` back for one host —
+ * `ShowBar` draws the tile under `{onBlind && …}`, so a per-host arm here would put the control in
+ * two places again, which is the split this hook was written to end.
  *
  * `showHeaderProps` comes along because Start/Stop is the same derivation from the same state, and
  * every host that needs the bar needs that too.
@@ -85,38 +92,6 @@ export function useShowBarProps(
     return i >= 0 ? (runnable[i + 1] ?? null) : null
   }, [transport.standbyCueId, stacks, activeStackId])
 
-  /**
-   * Blind, supplied from here rather than by each host.
-   *
-   * It sat in the programmer's action bar and, briefly, in the ShowBar on Show only — so the same
-   * control moved location depending on which view you were on. It belongs with blackout: they are
-   * the same class of thing (a gate on what reaches the rig), and the bar is the one piece of chrome
-   * the views that draw it share. Needs no new API surface — a fire-and-forget WS op and the
-   * programmer's own summary.
-   *
-   * That was "every live view" until the space plan's session 5, which took the bar off the
-   * programmer entirely; the programmer now has no Blind at all, which is a stated absence rather
-   * than a return to the old split. See `ProgrammerPage`'s note beside its header.
-   */
-  const { data: programmerSummary } = useProgrammerSummaryQuery()
-  const blind = programmerSummary?.blind ?? false
-  /**
-   * The same fade the programmer's Clear uses, read from the same store.
-   *
-   * Blind moved here out of the programmer's action bar, which passed this — so without it,
-   * blinding would start snapping where it used to fade. Read rather than re-declared: two
-   * definitions of one operator preference is how they come to disagree. Read at press time, not
-   * subscribed: the picker sits on `/programmer` beside this button, and the bar has no reason to
-   * re-render while the operator scrolls through fade times.
-   */
-  const onBlind = useCallback(() => programmerSetBlind(!blind, getProgrammerFadeMs()), [blind])
-  /**
-   * Blind is the one tile in the bar whose write is a *WebSocket* op, so it is the only one gated
-   * on the socket. GO/BACK and start/stop are REST, which stays perfectly usable while the socket
-   * is mid-backoff — and they already report their own failures through `errorToastMiddleware`.
-   */
-  const deskConnected = useIsDeskConnected()
-
   const [activateShow] = useActivateProgramMutation()
   const [deactivateShow] = useDeactivateProgramMutation()
   const runnableStackCount = stacks?.filter((s) => s.type === 'STACK').length ?? 0
@@ -158,9 +133,6 @@ export function useShowBarProps(
       onGo: transport.go,
       onBack: transport.back,
       goDisabled: transport.goDisabled,
-      blind,
-      onBlind,
-      blindDisabled: !deskConnected,
     },
   }
 }

@@ -149,8 +149,8 @@ export function useCellWriters(): CellWriters {
       clearValue(fixtureKey, propertyName) {
         if (setLookValue) return
         // By the programmer fade, read at press time — the same store the action bar's Clear and
-        // the ShowBar's Blind fade by. A release that snapped while the two beside it faded would
-        // make the keyboard the odd one out.
+        // Blind fade by. A release that snapped while the two beside it faded would make the
+        // keyboard the odd one out.
         lightingApi.programmer.clearEntry('fixture', fixtureKey, propertyName, getProgrammerFadeMs())
       },
 

@@ -4,8 +4,10 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 
 /**
- * Two modes since session 2b, because the `ShowBar` grew its own amber BLIND tile: this badge is
- * the blind signal in the app header, and only a value count in the bar.
+ * One mode: the badge is the blind signal wherever it is mounted — the app header and the
+ * `ShowBar` alike. It briefly had a second (session 2b to `PD-BLIND-ON-PROGRAMMER`), when the bar
+ * drew its own BLIND tile and told the badge to report only the count; the tile is the programmer's
+ * action bar's now, and the `blindShownSeparately` arm went with it.
  */
 
 const summary = { entryCount: 0, blind: false }
@@ -18,11 +20,10 @@ vi.mock('../store/projects', () => ({
 
 import { ProgrammerIndicator } from './ProgrammerIndicator'
 
-function draw(props: { blindShownSeparately?: boolean; at?: string } = {}) {
-  const { at = '/projects/1/show', ...rest } = props
+function draw({ at = '/projects/1/show' }: { at?: string } = {}) {
   return render(
     <MemoryRouter initialEntries={[at]}>
-      <ProgrammerIndicator {...rest} />
+      <ProgrammerIndicator />
     </MemoryRouter>,
   )
 }
@@ -51,30 +52,30 @@ describe('ProgrammerIndicator', () => {
     expect(screen.getByText('5')).toBeTruthy()
   })
 
-  it('does not repeat blind where a dedicated control sits beside it', () => {
-    // The ShowBar's own BLIND tile is louder and actionable; two amber badges saying the same word
-    // is worse than one.
+  it('reports blind and the count together, and explains both in the tooltip', () => {
+    // "5 values, and none of them reaching the stage" is the useful sentence; the badge itself
+    // spells out the word only above 760px, so the label carries it at every width.
     summary.blind = true
     summary.entryCount = 5
-    draw({ blindShownSeparately: true })
+    draw()
 
-    expect(screen.queryByText('Blind')).toBeNull()
+    expect(screen.getByText('Blind')).toBeTruthy()
     expect(screen.getByText('5')).toBeTruthy()
+    expect(screen.getByLabelText(/holds 5 values · Blind — the programmer is gated out/)).toBeTruthy()
   })
 
-  it('drops out entirely when blind is its only news and something else is telling it', () => {
+  it('has no way to be told to stay quiet about blind', () => {
+    // The `blindShownSeparately` arm went with the ShowBar's tile. A badge that can be silenced is
+    // a badge a host can silence with nothing else saying it, and the app header's mount on the
+    // programmer is the case that must stay loud — being blind and not knowing it is the hazard.
     summary.blind = true
-    const { container } = draw({ blindShownSeparately: true })
-    expect(container.innerHTML).toBe('')
-  })
-
-  it('still explains blind in the tooltip where the badge stays quiet', () => {
-    // "5 values, and none of them reaching the stage" is the useful sentence, and a tooltip costs
-    // no width beside the tile.
-    summary.blind = true
-    summary.entryCount = 5
-    draw({ blindShownSeparately: true })
-    expect(screen.getByLabelText(/gated out of the stage output/)).toBeTruthy()
+    render(
+      <MemoryRouter initialEntries={['/projects/1/programmer']}>
+        {/* @ts-expect-error — the prop is gone; a caller passing it must not compile. */}
+        <ProgrammerIndicator blindShownSeparately />
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('Blind')).toBeTruthy()
   })
 
   it('offers the trip to the programmer from anywhere else', () => {
@@ -104,14 +105,14 @@ describe('ProgrammerIndicator', () => {
     expect(screen.queryByRole('link')).toBeNull()
   })
 
-  it('keeps the amber wash for its own blind reporting only', () => {
-    summary.blind = true
+  it('washes amber only when blind', () => {
     summary.entryCount = 5
-    const own = draw()
-    expect(own.container.innerHTML).toContain('amber')
+    const live = draw()
+    expect(live.container.innerHTML).not.toContain('amber')
     cleanup()
 
-    const beside = draw({ blindShownSeparately: true })
-    expect(beside.container.innerHTML).not.toContain('amber')
+    summary.blind = true
+    const blind = draw()
+    expect(blind.container.innerHTML).toContain('amber')
   })
 })

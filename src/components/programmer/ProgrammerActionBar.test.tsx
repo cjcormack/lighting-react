@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { IncludedTarget } from '@/api/programmerWsApi'
 
@@ -24,6 +24,8 @@ vi.mock('@/store/programmer', () => ({
   programmerSetBlind: (...a: unknown[]) => programmerSetBlind(...a),
 }))
 vi.mock('@/store/fixtureFx', () => ({ useActiveEffectsQuery: () => ({ data: effects }) }))
+const desk = { connected: true }
+vi.mock('@/store/status', () => ({ useIsDeskConnected: () => desk.connected }))
 vi.mock('@/store/cueStacks', () => ({
   useProjectCueStackListQuery: () => ({ data: [{ id: 2, name: 'Act 1', cues: [] }] }),
 }))
@@ -36,6 +38,7 @@ const sheets = {
 }
 vi.mock('./ProgrammerSheets', () => ({ useProgrammerSheets: () => sheets }))
 
+import { resetProgrammerFadeStore, setProgrammerFade } from '@/lib/programmerFade'
 import { ProgrammerActionBar } from './ProgrammerActionBar'
 
 /**
@@ -55,6 +58,8 @@ afterEach(() => {
   window.localStorage.clear()
   summary = { blind: false, entryCount: 0, lastIncluded: null }
   effects = []
+  desk.connected = true
+  resetProgrammerFadeStore()
 })
 
 const CUE: IncludedTarget = {
@@ -164,18 +169,44 @@ describe('ProgrammerActionBar', () => {
     expect(screen.getByText('A new Look')).toBeTruthy()
   })
 
-  it('has no Blind — that moved to the ShowBar, beside blackout', () => {
-    // Blind sat in the Stage zone here, which meant the same control was in one place on the
-    // Programmer and another on Show. It is the same class of thing as blackout (a gate on what
-    // reaches the rig) and belongs beside it, in the bar. It still fades by *this* bar's fade time
-    // — `useShowBarProps` reads the same persisted key.
-    //
-    // Since the space plan's session 5 the programmer draws no `ShowBar` either, so this assertion
-    // now fences something stronger than it was written for: the programmer has Blind in NO place,
-    // deliberately, and a second toggle re-added here would rebuild the split rather than close a
-    // gap. See `ProgrammerPage`'s note beside the header.
+  it('toggles Blind by the fade the picker holds', () => {
+    // Blind is a programmer fact and this is its one control (`PD-BLIND-ON-PROGRAMMER`). It sat
+    // here, moved to the `ShowBar` in session 2b, and vanished from the programmer when session 5
+    // took the bar off this page — which a desk pass found unliveable. The fade is the load-bearing
+    // half: Blind used to snap the moment it left this bar, because the picker's value stopped
+    // reaching it, so the assertion is on the *argument*, not just the call — and the picker is
+    // moved AFTER mount, through the store the picker writes, so a mount-time snapshot would fail.
     render(<ProgrammerActionBar projectId={1} />)
-    expect(screen.queryByText('Blind')).toBeNull()
+    act(() => setProgrammerFade('2000'))
+
+    const blind = screen.getByRole('button', { name: 'Blind' })
+    expect(blind.getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(blind)
+    expect(programmerSetBlind).toHaveBeenCalledWith(true, 2000)
+  })
+
+  it('reports blind on, and presses it off', () => {
+    summary = { ...summary, blind: true }
+    render(<ProgrammerActionBar projectId={1} />)
+
+    const blind = screen.getByRole('button', { name: 'Blind' })
+    expect(blind.getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(blind)
+    expect(programmerSetBlind).toHaveBeenCalledWith(false, 0)
+  })
+
+  it('keeps Blind visible but inert while the desk is offline', () => {
+    // A WS write on a server-owned flag: a press with the socket down neither reaches the rig nor
+    // moves the button. It stays on screen — blind is state the operator must keep reading — and
+    // only stops taking the press, saying why.
+    desk.connected = false
+    summary = { ...summary, blind: true }
+    render(<ProgrammerActionBar projectId={1} />)
+
+    const blind = screen.getByRole('button', { name: 'Blind' })
+    expect((blind as HTMLButtonElement).disabled).toBe(true)
+    expect(blind.getAttribute('title')).toContain('Not connected')
+    fireEvent.click(blind)
     expect(programmerSetBlind).not.toHaveBeenCalled()
   })
 })

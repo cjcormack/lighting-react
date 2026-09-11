@@ -4,15 +4,16 @@ import { createSyncStore } from './syncStore'
 /**
  * The programmer's fade time, in ms, held as the string the picker shows.
  *
- * Shared because two surfaces act on it: the programmer's action bar owns the picker and uses it for
- * Clear, and `useShowBarProps` reads it so Blind fades by the same amount. Blind used to live beside
- * the picker and could read it directly; when it moved into the `ShowBar` the value had to become
- * addressable rather than local, or blinding would have started snapping.
+ * Shared because more than one surface acts on it: the programmer's action bar owns the picker and
+ * subscribes for Clear and Blind, and the marquee's Backspace (`useCellWriters.clearValue`) reads it
+ * at press time. It became a store when Blind moved into the `ShowBar` in session 2b and the value
+ * had to be addressable rather than local; Blind is back beside the picker now
+ * (`PD-BLIND-ON-PROGRAMMER`), but the marquee still reads from here and the store stays.
  *
- * A `createSyncStore` singleton rather than `usePersistentState`, because both surfaces are mounted
- * at once on `/programmer`: as two instances of one key they held two mount-time snapshots and
- * drifted apart the moment the picker wrote, so Blind snapped for the rest of the visit — which made
- * the rationale above false in practice.
+ * A `createSyncStore` singleton rather than `usePersistentState`, because the readers are mounted at
+ * once on `/programmer`: as two instances of one key they held two mount-time snapshots and drifted
+ * apart the moment the picker wrote, so Blind snapped for the rest of the visit — which made the
+ * sharing above false in practice.
  */
 export const PROGRAMMER_FADE_KEY = 'programmer.fadeMs'
 
@@ -38,8 +39,9 @@ export const setProgrammerFade = store.set
 /**
  * The fade in ms, for a surface that only needs it when the operator presses something.
  *
- * Read at press time rather than subscribed, so Blind picks up a fade chosen a moment ago without
- * the whole `ShowBar` re-rendering every time the picker moves. `|| 0` keeps answering 0 for junk.
+ * Read at press time rather than subscribed, so a surface far from the picker (the marquee's
+ * Backspace) picks up a fade chosen a moment ago without re-rendering every time the picker moves.
+ * `|| 0` keeps answering 0 for junk.
  */
 export function getProgrammerFadeMs(): number {
   return Number(store.getSnapshot()) || 0

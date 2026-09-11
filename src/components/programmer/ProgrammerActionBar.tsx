@@ -1,6 +1,8 @@
 import { type ReactNode } from 'react'
-import { ChevronDown, Circle, Download, Eraser, Layers, Plus, Upload } from 'lucide-react'
+import { ChevronDown, Circle, Download, Eraser, EyeOff, Layers, Plus, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+import { DESK_OFFLINE_LABEL } from '@/api/wsGesture'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,8 +22,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { setProgrammerFade, useProgrammerFade } from '@/lib/programmerFade'
 import {
   programmerClearAll,
+  programmerSetBlind,
   useProgrammerSummaryQuery,
 } from '@/store/programmer'
+import { useIsDeskConnected } from '@/store/status'
 import { useActiveEffectsQuery } from '@/store/fixtureFx'
 import { useProjectCueStackListQuery } from '@/store/cueStacks'
 import { includedCueId, includedTargetParts } from '@/lib/includedTarget'
@@ -54,13 +58,17 @@ const FADE_OPTIONS = [
  *
  *  - **Stage** — leading Clear's *Radix* tooltip rather than a native `title`, because Clear is the
  *    one control here already wrapped in a `TooltipTrigger` and two tooltip mechanisms answering
- *    one hover is a bug, not two explanations. It changes what the rig is doing right now. Blind
- *    used to sit here too; session 2b moved it into the `ShowBar` beside blackout, so that one
- *    control was in one place rather than one location on the Programmer and another on Show.
- *    **It did not come back when the space plan's session 5 took the bar off this page**, and it
- *    must not: the programmer has no Blind at all now, and putting a second toggle back in this
- *    zone would recreate the exact split moving it ended. Blind returns as the bar or not at all
- *    — see `ProgrammerPage`'s note beside the header.
+ *    one hover is a bug, not two explanations. It changes what the rig is doing right now, and
+ *    **Blind is its second control**, beside the fade they share. Blind has been in three places:
+ *    here, then from session 2b in the `ShowBar` beside blackout (one control in one place on every
+ *    view *with* a bar), and then — after the space plan's session 5 took the bar off this page —
+ *    nowhere on the programmer at all, which a desk pass found unliveable (`PD-BLIND-ON-PROGRAMMER`).
+ *    The answer taken was not to bring the bar back but to notice that Blind was never show
+ *    chrome: `ProgrammerSummary.blind` is a programmer fact, so the one toggle is here and every
+ *    other view *reports* it through `ProgrammerIndicator`. **This is the only Blind control in the
+ *    app**, and `useShowBarProps` deliberately supplies none — it is not a second toggle, and
+ *    adding one back to the bar for any host would be the split session 2b ended, from the other
+ *    side.
  *  - **Load** — a native `title` on Include, which is not wrapped: the only way in, and the only
  *    control never disabled.
  *  - **Save** — the same, on Record: one primary button with a destination menu, unchanged.
@@ -70,11 +78,11 @@ const FADE_OPTIONS = [
  * `sheetControls` is gone too: Groups and Columns are the *grid's* tools, not the programmer's
  * verbs, and they moved to row B where the filter already was.
  *
- * Below `@[800px]` Clear keeps its fade segment and loses its word, and Include and Record become
- * their icons; every one of those carries an `aria-label` so the shrink costs a sighted operator a
- * word and a screen reader nothing. Nothing collapses into an overflow kebab — the old bar hid its
- * last four buttons behind a `MoreHorizontal` below `sm`, which put the entire point of the
- * programmer one tap further away on the surface most likely to be used standing up.
+ * Below `@[800px]` Clear keeps its fade segment and loses its word, and Blind, Include and Record
+ * become their icons; every one of those carries an `aria-label` so the shrink costs a sighted
+ * operator a word and a screen reader nothing. Nothing collapses into an overflow kebab — the old
+ * bar hid its last four buttons behind a `MoreHorizontal` below `sm`, which put the entire point
+ * of the programmer one tap further away on the surface most likely to be used standing up.
  *
  * **The phone's icon arm (space plan D8) therefore needs nothing here.** Session 4 puts rows A and
  * B on icons below `@[600px]`, and 600 is inside the band this bar is already iconic in — the one
@@ -84,9 +92,11 @@ const FADE_OPTIONS = [
  * The container queried is **row A's**, declared by the wrapper in `ProgrammerPage`; this
  * component must not declare one of its own, for the reason `ProgrammerWorkspace` documents. In
  * the short-height arm there is no row A and this pair leads row B instead, inside an `@container`
- * `ProgrammerGrid` puts around the two of them — so the queries here measure the ~380px the folded
- * row gives the pair rather than the row's own ~750px, and these three stay icons on an 852×393
- * phone by measurement rather than by luck.
+ * `ProgrammerGrid` puts around the two of them — so the queries here measure the ~420px the folded
+ * row gives the pair rather than the row's own ~750px, and these four stay icons on an 852×393
+ * phone by measurement rather than by luck. Measured with Blind back in the bar
+ * (`PD-BLIND-ON-PROGRAMMER`): the bar is 285px iconic, the leading container 419px, and the source
+ * box keeps 117px beside it; the first fixture row still lands at the same y it did before.
  */
 export function ProgrammerActionBar({ projectId }: { projectId: number }) {
   const { data: summary } = useProgrammerSummaryQuery()
@@ -94,9 +104,18 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
   const { data: stacks } = useProjectCueStackListQuery(projectId)
   const fadeMs = useProgrammerFade()
   const sheets = useProgrammerSheets()
+  // Blind is the one control here whose write is gated on the socket. `programmer.setBlind` is a
+  // fire-and-forget WS op on a server-owned flag, so a press while the socket is down neither
+  // reaches the rig nor moves the button — it just looks broken. The button stays visible (blind is
+  // state the operator must keep reading) and only stops taking the press. Clear is a WS op too and
+  // is not gated, which predates this; that is its call, not Blind's.
+  const deskConnected = useIsDeskConnected()
 
   const entryCount = summary?.entryCount ?? 0
+  const blind = summary?.blind ?? false
   const target = summary?.lastIncluded ?? null
+  // The picker's value, subscribed: this component owns the picker, so it re-renders on every move
+  // anyway, and Clear and Blind reading one variable is what keeps them fading by the same amount.
   const fade = Number(fadeMs) || 0
 
   // Clear releases programmer values *and* programmer-band FX, and the two are independent:
@@ -177,6 +196,37 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
                 .join(' ')}
         </TooltipContent>
       </Tooltip>
+
+      {/* Blind: the programmer gated out of the stage output. A native `title` like Include and
+          Record, because it is not wrapped in a `TooltipTrigger`; every arm of it leads with the
+          Stage label, as Clear's tooltip does. Amber when on, in the SAME classes the
+          `ProgrammerIndicator` in the app header uses for the same state — theme-paired, because
+          light mode is a real arm here and `amber-300` on a light card is unreadable; that badge is
+          the reporter, this is the control. The glyph is fixed: state is `aria-pressed` and the
+          wash, as it was on this control before session 2b. It enters and leaves by the fade
+          beside Clear. */}
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={!deskConnected}
+        aria-pressed={blind}
+        aria-label="Blind"
+        title={
+          !deskConnected
+            ? `Stage — Blind: ${DESK_OFFLINE_LABEL}, so it cannot be changed`
+            : blind
+              ? 'Stage — Blind is on: programmer values are gated out of the stage output'
+              : 'Stage — Blind: edit without the rig showing it'
+        }
+        onClick={() => programmerSetBlind(!blind, fade)}
+        className={cn(
+          blind &&
+            'border-amber-500/60 bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 hover:text-amber-800 dark:text-amber-300 dark:hover:text-amber-200',
+        )}
+      >
+        <EyeOff className="size-3.5" />
+        <span className="hidden @[800px]:inline">Blind</span>
+      </Button>
 
       <Button
         variant="outline"
