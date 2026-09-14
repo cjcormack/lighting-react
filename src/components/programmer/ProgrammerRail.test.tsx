@@ -158,4 +158,20 @@ describe('ProgrammerRail — the collapsed arms', () => {
     const handle = frameOf(screen.getByRole('button', { name: 'Show the layers' }))
     expect(strip).not.toBe(handle)
   })
+
+  it('keeps the rail header and the strip chevrons level with row B at 40px', () => {
+    // The chrome system: row B is `h-10` on a 12px gutter, and this header's bottom border meets
+    // that row's across the seam. `h-9 px-2.5` was four pixels short and two in. Expanded, since
+    // the docked frame is what draws the header.
+    window.localStorage.setItem(COLLAPSED_KEY, JSON.stringify(false))
+    draw()
+    const expand = screen.getByRole('button', { name: 'Expand the rail' })
+    expect(expand.className).toContain('h-10')
+    // The header is the one 40px row with the gutter; `0 layers` is also the strip count's title.
+    const header = document.querySelector('div.h-10.border-b.px-3')!
+    expect(header).not.toBeNull()
+    expect(header.textContent).toContain('Layers')
+    expect(header.className).toContain('px-3')
+    expect(header.className).toContain('gap-2')
+  })
 })

@@ -63,4 +63,16 @@ describe('ShowHeader', () => {
     draw({ actions: <button>lock</button> })
     expect(screen.getByText('lock')).toBeTruthy()
   })
+
+  it('is a 48px row on the 12px gutter at every height — the chrome system', () => {
+    // `px-3 py-2` replaced `p-4` with a `py-2` short-height arm: the header is the row every
+    // other programmer row's left edge is read against, and it is shared, so all four live views
+    // take it. A `p-4` or a height media arm coming back here would put the header on a
+    // different gutter from the rows under it again.
+    const { container } = draw()
+    expect(root(container)).toContain('px-3')
+    expect(root(container)).toContain('py-2')
+    expect(root(container)).not.toMatch(/(^|\s)p-4(\s|$)/)
+    expect(root(container)).not.toContain('max-height')
+  })
 })

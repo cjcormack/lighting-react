@@ -84,10 +84,13 @@ const FADE_OPTIONS = [
  * bar hid its last four buttons behind a `MoreHorizontal` below `sm`, which put the entire point
  * of the programmer one tap further away on the surface most likely to be used standing up.
  *
- * **The phone's icon arm (space plan D8) therefore needs nothing here.** Session 4 puts rows A and
- * B on icons below `@[600px]`, and 600 is inside the band this bar is already iconic in — the one
- * verb that had to change was `Update`, which lives in the source box next door. Adding a second
- * threshold that says the same thing at a lower number would be two answers to one question.
+ * **The phone's icon arm (space plan D8) needs one thing here, and it is not a word.** Session 4
+ * puts rows A and B on icons below `@[600px]`, and 600 is inside the band this bar is already
+ * iconic in — the verb that had to change was `Update`, in the source box next door. What the
+ * chrome tidy-up added below 600 is the fade trigger dropping its **chevron**, and only that: the
+ * value stays, because the fade has to be read before Clear is pressed. That takes the trigger
+ * from 86 to 48px and the bar from 285 to 247, and those 38px are what pay for the source box's
+ * `Q4 · Update · Revert` on a portrait phone (`ProgrammerSourceStrip` has the row's arithmetic).
  *
  * The container queried is **row A's**, declared by the wrapper in `ProgrammerPage`; this
  * component must not declare one of its own, for the reason `ProgrammerWorkspace` documents. In
@@ -95,8 +98,9 @@ const FADE_OPTIONS = [
  * `ProgrammerGrid` puts around the two of them — so the queries here measure the ~420px the folded
  * row gives the pair rather than the row's own ~750px, and these four stay icons on an 852×393
  * phone by measurement rather than by luck. Measured with Blind back in the bar
- * (`PD-BLIND-ON-PROGRAMMER`): the bar is 285px iconic and the leading container 419px; the first
- * fixture row still lands at the same y it did before. The source box took the remaining 117px
+ * (`PD-BLIND-ON-PROGRAMMER`): the bar is 285px iconic (247 below `@[600px]`, once the fade's
+ * chevron goes) and the leading container 419px; the first fixture row still lands at the same y
+ * it did before. The source box took the remaining 117px
  * back when it filled in every state, and it no longer does: with nothing included it is as wide
  * as its words (102px for `No source`) and the rest goes to the row's filter field. So 117 is the
  * ceiling that arithmetic leaves it rather than the width it takes. The two figures that still
@@ -162,10 +166,13 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
                 size="sm"
                 aria-label="Fade time"
                 // Wide enough for "Snap" beside the chevron at the trigger's own padding; at 72px
-                // the longest label clipped to "Sna" — and 64px with `px-2` on the phone's arm
-                // clipped it to "Sna" again, which is why there is no narrow arm here. The fade is
-                // the one thing on this row that has to be *read* before Clear is pressed.
-                className="h-8 w-[86px] rounded-none border-0 border-l bg-muted/40 font-mono text-xs focus-visible:ring-0"
+                // the longest label clipped to "Sna". The fade is the one thing on this row that
+                // has to be *read* before Clear is pressed, so the phone's arm keeps the value and
+                // drops only the chevron: 48px centred with no padding holds the four mono
+                // characters of "Snap" (~29px) with room either side, where 64px with `px-2` and
+                // the chevron still in it clipped to "Sna" — which is why the first cut had no
+                // narrow arm at all. 86 → 48 is what pays for the source box's phone arm.
+                className="h-8 w-[86px] rounded-none border-0 border-l bg-muted/40 font-mono text-xs focus-visible:ring-0 @max-[600px]:w-12 @max-[600px]:justify-center @max-[600px]:px-0 @max-[600px]:[&_svg]:hidden"
               >
                 <SelectValue />
               </SelectTrigger>

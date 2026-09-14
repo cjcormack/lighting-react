@@ -209,4 +209,18 @@ describe('ProgrammerActionBar', () => {
     fireEvent.click(blind)
     expect(programmerSetBlind).not.toHaveBeenCalled()
   })
+
+  it('keeps the fade value on the phone and drops only its chevron', () => {
+    // Below `@[600px]` the trigger is 48px, centred, with no chevron — the fade must still be
+    // *read* before Clear is pressed, so the value cannot go, and 86 → 48 is what pays for the
+    // source box's `Q4 · Update · Revert` on a portrait phone. The width stays 86 above it.
+    render(<ProgrammerActionBar projectId={1} />)
+    const trigger = screen.getByRole('combobox', { name: 'Fade time' })
+    expect(trigger.className).toContain('w-[86px]')
+    expect(trigger.className).toContain('@max-[600px]:w-12')
+    expect(trigger.className).toContain('@max-[600px]:px-0')
+    expect(trigger.className).toContain('@max-[600px]:justify-center')
+    expect(trigger.className).toContain('@max-[600px]:[&_svg]:hidden')
+    expect(trigger.textContent).toContain('Snap')
+  })
 })

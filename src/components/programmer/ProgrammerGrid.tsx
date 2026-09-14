@@ -3,13 +3,12 @@ import { KeyRound, Layers, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
-  LayerKey,
   LayerLegend,
   OwnershipKey,
   OwnershipLegend,
 } from '@/components/fixtures-list/OwnershipLegend'
 import { cn, labelUnlessCompact } from '@/lib/utils'
-import { FIXTURE_FILTER_HINT } from '@/lib/fixtureFilterCopy'
+import { FIXTURE_FILTER_HINT, FIXTURE_FILTER_PLACEHOLDER_SHORT } from '@/lib/fixtureFilterCopy'
 import type { ColumnVisibility } from '@/components/fixtures-list/ColumnsMenu'
 import { FixturesListContainer } from '@/components/fixtures-list/FixturesListContainer'
 import { EditorContextProvider } from '@/components/programmer/EditorContext'
@@ -46,15 +45,21 @@ import type { EditorContextValue } from '@/components/programmer/EditorContext'
  *
  * **Row B has a phone arm and a folded arm, and they are different questions.** Below `@[600px]`
  * of *this column* a key button appears, because the 22px ownership footer is not rendered at that
- * width (space plan D8). The filter becomes a search icon over a popover too, but at `@[800px]`
- * and not here — the two used to be one threshold and are now two, because one is about a footer
- * being absent and the other about a placeholder fitting (see the note beside the field). The
- * folded arm
+ * width (space plan D8) — outside layer scope only; see the note beside `ScopedKeyPopover` below.
+ * The filter becomes a search icon over a popover too, but at `@[360px]` and not here — the two
+ * used to be one threshold and are now two, because one is about a footer being absent and the
+ * other about a field having room (see the note beside the field). The folded arm
  * is about *height*: under `@media (max-height: 500px)` `ProgrammerBody` stops drawing row A and
- * hands its two halves here as `leading`, so the page's two rows of chrome are one 36px line —
+ * hands its two halves here as `leading`, so the page's two rows of chrome are one 40px line —
  * which on an 852×393 landscape phone is the difference between three fixture rows and eight.
  * Height is the one thing a container query cannot ask, so that arm is a `useMediaQuery` above
  * the barrier; the grid element itself never moves, so the grid never remounts.
+ *
+ * **Every row of chrome here is 40px on a 12px gutter and holds 32px controls** — the chrome
+ * tidy-up (`lighting7/docs/plans/programmer-chrome-design/`). Row B was 36 with 28px and 32px
+ * controls side by side; the 28s (Groups, the search icon, the key) are the `size="sm"` 32 now,
+ * and the only 28s left on the page are controls *inside* a control — Update and Revert in the
+ * source box, the template chips and `New` on the selection bar.
  */
 export function ProgrammerGrid({
   projectId,
@@ -117,6 +122,8 @@ function ProgrammerGridBody({
   onColumnVisibilityChange: (next: ColumnVisibility) => void
   leading?: ReactNode
 }) {
+  // Whether the phone arm draws the key at all — see the note beside `ScopedKeyPopover` below.
+  const layerScope = useLayerScopeKey()
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <FixturesListContainer
@@ -126,6 +133,10 @@ function ProgrammerGridBody({
         fill
         columnVisibility={columnVisibility}
         onColumnVisibilityChange={onColumnVisibilityChange}
+        // The one word: this row keeps the field down to 360px of its own width, where the long
+        // placeholder clipped mid-word (`lib/fixtureFilterCopy.ts`). The hint rides the field's
+        // `title` and `aria-label` at every width.
+        filterPlaceholder={FIXTURE_FILTER_PLACEHOLDER_SHORT}
         compactControls={!!leading}
         // Cmd+K's ?select= links target the fixtures/groups pair; consuming them here would bounce
         // a group select straight back out to /groups/list.
@@ -153,16 +164,18 @@ function ProgrammerGridBody({
                   unfolded, row B's tools have a hard minimum of ~290px and there is no width this
                   app is usable at where that does not fit on one line.
 
-                  `h-9` becomes `min-h-9` in that arm because a wrapped row is two lines tall; with
-                  one line it is the same 36px, since the tallest control here is 32px and there is
-                  no vertical padding to add to it. `gap-y-1.5` is the gap *between* the lines, and
-                  is stated separately from `gap-2` so the two can be read apart: at 6px a wrapped
-                  folded row is 70px against the 76px row A and row B cost unfolded, so the fold
-                  still pays for itself at the widths where it has to take a second line. */}
+                  `h-10` becomes `min-h-10` in that arm because a wrapped row is two lines tall.
+                  With one line it is the same 40px either way: every chrome row on this page is
+                  40 and holds 32px controls, so the 4px above and below a control is the row's
+                  own inset, not padding, and the folded row keeps it by having the same minimum.
+                  `gap-y-1.5` is the gap *between* the lines, and is stated separately from `gap-2`
+                  so the two can be read apart: at 6px a wrapped folded row is 70px against the
+                  80px row A and row B cost unfolded, so the fold still pays for itself at the
+                  widths where it has to take a second line. */}
               <div
                 className={cn(
                   'flex items-center gap-2 border-b px-3',
-                  leading ? 'min-h-9 flex-wrap gap-y-1.5' : 'h-9',
+                  leading ? 'min-h-10 flex-wrap gap-y-1.5' : 'h-10',
                 )}
               >
                 {/* The short-height arm: row A has no row of its own and its two halves lead this
@@ -231,7 +244,16 @@ function ProgrammerGridBody({
                     `min(410px, 100%)` rather than a bare 410, because a floor taller than the
                     room cannot be met and simply overflows again — a window both short enough to
                     fold and under ~393px wide is an ordinary desktop resize away. Clamped, the
-                    block fills its line instead, which is the most it could have had. */}
+                    block fills its line instead, which is the most it could have had.
+
+                    **The 285 is the bar above `@[600px]` of the pair's own container.** Below it
+                    the fade trigger drops its chevron (`ProgrammerActionBar`), and the bar is
+                    247 — so on the 852×393 phone, where the pair's container is 419, this floor
+                    and the two measured numbers derived from the same 285 (`@max-[739px]` and
+                    `@[840px]` below) carry ~38px of slack they did not have when they were
+                    measured. They still hold, and they were left where they are rather than
+                    re-derived: move all three together, against 852×393 and 945×457, the way
+                    their notes prescribe, or none of them. */}
                 {leading && (
                   <>
                     <div className="@container flex min-w-[min(410px,100%)] flex-initial items-center gap-2 has-[[data-fills]]:flex-1">
@@ -368,33 +390,38 @@ function ProgrammerGridBody({
                       second line to give it — the folded one wraps, but this arm does not — so the
                       field gives instead — and session 4 replaces it with a search icon
                       at the width where even that stops being enough. */}
-                  {/* Two arms of one control. Above `@[800px]` the field is on the row; below it
+                  {/* Two arms of one control. From `@[360px]` the field is on the row; below it
                       the field is a search icon that opens the same node in a popover — the icon
                       arm session 4 promised, and the real answer to the `min-w-48` squeeze the note
                       above records. Radix mounts popover content only while it is open, so there is
                       one filter input in the document except during the moment it is being used.
 
-                      **The threshold is `@[800px]`, and it is measured.** It was `@[600px]`, and
-                      the desk pass found the field still clipping its placeholder mid-word there
-                      (`PD-FILTER-PLACEHOLDER-CLIP`): at the tablet preset the input has about 72px
-                      of room behind its 36px search icon, for a placeholder that needs 96px. At a
-                      row B of 800 it has ~113px, so the threshold clears the need with roughly a
-                      fifth to spare, and it is a number this row already uses, for `Groups`.
+                      **The threshold is `@[360px]`, and two things make it that low.** It was
+                      `@[600px]`, then `@[800px]`, and both were about a placeholder: the desk pass
+                      found `Filter fixtures…` clipping mid-word at 600 (`PD-FILTER-PLACEHOLDER-CLIP`
+                      — ~72px of room behind a 36px search icon for a placeholder needing 96), and
+                      800 was the first width that cleared it. That constraint is retired: the
+                      programmer's field says `Filter…` at every width
+                      (`FIXTURE_FILTER_PLACEHOLDER_SHORT`, since a placeholder cannot switch by
+                      container query), which fits behind the icon at the field's 132px floor, and
+                      the whole hint rides the field's `title` and `aria-label`. The second thing
+                      is the slack rule below. What 360 is: the row's furniture without the field
+                      is ~250 (two pills, Lit, Groups, Columns, the gaps and the 24px inset), so 360
+                      is the first width with a legible field beside it — and a row narrower than
+                      that is the phone's, where the icon arm and its `w-72` popover are the right
+                      answer anyway. Above 360 the middle of the row is never a hole.
 
-                      **The crossover itself is deliberately not quoted here.** Two sweeps of it
-                      disagreed by ~30px — it is only reachable by forcing a width, and the answer
-                      moves with how you force it — so a precise figure in a comment that says
-                      *measured* would be a claim the next reader cannot reproduce. What is stable
-                      is the pair above: 96px needed, ~113px given at 800. Re-measure those two if
-                      you move it, rather than trusting a crossover.
-
-                      Below the threshold the popover's field is `w-72` and has room for the whole
-                      placeholder, which is the point of the icon arm: the field gives all the way,
-                      rather than staying on the row saying half a word. Note the field is
-                      *also* being shorted by roughly half at every width, because its `flex-1`
-                      splits the row's slack with the plain `flex-1` spacer below — a real
-                      pre-existing bug, not this threshold's, and fixing it would let the field stay
-                      on the row a good deal narrower.
+                      **The field takes the slack before the spacer does.** It is `flex: 999 1 0%`
+                      against the spacer's `flex: 1 1 0%` below, so it grows to its 340px cap first
+                      and the spacer gets only what the cap leaves. It was `flex-1` like the spacer,
+                      and two `flex: 1 1 0%` siblings *split* the free space — so the field was
+                      half the width it could be at every width, which is the bug the note beside
+                      `ml-auto` in `SelectionBar` records from the other end. That is what left the
+                      field too narrow for its placeholder at 600 and 800 in the first place.
+                      The folded arm keeps its plain `flex-1`: there the spacer is hidden and the
+                      only other elastic thing is the leading block, which grows only when a cue or
+                      a Look is included (`has-[[data-fills]]`) and shares the slack with the field
+                      by design — see the note above on the 132px floor.
 
                       The folded row took the icon at **every** width until the hole above it was
                       closed, and the reason was never that a field is wrong there: "wide enough
@@ -408,15 +435,15 @@ function ProgrammerGridBody({
                       block sharing it with a 230px action bar — collapsed to four pixels. */}
                   <div
                     className={cn(
-                      'hidden min-w-0 flex-1 items-center gap-2 [&>div]:min-w-0',
+                      'hidden min-w-0 items-center gap-2 [&>div]:min-w-0',
                       leading
-                        ? '@[840px]:flex @[840px]:min-w-[132px]'
-                        : 'max-w-[340px] @[800px]:flex',
+                        ? 'flex-1 @[840px]:flex @[840px]:min-w-[132px]'
+                        : 'max-w-[340px] flex-[999_1_0%] @[360px]:flex',
                     )}
                   >
                     {filter}
                   </div>
-                  <FilterPopover className={leading ? '@[840px]:hidden' : '@[800px]:hidden'}>
+                  <FilterPopover className={leading ? '@[840px]:hidden' : '@[360px]:hidden'}>
                     {filter}
                   </FilterPopover>
                   {lit}
@@ -426,7 +453,7 @@ function ProgrammerGridBody({
                   <Button
                     variant={grouped ? 'default' : 'outline'}
                     size="sm"
-                    className="h-7 shrink-0"
+                    className="shrink-0"
                     aria-pressed={grouped}
                     onClick={() => onGroupedChange(!grouped)}
                     title="Show group rows with their members"
@@ -447,8 +474,17 @@ function ProgrammerGridBody({
                       (see `renderFooter`) — narrow, or short. A grid whose tints are *navigational*
                       has to keep them learnable somewhere, so the two conditions are written as
                       two "show" rules over a hidden base rather than as a hide and an un-hide:
-                      both set the same `display`, so neither can lose to the other's ordering. */}
-                  <ScopedKeyPopover className="hidden @max-[600px]:inline-flex [@media(max-height:500px)]:inline-flex" />
+                      both set the same `display`, so neither can lose to the other's ordering.
+
+                      **Not drawn in layer scope.** The key explains the ownership tints, and
+                      ownership is switched off in layer scope — the engine has no opinion about a
+                      Look's stored rows — so there is nothing for it to explain there. It is also
+                      what the phone cannot afford: two scope pills, the layer pill, the save
+                      state, the search icon, Lit, Groups and Columns are 336px of a 369px row
+                      with the key gone, and clipped at the right end with it. */}
+                  {!layerScope && (
+                    <ScopedKeyPopover className="hidden @max-[600px]:inline-flex [@media(max-height:500px)]:inline-flex" />
+                  )}
                 </div>
                 {/* `Make layer` was this row's right end until session 3 of the space plan moved
                     it onto the rail's Local values row — the row it promotes. See `LocalValuesRow`
@@ -552,7 +588,7 @@ function FilterPopover({ className, children }: { className?: string; children: 
         <Button
           variant="outline"
           size="sm"
-          className={cn('h-7 shrink-0', className)}
+          className={cn('shrink-0', className)}
           aria-label="Filter fixtures"
           title={FIXTURE_FILTER_HINT}
         >
@@ -567,22 +603,26 @@ function FilterPopover({ className, children }: { className?: string; children: 
 }
 
 /**
- * The ownership key behind a button — the phone's answer to the footer legend, and the same
- * scope swap `ScopedLegend` makes.
+ * The ownership key behind a button — the phone's answer to the footer legend.
  *
  * Stacked rather than the footer's one line: a popover has room for the long glosses, which is
  * the form the footer only reaches at `@[1100px]`. The swatches are the footer's own components,
- * so both are still styled by the real `ownershipCellClass` / `layerCellClass`.
+ * so it is still styled by the real `ownershipCellClass`.
+ *
+ * It used to make the same scope swap `ScopedLegend` makes and draw a `LayerKey` under a focused
+ * layer. It is not rendered in layer scope at all now (see the note at its call site), so the
+ * ownership key is the only one it holds and the layer key was deleted with its last caller; the
+ * footer's `LayerLegend` still says what a focused layer's rings mean wherever the footer is
+ * drawn.
  */
 function ScopedKeyPopover({ className }: { className?: string }) {
-  const layerScope = useLayerScopeKey()
   return (
     <Popover>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
           size="sm"
-          className={cn('h-7 shrink-0', className)}
+          className={cn('shrink-0', className)}
           aria-label="Key to the cell colours"
           title="Key to the cell colours"
         >
@@ -590,7 +630,7 @@ function ScopedKeyPopover({ className }: { className?: string }) {
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-56 p-3">
-        {layerScope ? <LayerKey /> : <OwnershipKey />}
+        <OwnershipKey />
       </PopoverContent>
     </Popover>
   )

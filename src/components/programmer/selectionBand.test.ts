@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { selectionBandState } from './selectionBand'
 
 /**
- * `PD-SELECTION-BAR-SHIFT`. The defect it guards is a *layout* one — 34px arriving under a live
+ * `PD-SELECTION-BAR-SHIFT`. The defect it guards is a *layout* one — 40px arriving under a live
  * pointer — which no unit test can see, so what is pinned here is the decision behind it: on a
  * desk the band never moves, and on a phone it never moves *while a drag is in flight*.
  */
@@ -35,7 +35,7 @@ describe('selectionBandState', () => {
     const short = { shortViewport: true }
 
     it('stays out of the flow with nothing selected', () => {
-      // 34px of 393 is worth keeping while reading the grid.
+      // 40px of 393 is worth keeping while reading the grid.
       expect(selectionBandState({ ...short, heldPresence: null, hasSelection: false })).toBe(
         'absent',
       )
@@ -57,7 +57,7 @@ describe('selectionBandState', () => {
 
     it('holds the band in place for a drag begun with a selection showing', () => {
       // The other direction of the same shift: a drag that resolves to no cells at all would
-      // otherwise take the band away and pull the rows up by the same 34px.
+      // otherwise take the band away and pull the rows up by the same 40px.
       expect(selectionBandState({ ...short, heldPresence: true, hasSelection: false })).toBe(
         'reserved',
       )

@@ -1,16 +1,17 @@
 /**
- * The fixture filter's two forms of one sentence — **short on the field, whole on hover**.
+ * The fixture filter's three forms of one sentence — **short on the field, shorter on the
+ * programmer's field, whole on hover**.
  *
  * `Filter fixtures by name, manufacturer, or type…` is ~300px of 14px text behind a 36px search
  * icon, and every field that carries it is allowed to shrink: the programmer's row B unpicks the
- * field's own `min-w-48` because that row cannot wrap (`ProgrammerGrid`'s note), and below
- * `@[600px]` the field becomes an icon over a popover. So the placeholder was clipped mid-word at
+ * field's own `min-w-48` because that row cannot wrap (`ProgrammerGrid`'s note), and below a
+ * width the field becomes an icon over a popover. So the placeholder was clipped mid-word at
  * every width — `PD-FILTER-PLACEHOLDER-CLIP`. The fix the finding names is a shorter placeholder,
  * not a wider field: the field gives on purpose.
  *
- * Nothing the long form said is deleted — it rides the input's `title`, which is where the space
- * plan puts every sentence it moves. That is the same trade `LEGEND_SHORT` makes for the legend's
- * glosses, and `ProgrammerSourceStrip`'s `Busking` label for its sentence.
+ * Nothing the long form said is deleted — it rides the input's `title` and `aria-label`, which is
+ * where the space plan puts every sentence it moves. That is the same trade `LEGEND_SHORT` makes
+ * for the legend's glosses, and `ProgrammerSourceStrip`'s `Busking` label for its sentence.
  *
  * One module rather than a `const` per field because there are three fields — the shared toolbar
  * control in `FixturesListContainer`, `/fixtures`' own search row and the programmer's `FxSheet` —
@@ -18,5 +19,16 @@
  */
 export const FIXTURE_FILTER_PLACEHOLDER = 'Filter fixtures…'
 
-/** The whole sentence, for the `title` and for any control that stands in for the field. */
+/**
+ * The programmer's row B placeholder, at every width.
+ *
+ * An input's placeholder cannot switch by container query, and that row keeps its field from
+ * 360px of row up (the chrome tidy-up), where `Filter fixtures…` would clip again exactly as
+ * `PD-FILTER-PLACEHOLDER-CLIP` found it did at 600. One word fits behind the search icon at the
+ * field's 132px floor, so the programmer says the one word and the hint says the rest. The two
+ * plain list routes keep the long form: their toolbar wraps, so their field is never squeezed.
+ */
+export const FIXTURE_FILTER_PLACEHOLDER_SHORT = 'Filter…'
+
+/** The whole sentence, for the `title`, the `aria-label`, and any control that stands in for the field. */
 export const FIXTURE_FILTER_HINT = 'Filter fixtures by name, manufacturer, or type'

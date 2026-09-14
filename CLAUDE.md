@@ -1158,6 +1158,32 @@ because it is what makes editing a Look feel local rather than like a trip to th
 `components/programmer/ProgrammerScope.tsx` owns it; the band above the grid is
 `ProgrammerScopeBand`, and a layer is focused by clicking its name badge in the stack rail.
 
+**The programmer's chrome is one spacing system**, and every number in it is stated once here so a
+row cannot drift from its neighbours (design record: `lighting7/docs/plans/programmer-chrome-design/`,
+whose `INDEX.md` has the reasoning). A 12px gutter on every row, the `ShowHeader` included — and
+that header is shared, so Show, the Prompt Book and Busk take it too, and on those three it differs
+from the `ShowBar`'s own `@[440px]:px-4` by 4px, deliberately. Every chrome row is 40px and holds
+32px controls, so the inset is 4px everywhere: row A, row B (`h-10`, `min-h-10` when folded), row
+C (`SelectionBar`), the rail header and the strip's chevrons, all level. Three control tiers by
+nesting, and nothing else: 32 for a control on a row (`h-8` / `size="sm"`), 28 for a control inside
+a control (`h-7`: Update and Revert in the source box, a template chip, `New`), 24 for a toggle
+item, 20 for a pill. The header is 48px (`px-3 py-2`) at every height, not only under 500. 8px
+between controls on a row (`gap-2`), 6px inside a control. Row B's filter is a field from 360px of
+row B up, says `Filter…` (`FIXTURE_FILTER_PLACEHOLDER_SHORT` — a placeholder cannot switch by
+container query, and the two plain list routes keep the long form) with the whole hint on its
+`title` and `aria-label`, and takes the row's slack before the spacer does (`flex-[999_1_0%]`
+against the spacer's `flex-1`; the folded arm keeps plain `flex-1`, since there the spacer is
+hidden). The key button is not drawn in layer scope — ownership tints are off there, so there is
+nothing to explain — and `ScopedKeyPopover` holds the ownership key only. Two phone-arm folds
+below `@[600px]`: the source box becomes `Q4 · Update · Revert` with the name and change count
+hidden and the dirty state an amber dot on Update (count on its tooltip; a Look keeps its families
+badge, being its only name there), and the fade trigger keeps its value and drops only its chevron
+(86 → 48px); in layer scope the layer pill is capped at 120 and `Unsaved` / `Saving…` fold to a dot
+on it with the word `sr-only`, while `Save failed` keeps its word at every width. The three
+measured floors in `ProgrammerGrid` (`min-w-[min(410px,100%)]`, `@max-[739px]`, `@[840px]`) were
+derived from a 285px iconic action bar and now carry ~38px of slack on the phone; move all three
+together against 852×393 and 945×457, or none of them.
+
 Things that will bite:
 
 - **The grid must never remount on a scope change.** `useListSelection` clears its Redux scope on

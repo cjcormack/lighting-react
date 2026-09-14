@@ -28,7 +28,10 @@ const SHORT_VIEWPORT = '(max-height: 500px)'
 /**
  * Row C — the selection bar, which is also where the templates now live.
  *
- * **One 34px line, and it never wraps**, which is the change session 2 of the space plan is for.
+ * **One 40px line, and it never wraps**, which is the change session 2 of the space plan is for.
+ * (It was 34, with 32px verbs beside 26px chips — a 1px inset. The chrome tidy-up put every row
+ * at 40 with 32px controls, so the inset is 4px here as it is on rows A and B, and the chips and
+ * `New` moved to the 28px nested tier; see `TemplateStrip`.)
  * It used to be two bands: a full-width template strip that showed the whole library with nothing
  * selected (and wrapped to four rows on a real one), and a rounded selection card below it.
  * Together they cost ~90px of a grid's height, permanently, for a strip whose press could only
@@ -37,10 +40,10 @@ const SHORT_VIEWPORT = '(max-height: 500px)'
  *
  * **Whether it is in the flow with nothing selected is `selectionBandState`'s answer, not a
  * constant** (`PD-SELECTION-BAR-SHIFT`). It used to be simply absent, which meant the first cell
- * of a marquee mounted it and pushed every row down 34px under a pointer that was mid-drag. On a
+ * of a marquee mounted it and pushed every row down by its height under a pointer that was mid-drag. On a
  * desk the band is now always in the flow — reserved and quiet when there is no selection, since
  * the height is only saved at a moment the grid is not being used anyway. On a landscape phone the
- * 34px is worth more than that, so there it stays out of the flow and its presence is *held* for
+ * 40px is worth more than that, so there it stays out of the flow and its presence is *held* for
  * the duration of a drag instead: it arrives on pointer-up, not on the first cell.
  *
  * It is full-bleed with a `border-b` rather than a rounded card inset in a padded block: it is a
@@ -125,10 +128,10 @@ export function SelectionBar({
 
   // Holding the height with nothing to say. No `bg-foreground/5` wash: that wash *is* the selection
   // (D4), so wearing it over an empty bar would say there is one. The sentence is there because
-  // 34px of otherwise blank strip above a grid reads as a rendering fault rather than as a rung.
+  // 40px of otherwise blank strip above a grid reads as a rendering fault rather than as a rung.
   if (band === 'reserved') {
     return (
-      <div className="flex h-[34px] min-w-0 items-center gap-2 border-b px-3 text-muted-foreground">
+      <div className="flex h-10 min-w-0 items-center gap-2 border-b px-3 text-muted-foreground">
         <MousePointerSquareDashed className="size-3.5 shrink-0 opacity-60" />
         <span className="text-xs">Nothing selected</span>
       </div>
@@ -136,7 +139,7 @@ export function SelectionBar({
   }
 
   return (
-    <div className="flex h-[34px] min-w-0 items-center gap-2 border-b bg-foreground/5 px-3">
+    <div className="flex h-10 min-w-0 items-center gap-2 border-b bg-foreground/5 px-3">
       <MousePointerSquareDashed className="size-3.5 shrink-0" />
       {/* One selection, counted two ways under a marquee: the heads it reaches, and the cells it
           names on them. Rows and cells are one state now (`FixturesListContainer`), so the head

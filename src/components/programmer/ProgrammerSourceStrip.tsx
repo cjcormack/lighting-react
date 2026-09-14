@@ -113,12 +113,24 @@ const BUSK_STATE = 'Busking'
  * `@[800px]`, and Revert becomes its icon below `@[1100px]` with the word on its `aria-label`.
  *
  * **Below `@[600px]` it is the phone's arm** (space plan D8, session 4): the `Editing` label and
- * the cue/Look glyph go, and every verb here is its icon. What is left is `Q4 · name · badge`,
- * which is the shortest thing that still answers "will Record overwrite Q4?" — the question the
- * whole box exists for. The two that went are the two that say the *same* thing twice: the label
- * is a word for a state the blue rim already draws, and the glyph is a picture of the `Q4` beside
- * it. Both are still on the `title` the name carries, which is where every sentence this plan
- * moved went.
+ * the cue/Look glyph go, and every verb here is its icon. What is left is **`Q4 · Update ·
+ * Revert`** — the number and its two verbs, and nothing else — since the chrome tidy-up
+ * (`lighting7/docs/plans/programmer-chrome-design/`). It was `Q4 · name · badge` there, and the
+ * arithmetic never allowed it: with a cue included the verbs beside this box are 285px iconic, so
+ * on a 393px portrait phone the box got 393 − 24 − 17 − 285 = 67px, and 117 in the folded arm on
+ * a landscape one, for content that needs ~200 — Update was clipped to a sliver, on the one
+ * screen where it is the only way to write the cue. So below 600 the name is hidden (it is on the
+ * `title` and in the `sr-only` sentence) — **unless it is the only identity left**: a cue with no
+ * number falls back to its name in `includedTargetParts`, and a Look's families badge is undefined
+ * until the Look list arrives, and in either case hiding the name leaves two icon buttons and
+ * nothing saying what Update would overwrite. The change count becomes an **amber dot on Update**
+ * with the count on Update's tooltip, and the box is 24 + 28 + 28 + 16 + 20 = 116px: the number,
+ * two 28px verbs, two gaps and the inset. With the fade trigger's chevron gone below 600 as well
+ * (`ProgrammerActionBar`) the row is 116 + 17 + 228 = 361 of 369. A Look keeps its families
+ * badge in that arm, since it has no number and the badge is the only thing left naming it. The
+ * `Editing` label and the glyph went earlier and for a different reason — they said the *same*
+ * thing twice: the label is a word for a state the blue rim already draws, and the glyph is a
+ * picture of the `Q4` beside it.
  *
  * The container queried is **row A's**, declared by the wrapper in `ProgrammerPage` — this
  * component must not declare one of its own, or every query here would measure the box rather
@@ -262,9 +274,25 @@ export function ProgrammerSourceStrip({
     .filter(Boolean)
     .join(' · ')
 
+  // Whether anything *other than the name* still names the source below `@[600px]`: a cue's number,
+  // or a Look's families badge. Neither is guaranteed — `includedTargetParts` falls back to the
+  // **name** for a cue with no number (and to `Cue {id}` when it has neither), and `families` is
+  // undefined until the Look list arrives — and with the name hidden unconditionally the box was
+  // then an Upload glyph and a Revert glyph and nothing at all saying what Update would overwrite,
+  // which is the one question this box exists to answer. So the name stays wherever it is the only
+  // identity left.
+  const namedWithoutName = source.kind === 'cue' ? !!source.number : !!source.families
+
   return (
     <Strip tone="editing">
+      {/* The whole state, for assistive tech, at every width: below `@[600px]` the label and the
+          name are both off the screen, and a `title` is mouse-only. The same split the two
+          sourceless arms make — which is also why every visible part of it below carries
+          `aria-hidden`: the number and the location are in this sentence too, and without it they
+          are announced twice. */}
+      <span className="sr-only">{boxTitle}</span>
       <span
+        aria-hidden="true"
         className={cn(ZONE_LABEL, 'hidden shrink-0 text-blue-300 @[600px]:inline')}
         title={boxTitle}
       >
@@ -276,10 +304,21 @@ export function ProgrammerSourceStrip({
         <Download className="hidden size-3.5 shrink-0 text-blue-300 @[600px]:block" />
       )}
       {source.kind === 'cue' && source.number && (
-        <span className="shrink-0 font-mono text-sm font-bold">{source.number}</span>
+        <span aria-hidden="true" className="shrink-0 font-mono text-sm font-bold">
+          {source.number}
+        </span>
       )}
       {source.name && (
-        <span className="truncate text-sm font-medium" title={boxTitle}>
+        <span
+          aria-hidden="true"
+          className={cn(
+            'min-w-0 truncate text-sm font-medium',
+            // Hidden on the phone's arm only where `namedWithoutName` says something else is
+            // carrying the identity.
+            namedWithoutName && 'hidden @[600px]:inline',
+          )}
+          title={boxTitle}
+        >
           {source.name}
         </span>
       )}
@@ -296,8 +335,8 @@ export function ProgrammerSourceStrip({
 
       <Tooltip>
         <TooltipTrigger asChild>
-          {/* Wrapped so a disabled button still shows its reason. */}
-          <div className="shrink-0">
+          {/* Wrapped so a disabled button still shows its reason. `relative` for the dot below. */}
+          <div className="relative shrink-0">
             <Button
               size="sm"
               className="h-7 @max-[600px]:w-7 @max-[600px]:px-0"
@@ -315,6 +354,15 @@ export function ProgrammerSourceStrip({
                 <span className="hidden @[800px]:inline">{source.number}</span>
               )}
             </Button>
+            {/* The dirty state below `@[600px]`, where `DirtyBadge` is hidden: an amber dot on
+                the verb that clears it. The count is on the tooltip text, so the number is still
+                one press away; the badge and its `title` carry it above 600 as before. */}
+            {source.dirty != null && source.dirty > 0 && (
+              <span
+                aria-hidden="true"
+                className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-amber-400 ring-[1.5px] ring-background @[600px]:hidden"
+              />
+            )}
           </div>
         </TooltipTrigger>
         <TooltipContent>
@@ -322,7 +370,7 @@ export function ProgrammerSourceStrip({
             ? 'Nothing has changed since Include'
             : source.dirty == null
               ? "This tab didn't see the Include, so it can't count your changes — Update writes whatever changed on the server."
-              : 'Write your changes back'}
+              : `${source.dirty} change${source.dirty === 1 ? '' : 's'} not written back — write them back`}
         </TooltipContent>
       </Tooltip>
 
@@ -365,7 +413,12 @@ function CueLocation({ source }: { source: Extract<ProgrammerSource, { kind: 'cu
   const text = cueLocationText(source)
   if (text == null) return null
   return (
-    <span className="hidden shrink-0 truncate text-xs text-blue-300/80 @[1100px]:inline">
+    // `aria-hidden` like every other visible part of the box: the same text is in the `sr-only`
+    // sentence above, and without it the location is announced twice at `@[1100px]`.
+    <span
+      aria-hidden="true"
+      className="hidden shrink-0 truncate text-xs text-blue-300/80 @[1100px]:inline"
+    >
       {text}
     </span>
   )
@@ -376,11 +429,15 @@ function CueLocation({ source }: { source: Extract<ProgrammerSource, { kind: 'cu
  *
  * `dirty == null` renders no badge rather than a reassuring one. See `canClaimInSync`: a tab that
  * did not watch the Include cannot tell, and "in sync" over unwritten work costs a cue.
+ *
+ * Hidden below `@[600px]` in both arms — the phone's box is `Q4 · Update · Revert` and nothing
+ * else. The dirty state is an amber dot on Update there, with the count on its tooltip; "in sync"
+ * is Update being disabled, which it already is.
  */
 function DirtyBadge({ dirty, inSync }: { dirty: number | null; inSync: boolean }) {
   if (inSync) {
     return (
-      <span className="shrink-0 rounded-full border border-green-900 bg-green-950/40 px-2 py-px text-[10px] font-medium text-green-400">
+      <span className="hidden shrink-0 rounded-full border border-green-900 bg-green-950/40 px-2 py-px text-[10px] font-medium text-green-400 @[600px]:inline">
         in sync
       </span>
     )
@@ -392,7 +449,7 @@ function DirtyBadge({ dirty, inSync }: { dirty: number | null; inSync: boolean }
       // The long wording is the artboard's, and it only fits at `@[1100px]`; the short form keeps
       // the number, which is the part that changes, and the `title` keeps the sentence.
       title={`${dirty} change${plural} not written back`}
-      className="flex shrink-0 items-center gap-1.5 rounded-full border border-amber-900 bg-amber-950/40 px-2 py-px text-[10px] font-medium text-amber-300"
+      className="hidden shrink-0 items-center gap-1.5 rounded-full border border-amber-900 bg-amber-950/40 px-2 py-px text-[10px] font-medium text-amber-300 @[600px]:flex"
     >
       <span className="size-1.5 rounded-full bg-amber-400" />
       {dirty} change{plural}

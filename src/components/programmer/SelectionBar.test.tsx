@@ -81,4 +81,15 @@ describe('SelectionBar', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
     expect(screen.getByText('Nothing selected')).toBeInTheDocument()
   })
+
+  it('is a 40px line in both arms — the chrome system', () => {
+    // Rows A, B and C are all 40 with 32px controls, so the verbs on this bar sit at the same
+    // inset as the tools above them. It was 34, a 1px inset over 32px verbs and 26px chips.
+    const live = render(bar())
+    expect(live.container.firstElementChild!.className).toContain('h-10')
+    expect(live.container.firstElementChild!.className).not.toContain('h-[34px]')
+    live.unmount()
+    const reserved = render(bar({ cells: [], templateTargets: [] }))
+    expect(reserved.container.firstElementChild!.className).toContain('h-10')
+  })
 })

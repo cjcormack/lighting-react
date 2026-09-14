@@ -63,7 +63,7 @@ type RailBand = 'layers' | 'fx'
  *
  * **One list, two bands, since session 3 of the space plan.** It was two separately-headed
  * sections — the stack with its own LAYERS heading and Add, the FX band with its own heading and
- * `+ Effect` — stacked in a fixed 404px column. Now it is one scroller under one 36px header
+ * `+ Effect` — stacked in a fixed 404px column. Now it is one scroller under one 40px header
  * (`LAYERS n · FX n` and the collapse chevron, level with row B) and over one footer
  * (`+ Look · + Template · + Effect`). The body runs top to bottom **top wins**: a
  * `VALUES · top wins` label, the **Local values** row — the operator's own entries, which beat
@@ -146,8 +146,8 @@ export function ProgrammerRail() {
       {arm.sheetOpen ? (
         <Sheet open onOpenChange={(next) => !next && arm.closeSheet()}>
           {/* `p-0 gap-0` because the body and the footer bring their own padding, and the rail's
-              own 36px header is replaced by the sheet's — two headings stacked would be the
-              phone's scarcest 36px spent saying "Layers" twice.
+              own 40px header is replaced by the sheet's — two headings stacked would be the
+              phone's scarcest 40px spent saying "Layers" twice.
 
               `PD-SHEET-CLOSE-ALIGN`: that header is ~32px (8px of padding either side of a 9px
               label), where `SheetContent`'s shared close button is pinned at `top-4` — an offset
@@ -221,7 +221,12 @@ function CountBadge({ count }: { count: number }) {
 }
 
 /**
- * `LAYERS n · FX n` and the chevron that takes the rail away — 36px, level with row B.
+ * `LAYERS n · FX n` and the chevron that takes the rail away — 40px, level with row B.
+ *
+ * **Level with row B is the reason for every number on it.** Row B is a 40px line on a 12px gutter
+ * with 8px between its controls, and this header's bottom border meets that row's across the
+ * seam; it was `h-9 px-2.5 gap-2.5`, four pixels short and two pixels in, so the two borders
+ * stepped where they met. The strip's chevrons below are `h-10` for the same reason.
  *
  * Two chevrons, one per arm, hidden by the same container query the frames use: the docked
  * rail's writes the collapsed preference, the overlay's only shuts the overlay. One button
@@ -231,7 +236,7 @@ function CountBadge({ count }: { count: number }) {
 function RailHeader({ layerCount, fxCount }: { layerCount: number; fxCount: number }) {
   const arm = useRailArm()
   return (
-    <div className="flex h-9 shrink-0 items-center gap-2.5 border-b px-2.5">
+    <div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
       <span className={LABEL_CLASS} title={`${layerCount} layer${layerCount === 1 ? '' : 's'}`}>
         <Layers className="size-3" />
         Layers
@@ -508,7 +513,7 @@ function RailStrip({
       <Button
         variant="ghost"
         size="icon"
-        className="h-9 w-10 rounded-none border-b text-muted-foreground @max-[1200px]:hidden"
+        className="h-10 w-10 rounded-none border-b text-muted-foreground @max-[1200px]:hidden"
         aria-label="Expand the rail"
         title="Show the layers and effects"
         onClick={arm.expand}
@@ -521,7 +526,7 @@ function RailStrip({
       <Button
         variant="ghost"
         size="icon"
-        className="h-9 w-10 rounded-none border-b text-muted-foreground @min-[1200px]:hidden"
+        className="h-10 w-10 rounded-none border-b text-muted-foreground @min-[1200px]:hidden"
         aria-label="Open the rail"
         aria-expanded={arm.overlayOpen}
         title={

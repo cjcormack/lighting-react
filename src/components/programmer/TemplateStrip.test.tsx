@@ -490,4 +490,15 @@ describe('TemplateStrip hold', () => {
     fireEvent.click(chip)
     expect(applyTemplate).toHaveBeenCalledTimes(1)
   })
+
+  it('draws its chips and New at the 28px nested tier', () => {
+    // A chip is a control inside the selection bar's 40px row, so it is `h-7` where the row's own
+    // verbs are 32 — the same tier as Update and Revert inside the source box. It was 26.
+    render(strip(COLOUR_CELL))
+    const chip = screen.getByText('Amber Key').closest('button')!
+    expect(chip.className).toContain('h-7')
+    expect(chip.className).not.toContain('h-[26px]')
+    const fresh = screen.getByRole('button', { name: /New/ })
+    expect(fresh.className).toContain('h-7')
+  })
 })

@@ -30,7 +30,7 @@ export interface SelectionToolbarProps {
  *
  * `hidden sm:inline` is the viewport rule this bar has always had: on a phone the icons and their
  * tooltips carry it. `@max-[1100px]:hidden` is the *container* rule the programmer's selection bar
- * adds on top — that bar is one 34px line that must not wrap, and these two words are the widest
+ * adds on top — that bar is one 40px line that must not wrap, and these two words are the widest
  * thing on it that a tooltip already says. The two compose: a word shows only when the viewport is
  * at least `sm` **and** the container is at least 1100px wide.
  *
@@ -101,7 +101,7 @@ export function SelectionToolbar({
           And in the programmer's selection bar it goes entirely, on the same `@max-[1100px]`
           rule as the two verbs' words: that bar counts the selection itself, at its left end, as
           "4 fixtures" — the heads a press lands on — and the same number twice at opposite ends of
-          one 34px line reads as two different facts that happen to agree. The list routes have no
+          one 40px line reads as two different facts that happen to agree. The list routes have no
           such count of their own, so there it stays.
 
           Since the two selections became one (`FixturesListContainer`), a marquee's rows are the

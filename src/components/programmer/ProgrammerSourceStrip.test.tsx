@@ -6,13 +6,14 @@ import type { IncludedTarget } from '@/api/programmerWsApi'
 let summary = { blind: false, entryCount: 0, lastIncluded: null as IncludedTarget | null }
 let dirty: number | null = null
 let stacks: unknown[] = []
+let looks: unknown[] = []
 
 vi.mock('@/store/programmer', () => ({
   useProgrammerSummaryQuery: () => ({ data: summary }),
 }))
 vi.mock('@/store/fixtureFx', () => ({ useActiveEffectsQuery: () => ({ data: [] }) }))
 vi.mock('@/store/cueStacks', () => ({ useProjectCueStackListQuery: () => ({ data: stacks }) }))
-vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: [] }) }))
+vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: looks }) }))
 vi.mock('./useIncludeBaseline', () => ({ useIncludeBaseline: () => dirty }))
 
 import { ProgrammerSourceStrip } from './ProgrammerSourceStrip'
@@ -41,6 +42,7 @@ afterEach(() => {
   summary = { blind: false, entryCount: 0, lastIncluded: null }
   dirty = null
   stacks = []
+  looks = []
 })
 
 describe('ProgrammerSourceStrip', () => {
@@ -81,7 +83,8 @@ describe('ProgrammerSourceStrip', () => {
     // the folded row silently lays out wrong. `foldedRow.test.ts` pins the consumer; this pins the
     // producer, so the two ends are asserted against the same spelling.
     const box = () =>
-      screen.getByText(/No source|Warm Wash|has been deleted/).closest('[class*="rounded-md"]')
+      // `getAll`: since the phone arm the cue's name is also in the box's `sr-only` sentence.
+      screen.getAllByText(/No source|Warm Wash|has been deleted/)[0].closest('[class*="rounded-md"]')
 
     // Sourceless: as wide as its words, so it must NOT ask for the row.
     draw()
@@ -243,5 +246,81 @@ describe('ProgrammerSourceStrip', () => {
     draw()
     expect(screen.getByText(/has been deleted/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Record/ })).toBeNull()
+  })
+
+  it('folds to `Q4 · Update · Revert` below 600, with the change count as a dot on Update', () => {
+    // The phone arm (`programmer-chrome-design`): with a cue included the box had 67px on a
+    // portrait phone for ~200px of content and Update was clipped to a sliver. Below `@[600px]`
+    // the name and the badge are hidden, the dirty state is an amber dot on Update, and the count
+    // moves to Update's tooltip; the whole state stays in an `sr-only` sentence.
+    summary = { ...summary, entryCount: 9, lastIncluded: CUE }
+    dirty = 3
+    stacks = [STACK]
+    draw()
+    const name = screen.getByText('Warm Wash')
+    expect(name.className).toContain('hidden')
+    expect(name.className).toContain('@[600px]:inline')
+    const badge = screen.getByTitle('3 changes not written back')
+    expect(badge.className).toContain('hidden')
+    expect(badge.className).toContain('@[600px]:flex')
+    const update = screen.getByRole('button', { name: 'Update Q4' })
+    const dot = update.parentElement!.querySelector('span[aria-hidden]')!
+    expect(dot).not.toBeNull()
+    expect(dot.className).toContain('bg-amber-400')
+    expect(dot.className).toContain('@[600px]:hidden')
+    // The number itself never leaves the box: `Q4` is the one thing the fold keeps on screen.
+    const numbers = screen.getAllByText('Q4').filter((el) => !el.className.includes('hidden'))
+    expect(numbers.length).toBeGreaterThan(0)
+    expect(
+      screen.getByText('Editing · Q4 · Warm Wash · Act 1 · cue 1 of 2', { selector: '.sr-only' }),
+    ).toBeTruthy()
+  })
+
+  it('keeps the name on the phone where nothing else names the source', () => {
+    // `includedTargetParts` falls back to the *name* for a cue with no number, so hiding the name
+    // below `@[600px]` unconditionally left an Upload glyph and a Revert glyph and nothing at all
+    // saying what Update would overwrite — the one question this box exists to answer.
+    summary = {
+      ...summary,
+      entryCount: 9,
+      lastIncluded: { ...CUE, cueNumber: '', cueName: 'Warm Wash' },
+    }
+    dirty = 3
+    stacks = [STACK]
+    draw()
+    const name = screen.getByText('Warm Wash', { selector: '[aria-hidden]' })
+    expect(name.className).not.toContain('hidden')
+    expect(name.className).not.toContain('@[600px]:inline')
+  })
+
+  it('drops it again for a Look once its families badge has arrived to carry it', () => {
+    // The Look arm's own identity below 600 is the badge, so the name goes when there is one —
+    // and stays while `families` is still in flight, which is every first paint after an Include.
+    summary = {
+      ...summary,
+      entryCount: 9,
+      lastIncluded: { kind: 'LOOK', lookId: 3, lookName: 'Warm Amber' },
+    }
+    dirty = 1
+    draw()
+    expect(
+      screen.getByText('Warm Amber', { selector: '[aria-hidden]' }).className,
+    ).not.toContain('hidden')
+    cleanup()
+
+    looks = [{ id: 3, families: ['COLOUR'] }]
+    draw()
+    const named = screen.getByText('Warm Amber', { selector: '[aria-hidden]' })
+    expect(named.className).toContain('hidden')
+    expect(named.className).toContain('@[600px]:inline')
+  })
+
+  it('draws no dot on Update with nothing to write back', () => {
+    summary = { ...summary, entryCount: 9, lastIncluded: CUE }
+    dirty = 0
+    stacks = [STACK]
+    draw()
+    const update = screen.getByRole('button', { name: 'Update Q4' })
+    expect(update.parentElement!.querySelector('span[aria-hidden]')).toBeNull()
   })
 })

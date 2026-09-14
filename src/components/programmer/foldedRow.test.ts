@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-// The source as text, the way `shortViewport.test.ts` reads its four sites. Everything this file
+// The source as text, the way `shortViewport.test.ts` reads its three sites. Everything this file
 // pins is a Tailwind class, so there is nothing a rendered test could assert: jsdom performs no
 // layout, so it cannot tell a row that wraps from one whose controls are drawn on top of the
 // controls beside them.
@@ -35,10 +35,10 @@ describe("the folded row's layout contract", () => {
   })
 
   it('lets the folded row wrap, and only the folded row', () => {
-    // `h-9` in the unfolded arm, `min-h-9 flex-wrap` in the folded one. A fixed height on a
+    // `h-10` in the unfolded arm, `min-h-10 flex-wrap` in the folded one. A fixed height on a
     // wrapping row would clip the second line instead of showing it, which is how this "fix"
-    // would look fixed and not be.
-    expect(programmerGridSrc).toContain("leading ? 'min-h-9 flex-wrap gap-y-1.5' : 'h-9'")
+    // would look fixed and not be. 40 is the chrome system's row height, the same as rows A and C.
+    expect(programmerGridSrc).toContain("leading ? 'min-h-10 flex-wrap gap-y-1.5' : 'h-10'")
   })
 
   it("keeps row B's tools together, and out of the way when the row is not folded", () => {
@@ -84,9 +84,13 @@ describe("the folded row's layout contract", () => {
     // only put the hole back beyond it — but it does carry a `min-w`, because with a cue included
     // the leading block grows too and an unclamped field would be starved to a clipped
     // placeholder, which is the regression the threshold exists to prevent.
-    expect(programmerGridSrc).toContain("'@[840px]:flex @[840px]:min-w-[132px]'")
-    expect(programmerGridSrc).toContain("'max-w-[340px] @[800px]:flex'")
-    expect(programmerGridSrc).toContain("leading ? '@[840px]:hidden' : '@[800px]:hidden'")
+    //
+    // The folded arm keeps a plain `flex-1` — it shares the slack with the leading block by
+    // design — where the unfolded arm is `flex-[999_1_0%]` so the field takes the slack before
+    // the row's spacer does, and has its field from `@[360px]` (the chrome tidy-up).
+    expect(programmerGridSrc).toContain("'flex-1 @[840px]:flex @[840px]:min-w-[132px]'")
+    expect(programmerGridSrc).toContain("'max-w-[340px] flex-[999_1_0%] @[360px]:flex'")
+    expect(programmerGridSrc).toContain("leading ? '@[840px]:hidden' : '@[360px]:hidden'")
   })
 
   it('keeps the `Groups` word off the folded row', () => {

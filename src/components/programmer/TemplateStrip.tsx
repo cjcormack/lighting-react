@@ -255,7 +255,7 @@ export function TemplateStrip({
               '[mask-image:linear-gradient(90deg,#000_92%,transparent)]',
               '[-webkit-mask-image:linear-gradient(90deg,#000_92%,transparent)]',
             ],
-            // The scrollbar is the horizontal one on a 26px-tall row: showing it would take a
+            // The scrollbar is the horizontal one on a 28px-tall row: showing it would take a
             // third of the chips' height. The overflow is still scrollable by wheel, trackpad
             // and keyboard.
             '[scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
@@ -280,7 +280,9 @@ export function TemplateStrip({
           ))}
         </div>
 
-        {/* The chip that fills the library, pinned outside the scroller. No `disabled` arm: the
+        {/* The chip that fills the library, pinned outside the scroller. `h-7` like the chips: a
+            control inside a control is 28 — the nested tier of the chrome system, the same height
+            as Update and Revert inside the source box. No `disabled` arm: the
             guard above has already returned, so it could only ever have rendered enabled, and a
             dead conditional whose `title` no longer explains the state it guards is worse than no
             conditional. `press`'s guard is the one that stays — it is the only one a future host
@@ -288,7 +290,7 @@ export function TemplateStrip({
         <Button
           variant="outline"
           size="sm"
-          className="h-[26px] shrink-0 gap-1 border-dashed px-2 text-xs"
+          className="h-7 shrink-0 gap-1 border-dashed px-2 text-xs"
           title="Record what you have selected as a new template"
           onClick={() => setNewOpen(true)}
         >
@@ -371,8 +373,10 @@ function TemplateChip({
       }
       className={cn(
         // `shrink-0` is what makes the row a scroller rather than a squeezer: without it flex
-        // would compress every chip to fit and the mask would never fade anything.
-        'flex h-[26px] shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs transition-colors',
+        // would compress every chip to fit and the mask would never fade anything. `h-7` is the
+        // nested tier: a chip is a control inside the selection bar's 40px row, so it is 28 where
+        // the row's own verbs are 32.
+        'flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs transition-colors',
         'hover:bg-accent/60 active:scale-95',
       )}
     >

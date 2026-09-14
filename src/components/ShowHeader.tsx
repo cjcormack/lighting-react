@@ -103,13 +103,22 @@ export function ShowHeader({
     // The transparent border is always present so colouring it cannot shift the layout by a pixel
     // when the lock flips.
     //
-    // `py-2` under 500px of viewport height, with the rest of the short-height arm (space plan
-    // D8): a landscape phone spends 16px above and below this row on nothing, and the row's own
-    // controls are 32px tall either way, so it is 16px of pure air on the screen with the least.
-    // Nothing is removed — the same header, tighter.
+    // `px-3 py-2` at every height — a 48px row holding 32px controls, on the programmer's 12px
+    // gutter (the chrome tidy-up; `lighting7/docs/plans/programmer-chrome-design/`). It was `p-4`,
+    // with `py-2` only under 500px of viewport height as part of the short-height arm (space plan
+    // D8): that arm proved the row reads fine at 48, and at 64 it was the fattest row on every
+    // screen with the least in it — 16px above and below 32px controls, spent on nothing. The
+    // gutter was the odder half: every row of the programmer under this one is inset 12px, and
+    // this is the row whose left edge they are all read against. Nothing is removed — the same
+    // header, tighter, and it is shared, so Show, the Prompt Book and Busk take the 48px too.
+    //
+    // Those three carry a `ShowBar` under it, which keeps its own `@[440px]:px-4` (see the note
+    // in `ShowBar.tsx` for why that class is the bar's business): on those views the header and
+    // the bar now differ by 4px of gutter. Deliberate — the bar's ladder was measured at 16 and
+    // is left alone.
     <div
       className={cn(
-        '@container flex items-center gap-3 border-b border-transparent p-4 transition-colors [@media(max-height:500px)]:py-2',
+        '@container flex items-center gap-3 border-b border-transparent px-3 py-2 transition-colors',
         unlockedWarning && UNLOCKED_WARNING_CLASS,
       )}
     >

@@ -366,7 +366,8 @@ export function RailStripFrame({ children }: { children: ReactNode }) {
  * 704px, which is what puts this under the grid instead of beside it — so nothing about the
  * grid's position changes as the arm does.
  *
- * 44px, not the strip's 40: this one is a touch target rather than a column of glyphs.
+ * 44px, not the strip's 40: this one is a touch target rather than a column of glyphs. Its gap
+ * is the chrome system's 8 between controls, like every other row of the programmer.
  *
  * **It closes the sheet when it stops being drawn**, and that is not decoration. `sheetOpen` is
  * the one arm flag a stale `true` is not harmless for: `collapsed` and `overlayOpen` are read by
@@ -402,7 +403,7 @@ export function RailHandleFrame({ children }: { children: ReactNode }) {
   return (
     <div
       ref={ref}
-      className="flex h-11 shrink-0 items-center gap-2.5 border-t bg-card/40 px-3 @min-[704px]:hidden"
+      className="flex h-11 shrink-0 items-center gap-2 border-t bg-card/40 px-3 @min-[704px]:hidden"
     >
       {children}
     </div>

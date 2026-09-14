@@ -5,26 +5,27 @@ import { describe, expect, it } from 'vitest'
 // resolver the app uses, so a file that is moved fails the build rather than the assertion.
 import programmerPageSrc from './routes/ProgrammerPage.tsx?raw'
 import layoutSrc from './Layout.tsx?raw'
-import showHeaderSrc from './components/ShowHeader.tsx?raw'
 import programmerGridSrc from './components/programmer/ProgrammerGrid.tsx?raw'
 import selectionBarSrc from './components/programmer/SelectionBar.tsx?raw'
 import cellEditorSurfaceSrc from './components/fixtures-list/cells/CellEditorSurface.tsx?raw'
 
 /**
- * The short-viewport fold is one decision written in four places, and this is what keeps them one
+ * The short-viewport fold is one decision written in three places, and this is what keeps them one
  * number.
  *
  * Space plan D8 gives a landscape phone its own arm below 500px of viewport **height**: the app
- * header stops being sticky, the ShowHeader tightens to `py-2`, the programmer's rows A and B
- * become one row, its 22px ownership footer goes and the key moves onto a button. Because height
+ * header stops being sticky, the programmer's rows A and B become one row, its 22px ownership
+ * footer goes and the key moves onto a button. (`ShowHeader` was a fourth site — it tightened to
+ * `py-2` there — until the chrome tidy-up made it `py-2` at every height, so it carries no
+ * threshold at all now and is deliberately not listed.) Because height
  * is the one thing a container query cannot ask, each surface says so with a media query of its
- * own — three as Tailwind arbitrary variants, one as the string `useMediaQuery` is handed. That
+ * own — two as Tailwind arbitrary variants, one as the string `useMediaQuery` is handed. That
  * is not a choice: Tailwind scans source *text* for class names, so a threshold assembled from a
  * shared constant would generate no CSS at all. The number cannot be shared; it can only be
  * pinned.
  *
  * The failure this guards is quiet. A rig check that decides 500 is wrong and moves the JS
- * constant leaves the header un-sticking, the ShowHeader tightening and the rows folding at three
+ * constant leaves the header un-sticking and the rows folding at two
  * different heights — no error, no type failure, no failing unit test, visible only on a real
  * short screen. Same reasoning as `navMatch.test.ts`, which pins two route prefixes apart for a
  * collision that also could not fail loudly.
@@ -35,8 +36,6 @@ const SITES: ReadonlyArray<readonly [name: string, source: string]> = [
   ['ProgrammerPage.tsx', programmerPageSrc],
   // The app header stops being sticky.
   ['Layout.tsx', layoutSrc],
-  // The ShowHeader tightens to `py-2`.
-  ['ShowHeader.tsx', showHeaderSrc],
   // Row B's key button arrives and the ownership footer goes.
   ['ProgrammerGrid.tsx', programmerGridSrc],
 ]
@@ -75,7 +74,7 @@ describe('the short-viewport fold', () => {
     }
   })
 
-  it('keeps the other three sites as literal Tailwind class names', () => {
+  it('keeps the other two sites as literal Tailwind class names', () => {
     // If one is ever "tidied" into an interpolation it will generate no CSS and that surface
     // will simply stop folding — silently, and only on a short screen.
     for (const [name, source] of SITES.slice(1)) {

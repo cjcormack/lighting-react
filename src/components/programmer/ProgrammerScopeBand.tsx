@@ -1,5 +1,5 @@
 import { Eye, Hand } from 'lucide-react'
-import { labelUnlessCompact } from '@/lib/utils'
+import { cn, labelUnlessCompact } from '@/lib/utils'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { LookNameBadge } from '@/components/looks/LookNameBadge'
 import { FAMILY_LABELS, parsePropertyMask } from '@/lib/attributeFamily'
@@ -41,8 +41,19 @@ const SAVE_LABELS: Record<Exclude<LookSaveState, 'clean'>, string> = {
  * stack row itself — a picker here would be a second way to say the same thing, and the stack is
  * the one that shows order, mask and amount alongside.
  *
+ * **Below `@[600px]` the layer pill is capped at 120 and carries the save state as a dot.** In
+ * layer scope a 369px phone row had two scope pills, the layer pill at up to 220, `Unsaved`, the
+ * search icon, Lit, Groups, Columns and the key — ~470px, clipped at the right end. The chrome
+ * tidy-up (`lighting7/docs/plans/programmer-chrome-design/`) takes the key off the row in layer
+ * scope (`ProgrammerGrid`), caps the pill, and folds `Unsaved` / `Saving…` into a grey dot on the
+ * pill with the word kept `sr-only`; 336 of 369. **`Save failed` keeps its word at every
+ * width**, for the reason on `layerDetail` below — a failed write must never be a casualty of
+ * width, and a dot cannot say *failed*. `compact` takes that arm at every width, exactly as it
+ * takes the two pills' — see the next paragraph for why a container query has the wrong answer
+ * there.
+ *
  * `compact` drops the two pills' words whatever the width. It exists for the short-height arm
- * (space plan D8), where this band shares one 36px line with the whole of row A: the row is then
+ * (space plan D8), where this band shares one 40px line with the whole of row A: the row is then
  * short of width for a reason its container's width does not show, so the question `@[520px]`
  * asks — "is this column wide?" — has the wrong answer on an 852×393 phone. The `aria-label`s and
  * `title`s are unchanged, which is where those two words already live at every narrow width.
@@ -126,7 +137,13 @@ export function ProgrammerScopeBand({ compact = false }: { compact?: boolean }) 
             value="layer"
             aria-label="Show the focused layer"
             title="One layer's stored rows — not the rig"
-            className="max-w-[220px] gap-1.5"
+            className={cn(
+              'relative max-w-[120px] gap-1.5',
+              // `compact` wins over the query for the reason the two pills' words already give it
+              // that power: on the folded row the *column* is wide and the row is not, so
+              // `@[600px]` answers "yes, there is room" on exactly the screen with least of it.
+              !compact && '@[600px]:max-w-[220px]',
+            )}
           >
             <LookNameBadge
               name={layer?.source.name}
@@ -138,6 +155,19 @@ export function ProgrammerScopeBand({ compact = false }: { compact?: boolean }) 
               isEffect={focusedTemplate?.kind === 'effect'}
               className="border-none bg-transparent px-0"
             />
+            {/* The phone's save state: the word beside the pill is hidden below `@[600px]` and
+                this dot stands in. Not for `error` — that one keeps its word. */}
+            {(saveState === 'dirty' || saveState === 'saving') && (
+              <span
+                aria-hidden="true"
+                className={cn(
+                  'absolute -top-0.5 -right-0.5 size-2 rounded-full bg-muted-foreground ring-[1.5px] ring-muted',
+                  // Stands in wherever the word is hidden, so the two are one switch — including
+                  // the `compact` arm, where the word never comes back.
+                  !compact && '@[600px]:hidden',
+                )}
+              />
+            )}
           </ToggleGroupItem>
         )}
       </ToggleGroup>
@@ -159,11 +189,26 @@ export function ProgrammerScopeBand({ compact = false }: { compact?: boolean }) 
       {scope.kind === 'layer' && saveState !== 'clean' && (
         <span
           role="status"
-          className={`shrink-0 truncate ${
-            saveState === 'error' ? 'text-destructive' : 'text-muted-foreground'
-          }`}
+          className={cn(
+            'shrink-0 truncate',
+            saveState === 'error' ? 'text-destructive' : 'text-muted-foreground',
+          )}
         >
-          {SAVE_LABELS[saveState]}
+          {saveState === 'error' ? (
+            SAVE_LABELS[saveState]
+          ) : (
+            <>
+              {/* The word from `@[600px]`, and `sr-only` below it so the status is still announced
+                  where the dot on the layer pill is what a sighted operator sees. `compact` keeps
+                  it off at every width — deliberately without `labelUnlessCompact`, whose
+                  `control-label` hook the folded row brings back on a wrapped line: the dot beside
+                  it would then say the same thing twice. */}
+              <span aria-hidden="true" className={cn('hidden', !compact && '@[600px]:inline')}>
+                {SAVE_LABELS[saveState]}
+              </span>
+              <span className="sr-only">{SAVE_LABELS[saveState]}</span>
+            </>
+          )}
         </span>
       )}
     </div>

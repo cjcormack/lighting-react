@@ -117,6 +117,13 @@ export interface FixturesListContainerProps {
   columnVisibility?: ColumnVisibility
   onColumnVisibilityChange?: (next: ColumnVisibility) => void
   /**
+   * The filter field's placeholder. Defaults to the long form; the programmer passes
+   * `FIXTURE_FILTER_PLACEHOLDER_SHORT` because its row B keeps the field down to 360px of row and
+   * a placeholder cannot switch by container query (`lib/fixtureFilterCopy.ts`). The `title` and
+   * `aria-label` carry the whole hint whichever is shown.
+   */
+  filterPlaceholder?: string
+  /**
    * Replace the built-in toolbar row, receiving the controls this container owns as ready-made
    * nodes so a caller can re-arrange them without re-implementing their state.
    *
@@ -215,6 +222,7 @@ export function FixturesListContainer({
   respondToIncludeSelection = false,
   columnVisibility: controlledColumnVisibility,
   onColumnVisibilityChange,
+  filterPlaceholder = FIXTURE_FILTER_PLACEHOLDER,
   renderToolbar,
   renderFooter,
   fill = false,
@@ -1094,8 +1102,9 @@ export function FixturesListContainer({
     <div className="relative w-full min-w-48 sm:w-auto sm:flex-1">
       <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
       <Input
-        placeholder={FIXTURE_FILTER_PLACEHOLDER}
+        placeholder={filterPlaceholder}
         title={FIXTURE_FILTER_HINT}
+        aria-label={FIXTURE_FILTER_HINT}
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
         className="h-8 pl-9"

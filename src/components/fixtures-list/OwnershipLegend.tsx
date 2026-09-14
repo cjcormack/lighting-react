@@ -211,20 +211,6 @@ export function OwnershipKey() {
   )
 }
 
-/** Its sibling, for a focused Look layer — the same swap `ScopedLegend` makes on the footer. */
-export function LayerKey() {
-  return (
-    <KeyList heading="In this look">
-      {LAYER_LEGEND_ORDER.map((key) => (
-        <li key={key} className="flex items-center gap-2">
-          <LayerSwatch legendKey={key} />
-          {LAYER_LEGEND_GLOSS[key]}
-        </li>
-      ))}
-    </KeyList>
-  )
-}
-
 function KeyList({ heading, children }: { heading: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5 text-[11px] text-muted-foreground">

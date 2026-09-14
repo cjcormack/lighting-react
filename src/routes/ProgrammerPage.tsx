@@ -33,8 +33,10 @@ const GROUPED_KEY = 'programmer.grouped'
 /**
  * The short-height arm's threshold (space plan D8). A landscape phone is ~393px tall, and an app
  * header, a `ShowHeader` and two rows of chrome leave it four fixture rows and part of a fifth;
- * 500 is the artboard's number and the one `Layout` and `ShowHeader` unstick and tighten
- * themselves at, so the three surfaces fold together rather than at three nearby numbers.
+ * 500 is the artboard's number and the one `Layout` unsticks itself at, so the two surfaces fold
+ * together rather than at two nearby numbers. (`ShowHeader` was a third until the chrome tidy-up
+ * made it `py-2` at every height — see `shortViewport.test.ts`, which pins the sites that are
+ * left.)
  *
  * That count was three until this page stopped drawing a `ShowBar` (see the note beside the
  * header below) — the band was ~60px of the same 393.
