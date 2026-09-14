@@ -167,6 +167,11 @@ describe('ProgrammerRail — the collapsed arms', () => {
     draw()
     const expand = screen.getByRole('button', { name: 'Expand the rail' })
     expect(expand.className).toContain('h-10')
+    // **And the `+` at the foot of the same column.** It was left at `h-9` by the chrome tidy-up
+    // and only the chevron was pinned, so the one control that had missed the system was also the
+    // one the test could not see. Every fixed-height cell of the strip is asserted here now.
+    const add = screen.getByRole('button', { name: 'Add a layer or an effect' })
+    expect(add.className).toContain('h-10')
     // The header is the one 40px row with the gutter; `0 layers` is also the strip count's title.
     const header = document.querySelector('div.h-10.border-b.px-3')!
     expect(header).not.toBeNull()

@@ -562,7 +562,10 @@ function RailStrip({
         label="Add a layer or an effect"
         title="Add a look, a template or an effect"
         side="left"
-        className="h-9 w-10 rounded-none"
+        // `h-10`, like the chevrons above it: this is the 40px strip, and the `+` is a cell of it.
+        // It was `h-9` — four pixels short, and the one control in the strip the chrome tidy-up
+        // missed, which put a seam at the bottom of the column it sits in.
+        className="h-10 w-10 rounded-none"
       />
     </>
   )
