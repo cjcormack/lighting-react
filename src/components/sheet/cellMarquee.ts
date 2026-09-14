@@ -1,8 +1,6 @@
-import type { ColumnKey } from './columns'
-
 /** One column's horizontal extent, measured from the sticky header. */
-export interface ColumnBand {
-  col: ColumnKey
+export interface ColumnBand<C extends string = string> {
+  col: C
   left: number
   right: number
 }
@@ -73,9 +71,9 @@ export function rowIndexRange(
  * Overlap is strict: a rectangle that merely touches a band's edge does not select it, so a drag
  * that starts exactly on a boundary picks one column rather than two.
  */
-export function columnRange(
+export function columnRange<C extends string>(
   rect: Pick<MarqueeRect, 'left' | 'right'>,
-  bands: readonly ColumnBand[],
-): ColumnKey[] {
+  bands: readonly ColumnBand<C>[],
+): C[] {
   return bands.filter((b) => b.left < rect.right && b.right > rect.left).map((b) => b.col)
 }

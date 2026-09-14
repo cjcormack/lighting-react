@@ -18,8 +18,7 @@ import { Breadcrumbs } from "../components/Breadcrumbs"
 import {
   FIXTURES_VIEW_KEY,
   FixturesViewSwitcher,
-  getStoredCardsListView,
-  isCardsLinkState,
+  stickyRedirectsToList,
 } from "../components/ViewSwitcher"
 import { FixtureContent, FixtureViewMode } from "../components/fixtures/FixtureContent"
 import { GroupDetailModal } from "../components/fixtures/GroupDetailModal"
@@ -52,7 +51,7 @@ export function ProjectFixtures() {
   // the last-used view. The switcher's Cards segment both rewrites the
   // preference and tags its navigation with link state, so Cards stays
   // reachable even when the localStorage write fails.
-  if (!isCardsLinkState(location.state) && getStoredCardsListView(FIXTURES_VIEW_KEY) === 'list') {
+  if (stickyRedirectsToList(location.state, FIXTURES_VIEW_KEY)) {
     return <Navigate to={`/projects/${projectIdNum}/fixtures/list`} replace />
   }
 

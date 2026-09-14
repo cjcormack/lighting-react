@@ -7,7 +7,7 @@ import {
   openCellEditorTarget,
   orderedSelectedCells,
 } from './cellEntry'
-import type { CellRef } from './cellSelectionModel'
+import type { CellRef } from '../sheet/cellSelectionModel'
 
 /**
  * Which cell a keystroke opens. Display order on both axes, which is the whole of the rule: the

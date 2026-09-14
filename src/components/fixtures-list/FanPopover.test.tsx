@@ -112,3 +112,28 @@ describe('FanPopover', () => {
     expect(button).toHaveAttribute('title', expect.stringContaining('switch to Local'))
   })
 })
+
+describe('FanPopover (the programmer’s arm of the kit’s popover)', () => {
+  it('still draws From · To byte fields and Reverse for a value column — no Step, no Spread', () => {
+    // The kit's popover grew an address arm (From · Step) and a duration arm (From · To · Spread)
+    // for the patch list and the cue sheet. The programmer's fan is the value arm it always was.
+    render(<FanPopover columns={[DIMMER]} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Fan' }))
+    expect(screen.getByLabelText('From')).toHaveAttribute('type', 'number')
+    expect(screen.getByLabelText('To')).toHaveAttribute('type', 'number')
+    expect(screen.getByLabelText('From')).toHaveAttribute('max', '255')
+    expect(screen.getByRole('checkbox', { name: 'Reverse' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Step')).toBeNull()
+    expect(screen.queryByLabelText('Spread')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Apply' })).not.toBeDisabled()
+  })
+
+  it('names the columns it can drive when the marquee sits in one it cannot — not "select cells"', () => {
+    // A Setting or Position marquee is a selection; the button must say why it cannot fan it.
+    render(<FanPopover columns={[{ col: 'gobo', targets: TARGETS }]} />)
+    const button = screen.getByRole('button', { name: 'Fan' })
+    expect(button).toBeDisabled()
+    expect(button).toHaveAttribute('title', expect.stringContaining('in a column it can drive'))
+    expect(button).not.toHaveAttribute('title', expect.stringContaining('Select cells'))
+  })
+})

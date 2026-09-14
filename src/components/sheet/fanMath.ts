@@ -56,3 +56,40 @@ export function fanColours(from: FanColour, to: FanColour, n: number): FanColour
     return colour
   })
 }
+
+/**
+ * Addresses re-spaced from a start channel — the patch list's Fan, and the arithmetic behind its
+ * consecutive Set.
+ *
+ * `step` is a fixed gap between one fixture's start and the next; **null means each fixture's own
+ * footprint**, which is what every desk surveyed does by default (Eos `1 Thru 10 @ 1` auto-offsets
+ * by type, Hog follows on, MA3's Edit Patch is consecutive) and what a Set over N addresses lands
+ * as. `footprints` is in visible-row order, one per head, and the result is index-parallel to it.
+ *
+ * Channels only. The universe is not part of the walk because the patch PUT cannot move a head to
+ * another universe — every head keeps its own, and `patchAddress.ts` checks each landing against
+ * the heads on that universe. A walk past 512 is returned as it is, so the caller can name the
+ * overflow rather than have it silently wrap or clamp onto the last head.
+ */
+export function fanAddresses(from: number, step: number | null, footprints: readonly number[]): number[] {
+  const out: number[] = []
+  let next = from
+  for (const footprint of footprints) {
+    out.push(next)
+    next += step ?? Math.max(1, footprint)
+  }
+  return out
+}
+
+/**
+ * Fade times spread first→last across a selection — the cue sheet's Fan.
+ *
+ * Milliseconds in, milliseconds out, endpoints exact, rounded to whole ms; `n === 1` gets `to`
+ * exactly as `fanValues` does. One spread for now, *linear*; the control that names it is on the
+ * popover so a second one can be added without the arithmetic moving.
+ */
+export function fanDurations(fromMs: number, toMs: number, n: number): number[] {
+  if (n <= 0) return []
+  if (n === 1) return [toMs]
+  return Array.from({ length: n }, (_, i) => Math.round(fromMs + (toMs - fromMs) * (i / (n - 1))))
+}

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CellRef } from '@/components/fixtures-list/cellSelectionModel'
+import type { CellRef } from '@/components/sheet/cellSelectionModel'
+import type { ColumnKey } from '@/components/fixtures-list/columns'
 
 /**
  * Row C's phone arm (`PD-SELECTION-BAR-DENSITY`, `PD-CLEAR-SELECTION-TOUCH`).
@@ -16,9 +17,9 @@ const shortViewport = vi.hoisted(() => ({ current: false }))
 vi.mock('@/hooks/useMediaQuery', () => ({ useMediaQuery: () => shortViewport.current }))
 
 const { SelectionBar } = await import('./SelectionBar')
-import { MID_FOLDED_CLASS, PHONE_FOLDED_CLASS } from '@/components/fixtures-list/SelectionToolbar'
+import { MID_FOLDED_CLASS, PHONE_FOLDED_CLASS } from '@/components/sheet/toolbarFolds'
 
-const CELLS: CellRef[] = [
+const CELLS: CellRef<ColumnKey>[] = [
   { rowId: 'fixture:a', col: 'colour' },
   { rowId: 'fixture:b', col: 'colour' },
 ]

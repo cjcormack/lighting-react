@@ -3,11 +3,11 @@ import { useNumberFieldDraft } from '@/hooks/useNumberFieldDraft'
 import type { CellResolution } from '../columns'
 import type { CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
-import { CellEditorSurface, type CellClickBehaviour } from './CellEditorSurface'
-import { UNSET_CELL_TITLE, UnsetCellMark } from './UnsetCellMark'
-import { numericSeed, useCellEditorKeyboard } from './useCellEditorKeyboard'
-import { useCellEditorOpen } from './useCellEditorOpen'
-import { ValueFieldRow } from './ValueFieldRow'
+import { CellEditorSurface, type CellClickBehaviour } from '../../sheet/cells/CellEditorSurface'
+import { UNSET_CELL_TITLE, UnsetCellMark } from '../../sheet/cells/UnsetCellMark'
+import { numericSeed, useCellEditorKeyboard } from '../../sheet/cells/useCellEditorKeyboard'
+import { useCellEditorOpen } from '../../sheet/cells/useCellEditorOpen'
+import { ValueFieldRow } from '../../sheet/cells/ValueFieldRow'
 
 interface PositionCellOwnProps {
   value: Extract<CellValue, { kind: 'position' }>

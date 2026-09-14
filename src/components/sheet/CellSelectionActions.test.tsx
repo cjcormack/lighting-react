@@ -2,29 +2,28 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('./FanPopover', () => ({ FanPopover: () => <button type="button">Fan</button> }))
-
 import { CellSelectionActions } from './CellSelectionActions'
-import { cellActionCopy } from './cellEntry'
+import { cellActionCopy } from '../fixtures-list/cellEntry'
 
 afterEach(cleanup)
 
 /**
  * The bar's cell verbs are the marquee's two keys with a button on them. What is pinned is that
- * they take the container's gate and words rather than deciding anything themselves.
+ * they take the surface's gate and words rather than deciding anything themselves — one
+ * `permission` object for the button and the key, so the two cannot disagree — and that Fan is a
+ * slot the surface fills rather than a fan drawn here.
  */
 describe('CellSelectionActions', () => {
-  it('runs Set and Clear from the container, and carries its words', () => {
+  it('runs Set and Clear from the surface, and carries its words', () => {
     const onSet = vi.fn()
     const onClear = vi.fn()
     render(
       <CellSelectionActions
         copy={cellActionCopy({ kind: 'local' }, false, 2)}
-        canSet
+        permission={{ entry: true, clear: true }}
         onSet={onSet}
-        canClear
         onClear={onClear}
-        fanColumns={[]}
+        fan={<button type="button">Fan</button>}
       />,
     )
     const set = screen.getByRole('button', { name: 'Set' })
@@ -40,17 +39,33 @@ describe('CellSelectionActions', () => {
     render(
       <CellSelectionActions
         copy={cellActionCopy({ kind: 'output' }, false, 2)}
-        canSet={false}
+        permission={{ entry: false, clear: false }}
         onSet={() => {}}
-        canClear={false}
         onClear={() => {}}
-        fanColumns={[]}
       />,
     )
     const set = screen.getByRole('button', { name: 'Set' })
     expect(set).toBeDisabled()
     expect(set).toHaveAttribute('title', expect.stringContaining('read of the cook'))
     expect(screen.getByRole('button', { name: 'Clear cells' })).toBeDisabled()
+    // No fan handed in, none drawn: a surface with nothing that fans draws no dead button.
+    expect(screen.queryByRole('button', { name: 'Fan' })).toBeNull()
+  })
+
+  it('refuses one verb without the other — Clear alone, on a column that cannot be empty', () => {
+    // The patch list's Address column: Set lands an address, and an address cannot be cleared.
+    render(
+      <CellSelectionActions
+        copy={{ setTitle: 'Set the address', clearTitle: 'An address cannot be empty' }}
+        permission={{ entry: true, clear: false }}
+        onSet={() => {}}
+        onClear={() => {}}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'Set' })).not.toBeDisabled()
+    const clear = screen.getByRole('button', { name: 'Clear cells' })
+    expect(clear).toBeDisabled()
+    expect(clear).toHaveAttribute('title', 'An address cannot be empty')
   })
 
   it('hands the Set button up as a ref — it is where the editor it opens is anchored', () => {
@@ -61,12 +76,10 @@ describe('CellSelectionActions', () => {
     render(
       <CellSelectionActions
         copy={cellActionCopy({ kind: 'local' }, false, 1)}
-        canSet
+        permission={{ entry: true, clear: true }}
         setRef={ref}
         onSet={() => {}}
-        canClear
         onClear={() => {}}
-        fanColumns={[]}
       />,
     )
     expect(ref.current).toBe(screen.getByRole('button', { name: 'Set' }))

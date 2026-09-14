@@ -11,8 +11,7 @@ import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
 import {
   GROUPS_VIEW_KEY,
   GroupsViewSwitcher,
-  getStoredCardsListView,
-  isCardsLinkState,
+  stickyRedirectsToList,
 } from '../components/ViewSwitcher'
 
 // Redirect component for /groups route
@@ -37,7 +36,7 @@ export function ProjectGroups() {
   // last-used view. The switcher's Cards segment both rewrites the preference
   // and tags its navigation with link state, so Cards stays reachable even
   // when the localStorage write fails.
-  if (!isCardsLinkState(location.state) && getStoredCardsListView(GROUPS_VIEW_KEY) === 'list') {
+  if (stickyRedirectsToList(location.state, GROUPS_VIEW_KEY)) {
     return <Navigate to={`/projects/${projectIdNum}/groups/list`} replace />
   }
 

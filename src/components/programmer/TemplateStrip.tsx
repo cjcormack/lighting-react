@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button'
 import { AudioWaveform, LayoutGrid, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useScrollEdges } from '@/hooks/useScrollEdges'
-import type { CellRef } from '@/components/fixtures-list/cellSelectionModel'
+import type { CellRef } from '@/components/sheet/cellSelectionModel'
+import type { ColumnKey } from '@/components/fixtures-list/columns'
 import { type AttributeFamily } from '@/lib/attributeFamily'
 import { EFFECT_GLYPH_CLASS } from '@/components/busking/padFace'
 import { templateRowsSwatch, describeTemplateIntent } from '@/lib/templateIntent'
@@ -86,7 +87,7 @@ export function TemplateStrip({
 }: {
   projectId: number
   /** The marquee's cells. Empty when the operator has selected rows but not cells. */
-  cells: readonly CellRef[]
+  cells: readonly CellRef<ColumnKey>[]
   /**
    * The families those cells name, already derived by the bar for its own badge — `null` when
    * there are no cells. Passed in rather than recomputed so the badge and these chips answer from

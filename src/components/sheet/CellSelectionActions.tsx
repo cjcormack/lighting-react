@@ -1,9 +1,8 @@
-import type { Ref } from 'react'
+import type { ReactNode, Ref } from 'react'
 import { Delete, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { FanPopover, type FanColumn } from './FanPopover'
-import { PHONE_FOLDED_CLASS, WORD_CLASS } from './SelectionToolbar'
-import type { CellActionCopy } from './cellEntry'
+import { WORD_CLASS } from './toolbarFolds'
+import type { CellActionCopy, CellKeyboardPermission } from './cellEntry'
 
 /**
  * The selection bar's verbs for a **cell** selection: Set, Clear, Fan.
@@ -11,37 +10,42 @@ import type { CellActionCopy } from './cellEntry'
  * Set and Clear are the marquee's two keys with a button on them — Enter and Backspace — and they
  * exist because a phone has neither, and because a released drag no longer opens an editor by
  * itself: the gesture says *what* to edit, and this is where the operator says *do it*. Both take
- * the container's own answer (`cellKeyboardPermission`) for whether they are enabled, and the
- * container's own words (`cellActionCopy`) for why not, so a button can never promise a gesture the
- * grid refuses. Fan moved here from the row toolbar when it started reading the marquee rather
- * than the fixture selection.
+ * the surface's own answer ([permission], the shape `cellKeyboardPermission` returns on the
+ * programmer) for whether they are enabled, and the surface's own words ([copy]) for why not, so a
+ * button can never promise a gesture the keyboard refuses — and a refused key and a disabled
+ * button always agree, since they read one object.
+ *
+ * Fan is a **slot** rather than a component drawn here, because which fan a surface has is the
+ * surface's: the programmer's fans levels and colours through `planBatchWrites`, the patch list's
+ * re-spaces addresses by a step, the cue sheet's spreads fade times. Each hands in its own
+ * `FanPopover` instance, already folded with `PHONE_FOLDED_CLASS` where the surface folds.
  *
  * Set and Clear keep their icons at every width; only Fan folds on the phone arm. On a phone Set
- * is the only way into a selection's editor, and Clear the only way to un-busk one cell without
- * clearing the programmer — so the two controls the phone has no key for are the two it keeps.
+ * is the only way into a selection's editor, and Clear the only way to clear one cell — so the two
+ * controls the phone has no key for are the two it keeps.
  */
 export function CellSelectionActions({
   copy,
-  canSet,
+  permission,
   setRef,
   onSet,
-  canClear,
   onClear,
-  fanColumns,
+  fan,
 }: {
   copy: CellActionCopy
-  canSet: boolean
+  /** Whether Set and Clear are offered — the keyboard's own gate, read here so the two agree. */
+  permission: CellKeyboardPermission
   /**
    * The Set button itself, which is where the editor it opens is anchored — see `editorAnchorRef`
-   * on `FixturesTable`. The panel belongs to the cell that owns it, so the button is handed down
+   * on the sheet's table. The panel belongs to the cell that owns it, so the button is handed down
    * to the grid rather than the editor being hoisted up here.
    */
   setRef?: Ref<HTMLButtonElement>
   /** Open the selection's editor, or close the one this button opened. */
   onSet: () => void
-  canClear: boolean
   onClear: () => void
-  fanColumns: readonly FanColumn[]
+  /** The surface's Fan popover, or nothing where the surface has no column that fans. */
+  fan?: ReactNode
 }) {
   return (
     <>
@@ -49,7 +53,7 @@ export function CellSelectionActions({
         ref={setRef}
         variant="outline"
         size="sm"
-        disabled={!canSet}
+        disabled={!permission.entry}
         onClick={onSet}
         title={copy.setTitle}
         aria-label="Set"
@@ -60,7 +64,7 @@ export function CellSelectionActions({
       <Button
         variant="outline"
         size="sm"
-        disabled={!canClear}
+        disabled={!permission.clear}
         onClick={onClear}
         title={copy.clearTitle}
         aria-label="Clear cells"
@@ -68,7 +72,7 @@ export function CellSelectionActions({
         <Delete className="size-3.5" />
         <span className={WORD_CLASS}>Clear</span>
       </Button>
-      <FanPopover columns={fanColumns} className={PHONE_FOLDED_CLASS} />
+      {fan}
     </>
   )
 }

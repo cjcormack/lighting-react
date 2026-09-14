@@ -9,18 +9,18 @@ import {
   setSelection as setSelectionAction,
   type SelectionScope,
 } from '../../store/selectionSlice'
-import type { ListSelectIntent } from './listSelectionModel'
+import type { ListSelectIntent } from '../sheet/listSelectionModel'
 import type { RowId } from './rowModel'
 
-// The pure model lives in ./listSelectionModel so the slice can reduce with it without
+// The pure model lives in the sheet kit (`sheet/listSelectionModel`) so the slice can reduce with it without
 // importing this hook. Re-exported here because this stays the public entry point — callers
 // and tests import `listSelectionIntentFor` / `applyListSelection` from this module.
 export {
   applyListSelection,
   listSelectionIntentFor,
   setListSelection,
-} from './listSelectionModel'
-export type { ListSelectIntent, ListSelectionState } from './listSelectionModel'
+} from '../sheet/listSelectionModel'
+export type { ListSelectIntent, ListSelectionState } from '../sheet/listSelectionModel'
 
 export interface ListSelection {
   selectedIds: ReadonlySet<RowId>

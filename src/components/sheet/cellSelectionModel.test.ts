@@ -7,8 +7,8 @@ import {
   parseCellKey,
   visibleCells,
 } from './cellSelectionModel'
-import type { ColumnKey } from './columns'
-import type { RowId } from './rowModel'
+import type { ColumnKey } from '../fixtures-list/columns'
+import type { RowId } from './cellSelectionModel'
 
 const rid = (s: string) => s as RowId
 const col = (s: string) => s as ColumnKey

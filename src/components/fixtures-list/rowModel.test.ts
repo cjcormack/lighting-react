@@ -21,7 +21,7 @@ import {
 } from './rowModel'
 import { resolveCell } from './columns'
 import type { ColumnKey } from './columns'
-import { cellKey, cellsByColumn } from './cellSelectionModel'
+import { cellKey, cellsByColumn } from '../sheet/cellSelectionModel'
 import {
   chan,
   colourProp,
@@ -488,7 +488,7 @@ describe('a multi-column marquee, grouped and planned', () => {
       cellKey('fixture:rgb' as RowId, 'colour' as ColumnKey),
     ])
 
-    const written = cellsByColumn(selected).flatMap(({ col, rowIds }) =>
+    const written = cellsByColumn<ColumnKey>(selected).flatMap(({ col, rowIds }) =>
       planBatchWrites(expandSelectionToTargets(rows, new Set(rowIds)), col, {
         kind: 'colour',
         r: 255,
@@ -508,7 +508,7 @@ describe('a multi-column marquee, grouped and planned', () => {
       cellKey('fixture:rgb' as RowId, 'colour' as ColumnKey),
     ])
 
-    const written = cellsByColumn(selected).flatMap(({ col, rowIds }) =>
+    const written = cellsByColumn<ColumnKey>(selected).flatMap(({ col, rowIds }) =>
       planBatchWrites(expandSelectionToTargets(rows, new Set(rowIds)), col, {
         kind: 'slider',
         value: 128,

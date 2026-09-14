@@ -2,7 +2,8 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
-import type { CellRef } from '@/components/fixtures-list/cellSelectionModel'
+import type { CellRef } from '@/components/sheet/cellSelectionModel'
+import type { ColumnKey } from '@/components/fixtures-list/columns'
 
 /**
  * The picker: the whole library that fits the selection, as a searchable pad grid.
@@ -66,14 +67,14 @@ vi.mock('./NewTemplateFromSelectionSheet', () => ({
 
 /** The form the cell editor would choose. Swapped per test — the picker asks, it does not decide. */
 const form = vi.hoisted(() => ({ current: 'popover' as 'popover' | 'bottom-sheet' | 'side-sheet' }))
-vi.mock('@/components/fixtures-list/cells/CellEditorSurface', () => ({
+vi.mock('@/components/sheet/cells/CellEditorSurface', () => ({
   useCellEditorForm: () => form.current,
 }))
 
 const { TemplatePicker } = await import('./TemplatePicker')
 
 const HEX_1: TemplateTarget[] = [{ type: 'fixture', key: 'hex-1' }]
-const COLOUR_CELL: CellRef[] = [{ rowId: 'fixture:hex-1', col: 'colour' }]
+const COLOUR_CELL: CellRef<ColumnKey>[] = [{ rowId: 'fixture:hex-1', col: 'colour' }]
 
 function template(over: Partial<TemplateSummary> = {}): TemplateSummary {
   return {

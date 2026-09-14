@@ -39,6 +39,13 @@ export function useTransportKeys({
     const onKey = (e: KeyboardEvent) => {
       // Browser and system shortcuts (Cmd+L, Cmd+Backspace, …) are not ours.
       if (e.metaKey || e.ctrlKey || e.altKey) return
+      // A key another handler has already claimed is not ours either. The cue sheet's keyboard
+      // (`sheet/useSheetKeyboard`) opens an editor on a character typed at the grid — and `l` is
+      // one of them — from a **capture** listener, so by the time this bubble listener runs the
+      // sheet has said so with `preventDefault()`. Without this, typing a name beginning with `l`
+      // into a cue's cell would also toggle the lock, which is exactly the stray keypress this
+      // handler exists to keep away from a running show.
+      if (e.defaultPrevented) return
       const target = e.target as HTMLElement | null
       if (isEditableTarget(target)) return
       // `isEditableTarget` reads `isContentEditable`, which jsdom does not implement — so a guard

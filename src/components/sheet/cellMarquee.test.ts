@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { columnRange, rectFrom, rowIndexRange } from './cellMarquee'
 import type { ColumnBand } from './cellMarquee'
-import type { ColumnKey } from './columns'
+import type { ColumnKey } from '../fixtures-list/columns'
 
 const GEO = { scrollTop: 0, headerHeight: 32, rowHeight: 36, rowCount: 10 }
 

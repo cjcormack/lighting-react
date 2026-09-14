@@ -1,7 +1,16 @@
-import type { ColumnKey } from './columns'
-import type { CellRef } from './cellSelectionModel'
-import type { RowId } from './rowModel'
 import type { ProgrammerScope } from '../programmer/ProgrammerScope'
+import type { CellActionCopy, CellKeyboardPermission } from '../sheet/cellEntry'
+
+// The generic half — which cell a keystroke opens, the DOM guards, and the two shapes the
+// permission and the copy take — lives in the sheet kit and is re-exported here so this list's
+// callers and tests keep one import. What stays in this file is the programmer's own answer to
+// those two questions, because it reads a `ProgrammerScope`.
+export {
+  marqueeOwnsKeyTarget,
+  openCellEditorTarget,
+  orderedSelectedCells,
+} from '../sheet/cellEntry'
+export type { CellActionCopy, CellKeyboardPermission } from '../sheet/cellEntry'
 
 /**
  * The keyboard half of the marquee: which cell a keystroke opens, and which scopes may take one.
@@ -35,50 +44,6 @@ import type { ProgrammerScope } from '../programmer/ProgrammerScope'
  */
 
 /**
- * The selected cells in the order the operator sees them: by displayed row, and within a row by
- * visible column.
- *
- * The caller takes the **first one that has an editor**, which is why this hands back the whole
- * order rather than just the winner. A marquee is geometric — `hitsFor` sweeps a rectangle over
- * rows and column bands — so it happily covers a Colour cell on a dimmer-only par, and opening
- * "the first selected cell" flatly would leave Enter doing nothing at all on a perfectly ordinary
- * selection. Which columns a row resolves is `buildRowCells`' answer and needs the rows, so it is
- * the container's half rather than this one's.
- *
- * The ordering is the first cell in display order, on both axes. (It was shared with
- * `singleColumnAnchor`, which anchored the editor a released drag used to open; that open and
- * that function are gone, and this is the one copy of the rule.) [rowOrder] and [columnOrder] are
- * as displayed;
- * a selected cell that is filtered out or in a hidden column ranks last rather than being dropped,
- * so a selection made entirely of such cells is still offered rather than silently empty.
- */
-export function orderedSelectedCells(
-  cells: readonly CellRef[],
-  rowOrder: readonly RowId[],
-  columnOrder: readonly ColumnKey[],
-): CellRef[] {
-  const rowRank = new Map(rowOrder.map((id, index) => [id, index]))
-  const colRank = new Map(columnOrder.map((col, index) => [col, index]))
-  const rank = (cell: CellRef): [number, number] => [
-    rowRank.get(cell.rowId) ?? Infinity,
-    colRank.get(cell.col) ?? Infinity,
-  ]
-  return [...cells].sort((a, b) => {
-    const [aRow, aCol] = rank(a)
-    const [bRow, bCol] = rank(b)
-    return aRow - bRow || aCol - bCol
-  })
-}
-
-/** Which of the marquee's two keyboard gestures the current scope may take. */
-export interface CellKeyboardPermission {
-  /** Enter / a character: the cell's own editor is opened over the selection and its commit taken. */
-  entry: boolean
-  /** Backspace / Delete: the selected cells — values and the local effects on them — are taken out of Local. */
-  clear: boolean
-}
-
-/**
  * The scope gate for the marquee's keyboard — and for the selection bar's Set and Clear, which are
  * the same two gestures with a button on them. The fourth place "read-only" has to be said.
  *
@@ -105,14 +70,6 @@ export function cellKeyboardPermission(
   if (scope == null || scope.kind === 'local') return { entry: true, clear: true }
   if (scope.kind === 'output') return { entry: false, clear: false }
   return focusedTemplate ? { entry: false, clear: false } : { entry: true, clear: false }
-}
-
-/** The hovers on the selection bar's two cell verbs, per scope. */
-export interface CellActionCopy {
-  /** Set's hover, or the reason it is disabled. */
-  setTitle: string
-  /** Clear's hover, or the reason it is disabled. */
-  clearTitle: string
 }
 
 /**
@@ -150,74 +107,4 @@ export function cellActionCopy(
     setTitle: `Set the ${cells} in Local — this is what Record will take (Enter)`,
     clearTitle: `Take the ${cells} out of Local, including any effect busked on them (Backspace)`,
   }
-}
-
-/**
- * Is a keystroke's target a cell the live marquee already covers?
- *
- * The DOM half of the grid's "not from a focused control" guard, and the reason it needs a half at
- * all. A cell trigger is a `<button>`, so a bare `closest('button')` test calls it someone else's
- * control — and after a marquee drag it can be *exactly* where the focus is: the press focuses the
- * button under it (Chromium does, on mousedown; the release blurs it, but an editor closed by
- * Escape hands focus back to its trigger). Every arm of the marquee keyboard then fell through
- * from there, Enter to the button's own default activation — which is now "select this one cell",
- * and was then "open *that* cell's editor with nothing focused": either way, not the first
- * selected cell's editor with its first field focused and waiting.
- *
- * The exemption is exactly as wide as the marquee and no wider, which is what keeps the rest of
- * the guard intact: a template chip, the bar's own Set and a menu item are not inside a cell at
- * all; a cell *outside* the selection, tabbed to while one is live, is still its own editor's
- * trigger; and with no cells selected the caller never asks, so plain Tab-then-Enter is untouched
- * — it selects that cell on the programmer, and opens its editor on the two plain list routes,
- * which is exactly what a click there does.
- *
- * **It claims any control inside a covered cell, not the editor trigger specifically**, and that
- * is a deliberate width rather than an oversight: all four cell editors hang off a Popover
- * today, but naming the trigger — by `data-slot`, or by "the only button here" — would make this
- * exemption lapse silently the day one of them became a Select or a Dialog, which is the very
- * defect it exists to fix. The cost is the other direction: the grid's *second* in-cell control,
- * `OwnerJumpOverlay` (`FixturesTable.tsx`), would have its Enter and Backspace taken by the
- * marquee too. It does not today, because it renders only in Output scope, where
- * `cellKeyboardPermission` refuses both keys — so **a third in-cell control added in an editable
- * scope needs its own answer here**, and that is the check to make rather than a narrower
- * predicate now.
- *
- * Reads `data-cell` and `data-row-id`, the grid's addressing contract — the same two attributes
- * `FixturesTable` hangs on its rows and cells, and the same pair `orderedSelectedCells` above names
- * a cell by. Rename either and this has to move with it.
- */
-/**
- * Which cell's editor is open, by the grid's own addressing contract.
- *
- * `data-state` is Radix's word, restored by hand on the cell's anchor (`CellEditorSurface`) because
- * an anchor does not carry one — and `[data-cell]` is what scopes the question to a *cell* editor,
- * so `FanPopover`'s panel, mounted from the toolbar and a cell editor in every other way, does not
- * answer it. Read with `data-row-id`, the same pair `marqueeOwnsKeyTarget` below walks.
- *
- * The selection bar's **Set** asks, because Set has to be able to close what it opened: a press on
- * that button is not the outside click that dismisses a popover — the button is that popover's own
- * anchor — so without an answer here the second press had nothing to do and the panel stayed open
- * with focus stranded on the button. The DOM rather than lifted state, for the reason
- * `cellEditorIsOpen` gives: this is one bit, and the state lives per cell, hundreds of instances
- * down.
- */
-export function openCellEditorTarget(): CellRef | null {
-  if (typeof document === 'undefined') return null
-  const anchor = document.querySelector('[data-cell] [data-state="open"]')
-  const rowId = anchor?.closest('[data-row-id]')?.getAttribute('data-row-id')
-  const col = anchor?.closest('[data-cell]')?.getAttribute('data-cell')
-  if (!rowId || !col) return null
-  return { rowId: rowId as RowId, col: col as ColumnKey }
-}
-
-export function marqueeOwnsKeyTarget(
-  target: EventTarget | null,
-  isCellSelected: (rowId: RowId, col: ColumnKey) => boolean,
-): boolean {
-  if (!(target instanceof HTMLElement)) return false
-  const cell = target.closest<HTMLElement>('[data-cell]')
-  const col = cell?.dataset.cell
-  const rowId = cell?.closest<HTMLElement>('[data-row-id]')?.dataset.rowId
-  if (col == null || rowId == null) return false
-  return isCellSelected(rowId, col as ColumnKey)
 }

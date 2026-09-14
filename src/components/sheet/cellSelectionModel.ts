@@ -1,11 +1,21 @@
-import type { ColumnKey } from './columns'
-import type { RowId } from './rowModel'
 import type { ListSelectIntent } from './listSelectionModel'
 
-/** One cell of the grid: a row and a value column. */
-export interface CellRef {
+/**
+ * A row's id. A string on every sheet — `group:{name}` / `fixture:{key}` on the fixtures list,
+ * `patch:{id}` on the patch list, `cue:{id}` on the cue sheet, `ch:{n}` on the DMX sheet.
+ */
+export type RowId = string
+
+/**
+ * One cell of a sheet: a row and a value column.
+ *
+ * Generic over the column key so each surface keeps its own closed column vocabulary (the
+ * fixtures list's `ColumnKey`, the patch list's, the cue sheet's) while the selection, marquee and
+ * editor machinery is written once. Defaults to `string` where the column set is not the point.
+ */
+export interface CellRef<C extends string = string> {
   rowId: RowId
-  col: ColumnKey
+  col: C
 }
 
 /**
@@ -22,13 +32,13 @@ export type CellSelectionState = ReadonlySet<string>
 
 const SEP = '\u0000'
 
-export function cellKey(rowId: RowId, col: ColumnKey): string {
+export function cellKey(rowId: RowId, col: string): string {
   return `${rowId}${SEP}${col}`
 }
 
-export function parseCellKey(key: string): CellRef {
+export function parseCellKey<C extends string = string>(key: string): CellRef<C> {
   const at = key.indexOf(SEP)
-  return { rowId: key.slice(0, at) as RowId, col: key.slice(at + 1) as ColumnKey }
+  return { rowId: key.slice(0, at), col: key.slice(at + 1) as C }
 }
 
 /**
@@ -41,7 +51,7 @@ export function parseCellKey(key: string): CellRef {
  */
 export function applyCellSelection(
   current: CellSelectionState,
-  hits: readonly CellRef[],
+  hits: readonly CellRef<string>[],
   intent: ListSelectIntent,
 ): CellSelectionState {
   const keys = hits.map((h) => cellKey(h.rowId, h.col))
@@ -67,10 +77,12 @@ export function applyCellSelection(
  * multi-column marquee becomes one batch call per column, each keeping `resolveTargetCells`'
  * parent-first precedence and per-target clamping exactly as a single-column write has them.
  */
-export function cellsByColumn(selected: CellSelectionState): { col: ColumnKey; rowIds: RowId[] }[] {
-  const byCol = new Map<ColumnKey, RowId[]>()
+export function cellsByColumn<C extends string = string>(
+  selected: CellSelectionState,
+): { col: C; rowIds: RowId[] }[] {
+  const byCol = new Map<C, RowId[]>()
   for (const key of selected) {
-    const { rowId, col } = parseCellKey(key)
+    const { rowId, col } = parseCellKey<C>(key)
     const list = byCol.get(col)
     if (list) list.push(rowId)
     else byCol.set(col, [rowId])
@@ -85,22 +97,22 @@ export function cellsByColumn(selected: CellSelectionState): { col: ColumnKey; r
  * silently contributing to the next write. The stored state is left alone — re-showing the row
  * brings its cells back, which is what an operator toggling `Lit` expects.
  */
-export function visibleCells(
+export function visibleCells<C extends string = string>(
   selected: CellSelectionState,
   visibleRowIds: ReadonlySet<string>,
-): CellRef[] {
-  const out: CellRef[] = []
+): CellRef<C>[] {
+  const out: CellRef<C>[] = []
   for (const key of selected) {
-    const ref = parseCellKey(key)
+    const ref = parseCellKey<C>(key)
     if (visibleRowIds.has(ref.rowId)) out.push(ref)
   }
   return out
 }
 
 /** A short description of the scope, for the drag chip and the selection bar. */
-export function describeCellScope(
-  cells: readonly CellRef[],
-  labelFor: (col: ColumnKey) => string,
+export function describeCellScope<C extends string>(
+  cells: readonly CellRef<C>[],
+  labelFor: (col: C) => string,
 ): string {
   if (cells.length === 0) return ''
   const cols = [...new Set(cells.map((c) => c.col))]

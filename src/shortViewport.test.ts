@@ -6,8 +6,8 @@ import { describe, expect, it } from 'vitest'
 import programmerPageSrc from './routes/ProgrammerPage.tsx?raw'
 import layoutSrc from './Layout.tsx?raw'
 import programmerGridSrc from './components/programmer/ProgrammerGrid.tsx?raw'
-import selectionBarSrc from './components/programmer/SelectionBar.tsx?raw'
-import cellEditorSurfaceSrc from './components/fixtures-list/cells/CellEditorSurface.tsx?raw'
+import selectionBarSrc from './components/sheet/SelectionBar.tsx?raw'
+import cellEditorSurfaceSrc from './components/sheet/cells/CellEditorSurface.tsx?raw'
 
 /**
  * The short-viewport fold is one decision written in three places, and this is what keeps them one
@@ -60,7 +60,7 @@ describe('the short-viewport fold', () => {
     // `useMediaQuery` — or, in the third case, a `matchMedia` store of its own — passes this
     // straight to `window.matchMedia`, which answers `false` for a string it cannot parse rather
     // than throwing, so a typo here is a fold that silently never happens. Three sites hand it a
-    // string: `ProgrammerBody`, which moves rows A and B; `SelectionBar` (its own module since the
+    // string: `ProgrammerBody`, which moves rows A and B; `SelectionBar` (the sheet kit's since the
     // desk-findings' group B), which decides whether row C is permanently in the flow
     // (`selectionBandState`); and `CellEditorSurface`, which swaps a cell editor's bottom sheet
     // for a right-hand one, because a short viewport has no vertical room to give a bottom sheet.

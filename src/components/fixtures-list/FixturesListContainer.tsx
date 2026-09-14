@@ -8,22 +8,25 @@ import { Lightbulb, Search } from 'lucide-react'
 import { useFixtureListQuery } from '../../store/fixtures'
 import { useGroupListQuery } from '../../store/groups'
 import { usePersistentState } from '../../hooks/usePersistentState'
-import { useCellSelection, type CellSelection } from './useCellSelection'
-import { useEscapeEditorSnapshot } from './useEscapeEditorSnapshot'
+import { useCellSelection, type CellSelection } from '../sheet/useCellSelection'
+import { useEscapeEditorSnapshot } from '../sheet/useEscapeEditorSnapshot'
+import { useCellEditorRequests } from '../sheet/useCellEditorRequests'
 import { useProgrammerScope } from '../programmer/ProgrammerScope'
 import { useFocusedTemplateLayer } from '../programmer/FocusedTemplateLayer'
 import {
   cellActionCopy,
   cellKeyboardPermission,
   marqueeOwnsKeyTarget,
-  openCellEditorTarget,
   orderedSelectedCells,
 } from './cellEntry'
 import { resolutionPropertyNames } from './columns'
 import { cellEffectKey } from './cellEffects'
 import { useClearCellEffects } from './useClearCellEffects'
-import type { CellRef } from './cellSelectionModel'
-import type { ListSelectIntent } from './listSelectionModel'
+import type { CellRef } from '../sheet/cellSelectionModel'
+
+/** This list's cell, over its closed column vocabulary. */
+type FixtureCellRef = CellRef<ColumnKey>
+import type { ListSelectIntent } from '../sheet/listSelectionModel'
 import type { AttributeFamily } from '../../lib/attributeFamily'
 import {
   ColumnsMenu,
@@ -61,7 +64,8 @@ import { applyPlannedWrite, useCellWriters } from './useCellWriters'
 import { useLitFixtureKeys } from './useLitFixtureKeys'
 import { FixturesTable } from './FixturesTable'
 import { SelectionToolbar } from './SelectionToolbar'
-import { CellSelectionActions } from './CellSelectionActions'
+import { PHONE_FOLDED_CLASS } from '../sheet/toolbarFolds'
+import { CellSelectionActions } from '../sheet/CellSelectionActions'
 import { FanPopover, fanColumnsForTargets, type FanColumn } from './FanPopover'
 import { FixtureDetailModal } from '../groups/FixtureDetailModal'
 import { GroupDetailModal } from '../fixtures/GroupDetailModal'
@@ -144,7 +148,7 @@ export interface FixturesListContainerProps {
      */
     selection: React.ReactNode | null
     /** The marquee's cells, for a scope label beside the fixture count. Empty when none. */
-    cells: readonly CellRef[]
+    cells: readonly FixtureCellRef[]
     /**
      * True when Enter (or a digit) — or the toolbar's Set — opens the marquee's editor: cells are
      * selected and the scope can take a value (`cellKeyboardPermission`). The editor itself is the
@@ -282,7 +286,7 @@ export function FixturesListContainer({
   )
   const selection = useListSelection(selectableOrder, selectionScope)
   const visibleRowIds = useMemo(() => new Set(rows.map((r) => r.id)), [rows])
-  const cellSelection = useCellSelection(visibleRowIds)
+  const cellSelection = useCellSelection<ColumnKey>(visibleRowIds)
   const { count: cellCount, clear: clearCells, isSelected: isCellSelected } = cellSelection
 
   // ── One selection, two shapes ─────────────────────────────────────────────────────────────
@@ -303,13 +307,13 @@ export function FixturesListContainer({
   rowCountRef.current = selection.count
   const { select: selectRowRaw, selectAll: selectAllRaw, setSelection: setRowsRaw, clear: clearRows } = selection
   const selectCells = useCallback(
-    (hits: readonly CellRef[], intent: ListSelectIntent) => {
+    (hits: readonly FixtureCellRef[], intent: ListSelectIntent) => {
       if (hits.length > 0 && rowCountRef.current > 0) clearRows()
       cellSelection.select(hits, intent)
     },
     [cellSelection, clearRows],
   )
-  const tableCellSelection = useMemo<CellSelection>(
+  const tableCellSelection = useMemo<CellSelection<ColumnKey>>(
     () => ({ ...cellSelection, select: selectCells }),
     [cellSelection, selectCells],
   )
@@ -594,32 +598,11 @@ export function FixturesListContainer({
    * cells rather than resolved here, because the popover belongs to the cell that owns the editor.
    */
   const setButtonRef = useRef<HTMLButtonElement | null>(null)
-  /**
-   * Close the editor Set opened — a one-shot handed to `FixturesTable`, the mirror of `keyboardOpen`.
-   *
-   * **Set has to close it, because nothing else does.** The Set button is the open popover's own
-   * anchor, and a press on it is not treated as the outside click that dismisses one — verified on
-   * the desk: pressing Set twice left the panel open with focus on the button. So the second press
-   * asks the cell to close, which is what makes Set behave the way Fan's own button always has.
-   */
-  const [closeEditorCell, setCloseEditorCell] = useState<CellRef | null>(null)
-  useEffect(() => {
-    if (closeEditorCell) setCloseEditorCell(null)
-  }, [closeEditorCell])
-  const [keyboardOpen, setKeyboardOpen] = useState<{
-    rowId: RowId
-    col: ColumnKey
-    seed: string
-    /** Set's press, which opens the editor at that button. See `useCellEditorOpen`. */
-    atButton: boolean
-  } | null>(null)
-  useEffect(() => {
-    if (keyboardOpen) setKeyboardOpen(null)
-  }, [keyboardOpen])
 
   /**
-   * Open the editor for the first selected cell in display order **that has one**, carrying
-   * whatever character opened it.
+   * The cell Set, Enter and a typed character all name: first in display order **that has an
+   * editor**. Shared with the close request, so the press that shuts the panel cannot name a
+   * different cell from the press that opened it.
    *
    * The "that has one" is not a nicety. A marquee is geometric, so a rectangle drawn across a rig
    * of mixed heads covers Colour cells on dimmer-only pars and Position cells on everything that
@@ -630,24 +613,9 @@ export function FixturesListContainer({
    *
    * Opening one column's editor for a selection that spans several is not a narrowing — see
    * `cellEntry.ts` and `commitToCells`.
-   *
-   * **A cell that is not on screen is scrolled to rather than opened.** The rows are virtualised,
-   * so an operator who selects cells, scrolls away and then presses Enter names a row that no
-   * `RowView` is mounted for — and the request, being a one-shot the table drops on the very next
-   * commit, would be swallowed in silence. It cannot simply be held until the row mounts: that is
-   * precisely the standing signal `autoOpenCell` is a one-shot to avoid, which would spring an
-   * editor open minutes later on an unrelated scroll. Nor can the two be done in one press: the
-   * virtualiser learns its new offset from a *scroll event*, so the row is a commit or two behind
-   * the request whatever order they are issued in. So the first press brings the cell into view
-   * and the second opens it — visibly doing something, which is the part that was missing.
    */
   const rowById = useMemo(() => new Map(rows.map((row) => [row.id, row])), [rows])
-  /**
-   * The cell Set, Enter and a typed character all name: first in display order **that has an
-   * editor**. Shared with the close request below, so the press that shuts the panel cannot name a
-   * different cell from the press that opened it.
-   */
-  const firstEditableSelectedCell = useCallback((): CellRef | undefined => {
+  const firstEditableSelectedCell = useCallback((): FixtureCellRef | undefined => {
     const ordered = orderedSelectedCells(
       cellSelection.cells,
       rows.map((row) => row.id),
@@ -669,42 +637,16 @@ export function FixturesListContainer({
     })
   }, [cellSelection.cells, rows, rowById, visibleColumns])
 
-  const openCellEditor = useCallback(
-    (seed: string, atButton = false) => {
-      const first = firstEditableSelectedCell()
-      if (!first) return
-      // The DOM is the only thing that knows what the virtualiser rendered, and `data-row-id` is
-      // the grid's own addressing contract — the same attribute `marqueeOwnsKeyTarget` reads,
-      // walked the other way. Asked rather than always scrolling, because recentring the list
-      // under an operator who pressed Enter on a cell they were already looking at is worse than
-      // the problem.
-      if (document.querySelector(`[data-row-id="${CSS.escape(first.rowId)}"]`) == null) {
-        setScrollToRowId(first.rowId)
-        return
-      }
-      setKeyboardOpen({ rowId: first.rowId, col: first.col, seed, atButton })
-    },
-    [firstEditableSelectedCell],
-  )
-
-  /**
-   * The selection bar's **Set**: open the selection's editor, or close the one it opened.
-   *
-   * Asked at click time, which is only safe because a press on Set does *not* dismiss the panel —
-   * Set is that popover's own anchor. `cellEditorIsOpen()` would answer true for `FanPopover` too,
-   * which is a cell editor in every way but this one, so the question is scoped to a cell's own
-   * anchor through the grid's addressing contract.
-   */
-  const toggleCellEditor = useCallback(() => {
-    const open = openCellEditorTarget()
-    if (open) {
-      setCloseEditorCell(open)
-      return
-    }
-    // Set is pressed at the toolbar, so its editor opens there. Enter and a typed character are
-    // made at the selection and open beside the cell — see `anchorAtButton` in `useCellEditorOpen`.
-    openCellEditor('', true)
-  }, [openCellEditor])
+  // The two one-shots handed to `FixturesTable` — open this cell's editor, close it — and the
+  // gestures behind them: Enter and a typed character (`openCellEditor`, beside the cell) and the
+  // bar's Set (`toggleCellEditor`, at the button, or closing what it opened). The rule is the sheet
+  // kit's, shared with the patch list, the DMX sheet and the cue sheet; see the hook for why a
+  // request is a one-shot and why an off-screen cell is scrolled to rather than opened.
+  const { keyboardOpen, closeEditorCell, openCellEditor, toggleCellEditor } =
+    useCellEditorRequests<ColumnKey>({
+      firstEditableCell: firstEditableSelectedCell,
+      onScrollTo: setScrollToRowId,
+    })
 
   /**
    * Backspace / Delete on a marquee: take the selected cells out of Local — the spreadsheet's
@@ -1159,12 +1101,11 @@ export function FixturesListContainer({
     cellCount > 0 ? (
       <CellSelectionActions
         copy={cellActionCopy(scope, focusedTemplate != null, cellCount)}
-        canSet={canTypeCells}
+        permission={keys}
         setRef={setButtonRef}
         onSet={toggleCellEditor}
-        canClear={canClearCells}
         onClear={clearSelectedCells}
-        fanColumns={columnTargets}
+        fan={<FanPopover columns={columnTargets} className={PHONE_FOLDED_CLASS} />}
       />
     ) : !showOwnership && selectedTargets.length > 0 ? (
       <FanPopover columns={rowFanColumns} />

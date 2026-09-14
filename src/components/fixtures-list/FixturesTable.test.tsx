@@ -129,7 +129,7 @@ vi.mock('../../store/status', () => ({
 
 import { FixturesTable } from './FixturesTable'
 import { EditorContextProvider } from '../programmer/EditorContext'
-import { useCellSelection } from './useCellSelection'
+import { useCellSelection } from '../sheet/useCellSelection'
 import type { Row } from './rowModel'
 import { lookRowKey } from '../programmer/lookRowKey'
 import type { ColumnKey } from './columns'
@@ -173,7 +173,7 @@ function Harness({
    */
   visibleColumns?: ColumnKey[]
 }) {
-  const cellSelection = useCellSelection(new Set(rows.map(r => r.id)))
+  const cellSelection = useCellSelection<ColumnKey>(new Set(rows.map(r => r.id)))
   return (
     <>
       <FixturesTable
@@ -939,7 +939,7 @@ describe('FixturesTable neutral selection', () => {
   const rowOf = (name: string) => screen.getByText(name).closest('.group\\/row')!
 
   function SelectedHarness() {
-    const cellSelection = useCellSelection(new Set(ROWS.map((r) => r.id)))
+    const cellSelection = useCellSelection<ColumnKey>(new Set(ROWS.map((r) => r.id)))
     return (
       <FixturesTable
         rows={ROWS}

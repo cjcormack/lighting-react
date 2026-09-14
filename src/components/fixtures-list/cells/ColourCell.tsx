@@ -3,9 +3,9 @@ import { ColourPickerPopover } from '../../fixtures/ColourPickerPopover'
 import type { CellResolution } from '../columns'
 import type { CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
-import { useCellEditorCramped, type CellClickBehaviour } from './CellEditorSurface'
-import { UNSET_CELL_TITLE, UnsetCellMark } from './UnsetCellMark'
-import { useCellEditorOpen } from './useCellEditorOpen'
+import { useCellEditorCramped, type CellClickBehaviour } from '../../sheet/cells/CellEditorSurface'
+import { UNSET_CELL_TITLE, UnsetCellMark } from '../../sheet/cells/UnsetCellMark'
+import { useCellEditorOpen } from '../../sheet/cells/useCellEditorOpen'
 
 interface ColourCellOwnProps {
   value: Extract<CellValue, { kind: 'colour' }>

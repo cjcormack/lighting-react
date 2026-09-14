@@ -1,12 +1,13 @@
-import type { RowId } from './rowModel'
+import type { RowId } from './cellSelectionModel'
 
 /**
  * The pure half of list selection: intent parsing and the state transitions.
  *
- * Separate from [useListSelection] so that `store/selectionSlice.ts` can reduce with these
+ * Separate from `useListSelection` so that `store/selectionSlice.ts` can reduce with these
  * without importing the hook that dispatches its actions — the two would otherwise form an
- * import cycle. Everything here is re-exported from `useListSelection.ts`, which stays the
- * public entry point.
+ * import cycle. Everything here is re-exported from `fixtures-list/useListSelection.ts`, which
+ * stays that list's public entry point; the sheet kit's own `useLocalListSelection` reduces with
+ * the same functions for the surfaces whose row selection is nobody's business but their own.
  */
 
 export type ListSelectIntent = 'replace' | 'toggle' | 'range' | 'range-add'

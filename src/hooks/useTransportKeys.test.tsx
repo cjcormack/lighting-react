@@ -47,6 +47,25 @@ describe('useTransportKeys', () => {
     expect(onBack).toHaveBeenCalledTimes(1)
   })
 
+  it('leaves a key another handler has already claimed alone — including L', () => {
+    // The cue sheet's keyboard runs in the capture phase and claims a character typed at the grid
+    // by preventing its default. `l` is a character, so a name typed into a cue cell must not
+    // toggle the lock as it goes in.
+    const onGo = vi.fn()
+    const onToggleLock = vi.fn()
+    render(<Harness onGo={onGo} onToggleLock={onToggleLock} />)
+    const claim = (e: Event) => e.preventDefault()
+    window.addEventListener('keydown', claim, true)
+    try {
+      fireEvent.keyDown(document.body, { code: 'KeyL', key: 'l' })
+      fireEvent.keyDown(document.body, { code: 'Space', key: ' ' })
+    } finally {
+      window.removeEventListener('keydown', claim, true)
+    }
+    expect(onToggleLock).not.toHaveBeenCalled()
+    expect(onGo).not.toHaveBeenCalled()
+  })
+
   it('leaves modified keys to the browser', () => {
     const onGo = vi.fn()
     render(<Harness onGo={onGo} />)

@@ -68,15 +68,16 @@ vi.mock('./NewTemplateFromSelectionSheet', () => ({
 const { TemplateStrip } = await import('./TemplateStrip')
 import type { TemplateTarget } from '@/api/templatesApi'
 import type { AttributeFamily } from '@/lib/attributeFamily'
-import type { CellRef } from '@/components/fixtures-list/cellSelectionModel'
+import type { CellRef } from '@/components/sheet/cellSelectionModel'
+import type { ColumnKey } from '@/components/fixtures-list/columns'
 import { cellFamilies } from '@/components/fixtures-list/columns'
 
 const HEX_1: TemplateTarget[] = [{ type: 'fixture', key: 'hex-1' }]
-const COLOUR_CELL: CellRef[] = [{ rowId: 'fixture:hex-1', col: 'colour' }]
+const COLOUR_CELL: CellRef<ColumnKey>[] = [{ rowId: 'fixture:hex-1', col: 'colour' }]
 
 /** The strip with the container's three answers: cells, where a press lands, what those heads have. */
 function strip(
-  cells: CellRef[],
+  cells: CellRef<ColumnKey>[],
   targets: TemplateTarget[] = HEX_1,
   targetFamilies: AttributeFamily[] = ['INTENSITY', 'COLOUR'],
   targetEmitters: string[] = ['white', 'amber', 'uv'],

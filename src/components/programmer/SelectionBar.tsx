@@ -1,84 +1,24 @@
-import { useMemo, useRef } from 'react'
-import { MousePointerSquareDashed } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
-import { cn } from '@/lib/utils'
-import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { useMemo } from 'react'
 import { formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
-import { describeCellScope, type CellRef } from '@/components/fixtures-list/cellSelectionModel'
-import { cellFamilies, columnLabel } from '@/components/fixtures-list/columns'
-import { MID_FOLDED_CLASS, PHONE_FOLDED_CLASS } from '@/components/fixtures-list/SelectionToolbar'
+import { describeCellScope, type CellRef } from '@/components/sheet/cellSelectionModel'
+import { cellFamilies, columnLabel, type ColumnKey } from '@/components/fixtures-list/columns'
+import { SelectionBar as SheetSelectionBar } from '@/components/sheet/SelectionBar'
 import { TemplateStrip } from './TemplateStrip'
-import { selectionBandState } from './selectionBand'
 import type { LocateTarget } from '@/store/locate'
 
-/** The ShowBar's key-cap styling, so the two hints read as one vocabulary. */
-const KBD_CLASS = 'rounded border bg-muted/50 px-1.5 py-px text-[9.5px]'
-
 /**
- * The short-viewport fold, spelled for `matchMedia` — a second copy of `ProgrammerPage`'s own
- * constant, and `shortViewport.test.ts` is what keeps the two one number. It cannot be imported
- * from there: this module is part of that page's own tree, and `import/no-cycle` is an error here.
+ * Row C on the programmer — the sheet kit's selection bar with the templates riding it.
  *
- * Row C asks it for a different reason than the rest of D8 does. The others fold *chrome* to buy
- * height; this one decides whether the selection bar is permanently in the flow or held back until
- * a drag ends — see `selectionBandState`.
- */
-const SHORT_VIEWPORT = '(max-height: 500px)'
-
-/**
- * Row C — the selection bar, which is also where the templates now live.
+ * The bar itself — the 40px line, the counts, the family pill, the hints, the hold-its-place
+ * rule on a short viewport — is `sheet/SelectionBar.tsx` since the patch list, the DMX sheet and
+ * the cue sheet gained the same row (CLAUDE.md §Sheet kit). What is the programmer's is what this
+ * file computes: the family the marquee *named* (never the capability list a rows-only selection
+ * produces — badging that would read as the operator's statement when it is only the strip's
+ * filter), the heads a template press lands on, and the strip itself.
  *
- * **One 40px line, and it never wraps**, which is the change session 2 of the space plan is for.
- * (It was 34, with 32px verbs beside 26px chips — a 1px inset. The chrome tidy-up put every row
- * at 40 with 32px controls, so the inset is 4px here as it is on rows A and B, and the chips and
- * `New` moved to the 28px nested tier; see `TemplateStrip`.)
- * It used to be two bands: a full-width template strip that showed the whole library with nothing
- * selected (and wrapped to four rows on a real one), and a rounded selection card below it.
- * Together they cost ~90px of a grid's height, permanently, for a strip whose press could only
- * toast. Now the chips scroll sideways inside it under a fade, and the bar carries only what a
- * live selection has to say.
- *
- * **Whether it is in the flow with nothing selected is `selectionBandState`'s answer, not a
- * constant** (`PD-SELECTION-BAR-SHIFT`). It used to be simply absent, which meant the first cell
- * of a marquee mounted it and pushed every row down by its height under a pointer that was mid-drag. On a
- * desk the band is now always in the flow — reserved and quiet when there is no selection, since
- * the height is only saved at a moment the grid is not being used anyway. On a landscape phone the
- * 40px is worth more than that, so there it stays out of the flow and its presence is *held* for
- * the duration of a drag instead: it arrives on pointer-up, not on the first cell.
- *
- * It is full-bleed with a `border-b` rather than a rounded card inset in a padded block: it is a
- * *rung of the grid's chrome* like row B above it, not an object floating over the page, and the
- * card's 16px of surrounding padding was height.
- *
- * **Below `@[800px]` the row starts shedding for the templates.** The fixture count and its
- * separator fold into the cell count's hover, and Locate and Highlight go with them
- * (`MID_FOLDED_CLASS`) — the two controls on this row that are also on the busk view's target band.
- * That is what gives an iPad portrait two recent chips instead of none. Below `@[600px]` the
- * template *scroller* goes too, and the library is reached through `All · n` alone.
- *
- * **Below `@[600px]` it is glyph · count · chips · New · Set · Clear · X**, which is the `Phone`
- * artboard (`PD-SELECTION-BAR-DENSITY`) plus the two cell verbs. The fixture count folds into the
- * cell count's hover, the family badge goes (the chips are already filtered by it), and Locate,
- * Highlight and Fan fold (`SelectionToolbar` and `CellSelectionActions`) — the chips are the only
- * thing on this row an operator presses, and on a 393px phone the detail was taking the width
- * they needed. Three controls are kept at every width. Deselect, because on a phone it and a tap
- * on the grid's empty background are the only ways to drop a selection
- * (`PD-CLEAR-SELECTION-TOUCH`): Escape is a key. And Set and Clear for the same reason: Enter and
- * Backspace are keys, a released drag no longer opens an editor, so on a phone these two icons
- * are the only way into a marquee's editor and the only way to un-busk one cell. Decided together,
- * since "make the gestures reachable" and "give the chips the width" pull on the same row.
- *
- * **The wash is `foreground/5`, not a primary tint** (D4). Selection is neutral on this page now,
- * so that `--primary` can mean one thing — you own this value — from the ownership rings down to
- * the row wash. A blue bar over blue-ringed cells was the two facts the grid most needs to keep
- * apart sharing one colour.
- *
- * **It is a component rather than JSX inside `renderToolbar`, and that is load-bearing.**
- * `renderToolbar` is a render prop invoked during `FixturesListContainer`'s render, so a hook in
- * its body is a hook of *that* component and `react-hooks/rules-of-hooks` rejects it outright.
- * The families the marquee named have to be memoised somewhere — they are derived once here and
- * handed to `TemplateStrip` — and this is the nearest place a hook may legally live. It returns
- * `null` itself rather than being mounted conditionally, so its own hooks run in a stable order.
+ * `askedFamilies` is derived once and shared with the strip, so the badge and the chips beside it
+ * cannot disagree about what is being offered — and so a marquee drag, which mints a fresh `cells`
+ * array on every animation frame, pays for one pass rather than two.
  */
 export function SelectionBar({
   projectId,
@@ -93,7 +33,7 @@ export function SelectionBar({
 }: {
   projectId: number
   selection: React.ReactNode | null
-  cells: readonly CellRef[]
+  cells: readonly CellRef<ColumnKey>[]
   cellEntryKey: boolean
   cellClearKey: boolean
   templateTargets: readonly LocateTarget[]
@@ -101,156 +41,40 @@ export function SelectionBar({
   targetEmitters: readonly string[]
   marqueeDragging: boolean
 }) {
-  // Derived once and shared with the strip below, so the badge and the chips beside it cannot
-  // disagree about what is being offered — and so a marquee drag, which mints a fresh `cells`
-  // array on every animation frame, pays for one pass rather than two.
-  const askedFamilies = useMemo(
-    () => (cells.length > 0 ? cellFamilies(cells) : null),
-    [cells],
-  )
+  const askedFamilies = useMemo(() => (cells.length > 0 ? cellFamilies(cells) : null), [cells])
 
-  const shortViewport = useMediaQuery(SHORT_VIEWPORT)
-  const hasSelection = !!selection || cells.length > 0
-  // The presence from *before* the drag, which is the whole trick: the drag flag and the marquee's
-  // first cells arrive in one commit, so a latch taken when `marqueeDragging` flips would already
-  // read `true` and hold exactly the arrival it is meant to hold back. Writing a ref during render
-  // is safe here — it is idempotent and touches nothing outside this component. The same idiom,
-  // hand-rolled the same way, is `lastCueRef` in `components/cues/CueRowParts.tsx`; a third
-  // occurrence is the point at which it is worth a hook of its own.
-  //
-  // It is latched on **every** arm and not only the short one, even though `selectionBandState`
-  // reads `heldPresence` past its tall-viewport early return alone. A phone can be rotated between
-  // one gesture and the next, and a latch that only ran while short would answer the first drag
-  // after the fold with whatever was true whenever it last happened to be short.
-  const idlePresenceRef = useRef(hasSelection)
-  if (!marqueeDragging) idlePresenceRef.current = hasSelection
-  const band = selectionBandState({
-    shortViewport,
-    heldPresence: marqueeDragging ? idlePresenceRef.current : null,
-    hasSelection,
-  })
-
-  if (band === 'absent') return null
-
-  // Holding the height with nothing to say. No `bg-foreground/5` wash: that wash *is* the selection
-  // (D4), so wearing it over an empty bar would say there is one. The sentence is there because
-  // 40px of otherwise blank strip above a grid reads as a rendering fault rather than as a rung.
-  if (band === 'reserved') {
-    return (
-      <div className="flex h-10 min-w-0 items-center gap-2 border-b px-3 text-muted-foreground">
-        <MousePointerSquareDashed className="size-3.5 shrink-0 opacity-60" />
-        <span className="text-xs">Nothing selected</span>
-      </div>
-    )
-  }
+  // The fixture count is `templateTargets` — the heads a press actually lands on, which is the
+  // cells' heads under a marquee and the selected rows' otherwise — and deliberately not the
+  // footer's `selectedCount`, which counts visible *rows* with a group as one. Two numbers, two
+  // questions: the footer says how much of the list you have picked, this says how many heads
+  // your next gesture reaches.
+  const fixtures = `${templateTargets.length} fixture${templateTargets.length === 1 ? '' : 's'}`
 
   return (
-    <div className="flex h-10 min-w-0 items-center gap-2 border-b bg-foreground/5 px-3">
-      <MousePointerSquareDashed className="size-3.5 shrink-0" />
-      {/* One selection, counted two ways under a marquee: the heads it reaches, and the cells it
-          names on them. Rows and cells are one state now (`FixturesListContainer`), so the head
-          count is what Record and Locate see whichever way the operator selected, and the cell
-          count says how much of those heads the next value touches.
-
-          The fixture count is `templateTargets` — the heads a press actually lands on, which is
-          the cells' heads under a marquee and the selected rows' otherwise — and deliberately not
-          the footer's `selectedCount`, which counts visible *rows* with a group as one. Two
-          numbers, two questions: the footer says how much of the list you have picked, this says
-          how many heads your next gesture reaches. It replaced the bare label "Selected fixtures",
-          which named the fact without answering the only question anyone asks of it. */}
-      {templateTargets.length > 0 && (
-        <span
-          className={cn(
-            'whitespace-nowrap text-xs font-semibold tabular-nums',
-            // With cells in play the fixture count and its separator fold into the cell count's
-            // hover, and the width goes to the chips. With rows only it is the one count there is,
-            // so it stays.
-            //
-            // **At 800 rather than at the phone's 600**, alongside Locate and Highlight
-            // (`MID_FOLDED_CLASS`): the template row needs the width earlier than the rest of the
-            // bar does, and an iPad portrait's row C sits right on that line — it is the
-            // difference between two recent chips and none. The count is not lost, only moved: the
-            // cell count's `title` beside it has carried it since session 1.
-            cells.length > 0 && MID_FOLDED_CLASS,
-          )}
-        >
-          {templateTargets.length} fixture{templateTargets.length === 1 ? '' : 's'}
-        </span>
-      )}
-      {cells.length > 0 && (
-        <>
-          {templateTargets.length > 0 && (
-            <span className={cn('text-muted-foreground/50', MID_FOLDED_CLASS)}>·</span>
-          )}
-          <span
-            className="whitespace-nowrap text-xs font-semibold tabular-nums"
-            // Session 1's rule: the sentence becomes the hover. `describeCellScope` is the same
-            // string the drag chip shows, so the two agree by construction. The fixture count
-            // rides it too, since on a phone the hover is the only place that count is said.
-            title={`${templateTargets.length} fixture${templateTargets.length === 1 ? '' : 's'} · ${describeCellScope(cells, columnLabel)} — edit once, applies to all`}
-          >
-            {cells.length} cell{cells.length === 1 ? '' : 's'}
-          </span>
-          {/* The family the marquee named. The *asked* families, never the capability list a
-              rows-only selection produces — badging that would read as the operator's statement
-              when it is only the strip's filter. Folded on the phone arm: the chips beside it are
-              already filtered *by* that family, so the badge restates what the chips show. */}
-          {askedFamilies != null && (
-            <Badge
-              variant="outline"
-              className={cn('shrink-0 whitespace-nowrap px-1.5 py-0 text-[10px]', PHONE_FOLDED_CLASS)}
-            >
-              {formatFamilyList(askedFamilies, ' · ')}
-            </Badge>
-          )}
-          {/* The keyboard half: the two keys that reach the marquee's editor from the grid. The
-              editor itself is a popover the container opens at the first selected cell. Both hints
-              follow the container's own answer — each flag is false where its key is refused — so
-              this cannot advertise a key that does nothing, and the rule
-              (`cellKeyboardPermission`) is not restated here.
-
-              `@[1100px]` is the artboard's threshold, kept literally the way session 1 kept the
-              legend's: on a bar whose container is the grid column this is the first thing to go,
-              and it is the right first thing — a hint, not a control. It does mean the hints are
-              unreachable at today's rail width; session 3's 300px rail is what brings them back on
-              a wide desk. */}
-          {(cellEntryKey || cellClearKey) && (
-            <span className="hidden shrink-0 items-center gap-1 whitespace-nowrap text-[10px] text-muted-foreground @[1100px]:inline-flex">
-              {cellEntryKey && (
-                <>
-                  <kbd className={KBD_CLASS}>⏎</kbd> edit
-                </>
-              )}
-              {cellClearKey && (
-                <>
-                  <kbd className={`${KBD_CLASS} ml-1`}>⌫</kbd> clear
-                </>
-              )}
-            </span>
-          )}
-        </>
-      )}
-      {/* The templates, on this line since session 2: a hairline, the chips in a scroller, then
-          New. It renders nothing when a press has nowhere to land, so the bar can still be here
-          for the counts and Deselect alone. */}
-      <TemplateStrip
-        projectId={projectId}
-        cells={cells}
-        askedFamilies={askedFamilies}
-        targets={templateTargets}
-        targetFamilies={targetFamilies}
-        targetEmitters={targetEmitters}
-      />
-      {/* `ml-auto`, not a `flex-1` spacer. The strip's chip scroller is itself `flex-1`, and two
-          `flex: 1 1 0%` siblings *split* the row's free space rather than one of them taking it
-          all — so a spacer here silently stole roughly half the scroller's width and opened a
-          blank gap before these buttons. An auto margin is resolved after flex growth, so it
-          takes the whole slack when the strip is absent and exactly nothing when it is there. */}
-      {/* The toolbar serves a marquee as well as a row selection since the two became one, so its
-          Deselect is the way out on a phone (`PD-CLEAR-SELECTION-TOUCH`) whichever shape the
-          selection is in; this bar used to draw a second X for the cells-only case. */}
-      {selection && <div className="ml-auto flex shrink-0 items-center">{selection}</div>}
-    </div>
+    <SheetSelectionBar
+      rowLabel={templateTargets.length > 0 ? fixtures : null}
+      cellLabel={cells.length > 0 ? `${cells.length} cell${cells.length === 1 ? '' : 's'}` : null}
+      // Session 1's rule: the sentence becomes the hover. `describeCellScope` is the same string
+      // the drag chip shows, so the two agree by construction. The fixture count rides it too,
+      // since on a phone the hover is the only place that count is said.
+      cellTitle={`${fixtures} · ${describeCellScope(cells, columnLabel)} — edit once, applies to all`}
+      family={askedFamilies != null ? formatFamilyList(askedFamilies, ' · ') : null}
+      hints={{ entry: cellEntryKey, clear: cellClearKey }}
+      // The templates, on this line since session 2: a hairline, the chips in a scroller, then
+      // New. It renders nothing when a press has nowhere to land, so the bar can still be here
+      // for the counts and Deselect alone.
+      strip={
+        <TemplateStrip
+          projectId={projectId}
+          cells={cells}
+          askedFamilies={askedFamilies}
+          targets={templateTargets}
+          targetFamilies={targetFamilies}
+          targetEmitters={targetEmitters}
+        />
+      }
+      verbs={selection}
+      marqueeDragging={marqueeDragging}
+    />
   )
 }
-

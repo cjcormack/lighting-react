@@ -17,8 +17,9 @@ import {
   templateSwatch,
 } from '@/components/busking/padFace'
 import { templateLayerPresence } from '@/components/busking/lookPresence'
-import { useCellEditorForm } from '@/components/fixtures-list/cells/CellEditorSurface'
-import type { CellRef } from '@/components/fixtures-list/cellSelectionModel'
+import { useCellEditorForm } from '@/components/sheet/cells/CellEditorSurface'
+import type { CellRef } from '@/components/sheet/cellSelectionModel'
+import type { ColumnKey } from '@/components/fixtures-list/columns'
 import { FAMILY_LABELS, formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
 import { cn } from '@/lib/utils'
 import { recentTemplates } from '@/lib/templateRecents'
@@ -100,7 +101,7 @@ export function TemplatePicker({
    */
   anchorRef: RefObject<HTMLElement | null>
   /** The marquee's cells; empty when rows are selected but no cells. Names the scope line. */
-  cells: readonly CellRef[]
+  cells: readonly CellRef<ColumnKey>[]
   /** The families those cells name — null when the gesture named no attribute. */
   askedFamilies: readonly AttributeFamily[] | null
   /** Where a press lands. Renders nothing when empty, like the strip. */

@@ -3,7 +3,7 @@ import {
   applyListSelection,
   setListSelection,
   type ListSelectIntent,
-} from '../components/fixtures-list/listSelectionModel'
+} from '../components/sheet/listSelectionModel'
 import type { RowId } from '../components/fixtures-list/rowModel'
 
 /**

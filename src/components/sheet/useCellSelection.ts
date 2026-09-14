@@ -1,6 +1,4 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import type { ColumnKey } from './columns'
-import type { RowId } from './rowModel'
 import type { ListSelectIntent } from './listSelectionModel'
 import {
   applyCellSelection,
@@ -9,16 +7,17 @@ import {
   visibleCells,
   type CellRef,
   type CellSelectionState,
+  type RowId,
 } from './cellSelectionModel'
 
-export interface CellSelection {
+export interface CellSelection<C extends string = string> {
   /** Cells still on screen. Filtered rows drop out; the stored state keeps them. */
-  cells: CellRef[]
+  cells: CellRef<C>[]
   count: number
-  isSelected: (rowId: RowId, col: ColumnKey) => boolean
+  isSelected: (rowId: RowId, col: C) => boolean
   /** Grouped for the write path — one entry per column. */
-  byColumn: () => { col: ColumnKey; rowIds: RowId[] }[]
-  select: (hits: readonly CellRef[], intent: ListSelectIntent) => void
+  byColumn: () => { col: C; rowIds: RowId[] }[]
+  select: (hits: readonly CellRef<C>[], intent: ListSelectIntent) => void
   clear: () => void
 }
 
@@ -34,7 +33,9 @@ export interface CellSelection {
  * door. Redux here would also inherit `useListSelection`'s unmount-clear hazard for no benefit,
  * and the scope-swappable grid wants per-instance state anyway.
  */
-export function useCellSelection(visibleRowIds: ReadonlySet<string>): CellSelection {
+export function useCellSelection<C extends string = string>(
+  visibleRowIds: ReadonlySet<string>,
+): CellSelection<C> {
   const [state, setState] = useState<CellSelectionState>(() => new Set<string>())
 
   // The pointer handlers in `FixturesTable` need to read the current selection without being
@@ -42,9 +43,9 @@ export function useCellSelection(visibleRowIds: ReadonlySet<string>): CellSelect
   const stateRef = useRef(state)
   stateRef.current = state
 
-  const cells = useMemo(() => visibleCells(state, visibleRowIds), [state, visibleRowIds])
+  const cells = useMemo(() => visibleCells<C>(state, visibleRowIds), [state, visibleRowIds])
 
-  const select = useCallback((hits: readonly CellRef[], intent: ListSelectIntent) => {
+  const select = useCallback((hits: readonly CellRef<C>[], intent: ListSelectIntent) => {
     setState((prev) => applyCellSelection(prev, hits, intent))
   }, [])
 
@@ -55,11 +56,11 @@ export function useCellSelection(visibleRowIds: ReadonlySet<string>): CellSelect
   }, [])
 
   const isSelected = useCallback(
-    (rowId: RowId, col: ColumnKey) => stateRef.current.has(cellKey(rowId, col)),
+    (rowId: RowId, col: C) => stateRef.current.has(cellKey(rowId, col)),
     [],
   )
 
-  const byColumn = useCallback(() => cellsByColumn(stateRef.current), [])
+  const byColumn = useCallback(() => cellsByColumn<C>(stateRef.current), [])
 
   return useMemo(
     () => ({ cells, count: cells.length, isSelected, byColumn, select, clear }),

@@ -38,7 +38,7 @@ const ITEM = 'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs fo
  * two-pill switcher and a five-pill one. Written out per switcher rather than computed, because a
  * template literal produces no CSS — the scanner only reads whole class strings.
  */
-const LABEL_AT_560 = 'hidden @[560px]:inline' // Cards · List — two pills
+const LABEL_AT_560 = 'hidden @[560px]:inline' // Cards · List / Cards · Table — two pills
 const LABEL_AT_720 = 'hidden @[720px]:inline' // Look families — five pills
 /**
  * Four pills in a header that also carries a breadcrumb trail (~220-320px above 640), the save
@@ -109,10 +109,20 @@ export function ViewSwitcher({ current, projectId }: { current: ShowView; projec
 
 export type CardsListView = 'cards' | 'list'
 
-/** localStorage keys remembering which view (cards or list) each page last
- *  used, so its single sidebar entry lands on the one you left. */
+/**
+ * localStorage keys remembering which view (cards or list) each page last used, so its single
+ * sidebar entry lands on the one you left.
+ *
+ * The stored vocabulary is `'cards' | 'list'` for all four pairs, whatever the second segment is
+ * *called*: Fixtures and Groups say Cards · List, Channels and Show say Cards · Table (their second
+ * view is a table and their first genuinely is cards — the sheet-views design's own word). One
+ * storage value for one meaning, "the sheet rather than the cards", so `getStoredCardsListView`
+ * answers every pair and a rename of the label can never reset a desk's remembered view.
+ */
 export const FIXTURES_VIEW_KEY = 'fixtures.view'
 export const GROUPS_VIEW_KEY = 'groups.view'
+export const CHANNELS_VIEW_KEY = 'channels.view'
+export const SHOW_VIEW_KEY = 'show.view'
 
 export function setStoredCardsListView(key: string, view: CardsListView) {
   try {
@@ -131,6 +141,17 @@ export function getStoredCardsListView(key: string): CardsListView {
   } catch {
     return 'cards'
   }
+}
+
+/**
+ * Whether a cards route should hand off to its sheet sibling on arrival: the sticky says the sheet,
+ * and this arrival is not the switcher's own Cards click (which carries [CARDS_LINK_STATE]).
+ *
+ * The one decision behind four redirects — Fixtures, Groups, Channels, Show — so the pairs cannot
+ * drift; `ViewSwitcher.test.ts` pins it for both halves.
+ */
+export function stickyRedirectsToList(locationState: unknown, storageKey: string): boolean {
+  return !isCardsLinkState(locationState) && getStoredCardsListView(storageKey) === 'list'
 }
 
 /** Location state the Cards segment attaches to its navigation. The cards
@@ -158,11 +179,14 @@ function CardsListSwitcher({
   cardsTo,
   listTo,
   storageKey,
+  listLabel = 'List',
 }: {
   current: CardsListView
   cardsTo: string
   listTo: string
   storageKey: string
+  /** What the second segment is called — `List` on Fixtures and Groups, `Table` on Channels and Show. */
+  listLabel?: string
 }) {
   return (
     <nav className="inline-flex items-center gap-0.5 rounded-lg border bg-card p-0.5">
@@ -178,7 +202,7 @@ function CardsListSwitcher({
         active={current === 'list'}
         to={listTo}
         icon={<TableProperties className="size-3.5" />}
-        label="List"
+        label={listLabel}
         onClick={() => setStoredCardsListView(storageKey, 'list')}
       />
     </nav>
@@ -217,6 +241,48 @@ export function GroupsViewSwitcher({
       cardsTo={`/projects/${projectId}/groups`}
       listTo={`/projects/${projectId}/groups/list`}
       storageKey={GROUPS_VIEW_KEY}
+    />
+  )
+}
+
+/** Channel cards (`/channels/:u`) vs the 16-wide DMX sheet (`/channels/:u/table`). */
+export function ChannelsViewSwitcher({
+  current,
+  projectId,
+  universe,
+}: {
+  current: CardsListView
+  projectId: number
+  universe: number
+}) {
+  return (
+    <CardsListSwitcher
+      current={current}
+      cardsTo={`/projects/${projectId}/channels/${universe}`}
+      listTo={`/projects/${projectId}/channels/${universe}/table`}
+      storageKey={CHANNELS_VIEW_KEY}
+      listLabel="Table"
+    />
+  )
+}
+
+/** A stack's cue cards (`/show/stacks/:id`) vs its cue sheet (`/show/stacks/:id/table`). */
+export function ShowStackViewSwitcher({
+  current,
+  projectId,
+  stackId,
+}: {
+  current: CardsListView
+  projectId: number
+  stackId: number
+}) {
+  return (
+    <CardsListSwitcher
+      current={current}
+      cardsTo={`/projects/${projectId}/show/stacks/${stackId}`}
+      listTo={`/projects/${projectId}/show/stacks/${stackId}/table`}
+      storageKey={SHOW_VIEW_KEY}
+      listLabel="Table"
     />
   )
 }
