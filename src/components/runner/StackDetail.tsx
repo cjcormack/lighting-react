@@ -27,6 +27,8 @@ import { ShowMarkerRow } from './ShowMarkerRow'
 import { OutOfOrderBanner } from '@/components/runner/OutOfOrderBanner'
 import { cueNumberColumnChars, detectOutOfOrder } from '@/lib/cueNumber'
 import { UNLOCKED_WARNING_CLASS } from '@/lib/lockChrome'
+import { ShowStackViewSwitcher, type CardsListView } from '@/components/ViewSwitcher'
+import { CueSheet } from './CueSheet'
 
 interface StackDetailProps {
   stack: CueStack
@@ -79,6 +81,14 @@ interface StackDetailProps {
   /** Load this cue into the programmer to edit it on stage. */
   onIncludeCue?: (cueId: number) => void
   includePending?: boolean
+  /**
+   * Cards (the inline-expanding cue cards, draggable while unlocked) or the cue sheet
+   * (`CueSheet`, CLAUDE.md §Sheet kit). A sibling route plus a sticky preference, exactly the
+   * Fixtures / Groups wiring — see `ShowPage`.
+   */
+  view?: CardsListView
+  /** Open a cue's card on the cards view — the sheet's read-outs do this. */
+  onOpenCue?: (cueId: number) => void
 }
 
 export function StackDetail({
@@ -104,6 +114,8 @@ export function StackDetail({
   onRecordInto,
   onIncludeCue,
   includePending,
+  view = 'cards',
+  onOpenCue,
 }: StackDetailProps) {
   const [reorderCues] = useReorderCueStackCuesMutation()
   const [sortByCueNumber] = useSortCueStackByCueNumberMutation()
@@ -211,6 +223,7 @@ export function StackDetail({
           {standardCount} cues
         </span>
         <div className="flex-1" />
+        <ShowStackViewSwitcher current={view} projectId={projectId} stackId={stack.id} />
 
         {/* **Recording is the only way in.** "Add Cue" made an empty cue and opened an editor
             on it, which is backwards: a cue is a captured state, so the thing that makes one is the
@@ -247,7 +260,21 @@ export function StackDetail({
         />
       )}
 
-      {/* Cue list — scrolls within the recessed Row 4 surface set on the root above. */}
+      {view === 'list' ? (
+        <CueSheet
+          stack={stack}
+          projectId={projectId}
+          activeCueId={activeCueId}
+          standbyCueId={standbyCueId}
+          completedCueIds={completedCueIds}
+          locationByCue={locationByCue}
+          onSetStandby={onSetStandby}
+          locked={locked}
+          openedCueId={openedCueId}
+          onOpenCue={(cueId) => onOpenCue?.(cueId)}
+        />
+      ) : (
+      /* Cue list — scrolls within the recessed Row 4 surface set on the root above. */
       <div
         ref={listRef}
         className="flex-1 overflow-y-auto py-1"
@@ -299,6 +326,7 @@ export function StackDetail({
           </SortableContext>
         </DndContext>
       </div>
+      )}
     </div>
   )
 }

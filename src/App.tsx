@@ -12,6 +12,7 @@ import {
   ProjectChannels,
   ProjectChannelsDefaultUniverse,
 } from "./routes/Channels";
+import { ProjectChannelsTable } from "./routes/ChannelsTable";
 import { FixturesRedirect, ProjectFixtures } from "./routes/Fixtures";
 import { FixturesListRedirect, ProjectFixturesList } from "./routes/FixturesList";
 import { GroupsRedirect, ProjectGroups } from "./routes/Groups";
@@ -292,6 +293,12 @@ function App() {
           path: "projects/:projectId/channels/:universe",
           element: <ProjectChannels />,
         },
+        // The DMX sheet — the cards route's sibling, reached through the Cards · Table switcher
+        // and the sticky preference, never from the sidebar (§Navigation Registry).
+        {
+          path: "projects/:projectId/channels/:universe/table",
+          element: <ProjectChannelsTable />,
+        },
         {
           path: "channels",
           element: <ChannelsBaseRedirect />,
@@ -326,6 +333,12 @@ function App() {
         {
           path: "projects/:projectId/show/stacks/:stackId",
           element: <ShowPage />,
+        },
+        // The cue sheet — the stack's cards route's sibling, reached through the Cards · Table
+        // switcher on the stack header and the sticky preference (§Navigation Registry).
+        {
+          path: "projects/:projectId/show/stacks/:stackId/table",
+          element: <ShowPage stackView="list" />,
         },
         {
           path: "show",

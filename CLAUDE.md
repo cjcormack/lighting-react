@@ -866,12 +866,112 @@ because the operator already said which they meant by putting the heads where th
 colour inverse is a documented heuristic (fold the emitters back into RGB, policy `extract` when
 either was driven); it lives in one place, `templateRecord.kt`.
 
+### Sheet kit
+
+**One sheet, four surfaces.** The programmer's grid gestures — drag selection, single click
+selects a cell, double click / ⏎ / typing opens one editor for every selected cell, ⌫ clears, one
+editor per column fanned over the selected columns, the Set · Clear · Fan bar — are a kit in
+`components/sheet/`, mounted by the **patch list** (`components/patches/PatchSheet.tsx`), the
+**DMX sheet** (`components/channels/DmxSheet.tsx`) and the **cue sheet**
+(`components/runner/CueSheet.tsx`) as well as the programmer. The design record is
+`lighting7/docs/plans/sheet-views-design/` (the `Kit` artboard is the module map, `Spec` the desk
+survey and the rules). The surfaces differ in their columns and their verbs, never in the gesture.
+
+**What lifted out of `components/fixtures-list/`**, generic over the column key (`CellRef<C>`,
+`CellSelection<C>`): `cellSelectionModel`, `cellSelection`, `cellMarquee`, `listSelectionModel`,
+`useCellSelection`, `cellEntry` (the generic half — `orderedSelectedCells`, the two DOM guards,
+and the *shapes* `CellKeyboardPermission` / `CellActionCopy`; the programmer's own answers
+`cellKeyboardPermission` / `cellActionCopy` stay in `fixtures-list/cellEntry.ts`),
+`cells/CellEditorSurface` and its two hooks, `ValueFieldRow`, `UnsetCellMark`, the three fold
+constants (`toolbarFolds.ts`, re-exported by `SelectionToolbar`), `CellSelectionActions`,
+`FanPopover` + `fanMath`, `selectionBand`, `useEscapeEditorSnapshot`. Three were extractions rather
+than moves: `useCellMarquee` (a local of `FixturesTable`, now generic over rows with a
+`rowHeight` and an `isSelectableRow`), `useCellEditorRequests` (the open/close one-shots and the
+Set toggle from the container), and `commitToSelectedCells` / `selectedRowsByColumn`
+(`sheetModel.ts` — the container's `commitToCells` / `columnTargets` over rows instead of write
+targets). The fixtures list keeps its columns, row model, ownership and scope, and
+`FixturesListContainer` keeps its own keyboard listener: its tests pin it, and its selection is
+Redux-scoped for readers outside the list.
+
+**A `SheetColumn<Row, C>` per surface** says how to read a row (`value`), which cell it draws
+(`cell`, or `display` for a read-out), whether it fans (`fan` → a `FanPlan`), and what a commit
+does (`write(rows, value)`, over the **batch**, answering false for a value it refuses) and what
+Clear does (`clear`, or `clearRefusal` as the button's reason). **A commit fans only to the
+selected columns that share its origin's `kind`**: the programmer tells commits apart by shape,
+but a cue's name, notes and fade are all one string, so each surface column names its vocabulary
+(`level` on all sixteen DMX columns, one kind per column on the cue and patch sheets) and a `3s`
+typed into Fade over a Fade→Follow marquee cannot switch auto-advance on. A read-out column hangs
+no `data-column-header`, so a marquee never selects it. `useSheet` is the container half — one selection in two shapes, the keyboard, the editor
+requests, the throttled commit, the batch count — and `SheetTable` the anatomy: 30px uppercase
+header, 36px rows (44 on the DMX sheet), a sticky first column with the 3px selection edge, the
+same DOM contract as `FixturesTable` (`data-grid-header`, `data-column-header`,
+`data-grid-name-header`, `data-row-id`, `data-cell`). Four kit cells go through
+`CellEditorSurface`, so they get the three forms and the double click for free: `TextCell`
+(commit on ⏎, Escape reverts), `LevelCell` (the DMX value, live like `SliderCell`), `OptionCell`
+(`SettingCell`'s type-ahead over plain options) and `AddressCell`.
+
+**`SelectionBar` is a shell** — counts · family pill · ⏎/⌫ hints · a `strip` slot · a `verbs`
+slot — and the programmer's `SelectionBar` wraps it with the template strip in the slot.
+`CellSelectionActions` takes a `permission` of `CellKeyboardPermission`'s shape and a `fan` slot,
+so a disabled button and a refused key always read one object, and each surface hands in its own
+`FanPopover` instance. Surface verbs come after Fan; Deselect is always last and ghost.
+
+**The kit's `FanPopover` has four plan kinds** and the programmer's is the first one unchanged:
+`value` (From · To bytes, Reverse), `colour` (two pickers), `address` (From · Step in visible-row
+order, blank step = footprint) and `duration` (From · To · Spread — Linear, the one spread there
+is). `fixtures-list/FanPopover.tsx` is the adapter that builds value and colour plans through
+`planBatchWrites`. `useSheetKeyboard` is the kit's window listener and it is **capture-phase**:
+`useTransportKeys` toggles the lock on `L` from a bubble listener whether or not the transport is
+enabled, and a name typed into a cue cell begins with a character — so the sheet claims the key
+first and the transport now stands aside from a key whose default is already prevented.
+
+Three surface rules, each pinned by its test:
+
+- **Patch list** (`PatchSheet.test.tsx`, `lib/patchAddress.test.ts`): **Set over N addresses lands
+  them consecutively by footprint from the typed one**, in visible-row order, each head on its own
+  universe (the PUT cannot move a head across universes); Fan on Address is From + Step. An
+  overlap is a destructive ring on the Address cell with the other head on its title and a legend
+  line under the sheet; the address editor **names the collision before Apply and refuses it**.
+  That refusal is the only overlap check there is — **the patch PUT has none today** (only the
+  POST checks), and there is no bulk atomic route, so a batch is N PUTs that can half-apply on a
+  network failure; both are lighting7 work and Chris's call. Clear is refused on Address, Fixture,
+  Key and Stage; offered on Mount, Angle and Gel. It stays the Patch List tab; row B is universe
+  toggle · filter · spacer · Groups · Columns · + Patch, and the universe chips carry a fill bar.
+- **DMX sheet** (`DmxSheet.test.tsx`): `/projects/:id/channels/:universe/table`, sticky key
+  `channels.view`, a 16-wide grid of 44px cells — address and attribute on line one (the fixture
+  name on the first cell of its footprint, the run tinted), the raw 0–255 value on line two,
+  ownership rings read through the property that drives the channel. No row axis: the row head
+  hangs no `data-grid-name-header`, so every press is a cell press, and Fan is one plan over every
+  selected cell in address order. Writes are `channels.update` per address; Clear is 0; Park /
+  Unpark act on the selection; the desk being offline is the read-only scope; Unpark All keeps its
+  confirm and there is no Edit/Done toggle. Raw 0–255 only, no level bar — left for later.
+- **Cue sheet** (`CueSheet.test.tsx`): `/projects/:id/show/stacks/:stackId/table`, sticky key
+  `show.view`, the switcher on the `StackDetail` header. Name · Fade · Curve · Follow · Notes are
+  cells, the cue number keeps its inline edit on the Cue column, Book · Layers · FX are read-outs
+  that open the card on the cards view (with `CARDS_LINK_STATE`, so the sticky does not bounce it
+  back; a peek is not a change of view). **No Hooks column**: `CueStackCueEntry` carries no trigger
+  count, and adding one is a backend field. **The lock is the sheet's read-only scope** the way
+  Output is the programmer's — locked, every value cell is inert in all four places, the marquee
+  still works, Set · Clear · Fan are disabled with the reason, and a click on the Cue column arms
+  the cue as next; unlocked, cells edit under the amber wash. Writes are one PATCH per cue carrying
+  the field, the cards' own auto-saving contract. The transport is untouched: `useTransportKeys`
+  is enabled exactly while locked, as it always was, and `canOperate` is never handed `locked`.
+  The sheet consumes `?cue=` by selecting the addressed cue's row and scrolling to it — the
+  external contract holds on both views.
+
+**Cards · List and Cards · Table are one switcher and one storage vocabulary.** Fixtures and
+Groups keep the word *List*; Channels and Show say *Table* (their second view is a table and their
+first genuinely is cards). The stored value is `'list'` for all four keys, so `getStoredCardsListView`
+answers every pair and a rename can never reset a desk's remembered view; `stickyRedirectsToList`
+is the one redirect decision, called by all four cards routes (`ViewSwitcher.test.ts`).
+
 ### The cell editor's three forms
 
 **A cell editor is a popover on a desk, a bottom sheet on an upright phone, and a right-hand sheet
-where the viewport is short.** `components/fixtures-list/cells/CellEditorSurface.tsx` is the one
-place that decides, and all four value cells go through it (`SliderCell`, `ColourCell` via
-`ColourPickerPopover`, `PositionCell`, `SettingCell`). There were **five**: the marquee's own typed
+where the viewport is short.** `components/sheet/cells/CellEditorSurface.tsx` is the one
+place that decides, and every cell goes through it — the programmer's four (`SliderCell`,
+`ColourCell` via `ColourPickerPopover`, `PositionCell`, `SettingCell`) and the kit's four
+(§Sheet kit). There were **five**: the marquee's own typed
 field, `CellEntryPopover`, drawn through this same surface precisely so that Enter and a click
 would read as one kind of thing. It is gone, and the reason is the stronger form of that argument —
 §The programmer's keyboard.
@@ -1057,8 +1157,9 @@ it went instead:
   back means a text grammar in the byte field, which costs that field its spinner and its
   arrow-key increment — so ask before reaching for it.
 
-`components/fixtures-list/cells/useCellEditorKeyboard.ts` is the one copy of the rule, shared by
-all four cells **and by `FanPopover`**, which is the same kind of panel and had the same gap. Two
+`components/sheet/cells/useCellEditorKeyboard.ts` is the one copy of the rule, shared by
+every cell — the programmer's four and the kit's — **and by `FanPopover`**, which is the same kind
+of panel and had the same gap. Two
 things in it are not arbitrary. The focus is taken in **`onOpenAutoFocus`**, not in an effect:
 Radix's own auto-focus is a *parent* effect and parent effects run after a child's, so a focus set
 from inside the content is taken straight back off it. And **comma is left alone in a one-field
@@ -1151,7 +1252,8 @@ re-opens the editor the next time the virtualiser renders the row it names.
 
 ### One selection, two shapes
 
-**Rows and cells are one selection**, and either clears the other. They were two independent states
+**Rows and cells are one selection**, and either clears the other — on every sheet; `useSheet`
+is the kit's copy of the rule for the three surfaces whose row selection is local (§Sheet kit). They were two independent states
 — a row selection with checkboxes that Record scoped on, and a cell marquee drawn over it as a
 transient edit scope — and an operator had to hold both in their head to know what the next gesture
 reached. Now `FixturesListContainer` derives one `selectedRowIds` (the cells' rows under a marquee,
@@ -1616,6 +1718,11 @@ Six things about it are load-bearing:
 - **Dragging is disabled through dnd-kit's own `disabled`**, per sortable, never by unmounting the
   `DndContext` — `useSortable` needs that ancestor, so removing it breaks every row. Affordances are
   **hidden rather than greyed out**: a row of disabled destructive buttons reads as breakage.
+- **The lock is the cue sheet's read-only scope** (§Sheet kit): locked, the sheet's value cells
+  are inert and a click on the Cue column arms the cue as next, exactly as a card's body click
+  does; `useTransportKeys` keeps its `enabled: locked` and now stands aside from a key another
+  handler has already claimed, which is how a name typed into a cue cell beginning with `l` does
+  not toggle the lock.
 - **Transport shortcuts act only while locked**, via `useTransportKeys`, on **both** lock surfaces;
   `L` stays bound in both states so there is always a keyboard way back to a safe desk. Unlocked, the
   row's cue number, name and fade are live text fields, and in an editing surface Space is a space.
@@ -1947,7 +2054,8 @@ path may quietly change where it lands.
 - This automatically registers the page in both the sidebar and the Cmd+K command palette
 - Dynamic items (e.g. universes) are handled by the `useUniverseNavItems()` hook (`useNavItems()` just returns the static `navItems`)
 - **Exception — cards/list sibling routes**: list views that pair with a cards
-  view (`/fixtures/list`, `/groups/list`) deliberately have **no** `navItems`
+  view (`/fixtures/list`, `/groups/list`, `/channels/:universe/table`,
+  `/show/stacks/:stackId/table`) deliberately have **no** `navItems`
   entry. They're reached via the in-page Cards/List switcher
   (`src/components/ViewSwitcher.tsx`) and Cmd+K item deep links, and the
   sidebar keeps one entry per resource; the cards route redirects to the list

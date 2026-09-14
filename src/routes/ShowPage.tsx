@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useParams, useNavigate, Navigate, useSearchParams } from 'react-router'
+import { useParams, useNavigate, Navigate, useSearchParams, useLocation } from 'react-router'
 import { Card } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
@@ -29,6 +29,13 @@ import { RecordSheet } from '../components/programmer/RecordSheet'
 import { useInclude } from '../components/programmer/useInclude'
 import type { CueStack } from '../api/cueStacksApi'
 import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
+import {
+  CARDS_LINK_STATE,
+  SHOW_VIEW_KEY,
+  setStoredCardsListView,
+  stickyRedirectsToList,
+  type CardsListView,
+} from '../components/ViewSwitcher'
 
 /** Below this container width the view becomes the phone runner, which is always locked. */
 const MOBILE_RUNNER_THRESHOLD = 600
@@ -49,11 +56,24 @@ export function ShowRedirect() {
   return <CurrentProjectRedirect to="show" />
 }
 
-export function ShowPage() {
+/**
+ * `stackView` is which of the drilled stack's two views this route draws: the cue cards, or the
+ * cue sheet at `/show/stacks/:stackId/table` (CLAUDE.md §Sheet kit). Wired exactly like
+ * `/fixtures/list`: the table route writes the sticky preference on mount, and the cards route
+ * redirects to it when the sticky says so — carrying `?cue=`, which is an external contract.
+ */
+export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } = {}) {
   const { projectId, stackId } = useParams()
   const projectIdNum = Number(projectId)
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
+  const location = useLocation()
+
+  // Record the sheet as the last-used stack view even when arriving by deep link, so the next
+  // drill into a stack lands here.
+  useEffect(() => {
+    if (stackView === 'list') setStoredCardsListView(SHOW_VIEW_KEY, 'list')
+  }, [stackView])
 
   const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
@@ -331,6 +351,19 @@ export function ShowPage() {
 
   const handleIncludeCue = useCallback((cueId: number) => void includeCue(cueId), [includeCue])
 
+  /**
+   * The sheet's read-outs open a cue's *card*: the cards view with `?cue=` — tagged as the
+   * switcher's own Cards click, so the sticky (which still says the sheet) does not bounce it
+   * straight back. A peek at a card is not a change of view, so the sticky is left alone.
+   */
+  const handleOpenCue = useCallback(
+    (cueId: number) => {
+      if (drillStackId == null) return
+      navigate(`/projects/${projectIdNum}/show/stacks/${drillStackId}?cue=${cueId}`, { state: CARDS_LINK_STATE })
+    },
+    [drillStackId, navigate, projectIdNum],
+  )
+
   // ── Deep-link normalizer + auto-drill ──
   // - Legacy `/show?stack=X&cue=Y` links (the Prompt Book's "Edit cue" mints the path form now)
   //   are rewritten to
@@ -405,6 +438,16 @@ export function ShowPage() {
   // Loading / redirect guards
   if (!currentLoading && currentProject && projectIdNum !== currentProject.id) {
     return <Navigate to={`/projects/${currentProject.id}/show`} replace />
+  }
+
+  // Sticky view: a drilled stack lands on the cue sheet once that has been chosen, unless this
+  // arrival is the switcher's own Cards click. `?cue=` rides along — the Prompt Book mints it.
+  // The phone is not exempted here, deliberately: `isNarrow` is measured from the body, which
+  // this early return keeps from mounting, so a guard on it could never fire on a fresh load.
+  // Nothing needs it — the phone branch below draws `RunMobile` whichever of the two URLs it is
+  // on, since the sticky is a desk preference and the phone has no cue sheet.
+  if (stackView === 'cards' && drillStackId != null && stickyRedirectsToList(location.state, SHOW_VIEW_KEY)) {
+    return <Navigate to={`/projects/${projectIdNum}/show/stacks/${drillStackId}/table${location.search}`} replace />
   }
 
   if (projectLoading || currentLoading || stacksLoading) {
@@ -569,6 +612,8 @@ export function ShowPage() {
               onRecordIntoStack={handleRecordIntoStack}
               onIncludeCue={handleIncludeCue}
               includePending={includePending}
+              view={stackView}
+              onOpenCue={handleOpenCue}
             />
           </div>
         </div>

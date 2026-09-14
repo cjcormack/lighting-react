@@ -50,6 +50,10 @@ interface ShowViewProps {
   /** Record the programmer into a new cue in this stack — what replaced "Add Cue". */
   onRecordIntoStack?: (stackId: number) => void
   includePending?: boolean
+  /** Cards or the cue sheet, for the drilled stack. See `StackDetail`. */
+  view?: 'cards' | 'list'
+  /** Open a cue's card on the cards view. */
+  onOpenCue?: (cueId: number) => void
 }
 
 // Memoized: `ShowPage` subscribes to the runner slice (via `useShowTransport` for the Row 3 show
@@ -83,6 +87,8 @@ export const ShowView = memo(function ShowView({
   onIncludeCue,
   onRecordIntoStack,
   includePending,
+  view,
+  onOpenCue,
 }: ShowViewProps) {
   const [createCue] = useCreateProjectCueMutation()
   const [deleteCue] = useDeleteProjectCueMutation()
@@ -160,6 +166,8 @@ export const ShowView = memo(function ShowView({
         onRecordInto={onRecordInto}
                   onIncludeCue={onIncludeCue}
         includePending={includePending}
+        view={view}
+        onOpenCue={onOpenCue}
       />
     )
   }

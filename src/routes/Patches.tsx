@@ -1,23 +1,32 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "react-router"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { Loader2, Plus, Pencil, Check, EyeOff } from "lucide-react"
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Columns3, Layers, Loader2, Plus, Pencil, Check, Search } from "lucide-react"
 import { usePatchListQuery, useUniverseConfigListQuery, useUpdateUniverseConfigMutation, usePatchGroupListQuery } from "../store/patches"
 import { useRiggingListQuery } from "../store/riggings"
+import { useFixtureTypeListQuery } from "../store/fixtures"
+import { usePersistentState } from "../hooks/usePersistentState"
 import { AddFixtureSheet } from "@/components/patches/AddFixtureSheet"
 import { EditPatchSheet } from "@/components/patches/EditPatchSheet"
 import { EditGroupSheet } from "@/components/patches/EditGroupSheet"
+import {
+  PATCH_COLUMN_LABELS,
+  PATCH_COLUMN_ORDER,
+  PatchSheet,
+  patchRowId,
+  type PatchColumnKey,
+  type PatchSheetRow,
+} from "@/components/patches/PatchSheet"
+import { universeFill } from "@/lib/patchAddress"
 import type { FixturePatch, UniverseConfig } from "../api/patchApi"
 import {
   DEFAULT_REFRESH_INTERVAL_MS,
@@ -25,7 +34,6 @@ import {
   MIN_REFRESH_INTERVAL_MS,
 } from "../api/patchApi"
 import { parseNullableNumber } from "@/lib/utils"
-import { findGel } from "@/data/gels"
 import { CurrentProjectRedirect } from "@/components/CurrentProjectRedirect"
 
 // ─── Redirect ─────────────────────────────────────────────────────────
@@ -36,6 +44,24 @@ export function PatchesRedirect() {
 
 // ─── Content ──────────────────────────────────────────────────────────
 
+const DEFAULT_COLUMNS: Record<PatchColumnKey, boolean> = {
+  address: true,
+  type: true,
+  mode: true,
+  ch: true,
+  key: true,
+  mount: true,
+  angle: true,
+  gel: true,
+  groups: true,
+  stage: true,
+}
+
+/**
+ * The Patch List tab — the patch list as a sheet (CLAUDE.md §Sheet kit), under row B: a universe
+ * toggle, the filter, then Groups, Columns and `+ Patch` on the row. It stays a settings tab; the
+ * universe chips above it carry a fill bar now, and the group chips fold behind the Groups button.
+ */
 export function PatchListContent({
   projectId,
 }: {
@@ -45,6 +71,15 @@ export function PatchListContent({
   const [addFixtureOpen, setAddFixtureOpen] = useState(false)
   const [editingPatchId, setEditingPatchId] = useState<number | null>(null)
   const [editingGroup, setEditingGroup] = useState<{ id: number; name: string } | null>(null)
+  const [universeFilter, setUniverseFilter] = useState<'all' | number>('all')
+  const [filter, setFilter] = useState('')
+  const [showGroups, setShowGroups] = usePersistentState('patches.showGroups', true)
+  const [columnVisibility, setColumnVisibility] = usePersistentState<Record<PatchColumnKey, boolean>>(
+    'patches.columns',
+    DEFAULT_COLUMNS,
+    { merge: true },
+  )
+  const [selectedCount, setSelectedCount] = useState(0)
 
   // Open add-fixture sheet when navigated with ?action=new (e.g. from command palette)
   useEffect(() => {
@@ -58,79 +93,173 @@ export function PatchListContent({
   const { data: universeConfigs } = useUniverseConfigListQuery(projectId)
   const { data: patchGroups } = usePatchGroupListQuery(projectId)
   const { data: riggings } = useRiggingListQuery(projectId)
+  const { data: fixtureTypes } = useFixtureTypeListQuery()
 
-  const rows = useMemo(
-    () => buildPatchRows(patches, riggings),
-    [patches, riggings],
+  const universes = useMemo(
+    () => [...new Set((patches ?? []).map((p) => p.universe))].sort((a, b) => a - b),
+    [patches],
   )
+  const rows = useMemo(
+    () => buildPatchRows(patches, riggings, fixtureTypes, universeFilter, filter),
+    [patches, riggings, fixtureTypes, universeFilter, filter],
+  )
+  const visibleColumns = useMemo(
+    () => PATCH_COLUMN_ORDER.filter((key) => columnVisibility[key]),
+    [columnVisibility],
+  )
+  const onEditPatch = useCallback((id: number) => setEditingPatchId(id), [])
+  const onEditGroup = useCallback((id: number, name: string) => setEditingGroup({ id, name }), [])
 
   const editingPatch = patches?.find(p => p.id === editingPatchId) ?? null
-
-  const totalPatches = rows.length
+  const totalPatches = patches?.length ?? 0
   const totalGroups = patchGroups?.length ?? 0
+  const heads = useMemo(
+    () => (patches ?? []).map((p) => ({ id: p.id, name: p.displayName, universe: p.universe, channel: p.startChannel, footprint: p.channelCount ?? 1 })),
+    [patches],
+  )
+  const addressesUsed = useMemo(
+    () => universes.reduce((n, u) => n + universeFill(heads, u), 0),
+    [heads, universes],
+  )
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-muted-foreground">
-              {`${totalPatches} fixture${totalPatches !== 1 ? 's' : ''} patched${totalGroups > 0 ? `, ${totalGroups} group${totalGroups !== 1 ? 's' : ''}` : ''}.`}
-            </p>
-          </div>
-          <Button onClick={() => setAddFixtureOpen(true)} size="sm" className="gap-1.5 shrink-0">
-            <Plus className="size-4" />
-            <span className="hidden sm:inline">Patch</span>
-          </Button>
+    <div className="flex flex-col h-full min-h-0">
+      {/* Universe chips, with a fill bar each; the group chips fold behind row B's Groups. */}
+      {(universeConfigs?.length || (showGroups && patchGroups?.length)) ? (
+        <div className="flex flex-wrap items-center gap-2 px-3 pb-1 pt-3">
+          {universeConfigs && universeConfigs.length > 0 && (
+            <>
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Universes</span>
+              {universeConfigs.map((config) => (
+                <UniverseChip
+                  key={config.id}
+                  config={config}
+                  projectId={projectId}
+                  fill={universeFill(heads, config.universe)}
+                />
+              ))}
+            </>
+          )}
+          {showGroups && patchGroups && patchGroups.length > 0 && (
+            <>
+              <span className="w-3" />
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Groups</span>
+              {patchGroups.map((group) => (
+                <button
+                  key={group.id}
+                  onClick={() => setEditingGroup({ id: group.id, name: group.name })}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs hover:bg-accent transition-colors"
+                >
+                  <span className="font-medium">{group.name}</span>
+                  <span className="text-muted-foreground">{group.memberCount}</span>
+                </button>
+              ))}
+            </>
+          )}
         </div>
+      ) : null}
+
+      {/* Row B: universe toggle · filter · spacer · Groups · Columns · + Patch. 40px, 32px controls. */}
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
+        {universes.length > 1 && (
+          <ToggleGroup
+            type="single"
+            size="sm"
+            value={universeFilter === 'all' ? 'all' : String(universeFilter)}
+            onValueChange={(v) => {
+              if (!v) return
+              setUniverseFilter(v === 'all' ? 'all' : Number(v))
+            }}
+            aria-label="Universe"
+          >
+            <ToggleGroupItem value="all">All</ToggleGroupItem>
+            {universes.map((u) => (
+              <ToggleGroupItem key={u} value={String(u)}>
+                U{u}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        )}
+        <div className="relative min-w-0 max-w-[340px] flex-[999_1_0%]">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Filter…"
+            title="Filter by name, key, type or address"
+            aria-label="Filter by name, key, type or address"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="h-8 pl-9"
+          />
+        </div>
+        <div className="flex-1" />
+        <Button
+          variant={showGroups ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setShowGroups(!showGroups)}
+          title="Show the group chips"
+          aria-pressed={showGroups}
+        >
+          <Layers className="size-3.5" />
+          <span className="hidden sm:inline">Groups</span>
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" title="Choose columns">
+              <Columns3 className="size-3.5" />
+              <span className="hidden sm:inline">Columns</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {PATCH_COLUMN_ORDER.map((key) => (
+              <DropdownMenuCheckboxItem
+                key={key}
+                checked={columnVisibility[key]}
+                onCheckedChange={(checked) =>
+                  setColumnVisibility({ ...columnVisibility, [key]: checked === true })
+                }
+              >
+                {PATCH_COLUMN_LABELS[key]}
+              </DropdownMenuCheckboxItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Button onClick={() => setAddFixtureOpen(true)} size="sm" className="gap-1.5 shrink-0">
+          <Plus className="size-4" />
+          <span className="hidden sm:inline">Patch</span>
+        </Button>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto px-4 pb-4">
+      {patchesLoading ? (
+        <div className="flex justify-center py-8"><Loader2 className="size-6 animate-spin" /></div>
+      ) : totalPatches === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          No fixtures patched yet. Click &ldquo;Patch&rdquo; to get started.
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">No fixtures match your filter.</div>
+      ) : (
+        <PatchSheet
+          projectId={projectId}
+          rows={rows}
+          allPatches={patches ?? []}
+          riggings={riggings ?? []}
+          visibleColumns={visibleColumns}
+          onEditPatch={onEditPatch}
+          onEditGroup={onEditGroup}
+          onCountsChange={setSelectedCount}
+        />
+      )}
 
-        {/* Universe config chips */}
-        {(universeConfigs?.length || patchGroups?.length) ? (
-          <div className="flex flex-col gap-2 mb-4">
-            {universeConfigs && universeConfigs.length > 0 && (
-              <div className="flex flex-wrap gap-2 items-center">
-                <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Universes</span>
-                {universeConfigs.map((config) => (
-                  <UniverseChip key={config.id} config={config} projectId={projectId} />
-                ))}
-              </div>
-            )}
-            {patchGroups && patchGroups.length > 0 && (
-              <div className="flex flex-wrap gap-2 items-center">
-                <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Groups</span>
-                {patchGroups.map((group) => (
-                  <button
-                    key={group.id}
-                    onClick={() => setEditingGroup({ id: group.id, name: group.name })}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs hover:bg-accent transition-colors"
-                  >
-                    <span className="font-medium">{group.name}</span>
-                    <span className="text-muted-foreground">{group.memberCount}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : null}
-
-        {patchesLoading ? (
-          <div className="flex justify-center py-8"><Loader2 className="size-6 animate-spin" /></div>
-        ) : rows.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
-            No fixtures patched yet. Click &ldquo;Patch&rdquo; to get started.
-          </div>
-        ) : (
-          <PatchTable
-            rows={rows}
-            onRowClick={(id) => setEditingPatchId(id)}
-            onGroupClick={(id, name) => setEditingGroup({ id, name })}
-          />
-        )}
+      {/* The footer: the counts, and how full the rig is. */}
+      <div className="flex h-[22px] shrink-0 items-center gap-3 overflow-hidden whitespace-nowrap border-t px-3 text-[10.5px] text-muted-foreground">
+        <span className="tabular-nums">
+          {totalPatches} fixture{totalPatches === 1 ? '' : 's'} patched
+          {selectedCount > 0 ? ` · ${selectedCount} selected` : ''}
+          {totalGroups > 0 ? ` · ${totalGroups} group${totalGroups === 1 ? '' : 's'}` : ''}
+        </span>
+        <span className="ml-auto tabular-nums">
+          {universes.length} universe{universes.length === 1 ? '' : 's'} · {addressesUsed} of {universes.length * 512} addresses
+        </span>
       </div>
 
       <AddFixtureSheet
@@ -160,7 +289,7 @@ export function PatchListContent({
 
 // ─── Universe chips ───────────────────────────────────────────────────
 
-function UniverseChip({ config, projectId }: { config: UniverseConfig; projectId: number }) {
+function UniverseChip({ config, projectId, fill }: { config: UniverseConfig; projectId: number; fill: number }) {
   const [editing, setEditing] = useState(false)
   const [address, setAddress] = useState(config.address ?? '')
   const [intervalMs, setIntervalMs] = useState(String(config.refreshIntervalMs))
@@ -219,6 +348,20 @@ function UniverseChip({ config, projectId }: { config: UniverseConfig; projectId
           ) : (
             <span className="text-muted-foreground/50 italic">no address</span>
           )}
+          {/* The fill bar: how many of the universe's 512 addresses its heads occupy. Titan draws
+              one per line; here it is the one thing about a universe an operator patching by
+              hand wants to see at a glance. */}
+          <span
+            className="relative h-1.5 w-16 overflow-hidden rounded-full bg-muted"
+            title={`${fill} of 512 addresses used`}
+            role="img"
+            aria-label={`${fill} of 512 addresses used`}
+          >
+            <span
+              className="absolute inset-y-0 left-0 rounded-full bg-muted-foreground/70"
+              style={{ width: `${Math.round((fill / 512) * 100)}%` }}
+            />
+          </span>
           {/* Only when pinned on this desk. A machine-local setting that lives behind a
               popover is one people forget they set — but showing the default on every
               chip would be noise on every rig that never touches it. */}
@@ -295,184 +438,41 @@ function UniverseChip({ config, projectId }: { config: UniverseConfig; projectId
   )
 }
 
-// ─── Patch table ──────────────────────────────────────────────────────
-
-interface PatchRow {
-  id: number | null
-  key: string
-  displayName: string
-  address: string
-  channelCount: number
-  fixtureType: string
-  riggingName: string | null
-  beamAngleDeg: number | null
-  gelCode: string | null
-  groups: { id: number; name: string }[]
-  stageHidden: boolean
-  sortKey: number
-}
-
-function PatchTable({
-  rows,
-  onRowClick,
-  onGroupClick,
-}: {
-  rows: PatchRow[]
-  onRowClick?: (id: number) => void
-  onGroupClick?: (id: number, name: string) => void
-}) {
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead className="w-[5rem]">Address</TableHead>
-          <TableHead className="hidden sm:table-cell">Type</TableHead>
-          <TableHead className="hidden md:table-cell">Key</TableHead>
-          <TableHead className="hidden md:table-cell">Mount</TableHead>
-          <TableHead className="hidden lg:table-cell">Angle</TableHead>
-          <TableHead className="hidden lg:table-cell">Gel</TableHead>
-          <TableHead>Name</TableHead>
-          <TableHead className="hidden lg:table-cell">Groups</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((row) => (
-          <TableRow
-            key={row.id ?? row.key}
-            className={row.id != null ? "cursor-pointer hover:bg-accent/50" : ""}
-            onClick={() => {
-              if (row.id != null && onRowClick) onRowClick(row.id)
-            }}
-          >
-            <TableCell className="font-mono text-xs tabular-nums">
-              {row.address}
-            </TableCell>
-            <TableCell className="hidden sm:table-cell">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-muted-foreground">{row.fixtureType}</span>
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono shrink-0">
-                  {row.channelCount}ch
-                </Badge>
-              </div>
-            </TableCell>
-            <TableCell className="hidden md:table-cell">
-              <code className="text-xs text-muted-foreground">{row.key}</code>
-            </TableCell>
-            <TableCell className="hidden md:table-cell text-xs">
-              {row.riggingName ? (
-                <span>{row.riggingName}</span>
-              ) : (
-                <span className="italic text-muted-foreground">Free</span>
-              )}
-            </TableCell>
-            <TableCell className="hidden lg:table-cell text-xs font-mono tabular-nums text-muted-foreground">
-              {row.beamAngleDeg != null ? `${row.beamAngleDeg}°` : null}
-            </TableCell>
-            <TableCell className="hidden lg:table-cell">
-              <GelCell code={row.gelCode} />
-            </TableCell>
-            <TableCell>
-              <div className="font-medium text-sm flex items-center gap-1.5">
-                <span>{row.displayName}</span>
-                {row.stageHidden && (
-                  <EyeOff
-                    className="size-3 shrink-0 text-muted-foreground"
-                    role="img"
-                    aria-label="Hidden from Stage view"
-                  />
-                )}
-              </div>
-              {row.fixtureType && (
-                <div className="sm:hidden text-[11px] text-muted-foreground flex items-center gap-1">
-                  <span>{row.fixtureType}</span>
-                  <span className="font-mono">{row.channelCount}ch</span>
-                </div>
-              )}
-            </TableCell>
-            <TableCell className="hidden lg:table-cell">
-              <div className="flex flex-wrap gap-1">
-                {row.groups.map((g) => (
-                  <Badge
-                    key={g.id}
-                    variant="secondary"
-                    className={`text-[10px] px-1.5 py-0 ${onGroupClick ? 'cursor-pointer hover:bg-accent' : ''}`}
-                    onClick={(e) => {
-                      if (onGroupClick) {
-                        e.stopPropagation()
-                        onGroupClick(g.id, g.name)
-                      }
-                    }}
-                  >
-                    {g.name}
-                  </Badge>
-                ))}
-              </div>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  )
-}
-
-function GelCell({ code }: { code: string | null }) {
-  if (!code) return null
-  const gel = findGel(code)
-  return (
-    <div className="flex items-center gap-1.5">
-      <span
-        className="size-3 rounded-sm border border-border/60 shrink-0"
-        style={{ background: gel?.color ?? 'transparent' }}
-        aria-hidden
-      />
-      <span className="font-mono text-xs">{code}</span>
-    </div>
-  )
-}
-
-// ─── Address formatting ───────────────────────────────────────────────
-
-function formatAddress(universe: number, channel: number): string {
-  return `${universe}-${String(channel).padStart(3, "0")}`
-}
-
 // ─── Data transformation ──────────────────────────────────────────────
 
 function buildPatchRows(
   patches: FixturePatch[] | undefined,
   riggings: { uuid: string; name: string }[] | undefined,
-): PatchRow[] {
+  fixtureTypes: { typeKey: string; acceptsBeamAngle?: boolean; acceptsGel?: boolean }[] | undefined,
+  universeFilter: 'all' | number,
+  filter: string,
+): PatchSheetRow[] {
   if (!patches) return []
 
   const riggingNames = new Map<string, string>()
   for (const r of riggings ?? []) riggingNames.set(r.uuid, r.name)
+  const typeByKey = new Map((fixtureTypes ?? []).map((t) => [t.typeKey, t]))
+  const needle = filter.trim().toLowerCase()
 
-  const rows: PatchRow[] = patches.map((p) => {
-    const channelCount = p.channelCount ?? 1
-    return {
-      id: p.id,
-      key: p.key,
-      displayName: p.displayName,
-      address: formatAddress(p.universe, p.startChannel),
-      channelCount,
-      fixtureType: buildTypeLabel(p.manufacturer, p.model, p.modeName),
-      riggingName: p.riggingUuid ? riggingNames.get(p.riggingUuid) ?? null : null,
-      beamAngleDeg: p.beamAngleDeg,
-      gelCode: p.gelCode,
-      groups: p.groups,
-      stageHidden: p.stageHidden,
-      sortKey: p.universe * 1000 + p.startChannel,
-    }
-  })
+  const rows: PatchSheetRow[] = patches
+    .filter((p) => universeFilter === 'all' || p.universe === universeFilter)
+    .filter((p) => {
+      if (needle === '') return true
+      const address = `${p.universe}-${String(p.startChannel).padStart(3, '0')}`
+      return [p.displayName, p.key, p.manufacturer, p.model, p.modeName, address]
+        .some((field) => field?.toLowerCase().includes(needle))
+    })
+    .map((p) => {
+      const type = typeByKey.get(p.fixtureTypeKey)
+      return {
+        id: patchRowId(p.id),
+        patch: p,
+        riggingName: p.riggingUuid ? riggingNames.get(p.riggingUuid) ?? null : null,
+        acceptsBeamAngle: type?.acceptsBeamAngle ?? false,
+        acceptsGel: type?.acceptsGel ?? false,
+      }
+    })
 
-  rows.sort((a, b) => a.sortKey - b.sortKey)
+  rows.sort((a, b) => a.patch.universe * 1000 + a.patch.startChannel - (b.patch.universe * 1000 + b.patch.startChannel))
   return rows
-}
-
-function buildTypeLabel(manufacturer: string | null, model: string | null, modeName: string | null): string {
-  const parts: string[] = []
-  if (manufacturer) parts.push(manufacturer)
-  if (model) parts.push(model)
-  if (modeName) parts.push(`(${modeName})`)
-  return parts.join(" ")
 }

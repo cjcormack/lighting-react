@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router'
 import type { CueStack, CueStackCueEntry } from '@/api/cueStacksApi'
 
 /**
@@ -91,6 +92,7 @@ interface Props {
 
 function view(p: Props = {}) {
   return (
+    <MemoryRouter>
     <StackDetail
       stack={p.stack ?? mkStack()}
       projectId={1}
@@ -107,6 +109,7 @@ function view(p: Props = {}) {
       onMarkerRename={vi.fn()}
       onMarkerDelete={vi.fn()}
     />
+    </MemoryRouter>
   )
 }
 

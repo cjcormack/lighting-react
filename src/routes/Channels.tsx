@@ -11,7 +11,7 @@ import {
   ContextMenuContent,
   ContextMenuItem,
 } from "@/components/ui/context-menu"
-import { useParams, useNavigate, useSearchParams, Navigate } from "react-router"
+import { useParams, useNavigate, useSearchParams, useLocation, Navigate } from "react-router"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -38,6 +38,7 @@ import { FixtureDetailModal } from "@/components/groups/FixtureDetailModal"
 import { ChannelValueDialog } from "@/components/ChannelValueDialog"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { CurrentProjectRedirect } from "@/components/CurrentProjectRedirect"
+import { CHANNELS_VIEW_KEY, ChannelsViewSwitcher, stickyRedirectsToList } from "@/components/ViewSwitcher"
 
 // Pre-computed static channel groups: 64 groups of 8 channels each
 const CHANNEL_GROUPS: number[][] = Array.from({ length: 64 }, (_, g) =>
@@ -376,10 +377,19 @@ export function ProjectChannels() {
   const universeNum = Number(universe ?? 0)
   const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
+  const location = useLocation()
 
   // If viewing a non-current project, redirect to the current project
   if (!currentLoading && currentProject && projectIdNum !== currentProject.id) {
     return <Navigate to={`/projects/${currentProject.id}/channels/${universeNum}`} replace />
+  }
+
+  // Sticky view: the sidebar's single "Channels" entry points here, so honour the last-used view
+  // — exactly the Fixtures / Groups wiring (`ProjectFixtures`). The switcher's Cards segment both
+  // rewrites the preference and tags its navigation with link state, so Cards stays reachable
+  // even when the localStorage write fails.
+  if (stickyRedirectsToList(location.state, CHANNELS_VIEW_KEY)) {
+    return <Navigate to={`/projects/${projectIdNum}/channels/${universeNum}/table`} replace />
   }
 
   if (projectLoading || currentLoading) {
@@ -488,8 +498,10 @@ function ProjectChannelsContent({ projectId, projectName, universe }: { projectI
   return (
     <>
       <Card className="m-4 p-4">
-        <div className="flex items-start justify-between gap-2 mb-4">
-          <Breadcrumbs projectName={projectName} />
+        {/* `@container`: the view switcher's labels are a container query, and a missing ancestor
+            would drop them silently. See ViewSwitcher's LABEL_AT_* constants. */}
+        <div className="@container flex items-start justify-between gap-2 mb-4">
+          <ChannelsBreadcrumbs projectName={projectName} />
           <div className="flex items-center gap-2">
             {/* Inline buttons — hidden on narrow viewports. Kept mounted while the filter
                 is on even at zero parked channels: unparking the last one would otherwise
@@ -566,6 +578,8 @@ function ProjectChannelsContent({ projectId, projectName, universe }: { projectI
             >
               {isEditing ? "Done" : "Edit"}
             </Button>
+
+            <ChannelsViewSwitcher current="cards" projectId={projectId} universe={universe} />
 
             {/* Overflow menu — visible on narrow viewports */}
             <DropdownMenu>
@@ -651,8 +665,8 @@ function ProjectChannelsContent({ projectId, projectName, universe }: { projectI
   )
 }
 
-// Breadcrumbs component
-function Breadcrumbs({ projectName }: { projectName: string }) {
+// Breadcrumbs component — shared with the table sibling (`routes/ChannelsTable.tsx`).
+export function ChannelsBreadcrumbs({ projectName }: { projectName: string }) {
   const navigate = useNavigate()
 
   return (
