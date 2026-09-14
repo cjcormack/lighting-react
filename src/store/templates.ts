@@ -28,6 +28,17 @@ import type {
  * those two lists.
  */
 export function startTemplatesBridge() {
+  // `templatePressed` — a press somewhere on this desk. Patched, never invalidated: the frame
+  // carries the whole of what changed, a press happens at busking rate, and the sibling signal
+  // below drops three caches. Zero network, which is the point of the frame being keyed at all.
+  //
+  // It fires for **this** tab's own presses too, and that is wanted rather than tolerated: it is
+  // what makes the server's stamp the one every client ends up holding, so the row cannot order
+  // itself differently in two tabs because their clocks differ.
+  lightingApi.templates.subscribePressed(function (event) {
+    applyTemplatePressed(store.dispatch, store.getState, event.templateId, event.lastPressedAt)
+  })
+
   lightingApi.templates.subscribe(function () {
     // `Cue` rides along for the reason the looks bridge gives: a template created, copied or
     // deleted elsewhere changes what the cues layering it compose to, and this signal is the only
@@ -36,6 +47,34 @@ export function startTemplatesBridge() {
     // entries carry `layers[].source.name`, so a rename shows through it.
     store.dispatch(restApi.util.invalidateTags(['TemplateList', 'Cue', 'CueList']))
   })
+}
+
+/**
+ * Write `lastPressedAt` into every cached `templateList` entry holding this template.
+ *
+ * **Every entry, because the family filter is a query argument**: `/templates?family=colour` and
+ * the programmer's unfiltered list are two cache entries of one endpoint, and a press seen through
+ * one of them has to move the other or the two disagree about the order of the same library.
+ * `selectCachedArgsForQuery` is what enumerates them without this module having to know which
+ * families anything happens to be showing.
+ *
+ * A template the entry does not hold is left alone rather than inserted — a list filtered to
+ * COLOUR must not gain a position template because someone pressed one.
+ */
+function applyTemplatePressed(
+  dispatch: typeof store.dispatch,
+  getState: typeof store.getState,
+  templateId: number,
+  lastPressedAt: string,
+) {
+  for (const args of templatesApi.util.selectCachedArgsForQuery(getState(), 'templateList')) {
+    dispatch(
+      templatesApi.util.updateQueryData('templateList', args, (draft) => {
+        const template = draft.find((t) => t.id === templateId)
+        if (template != null) template.lastPressedAt = lastPressedAt
+      }),
+    )
+  }
 }
 
 export const templatesApi = restApi.injectEndpoints({
@@ -144,6 +183,24 @@ export const templatesApi = restApi.injectEndpoints({
         method: 'POST',
         body,
       }),
+      // The acting tab's own fast path onto the recents row. The server stamps this press and
+      // broadcasts `templatePressed`, so this is belt as well as braces — but the frame is a
+      // round trip away and the chips the operator just pressed are under their hand.
+      //
+      // **After the response, not before it, and gated on the same rule the server applies**: a
+      // click that reaches no head returns 200 having written nothing, and the desk does not stamp
+      // that. A provisional clock reading is fine because the frame overwrites it with the
+      // server's within the same breath — and it is the server's value every client keeps.
+      async onQueryStarted({ templateId }, { dispatch, getState, queryFulfilled }) {
+        try {
+          const { data } = await queryFulfilled
+          if (data.written > 0 || (data.effectIds?.length ?? 0) > 0) {
+            applyTemplatePressed(dispatch, getState as typeof store.getState, templateId, new Date().toISOString())
+          }
+        } catch {
+          // A refused press is not a press. The toast is the caller's.
+        }
+      },
     }),
 
     /**
@@ -194,6 +251,19 @@ export const templatesApi = restApi.injectEndpoints({
         method: 'POST',
         body,
       }),
+      // The **on** arm only, for the reason the desk applies the same rule: a second press takes
+      // the layer off, and a release is not something you reached for. See `applyTemplate` above
+      // for why this runs after the response rather than optimistically.
+      async onQueryStarted({ templateId }, { dispatch, getState, queryFulfilled }) {
+        try {
+          const { data } = await queryFulfilled
+          if (data.action === 'applied') {
+            applyTemplatePressed(dispatch, getState as typeof store.getState, templateId, new Date().toISOString())
+          }
+        } catch {
+          // Refused, or the target is gone. Not a press.
+        }
+      },
     }),
   }),
   overrideExisting: false,

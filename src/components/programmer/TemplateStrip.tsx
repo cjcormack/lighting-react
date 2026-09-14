@@ -1,20 +1,18 @@
-import { useCallback, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { AudioWaveform, Plus } from 'lucide-react'
-import { toast } from 'sonner'
+import { AudioWaveform, LayoutGrid, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useScrollEdges } from '@/hooks/useScrollEdges'
-import { useLongPress } from '@/hooks/useLongPress'
 import type { CellRef } from '@/components/fixtures-list/cellSelectionModel'
 import { type AttributeFamily } from '@/lib/attributeFamily'
+import { EFFECT_GLYPH_CLASS } from '@/components/busking/padFace'
 import { templateRowsSwatch, describeTemplateIntent } from '@/lib/templateIntent'
-import {
-  useApplyTemplateMutation,
-  useTemplateListQuery,
-  useToggleTemplateMutation,
-} from '@/store/templates'
-import { formatError } from '@/lib/formatError'
+import { stripTemplates } from '@/lib/templateRecents'
+import { useTemplateListQuery } from '@/store/templates'
 import { NewTemplateFromSelectionSheet } from './NewTemplateFromSelectionSheet'
+import { TemplatePicker } from './TemplatePicker'
+import { templatePressTitle, useTemplatePress, useTemplatePressHandlers } from './useTemplatePress'
 import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
 
 /**
@@ -63,10 +61,17 @@ import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
  * guard in `press` stays as defence in depth, and so does `New`'s disabled arm — neither is
  * reachable through the UI now, and both are one careless host away from being reachable again.
  *
+ * **The chips are the eight most recently *pressed*, not the whole library** (see `stripTemplates`).
+ * A show has sixty templates and this row was sized for six; the fix is not a longer scroller but a
+ * different question — the row answers "what am I reaching for", and `All · n` opens a searchable
+ * pad grid for everything else (`TemplatePicker`). Recency is a **desk** fact, stamped server-side
+ * on every press from any surface, so the row agrees with the busk page and with the hardware.
+ *
  * **It is a row of the selection bar, not a band of its own.** It renders a leading hairline, then
- * the chips in a `flex-1 min-w-0 overflow-x-auto` scroller under a right-edge mask, then `New` —
- * three siblings of one flex line that `ProgrammerGrid` owns, which is why there is no wrapper
- * element around them. The hairline belongs to the strip rather than to the bar so that the two
+ * the chips in a `flex-1 min-w-0 overflow-x-auto` scroller under a right-edge mask, then `All · n`,
+ * then `New` — four siblings of one flex line that `ProgrammerGrid` owns, which is why there is no
+ * wrapper element around them. Below 600px of that row the scroller is not drawn and the last two
+ * are the whole strip. The hairline belongs to the strip rather than to the bar so that the two
  * appear and disappear together: the bar renders whenever anything is selected, and the strip
  * whenever a press has somewhere to land, and those are not quite the same condition (a selected
  * group row with no visible members resolves to no targets at all).
@@ -97,10 +102,11 @@ export function TemplateStrip({
   targetEmitters?: readonly string[]
 }) {
   const { data: templates } = useTemplateListQuery({ projectId }, { skip: !projectId })
-  const [applyTemplate] = useApplyTemplateMutation()
-  const [toggleTemplate] = useToggleTemplateMutation()
   const [newOpen, setNewOpen] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
   const scrollerRef = useRef<HTMLDivElement>(null)
+  const allRef = useRef<HTMLButtonElement>(null)
+  const press = useTemplatePress(projectId, targets)
 
   /**
    * The families the selection is asking about.
@@ -149,65 +155,27 @@ export function TemplateStrip({
   }, [templates, families, targetEmitters])
 
   /**
+   * The chips the row actually draws: the templates this desk pressed most recently, most recent
+   * first, up to eight — or the first eight by name where nothing has been pressed yet.
+   *
+   * The strip used to draw the whole offerable list. That was sized for six templates and a real
+   * show has sixty; on an iPad portrait the row has space for one chip, and there was no way to
+   * reach past it. So the row keeps what you reach for and `All · n` opens the rest.
+   *
+   * "For the selected family" needs no parameter: [visible] has already been filtered by family,
+   * emitters and generic-vs-per-fixture, so the recents are per-family by construction.
+   */
+  const shown = useMemo(() => stripTemplates(visible), [visible])
+
+  /**
    * Values, then a hairline, then effects (fx-templates D10) — the busk column's split, sideways.
    *
-   * Name order holds inside each half; nothing is sorted here and nothing was before. The
-   * hairline is drawn only when both halves have something in them, so a colour selection with no
-   * colour effect templates looks exactly as it did.
+   * Order holds inside each half — recency now, name order in the fallback arm. The hairline is
+   * drawn only when both halves have something in them, so a colour selection with no colour
+   * effect templates looks exactly as it did.
    */
-  const valueChips = useMemo(() => visible.filter((t) => t.kind !== 'effect'), [visible])
-  const effectChips = useMemo(() => visible.filter((t) => t.kind === 'effect'), [visible])
-
-  const press = useCallback(
-    (template: TemplateSummary, additive: boolean) => {
-      if (targets.length === 0) {
-        toast.error('Select the fixtures this should land on first')
-        return
-      }
-      const request = additive
-        ? toggleTemplate({
-            projectId,
-            templateId: template.id,
-            targets: [...targets],
-            propertyMask: template.family ?? undefined,
-          })
-        : applyTemplate({ projectId, templateId: template.id, targets: [...targets] })
-      request
-        .unwrap()
-        .then((result) => {
-          // The skips are the honest half of a type-agnostic apply: a head with no dimmer takes no
-          // level, and saying nothing would look like the press did nothing.
-          if ('skipped' in result && result.skipped.length > 0) {
-            toast.warning(
-              `${result.written} head${result.written === 1 ? '' : 's'} set · ${result.skipped.length} could not take it`,
-            )
-            return
-          }
-          // An **effect** template writes no literals at all — it mints detached programmer-band
-          // copies, so `written` stays 0 and `effectIds` is the whole result. Without this the one
-          // gesture that reaches the rig hardest is the only one that says nothing.
-          //
-          // An *empty* list is reported too, and that is the half worth keeping: a press that
-          // started nothing looks exactly like a press that started everything, and the value arm
-          // above has `skipped` to say so where this one has only the count.
-          //
-          // Gated on the template's **kind**, not on the field being present: the desk answers a
-          // value press with `effectIds: []` as well, and reading that as "nothing started" put a
-          // failure toast on every successful value press. Found on a desk, not by a test —
-          // the mock here answered without the field.
-          if (template.kind === 'effect' && 'effectIds' in result && result.effectIds != null) {
-            const count = result.effectIds.length
-            if (count === 0) {
-              toast.warning('Nothing started — no selected head could take this effect')
-            } else {
-              toast.success(`${count} effect${count === 1 ? '' : 's'} started`)
-            }
-          }
-        })
-        .catch((err) => toast.error(formatError(err)))
-    },
-    [applyTemplate, toggleTemplate, projectId, targets],
-  )
+  const valueChips = useMemo(() => shown.filter((t) => t.kind !== 'effect'), [shown])
+  const effectChips = useMemo(() => shown.filter((t) => t.kind === 'effect'), [shown])
 
   // The chips are a *scroller*, so the mask has to be conditional. A fade drawn over content that
   // fits says "there is more to the right" when there is not, and after the two-flex-1 fix below
@@ -250,7 +218,12 @@ export function TemplateStrip({
           // selection, so the hook has to be told when it arrives.
           ref={attach}
           className={cn(
-            'flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto',
+            // **Not drawn below 600px of row C.** A phone has room for one chip beside the counts,
+            // and one chip of sixty is a worse answer than none: there the library is reached
+            // through `All · n` alone, and Recent is the first section of the sheet it opens.
+            // `hidden … flex` rather than an unmount, so the scroller's measured overflow and the
+            // hook attached to it survive a rotation.
+            'hidden min-w-0 flex-1 items-center gap-1.5 overflow-x-auto @[600px]:flex',
             overflows && [
               '[mask-image:linear-gradient(90deg,#000_92%,transparent)]',
               '[-webkit-mask-image:linear-gradient(90deg,#000_92%,transparent)]',
@@ -280,6 +253,29 @@ export function TemplateStrip({
           ))}
         </div>
 
+        {/* The rest of the library, one button away, at **every** width — it is the only way in
+            below 600px, where the scroller above is not drawn at all.
+
+            `size="sm"` with `h-7`: it sits in the chips' row, so it takes their nested tier rather
+            than the row's own 32px verbs. The count is what the selection *fits*, which is the
+            same rule the scroller filters by (`visible`) rather than the whole library — the
+            picker's footer is where the two numbers are compared. */}
+        <Button
+          ref={allRef}
+          variant="outline"
+          size="sm"
+          className="h-7 shrink-0 gap-1.5 px-2 text-xs"
+          aria-expanded={pickerOpen}
+          title="Every template that fits the selection, searchable"
+          onClick={() => setPickerOpen((wasOpen) => !wasOpen)}
+        >
+          <LayoutGrid className="size-3.5" />
+          All
+          <Badge variant="secondary" className="px-1 py-0 text-[10px] tabular-nums">
+            {visible.length}
+          </Badge>
+        </Button>
+
         {/* The chip that fills the library, pinned outside the scroller. `h-7` like the chips: a
             control inside a control is 28 — the nested tier of the chrome system, the same height
             as Update and Revert inside the source box. No `disabled` arm: the
@@ -303,6 +299,18 @@ export function TemplateStrip({
   return (
     <>
       {strip}
+      {/* Outside the guard for the sheet's reason below — and because Radix needs the content
+          mounted for the close animation the moment `targets` empties under an open picker. */}
+      <TemplatePicker
+        projectId={projectId}
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        anchorRef={allRef}
+        cells={cells}
+        askedFamilies={askedFamilies}
+        targets={targets}
+        offerable={visible}
+      />
       <NewTemplateFromSelectionSheet
         open={newOpen}
         onOpenChange={setNewOpen}
@@ -331,46 +339,15 @@ function TemplateChip({
   onPress: (template: TemplateSummary, additive: boolean) => void
 }) {
   const swatch = templateRowsSwatch(template.rows)
-  // The hold is ⌥click's touch twin (`PD-TRACKING-GESTURE-TOUCH`): a phone has no Option key, so
-  // without it the tracking half of the design was unreachable from the surface built for it. It
-  // is a hold and not a mode switch in the bar because ⌥ is per-press, and a sticky Set/Track
-  // toggle is the kind of state an operator forgets they set. A hold means the press's second
-  // meaning everywhere on the desk — a pad's hold inspects it, a speed card's hold is its fader,
-  // the grid's hold is its marquee — and the chip and the grid never share a point, so the hold
-  // cannot mean two things anywhere a finger lands. `consumeLongPress` swallows the click the
-  // release then generates, or a hold would add the layer *and* set the literals.
-  //
-  // **Touch and pen only — the same gate the grid's marquee arm makes, and the same list.** A
-  // mouse has ⌥, so a mouse hold would be a second, silent door to the tracking mutation: an
-  // operator who paused on a chip for half a second would get a layer where they meant literals,
-  // and nothing on screen says which happened. The busk pads keep their mouse hold because theirs
-  // opens an inspector; this one changes the rig.
-  const { handlers: hold, consumeLongPress } = useLongPress({
-    onLongPress: () => onPress(template, true),
-  })
-  const handlers = {
-    ...hold,
-    onPointerDown: (e: ReactPointerEvent) => {
-      if (e.pointerType === 'touch' || e.pointerType === 'pen') hold.onPointerDown(e)
-    },
-  }
+  // Click, ⌥click and the touch hold, shared with the picker's pad — see `useTemplatePressHandlers`.
+  // It was written out here and copied into the pad, which is the drift `useTemplatePress` was
+  // extracted to stop for the mutation half and had not yet stopped for the gesture half.
+  const handlers = useTemplatePressHandlers(template, onPress)
   return (
     <button
       type="button"
       {...handlers}
-      onClick={(e) => {
-        if (consumeLongPress()) return
-        onPress(template, e.altKey)
-      }}
-      title={
-        // The two gestures, stated on the chip rather than left to be discovered: ⌥click is not a
-        // thing an operator guesses, and it is the one that creates a dependency. For an effect the
-        // click half says **a copy**, which is the whole difference between the two: the instance a
-        // click mints carries no `LayerSource`, so retuning the template afterwards never moves it.
-        template.kind === 'effect'
-          ? `Click to run a copy of “${template.name}” on the selection · hold or ⌥click to add a layer that tracks it`
-          : `Click to set these values · hold or ⌥click to add a layer that tracks “${template.name}”`
-      }
+      title={templatePressTitle(template)}
       className={cn(
         // `shrink-0` is what makes the row a scroller rather than a squeezer: without it flex
         // would compress every chip to fit and the mask would never fade anything. `h-7` is the
@@ -383,7 +360,7 @@ function TemplateChip({
       {/* An effect template holds no rows, so there is no value to preview — the glyph the whole
           desk uses for FX says what the press will do instead of a blank gap. */}
       {template.kind === 'effect' ? (
-        <AudioWaveform className="size-3 shrink-0 text-muted-foreground" />
+        <AudioWaveform className={EFFECT_GLYPH_CLASS} />
       ) : swatch != null ? (
         <span className="size-3 rounded-sm border border-border/60" style={{ background: swatch }} />
       ) : (

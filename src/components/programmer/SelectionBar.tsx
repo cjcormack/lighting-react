@@ -6,7 +6,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
 import { describeCellScope, type CellRef } from '@/components/fixtures-list/cellSelectionModel'
 import { cellFamilies, columnLabel } from '@/components/fixtures-list/columns'
-import { PHONE_FOLDED_CLASS } from '@/components/fixtures-list/SelectionToolbar'
+import { MID_FOLDED_CLASS, PHONE_FOLDED_CLASS } from '@/components/fixtures-list/SelectionToolbar'
 import { TemplateStrip } from './TemplateStrip'
 import { selectionBandState } from './selectionBand'
 import type { LocateTarget } from '@/store/locate'
@@ -49,6 +49,12 @@ const SHORT_VIEWPORT = '(max-height: 500px)'
  * It is full-bleed with a `border-b` rather than a rounded card inset in a padded block: it is a
  * *rung of the grid's chrome* like row B above it, not an object floating over the page, and the
  * card's 16px of surrounding padding was height.
+ *
+ * **Below `@[800px]` the row starts shedding for the templates.** The fixture count and its
+ * separator fold into the cell count's hover, and Locate and Highlight go with them
+ * (`MID_FOLDED_CLASS`) — the two controls on this row that are also on the busk view's target band.
+ * That is what gives an iPad portrait two recent chips instead of none. Below `@[600px]` the
+ * template *scroller* goes too, and the library is reached through `All · n` alone.
  *
  * **Below `@[600px]` it is glyph · count · chips · New · Set · Clear · X**, which is the `Phone`
  * artboard (`PD-SELECTION-BAR-DENSITY`) plus the two cell verbs. The fixture count folds into the
@@ -156,11 +162,16 @@ export function SelectionBar({
         <span
           className={cn(
             'whitespace-nowrap text-xs font-semibold tabular-nums',
-            // The phone arm (`PD-SELECTION-BAR-DENSITY`): with cells in play the fixture count
-            // and its separator fold into the cell count's hover, and the width goes to the chips.
-            // With rows only it is the one count there is, so it stays. `@[600px]` is row B's
-            // phone threshold, the one the key button appears at.
-            cells.length > 0 && PHONE_FOLDED_CLASS,
+            // With cells in play the fixture count and its separator fold into the cell count's
+            // hover, and the width goes to the chips. With rows only it is the one count there is,
+            // so it stays.
+            //
+            // **At 800 rather than at the phone's 600**, alongside Locate and Highlight
+            // (`MID_FOLDED_CLASS`): the template row needs the width earlier than the rest of the
+            // bar does, and an iPad portrait's row C sits right on that line — it is the
+            // difference between two recent chips and none. The count is not lost, only moved: the
+            // cell count's `title` beside it has carried it since session 1.
+            cells.length > 0 && MID_FOLDED_CLASS,
           )}
         >
           {templateTargets.length} fixture{templateTargets.length === 1 ? '' : 's'}
@@ -169,7 +180,7 @@ export function SelectionBar({
       {cells.length > 0 && (
         <>
           {templateTargets.length > 0 && (
-            <span className={cn('text-muted-foreground/50', PHONE_FOLDED_CLASS)}>·</span>
+            <span className={cn('text-muted-foreground/50', MID_FOLDED_CLASS)}>·</span>
           )}
           <span
             className="whitespace-nowrap text-xs font-semibold tabular-nums"

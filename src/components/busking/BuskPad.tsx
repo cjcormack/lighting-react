@@ -2,15 +2,20 @@ import { useDraggable, useDroppable } from '@dnd-kit/core'
 import { AudioWaveform, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useLongPress } from '@/hooks/useLongPress'
-import { useSpeedMasterDisplay } from '@/store/speedMasters'
-import { effectSpeedLabel } from '@/components/fx/fxConstants'
 import { registerDragOverlay } from '@/components/dnd/dragOverlayRegistry'
 import type { BuskPad } from '@/api/buskApi'
-import type { TemplateSummary } from '@/api/templatesApi'
 import { buskPadId, type PadAddress } from '@/lib/buskLayout'
 import { useBuskEdit } from './BuskEditProvider'
 import type { EffectPresence } from './buskingTypes'
-import { padFaceOf, padPresenceClass, type PadFace } from './padFace'
+import { EffectPadDetail } from './EffectPadDetail'
+import {
+  EFFECT_GLYPH_CLASS,
+  PAD_FACE_SHELL,
+  PAD_SHELL,
+  padFaceOf,
+  padPresenceClass,
+  type PadFace,
+} from './padFace'
 import { buskDragData, DROP_DEPTH, type BuskDropData, type BuskPadDragData } from './buskDnd'
 
 /**
@@ -22,39 +27,6 @@ import { buskDragData, DROP_DEPTH, type BuskDropData, type BuskPadDragData } fro
  * does say something different (a number, a name and a stack, lit green when it is on stage) from a
  * template or a Look (a name, a detail line, and a three-rung presence ring in the accent colour).
  */
-
-/**
- * An effect template's detail line, which is **live** and therefore a component.
- *
- * The master's label comes from a subscription, and a hook cannot be conditional — so this cannot
- * be a string the caller builds, or every value pad in the bank would subscribe to the speed-master
- * bank to render a line that never mentions one. `padFace`'s static `detail` is the same line
- * without the master, and is what the drag ghost shows.
- */
-function EffectPadDetail({ template }: { template: TemplateSummary }) {
-  // A WALL_CLOCK effect never reads `speedMasterUuid`: its cycle is scaled by the *rate* master, and
-  // a null one means **unscaled** rather than master 1.
-  const isWallClock = template.effect?.timingSource === 'WALL_CLOCK'
-  const master = useSpeedMasterDisplay(
-    isWallClock ? template.effect?.rateSpeedMasterUuid : template.effect?.speedMasterUuid,
-  )
-  if (template.effect == null) return 'Effect'
-  const speed = effectSpeedLabel(template.effect.beatDivision, template.effect.timingSource)
-  // A null `timingSource` means the stored `effectType` no longer resolves in this desk's registry.
-  // Both clauses go then, not just the speed: `isWallClock` is false for a null as well as for a
-  // beat effect, so naming the beat master would state a tempo link a wall-clock effect does not
-  // have. Say nothing rather than pick the likelier of two wrong answers.
-  const masterLabel =
-    template.effect.timingSource == null
-      ? null
-      : master
-        ? `M${master.index}`
-        : isWallClock && template.effect.rateSpeedMasterUuid == null
-          ? 'unscaled'
-          : 'M1'
-  return [template.effect.effectType, speed, masterLabel].filter(Boolean).join(' · ')
-}
-
 
 function LookFace({
   face,
@@ -72,7 +44,7 @@ function LookFace({
       <span className="flex items-center gap-1.5">
         {/* An effect template has no value to preview, so the FX glyph stands where a swatch would
             — the same substitution `TemplateListRow` and `TemplateStrip` make. */}
-        {face.isEffect && <AudioWaveform className="size-3 shrink-0 text-muted-foreground" />}
+        {face.isEffect && <AudioWaveform className={EFFECT_GLYPH_CLASS} />}
         {face.swatch && (
           <span
             aria-hidden
@@ -113,8 +85,6 @@ function CueFace({ face }: { face: PadFace }) {
   )
 }
 
-const PAD_SHELL = 'relative flex min-h-[56px] rounded-lg border p-2 transition-all select-none touch-manipulation'
-const LOOK_SHELL = 'flex-col items-center justify-center text-center'
 const CUE_SHELL = 'flex-col items-start gap-0.5 px-2.5 py-2 text-left'
 
 export interface BuskPadButtonProps {
@@ -182,7 +152,7 @@ export function BuskPadButton({
         className={cn(
           PAD_SHELL,
           'w-full',
-          isCue ? CUE_SHELL : LOOK_SHELL,
+          isCue ? CUE_SHELL : PAD_FACE_SHELL,
           isCue
             ? cn('bg-card', isLive && 'border-green-500/70 bg-green-500/10 ring-1 ring-green-500/35')
             : padPresenceClass(presence),
@@ -241,7 +211,7 @@ function PadGhost({ face }: { face: PadFace }) {
     <div
       className={cn(
         PAD_SHELL,
-        isCue ? CUE_SHELL : LOOK_SHELL,
+        isCue ? CUE_SHELL : PAD_FACE_SHELL,
         'w-[120px] border-primary bg-card opacity-90 shadow-lg',
       )}
       style={{ transform: 'rotate(-2deg)' }}

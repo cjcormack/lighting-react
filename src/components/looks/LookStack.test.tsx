@@ -58,6 +58,7 @@ function templateSummary(overrides: Partial<TemplateSummary> = {}): TemplateSumm
     ],
     effect: null,
     layerCount: 0,
+    lastPressedAt: null,
     buskPageCount: 0,
     ...overrides,
   }

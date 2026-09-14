@@ -11,7 +11,13 @@ import { useProjectCueStackListQuery } from '@/store/cueStacks'
 import { buskPaletteId, type PaletteRecord } from '@/lib/buskLayout'
 import type { BuskCue } from '@/api/buskApi'
 import { BuskLabel } from './BuskLabel'
-import { describeLookContents, describeTemplate, padFaceOf, type PadFace } from './padFace'
+import {
+  describeLookContents,
+  describeTemplate,
+  EFFECT_GLYPH_CLASS,
+  padFaceOf,
+  type PadFace,
+} from './padFace'
 import type { BuskPaletteDragData } from './buskDnd'
 
 /**
@@ -96,7 +102,7 @@ function PaletteRowItem({
           {row.cueNumber}
         </span>
       )}
-      {row.isEffect && <AudioWaveform className="size-3 shrink-0 text-muted-foreground" />}
+      {row.isEffect && <AudioWaveform className={EFFECT_GLYPH_CLASS} />}
       {row.swatch && (
         <span
           aria-hidden

@@ -483,8 +483,11 @@ operator-set position and could sit in a *group* whose pads released each other;
 automatic layout, because both were things the busk page does better — order is a pad's place in a
 bank, exclusivity is a solo bank's. `TemplateLayoutList`, `TemplateGroupRow` and
 `lib/templateLayout.ts` are deleted, `/templates/reorder` and the `/template-groups` CRUD with them,
-and `TemplateSummary` carries no `sortOrder` and no `groupId`. The programmer's `TemplateStrip`
-renders the same name-ordered list; do not reintroduce a client-side library order.
+and `TemplateSummary` carries no `sortOrder` and no `groupId`. **Do not reintroduce a stored library
+order**: the only orders a template has are this page's name order and the programmer row's
+recency, and neither is a field. The programmer's `TemplateStrip` drew this same name-ordered list
+until it became a recents row — see §"The two apply gestures", where the row is the eight most
+recently *pressed* and name order is only the fallback for a library nothing has been pressed from.
 
 The **family filter** stays, and is the page's only partition: a template is in exactly one family,
 so `?family=colour` is a view of a small library rather than a division of it, and it deep-links
@@ -819,7 +822,41 @@ same targets so a press and its "new from selection" cannot name different heads
 
 One trap on the response: the desk answers a **value** apply with `effectIds: []` as well as
 `written`, so the "nothing started" warning is gated on `template.kind === 'effect'`, not on the
-field being present — it toasted red on every successful value press before that.
+field being present — it toasted red on every successful value press before that. Both presses go
+through **`useTemplatePress`**, shared by the chip and the picker's pads, so the two surfaces cannot
+answer "what does a press do" a chip apart.
+
+**The row is the eight most recently *pressed*, not the library**, and recency is a **desk** fact
+rather than a tab's. lighting7 stamps `last_pressed_at_ms` on every press that *applies* a template
+— through four doors: the chip's click, ⌥click / hold, a busk pad press, and a MIDI `pressTemplate`
+— so every client and the desk's own hardware agree about what was reached for; a toggle **off** is
+not a press, and neither is a click that reached no head. It arrives as the keyed frame
+`templatePressed { templateId, lastPressedAt }`, which `startTemplatesBridge` **patches** into every
+cached `templateList` entry (all `family` args — the filter is a query argument, so the programmer's
+unfiltered list and `/templates?family=` are two entries of one endpoint). It must not be folded
+into `templateListChanged`: that bridge invalidates `TemplateList`, `Cue` and `CueList`, and a press
+happens at busking rate. `lib/templateRecents.ts` is the one place that orders them, and it orders
+by **parsing** the stamps: `Instant.toString()` omits the fraction on an exact second, so `…:34Z`
+compares *after* `…:34.500Z` as text. With nothing pressed yet the row falls back to the first eight
+by name — all or nothing, never one recent padded out by seven, which would move the row's contents
+under the operator's hand on the second press.
+
+**`All · n` opens `TemplatePicker`** — the offerable library as a searchable pad grid, sections
+Recent · All A–Z · Per fixture · Effects, built from the busk pad's own face (`padFace.ts`'s
+`PAD_SHELL` / `templateSwatch` / `padPresenceClass`, and `templateLayerPresence` against the desk's
+resolved applied state). Three things about it: it takes **`useCellEditorForm`'s three forms** and
+neither of its own media queries, so the picker and a cell editor never disagree about which shape a
+screen gets; **a press does not close it**, because auditioning three colours in a row is the normal
+case; and its popover width is a **media** query rather than a container one — `PopoverContent` is
+portalled to `body`, so row C's `@container` is not an ancestor and a container class there would
+match nothing, silently.
+
+**Row C sheds twice on the way down.** Below `@[800px]` the fixture count, its separator and Locate
+/ Highlight fold (`MID_FOLDED_CLASS` in `SelectionToolbar.tsx`) — the count is already on the cell
+count's hover, and both verbs are on the busk target band — which is what gives an iPad portrait two
+recent chips instead of none. Below `@[600px]` the chip scroller is not drawn at all and the library
+is reached through `All · n` alone, with Recent as the sheet's first section. The design authority
+is `lighting7/docs/plans/programmer-chrome-design/`, page *Templates*.
 
 **New from selection** is server-side (`POST /templates/from-programmer`), for the same reason apply
 is: converting a recorded *literal* back into an **intent** is per-head arithmetic that has to agree

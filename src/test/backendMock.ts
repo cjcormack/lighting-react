@@ -222,6 +222,16 @@ const noopSub = () => ({ unsubscribe: () => {} })
 /** `busk.layoutChanged` frames, so a test can fire one at `store/busk.ts`'s bridge. */
 export const buskWs: { callback: null | ((pageIds: number[]) => void) } = { callback: null }
 
+/**
+ * The template library's two frames: `templateListChanged` (payload-free, invalidates) and
+ * `templatePressed` (keyed, patched in place). Spelled out rather than left to the fallback Proxy
+ * because a test has to *fire* the pressed one — the Proxy can only make subscribing safe.
+ */
+export const templatesWs: {
+  changed: null | (() => void)
+  pressed: null | ((event: { templateId: number; lastPressedAt: string }) => void)
+} = { changed: null, pressed: null }
+
 export function lightingApiMock() {
   const namespaces: Record<string, unknown> = {
       bootStatus: {
@@ -268,6 +278,24 @@ export function lightingApiMock() {
           return {
             unsubscribe: () => {
               buskWs.callback = null
+            },
+          }
+        },
+      },
+      templates: {
+        subscribe: (fn: () => void) => {
+          templatesWs.changed = fn
+          return {
+            unsubscribe: () => {
+              templatesWs.changed = null
+            },
+          }
+        },
+        subscribePressed: (fn: (event: { templateId: number; lastPressedAt: string }) => void) => {
+          templatesWs.pressed = fn
+          return {
+            unsubscribe: () => {
+              templatesWs.pressed = null
             },
           }
         },

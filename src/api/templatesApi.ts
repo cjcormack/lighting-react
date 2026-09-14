@@ -139,6 +139,29 @@ export interface TemplateSummary {
    * hex are all `COLOUR`. Pair it with `targetEmitters` from `fixtures-list/rowModel`.
    */
   requiredEmitters: string[]
+  /**
+   * When this template was last **pressed** on this desk, as an ISO-8601 instant; null until it has
+   * been.
+   *
+   * What the programmer's row of recent chips is ordered by. It is a **desk** fact rather than a
+   * tab's — the server stamps it, on the chip's click, on ⌥click / hold, on a busk pad press and on
+   * a MIDI `pressTemplate` — so every client and every surface agrees on what was reached for, and
+   * a press made from the desk's own hardware counts. Toggling a layer **off** is not a press and
+   * leaves it where it was.
+   *
+   * **Order these by parsing, never by comparing the text.** Java's `Instant.toString()` omits the
+   * fractional part on an exact second, so `…:34Z` sorts *after* `…:34.500Z` lexicographically.
+   * `lib/templateRecents.ts` is the one place that sorts them.
+   *
+   * **Optional, and that is the wire's doing rather than a convenience.** lighting7 hot-swaps changed
+   * handler bodies but not new response fields, so a desk mid-upgrade serves rows without it — which
+   * arrives here as `undefined`, not `null`. The type says so: declaring it `string | null` while
+   * the comment described `undefined` left the one case the comment exists to warn about outside
+   * what `strict` could see, and a future `template.lastPressedAt.length` would have compiled.
+   * Every reader treats absent as "never pressed", which is what every template predating the
+   * column actually is.
+   */
+  lastPressedAt?: string | null
   rows: TemplateRow[]
   effect: TemplateEffect | null
   /**

@@ -16,7 +16,7 @@ const shortViewport = vi.hoisted(() => ({ current: false }))
 vi.mock('@/hooks/useMediaQuery', () => ({ useMediaQuery: () => shortViewport.current }))
 
 const { SelectionBar } = await import('./SelectionBar')
-import { PHONE_FOLDED_CLASS } from '@/components/fixtures-list/SelectionToolbar'
+import { MID_FOLDED_CLASS, PHONE_FOLDED_CLASS } from '@/components/fixtures-list/SelectionToolbar'
 
 const CELLS: CellRef[] = [
   { rowId: 'fixture:a', col: 'colour' },
@@ -49,16 +49,21 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('SelectionBar', () => {
-  it('folds the fixture count and the family badge on the phone arm, and keeps the cell count', () => {
+  it('folds the fixture count at 800 and the family badge at 600, and keeps the cell count', () => {
     render(bar())
-    expect(screen.getByText('2 fixtures')).toHaveClass(PHONE_FOLDED_CLASS)
+    // The count goes early, with Locate and Highlight, because that is what buys the template row
+    // its chips on an iPad portrait; the badge is a phone-arm fold like the rest of the bar.
+    expect(screen.getByText('2 fixtures')).toHaveClass(MID_FOLDED_CLASS)
+    expect(screen.getByText('2 fixtures')).not.toHaveClass(PHONE_FOLDED_CLASS)
     expect(screen.getByText('Colour')).toHaveClass(PHONE_FOLDED_CLASS)
+    expect(screen.getByText('2 cells')).not.toHaveClass(MID_FOLDED_CLASS)
     expect(screen.getByText('2 cells')).not.toHaveClass(PHONE_FOLDED_CLASS)
   })
 
   it('keeps the fixture count at every width when it is the only count', () => {
     // Rows selected and no cells: the row toolbar is there, and the count is the only one.
     render(bar({ cells: [], selection: <button type="button">Deselect all</button> }))
+    expect(screen.getByText('2 fixtures')).not.toHaveClass(MID_FOLDED_CLASS)
     expect(screen.getByText('2 fixtures')).not.toHaveClass(PHONE_FOLDED_CLASS)
   })
 

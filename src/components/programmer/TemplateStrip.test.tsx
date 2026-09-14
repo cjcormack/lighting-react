@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TemplateSummary } from '@/api/templatesApi'
 
@@ -53,6 +53,10 @@ vi.mock('@/store/templates', () => ({
   ],
   useCreateTemplateFromProgrammerMutation: () => [vi.fn(), { isLoading: false, reset: vi.fn() }],
 }))
+// The picker's pads read the desk's resolved applied state for their presence ring. Nothing here
+// is about the ring, so an empty list is the whole mock.
+vi.mock('@/store/programmer', () => ({ useProgrammerAppliedQuery: () => ({ data: [] }) }))
+
 const newSheetProps = vi.fn()
 vi.mock('./NewTemplateFromSelectionSheet', () => ({
   NewTemplateFromSelectionSheet: (props: { open: boolean }) => {
@@ -108,6 +112,7 @@ function template(over: Partial<TemplateSummary> = {}): TemplateSummary {
     requiredEmitters: [],
     effect: null,
     layerCount: 0,
+    lastPressedAt: null,
     buskPageCount: 0,
     ...over,
   }
@@ -152,6 +157,19 @@ beforeEach(() => {
   newSheetProps.mockClear()
 })
 afterEach(cleanup)
+
+/** The `All · n` trigger, by its stable title rather than by its shifting label. */
+function allButton(): HTMLElement {
+  return screen.getByTitle('Every template that fits the selection, searchable')
+}
+
+/** The chip labels, in the order the scroller draws them. */
+function chipNames(): (string | null)[] {
+  return screen
+    .getAllByRole('button')
+    .map((b) => b.textContent)
+    .filter((t) => t !== 'New' && !(t ?? '').startsWith('All'))
+}
 
 describe('TemplateStrip', () => {
   it('offers only the families the selected cells name', () => {
@@ -302,11 +320,101 @@ describe('TemplateStrip', () => {
   it('puts effect chips after the values, in library order', () => {
     templates = [BREATHE, AMBER]
     render(strip(COLOUR_CELL))
-    const names = screen
-      .getAllByRole('button')
-      .map((b) => b.textContent)
-      .filter((t) => t !== 'New')
-    expect(names).toEqual(['Amber Key', 'Amber Breathe'])
+    expect(chipNames()).toEqual(['Amber Key', 'Amber Breathe'])
+  })
+
+  // ─── Recents on the row ───────────────────────────────────────────────
+
+  /**
+   * The row is the eight templates this desk pressed most recently, most recent first — a **desk**
+   * fact, stamped server-side, so it agrees with the busk page and the hardware. The library's own
+   * name order is the fallback, not the rule.
+   */
+  it('draws the most recently pressed first, whatever the library order', () => {
+    templates = [
+      template({ id: 1, uuid: 'u1', name: 'Amber Key', lastPressedAt: '2026-09-14T10:00:00Z' }),
+      template({ id: 2, uuid: 'u2', name: 'Blue Wash', lastPressedAt: '2026-09-14T10:00:02Z' }),
+      template({ id: 3, uuid: 'u3', name: 'Cold Key', lastPressedAt: '2026-09-14T10:00:01Z' }),
+    ]
+    render(strip(COLOUR_CELL))
+    expect(chipNames()).toEqual(['Blue Wash', 'Cold Key', 'Amber Key'])
+  })
+
+  it('falls back to the first eight by name when nothing has been pressed', () => {
+    // A fresh project must not open on an empty row: the first press has to come off the row like
+    // every one after it. Nine offerable, eight drawn, in the library's own order.
+    templates = Array.from({ length: 9 }, (_, i) =>
+      template({ id: i + 1, uuid: `u${i + 1}`, name: `Colour ${i + 1}` }),
+    )
+    render(strip(COLOUR_CELL))
+    expect(chipNames()).toEqual([
+      'Colour 1', 'Colour 2', 'Colour 3', 'Colour 4',
+      'Colour 5', 'Colour 6', 'Colour 7', 'Colour 8',
+    ])
+  })
+
+  it('shows only the recents once there are any, rather than padding them out by name', () => {
+    // All or nothing: a padded row would move its own contents under the hand on the second press
+    // — chip five becoming chip two — where a short row only grows.
+    templates = [
+      template({ id: 1, uuid: 'u1', name: 'Amber Key' }),
+      template({ id: 2, uuid: 'u2', name: 'Blue Wash', lastPressedAt: '2026-09-14T10:00:00Z' }),
+    ]
+    render(strip(COLOUR_CELL))
+    expect(chipNames()).toEqual(['Blue Wash'])
+  })
+
+  // ─── The way in to the rest of the library ────────────────────────────
+
+  it('counts what fits the selection on the All button, not the whole library', () => {
+    templates = [AMBER, HALF_UP]
+    render(strip(COLOUR_CELL))
+    // Two in the library, one of them a colour template — the badge is the strip's own filter.
+    expect(allButton().textContent).toBe('All1')
+    expect(allButton()).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('drops the chip scroller below 600px of the row, keeping All and New', () => {
+    // jsdom evaluates no container query, so what is pinned is that the scroller carries the fold
+    // and the two buttons beside it do not: below 600 the library is reached through All alone.
+    render(strip(COLOUR_CELL))
+    const scroller = screen.getByText('Amber Key').closest('div')
+    expect(scroller).toHaveClass('hidden')
+    expect(scroller).toHaveClass('@[600px]:flex')
+    expect(allButton()).not.toHaveClass('hidden')
+  })
+
+  it('presses through the same hook from a picker pad as from a chip', async () => {
+    // One `useTemplatePress` for both surfaces: two copies would be two answers to what a press
+    // does, a chip apart.
+    render(strip(COLOUR_CELL))
+    fireEvent.click(allButton())
+    // Scoped to the panel: the chip in the scroller carries the same title, which is the point —
+    // they are one gesture described once.
+    const pad = within(await screen.findByRole('dialog')).getByTitle(/Click to set these values/)
+    await act(async () => {
+      fireEvent.click(pad)
+    })
+    expect(applyTemplate).toHaveBeenCalledWith({
+      projectId: 1,
+      templateId: 1,
+      targets: [{ type: 'fixture', key: 'hex-1' }],
+    })
+  })
+
+  it('keeps the picker open across a press, and shuts it on a second All', async () => {
+    render(strip(COLOUR_CELL))
+    fireEvent.click(allButton())
+    expect(allButton()).toHaveAttribute('aria-expanded', 'true')
+    const panel = await screen.findByRole('dialog')
+    await act(async () => {
+      fireEvent.click(within(panel).getByTitle(/Click to set these values/))
+    })
+    // Auditioning three colours in a row is the normal case.
+    expect(within(screen.getByRole('dialog')).getByTitle(/Click to set these values/)).toBeInTheDocument()
+
+    fireEvent.click(allButton())
+    expect(allButton()).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('click on an effect template mints copies, and says how many started', async () => {

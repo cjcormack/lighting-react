@@ -47,6 +47,7 @@ function template(over: Partial<TemplateSummary> = {}): TemplateSummary {
     requiredEmitters: [],
     effect: null,
     layerCount: 0,
+    lastPressedAt: null,
     buskPageCount: 0,
     ...over,
   }

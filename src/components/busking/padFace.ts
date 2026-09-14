@@ -129,6 +129,34 @@ export function padFaceOf(pad: BuskPad): PadFace {
 }
 
 /**
+ * One pad's geometry, so the four surfaces that draw a pad cannot drift apart.
+ *
+ * Here rather than in `BuskPad.tsx` for [padPresenceClass]'s reason, and with one more caller than
+ * it has: the programmer's template picker draws pads too, and must not import the busk pad itself
+ * — that component is a draggable with an address on a page, which a picker's pad has neither of.
+ * A cue pad keeps its own left-aligned shell in `BuskPad.tsx`; only a picker can be sure it is
+ * drawing no cues.
+ */
+export const PAD_SHELL =
+  'relative flex min-h-[56px] rounded-lg border p-2 transition-all select-none touch-manipulation'
+
+/** The face a template or Look pad wears inside [PAD_SHELL] — centred name over a detail line. */
+export const PAD_FACE_SHELL = 'flex-col items-center justify-center text-center'
+
+/**
+ * How an **effect** is marked where a swatch would otherwise be: `AudioWaveform` at this size.
+ *
+ * An effect template holds no rows, so there is no value to preview — the glyph the whole desk uses
+ * for FX stands in its place. The four surfaces that draw it (`BuskPad`, `LibraryPalette`,
+ * `TemplateStrip`'s chip and `TemplatePicker`'s pad) had four hand-written copies of this class
+ * string, which is the drift this module exists to prevent; the icon is `AudioWaveform` at every one
+ * of them, and that half is stated here rather than enforced, because a lucide import cannot live in
+ * a `.ts` file. Other sizes elsewhere (`size-3.5` in a menu, `size-3 text-white` on a coloured tile)
+ * are deliberately not this — they are not a pad's swatch slot.
+ */
+export const EFFECT_GLYPH_CLASS = 'size-3 shrink-0 text-muted-foreground'
+
+/**
  * The presence ladder: how much of the selection a record covers, as a shell.
  *
  * Here rather than in `BuskPad.tsx` because three surfaces draw it and must not drift: the pad, its

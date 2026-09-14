@@ -66,6 +66,7 @@ const TEMPLATES: TemplateSummary[] = [
       timingSource: 'BEAT',
     },
     layerCount: 1,
+    lastPressedAt: null,
     buskPageCount: 0,
   },
 ]

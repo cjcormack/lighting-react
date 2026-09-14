@@ -65,6 +65,25 @@ export const WORD_CLASS = 'hidden sm:inline @max-[1100px]:hidden'
  */
 export const PHONE_FOLDED_CLASS = '@max-[600px]:hidden'
 
+/**
+ * Where **Locate and Highlight** go, which is earlier than everything else on the row.
+ *
+ * The template row needs the width. `All · n` and `New` are fixed, the chips are what an operator
+ * presses, and an iPad portrait's row C is ~800px — enough for two recent chips once these two
+ * buttons and the fixture count have gone, and enough for none while they are there.
+ *
+ * They are the right two to lose first because neither is lost: both are on the busk view's target
+ * band, and both are momentary aids rather than gestures the grid depends on — unlike Set, Clear
+ * and Deselect, which stay at every width because Enter, Backspace and Escape are keys a phone has
+ * not got. Fan keeps the 600 fold: it is a cell verb like the two beside it, and folding it earlier
+ * would break up a group of three.
+ *
+ * Same container dependency as [WORD_CLASS] and [PHONE_FOLDED_CLASS]: `/fixtures/list` and
+ * `/groups/list` have no ancestor `@container`, so the query is never true there and those two
+ * routes keep every button at every width.
+ */
+export const MID_FOLDED_CLASS = '@max-[800px]:hidden'
+
 export function SelectionToolbar({
   locateTargets,
   targets,
@@ -122,7 +141,7 @@ export function SelectionToolbar({
             variant={allLocated ? 'default' : 'outline'}
             size="sm"
             onClick={locateSelection}
-            className={cn(PHONE_FOLDED_CLASS, allLocated && 'bg-sky-500 text-white hover:bg-sky-600')}
+            className={cn(MID_FOLDED_CLASS, allLocated && 'bg-sky-500 text-white hover:bg-sky-600')}
           >
             <Crosshair className="size-3.5" />
             <span className={WORD_CLASS}>Locate</span>
@@ -137,7 +156,7 @@ export function SelectionToolbar({
           <Button
             variant={highlight.isActive ? 'default' : 'outline'}
             size="sm"
-            className={PHONE_FOLDED_CLASS}
+            className={MID_FOLDED_CLASS}
             onPointerDown={highlight.press}
             onPointerUp={highlight.release}
             onPointerCancel={highlight.release}
