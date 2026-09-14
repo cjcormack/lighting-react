@@ -5,7 +5,7 @@ import { restApi } from "./restApi"
 /** A repository this project has previously been linked to; offered for reconnect. */
 export interface LinkedRepo {
   repoUrl: string
-  lastLinkedAtMs: number
+  lastLinkedAt: string
 }
 
 export interface SyncConfig {
@@ -19,7 +19,7 @@ export interface SyncConfig {
   autoSyncEnabled: boolean
   autoSyncIntervalMs: number | null
   lastSyncedSha: string | null
-  lastSyncedAtMs: number | null
+  lastSyncedAt: string | null
   /**
    * True if a PAT for the configured `repoUrl` is stored in the OS keychain (or the
    * encrypted-file fallback). The actual token is never sent to the client; this flag
@@ -119,7 +119,7 @@ export interface CommitInfo {
 /** A single row from the per-project activity log; mirrors `SyncLogEntryDto`. */
 export interface SyncLogEntry {
   id: number
-  tsMs: number
+  ts: string
   level: "INFO" | "WARN" | "ERROR"
   /**
    * Stable code from `SyncLogEvent` — e.g. `RUN_DONE`, `AUTO_SYNC_RECOVERED`. Rendered as

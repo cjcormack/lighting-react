@@ -18,9 +18,9 @@ export interface OAuthIdentity {
   oauthConfigured: boolean
   login?: string | null
   githubUserId?: number | null
-  accessExpiresAtMs?: number | null
-  refreshExpiresAtMs?: number | null
-  connectedAtMs?: number | null
+  accessExpiresAt?: string | null
+  refreshExpiresAt?: string | null
+  connectedAt?: string | null
   /**
    * Connected, but GitHub has rejected the stored refresh token — nothing will sync over
    * OAuth until the user reconnects. `connected` stays `true` (the identity still names
@@ -32,7 +32,7 @@ export interface OAuthIdentity {
   /** GitHub's stated reason, when `reauthRequired`. */
   reauthReason?: string | null
   /** When the rejection was first seen, when `reauthRequired`. */
-  reauthRequiredAtMs?: number | null
+  reauthRequiredAt?: string | null
 }
 
 export interface GithubRepo {
@@ -207,13 +207,13 @@ export function startOAuthIdentityBridge(): void {
 export function useOAuthReauthState(): {
   reauthRequired: boolean
   reauthReason?: string | null
-  reauthRequiredAtMs?: number | null
+  reauthRequiredAt?: string | null
 } {
   const isAdmin = useIsNavAdmin()
   const { data } = useOauthGithubIdentityQuery(undefined, { skip: !isAdmin })
   return {
     reauthRequired: data?.connected === true && data.reauthRequired === true,
     reauthReason: data?.reauthReason,
-    reauthRequiredAtMs: data?.reauthRequiredAtMs,
+    reauthRequiredAt: data?.reauthRequiredAt,
   }
 }

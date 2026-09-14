@@ -18,7 +18,7 @@ vi.mock('@/store/installs', () => ({
   useInstallQuery: () => mocks.install,
 }))
 
-const LOADED_INSTALL = { uuid: 'i-1', friendlyName: 'Front of House', createdAtMs: 1 }
+const LOADED_INSTALL = { uuid: 'i-1', friendlyName: 'Front of House', createdAt: new Date(1).toISOString() }
 
 import { ApplyUpdateDialog } from './ApplyUpdateDialog'
 

@@ -181,7 +181,7 @@ export function StatusPanel({ projectId }: { projectId: number }) {
 
 function LastSyncedBody({ config }: { config: SyncConfig | undefined }) {
   if (!config?.lastSyncedSha) return null
-  const when = config.lastSyncedAtMs ? new Date(config.lastSyncedAtMs).toLocaleString() : "—"
+  const when = config.lastSyncedAt ? new Date(config.lastSyncedAt).toLocaleString() : "—"
   return (
     <div className="space-y-1">
       <Label className="text-muted-foreground text-xs">Last synced</Label>

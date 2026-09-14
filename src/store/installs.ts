@@ -5,7 +5,7 @@ import { store } from "./index"
 export interface Install {
   uuid: string
   friendlyName: string
-  createdAtMs: number
+  createdAt: string
 }
 
 export interface UpdateInstallRequest {

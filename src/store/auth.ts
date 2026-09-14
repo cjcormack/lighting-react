@@ -30,8 +30,8 @@ export type SessionOrigin = 'PASSWORD' | 'QR'
 
 export interface SessionInfo {
   id: number
-  createdAtMs: number
-  lastSeenAtMs: number
+  createdAt: string
+  lastSeenAt: string
   userAgent: string | null
   /** The session this browser is using. It survives "sign out everywhere else". */
   current: boolean
@@ -46,7 +46,7 @@ export interface DeviceLoginResponse {
   url: string
   /** Other addresses the same page answers on, for a phone that can't reach `url`. */
   alternateUrls: string[]
-  expiresAtMs: number
+  expiresAt: string
   displayName: string
 }
 
@@ -54,7 +54,7 @@ export type DeviceLoginStatus = 'PENDING' | 'USED' | 'EXPIRED' | 'CANCELLED'
 
 export interface DeviceLoginStatusInfo {
   status: DeviceLoginStatus
-  expiresAtMs: number
+  expiresAt: string
   /**
    * The phone that took the QR, once one has. There is no confirmation step in this flow, so
    * this is the desk's only way to notice a *wrong* device took it — paired with `sessionId`

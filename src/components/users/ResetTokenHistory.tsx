@@ -69,7 +69,7 @@ export function ResetTokenHistory({ userId }: { userId: number }) {
   // it says a link is redeemable at the moment it stopped being one. The backend stays
   // authoritative for redemption; this is display only.
   const displayed = rows?.map((row) =>
-    row.status === "PENDING" && row.expiresAtMs <= now
+    row.status === "PENDING" && Date.parse(row.expiresAt) <= now
       ? { ...row, status: "EXPIRED" as const }
       : row,
   )
@@ -127,12 +127,12 @@ function ResetTokenRow({
       <Badge variant={STATUS_VARIANTS[row.status]}>{STATUS_LABELS[row.status]}</Badge>
       <div className="min-w-0 flex-1 text-muted-foreground">
         <div className="truncate">
-          {formatWhen(row.createdAtMs)}
+          {formatWhen(Date.parse(row.createdAt))}
           {row.createdByDisplayName != null && ` · by ${row.createdByDisplayName}`}
         </div>
         {live && (
           <div className="tabular-nums">
-            Expires in {formatCountdown(row.expiresAtMs - now)}
+            Expires in {formatCountdown(Date.parse(row.expiresAt) - now)}
           </div>
         )}
       </div>

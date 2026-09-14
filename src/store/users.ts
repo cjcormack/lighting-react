@@ -14,8 +14,8 @@ export interface DeskUser {
   displayName: string
   role: UserRole
   disabled: boolean
-  createdAtMs: number
-  lastLoginAtMs?: number | null
+  createdAt: string
+  lastLoginAt?: string | null
 }
 
 export interface NewUserRequest {
@@ -38,7 +38,7 @@ export interface ResetTokenResponse {
   id: number
   url: string
   alternateUrls: string[]
-  expiresAtMs: number
+  expiresAt: string
   username: string
   displayName: string
 }
@@ -47,17 +47,17 @@ export type ResetTokenStatus = 'PENDING' | 'USED' | 'EXPIRED' | 'CANCELLED'
 
 export interface ResetTokenStatusInfo {
   status: ResetTokenStatus
-  expiresAtMs: number
+  expiresAt: string
 }
 
 /** One row of a user's reset-link history. Deliberately carries no token and no hash. */
 export interface ResetTokenHistoryEntry {
   id: number
   status: ResetTokenStatus
-  createdAtMs: number
-  expiresAtMs: number
-  usedAtMs?: number | null
-  cancelledAtMs?: number | null
+  createdAt: string
+  expiresAt: string
+  usedAt?: string | null
+  cancelledAt?: string | null
   /** The admin who minted it; null once that admin is deleted. */
   createdByDisplayName?: string | null
 }

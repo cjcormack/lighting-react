@@ -67,7 +67,7 @@ export function UserDetailSheet({
   const userId = listRow?.id
 
   // Re-read the row while the sheet is open. The list is fresh enough to render from, but
-  // `lastLoginAtMs` moves without any local mutation, and the fetched copy is what makes
+  // `lastLoginAt` moves without any local mutation, and the fetched copy is what makes
   // the `user` endpoint's cache entry (and so this sheet) authoritative after an edit.
   const { data: fetched, error: fetchError } = useUserQuery(
     { userId: userId ?? 0 },
@@ -227,7 +227,7 @@ export function UserDetailSheet({
             <div className="space-y-1">
               <Label className="text-muted-foreground">Last signed in</Label>
               <div className="text-sm">
-                {user.lastLoginAtMs ? new Date(user.lastLoginAtMs).toLocaleString() : "Never"}
+                {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : "Never"}
               </div>
             </div>
 

@@ -287,8 +287,8 @@ function ProjectCard({
               </TooltipTrigger>
               <TooltipContent>
                 {formatRepoUrl(syncConfig.repoUrl) ?? "synced"}
-                {syncConfig.lastSyncedAtMs
-                  ? ` · last synced ${new Date(syncConfig.lastSyncedAtMs).toLocaleString()}`
+                {syncConfig.lastSyncedAt
+                  ? ` · last synced ${new Date(syncConfig.lastSyncedAt).toLocaleString()}`
                   : " · not yet synced"}
               </TooltipContent>
             </Tooltip>

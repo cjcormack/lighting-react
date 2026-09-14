@@ -38,17 +38,17 @@ const HEALTHY = {
   oauthConfigured: true,
   login: 'octocat',
   // Comfortably in the future, so the "refreshing soon" badge is not merely absent by luck.
-  accessExpiresAtMs: Date.now() + 8 * 60 * 60 * 1000,
-  connectedAtMs: Date.now() - 24 * 60 * 60 * 1000,
+  accessExpiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString(),
+  connectedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
 }
 
 const REJECTED = {
   ...HEALTHY,
   // Expired a month ago: this is the shape that used to read as "refreshing soon".
-  accessExpiresAtMs: Date.now() - 25 * 24 * 60 * 60 * 1000,
+  accessExpiresAt: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString(),
   reauthRequired: true,
   reauthReason: 'GitHub rejected the refresh token (bad_refresh_token); user must re-connect.',
-  reauthRequiredAtMs: Date.now() - 25 * 24 * 60 * 60 * 1000,
+  reauthRequiredAt: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString(),
 }
 
 describe('IdentityRow', () => {

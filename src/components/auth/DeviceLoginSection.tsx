@@ -208,7 +208,7 @@ export function DeviceLoginSection({
     }
   }
 
-  const remaining = code ? code.expiresAtMs - now : 0
+  const remaining = code ? Date.parse(code.expiresAt) - now : 0
 
   return (
     <div className="space-y-3">

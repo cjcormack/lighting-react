@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 // a component test and keeps the import graph away from lightingApi's real WebSocket.
 const redeem = vi.fn()
 let infoResult: {
-  data?: { username: string; displayName: string; expiresAtMs: number }
+  data?: { username: string; displayName: string; expiresAt: string }
   error?: unknown
   isLoading?: boolean
 } = {}
@@ -32,7 +32,7 @@ afterEach(() => {
 
 function live() {
   infoResult = {
-    data: { username: 'op', displayName: 'Ops Person', expiresAtMs: Date.now() + 60_000 },
+    data: { username: 'op', displayName: 'Ops Person', expiresAt: new Date(Date.now() + 60_000).toISOString() },
   }
 }
 

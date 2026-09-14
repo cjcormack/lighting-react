@@ -22,7 +22,7 @@ export interface AiChatResponse {
 export interface AiConversationSummary {
   id: number
   title: string | null
-  updatedAt: number
+  updatedAt: string
 }
 
 export interface DisplayToolCall {

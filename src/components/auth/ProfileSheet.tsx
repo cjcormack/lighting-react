@@ -57,7 +57,7 @@ function SessionRow({ session }: { session: SessionInfo }) {
       <div className="min-w-0">
         <p className="truncate text-sm">{describeUserAgent(session.userAgent)}</p>
         <p className="text-xs text-muted-foreground">
-          Last active {new Date(session.lastSeenAtMs).toLocaleString()}
+          Last active {new Date(session.lastSeenAt).toLocaleString()}
           {/* Named because a QR sign-in is the one entry here nobody typed a password for:
               if a device you don't recognise came in that way, this row is where you find
               out. */}

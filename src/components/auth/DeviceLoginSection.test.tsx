@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // file, so the mocks it returns can't close over helpers declared here.
 const createDeviceLogin = vi.fn()
 const cancelDeviceLogin = vi.fn()
-let statusResult: { data?: { status: string; expiresAtMs: number } } = {}
+let statusResult: { data?: { status: string; expiresAt: string } } = {}
 
 vi.mock('@/store/auth', () => ({
   useCreateDeviceLoginMutation: () => [
@@ -41,14 +41,14 @@ const CODE = {
   id: 'code-1',
   url: 'http://desk.local:8413/device/a-code',
   alternateUrls: [],
-  expiresAtMs: 0,
+  expiresAt: new Date(0).toISOString(),
   displayName: 'Ops Person',
 }
 
 beforeEach(() => {
-  // `expiresAtMs` is read against Date.now() for the countdown; keep it in the future so the
+  // `expiresAt` is read against Date.now() for the countdown; keep it in the future so the
   // pending branch renders the way it would on screen.
-  createDeviceLogin.mockResolvedValue({ ...CODE, expiresAtMs: Date.now() + 120_000 })
+  createDeviceLogin.mockResolvedValue({ ...CODE, expiresAt: new Date(Date.now() + 120_000).toISOString() })
 })
 
 afterEach(() => {
@@ -94,7 +94,7 @@ describe('DeviceLoginSection', () => {
 
     // Nothing was in `liveCode` when the teardown ran, so the mint has to cancel itself.
     // Otherwise a code nobody has ever seen stays exchangeable for its full TTL.
-    resolveMint({ ...CODE, expiresAtMs: Date.now() + 120_000 })
+    resolveMint({ ...CODE, expiresAt: new Date(Date.now() + 120_000).toISOString() })
     await vi.waitFor(() => expect(cancelDeviceLogin).toHaveBeenCalledWith({ id: 'code-1' }))
   })
 
@@ -106,7 +106,7 @@ describe('DeviceLoginSection', () => {
     beforeEach(() => {
       mintCount = 0
       createDeviceLogin.mockImplementation(() =>
-        Promise.resolve({ ...CODE, id: `code-${++mintCount}`, expiresAtMs: Date.now() + 120_000 }),
+        Promise.resolve({ ...CODE, id: `code-${++mintCount}`, expiresAt: new Date(Date.now() + 120_000).toISOString() }),
       )
     })
 
@@ -151,13 +151,13 @@ describe('DeviceLoginSection', () => {
     // one-mint-per-mount guard means simply waiting never helps.
     const retry = await screen.findByRole('button', { name: /Try again/ })
 
-    createDeviceLogin.mockResolvedValue({ ...CODE, expiresAtMs: Date.now() + 120_000 })
+    createDeviceLogin.mockResolvedValue({ ...CODE, expiresAt: new Date(Date.now() + 120_000).toISOString() })
     fireEvent.click(retry)
     expect(await screen.findByText(CODE.url)).toBeInTheDocument()
   })
 
   it('offers the undo once a device has taken the code', async () => {
-    statusResult = { data: { status: 'USED', expiresAtMs: Date.now() + 120_000 } }
+    statusResult = { data: { status: 'USED', expiresAt: new Date(Date.now() + 120_000).toISOString() } }
     render(<DeviceLoginSection active onDone={() => {}} />)
 
     // No confirmation step exists, so detect-and-undo is the whole control.

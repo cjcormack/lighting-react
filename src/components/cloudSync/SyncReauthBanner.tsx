@@ -36,8 +36,8 @@ function readDismissedAt(): string | null {
 
 export function SyncReauthBanner() {
   const navigate = useNavigate()
-  const { reauthRequired, reauthReason, reauthRequiredAtMs } = useOAuthReauthState()
-  const stamp = reauthRequiredAtMs != null ? String(reauthRequiredAtMs) : "unknown"
+  const { reauthRequired, reauthReason, reauthRequiredAt } = useOAuthReauthState()
+  const stamp = reauthRequiredAt ?? "unknown"
   const [dismissedAt, setDismissedAt] = useState<string | null>(() => readDismissedAt())
 
   // A fresh rejection re-arms the banner even in a tab that was open when the old one was

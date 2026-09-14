@@ -95,7 +95,7 @@ function GeneralTab() {
   const trimmed = friendlyName.trim()
   const dirty = trimmed !== install.friendlyName
   const isValid = trimmed.length > 0
-  const createdAt = new Date(install.createdAtMs).toLocaleString()
+  const createdAt = new Date(install.createdAt).toLocaleString()
 
   const handleSave = async () => {
     if (!isValid) return

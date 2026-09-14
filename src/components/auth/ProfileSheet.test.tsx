@@ -56,7 +56,7 @@ beforeEach(() => {
     id: 'code-1',
     url: 'http://desk.local:8413/device/a-code',
     alternateUrls: [],
-    expiresAtMs: Date.now() + 120_000,
+    expiresAt: new Date(Date.now() + 120_000).toISOString(),
     displayName: 'The Boss',
   })
 })
@@ -164,7 +164,7 @@ describe('ProfileSheet', () => {
 
   describe('the signed-in devices', () => {
     it('says so rather than offering an action when there are no others', () => {
-      sessionsResult = { data: [{ id: 1, current: true, lastSeenAtMs: 0, userAgent: null, createdVia: 'PASSWORD' }] }
+      sessionsResult = { data: [{ id: 1, current: true, lastSeenAt: new Date(0).toISOString(), userAgent: null, createdVia: 'PASSWORD' }] }
       renderSheet()
       goTo('Devices')
 
@@ -174,8 +174,8 @@ describe('ProfileSheet', () => {
     it('counts the others when it knows the count', () => {
       sessionsResult = {
         data: [
-          { id: 1, current: true, lastSeenAtMs: 0, userAgent: null, createdVia: 'PASSWORD' },
-          { id: 2, current: false, lastSeenAtMs: 0, userAgent: null, createdVia: 'QR' },
+          { id: 1, current: true, lastSeenAt: new Date(0).toISOString(), userAgent: null, createdVia: 'PASSWORD' },
+          { id: 2, current: false, lastSeenAt: new Date(0).toISOString(), userAgent: null, createdVia: 'QR' },
         ],
       }
       renderSheet()

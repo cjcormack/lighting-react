@@ -90,8 +90,8 @@ export function IdentityRow({ projectId }: { projectId: number | null }) {
           <AlertDescription>
             GitHub has rejected this desk&rsquo;s authorisation for{" "}
             <strong>@{identity.login}</strong>
-            {identity.reauthRequiredAtMs != null && (
-              <> since {new Date(identity.reauthRequiredAtMs).toLocaleString()}</>
+            {identity.reauthRequiredAt != null && (
+              <> since {new Date(identity.reauthRequiredAt).toLocaleString()}</>
             )}
             {/* Deliberately not "sync has stopped": this row is install-wide and can't see
                 whether a given project has a PAT to fall back on. */}
@@ -123,8 +123,8 @@ export function IdentityRow({ projectId }: { projectId: number | null }) {
   }
 
   if (identity.connected) {
-    const expiresIn = identity.accessExpiresAtMs
-      ? Math.max(0, identity.accessExpiresAtMs - Date.now())
+    const expiresIn = identity.accessExpiresAt
+      ? Math.max(0, Date.parse(identity.accessExpiresAt) - Date.now())
       : null
     return (
       <div className="flex flex-wrap items-center justify-between gap-3">

@@ -147,7 +147,7 @@ function ActivityRow({ entry }: { entry: SyncLogEntry }) {
             {entry.event}
           </Badge>
           <span className="text-muted-foreground">
-            {new Date(entry.tsMs).toLocaleString()}
+            {new Date(entry.ts).toLocaleString()}
           </span>
         </div>
         <div className={meta.messageClassName}>{entry.message}</div>

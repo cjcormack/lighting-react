@@ -9,7 +9,7 @@ import { restApi } from './restApi'
 export interface DeviceLoginInfo {
   username: string
   displayName: string
-  expiresAtMs: number
+  expiresAt: string
 }
 
 export const deviceLoginApi = restApi.injectEndpoints({

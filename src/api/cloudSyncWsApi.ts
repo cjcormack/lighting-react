@@ -81,8 +81,8 @@ export interface OAuthIdentityChangedEvent {
   provider: string
   connected: boolean
   login?: string | null
-  accessExpiresAtMs?: number | null
-  refreshExpiresAtMs?: number | null
+  accessExpiresAt?: string | null
+  refreshExpiresAt?: string | null
   /**
    * GitHub has rejected the identity. Carried so a listener can react to *becoming* broken,
    * but the frame is only a nudge — the detail (reason, since when) comes from re-reading

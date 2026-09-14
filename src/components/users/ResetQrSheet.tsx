@@ -136,7 +136,7 @@ export function ResetQrSheet({
     }
   }
 
-  const remaining = token ? token.expiresAtMs - now : 0
+  const remaining = token ? Date.parse(token.expiresAt) - now : 0
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>

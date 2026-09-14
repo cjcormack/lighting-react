@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 let reauthState: {
   reauthRequired: boolean
   reauthReason?: string | null
-  reauthRequiredAtMs?: number | null
+  reauthRequiredAt?: string | null
 } = { reauthRequired: false }
 
 vi.mock('@/store/oauthGithub', () => ({
@@ -26,7 +26,8 @@ vi.mock('react-router', () => ({
 
 import { SyncReauthBanner } from './SyncReauthBanner'
 
-const REJECTED_AT = 1787063158854
+const REJECTED_AT = new Date(1787063158854).toISOString()
+const REJECTED_AT_LATER = new Date(1787063158854 + 60_000).toISOString()
 
 describe('SyncReauthBanner', () => {
   beforeEach(() => {
@@ -45,7 +46,7 @@ describe('SyncReauthBanner', () => {
     reauthState = {
       reauthRequired: true,
       reauthReason: 'GitHub rejected the refresh token (bad_refresh_token); user must re-connect.',
-      reauthRequiredAtMs: REJECTED_AT,
+      reauthRequiredAt: REJECTED_AT,
     }
     render(<SyncReauthBanner />)
 
@@ -56,7 +57,7 @@ describe('SyncReauthBanner', () => {
   })
 
   it('stays dismissed for this rejection across a remount', () => {
-    reauthState = { reauthRequired: true, reauthRequiredAtMs: REJECTED_AT }
+    reauthState = { reauthRequired: true, reauthRequiredAt: REJECTED_AT }
     const first = render(<SyncReauthBanner />)
     fireEvent.click(screen.getByRole('button', { name: /dismiss/i }))
     expect(screen.queryByRole('alert')).toBeNull()
@@ -70,8 +71,8 @@ describe('SyncReauthBanner', () => {
   it('comes back for a *later* rejection that was never dismissed', () => {
     // The property that stops this from becoming the original bug: a desk broken again in three
     // months must not be silently pre-dismissed by a click from today.
-    window.localStorage.setItem('lighting7:syncReauthDismissedAt', String(REJECTED_AT))
-    reauthState = { reauthRequired: true, reauthRequiredAtMs: REJECTED_AT + 60_000 }
+    window.localStorage.setItem('lighting7:syncReauthDismissedAt', REJECTED_AT)
+    reauthState = { reauthRequired: true, reauthRequiredAt: REJECTED_AT_LATER }
     render(<SyncReauthBanner />)
 
     expect(screen.getByRole('alert')).toBeTruthy()
@@ -80,18 +81,18 @@ describe('SyncReauthBanner', () => {
   it('re-arms in a tab that was already open when the new rejection arrives', () => {
     // The store's WS bridge keeps the identity live, so the stamp can change under a mounted
     // banner with no reload — the case a plain `useState` initialiser would miss.
-    reauthState = { reauthRequired: true, reauthRequiredAtMs: REJECTED_AT }
+    reauthState = { reauthRequired: true, reauthRequiredAt: REJECTED_AT }
     const view = render(<SyncReauthBanner />)
     fireEvent.click(screen.getByRole('button', { name: /dismiss/i }))
     expect(screen.queryByRole('alert')).toBeNull()
 
-    reauthState = { reauthRequired: true, reauthRequiredAtMs: REJECTED_AT + 60_000 }
+    reauthState = { reauthRequired: true, reauthRequiredAt: REJECTED_AT_LATER }
     view.rerender(<SyncReauthBanner />)
     expect(screen.getByRole('alert')).toBeTruthy()
   })
 
   it('sends the user to the install-level sync page, where the identity lives', () => {
-    reauthState = { reauthRequired: true, reauthRequiredAtMs: REJECTED_AT }
+    reauthState = { reauthRequired: true, reauthRequiredAt: REJECTED_AT }
     render(<SyncReauthBanner />)
     fireEvent.click(screen.getByRole('button', { name: /reconnect/i }))
     expect(navigate).toHaveBeenCalledWith('/install/sync')

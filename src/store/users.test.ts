@@ -25,7 +25,7 @@ const USERS: DeskUser[] = [
     displayName: "Chris",
     role: "ADMIN",
     disabled: false,
-    createdAtMs: 1,
+    createdAt: new Date(1).toISOString(),
   },
 ]
 

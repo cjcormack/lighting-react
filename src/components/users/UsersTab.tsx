@@ -122,8 +122,8 @@ export function UsersTab() {
                     <RoleBadge role={user.role} />
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {user.lastLoginAtMs
-                      ? new Date(user.lastLoginAtMs).toLocaleString()
+                    {user.lastLoginAt
+                      ? new Date(user.lastLoginAt).toLocaleString()
                       : "Never"}
                   </TableCell>
                 </TableRow>

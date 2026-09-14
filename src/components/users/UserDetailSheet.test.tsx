@@ -40,8 +40,8 @@ const user = {
   displayName: 'The Boss',
   role: 'ADMIN' as const,
   disabled: false,
-  createdAtMs: 0,
-  lastLoginAtMs: null,
+  createdAt: new Date(0).toISOString(),
+  lastLoginAt: null,
 }
 
 afterEach(() => {

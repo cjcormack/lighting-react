@@ -8,7 +8,7 @@ import { restApi } from './restApi'
 export interface ResetTokenInfo {
   username: string
   displayName: string
-  expiresAtMs: number
+  expiresAt: string
 }
 
 export const passwordResetApi = restApi.injectEndpoints({

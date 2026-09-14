@@ -47,8 +47,8 @@ export function ProjectSyncRow({
         {config?.branch ?? "—"}
       </TableCell>
       <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">
-        {config?.lastSyncedAtMs
-          ? new Date(config.lastSyncedAtMs).toLocaleString()
+        {config?.lastSyncedAt
+          ? new Date(config.lastSyncedAt).toLocaleString()
           : <span className="italic">never</span>}
       </TableCell>
       <TableCell className="text-right">
