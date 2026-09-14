@@ -74,7 +74,7 @@ export function orderedSelectedCells(
 export interface CellKeyboardPermission {
   /** Enter / a character: the cell's own editor is opened over the selection and its commit taken. */
   entry: boolean
-  /** Backspace / Delete: the selected cells are taken out of Local. */
+  /** Backspace / Delete: the selected cells — values and the local effects on them — are taken out of Local. */
   clear: boolean
 }
 
@@ -148,7 +148,7 @@ export function cellActionCopy(
   }
   return {
     setTitle: `Set the ${cells} in Local — this is what Record will take (Enter)`,
-    clearTitle: `Take the ${cells} out of Local (Backspace)`,
+    clearTitle: `Take the ${cells} out of Local, including any effect busked on them (Backspace)`,
   }
 }
 

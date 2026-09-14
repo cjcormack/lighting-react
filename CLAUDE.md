@@ -1128,7 +1128,21 @@ marquee itself covers (`marqueeOwnsKeyTarget`), or Enter there would fall throug
 own activation and open *that* cell's editor with nothing focused.
 
 **Backspace / Delete takes the selected cells out of Local** (`CellWriters.clearValue` →
-`programmer.clearEntry`, by the programmer fade — the same store the action bar's Clear fades by).
+`programmer.clearEntry`, by the programmer fade — the same store the action bar's Clear fades by)
+— **and stops the local effects on them**. That second half is not a new gesture: the programmer's
+whole-desk Clear has always swept values and programmer-band FX together
+(`clearProgrammerCompletely` in lighting7), and three cells under an effect template's press are
+three instances that were otherwise removable only one at a time in the rail.
+`components/fixtures-list/cellEffects.ts` owns the rule and `useClearCellEffects.ts` the wiring;
+two clauses keep the key inside the rectangle. **Local means unowned** — `programmerOwned` *and*
+no `lookId` / `templateId` / `programmerLayerId` / `cueId`, since an effect that came out of a
+Look, a template layer or a cue is that thing's, and stopping it here would be undone by the next
+recook or would quietly edit a library record. And **every head, or none**: an effect drives
+whatever its target names (for a group, every member) and there is no "stop it on these heads
+only", so a partly-covered one is left running and toasts that it was, rather than half vanishing
+from the rig. Matching is on `fixtureKey|propertyName`, the same pairing `FxSheet` places an
+effect on a cell by, and the pairs are **collected by the clear loop itself** rather than
+re-derived, so the values half and the effects half cannot reach different heads.
 
 The request itself is a **one-shot** on both halves: the container drops it on the commit after it
 is set, and `FixturesTable` folds it into `autoOpenCell`, so there is one mechanism for "open that

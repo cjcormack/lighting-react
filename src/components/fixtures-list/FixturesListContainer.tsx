@@ -20,6 +20,8 @@ import {
   orderedSelectedCells,
 } from './cellEntry'
 import { resolutionPropertyNames } from './columns'
+import { cellEffectKey } from './cellEffects'
+import { useClearCellEffects } from './useClearCellEffects'
 import type { CellRef } from './cellSelectionModel'
 import type { ListSelectIntent } from './listSelectionModel'
 import type { AttributeFamily } from '../../lib/attributeFamily'
@@ -714,21 +716,32 @@ export function FixturesListContainer({
    * removal — `LookRowStore` exposes `setValue` alone — so rather than a key that silently does
    * nothing there, the gesture is not offered, and `cellClearKey` tells the toolbar so the hint
    * names it only where it works.
+   *
+   * **It clears the cells' local effects too**, which is not a second gesture bolted on: the
+   * programmer's own whole-desk Clear has always swept values and programmer-band FX together, and
+   * an effect busked onto three cells was otherwise only removable one instance at a time in the
+   * rail. `cellEffects.ts` owns which effects qualify and why a partly-covered one is left alone;
+   * the same `fixtureKey|propertyName` pairs this loop clears are what it matches on, collected
+   * here rather than re-derived so the two halves cannot reach different heads.
    */
   const canClearCells = keys.clear
   const canTypeCells = keys.entry
+  const clearCellEffects = useClearCellEffects(showOwnership && canClearCells)
   const clearSelectedCells = useCallback(() => {
     if (!canClearCells) return
+    const cleared = new Set<string>()
     for (const { col, targets } of columnTargets) {
       for (const outer of targets) {
         for (const { target, resolution } of resolveTargetCells(outer, col)) {
           for (const propertyName of resolutionPropertyNames(resolution)) {
             writers.clearValue(target.key, propertyName)
+            cleared.add(cellEffectKey(target.key, propertyName))
           }
         }
       }
     }
-  }, [canClearCells, columnTargets, writers])
+    clearCellEffects(cleared)
+  }, [canClearCells, clearCellEffects, columnTargets, writers])
 
   // Continuous drag commits (slider/colour/position editors fire per pointer
   // move) are throttled to ~30Hz with a trailing call, because each commit

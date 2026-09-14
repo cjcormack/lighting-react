@@ -11,6 +11,7 @@ import type {
   SliderPropertyDescriptor,
 } from '@/store/fixtures'
 import type { GroupSummary } from '@/api/groupsApi'
+import type { ActiveEffect } from '@/store/fixtureFx'
 
 // Hand-built descriptor/fixture factories for fixtures-list tests. Type-only
 // imports from store/fixtures, so importing this file never touches the store
@@ -161,4 +162,43 @@ export function makePixelBar(
     )
   }
   return makeFixture(key, parentProps, { elements, ...over })
+}
+
+/**
+ * One running effect, defaulted to the common case: a busked, programmer-band instance on
+ * `hex-1`'s dimmer with no owner at all. Override `lookId` / `templateId` / `programmerLayerId` /
+ * `cueId` to make it something else's — which is the distinction `cellEffects.ts` turns on.
+ *
+ * Here rather than in either test file because two of them wanted the same 25-field literal, and a
+ * copy in each is one that goes stale the day `ActiveEffect` gains a field.
+ */
+export function makeActiveEffect(over: Partial<ActiveEffect> = {}): ActiveEffect {
+  return {
+    id: 1,
+    effectType: 'sinewave',
+    targetKey: 'hex-1',
+    propertyName: 'dimmer',
+    beatDivision: 1,
+    blendMode: 'OVERRIDE',
+    isRunning: true,
+    phaseOffset: 0,
+    currentPhase: 0,
+    parameters: {},
+    isGroupTarget: false,
+    distributionStrategy: null,
+    elementMode: null,
+    elementFilter: null,
+    stepTiming: false,
+    lookId: null,
+    templateId: null,
+    sourceName: null,
+    programmerLayerId: null,
+    cueId: null,
+    timingSource: 'BEAT',
+    programmerOwned: true,
+    intensityMultiplier: 1,
+    speedMasterUuid: null,
+    rateSpeedMasterUuid: null,
+    ...over,
+  }
 }

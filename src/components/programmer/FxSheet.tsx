@@ -14,6 +14,7 @@ import { useRemoveGroupFxMutation } from '../../store/groups'
 import { lightingApi } from '../../api/lightingApi'
 import { useProgrammerRevision } from '../../store/programmer'
 import { COLUMN_DEFS, resolutionPropertyNames } from '../fixtures-list/columns'
+import { cellEffectKey, membersByGroupOf } from '../fixtures-list/cellEffects'
 import { buildRows, resolveTargetCells, rowWriteTargets } from '../fixtures-list/rowModel'
 import { ActiveEffectSheet } from '../busking/ActiveEffectSheet'
 import type { ActiveEffect } from '../../store/fixtureFx'
@@ -73,18 +74,9 @@ export function FxSheet() {
   // here looking healthy.
   useProgrammerRevision()
 
-  // Group membership, so a group-targeted effect can be attributed to its members.
-  const membersByGroup = useMemo(() => {
-    const map = new Map<string, string[]>()
-    for (const fixture of fixtures) {
-      for (const name of fixture.groups) {
-        const list = map.get(name)
-        if (list) list.push(fixture.key)
-        else map.set(name, [fixture.key])
-      }
-    }
-    return map
-  }, [fixtures])
+  // Group membership, so a group-targeted effect can be attributed to its members. Shared with the
+  // marquee's effect clear (`cellEffects.ts`), which expands a group target the same way.
+  const membersByGroup = useMemo(() => membersByGroupOf(fixtures), [fixtures])
 
   const placed = useMemo<PlacedEffect[]>(
     () =>
@@ -98,14 +90,14 @@ export function FxSheet() {
   )
 
   /**
-   * Index by `fixtureKey|propertyName`. Element-targeted effects key on the element key, which
-   * is exactly how the row model names those targets, so no extra mapping is needed.
+   * Index by [cellEffectKey] — `fixtureKey|propertyName`, the format the marquee's effect clear
+   * matches on too, so the two cannot drift.
    */
   const byKey = useMemo(() => {
     const map = new Map<string, ActiveEffect[]>()
     for (const { effect, fixtureKeys } of placed) {
       for (const fixtureKey of fixtureKeys) {
-        const id = `${fixtureKey}|${effect.propertyName}`
+        const id = cellEffectKey(fixtureKey, effect.propertyName)
         const list = map.get(id)
         if (list) list.push(effect)
         else map.set(id, [effect])
@@ -137,7 +129,7 @@ export function FxSheet() {
           if (active.has(col.key)) continue
           for (const { target: resolved, resolution } of resolveTargetCells(target, col.key)) {
             const names = resolutionPropertyNames(resolution)
-            if (names.some((n) => byKey.has(`${resolved.key}|${n}`))) {
+            if (names.some((n) => byKey.has(cellEffectKey(resolved.key, n)))) {
               active.add(col.key)
               break
             }
@@ -156,7 +148,7 @@ export function FxSheet() {
       for (const target of rowWriteTargets(row)) {
         for (const { target: resolved, resolution } of resolveTargetCells(target, col)) {
           for (const name of resolutionPropertyNames(resolution)) {
-            for (const effect of byKey.get(`${resolved.key}|${name}`) ?? []) {
+            for (const effect of byKey.get(cellEffectKey(resolved.key, name)) ?? []) {
               if (seen.has(effect.id)) continue
               seen.add(effect.id)
               out.push(effect)
