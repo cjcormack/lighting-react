@@ -78,6 +78,16 @@ export interface SheetColumn<Row extends SheetRow, C extends string = string, V 
   clearRefusal?: string
   /** The fan over these rows in visible order, or null where this column does not fan. */
   fan?: (rows: readonly Row[]) => FanPlan | null
+  /**
+   * Whether the cell reserves the **18px marks gutter** on its right for the corner glyphs (a
+   * Look layer, an effect, a clash). True by default, which is every column that has one.
+   *
+   * The DMX sheet sets it false: it draws no corner glyph, and the gutter made the cell's own
+   * ownership ring a box 18px narrower than the selection overlay around it — the two lines an
+   * operator reads a channel by, disagreeing on three of four edges. Without it the cell is padded
+   * 2px all round and the overlay is inset to match (`cellSelectionClass`).
+   */
+  gutter?: boolean
   /** Extra classes on the cell wrapper — an ownership ring, the overlap ring. */
   cellClass?: (row: Row) => string | undefined
   /** The wrapper's hover text. */

@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import { CellEditorSurface } from './CellEditorSurface'
 import { useCellEditorKeyboard } from './useCellEditorKeyboard'
 import { useCellEditorOpen } from './useCellEditorOpen'
+import { LandingLines } from './LandingLines'
 import type { SheetCellProps, SheetRow } from '../sheetModel'
 
 /** A patched address as the cell holds it. */
@@ -17,8 +18,8 @@ export interface CellAddress {
 
 /** What the editor says a typed start would do to the batch. */
 export interface AddressLanding {
-  /** `Front PAR 1 → 1-007 · PAR 2 → 1-013 …` */
-  summary: string
+  /** `Front PAR 1 → 1-007`, one per head that moves — drawn one to a line. */
+  lines: string[]
   /** A collision or an overflow, named; null when every head lands clear. */
   error: string | null
 }
@@ -155,12 +156,10 @@ export const AddressCell = memo(function AddressCell({
             Consecutive across the selection — each head lands after the previous one by its footprint.
           </p>
         )}
-        {plan && (
-          <p className={cn('text-xs tabular-nums', error ? 'text-destructive' : 'text-muted-foreground')}>
-            {error ? `${plan.summary} · ${error}` : plan.summary}
-          </p>
+        {plan && plan.lines.length > 0 && (
+          <LandingLines lines={plan.lines} error={error} />
         )}
-        {!plan && error && <p className="text-xs text-destructive">{error}</p>}
+        {error && (!plan || plan.lines.length === 0) && <p className="text-xs text-destructive">{error}</p>}
         <div className="flex justify-end">
           <Button
             size="sm"

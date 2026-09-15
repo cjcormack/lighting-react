@@ -50,7 +50,7 @@ vi.mock('../store/programmer', () => ({
 }))
 // Desktop by default; one case flips it to exercise the phone layout.
 const narrow = { value: false }
-vi.mock('../hooks/useNarrowContainer', () => ({
+vi.mock('../hooks/useContainerBand', () => ({
   useNarrowContainer: () => [vi.fn(), narrow.value],
 }))
 const stripProbe: { onSelectStack?: (s: CueStack) => void } = {}
@@ -387,6 +387,25 @@ describe('ShowPage URL contract', () => {
 
     act(() => screen.getByText('back').click())
     expect(where()).toBe('/elsewhere')
+  })
+
+  it('drills into the live stack on arrival, once', () => {
+    programState.data = { activeStackId: 11, canEdit: true }
+    draw(['/projects/1/show'])
+    expect(screen.getByTestId('where')).toHaveTextContent('/projects/1/show/stacks/11')
+  })
+
+  it('the Stacks button leaves a stack while the show runs, and stays left', () => {
+    // The auto-drill above used to fire again on the way back: `/show` and `/show/stacks/:id` are
+    // sibling routes with an `element` each, so leaving a stack REMOUNTS the page and resets the
+    // ref that was meant to make it fire once. The signal has to ride the location.
+    programState.data = { activeStackId: 11, canEdit: true }
+    draw(['/projects/1/show/stacks/11'])
+    act(() => {
+      probe.drill(null)
+    })
+    expect(screen.getByTestId('where')).toHaveTextContent('/projects/1/show')
+    expect(screen.getByTestId('where')).not.toHaveTextContent('/stacks/')
   })
 
   it('redirects out of a stack that has vanished', () => {

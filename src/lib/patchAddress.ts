@@ -67,10 +67,14 @@ export function findOverlaps(heads: readonly AddressedHead[]): Map<number, Addre
   return out
 }
 
-/** The preview of a landing: a summary line, and the first problem with it. */
+/** The preview of a landing: one line per head, and the first problem with the set. */
 export interface LandingReport {
-  /** `Front PAR 1 → 1-007 · PAR 2 → 1-013 …` */
-  summary: string
+  /**
+   * `Front PAR 1 → 1-007`, one entry per head that moves — **a list, not a joined string**, so the
+   * editor can put each head on its own line. Joined with `·` it was one wrapped paragraph that an
+   * operator had to parse before Apply, which is the moment it least wants reading twice.
+   */
+  lines: string[]
   /** Names the collision or the overflow, or null when every head lands clear. */
   error: string | null
 }
@@ -96,12 +100,12 @@ export function checkLanding(
     landing.has(head.id) ? { ...head, channel: landing.get(head.id)! } : head,
   )
   const movedHeads = moved.filter((head) => landing.has(head.id))
-  const summary = movedHeads
-    .map((head) => `${head.name} → ${formatPatchAddress(head.universe, head.channel)}`)
-    .join(' · ')
+  const lines = movedHeads.map(
+    (head) => `${head.name} → ${formatPatchAddress(head.universe, head.channel)}`,
+  )
   for (const head of movedHeads) {
     if (head.channel < 1 || lastChannel(head) > 512) {
-      return { summary, error: `${head.name} runs past channel 512 on universe ${head.universe}` }
+      return { lines, error: `${head.name} runs past channel 512 on universe ${head.universe}` }
     }
   }
   const overlaps = findOverlaps(moved)
@@ -109,12 +113,12 @@ export function checkLanding(
     const other = overlaps.get(head.id)
     if (other) {
       return {
-        summary,
+        lines,
         error: `${formatPatchAddress(head.universe, head.channel)} overlaps ${other.name} (${formatPatchAddress(other.universe, other.channel)} to ${formatPatchAddress(other.universe, lastChannel(other))})`,
       }
     }
   }
-  return { summary, error: null }
+  return { lines, error: null }
 }
 
 /** How many of a universe's 512 addresses its heads occupy — the chip's fill bar. */

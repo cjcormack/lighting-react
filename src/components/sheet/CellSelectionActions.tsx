@@ -30,6 +30,7 @@ export function CellSelectionActions({
   setRef,
   onSet,
   onClear,
+  onRefused,
   fan,
 }: {
   copy: CellActionCopy
@@ -44,6 +45,14 @@ export function CellSelectionActions({
   /** Open the selection's editor, or close the one this button opened. */
   onSet: () => void
   onClear: () => void
+  /**
+   * The surface can offer a way past its own refusal. Given, a refused verb is **live and says so
+   * when pressed** rather than greyed out: three dead buttons tell an operator that the sheet is
+   * broken, where a press that answers "the show is locked — unlock it?" tells them what to do.
+   * `permission` still decides which of the two a press does, so a button can no more *act* than
+   * before; it only stops being silent.
+   */
+  onRefused?: () => void
   /** The surface's Fan popover, or nothing where the surface has no column that fans. */
   fan?: ReactNode
 }) {
@@ -53,8 +62,8 @@ export function CellSelectionActions({
         ref={setRef}
         variant="outline"
         size="sm"
-        disabled={!permission.entry}
-        onClick={onSet}
+        disabled={!permission.entry && !onRefused}
+        onClick={permission.entry ? onSet : onRefused}
         title={copy.setTitle}
         aria-label="Set"
       >
@@ -64,8 +73,8 @@ export function CellSelectionActions({
       <Button
         variant="outline"
         size="sm"
-        disabled={!permission.clear}
-        onClick={onClear}
+        disabled={!permission.clear && !onRefused}
+        onClick={permission.clear ? onClear : onRefused}
         title={copy.clearTitle}
         aria-label="Clear cells"
       >

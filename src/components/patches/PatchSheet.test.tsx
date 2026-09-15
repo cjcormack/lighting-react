@@ -134,7 +134,10 @@ afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+  // `mockClear` keeps the implementation, and one test swaps in a PUT that never resolves — so the
+  // default has to be put back, or every later test in this file inherits the hang.
   updatePatch.mockClear()
+  updatePatch.mockImplementation(() => ({ unwrap: () => Promise.resolve() }))
 })
 
 /**
@@ -165,6 +168,17 @@ function clickAddress(name: string) {
   fireEvent.click(addressCell(name))
 }
 
+/** A marquee down the Key column over rows `from`..`to` (indices into the drawn rows). */
+function dragKeys(from: number, to: number) {
+  const cell = within(
+    screen.getAllByText(/^(PAR \d|Bar SL)$/)[from].closest('[data-row-id]') as HTMLElement,
+  ).getByText(/^(par|bar)-/).closest('button')!
+  fireEvent.pointerDown(cell, { button: 0, clientX: 620, clientY: from * 36 + 10 })
+  fireEvent.pointerMove(cell, { button: 0, buttons: 1, clientX: 700, clientY: to * 36 + 26 })
+  fireEvent.pointerUp(cell, { button: 0, clientX: 700, clientY: to * 36 + 26 })
+  fireEvent.click(cell)
+}
+
 /** A marquee down the Address column over rows `from`..`to` (indices into the drawn rows). */
 function dragAddresses(from: number, to: number) {
   const cell = addressCell(screen.getAllByText(/^(PAR \d|Bar SL)$/)[from].textContent!)
@@ -186,7 +200,8 @@ describe('PatchSheet', () => {
     const field = await screen.findByLabelText('Start channel')
     fireEvent.change(field, { target: { value: '7' } })
     // The preview names the landing before Apply.
-    expect(screen.getByText(/PAR 1 → 1-007 · PAR 2 → 1-013/)).toBeInTheDocument()
+    expect(screen.getByText('PAR 1 → 1-007')).toBeInTheDocument()
+    expect(screen.getByText('PAR 2 → 1-013')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
     expect(updatePatch).toHaveBeenCalledTimes(2)
     expect(updatePatch).toHaveBeenCalledWith({ projectId: 1, patchId: 1, startChannel: 7 })
@@ -262,6 +277,103 @@ describe('PatchSheet', () => {
     expect(cell).toHaveAttribute('title', expect.stringContaining('Overlaps Bar SL'))
     expect(screen.getByText(/2 addresses overlap another fixture/)).toBeInTheDocument()
     expect(addressCell('PAR 1').closest('[data-cell="address"]')!.className).not.toContain('ring-destructive')
+  })
+
+  it('fans one typed key over the selection, continuing the scheme it already carries', async () => {
+    draw()
+    // PAR 1 (`par-1`) and PAR 2 (`par-2`), re-keyed from `foh-3`.
+    dragKeys(0, 1)
+    expect(screen.getByText('2 cells')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    const field = await screen.findByLabelText('Key')
+    fireEvent.change(field, { target: { value: 'foh-3' } })
+    // One head to a line, not a `·`-joined sentence.
+    expect(screen.getByText('PAR 1 → foh-3')).toBeInTheDocument()
+    expect(screen.getByText('PAR 2 → foh-4')).toBeInTheDocument()
+    // Awaited: the PUTs go out one at a time, because each one checks key uniqueness on its own.
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    })
+    expect(updatePatch).toHaveBeenCalledTimes(2)
+    expect(updatePatch).toHaveBeenCalledWith({ projectId: 1, patchId: 1, key: 'foh-3' })
+    expect(updatePatch).toHaveBeenCalledWith({ projectId: 1, patchId: 2, key: 'foh-4' })
+  })
+
+  it('names a key another head holds and refuses Apply — the PUT rejects a duplicate', async () => {
+    draw()
+    dragKeys(0, 1)
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    const field = await screen.findByLabelText('Key')
+    // `par-3` is PAR 3's, which is outside the selection.
+    fireEvent.change(field, { target: { value: 'par-3' } })
+    expect(screen.getByText(/“par-3” is already PAR 3's key/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Apply' })).toBeDisabled()
+    fireEvent.keyDown(field, { key: 'Enter' })
+    expect(updatePatch).not.toHaveBeenCalled()
+  })
+
+  it('re-keys a batch onto keys its own members hold, one PUT at a time and in a safe order', async () => {
+    draw()
+    // PAR 1 · PAR 2 · PAR 3 are `par-1` · `par-2` · `par-3`; typing `par-2` walks them all up one.
+    dragKeys(0, 2)
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    const field = await screen.findByLabelText('Key')
+    fireEvent.change(field, { target: { value: 'par-2' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    })
+    // Downwards: `par-4` is free, then the `par-3` it vacates, then `par-2`. The other order would
+    // put `par-2` on PAR 1 while PAR 2 still held it, and each PUT checks uniqueness on its own.
+    const bodies = (updatePatch.mock.calls as unknown as Record<string, unknown>[][]).map((c) => c[0])
+    expect(bodies).toEqual([
+      { projectId: 1, patchId: 3, key: 'par-4' },
+      { projectId: 1, patchId: 2, key: 'par-3' },
+      { projectId: 1, patchId: 1, key: 'par-2' },
+    ])
+  })
+
+  it('refuses a second re-key while one batch is still going out', async () => {
+    // `write` answers synchronously and the editor closes on top of the detached PUT loop, so two
+    // overlapping batches would each plan against an `allPatches` the other has not landed in.
+    let release: (() => void) | undefined
+    updatePatch.mockImplementation(() => ({
+      unwrap: () => new Promise<void>((resolve) => { release = () => resolve() }),
+    }))
+    draw()
+    dragKeys(0, 1)
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    fireEvent.change(await screen.findByLabelText('Key'), { target: { value: 'foh-3' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    })
+    expect(updatePatch).toHaveBeenCalledTimes(1) // the first PUT is in flight, the second waits
+
+    // A second batch, before the first has drained.
+    dragKeys(2, 3)
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    fireEvent.change(await screen.findByLabelText('Key'), { target: { value: 'spot-1' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    })
+    expect(updatePatch).toHaveBeenCalledTimes(1) // refused: nothing new went out
+
+    await act(async () => {
+      release?.()
+    })
+  })
+
+  it('renames a head from a double click on its name, and a single click still selects the row', async () => {
+    draw()
+    const name = screen.getByText('PAR 2')
+    fireEvent.click(name)
+    expect(row('PAR 2')).toHaveAttribute('data-state', 'selected')
+    expect(screen.queryByLabelText('fixture name')).not.toBeInTheDocument()
+    fireEvent.doubleClick(name)
+    const field = screen.getByLabelText('fixture name') as HTMLInputElement
+    expect(field.value).toBe('PAR 2')
+    fireEvent.change(field, { target: { value: 'Front wash 2' } })
+    fireEvent.keyDown(field, { key: 'Enter' })
+    expect(updatePatch).toHaveBeenCalledWith({ projectId: 1, patchId: 2, displayName: 'Front wash 2' })
   })
 
   it('opens the address editor from Enter, seeded from a typed digit, and applies on Enter', async () => {

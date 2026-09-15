@@ -83,38 +83,53 @@ function ChannelsTableContent({ projectId, projectName, universe }: { projectId:
     }
   }
 
+  /**
+   * **Full height, and one scroller.** The cards view is a `Card` in a scrolling page, which is
+   * right for a page of cards; for the sheet it meant the page scrolled *and* the table scrolled
+   * inside a `calc(100vh - 14rem)` cap — two bars for one list, and a 393px-tall landscape phone
+   * got 169px of grid. The patch list's shape instead: a flex column that fills `<main>`, a 48px
+   * chrome row, and the sheet taking the rest. That also closes the gap the breadcrumbs left above
+   * the header, which was the `Card`'s padding plus two 16px margins around a selection bar that
+   * usually says "Nothing selected".
+   */
   return (
-    <Card className="m-4 p-4">
-      {/* `@container`: the view switcher's labels are a container query. */}
-      <div className="@container mb-4 flex items-start justify-between gap-2">
+    <div className="flex h-full min-h-0 flex-col">
+      {/* The breadcrumb header — 48px, like `ShowHeader` and `StackDetail`'s, **not** one of the
+          40px chrome rows (CLAUDE.md §the programmer's chrome): this row carries the page's
+          identity, which is the job those two do at 48. The 12px gutter and 32px controls are the
+          shared ones. `@container`: the view switcher's labels are a container query. */}
+      <div className="@container flex h-12 shrink-0 items-center gap-2 border-b px-3">
         <ChannelsBreadcrumbs projectName={projectName} />
-        <div className="flex items-center gap-2">
-          {parkedCount > 0 && (
-            <>
-              <Badge variant="secondary" className="gap-1 px-1.5 py-0 text-[10px]">
-                <Lock className="size-3" />
-                {parkedCount} parked
-              </Badge>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleUnparkAll}
-                disabled={!canUnpark}
-                title={connected ? undefined : DESK_OFFLINE_LABEL}
-              >
-                <LockOpen className="size-3.5" />
-                Unpark All
-              </Button>
-            </>
-          )}
-          <ChannelsViewSwitcher current="list" projectId={projectId} universe={universe} />
-        </div>
+        <div className="flex-1" />
+        {parkedCount > 0 && (
+          <>
+            <Badge variant="secondary" className="gap-1 px-1.5 py-0 text-[10px]">
+              <Lock className="size-3" />
+              {parkedCount} parked
+            </Badge>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleUnparkAll}
+              disabled={!canUnpark}
+              title={connected ? undefined : DESK_OFFLINE_LABEL}
+              // The word folds on a phone, so the name has to come from somewhere else: a lucide
+              // glyph carries none, and without this the button is announced unnamed at the width
+              // it is hardest to identify by sight.
+              aria-label="Unpark All"
+            >
+              <LockOpen className="size-3.5" />
+              <span className="hidden sm:inline">Unpark All</span>
+            </Button>
+          </>
+        )}
+        <ChannelsViewSwitcher current="list" projectId={projectId} universe={universe} />
       </div>
       {universes && universes.length > 1 && (
         <Tabs
           value={String(universe)}
           onValueChange={(v) => navigate(`/projects/${projectId}/channels/${v}/table`)}
-          className="mb-4"
+          className="shrink-0 border-b px-3 py-1.5"
         >
           <TabsList>
             {universes.map((u) => (
@@ -131,6 +146,6 @@ function ChannelsTableContent({ projectId, projectName, universe }: { projectId:
         mappings={mappingRecord?.[universe]}
         parkValueMap={parkValueMap}
       />
-    </Card>
+    </div>
   )
 }

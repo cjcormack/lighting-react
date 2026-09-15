@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Crosshair, EyeOff, Flashlight, Info, Pencil, Trash2, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { findGel, GELS } from '@/data/gels'
+import { InlineEditField } from '@/components/InlineEditField'
 import {
   checkLanding,
   consecutiveLanding,
@@ -13,6 +14,8 @@ import {
   lastChannel,
   type AddressedHead,
 } from '@/lib/patchAddress'
+import { checkKeyLanding, fanKeys, type KeyedHead } from '@/lib/fixtureKey'
+import { toast } from 'sonner'
 import { useDeletePatchMutation, useUpdatePatchMutation } from '@/store/patches'
 import { useFixtureListQuery, type Fixture } from '@/store/fixtures'
 import { useLocateStateQuery, useToggleLocateMutation, type LocateTarget } from '@/store/locate'
@@ -78,6 +81,15 @@ export interface PatchSheetRow extends SheetRow {
 
 export function patchRowId(patchId: number): string {
   return `patch:${patchId}`
+}
+
+/** The batch as the key arithmetic sees it. Pure, so it needs no hook and no identity. */
+function keyedHeads(batch: readonly SheetRow[]): KeyedHead[] {
+  return (batch as readonly PatchSheetRow[]).map((row) => ({
+    id: row.patch.id,
+    key: row.patch.key,
+    name: row.patch.displayName,
+  }))
 }
 
 function headOf(patch: FixturePatch): AddressedHead {
@@ -153,6 +165,71 @@ export function PatchSheet({
     (patchId: number, body: Record<string, unknown>) =>
       updatePatch({ projectId, patchId, ...body }).unwrap().catch(ignoreReportedError),
     [projectId, updatePatch],
+  )
+
+  /**
+   * One key PUT, reporting whether it landed. The batch re-key has to know: the backend refuses a
+   * duplicate key per PUT, so `planKeyWrites`' order only holds while every step succeeds — the
+   * step after a failure would walk onto a key the failed one was supposed to have vacated. The
+   * error itself is already on screen (the toast middleware reports it).
+   */
+  const putKey = useCallback(
+    (patchId: number, key: string) =>
+      updatePatch({ projectId, patchId, key })
+        .unwrap()
+        .then(
+          () => true,
+          () => false,
+        ),
+    [projectId, updatePatch],
+  )
+
+  /**
+   * The batch's PUTs, **one at a time and stopped on the first failure**. Sequential because each
+   * PUT checks key uniqueness on its own, so `planKeyWrites`' order only holds while every step
+   * lands: the step after a failure would walk onto a key the failed one was supposed to have
+   * vacated. A failure leaves the batch half-applied — the same caveat the Address column carries,
+   * there being no bulk route — so it says how far it got rather than stopping silently.
+   */
+  const applyKeyWrites = useCallback(
+    async (steps: readonly { id: number; key: string }[]) => {
+      keyBatchInFlight.current = true
+      try {
+        for (let i = 0; i < steps.length; i++) {
+          if (await putKey(steps[i].id, steps[i].key)) continue
+          // The failure itself is already on screen (the toast middleware reports it); what only
+          // this loop knows is that the rest of the batch never went out.
+          if (i > 0) {
+            toast.warning(`Re-keyed ${i} of ${steps.length} fixtures`, {
+              description: 'The rest were left as they were — fix the one that failed and try again.',
+            })
+          }
+          return
+        }
+      } finally {
+        keyBatchInFlight.current = false
+      }
+    },
+    [putKey],
+  )
+
+  /**
+   * **One re-key batch at a time.** `write` has to answer synchronously, so the loop above runs
+   * detached and the editor closes on top of it — which leaves a window in which a second batch
+   * could be planned against an `allPatches` the first batch's PUTs have not landed in yet. Two
+   * plans each assuming they are the only writer is how a batch walks onto a key the other one is
+   * mid-way through vacating: the server refuses the duplicate, and both are left half-applied.
+   * A wait-your-turn refusal is a second of patience against a rig nobody can re-key by hand.
+   */
+  const keyBatchInFlight = useRef(false)
+
+  /** What a typed key would do to these rows, checked against every patch on the project. */
+  const keyLanding = useCallback(
+    (batch: readonly SheetRow[], draft: string) => {
+      const heads = keyedHeads(batch)
+      return checkKeyLanding(heads, fanKeys(draft.trim(), heads.length), allPatches)
+    },
+    [allPatches],
   )
 
   /** The landing of a start over these rows, checked against the whole rig. */
@@ -270,20 +347,32 @@ export function PatchSheet({
         kind: 'key',
         width: '132px',
         value: (row) => row.patch.key,
-        cell: (row, props) => (
+        cell: (_row, props) => (
           <TextCell
             {...(props as React.ComponentProps<typeof TextCell>)}
             mono
-            validate={(draft) => {
-              if (props.batchCount > 1) return 'A key is unique per fixture — select one'
-              const key = draft.trim()
-              return allPatches.some((p) => p.key === key && p.id !== row.patch.id) ? `“${key}” is already a key` : null
-            }}
+            placeholder="par-1"
+            plan={keyLanding}
           />
         ),
+        // **A typed key fans over the selection**, the way a typed address does: one head takes it
+        // as it is, several count up from it in visible-row order, continuing the number, the
+        // separator and the zero padding the typed key already carries (`lib/fixtureKey.ts`). The
+        // landing is refused before Apply where it would take a key another head holds — and the
+        // writes are **sequential, ordered and stopped on the first failure**, because unlike the
+        // address PUT this one enforces uniqueness on every call.
         write: (batch, value) => {
-          if (typeof value !== 'string' || batch.length !== 1) return false
-          if (value !== batch[0].patch.key) void put(batch[0].patch.id, { key: value })
+          if (typeof value !== 'string') return false
+          if (keyBatchInFlight.current) {
+            toast.warning('Still re-keying', { description: 'Wait for the last batch to land, then try again.' })
+            return false
+          }
+          const typed = value.trim()
+          const heads = keyedHeads(batch)
+          // The landing carries the writes it had to plan to answer, so this does not re-plan them.
+          const { error, writes } = checkKeyLanding(heads, fanKeys(typed, heads.length), allPatches)
+          if (error || !writes) return false
+          void applyKeyWrites(writes)
           return true
         },
         clearRefusal: 'A key cannot be empty',
@@ -442,7 +531,7 @@ export function PatchSheet({
       },
     ]
     return visibleColumns.map((key) => all.find((c) => c.key === key)!).filter(Boolean)
-  }, [allHeads, allPatches, landing, mountOptions, onEditGroup, overlaps, put, visibleColumns])
+  }, [allHeads, allPatches, applyKeyWrites, keyLanding, landing, mountOptions, onEditGroup, overlaps, put, visibleColumns])
 
   const copy = useCallback(
     (cellCount: number) => ({
@@ -581,9 +670,26 @@ export function PatchSheet({
           selectsRows: true,
           render: (row, selected) => (
             <>
-              <span className={cn('relative min-w-0 flex-1 truncate', selected ? 'font-semibold' : 'font-medium')}>
-                {row.patch.displayName}
-              </span>
+              {/* **A double click renames the head in place.** A single click on this column is
+                  the row selection and a press on it starts the row marquee, so the rename is the
+                  second gesture — the same split the value cells make (CLAUDE.md §The cell
+                  editor's three forms). The pencil beside it still opens the full patch editor,
+                  which is also the keyboard route to a rename. */}
+              <InlineEditField
+                value={row.patch.displayName}
+                openOn="doubleClick"
+                ariaLabel="fixture name"
+                title="Double-click to rename"
+                onCommit={(next) => {
+                  const name = next.trim()
+                  if (name === '') return false
+                  if (name !== row.patch.displayName) void put(row.patch.id, { displayName: name })
+                }}
+                className={cn(
+                  'relative min-w-0 flex-1 truncate',
+                  selected ? 'font-semibold' : 'font-medium',
+                )}
+              />
               {row.patch.stageHidden && (
                 <EyeOff className="relative size-3 shrink-0 text-muted-foreground" role="img" aria-label="Hidden from Stage view" />
               )}

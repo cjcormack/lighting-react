@@ -5,7 +5,7 @@ import type { ListSelectIntent } from './listSelectionModel'
 import { useCellSelection, type CellSelection } from './useCellSelection'
 import { useCellEditorRequests } from './useCellEditorRequests'
 import { useLocalListSelection } from './useLocalListSelection'
-import { useSheetKeyboard } from './useSheetKeyboard'
+import { useSheetKeyboard, type SheetKeyRefusal } from './useSheetKeyboard'
 import {
   commitToSelectedCells,
   firstEditableCell,
@@ -35,6 +35,13 @@ export interface UseSheetOptions<Row extends SheetRow, C extends string> {
    * read [permission], which the surface keeps in step with this.
    */
   cellDisabled?: (row: Row, col: C) => boolean
+  /**
+   * The surface has a way out of its own refusal. Given, a refused key reaches it rather than being
+   * swallowed — see `useSheetKeyboard`, which leaves it to the surface to decide whether to claim
+   * the key. The bar's verbs are the other half and are wired separately, being presses rather than
+   * keys (`CellSelectionActions`, `FanPopover`).
+   */
+  onRefused?: (refusal: SheetKeyRefusal) => boolean | void
 }
 
 /**
@@ -54,6 +61,7 @@ export function useSheet<Row extends SheetRow, C extends string>({
   permission,
   copy,
   cellDisabled,
+  onRefused,
 }: UseSheetOptions<Row, C>) {
   const selectableOrder = useMemo(
     () => rows.filter((row) => row.divider == null).map((row) => row.id),
@@ -229,6 +237,7 @@ export function useSheet<Row extends SheetRow, C extends string>({
     onEscape: clearByLadder,
     onOpen: requests.openCellEditor,
     onClear: clearSelectedCells,
+    onRefused,
   })
 
   const [marqueeDragging, setMarqueeDragging] = useState(false)
@@ -298,6 +307,7 @@ export function useSheet<Row extends SheetRow, C extends string>({
     setButtonRef,
     toggleCellEditor: requests.toggleCellEditor,
     clearSelectedCells,
+    onRefused,
     clearByLadder,
     selectRow,
     setRows,

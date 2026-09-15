@@ -1,6 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { GripVertical } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useScrollEdges } from '@/hooks/useScrollEdges'
 import { useStableCallback } from '@/hooks/useStableCallback'
@@ -16,6 +27,19 @@ export const SHEET_ROW_HEIGHT = 36
 /** The header: 30px, uppercase 11px tracked. */
 const HEADER_CLASS =
   'px-1.5 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground'
+
+/**
+ * What a row hands its grip: dnd-kit's activator, spread onto the handle button.
+ *
+ * `attributes` and `listeners` go on the **handle** rather than the row, which is what makes the
+ * drag handle-based — a press anywhere else on the row is still a selection or a marquee.
+ */
+export interface SheetDragHandle {
+  ref: (el: HTMLElement | null) => void
+  listeners: Record<string, unknown>
+  attributes: Record<string, unknown>
+  isDragging: boolean
+}
 
 export interface SheetTableProps<Row extends SheetRow, C extends string> {
   rows: readonly Row[]
@@ -52,6 +76,19 @@ export interface SheetTableProps<Row extends SheetRow, C extends string> {
   cellDisabled?: (row: Row, col: C) => boolean
   /** Classes on the whole row — the cue sheet's live green and next blue. */
   rowClass?: (row: Row) => string | undefined
+  /**
+   * Reorder rows by dragging a grip in the first column. Present makes this sheet sortable; the
+   * grip is drawn (and the drag armed) only while [enabled], so a surface with a read-only mode
+   * keeps the `DndContext` mounted and turns the rows off through dnd-kit's own `disabled` — see
+   * `StackDetail`, which learned that unmounting the context breaks every row instead.
+   *
+   * `onReorder` gets **every** row id in its new order, dividers included: on the cue sheet a
+   * separator is a row of the stack like any other and moves with them.
+   */
+  rowDrag?: {
+    enabled: boolean
+    onReorder: (ids: RowId[]) => void
+  }
   cellSelection: CellSelection<C>
   onRowMarquee?: (ids: RowId[]) => void
   keyboardOpen?: CellOpenRequest<C> | null
@@ -90,6 +127,7 @@ export function SheetTable<Row extends SheetRow, C extends string>({
   batchRowsFor,
   cellDisabled,
   rowClass,
+  rowDrag,
   cellSelection,
   onRowMarquee,
   keyboardOpen,
@@ -162,12 +200,38 @@ export function SheetTable<Row extends SheetRow, C extends string>({
     horizontalOnly: true,
   })
 
+  // A distance constraint, not a delay: the grip is its own target, so a press on it is never
+  // ambiguous — but a click that moves a pixel should still be a click.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor),
+  )
+  const rowIds = useMemo(() => rows.map((row) => row.id), [rows])
+  const onReorder = rowDrag?.onReorder
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event
+      if (!over || active.id === over.id || !onReorder) return
+      const from = rowIds.indexOf(String(active.id))
+      const to = rowIds.indexOf(String(over.id))
+      if (from < 0 || to < 0) return
+      const next = [...rowIds]
+      next.splice(to, 0, ...next.splice(from, 1))
+      onReorder(next)
+    },
+    [onReorder, rowIds],
+  )
+
   return (
     <div className={cn('relative', fill && 'flex min-h-0 flex-1 flex-col')}>
       <div
         ref={attachScroller}
         className={cn(
-          'overflow-auto',
+          // `bg-background` explicitly: the sticky first column has to be opaque to cover the
+          // cells sliding under it, and with the sheet itself transparent it took its colour from
+          // whatever the page happened to be — on `/show`, whose `<main>` is `bg-muted/40`, the
+          // Cue column read as a dark block laid over the rows. The sheet is one surface.
+          'overflow-auto bg-background',
           fill ? 'min-h-0 flex-1 border-t border-border' : 'rounded-md border border-border',
         )}
         style={fill ? undefined : { maxHeight: 'calc(100vh - 14rem)' }}
@@ -210,6 +274,12 @@ export function SheetTable<Row extends SheetRow, C extends string>({
             ))}
           </div>
 
+          <SheetRowsDnd
+            enabled={rowDrag != null}
+            sensors={sensors}
+            rowIds={rowIds}
+            onDragEnd={handleDragEnd}
+          >
           <div
             className="select-none touch-manipulation [-webkit-touch-callout:none]"
             style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}
@@ -232,38 +302,58 @@ export function SheetTable<Row extends SheetRow, C extends string>({
             )}
             {virtualizer.getVirtualItems().map((virtualRow) => {
               const row = rows[virtualRow.index]
-              return (
+              const view = (dragHandle?: SheetDragHandle) => (
+                <SheetRowView
+                  row={row}
+                  columns={columns}
+                  firstColumn={firstColumn}
+                  gridTemplateColumns={gridTemplateColumns}
+                  selected={row.divider == null && isSelected(row.id)}
+                  rowClass={rowClass?.(row)}
+                  onRowClick={onRowClick}
+                  onBeginCellEdit={onBeginCellEdit}
+                  onCellCommit={onCellCommit}
+                  batchCountFor={batchCountFor}
+                  batchRowsFor={batchRowsFor}
+                  cellDisabled={cellDisabled}
+                  cellSelection={cellSelection}
+                  autoOpenCol={autoOpenCell?.rowId === row.id ? autoOpenCell.col : null}
+                  autoOpenSeed={autoOpenCell?.rowId === row.id ? autoOpenCell.seed : null}
+                  autoOpenAtButton={autoOpenCell?.rowId === row.id && autoOpenCell.atButton}
+                  autoCloseCol={closeCell?.rowId === row.id ? closeCell.col : null}
+                  selectionEmpty={selectionEmpty}
+                  editorAnchorRef={editorAnchorRef}
+                  onEmptyCellClick={onEmptyCellClick}
+                  dragHandle={dragHandle}
+                />
+              )
+              // The branch is the *sheet's*, not the row's — `rowDrag` is either given for the life
+              // of this table or never — so the hooks inside `SortableVirtualRow` keep a stable
+              // order across every render and every row.
+              return rowDrag ? (
+                <SortableVirtualRow
+                  key={row.id}
+                  id={row.id}
+                  start={virtualRow.start}
+                  height={rowHeight}
+                  disabled={!rowDrag.enabled}
+                  render={view}
+                />
+              ) : (
                 <div
                   key={row.id}
                   className="absolute inset-x-0"
+                  // The virtualiser's own recommendation, and untouched: a sheet with no row drag
+                  // has nothing else competing for `transform`. See `SortableVirtualRow` for why the
+                  // sortable branch cannot use it.
                   style={{ height: `${rowHeight}px`, transform: `translateY(${virtualRow.start}px)` }}
                 >
-                  <SheetRowView
-                    row={row}
-                    columns={columns}
-                    firstColumn={firstColumn}
-                    gridTemplateColumns={gridTemplateColumns}
-                    selected={row.divider == null && isSelected(row.id)}
-                    rowClass={rowClass?.(row)}
-                    onRowClick={onRowClick}
-                    onBeginCellEdit={onBeginCellEdit}
-                    onCellCommit={onCellCommit}
-                    batchCountFor={batchCountFor}
-                    batchRowsFor={batchRowsFor}
-                    cellDisabled={cellDisabled}
-                    cellSelection={cellSelection}
-                    autoOpenCol={autoOpenCell?.rowId === row.id ? autoOpenCell.col : null}
-                    autoOpenSeed={autoOpenCell?.rowId === row.id ? autoOpenCell.seed : null}
-                    autoOpenAtButton={autoOpenCell?.rowId === row.id && autoOpenCell.atButton}
-                    autoCloseCol={closeCell?.rowId === row.id ? closeCell.col : null}
-                    selectionEmpty={selectionEmpty}
-                    editorAnchorRef={editorAnchorRef}
-                    onEmptyCellClick={onEmptyCellClick}
-                  />
+                  {view()}
                 </div>
               )
             })}
           </div>
+          </SheetRowsDnd>
         </div>
 
         {/* The scope chip, following the pointer. Portalled to `body` so a `@container` ancestor
@@ -303,6 +393,126 @@ export function SheetTable<Row extends SheetRow, C extends string>({
   )
 }
 
+/**
+ * The sortable half, mounted only where a surface asked for it.
+ *
+ * A component rather than a branch inside the table's body, so the `DndContext` is absent entirely
+ * for the sheets that do not reorder — the patch list and the DMX sheet have no row order of their
+ * own to change, and a context they never use is a context that can still swallow a pointer event.
+ */
+function SheetRowsDnd({
+  enabled,
+  sensors,
+  rowIds,
+  onDragEnd,
+  children,
+}: {
+  enabled: boolean
+  sensors: ReturnType<typeof useSensors>
+  rowIds: readonly RowId[]
+  onDragEnd: (event: DragEndEvent) => void
+  children: React.ReactNode
+}) {
+  if (!enabled) return <>{children}</>
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      {/* Every row id, not just the virtualised window: a drag that scrolls past the window's edge
+          still has to land somewhere dnd-kit knows about. */}
+      <SortableContext items={rowIds as string[]} strategy={verticalListSortingStrategy}>
+        {children}
+      </SortableContext>
+    </DndContext>
+  )
+}
+
+/**
+ * One virtualised row, sortable.
+ *
+ * The virtualiser positions the row with `translateY`, and dnd-kit wants to move it too, so the two
+ * are **composed on one element** rather than nested — the sortable node has to be the element
+ * dnd-kit measures, and that is the positioned wrapper. Order matters: the virtualiser's offset is
+ * where the row lives, the sortable transform is where the drag has taken it from there.
+ */
+function SortableVirtualRow({
+  id,
+  start,
+  height,
+  disabled,
+  render,
+}: {
+  id: RowId
+  start: number
+  height: number
+  disabled: boolean
+  render: (handle?: SheetDragHandle) => React.ReactNode
+}) {
+  const { setNodeRef, setActivatorNodeRef, listeners, attributes, transform, transition, isDragging } =
+    useSortable({ id, disabled })
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn('absolute inset-x-0', isDragging && 'z-30')}
+      style={{
+        height: `${height}px`,
+        // **`top`, not the virtualiser's usual `translateY`.** This is the node dnd-kit measures,
+        // and it measures droppables with transforms discounted — so rows positioned *only* by a
+        // transform all measure at the container's origin, every centre-distance ties, and
+        // `closestCenter`'s stable sort hands back the rows in DOM order on every frame. The
+        // symptom is not "no drag": dragging *up* still lands, because for an upward drag DOM order
+        // and distance order agree; dragging down picks the row you started on and drops nothing.
+        // Positioning with `top` leaves `transform` to the sortable alone, which is what it wants.
+        top: `${start}px`,
+        transform: transform ? `translate3d(0, ${transform.y}px, 0)` : undefined,
+        transition,
+        opacity: isDragging ? 0.85 : undefined,
+      }}
+    >
+      {/* No handle while the drag is off: a grip that cannot be dragged is worse than no grip, and
+          `disabled` on the sortable is what makes the drag genuinely impossible rather than merely
+          unadvertised — both halves are needed, as `StackDetail` found. */}
+      {render(
+        disabled
+          ? undefined
+          : {
+              ref: setActivatorNodeRef,
+              listeners: (listeners ?? {}) as Record<string, unknown>,
+              attributes: attributes as unknown as Record<string, unknown>,
+              isDragging,
+            },
+      )}
+    </div>
+  )
+}
+
+/**
+ * The grip. Only where the surface armed the drag — a disabled sortable renders none at all, since
+ * a handle that cannot be dragged is worse than no handle.
+ *
+ * `stopPropagation` on the press: the rows wrapper above is the marquee's `pointerdown` target, and
+ * React bubbles a synthetic event whatever the DOM says, so without it starting a drag would also
+ * start a rectangle.
+ */
+function RowGrip({ handle }: { handle: SheetDragHandle }) {
+  return (
+    <button
+      type="button"
+      ref={handle.ref}
+      {...handle.attributes}
+      {...handle.listeners}
+      onPointerDown={(e) => {
+        e.stopPropagation()
+        ;(handle.listeners.onPointerDown as ((e: React.PointerEvent) => void) | undefined)?.(e)
+      }}
+      onClick={(e) => e.stopPropagation()}
+      aria-label="Reorder row"
+      title="Drag to reorder"
+      className="relative -ml-1 flex h-full w-4 shrink-0 cursor-grab touch-none items-center justify-center text-muted-foreground/50 hover:text-foreground active:cursor-grabbing"
+    >
+      <GripVertical className="size-3.5" />
+    </button>
+  )
+}
+
 interface SheetRowViewProps<Row extends SheetRow, C extends string> {
   row: Row
   columns: readonly SheetColumn<Row, C>[]
@@ -324,6 +534,7 @@ interface SheetRowViewProps<Row extends SheetRow, C extends string> {
   selectionEmpty?: boolean
   editorAnchorRef?: React.RefObject<HTMLElement | null>
   onEmptyCellClick: () => void
+  dragHandle?: SheetDragHandle
 }
 
 function SheetRowViewInner<Row extends SheetRow, C extends string>({
@@ -347,6 +558,7 @@ function SheetRowViewInner<Row extends SheetRow, C extends string>({
   selectionEmpty,
   editorAnchorRef,
   onEmptyCellClick,
+  dragHandle,
 }: SheetRowViewProps<Row, C>) {
   if (row.divider != null) {
     return (
@@ -356,6 +568,7 @@ function SheetRowViewInner<Row extends SheetRow, C extends string>({
         className="flex h-full items-center gap-3 border-b border-border bg-muted/30 px-3"
         data-row-id={row.id}
       >
+        {dragHandle && <RowGrip handle={dragHandle} />}
         <span className="h-px flex-1 bg-border" />
         <span className="rounded border bg-card px-2 py-px text-xs font-medium text-muted-foreground">
           {row.divider}
@@ -368,7 +581,11 @@ function SheetRowViewInner<Row extends SheetRow, C extends string>({
   return (
     <div
       className={cn(
-        'group/row grid h-full border-b border-border text-sm',
+        // `auto-rows-[minmax(0,1fr)]`: the row is a fixed height the virtualiser positions, so the
+        // track has to be that height and not the tallest cell's min-content. Without the floor of
+        // zero a single cell with an outsized intrinsic height grows the track past the row box and
+        // every cell in the row is laid out below the row's own centre.
+        'group/row grid h-full auto-rows-[minmax(0,1fr)] border-b border-border text-sm',
         selected ? 'bg-foreground/[0.06]' : 'hover:bg-accent/30',
         rowClass,
       )}
@@ -391,6 +608,7 @@ function SheetRowViewInner<Row extends SheetRow, C extends string>({
             selected ? 'bg-foreground/[0.06] shadow-[inset_3px_0_0_var(--foreground)]' : 'group-hover/row:bg-accent/30',
           )}
         />
+        {dragHandle && <RowGrip handle={dragHandle} />}
         {firstColumn.render(row, selected)}
       </div>
 
@@ -402,7 +620,14 @@ function SheetRowViewInner<Row extends SheetRow, C extends string>({
           return (
             <div
               key={column.key}
-              className={cn('flex h-full min-w-0 items-center', column.align === 'right' && 'justify-end')}
+              // `overflow-hidden`: a read-out draws whatever the column hands it, and a wrapped
+              // line pushes the grid row past its fixed height and paints over the row below
+              // (the cue sheet's "top of p. 8"). It cannot go on the *row* — an `overflow` there
+              // makes it a scroll container and the sticky first column would stick to it.
+              className={cn(
+                'flex h-full min-w-0 items-center overflow-hidden',
+                column.align === 'right' && 'justify-end',
+              )}
               onClick={column.display == null ? onEmptyCellClick : undefined}
             >
               {column.display?.(row)}
@@ -432,10 +657,13 @@ function SheetRowViewInner<Row extends SheetRow, C extends string>({
             data-cell={column.key}
             className={cn(
               // The marks gutter: 18px on the right for the corner glyphs, the same number the
-              // programmer's cells reserve — see `FixturesTable`.
-              'relative h-full min-w-0 py-0.5 pr-[18px]',
+              // programmer's cells reserve — see `FixturesTable`. A column that draws no glyph
+              // asks for none and is padded evenly instead, so its own border and the selection
+              // overlay are one box — see `SheetColumn.gutter`.
+              'relative h-full min-w-0',
+              column.gutter === false ? 'p-0.5' : 'py-0.5 pr-[18px]',
               column.cellClass?.(row),
-              cellSelectionClass(selectedCell),
+              cellSelectionClass(selectedCell, column.gutter !== false),
               // Read-only for the pointer; the cell's trigger takes `disabled` for the keyboard.
               disabled && 'pointer-events-none',
             )}

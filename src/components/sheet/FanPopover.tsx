@@ -88,6 +88,12 @@ interface FanPopoverProps {
    * no selection; absent, an empty `plans` is taken to mean it.
    */
   noSelection?: boolean
+  /**
+   * The surface can offer a way past [disabledReason]. Given, the trigger stays live and a press
+   * calls this instead of opening — the cue sheet's "unlock the show?" — rather than sitting there
+   * greyed out beside Set and Clear, which do the same (`CellSelectionActions`).
+   */
+  onRefused?: () => void
   /** For the trigger button — the programmer's selection bar folds it away at phone widths. */
   className?: string
 }
@@ -114,6 +120,7 @@ export function FanPopover({
   disabledReason,
   drivableHint,
   noSelection,
+  onRefused,
   className,
 }: FanPopoverProps) {
   const [isOpen, setIsOpen] = useState(false)
@@ -137,6 +144,9 @@ export function FanPopover({
   // A fan needs at least two points on SOME column to be worth opening, and at least two on the
   // CHOSEN column to apply — one point is a set, not a fan.
   const canFan = !disabledReason && fannable.some((plan) => plan.count >= 2)
+  // A surface's own refusal is the one the operator can answer; "no two cells to fan" is not, so
+  // the offer is made only where [disabledReason] is what closed the button.
+  const refusable = disabledReason != null && onRefused != null
   const title =
     disabledReason ??
     ((noSelection ?? plans.length === 0)
@@ -245,7 +255,8 @@ export function FanPopover({
           variant="outline"
           size="sm"
           className={className}
-          disabled={!canFan}
+          disabled={!canFan && !refusable}
+          onClick={refusable ? (e) => { e.preventDefault(); onRefused?.() } : undefined}
           title={title}
           aria-label="Fan"
         >

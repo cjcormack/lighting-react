@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useStableCallback } from '@/hooks/useStableCallback'
-import { useNavigate, useParams } from 'react-router'
+import { useNavigate, useParams, useSearchParams } from 'react-router'
 import { Loader2, Trash2 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -29,7 +29,7 @@ import {
   useProjectCueStackListQuery,
 } from '../store/cueStacks'
 import { usePatchProjectCueMutation } from '../store/cues'
-import { useNarrowContainer } from '../hooks/useNarrowContainer'
+import { useNarrowContainer } from '../hooks/useContainerBand'
 import { useShowBarProps } from '../hooks/useShowBarProps'
 import { useProjectPromptBookQuery } from '../store/promptBooks'
 import { scriptDocUrl, type NoteTone } from '../api/promptBooksApi'
@@ -206,11 +206,48 @@ export function PromptBookViewerPage() {
     if (activeCueId != null) scrollToCue(activeCueId)
   }, [activeCueId, scrollToCue])
 
+  /**
+   * **`?cue=` is the arrival contract, the mirror of the one this page mints for Show.** The cue
+   * sheet's Book column asks "where is this cue in the book?", so it lands here at that cue's
+   * anchor rather than on page one — or on the live cue, which is a different cue entirely and is
+   * what `jumpToLive` below would otherwise do a beat later.
+   *
+   * Consumed **once per id**, by the same rule and for the same reason as `CueSheet`'s: the book
+   * and its anchors are refetched on every edit and every WS echo, so a plain dependency on
+   * `cueOrderIndex` would drag the viewport back here while the operator read ahead. The id is
+   * left in the URL — it is a deep link, not a command — and the ref remembers it has been acted
+   * on; a cue not in the book yet is consumed when its anchors arrive.
+   */
+  const [searchParams] = useSearchParams()
+  // `cueParam ? Number(…) : null`, the idiom `ShowPage` parses this same contract with — not
+  // `Number(…) || null`, which would read a cue id of 0 as "no link" and leave the two consumers of
+  // one arrival contract disagreeing about it. An unparseable id is NaN, which `cueOrderIndex` has
+  // no entry for, so the effect below simply never fires.
+  const cueParam = searchParams.get('cue')
+  const linkedCueId = cueParam ? Number(cueParam) : null
+  const consumedLinkRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (linkedCueId == null) {
+      consumedLinkRef.current = null
+      return
+    }
+    if (consumedLinkRef.current === linkedCueId) return
+    if (!cueOrderIndex.has(linkedCueId)) return
+    consumedLinkRef.current = linkedCueId
+    scrollToCue(linkedCueId)
+  }, [cueOrderIndex, linkedCueId, scrollToCue])
+
   // ── Runtime emphasis: scroll the live cue into view on advance. ──
   // The same operation the toolbar's "jump to live" performs, so the two cannot drift.
   // `scrollToCue` holds one identity for the session, so an unrelated book refetch (edit, WS echo)
   // can't re-run this and yank the viewport while the operator reads ahead.
-  useEffect(jumpToLive, [jumpToLive])
+  // Not while a `?cue=` link is being honoured — the two would fight over the viewport, and the
+  // one the operator asked for is the link.
+  const jumpToLiveUnlessLinked = useCallback(() => {
+    if (linkedCueId != null) return
+    jumpToLive()
+  }, [jumpToLive, linkedCueId])
+  useEffect(jumpToLiveUnlessLinked, [jumpToLiveUnlessLinked])
 
   /**
    * …and the one case that stability makes unreachable: **opening the book while the show runs**.
@@ -223,7 +260,14 @@ export function PromptBookViewerPage() {
    * prop of the memoized viewer: it must keep one identity while still reading the playhead as it
    * is at that moment rather than as it was at mount.
    */
-  const handlePagesReady = useStableCallback(jumpToLive)
+  const handlePagesReady = useStableCallback(() => {
+    if (linkedCueId != null && cueOrderIndex.has(linkedCueId)) {
+      consumedLinkRef.current = linkedCueId
+      scrollToCue(linkedCueId)
+      return
+    }
+    jumpToLive()
+  })
 
   // Arm a cue as the next GO (mirrors the Run page's standby). Does NOT fire it. The
   // transport ignores the live cue; we just also close the narrow drawer here.

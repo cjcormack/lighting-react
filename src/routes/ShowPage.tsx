@@ -12,7 +12,7 @@ import { useShowBarProps } from '../hooks/useShowBarProps'
 import { useEditLock } from '../hooks/useEditLock'
 import { useCueExpansion } from '../hooks/useCueExpansion'
 import { useTransportKeys } from '../hooks/useTransportKeys'
-import { useNarrowContainer } from '../hooks/useNarrowContainer'
+import { useNarrowContainer } from '../hooks/useContainerBand'
 import { useProjectCueLocationsQuery, useProjectPromptBookQuery } from '../store/promptBooks'
 import { positionLabelFor } from '../lib/promptBook/geometry'
 import { StackTabStrip } from '../components/runner/StackTabStrip'
@@ -42,6 +42,18 @@ const MOBILE_RUNNER_THRESHOLD = 600
 
 /** Stable no-op for the phone runner's requeue while it is reading a stack off the playhead. */
 const NO_REQUEUE = () => {}
+
+/**
+ * The location state that says "the operator asked for the stack list" — set by the Stacks button
+ * and by the breadcrumb, and read by the auto-drill so it stands aside. It rides the *location*
+ * rather than a ref because the three show routes each carry their own `element`, so leaving a
+ * stack remounts this component; see the effect that reads it.
+ */
+const STACK_LIST_STATE = { showStacks: true } as const
+
+function isStackListRequest(state: unknown): boolean {
+  return typeof state === 'object' && state !== null && (state as { showStacks?: unknown }).showStacks === true
+}
 
 /** The cue's display name for the Record sheet's header, or undefined if it has vanished. */
 function cueNameFor(stacks: CueStack[] | undefined, cueId: number): string | undefined {
@@ -316,14 +328,14 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
 
   const handleDrillStack = useCallback(
     (id: number | null) => {
-      if (id == null) navigate(`/projects/${projectIdNum}/show`)
+      if (id == null) navigate(`/projects/${projectIdNum}/show`, { state: STACK_LIST_STATE })
       else navigate(`/projects/${projectIdNum}/show/stacks/${id}`)
     },
     [navigate, projectIdNum],
   )
 
   const handleBreadcrumbCurrentPageClick = useCallback(() => {
-    navigate(`/projects/${projectIdNum}/show`)
+    navigate(`/projects/${projectIdNum}/show`, { state: STACK_LIST_STATE })
   }, [navigate, projectIdNum])
 
   const initialDrillDoneRef = useRef(false)
@@ -364,6 +376,19 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
     [drillStackId, navigate, projectIdNum],
   )
 
+  /**
+   * The Book column's read-out opens the **Prompt Book** at that cue, not the cue's card. It is the
+   * one read-out that names a place in another document — "top of p. 8" is an answer about the
+   * book — so sending it to the card answered a different question from the one the column asks.
+   * `?cue=` is the Prompt Book's own arrival contract, the mirror of the one it mints for Show.
+   */
+  const handleOpenBook = useCallback(
+    (cueId: number) => {
+      navigate(`/projects/${projectIdNum}/prompt-book?cue=${cueId}`)
+    },
+    [navigate, projectIdNum],
+  )
+
   // ── Deep-link normalizer + auto-drill ──
   // - Legacy `/show?stack=X&cue=Y` links (the Prompt Book's "Edit cue" mints the path form now)
   //   are rewritten to
@@ -373,6 +398,17 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
   useEffect(() => {
     if (initialDrillDoneRef.current) return
     if (!stacks) return
+
+    // **The operator asked for the stack list, so leave them on it.** The ref alone cannot say
+    // that: `/show`, `/show/stacks/:id` and `/show/stacks/:id/table` are three sibling routes with
+    // an `element` each, so going back from a stack *remounts* this component and resets the ref —
+    // and the auto-drill below then put them straight back into the live stack, which is what made
+    // the Stacks button look broken while a show was running. The signal has to ride the location,
+    // which survives that remount; `handleDrillStack(null)` and the breadcrumb both set it.
+    if (isStackListRequest(location.state)) {
+      initialDrillDoneRef.current = true
+      return
+    }
 
     const legacyStack = searchParams.get('stack')
     if (legacyStack && drillStackId == null) {
@@ -394,7 +430,7 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
       initialDrillDoneRef.current = true
       navigate(`/projects/${projectIdNum}/show/stacks/${activeStackId}`, { replace: true })
     }
-  }, [stacks, isShowActive, activeStackId, drillStackId, searchParams, navigate, projectIdNum])
+  }, [stacks, isShowActive, activeStackId, drillStackId, location.state, searchParams, navigate, projectIdNum])
 
   /**
    * Follow the playhead — but only while standing on it.
@@ -614,6 +650,11 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
               includePending={includePending}
               view={stackView}
               onOpenCue={handleOpenCue}
+              onOpenBook={handleOpenBook}
+              // Withheld where the lock is not the operator's to lift — a project that is not
+              // current cannot be edited at all, and offering an unlock that changes nothing is
+              // worse than the disabled verbs, which at least say why.
+              onRequestUnlock={editLock.lockRelevant ? editLock.toggleLock : undefined}
             />
           </div>
         </div>

@@ -89,6 +89,10 @@ interface StackDetailProps {
   view?: CardsListView
   /** Open a cue's card on the cards view — the sheet's read-outs do this. */
   onOpenCue?: (cueId: number) => void
+  /** Open the Prompt Book at a cue's anchor — the cue sheet's Book column. */
+  onOpenBook?: (cueId: number) => void
+  /** Lift the show-editing lock, where it is the operator's to lift. */
+  onRequestUnlock?: () => void
 }
 
 export function StackDetail({
@@ -116,6 +120,8 @@ export function StackDetail({
   includePending,
   view = 'cards',
   onOpenCue,
+  onOpenBook,
+  onRequestUnlock,
 }: StackDetailProps) {
   const [reorderCues] = useReorderCueStackCuesMutation()
   const [sortByCueNumber] = useSortCueStackByCueNumberMutation()
@@ -195,6 +201,12 @@ export function StackDetail({
     [stack, projectId, reorderCues],
   )
 
+  /** The cue sheet's drag, on the cards view's own mutation — one reorder, two surfaces. */
+  const handleSheetReorder = useCallback(
+    (cueIds: number[]) => reorderCues({ projectId, stackId: stack.id, cueIds }),
+    [projectId, reorderCues, stack.id],
+  )
+
   return (
     <div className="@container flex-1 flex flex-col overflow-hidden">
       {/* Header — controls drop their text labels progressively as the content area narrows
@@ -272,6 +284,9 @@ export function StackDetail({
           locked={locked}
           openedCueId={openedCueId}
           onOpenCue={(cueId) => onOpenCue?.(cueId)}
+          onOpenBook={onOpenBook}
+          onRequestUnlock={onRequestUnlock}
+          onReorder={handleSheetReorder}
         />
       ) : (
       /* Cue list — scrolls within the recessed Row 4 surface set on the root above. */

@@ -1,10 +1,11 @@
-import { memo, useCallback, useMemo, useRef, useSyncExternalStore } from 'react'
+import { memo, useCallback, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Lock, LockOpen, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { lightingApi } from '@/api/lightingApi'
 import { DESK_OFFLINE_LABEL } from '@/api/wsGesture'
 import { useChannelValue } from '@/hooks/usePropertyValues'
+import { useContainerBand } from '@/hooks/useContainerBand'
 import { useFixtureListQuery, type Fixture, type PropertyDescriptor } from '@/store/fixtures'
 import { useUpdateChannelMutation } from '@/store/channels'
 import { useParkChannelMutation, useUnparkChannelMutation } from '@/store/park'
@@ -22,23 +23,39 @@ import type { SheetColumn, SheetRow } from '@/components/sheet/sheetModel'
 import type { ChannelMappingEntry } from '@/api/channelMappingApi'
 import type { ProgrammerKeyState } from '@/api/programmerWsApi'
 
-/** Sixteen addresses to a row: the address space is the thing being read, and a fixture's RGB run reads across. */
-export const DMX_COLUMNS = 16
+/** The row head, 48px, and the floor a cell needs to hold `001 Front PAR` over a value. */
+const ROW_HEAD_WIDTH = 48
+const MIN_CELL_WIDTH = 64
 /** The DMX sheet's cells carry two lines, so its rows are 44 rather than 36. */
 export const DMX_ROW_HEIGHT = 44
 
+/**
+ * **How many addresses a row holds, widest first** — sixteen on a desk, eight on a tablet, four on
+ * a phone. The address space is the thing being read and a fixture's footprint runs across a row,
+ * so the count halves rather than taking any value: every common footprint divides into these, and
+ * a row's base stays a round address (`001`, `009`, `017`) whichever arm is showing.
+ *
+ * Each needs `48 + 64 × n` of container to be drawn without scrolling sideways, and the widest that
+ * fits is the one used. Exported for `DmxSheet.test.tsx`, which pins the arms against the floors.
+ */
+export const DMX_ROW_WIDTHS = [16, 8, 4] as const
+
+/** What `DMX_ROW_WIDTHS` needs of the container, in the same order. */
+const DMX_ROW_WIDTH_FLOORS = DMX_ROW_WIDTHS.map((n) => ROW_HEAD_WIDTH + MIN_CELL_WIDTH * n)
+
 export type DmxColumnKey = `c${number}`
 
-/** One row of sixteen addresses, from `base`. */
+/** One row of `columnCount` addresses, from `base`. */
 export interface DmxRow extends SheetRow {
   base: number
 }
 
-const ROWS: DmxRow[] = Array.from({ length: 512 / DMX_COLUMNS }, (_, r) => ({
-  id: `row:${r * DMX_COLUMNS + 1}`,
-  base: r * DMX_COLUMNS + 1,
-}))
-const COLUMN_KEYS = Array.from({ length: DMX_COLUMNS }, (_, i) => `c${i}` as DmxColumnKey)
+function rowsFor(columnCount: number): DmxRow[] {
+  return Array.from({ length: 512 / columnCount }, (_, r) => ({
+    id: `row:${r * columnCount + 1}`,
+    base: r * columnCount + 1,
+  }))
+}
 
 /** The fixture property behind an address, for the ownership ring. */
 interface ChannelOwner {
@@ -271,6 +288,18 @@ export function DmxSheet({
   const owners = useMemo(() => channelOwners(fixtures ?? []), [fixtures])
   const blind = useProgrammerBlind()
 
+  // **How many addresses fit on a row** — the widest arm the container can draw without scrolling
+  // sideways. `useContainerBand` reads the floors straight off `DMX_ROW_WIDTHS`, so the arms and
+  // the choice between them are one list rather than an array beside a hand-written ternary. A
+  // container query could not answer it at all: the row *count* is JavaScript, not a class.
+  const [measureRef, band] = useContainerBand(DMX_ROW_WIDTH_FLOORS)
+  const columnCount = DMX_ROW_WIDTHS[band]
+  const rows = useMemo(() => rowsFor(columnCount), [columnCount])
+  const columnKeys = useMemo(
+    () => Array.from({ length: columnCount }, (_, i) => `c${i}` as DmxColumnKey),
+    [columnCount],
+  )
+
   // A fixture's footprint is a run of consecutive addresses with one fixture key; its first cell
   // carries the name, and alternate runs are tinted so the reading eye can tell them apart.
   const runs = useMemo(() => {
@@ -299,13 +328,16 @@ export function DmxSheet({
 
   const columns = useMemo<SheetColumn<DmxRow, DmxColumnKey>[]>(
     () =>
-      COLUMN_KEYS.map((key, i) => ({
+      columnKeys.map((key, i) => ({
         key,
         label: `+${i}`,
         // One kind for all sixteen: a marquee across a row is eight columns of one, and a level
         // typed into any of them is meant for every selected address.
         kind: 'level',
-        width: 'minmax(64px, 1fr)',
+        width: `minmax(${MIN_CELL_WIDTH}px, 1fr)`,
+        // No marks gutter: this cell draws no corner glyph, and the 18px made its ownership ring
+        // a different box from the selection overlay drawn over it — see `SheetColumn.gutter`.
+        gutter: false,
         // The channel number is the cell's identity; the live value is read by the cell itself.
         value: (row) => row.base + i,
         cell: (row, props) => {
@@ -333,7 +365,7 @@ export function DmxSheet({
           for (const row of rows) write(row.base + i, 0)
         },
       })),
-    [blind, mappings, owners, parkValueMap, runs, universe, write],
+    [blind, columnKeys, mappings, owners, parkValueMap, runs, universe, write],
   )
 
   const copy = useCallback(
@@ -349,17 +381,40 @@ export function DmxSheet({
   )
   const permission = useMemo(() => ({ entry: connected, clear: connected }), [connected])
   const cellDisabled = useCallback(() => !connected, [connected])
-  const sheet = useSheet<DmxRow, DmxColumnKey>({ rows: ROWS, columns, permission, copy, cellDisabled })
+  const sheet = useSheet<DmxRow, DmxColumnKey>({ rows, columns, permission, copy, cellDisabled })
   const { cellCount } = sheet
 
-  /** The selected addresses, in address order — what Park, Unpark and Fan act on. */
-  const selectedChannels = useMemo(
-    () =>
-      sheet.columnGroups
-        .flatMap(({ col, rows }) => rows.map((row) => row.base + Number(col.slice(1))))
-        .sort((a, b) => a - b),
-    [sheet.columnGroups],
-  )
+  // **A row width change drops the cell selection, and drops it during the render that changes
+  // it.** Re-basing the rows makes the same `rowId`/`col` pair name a different address — `row:17 ·
+  // c3` is 020 at sixteen wide and 012 at eight — and nothing prunes it, because the row ids
+  // survive (16, 8 and 4 are multiples, so every wide row id exists narrow too) and `byColumn`
+  // reads the stored keys rather than the visible ones. In an effect that left one painted frame
+  // where `selectedChannels` named an address nothing on screen showed as selected; React's own
+  // "adjust state when a prop changes" reset re-renders before touching the DOM, so there is no
+  // such frame. Clearing an empty selection is a no-op, so the mount costs nothing.
+  const { clear: clearCells } = sheet.cellSelection
+  const [bandAtSelection, setBandAtSelection] = useState(columnCount)
+  if (bandAtSelection !== columnCount) {
+    setBandAtSelection(columnCount)
+    clearCells()
+  }
+
+  /**
+   * The selected addresses, in address order — what Park, Unpark and Fan act on.
+   *
+   * Filtered by the columns this arm actually has, the way `useSheet`'s own `selectedColumns` and
+   * `fanPlans` are (they go through `columnByKey`): `columnGroups` is built from the stored cell
+   * keys, so a `c9` held from the sixteen-wide arm would otherwise resolve to `base + 9` — a real
+   * address, and one the operator can see no highlight on. The reset above means that cannot
+   * outlive a render; this means it cannot be *read* even within one.
+   */
+  const selectedChannels = useMemo(() => {
+    const known = new Set<string>(columnKeys)
+    return sheet.columnGroups
+      .filter(({ col }) => known.has(col))
+      .flatMap(({ col, rows }) => rows.map((row) => row.base + Number(col.slice(1))))
+      .sort((a, b) => a - b)
+  }, [columnKeys, sheet.columnGroups])
   // One fan over every selected cell in address order, rather than one per column: a marquee
   // across eight addresses in a row is eight columns of one, and a fan is what that gesture means.
   const fanPlans = useMemo<FanPlan[]>(
@@ -456,8 +511,8 @@ export function DmxSheet({
   const patched = useMemo(() => Object.keys(mappings ?? {}).length, [mappings])
 
   return (
-    <div className="flex min-h-0 flex-col">
-      <div className="@container -mx-4 mb-3 border-t">
+    <div ref={measureRef} className="flex min-h-0 flex-1 flex-col">
+      <div className="@container shrink-0">
         <SelectionBar
           rowLabel={null}
           cellLabel={cellCount > 0 ? `${cellCount} channel${cellCount === 1 ? '' : 's'}` : null}
@@ -474,11 +529,12 @@ export function DmxSheet({
       </div>
       <SheetTable<DmxRow, DmxColumnKey>
         {...sheet.tableProps}
+        fill
         rowHeight={DMX_ROW_HEIGHT}
-        minWidth={`${48 + 64 * DMX_COLUMNS}px`}
+        minWidth={`${ROW_HEAD_WIDTH + MIN_CELL_WIDTH * columnCount}px`}
         firstColumn={{
           label: '',
-          width: '48px',
+          width: `${ROW_HEAD_WIDTH}px`,
           selectsRows: false,
           render: (row) => (
             <span className="relative font-mono text-[11px] tabular-nums text-muted-foreground">
@@ -487,7 +543,7 @@ export function DmxSheet({
           ),
         }}
       />
-      <div className="flex h-[22px] items-center gap-3 whitespace-nowrap border-x border-b px-3 text-[10.5px] text-muted-foreground">
+      <div className="flex h-[22px] shrink-0 items-center gap-3 overflow-hidden whitespace-nowrap border-t px-3 text-[10.5px] text-muted-foreground">
         <span>
           Universe {universe} · {patched} of 512 patched · {parkValueMap.size} parked
         </span>

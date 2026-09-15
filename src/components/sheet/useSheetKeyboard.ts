@@ -5,6 +5,13 @@ import { marqueeOwnsKeyTarget } from './cellEntry'
 import type { CellKeyboardPermission } from './cellEntry'
 import type { RowId } from './cellSelectionModel'
 
+/** A cell gesture the surface's permission refused, and the key that asked for it. */
+export interface SheetKeyRefusal {
+  gesture: 'entry' | 'clear'
+  /** `KeyboardEvent.key` — `'Enter'`, `'Backspace'`, `'Delete'`, or the character typed. */
+  key: string
+}
+
 /**
  * The window-level keys a sheet's cell selection answers: Escape, Enter, a typed character,
  * Backspace / Delete.
@@ -38,6 +45,7 @@ export function useSheetKeyboard<C extends string>({
   onEscape,
   onOpen,
   onClear,
+  onRefused,
 }: {
   /** How many cells are selected — zero means the cell arms are inert and only Escape is heard. */
   cellCount: number
@@ -50,6 +58,19 @@ export function useSheetKeyboard<C extends string>({
   onOpen: (seed: string) => void
   /** Backspace / Delete: clear the selected cells. */
   onClear: () => void
+  /**
+   * A cell gesture was aimed at the selection and [permission] refused it. Given, the surface gets
+   * a chance to say why and offer a way out; absent, the key is swallowed as it always was.
+   *
+   * **The surface decides which keys it may claim, not this hook.** Return true to claim the key —
+   * the hook then `preventDefault()`s it — or false/undefined to leave it to whoever else wants it.
+   * Which keys are safe to take depends entirely on what else the *surface* has bound, which is
+   * knowledge this file has no business holding: the cue sheet claims Enter alone, because while a
+   * show is locked `useTransportKeys` owns Backspace (BACK) and a typed `l` (the lock toggle, the
+   * keyboard's own way back to editing), and both of those stand aside on `defaultPrevented`.
+   * That reasoning lives in `CueSheet`, beside the hook it is about.
+   */
+  onRefused?: (refusal: SheetKeyRefusal) => boolean | void
 }): void {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -71,7 +92,10 @@ export function useSheetKeyboard<C extends string>({
         e.target.closest('button, a, [role="menuitem"], [role="menu"]') != null
       if (e.metaKey || e.ctrlKey || e.altKey || onControl) return
       if (e.key === 'Enter') {
-        if (!permission.entry) return
+        if (!permission.entry) {
+          if (onRefused?.({ gesture: 'entry', key: e.key }) === true) e.preventDefault()
+          return
+        }
         e.preventDefault()
         onOpen('')
         return
@@ -80,18 +104,24 @@ export function useSheetKeyboard<C extends string>({
         // A digit or a dot is the start of a number, and a letter is the start of a type-ahead —
         // so the character that opens an editor is anything a field on the other side could want,
         // and each editor takes the ones it can use.
-        if (!permission.entry) return
+        if (!permission.entry) {
+          if (onRefused?.({ gesture: 'entry', key: e.key }) === true) e.preventDefault()
+          return
+        }
         e.preventDefault()
         onOpen(e.key)
         return
       }
       if (e.key === 'Backspace' || e.key === 'Delete') {
-        if (!permission.clear) return
+        if (!permission.clear) {
+          if (onRefused?.({ gesture: 'clear', key: e.key }) === true) e.preventDefault()
+          return
+        }
         e.preventDefault()
         onClear()
       }
     }
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [cellCount, permission.entry, permission.clear, isCellSelected, onEscape, onOpen, onClear])
+  }, [cellCount, permission.entry, permission.clear, isCellSelected, onEscape, onOpen, onClear, onRefused])
 }

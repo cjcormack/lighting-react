@@ -1,6 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AudioWaveform, Layers, Lock, Play, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/utils'
 import { usePatchProjectCueMutation } from '@/store/cues'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
@@ -15,6 +25,7 @@ import { FanPopover, type FanPlan } from '@/components/sheet/FanPopover'
 import { SelectionBar } from '@/components/sheet/SelectionBar'
 import { SheetTable } from '@/components/sheet/SheetTable'
 import { useSheet } from '@/components/sheet/useSheet'
+import type { SheetKeyRefusal } from '@/components/sheet/useSheetKeyboard'
 import { OptionCell, type SheetOption } from '@/components/sheet/cells/OptionCell'
 import { TextCell } from '@/components/sheet/cells/TextCell'
 import { PHONE_FOLDED_CLASS, WORD_CLASS } from '@/components/sheet/toolbarFolds'
@@ -62,8 +73,20 @@ export interface CueSheetProps {
    * sheet. Consumed on arrival and whenever it changes.
    */
   openedCueId?: number | null
-  /** Open a cue's card on the cards view — Book, Layers and FX are read-outs that do this. */
+  /** Open a cue's card on the cards view — Layers and FX are read-outs that do this. */
   onOpenCue: (cueId: number) => void
+  /** Open the Prompt Book at this cue's anchor — the Book column's read-out. */
+  onOpenBook?: (cueId: number) => void
+  /**
+   * The show is locked and the operator reached for an edit anyway. Given, the refused gestures
+   * stop being dead controls and ask to unlock instead; absent, they stay disabled with the reason.
+   */
+  onRequestUnlock?: () => void
+  /**
+   * Reorder the stack — every row id in its new order, separators included, which is the same
+   * `reorderCues` the cards view's drag calls. Absent leaves the rows static.
+   */
+  onReorder?: (cueIds: number[]) => void
 }
 
 /**
@@ -90,6 +113,11 @@ export interface CueSheetProps {
  * spread there is).
  *
  * No Hooks column: `CueStackCueEntry` carries no trigger count, and adding one is a backend field.
+ *
+ * **Blank means unsettable; an em-dash means empty but settable.** Follow and Notes draw the dash
+ * because a marquee can reach them and Set will write them; a read-out (Book, Layers, FX) and a
+ * snap cue's Curve draw nothing at all, because there is no cell there to select. One glyph for
+ * both made half the sheet's dashes look editable. Any column added here answers the same way.
  */
 export function CueSheet({
   stack,
@@ -102,6 +130,9 @@ export function CueSheet({
   locked = false,
   openedCueId,
   onOpenCue,
+  onOpenBook,
+  onRequestUnlock,
+  onReorder,
 }: CueSheetProps) {
   const [patchCue] = usePatchProjectCueMutation()
   const patch = useCallback(
@@ -212,7 +243,8 @@ export function CueSheet({
         cell: (_row, props) => (
           <OptionCell {...(props as React.ComponentProps<typeof OptionCell>)} options={CURVE_OPTIONS} />
         ),
-        display: () => <span className="mx-1.5 text-xs text-muted-foreground/60">—</span>,
+        // Nothing to set on a snap cue, so nothing drawn — see the docblock's blank-vs-em-dash rule.
+        display: () => null,
         write: (batch, value) => {
           if (typeof value !== 'string' || !CURVE_OPTIONS.some((o) => o.value === value)) return false
           for (const row of batch) if (value !== row.cue.fadeCurve) patch(row.cue.id, { fadeCurve: value })
@@ -266,18 +298,28 @@ export function CueSheet({
       },
       {
         key: 'book',
+        // Wider than the design's 76px, and not in the mono face: the mockup's value was `p1`,
+        // and a real one is a sentence — `bottom of p. 12`, up to 85px of proportional 11px text.
+        // At 76px mono it wrapped to two lines and pushed the cell past the row's fixed height,
+        // painting over the row below. The kit clips a read-out now (`SheetTable`), so this is
+        // about the label being *readable* rather than about the overflow.
         label: 'Book',
-        width: '76px',
+        width: '108px',
         value: () => undefined,
         display: (row) => {
           const location = locationByCue?.get(row.cue.id)
+          // **The Book column opens the Prompt Book**, not the cue's card — it is the one read-out
+          // that names a place in another document, and sending it to the card was answering a
+          // different question from the one the column asks.
           return location ? (
-            <ReadOut onClick={() => onOpenCue(row.cue.id)} title="Open the cue's card">
-              <span className="font-mono text-[11px]">{location}</span>
+            <ReadOut
+              onClick={() => onOpenBook?.(row.cue.id)}
+              disabled={onOpenBook == null}
+              title={`${location} — open the Prompt Book here`}
+            >
+              <span className="truncate text-[11px]">{location}</span>
             </ReadOut>
-          ) : (
-            <span className="mx-1.5 text-xs text-muted-foreground/60">—</span>
-          )
+          ) : null
         },
       },
       {
@@ -291,9 +333,7 @@ export function CueSheet({
               <CountBadge n={row.cue.layerCount} />
               <Layers className="size-3" />
             </ReadOut>
-          ) : (
-            <span className="mx-1.5 text-xs text-muted-foreground/60">—</span>
-          ),
+          ) : null,
       },
       {
         key: 'fx',
@@ -306,9 +346,7 @@ export function CueSheet({
               <CountBadge n={row.cue.adHocEffectCount} className="border-violet-400/60" />
               <AudioWaveform className="size-3" />
             </ReadOut>
-          ) : (
-            <span className="mx-1.5 text-xs text-muted-foreground/60">—</span>
-          ),
+          ) : null,
       },
       {
         key: 'notes',
@@ -340,7 +378,7 @@ export function CueSheet({
         },
       },
     ],
-    [activeCueId, locationByCue, onOpenCue, patch, standbyCueId],
+    [activeCueId, locationByCue, onOpenBook, onOpenCue, patch, standbyCueId],
   )
 
   const copy = useCallback(
@@ -353,7 +391,50 @@ export function CueSheet({
   )
   const permission = useMemo(() => ({ entry: !locked, clear: !locked }), [locked])
   const cellDisabled = useCallback(() => locked, [locked])
-  const sheet = useSheet<CueSheetRow, CueColumnKey>({ rows, columns, permission, copy, cellDisabled })
+
+  /**
+   * **A refused edit asks to unlock rather than doing nothing.** Locked, Set · Clear · Fan were
+   * greyed out and ⏎ was swallowed — which reads as a broken sheet rather than as a mode, since
+   * the marquee that put the operator there still works. Now each of those opens this dialog, and
+   * the way out is one press.
+   *
+   * Offered only when the lock is the operator's to lift (`onRequestUnlock` is withheld where the
+   * backend would refuse the write anyway — see `ShowPage`), so the inert case keeps the disabled
+   * buttons and their reason, which is the honest answer there.
+   */
+  const [unlockAsked, setUnlockAsked] = useState(false)
+  const askToUnlock = useCallback(() => setUnlockAsked(true), [])
+  /** The verbs' half: a press, so there is no key to weigh. */
+  const refuseVerb = locked && onRequestUnlock ? askToUnlock : undefined
+
+  /**
+   * The keyboard's half — **Enter alone**, which is this surface's call to make rather than the
+   * kit's. While a show is locked, `useTransportKeys` owns Backspace (it is BACK) and a typed `l`
+   * (the lock toggle, and the keyboard's own way back to editing); both stand aside on
+   * `defaultPrevented`, so claiming either here would take them away in the state they matter
+   * most. The transport binds no Enter.
+   *
+   * Memoised, not an inline ternary: `useSheetKeyboard` has this in its effect's deps, so an
+   * identity that moved per render would tear down and rebuild a window keydown listener at
+   * render rate.
+   */
+  const refuseKey = useMemo(() => {
+    if (!locked || !onRequestUnlock) return undefined
+    return ({ key }: SheetKeyRefusal) => {
+      if (key !== 'Enter') return false
+      setUnlockAsked(true)
+      return true
+    }
+  }, [locked, onRequestUnlock])
+
+  const sheet = useSheet<CueSheetRow, CueColumnKey>({
+    rows,
+    columns,
+    permission,
+    copy,
+    cellDisabled,
+    onRefused: refuseKey,
+  })
   const { selectedRows, cellCount, setRows, scrollTo } = sheet
 
   // The deep link: select the addressed cue's row and bring it into view — **once per id**. Not
@@ -404,10 +485,12 @@ export function CueSheet({
             setRef={sheet.setButtonRef}
             onSet={sheet.toggleCellEditor}
             onClear={sheet.clearSelectedCells}
+            onRefused={refuseVerb}
             fan={
               <FanPopover
                 plans={sheet.fanPlans}
                 disabledReason={locked ? LOCKED_REASON : null}
+                onRefused={refuseVerb}
                 drivableHint="fade"
                 className={PHONE_FOLDED_CLASS}
               />
@@ -462,6 +545,19 @@ export function CueSheet({
         {...sheet.tableProps}
         onRowClick={onRowClick}
         fill
+        // **Reordering is an unlocked gesture**, like every other edit on this sheet — the grip is
+        // drawn only then, and the rows the cards view can drag are the rows this can. The ids come
+        // back as row ids (`cue:<n>`), which is the sheet's vocabulary, so they are unwrapped here
+        // rather than making the kit know what a cue is.
+        rowDrag={
+          onReorder
+            ? {
+                enabled: !locked,
+                onReorder: (ids) =>
+                  onReorder(ids.map((id) => Number(id.slice('cue:'.length))).filter(Number.isFinite)),
+              }
+            : undefined
+        }
         minWidth={`${100 + columns.reduce((n, c) => n + trackFloor(c.width), 0)}px`}
         rowClass={(row) =>
           row.cue.id === activeCueId
@@ -483,18 +579,20 @@ export function CueSheet({
                 {completedSet.has(row.cue.id) && !active && (
                   <span className="sr-only">Played</span>
                 )}
+                {/* **A double click opens it, like every value cell on this sheet.** It was a
+                    single click, which had to swallow the press so the row underneath did not
+                    select — so the Cue column was the one column where a click meant something
+                    different. Now the single click selects the row (or arms the cue, locked) and
+                    the second gesture edits, which is the grid's rule everywhere else. */}
                 <span
                   className={cn(
                     'min-w-0 font-mono text-sm',
                     row.cue.cueNumberAuto ? AUTO_CUE_NUMBER_CLASS : 'font-semibold',
                   )}
-                  // Unlocked, the number is an inline field and its click must not select the
-                  // row under it. Locked, the field is inert text and the number is the largest
-                  // thing in the Cue column — so the click bubbles to the column and arms.
-                  onClick={locked ? undefined : (e) => e.stopPropagation()}
                 >
                   <InlineEditField
                     value={row.cue.cueNumber ?? ''}
+                    openOn="doubleClick"
                     formatDisplay={(v) => <TruncateStart text={v ? `Q${v}` : '—'} />}
                     onCommit={(next) => {
                       const trimmed = next.trim() || null
@@ -505,8 +603,8 @@ export function CueSheet({
                     placeholder="14A"
                     title={
                       row.cue.cueNumberAuto
-                        ? 'Auto-numbered from position — click to set an explicit cue number'
-                        : 'Click to edit the cue number'
+                        ? 'Auto-numbered from position — double-click to set an explicit cue number'
+                        : 'Double-click to edit the cue number'
                     }
                     className="min-w-0 max-w-full px-0.5"
                   />
@@ -516,6 +614,28 @@ export function CueSheet({
           },
         }}
       />
+      <AlertDialog open={unlockAsked} onOpenChange={setUnlockAsked}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unlock the show to edit?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The show is running and locked, so a stray click cannot change it. Unlocking leaves it
+              running and re-locks itself on the next GO — your selection is kept either way.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Stay locked</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setUnlockAsked(false)
+                onRequestUnlock?.()
+              }}
+            >
+              Unlock
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <div className="flex h-[22px] shrink-0 items-center gap-3 whitespace-nowrap border-t px-3 text-[10.5px] text-muted-foreground">
         <span>
           {standardCount} cue{standardCount === 1 ? '' : 's'}
@@ -538,20 +658,27 @@ function ReadOut({
   onClick,
   title,
   className,
+  disabled,
   children,
 }: {
   onClick: () => void
   title: string
   className?: string
+  /** The host gave this read-out nowhere to go — it stays legible but inert. */
+  disabled?: boolean
   children: React.ReactNode
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       title={title}
       className={cn(
-        'mx-1 inline-flex h-7 items-center gap-1.5 rounded px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground',
+        // `min-w-0` + `whitespace-nowrap`: the cell is a fixed grid track and the row a fixed
+        // height, so a read-out that wraps grows the row and paints over its neighbour.
+        'mx-1 inline-flex h-7 min-w-0 items-center gap-1.5 whitespace-nowrap rounded px-1.5 text-xs text-muted-foreground',
+        'enabled:hover:bg-accent enabled:hover:text-foreground disabled:cursor-default',
         className,
       )}
     >

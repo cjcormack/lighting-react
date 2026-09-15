@@ -560,11 +560,18 @@ shifts every later gap down. Reading the index as an `arrayMove` destination ins
 self-consistent and only the composition was wrong. `buskDnd.test.ts` composes the two and asserts
 the slot and the landing place agree; testing either half alone passes with the bug in.
 
-**There is one `DndContext` in the app**, in `components/dnd/DeskDndProvider.tsx` (it was
+**There is one *app-wide* `DndContext`**, in `components/dnd/DeskDndProvider.tsx` (it was
 `CueSlotDndProvider`; it is not about cue slots). `Layout.tsx` mounts it around **both** the FX
 cue-slot overlay and the routed page, and the busk page joins it with `useDndMonitor` rather than
-nesting one — a nested context wins for its subtree and would hide the busk page from the overlay's
-droppables, which is exactly the drop the plan's session 3 needs. The two surfaces coexist by
+nesting one.
+
+Three surfaces do nest one of their own, and the line between them and the busk page is whether the
+drag has to *cross* into the shell's droppables: the show's cue cards (`StackDetail`), the stack
+list (`ShowOverview`) and the cue sheet's row drag (`SheetTable`'s `rowDrag`, mounted only for a
+sheet that asked for it) each reorder a list **within themselves**, and none of them has a gesture
+that ends on a cue slot. A nested context wins for its subtree, which is exactly why the busk page
+must not have one: it would hide that page from the overlay's droppables, which is exactly the drop
+the plan's session 3 needs. The overlay and the busk page coexist by
 **mutual ignorance of ids and of foreign *targets***: `parseBuskDragId` answers null for a `slot-…`
 id, and the slot handler returns for any `over` that is not a slot. It is **not** ignorance of
 *sources* — a drop onto a slot is resolved in the provider whatever lifted it, today a sibling slot
@@ -937,27 +944,103 @@ Three surface rules, each pinned by its test:
   network failure; both are lighting7 work and Chris's call. Clear is refused on Address, Fixture,
   Key and Stage; offered on Mount, Angle and Gel. It stays the Patch List tab; row B is universe
   toggle · filter · spacer · Groups · Columns · + Patch, and the universe chips carry a fill bar.
+  **A double click on a fixture's name renames it in place** (`InlineEditField openOn="doubleClick"`,
+  which renders a span rather than a button so the single click underneath still selects the row and
+  still starts the row marquee); the pencil beside it still opens the full editor, and is the
+  keyboard route.
+  **Set over N *keys* fans one typed key over them**, `lib/fixtureKey.ts`: one head takes it as it
+  is, several count up from it, continuing the number, the separator and the zero padding the typed
+  key already carries — the vocabulary `AddFixtureSheet` mints keys in, read back off what was typed
+  rather than imposed. Two refusals are named before Apply: a key another head holds, and a set that
+  cannot be *ordered*. The ordering exists because this PUT, unlike the address one, checks
+  uniqueness on **every call** — so `par-1 … par-4` re-keyed from `par-2` walks *down*, and the
+  writes go out one at a time and stop on the first failure, saying how far they got. A true swap
+  (the visible order is not the key order) is refused rather than broken open by parking a head on a
+  synthetic key: a PUT failing after a park leaves a fixture called `par-2-tmp1` on a live rig with
+  nothing to put it back. **One batch at a time**, too: `write` has to answer synchronously, so the
+  loop runs detached and the editor closes over it — a second batch planned in that window would be
+  planned against an `allPatches` the first has not landed in, and two plans each assuming they are
+  the only writer is how one walks onto a key the other is mid-way through vacating. **`key` is also outside `METADATA_ONLY_PUT_KEYS`**, so each of those PUTs
+  rebuilds the fixture registry and broadcasts — the same cost the address batch has always had, and
+  the same answer: a bulk route is lighting7 work and Chris's call.
+  **A batch landing is drawn one head to a line** (`cells/LandingLines.tsx`), shared by the address
+  editor and the Key column, rather than joined with `·` into a paragraph read at the worst moment.
 - **DMX sheet** (`DmxSheet.test.tsx`): `/projects/:id/channels/:universe/table`, sticky key
-  `channels.view`, a 16-wide grid of 44px cells — address and attribute on line one (the fixture
+  `channels.view`, a grid of 44px cells — address and attribute on line one (the fixture
   name on the first cell of its footprint, the run tinted), the raw 0–255 value on line two,
   ownership rings read through the property that drives the channel. No row axis: the row head
   hangs no `data-grid-name-header`, so every press is a cell press, and Fan is one plan over every
   selected cell in address order. Writes are `channels.update` per address; Clear is 0; Park /
   Unpark act on the selection; the desk being offline is the read-only scope; Unpark All keeps its
   confirm and there is no Edit/Done toggle. Raw 0–255 only, no level bar — left for later.
+
+  **A row is 16 addresses wide on a desk, 8 on a tablet and 4 on a phone** — `DMX_ROW_WIDTHS`, the
+  widest arm whose `48 + 64 × n` the container can draw without scrolling sideways, measured by
+  `hooks/useContainerBand.ts`. It halves rather than taking any n so that a fixture's footprint
+  still reads across a row and a row's base stays a round address (`001`, `009`, `017`). A
+  container query cannot answer it: the count is JavaScript, not a class. **Changing arms drops the
+  cell selection, during the render that changes it** — 16, 8 and 4 are multiples, so every wide
+  row id exists narrow too, and the same `rowId · col` pair would silently name a different
+  address; done in an effect it left one painted frame where `selectedChannels` named an address
+  nothing showed as selected.
+
+  Its cells set **`SheetColumn.gutter: false`**: they draw no corner glyph, and the kit's 18px marks
+  gutter made a cell's own ownership ring a box 18px narrower than the selection overlay drawn over
+  it — the two lines an operator reads a channel by, disagreeing on three of four edges. Without it
+  the wrapper is padded 2px all round and `cellSelectionClass` insets the overlay to match.
+
+  **The route is full height, not a `Card` in a scrolling page** (`routes/ChannelsTable.tsx`): as a
+  card the page scrolled *and* the table scrolled inside a `calc(100vh - 14rem)` cap, two bars for
+  one list, and a 393px-tall landscape phone got 169px of grid. Its breadcrumb header is 48px like
+  `ShowHeader`'s and `StackDetail`'s — a header, not one of the 40px chrome rows.
 - **Cue sheet** (`CueSheet.test.tsx`): `/projects/:id/show/stacks/:stackId/table`, sticky key
   `show.view`, the switcher on the `StackDetail` header. Name · Fade · Curve · Follow · Notes are
-  cells, the cue number keeps its inline edit on the Cue column, Book · Layers · FX are read-outs
-  that open the card on the cards view (with `CARDS_LINK_STATE`, so the sticky does not bounce it
-  back; a peek is not a change of view). **No Hooks column**: `CueStackCueEntry` carries no trigger
-  count, and adding one is a backend field. **The lock is the sheet's read-only scope** the way
+  cells, the cue number is an inline field on the Cue column **opened by a double click** like every
+  value cell beside it (a single click there selects the row, or arms the cue while locked — it was
+  a single click that had to swallow the press, which made the Cue column the one column where a
+  click meant something different). Layers · FX are read-outs that open the card on the cards view
+  (with `CARDS_LINK_STATE`, so the sticky does not bounce it
+  back; a peek is not a change of view); **Book opens the Prompt Book** at that cue instead, through
+  `?cue=`, which is that page's arrival contract and the mirror of the one it mints for Show — it is
+  the one read-out that names a place in another document. **No Hooks column**: `CueStackCueEntry`
+  carries no trigger count, and adding one is a backend field.
+
+  **A cell that cannot be selected is blank**, not an em-dash: the em-dash is the mark an *empty but
+  settable* cell wears (Follow, Notes), and wearing it on a read-out and on a snap cue's Curve made
+  half the sheet's dashes look editable.
+
+  **The lock is the sheet's read-only scope** the way
   Output is the programmer's — locked, every value cell is inert in all four places, the marquee
-  still works, Set · Clear · Fan are disabled with the reason, and a click on the Cue column arms
-  the cue as next; unlocked, cells edit under the amber wash. Writes are one PATCH per cue carrying
-  the field, the cards' own auto-saving contract. The transport is untouched: `useTransportKeys`
-  is enabled exactly while locked, as it always was, and `canOperate` is never handed `locked`.
+  still works, and a click on the Cue column arms
+  the cue as next; unlocked, cells edit under the amber wash. **A refused edit asks to unlock**
+  rather than doing nothing: Set · Clear · Fan stay live and open a confirm, and so does ⏎ — through
+  `useSheetKeyboard`'s `onRefused`, which reports the refused gesture **and the key** and lets the
+  *surface* say whether to claim it. The kit takes no view on which keys are safe: that depends on
+  what else the surface has bound, and here it is Enter alone, because while a show is locked
+  `useTransportKeys` owns Backspace (BACK) and a typed `l` (the lock toggle, the keyboard's own way
+  back) and both stand aside on `defaultPrevented`. That reasoning lives in `CueSheet`, beside the
+  hook it is about, and `CueSheet.test.tsx` pins both keys as untouched. The offer is withheld where
+  the lock is not the operator's to lift (`canEdit` false), where the disabled verbs and their
+  reason are the honest answer. Writes are one PATCH per cue carrying
+  the field, the cards' own auto-saving contract. The transport is otherwise untouched:
+  `useTransportKeys` is enabled exactly while locked, as it always was, and `canOperate` is never
+  handed `locked`.
   The sheet consumes `?cue=` by selecting the addressed cue's row and scrolling to it — the
   external contract holds on both views.
+
+  **Unlocked, a grip in the Cue column reorders cues and separators** — `SheetTable`'s `rowDrag`,
+  on the cards view's own `reorderCues`, so one gesture and one mutation serve both. The
+  `DndContext` is mounted only where a surface asks for it and the rows are turned off through
+  dnd-kit's `disabled` rather than by unmounting it (`StackDetail` learned that one); the grip
+  stops its own `pointerdown` propagating, or starting a drag would also start a marquee.
+
+  **A sortable row is positioned with `top`, never the virtualiser's `translateY`.** dnd-kit
+  measures droppables with transforms discounted, so rows positioned only by a transform all measure
+  at the container's origin: every centre-distance ties, `closestCenter`'s stable sort returns the
+  rows in DOM order on every frame, and the drop lands on the row the drag began on. It does not
+  fail cleanly — dragging **up** still works, because for an upward drag DOM order and distance order
+  agree — which is how it survived a first browser check. `CueSheet.test.tsx` pins the `top`; the
+  sheets with no row drag keep `translateY`, having nothing else competing for `transform`.
 
 **Cards · List and Cards · Table are one switcher and one storage vocabulary.** Fixtures and
 Groups keep the word *List*; Channels and Show say *Table* (their second view is a table and their
@@ -1802,6 +1885,15 @@ and `liveStackId` (the green pip) as separate props, and arming is an explicit, 
 in `OffPlayheadBanner`. The confirmation is not ceremony: `POST /show/go-to` deactivates the stack
 being left and then calls `activateAtFirstCue` on the target, so the target's first cue genuinely
 fires and the desk darkens it again — a visible blip on top of losing the current cue.
+
+**And the Stacks button has to be able to leave one.** `/show`, `/show/stacks/:id` and
+`/show/stacks/:id/table` are three sibling routes with an `element` each, so going back from a stack
+**remounts** `ShowPage` — which reset the `initialDrillDoneRef` that makes the "drill into the live
+stack on arrival" auto-navigate fire once, and the auto-drill put the operator straight back where
+they had just left. A ref cannot say "they asked for the list" across a remount, so the signal rides
+the *location* instead: `STACK_LIST_STATE` on the Stacks button's and the breadcrumb's navigate, read
+by that effect. Do not replace it with a ref or a module-level flag — the first cannot survive the
+remount and the second would suppress the auto-drill for the rest of the tab's life.
 
 **Two cursors reach a cue row, and neither is a mode.** `serverActiveCueId` places the stable
 "on stage" marker; `activeCueId` (the optimistic runner cursor) says which row owns the fade chrome.

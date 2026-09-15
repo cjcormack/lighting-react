@@ -49,6 +49,9 @@ const cue = (id: number, over: Partial<CueStackCueEntry> = {}): CueStackCueEntry
   ...over,
 })
 
+/** The reason a locked, unliftable sheet gives on its disabled verbs. */
+const LOCKED_TITLE = 'Locked — cells are read-only · L to edit'
+
 const STACK: CueStack = {
   id: 10,
   name: 'Act 1',
@@ -131,6 +134,137 @@ describe('CueSheet', () => {
     expect(row(3)).toHaveTextContent('Interval')
     expect(within(row(3)).queryByRole('button')).toBeNull()
     expect(screen.getByText('4 cues · 1 marker')).toBeInTheDocument()
+  })
+
+  it('keeps a read-out on one line, so a long book position cannot grow the row', () => {
+    // `bottom of p. 12` is 85px of text in a 108px track. Wrapped, the cell was 60px tall inside a
+    // 36px row and painted over the row below it — the defect the show table was reported for.
+    draw({ locationByCue: new Map([[1, 'bottom of p. 12']]) })
+    const book = within(row(1)).getByText('bottom of p. 12')
+    expect(book.className).toContain('truncate')
+    expect(book.closest('button')!.className).toContain('whitespace-nowrap')
+    expect(book.closest('[data-cell], div')!.className).toContain('overflow-hidden')
+    // The whole label is still reachable, on the read-out's own hover.
+    expect(book.closest('button')).toHaveAttribute('title', expect.stringContaining('bottom of p. 12'))
+  })
+
+  it('locked: the cue number does not inflate the row — the display box is inline-block', () => {
+    // `InlineEditField`'s read-only branch is a `<span>` wrapping `TruncateStart`'s blocks. Left
+    // inline, its line box measured 59px for a 20px number, and as the grid row's tallest
+    // min-content that became the *track*: every cell in the row was laid out below the row.
+    draw({ locked: true })
+    const number = within(row(1)).getByTitle(/cue number/i)
+    expect(number.className).toContain('inline-block')
+  })
+
+  it('unlocked: a double click on the cue number edits it, and a single click selects the row', () => {
+    draw()
+    const number = within(row(1)).getByTitle(/edit the cue number/i)
+    fireEvent.click(number)
+    expect(row(1)).toHaveAttribute('data-state', 'selected')
+    expect(within(row(1)).queryByLabelText('cue number')).not.toBeInTheDocument()
+    fireEvent.doubleClick(number)
+    const field = within(row(1)).getByLabelText('cue number') as HTMLInputElement
+    expect(field.value).toBe('1')
+    fireEvent.change(field, { target: { value: '12A' } })
+    fireEvent.keyDown(field, { key: 'Enter' })
+    expect(patchCue).toHaveBeenCalledWith({ projectId: 1, cueId: 1, cueNumber: '12A' })
+  })
+
+  it('leaves a cell it cannot select blank rather than drawing an em-dash', () => {
+    // A snap cue has no curve to set and the read-outs are not cells at all; the em-dash belongs to
+    // an empty cell you CAN set, which is what Follow and Notes still draw.
+    draw({ stack: { ...STACK, cues: [cue(1, { fadeDurationMs: null }), cue(2)] } })
+    // Columns after the sticky Cue head: name, fade, curve, follow, book, layers, fx, notes.
+    const cell = (i: number) => row(1).children[i] as HTMLElement
+    // A snap cue's Curve has nothing to set, so it is not a cell at all — and it draws nothing.
+    expect(row(1).querySelector('[data-cell="curve"]')).toBeNull()
+    expect(cell(3).textContent).toBe('')
+    // Book, Layers and FX are read-outs with nothing to show, so they show nothing.
+    expect(cell(5).textContent).toBe('')
+    expect(cell(6).textContent).toBe('')
+    expect(cell(7).textContent).toBe('')
+    // Follow and Notes keep their em-dash: they are empty cells, not absent ones.
+    expect(row(1).querySelector('[data-cell="follow"]')?.textContent).toContain('—')
+    expect(row(1).querySelector('[data-cell="notes"]')?.textContent).toContain('—')
+  })
+
+  it('the Book read-out opens the Prompt Book, not the cue card', () => {
+    const onOpenBook = vi.fn()
+    const onOpenCue = vi.fn()
+    draw({ locationByCue: new Map([[1, 'top of p. 8']]), onOpenBook, onOpenCue })
+    fireEvent.click(within(row(1)).getByText('top of p. 8').closest('button')!)
+    expect(onOpenBook).toHaveBeenCalledWith(1)
+    expect(onOpenCue).not.toHaveBeenCalled()
+  })
+
+  it('locked: a refused edit offers to unlock instead of doing nothing', async () => {
+    const onRequestUnlock = vi.fn()
+    draw({ locked: true, onRequestUnlock })
+    dragFade(0, 1)
+    // The verbs stay live and say why rather than sitting there greyed out.
+    const set = screen.getByRole('button', { name: 'Set' })
+    expect(set).not.toBeDisabled()
+    fireEvent.click(set)
+    expect(await screen.findByText('Unlock the show to edit?')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Unlock' }))
+    expect(onRequestUnlock).toHaveBeenCalled()
+    // …and no cell editor was opened behind it.
+    expect(screen.queryByLabelText('Fade')).not.toBeInTheDocument()
+  })
+
+  it('locked: Enter offers the unlock, and the transport’s own keys are left alone', () => {
+    const onRequestUnlock = vi.fn()
+    draw({ locked: true, onRequestUnlock })
+    dragFade(0, 1)
+    fireEvent.keyDown(window, { key: 'Enter' })
+    expect(screen.getByText('Unlock the show to edit?')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Stay locked' }))
+
+    // Backspace is BACK on a locked show and `l` is the lock toggle — the keyboard's own way back
+    // to editing. Both read `defaultPrevented`, so the sheet must neither claim them nor answer
+    // them with a dialog that would sit over whatever they did.
+    for (const key of ['Backspace', 'l']) {
+      const e = new KeyboardEvent('keydown', { key, cancelable: true, bubbles: true })
+      window.dispatchEvent(e)
+      expect(e.defaultPrevented).toBe(false)
+      expect(screen.queryByText('Unlock the show to edit?')).not.toBeInTheDocument()
+    }
+  })
+
+  it('without a way out, the refused verbs stay disabled and say why', () => {
+    draw({ locked: true })
+    dragFade(0, 1)
+    expect(screen.getByRole('button', { name: 'Set' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Set' })).toHaveAttribute('title', LOCKED_TITLE)
+  })
+
+  it('unlocked: every row carries a reorder grip; locked, none does', () => {
+    const onReorder = vi.fn()
+    const { rerender } = render(
+      <CueSheet stack={STACK} projectId={1} activeCueId={null} onOpenCue={() => {}} onReorder={onReorder} />,
+    )
+    // Cues and separators alike — a marker is a row of the stack and moves with them.
+    expect(screen.getAllByRole('button', { name: 'Reorder row' })).toHaveLength(STACK.cues.length)
+    rerender(
+      <CueSheet stack={STACK} projectId={1} activeCueId={null} onOpenCue={() => {}} onReorder={onReorder} locked />,
+    )
+    expect(screen.queryAllByRole('button', { name: 'Reorder row' })).toHaveLength(0)
+  })
+
+  it('positions a draggable row with `top`, so dnd-kit can measure where it is', () => {
+    // The virtualiser's usual `transform: translateY()` is what a sortable row cannot use: dnd-kit
+    // measures droppables with transforms discounted, so rows positioned only by a transform all
+    // measure at the container's origin. Every centre-distance then ties, `closestCenter`'s stable
+    // sort hands back the rows in DOM order on every frame, and the drop lands on the row the drag
+    // started from. It is not a dead drag either way, which is what made it easy to miss: dragging
+    // *up* still worked, because for an upward drag DOM order and distance order agree.
+    render(
+      <CueSheet stack={STACK} projectId={1} activeCueId={null} onOpenCue={() => {}} onReorder={vi.fn()} />,
+    )
+    const wrappers = [...document.querySelectorAll('[data-row-id]')].map((r) => r.parentElement!)
+    expect(wrappers.map((w) => w.style.top)).toEqual(['0px', '36px', '72px', '108px', '144px'])
+    for (const w of wrappers) expect(w.style.transform).not.toContain('translateY')
   })
 
   it('washes the live row green and the next row blue, as the cards do', () => {

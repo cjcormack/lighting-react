@@ -51,7 +51,7 @@ vi.mock('@tanstack/react-virtual', () => ({
   }),
 }))
 
-import { DmxSheet, DMX_ROW_HEIGHT } from './DmxSheet'
+import { DmxSheet, DMX_ROW_HEIGHT, DMX_ROW_WIDTHS } from './DmxSheet'
 import { resetCellEditorSurfaceMedia } from '@/components/sheet/cells/CellEditorSurface'
 
 const MAPPINGS = {
@@ -67,8 +67,13 @@ function draw(over: Partial<React.ComponentProps<typeof DmxSheet>> = {}) {
   )
 }
 
-/** The sixteen column bands, 64px each after a 48px row head; rows are 44px from a 0-high header. */
-function stubFlatLayout() {
+/**
+ * The column bands, 64px each after a 48px row head; rows are 44px from a 0-high header.
+ *
+ * `width` is what every other element measures, and the sheet reads its own to decide how many
+ * addresses a row holds — 1100 is a desk, and the two narrow arms need less than 1072 and 560.
+ */
+function stubFlatLayout(width = 1100) {
   const rect = (left: number, right: number) =>
     ({ left, top: 0, right, bottom: 0, width: right - left, height: 0, x: left, y: 0, toJSON: () => ({}) }) as DOMRect
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
@@ -77,8 +82,15 @@ function stubFlatLayout() {
       const i = Number(col.slice(1))
       return rect(48 + i * 64, 48 + (i + 1) * 64)
     }
-    return rect(0, 1100)
+    return rect(0, width)
   })
+}
+
+/** The row-head labels the virtualiser drew — `001`, `017`, … at sixteen wide. */
+function rowBases(): string[] {
+  return [...document.querySelectorAll('[data-row-id] > span, [data-row-id] > div > span')]
+    .map((el) => el.textContent ?? '')
+    .filter((t) => /^\d{3}$/.test(t))
 }
 
 /** The address cell's trigger, found by its zero-padded number on the first line. */
@@ -123,6 +135,23 @@ afterEach(() => {
 })
 
 describe('DmxSheet', () => {
+  it('draws the widest arm the container fits, halving to eight and then four', () => {
+    // Driven off the exported arms rather than three hand-written numbers, so adding a fourth arm
+    // is covered by this test rather than silently outside it. Each needs `48 + 64 × n` of
+    // container; one pixel under that floor is the next arm down.
+    expect(DMX_ROW_WIDTHS).toEqual([16, 8, 4])
+    for (const columns of DMX_ROW_WIDTHS) {
+      cleanup()
+      vi.restoreAllMocks()
+      stubFlatLayout(48 + 64 * columns)
+      draw()
+      expect(screen.getAllByText(`+${columns - 1}`)).toHaveLength(1)
+      expect(screen.queryByText(`+${columns}`)).not.toBeInTheDocument()
+      // The row bases stay round addresses whichever arm is showing: 001, then 1 + columns.
+      expect(rowBases()).toEqual(['001', String(1 + columns).padStart(3, '0')])
+    }
+  })
+
   it('draws sixteen addresses to a row at 44px, naming a fixture on the first cell of its run', () => {
     draw()
     expect(screen.getAllByText('+15')).toHaveLength(1)

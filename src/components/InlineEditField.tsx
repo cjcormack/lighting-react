@@ -20,6 +20,17 @@ interface InlineEditFieldProps {
   /** Renders as plain text with no edit affordance. */
   disabled?: boolean
   /**
+   * Which pointer gesture opens the field. `'click'` is the default and the original behaviour.
+   *
+   * `'doubleClick'` is for a field that sits **on a sheet's row-select column**, where a single
+   * click already means "select this row" (CLAUDE.md §The cell editor's three forms: a single
+   * click says what to edit, a second gesture edits it). It renders a plain `<span>` rather than a
+   * `<button>`: a button would swallow the press the row selection and the row marquee are both
+   * listening for, and nothing here stops propagation until the field is actually open. The
+   * keyboard route to the same edit is the row's own Edit affordance.
+   */
+  openOn?: 'click' | 'doubleClick'
+  /**
    * Applied to both the display element and the input, so the row can't jump on open.
    * Pass `truncate` when the host cell needs one clipped line — the field wraps like a
    * plain `<span>` otherwise, matching whatever the read-only markup did.
@@ -58,6 +69,7 @@ export function InlineEditField({
   formatDisplay,
   placeholder,
   disabled = false,
+  openOn = 'click',
   className,
   displayClassName,
   inputClassName,
@@ -195,8 +207,16 @@ export function InlineEditField({
   const text = pending ?? value
   const display = formatDisplay ? formatDisplay(text) : text
   // A transparent border matches the input's box so opening the field can't reflow the row.
+  //
+  // **`inline-block`, not the default inline.** A `<span>` whose child is a block (`TruncateStart`
+  // renders three) is broken into anonymous block boxes, and the line box it leaves behind measures
+  // far taller than the glyphs — 59px for a 20px cue number. Harmless where the host just centres
+  // it; on a sheet the host is a grid item, so that phantom height became the row's *track* and
+  // every cell in a locked cue sheet was laid out 12px below the 36px row, spilling across the
+  // border into the next one. The editing branch is an `<input>` and the enabled display branch a
+  // `<button>`, both already inline-block; this makes the read-only span agree with them.
   const boxClass = cn(
-    'min-w-0 rounded border border-transparent px-1 text-left',
+    'inline-block min-w-0 rounded border border-transparent px-1 text-left',
     // Multi-line values are prose — keep the operator's own line breaks, and let the text wrap
     // rather than running off the side as a single-line cell would.
     multiline && 'block whitespace-pre-wrap',
@@ -210,6 +230,26 @@ export function InlineEditField({
   if (disabled) {
     return (
       <span title={title} className={boxClass}>
+        {display}
+      </span>
+    )
+  }
+
+  // A sheet's row-select column: a single click belongs to the row underneath, so the display is a
+  // span and only the second click opens the field. `stopPropagation` on the double click alone —
+  // the single clicks that make it up must reach the row, and so must the press that starts a
+  // marquee.
+  if (openOn === 'doubleClick') {
+    return (
+      <span
+        title={title}
+        aria-label={`${ariaLabel}: ${text || 'empty'}. Double-click to edit.`}
+        onDoubleClick={(e) => {
+          e.stopPropagation()
+          open()
+        }}
+        className={cn(boxClass, 'cursor-text hover:border-input hover:bg-foreground/[0.06]')}
+      >
         {display}
       </span>
     )

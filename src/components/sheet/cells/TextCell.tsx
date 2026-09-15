@@ -1,11 +1,20 @@
-import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { CellEditorSurface } from './CellEditorSurface'
 import { useCellEditorKeyboard } from './useCellEditorKeyboard'
 import { useCellEditorOpen } from './useCellEditorOpen'
-import type { SheetCellProps } from '../sheetModel'
+import { LandingLines } from './LandingLines'
+import type { SheetCellProps, SheetRow } from '../sheetModel'
+
+/** What a typed draft would do to the whole batch — [AddressCell]'s `AddressLanding` in text form. */
+export interface TextLanding {
+  /** `Front PAR → par-1`, one per row — drawn one to a line; empty where there is nothing to show. */
+  lines: string[]
+  /** The first problem with it, named; null when it lands clear. */
+  error: string | null
+}
 
 export interface TextCellProps extends SheetCellProps<string> {
   /** What the cell shows. Defaults to the value, or an em-dash for an empty one. */
@@ -18,6 +27,13 @@ export interface TextCellProps extends SheetCellProps<string> {
    * answers; the editor stays open so the operator can fix the text rather than lose it.
    */
   validate?: (draft: string) => string | null
+  /**
+   * What a draft would do to the **batch**, computed by the column, which knows the rest of the
+   * rig — the patch list's Key column fans one typed key over the selection and names a collision
+   * before Apply, exactly as `AddressCell` does for a start channel. Called with the batch rows in
+   * visible order, and only while the editor is open.
+   */
+  plan?: (rows: readonly SheetRow[], draft: string) => TextLanding | null
   /** The commit for an emptied field. Absent means an empty draft is refused. */
   allowEmpty?: boolean
 }
@@ -35,6 +51,7 @@ export const TextCell = memo(function TextCell({
   value,
   label,
   batchCount,
+  batchRows,
   disabled,
   autoOpen,
   autoClose,
@@ -48,6 +65,7 @@ export const TextCell = memo(function TextCell({
   placeholder,
   mono,
   validate,
+  plan,
   allowEmpty = false,
 }: TextCellProps) {
   const [draft, setDraft] = useState(value)
@@ -71,7 +89,18 @@ export const TextCell = memo(function TextCell({
   }, [keyboardOpen])
 
   const trimmed = draft.trim()
-  const error = trimmed === '' && !allowEmpty ? `${label} cannot be empty` : (validate?.(draft) ?? null)
+  const empty = trimmed === '' && !allowEmpty
+  // Only while open, and never for an empty draft. Open, because the closure is re-made on every
+  // render of the row (the props object hands a fresh `batchRows` arrow), so a plan computed when
+  // the editor is shut would run per frame of a marquee drag for every visible cell. Non-empty,
+  // because a plan asked what `''` would do answers with whatever its own arithmetic makes of an
+  // empty string — the key scheme fans it to `-1`, `-2` — and the operator would read a preview of
+  // keys beside the "cannot be empty" that says nothing will be written at all.
+  const landing = useMemo(
+    () => (isOpen && plan && !empty ? plan(batchRows(), trimmed) : null),
+    [batchRows, empty, isOpen, plan, trimmed],
+  )
+  const error = empty ? `${label} cannot be empty` : (landing?.error ?? validate?.(draft) ?? null)
   const commit = useCallback(() => {
     if (error) return false
     onCommit(trimmed)
@@ -122,7 +151,10 @@ export const TextCell = memo(function TextCell({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
         />
-        {error && <p className="text-xs text-destructive">{error}</p>}
+        {landing && landing.lines.length > 0 && <LandingLines lines={landing.lines} error={error} />}
+        {error && (landing?.lines.length ?? 0) === 0 && (
+          <p className="text-xs text-destructive">{error}</p>
+        )}
         <div className="flex justify-end">
           <Button
             size="sm"

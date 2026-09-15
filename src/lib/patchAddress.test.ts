@@ -67,7 +67,7 @@ describe('checkLanding', () => {
   it('reports a landing clear when the moved heads sit in free space', () => {
     const report = checkLanding(rig, consecutiveLanding([rig[0], rig[1]], 100))
     expect(report.error).toBeNull()
-    expect(report.summary).toBe('PAR 1 → 1-100 · PAR 2 → 1-106')
+    expect(report.lines).toEqual(['PAR 1 → 1-100', 'PAR 2 → 1-106'])
   })
 
   it('lets a batch land on channels its own members are vacating', () => {

@@ -54,6 +54,8 @@ interface ShowViewProps {
   view?: 'cards' | 'list'
   /** Open a cue's card on the cards view. */
   onOpenCue?: (cueId: number) => void
+  onOpenBook?: (cueId: number) => void
+  onRequestUnlock?: () => void
 }
 
 // Memoized: `ShowPage` subscribes to the runner slice (via `useShowTransport` for the Row 3 show
@@ -89,6 +91,8 @@ export const ShowView = memo(function ShowView({
   includePending,
   view,
   onOpenCue,
+  onOpenBook,
+  onRequestUnlock,
 }: ShowViewProps) {
   const [createCue] = useCreateProjectCueMutation()
   const [deleteCue] = useDeleteProjectCueMutation()
@@ -168,6 +172,8 @@ export const ShowView = memo(function ShowView({
         includePending={includePending}
         view={view}
         onOpenCue={onOpenCue}
+        onOpenBook={onOpenBook}
+        onRequestUnlock={onRequestUnlock}
       />
     )
   }
