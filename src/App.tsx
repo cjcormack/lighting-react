@@ -3,7 +3,7 @@ import { Toaster } from "sonner"
 import { AuthGate } from "./AuthGate"
 import { BootGate } from "./BootGate"
 import Layout from "./Layout"
-import {createBrowserRouter, Navigate, useParams} from "react-router";
+import {createBrowserRouter, Navigate, useLocation, useParams} from "react-router";
 // v8 keeps the DOM-specific entry points in `react-router/dom`.
 import {RouterProvider} from "react-router/dom";
 import {
@@ -26,7 +26,7 @@ import { LooksRedirect, ProjectLooks } from "./routes/Looks";
 import { TemplatesRedirect, ProjectTemplates } from "./routes/Templates";
 import { SpeedMastersRedirect, ProjectSpeedMasters } from "./routes/SpeedMasters";
 import ProjectOverview, { ProjectOverviewRedirect } from "./routes/ProjectOverview";
-import { PatchesRedirect } from "./routes/Patches";
+import { PatchesRedirect, ProjectPatches } from "./routes/Patches";
 import { ShowPage, ShowRedirect } from "./routes/ShowPage";
 import {
   ProgrammerPage,
@@ -78,9 +78,13 @@ const PromptBookRedirect = React.lazy(() =>
   import("./routes/PromptBookPage").then((m) => ({ default: m.PromptBookRedirect })),
 );
 
-function PatchesToSettings() {
+// The patch list was the Patch List tab of Project Settings between the tabbed-settings
+// restructure and the list shell (CLAUDE.md §List shell); a bookmark or a link into the tab lands
+// on the page, `?action=new` and all.
+function SettingsPatchesToPatches() {
   const { projectId } = useParams()
-  return <Navigate to={`/projects/${projectId}/settings/patches`} replace />
+  const { search } = useLocation()
+  return <Navigate to={`/projects/${projectId}/patches${search}`} replace />
 }
 function SurfacesToSettings() {
   const { projectId } = useParams()
@@ -254,10 +258,14 @@ function App() {
           element: <ProjectSyncToSettings />,
         },
 
-        // Legacy per-project paths — keep working but redirect to the new location.
         {
           path: "projects/:projectId/patches",
-          element: <PatchesToSettings />,
+          element: <ProjectPatches />,
+        },
+        // Legacy per-project paths — keep working but redirect to the new location.
+        {
+          path: "projects/:projectId/settings/patches",
+          element: <SettingsPatchesToPatches />,
         },
         {
           path: "projects/:projectId/surfaces",

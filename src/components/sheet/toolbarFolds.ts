@@ -16,11 +16,11 @@
  * thing on it that a tooltip already says. The two compose: a word shows only when the viewport is
  * at least `sm` **and** the container is at least 1100px wide.
  *
- * On `/fixtures/list` and `/groups/list` there is no query container above this toolbar at all, so
- * the container half is *unknown* and never applies — those routes keep exactly today's behaviour,
- * which is what §5 of the space plan asks for. That is a real dependency on those pages not
- * gaining an ancestor `@container`; if one ever does, these words vanish there and the fix is to
- * name the container rather than to widen the threshold.
+ * `/fixtures/list` and `/groups/list` had no query container above this toolbar until the list
+ * shell (CLAUDE.md §List shell) gave them the same row C every other list has, with the bar's own
+ * `@container` above it — so the words fold there at the same widths as on the programmer, which
+ * is the point of one bar. The §5 behaviour those routes kept before that — every word at every
+ * width — went with the bar; the container is the bar's wrapper on every list, never the page.
  */
 export const WORD_CLASS = 'hidden sm:inline @max-[1100px]:hidden'
 
@@ -36,10 +36,9 @@ export const WORD_CLASS = 'hidden sm:inline @max-[1100px]:hidden'
  * are not lost — Locate and Highlight are on the busk target band, and Fan comes back with the
  * width.
  *
- * Same container rule as `WORD_CLASS`, with the same dependency: with no ancestor `@container`
- * the query is false and `/fixtures/list` and `/groups/list` keep every button at every width.
- * `@[600px]` is the bar's phone arm — the threshold row B's key button already uses for "this grid
- * column is a phone's".
+ * Same container rule as `WORD_CLASS`: the bar's wrapper is the container on every list, the two
+ * plain routes included. `@[600px]` is the bar's phone arm — the threshold row B's key button
+ * already uses for "this grid column is a phone's".
  *
  * Exported because the programmer's `SelectionBar` folds its own counts and badge at the same
  * width: one constant, so the two halves of one row cannot fold at different thresholds. The
@@ -60,8 +59,9 @@ export const PHONE_FOLDED_CLASS = '@max-[600px]:hidden'
  * not got. Fan keeps the 600 fold: it is a cell verb like the two beside it, and folding it earlier
  * would break up a group of three.
  *
- * Same container dependency as [WORD_CLASS] and [PHONE_FOLDED_CLASS]: `/fixtures/list` and
- * `/groups/list` have no ancestor `@container`, so the query is never true there and those two
- * routes keep every button at every width.
+ * Same container rule as [WORD_CLASS] and [PHONE_FOLDED_CLASS] — the bar's wrapper, on every
+ * list — but applied to Locate and Highlight only where a strip rides the bar
+ * (`SelectionToolbar`'s `foldForStrip`): on `/fixtures/list` and `/groups/list` nothing does, and
+ * that toolbar is the only place those two verbs exist, so there they keep every width.
  */
 export const MID_FOLDED_CLASS = '@max-[800px]:hidden'

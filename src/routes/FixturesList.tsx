@@ -1,7 +1,6 @@
 import { Suspense, useEffect } from 'react'
 import { Navigate, useLocation, useParams } from 'react-router'
-import { Card } from '@/components/ui/card'
-import { Loader2 } from 'lucide-react'
+import { SheetPage } from '@/components/sheet/SheetPage'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import {
   FIXTURES_VIEW_KEY,
@@ -9,10 +8,7 @@ import {
   setStoredCardsListView,
 } from '../components/ViewSwitcher'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
-import {
-  FixturesListContainer,
-  LIST_PAGE_CARD_CLASS,
-} from '../components/fixtures-list/FixturesListContainer'
+import { FixturesListContainer } from '../components/fixtures-list/FixturesListContainer'
 import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
 
 // Redirect component for the bare /fixtures/list route
@@ -41,32 +37,52 @@ export function ProjectFixturesList() {
     return <Navigate to={`/projects/${currentProject.id}/fixtures/list${search}`} replace />
   }
 
+  // Loading and not-found keep the list's shape (CLAUDE.md §List shell): the same header row,
+  // the body centred on the spinner or the sentence, so nothing changes shape when the list
+  // arrives.
   if (projectLoading || currentLoading) {
     return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
+      <SheetPage>
+        <SheetPage.Header />
+        <SheetPage.Empty loading />
+      </SheetPage>
     )
   }
 
   if (!project) {
     return (
-      <Card className="m-4 p-4">
-        <p className="text-destructive">Project not found</p>
-      </Card>
+      <SheetPage>
+        <SheetPage.Header />
+        <SheetPage.Empty className="text-destructive">Project not found</SheetPage.Empty>
+      </SheetPage>
     )
   }
 
+  // The list shell (CLAUDE.md §List shell): the header row with the breadcrumbs and the view
+  // switcher, then the container's own toolbar row and selection bar, the grid as the page's one
+  // scroller, and the footer with the count. No Card and no page scroll — the sheet is recessed
+  // on the page ground, on the same rows as every other list.
   return (
-    <Card className={LIST_PAGE_CARD_CLASS}>
-      {/* `@container` — see ViewSwitcher's LABEL_AT_* constants. */}
-      <div className="@container mb-4 flex flex-wrap items-center justify-between gap-3">
+    <SheetPage>
+      <SheetPage.Header>
         <Breadcrumbs projectName={project.name} currentPage="Fixtures" />
+        <span className="flex-1" />
         <FixturesViewSwitcher current="list" projectId={projectIdNum} />
-      </div>
-      <Suspense fallback={<div>Loading...</div>}>
-        <FixturesListContainer grouped={false} selectionScope="fixtures" />
+      </SheetPage.Header>
+      <Suspense fallback={<SheetPage.Empty loading />}>
+        <FixturesListContainer
+          grouped={false}
+          selectionScope="fixtures"
+          renderFooter={({ fixtureCount, selectedCount }) => (
+            <SheetPage.Footer>
+              <span className="tabular-nums">
+                {fixtureCount} fixture{fixtureCount === 1 ? '' : 's'}
+                {selectedCount > 0 ? ` · ${selectedCount} selected` : ''}
+              </span>
+            </SheetPage.Footer>
+          )}
+        />
       </Suspense>
-    </Card>
+    </SheetPage>
   )
 }

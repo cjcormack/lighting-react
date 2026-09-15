@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 // layout, so it cannot tell a row that wraps from one whose controls are drawn on top of the
 // controls beside them.
 import programmerGridSrc from './ProgrammerGrid.tsx?raw'
+import sheetPageSrc from '../sheet/SheetPage.tsx?raw'
 import programmerActionBarSrc from './ProgrammerActionBar.tsx?raw'
 import { CONTROL_LABEL_CLASS } from '@/lib/utils'
 
@@ -38,7 +39,13 @@ describe("the folded row's layout contract", () => {
     // `h-10` in the unfolded arm, `min-h-10 flex-wrap` in the folded one. A fixed height on a
     // wrapping row would clip the second line instead of showing it, which is how this "fix"
     // would look fixed and not be. 40 is the chrome system's row height, the same as rows A and C.
-    expect(programmerGridSrc).toContain("leading ? 'min-h-10 flex-wrap gap-y-1.5' : 'h-10'")
+    // Row B is the shell's `SheetPage.Row` since the list shell, so the contract is in two halves:
+    // the grid asks for the minimum only when folded, and the shell's `minHeight` is what swaps
+    // the fixed height for it.
+    expect(programmerGridSrc).toContain(
+      "<SheetPage.Row minHeight={!!leading} className={cn(leading && 'flex-wrap gap-y-1.5')}>",
+    )
+    expect(sheetPageSrc).toContain("minHeight && 'h-auto min-h-10'")
   })
 
   it("keeps row B's tools together, and out of the way when the row is not folded", () => {

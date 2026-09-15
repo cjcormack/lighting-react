@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { useSearchParams } from "react-router"
+import { useParams, useSearchParams } from "react-router"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -10,7 +10,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Columns3, Layers, Loader2, Plus, Pencil, Check, Search } from "lucide-react"
+import { Columns3, Layers, Plus, Pencil, Check, Search } from "lucide-react"
 import { usePatchListQuery, useUniverseConfigListQuery, useUpdateUniverseConfigMutation, usePatchGroupListQuery } from "../store/patches"
 import { useRiggingListQuery } from "../store/riggings"
 import { useFixtureTypeListQuery } from "../store/fixtures"
@@ -35,14 +35,67 @@ import {
 } from "../api/patchApi"
 import { parseNullableNumber } from "@/lib/utils"
 import { CurrentProjectRedirect } from "@/components/CurrentProjectRedirect"
+import { Breadcrumbs } from "@/components/Breadcrumbs"
+import { SheetPage } from "@/components/sheet/SheetPage"
+import { useProjectQuery } from "../store/projects"
 
 // ─── Redirect ─────────────────────────────────────────────────────────
 
+/** The bare `/patches` → the current project's patch list: part of the resource, so it lives here. */
 export function PatchesRedirect() {
-  return <CurrentProjectRedirect to="settings/patches" />
+  return <CurrentProjectRedirect to="patches" preserveSearch />
+}
+
+// ─── Route ────────────────────────────────────────────────────────────
+
+/**
+ * `/projects/:projectId/patches` — the patch list as a routed page again (list-shell-design,
+ * called 2026-09-15). It was the Patch List tab of Project Settings from the tabbed-settings
+ * restructure until the list shell: a tab body under a settings heading was the one list that
+ * could not have the 48px header row and the 12px gutter every other list has. The settings page
+ * keeps General · Surfaces · Stage · Rigging · Sync, and `/settings/patches` redirects here.
+ */
+export function ProjectPatches() {
+  const { projectId } = useParams()
+  const projectIdNum = Number(projectId)
+  const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
+
+  // No "not the current project → redirect" guard, unlike `/fixtures/list`: a patch is stored per
+  // project and every query below takes the id, so an *inactive* project's patch list renders here
+  // exactly as its settings tab did — which is what keeps the nav entry's `visibility: "always"`
+  // honest. Only the bare `/patches` resolves "which project?" (`PatchesRedirect`).
+
+  // Loading and not-found keep the list's shape (CLAUDE.md §List shell): the same header row,
+  // the body centred on the spinner or the sentence.
+  if (projectLoading) {
+    return (
+      <SheetPage>
+        <SheetPage.Header />
+        <SheetPage.Empty loading />
+      </SheetPage>
+    )
+  }
+  if (!project) {
+    return (
+      <SheetPage>
+        <SheetPage.Header />
+        <SheetPage.Empty className="text-destructive">Project not found</SheetPage.Empty>
+      </SheetPage>
+    )
+  }
+
+  return <PatchListContent projectId={projectIdNum} projectName={project.name} />
 }
 
 // ─── Content ──────────────────────────────────────────────────────────
+
+/**
+ * A chip on the chips row: 28px, the tier of a control inside a control (CLAUDE.md §The
+ * programmer's scoped grid — 32 on a row, 28 inside a control, 24 for a toggle item, 20 a pill).
+ * `shrink-0`, since the row scrolls sideways rather than wrapping.
+ */
+const CHIP_CLASS =
+  'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors hover:bg-accent'
 
 const DEFAULT_COLUMNS: Record<PatchColumnKey, boolean> = {
   address: true,
@@ -58,14 +111,18 @@ const DEFAULT_COLUMNS: Record<PatchColumnKey, boolean> = {
 }
 
 /**
- * The Patch List tab — the patch list as a sheet (CLAUDE.md §Sheet kit), under row B: a universe
- * toggle, the filter, then Groups, Columns and `+ Patch` on the row. It stays a settings tab; the
- * universe chips above it carry a fill bar now, and the group chips fold behind the Groups button.
+ * The patch list as a sheet (CLAUDE.md §Sheet kit) on the list shell (§List shell): the header row
+ * with the breadcrumbs, the universe and group chips as a 40px chrome row of their own, row B — a
+ * universe toggle, the filter, then Groups, Columns and `+ Patch` — the selection bar, the sheet,
+ * and the footer. The universe chips carry a fill bar, and the group chips fold behind the Groups
+ * button.
  */
-export function PatchListContent({
+function PatchListContent({
   projectId,
+  projectName,
 }: {
   projectId: number
+  projectName: string
 }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const [addFixtureOpen, setAddFixtureOpen] = useState(false)
@@ -123,13 +180,21 @@ export function PatchListContent({
   )
 
   return (
-    <div className="flex flex-col h-full min-h-0">
-      {/* Universe chips, with a fill bar each; the group chips fold behind row B's Groups. */}
+    <SheetPage>
+      <SheetPage.Header>
+        <Breadcrumbs projectName={projectName} currentPage="Patch List" />
+      </SheetPage.Header>
+
+      {/* The chips: universes with a fill bar each, then the groups (which fold behind row B's
+          Groups). A 40px chrome row of the shell with 28px chips — a control inside a control's
+          tier — and its own line, above row B; it was a padded strip with no height and no line.
+          A row is one line by definition, so past the width the chips scroll sideways rather than
+          wrapping the row taller. */}
       {(universeConfigs?.length || (showGroups && patchGroups?.length)) ? (
-        <div className="flex flex-wrap items-center gap-2 px-3 pb-1 pt-3">
+        <SheetPage.Row className="overflow-x-auto [scrollbar-width:none]">
           {universeConfigs && universeConfigs.length > 0 && (
             <>
-              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Universes</span>
+              <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Universes</span>
               {universeConfigs.map((config) => (
                 <UniverseChip
                   key={config.id}
@@ -142,13 +207,13 @@ export function PatchListContent({
           )}
           {showGroups && patchGroups && patchGroups.length > 0 && (
             <>
-              <span className="w-3" />
-              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Groups</span>
+              <span className="w-3 shrink-0" />
+              <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Groups</span>
               {patchGroups.map((group) => (
                 <button
                   key={group.id}
                   onClick={() => setEditingGroup({ id: group.id, name: group.name })}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs hover:bg-accent transition-colors"
+                  className={CHIP_CLASS}
                 >
                   <span className="font-medium">{group.name}</span>
                   <span className="text-muted-foreground">{group.memberCount}</span>
@@ -156,11 +221,11 @@ export function PatchListContent({
               ))}
             </>
           )}
-        </div>
+        </SheetPage.Row>
       ) : null}
 
       {/* Row B: universe toggle · filter · spacer · Groups · Columns · + Patch. 40px, 32px controls. */}
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
+      <SheetPage.Row>
         {universes.length > 1 && (
           <ToggleGroup
             type="single"
@@ -227,16 +292,14 @@ export function PatchListContent({
           <Plus className="size-4" />
           <span className="hidden sm:inline">Patch</span>
         </Button>
-      </div>
+      </SheetPage.Row>
 
       {patchesLoading ? (
-        <div className="flex justify-center py-8"><Loader2 className="size-6 animate-spin" /></div>
+        <SheetPage.Empty loading />
       ) : totalPatches === 0 ? (
-        <div className="text-center py-8 text-muted-foreground">
-          No fixtures patched yet. Click &ldquo;Patch&rdquo; to get started.
-        </div>
+        <SheetPage.Empty>No fixtures patched yet. Click &ldquo;Patch&rdquo; to get started.</SheetPage.Empty>
       ) : rows.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground">No fixtures match your filter.</div>
+        <SheetPage.Empty>No fixtures match your filter.</SheetPage.Empty>
       ) : (
         <PatchSheet
           projectId={projectId}
@@ -251,7 +314,7 @@ export function PatchListContent({
       )}
 
       {/* The footer: the counts, and how full the rig is. */}
-      <div className="flex h-[22px] shrink-0 items-center gap-3 overflow-hidden whitespace-nowrap border-t px-3 text-[10.5px] text-muted-foreground">
+      <SheetPage.Footer>
         <span className="tabular-nums">
           {totalPatches} fixture{totalPatches === 1 ? '' : 's'} patched
           {selectedCount > 0 ? ` · ${selectedCount} selected` : ''}
@@ -260,7 +323,7 @@ export function PatchListContent({
         <span className="ml-auto tabular-nums">
           {universes.length} universe{universes.length === 1 ? '' : 's'} · {addressesUsed} of {universes.length * 512} addresses
         </span>
-      </div>
+      </SheetPage.Footer>
 
       <AddFixtureSheet
         open={addFixtureOpen}
@@ -283,7 +346,7 @@ export function PatchListContent({
         projectId={projectId}
         patches={patches ?? []}
       />
-    </div>
+    </SheetPage>
   )
 }
 
@@ -341,7 +404,7 @@ function UniverseChip({ config, projectId, fill }: { config: UniverseConfig; pro
   return (
     <Popover open={editing} onOpenChange={setEditing}>
       <PopoverTrigger asChild>
-        <button className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs hover:bg-accent transition-colors">
+        <button className={CHIP_CLASS}>
           <span className="font-mono font-medium">U{config.universe}</span>
           {config.address ? (
             <span className="text-muted-foreground">{config.address}</span>

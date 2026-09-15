@@ -6,8 +6,13 @@ import { SelectionBar as SheetSelectionBar } from '@/components/sheet/SelectionB
 import { TemplateStrip } from './TemplateStrip'
 import type { LocateTarget } from '@/store/locate'
 
+const NO_FAMILIES: readonly AttributeFamily[] = []
+const NO_EMITTERS: readonly string[] = []
+
 /**
- * Row C on the programmer — the sheet kit's selection bar with the templates riding it.
+ * Row C on the programmer — the sheet kit's selection bar with the templates riding it — and, with
+ * no `projectId`, row C on the two plain lists, where nothing rides it (CLAUDE.md §List shell).
+ * One component for both so the counts, the family pill and the hints cannot be computed two ways.
  *
  * The bar itself — the 40px line, the counts, the family pill, the hints, the hold-its-place
  * rule on a short viewport — is `sheet/SelectionBar.tsx` since the patch list, the DMX sheet and
@@ -27,18 +32,19 @@ export function SelectionBar({
   cellEntryKey,
   cellClearKey,
   templateTargets,
-  targetFamilies,
-  targetEmitters,
+  targetFamilies = NO_FAMILIES,
+  targetEmitters = NO_EMITTERS,
   marqueeDragging,
 }: {
-  projectId: number
+  /** The project the template strip presses into. Absent — the plain lists — draws no strip. */
+  projectId?: number
   selection: React.ReactNode | null
   cells: readonly CellRef<ColumnKey>[]
   cellEntryKey: boolean
   cellClearKey: boolean
   templateTargets: readonly LocateTarget[]
-  targetFamilies: readonly AttributeFamily[]
-  targetEmitters: readonly string[]
+  targetFamilies?: readonly AttributeFamily[]
+  targetEmitters?: readonly string[]
   marqueeDragging: boolean
 }) {
   const askedFamilies = useMemo(() => (cells.length > 0 ? cellFamilies(cells) : null), [cells])
@@ -64,14 +70,16 @@ export function SelectionBar({
       // New. It renders nothing when a press has nowhere to land, so the bar can still be here
       // for the counts and Deselect alone.
       strip={
-        <TemplateStrip
-          projectId={projectId}
-          cells={cells}
-          askedFamilies={askedFamilies}
-          targets={templateTargets}
-          targetFamilies={targetFamilies}
-          targetEmitters={targetEmitters}
-        />
+        projectId != null ? (
+          <TemplateStrip
+            projectId={projectId}
+            cells={cells}
+            askedFamilies={askedFamilies}
+            targets={templateTargets}
+            targetFamilies={targetFamilies}
+            targetEmitters={targetEmitters}
+          />
+        ) : undefined
       }
       verbs={selection}
       marqueeDragging={marqueeDragging}

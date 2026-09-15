@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { cn, labelUnlessCompact } from '@/lib/utils'
+import { labelUnlessCompact } from '@/lib/utils'
 import { FIXTURE_FILTER_HINT, FIXTURE_FILTER_PLACEHOLDER } from '@/lib/fixtureFilterCopy'
 import { Lightbulb, Search } from 'lucide-react'
 import { useFixtureListQuery } from '../../store/fixtures'
@@ -64,6 +64,8 @@ import { applyPlannedWrite, useCellWriters } from './useCellWriters'
 import { useLitFixtureKeys } from './useLitFixtureKeys'
 import { FixturesTable } from './FixturesTable'
 import { SelectionToolbar } from './SelectionToolbar'
+import { SelectionBar as ListSelectionBar } from '../programmer/SelectionBar'
+import { SheetPage } from '../sheet/SheetPage'
 import { PHONE_FOLDED_CLASS } from '../sheet/toolbarFolds'
 import { CellSelectionActions } from '../sheet/CellSelectionActions'
 import { FanPopover, fanColumnsForTargets, type FanColumn } from './FanPopover'
@@ -82,14 +84,6 @@ import type {
 import type { LocateTarget } from '../../store/locate'
 import type { Fixture } from '../../store/fixtures'
 import type { GroupSummary } from '../../api/groupsApi'
-
-/**
- * Page chrome for the spreadsheet routes. Tighter than the card views' `m-4 p-4` at phone
- * widths: margin + padding cost 64px of a 375px viewport before a single column renders,
- * and the table is the content — losing a sixth of the screen to a frame around it is the
- * wrong trade. Shared so the three list routes can't drift apart.
- */
-export const LIST_PAGE_CARD_CLASS = 'm-2 p-2 sm:m-4 sm:p-4'
 
 const EMPTY_FIXTURES: Fixture[] = []
 const EMPTY_GROUPS: GroupSummary[] = []
@@ -137,12 +131,14 @@ export interface FixturesListContainerProps {
    */
   filterPlaceholder?: string
   /**
-   * Replace the built-in toolbar row, receiving the controls this container owns as ready-made
-   * nodes so a caller can re-arrange them without re-implementing their state.
+   * Replace the built-in chrome — one 40px toolbar row (filter · spacer · Lit · Columns) and the
+   * selection bar under it — receiving the controls this container owns as ready-made nodes so a
+   * caller can re-arrange them without re-implementing their state.
    *
-   * Exists because the programmer view scatters them: Columns joins the action bar's Sheet zone,
-   * the filter sits above the grid, and the selection actions get a bar of their own. Absent — the
-   * two plain list routes — keeps today's single row exactly.
+   * Exists because the programmer view scatters them: the scope band and Groups join the filter on
+   * row B, and the template strip rides the selection bar. Absent — the two plain list routes —
+   * draws the shell's own two rows (CLAUDE.md §List shell), which are the same rows on the same
+   * classes, so a plain list and the programmer cannot differ by a pixel above the grid.
    */
   renderToolbar?: (parts: {
     filter: React.ReactNode
@@ -199,17 +195,18 @@ export interface FixturesListContainerProps {
    *
    * `fixtureCount` counts **fixture rows after filtering** — not groups, elements or dividers, and
    * not the whole patch: the number answers "how much is in front of me", which is what a filtered
-   * list changes. `selectedCount` is the *visible* selection, the same set the selection toolbar
-   * gates on, so a filter that hides every selected row reads 0 rather than lying.
-   */
-  renderFooter?: (parts: { fixtureCount: number; selectedCount: number }) => React.ReactNode
-  /**
-   * Let the table fill its flex parent instead of capping at `calc(100vh - 14rem)`.
+   * list changes. `groupCount` is the group rows the same way, for the grouped list's footer.
+   * `selectedCount` is the *visible* selection, the same set the selection toolbar gates on, so a
+   * filter that hides every selected row reads 0 rather than lying.
    *
-   * That cap is tuned for a list embedded in a scrolling page. The programmer is a full-height
-   * view whose grid owns the remaining space, and the cap there leaves dead air below the rows.
+   * Every mount passes one since the list shell: the footer is a row of the shell, and a list with
+   * no count was one of the four inconsistencies the shell exists to close.
    */
-  fill?: boolean
+  renderFooter?: (parts: {
+    fixtureCount: number
+    groupCount: number
+    selectedCount: number
+  }) => React.ReactNode
   /**
    * Draw `Lit` and `Columns` as icons alone, whatever the viewport says.
    *
@@ -246,7 +243,6 @@ export function FixturesListContainer({
   filterPlaceholder = FIXTURE_FILTER_PLACEHOLDER,
   renderToolbar,
   renderFooter,
-  fill = false,
   compactControls = false,
 }: FixturesListContainerProps) {
   const { data: maybeFixtures, isLoading: fixturesLoading } = useFixtureListQuery()
@@ -425,6 +421,9 @@ export function FixturesListContainer({
   // pointermove of a marquee drag, and an inline reduce in the return would rescan the whole row
   // list per frame to feed one footer string.
   const fixtureCount = useMemo(() => countFixtureRows(rows), [rows])
+  // The grouped list's footer says `1 group · 7 fixtures`; the flat list has no group rows and says
+  // the fixtures alone.
+  const groupCount = useMemo(() => rows.filter((row) => row.kind === 'group').length, [rows])
 
   const locateTargets = useMemo<LocateTarget[]>(
     () => selectedRowTargets(rows, selectedRowIds),
@@ -1067,13 +1066,13 @@ export function FixturesListContainer({
   }, [selection, selectRow, selectAllRows, selectableOrder, rowById, handleToggleExpand, cellCount, clearByLadder, escapeFoundEditorRef, canClearCells, canTypeCells, clearSelectedCells, isCellSelected, openCellEditor])
 
   if (fixturesLoading || groupsLoading) {
-    return <div>Loading...</div>
+    return <SheetPage.Empty loading />
   }
 
   // The container owns these controls' state, so a caller re-arranging the toolbar gets them as
   // ready-made nodes rather than re-implementing them. See `renderToolbar`.
   const filterControl = (
-    <div className="relative w-full min-w-48 sm:w-auto sm:flex-1">
+    <div className="relative min-w-0 flex-1">
       <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
       <Input
         placeholder={filterPlaceholder}
@@ -1142,14 +1141,18 @@ export function FixturesListContainer({
         targets={selectedTargets}
         onClear={clearByLadder}
         actions={selectionActions}
+        // The 800 fold exists to give the template strip room, and only the programmer's bar
+        // (`renderToolbar`) carries one; the two plain lists keep Locate and Highlight at every
+        // width, as they did before the bar — there they are the only place those verbs live.
+        foldForStrip={renderToolbar != null}
       />
     ) : null
 
   return (
-    // `space-y-3` only off `fill`. The programmer's grid runs edge to edge under a 22px footer
-    // that has to sit hard against the table's own border, and a rhythm applied to every child
-    // would push a 12px gap under it.
-    <div className={cn(fill ? 'flex min-h-0 flex-1 flex-col' : 'space-y-3')}>
+    // One arm: a flex column the grid fills, under a row or two of chrome and over a footer that
+    // sits hard against the grid's last row (CLAUDE.md §List shell). There was a second arm — a
+    // `space-y-3` rhythm for the two plain lists inside their `Card` — and the Card is gone.
+    <div className="flex min-h-0 flex-1 flex-col">
       {renderToolbar ? (
         renderToolbar({
           filter: filterControl,
@@ -1165,25 +1168,44 @@ export function FixturesListContainer({
           marqueeDragging,
         })
       ) : (
-        /* Default toolbar. At phone widths the filter takes a full row of its own — sharing one
-           with the buttons squeezes it to a few characters, and it is the control most likely to
-           be reached for on a small screen. */
-        <div className="flex flex-wrap items-center gap-2">
-          {filterControl}
-          {litControl}
-          {columnsControl}
-          {selectionControl}
-        </div>
+        <>
+          {/* The shell's toolbar row: the filter takes the slack before the spacer does and is
+              capped at 340 (the programmer's row B rule), Lit and Columns at the right. On a phone
+              the field simply gives — the hint rides its `title` — rather than taking a row of its
+              own, since a row here is a 40px rung and not a wrapping strip. */}
+          <SheetPage.Row>
+            <div className="flex min-w-0 max-w-[340px] flex-[999_1_0%] items-center">{filterControl}</div>
+            <span className="flex-1" />
+            {litControl}
+            {columnsControl}
+          </SheetPage.Row>
+          {/* Row C, reserved when nothing is selected — the programmer's bar with no template strip
+              (no `projectId`), so the two cannot disagree about what a marquee names. Its own
+              `@container`, with the queries on the child — the wrapper trap `ProgrammerWorkspace`
+              documents. */}
+          <div className="@container">
+            <ListSelectionBar
+              selection={selectionControl}
+              cells={cellSelection.cells}
+              cellEntryKey={cellCount > 0 && keys.entry}
+              cellClearKey={cellCount > 0 && keys.clear}
+              templateTargets={templateTargets}
+              marqueeDragging={marqueeDragging}
+            />
+          </div>
+        </>
       )}
 
       {rows.length === 0 ? (
-        <p className="py-8 text-center text-muted-foreground">
+        // The shell's body for an empty list, so the footer stays at the bottom of the column
+        // rather than riding up under the sentence (CLAUDE.md §List shell).
+        <SheetPage.Empty>
           {fixtures.length === 0
             ? 'No fixtures available'
             : onlyLit && !filter.trim()
               ? 'No fixtures are currently lit'
               : 'No fixtures match your filter'}
-        </p>
+        </SheetPage.Empty>
       ) : (
         <FixturesTable
           rows={rows}
@@ -1202,7 +1224,6 @@ export function FixturesListContainer({
           scrollToRowId={scrollToRowId}
           onScrolledToRow={() => setScrollToRowId(null)}
           showOwnership={showOwnership}
-          fill={fill}
           // An open cell editor belongs to whatever is selected — the marquee it sits in, or the
           // row selection its own click created. Deselect while one is open and it stays on
           // screen still writing, to something narrower than its own "Applying to N" line just
@@ -1221,7 +1242,7 @@ export function FixturesListContainer({
         />
       )}
 
-      {renderFooter?.({ fixtureCount, selectedCount: locateTargets.length })}
+      {renderFooter?.({ fixtureCount, groupCount, selectedCount: locateTargets.length })}
 
       <FixtureDetailModal fixtureKey={infoFixtureKey} onClose={() => setInfoFixtureKey(null)} />
       <GroupDetailModal groupName={infoGroupName} onClose={() => setInfoGroupName(null)} />

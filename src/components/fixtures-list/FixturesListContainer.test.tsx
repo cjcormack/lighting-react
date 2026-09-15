@@ -51,6 +51,9 @@ vi.mock('../../store/fixtures', async (importOriginal) => ({
 vi.mock('../../store/groups', () => ({ useGroupListQuery: () => ({ data: [], isLoading: false }) }))
 vi.mock('./useLitFixtureKeys', () => ({ useLitFixtureKeys: () => new Set<string>() }))
 vi.mock('./useDeskSelectionBridge', () => ({ useDeskSelectionBridge: () => {} }))
+// The plain lists draw the kit's selection bar as their row C (CLAUDE.md §List shell), and it asks
+// the viewport's height; jsdom has no `matchMedia`, and a desk is tall.
+vi.mock('../../hooks/useMediaQuery', () => ({ useMediaQuery: () => false }))
 vi.mock('../../store/includeSelection', () => ({
   useIncludeSelectionRequest: () => ({ nonce: 0, targetKeys: [] }),
 }))

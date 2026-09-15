@@ -1,10 +1,10 @@
 import { useEffect, useMemo } from "react"
 import { useParams, useNavigate, Navigate } from "react-router"
-import { Card } from "@/components/ui/card"
+import { SheetPage } from "@/components/sheet/SheetPage"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Loader2, Lock, LockOpen } from "lucide-react"
+import { Lock, LockOpen } from "lucide-react"
 import { useGetChannelMappingListQuery } from "../store/channelMapping"
 import { useGetParkStateListQuery, useUnparkChannelMutation } from "../store/park"
 import { useCurrentProjectQuery, useProjectQuery } from "../store/projects"
@@ -37,19 +37,23 @@ export function ProjectChannelsTable() {
     return <Navigate to={`/projects/${currentProject.id}/channels/${universeNum}/table`} replace />
   }
 
+  // Loading and not-found keep the list's shape (CLAUDE.md §List shell): the same header row,
+  // the body centred on the spinner or the sentence.
   if (projectLoading || currentLoading) {
     return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
+      <SheetPage>
+        <SheetPage.Header />
+        <SheetPage.Empty loading />
+      </SheetPage>
     )
   }
 
   if (!project) {
     return (
-      <Card className="m-4 p-4">
-        <p className="text-destructive">Project not found</p>
-      </Card>
+      <SheetPage>
+        <SheetPage.Header />
+        <SheetPage.Empty className="text-destructive">Project not found</SheetPage.Empty>
+      </SheetPage>
     )
   }
 
@@ -87,18 +91,19 @@ function ChannelsTableContent({ projectId, projectName, universe }: { projectId:
    * **Full height, and one scroller.** The cards view is a `Card` in a scrolling page, which is
    * right for a page of cards; for the sheet it meant the page scrolled *and* the table scrolled
    * inside a `calc(100vh - 14rem)` cap — two bars for one list, and a 393px-tall landscape phone
-   * got 169px of grid. The patch list's shape instead: a flex column that fills `<main>`, a 48px
-   * chrome row, and the sheet taking the rest. That also closes the gap the breadcrumbs left above
-   * the header, which was the `Card`'s padding plus two 16px margins around a selection bar that
-   * usually says "Nothing selected".
+   * got 169px of grid. The list shell instead (CLAUDE.md §List shell): a flex column that fills
+   * `<main>`, a 48px header row, and the sheet taking the rest. That also closes the gap the
+   * breadcrumbs left above the header, which was the `Card`'s padding plus two 16px margins around
+   * a selection bar that usually says "Nothing selected". This page was the reference shape the
+   * shell was drawn from; what it gained from the shell is the one line under the bar (the sheet
+   * drew a second) and the legend's swatch.
    */
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <SheetPage>
       {/* The breadcrumb header — 48px, like `ShowHeader` and `StackDetail`'s, **not** one of the
           40px chrome rows (CLAUDE.md §the programmer's chrome): this row carries the page's
-          identity, which is the job those two do at 48. The 12px gutter and 32px controls are the
-          shared ones. `@container`: the view switcher's labels are a container query. */}
-      <div className="@container flex h-12 shrink-0 items-center gap-2 border-b px-3">
+          identity, which is the job those two do at 48. */}
+      <SheetPage.Header>
         <ChannelsBreadcrumbs projectName={projectName} />
         <div className="flex-1" />
         {parkedCount > 0 && (
@@ -124,7 +129,7 @@ function ChannelsTableContent({ projectId, projectName, universe }: { projectId:
           </>
         )}
         <ChannelsViewSwitcher current="list" projectId={projectId} universe={universe} />
-      </div>
+      </SheetPage.Header>
       {universes && universes.length > 1 && (
         <Tabs
           value={String(universe)}
@@ -146,6 +151,6 @@ function ChannelsTableContent({ projectId, projectName, universe }: { projectId:
         mappings={mappingRecord?.[universe]}
         parkValueMap={parkValueMap}
       />
-    </div>
+    </SheetPage>
   )
 }

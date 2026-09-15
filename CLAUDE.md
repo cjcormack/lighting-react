@@ -942,8 +942,9 @@ Three surface rules, each pinned by its test:
   That refusal is the only overlap check there is — **the patch PUT has none today** (only the
   POST checks), and there is no bulk atomic route, so a batch is N PUTs that can half-apply on a
   network failure; both are lighting7 work and Chris's call. Clear is refused on Address, Fixture,
-  Key and Stage; offered on Mount, Angle and Gel. It stays the Patch List tab; row B is universe
-  toggle · filter · spacer · Groups · Columns · + Patch, and the universe chips carry a fill bar.
+  Key and Stage; offered on Mount, Angle and Gel. It is a routed page again (§List shell); row B is
+  universe toggle · filter · spacer · Groups · Columns · + Patch, and the universe chips carry a
+  fill bar on a 40px chrome row of their own.
   **A double click on a fixture's name renames it in place** (`InlineEditField openOn="doubleClick"`,
   which renders a span rather than a button so the single click underneath still selects the row and
   still starts the row marquee); the pencil beside it still opens the full editor, and is the
@@ -1047,6 +1048,48 @@ Groups keep the word *List*; Channels and Show say *Table* (their second view is
 first genuinely is cards). The stored value is `'list'` for all four keys, so `getStoredCardsListView`
 answers every pair and a rename can never reset a desk's remembered view; `stickyRedirectsToList`
 is the one redirect decision, called by all four cards routes (`ViewSwitcher.test.ts`).
+
+### List shell
+
+**Every list view is one column, stated once.** Fixtures › List, Groups › List, the programmer,
+Show › Table, Channels › Table and the patch list share one anatomy — a 48px header row, any
+number of 40px chrome rows, the 40px `SelectionBar`, the sheet, a 22px footer — and the whole of it
+is two files: `components/sheet/sheetFrame.ts` holds the class strings (`PAGE_HEADER_CLASS`,
+`CHROME_ROW_CLASS`, `SHEET_SCROLLER_CLASS`, the sheet header row and cell, the sticky cell, the row,
+the divider, `SHEET_FOOTER_CLASS`), and `components/sheet/SheetPage.tsx` the thin components over
+them (`SheetPage`, `.Header`, `.Row`, `.Footer`, `.Empty`) plus the one `LegendSwatch`. `SheetTable`
+and `FixturesTable` draw their frame from the constants; every surface mounts the components and
+never writes the classes. A surface that wants to differ says so at the import, in one file. The
+design record is `lighting7/docs/plans/list-shell-design/` (`Kit.dc.html`'s "Where the code goes"
+is the file-by-file map; the five open calls are made on `Spec` under "Called — 2026-09-15").
+
+The rules the two files encode, each of which was a measured inconsistency before them: a list is a
+full-height column filling `<main>` — **no `Card`, no page scroll, the sheet is the only scroller**;
+a 12px gutter on every row; header 48, every other chrome row 40 with 32px controls, footer 22, sheet
+header 30 and rows 36 (44 on the DMX sheet); **three grounds** — the page (`<main>`'s `bg-muted/40`,
+which every chrome row sits on with no ground of its own), the sheet (`bg-background` on the header
+row, the sticky column and the body alike, so a name column can never read darker than its cells)
+and a divider row (`bg-muted/30`); and **one line between neighbours** — a chrome row owns its
+`border-b`, the sheet owns no top line, the footer owns its `border-t`. **Two named exceptions, both
+by decision:** the programmer's row A keeps its `bg-card/50` wash, and `ShowHeader`'s border stays
+transparent until the unlocked wash colours it.
+
+Three things the shell changed that read as bugs if you do not know they are decisions. **The two
+plain lists have row C and a footer now** — reserved (`Nothing selected`) when nothing is, the
+count in the footer — so `SelectionToolbar` draws no count of its own, and `FixturesListContainer`
+has one arm: no `fill`, no `space-y-3` wrapper, and its default toolbar is the shell's row plus
+the programmer's own `SelectionBar` with no `projectId`, which is what draws it without the
+template strip — one component, so the two bars cannot count a marquee two ways. The bar's own
+`@container` sits above it on those two routes as everywhere; the one fold that does *not* apply
+there is Locate and Highlight's 800 (`SelectionToolbar`'s `foldForStrip`), because that fold exists
+to give the strip room and on the plain lists that toolbar is the only place those two verbs live.
+`SheetPage.Header` and `.Footer` put their `@container` on an unpadded wrapper, never on the `px-3`
+row: a size query measures the content box, and a container on the row would fire every threshold
+24px early. **Loading and not-found render inside the same `SheetPage`** — an empty header row over
+`SheetPage.Empty` — so a list keeps its shape from loading to loaded. And **the patch list is a
+route again**, `/projects/:id/patches`, with the chips as a 40px chrome row of 28px chips above row
+B: it left Project Settings because a tab body under a settings heading was the one list that could
+not have the header row and the gutter. `/settings/patches` redirects there, `?action=new` intact.
 
 ### The cell editor's three forms
 
@@ -2136,11 +2179,13 @@ modules export a page *and* one or two redirects, which reads like drift and is 
    `/fixtures` → the current project's fixtures). The redirect is part of the resource: it answers
    "which project?", not "where did this view go?".
 2. **A former route that became a settings tab keeps its module and its identity**, exporting the
-   tab body alongside the redirect that survives its old path — `Patches.tsx` (`PatchesRedirect` +
-   `PatchListContent`), `Surfaces.tsx`, `CloudSync.tsx`. This is the uniform pattern, not a stray.
-   The test is whether the module is still *routed*: if nothing in `App.tsx` renders it, it is a
-   component, not a route, and belongs under `components/<feature>/` — which is where
-   `RiggingsContent` and `StageRegionsContent` went.
+   tab body alongside the redirect that survives its old path — `Surfaces.tsx`, `CloudSync.tsx`.
+   This is the uniform pattern, not a stray. The test is whether the module is still *routed*: if
+   nothing in `App.tsx` renders it, it is a component, not a route, and belongs under
+   `components/<feature>/` — which is where `RiggingsContent` and `StageRegionsContent` went.
+   `Patches.tsx` was this pattern's third example and is rule 1 again: the patch list is routed at
+   `/projects/:id/patches` since the list shell (§List shell), and the module exports the page
+   (`ProjectPatches`) and its bare-path redirect.
 3. **A redirect for a path that no longer names a view goes in `routes/legacyRedirects.tsx`**, not
    in whichever module happens to be its destination. `/run`, `/cue-stacks`, `/cues` and `/program`
    all land on `/show`, and `/fx` lands on `/busk`; collecting them keeps `ShowPage.tsx` from

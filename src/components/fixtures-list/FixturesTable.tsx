@@ -1,6 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
+import {
+  SHEET_DIVIDER_CLASS,
+  SHEET_HEADER_CELL_CLASS,
+  SHEET_HEADER_ROW_CLASS,
+  SHEET_ROW_CLASS,
+  SHEET_SCROLLER_CLASS,
+  SHEET_STICKY_CELL_CLASS,
+} from '../sheet/sheetFrame'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useScrollEdges } from '@/hooks/useScrollEdges'
 import { useStableCallback } from '@/hooks/useStableCallback'
@@ -76,8 +84,6 @@ export interface FixturesTableProps {
    * patch-management views where provenance tinting would just be noise.
    */
   showOwnership?: boolean
-  /** Fill the flex parent instead of the embedded-list viewport cap. See FixturesListContainer. */
-  fill?: boolean
   /**
    * Neither a row nor a cell is selected any more. Any open cell editor closes on the crossing
    * into this — see `useCellEditorOpen`, which owns the rule and the reason.
@@ -176,7 +182,6 @@ export function FixturesTable({
   scrollToRowId,
   onScrolledToRow,
   showOwnership = false,
-  fill = false,
   selectionEmpty,
   cellSelection,
   onRowMarquee,
@@ -296,22 +301,20 @@ export function FixturesTable({
     /* The scroller's WRAPPER, and it exists for the fade below: a gradient drawn inside the
        scroller would scroll away with the columns it is meant to be covering, which on a phone
        means the one hint that there are more columns disappears the moment you use it. It also
-       gives the `fill` arm its own flex column so the scroller keeps `min-h-0 flex-1`. */
-    <div className={cn('relative', fill && 'flex min-h-0 flex-1 flex-col')}>
+       is its own flex column so the scroller keeps `min-h-0 flex-1`. */
+    <div className="relative flex min-h-0 flex-1 flex-col">
       <div
         // `attach` rather than `scrollRef` — it fills that ref AND tells `useScrollEdges` the
         // node exists, which a `RefObject` alone cannot.
         ref={attachScroller}
-        className={cn(
-          'overflow-auto',
-          // `fill` is the programmer, whose grid owns the remaining height of a full-page view. The
-          // viewport cap is tuned for a list embedded in a scrolling page and leaves dead air there.
-          // It is also the arm with no card around it: since the space plan's session 1 the grid runs
-          // edge to edge between the page edge and the rail's `border-l`, so a rounded box drawn hard
-          // against both reads as a card that failed to inset rather than as a table.
-          fill ? 'min-h-0 flex-1 border-t border-border' : 'rounded-md border border-border',
-        )}
-        style={fill ? undefined : { maxHeight: 'calc(100vh - 14rem)' }}
+        // The frame is `sheetFrame.ts`'s (CLAUDE.md §List shell), and there is one arm: the grid
+        // owns the remaining height of a full-height column on every list it is mounted on, and
+        // runs edge to edge under the row above — which owns the line between them. The other
+        // arm, a `rounded-md border` capped at `calc(100vh - 14rem)` for a list embedded in a
+        // scrolling page, went with the `Card` the two plain lists sat in. `bg-background` on the
+        // scroller is the fix `SheetTable` already carried: the sticky name column is opaque, and
+        // over a transparent body it read darker than the cells beside it.
+        className={SHEET_SCROLLER_CLASS}
         // On the scroller, not the rows wrapper: a short list leaves the wrapper shorter than the
         // scroller, and the empty space under the last row — the target this is for — is the
         // scroller's own. The header and every row stop it by ancestry rather than by
@@ -334,13 +337,16 @@ export function FixturesTable({
           {/* Header */}
           <div
             data-grid-header
-            className="sticky top-0 z-20 grid border-b border-border bg-background"
+            className={SHEET_HEADER_ROW_CLASS}
             style={{ gridTemplateColumns }}
           >
             <div
               // The marquee measures the name column from this — see `useCellMarquee`.
               data-grid-name-header
-              className="sticky left-0 z-10 bg-background px-2 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
+              // `px-2` *after* the header class: the header cell class carries `px-1.5`, and
+              // `cn` is tailwind-merge, so the later padding wins — the sticky name column is 8px
+              // inset in every row, and its label has to be too.
+              className={cn(SHEET_STICKY_CELL_CLASS, SHEET_HEADER_CELL_CLASS, 'px-2')}
             >
               Fixture
             </div>
@@ -350,7 +356,7 @@ export function FixturesTable({
                 // The marquee measures its column bands from these — see `useCellMarquee`.
                 data-column-header={col}
                 className={cn(
-                  'px-1.5 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground',
+                  SHEET_HEADER_CELL_CLASS,
                   // Greyed rather than hidden: an operator looking for Colour in a
                   // POSITION-masked layer needs to learn *why* it is unavailable, and a column that
                   // vanished would read as a broken grid. The cells beneath say the same thing.
@@ -665,12 +671,10 @@ const RowView = React.memo(function RowView({
       // `data-row-id` here too: the scroller's background-click test reads it, and a divider is a
       // row of the list, not empty space — a tap on "Ungrouped" must not drop the selection.
       <div
-        className="flex h-full items-center border-b border-border bg-muted/30 px-2"
+        className={cn(SHEET_DIVIDER_CLASS, 'px-2')}
         data-row-id={row.id}
       >
-        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-          {row.label}
-        </span>
+        <span className={SHEET_HEADER_CELL_CLASS}>{row.label}</span>
       </div>
     )
   }
@@ -704,9 +708,7 @@ const RowView = React.memo(function RowView({
   // on the sticky cell's overlay rather than here; see below for why.
   return (
     <div
-      className={`group/row grid h-full border-b border-border text-sm ${
-        selected ? 'bg-foreground/[0.06]' : 'hover:bg-accent/30'
-      }`}
+      className={cn(SHEET_ROW_CLASS, selected ? 'bg-foreground/[0.06]' : 'hover:bg-accent/30')}
       style={{ gridTemplateColumns }}
       data-state={selected ? 'selected' : undefined}
       // With `data-cell` on each value cell, this is how the container finds the DOM cell to anchor
@@ -715,7 +717,7 @@ const RowView = React.memo(function RowView({
     >
       {/* Name cell (sticky left, carries selection affordances) */}
       <div
-        className="sticky left-0 z-10 flex h-full cursor-pointer items-center gap-1.5 bg-background px-2"
+        className={cn(SHEET_STICKY_CELL_CLASS, 'flex h-full cursor-pointer items-center gap-1.5 px-2')}
         onClick={(e) => onRowClick(row.id, e)}
       >
         {/* Selection tint needs to survive the opaque sticky background — and so does the 3px

@@ -23,6 +23,14 @@ import { CueStatePip } from '@/components/cues/CueRowParts'
 import { CellSelectionActions } from '@/components/sheet/CellSelectionActions'
 import { FanPopover, type FanPlan } from '@/components/sheet/FanPopover'
 import { SelectionBar } from '@/components/sheet/SelectionBar'
+import { LegendSwatch, SheetPage } from '@/components/sheet/SheetPage'
+
+/**
+ * The live and standby rows' tints — one constant each, worn by the row *and* by its legend
+ * swatch, so retuning a row moves the key with it (`LegendSwatch`'s contract).
+ */
+const LIVE_ROW_CLASS = 'bg-green-500/[0.08] shadow-[inset_3px_0_0_rgb(34,197,94)]'
+const STANDBY_ROW_CLASS = 'bg-blue-500/[0.06] shadow-[inset_3px_0_0_rgb(59,130,246)]'
 import { SheetTable } from '@/components/sheet/SheetTable'
 import { useSheet } from '@/components/sheet/useSheet'
 import type { SheetKeyRefusal } from '@/components/sheet/useSheetKeyboard'
@@ -544,7 +552,6 @@ export function CueSheet({
       <SheetTable<CueSheetRow, CueColumnKey>
         {...sheet.tableProps}
         onRowClick={onRowClick}
-        fill
         // **Reordering is an unlocked gesture**, like every other edit on this sheet — the grip is
         // drawn only then, and the rows the cards view can drag are the rows this can. The ids come
         // back as row ids (`cue:<n>`), which is the sheet's vocabulary, so they are unwrapped here
@@ -561,9 +568,9 @@ export function CueSheet({
         minWidth={`${100 + columns.reduce((n, c) => n + trackFloor(c.width), 0)}px`}
         rowClass={(row) =>
           row.cue.id === activeCueId
-            ? 'bg-green-500/[0.08] shadow-[inset_3px_0_0_rgb(34,197,94)]'
+            ? LIVE_ROW_CLASS
             : row.cue.id === standbyCueId
-              ? 'bg-blue-500/[0.06] shadow-[inset_3px_0_0_rgb(59,130,246)]'
+              ? STANDBY_ROW_CLASS
               : undefined
         }
         firstColumn={{
@@ -636,20 +643,22 @@ export function CueSheet({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      <div className="flex h-[22px] shrink-0 items-center gap-3 whitespace-nowrap border-t px-3 text-[10.5px] text-muted-foreground">
+      {/* The shell's footer, and its one swatch (CLAUDE.md §List shell): each wears the tint and
+          the 3px edge its row wears above, so the key teaches the mark and not a stand-in. */}
+      <SheetPage.Footer>
         <span>
           {standardCount} cue{standardCount === 1 ? '' : 's'}
           {markerCount > 0 ? ` · ${markerCount} marker${markerCount === 1 ? '' : 's'}` : ''}
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block size-2.5 rounded-full border border-green-500 bg-green-500/20" />
+          <LegendSwatch className={cn(LIVE_ROW_CLASS, 'ring-1 ring-inset ring-green-500/40')} />
           Live
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block size-2.5 rounded-full border border-blue-500 bg-blue-500/20" />
+          <LegendSwatch className={cn(STANDBY_ROW_CLASS, 'ring-1 ring-inset ring-blue-500/40')} />
           Next
         </span>
-      </div>
+      </SheetPage.Footer>
     </div>
   )
 }

@@ -282,7 +282,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
                   <Command.Item
                     value="New Patch"
                     keywords={["patch", "fixture", "add"]}
-                    onSelect={() => runAction(() => navigate(`/projects/${viewedProject.id}/settings/patches?action=new`))}
+                    onSelect={() => runAction(() => navigate(`/projects/${viewedProject.id}/patches?action=new`))}
                     className={itemClassName}
                   >
                     <TableProperties className="size-4 text-muted-foreground" />

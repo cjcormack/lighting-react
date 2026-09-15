@@ -3,9 +3,10 @@
  * programmer's field, whole on hover**.
  *
  * `Filter fixtures by name, manufacturer, or type…` is ~300px of 14px text behind a 36px search
- * icon, and every field that carries it is allowed to shrink: the programmer's row B unpicks the
- * field's own `min-w-48` because that row cannot wrap (`ProgrammerGrid`'s note), and below a
- * width the field becomes an icon over a popover. So the placeholder was clipped mid-word at
+ * icon, and every field that carries it is allowed to shrink: the field declares `min-w-0` because
+ * no list toolbar wraps any more — the programmer's row B never could (`ProgrammerGrid`'s note),
+ * and the plain lists' row is a 40px rung of the list shell since CLAUDE.md §List shell — and
+ * below a width the programmer's field becomes an icon over a popover. So the placeholder was clipped mid-word at
  * every width — `PD-FILTER-PLACEHOLDER-CLIP`. The fix the finding names is a shorter placeholder,
  * not a wider field: the field gives on purpose.
  *
@@ -26,7 +27,8 @@ export const FIXTURE_FILTER_PLACEHOLDER = 'Filter fixtures…'
  * 360px of row up (the chrome tidy-up), where `Filter fixtures…` would clip again exactly as
  * `PD-FILTER-PLACEHOLDER-CLIP` found it did at 600. One word fits behind the search icon at the
  * field's 132px floor, so the programmer says the one word and the hint says the rest. The two
- * plain list routes keep the long form: their toolbar wraps, so their field is never squeezed.
+ * plain list routes keep the long form: their field is capped at 340 on a row with only Lit and
+ * Columns beside it, so it has the room at every width a desk is used at.
  */
 export const FIXTURE_FILTER_PLACEHOLDER_SHORT = 'Filter…'
 

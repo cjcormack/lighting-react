@@ -11,6 +11,7 @@ import { cn, labelUnlessCompact } from '@/lib/utils'
 import { FIXTURE_FILTER_HINT, FIXTURE_FILTER_PLACEHOLDER_SHORT } from '@/lib/fixtureFilterCopy'
 import type { ColumnVisibility } from '@/components/fixtures-list/ColumnsMenu'
 import { FixturesListContainer } from '@/components/fixtures-list/FixturesListContainer'
+import { SheetPage } from '@/components/sheet/SheetPage'
 import { EditorContextProvider } from '@/components/programmer/EditorContext'
 import { LayerRowNotices } from './LayerRowNotices'
 import { ProgrammerScopeBand } from './ProgrammerScopeBand'
@@ -130,7 +131,6 @@ function ProgrammerGridBody({
         grouped={grouped}
         selectionScope="programmer"
         showOwnership
-        fill
         columnVisibility={columnVisibility}
         onColumnVisibilityChange={onColumnVisibilityChange}
         // The one word: this row keeps the field down to 360px of its own width, where the long
@@ -164,20 +164,16 @@ function ProgrammerGridBody({
                   unfolded, row B's tools have a hard minimum of ~290px and there is no width this
                   app is usable at where that does not fit on one line.
 
-                  `h-10` becomes `min-h-10` in that arm because a wrapped row is two lines tall.
-                  With one line it is the same 40px either way: every chrome row on this page is
-                  40 and holds 32px controls, so the 4px above and below a control is the row's
-                  own inset, not padding, and the folded row keeps it by having the same minimum.
+                  `h-10` becomes `min-h-10` in that arm (`SheetPage.Row`'s `minHeight`) because a
+                  wrapped row is two lines tall. With one line it is the same 40px either way:
+                  every chrome row on this page is 40 and holds 32px controls, so the 4px above
+                  and below a control is the row's own inset, not padding, and the folded row
+                  keeps it by having the same minimum.
                   `gap-y-1.5` is the gap *between* the lines, and is stated separately from `gap-2`
                   so the two can be read apart: at 6px a wrapped folded row is 70px against the
                   80px row A and row B cost unfolded, so the fold still pays for itself at the
                   widths where it has to take a second line. */}
-              <div
-                className={cn(
-                  'flex items-center gap-2 border-b px-3',
-                  leading ? 'min-h-10 flex-wrap gap-y-1.5' : 'h-10',
-                )}
-              >
+              <SheetPage.Row minHeight={!!leading} className={cn(leading && 'flex-wrap gap-y-1.5')}>
                 {/* The short-height arm: row A has no row of its own and its two halves lead this
                     one (space plan D8), and they get an `@container` of their own — because the
                     question their thresholds ask ("has this box room for the word `Editing`?") is
@@ -383,17 +379,18 @@ function ProgrammerGridBody({
                   {/* `max-w-[340px]` is the artboard's: past that the field is wider than any
                       fixture name and the row's right end starts to feel unanchored.
 
-                      `[&>div]:min-w-0` unpicks the filter's own `min-w-48`. That floor is right in
-                      the default toolbar, which *wraps*, and wrong here, where the row does not:
-                      below ~1300px of page width the 192px input simply overran its flex track and
-                      painted its placeholder under the Lit button. The *unfolded* row B has no
-                      second line to give it — the folded one wraps, but this arm does not — so the
-                      field gives instead — and session 4 replaces it with a search icon
-                      at the width where even that stops being enough. */}
+                      The field is allowed to give: the container's own node declares `min-w-0`
+                      (it carried a `min-w-48` floor while the plain lists' toolbar *wrapped*, and
+                      this row had to unpick it — below ~1300px of page width the 192px input
+                      overran its flex track and painted its placeholder under the Lit button; the
+                      floor went with the wrapping toolbar, since no list toolbar wraps now). The
+                      *unfolded* row B has no second line to give it — the folded one wraps, but
+                      this arm does not — so the field gives instead — and session 4 replaces it
+                      with a search icon at the width where even that stops being enough. */}
                   {/* Two arms of one control. From `@[360px]` the field is on the row; below it
                       the field is a search icon that opens the same node in a popover — the icon
-                      arm session 4 promised, and the real answer to the `min-w-48` squeeze the note
-                      above records. Radix mounts popover content only while it is open, so there is
+                      arm session 4 promised, and the real answer to the squeeze the old 192px floor
+                      caused (the note above). Radix mounts popover content only while it is open, so there is
                       one filter input in the document except during the moment it is being used.
 
                       **The threshold is `@[360px]`, and two things make it that low.** It was
@@ -435,7 +432,7 @@ function ProgrammerGridBody({
                       block sharing it with a 230px action bar — collapsed to four pixels. */}
                   <div
                     className={cn(
-                      'hidden min-w-0 items-center gap-2 [&>div]:min-w-0',
+                      'hidden min-w-0 items-center gap-2',
                       leading
                         ? 'flex-1 @[840px]:flex @[840px]:min-w-[132px]'
                         : 'max-w-[340px] flex-[999_1_0%] @[360px]:flex',
@@ -489,7 +486,7 @@ function ProgrammerGridBody({
                 {/* `Make layer` was this row's right end until session 3 of the space plan moved
                     it onto the rail's Local values row — the row it promotes. See `LocalValuesRow`
                     in `ProgrammerRail` for the one rule that changed with the move. */}
-              </div>
+              </SheetPage.Row>
             </div>
             {/* The layer notices keep their padded block. They are prose, not chrome — a sentence
                 about what a focused layer will and will not take — and they wrap. `empty:hidden`
@@ -578,8 +575,9 @@ function ScopedLegend({
  *
  * It holds the container's *own* filter node rather than a second input, so there is one piece of
  * state and one placeholder however this is drawn — the field the popover opens is the field the
- * row shows a hundred pixels wider. `w-72` because the node carries `min-w-48` and a popover is
- * the one place that floor is simply right.
+ * row shows a hundred pixels wider. `w-72` because the node carries no floor of its own (it is
+ * `min-w-0`, so the row can squeeze it), and a popover is the one place a comfortable fixed width
+ * is simply right.
  */
 function FilterPopover({ className, children }: { className?: string; children: ReactNode }) {
   return (

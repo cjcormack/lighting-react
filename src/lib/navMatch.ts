@@ -23,7 +23,7 @@ export function pathHasSegment(pathname: string, segment: string): boolean {
 /**
  * Among all visible nav items whose `pathMatch` appears in the current pathname, return the id of
  * the most specific one — longest `pathMatch` wins. This keeps a parent like "Project Settings"
- * from staying active while the operator is on one of its child tabs (e.g. "Patch List").
+ * from staying active while the operator is on one of its child tabs (e.g. "Surfaces").
  *
  * Matching is [pathHasSegment] — see there for why it has to be segment-aware.
  *

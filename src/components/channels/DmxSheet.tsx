@@ -11,6 +11,8 @@ import { useUpdateChannelMutation } from '@/store/channels'
 import { useParkChannelMutation, useUnparkChannelMutation } from '@/store/park'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import { ownershipCellClass, OWNERSHIP_LABELS } from '@/components/fixtures-list/ownership'
+import { OwnershipSwatch } from '@/components/fixtures-list/OwnershipLegend'
+import { SheetPage } from '@/components/sheet/SheetPage'
 import { aggregateCellOwnership, type CellOwnership } from '@/components/fixtures-list/useRowOwnership'
 import { CellSelectionActions } from '@/components/sheet/CellSelectionActions'
 import { FanPopover, type FanPlan } from '@/components/sheet/FanPopover'
@@ -529,7 +531,6 @@ export function DmxSheet({
       </div>
       <SheetTable<DmxRow, DmxColumnKey>
         {...sheet.tableProps}
-        fill
         rowHeight={DMX_ROW_HEIGHT}
         minWidth={`${ROW_HEAD_WIDTH + MIN_CELL_WIDTH * columnCount}px`}
         firstColumn={{
@@ -543,25 +544,28 @@ export function DmxSheet({
           ),
         }}
       />
-      <div className="flex h-[22px] shrink-0 items-center gap-3 overflow-hidden whitespace-nowrap border-t px-3 text-[10.5px] text-muted-foreground">
+      {/* The shell's footer, with the programmer's own swatches (CLAUDE.md §List shell): each is
+          styled by the real `ownershipCellClass`, so retuning a ring moves this key with it — the
+          four hand-copied ring colours this drew before could drift from the cells above. */}
+      <SheetPage.Footer>
         <span>
           Universe {universe} · {patched} of 512 patched · {parkValueMap.size} parked
         </span>
         <span className="font-medium">Owned by</span>
         {(
           [
-            ['ring-primary', 'You'],
-            ['ring-sky-500/40', 'Cue'],
-            ['ring-violet-500/50', 'Effect'],
-            ['ring-amber-500', 'Parked'],
+            ['programmer', 'You'],
+            ['cue', 'Cue'],
+            ['effect', 'Effect'],
+            ['parked', 'Parked'],
           ] as const
-        ).map(([ring, name]) => (
-          <span key={name} className="inline-flex items-center gap-1.5" title={OWNERSHIP_LABELS[name.toLowerCase() === 'you' ? 'programmer' : (name.toLowerCase() as 'cue' | 'effect' | 'parked')]}>
-            <span className={cn('inline-block size-2.5 rounded-sm ring-1 ring-inset', ring)} />
+        ).map(([source, name]) => (
+          <span key={name} className="inline-flex items-center gap-1.5" title={OWNERSHIP_LABELS[source]}>
+            <OwnershipSwatch source={source} />
             {name}
           </span>
         ))}
-      </div>
+      </SheetPage.Footer>
     </div>
   )
 }

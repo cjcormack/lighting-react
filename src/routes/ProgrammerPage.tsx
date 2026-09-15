@@ -1,7 +1,6 @@
 import { memo } from 'react'
-import { Loader2 } from 'lucide-react'
 import { Navigate, useParams } from 'react-router'
-import { Card } from '@/components/ui/card'
+import { SheetPage } from '@/components/sheet/SheetPage'
 import { ShowHeader } from '@/components/ShowHeader'
 import { EditorContextProvider } from '@/components/programmer/EditorContext'
 import { ProgrammerActionBar } from '@/components/programmer/ProgrammerActionBar'
@@ -96,11 +95,15 @@ export function ProgrammerPage() {
     frameRateProgress: false,
   })
 
+  // Loading and not-found keep the list's shape (CLAUDE.md §List shell): the same header row,
+  // the body centred on the spinner or the sentence, so nothing changes shape when the grid
+  // arrives.
   if (currentLoading || projectLoading) {
     return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
+      <SheetPage>
+        <SheetPage.Header />
+        <SheetPage.Empty loading />
+      </SheetPage>
     )
   }
 
@@ -112,9 +115,10 @@ export function ProgrammerPage() {
 
   if (!project) {
     return (
-      <Card className="m-4 p-4">
-        <p className="text-muted-foreground">Project not found</p>
-      </Card>
+      <SheetPage>
+        <SheetPage.Header />
+        <SheetPage.Empty className="text-destructive">Project not found</SheetPage.Empty>
+      </SheetPage>
     )
   }
 
@@ -256,9 +260,9 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
           components are mounted in the other place and two copies would be two of every query
           behind them. */}
       {!shortViewport && (
-        <div className="@container shrink-0 border-b bg-card/50 px-3">
-          <div className="flex h-10 items-center gap-2">{rowA}</div>
-        </div>
+        // The shell's chrome row, with the one ground any row has: row A keeps its `bg-card/50`
+        // wash by decision (list-shell-design, called 2026-09-15) — the verbs' own band.
+        <SheetPage.Row className="@container bg-card/50">{rowA}</SheetPage.Row>
       )}
 
       {/* The outer editor context stays `live` for the *rail* — its FX controls write the

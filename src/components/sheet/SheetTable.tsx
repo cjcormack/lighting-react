@@ -24,9 +24,14 @@ import type { SheetCellProps, SheetColumn, SheetRow } from './sheetModel'
 
 /** Every row of every sheet is 36px, the DMX sheet's 44 — see `rowHeight`. */
 export const SHEET_ROW_HEIGHT = 36
-/** The header: 30px, uppercase 11px tracked. */
-const HEADER_CLASS =
-  'px-1.5 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground'
+import {
+  SHEET_DIVIDER_CLASS,
+  SHEET_HEADER_CELL_CLASS,
+  SHEET_HEADER_ROW_CLASS,
+  SHEET_ROW_CLASS,
+  SHEET_SCROLLER_CLASS,
+  SHEET_STICKY_CELL_CLASS,
+} from './sheetFrame'
 
 /**
  * What a row hands its grip: dnd-kit's activator, spread onto the handle button.
@@ -57,8 +62,6 @@ export interface SheetTableProps<Row extends SheetRow, C extends string> {
   }
   /** The height of every row, dividers included. 36 everywhere but the DMX sheet's 44. */
   rowHeight?: number
-  /** Fill the flex parent instead of the embedded-list viewport cap. */
-  fill?: boolean
   /** Below this the table needs its columns' minimum widths; the sum of the tracks' floors. */
   minWidth?: string
   isSelected: (id: RowId) => boolean
@@ -117,7 +120,6 @@ export function SheetTable<Row extends SheetRow, C extends string>({
   columns,
   firstColumn,
   rowHeight = SHEET_ROW_HEIGHT,
-  fill = false,
   minWidth,
   isSelected,
   onRowClick,
@@ -223,18 +225,17 @@ export function SheetTable<Row extends SheetRow, C extends string>({
   )
 
   return (
-    <div className={cn('relative', fill && 'flex min-h-0 flex-1 flex-col')}>
+    // Always the fill arm: the sheet owns the remaining height of a full-height column
+    // (`SheetPage`) and is the page's one scroller. There was a second arm — `rounded-md border`
+    // capped at `calc(100vh - 14rem)` for a sheet embedded in a scrolling page — and nothing
+    // embeds a sheet in a scrolling page any more.
+    <div className="relative flex min-h-0 flex-1 flex-col">
       <div
         ref={attachScroller}
-        className={cn(
-          // `bg-background` explicitly: the sticky first column has to be opaque to cover the
-          // cells sliding under it, and with the sheet itself transparent it took its colour from
-          // whatever the page happened to be — on `/show`, whose `<main>` is `bg-muted/40`, the
-          // Cue column read as a dark block laid over the rows. The sheet is one surface.
-          'overflow-auto bg-background',
-          fill ? 'min-h-0 flex-1 border-t border-border' : 'rounded-md border border-border',
-        )}
-        style={fill ? undefined : { maxHeight: 'calc(100vh - 14rem)' }}
+        // The frame is `sheetFrame.ts`'s (CLAUDE.md §List shell): the sheet ground on the scroller,
+        // so the sticky first column and the body are one colour, and no top line — the row
+        // above owns it.
+        className={SHEET_SCROLLER_CLASS}
         onClick={(e) => {
           if (!onBackgroundClick) return
           const target = e.target as Element
@@ -248,7 +249,7 @@ export function SheetTable<Row extends SheetRow, C extends string>({
         <div style={{ minWidth }}>
           <div
             data-grid-header
-            className="sticky top-0 z-20 grid border-b border-border bg-background"
+            className={SHEET_HEADER_ROW_CLASS}
             style={{ gridTemplateColumns }}
           >
             <div
@@ -256,7 +257,9 @@ export function SheetTable<Row extends SheetRow, C extends string>({
               // whose first column selects no rows hangs no name header, and every press is a cell
               // press.
               {...(firstColumn.selectsRows ? { 'data-grid-name-header': true } : {})}
-              className={cn('sticky left-0 z-10 bg-background px-2', HEADER_CLASS)}
+              // `px-2` *after* the header class — `cn` is tailwind-merge and the header class carries
+              // `px-1.5`, so this order is what keeps the label on the row cells' 8px inset.
+              className={cn(SHEET_STICKY_CELL_CLASS, SHEET_HEADER_CELL_CLASS, 'px-2')}
             >
               {firstColumn.label}
             </div>
@@ -267,7 +270,7 @@ export function SheetTable<Row extends SheetRow, C extends string>({
                 // read-out column hangs none: a rectangle over Book or Type selects nothing there,
                 // rather than cells with no editor that inflate the count and refuse Clear.
                 {...(column.cell != null ? { 'data-column-header': column.key } : {})}
-                className={cn(HEADER_CLASS, column.align === 'right' && 'text-right')}
+                className={cn(SHEET_HEADER_CELL_CLASS, column.align === 'right' && 'text-right')}
               >
                 {column.label}
               </div>
@@ -565,7 +568,7 @@ function SheetRowViewInner<Row extends SheetRow, C extends string>({
       // `data-row-id` here too: a divider is a row of the sheet, not empty space — a tap on it must
       // not drop the selection.
       <div
-        className="flex h-full items-center gap-3 border-b border-border bg-muted/30 px-3"
+        className={cn(SHEET_DIVIDER_CLASS, 'gap-3 px-3')}
         data-row-id={row.id}
       >
         {dragHandle && <RowGrip handle={dragHandle} />}
@@ -585,7 +588,8 @@ function SheetRowViewInner<Row extends SheetRow, C extends string>({
         // track has to be that height and not the tallest cell's min-content. Without the floor of
         // zero a single cell with an outsized intrinsic height grows the track past the row box and
         // every cell in the row is laid out below the row's own centre.
-        'group/row grid h-full auto-rows-[minmax(0,1fr)] border-b border-border text-sm',
+        SHEET_ROW_CLASS,
+        'auto-rows-[minmax(0,1fr)]',
         selected ? 'bg-foreground/[0.06]' : 'hover:bg-accent/30',
         rowClass,
       )}
@@ -595,7 +599,8 @@ function SheetRowViewInner<Row extends SheetRow, C extends string>({
     >
       <div
         className={cn(
-          'sticky left-0 z-10 flex h-full items-center gap-1.5 bg-background px-2',
+          SHEET_STICKY_CELL_CLASS,
+          'flex h-full items-center gap-1.5 px-2',
           firstColumn.selectsRows && 'cursor-pointer',
         )}
         onClick={firstColumn.selectsRows ? (e) => onRowClick(row.id, e) : undefined}

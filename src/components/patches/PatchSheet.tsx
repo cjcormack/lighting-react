@@ -24,6 +24,10 @@ import { useHighlight } from '@/components/fixtures-list/useHighlight'
 import { CellSelectionActions } from '@/components/sheet/CellSelectionActions'
 import { FanPopover, type FanPlan } from '@/components/sheet/FanPopover'
 import { SelectionBar } from '@/components/sheet/SelectionBar'
+import { LegendSwatch } from '@/components/sheet/SheetPage'
+
+/** The overlap ring on an Address cell — worn by the cell and by the legend's swatch alike. */
+const OVERLAP_CELL_CLASS = 'rounded-sm ring-1 ring-inset ring-destructive bg-destructive/10'
 import { SheetTable } from '@/components/sheet/SheetTable'
 import { useSheet } from '@/components/sheet/useSheet'
 import { AddressCell, type CellAddress } from '@/components/sheet/cells/AddressCell'
@@ -109,7 +113,7 @@ const STAGE_OPTIONS: SheetOption[] = [
 ]
 
 /**
- * The patch list as a sheet (CLAUDE.md §Sheet kit): the Patch List tab's rows on the
+ * The patch list as a sheet (CLAUDE.md §Sheet kit): the patch list's rows on the
  * programmer's grid — 36px rows, a sticky name column, drag-select from the name column for rows
  * and from a value column for cells, one editor per column fanned over the selection.
  *
@@ -305,7 +309,7 @@ export function PatchSheet({
             },
           }
         },
-        cellClass: (row) => (overlaps.has(row.patch.id) ? 'rounded-sm ring-1 ring-inset ring-destructive bg-destructive/10' : undefined),
+        cellClass: (row) => (overlaps.has(row.patch.id) ? OVERLAP_CELL_CLASS : undefined),
         cellTitle: (row) => {
           const other = overlaps.get(row.patch.id)
           return other
@@ -662,7 +666,6 @@ export function PatchSheet({
       </div>
       <SheetTable<PatchSheetRow, PatchColumnKey>
         {...sheet.tableProps}
-        fill
         minWidth={`${240 + columns.reduce((n, c) => n + trackFloor(c.width), 0)}px`}
         firstColumn={{
           label: 'Fixture',
@@ -718,7 +721,7 @@ export function PatchSheet({
       />
       {overlaps.size > 0 && (
         <p className="flex items-center gap-2 border-t px-3 py-1 text-[10.5px] text-muted-foreground">
-          <span className="inline-block size-2.5 rounded-full border border-destructive bg-destructive/20" />
+          <LegendSwatch className={OVERLAP_CELL_CLASS} />
           <Info className="size-3" />
           {overlaps.size} address{overlaps.size === 1 ? '' : 'es'} overlap another fixture — hover an address for which
         </p>

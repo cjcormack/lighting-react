@@ -65,6 +65,15 @@ export interface NavItem {
 export const navItems: NavItem[] = [
   // ── Setup ───────────────────────────────────────────────────────────
   {
+    id: "patches",
+    label: "Patch List",
+    icon: TableProperties,
+    path: (p) => `/projects/${p}/patches`,
+    visibility: "always",
+    pathMatch: "/patches",
+    group: "setup",
+  },
+  {
     id: "fixtures",
     label: "Fixtures",
     icon: LayoutGrid,
@@ -232,8 +241,9 @@ export const navItems: NavItem[] = [
 
   // ── Settings (per-project) ──────────────────────────────────────────
   // The parent lands on the General tab; the children deep-link to their
-  // sibling tabs so common destinations (Patch List in particular) are one
-  // click away from the sidebar.
+  // sibling tabs so common destinations are one click away from the sidebar.
+  // The patch list is not one of them any more: it is a routed page under
+  // Setup (list-shell-design, called 2026-09-15).
   {
     id: "project-settings",
     label: "Project Settings",
@@ -242,16 +252,6 @@ export const navItems: NavItem[] = [
     visibility: "always",
     pathMatch: "/settings",
     group: "settings",
-  },
-  {
-    id: "patches",
-    label: "Patch List",
-    icon: TableProperties,
-    path: (p) => `/projects/${p}/settings/patches`,
-    visibility: "always",
-    pathMatch: "/settings/patches",
-    group: "settings",
-    parent: "project-settings",
   },
   {
     id: "surfaces",

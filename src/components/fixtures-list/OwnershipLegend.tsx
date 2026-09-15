@@ -1,5 +1,6 @@
 import { AudioWaveform, Layers } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { LegendSwatch, SheetPage } from '@/components/sheet/SheetPage'
 import { OWNERSHIP_LABELS, layerCellClass, ownershipCellClass } from './ownership'
 import {
   LAYER_LEGEND_GLOSS,
@@ -30,19 +31,17 @@ import type { CellOwnership, CellOwnershipSource } from './useRowOwnership'
  * and nothing to say it existed — and the counts, which are leftmost and the only thing here that
  * changes minute to minute, are what has to survive to the last.
  */
-function OwnershipSwatch({ source }: { source: CellOwnershipSource }) {
+export function OwnershipSwatch({ source }: { source: CellOwnershipSource }) {
   return (
-    <span
-      aria-hidden="true"
+    <LegendSwatch
       className={cn(
-        'flex size-3 shrink-0 items-center justify-center rounded-sm',
         source === 'baseline' ? 'bg-muted' : ownershipCellClass(swatchOwnership(source)),
         // The badge the cell wears, so the legend teaches the mark and not only the ring.
         source === 'effect' && 'bg-violet-500/90 text-white',
       )}
     >
       {source === 'effect' && <AudioWaveform className="size-2.5" />}
-    </span>
+    </LegendSwatch>
   )
 }
 
@@ -90,12 +89,12 @@ interface LegendCountProps {
 }
 
 /**
- * The shared footer shape: one 22px line, its own `@container`, never wrapping.
+ * The shared footer shape: the shell's 22px footer (`SheetPage.Footer`), never wrapping.
  *
  * Both legends use it so they cannot drift into two different footers — they occupy the same slot
  * and swap only on the scope.
  *
- * The `@container` is declared here and every width query is on a descendant — the shape
+ * The footer is the `@container` and every width query is on a descendant — the shape
  * `ProgrammerWorkspace`'s doc comment records the bug for. It measures **the footer's own column**
  * rather than the page, because fitting inside the grid column is the actual question: measuring
  * the page would show the long glosses at 1180 of viewport, where the column is 712 and they clip
@@ -109,17 +108,15 @@ function LegendFooter({
   children,
 }: LegendCountProps & { className?: string; children: React.ReactNode }) {
   return (
-    <div className={cn('@container shrink-0 border-t', className)}>
-      <div className="flex h-[22px] items-center gap-3 overflow-hidden whitespace-nowrap px-3 text-[10.5px] text-muted-foreground">
-        {fixtureCount != null && (
-          <span className="shrink-0 tabular-nums">
-            {fixtureCount} fixture{fixtureCount === 1 ? '' : 's'}
-            {selectedCount != null && selectedCount > 0 && ` · ${selectedCount} selected`}
-          </span>
-        )}
-        {children}
-      </div>
-    </div>
+    <SheetPage.Footer className={className}>
+      {fixtureCount != null && (
+        <span className="shrink-0 tabular-nums">
+          {fixtureCount} fixture{fixtureCount === 1 ? '' : 's'}
+          {selectedCount != null && selectedCount > 0 && ` · ${selectedCount} selected`}
+        </span>
+      )}
+      {children}
+    </SheetPage.Footer>
   )
 }
 
@@ -176,9 +173,8 @@ const SWATCH_VALUE = { kind: 'slider', min: 255, max: 255, isUniform: true } as 
 
 function LayerSwatch({ legendKey }: { legendKey: LayerLegendKey }) {
   return (
-    <span
-      aria-hidden="true"
-      className={cn('size-3 shrink-0 rounded-sm', layerCellClass(swatchState(legendKey)) || 'bg-muted')}
+    <LegendSwatch
+      className={layerCellClass(swatchState(legendKey)) || 'bg-muted'}
     />
   )
 }

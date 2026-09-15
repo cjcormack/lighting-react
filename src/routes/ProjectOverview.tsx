@@ -115,7 +115,7 @@ export default function ProjectOverview() {
             count={patches?.length}
             icon={<TableProperties className="size-5" />}
             description="Manage fixture patching"
-            onClick={() => navigate(`/projects/${project.id}/settings/patches`)}
+            onClick={() => navigate(`/projects/${project.id}/patches`)}
           />
           <QuickNavCard
             title="Scripts"

@@ -34,7 +34,9 @@ describe('mostSpecificActiveId', () => {
 
   it('prefers the longest match, so a child tab beats its parent', () => {
     expect(mostSpecificActiveId(nav, '/projects/7/settings')).toBe('project-settings')
-    expect(mostSpecificActiveId(nav, '/projects/7/settings/patches')).toBe('patches')
+    expect(mostSpecificActiveId(nav, '/projects/7/settings/surfaces')).toBe('surfaces')
+    // The patch list left the settings page for a route of its own (list-shell-design).
+    expect(mostSpecificActiveId(nav, '/projects/7/patches')).toBe('patches')
   })
 
   it('matches whole segments only', () => {

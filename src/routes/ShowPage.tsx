@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate, Navigate, useSearchParams, useLocation } from 'react-router'
-import { Card } from '@/components/ui/card'
-import { Loader2 } from 'lucide-react'
+import { SheetPage } from '@/components/sheet/SheetPage'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import { useProjectCueStackListQuery } from '../store/cueStacks'
 import { useCreateProjectCueMutation } from '../store/cues'
@@ -486,19 +485,23 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
     return <Navigate to={`/projects/${projectIdNum}/show/stacks/${drillStackId}/table${location.search}`} replace />
   }
 
+  // Loading and not-found keep the list's shape (CLAUDE.md §List shell) for both views — the
+  // loaded page is the same full-height column whichever it draws.
   if (projectLoading || currentLoading || stacksLoading) {
     return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
+      <SheetPage>
+        <SheetPage.Header />
+        <SheetPage.Empty loading />
+      </SheetPage>
     )
   }
 
   if (!project) {
     return (
-      <Card className="m-4 p-4">
-        <p className="text-muted-foreground">Project not found</p>
-      </Card>
+      <SheetPage>
+        <SheetPage.Header />
+        <SheetPage.Empty className="text-destructive">Project not found</SheetPage.Empty>
+      </SheetPage>
     )
   }
 

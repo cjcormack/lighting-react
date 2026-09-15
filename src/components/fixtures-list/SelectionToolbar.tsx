@@ -24,6 +24,12 @@ export interface SelectionToolbarProps {
    * routes the whole-selection row Fan they have always had.
    */
   actions?: ReactNode
+  /**
+   * Fold Locate and Highlight below 800px of the bar (`MID_FOLDED_CLASS`). True on the programmer,
+   * whose bar carries the template strip the fold exists to make room for; false on the two plain
+   * lists, where nothing rides the bar and this toolbar is the only place those two verbs live.
+   */
+  foldForStrip?: boolean
 }
 
 // The three fold classes moved to the sheet kit; re-exported so this list's callers keep one import.
@@ -35,7 +41,9 @@ export function SelectionToolbar({
   targets,
   onClear,
   actions,
+  foldForStrip = true,
 }: SelectionToolbarProps) {
+  const midFold = foldForStrip ? MID_FOLDED_CLASS : undefined
   const { data: locateState } = useLocateStateQuery()
   const [toggleLocate] = useToggleLocateMutation()
   const getTargets = useCallback(() => [...targets], [targets])
@@ -55,26 +63,16 @@ export function SelectionToolbar({
     }
   }
 
-  // `shrink-0`: in the programmer's one-line selection bar this sits at the right end of a row
+  // `shrink-0`: on the programmer's one-line selection bar this sits at the right end of a row
   // whose middle is a scroller, and a flex item that gives would be squeezed by the chips it is
-  // supposed to sit beside. In the default wrapping toolbar it simply wraps instead.
+  // supposed to sit beside.
   return (
     <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-      {/* "12 selected" is three times the width of "12" and says the same thing next to a
-          row of selection actions. Narrow viewports get the number alone.
-
-          And in the programmer's selection bar it goes entirely, on the same `@max-[1100px]`
-          rule as the two verbs' words: that bar counts the selection itself, at its left end, as
-          "4 fixtures" — the heads a press lands on — and the same number twice at opposite ends of
-          one 40px line reads as two different facts that happen to agree. The list routes have no
-          such count of their own, so there it stays.
-
-          Since the two selections became one (`FixturesListContainer`), a marquee's rows are the
-          selection too, so this counts the cells' heads under a marquee and the rows' otherwise. */}
-      <span className="text-xs text-muted-foreground tabular-nums @max-[1100px]:hidden">
-        {targets.length}
-        <span className="hidden sm:inline"> selected</span>
-      </span>
+      {/* No count here. There was one — "12 selected", folding to the number on a phone — and it
+          went when the two plain lists gained the selection bar (CLAUDE.md §List shell): every
+          list this sits on now counts the selection at the bar's left end, as "4 fixtures" — the
+          heads a press lands on — and the same number twice at opposite ends of one 40px line
+          reads as two different facts that happen to agree. */}
       {actions}
       {/* No "Apply palette" or "Record palette" here any more. Both authored value-level
           references, which layers replace: applying a look to a cue is a layer, and recording the
@@ -87,7 +85,7 @@ export function SelectionToolbar({
             variant={allLocated ? 'default' : 'outline'}
             size="sm"
             onClick={locateSelection}
-            className={cn(MID_FOLDED_CLASS, allLocated && 'bg-sky-500 text-white hover:bg-sky-600')}
+            className={cn(midFold, allLocated && 'bg-sky-500 text-white hover:bg-sky-600')}
           >
             <Crosshair className="size-3.5" />
             <span className={WORD_CLASS}>Locate</span>
@@ -102,7 +100,7 @@ export function SelectionToolbar({
           <Button
             variant={highlight.isActive ? 'default' : 'outline'}
             size="sm"
-            className={MID_FOLDED_CLASS}
+            className={midFold}
             onPointerDown={highlight.press}
             onPointerUp={highlight.release}
             onPointerCancel={highlight.release}

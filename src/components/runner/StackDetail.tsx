@@ -20,6 +20,7 @@ import {
   useSortCueStackByCueNumberMutation,
 } from '@/store/cueStacks'
 import { cn } from '@/lib/utils'
+import { SheetPage } from '@/components/sheet/SheetPage'
 import type { CueStack } from '@/api/cueStacksApi'
 import type { Cue } from '@/api/cuesApi'
 import { CueCardEditor } from './CueCardEditor'
@@ -212,11 +213,10 @@ export function StackDetail({
       {/* Header — controls drop their text labels progressively as the content area narrows
           (container-query, sidebar-aware); everything stays reachable as an icon button down
           to phone widths. */}
-      <div
-        className={cn(
-          'flex h-12 shrink-0 items-center gap-3 border-b px-4 transition-colors',
-          unlockedWarning && UNLOCKED_WARNING_CLASS,
-        )}
+      {/* The shell's 48px header row (CLAUDE.md §List shell) — the 12px gutter every list row
+          has; this one was `px-4` alone. */}
+      <SheetPage.Header
+        className={cn('gap-3 transition-colors', unlockedWarning && UNLOCKED_WARNING_CLASS)}
       >
         <Button
           variant="outline"
@@ -263,7 +263,7 @@ export function StackDetail({
             </Button>
           </>
         )}
-      </div>
+      </SheetPage.Header>
 
       {showOutOfOrder && !locked && (
         <OutOfOrderBanner

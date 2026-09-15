@@ -185,8 +185,9 @@ export default function Layout() {
               **It buys nothing on the four live views, and that is not a bug in this line.** They
               are `h-full` and own their own scrollers, so `<main>` never overflows and there is
               no scroll for the header to leave in — measured at 852×393, the header is 53px
-              whether it is `sticky` or `static`. The routes that do scroll (Fixtures, Scripts,
-              the patch list) get the whole 53 back. Making it *disappear* on a short screen would
+              whether it is `sticky` or `static`. The routes that do scroll (the Fixtures and
+              Groups cards, Scripts, Project Settings) get the whole 53 back — the six list views
+              are full-height columns on the list shell and never do. Making it *disappear* on a short screen would
               be a different decision, and a worse one below 768px of width, where the hamburger
               inside it is the only navigation there is. */}
           <header className="@container sticky top-0 z-40 border-b bg-primary px-2 py-2 text-primary-foreground sm:px-4 [@media(max-height:500px)]:static">

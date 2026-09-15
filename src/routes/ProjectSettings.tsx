@@ -12,14 +12,15 @@ import { useProjectQuery, useUpdateProjectMutation } from "@/store/projects"
 import { Breadcrumbs } from "@/components/Breadcrumbs"
 import { formatError } from "@/lib/formatError"
 import { parseNullableNumber } from "@/lib/utils"
-import { PatchListContent } from "./Patches"
 import { SurfacesContent } from "./Surfaces"
 import { StageRegionsContent } from "@/components/stage/StageRegionsContent"
 import { RiggingsContent } from "@/components/rigging/RiggingsContent"
 import { ProjectSyncContent } from "./CloudSync"
 import { CurrentProjectRedirect } from "@/components/CurrentProjectRedirect"
 
-const TABS = ["general", "patches", "surfaces", "stage", "rigging", "sync"] as const
+// No `patches`: the patch list is a routed page again at `/projects/:id/patches` (CLAUDE.md
+// §List shell), and `App.tsx` redirects `/settings/patches` there.
+const TABS = ["general", "surfaces", "stage", "rigging", "sync"] as const
 type Tab = (typeof TABS)[number]
 
 function isTab(value: string | undefined): value is Tab {
@@ -64,13 +65,12 @@ export function ProjectSettings() {
         <div>
           <h1 className="text-lg font-semibold">Project Settings</h1>
           <p className="text-sm text-muted-foreground">
-            Configure this project&rsquo;s metadata, fixture patches, and control surfaces.
+            Configure this project&rsquo;s metadata, control surfaces, stage and rigging.
           </p>
         </div>
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList>
             <TabsTrigger value="general">General</TabsTrigger>
-            <TabsTrigger value="patches">Patch List</TabsTrigger>
             <TabsTrigger value="surfaces">Surfaces</TabsTrigger>
             <TabsTrigger value="stage">Stage</TabsTrigger>
             <TabsTrigger value="rigging">Rigging</TabsTrigger>
@@ -82,7 +82,6 @@ export function ProjectSettings() {
         {activeTab === "general" && (
           <GeneralTab projectId={projectIdNum} />
         )}
-        {activeTab === "patches" && <PatchListContent projectId={projectIdNum} />}
         {activeTab === "surfaces" && <SurfacesContent projectId={projectIdNum} />}
         {activeTab === "stage" && <StageTab projectId={projectIdNum} />}
         {activeTab === "rigging" && <RiggingTab projectId={projectIdNum} />}

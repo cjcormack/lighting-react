@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { MID_FOLDED_CLASS, PHONE_FOLDED_CLASS } from './toolbarFolds'
+import { CHROME_ROW_CLASS } from './sheetFrame'
 import { selectionBandState } from './selectionBand'
 
 /** The ShowBar's key-cap styling, so the two hints read as one vocabulary. */
@@ -75,7 +76,9 @@ export interface SelectionBarProps {
  * first cell.
  *
  * It is full-bleed with a `border-b` rather than a rounded card inset in a padded block: it is a
- * *rung of the grid's chrome* like row B above it, not an object floating over the page.
+ * *rung of the grid's chrome* like row B above it, not an object floating over the page — the
+ * shell's `CHROME_ROW_CLASS`, so it cannot drift a pixel from the rows above it, and the line under
+ * it is the one line between the bar and the sheet (the sheet draws no top line of its own).
  *
  * **Below `@[800px]` the row starts shedding.** The row count and its separator fold into the cell
  * count's hover (`MID_FOLDED_CLASS`); below `@[600px]` the family pill goes too
@@ -126,7 +129,7 @@ export function SelectionBar({
   // 40px of otherwise blank strip above a grid reads as a rendering fault rather than as a rung.
   if (band === 'reserved') {
     return (
-      <div className="flex h-10 min-w-0 items-center gap-2 border-b px-3 text-muted-foreground">
+      <div className={cn(CHROME_ROW_CLASS, 'min-w-0 text-muted-foreground')}>
         <MousePointerSquareDashed className="size-3.5 shrink-0 opacity-60" />
         <span className="text-xs">Nothing selected</span>
       </div>
@@ -134,7 +137,7 @@ export function SelectionBar({
   }
 
   return (
-    <div className="flex h-10 min-w-0 items-center gap-2 border-b bg-foreground/5 px-3">
+    <div className={cn(CHROME_ROW_CLASS, 'min-w-0 bg-foreground/5')}>
       <MousePointerSquareDashed className="size-3.5 shrink-0" />
       {/* One selection, counted two ways under a marquee: the rows it reaches, and the cells it
           names on them. With cells in play the row count and its separator fold into the cell
