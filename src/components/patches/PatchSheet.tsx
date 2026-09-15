@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { findGel, GELS } from '@/data/gels'
-import { InlineEditField } from '@/components/InlineEditField'
 import {
   checkLanding,
   consecutiveLanding,
@@ -33,8 +32,8 @@ import { useSheet } from '@/components/sheet/useSheet'
 import { AddressCell, type CellAddress } from '@/components/sheet/cells/AddressCell'
 import { OptionCell, type SheetOption } from '@/components/sheet/cells/OptionCell'
 import { TextCell } from '@/components/sheet/cells/TextCell'
-import { MID_FOLDED_CLASS, PHONE_FOLDED_CLASS, WORD_CLASS } from '@/components/sheet/toolbarFolds'
-import type { SheetColumn, SheetRow } from '@/components/sheet/sheetModel'
+import { PHONE_FOLDED_CLASS, STRIP_MID_FOLDED_CLASS, WORD_CLASS } from '@/components/sheet/toolbarFolds'
+import { firstColumnCellProps, type SheetColumn, type SheetRow } from '@/components/sheet/sheetModel'
 import type { FixturePatch } from '@/api/patchApi'
 
 export type PatchColumnKey =
@@ -605,7 +604,7 @@ export function PatchSheet({
               variant={allLocated ? 'default' : 'outline'}
               size="sm"
               onClick={locateSelection}
-              className={cn(MID_FOLDED_CLASS, allLocated && 'bg-sky-500 text-white hover:bg-sky-600')}
+              className={cn(STRIP_MID_FOLDED_CLASS, allLocated && 'bg-sky-500 text-white hover:bg-sky-600')}
             >
               <Crosshair className="size-3.5" />
               <span className={WORD_CLASS}>Locate</span>
@@ -618,7 +617,7 @@ export function PatchSheet({
             <Button
               variant={highlight.isActive ? 'default' : 'outline'}
               size="sm"
-              className={MID_FOLDED_CLASS}
+              className={STRIP_MID_FOLDED_CLASS}
               onPointerDown={highlight.press}
               onPointerUp={highlight.release}
               onPointerCancel={highlight.release}
@@ -673,26 +672,32 @@ export function PatchSheet({
           selectsRows: true,
           render: (row, selected) => (
             <>
-              {/* **A double click renames the head in place.** A single click on this column is
-                  the row selection and a press on it starts the row marquee, so the rename is the
-                  second gesture — the same split the value cells make (CLAUDE.md §The cell
-                  editor's three forms). The pencil beside it still opens the full patch editor,
-                  which is also the keyboard route to a rename. */}
-              <InlineEditField
-                value={row.patch.displayName}
-                openOn="doubleClick"
-                ariaLabel="fixture name"
-                title="Double-click to rename"
-                onCommit={(next) => {
-                  const name = next.trim()
-                  if (name === '') return false
-                  if (name !== row.patch.displayName) void put(row.patch.id, { displayName: name })
-                }}
-                className={cn(
-                  'relative min-w-0 flex-1 truncate',
-                  selected ? 'font-semibold' : 'font-medium',
-                )}
-              />
+              {/* **A double click renames the head — in the same popover every value cell opens.**
+                  A single click on this column is the row selection and a press on it starts the
+                  row marquee, so the rename is the second gesture, the split the value cells make
+                  (CLAUDE.md §The cell editor's three forms); the trigger's click bubbles to the
+                  sticky cell's `onRowClick`, and the marquee arms on `pointerdown` regardless of
+                  what it lands on. The pencil beside it still opens the full patch editor, which
+                  is also the keyboard route to a rename. */}
+              <span className="relative min-w-0 flex-1">
+                <TextCell
+                  {...firstColumnCellProps<string>({
+                    value: row.patch.displayName,
+                    label: 'Fixture name',
+                    onCommit: (next) => {
+                      if (next !== row.patch.displayName) void put(row.patch.id, { displayName: next })
+                    },
+                  })}
+                  face={
+                    <span
+                      className={cn('mx-1 truncate text-sm', selected ? 'font-semibold' : 'font-medium')}
+                      title="Double-click to rename"
+                    >
+                      {row.patch.displayName}
+                    </span>
+                  }
+                />
+              </span>
               {row.patch.stageHidden && (
                 <EyeOff className="relative size-3 shrink-0 text-muted-foreground" role="img" aria-label="Hidden from Stage view" />
               )}

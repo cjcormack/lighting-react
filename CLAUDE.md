@@ -945,10 +945,11 @@ Three surface rules, each pinned by its test:
   Key and Stage; offered on Mount, Angle and Gel. It is a routed page again (§List shell); row B is
   universe toggle · filter · spacer · Groups · Columns · + Patch, and the universe chips carry a
   fill bar on a 40px chrome row of their own.
-  **A double click on a fixture's name renames it in place** (`InlineEditField openOn="doubleClick"`,
-  which renders a span rather than a button so the single click underneath still selects the row and
-  still starts the row marquee); the pencil beside it still opens the full editor, and is the
-  keyboard route.
+  **A double click on a fixture's name opens a rename popover — the kit's `TextCell`, mounted with
+  `firstColumnCellProps`** (`sheetModel.ts`), so the first column edits in the same popover, in the
+  same three forms, as every value cell; the single click underneath still selects the row and a
+  press still starts the row marquee. It was an `InlineEditField`, the one editor on a sheet that was
+  not a popover. The pencil beside it still opens the full editor, and is the keyboard route.
   **Set over N *keys* fans one typed key over them**, `lib/fixtureKey.ts`: one head takes it as it
   is, several count up from it, continuing the number, the separator and the zero padding the typed
   key already carries — the vocabulary `AddFixtureSheet` mints keys in, read back off what was typed
@@ -996,10 +997,12 @@ Three surface rules, each pinned by its test:
   `ShowHeader`'s and `StackDetail`'s — a header, not one of the 40px chrome rows.
 - **Cue sheet** (`CueSheet.test.tsx`): `/projects/:id/show/stacks/:stackId/table`, sticky key
   `show.view`, the switcher on the `StackDetail` header. Name · Fade · Curve · Follow · Notes are
-  cells, the cue number is an inline field on the Cue column **opened by a double click** like every
-  value cell beside it (a single click there selects the row, or arms the cue while locked — it was
-  a single click that had to swallow the press, which made the Cue column the one column where a
-  click meant something different). Layers · FX are read-outs that open the card on the cards view
+  cells, and the cue number is a `TextCell` on the Cue column (`firstColumnCellProps`) **opened by a
+  double click** into the same popover as every value cell beside it (a single click there selects
+  the row — it was a single click that had to swallow the press, which made the Cue column the one
+  column where a click meant something different). **Locked, the number is plain text rather than a
+  disabled trigger**, because a click on it must bubble to the column to arm the cue and a browser
+  dispatches no click for a press inside a disabled button. Layers · FX are read-outs that open the card on the cards view
   (with `CARDS_LINK_STATE`, so the sticky does not bounce it
   back; a peek is not a change of view); **Book opens the Prompt Book** at that cue instead, through
   `?cue=`, which is that page's arrival contract and the mirror of the one it mints for Show — it is
@@ -1080,9 +1083,13 @@ count in the footer — so `SelectionToolbar` draws no count of its own, and `Fi
 has one arm: no `fill`, no `space-y-3` wrapper, and its default toolbar is the shell's row plus
 the programmer's own `SelectionBar` with no `projectId`, which is what draws it without the
 template strip — one component, so the two bars cannot count a marquee two ways. The bar's own
-`@container` sits above it on those two routes as everywhere; the one fold that does *not* apply
-there is Locate and Highlight's 800 (`SelectionToolbar`'s `foldForStrip`), because that fold exists
-to give the strip room and on the plain lists that toolbar is the only place those two verbs live.
+`@container` sits above it on those two routes as everywhere. **The strip folds — the verbs' words
+at 1100 and Locate · Highlight at 800 — apply only on a bar that carries a strip**: the kit's
+`SelectionBar` marks itself `group/bar` + `data-strip` (from `foldForStrip`, defaulting to "there
+is a strip"), and `WORD_CLASS` / `STRIP_MID_FOLDED_CLASS` in `toolbarFolds.ts` are gated on it.
+Those folds exist to give the template strip room; on the plain lists, the DMX sheet, the patch
+list and the cue sheet nothing needs it, and a 1100 fold there emptied every word at once on an
+ordinary 1160px window.
 `SheetPage.Header` and `.Footer` put their `@container` on an unpadded wrapper, never on the `px-3`
 row: a size query measures the content box, and a container on the row would fire every threshold
 24px early. **Loading and not-found render inside the same `SheetPage`** — an empty header row over

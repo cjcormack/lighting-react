@@ -37,6 +37,47 @@ export interface SheetCellProps<V> {
   onCommit: (value: V) => void
 }
 
+const NO_ROWS: readonly SheetRow[] = []
+const noop = () => {}
+
+/**
+ * The props for a kit cell mounted **outside the marquee** — the first column's own editor: the
+ * patch list's fixture name, the cue sheet's cue number.
+ *
+ * The first column is the row axis, so it is never in a cell selection: no batch to fan over, no
+ * keyboard seed, no Set to anchor at, and `onBeginEdit` does nothing — a single click on the
+ * trigger simply bubbles to the sticky cell's `onRowClick` and selects the row, and a double click
+ * opens the editor beside it. That is the same popover, in the same three forms, as every value
+ * cell (CLAUDE.md §The cell editor's three forms). It was an `InlineEditField` until the list
+ * shell's follow-up, which made the name the one editor on a sheet that was not a popover, in the
+ * column every other gesture starts from.
+ */
+export function firstColumnCellProps<V>({
+  value,
+  label,
+  disabled = false,
+  onCommit,
+}: {
+  value: V
+  label: string
+  disabled?: boolean
+  onCommit: (value: V) => void
+}): SheetCellProps<V> {
+  return {
+    value,
+    label,
+    batchCount: 1,
+    batchRows: () => NO_ROWS,
+    disabled,
+    autoOpen: false,
+    autoClose: false,
+    anchorAtButton: false,
+    keyboardSeed: null,
+    onBeginEdit: noop,
+    onCommit,
+  }
+}
+
 /**
  * One column of a sheet: how to read a row, which editor it takes, whether it fans, and what a
  * commit does (CLAUDE.md §Sheet kit).

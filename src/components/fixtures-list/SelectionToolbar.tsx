@@ -24,26 +24,23 @@ export interface SelectionToolbarProps {
    * routes the whole-selection row Fan they have always had.
    */
   actions?: ReactNode
-  /**
-   * Fold Locate and Highlight below 800px of the bar (`MID_FOLDED_CLASS`). True on the programmer,
-   * whose bar carries the template strip the fold exists to make room for; false on the two plain
-   * lists, where nothing rides the bar and this toolbar is the only place those two verbs live.
-   */
-  foldForStrip?: boolean
 }
 
 // The three fold classes moved to the sheet kit; re-exported so this list's callers keep one import.
-export { MID_FOLDED_CLASS, PHONE_FOLDED_CLASS, WORD_CLASS } from '../sheet/toolbarFolds'
-import { MID_FOLDED_CLASS, WORD_CLASS } from '../sheet/toolbarFolds'
+export {
+  MID_FOLDED_CLASS,
+  PHONE_FOLDED_CLASS,
+  STRIP_MID_FOLDED_CLASS,
+  WORD_CLASS,
+} from '../sheet/toolbarFolds'
+import { STRIP_MID_FOLDED_CLASS, WORD_CLASS } from '../sheet/toolbarFolds'
 
 export function SelectionToolbar({
   locateTargets,
   targets,
   onClear,
   actions,
-  foldForStrip = true,
 }: SelectionToolbarProps) {
-  const midFold = foldForStrip ? MID_FOLDED_CLASS : undefined
   const { data: locateState } = useLocateStateQuery()
   const [toggleLocate] = useToggleLocateMutation()
   const getTargets = useCallback(() => [...targets], [targets])
@@ -85,7 +82,9 @@ export function SelectionToolbar({
             variant={allLocated ? 'default' : 'outline'}
             size="sm"
             onClick={locateSelection}
-            className={cn(midFold, allLocated && 'bg-sky-500 text-white hover:bg-sky-600')}
+            // Folds at 800 only on a bar with a strip (`STRIP_MID_FOLDED_CLASS`): on the plain lists
+            // this toolbar is the only place Locate and Highlight exist.
+            className={cn(STRIP_MID_FOLDED_CLASS, allLocated && 'bg-sky-500 text-white hover:bg-sky-600')}
           >
             <Crosshair className="size-3.5" />
             <span className={WORD_CLASS}>Locate</span>
@@ -100,7 +99,7 @@ export function SelectionToolbar({
           <Button
             variant={highlight.isActive ? 'default' : 'outline'}
             size="sm"
-            className={midFold}
+            className={STRIP_MID_FOLDED_CLASS}
             onPointerDown={highlight.press}
             onPointerUp={highlight.release}
             onPointerCancel={highlight.release}

@@ -362,14 +362,14 @@ describe('PatchSheet', () => {
     })
   })
 
-  it('renames a head from a double click on its name, and a single click still selects the row', async () => {
+  it('renames a head from a double click on its name — the same popover as every value cell — and a single click still selects the row', async () => {
     draw()
     const name = screen.getByText('PAR 2')
     fireEvent.click(name)
     expect(row('PAR 2')).toHaveAttribute('data-state', 'selected')
-    expect(screen.queryByLabelText('fixture name')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Fixture name')).not.toBeInTheDocument()
     fireEvent.doubleClick(name)
-    const field = screen.getByLabelText('fixture name') as HTMLInputElement
+    const field = screen.getByLabelText('Fixture name') as HTMLInputElement
     expect(field.value).toBe('PAR 2')
     fireEvent.change(field, { target: { value: 'Front wash 2' } })
     fireEvent.keyDown(field, { key: 'Enter' })

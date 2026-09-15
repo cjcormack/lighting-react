@@ -19,7 +19,7 @@ vi.mock('../../store/locate', () => ({
   useToggleLocateMutation: () => [vi.fn()],
 }))
 
-const { MID_FOLDED_CLASS, PHONE_FOLDED_CLASS, SelectionToolbar, WORD_CLASS } = await import(
+const { MID_FOLDED_CLASS, PHONE_FOLDED_CLASS, STRIP_MID_FOLDED_CLASS, SelectionToolbar, WORD_CLASS } = await import(
   './SelectionToolbar'
 )
 
@@ -37,11 +37,14 @@ function toolbar() {
 }
 
 describe('SelectionToolbar', () => {
-  it('folds Locate and Highlight at 800, ahead of the phone arm', () => {
+  it('folds Locate and Highlight at 800 only on a bar with a strip, ahead of the phone arm', () => {
+    // The gated form, not the bare one: on the plain lists this toolbar is the only place the two
+    // verbs exist, and the 800 fold exists to give the programmer's template strip room.
     toolbar()
     for (const word of ['Locate', 'Highlight']) {
       const button = screen.getByText(word).closest('button')
-      expect(button, word).toHaveClass(MID_FOLDED_CLASS)
+      expect(button, word).toHaveClass(STRIP_MID_FOLDED_CLASS)
+      expect(button, word).not.toHaveClass(MID_FOLDED_CLASS)
       expect(button, word).not.toHaveClass(PHONE_FOLDED_CLASS)
     }
   })

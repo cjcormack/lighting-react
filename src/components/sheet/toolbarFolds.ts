@@ -8,21 +8,22 @@
  */
 
 /**
- * When the two verbs keep their words.
+ * When a verb keeps its word.
  *
  * `hidden sm:inline` is the viewport rule this bar has always had: on a phone the icons and their
- * tooltips carry it. `@max-[1100px]:hidden` is the *container* rule the programmer's selection bar
- * adds on top — that bar is one 40px line that must not wrap, and these two words are the widest
- * thing on it that a tooltip already says. The two compose: a word shows only when the viewport is
- * at least `sm` **and** the container is at least 1100px wide.
+ * tooltips carry it. The `@max-[1100px]:hidden` half is the *container* rule the programmer's
+ * selection bar adds on top — that bar is one 40px line that must not wrap, and the words are the
+ * widest thing on it that a tooltip already says — **and it applies only inside a bar that carries
+ * a strip**: `SelectionBar` marks itself `group/bar` + `data-strip` when something rides it, and
+ * the fold is written as `group-data-[strip]/bar:@max-[1100px]:hidden`. The strip is what needs
+ * the width. On a bar with nothing riding it — the two plain lists, the DMX sheet, the patch list,
+ * the cue sheet — a 1100px fold folded every word at once on an ordinary 1160px window, with
+ * nothing to give the room to; those keep their words down to `sm`.
  *
- * `/fixtures/list` and `/groups/list` had no query container above this toolbar until the list
- * shell (CLAUDE.md §List shell) gave them the same row C every other list has, with the bar's own
- * `@container` above it — so the words fold there at the same widths as on the programmer, which
- * is the point of one bar. The §5 behaviour those routes kept before that — every word at every
- * width — went with the bar; the container is the bar's wrapper on every list, never the page.
+ * Every list has the bar's `@container` above row C since the list shell (CLAUDE.md §List shell);
+ * the container is the bar's wrapper on every list, never the page.
  */
-export const WORD_CLASS = 'hidden sm:inline @max-[1100px]:hidden'
+export const WORD_CLASS = 'hidden sm:inline group-data-[strip]/bar:@max-[1100px]:hidden'
 
 /**
  * Where Locate, Highlight and Fan go on a phone-width programmer bar, and Deselect does not.
@@ -47,7 +48,8 @@ export const WORD_CLASS = 'hidden sm:inline @max-[1100px]:hidden'
 export const PHONE_FOLDED_CLASS = '@max-[600px]:hidden'
 
 /**
- * Where **Locate and Highlight** go, which is earlier than everything else on the row.
+ * Where **Locate and Highlight** go on a bar with a strip, which is earlier than everything else
+ * on the row — the same `data-strip` gate as [WORD_CLASS], and for the same reason.
  *
  * The template row needs the width. `All · n` and `New` are fixed, the chips are what an operator
  * presses, and an iPad portrait's row C is ~800px — enough for two recent chips once these two
@@ -59,9 +61,11 @@ export const PHONE_FOLDED_CLASS = '@max-[600px]:hidden'
  * not got. Fan keeps the 600 fold: it is a cell verb like the two beside it, and folding it earlier
  * would break up a group of three.
  *
- * Same container rule as [WORD_CLASS] and [PHONE_FOLDED_CLASS] — the bar's wrapper, on every
- * list — but applied to Locate and Highlight only where a strip rides the bar
- * (`SelectionToolbar`'s `foldForStrip`): on `/fixtures/list` and `/groups/list` nothing does, and
- * that toolbar is the only place those two verbs exist, so there they keep every width.
+ * Same container rule as [PHONE_FOLDED_CLASS] — the bar's wrapper, on every list. The bare form
+ * folds the bar's own counts; Locate and Highlight take [STRIP_MID_FOLDED_CLASS] instead, because
+ * on a bar with nothing riding it that toolbar is the only place those two verbs exist.
  */
 export const MID_FOLDED_CLASS = '@max-[800px]:hidden'
+
+/** [MID_FOLDED_CLASS] gated on the bar carrying a strip — Locate and Highlight's fold. */
+export const STRIP_MID_FOLDED_CLASS = 'group-data-[strip]/bar:@max-[800px]:hidden'

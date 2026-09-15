@@ -1141,10 +1141,6 @@ export function FixturesListContainer({
         targets={selectedTargets}
         onClear={clearByLadder}
         actions={selectionActions}
-        // The 800 fold exists to give the template strip room, and only the programmer's bar
-        // (`renderToolbar`) carries one; the two plain lists keep Locate and Highlight at every
-        // width, as they did before the bar — there they are the only place those verbs live.
-        foldForStrip={renderToolbar != null}
       />
     ) : null
 

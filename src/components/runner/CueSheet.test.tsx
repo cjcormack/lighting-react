@@ -149,22 +149,26 @@ describe('CueSheet', () => {
   })
 
   it('locked: the cue number does not inflate the row — the display box is inline-block', () => {
-    // `InlineEditField`'s read-only branch is a `<span>` wrapping `TruncateStart`'s blocks. Left
-    // inline, its line box measured 59px for a 20px number, and as the grid row's tallest
-    // min-content that became the *track*: every cell in the row was laid out below the row.
+    // Locked, the number is a `<span>` wrapping `TruncateStart`'s blocks. Left inline, its line
+    // box measured 59px for a 20px number, and as the grid row's tallest min-content that became
+    // the *track*: every cell in the row was laid out below the row.
     draw({ locked: true })
     const number = within(row(1)).getByTitle(/cue number/i)
     expect(number.className).toContain('inline-block')
+    // And it is text, not a disabled editor: a disabled button swallows the click the column
+    // needs to arm the cue.
+    expect(number.closest('button')).toBeNull()
   })
 
-  it('unlocked: a double click on the cue number edits it, and a single click selects the row', () => {
+  it('unlocked: a double click on the cue number opens its editor — the same popover as every value cell — and a single click selects the row', () => {
     draw()
     const number = within(row(1)).getByTitle(/edit the cue number/i)
     fireEvent.click(number)
     expect(row(1)).toHaveAttribute('data-state', 'selected')
-    expect(within(row(1)).queryByLabelText('cue number')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Cue number')).not.toBeInTheDocument()
     fireEvent.doubleClick(number)
-    const field = within(row(1)).getByLabelText('cue number') as HTMLInputElement
+    // Portalled, like every cell editor, so it is looked for on the screen and not in the row.
+    const field = screen.getByLabelText('Cue number') as HTMLInputElement
     expect(field.value).toBe('1')
     fireEvent.change(field, { target: { value: '12A' } })
     fireEvent.keyDown(field, { key: 'Enter' })

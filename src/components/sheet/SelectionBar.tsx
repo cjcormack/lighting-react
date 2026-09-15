@@ -54,6 +54,12 @@ export interface SelectionBarProps {
   verbs: ReactNode | null
   /** A marquee drag is in flight — the band holds its place for the duration on a short viewport. */
   marqueeDragging: boolean
+  /**
+   * Fold the verbs' words at `@max-[1100px]` and Locate/Highlight at `@max-[800px]` to give the
+   * strip room (`toolbarFolds.ts`). Defaults to "there is a strip"; a surface whose strip is a
+   * short label rather than a scroller — the cue sheet's lock note — says false.
+   */
+  foldForStrip?: boolean
 }
 
 /**
@@ -102,6 +108,7 @@ export function SelectionBar({
   strip,
   verbs,
   marqueeDragging,
+  foldForStrip = strip != null,
 }: SelectionBarProps) {
   const shortViewport = useMediaQuery(SHORT_VIEWPORT)
   const hasSelection = !!verbs || cellLabel != null
@@ -137,7 +144,12 @@ export function SelectionBar({
   }
 
   return (
-    <div className={cn(CHROME_ROW_CLASS, 'min-w-0 bg-foreground/5')}>
+    // `group/bar` + `data-strip`: the gate the word folds in `toolbarFolds.ts` read, so a verb's
+    // word folds for the strip only on a bar that has one.
+    <div
+      className={cn(CHROME_ROW_CLASS, 'group/bar min-w-0 bg-foreground/5')}
+      data-strip={foldForStrip ? '' : undefined}
+    >
       <MousePointerSquareDashed className="size-3.5 shrink-0" />
       {/* One selection, counted two ways under a marquee: the rows it reaches, and the cells it
           names on them. With cells in play the row count and its separator fold into the cell
@@ -171,9 +183,10 @@ export function SelectionBar({
           )}
           {/* The keyboard half: the two keys that reach the marquee's editor from the grid. Both
               hints follow the surface's own answer — each flag is false where its key is refused —
-              so this cannot advertise a key that does nothing. */}
+              so this cannot advertise a key that does nothing. A hint, not a control, so on a bar
+              with a strip it is the first thing to go. */}
           {(hints.entry || hints.clear) && (
-            <span className="hidden shrink-0 items-center gap-1 whitespace-nowrap text-[10px] text-muted-foreground @[1100px]:inline-flex">
+            <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-[10px] text-muted-foreground group-data-[strip]/bar:@max-[1100px]:hidden">
               {hints.entry && (
                 <>
                   <kbd className={KBD_CLASS}>⏎</kbd> edit

@@ -17,7 +17,6 @@ import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import { formatFadeDuration, parseFadeDuration } from '@/lib/cueUtils'
 import { formatMs } from '@/lib/formatMs'
 import { AUTO_CUE_NUMBER_CLASS } from '@/lib/cueNumber'
-import { InlineEditField } from '@/components/InlineEditField'
 import { TruncateStart } from '@/components/TruncateStart'
 import { CueStatePip } from '@/components/cues/CueRowParts'
 import { CellSelectionActions } from '@/components/sheet/CellSelectionActions'
@@ -37,7 +36,7 @@ import type { SheetKeyRefusal } from '@/components/sheet/useSheetKeyboard'
 import { OptionCell, type SheetOption } from '@/components/sheet/cells/OptionCell'
 import { TextCell } from '@/components/sheet/cells/TextCell'
 import { PHONE_FOLDED_CLASS, WORD_CLASS } from '@/components/sheet/toolbarFolds'
-import type { SheetColumn, SheetRow } from '@/components/sheet/sheetModel'
+import { firstColumnCellProps, type SheetColumn, type SheetRow } from '@/components/sheet/sheetModel'
 import type { CueStack, CueStackCueEntry } from '@/api/cueStacksApi'
 
 export type CueColumnKey = 'name' | 'fade' | 'curve' | 'follow' | 'book' | 'layers' | 'fx' | 'notes'
@@ -547,6 +546,9 @@ export function CueSheet({
           }
           verbs={verbs}
           marqueeDragging={sheet.marqueeDragging}
+          // The lock note is a short label, not a scroller: it needs no room, so the verbs keep
+          // their words as on a bar with nothing riding it.
+          foldForStrip={false}
         />
       </div>
       <SheetTable<CueSheetRow, CueColumnKey>
@@ -586,35 +588,56 @@ export function CueSheet({
                 {completedSet.has(row.cue.id) && !active && (
                   <span className="sr-only">Played</span>
                 )}
-                {/* **A double click opens it, like every value cell on this sheet.** It was a
-                    single click, which had to swallow the press so the row underneath did not
-                    select — so the Cue column was the one column where a click meant something
-                    different. Now the single click selects the row (or arms the cue, locked) and
-                    the second gesture edits, which is the grid's rule everywhere else. */}
+                {/* **A double click opens it, in the same popover as every value cell on this
+                    sheet.** It was a single click, which had to swallow the press so the row
+                    underneath did not select — so the Cue column was the one column where a click
+                    meant something different. Now the single click selects the row and the second
+                    gesture edits, which is the grid's rule everywhere else.
+
+                    **Locked, it is plain text, not a disabled trigger.** A click on the number
+                    while locked arms the cue, by bubbling to the column — and a browser dispatches
+                    no click at all for a press inside a disabled button, so a disabled editor would
+                    have made the number the one dead spot in the column. The face is
+                    `inline-block` in both arms: left inline, `TruncateStart`'s blocks made the line
+                    box 59px tall for a 20px number, and as the row's tallest min-content that
+                    became the track. */}
                 <span
                   className={cn(
-                    'min-w-0 font-mono text-sm',
+                    'min-w-0 flex-1 font-mono text-sm',
                     row.cue.cueNumberAuto ? AUTO_CUE_NUMBER_CLASS : 'font-semibold',
                   )}
                 >
-                  <InlineEditField
-                    value={row.cue.cueNumber ?? ''}
-                    openOn="doubleClick"
-                    formatDisplay={(v) => <TruncateStart text={v ? `Q${v}` : '—'} />}
-                    onCommit={(next) => {
-                      const trimmed = next.trim() || null
-                      if (trimmed !== (row.cue.cueNumber ?? null)) patch(row.cue.id, { cueNumber: trimmed })
-                    }}
-                    ariaLabel="cue number"
-                    disabled={locked}
-                    placeholder="14A"
-                    title={
-                      row.cue.cueNumberAuto
-                        ? 'Auto-numbered from position — double-click to set an explicit cue number'
-                        : 'Double-click to edit the cue number'
-                    }
-                    className="min-w-0 max-w-full px-0.5"
-                  />
+                  {locked ? (
+                    <span className="inline-block max-w-full px-0.5" title="Cue number">
+                      <TruncateStart text={row.cue.cueNumber ? `Q${row.cue.cueNumber}` : '—'} />
+                    </span>
+                  ) : (
+                    <TextCell
+                      {...firstColumnCellProps<string>({
+                        value: row.cue.cueNumber ?? '',
+                        label: 'Cue number',
+                        onCommit: (next) => {
+                          const trimmed = next || null
+                          if (trimmed !== (row.cue.cueNumber ?? null)) patch(row.cue.id, { cueNumber: trimmed })
+                        },
+                      })}
+                      mono
+                      allowEmpty
+                      placeholder="14A"
+                      face={
+                        <span
+                          className="inline-block max-w-full px-0.5"
+                          title={
+                            row.cue.cueNumberAuto
+                              ? 'Auto-numbered from position — double-click to set an explicit cue number'
+                              : 'Double-click to edit the cue number'
+                          }
+                        >
+                          <TruncateStart text={row.cue.cueNumber ? `Q${row.cue.cueNumber}` : '—'} />
+                        </span>
+                      }
+                    />
+                  )}
                 </span>
               </span>
             )
