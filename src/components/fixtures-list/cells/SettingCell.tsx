@@ -200,7 +200,7 @@ export const SettingCell = memo(function SettingCell({
           disabled={disabled}
           // **The whole of what a click does, in every mode.** Where a click selects, the trigger
           // is only an anchor and `onOpenChange` never sees a `true`; where it opens the editor
-          // (the two plain list routes) it fires alongside that open, which is where this used to
+          // (`CueValueGrid`) it fires alongside that open, which is where this used to
           // live. Unconditional, and identical in all four cells, because the alternative was two
           // mechanisms for one contract — `ColourCell` already did it this way, and a fifth cell
           // modelled on either half could have double-fired or missed. See `CellClickBehaviour`.

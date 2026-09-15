@@ -105,7 +105,8 @@ export function cellEditorIsOpen(): boolean {
  * one shape. `PropertyCell` spreads it into whichever of them a cell's value kind picks.
  *
  * Absent means the old behaviour — a click opens the editor, anchored at the cell — which is what
- * the two plain list routes and `CueValueGrid` want and get by passing nothing.
+ * `CueValueGrid` wants and gets by passing nothing. It was the fixtures and groups lists' answer
+ * too, until they gained a cell selection to put a click in.
  */
 export interface CellClickBehaviour {
   /**
@@ -323,10 +324,11 @@ interface CellEditorSurfaceProps {
    * It is withheld while this editor is already open, which is not tidiness — see the guard at
    * `onTriggerDoubleClick` for what a second open does to a panel the operator is typing into.
    *
-   * True everywhere else — the two plain list routes, which cannot select a cell at all and would
-   * otherwise lose every way into an editor, and `CueValueGrid`, which passes no `clickSelects`.
-   * There a single click already opens, so no double click is wired: two clicks would toggle the
-   * editor shut and back open again, which is a worse answer than the one a click already gives.
+   * True everywhere else — today `CueValueGrid`, which passes no `clickSelects`: it has no
+   * selection to put a click in and would otherwise lose every way into an editor. There a single
+   * click already opens, so no double click is wired: two clicks would toggle the editor shut and
+   * back open again, which is a worse answer than the one a click already gives. The two plain
+   * fixture/group list routes were in this list until they gained a cell selection of their own.
    *
    * `ColourPickerPopover`'s two visualizer callers are **not** in that list, though its own doc
    * comment says they are: they pass no `sheetWhenNarrow`, so they take its plain-`Popover` branch

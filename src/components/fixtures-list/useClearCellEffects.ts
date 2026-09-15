@@ -8,12 +8,20 @@ import { effectsToStop, membersByGroupOf, partialSweepMessage } from './cellEffe
 /**
  * Stop the **local** effects a cell clear covers — the other half of the marquee's Backspace.
  *
- * `cellEffects.ts` holds the rule and the reasoning; this is the wiring. Four things about it:
+ * `cellEffects.ts` holds the rule and the reasoning; this is the wiring. Five things about it:
  *
  *  - **[enabled] gates the subscription, not the sweep.** `activeEffects` is invalidated by every
- *    `fxChanged` frame, so the two plain list routes — which have no cell selection to clear, and
- *    no rail already holding this entry — must not mount it. On the programmer `ProgrammerFxList`
- *    is subscribed to the same cache entry already, so this adds a reader rather than a request.
+ *    `fxChanged` frame, so a list that cannot clear a cell must not mount it — today that is
+ *    Output and a focused template layer, where `cellKeyboardPermission` refuses ⌫. On the
+ *    programmer `ProgrammerFxList` is subscribed to the same cache entry already, so this adds a
+ *    reader rather than a request; the two plain lists do pay for a subscription of their own,
+ *    which is the price of ⌫ meaning one thing on every list. It is not frame-rate traffic —
+ *    `fxChanged` fires when an effect starts or stops — and the alternative was worse: clearing
+ *    the values while leaving the effect that is driving them running looks, on the rig, exactly
+ *    like the key having done nothing.
+ *  - **Mounted whenever the clear is *possible*, not only while cells are selected.** Gating on
+ *    the marquee would start the fetch at the drag and let the Backspace that follows it read an
+ *    `undefined` effects list — and this sweep's answer to that is to return, silently.
  *  - **The returned callback is stable for the mount, and that is load-bearing rather than tidy.**
  *    It is a dependency of `clearSelectedCells`, which is a dependency of the grid's window
  *    `keydown` listener — an effect whose own comment accepts a rebind on a marquee, filter or

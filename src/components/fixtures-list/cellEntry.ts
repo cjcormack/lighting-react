@@ -55,8 +55,10 @@ export type { CellActionCopy, CellKeyboardPermission } from '../sheet/cellEntry'
  * `PropertyCell`'s `disabled` and `FanPopover`'s template gate each close for their own path, and
  * this closes it for the keyboard and the bar.
  *
- *  - **Local**, or no scope at all (unreachable today — a marquee exists only on the programmer,
- *    which always has a scope — and answered as Local so the default is the permissive one): both.
+ *  - **Local**, or no scope at all — the two plain list routes, whose cells write straight to the
+ *    programmer through `useCellWriters`' `live` arm, which is Local by another name: both. (It
+ *    was answered this way while it was unreachable, on the principle that the default should be
+ *    the permissive one; the lists gained a marquee of their own this session and now reach it.)
  *  - **Output**: neither. It is a read of the cook.
  *  - **A focused Look layer**: entry only. A value typed there lands in the row draft the way a
  *    cell edit does; Backspace does not, because the draft has no removal (`LookRowStore` exposes

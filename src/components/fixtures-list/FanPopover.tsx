@@ -34,8 +34,9 @@ export interface FanColumn {
 
 /**
  * Every fannable column over one target list — the shape a **row** selection fans by, on the two
- * plain list routes that cannot select a cell. The programmer's Fan reads the marquee instead and
- * never calls this; here the column is still the operator's to choose, as it always was there.
+ * plain list routes. They select cells too now, and a cell selection's Fan reads the marquee like
+ * the programmer's; this is the *rows-only* arm those two keep and the programmer does not, where
+ * the column is still the operator's to choose in the panel.
  */
 export function fanColumnsForTargets(targets: readonly WriteTarget[]): FanColumn[] {
   return FAN_COLUMNS.map((col) => ({ col, targets }))

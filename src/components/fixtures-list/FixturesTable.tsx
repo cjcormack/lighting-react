@@ -54,10 +54,9 @@ export interface FixturesTableProps {
   onRowClick: (id: RowId, e: React.MouseEvent) => void
   onToggleExpand: (row: GroupRow | FixtureRow) => void
   /**
-   * A click landed on this cell. Where the grid has a [cellSelection] that is the *whole* of what
-   * the click does — the caller selects the one cell, and the editor is opened by Set, Enter or a
-   * typed character instead. Where it has not (the two plain list routes) the click is still the
-   * way into the editor, and this fires as it opens.
+   * A click landed on this cell, and that is the *whole* of what the click does: the caller
+   * selects the one cell, and the editor is opened by Set, by Enter, by a typed character or by a
+   * double click instead.
    */
   onBeginCellEdit: (row: Row, col: ColumnKey) => void
   onCellCommit: (row: Row, col: ColumnKey, commit: CellCommit) => void
@@ -89,10 +88,15 @@ export interface FixturesTableProps {
    */
   selectionEmpty?: boolean
   /**
-   * Drag-select across cells. Absent on the two plain list routes, which have no use for an edit
-   * scope narrower than a row.
+   * Drag-select across cells — and with it the whole cell vocabulary: a single click selects one,
+   * a double click opens its editor, and the container's keyboard and Set · Clear · Fan act on
+   * the rectangle.
+   *
+   * **Required.** It was optional while the two plain list routes had no marquee, which left this
+   * component answering a click two ways depending on who mounted it; they select cells now, and
+   * `FixturesListContainer` is this table's only caller.
    */
-  cellSelection?: CellSelection<ColumnKey>
+  cellSelection: CellSelection<ColumnKey>
   /**
    * Drag-select across **rows**: a press in the sticky name column that travels selects the rows
    * the rectangle covers, exactly as one in a value column selects cells. Called with the whole
@@ -373,18 +377,13 @@ export function FixturesTable({
               `touch-action` is read once, at the start of the touch, and the start of this touch
               is a scroll until it has been held.
 
-              Only where there is a marquee to lose them to, and only for as long as there is: the
-              programmer (`cellSelection`) carries all three always, as it did. The two plain list
-              routes have the row marquee alone, and there the names stay selectable and copyable
-              — which their old comment named as deliberate — by refusing text selection only
-              while a row drag is live (`select-none` from `marquee.dragging`, and `arm()` drops
-              whatever the browser had started selecting in the five pixels before it). The cue
-              value grid has neither and nothing drags there. */}
+              Unconditional now, on every list this table serves. The two plain ones carried the
+              narrower arm — text selection refused only while a *row* drag was live, so fixture
+              names stayed selectable and copyable — which was right while they had the row marquee
+              alone. With a cell marquee they lose the same three defaults the programmer does, and
+              a name is still copyable from the detail sheet. */}
           <div
-            className={cn(
-              cellSelection && 'select-none touch-manipulation [-webkit-touch-callout:none]',
-              !cellSelection && marquee.dragging && 'select-none',
-            )}
+            className="select-none touch-manipulation [-webkit-touch-callout:none]"
             style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}
             onPointerDown={marquee.onPointerDown}
             onPointerMove={marquee.onPointerMove}
@@ -440,18 +439,8 @@ export function FixturesTable({
                     autoOpenAtButton={autoOpenCell?.rowId === row.id && autoOpenCell.atButton}
                     autoCloseCol={closeCell?.rowId === row.id ? closeCell.col : null}
                     selectionEmpty={selectionEmpty}
-                    // A grid that can select cells is a grid where a click selects one. Derived
-                    // from the same prop rather than asked for separately, so the two can never
-                    // disagree — a cell click that opened an editor *and* moved the marquee under
-                    // it is exactly the confusion this replaced.
-                    clickSelectsCell={cellSelection != null}
                     editorAnchorRef={editorAnchorRef}
-                    // Only where there is a cell selection to clear. On the two plain list routes
-                    // a blank cell was inert, and the ladder there has only its row rung — so
-                    // wiring it up would have made clicking the Colour column of a dimmer-only par
-                    // *drop* a multi-row selection that was about to be acted on, which is a new
-                    // destructive gesture rather than the clear this is.
-                    onEmptyCellClick={cellSelection != null ? onEmptyCellClick : undefined}
+                    onEmptyCellClick={onEmptyCellClick}
                   />
                 </div>
               )
@@ -468,15 +457,21 @@ export function FixturesTable({
             with a ring the way a row wash sitting still under one could.
 
             PORTALLED to `document.body`, which is load-bearing rather than tidiness: its coordinates
-            are the pointer's `clientX/clientY`, i.e. viewport space, and `ProgrammerWorkspace` — the
-            only host that enables cell selection — is a Tailwind `@container`. `container-type:
-            inline-size` applies layout containment, which makes that element the containing block for
-            `fixed` descendants, so an in-tree chip would be offset by the workspace's own top-left
-            (the header, source strip, action bar and `p-4`) and sit well below the cursor. */}
+            are the pointer's `clientX/clientY`, i.e. viewport space, and `ProgrammerWorkspace` is a
+            Tailwind `@container`. `container-type: inline-size` applies layout containment, which
+            makes that element the containing block for `fixed` descendants, so an in-tree chip would
+            be offset by the workspace's own top-left (the header, source strip, action bar and
+            `p-4`) and sit well below the cursor.
+
+            All three lists select cells now, so the workspace is no longer the only host — and the
+            other two are why the portal has to stay whatever their markup looks like today. Neither
+            `/fixtures/list` nor `/groups/list` has an `@container` above this table (each route puts
+            one on its *sibling* breadcrumb row, and `Layout`'s is the `<header>`, a sibling of
+            `<main>`), so on those two the chip would land correctly in-tree by luck. One
+            `@container` added to a page wrapper for an unrelated reason would move it, silently and
+            only on that route. */}
         {marquee.chip &&
-          (marquee.rowCount != null
-            ? marquee.rowCount > 0
-            : cellSelection != null && cellSelection.count > 0) &&
+          (marquee.rowCount != null ? marquee.rowCount > 0 : cellSelection.count > 0) &&
           createPortal(
             <div
               className="pointer-events-none fixed z-50 flex items-center gap-1.5 rounded-full bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground shadow-lg"
@@ -489,10 +484,10 @@ export function FixturesTable({
               ) : (
                 <>
                   <span className="font-mono tabular-nums">
-                    {cellSelection!.count} cell{cellSelection!.count === 1 ? '' : 's'}
+                    {cellSelection.count} cell{cellSelection.count === 1 ? '' : 's'}
                   </span>
                   <span className="opacity-60">·</span>
-                  <span>{describeCellScope(cellSelection!.cells, columnLabelFor)}</span>
+                  <span>{describeCellScope(cellSelection.cells, columnLabelFor)}</span>
                 </>
               )}
             </div>,
@@ -529,7 +524,8 @@ interface RowViewProps {
   batchCountFor: (row: Row, col: ColumnKey) => number
   onShowInfo: (row: InfoRow) => void
   showOwnership: boolean
-  cellSelection?: CellSelection<ColumnKey>
+  /** Required, like the table's own — `RowView` has one caller and it always passes it. */
+  cellSelection: CellSelection<ColumnKey>
   /**
    * The desk is reachable. A cell edit in the `live` editor context is a `programmer.*`
    * WebSocket write, so with the socket down it goes nowhere — and because the grid reads its
@@ -559,22 +555,11 @@ interface RowViewProps {
   autoCloseCol: ColumnKey | null
   /** Nothing is selected — any open cell editor in this row must go. See `useCellEditorOpen`. */
   selectionEmpty?: boolean
-  /**
-   * A **single** click on one of this row's value cells **selects** it instead of opening its
-   * editor; a double click on the cell opens it.
-   *
-   * True exactly where the grid has a cell selection to put it in. The editor is then opened by
-   * the selection bar's Set, by Enter, by typing, or by that double click — so the drag, the single
-   * click and the keys all say *what* to edit and one gesture says *edit it*. The double click is
-   * the surface's own and never reaches this component. See `CellClickBehaviour`.
-   */
-  clickSelectsCell: boolean
   /** Where a requested editor opens. See `FixturesTableProps`. */
   editorAnchorRef?: React.RefObject<HTMLElement | null>
   /**
    * A click on a column this row resolves nothing for. Stable, so the memo holds — see the
-   * table's own `onEmptyCellClick`. Absent on the two plain list routes, where a blank cell was
-   * inert and clearing there could only take a row selection away.
+   * table's own `onEmptyCellClick`.
    */
   onEmptyCellClick?: () => void
 }
@@ -628,7 +613,6 @@ const RowView = React.memo(function RowView({
   autoOpenAtButton,
   autoCloseCol,
   selectionEmpty,
-  clickSelectsCell,
   editorAnchorRef,
   onEmptyCellClick,
 }: RowViewProps) {
@@ -856,7 +840,7 @@ const RowView = React.memo(function RowView({
         const layer = owned?.layer
         // Layered OVER whatever ownership produced, as a fill rather than a seventh ring colour —
         // see `cellSelection.ts`.
-        const selectedCell = cellSelection?.isSelected(row.id, col)
+        const selectedCell = cellSelection.isSelected(row.id, col)
         return (
           <div
             key={col}
@@ -892,7 +876,7 @@ const RowView = React.memo(function RowView({
               'relative h-full min-w-0 py-0.5 pr-[18px]',
               ownershipCellClass(owned),
               layerCellClass(scope?.kind === 'layer' ? state : undefined),
-              cellSelectionClass(selectedCell === true),
+              cellSelectionClass(selectedCell),
               // Output is a read of the cook. Editing it would have to pick a destination, and
               // choosing one is what the scope switcher is for — so the cell reads and the
               // overlay button below takes the click instead.
@@ -988,7 +972,13 @@ const RowView = React.memo(function RowView({
               anchorAtButton={autoOpenCol === col && autoOpenAtButton}
               keyboardSeed={autoOpenCol === col ? autoOpenSeed : null}
               selectionEmpty={selectionEmpty}
-              clickSelects={clickSelectsCell}
+              // A **single** click on a value cell selects it; a **double** click opens its
+              // editor — which is also opened by the selection bar's Set, by ⏎ and by typing. So
+              // the drag, the click and the keys all say *what* to edit and one gesture says
+              // *edit it*. Constant on this grid since every list it serves selects cells; the
+              // flag stays on the cells themselves for `CueValueGrid`, which has no selection and
+              // must keep click-to-open or lose every way in. See `CellClickBehaviour`.
+              clickSelects
               editorAnchorRef={editorAnchorRef}
               onBeginEdit={() => onBeginCellEdit(row, col)}
               onCommit={(commit) => onCellCommit(row, col, commit)}

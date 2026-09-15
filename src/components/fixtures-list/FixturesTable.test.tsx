@@ -203,28 +203,6 @@ function Harness({
 const cellCount = () => Number(screen.getByTestId('cell-count').textContent)
 
 /**
- * The table as the two plain list routes mount it: no `cellSelection`, so a click still opens the
- * editor at the cell and a blank cell is inert.
- */
-function PlainHarness({ visibleColumns = ['dimmer'] as ColumnKey[] }: { visibleColumns?: ColumnKey[] }) {
-  return (
-    <FixturesTable
-      rows={ROWS}
-      visibleColumns={visibleColumns}
-      isSelected={() => false}
-      onRowClick={() => {}}
-      onToggleExpand={() => {}}
-      onBeginCellEdit={onBeginCellEdit}
-      onCellCommit={() => {}}
-      batchCountFor={() => 1}
-      onShowInfo={() => {}}
-      onRowMarquee={onRowMarquee}
-      onBackgroundClick={onBackgroundClick}
-    />
-  )
-}
-
-/**
  * Give the grid a layout, for the tests that need the marquee to actually resolve to cells or rows.
  *
  * jsdom reports every rect as zero, which is why the rest of this suite asserts the *gesture* and
@@ -381,27 +359,6 @@ describe('FixturesTable cell gesture', () => {
     expect(blank.querySelector('button')).toBeNull()
     fireEvent.click(blank)
     expect(onBackgroundClick).toHaveBeenCalled()
-  })
-
-  it('still opens the editor on a click where the grid has no cell selection', () => {
-    // The two plain list routes have no marquee and no Set button, so the click *is* the way in —
-    // the trigger stays a `PopoverTrigger` there, and losing that would leave those routes with no
-    // way to edit a value at all.
-    render(<PlainHarness />)
-    fireEvent.click(cellButton())
-    expect(onBeginCellEdit).toHaveBeenCalled()
-    expect(document.querySelector('[data-cell-editor-surface]')).not.toBeNull()
-  })
-
-  it('leaves a blank cell inert where the grid has no cell selection', () => {
-    // The two plain list routes. Their ladder has only its row rung, so clearing from a blank cell
-    // could not narrow anything — it could only take away a multi-row selection that was about to
-    // be acted on, which is a new destructive gesture rather than the clear this is.
-    stubFlatLayout()
-    render(<PlainHarness visibleColumns={['dimmer', 'colour'] as ColumnKey[]} />)
-    const row = document.querySelector('[data-row-id="fixture:a"]')!
-    fireEvent.click(row.children[2])
-    expect(onBackgroundClick).not.toHaveBeenCalled()
   })
 
   it('a press that travels is a marquee, and the trailing click is swallowed', () => {

@@ -85,8 +85,8 @@ export interface CellActionCopy {
  * the guard intact: a template chip, the bar's own Set and a menu item are not inside a cell at
  * all; a cell *outside* the selection, tabbed to while one is live, is still its own editor's
  * trigger; and with no cells selected the caller never asks, so plain Tab-then-Enter is untouched
- * — it selects that cell on the programmer, and opens its editor on the two plain list routes,
- * which is exactly what a click there does.
+ * — it does exactly what a click on that cell does, which on every list this guard serves is
+ * to select it.
  *
  * **It claims any control inside a covered cell, not the editor trigger specifically**, and that
  * is a deliberate width rather than an oversight: all four cell editors hang off a Popover

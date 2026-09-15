@@ -105,7 +105,14 @@ export interface FixturesListContainerProps {
    * them were mounted at once.
    */
   selectionScope: SelectionScope
-  /** Colour cells by owning layer and show blind-staged values — the programmer sheet. */
+  /**
+   * Colour cells by owning layer and show blind-staged values — the programmer sheet.
+   *
+   * **Not the cell-selection gate any more.** It was, which made one flag mean two things: every
+   * list this container mounts now drag-selects cells, types into them and clears them, and this
+   * says only whether provenance is drawn. The one behaviour still keyed off it is the *row* Fan
+   * below, which the programmer trades away for the marquee's.
+   */
   showOwnership?: boolean
   /**
    * Consume the `?select=` deep-link param. Off for the programmer sheet: those links are
@@ -219,6 +226,14 @@ export interface FixturesListContainerProps {
  * The spreadsheet view shared by Fixtures → List (flat, `grouped: false`),
  * Groups → List (group rows + members + Ungrouped, `grouped: true`), and the
  * programmer sheet (`showOwnership`, either grouping).
+ *
+ * **All three select cells and edit them the same way.** Drag a rectangle over the value columns,
+ * click to narrow it to one cell, double click / ⏎ / a typed character to open that column's
+ * editor over the whole marquee, ⌫ to take those cells out of Local. Until this session the
+ * marquee, the keyboard and the Set · Clear · Fan verbs were the programmer's alone and the two
+ * plain lists had click-to-open and a row selection; the gestures were the same component's either
+ * way, so the split was one prop rather than a design, and it made the same grid answer a click
+ * two ways depending on the route it was mounted on.
  */
 export function FixturesListContainer({
   grouped,
@@ -371,6 +386,16 @@ export function FixturesListContainer({
   // with two rungs — but it stays one function for Escape, for a click on the grid's empty
   // background (`PD-CLEAR-SELECTION-TOUCH`) and for the toolbar's Deselect, so the three cannot
   // drop different things.
+  //
+  // **A blank cell reaches it too, and on the two plain lists that is new.** A column a row
+  // resolves nothing for — a dimmer-only par's Colour — is grid background wearing a cell's
+  // position, so clicking it clears, which with a rows-only selection means dropping the rows.
+  // That was refused on those two routes while `onEmptyCellClick` was withheld there, on the
+  // reasoning that their ladder had only a row rung and so the click could only ever be
+  // destructive. The rung is no longer the only one, and the programmer has answered a blank cell
+  // this way throughout — so the refusal expired with the reason for it rather than being
+  // overruled. Stated here because it is the one part of the unification that *removes* something
+  // rather than adding it, and pinned in `FixturesListContainer.test.tsx`.
   const clearByLadder = useCallback(() => {
     if (cellCount > 0) clearCells()
     else clearRows()
@@ -475,25 +500,19 @@ export function FixturesListContainer({
   // marquee's editor and collapsing to one cell would silently discard the rest — true while the
   // click was the way in. With the editor elsewhere, a click inside the marquee is an operator
   // narrowing it to one cell, which is the one thing a rectangle cannot express.
+  //
+  // **Every list this container mounts answers a click the same way**, including the two plain
+  // ones. They used to select the clicked *row* instead — the spreadsheet feel from when a click
+  // was also the way into the editor, and the only honest answer while they had no cell selection
+  // for the toolbar, `commitNow` and `batchCountFor` to read. They have one now, so the row rule
+  // and its exception went with the gate: one gesture vocabulary across the three lists, which is
+  // the whole point of their sharing this component.
   const handleBeginCellEdit = useCallback(
     (row: Row, col: ColumnKey) => {
       if (row.kind === 'divider') return
-      // **The two plain list routes keep the row rule, and must.** They are not given a
-      // `cellSelection` (see the table below), so a cell selection made here would be one nothing
-      // draws — and it would still reach the toolbar, which counts cells to choose between the cell
-      // verbs and the row Fan. What a click there *does* mean is the spreadsheet feel it always
-      // had: the clicked row becomes the selection, unless it is already in it. That is not
-      // decoration — `commitNow` and `batchCountFor` both write to the whole row selection when the
-      // clicked row is part of it, so the editor's own "Applying to N targets" line is only honest
-      // while the selection and the click agree. Left out, a click on row D's cell while rows A–C
-      // were selected opened an editor headed "1 target" over three highlighted rows.
-      if (!showOwnership) {
-        if (!selection.isSelected(row.id)) selectRow(row.id, 'replace')
-        return
-      }
       selectCells([{ rowId: row.id, col }], 'replace')
     },
-    [showOwnership, selectCells, selection, selectRow],
+    [selectCells],
   )
 
   /**
@@ -668,7 +687,7 @@ export function FixturesListContainer({
    */
   const canClearCells = keys.clear
   const canTypeCells = keys.entry
-  const clearCellEffects = useClearCellEffects(showOwnership && canClearCells)
+  const clearCellEffects = useClearCellEffects(canClearCells)
   const clearSelectedCells = useCallback(() => {
     if (!canClearCells) return
     const cleared = new Set<string>()
@@ -1095,8 +1114,11 @@ export function FixturesListContainer({
   // same first cell, the same commit to every selected cell.
   //
   // On the programmer a rows-only selection gets none of them: Fan reads the marquee there, which
-  // is what the selection is for. The two plain list routes cannot select a cell at all, so they
-  // keep the row Fan they always had — over the whole selection, column chosen in the panel.
+  // is what the selection is for. The two plain list routes keep the *row* Fan they always had
+  // beside the marquee's — over the whole selection, column chosen in the panel. That is the one
+  // gesture this session did not fold into the marquee: a row selection there is made by dragging
+  // the name column or by ⌘A, and fanning a colour across eight whole heads without first drawing
+  // a rectangle over one of their columns is a real gesture those two views already offered.
   const selectionActions =
     cellCount > 0 ? (
       <CellSelectionActions
@@ -1186,7 +1208,7 @@ export function FixturesListContainer({
           // screen still writing, to something narrower than its own "Applying to N" line just
           // claimed. Both selections, because either is enough to keep an editor honest.
           selectionEmpty={selection.count === 0 && cellCount === 0}
-          cellSelection={showOwnership ? tableCellSelection : undefined}
+          cellSelection={tableCellSelection}
           // A drag from the name column selects rows, on every list this table serves: it is what
           // the checkbox column was for, and a list with no way to accumulate a selection by
           // touch would be a regression on the two plain routes.

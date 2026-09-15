@@ -1104,8 +1104,8 @@ three forms and all four value kinds answer it identically — the reason `CellC
 type rather than four copies of two props. It opens through the same `onOpenChange` every other
 opener uses, so it lands in `useCellEditorOpen`'s click path: beside the cell (Set's toolbar anchor
 is Set's alone), with no typed seed, and with whatever a click's open resets reset. It is wired
-**only where a single click selects** — on the two plain list routes and in `CueValueGrid` a single
-click already opens, and two of them would toggle the editor shut and back open. And it needs no
+**only where a single click selects** — in `CueValueGrid` a single click already opens, and two of
+them would toggle the editor shut and back open. And it needs no
 *permission* gate of its own: a `disabled` trigger fires no click and therefore no double click,
 which is how Output scope, a focused template layer and an unreachable desk stay read-only through
 this door as much as through the other three.
@@ -1144,19 +1144,24 @@ Three consequences worth knowing before touching any of it:
   toggle and the button's own `onClick` is free to be the selection. `data-state` is restored by
   hand on the anchor: it is the only thing that says *which cell* the open editor belongs to, and
   the grid's addressing contract is read through it.
-- **The two plain list routes keep click-to-open, and keep the row rule with it.** They are given no
-  `cellSelection`, so a click is the only way into an editor there; the table derives one from the
-  other (`clickSelectsCell={cellSelection != null}`) so the two can never disagree. There
-  `handleBeginCellEdit` selects the clicked **row** instead — the spreadsheet feel it has always had
-  — and that is load-bearing rather than decorative: `commitNow` and `batchCountFor` both write to
-  the whole row selection when the clicked row is part of it, so the editor's own "Applying to N
-  targets" line is honest only while the selection and the click agree. What it must *not* do there
-  is make a cell selection: nothing draws one on those routes, and it would still reach the toolbar,
-  which counts cells to choose between the cell verbs and the row Fan.
-- **A blank cell clears only where there is a cell selection to clear.** On the plain routes the
-  ladder has just its row rung, so wiring it up there would make a click on a dimmer-only par's
-  Colour column *drop* a multi-row selection about to be acted on — a new destructive gesture rather
-  than the clear this is.
+- **All three lists answer a click the same way, and `FixturesTable`'s `cellSelection` is
+  required.** Fixtures → List and Groups → List were the exception until this session: no
+  `cellSelection`, so a click there opened the editor *and* selected the clicked **row** — which
+  was the honest answer while they had no cell selection for the toolbar, `commitNow` or
+  `batchCountFor` to read, and which made one component answer one gesture two ways depending on
+  the route it was mounted under. They have the marquee, the keyboard, Set · Clear · Fan and the
+  double click now, and `showOwnership` is back to meaning only what it says: draw provenance.
+  `clickSelectsCell` went with the branch — `FixturesListContainer` is this table's one caller, so
+  the flag was a constant — and the cells keep their own `clickSelects` for `CueValueGrid`, which
+  has no selection and would otherwise lose every way into an editor.
+- **What the two plain lists keep of their own is the *row* Fan** (`!showOwnership`), over the whole
+  row selection with the column chosen in the panel. A row selection there is made by dragging the
+  name column or by ⌘A, and fanning across eight whole heads without first drawing a rectangle over
+  one of their columns is a gesture those views already offered; the programmer trades it away
+  because there the marquee is what a selection is *for*. They also now mount `useClearCellEffects`
+  — a subscription of their own, which the programmer gets free from `ProgrammerFxList` — because
+  ⌫ clearing the values while the effect driving them kept running is, on the rig,
+  indistinguishable from the key having done nothing.
 - **A click on a column the row resolves nothing for clears the selection** — a dimmer-only par's
   Colour cell. It is blank rather than an em-dash, and it is *not* background in the DOM (the row
   carries `data-row-id`, which the scroller's background handler stops at), so it carries
@@ -1195,7 +1200,7 @@ panel landed nowhere near the hand that pressed Set. Three rules in it:
   the screen.
 - **The ref is read at render time and only while open**, because a `virtualRef` whose `current` is
   null sets Radix's anchor to null and the content is then never positioned at all. So no button
-  means the cell, which is also what the two plain list routes get.
+  means the cell, which is what a double click gets on any of the three lists.
 - **The virtual anchor is rendered after the cell's**, which is what makes it win: it claims the
   anchor from an effect, and effects run after the refs of the same commit.
 
@@ -1249,7 +1254,7 @@ from inside the content is taken straight back off it. And **comma is left alone
 editor** — there is nowhere to step to, and a type-ahead may want the character.
 
 **The panel behaves the same however it was opened** — the selection bar's Set, a keystroke, or a
-click on one of the two plain list routes. The first field is focused in all of them, and that is
+double click on the cell. The first field is focused in all of them, and that is
 not a nicety: *drag three dimmer cells, Enter, type `128`, Enter* is the ordinary desk gesture, and
 it only works if the open leaves the field focused. A first cut focused the field only for a
 keystroke, on the reasoning that a tap must not summon the on-screen keyboard, and quietly broke
@@ -1362,6 +1367,18 @@ per-row control: ⌘A, ↑/↓ with Shift extending, and **→/← open and clos
 over its members, a multi-head fixture over its elements — with ← on a member or element climbing
 to its parent first, the ARIA tree convention (`treeKeyAction` in `rowModel.ts` is the rule).
 
+**The grid's rows are `select-none`, and a fixture name is no longer selectable text.** Three
+declarations ride together on the rows wrapper — `select-none`, `touch-manipulation` and
+`[-webkit-touch-callout:none]` — each for a browser default a marquee was losing to
+(`PD-MARQUEE-TOUCH`), and they are unconditional on all three lists. The two plain ones carried a
+narrower arm while they had the row marquee alone: text selection was refused only *while* a row
+drag was live, so a fixture or group name could be selected and copied straight out of the list,
+which their comment named as deliberate. A cell marquee costs them that, and it is a real loss on
+two everyday browsing views rather than a tidy-up — the name is still copyable from the detail
+sheet, which is weaker. Recorded rather than argued: if it turns out to matter, the fix is to
+exempt the name cell's own text, not to put the narrow arm back, because that arm leans on `arm()`
+clearing whatever the browser began selecting in the five pixels before the threshold.
+
 **The selection bar's cell verbs are Set · Clear · Fan** (`CellSelectionActions`), drawn before
 Locate and Highlight when the selection is cells. Set and Clear are Enter and Backspace with a
 button on them, and take the container's gate (`cellKeyboardPermission`) and words
@@ -1382,8 +1399,9 @@ Backspace and the batch count use — and the chooser is drawn only when the sel
 than one fannable column. Focus follows: with one column the first question is From and it is
 focused on open; with several it is still *which column*, so nothing is. Enter still *applies*,
 since a fan is the one panel here that does not write as it is edited. The two plain list routes
-cannot select a cell, so they keep the row Fan they always had (`fanColumnsForTargets`), drawn in
-the toolbar's `actions` slot where the programmer draws the cell verbs.
+select cells like the programmer, but they *also* keep the whole-selection row Fan they always had
+(`fanColumnsForTargets`), drawn in the toolbar's `actions` slot with nothing selected but rows —
+the cell verbs replace it the moment a cell is.
 
 ### The programmer's scoped grid
 

@@ -13,8 +13,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  *
  * **`onBeginEdit` is deliberately not part of it.** That callback exists to select the cell a click
  * landed on — the cell's trigger calls it, either from `onOpenChange` where a click still opens
- * the editor (the two plain list routes) or from its own `onClick` where a click selects instead
- * (the programmer; see `CellClickBehaviour`). An auto-open must not: it would replace the very
+ * the editor (`CueValueGrid`) or from its own `onClick` where a click selects instead (every
+ * sheet with a cell selection; see `CellClickBehaviour`). An auto-open must not: it would replace the very
  * selection the operator pressed Set for with the one cell whose editor Set chose to open.
  * [onOpen] is for the rest of what a click's open does — `SliderCell`'s typed-input reset — which
  * an auto-open *does* want.
@@ -109,9 +109,11 @@ export function useCellEditorOpen({
     (next: boolean, viaKeyboard: string | null = null, fromButton = false) => {
       if (next) onOpenRef.current?.()
       setKeyboardOpen(next ? viaKeyboard : null)
-      // Latched here rather than read per render: see [anchorAtButton]. A click — the two plain
-      // list routes, where there is no Set button at all — passes neither argument and anchors at
-      // the cell, which is the default this leaves in place.
+      // Latched here rather than read per render: see [anchorAtButton]. A click passes neither
+      // argument and anchors at the cell, which is the default this leaves in place — that is
+      // `CueValueGrid`, the one surface left where a click opens rather than selects, and it has no
+      // Set button to anchor at. A double click on a sheet that *does* select takes the same path,
+      // and wants the same answer: it is made at the cell, not at the bar.
       setAtButton(next ? fromButton : false)
       setIsOpen(next)
     },
