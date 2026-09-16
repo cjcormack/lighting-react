@@ -199,6 +199,11 @@ describe('ScreensSheet', () => {
     fireEvent.click(screen.getByRole('button', { name: /Choose a display/ }))
     const display2 = await screen.findByRole('button', { name: /Display 2 · 1920×1080/ })
     fireEvent.click(display2)
+    // `noopener` is load-bearing and not decoration: without it the child is an *auxiliary*
+    // browsing context and clones this tab's `sessionStorage`, which is the inherited-`windowId`
+    // bug session 2.5 fixed on the other side. Kept pinned because that half is spec-asserted and
+    // still unobserved — the preview pane creates no child context on any route, so neither this
+    // open nor a plain one could be shown to clone there.
     expect(open).toHaveBeenCalledWith(
       `${window.location.origin}/?window=Screen%203`,
       '_blank',

@@ -13,11 +13,29 @@ import { useSyncExternalStore } from 'react'
  * there would be one identity for both screens (D8's reason, applied to D9). `sessionStorage` is
  * per tab and survives a reload of that tab, which is exactly the lifetime a window identity wants.
  *
- * - **`windowId`** is a uuid minted once into storage. The client resolves "my row" in
- *   `windows.state` by matching it (`store/windows.ts`); the socket-minted row `id` is what every
- *   command addresses. A *duplicated* tab copies its `sessionStorage`, so two rows can share one
- *   `windowId`: they are still two rows, separately addressable, and the client simply cannot tell
- *   them apart (D9 accepts that; `FU-WINDOWS-OWN-ROW-ID` in lighting7 is the exact fix).
+ * - **`windowId`** is a uuid minted into storage, and **`?window=` at boot mints a fresh one**
+ *   rather than keeping whatever storage held. That is the whole of session 2.5. `sessionStorage`
+ *   is *cloned* into a top-level context created from an existing one — a `window.open` without
+ *   `noopener`, a `target=_blank` link — so the second desk screen can wake up holding the first's
+ *   id, and since a window is never told its own row (`windows.state` keys by socket) and infers
+ *   it by matching `windowId`, both screens would match both rows and the desk chip would read
+ *   *Desk* — "I moved it" — when the twin moved it. The parameter means "a deliberately-named new
+ *   window", which is exactly the signal that this context is **not** a continuation of the
+ *   storage it woke up with.
+ *
+ *   The invariant on the other side, and the regression to watch for: the parameter is **stripped
+ *   at boot**, so a reload carries none and **keeps its id**. Minting there would churn a registry
+ *   row on every refresh. Presence of the *key* is the signal, blank value included — a blank
+ *   names nothing, so the name falls back, but the fail-safe direction for an identity is a fresh
+ *   one rather than a shared one.
+ *
+ *   The name deliberately does **not** follow: a stored name still beats the parameter (see below),
+ *   so a `?window=` boot over cloned storage is a fresh id under the inherited name. Two rows
+ *   sharing a *name* is what D9 already says happens to a duplicated tab and is only cosmetic;
+ *   two rows sharing an *id* is the misattribution above. What is still not fixed here is
+ *   right-click **Duplicate Tab**, which clones storage on a URL whose parameter was already
+ *   stripped: two rows, one id, and the client cannot tell them apart (D9 accepts that;
+ *   `FU-WINDOWS-OWN-ROW-ID` in lighting7 is the exact fix).
  * - **`name`** comes, in order, from `sessionStorage`; from **`?window=` on the launch URL**, read
  *   once at boot before the router is created (`main.tsx`) and stripped, which is what lets a
  *   shortcut, a Dock app, a home-screen icon or a copied link name its window durably without a
@@ -26,34 +44,69 @@ import { useSyncExternalStore } from 'react'
  *
  * The name is a subscribable, so the desk chip, the user menu and the announce all move on a
  * rename; the id is static for the tab, so it is a plain read.
+ *
+ * **Both lazy reads go through `consumeLaunchParam`**, which reads and strips `?window=` once per
+ * boot and remembers *whether it was there* as well as what it said. `main.tsx` calls only
+ * `windowName()`, so the "was the parameter present" fact cannot live in `windowId()`'s own path —
+ * by the time anything asks for the id the URL has long been rewritten. Memoising it in one place
+ * is what makes the two functions order-independent: whichever is called first consumes the
+ * parameter, and the other reads the same answer.
  */
 
 export const WINDOW_ID_KEY = 'desk.windowId'
 export const WINDOW_NAME_KEY = 'desk.windowName'
 export const WINDOW_NAME_PARAM = 'window'
 
-let cachedId: string | null = null
-let cachedName: string | null = null
+/**
+ * Every boot-time value this module memoises, in **one object reset by a single reassignment** —
+ * so a fourth cannot be added without appearing in [resetWindowIdentity], which is how a stale
+ * value leaks from one test into the next.
+ */
+interface IdentityCache {
+  /** The minted or stored `windowId`. */
+  id: string | null
+  /** The stored, launched or minted name. */
+  name: string | null
+  /** `?window=` as this boot found it, consumed once — see [consumeLaunchParam]. */
+  launch: LaunchParam | null
+}
+
+const EMPTY_CACHE: IdentityCache = { id: null, name: null, launch: null }
+
+let cache: IdentityCache = { ...EMPTY_CACHE }
 const nameListeners = new Set<() => void>()
 
-/** The tab's client-minted identity, minted on first call and stable for the life of the tab. */
+/** What `?window=` said at boot, and — separately — whether it was there at all. */
+interface LaunchParam {
+  /** The parameter key was on the launch URL, blank value included. */
+  present: boolean
+  /** Its trimmed value, or null for a blank one. */
+  name: string | null
+}
+
+/**
+ * The tab's client-minted identity: a fresh uuid when this boot carried `?window=`, else the
+ * stored one, else a fresh one. Stable for the life of the tab once minted.
+ */
 export function windowId(): string {
-  if (cachedId != null) return cachedId
-  cachedId = readStored(WINDOW_ID_KEY) ?? mintUuid()
-  writeStored(WINDOW_ID_KEY, cachedId)
-  return cachedId
+  if (cache.id != null) return cache.id
+  const stored = consumeLaunchParam().present ? null : readStored(WINDOW_ID_KEY)
+  cache.id = stored ?? mintUuid()
+  writeStored(WINDOW_ID_KEY, cache.id)
+  return cache.id
 }
 
 /** The tab's name, minted on first call and stable until [renameWindow]. */
 export function windowName(): string {
-  if (cachedName != null) return cachedName
+  if (cache.name != null) return cache.name
   // The launch parameter is consumed whether or not it wins: a tab that already has a name and is
   // sent to a `?window=` URL again (the desktop shortcut clicked with the tab open) keeps its name
-  // and still loses the parameter, or the URL would carry it for the life of the tab.
-  const launch = readLaunchParam()
-  cachedName = readStored(WINDOW_NAME_KEY) ?? launch ?? `Window ${shortSuffix()}`
-  writeStored(WINDOW_NAME_KEY, cachedName)
-  return cachedName
+  // and still loses the parameter, or the URL would carry it for the life of the tab. That tab
+  // does take a fresh `windowId` — see the module comment for why the two answer differently.
+  const launch = consumeLaunchParam()
+  cache.name = readStored(WINDOW_NAME_KEY) ?? launch.name ?? `Window ${shortSuffix()}`
+  writeStored(WINDOW_NAME_KEY, cache.name)
+  return cache.name
 }
 
 /**
@@ -64,7 +117,7 @@ export function windowName(): string {
 export function renameWindow(next: string): boolean {
   const name = next.trim()
   if (name === '' || name === windowName()) return false
-  cachedName = name
+  cache.name = name
   writeStored(WINDOW_NAME_KEY, name)
   for (const fn of [...nameListeners]) fn()
   return true
@@ -83,11 +136,23 @@ export function useWindowName(): string {
   return useSyncExternalStore(subscribeWindowName, windowName, windowName)
 }
 
-/** Test seam: forget both cached values so each test starts from storage and the URL. */
+/**
+ * Test seam: forget every cached value — the id, the name and the consumed launch parameter — so
+ * each test starts from storage and the URL, which is also how a reload is simulated.
+ */
 export function resetWindowIdentity(): void {
-  cachedId = null
-  cachedName = null
+  cache = { ...EMPTY_CACHE }
   nameListeners.clear()
+}
+
+/**
+ * `?window=`, read and stripped **once per boot**, by whichever of [windowId] and [windowName]
+ * asks first. Both the value and its mere presence are remembered: the id needs the second and the
+ * URL is rewritten by the first read, so nothing can ask again.
+ */
+function consumeLaunchParam(): LaunchParam {
+  cache.launch ??= readLaunchParam()
+  return cache.launch
 }
 
 function readStored(key: string): string | null {
@@ -110,18 +175,19 @@ function writeStored(key: string, value: string): void {
 }
 
 /** `?window=Screen%202`, consumed: read, then stripped from the URL with `replaceState`. */
-function readLaunchParam(): string | null {
-  if (typeof window === 'undefined') return null
+function readLaunchParam(): LaunchParam {
+  if (typeof window === 'undefined') return { present: false, name: null }
   try {
     const url = new URL(window.location.href)
     const raw = url.searchParams.get(WINDOW_NAME_PARAM)
-    if (raw == null) return null
+    if (raw == null) return { present: false, name: null }
     url.searchParams.delete(WINDOW_NAME_PARAM)
     window.history.replaceState(window.history.state, '', url)
     const name = raw.trim()
-    return name === '' ? null : name
+    return { present: true, name: name === '' ? null : name }
   } catch {
-    return null
+    // An unreadable URL is not a launch: keep the stored id rather than churning a registry row.
+    return { present: false, name: null }
   }
 }
 

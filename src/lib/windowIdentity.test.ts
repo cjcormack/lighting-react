@@ -13,9 +13,13 @@ import {
 } from './windowIdentity'
 
 /**
- * This tab's identity (multi-screen plan D9, D10): a `windowId` minted once into `sessionStorage`,
- * a name from `?window=` read once and stripped, else `Window xxxx`; both survive a reload, neither
- * is shared with another tab; and a rename moves every reader.
+ * This tab's identity (multi-screen plan D9, D10, and session 2.5): a `windowId` in
+ * `sessionStorage`, a name from `?window=` read once and stripped, else `Window xxxx`; both survive
+ * a reload, neither is shared with another tab; and a rename moves every reader.
+ *
+ * The session-2.5 pair, which is the whole point of the `windowId` block: a boot carrying
+ * `?window=` **mints a fresh id** even over storage a cloned context inherited, and a boot with no
+ * parameter — which is every reload, since the parameter is stripped at the first — **keeps** it.
  */
 
 beforeEach(() => {
@@ -48,11 +52,57 @@ describe('windowId', () => {
     expect(windowId()).not.toBe(first)
   })
 
-  it('survives a `?window=` boot: the name is taken, the id is kept', () => {
+  it('mints a fresh id on a `?window=` boot, over an inherited one — the cloned-storage case', () => {
+    // A `window.open`'d child clones its parent's sessionStorage, so this is the parent's id.
     window.sessionStorage.setItem(WINDOW_ID_KEY, 'aaaaaaaa-0000-4000-8000-000000000002')
     window.history.replaceState(null, '', '/?window=Screen%202')
+    const minted = windowId()
+    expect(minted).not.toBe('aaaaaaaa-0000-4000-8000-000000000002')
+    expect(window.sessionStorage.getItem(WINDOW_ID_KEY)).toBe(minted)
+    // The name is the launch parameter's business and is unaffected by the minting.
     expect(windowName()).toBe('Screen 2')
-    expect(windowId()).toBe('aaaaaaaa-0000-4000-8000-000000000002')
+  })
+
+  it('mints on the parameter whichever of the two is asked first — the id may be asked before the name', () => {
+    window.sessionStorage.setItem(WINDOW_ID_KEY, 'aaaaaaaa-0000-4000-8000-000000000003')
+    window.history.replaceState(null, '', '/?window=Screen%202')
+    // `main.tsx` calls windowName() first; nothing guarantees a test or a future caller does.
+    expect(windowId()).not.toBe('aaaaaaaa-0000-4000-8000-000000000003')
+    // …and the name the id's read consumed is still the one the parameter carried.
+    expect(windowName()).toBe('Screen 2')
+    expect(window.location.search).toBe('')
+  })
+
+  it('mints on a blank `?window=` too — a shared identity is the worse failure', () => {
+    window.sessionStorage.setItem(WINDOW_ID_KEY, 'aaaaaaaa-0000-4000-8000-000000000004')
+    window.history.replaceState(null, '', '/?window=%20')
+    expect(windowId()).not.toBe('aaaaaaaa-0000-4000-8000-000000000004')
+  })
+
+  it('is the true clone shape: an inherited id AND an inherited name, with `?window=` on the URL', () => {
+    // What a cloned context actually wakes up holding — both keys, copied from its opener. Pinned
+    // because the two halves deliberately answer differently and only prose said so: the id is the
+    // misattribution vector and is re-minted, the name is cosmetic and the stored one still wins,
+    // so this child lists as a second *Screen 1* rather than the *Screen 2* that was asked for.
+    window.sessionStorage.setItem(WINDOW_ID_KEY, 'aaaaaaaa-0000-4000-8000-000000000005')
+    window.sessionStorage.setItem(WINDOW_NAME_KEY, 'Screen 1')
+    window.history.replaceState(null, '', '/?window=Screen%202')
+
+    expect(windowId()).not.toBe('aaaaaaaa-0000-4000-8000-000000000005')
+    expect(windowName()).toBe('Screen 1')
+    expect(window.sessionStorage.getItem(WINDOW_ID_KEY)).toBe(windowId())
+  })
+
+  it('keeps the id minted at a `?window=` boot across the reload that follows it', () => {
+    // Boot one: the parameter is present, so a fresh id is minted and the parameter stripped.
+    window.history.replaceState(null, '', '/projects/1/busk?window=Screen%202')
+    const minted = windowId()
+    expect(window.location.search).toBe('')
+
+    // Boot two is a reload of that stripped URL: no parameter, so the stored id is kept. Minting
+    // here would churn a registry row on every refresh.
+    resetWindowIdentity()
+    expect(windowId()).toBe(minted)
   })
 })
 

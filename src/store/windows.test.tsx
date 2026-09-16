@@ -9,16 +9,34 @@ import { windowsWs } from '@/test/backendMock'
 // lightingApi opens a real WebSocket at import time (jsdom has none). The mock's `windows`
 // namespace remembers the subscriber and every announce.
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
-vi.mock('@/lib/windowIdentity', () => ({
-  windowId: () => 'w-1',
-  windowName: () => identity.name,
-  useWindowName: () => identity.name,
-  renameWindow: (next: string) => {
-    identity.renamed.push(next)
-    return true
+// `useWindowName` is mocked *subscribably*, not as a constant read: the announce effect is keyed
+// on the name, so a plain `() => identity.name` would never re-run it and the rename case below
+// could only assert that `renameWindow` was called — not the re-announce its title claims.
+vi.mock('@/lib/windowIdentity', async () => {
+  const { useSyncExternalStore } = await import('react')
+  return {
+    windowId: () => 'w-1',
+    windowName: () => identity.name,
+    useWindowName: () => useSyncExternalStore(identity.subscribe, () => identity.name),
+    renameWindow: (next: string) => {
+      identity.renamed.push(next)
+      identity.name = next
+      for (const fn of [...identity.listeners]) fn()
+      return true
+    },
+  }
+})
+const identity = {
+  name: 'Screen 1',
+  renamed: [] as string[],
+  listeners: new Set<() => void>(),
+  subscribe: (fn: () => void) => {
+    identity.listeners.add(fn)
+    return () => {
+      identity.listeners.delete(fn)
+    }
   },
-}))
-const identity = { name: 'Screen 1', renamed: [] as string[] }
+}
 
 const toasts: unknown[] = []
 vi.mock('sonner', () => ({
@@ -62,6 +80,7 @@ afterEach(() => {
   toasts.length = 0
   identity.renamed.length = 0
   identity.name = 'Screen 1'
+  identity.listeners.clear()
   window.sessionStorage.clear()
   resetDeskFollowStores()
   resetFullscreenState()
@@ -225,10 +244,16 @@ describe('the mounted bridge', () => {
     windowsWs.last = [row('s-1', 'w-1', 'Screen 1')]
     mountBridge()
     await waitFor(() => expect(windowsWs.commandCallback).not.toBeNull())
+    await waitFor(() => expect(windowsWs.announced).toHaveLength(1))
     act(() => {
       windowsWs.command({ type: 'rename', targetId: 's-1', name: 'Desk left' })
     })
     expect(identity.renamed).toEqual(['Desk left'])
+    // The rename is not applied server-side: this tab renames itself and the announce effect —
+    // keyed on the name — carries it back. That round trip is what makes the new name survive
+    // this tab's reload, so it is the half worth asserting.
+    await waitFor(() => expect(windowsWs.announced).toHaveLength(2))
+    expect(windowsWs.announced[1]).toMatchObject({ name: 'Desk left' })
   })
 
   it('exits full screen on {on:false} and raises the banner on {on:true}', async () => {

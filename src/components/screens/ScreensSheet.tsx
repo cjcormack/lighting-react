@@ -65,8 +65,14 @@ import { setScreensSheetOpen, useScreensSheetOpen } from './screensSheetState'
  *   equivalent and the operator opens the window by hand). The permission prompt is Chrome's, on
  *   the first *Choose a display*. The child is opened with `noopener`, which puts it in a new
  *   browsing-context group rather than an auxiliary one, so it does **not** inherit this tab's
- *   `sessionStorage`; the `?window=` on its URL names it (D10). Minting a fresh `windowId` on the
- *   param regardless is session 2.5's.
+ *   `sessionStorage`; the `?window=` on its URL names it (D10). That is the spec's promise and it
+ *   is belt *and* braces: `lib/windowIdentity.ts` mints a fresh `windowId` whenever the parameter
+ *   is present at boot, so a route that *does* clone — a `target=_blank` link, another browser —
+ *   still gets its own **`windowId`**. Its *name* is not covered, and "identity" is the pair: a
+ *   stored name beats the parameter, so a cloned child keeps the opener's name and this sheet
+ *   would list a second *Screen 1* rather than the *Screen 2* that was asked for. Only the id is
+ *   the misattribution vector, and only the id is fixed — two rows sharing a name is what D9
+ *   already accepts.
  * - **Copy link for another device** mints `<origin>/?window=<name>` with the space as `%20`,
  *   matching the launcher's tray items. The origin is this tab's: the desk mints its LAN address
  *   server-side per request (`auth/ResetUrls.kt`) and exposes it on no GET route, so a tab open at

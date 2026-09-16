@@ -1843,7 +1843,9 @@ d774fd9 is the wire, and where it and the plan's §3.4 sketch differ, the commit
 `lib/windowIdentity.ts` holds both halves in **`sessionStorage`, never `localStorage`** — the two
 desk screens are two windows of one browser profile, and `localStorage` is one value per origin per
 profile, so an identity kept there would be one identity for both screens. `windowId` is a uuid
-minted once and kept for the tab's life; the name is `?window=Screen%202` from the launch URL, read
+kept for the tab's life once minted — a reload keeps it, and only a `?window=` boot mints a fresh
+one, even over storage a cloned context inherited (its own bullet below); the name is
+`?window=Screen%202` from the launch URL, read
 once at boot before the router is created (`main.tsx`) and stripped, else *Window* plus a suffix,
 and it can be renamed (`renameWindow`, a subscribable so the chip, the user menu and the announce
 all move). Three things about the registry (`api/windowsApi.ts`, `store/windows.ts`):
@@ -1860,10 +1862,29 @@ all move). Three things about the registry (`api/windowsApi.ts`, `store/windows.
 - **The row's `id` is socket-minted and is what every command addresses**; the `windowId` is how a
   tab recognises its own row (`thisWindowRow`, first match). A duplicated tab copies its storage, so
   two rows can share a `windowId` and cannot be told apart from this side — D9 accepts that, the
-  Screens sheet shows two rows, and `FU-WINDOWS-OWN-ROW-ID` is the exact fix. A window opened by the
-  Screens sheet goes out with `noopener`, which makes it a new browsing-context group rather than an
-  auxiliary one, so it does **not** inherit the opener's `sessionStorage`; minting a fresh
-  `windowId` whenever `?window=` is present at boot is session 2.5's.
+  Screens sheet shows two rows, and `FU-WINDOWS-OWN-ROW-ID` is the exact fix.
+- **`?window=` at boot mints a fresh `windowId`; a reload keeps the one it has** (session 2.5).
+  `sessionStorage` is *cloned* into a top-level context created from an existing one — a
+  `window.open` without `noopener`, a `target=_blank` link — so a second desk screen can wake up
+  holding the first's id. A window is never told its own row, it *infers* it by matching `windowId`,
+  so both screens would match both rows and the chip would read *Desk* — "I moved it" — when the
+  twin moved it. The parameter means "a deliberately-named new window", which is exactly the signal
+  that this context is not a continuation of the storage it woke up with; presence of the key is
+  the signal, a blank value included, because a shared identity is the worse failure. The invariant
+  on the other side is the regression to watch for: the parameter is **stripped** at boot, so a
+  reload carries none and keeps its id — minting there would churn a registry row on every refresh.
+  Both facts are read through one memoised `consumeLaunchParam`, because `main.tsx` calls only
+  `windowName()` and the URL is rewritten by whichever of the two asks first. The **name does not
+  follow**: a stored name still beats the parameter, so a `?window=` boot over cloned storage is a
+  fresh id under the inherited name — two rows sharing a *name* is what D9 already accepts, and
+  only the shared *id* was the misattribution. A window opened by the Screens sheet goes out with
+  `noopener`, which per spec makes it a new browsing-context group rather than an auxiliary one and
+  so should not clone at all — **still asserted from the spec, not observed**: the desktop app's
+  Chromium preview pane creates no child context for any of the three routes (`window.open` plain,
+  `window.open` with `noopener`, a `target=_blank` click), converting each into a navigation of the
+  *current* tab, so neither route could be shown to clone there. What that pane did show is the
+  same-tab half of the rule: each of those `?window=` navigations minted a fresh id and kept the
+  stored name. The clone itself is the desk's to see, on a tray item, a Dock app or Safari.
 - **Every socket receives every command, the sender included** (D11), so each handler's first act
   is comparing `targetId` to this window's row id, read at command time from the last state frame
   — which is also what makes this window's own `show` for another window a no-op when it comes back.
