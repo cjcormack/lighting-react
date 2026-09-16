@@ -1,0 +1,232 @@
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import type { ReactNode } from 'react'
+import type { DeskWindow } from '@/api/windowsApi'
+
+const registry: { windows: DeskWindow[] } = { windows: [] }
+const sent: unknown[] = []
+vi.mock('@/store/windows', async () => {
+  const real = await import('@/store/windows')
+  return {
+    thisWindowRow: real.thisWindowRow,
+    useDeskWindows: () => registry.windows,
+    showOnWindow: (targetId: string, view: string) => sent.push({ type: 'show', targetId, view }),
+    renameWindowRow: (targetId: string, name: string) => sent.push({ type: 'rename', targetId, name }),
+    setWindowFullscreen: (targetId: string, on: boolean) => sent.push({ type: 'fullscreen', targetId, on }),
+  }
+})
+vi.mock('@/lib/windowIdentity', () => ({ windowId: () => 'w-1' }))
+vi.mock('@/ProjectSwitcher', () => ({ useViewedProject: () => ({ id: 1, name: 'Show', isCurrent: true }) }))
+
+const fullscreen = { active: false, enter: vi.fn(), exit: vi.fn() }
+vi.mock('@/lib/fullscreen', () => ({
+  useFullscreenState: () => ({ active: fullscreen.active, wanted: false }),
+  canFullscreen: () => true,
+  enterFullscreen: () => fullscreen.enter(),
+  exitFullscreen: () => fullscreen.exit(),
+}))
+
+// Radix's Select needs pointer-capture polyfills jsdom lacks; a native select over the same six
+// views carries the same contract (a value, a change) and is what the view picker is tested
+// through. Built inside the factory: `vi.mock` is hoisted above every import, so nothing declared
+// in this file is in scope when it runs.
+vi.mock('@/components/ui/select', async () => {
+  const React = await import('react')
+  const { WINDOW_VIEWS } = await import('@/lib/windowViews')
+  type Ctx = { value: string; onValueChange: (v: string) => void; disabled: boolean }
+  const Context = React.createContext<Ctx>({ value: '', onValueChange: () => {}, disabled: false })
+  const Select = ({ value, onValueChange, disabled, children }: Ctx & { children: ReactNode }) =>
+    React.createElement(Context.Provider, { value: { value, onValueChange, disabled: disabled ?? false } }, children)
+  const SelectTrigger = (props: { 'aria-label'?: string; title?: string }) => {
+    const ctx = React.useContext(Context)
+    return React.createElement(
+      'select',
+      {
+        'aria-label': props['aria-label'],
+        title: props.title,
+        value: ctx.value,
+        disabled: ctx.disabled,
+        onChange: (e: { target: { value: string } }) => ctx.onValueChange(e.target.value),
+      },
+      React.createElement('option', { value: '' }, ''),
+      ...WINDOW_VIEWS.map((v) => React.createElement('option', { key: v.id, value: v.id }, v.label)),
+    )
+  }
+  return {
+    Select,
+    SelectTrigger,
+    SelectValue: () => null,
+    SelectContent: () => null,
+    SelectItem: () => null,
+  }
+})
+
+import { ScreensSheet } from './ScreensSheet'
+import { setScreensSheetOpen } from './screensSheetState'
+
+/**
+ * The Screens sheet (multi-screen plan §4, `Screens.dc.html` §2): a row per window with *this
+ * window* on the right one, every write a `windows.*` command by row id, and the two ways to make
+ * a new window — Open on Display N only behind `getScreenDetails`, Copy link with `%20`.
+ */
+const row = (id: string, windowId: string, name: string, extra: Partial<DeskWindow> = {}): DeskWindow => ({
+  id,
+  windowId,
+  name,
+  view: '/projects/1/programmer',
+  fullscreen: false,
+  follows: true,
+  user: null,
+  ...extra,
+})
+
+beforeEach(() => {
+  registry.windows = [
+    row('s-1', 'w-1', 'Screen 1'),
+    row('s-2', 'w-2', 'Screen 2', { view: '/projects/1/busk', fullscreen: true }),
+    row('s-3', 'w-3', 'Chris’s iPad', { follows: false, user: 'Chris' }),
+  ]
+  act(() => setScreensSheetOpen(true))
+})
+
+afterEach(() => {
+  act(() => setScreensSheetOpen(false))
+  sent.length = 0
+  fullscreen.active = false
+  vi.clearAllMocks()
+  delete (window as { getScreenDetails?: unknown }).getScreenDetails
+})
+
+const rowFor = (name: string) => screen.getByRole('listitem', { name })
+
+describe('ScreensSheet', () => {
+  it('lists every window with this one marked, and each one’s framing', () => {
+    render(<ScreensSheet />)
+    expect(screen.getByRole('dialog', { name: 'Screens' })).toBeInTheDocument()
+    const rows = within(screen.getByRole('list', { name: 'Windows' })).getAllByRole('listitem')
+    expect(rows).toHaveLength(3)
+
+    expect(rowFor('Screen 1')).toHaveTextContent('this window')
+    expect(rowFor('Screen 1')).toHaveTextContent('in a browser tab · follows the desk')
+    expect(rowFor('Screen 2')).not.toHaveTextContent('this window')
+    expect(rowFor('Screen 2')).toHaveTextContent('full screen · follows the desk')
+    expect(rowFor('Chris’s iPad')).toHaveTextContent('in a browser tab · own selection')
+    // The user is not drawn while every name is unique.
+    expect(rowFor('Chris’s iPad')).not.toHaveTextContent('· Chris')
+  })
+
+  it('badges one twin only when two rows share this tab’s windowId — the first, as the chip reads it', () => {
+    registry.windows = [row('s-1', 'w-1', 'Screen 1'), row('s-2', 'w-1', 'Screen 1')]
+    render(<ScreensSheet />)
+    const rows = within(screen.getByRole('list', { name: 'Windows' })).getAllByRole('listitem')
+    expect(rows[0]).toHaveTextContent('this window')
+    expect(rows[1]).not.toHaveTextContent('this window')
+  })
+
+  it('draws the server-stamped user only where two rows share a name', () => {
+    registry.windows = [row('s-1', 'w-1', 'Desk', { user: 'Chris' }), row('s-2', 'w-2', 'Desk', { user: 'Sam' })]
+    render(<ScreensSheet />)
+    const rows = within(screen.getByRole('list', { name: 'Windows' })).getAllByRole('listitem')
+    expect(rows[0]).toHaveTextContent('· Chris')
+    expect(rows[1]).toHaveTextContent('· Sam')
+  })
+
+  it('shows a view on another window by row id, and on this one the same way', () => {
+    render(<ScreensSheet />)
+    fireEvent.change(screen.getByRole('combobox', { name: 'View on Screen 2' }), { target: { value: 'busk' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'View on Screen 1' }), { target: { value: 'looks' } })
+    expect(sent).toEqual([
+      { type: 'show', targetId: 's-2', view: '/projects/1/busk' },
+      { type: 'show', targetId: 's-1', view: '/projects/1/looks' },
+    ])
+  })
+
+  it('renames a window by row id on ⏎, reverts a blank, and sends nothing for a no-op', () => {
+    render(<ScreensSheet />)
+    const field = within(rowFor('Screen 2')).getByRole('textbox', { name: 'Name of Screen 2' })
+    field.focus()
+    fireEvent.change(field, { target: { value: 'Desk right' } })
+    fireEvent.keyDown(field, { key: 'Enter' })
+    // Exactly one frame: Enter blurs and the blur commits, rather than both committing.
+    expect(sent).toEqual([{ type: 'rename', targetId: 's-2', name: 'Desk right' }])
+
+    sent.length = 0
+    fireEvent.change(field, { target: { value: '   ' } })
+    fireEvent.blur(field)
+    expect(sent).toEqual([])
+    expect((field as HTMLInputElement).value).toBe('Screen 2')
+
+    fireEvent.change(field, { target: { value: 'Screen 2' } })
+    fireEvent.blur(field)
+    expect(sent).toEqual([])
+  })
+
+  it('sends a fullscreen command to another window, and enters or exits directly for this one', () => {
+    render(<ScreensSheet />)
+    fireEvent.click(within(rowFor('Screen 2')).getByRole('button', { name: 'Exit full screen' }))
+    fireEvent.click(within(rowFor('Chris’s iPad')).getByRole('button', { name: 'Full screen' }))
+    expect(sent).toEqual([
+      { type: 'fullscreen', targetId: 's-2', on: false },
+      { type: 'fullscreen', targetId: 's-3', on: true },
+    ])
+    fireEvent.click(within(rowFor('Screen 1')).getByRole('button', { name: 'Full screen' }))
+    expect(fullscreen.enter).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads this window’s own full-screen state from the document, ahead of the registry', () => {
+    fullscreen.active = true
+    render(<ScreensSheet />)
+    expect(rowFor('Screen 1')).toHaveTextContent('full screen ·')
+    fireEvent.click(within(rowFor('Screen 1')).getByRole('button', { name: 'Exit full screen' }))
+    expect(fullscreen.exit).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers Open a window on… only behind getScreenDetails, and nothing at all without it', () => {
+    render(<ScreensSheet />)
+    expect(screen.queryByText('Open a window on…')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Choose a display/ })).toBeNull()
+  })
+
+  it('lists the displays after the prompt and opens a named window on the chosen one', async () => {
+    const current = { availLeft: 0, availTop: 0, availWidth: 1440, availHeight: 900, width: 1440, height: 900 }
+    const other = { availLeft: 1440, availTop: 0, availWidth: 1920, availHeight: 1080, width: 1920, height: 1080 }
+    ;(window as { getScreenDetails?: unknown }).getScreenDetails = async () => ({ screens: [current, other], currentScreen: current })
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+    render(<ScreensSheet />)
+
+    expect(screen.getByText('Open a window on…')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Choose a display/ }))
+    const display2 = await screen.findByRole('button', { name: /Display 2 · 1920×1080/ })
+    fireEvent.click(display2)
+    expect(open).toHaveBeenCalledWith(
+      `${window.location.origin}/?window=Screen%203`,
+      '_blank',
+      'left=1440,top=0,width=1920,height=1080,noopener',
+    )
+    // The name is spent on the open: the field clears to the placeholder so a second open
+    // takes the registry's next free name rather than naming a twin.
+    expect(screen.getByRole('textbox', { name: 'Name for a new window' })).toHaveValue('')
+  })
+
+  it('copies a link for another device with the next free Screen N, the space as %20', async () => {
+    const writeText = vi.fn(async () => {})
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    render(<ScreensSheet />)
+    // Screen 1 and Screen 2 are taken, so the default is Screen 3; the field can change it.
+    expect(screen.getByRole('textbox', { name: 'Name for a new window' })).toHaveValue('Screen 3')
+    fireEvent.click(screen.getByRole('button', { name: 'Copy link for another device' }))
+    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/?window=Screen%203`)
+    expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument()
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Name for a new window' }), { target: { value: 'Front of house' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Copy link for another device' }))
+    expect(writeText).toHaveBeenLastCalledWith(`${window.location.origin}/?window=Front%20of%20house`)
+  })
+
+  it('says under the button that a localhost link names the desk to itself', () => {
+    render(<ScreensSheet />)
+    // jsdom's origin is http://localhost:3000.
+    expect(screen.getByText(/names the desk to itself/)).toBeInTheDocument()
+  })
+})

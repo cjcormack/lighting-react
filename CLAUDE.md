@@ -1463,13 +1463,23 @@ cannot draw a mask it did not make as a marquee, so the marquee is dropped to it
 FIFO *does* treat as an echo still lands its `source` in the cache, because the cache is
 `store/selection.ts`'s and is written before the bridge's effect runs (`decodeSelectionState` keeps
 the untouched parts' identities, so a source-only frame moves the chip and nothing else).
-`source` is stamped by the desk from the socket's own name, never sent: every `selection.set` /
-`selection.toggle` carries this tab's `sourceName` from `lib/windowIdentity.ts` — `?window=` read
-once at boot and stripped, else `Window` plus a suffix, in `sessionStorage` — and the desk
-remembers it per socket. **There is no `open`-branch re-send**, and it is not an omission: the
-shipped wire has no name-only frame, so a `selection.set` on connect would *replace* the desk's
-selection and make a reconnecting tab its last mover; a reconnected socket is named again by the
-first write it makes, and a socket that has made none stamps no source, which is the desk's rule.
+`source` is stamped by the desk from the window this socket **announced**, never sent: the
+`windows.announce` every tab sends on connect and on every change (§Windows, full screen and the
+hand) carries its name, and the desk stamps `source` with that name **and the socket-minted row
+id** (lighting7 d774fd9). No selection write names this window any more — session 1's `sourceName`
+on `selection.set` / `selection.toggle` is gone from this side, and the desk's fallback arm for it is
+`FU-WINDOWS-RETIRE-SOURCENAME`, ready to delete.
+
+**The chip resolves "this window" through `windows.state`, not through `sessionStorage`**
+(`deskReading` in `components/desk/DeskChip.tsx`). `source.id` is the mover's *row* id, which a tab
+never sees except in its own registry row, so *my* row is the one whose `windowId` is this tab's
+(`thisWindowRow`, first match), and the chip reads *Desk* when `source.id` equals that row's id,
+*Desk · from <name>* when it names another row — the row's *current* name, so a rename shows without
+a new write — and *Desk · from the desk* for kind `surface`. `source.id` is absent for a surface
+write and for a socket that never announced; there the chip falls back to comparing names, which is
+what a pre-registry client still gets. A duplicated tab copies its `sessionStorage`, so two rows can
+share one `windowId` and neither the tab nor the chip can tell them apart: the twin's write can read
+as this window's own. Cosmetic, accepted by D9, and left; `FU-WINDOWS-OWN-ROW-ID` is the exact fix.
 
 **Follow / local is a per-tab `sessionStorage` fact, default on** (`lib/deskFollow.ts`, D8), and it
 gates **both** directions of the bridge, since one bridge is both. `localStorage` is one value per
@@ -1826,6 +1836,80 @@ messages, and an `''`-keyed subscriber matches no frame at all. Server frames ar
 (one per 16 beats), so the component free-runs a local timer in between — that interpolation
 is load-bearing, not decoration.
 
+### Windows, full screen and the hand
+
+**A window is a socket carrying a client-minted identity** (multi-screen plan D9, D10; lighting7
+d774fd9 is the wire, and where it and the plan's §3.4 sketch differ, the commit wins).
+`lib/windowIdentity.ts` holds both halves in **`sessionStorage`, never `localStorage`** — the two
+desk screens are two windows of one browser profile, and `localStorage` is one value per origin per
+profile, so an identity kept there would be one identity for both screens. `windowId` is a uuid
+minted once and kept for the tab's life; the name is `?window=Screen%202` from the launch URL, read
+once at boot before the router is created (`main.tsx`) and stripped, else *Window* plus a suffix,
+and it can be renamed (`renameWindow`, a subscribable so the chip, the user menu and the announce
+all move). Three things about the registry (`api/windowsApi.ts`, `store/windows.ts`):
+
+- **The announce carries exactly `windowId`, `name`, `view`, `fullscreen`, `follows`.** The desk's
+  Json is bare — no `ignoreUnknownKeys` — so one extra key makes the whole frame undeserializable and
+  it is dropped with a server-side log line only. The symptom is a window that never appears in
+  `windows.state`; `windowsApi.test.ts` pins the key set, and `id` and `user` are the server's to
+  say. It goes out on every `Status.OPEN` (the second legitimate `open` re-send, §Where a WS bridge
+  subscribes) and on every change — route, full screen, follow, rename — from one effect in
+  `useWindowsBridge`. It is **handled only once the show is warm**: the frame waits in the socket's
+  incoming channel through boot, so `windows.state` arrives empty behind the boot overlay and fills
+  itself when the show is ready. There is no retry timer; do not add one.
+- **The row's `id` is socket-minted and is what every command addresses**; the `windowId` is how a
+  tab recognises its own row (`thisWindowRow`, first match). A duplicated tab copies its storage, so
+  two rows can share a `windowId` and cannot be told apart from this side — D9 accepts that, the
+  Screens sheet shows two rows, and `FU-WINDOWS-OWN-ROW-ID` is the exact fix. A window opened by the
+  Screens sheet goes out with `noopener`, which makes it a new browsing-context group rather than an
+  auxiliary one, so it does **not** inherit the opener's `sessionStorage`; minting a fresh
+  `windowId` whenever `?window=` is present at boot is session 2.5's.
+- **Every socket receives every command, the sender included** (D11), so each handler's first act
+  is comparing `targetId` to this window's row id, read at command time from the last state frame
+  — which is also what makes this window's own `show` for another window a no-op when it comes back.
+  `windows.show` is a `navigate(view)`: the show-editing lock is per tab and defaults locked, so
+  `/show` lands locked; an open cell editor unmounts with its route and the desk bridge never
+  publishes on unmount; and a **guarded sheet declines** — the toast names the view and carries a
+  button that goes. `windows.rename` is **not applied server-side**: the target renames itself and
+  re-announces, which is what makes the name survive that tab's reload, so a rename aimed at a
+  disconnected window changes nothing, exactly as a show does (`FU-WINDOWS-SHOW-OFFLINE`; do not
+  retry). `windows.fullscreen {on:false}` calls `document.exitFullscreen()`; `{on:true}` cannot call
+  `requestFullscreen` without a gesture and raises the *Return to full screen* banner instead.
+
+**Full screen** (`lib/fullscreen.ts`, plan §3.6): `requestFullscreen` on the document element from
+a gesture — the user menu's item, ⇧F, the ⌘K command, the Screens sheet's button — then
+`navigator.keyboard.lock(['Escape'])` **feature-detected**, so on Chrome at a secure origin Esc
+reaches the sheet's clear-selection rather than the browser, and on Safari it quietly does not. A
+`fullscreenchange` listener is the truth (Esc, a tab switch and another app all leave without
+telling the requester), and it keeps a `sessionStorage` flag so a window that was full screen and is
+not now — a reload, a crash, a `{on:true}` from another screen — draws the one-tap banner at the top
+of `<main>` (`ReturnToFullscreenBanner`, beside `SyncReauthBanner`). In full screen the app draws a
+small exit glyph on the user menu's label line and nowhere else — never a floating button on a live
+view. **Safari on the Mac is a first-class desk browser (D13)**: every Chrome-only piece — Keyboard
+Lock, `getScreenDetails`, the *Open a window on… Display N* row and the *Open <view> on another
+display* commands — is feature-detected and its absence is *quiet*: no item, no gutter, no disabled
+control saying "use Chrome".
+
+**The one rule underneath all of it is the secure context** (`lighting7/docs/desk-screens.md`):
+installation, Keyboard Lock and Window Management exist only on a potentially-trustworthy origin,
+and the desk serves plain HTTP — so the two desk screens must be opened at `http://localhost:8413/`,
+and the iPad at the `.local` name gets the Fullscreen API and nothing else. Nothing in the UI says
+so; a desk screen whose Esc keeps leaving full screen has almost certainly been opened at the LAN
+name. `public/manifest.webmanifest` (`display: fullscreen`, `display_override: ["fullscreen",
+"standalone"]`, no service worker) plus `<link rel="manifest">` and `apple-mobile-web-app-capable`
+in `index.html` are the whole of the install story; its icon is `public/icon.svg`, a placeholder
+until `FU-DIST-ICONS` — the `/vite.svg` favicon link it replaced pointed at nothing.
+
+**The Screens sheet** (`components/screens/ScreensSheet.tsx`, `Screens.dc.html` §2) is mounted once
+in `Layout` and opened from the user menu and from ⌘K through `screensSheetState`, since neither
+opener is an ancestor of the other. Every write on it is a `windows.*` command by row id — this
+window's included, so a rename of this tab goes out and comes back like any other and there is one
+path, not two. *Copy link for another device* mints `<origin>/?window=<name>` with the space as
+`%20`, the launcher's spelling (`DeskScreens.screenUrl`); the origin is this tab's, because the desk
+mints its LAN address server-side per request and exposes it on no GET route, so a tab at
+`localhost` copies a link that names the desk to itself and says so under the button
+(`FU-SCREENS-LAN-URL`). **Layouts** is `FU-SCREENS-LAYOUTS`, not built. **The hand** is session 3.
+
 ### Desk accounts
 
 Login, roles, and user administration for a desk whose accounts live on the
@@ -1867,11 +1951,13 @@ recovery. Frontend shape:
   (nine controls came to 439px against a 375px viewport, and the avatar was what got
   pushed off). Theme went because it is the one thing on that row that is not a desk
   control but a per-*viewer* display preference, which is what the rest of this menu
-  is. `ThemeToggle` still exists as a standalone button for one case: `UserMenu`
-  renders it instead of `null` when there is no signed-in user, or a bootstrap-open
-  desk would have no way to change theme at all. Exactly one of the two is ever
-  mounted — the theme is a `useState` seeded once from storage, so two would drift —
-  and it is deliberately **not** on `syncStore`, which JSON-encodes: `theme` is stored
+  is. **On a bootstrap-open desk the menu still opens**, behind a generic glyph, with
+  the per-viewer items — the theme, *Full screen*, *Screens…* — and no account items:
+  it used to return a bare `ThemeToggle` there, which kept the theme reachable and
+  quietly lost the other two the day they were added. That standalone button is
+  deleted; `ThemeMenuItem` is the one theme control, and the theme is
+  a `useState` seeded once from storage, so a second mount would drift. It is
+  deliberately **not** on `syncStore`, which JSON-encodes: `theme` is stored
   as the bare string `dark` and read at module scope in `main.tsx` before React exists. Four tabs — **Profile / Password / Devices /
   Sign-in** — and **each tab owns its own action button**; the footer is just Close,
   because a footer Save would have to mean "save the display name" while you were
@@ -2255,22 +2341,27 @@ The census as of this writing, so a new slice can see which company it is in: **
 sites across 20 slices** (`grep -n '^lightingApi\.' src/store/*.ts`), and **four deferred**, all
 started from `main.tsx` — `oauthGithub`, `looks`, `templates`, `programmerErrors`. The imbalance is
 the rule working, not drift: form 1 is the default and form 2 is the exception, and the four are
-exactly the slices the sidebar and the first paint reach.
+exactly the slices the sidebar and the first paint reach. `store/windows.ts` is on the sidebar's
+path too (`UserMenu` reads the window count) and is **neither**: its only subscription is form 3, a
+`queryFn` that closes over `lightingApi` and touches it when the first reader mounts, so it needs no
+`startWindowsBridge()`. The half of that family that turns a frame into an action — the announce
+and the three command handlers — lives in a hook (`components/screens/useWindowsBridge.ts`, mounted
+once in `Layout`), because it needs the router's location and `navigate`, which exist only inside
+`RouterProvider`.
 
 Nothing is being migrated toward form 2. `import/no-cycle` is an ESLint **error** in this repo, so
 the precondition for the TDZ hazard — an import cycle through `api/lightingApi` — cannot reappear
 silently; the four deferred bridges stay deferred as defence in depth for the render-order half,
 which the lint rule does not see.
 
-**The beat subscriptions are still the only legitimate `open` re-send.** The multi-screen plan
-expected a second one — the window's name, re-announced on every connect so the desk can stamp
-`selection.state`'s `source` — but the wire that shipped (lighting7 af3575a) has no name-only frame:
-a socket names itself only by a `selection.set` or `selection.toggle` carrying `sourceName`, and
-sending either on `open` would be a *write* that replaces the desk's selection and makes a
-reconnecting tab its last mover. So `api/selectionApi.ts` has no `open` branch; the name rides every
-write instead (`store/selection.ts`), and a reconnected socket is named again by the first write it
-makes. Session 2's `windows.announce` — a frame that *is* a name and nothing else — is where that
-second `open` branch belongs.
+**There are two legitimate `open` re-sends, and both re-send what the *server* forgot.** The
+first is `speedMastersWsApi`'s beat requests, which live on the server's per-connection scope. The
+second is `windows.announce` in `api/windowsApi.ts`: the desk's windows registry keys its rows by
+socket, so a reconnect is a new socket with no row until this tab says again what it is. That
+branch re-sends the last announce and nothing else — no `windows.state` request, since the desk
+pushes the snapshot on every connect — and it is the frame that carries the window's name, which is
+why `api/selectionApi.ts` still has no `open` branch and never will: a `selection.set` on connect
+would be a *write* that replaces the desk's selection and makes a reconnecting tab its last mover.
 
 ## Patterns and Conventions
 
@@ -2324,6 +2415,16 @@ path may quietly change where it lands.
 - When adding a new page/route, add an entry to the `navItems` array in `src/navigation.ts`
 - This automatically registers the page in both the sidebar and the Cmd+K command palette
 - Dynamic items (e.g. universes) are handled by the `useUniverseNavItems()` hook (`useNavItems()` just returns the static `navItems`)
+- **The ⌘K window commands are actions, not `NavItem`s.** `useWindowCommands()` in
+  `src/navigation.ts` builds ⌘K's *Screens* group from the windows registry the way
+  `useTemplateFamilyNavItems` builds its four from the family list, and `buildWindowCommands` is the
+  pure half `navigation.test.ts` pins: *Go full screen* / *Exit full screen* (⇧F, absent where the
+  browser has no Fullscreen API), *Screens…* with the window count, *Show <view> on <window>* for
+  every **other** window × the six views in `lib/windowViews.ts` (this window has the Navigation
+  group already), *Open <view> on another display* (Chrome only, absent elsewhere — D13's rule that a
+  missing feature is quiet, never a disabled row saying "use Chrome"), and *Follow the desk selection
+  in this window* with its state as the detail. They carry a `run`, not a `path`, because most of
+  them move *another* window; the sidebar never lists them.
 - **Exception — cards/list sibling routes**: list views that pair with a cards
   view (`/fixtures/list`, `/groups/list`, `/channels/:universe/table`,
   `/show/stacks/:stackId/table`) deliberately have **no** `navItems`
@@ -2631,7 +2732,12 @@ All sheets must follow this structure using the shared primitives from `src/comp
     is invisible (`CueTriggerEditor` relies on that for its inline mode).
 
   The two combine, so a parent's prop and a body's hook can both contribute. `sheet.test.tsx` pins
-  both directions of the trap. Only a close **Radix** drives reaches the question, so a Cancel
+  both directions of the trap. **Both also feed a module-level count**, `lib/unsavedSheets.ts`,
+  which `Sheet`'s provider writes from the same `hasUnsaved` it guards on — gated on `open`, since a
+  controlled sheet's `unsavedChanges` prop can stay true after the panel closed. It exists for one
+  reader nowhere near a sheet: a `windows.show` from another screen declines to navigate while the
+  count is non-zero (§Windows, full screen and the hand). A count and not a flag, because a picker
+  can sit over an editor and the second closing must not clear the first's claim. Only a close **Radix** drives reaches the question, so a Cancel
   button must be wrapped in `<SheetClose asChild>` rather than calling the parent's own
   `setOpen(false)` — and must not also carry an `onClick` that closes, since `asChild` would run
   both. Only controlled sheets can be guarded — an uncontrolled one closes itself inside Radix.

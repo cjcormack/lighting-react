@@ -8,15 +8,14 @@ import { createSelectionWsApi, type DeskSelectionSnapshot } from './selectionApi
  * module, and a renamed key here would have left that suite green while the desk ignored it.
  */
 describe('createSelectionWsApi', () => {
-  it('sends the whole fact on a set — targets, families and the window’s name', () => {
+  it('sends the whole fact on a set — targets and families, and no name', () => {
     const { conn, sent } = fakeWsConnection()
-    createSelectionWsApi(conn).set([{ type: 'fixture', key: 'par-1' }], ['COLOUR'], 'Screen 1')
+    createSelectionWsApi(conn).set([{ type: 'fixture', key: 'par-1' }], ['COLOUR'])
     expect(sent).toEqual([
       {
         type: 'selection.set',
         targets: [{ type: 'fixture', key: 'par-1' }],
         families: ['COLOUR'],
-        sourceName: 'Screen 1',
       },
     ])
   })
@@ -26,26 +25,27 @@ describe('createSelectionWsApi', () => {
     // the echo compare equal to what was sent.
     const { conn, sent } = fakeWsConnection()
     const api = createSelectionWsApi(conn)
-    api.set([], null, 'Screen 1')
-    api.set([], ['INTENSITY', 'POSITION', 'COLOUR', 'BEAM'], 'Screen 1')
+    api.set([], null)
+    api.set([], ['INTENSITY', 'POSITION', 'COLOUR', 'BEAM'])
     expect(sent.map((frame) => 'families' in frame)).toEqual([false, false])
   })
 
-  it('names the window on a toggle and sends a bare clear', () => {
+  it('sends a bare toggle and a bare clear — the announce names the window, not the write', () => {
     const { conn, sent } = fakeWsConnection()
     const api = createSelectionWsApi(conn)
-    api.toggle({ type: 'group', key: 'Front wash' }, 'Screen 1')
+    api.toggle({ type: 'group', key: 'Front wash' })
     api.clear()
     expect(sent).toEqual([
-      { type: 'selection.toggle', target: { type: 'group', key: 'Front wash' }, sourceName: 'Screen 1' },
+      { type: 'selection.toggle', target: { type: 'group', key: 'Front wash' } },
       { type: 'selection.clear' },
     ])
   })
 
   it('never puts a source on the wire — the desk stamps it', () => {
     const { conn, sent } = fakeWsConnection()
-    createSelectionWsApi(conn).set([{ type: 'fixture', key: 'par-1' }], null, 'Screen 1')
+    createSelectionWsApi(conn).set([{ type: 'fixture', key: 'par-1' }], null)
     expect(sent[0]).not.toHaveProperty('source')
+    expect(sent[0]).not.toHaveProperty('sourceName')
   })
 
   it('decodes a state frame with the two fields absent as every attribute and nobody', () => {

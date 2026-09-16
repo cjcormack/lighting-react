@@ -186,23 +186,23 @@ describe('the cache entry', () => {
 })
 
 describe('the writes', () => {
-  it('sends the whole fact on a set — targets, families and this window’s name', () => {
+  it('sends the whole fact on a set — targets and families, with no name on the write', () => {
     const set = vi.spyOn(lightingApi.selection, 'set')
     setDeskSelection([{ type: 'group', key: 'Front wash' }], ['COLOUR'])
-    expect(set).toHaveBeenCalledWith([{ type: 'group', key: 'Front wash' }], ['COLOUR'], 'Screen 1')
+    expect(set).toHaveBeenCalledWith([{ type: 'group', key: 'Front wash' }], ['COLOUR'])
   })
 
   it('sends a set with no families for a row selection, which clears the desk’s mask', () => {
     const set = vi.spyOn(lightingApi.selection, 'set')
     setDeskSelection([{ type: 'fixture', key: 'par-1' }])
-    expect(set).toHaveBeenCalledWith([{ type: 'fixture', key: 'par-1' }], null, 'Screen 1')
+    expect(set).toHaveBeenCalledWith([{ type: 'fixture', key: 'par-1' }], null)
   })
 
-  it('names this window on a toggle, and sends nothing but the clear on a clear', () => {
+  it('sends a bare toggle, and nothing but the clear on a clear', () => {
     const toggle = vi.spyOn(lightingApi.selection, 'toggle')
     const clear = vi.spyOn(lightingApi.selection, 'clear')
     toggleDeskSelection({ type: 'fixture', key: 'par-1' })
-    expect(toggle).toHaveBeenCalledWith({ type: 'fixture', key: 'par-1' }, 'Screen 1')
+    expect(toggle).toHaveBeenCalledWith({ type: 'fixture', key: 'par-1' })
     clearDeskSelection()
     expect(clear).toHaveBeenCalledWith()
   })

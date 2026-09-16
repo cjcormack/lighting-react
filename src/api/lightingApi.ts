@@ -31,6 +31,7 @@ import {AuthWsApi, createAuthWsApi} from "./authWsApi";
 import {createUsersWsApi, UsersWsApi} from "./usersWsApi";
 import {createInstallWsApi, InstallWsApi} from "./installWsApi";
 import {createUpdateWsApi, UpdateWsApi} from "./updateWsApi";
+import {createWindowsWsApi, WindowsWsApi} from "./windowsApi";
 
 interface LightingApi {
   universes: UniversesApi
@@ -62,6 +63,7 @@ interface LightingApi {
   surfaces: SurfacesWsApi
   selection: SelectionWsApi
   buskPage: BuskPageWsApi
+  windows: WindowsWsApi
   cloudSync: CloudSyncWsApi
   bootStatus: BootStatusWsApi
   programmer: ProgrammerApi
@@ -121,6 +123,7 @@ function createLightingApi(): LightingApi {
   const cloudSyncWsApi = createCloudSyncWsApi(connection)
   const selectionWsApi = createSelectionWsApi(connection)
   const buskPageWsApi = createBuskPageWsApi(connection)
+  const windowsWsApi = createWindowsWsApi(connection)
   const bootStatusWsApi = createBootStatusWsApi(connection)
   const programmerApi = createProgrammerApi(connection)
   const speedMastersWsApi = createSpeedMastersWsApi(connection)
@@ -155,6 +158,7 @@ function createLightingApi(): LightingApi {
     surfaces: surfacesWsApi,
     selection: selectionWsApi,
     buskPage: buskPageWsApi,
+    windows: windowsWsApi,
     cloudSync: cloudSyncWsApi,
     bootStatus: bootStatusWsApi,
     programmer: programmerApi,

@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { useState } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, useUnsavedChanges } from './sheet'
+import { hasUnsavedSheets, resetUnsavedSheets } from '@/lib/unsavedSheets'
 
 /**
  * Escape closes a sheet, except while the Kotlin editor's completion popup is open — that popup
@@ -176,5 +177,63 @@ describe('where useUnsavedChanges is called', () => {
 
     expect(screen.getByText('Discard changes?')).toBeInTheDocument()
     expect(screen.getByText('Edit')).toBeInTheDocument()
+  })
+})
+
+/**
+ * The module-level dirty count (`lib/unsavedSheets.ts`), fed from the provider so a `windows.show`
+ * from another screen can decline while a form here is half-edited (multi-screen plan §3.4). Both
+ * ways of saying dirty feed it; a closed sheet, and an unmounted one, do not.
+ */
+describe('the dirty-sheet count', () => {
+  afterEach(resetUnsavedSheets)
+
+  function BodyGuarded({ unsaved }: { unsaved: boolean }) {
+    const [open, setOpen] = useState(true)
+    return (
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Edit</SheetTitle>
+          </SheetHeader>
+          <DirtyBody unsaved={unsaved} />
+        </SheetContent>
+      </Sheet>
+    )
+  }
+
+  it('counts a body reporting through the hook, and clears when it stops', () => {
+    const { rerender, unmount } = render(<BodyGuarded unsaved />)
+    expect(hasUnsavedSheets()).toBe(true)
+    rerender(<BodyGuarded unsaved={false} />)
+    expect(hasUnsavedSheets()).toBe(false)
+    rerender(<BodyGuarded unsaved />)
+    expect(hasUnsavedSheets()).toBe(true)
+    unmount()
+    expect(hasUnsavedSheets()).toBe(false)
+  })
+
+  it('counts the parent’s own prop, but not while the sheet is closed', () => {
+    const { rerender } = render(
+      <Sheet open unsavedChanges onOpenChange={() => {}}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Edit</SheetTitle>
+          </SheetHeader>
+        </SheetContent>
+      </Sheet>,
+    )
+    expect(hasUnsavedSheets()).toBe(true)
+    // The form state outlives the panel; a closed sheet loses nothing on a navigation.
+    rerender(
+      <Sheet open={false} unsavedChanges onOpenChange={() => {}}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Edit</SheetTitle>
+          </SheetHeader>
+        </SheetContent>
+      </Sheet>,
+    )
+    expect(hasUnsavedSheets()).toBe(false)
   })
 })

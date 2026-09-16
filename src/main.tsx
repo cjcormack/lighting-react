@@ -12,9 +12,9 @@ import { startProgrammerErrorBridge } from "./store/programmerErrors"
 import { windowName } from "./lib/windowIdentity"
 
 // Apply the stored (or system-preferred) theme before React mounts. The boot
-// loading overlay renders before Layout's ThemeToggle effect runs, so without
+// loading overlay renders before the user menu's ThemeMenuItem effect runs, so without
 // this the overlay would be light regardless of preference; this also removes
-// the flash-of-light on normal loads. Resolution is shared with ThemeToggle.
+// the flash-of-light on normal loads. Resolution is shared with ThemeMenuItem.
 applyThemeClass(getInitialTheme())
 
 // Keep the GitHub identity cache live for the whole app, so the sidebar badge and the re-auth
@@ -35,7 +35,8 @@ startProgrammerErrorBridge()
 
 // This tab's name (multi-screen plan D10): `?window=` is read once and stripped here, before the
 // router is created, so the router never sees the parameter and a bookmark of the stripped URL
-// does not re-mint the name on the next tab. See lib/windowIdentity.ts.
+// does not re-mint the name on the next tab. The announce that carries it to the desk's windows
+// registry is `useWindowsBridge`, inside the router. See lib/windowIdentity.ts.
 windowName()
 
 const root = ReactDOM.createRoot(

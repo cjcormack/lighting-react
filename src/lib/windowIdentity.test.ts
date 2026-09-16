@@ -1,10 +1,21 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { WINDOW_NAME_KEY, resetWindowIdentity, useWindowName, windowName } from './windowIdentity'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, renderHook } from '@testing-library/react'
+import {
+  WINDOW_ID_KEY,
+  WINDOW_NAME_KEY,
+  renameWindow,
+  resetWindowIdentity,
+  subscribeWindowName,
+  useWindowName,
+  windowId,
+  windowName,
+} from './windowIdentity'
 
 /**
- * This tab's name (multi-screen plan D10, the session-1 stub): `?window=` read once and
- * stripped, `sessionStorage` across a reload, a minted `Window xxxx` otherwise.
+ * This tab's identity (multi-screen plan D9, D10): a `windowId` minted once into `sessionStorage`,
+ * a name from `?window=` read once and stripped, else `Window xxxx`; both survive a reload, neither
+ * is shared with another tab; and a rename moves every reader.
  */
 
 beforeEach(() => {
@@ -16,12 +27,40 @@ afterEach(() => {
   resetWindowIdentity()
 })
 
+describe('windowId', () => {
+  it('mints a uuid once and keeps it for the tab', () => {
+    const id = windowId()
+    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
+    expect(windowId()).toBe(id)
+    expect(window.sessionStorage.getItem(WINDOW_ID_KEY)).toBe(id)
+  })
+
+  it('reads the stored id after a reload rather than minting a new one', () => {
+    window.sessionStorage.setItem(WINDOW_ID_KEY, 'aaaaaaaa-0000-4000-8000-000000000001')
+    expect(windowId()).toBe('aaaaaaaa-0000-4000-8000-000000000001')
+  })
+
+  it('differs between two tabs — storage is per tab, so a fresh tab mints a fresh id', () => {
+    const first = windowId()
+    // A second tab: no storage, no cache.
+    window.sessionStorage.clear()
+    resetWindowIdentity()
+    expect(windowId()).not.toBe(first)
+  })
+
+  it('survives a `?window=` boot: the name is taken, the id is kept', () => {
+    window.sessionStorage.setItem(WINDOW_ID_KEY, 'aaaaaaaa-0000-4000-8000-000000000002')
+    window.history.replaceState(null, '', '/?window=Screen%202')
+    expect(windowName()).toBe('Screen 2')
+    expect(windowId()).toBe('aaaaaaaa-0000-4000-8000-000000000002')
+  })
+})
+
 describe('windowName', () => {
   it('mints `Window` plus a short suffix for a tab opened by hand, once', () => {
     const name = windowName()
     expect(name).toMatch(/^Window [0-9a-z]{4}$/)
     expect(windowName()).toBe(name)
-    expect(useWindowName()).toBe(name)
     expect(window.sessionStorage.getItem(WINDOW_NAME_KEY)).toBe(name)
   })
 
@@ -51,5 +90,41 @@ describe('windowName', () => {
     window.history.replaceState(null, '', '/?window=%20')
     expect(windowName()).toMatch(/^Window /)
     expect(window.location.search).toBe('')
+  })
+})
+
+describe('renameWindow', () => {
+  it('stores the new name, tells every subscriber, and reports whether anything changed', () => {
+    windowName()
+    const listener = vi.fn()
+    subscribeWindowName(listener)
+
+    expect(renameWindow('  Screen 2  ')).toBe(true)
+    expect(windowName()).toBe('Screen 2')
+    expect(window.sessionStorage.getItem(WINDOW_NAME_KEY)).toBe('Screen 2')
+    expect(listener).toHaveBeenCalledTimes(1)
+
+    // A no-op rename and a blank one change nothing and wake nobody.
+    expect(renameWindow('Screen 2')).toBe(false)
+    expect(renameWindow('   ')).toBe(false)
+    expect(windowName()).toBe('Screen 2')
+    expect(listener).toHaveBeenCalledTimes(1)
+  })
+
+  it('survives a reload — the renamed name is what storage holds', () => {
+    windowName()
+    renameWindow('Chris’s iPad')
+    resetWindowIdentity()
+    expect(windowName()).toBe('Chris’s iPad')
+  })
+
+  it('re-renders a React reader', () => {
+    const { result } = renderHook(() => useWindowName())
+    const before = result.current
+    act(() => {
+      renameWindow('Screen 3')
+    })
+    expect(before).not.toBe('Screen 3')
+    expect(result.current).toBe('Screen 3')
   })
 })

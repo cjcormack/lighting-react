@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 // jsdom provides `window`, which navigation.ts pulls in transitively via
 // store/universes → api/lightingApi (it reads window.location at import time).
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import { Box } from "lucide-react"
-import { navItems, templateFamilyNavItems, filterNavItems, type NavItem } from "./navigation"
+import { navItems, templateFamilyNavItems, filterNavItems, type NavItem, buildWindowCommands, type WindowCommandInputs } from "./navigation"
 import { ATTRIBUTE_FAMILIES, familySlug } from "./lib/attributeFamily"
 
 /** Minimal NavItem factory for exercising filterNavItems in isolation. */
@@ -211,5 +211,118 @@ describe("look and template navigation", () => {
     expect(show?.path(7)).toBe("/projects/7/show")
     // Neither pathMatch may be a whole-segment suffix of the other.
     expect(programmer!.pathMatch.endsWith(show!.pathMatch)).toBe(false)
+  })
+})
+
+/**
+ * The ⌘K window commands (multi-screen plan §4, `Screens.dc.html` §3), built from the registry
+ * the way the template-family items are built from the family list — so their shapes are pinned
+ * here without a store: one *Show <view> on <window>* per other window and view, the two
+ * Chrome-only families absent rather than disabled, and the follow toggle naming its state.
+ */
+describe("window commands", () => {
+  const actions = () => ({
+    enterFullscreen: vi.fn(),
+    exitFullscreen: vi.fn(),
+    openScreens: vi.fn(),
+    show: vi.fn(),
+    openOnDisplay: vi.fn(),
+    follow: vi.fn(),
+    unlink: vi.fn(),
+  })
+  const row = (id: string, name: string, view = "/projects/1/programmer") => ({
+    id,
+    windowId: `w-${id}`,
+    name,
+    view,
+    fullscreen: false,
+    follows: true,
+    user: null,
+  })
+  const base = (over: Partial<WindowCommandInputs> = {}): WindowCommandInputs => ({
+    windows: [row("s-1", "Screen 1"), row("s-2", "Screen 2", "/projects/1/busk"), row("s-3", "iPad", "/install")],
+    thisRowId: "s-1",
+    projectId: 1,
+    fullscreen: false,
+    canFullscreen: true,
+    canOpenOnDisplay: false,
+    following: true,
+    actions: actions(),
+    ...over,
+  })
+
+  it("lists Go full screen, Screens…, a Show per other window and view, and the follow toggle, in that order", () => {
+    const commands = buildWindowCommands(base())
+    const labels = commands.map((c) => c.label)
+    expect(labels.slice(0, 2)).toEqual(["Go full screen", "Screens…"])
+    expect(labels.at(-1)).toBe("Stop following the desk selection in this window")
+    // Six views × two other windows (the iPad on an install route takes the viewed project).
+    const shows = commands.filter((c) => c.id.startsWith("window-show-"))
+    expect(shows).toHaveLength(12)
+    expect(shows.map((c) => c.label)).toContain("Show Busk on Screen 2")
+    expect(shows.map((c) => c.label)).toContain("Show Prompt Book on iPad")
+    // Never this window: the Navigation group already moves it.
+    expect(labels.some((l) => l.endsWith("on Screen 1"))).toBe(false)
+    expect(new Set(commands.map((c) => c.id)).size).toBe(commands.length)
+  })
+
+  it("shows a view on the target’s own project, falling back to the viewed one", () => {
+    const inputs = base()
+    const commands = buildWindowCommands(inputs)
+    commands.find((c) => c.id === "window-show-s-2-busk")!.run()
+    commands.find((c) => c.id === "window-show-s-3-looks")!.run()
+    expect(inputs.actions.show).toHaveBeenNthCalledWith(1, "s-2", "/projects/1/busk")
+    expect(inputs.actions.show).toHaveBeenNthCalledWith(2, "s-3", "/projects/1/looks")
+  })
+
+  it("skips a window whose view names no project when there is no viewed project either", () => {
+    const commands = buildWindowCommands(base({ projectId: null }))
+    expect(commands.some((c) => c.label.endsWith("on iPad"))).toBe(false)
+    expect(commands.some((c) => c.label.endsWith("on Screen 2"))).toBe(true)
+  })
+
+  it("flips to Exit full screen while full screen, and is absent without the API (D13)", () => {
+    expect(buildWindowCommands(base({ fullscreen: true }))[0]!.label).toBe("Exit full screen")
+    const without = buildWindowCommands(base({ canFullscreen: false }))
+    expect(without[0]!.label).toBe("Screens…")
+    expect(without.some((c) => /full screen/i.test(c.label))).toBe(false)
+  })
+
+  it("offers Open <view> on another display only with Window Management and a project", () => {
+    expect(buildWindowCommands(base()).some((c) => c.id.startsWith("window-open-"))).toBe(false)
+    const withIt = buildWindowCommands(base({ canOpenOnDisplay: true }))
+    const opens = withIt.filter((c) => c.id.startsWith("window-open-"))
+    expect(opens.map((c) => c.label)).toEqual([
+      "Open Programmer on another display",
+      "Open Show on another display",
+      "Open Prompt Book on another display",
+      "Open Busk on another display",
+      "Open Looks on another display",
+      "Open Templates on another display",
+    ])
+    expect(buildWindowCommands(base({ canOpenOnDisplay: true, projectId: null })).some((c) => c.id.startsWith("window-open-"))).toBe(false)
+  })
+
+  it("names the follow state in its label and runs the opposite gesture", () => {
+    const on = base()
+    const follow = buildWindowCommands(on).at(-1)!
+    expect(follow.label).toBe("Stop following the desk selection in this window")
+    expect(follow.detail).toBe("on")
+    follow.run()
+    expect(on.actions.unlink).toHaveBeenCalledTimes(1)
+
+    const off = base({ following: false })
+    const relink = buildWindowCommands(off).at(-1)!
+    expect(relink.label).toBe("Follow the desk selection in this window")
+    expect(relink.detail).toBe("off")
+    relink.run()
+    expect(off.actions.follow).toHaveBeenCalledTimes(1)
+    // Reachable from the same search as every sibling in the Screens group.
+    expect(follow.keywords).toEqual(expect.arrayContaining(["screen", "window"]))
+  })
+
+  it("keeps the Screens… count in step with the registry", () => {
+    expect(buildWindowCommands(base()).find((c) => c.id === "window-screens")!.detail).toBe("3 windows")
+    expect(buildWindowCommands(base({ windows: [row("s-1", "Screen 1")] })).find((c) => c.id === "window-screens")!.detail).toBe("1 window")
   })
 })

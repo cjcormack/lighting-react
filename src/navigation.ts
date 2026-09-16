@@ -1,4 +1,5 @@
 import { useMemo } from "react"
+import { toast } from "sonner"
 import {
   Anchor,
   Braces,
@@ -22,11 +23,25 @@ import {
   Palette,
   Activity,
   Users,
+  Maximize2,
+  Minimize2,
+  MonitorSmartphone,
+  MonitorUp,
+  Link2,
+  Unlink2,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { useAuthStatusQuery } from "./store/auth"
 import { useGetUniverseQuery } from "./store/universes"
 import { ATTRIBUTE_FAMILIES, FAMILY_LABELS, familySlug } from "./lib/attributeFamily"
+import type { DeskWindow } from "./api/windowsApi"
+import { WINDOW_VIEWS, projectIdOfPath, windowViewPath } from "./lib/windowViews"
+import { canFullscreen, enterFullscreen, exitFullscreen, useFullscreenState } from "./lib/fullscreen"
+import { relinkToDesk, unlinkFromDesk, useDeskFollow } from "./lib/deskFollow"
+import { showOnWindow, thisWindowRow, useDeskWindows } from "./store/windows"
+import { lightingApi } from "./api/lightingApi"
+import { openScreensSheet } from "./components/screens/screensSheetState"
+import { canChooseDisplay, listDisplays, newWindowUrl, nextScreenName, openWindowOn } from "./lib/screens"
 
 export type NavGroup = "setup" | "program" | "live" | "monitor" | "settings" | "install"
 
@@ -427,4 +442,186 @@ export function filterNavItems(
     if (item.visibility === "inactive-only") return !isViewingActiveProject
     return true
   })
+}
+
+/**
+ * A ⌘K **action** about windows — not a [NavItem], because most of these move *another* window
+ * or change this one's framing, and neither is a path this window navigates to. `id` and `label`
+ * are what the palette lists and `navigation.test.ts` pins; `detail` is the trailing hint
+ * (*switches that window*, *on*); `run` is the gesture.
+ */
+export interface WindowCommand {
+  id: string
+  label: string
+  icon: LucideIcon
+  keywords: string[]
+  detail?: string
+  run: () => void
+}
+
+export interface WindowCommandInputs {
+  /** Every registry row, this window's included. */
+  windows: readonly DeskWindow[]
+  /** This tab's row id, or null before its announce has landed. */
+  thisRowId: string | null
+  /** The project a *Show <view> on <window>* lands in when the target's own view names none. */
+  projectId: number | null
+  fullscreen: boolean
+  /** The browser has the Fullscreen API at all (Safari iPhone does not). */
+  canFullscreen: boolean
+  /** Chrome's Window Management API is present (secure context, `getScreenDetails`). */
+  canOpenOnDisplay: boolean
+  following: boolean
+  actions: {
+    enterFullscreen: () => void
+    exitFullscreen: () => void
+    openScreens: () => void
+    show: (targetId: string, view: string) => void
+    openOnDisplay: (view: string) => void
+    follow: () => void
+    unlink: () => void
+  }
+}
+
+/**
+ * The window commands, built the way [templateFamilyNavItems] is built — from a vocabulary, in a
+ * fixed order — so a test can pin the shapes without a store (`Screens.dc.html` §3):
+ *
+ * - *Go full screen* / *Exit full screen* (⇧F), only where the API exists;
+ * - *Screens…*;
+ * - *Show <view> on <window>* for every **other** window × the six views — this window has the
+ *   Navigation group already, and a row whose view names no project is skipped rather than sent
+ *   somewhere half-addressed;
+ * - *Open <view> on another display* per view, Chrome only (the display itself is chosen in the
+ *   prompt the gesture opens, since `getScreenDetails` needs one);
+ * - *Follow the desk selection in this window*, with its state as the detail.
+ */
+export function buildWindowCommands(inputs: WindowCommandInputs): WindowCommand[] {
+  const commands: WindowCommand[] = []
+  const { actions } = inputs
+
+  if (inputs.canFullscreen) {
+    commands.push(
+      inputs.fullscreen
+        ? { id: "window-fullscreen-exit", label: "Exit full screen", icon: Minimize2, keywords: ["fullscreen", "window", "screen", "esc"], detail: "⇧F", run: actions.exitFullscreen }
+        : { id: "window-fullscreen", label: "Go full screen", icon: Maximize2, keywords: ["fullscreen", "window", "screen", "kiosk"], detail: "⇧F", run: actions.enterFullscreen },
+    )
+  }
+  commands.push({
+    id: "window-screens",
+    label: "Screens…",
+    icon: MonitorSmartphone,
+    keywords: ["windows", "screens", "display", "monitor", "ipad"],
+    detail: `${inputs.windows.length} ${inputs.windows.length === 1 ? "window" : "windows"}`,
+    run: actions.openScreens,
+  })
+
+  for (const row of inputs.windows) {
+    if (row.id === inputs.thisRowId) continue
+    const projectId = projectIdOfPath(row.view) ?? inputs.projectId
+    if (projectId == null) continue
+    for (const view of WINDOW_VIEWS) {
+      commands.push({
+        id: `window-show-${row.id}-${view.id}`,
+        label: `Show ${view.label} on ${row.name}`,
+        icon: MonitorSmartphone,
+        keywords: ["show", "window", "screen", view.label, row.name],
+        detail: "switches that window",
+        run: () => actions.show(row.id, windowViewPath(view, projectId)),
+      })
+    }
+  }
+
+  if (inputs.canOpenOnDisplay && inputs.projectId != null) {
+    const projectId = inputs.projectId
+    for (const view of WINDOW_VIEWS) {
+      commands.push({
+        id: `window-open-${view.id}`,
+        label: `Open ${view.label} on another display`,
+        icon: MonitorUp,
+        keywords: ["open", "display", "monitor", "window", "screen", view.label],
+        run: () => actions.openOnDisplay(windowViewPath(view, projectId)),
+      })
+    }
+  }
+
+  // The label flips with the state, like the full-screen pair above: an item that read *Follow…*
+  // on a following window and unlinked it said the opposite of what it did.
+  commands.push({
+    id: "window-follow",
+    label: inputs.following
+      ? "Stop following the desk selection in this window"
+      : "Follow the desk selection in this window",
+    icon: inputs.following ? Link2 : Unlink2,
+    keywords: ["follow", "desk", "selection", "local", "unlink", "link", "screen", "window"],
+    detail: inputs.following ? "on" : "off",
+    run: inputs.following ? actions.unlink : actions.follow,
+  })
+
+  return commands
+}
+
+/**
+ * The window commands for this tab, live. ⌘K only. Reads the registry, this tab's follow flag and
+ * full-screen state, and hands [buildWindowCommands] the real gestures.
+ */
+export function useWindowCommands(projectId: number | null): WindowCommand[] {
+  const windows = useDeskWindows()
+  const { active: fullscreen } = useFullscreenState()
+  const following = useDeskFollow()
+  const thisRowId = thisWindowRow(windows)?.id ?? null
+
+  return useMemo(
+    () =>
+      buildWindowCommands({
+        windows,
+        thisRowId,
+        projectId,
+        fullscreen,
+        canFullscreen: canFullscreen(),
+        canOpenOnDisplay: canChooseDisplay(),
+        following,
+        actions: {
+          enterFullscreen: () => void enterFullscreen(),
+          exitFullscreen: () => void exitFullscreen(),
+          openScreens: openScreensSheet,
+          show: showOnWindow,
+          openOnDisplay: (view) => void openOnAnotherDisplay(view, windows.map((w) => w.name)),
+          follow: relinkToDesk,
+          // The desk's fact is read at press time rather than subscribed: the palette is mounted
+          // on every route and closed almost always, and a `selection.state` subscription here
+          // would re-render it on every marquee frame for a value only this one press reads.
+          unlink: () => {
+            const desk = lightingApi.selection.getState()
+            unlinkFromDesk({ targets: desk?.targets ?? [], families: desk?.families ?? null })
+          },
+        },
+      }),
+    [windows, thisRowId, projectId, fullscreen, following],
+  )
+}
+
+/**
+ * Open [view] in a new named window on the first display that is not this one (Chrome's Window
+ * Management API; the permission prompt is the browser's). With one display there is nowhere to
+ * go, and the Screens sheet is where a specific display is picked.
+ *
+ * One gesture does both halves here, and that has a cost the sheet does not pay: `getScreenDetails`
+ * consumes the transient activation — and on first use shows the permission prompt — so by the
+ * time the `window.open` runs the popup blocker may refuse it, and **silently**: under `noopener`
+ * `window.open` returns null either way, so there is nothing to test. The sheet splits *Choose a
+ * display* from *Display N* into two gestures for exactly that reason, and is the route to point an
+ * operator at if this one opens nothing.
+ */
+async function openOnAnotherDisplay(view: string, takenNames: readonly string[]): Promise<void> {
+  try {
+    const other = (await listDisplays()).find((d) => !d.isCurrent)
+    if (other == null) {
+      toast("Only one display is attached")
+      return
+    }
+    openWindowOn(other, newWindowUrl(nextScreenName(takenNames), view))
+  } catch {
+    toast.error("The browser did not allow reading the displays")
+  }
 }

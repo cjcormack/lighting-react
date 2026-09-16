@@ -17,6 +17,9 @@ vi.mock('@/store/fixtures', () => ({ useFixtureListQuery: () => ({ data: fixture
 let snapshot: DeskSelectionSnapshot = { targets: [], families: null, source: null }
 vi.mock('@/store/selection', () => ({ useDeskSelectionSnapshot: () => snapshot }))
 vi.mock('@/lib/windowIdentity', () => ({ useWindowName: () => 'Screen 2' }))
+// The chip resolves "this window" through the windows registry now; an empty registry means it
+// falls back to comparing names, which is what these tests were written against.
+vi.mock('@/store/windows', () => ({ useDeskWindows: () => [], thisWindowRow: () => null }))
 
 import { TargetBand } from './TargetBand'
 

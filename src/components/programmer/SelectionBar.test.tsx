@@ -30,6 +30,9 @@ vi.mock('@/store/selection', async () => {
   }
 })
 vi.mock('@/lib/windowIdentity', () => ({ useWindowName: () => 'Screen 1' }))
+// The chip resolves "this window" through the windows registry now; an empty registry means it
+// falls back to comparing names, which is what these tests were written against.
+vi.mock('@/store/windows', () => ({ useDeskWindows: () => [], thisWindowRow: () => null }))
 
 const { SelectionBar } = await import('./SelectionBar')
 import { MID_FOLDED_CLASS, PHONE_FOLDED_CLASS } from '@/components/sheet/toolbarFolds'

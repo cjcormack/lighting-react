@@ -5,6 +5,7 @@ import * as SheetPrimitive from "@radix-ui/react-dialog"
 import { XIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { setSheetUnsaved } from "@/lib/unsavedSheets"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,6 +52,7 @@ function useUnsavedChanges(unsaved: boolean) {
 
 function Sheet({
   unsavedChanges = false,
+  open,
   onOpenChange,
   children,
   ...props
@@ -76,6 +78,17 @@ function Sheet({
 
   const hasUnsaved = unsavedChanges || unsavedIds.size > 0
 
+  // The same answer, summed across every open sheet in `lib/unsavedSheets.ts`, for a reader that is
+  // nowhere near a sheet: a `windows.show` from another screen declines to navigate while it is
+  // non-zero. Gated on `open` because a controlled sheet's `unsavedChanges` prop can stay true
+  // after the sheet closed (the form state outlives the panel), and a closed sheet loses nothing.
+  const [countId] = React.useState(() => Symbol("sheet-open-unsaved"))
+  const dirty = open !== false && hasUnsaved
+  React.useEffect(() => {
+    setSheetUnsaved(countId, dirty)
+    return () => setSheetUnsaved(countId, false)
+  }, [countId, dirty])
+
   const handleOpenChange = (open: boolean) => {
     if (!open && hasUnsaved) {
       setConfirming(true)
@@ -86,7 +99,7 @@ function Sheet({
 
   return (
     <SheetUnsavedContext.Provider value={register}>
-      <SheetPrimitive.Root data-slot="sheet" onOpenChange={handleOpenChange} {...props}>
+      <SheetPrimitive.Root data-slot="sheet" open={open} onOpenChange={handleOpenChange} {...props}>
         {children}
       </SheetPrimitive.Root>
 

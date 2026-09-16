@@ -16,6 +16,7 @@ import {
   useNavItems,
   useUniverseNavItems,
   useTemplateFamilyNavItems,
+  useWindowCommands,
   filterNavItems,
   useIsNavAdmin,
 } from "@/navigation"
@@ -160,6 +161,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
 
   const viewedProject = useViewedProject()
   const isViewingActiveProject = viewedProject?.id === currentProject?.id
+  const windowCommands = useWindowCommands(viewedProject?.id ?? null)
   const visibleItems = filterNavItems(allNavItems, isViewingActiveProject, isNavAdmin)
   const visibleUniverseItems = filterNavItems(universeNavItems, isViewingActiveProject)
   const visibleTemplateFamilyItems = filterNavItems(templateFamilyNavItems, isViewingActiveProject)
@@ -394,6 +396,27 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
                   Set Channel Value...
                 </Command.Item>
               )}
+            </Command.Group>
+
+            {/* Screens: full screen, the Screens sheet, and one window moving another
+                (multi-screen plan §4, `Screens.dc.html` §3). Built from the registry the way the
+                template-family items are built from the family list. */}
+            <Command.Group heading="Screens" className={groupClassName}>
+              {windowCommands.map((command) => (
+                <Command.Item
+                  key={command.id}
+                  // The id, not the label: cmdk keys selection on `value`, and two windows can
+                  // share a name — the label still matches through `keywords`.
+                  value={command.id}
+                  keywords={[command.label, ...command.keywords]}
+                  onSelect={() => runAction(command.run)}
+                  className={itemClassName}
+                >
+                  <command.icon className="size-4 text-muted-foreground" />
+                  <span className="flex-1">{command.label}</span>
+                  {command.detail && <span className="text-xs text-muted-foreground">{command.detail}</span>}
+                </Command.Item>
+              ))}
             </Command.Group>
 
             {/* View Toggles */}

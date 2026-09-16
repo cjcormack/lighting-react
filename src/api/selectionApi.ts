@@ -26,9 +26,11 @@ import { normaliseFamilies, parseFamilies, sameFamilies } from '../lib/selection
  * `families` is every attribute, absent `source` is nobody since the last clear. A `set` of the
  * same heads from a different mover *does* emit a frame — that is what the desk chip reads.
  *
- * `source` is never sent: the desk stamps it from the socket's own name (D7), which this session is
- * the `sourceName` a write carries (`lib/windowIdentity.ts`) and the desk remembers per socket. The
- * three writes get no reply; the state frame is the acknowledgement.
+ * `source` is never sent: the desk stamps it from the socket's **announced window** (D7) — the
+ * `windows.announce` this tab sends on every connect (`api/windowsApi.ts`), which carries a name
+ * *and* buys the row id `source.id` names. Session 1's `sourceName` on each write is gone from this
+ * side; the desk still accepts it as a fallback until `FU-WINDOWS-RETIRE-SOURCENAME` deletes it.
+ * The three writes get no reply; the state frame is the acknowledgement.
  *
  * A group and one of its members are two separate entries: what the desk holds is what was
  * *said*, and expanding a group to its heads is a question asked later (server-side `coverage()`),
@@ -36,9 +38,13 @@ import { normaliseFamilies, parseFamilies, sameFamilies } from '../lib/selection
  * group rather than for eight loose fixtures.
  */
 export interface SelectionSource {
-  /** A browser window, by the name it gave itself, or a control surface. */
+  /** A browser window, by the name it announced, or a control surface. */
   kind: 'window' | 'surface'
-  /** The window's socket-minted identity once the registry exists (session 2); absent until then. */
+  /**
+   * The window's socket-minted row id in `windows.state` — what the desk chip compares against
+   * *its own* row's id. Absent for a surface write and for a socket that never announced (a
+   * pre-registry client on the `sourceName` fallback), where the chip falls back to the name.
+   */
   id?: string
   name: string
 }
@@ -61,13 +67,10 @@ export interface SelectionWsApi {
    */
   getState(): DeskSelectionSnapshot | null
 
-  /**
-   * Replace the whole fact. [families] absent or null clears the mask; [sourceName] is what the
-   * desk stamps as the mover, and remembers for this socket's later writes.
-   */
-  set(targets: CueTarget[], families?: readonly AttributeFamily[] | null, sourceName?: string): void
+  /** Replace the whole fact. [families] absent or null clears the mask. */
+  set(targets: CueTarget[], families?: readonly AttributeFamily[] | null): void
   /** Add the target, or take it off if its heads are already covered. The mask is kept. */
-  toggle(target: CueTarget, sourceName?: string): void
+  toggle(target: CueTarget): void
   /** Nothing selected, no mask, no mover. */
   clear(): void
 }
@@ -144,16 +147,15 @@ export function createSelectionWsApi(conn: InternalApiConnection): SelectionWsAp
       return sub
     },
     getState: () => last,
-    set: (targets, families, sourceName) =>
+    set: (targets, families) =>
       sendGesture(conn, {
         type: 'selection.set',
         targets,
         // The one spelling: none or all four is no mask, and the desk would fold either to null
         // anyway — sending it folded is what lets the echo compare equal to what was sent.
         families: normaliseFamilies(families) ?? undefined,
-        sourceName,
       }),
-    toggle: (target, sourceName) => sendGesture(conn, { type: 'selection.toggle', target, sourceName }),
+    toggle: (target) => sendGesture(conn, { type: 'selection.toggle', target }),
     clear: () => sendGesture(conn, { type: 'selection.clear' }),
   }
 }

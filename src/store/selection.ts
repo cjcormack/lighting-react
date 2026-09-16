@@ -5,7 +5,6 @@ import type { CueTarget } from '../api/cuesApi'
 import type { AttributeFamily } from '../lib/attributeFamily'
 import { normaliseFamilies } from '../lib/selectionMask'
 import { useDeskFollow, useLocalSelection } from '../lib/deskFollow'
-import { windowName } from '../lib/windowIdentity'
 
 /**
  * The desk selection — see `api/selectionApi.ts` for what it is and why it is server-owned.
@@ -90,10 +89,10 @@ export function useSelectionPair(): { targets: CueTarget[]; families: AttributeF
  * reader. A `useX` wrapper would only be a stable identity around `lightingApi`, which is already
  * a module singleton.
  *
- * Every write carries this tab's name as its `sourceName` (D7, `lib/windowIdentity.ts`): the desk
- * stamps it as the selection's `source`, which is what the chip on another screen reads. It rides
- * every write rather than being sent once on connect, because the wire has no name-only frame —
- * a socket names itself only by writing — and a reconnect makes a new, unnamed socket.
+ * No write names this window any more. The desk stamps the selection's `source` from the window
+ * this socket **announced** (`api/windowsApi.ts`, re-sent on every connect), which is what the chip
+ * on another screen reads — and it carries the row id as well as the name, so the chip can tell
+ * "this window" from a twin with the same name.
  *
  * [setDeskSelection] replaces the **whole** fact: the heads and the mask, so a replace with no
  * families — the narrow-width picker's one-thing press — clears the mask, as D2 says it must.
@@ -107,11 +106,11 @@ export function setDeskSelection(
   targets: readonly CueTarget[],
   families: readonly AttributeFamily[] | null = null,
 ): void {
-  lightingApi.selection.set([...targets], families, windowName())
+  lightingApi.selection.set([...targets], families)
 }
 
 export function toggleDeskSelection(target: CueTarget): void {
-  lightingApi.selection.toggle(target, windowName())
+  lightingApi.selection.toggle(target)
 }
 
 export function clearDeskSelection(): void {

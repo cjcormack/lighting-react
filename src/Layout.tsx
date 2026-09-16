@@ -27,6 +27,9 @@ import { AddEditFxSheet, type FxTarget } from "./components/fx/AddEditFxSheet"
 import { ChannelValueDialog } from "./components/ChannelValueDialog"
 import { SyncNotifications } from "./components/cloudSync/SyncNotifications"
 import { SyncReauthBanner } from "./components/cloudSync/SyncReauthBanner"
+import { ReturnToFullscreenBanner } from "./components/screens/ReturnToFullscreenBanner"
+import { ScreensSheet } from "./components/screens/ScreensSheet"
+import { useWindowsBridge } from "./components/screens/useWindowsBridge"
 
 const DRAWER_WIDTH = 240
 const DRAWER_COLLAPSED_WIDTH = 64
@@ -77,6 +80,10 @@ export default function Layout() {
   const { panels, byId } = useOverviewPanels()
   const location = useLocation()
   const isDesktop = useMediaQuery('(min-width: 768px)')
+
+  // This window's announce to the desk's windows registry, and the handler for the commands
+  // another window sends it. Here and not in a store, because it needs the router (see the hook).
+  useWindowsBridge()
 
   // Close mobile drawer on route change
   useEffect(() => {
@@ -259,6 +266,7 @@ export default function Layout() {
                 and the viewer is an admin who can act on it. */}
             <main className="flex-1 overflow-auto bg-muted/40 min-w-0">
               <SyncReauthBanner />
+              <ReturnToFullscreenBanner />
               {/* Outside the Suspense, so a route chunk that never arrives is caught here rather
                   than unmounting the desk. Keyed by pathname so navigating away from a failed
                   route clears the boundary instead of pinning the error over every later page. */}
@@ -294,6 +302,10 @@ export default function Layout() {
             </Suspense>
           </FeatureErrorBoundary>
         )}
+
+        {/* The Screens sheet, mounted once: opened from the user menu and from ⌘K through
+            `screensSheetState`, neither of which is an ancestor of the other. */}
+        <ScreensSheet />
 
         {/* Command Palette */}
         <CommandPalette

@@ -1035,6 +1035,10 @@ export function FixturesListContainer({
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      // A key another handler has already claimed — ⇧F on `document`'s capture phase, which is the
+      // full-screen toggle — is not this grid's to seed an editor with. Same posture as
+      // `useTransportKeys`; a bubble listener on `window` is the last to run, so the answer is here.
+      if (e.defaultPrevented) return
       if (isEditableTarget(e.target instanceof Element ? e.target : null)) return
       if (e.target instanceof HTMLElement && e.target.closest('[role="dialog"]')) return
 

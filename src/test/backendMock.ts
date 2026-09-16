@@ -236,6 +236,41 @@ export const selectionWs: {
   },
 }
 
+/**
+ * `windows.state` frames and the rebroadcast commands, so a test can drive `store/windows.ts`'s
+ * cache entry and the bridge hook. `announced` is every announce the code under test sent.
+ */
+export const windowsWs: {
+  callback: null | ((windows: unknown[]) => void)
+  commandCallback: null | ((command: unknown) => void)
+  last: unknown[] | null
+  announced: unknown[]
+  sent: unknown[]
+  fire: (windows: unknown[]) => void
+  command: (command: unknown) => void
+  reset: () => void
+} = {
+  callback: null,
+  commandCallback: null,
+  last: null,
+  announced: [],
+  sent: [],
+  fire: (windows) => {
+    windowsWs.last = windows
+    windowsWs.callback?.(windows)
+  },
+  command: (command) => {
+    windowsWs.commandCallback?.(command)
+  },
+  reset: () => {
+    windowsWs.callback = null
+    windowsWs.commandCallback = null
+    windowsWs.last = null
+    windowsWs.announced = []
+    windowsWs.sent = []
+  },
+}
+
 /** `busk.layoutChanged` frames, so a test can fire one at `store/busk.ts`'s bridge. */
 export const buskWs: { callback: null | ((pageIds: number[]) => void) } = { callback: null }
 
@@ -430,6 +465,41 @@ export function lightingApiMock() {
         getState: () => null,
         subscribe: noopSub,
         setPage: () => true,
+      },
+      // Spelled out for the `selection` reason: `store/windows.ts` seeds its entry from
+      // `getState()`, and the bridge hook reads the announce back off `announced`.
+      windows: {
+        getState: () => windowsWs.last,
+        subscribe: (fn: (windows: unknown[]) => void) => {
+          windowsWs.callback = fn
+          if (windowsWs.last != null) fn(windowsWs.last)
+          return {
+            unsubscribe: () => {
+              windowsWs.callback = null
+            },
+          }
+        },
+        subscribeCommands: (fn: (command: unknown) => void) => {
+          windowsWs.commandCallback = fn
+          return {
+            unsubscribe: () => {
+              windowsWs.commandCallback = null
+            },
+          }
+        },
+        announce: (payload: unknown) => {
+          windowsWs.announced.push(payload)
+        },
+        lastAnnounce: () => windowsWs.announced[windowsWs.announced.length - 1] ?? null,
+        show: (targetId: string, view: string) => {
+          windowsWs.sent.push({ type: 'windows.show', targetId, view })
+        },
+        rename: (targetId: string, name: string) => {
+          windowsWs.sent.push({ type: 'windows.rename', targetId, name })
+        },
+        fullscreen: (targetId: string, on: boolean) => {
+          windowsWs.sent.push({ type: 'windows.fullscreen', targetId, on })
+        },
       },
       cueStacks: {
         subscribe: noopSub,
