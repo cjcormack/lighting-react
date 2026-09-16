@@ -17,8 +17,17 @@ vi.mock('sonner', () => ({
 }))
 
 const addedLayers: unknown[] = []
+/**
+ * What `sendGesture` decided. `programmerAddLayer` returns it, and returning it *explicitly* is the
+ * point of this mock: the first version returned `Array.push`'s new length, which is truthy by
+ * accident — so the happy path was exercised and the dropped-frame path could not be.
+ */
+const sendVerdict = { ok: true }
 vi.mock('@/store/programmer', () => ({
-  programmerAddLayer: (input: unknown) => addedLayers.push(input),
+  programmerAddLayer: (input: unknown) => {
+    addedLayers.push(input)
+    return sendVerdict.ok
+  },
 }))
 
 const patches: unknown[] = []
@@ -105,6 +114,7 @@ beforeEach(() => {
   addedLayers.length = 0
   patches.length = 0
   selection.targets = []
+  sendVerdict.ok = true
   store.dispatch(restApi.util.resetApiState())
 })
 
@@ -146,6 +156,24 @@ describe('the programmer’s layer stack', () => {
     expect(addedLayers).toEqual([
       { templateId: 8, targets: [{ type: 'fixture', key: 'par-1' }] },
     ])
+  })
+
+  it('keeps the record held when the frame never left — a closed socket is not a place', async () => {
+    // The blocker this file exists to guard. `sendGesture` refuses a closed socket, toasts "that
+    // did not reach the rig", and returns false; `programmerAddLayer` passes that back. If `run`
+    // answers `true` regardless — as it first did — the hand is dropped and a success toast lands
+    // *beside* that error, on the one place with no Undo to recover through.
+    sendVerdict.ok = false
+    await withHold(<HandProgrammerLayerStrip />, hold('LOOK'), true)
+    await act(async () => {
+      screen.getByRole('button', { name: /Place “/ }).click()
+    })
+    // It was attempted...
+    expect(addedLayers).toHaveLength(1)
+    // ...and nothing followed: no drop, so the operator still has the record, and no toast of our
+    // own, because `sendGesture` has already said the only true thing there is to say.
+    expect(handWs.dropped).toEqual([])
+    expect(toasts).toHaveLength(0)
   })
 
   it('offers no Undo — programmer.addLayer answers no id to address', async () => {
