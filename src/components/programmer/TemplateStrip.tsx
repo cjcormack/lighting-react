@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { AudioWaveform, LayoutGrid, Plus } from 'lucide-react'
+import { AudioWaveform, Hand, LayoutGrid, Plus } from 'lucide-react'
+import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { useScrollEdges } from '@/hooks/useScrollEdges'
 import type { CellRef } from '@/components/sheet/cellSelectionModel'
@@ -15,6 +16,7 @@ import { NewTemplateFromSelectionSheet } from './NewTemplateFromSelectionSheet'
 import { TemplatePicker } from './TemplatePicker'
 import { templatePressTitle, useTemplatePress, useTemplatePressHandlers } from './useTemplatePress'
 import { usePressFamilies } from '@/store/selection'
+import { handPickUp } from '@/store/hand'
 import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
 
 /**
@@ -245,7 +247,12 @@ export function TemplateStrip({
           )}
 
           {valueChips.map((template) => (
-            <TemplateChip key={template.id} template={template} onPress={press} />
+            <TemplateChip
+              key={template.id}
+              template={template}
+              onPress={press}
+              onPickUp={(t) => handPickUp('TEMPLATE', t.id)}
+            />
           ))}
 
           {valueChips.length > 0 && effectChips.length > 0 && (
@@ -253,7 +260,12 @@ export function TemplateStrip({
           )}
 
           {effectChips.map((template) => (
-            <TemplateChip key={template.id} template={template} onPress={press} />
+            <TemplateChip
+              key={template.id}
+              template={template}
+              onPress={press}
+              onPickUp={(t) => handPickUp('TEMPLATE', t.id)}
+            />
           ))}
         </div>
 
@@ -335,20 +347,47 @@ export function TemplateStrip({
  */
 const HAIRLINE_CLASS = 'mx-0.5 h-5 w-px shrink-0 bg-border'
 
+/**
+ * One template on the recents row.
+ *
+ * **Its *Pick up* is a right-click, not a hold**, and that is forced rather than chosen: the chip's
+ * hold is already ⌥click's touch twin (§"The two apply gestures"), and a control cannot answer one
+ * gesture two ways. On touch the routes to picking a template up are the library row on
+ * `/templates` and a busk pad's own hold menu, both of which have a free hold.
+ *
+ * **Which is why this is a `Popover` opened from `onContextMenu`, and not a `ContextMenu`.**
+ * Radix's `ContextMenuTrigger` arms a long-press timer of its **own** (~700ms) for `touch`/`pen`
+ * and clears it only on its own pointer handlers or on a `contextmenu` event reaching the trigger.
+ * `BuskPad` and `CueSlotCell` are safe because their holds *dispatch* a synthetic `contextmenu`,
+ * which clears it — this chip's hold dispatches nothing, it fires a tracking-layer mutation. So a
+ * stationary touch hold here would have added the layer at 500ms and then popped this menu at
+ * 700ms: two uncoordinated effects from one finger, on a live rig, and exactly the "pick-up is
+ * right-click only" rule above broken by the primitive rather than by the code. `PopoverAnchor`
+ * registers no handlers at all, so the chip keeps one hold and one meaning.
+ */
 function TemplateChip({
   template,
   onPress,
+  onPickUp,
 }: {
   template: TemplateSummary
   onPress: (template: TemplateSummary, additive: boolean) => void
+  onPickUp: (template: TemplateSummary) => void
 }) {
   const swatch = templateRowsSwatch(template.rows)
   // Click, ⌥click and the touch hold, shared with the picker's pad — see `useTemplatePressHandlers`.
   // It was written out here and copied into the pad, which is the drift `useTemplatePress` was
   // extracted to stop for the mutation half and had not yet stopped for the gesture half.
   const handlers = useTemplatePressHandlers(template, onPress)
+  const [menuOpen, setMenuOpen] = useState(false)
   return (
+    <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+      <PopoverAnchor asChild>
     <button
+      onContextMenu={(event) => {
+        event.preventDefault()
+        setMenuOpen(true)
+      }}
       type="button"
       {...handlers}
       title={templatePressTitle(template)}
@@ -374,5 +413,20 @@ function TemplateChip({
       )}
       <span className="truncate max-w-32">{template.name}</span>
     </button>
+      </PopoverAnchor>
+      <PopoverContent align="start" className="w-auto p-1">
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-accent"
+          onClick={() => {
+            setMenuOpen(false)
+            onPickUp(template)
+          }}
+        >
+          <Hand className="size-3.5" />
+          Pick up
+        </button>
+      </PopoverContent>
+    </Popover>
   )
 }

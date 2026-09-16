@@ -225,6 +225,39 @@ export interface PressPadTarget {
   padUuid: string
 }
 
+/**
+ * Put the record on a **busk pad** into the desk's hand — the surface door of `hand.pickUp`
+ * (multi-screen plan §3.5).
+ *
+ * A pad, not a record: a pad is the address a button already knows how to carry, and what it picks
+ * up is exactly what it would otherwise press. The pick-up **replaces** whatever the hand held;
+ * there is no "put it back" gesture on hardware or anywhere else.
+ */
+export interface PickUpPadTarget {
+  type: "pickUpPad"
+  padUuid: string
+}
+
+/**
+ * Place whatever the hand holds as a pad on the bank [bankUuid] names, then let go.
+ *
+ * The **one** place binding there is. A window places through its own mutation and then sends
+ * `hand.drop` (D12); a button has no mutation of its own, so this runs the same append
+ * `POST /busk/banks/{bankId}/pads` runs. An empty hand is a dropped press, not an error.
+ *
+ * There is deliberately no `handPlaceInSlot` and no layer-stack place: neither a cue slot nor the
+ * programmer's layer stack has a uuid a binding could carry.
+ */
+export interface HandPlaceInBankTarget {
+  type: "handPlaceInBank"
+  bankUuid: string
+}
+
+/** Let go of whatever the hand holds. A no-op on an empty hand, like every other drop. */
+export interface HandDropTarget {
+  type: "handDrop"
+}
+
 /** Show the next busk page, wrapping. Page-agnostic, so it names none. */
 export interface BuskPageNextTarget {
   type: "buskPageNext"
@@ -275,6 +308,9 @@ export type BindingTarget =
   | ApplyLookTarget
   | PressTemplateTarget
   | PressPadTarget
+  | PickUpPadTarget
+  | HandPlaceInBankTarget
+  | HandDropTarget
   | BuskPageNextTarget
   | BuskPagePrevTarget
   | BuskPageSetTarget
@@ -311,6 +347,10 @@ export type BindingHealth =
   | { type: "missingLook"; lookUuid: string }
   | { type: "missingTemplate"; templateUuid: string }
   | { type: "missingPad"; padUuid: string }
+  // A `handPlaceInBank` binding naming a **busk** bank that is gone. Not `unknownBank`, which is a
+  // *device profile's* bank (an X-Touch layer): one is a row on a busk page, the other a mode of a
+  // control surface, and they share only the word.
+  | { type: "missingBank"; bankUuid: string }
   | { type: "missingPage"; pageUuid: string }
   // Not "missing": the Look is still there, but it has gained a deferred effect, so it has no own
   // targets and a button has no selection to give it. A different state because it has a different

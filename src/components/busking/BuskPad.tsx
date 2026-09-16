@@ -1,7 +1,15 @@
+import { useRef } from 'react'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
-import { AudioWaveform, X } from 'lucide-react'
+import { AudioWaveform, Eye, Hand, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useLongPress } from '@/hooks/useLongPress'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
+import { dispatchSyntheticContextMenu, useLongPress } from '@/hooks/useLongPress'
 import { registerDragOverlay } from '@/components/dnd/dragOverlayRegistry'
 import type { BuskPad } from '@/api/buskApi'
 import { buskPadId, type PadAddress } from '@/lib/buskLayout'
@@ -97,8 +105,10 @@ export interface BuskPadButtonProps {
   editing: boolean
   onPress: () => void
   onRemove: () => void
-  /** Long press outside edit mode; the library is where a record is actually edited. */
+  /** The hold menu's *View* — the library is where a record is actually edited. */
   onInspect: () => void
+  /** The hold menu's *Pick up* — this record into the desk's hand (multi-screen plan §3.5). */
+  onPickUp: () => void
 }
 
 export function BuskPadButton({
@@ -110,6 +120,7 @@ export function BuskPadButton({
   onPress,
   onRemove,
   onInspect,
+  onPickUp,
 }: BuskPadButtonProps) {
   const face = padFaceOf(pad)
   const isCue = face.kind === 'CUE'
@@ -129,18 +140,36 @@ export function BuskPadButton({
     data: { type: 'busk-drop', target: { kind: 'pad', at }, depth: DROP_DEPTH.pad } satisfies BuskDropData,
     disabled: !editing || draggingBank,
   })
+  // One node carries the drag ref, the drop ref and the context-menu trigger. Merging them here —
+  // rather than wrapping `body` in a `<div ref={triggerRef}>` — is what keeps the pad itself the
+  // direct child of the bank's CSS Grid: an extra wrapper becomes the grid item and takes the row's
+  // `align-items: stretch` for itself, leaving the pad's visible shell sized to its own content in
+  // a taller row. `CueSlotCell` merges its three refs onto one node for the same reason.
+  const triggerRef = useRef<HTMLElement | null>(null)
   const setRef = (node: HTMLElement | null) => {
     setDragRef(node)
     setDropRef(node)
+    triggerRef.current = node
   }
 
+  /**
+   * The hold opens the pad's **menu**, where it used to navigate straight to the library.
+   *
+   * It has two items now — *Pick up* first, then *View* — because the hand needed a door here and
+   * a hold cannot mean two things. The dispatch is {@link dispatchSyntheticContextMenu}, shared with
+   * `CueSlotCell`: it reaches a Radix context menu from a touch hold, leaves right-click working on
+   * a mouse for free, and — the part that is not merely convenience — **clears Radix's own 700ms
+   * touch timer** through the trigger's `onContextMenu`, so one finger cannot arm two hold
+   * detectors. (`TemplateStrip`'s chip has no such dispatch, which is exactly why it must not use a
+   * `ContextMenuTrigger` at all; see the note there.)
+   */
   const { handlers } = useLongPress({
-    onLongPress: onInspect,
+    onLongPress: (origin) => dispatchSyntheticContextMenu(triggerRef.current, origin),
     onPress,
     disabled: editing,
   })
 
-  return (
+  const body = (
     <div ref={setRef} className="relative">
       <button
         type="button"
@@ -186,6 +215,27 @@ export function BuskPadButton({
         </button>
       )}
     </div>
+  )
+
+  // No menu while editing: there the pad is a drag handle, `useLongPress` is disabled and the only
+  // gestures are drag and the cross.
+  if (editing) return body
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{body}</ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onSelect={onPickUp}>
+          <Hand className="mr-2 size-4" />
+          Pick up
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem onSelect={onInspect}>
+          <Eye className="mr-2 size-4" />
+          View
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   )
 }
 

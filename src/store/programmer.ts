@@ -245,8 +245,12 @@ export function programmerAddLayer(input: {
   speedMasterUuid?: string
   rateSpeedMasterUuid?: string
   fadeMs?: number
-}) {
-  lightingApi.programmer.addLayer(input)
+}): boolean {
+  // The verdict is the **send's**, not the desk's: true means the frame went out, never that a
+  // layer exists. That is all a caller can know here — the op is answered by a broadcast — but it
+  // is enough to tell "the socket was closed and `sendGesture` already said so" from "it landed",
+  // which is the difference between the hand letting go of a record and keeping it.
+  return lightingApi.programmer.addLayer(input)
 }
 
 export function programmerRemoveLayer(layerId: number, fadeMs?: number) {

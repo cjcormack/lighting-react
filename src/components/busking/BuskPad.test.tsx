@@ -2,7 +2,7 @@
 import { Provider } from 'react-redux'
 import { DndContext } from '@dnd-kit/core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
@@ -65,6 +65,7 @@ function draw(
           onPress={() => {}}
           onRemove={() => {}}
           onInspect={() => {}}
+          onPickUp={() => {}}
           {...props}
         />
       </DndContext>
@@ -168,5 +169,56 @@ describe('pressing', () => {
   it('offers no cross outside edit mode', () => {
     draw(templatePad())
     expect(screen.queryByLabelText('Remove Amber Key')).toBeNull()
+  })
+})
+
+/**
+ * The hold menu (multi-screen plan §3.5).
+ *
+ * The hold used to navigate straight to the library. It opens a **menu** now, because the hand
+ * needed a door on a pad and a hold cannot mean two things — so *Pick up* is first and *View* is
+ * the old behaviour, one item down.
+ */
+describe('the hold menu', () => {
+  /** A hold, as `useLongPress` sees it: down, wait past the delay, and the menu opens under it. */
+  function hold(pad: HTMLElement) {
+    vi.useFakeTimers()
+    fireEvent.pointerDown(pad, { clientX: 5, clientY: 5 })
+    act(() => {
+      vi.advanceTimersByTime(600)
+    })
+    vi.useRealTimers()
+  }
+
+  it('offers Pick up first, then View', () => {
+    draw(templatePad())
+    hold(screen.getByRole('button'))
+    const items = screen.getAllByRole('menuitem').map((i) => i.textContent)
+    expect(items).toEqual(['Pick up', 'View'])
+  })
+
+  it('picks the record up, and leaves the pad where it is', () => {
+    const onPickUp = vi.fn()
+    const onPress = vi.fn()
+    draw(templatePad(), { onPickUp, onPress })
+    hold(screen.getByRole('button'))
+    fireEvent.click(screen.getByText('Pick up'))
+    expect(onPickUp).toHaveBeenCalledTimes(1)
+    // A hold is not a press: the pad must not fire on the way into its own menu.
+    expect(onPress).not.toHaveBeenCalled()
+  })
+
+  it('keeps View as the hold’s old behaviour', () => {
+    const onInspect = vi.fn()
+    draw(templatePad(), { onInspect })
+    hold(screen.getByRole('button'))
+    fireEvent.click(screen.getByText('View'))
+    expect(onInspect).toHaveBeenCalledTimes(1)
+  })
+
+  it('draws no menu while editing — there the pad is a drag handle', () => {
+    draw(templatePad(), { editing: true })
+    fireEvent.contextMenu(screen.getByTitle('Amber Key'))
+    expect(screen.queryByRole('menuitem')).toBeNull()
   })
 })

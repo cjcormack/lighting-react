@@ -146,6 +146,9 @@ export function targetControlKind(target: BindingTarget): ControlKind | null {
     case 'applyLook':
     case 'pressTemplate':
     case 'pressPad':
+    case 'pickUpPad':
+    case 'handPlaceInBank':
+    case 'handDrop':
     case 'buskPageNext':
     case 'buskPagePrev':
     case 'buskPageSet':

@@ -15,6 +15,7 @@ import {
   Eye,
   Footprints,
   GripVertical,
+  Hand,
   Layers,
   SlidersHorizontal,
 } from 'lucide-react'
@@ -23,6 +24,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { targetKey } from '@/lib/targetKey'
+import { handPickUp } from '@/store/hand'
 import { TimingBadge } from '@/components/cues/TimingBadge'
 import { AddBtn, RemoveBtn, Section } from './paneChrome'
 import { Label } from '@/components/ui/label'
@@ -778,6 +780,27 @@ function DenseLayerPopover({
             Remove
           </Button>
         </div>
+        {/* *Pick up* the layer's **referent** into the desk's hand (multi-screen plan §3.5) — the
+            Look or template itself, not the layer, which is why removing the layer is a separate
+            button above and picking up leaves the stack untouched. Withheld for a row whose source
+            the server could not resolve: there is nothing to take.
+
+            It is not a `LayerHandlers` member, unlike everything else in this popover. Those seven
+            are index-based because they address *this host's* layer at that position; a pick-up
+            addresses a library record by its own id, which the row already carries and no host has
+            to translate. */}
+        {layer.source != null && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 w-full"
+            onClick={() => handPickUp(layer.source!.kind, layer.source!.id)}
+          >
+            <Hand className="size-3.5" />
+            Pick up {layer.source.name}
+          </Button>
+        )}
       </PopoverContent>
     </Popover>
   )

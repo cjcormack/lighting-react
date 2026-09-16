@@ -468,6 +468,14 @@ export interface ProgrammerApi {
   setBlind(blind: boolean, fadeMs?: number): void
   requestState(): void
 
+  /**
+   * Add a layer. Answered by the whole `programmer.layerState` broadcast, so there is no reply and
+   * no layer id — but the **send itself** has a synchronous verdict, which this returns: false
+   * means `sendGesture` found the socket closed, toasted, and put nothing on the wire.
+   *
+   * Its one reader is the hand's place (`HandProgrammerLayerStrip`), which must not let go of the
+   * held record for a frame that never left. Every other caller ignores it, as they always did.
+   */
   addLayer(input: {
     /** Exactly one of these — a layer applies a Look or a template. */
     lookId?: number
@@ -479,7 +487,7 @@ export interface ProgrammerApi {
     speedMasterUuid?: string
     rateSpeedMasterUuid?: string
     fadeMs?: number
-  }): void
+  }): boolean
   removeLayer(layerId: number, fadeMs?: number): void
   /** [toIndex] counts non-preview layers, which is what the server's own move does. */
   moveLayer(layerId: number, toIndex: number): void
@@ -914,7 +922,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     },
 
     addLayer({ lookId, templateId, targets, propertyMask, blendMode, amount, speedMasterUuid, rateSpeedMasterUuid, fadeMs }) {
-      send({
+      return send({
         type: 'programmer.addLayer',
         lookId,
         templateId,

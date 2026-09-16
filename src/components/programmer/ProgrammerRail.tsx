@@ -35,6 +35,7 @@ import {
 import { ProgrammerAddLayerSheet, type ProgrammerAddLayerKind } from './ProgrammerAddLayerSheet'
 import { ProgrammerFxList } from './ProgrammerFxList'
 import { ProgrammerLookStack } from './ProgrammerLookStack'
+import { HandProgrammerLayerStrip } from '@/components/hand/HandLayerTargets'
 import { useProgrammerScope, useProgrammerScopeActions } from './ProgrammerScope'
 import { useProgrammerSheets } from './ProgrammerSheets'
 import { useLocalValueCount } from './useLocalFamilyCounts'
@@ -441,7 +442,12 @@ function RailFooter({
   addEffect: AddEffectOffer
 }) {
   return (
-    <div className="flex shrink-0 gap-1.5 border-t p-2">
+    <div className="flex shrink-0 flex-col gap-1.5 border-t p-2">
+      {/* The hand's target for the programmer's stack (multi-screen plan §3.5). Above the three
+          doors and drawn only while something that can become a layer is held, so the footer keeps
+          its one row the rest of the time. */}
+      <HandProgrammerLayerStrip />
+      <div className="flex gap-1.5">
       <Button
         variant="outline"
         size="sm"
@@ -484,6 +490,7 @@ function RailFooter({
         </TooltipTrigger>
         <TooltipContent>{addEffect.reason}</TooltipContent>
       </Tooltip>
+      </div>
     </div>
   )
 }

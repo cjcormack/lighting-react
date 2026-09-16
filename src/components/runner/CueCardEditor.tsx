@@ -37,6 +37,7 @@ import { AUTO_CUE_NUMBER_CLASS, cueNumberCellWidth } from '@/lib/cueNumber'
 import { TruncateStart } from '@/components/TruncateStart'
 import { SaveStatusIndicator } from '@/components/SaveStatusIndicator'
 import { CueDetailContent } from '@/components/cues/CueDetailContent'
+import { HandCueLayerStrip } from '@/components/hand/HandLayerTargets'
 import { CuePropertiesSheet } from '@/components/cues/CuePropertiesSheet'
 import { useCueFade } from '@/hooks/useCueFade'
 interface CueCardEditorProps {
@@ -393,6 +394,12 @@ export function CueCardEditor({
                       programmer, which is what makes there be exactly one place values are set. */}
                   <div className="space-y-3 px-3 py-3">
                     <CueDetailContent cue={cueData} projectId={projectId} />
+                    {/* The hand's target for this cue's stack (multi-screen plan §3.5). Drawn only
+                        while something that can become a layer is held, and never while the show is
+                        locked — locked is the running state, and a cue must not gain a layer from a
+                        stray tap there. It sits under the read surface because that is where the
+                        layer stack it would join is drawn. */}
+                    {!locked && <HandCueLayerStrip projectId={projectId} cue={cueData} />}
                   </div>
 
                   {/* The action row, absent in its entirety while locked — hidden rather than

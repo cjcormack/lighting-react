@@ -7,7 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { AudioWaveform, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import { AudioWaveform, Hand, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { FAMILY_LABELS, type AttributeFamily } from '@/lib/attributeFamily'
 import { describeTemplateIntent, describeTemplateRows, templateRowsSwatch } from '@/lib/templateIntent'
@@ -41,10 +41,13 @@ export function TemplateListRow({
   template,
   onClick,
   onDelete,
+  onPickUp,
 }: {
   template: TemplateSummary
   onClick?: () => void
   onDelete?: () => void
+  /** *Pick up* — this template into the desk's hand (multi-screen plan §3.5). */
+  onPickUp?: () => void
 }) {
   const stop = (e: MouseEvent) => e.stopPropagation()
 
@@ -87,7 +90,7 @@ export function TemplateListRow({
           would have to look, and two pads in one bank is still one place to go. */}
       <BuskPageCountBadge count={template.buskPageCount} />
 
-      {(onClick || onDelete) && (
+      {(onClick || onDelete || onPickUp) && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild onClick={stop}>
             <Button variant="ghost" size="icon" className="size-7 shrink-0">
@@ -95,6 +98,14 @@ export function TemplateListRow({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" onClick={stop}>
+            {/* First, and above the edit verbs: picking up is about moving this record to another
+                screen rather than about changing it. Same order as the Look library's row. */}
+            {onPickUp && (
+              <DropdownMenuItem onClick={onPickUp}>
+                <Hand className="size-3.5" />
+                Pick up
+              </DropdownMenuItem>
+            )}
             {onClick && (
               <DropdownMenuItem onClick={onClick}>
                 <Pencil className="size-3.5" />

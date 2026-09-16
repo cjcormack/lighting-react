@@ -28,6 +28,7 @@ import { ChannelValueDialog } from "./components/ChannelValueDialog"
 import { SyncNotifications } from "./components/cloudSync/SyncNotifications"
 import { SyncReauthBanner } from "./components/cloudSync/SyncReauthBanner"
 import { ReturnToFullscreenBanner } from "./components/screens/ReturnToFullscreenBanner"
+import { HandChip } from "./components/hand/HandChip"
 import { ScreensSheet } from "./components/screens/ScreensSheet"
 import { useWindowsBridge } from "./components/screens/useWindowsBridge"
 
@@ -275,6 +276,12 @@ export default function Layout() {
                   <Outlet />
                 </Suspense>
               </FeatureErrorBoundary>
+              {/* What the desk is holding (multi-screen plan §3.5). Fixed at the bottom of
+                  `<main>`, below every bar and **not** in the header row — D14, which the header
+                  comment above already argues. Inside `<main>` so it sits under the same error
+                  boundary's sibling and inside `DeskDndProvider`; `position: fixed` takes it out
+                  of the scroller regardless, so it does not move with the page. */}
+              <HandChip />
             </main>
           </DeskDndProvider>
 

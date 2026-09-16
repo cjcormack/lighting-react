@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Clapperboard, Copy, CopyPlus, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import { Clapperboard, Copy, CopyPlus, Hand, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { FAMILY_LABELS } from '@/lib/attributeFamily'
 import type { LookSummary } from '@/api/looksApi'
@@ -22,6 +22,8 @@ interface LookListRowProps {
   onDelete?: () => void
   onCopy?: () => void
   onDuplicate?: () => void
+  /** *Pick up* — this Look into the desk's hand (multi-screen plan §3.5). */
+  onPickUp?: () => void
 }
 
 /**
@@ -40,6 +42,7 @@ export function LookListRow({
   onDelete,
   onCopy,
   onDuplicate,
+  onPickUp,
 }: LookListRowProps) {
   return (
     <div className={cn(selected && 'bg-accent')}>
@@ -89,7 +92,7 @@ export function LookListRow({
         {/* A hint about where to find it, never a use that gates delete. */}
         <BuskPageCountBadge count={look.buskPageCount} />
 
-        {(onEdit || onDelete || onCopy || onDuplicate) && (
+        {(onEdit || onDelete || onCopy || onDuplicate || onPickUp) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -102,6 +105,14 @@ export function LookListRow({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              {/* First, and above the edit verbs: picking up is the one item that is about moving
+                  this record to another screen rather than about changing it. */}
+              {onPickUp && (
+                <DropdownMenuItem onClick={menuAction(onPickUp)}>
+                  <Hand className="size-4 mr-2" />
+                  Pick up
+                </DropdownMenuItem>
+              )}
               {onEdit && (
                 <DropdownMenuItem onClick={menuAction(onEdit)}>
                   <Pencil className="size-4 mr-2" />

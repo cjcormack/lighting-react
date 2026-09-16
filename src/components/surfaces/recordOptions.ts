@@ -2,7 +2,7 @@ import { useMemo } from "react"
 import { useLookListQuery } from "@/store/looks"
 import { useTemplateListQuery } from "@/store/templates"
 import { useBuskPagesQuery } from "@/store/busk"
-import { forEachPad } from "@/lib/buskLayout"
+import { allBanks, forEachPad } from "@/lib/buskLayout"
 import { padFaceOf } from "@/components/busking/padFace"
 import { describeTarget } from "./targetUtils"
 import type { BindingTarget } from "@/api/surfacesApi"
@@ -40,11 +40,24 @@ export interface RecordBindingOptions {
   templates: RecordOption[]
   /** Every pad on every page, flat: a pad is addressed by uuid and its page is only context. */
   pads: RecordOption[]
+  /**
+   * Every **bank** on every page, flat — what a `handPlaceInBank` binding names.
+   *
+   * Includes empty banks, unlike [pads], which walks pads: an empty bank is exactly the one an
+   * operator is most likely to bind a place button to.
+   */
+  banks: RecordOption[]
   pages: RecordOption[]
 }
 
 /** No library loaded yet, or nothing to resolve — a stable empty answer callers can default to. */
-export const EMPTY_RECORD_OPTIONS: RecordBindingOptions = { looks: [], templates: [], pads: [], pages: [] }
+export const EMPTY_RECORD_OPTIONS: RecordBindingOptions = {
+  looks: [],
+  templates: [],
+  pads: [],
+  banks: [],
+  pages: [],
+}
 const EMPTY = EMPTY_RECORD_OPTIONS
 
 export function useRecordBindingOptions(projectId: number): RecordBindingOptions {
@@ -82,6 +95,16 @@ export function useRecordBindingOptions(projectId: number): RecordBindingOptions
         })
         return options
       }),
+      banks: (pages ?? []).flatMap((page) =>
+        allBanks(page)
+          // Same reason as a pad's: an unsaved bank has no uuid, and `""` would save.
+          .filter((bank) => bank.uuid != null)
+          .map((bank) => ({
+            uuid: bank.uuid!,
+            label: bank.name,
+            detail: `${page.name} · ${bank.pads.length} ${bank.pads.length === 1 ? 'pad' : 'pads'}`,
+          })),
+      ),
       pages: (pages ?? []).map((page) => ({ uuid: page.uuid, label: page.name, detail: null })),
     }
   }, [looks, templates, pages])
@@ -106,6 +129,12 @@ export function recordTargetName(
       return find(options.templates, target.templateUuid)
     case "pressPad":
       return find(options.pads, target.padUuid)
+    // The hand's two uuid-bearing targets. `handDrop` names no record and falls to `null` below,
+    // exactly as `blackout` does.
+    case "pickUpPad":
+      return find(options.pads, target.padUuid)
+    case "handPlaceInBank":
+      return find(options.banks, target.bankUuid)
     case "buskPageSet":
       return find(options.pages, target.pageUuid)
     default:
@@ -135,6 +164,10 @@ export function describeBindingTarget(target: BindingTarget, records: RecordBind
       return `Press ${name}`
     case "pressPad":
       return `Press pad ${name}`
+    case "pickUpPad":
+      return `Pick up ${name}`
+    case "handPlaceInBank":
+      return `Place in ${name}`
     case "buskPageSet":
       return `Show page ${name}`
     default:

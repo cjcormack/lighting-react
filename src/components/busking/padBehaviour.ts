@@ -1,4 +1,5 @@
 import type { BuskPad } from '@/api/buskApi'
+import type { HeldRecord } from '@/api/handApi'
 import type { EffectPresence } from './buskingTypes'
 
 /**
@@ -14,6 +15,16 @@ export interface PadBehaviour {
   /** A cue pad's green: its stack has this cue on stage, playhead or not. */
   isLive: (pad: BuskPad) => boolean
   onPress: (pad: BuskPad) => void
-  /** Long press: go to where the record is actually edited. */
+  /** Long press: the pad's hold menu — *Pick up*, and *View* (where the record is edited). */
   onInspect: (pad: BuskPad) => void
+  /** The pad's *Pick up*: this record into the desk's hand (multi-screen plan §3.5). */
+  onPickUp: (pad: BuskPad) => void
+  /**
+   * Place what the hand holds as a new pad on this bank, and let go.
+   *
+   * Threaded here rather than read from `useBuskEdit` for the reason the other four are: the
+   * append needs `projectId` and the page id, which the view owns and the two layers of pure
+   * layout between it and a bank do not.
+   */
+  onHandPlace: (bankId: number, bankName: string, held: HeldRecord) => void
 }

@@ -94,6 +94,9 @@ const BUTTON_KINDS: TargetKind[] = [
   "applyLook",
   "pressTemplate",
   "pressPad",
+  "pickUpPad",
+  "handPlaceInBank",
+  "handDrop",
   "buskPageSet",
   "buskPageNext",
   "buskPagePrev",
@@ -120,6 +123,9 @@ const KIND_LABELS: Record<TargetKind, string> = {
   applyLook: "Look — apply",
   pressTemplate: "Template — press",
   pressPad: "Busk pad — press",
+  pickUpPad: "Hand — pick up pad",
+  handPlaceInBank: "Hand — place in bank",
+  handDrop: "Hand — let go",
   buskPageSet: "Busk page — show",
   buskPageNext: "Busk page — next",
   buskPagePrev: "Busk page — previous",
@@ -696,6 +702,38 @@ function TargetBody({
       </div>
     )
   }
+  if (kind === "pickUpPad" && value.type === "pickUpPad") {
+    return (
+      <div className="space-y-2">
+        <RecordField
+          label="Busk pad"
+          value={value.padUuid}
+          onChange={(padUuid) => onChange({ ...value, padUuid })}
+          options={records.pads}
+        />
+        <p className="text-xs text-muted-foreground">
+          Puts the <em>record on that pad</em> into the desk&rsquo;s hand, to be placed on any
+          window. A second pick-up replaces; there is no put-it-back.
+        </p>
+      </div>
+    )
+  }
+  if (kind === "handPlaceInBank" && value.type === "handPlaceInBank") {
+    return (
+      <div className="space-y-2">
+        <RecordField
+          label="Busk bank"
+          value={value.bankUuid}
+          onChange={(bankUuid) => onChange({ ...value, bankUuid })}
+          options={records.banks}
+        />
+        <p className="text-xs text-muted-foreground">
+          Appends whatever the hand holds to this bank and lets go — the same append the busk page
+          makes. An empty hand is a dropped press, not an error.
+        </p>
+      </div>
+    )
+  }
   if (kind === "buskPageSet" && value.type === "buskPageSet") {
     return (
       <div className="space-y-2">
@@ -845,6 +883,12 @@ function defaultForKind(
       return { type: "pressTemplate", templateUuid: "" }
     case "pressPad":
       return { type: "pressPad", padUuid: "" }
+    case "pickUpPad":
+      return { type: "pickUpPad", padUuid: "" }
+    case "handPlaceInBank":
+      return { type: "handPlaceInBank", bankUuid: "" }
+    case "handDrop":
+      return { type: "handDrop" }
     case "buskPageSet":
       return { type: "buskPageSet", pageUuid: "" }
     case "buskPageNext":

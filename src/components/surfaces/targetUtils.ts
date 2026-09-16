@@ -129,6 +129,13 @@ export function describeTarget(target: BindingTarget): string {
       return `Press template ${shortUuid(target.templateUuid)}`
     case "pressPad":
       return `Press pad ${shortUuid(target.padUuid)}`
+    // The hand's three (multi-screen plan §3.5). Same uuid rule as the record variants above.
+    case "pickUpPad":
+      return `Pick up pad ${shortUuid(target.padUuid)}`
+    case "handPlaceInBank":
+      return `Place in bank ${shortUuid(target.bankUuid)}`
+    case "handDrop":
+      return "Let go"
     case "buskPageNext":
       return "Busk · next page"
     case "buskPagePrev":
@@ -139,6 +146,24 @@ export function describeTarget(target: BindingTarget): string {
     // silently dropped. Naming the discriminator is the only useful thing to say about it.
     case "unknown":
       return `Unknown target (${target.targetType})`
+    // A runtime fallback that **keeps compile-time exhaustiveness**, which a bare `default` would
+    // have thrown away. Both halves are load-bearing and they pull in opposite directions:
+    //
+    // - Without any arm the function returned `undefined` (`noImplicitReturns` is off) and the
+    //   binding drew a **blank** label. `case "unknown"` does not cover this: that variant is the
+    //   *backend's* tolerant decode of a newer project, normalised server-side — it says nothing
+    //   about a *frontend* older than the desk it is talking to, whose genuinely-new discriminator
+    //   is deserialised with no runtime check and matches no case at all.
+    // - But a bare `default` also silences the compiler for **first-party** additions, so a new
+    //   `BindingTarget` variant would render "Unsupported target" for ever with no build error.
+    //
+    // Assigning to `never` gets both: it compiles while every case is present, and fails
+    // (`TS2322`) the moment one is missing, while the return still answers at runtime.
+    default: {
+      const unhandled: never = target
+      void unhandled
+      return "Unsupported target"
+    }
   }
 }
 

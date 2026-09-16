@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { BUSK_WIDTHS, BUSK_WIDTH_LABELS, type BuskBank as BuskBankModel } from '@/api/buskApi'
+import { HandPlaceStrip } from '@/components/hand/HandTarget'
 import {
   buskBankBodyId,
   buskBankId,
@@ -265,6 +266,7 @@ export function BuskBankCluster({
         editing={editing}
         onPress={() => behaviour.onPress(pad)}
         onInspect={() => behaviour.onInspect(pad)}
+        onPickUp={() => behaviour.onPickUp(pad)}
         onRemove={() => commit((page) => removePad(page, { ...at, pad: index }))}
       />,
     )
@@ -321,6 +323,18 @@ export function BuskBankCluster({
             </div>
           )}
         </div>
+        {/* The hand's target (multi-screen plan §3.5). Not while editing: there the palette drag is
+            the same gesture with a pointer, and a dashed band that is *not* a droppable sitting
+            among ones that are is the confusion `BuskDropSlot`'s own comment is about. A bank this
+            client minted a moment ago has no server id for the append to address, so it offers
+            nothing until the layout PUT answers. */}
+        {!editing && bank.id != null && (
+          <HandPlaceStrip
+            target="bank"
+            where={bank.name}
+            onPlace={(held) => behaviour.onHandPlace(bank.id!, bank.name, held)}
+          />
+        )}
       </div>
       {/* Not under the bank being lifted: its own strip would light and then refuse — `dropBank`
           re-finds the anchor after the lift, and the anchor would be the bank that just left. With

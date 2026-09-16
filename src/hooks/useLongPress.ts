@@ -164,3 +164,23 @@ export function useLongPress({
 
   return { handlers, consumeLongPress }
 }
+
+/**
+ * Open a Radix context menu from a touch hold, by synthesising the event a right-click would send.
+ *
+ * Radix's `ContextMenuTrigger` has its own ~700ms touch long-press, but a surface that already owns
+ * a hold ({@link useLongPress}) must not run two hold detectors against one finger — so the app's
+ * hold fires first and *dispatches* the menu, which also clears Radix's timer through its own
+ * `onContextMenu` handler. Both callers pass the origin `onLongPress` hands them, which is what puts
+ * the menu under the finger rather than at the element's corner.
+ *
+ * Extracted because this was its second verbatim copy (`BuskPad` and `CueSlotCell`), and a third is
+ * likely: if the synthetic event ever needs a fix — `pageX`/`pageY`, `composed` for a shadow host —
+ * one copy would get it.
+ */
+export function dispatchSyntheticContextMenu(
+  element: HTMLElement | null | undefined,
+  { x, y }: PressOrigin,
+): void {
+  element?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: x, clientY: y }))
+}

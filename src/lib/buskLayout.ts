@@ -221,6 +221,18 @@ export function allPads(page: BuskPage): BuskPad[] {
 }
 
 /**
+ * Every **bank** on the page, flat — [allPads]'s sibling one level up.
+ *
+ * It is not `allPads` composed with anything, and that is the point: an empty bank has no pad to
+ * be found through, and an empty bank is exactly what a *place* target most often is. Two callers,
+ * both about the hand's `handPlaceInBank` binding — the surface library's chips and the picker's
+ * option list.
+ */
+export function allBanks(page: BuskPage): BuskBank[] {
+  return page.rows.flatMap((row) => row.columns).flatMap((column) => column.banks)
+}
+
+/**
  * The traversal itself, exported so a caller that *does* need the bank a pad sits on (a record
  * binding's picker, which shows "`page` · `bank`" as the pad's detail line) is not left re-deriving
  * `rows → columns → banks → pads` a second time by hand.
@@ -372,6 +384,33 @@ export function removePad(page: BuskPage, at: PadAddress): BuskPage {
   if (bank == null) return page
   bank.pads.splice(at.pad, 1)
   return normalisePage(next)
+}
+
+/**
+ * Where the **last** pad of the bank with this server id sits, or null if there is no such bank.
+ *
+ * The one reader is the hand's Undo for a bank place (`BuskingView`): `POST /busk/banks/{id}/pads`
+ * **appends**, and answers the whole page, so the pad to take back off is the last one of that
+ * bank in the page the append just returned. There is no remove-pad route — the inverse goes back
+ * through the layout PUT like every other edit to a page.
+ *
+ * By id rather than by address because the caller has a `bankId` and not a `BankAddress`: the
+ * append addresses a bank by its server id, and the row/column it sits in is not part of that
+ * conversation.
+ */
+export function lastPadOfBank(page: BuskPage, bankId: number): PadAddress | null {
+  for (let row = 0; row < page.rows.length; row++) {
+    const columns = page.rows[row]!.columns
+    for (let column = 0; column < columns.length; column++) {
+      const banks = columns[column]!.banks
+      for (let bank = 0; bank < banks.length; bank++) {
+        const found = banks[bank]!
+        if (found.id !== bankId || found.pads.length === 0) continue
+        return { row, column, bank, pad: found.pads.length - 1 }
+      }
+    }
+  }
+  return null
 }
 
 export function removeBank(page: BuskPage, at: BankAddress): BuskPage {

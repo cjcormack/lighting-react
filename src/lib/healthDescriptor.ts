@@ -43,6 +43,12 @@ export function describeHealth(health: BindingHealth | undefined): string | null
       return "The template this button presses no longer exists"
     case "missingPad":
       return "The busk pad this button presses is no longer on any page"
+    // A **busk** bank, not the device profile's `unknownBank` above — the two share only the word,
+    // and a place binding whose bank went with a layout write is dead in exactly the way a missing
+    // pad is. It had no arm here until the hand's bindings made it reachable, so it fell through to
+    // the generic line below.
+    case "missingBank":
+      return "The busk bank this button places into no longer exists"
     case "missingPage":
       return "The busk page this button shows no longer exists"
     case "lookNeedsSelection":

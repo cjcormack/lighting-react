@@ -722,6 +722,180 @@ hold one 110px pad. Edit mode stacks too, with a gutter drawn as a strip between
 hidden with it — by decision, narrow widths get play mode only, and an edit mode with nothing to
 drag from is a trap. `Done` stays at every width so a window narrowed mid-edit can leave.
 
+### The hand
+
+**The desk holds one record between two screens.** A template, a Look or a cue is *picked up* on
+any window and *placed* on any other — the cross-window move, deliberately instead of a pointer
+drag, because the window that saw the press keeps the pointer for the whole gesture and the
+neighbour never receives a pointer event of its own. Backend contract in `lighting7`'s
+`state/HandState.kt` and `plugins/HandSocket.kt` (17140b3), the wire in
+`docs/websocket-engineering.md` §Hand; the plan is `multi-screen-plan.md` §3.5 and D12, and where
+that plan's sketch and the shipped commit differ, **the commit wins**.
+
+**Three frames, and none of them places.** `hand.state {item?}` is the connect snapshot and the
+broadcast; `hand.pickUp {kind, id}` resolves the record **in the current project and nowhere else**;
+`hand.drop {uuid?}` lets go. There is no `hand.place` and **you must not add one** — every target
+already has a mutation with its own validation, so one frame that placed would reimplement four of
+them behind a single name. **A place is the placing window's own mutation followed by `hand.drop`**,
+and Undo is that window's inverse mutation, offered for ten seconds (`HAND_UNDO_MS`).
+
+**A drop after a place names what it is dropping; the chip's × and Escape do not.** A place is two
+independent round-trips — the window's mutation, then the drop — and another window may have picked
+something up in the gap, so a bare `hand.drop` would clear an item this window never touched, on
+exactly the two-screen case the hand exists for. `useHandPlace` in `store/hand.ts` is the one owner
+of that sequence and sends `hand.drop {uuid}`; `handDrop()` beside it is the bare form and is what
+the × and Escape call, because "let go of whatever is there" is precisely what those two mean.
+Getting it backwards is **invisible in one window**, which is why `hand.test.ts` asserts the uuid
+rather than the call — a test that accepted a bare drop would pass with the bug in. A failed
+mutation drops nothing and toasts nothing: the operator still has the item, and
+`errorToastMiddleware` has already reported the refusal.
+
+**Every hold carries a server-stamped `holdId`**, monotonic, which is the identity of *this* hold
+rather than of the record. It exists because `MutableStateFlow` conflates by `equals` and two
+pick-ups in one clock tick would otherwise be indistinguishable. On this side it is the chip's React
+`key` and the `data-hold-id` it draws: two hands of one record differ in nothing else, so without it
+neither a test nor a later session can tell "still holding" from "picked the same thing up again".
+
+**`store/hand.ts` is form 3** (`onCacheEntryAdded`), not the form 1 the plan's bullet names, and
+`store/windows.ts` is the precedent that settles it in two steps. `HandChip` mounts in `Layout.tsx`,
+so the module is on the **earliest render path** — the case §"Where a WS bridge subscribes" reserves
+for form 2, where a module-scope `lightingApi.hand.subscribe(…)` can throw a TDZ `ReferenceError`
+that `tsc`, `vite build` and the tests all miss. And `hand.state` is a **stream** carrying the whole
+item with nothing to refetch, so there is no invalidation for a bridge to dispatch; a `queryFn` that
+closes over `lightingApi` touches it only when the first reader mounts and needs no
+`startHandBridge()`. There is also **no `open` branch**, and that is `selectionApi`'s rule rather
+than `windowsApi`'s: the desk pushes the snapshot on every connect, and a write on connect would be
+this window silently changing the desk's hand.
+
+**The ghost is frozen and hookless.** The frame carries the record's **own summary DTOs**, exactly
+as `BuskPadDto` does, so `HandChip` builds its face through `padFaceOf` and subscribes to *nothing
+about the held item* — `dragOverlayRegistry`'s rule, for its reason: an effect template's detail line
+reads a live speed-master label through a hook, and a chip that can sit on screen for five minutes
+across every route must not mount one per hold. The cost is `FU-DTO-RECORD-SUMMARY` in lighting7:
+the embedded `usage` and `buskPageCount` were computed at pick-up, so a long hold can read "on 3
+pages" after a fourth was added. Intended — a pad's face is frozen between reads too — but **do not
+build anything that presents those two fields as live**.
+
+**Escape is the last rung, and the question is asked in the capture phase.** `HandChip` drops only
+when nothing else claims the key: a cell editor open anywhere (`cellEditorIsOpen()`), any
+`[role="dialog"]` or Radix popper on the page, or an event already `defaultPrevented`. That is
+§"The cell editor's three forms"' snapshot rule — *is an editor open*, not *where was the key
+pressed*, which `isEditableTarget` and `closest('[role="dialog"]')` answer and answer wrongly the
+moment focus leaves the panel. Radix listens on the **document** and closes first, so a bubble-phase
+read always says "nothing open"; a **window capture** listener is the first thing any keydown
+reaches, and the bubble handler reads what it recorded for that same press. Get it wrong and Escape
+in a cue-name field silently drops the operator's held item.
+
+**The timing is `useEscapeEditorSnapshot`'s, shared — only the predicate differs.** That hook takes
+an optional `extra` and the chip passes `anyOverlayOpen`; the hand's ladder is longer than the
+grid's, but the capture/bubble trick is delicate enough that a second copy of it is how one of the
+two silently stops working. The overlay half is a **document-wide** query, never an ancestor walk,
+for the same reason the rule is stated the way it is.
+
+**`lib/handTargets.ts` is the one eligibility table.** A bank takes all three kinds (a pad *is* a
+reference to one of them); a slot takes a cue or a Look with no deferred effect (it has no
+selection, D7); both layer stacks take a Look or a template. So a cue lands only on a bank or a
+slot, which falls out of the table rather than being stated a fifth time. It is eligibility and
+never permission: every place still runs its own mutation.
+
+**`canHandLand(…, 'slot')` is also what `LibraryPalette` sets each row's `slotEligible` from**, and
+that sharing is the fix for a real hole rather than tidiness. The rule used to be written out four
+times — three per-kind literals in the palette, `canHandLand`, and the test's own fixture — and
+`slotAssignmentFor` re-checks only the *template* refusal, so the deferred-effect-Look half rested
+on the flag alone. A test that built the flag from its own copy of the formula and then asserted the
+two agreed was comparing two hardcoded copies of one rule: genuine drift in the palette would have
+stayed green. With one statement of it that drift is gone by construction, so `handTargets.test.ts`
+pins what is *still* two independent pieces of code — `slotAssignmentFor`'s kind re-check, fed a
+deliberately wrong `slotEligible`, asserting both that it catches a template and that it does **not**
+catch a deferred Look. `slotDrop.ts`'s docblock states that asymmetry; the sentence that stood there
+before implied it covered both.
+
+**The rings are buttons, not `useDroppable` sites**, which is a deliberate departure from the plan's
+sketch. A hand place is a **tap** — the whole point of the hand is that no drag is in flight — so a
+droppable could never be dropped on in this session, while being registered on the app's *one*
+`DndContext` for every busk-page and surface drag that is; `DeskDndProvider`'s `closestCenter`
+fallback returns one collision in the gaps between banks, and a foreign candidate there is exactly
+the "highlight in one place, slot in another" failure §"The busk layout" is written about. Session
+4's `elementsFromPoint` hit-test would not have been helped by one either — dnd-kit gives no way
+back from a DOM element to a droppable — so **`data-hand-target` is the registration** both sessions
+read. The affordance is explicit (`HandPlaceStrip`: a dashed *Place “X” here* band, rendering null
+otherwise) rather than a temporary second meaning for a surface's existing press, because a mode is
+state an operator forgets.
+
+**`useHandOffer` narrows through `selectFromResult`, and the two layer strips are each split in
+two.** This hook runs once per bank and *unconditionally* in every `CueSlotCell` — hooks cannot be
+conditional, so the filled-slot path pays for it too — and a plain subscription woke all of them on
+every `hand.state` frame desk-wide, including the usual case where their own answer was null before
+and after. `useIsDeskConnected` is the same move for the same reason. The strips are split because
+`useDeskSelection` is a second standing subscription: the outer component asks the narrowed offer
+and renders nothing when the hand holds nothing it can take, so the selection is subscribed to only
+while a placeable record is held. Flat, the programmer's strip re-rendered on every marquee that
+crossed a row boundary — it sits in the rail footer on every visit to `/programmer` — and the cue
+strip multiplied that by however many cue cards are expanded.
+
+**A place that never left the browser is not a place.** `programmer.addLayer` is fire-and-forget, so
+"it landed" can only ever mean "it was sent" — but *was it sent* has a real answer: `sendGesture`
+refuses a closed socket, toasts "that did not reach the rig", and returns false. `addLayer` and
+`programmerAddLayer` now return that boolean, and the programmer strip's `run` answers `null` on
+false so `useHandPlace` keeps the record held and stays quiet. Returning `true` regardless — which
+is how it was first written — dropped the hand and toasted success **beside** that error toast, on
+the one place with no Undo to recover through.
+
+**The four places, and the three Undos.** A **bank** is `useAddBuskPadMutation` — it answers the
+whole page, so the busk view's commit queue needs nothing — and its inverse goes back through the
+layout PUT, since there is no remove-pad route: `lastPadOfBank` finds the appended pad in the page
+the append returned. A **cue slot** is `useAssignCueSlotMutation`, on **empty tiles only, and never while the busk view
+is editing** — a filled tile's press is live, and in edit mode a slot is a pointer-drag target, so
+in both cases a tap that quietly fired `assignSlot` would be a second meaning for a gesture the
+operator is making for something else. That is `BuskBank`'s `!editing` rule, and the tile broke it
+until the review caught it; replacing an occupied slot is *Clear slot* and then this. A **cue's stack** is `patchProjectCue`
+through `buildCueInput`, appended at the top (later wins within a cue), and its inverse patches back
+the layers array read *before* the place. The **programmer's layer stack** is `programmerAddLayer`
+and has **no Undo**, which is a decision: that op is fire-and-forget and returns no id, the only way
+to find the new layer would be to diff a stack that is *shared*, and a wrong inverse removing another
+window's layer on a live rig is worse than none — the row it just added is one click from its own
+remove. Both layer places send the **desk selection** as `targets`, which *supplies* them for a
+template and *filters* them for a Look, and the family mask is the server's.
+
+**Five doors pick something up.** A busk pad's hold now opens a **menu** — *Pick up* first, *View*
+second — where it used to navigate straight to the library, because the hand needed a door there and
+a hold cannot mean two things (`CueSlotCell` does the same synthetic-`contextmenu` trick, which
+leaves right-click working on a mouse for free). The `/looks` and `/templates` rows carry it at the
+top of their row menus, above the edit verbs and only for the project the desk is on — the hand is
+project-scoped server-side, so a pick-up from another project's library resolves nothing.
+`LookStack`'s dense row popover picks up the layer's **referent** and leaves the layer alone; it is
+not a `LayerHandlers` member, because those seven are index-based to address *this host's* layer
+while a pick-up names a library record the row already carries. And the programmer's template chip
+offers it on **right-click only**: the chip's hold is already ⌥click's touch twin (§"The two apply
+gestures"), so on touch the routes are the library row and a pad's hold menu, both of which have a
+free hold.
+
+**That chip is a `Popover` opened from `onContextMenu`, and must not become a `ContextMenu`.**
+Radix's `ContextMenuTrigger` arms a long-press timer of its **own** (~700ms) for `touch`/`pen`,
+cleared only by its own pointer handlers or by a `contextmenu` reaching the trigger. The pad and the
+cue-slot tile are safe because their holds *dispatch* a synthetic `contextmenu`
+(`dispatchSyntheticContextMenu`, shared by both — clearing that timer is what it is for, not just
+reaching the menu on touch). The chip dispatches nothing: its hold fires a tracking-layer mutation.
+So a stationary touch hold on it added the layer at 500ms and popped the pick-up menu at 700ms —
+two effects from one finger, on a live rig, with the primitive breaking the rule the code had
+written down. `PopoverAnchor` registers no handlers at all.
+
+**MIDI has three doors of its own** — `pickUpPad(padUuid)`, `handPlaceInBank(bankUuid)` and
+`handDrop`, all BUTTON, mirrored in `lib/surfaceDrop.ts` as §The MIDI surface view requires. There is
+no `handPlaceInSlot` and no layer-stack place: neither a cue slot nor the programmer's stack has a
+uuid a binding could carry. `handPlaceInBank` brought a new health variant, **`missingBank`** — a
+*busk* bank, never the device profile's `unknownBank`, which shares only the word — and closing that
+arm in `healthDescriptor.ts` was one of two gaps the backend's review found here. The other was
+`describeTarget`'s missing `default`: `noImplicitReturns` is off, so an unknown discriminator
+returned `undefined` and drew a **blank** label rather than falling through, which reads as a bug in
+the panel. Its three siblings already answered properly. The library offers `handPlaceInBank` as one
+chip per **bank** and `handDrop` on the Desk row; `pickUpPad` is in the picker only, because a
+`Pick up` chip would sit beside the `pressPad` chip for the same pad under the same name.
+
+**What is still out: session 4's same-machine edge drag** — the `BroadcastChannel('desk-drag')`,
+`onDragMove`'s screen-bounds test, the synthetic Escape that cancels dnd-kit, `elementsFromPoint`
+against registered targets. The hand is the route for now.
+
 ### The MIDI surface view
 
 `/projects/:id/settings/surfaces` draws the attached desk as **a picture built from profile data**

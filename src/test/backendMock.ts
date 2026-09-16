@@ -271,6 +271,37 @@ export const windowsWs: {
   },
 }
 
+/**
+ * The desk's hand: the `hand.state` stream a test fires, and the two writes it records.
+ *
+ * Spelled out rather than left to the fallback Proxy for `windows`' reason — `store/hand.ts` seeds
+ * its cache entry from `getState()` — and for one more: the whole point of the guarded drop is
+ * *which argument* it carries, so `dropped` keeps every call rather than counting them.
+ */
+export const handWs: {
+  callback: null | ((held: unknown) => void)
+  last: unknown
+  pickedUp: unknown[]
+  dropped: (string | undefined)[]
+  fire: (held: unknown) => void
+  reset: () => void
+} = {
+  callback: null,
+  last: null,
+  pickedUp: [],
+  dropped: [],
+  fire: (held) => {
+    handWs.last = held
+    handWs.callback?.(held)
+  },
+  reset: () => {
+    handWs.callback = null
+    handWs.last = null
+    handWs.pickedUp = []
+    handWs.dropped = []
+  },
+}
+
 /** `busk.layoutChanged` frames, so a test can fire one at `store/busk.ts`'s bridge. */
 export const buskWs: { callback: null | ((pageIds: number[]) => void) } = { callback: null }
 
@@ -465,6 +496,24 @@ export function lightingApiMock() {
         getState: () => null,
         subscribe: noopSub,
         setPage: () => true,
+      },
+      hand: {
+        getState: () => handWs.last,
+        subscribe: (fn: (held: unknown) => void) => {
+          handWs.callback = fn
+          if (handWs.last != null) fn(handWs.last)
+          return {
+            unsubscribe: () => {
+              handWs.callback = null
+            },
+          }
+        },
+        pickUp: (kind: string, id: number) => {
+          handWs.pickedUp.push({ kind, id })
+        },
+        drop: (uuid?: string) => {
+          handWs.dropped.push(uuid)
+        },
       },
       // Spelled out for the `selection` reason: `store/windows.ts` seeds its entry from
       // `getState()`, and the bridge hook reads the announce back off `announced`.

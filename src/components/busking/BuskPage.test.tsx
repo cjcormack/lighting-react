@@ -88,6 +88,8 @@ const behaviour: PadBehaviour = {
   isLive: () => false,
   onPress: () => {},
   onInspect: () => {},
+  onPickUp: () => {},
+  onHandPlace: () => {},
 }
 
 function draw(editing = false) {

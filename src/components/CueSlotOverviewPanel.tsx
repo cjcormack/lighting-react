@@ -13,9 +13,13 @@ import { cn } from '@/lib/utils'
 import { useCurrentProjectQuery } from '../store/projects'
 import {
   useProjectCueSlotsQuery,
+  useAssignCueSlotMutation,
   useClearCueSlotMutation,
   type CueSlot,
 } from '../store/cueSlots'
+import { useHandPlace } from '@/store/hand'
+import type { HeldRecord } from '@/api/handApi'
+import { HAND_TARGET_RING, useHandOffer } from './hand/HandTarget'
 import { useApplyCueMutation, useStopCueMutation, useActiveCueIds } from '../store/cues'
 import { useToggleLookMutation } from '../store/looks'
 import { useProgrammerAppliedQuery } from '../store/programmer'
@@ -24,7 +28,7 @@ import { useBuskEditMode } from '@/store/buskEditSlice'
 import { isSlotRefusedDrag } from './dnd/slotDrop'
 import { CollapsiblePanel } from './CollapsiblePanel'
 import { usePersistentState } from '@/hooks/usePersistentState'
-import { useLongPress } from '@/hooks/useLongPress'
+import { dispatchSyntheticContextMenu, useLongPress } from '@/hooks/useLongPress'
 import {
   SlotItemContent,
   slotLitClass,
@@ -96,6 +100,8 @@ function CueSlotOverviewPanelBody() {
   const [stopCue] = useStopCueMutation()
   const [toggleLook] = useToggleLookMutation()
   const [clearSlot] = useClearCueSlotMutation()
+  const [assignSlot] = useAssignCueSlotMutation()
+  const placeFromHand = useHandPlace()
 
   const navigate = useNavigate()
 
@@ -317,6 +323,39 @@ function CueSlotOverviewPanelBody() {
     [projectId, clearSlot],
   )
 
+  /**
+   * Fill an **empty** slot from the desk's hand: this window's own `assignCueSlot`, then the
+   * guarded `hand.drop` (D12, multi-screen plan §3.5).
+   *
+   * Empty slots only. A filled tile's press is live — it puts a cue on stage or takes a Look off —
+   * and a hand held over the panel must not quietly become a second meaning for it. Replacing an
+   * occupied slot is *Clear slot* and then this, which is two gestures the operator already has.
+   */
+  const handlePlaceInSlot = useCallback(
+    (page: number, slotIndex: number, held: HeldRecord) => {
+      if (!projectId) return
+      void placeFromHand(held, {
+        where: `slot ${slotIndex + 1} on page ${page + 1}`,
+        run: () =>
+          assignSlot({
+            projectId,
+            page,
+            slotIndex,
+            // A TEMPLATE never reaches here: `canHandLand`'s `slot` row refuses one, so the tile
+            // offers nothing and this is never called for it. The fallback is written as the Look
+            // arm rather than thrown for `layerSource`'s reason — a throw in a click handler on a
+            // live desk is worse than a request the server refuses by name — but note what it
+            // would cost if that gate were ever loosened: template and Look ids are independent
+            // numeric spaces, so a template arriving here would name an unrelated Look.
+            ...(held.kind === 'CUE' ? { cueId: held.id } : { lookId: held.id }),
+          }).unwrap(),
+        // The slot was empty, so the inverse is simply to empty it again.
+        undo: (slot) => clearSlot({ projectId, slotId: slot.id }),
+      })
+    },
+    [projectId, assignSlot, clearSlot, placeFromHand],
+  )
+
   const slotsForPage = useMemo(() => {
     const result: (CueSlot | null)[] = []
     for (let i = 0; i < SLOTS_PER_PAGE; i++) {
@@ -355,6 +394,7 @@ function CueSlotOverviewPanelBody() {
               onTap={handleSlotTap}
               onView={handleViewSlot}
               onClear={handleClearSlot}
+              onHandPlace={handlePlaceInSlot}
             />
           ))}
         </div>
@@ -402,6 +442,8 @@ interface CueSlotCellProps {
   onTap: (slot: CueSlot) => void
   onView: (slot: CueSlot) => void
   onClear: (slot: CueSlot) => void
+  /** Fill this slot from the desk's hand. Offered on an empty tile only — see the panel's handler. */
+  onHandPlace: (page: number, slotIndex: number, held: HeldRecord) => void
 }
 
 function CueSlotCell({
@@ -413,6 +455,7 @@ function CueSlotCell({
   onTap,
   onView,
   onClear,
+  onHandPlace,
 }: CueSlotCellProps) {
   const droppableId = `slot-${page}-${slotIndex}`
 
@@ -427,6 +470,17 @@ function CueSlotCell({
   // A palette row over this tile that cannot land in it — a template, or a Look needing a
   // selection. The drop is a no-op either way; this only says why rather than swallowing it.
   const refuses = isOver && isSlotRefusedDrag(active?.data.current)
+
+  // Above the empty-slot early return, because hooks cannot be conditional. The eligibility rule
+  // itself is `lib/handTargets.ts`'s, shared with the palette's `slotEligible`.
+  //
+  // **Withheld while the busk view is editing**, which is `BuskBank`'s rule and has to be this
+  // tile's too: in edit mode a slot is a drop target for a pointer drag, and a tap that quietly
+  // fired `assignSlot` — a live mutation, on a show — would be a second meaning for a click the
+  // operator is making to arrange the page. The droppable two lines above already says the same
+  // thing from the other side (`disabled: !isEditMode`).
+  const handOffer = useHandOffer('slot')
+  const offer = isEditMode ? null : handOffer
 
   const {
     attributes: dragAttributes,
@@ -452,11 +506,7 @@ function CueSlotCell({
   const triggerRef = useRef<HTMLDivElement>(null)
 
   const { handlers: pressHandlers } = useLongPress({
-    onLongPress: ({ x, y }) => {
-      triggerRef.current?.dispatchEvent(
-        new MouseEvent('contextmenu', { bubbles: true, clientX: x, clientY: y }),
-      )
-    },
+    onLongPress: (origin) => dispatchSyntheticContextMenu(triggerRef.current, origin),
     onPress: () => {
       if (slot) onTap(slot)
     },
@@ -477,23 +527,39 @@ function CueSlotCell({
     [setDropRef, setDragRef],
   )
 
-  // Empty slot — a drop target and nothing else. Its context menu held one item ("Edit slots"),
-  // which went with the panel's own edit mode, so there is no menu and no press to arm.
+  // Empty slot — a drop target, and since the hand a tap target too. Its context menu held one
+  // item ("Edit slots"), which went with the panel's own edit mode, so there is no menu.
+  //
+  // This is the one hand target that *is* the tap rather than carrying a band beside it: the tile
+  // is 3.5rem and already a dashed placeholder reading `—`, so lighting it and taking the press is
+  // the smallest honest affordance. It stays a `<button>` even when nothing is held, so the DOM
+  // does not change shape under a pointer — `disabled` is what says there is nothing to do.
   if (!slot) {
+    // One derivation, read seven times below. It was re-derived at each of them, which is how the
+    // meaning of "can this slot take what is held" ends up with seven places to update.
+    const canPlace = offer != null
     return (
-      <div
+      <button
+        type="button"
         ref={setDropRef}
+        disabled={!canPlace}
+        {...(canPlace ? { 'data-hand-target': 'slot' as const } : {})}
+        onClick={canPlace ? () => onHandPlace(page, slotIndex, offer) : undefined}
+        title={canPlace ? 'Place what the desk is holding here' : undefined}
+        aria-label={canPlace ? `Place in slot ${slotIndex + 1}` : undefined}
         className={cn(
-          'rounded-md border-2 border-dashed flex items-center justify-center min-h-[3.5rem] transition-colors touch-none select-none',
+          'w-full rounded-md border-2 border-dashed flex items-center justify-center min-h-[3.5rem] transition-colors touch-none select-none',
           refuses
             ? 'border-destructive bg-destructive/5 text-destructive'
             : isOver
               ? 'border-primary bg-primary/5'
-              : 'border-muted-foreground/25 text-muted-foreground/40',
+              : canPlace
+                ? cn(HAND_TARGET_RING, 'hover:bg-primary/10')
+                : 'border-muted-foreground/25 text-muted-foreground/40',
         )}
       >
-        <span className="text-xs">{refuses ? '×' : isOver ? '+' : '—'}</span>
-      </div>
+        <span className="text-xs">{refuses ? '×' : isOver || canPlace ? '+' : '—'}</span>
+      </button>
     )
   }
 

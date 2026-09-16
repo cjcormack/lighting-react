@@ -44,6 +44,8 @@ vi.mock('@/components/cues/CueDetailContent', () => ({
   CueDetailContent: () => <div data-testid="detail" />,
 }))
 vi.mock('@/components/cues/CuePropertiesSheet', () => ({ CuePropertiesSheet: () => null }))
+// The hand's place target under the read surface — store-touching, like `CueDetailContent` above.
+vi.mock('@/components/hand/HandLayerTargets', () => ({ HandCueLayerStrip: () => null }))
 vi.mock('@/components/SaveStatusIndicator', () => ({ SaveStatusIndicator: () => null }))
 
 import { CueCardEditor } from './CueCardEditor'

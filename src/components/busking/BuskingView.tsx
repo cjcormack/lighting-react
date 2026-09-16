@@ -19,9 +19,12 @@ import {
   useCacheBuskPage,
   useBuskShowingPageQuery,
   setShowingBuskPage,
+  useAddBuskPadMutation,
 } from '@/store/busk'
+import { handPickUp, heldName, useHandPlace } from '@/store/hand'
 import { toast } from 'sonner'
-import { libraryStarterLayout, recordsOnPage } from '@/lib/buskLayout'
+import { lastPadOfBank, libraryStarterLayout, recordsOnPage, removePad, toLayoutRequest } from '@/lib/buskLayout'
+import { buskAddBody } from '@/lib/buskAdd'
 import { skippedRowsMessage } from '@/lib/selectionMask'
 import type { BuskPad } from '@/api/buskApi'
 import { lookLayerPresence, templateLayerPresence } from './lookPresence'
@@ -90,6 +93,8 @@ export function BuskingView({ projectId }: { projectId: number }) {
   const [reorderPages] = useReorderBuskPagesMutation()
   const [saveLayout, { isLoading: generating }] = useSaveBuskLayoutMutation()
   const [pressPad] = usePressBuskPadMutation()
+  const [addPad] = useAddBuskPadMutation()
+  const placeFromHand = useHandPlace()
   const cachePage = useCacheBuskPage(projectId)
 
   // Which page is showing has **four** writers and one answer, and the precedence is what makes
@@ -209,8 +214,54 @@ export function BuskingView({ projectId }: { projectId: number }) {
           navigate(`/projects/${projectId}/show/stacks/${pad.cue.cueStackId}?cue=${pad.cue.id}`)
         }
       },
+      // *Pick up* names the **record**, not the pad: what the hand holds is the template, Look or
+      // cue, and placing it elsewhere makes a second pad rather than moving this one. (The MIDI
+      // door is `PickUpPad(padUuid)` and resolves to the same record server-side.)
+      onPickUp: (pad) => {
+        const id = pad.template?.id ?? pad.look?.id ?? pad.cue?.id
+        if (id != null) handPickUp(pad.kind, id)
+      },
+      // A place is this window's own append followed by `hand.drop` (D12). The append answers the
+      // **whole page**, so the busk view's commit queue needs nothing from it — and the Undo has to
+      // go back through the layout PUT, since there is no remove-pad route: the append's own
+      // response is the page to take the new pad off.
+      onHandPlace: (bankId, bankName, held) => {
+        const pageId = activePage?.id
+        if (pageId == null) return
+        void placeFromHand(held, {
+          where: bankName,
+          run: () =>
+            addPad({
+              projectId,
+              pageId,
+              bankId,
+              ...buskAddBody({ kind: held.kind, id: held.id, name: heldName(held) }),
+            }).unwrap(),
+          undo: (page) => {
+            const at = lastPadOfBank(page, bankId)
+            if (at == null) return
+            void saveLayout({
+              projectId,
+              pageId: page.id,
+              ...toLayoutRequest(removePad(page, at)),
+            }).unwrap().catch(ignoreReportedError)
+          },
+        })
+      },
     }),
-    [presenceOf, activeCueIds, pressPad, projectId, selectedLayerTargets, families, navigate],
+    [
+      presenceOf,
+      activeCueIds,
+      pressPad,
+      projectId,
+      selectedLayerTargets,
+      families,
+      navigate,
+      activePage,
+      addPad,
+      saveLayout,
+      placeFromHand,
+    ],
   )
 
   const onPageKeys = useMemo(

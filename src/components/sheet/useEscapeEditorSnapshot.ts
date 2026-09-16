@@ -22,12 +22,23 @@ import { cellEditorIsOpen } from './cells/CellEditorSurface'
  *
  * The ref is rewritten on every Escape, so it can never be read stale: whenever the bubble handler
  * looks, it is looking at a value written for that same keypress.
+ *
+ * **[extra] is for a caller whose ladder is longer than the grid's**, not for a different mechanism.
+ * The hand's chip (`components/hand/HandChip.tsx`) also has to stand aside for an open dialog or
+ * popper, which a cell editor is only one of — but the capture/bubble trick is delicate enough that
+ * a second copy of it is how one of them silently stops working. So the predicate is the parameter
+ * and the timing is shared.
  */
-export function useEscapeEditorSnapshot(): React.RefObject<boolean> {
+export function useEscapeEditorSnapshot(extra?: () => boolean): React.RefObject<boolean> {
+  // `extra` is held in a ref so a caller may pass an inline arrow without re-registering the
+  // listener on every render — the predicate is read at keydown time, never at subscribe time.
+  const extraRef = useRef(extra)
+  extraRef.current = extra
   const ref = useRef(false)
   useEffect(() => {
     const onCapture = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') ref.current = cellEditorIsOpen()
+      if (event.key !== 'Escape') return
+      ref.current = cellEditorIsOpen() || extraRef.current?.() === true
     }
     window.addEventListener('keydown', onCapture, true)
     return () => window.removeEventListener('keydown', onCapture, true)

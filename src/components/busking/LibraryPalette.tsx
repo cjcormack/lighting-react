@@ -9,6 +9,7 @@ import { useTemplateListQuery } from '@/store/templates'
 import { useLookListQuery } from '@/store/looks'
 import { useProjectCueStackListQuery } from '@/store/cueStacks'
 import { buskPaletteId, type PaletteRecord } from '@/lib/buskLayout'
+import { canHandLand } from '@/lib/handTargets'
 import type { BuskCue } from '@/api/buskApi'
 import { BuskLabel } from './BuskLabel'
 import {
@@ -189,9 +190,10 @@ export function LibraryPalette({
         badge: template.family != null ? FAMILY_LABELS[template.family].singular : 'Template',
         kind: 'template',
         families: template.family != null ? [template.family] : [],
-        // A template's rows take their targets from the press, so a slot — which has no selection
-        // — could never supply them.
-        slotEligible: false,
+        // The rule is `lib/handTargets.ts`'s, not this row's: a slot takes only what needs no
+        // selection, and that answer must be the same one the hand's target affordance gives.
+        // These three rows used to state it themselves, which made three copies of it.
+        slotEligible: canHandLand({ kind: 'TEMPLATE' }, 'slot'),
         swatch: face.swatch,
         isEffect: template.kind === 'effect',
         cueNumber: null,
@@ -215,7 +217,7 @@ export function LibraryPalette({
         badge: 'Look',
         kind: 'look',
         families: look.families,
-        slotEligible: !look.hasDeferredEffects,
+        slotEligible: canHandLand({ kind: 'LOOK', hasDeferredEffects: look.hasDeferredEffects }, 'slot'),
         swatch: null,
         isEffect: false,
         cueNumber: null,
@@ -244,7 +246,7 @@ export function LibraryPalette({
           badge: 'Cue',
           kind: 'cue',
           families: [],
-          slotEligible: true,
+          slotEligible: canHandLand({ kind: 'CUE' }, 'slot'),
           swatch: null,
           isEffect: false,
           cueNumber: cue.cueNumber,

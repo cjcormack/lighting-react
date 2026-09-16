@@ -25,6 +25,10 @@ vi.mock('./ProgrammerAddEffect', () => ({
 vi.mock('./ProgrammerAddLayerSheet', () => ({ ProgrammerAddLayerSheet: () => null }))
 vi.mock('./ProgrammerFxList', () => ({ ProgrammerFxList: () => null }))
 vi.mock('./ProgrammerLookStack', () => ({ ProgrammerLookStack: () => null }))
+// The hand's place target in the footer. Mocked for the reason every store-touching child here
+// is: it reads the desk selection and the hand through RTK Query, and this suite renders the
+// rail without a Provider.
+vi.mock('@/components/hand/HandLayerTargets', () => ({ HandProgrammerLayerStrip: () => null }))
 vi.mock('./ProgrammerScope', () => ({
   useProgrammerScope: () => null,
   useProgrammerScopeActions: () => ({ focusLocal: () => {} }),

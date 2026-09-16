@@ -21,6 +21,7 @@ import {
 } from '../store/templates'
 import { TemplateEditor } from '../components/templates/TemplateEditor'
 import { TemplateListRow } from '../components/templates/TemplateListRow'
+import { handPickUp } from '../store/hand'
 import {
   LookFamilyFilterBar,
   getStoredLookFamily,
@@ -256,6 +257,11 @@ export function ProjectTemplates() {
                   setEditorOpen(true)
                 }}
                 onDelete={isCurrentProject ? () => setConfirmDelete(template) : undefined}
+                // Only for the project the desk is on — the hand is project-scoped server-side and
+                // a pick-up from another project's library resolves nothing.
+                onPickUp={
+                  isCurrentProject ? () => handPickUp('TEMPLATE', template.id) : undefined
+                }
               />
             ))}
           </Card>

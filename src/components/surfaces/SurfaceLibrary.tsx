@@ -24,7 +24,7 @@ import { useProjectCueStackListQuery } from "@/store/cueStacks"
 import { useLookListQuery } from "@/store/looks"
 import { useTemplateListQuery } from "@/store/templates"
 import { useBuskPagesQuery } from "@/store/busk"
-import { allPads } from "@/lib/buskLayout"
+import { allBanks, allPads } from "@/lib/buskLayout"
 import { padFaceOf, templateSwatch } from "@/components/busking/padFace"
 import { useRigProperties, useTargetProperties, type AvailableProperty } from "@/hooks/useTargetProperties"
 import { surfaceDragData, type SurfaceDragData } from "@/lib/surfaceDrop"
@@ -592,6 +592,19 @@ export function SurfaceLibrary({
               padUuid: pad.uuid!,
             }),
           ),
+          // The hand's place target, one per bank (multi-screen plan §3.5). Banks and not pads:
+          // a `pickUpPad` chip would sit beside the `pressPad` chip for the same pad under the
+          // same name — the pad's — and two chips reading `Warm Wash` that do different things is
+          // worse than one route. Picking a pad up is offered in the binding picker, where the
+          // kind is named before the record is chosen.
+          ...allBanks(page)
+            .filter((bank) => bank.uuid != null)
+            .map((bank) =>
+              actionChip(`bank:${bank.uuid}`, `Place in ${bank.name}`, {
+                type: "handPlaceInBank",
+                bankUuid: bank.uuid!,
+              }),
+            ),
         ],
       })
     }
@@ -626,6 +639,9 @@ export function SurfaceLibrary({
         // reads as page-specific.
         actionChip("page-next", "Next page", { type: "buskPageNext" }),
         actionChip("page-prev", "Prev page", { type: "buskPagePrev" }),
+        // The hand's own release. On the Desk row for the two page chips' reason: it names no
+        // record and belongs to no page.
+        actionChip("hand-drop", "Let go", { type: "handDrop" }),
       ],
     })
 

@@ -19,6 +19,7 @@ import {
   useLookListQuery,
 } from '../store/looks'
 import { LookListRow } from '../components/looks/LookListRow'
+import { handPickUp } from '../store/hand'
 import { LookDetailSheet } from '../components/looks/LookDetailSheet'
 import { RecordLookSheet } from '../components/programmer/RecordLookSheet'
 import { CopyLookDialog } from '../components/looks/CopyLookDialog'
@@ -254,6 +255,10 @@ export function ProjectLooks() {
                 onDuplicate={isCurrentProject ? () => handleDuplicate(look) : undefined}
                 onCopy={() => setCopyingLook(look)}
                 onDelete={isCurrentProject ? () => setConfirmDelete(look) : undefined}
+                // Only for the project the desk is on: the hand is project-scoped server-side, so
+                // a pick-up from another project's library would resolve nothing and be dropped
+                // with a log line and no reply.
+                onPickUp={isCurrentProject ? () => handPickUp('LOOK', look.id) : undefined}
               />
             ))}
           </div>

@@ -52,6 +52,9 @@ vi.mock('@/components/programmer/ProgrammerGrid', async () => {
     },
   }
 })
+// The hand's place target in the rail footer — store-touching, and this suite renders without a
+// Provider, like every other child mocked here.
+vi.mock('@/components/hand/HandLayerTargets', () => ({ HandProgrammerLayerStrip: () => null }))
 vi.mock('@/components/programmer/ProgrammerLookStack', () => ({
   ProgrammerLookStack: () => <div data-testid="layers" />,
 }))
