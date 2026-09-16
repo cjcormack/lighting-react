@@ -73,7 +73,9 @@ export function TargetBand({
             {formatFamilyList(families, ' · ')}
           </Badge>
         )}
-        <DeskChip />
+        {/* `showSubject`: the page strip below carries the same pill for the page, and two bare
+            *Desk* chips a row apart would be worse than either alone. */}
+        <DeskChip showSubject />
         {/* The band is the picker at every width the rail is; below that the sheet still is. */}
         <Button variant="ghost" size="sm" className="h-6 px-2 text-xs md:hidden" onClick={onOpenPicker}>
           Pick targets…

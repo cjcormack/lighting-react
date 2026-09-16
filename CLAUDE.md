@@ -693,19 +693,68 @@ or within a short grace after its response, because our own write would otherwis
 gesture and could land between an optimistic patch and its own response. One page is the tell — a
 layout write announces exactly one, page CRUD and reorder announce several.
 
-**The showing page is a *desk* fact, and `?page=` mirrors it.** `busk.pageState` / `busk.setPage`
-(`api/buskPageApi.ts`, `store/busk.ts`'s `buskShowingPage` entry) is server-owned for the reason the
-selection is: a hardware *next page* button and a tab click are two ways of making one gesture, so
-two answers would leave the button and the screen disagreeing the moment either was used. The order
-is **this tab's offline override > desk > `?page=` > the first page**, all resolved against the
-fetched list so a stale bookmark lands somewhere real; a tab click writes the desk and the URL is
-written back with `replace` — flipping pages is not a history entry. A `null` from the desk is *not*
-"the first page": it means nothing has moved it, and each client falls back on its own. The offline
-override exists because `setShowingBuskPage` goes through `sendGesture`, which drops the frame when
-the socket is down — without it a click while offline would silently do nothing; it is set only on
-that failure and cleared by any change to the desk's value. It shares only a namespace with
-`busk.layoutChanged`, which names pages whose *document* changed and is what the echo suppression is
-written against. Edit mode
+**The desk holds a showing page, and a window chooses whether to be on it.** `busk.pageState` /
+`busk.setPage` (`api/buskPageApi.ts`, `store/busk.ts`'s `buskShowingPage` entry) stays server-owned,
+for the reason it always was: a hardware *next page* button and a tab click are two ways of making
+one gesture, so the surface needs one thing to move — `BuskPageNext` / `BuskPagePrev` /
+`BuskPageSet` write `BuskPageState` and every *following* window moves with them. What that argument
+never established is that **every** window must be pinned to it, and on two screens it is wrong: the
+flow this exists for is a colour page on one screen and a position page on the other, pressed onto
+one selection. Reported on the desk 2026-09-16.
+
+So the page gets a **follow/local split of its own**, `lib/buskPageFollow.ts`, on `lib/deskFollow.ts`'s
+model — per-tab `sessionStorage` (two desk screens are two windows of one profile), default follow,
+unlinking snapshots what the window is showing and leaves the desk's alone, re-linking adopts the
+desk's and publishes nothing. The order is **this window's own page (unlinked) or the desk's
+(following) > `?page=` > the first page**, all resolved against the fetched list so a stale bookmark
+lands somewhere real; a tab click writes the **desk** while following and this window's copy once
+unlinked, and the URL mirrors whichever won with `replace` — flipping pages is not a history entry.
+A `null` from the desk is *not* "the first page": it means nothing has moved it, and each client
+falls back on its own.
+
+**Two flags, two chips, and neither may drive the other.** A single flag cannot express the flow:
+following would pin both screens to one page, and unlinking to get two pages would take the shared
+selection with it, so the operator would select twice. `DeskChip` in the band's label row governs the
+selection, `BuskPageChip` beside the page tabs governs the page — the same pill, the same link /
+unlink glyph, and on this view both name their subject (*Targets:* / *Page:*) so neither reads as
+governing the whole view. On the programmer's row C the selection chip is alone and stays bare; there
+is **no page chip there**. A window that has unlinked its page has not unlinked its selection and
+still presses onto the desk's targets and mask.
+
+**The flag is tri-state, and `?page=` is what the third state is for.** Arriving with a `?page=`
+**that resolves against the fetched list** is an explicit statement about *this* window — it composes
+with the Screens sheet's launcher, so `?window=Screen%202&page=3` starts a second screen where you
+want it — so it **unlinks** the window onto that page. An arrival naming no page, or one that is
+gone, records that the window *follows* instead; both arms write the flag, which is what makes a
+reload never an arrival. It has to be once per tab: the view mirrors the showing page back into
+`?page=` on every change, so a following window reloading would otherwise read its own mirror as a
+deliberate statement and unlink on every refresh. `null` means *this tab has not decided yet*, and
+it is the only thing that tells a fresh window from a reloaded one — so there is deliberately no
+second, in-memory "already ran" flag beside it. The parameter is latched at mount as the **raw
+string**, null when absent, because `Number(null)` is 0 and a page whose id were 0 would make every
+plain `/busk` load read as an arrival.
+
+**Two consequences of that, both surprising enough to be worth saying out loud.** The busk view's own
+address always carries `?page=`, so **a copied URL opened in a fresh window arrives local, not
+following** — one click on the chip joins it to the desk, but nothing does it for you. And **there is
+no separate offline override any more**: it was a second thing meaning "this tab's page", so a click
+that never left the browser (`setShowingBuskPage` returns `sendGesture`'s `false` when the socket is
+down) now unlinks the window onto the page clicked. That loses the old override's self-healing — it
+was cleared by any change to the desk's value, so a Wi-Fi blip mended itself — and the trade is
+deliberate: one mechanism rather than two, and a state that *says* what it is on the chip instead of
+a silent override. A window stuck local after a blip is one click from following again.
+
+**The mirror waits for the arrival decision to be rendered.** Both effects run in one commit, in that
+order, and `unlinkBuskPage` only *schedules* the re-render that moves the active page — so an
+ungated mirror writes the page the window is unlinking *from* into the URL and corrects it a tick
+later. `useBuskPageDecided` is the **rendered** tri-state, and lagging by one render is exactly what
+makes it the right gate: a live `isBuskPageDecided()` has already been flipped by the arrival effect
+beside it, and `useBuskPageFollow()` collapses `null` and `true` to one `true` and so never changes
+in the keep-following arm.
+
+It shares only a namespace with `busk.layoutChanged`, which names pages whose *document* changed and
+is what the echo suppression is written against; a local page still needs that invalidation like any
+other. Edit mode
 lives in `store/buskEditSlice.ts` rather than a React context, because the cue-slot overlay is a
 *sibling* of the routed page in `Layout.tsx` and could never read a context provided inside the busk
 view. It is never persisted, and `BuskingView` **must** exit it on unmount, or that overlay keeps
@@ -1676,7 +1725,12 @@ selection or this window did, `Desk · from <name>` for another window, `Desk ·
 a control surface, dashed `This window` when local; a click flips it. It sits on the programmer's
 row C between the family pill and the strip (a `chip` slot on the kit's `SelectionBar`, filled only
 with a `projectId`) and in the busk band's label row beside the family pill, and nowhere else —
-the plain lists never bridge (D1), so a chip there would name a link that does not exist.
+the plain lists never bridge (D1), so a chip there would name a link that does not exist. **On the
+busk band it takes `showSubject` and reads `Targets: Desk`**, because there it has a sibling — the
+page chip (§The busk layout) — and two bare `Desk` chips a row apart would be worse than either
+alone; on row C it is alone and stays bare, that row being budgeted to the pixel. The pill itself is
+`components/desk/FollowPill.tsx`, shared by both chips so they cannot drift apart visually while
+their flags stay entirely separate.
 
 **The checkbox column is gone, and a drag from the name column selects rows** — the same
 `useCellMarquee`, which decides at the press which side of the first value column it landed on and

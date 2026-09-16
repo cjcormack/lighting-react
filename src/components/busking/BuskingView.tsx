@@ -22,6 +22,15 @@ import {
   useAddBuskPadMutation,
 } from '@/store/busk'
 import { handPickUp, heldName, useHandPlace } from '@/store/hand'
+import {
+  isBuskPageDecided,
+  keepFollowingBuskPage,
+  setLocalBuskPage,
+  unlinkBuskPage,
+  useBuskPageDecided,
+  useBuskPageFollow,
+  useLocalBuskPage,
+} from '@/lib/buskPageFollow'
 import { toast } from 'sonner'
 import { lastPadOfBank, libraryStarterLayout, recordsOnPage, removePad, toLayoutRequest } from '@/lib/buskLayout'
 import { buskAddBody } from '@/lib/buskAdd'
@@ -97,52 +106,101 @@ export function BuskingView({ projectId }: { projectId: number }) {
   const placeFromHand = useHandPlace()
   const cachePage = useCacheBuskPage(projectId)
 
-  // Which page is showing has **four** writers and one answer, and the precedence is what makes
-  // three of them one gesture rather than three:
+  // Which page is showing has two answers — the desk's and this window's — and a per-tab flag says
+  // which of them this window is on (`lib/buskPageFollow.ts`). Following:
   //
-  //   this tab's offline override  >  the desk's showing page  >  `?page=`  >  the first page
+  //   the desk's showing page  >  `?page=`  >  the first page
   //
-  // The **desk** wins over the URL because it is the shared fact a hardware *next page* button
-  // moves and every client follows (midi-surface plan D6); `?page=` is what a link carries and
-  // what this view falls back to before anything has moved the desk; and both are resolved
-  // against the fetched list, so a stale bookmark or a page deleted in another tab lands somewhere
-  // real.
+  // Local (the chip clicked to *This window*):
   //
-  // A tab click writes the **desk** rather than the URL, and the URL then mirrors what comes back.
-  // Writing the URL directly would leave this tab on a page the desk and every other client
-  // disagreed about, which is exactly what the shared state exists to prevent — *while connected*.
+  //   this window's own page   >  `?page=`  >  the first page
   //
-  // The **offline override** is the one case that beats the desk on purpose: `setShowingBuskPage`
-  // fails outright when the socket is down (see `sendGesture`), so without a local escape hatch a
-  // click while offline would silently do nothing — the desk's last-known value, however stale,
-  // would keep winning. `onPageSelect` below sets it only on that failure; `deskPageId` changing at
-  // all — a reconnect delivering the real answer, or this tab's own next successful click — is
-  // trusted over it and clears it.
+  // The **desk is still one fact and still moves for the hardware**: a MIDI *next page* press
+  // writes `BuskPageState` and every *following* window moves with it, which is the argument that
+  // made the showing page server-owned in the first place (midi-surface plan D6) and is untouched
+  // here. What that argument never established is that every window must be pinned to it — and on
+  // two screens it is wrong, because the flow this exists for is a colour page on one screen and a
+  // position page on the other, pressed onto one shared selection. So: two facts, two flags, two
+  // chips, and **this one may never read the selection's** (`lib/deskFollow.ts`). A window that has
+  // unlinked its page has not unlinked its selection and still presses onto the desk's.
+  //
+  // A tab click writes the **desk** while following, and this window's own copy once unlinked.
+  // Both are resolved against the fetched list, so a stale bookmark or a page deleted in another
+  // tab lands somewhere real.
+  //
+  // **There is no separate offline override any more.** There used to be one — a local page set
+  // only when `setShowingBuskPage` failed because the socket was down, cleared by any change to the
+  // desk's value — and it was the same shape as a local page: a per-tab page that beats the desk's.
+  // Two mechanisms meaning "this tab's page" is one too many, so a click that never left the
+  // browser now **unlinks the window** onto the page clicked. That is the honest reading of what
+  // just happened (`sendGesture` has already toasted that it did not reach the rig), and unlike the
+  // old override it *says so*: the page chip flips to *This window*.
   const requestedPageId = Number(searchParams.get('page'))
   const { data: deskPageId } = useBuskShowingPageQuery()
-  const [offlinePageId, setOfflinePageId] = useState<number | null>(null)
-  useEffect(() => {
-    setOfflinePageId(null)
-  }, [deskPageId])
+  const followingPage = useBuskPageFollow()
+  const localPageId = useLocalBuskPage()
   const activePage = useMemo(() => {
     if (pages == null || pages.length === 0) return null
+    const preferred = followingPage ? deskPageId : localPageId
     return (
-      pages.find((page) => page.id === offlinePageId) ??
-      pages.find((page) => page.id === deskPageId) ??
+      pages.find((page) => page.id === preferred) ??
       pages.find((page) => page.id === requestedPageId) ??
       pages[0]
     )
-  }, [pages, offlinePageId, deskPageId, requestedPageId])
+  }, [pages, followingPage, deskPageId, localPageId, requestedPageId])
 
   const onPageSelect = useCallback(
     (pageId: number) => {
-      if (!setShowingBuskPage(pageId)) setOfflinePageId(pageId)
+      if (!followingPage) {
+        setLocalBuskPage(pageId)
+        return
+      }
+      if (!setShowingBuskPage(pageId)) unlinkBuskPage(pageId)
     },
-    [],
+    [followingPage],
   )
 
+  // **`?page=` is *this window's* page when the window arrives carrying one**, and arriving with
+  // one unlinks it: a launcher URL (`?window=Screen%202&page=3`, the Screens sheet's spelling plus
+  // this) is an explicit statement about this window, and a link that says page 3 opening on
+  // whatever the desk happens to hold would be no statement at all. The consequence is worth
+  // knowing, because it is surprising: the view mirrors the showing page into `?page=`, so the
+  // busk view's own address always carries one — and a **copied URL opened in a fresh window
+  // therefore arrives local rather than following**. One click on the chip joins it to the desk.
+  //
+  // It is consumed **once per tab**, guarded on `isBuskPageDecided`, because the effect below
+  // mirrors the showing page back into `?page=` on every change: a guard that died with the mount
+  // would let a *reload* of a following window read its own mirror as a deliberate statement and
+  // unlink on every refresh. The flag's third state — undecided — is what tells a fresh window from
+  // a reloaded one, so both arms write it: a window that arrives with no usable `?page=` records
+  // that it follows. There is deliberately no second, in-memory "already ran" flag beside it; the
+  // persisted one can never disagree with itself, and a ref could.
+  //
+  // `launchPageId` is latched at mount, because by the time `pages` resolves the mirror may already
+  // have written a `page` this window never asked for. It is latched as the **raw parameter**,
+  // null when absent: `Number(null)` is 0, and a page whose id really were 0 would make every plain
+  // `/busk` load read as an arrival and unlink an ordinary tab with nobody having asked.
+  const [launchPageId] = useState(() => {
+    const raw = searchParams.get('page')
+    return raw == null ? null : Number(raw)
+  })
   useEffect(() => {
-    if (activePage == null || activePage.id === requestedPageId) return
+    if (pages == null || pages.length === 0 || isBuskPageDecided()) return
+    const arrival = launchPageId == null ? undefined : pages.find((page) => page.id === launchPageId)
+    if (arrival != null) unlinkBuskPage(arrival.id)
+    else keepFollowingBuskPage()
+    // `searchParams` is deliberately absent: `launchPageId` is the arrival value, latched.
+  }, [pages, launchPageId])
+
+  // Not until the arrival decision above has been *rendered*. Both effects run in one commit, in
+  // this order, and `unlinkBuskPage` only schedules the re-render that moves `activePage` — so
+  // without this gate the mirror writes the page the window is unlinking *from* into the URL, and
+  // corrects it a tick later. `useBuskPageDecided` is the rendered tri-state precisely because it
+  // lags by one render; see its doc for why neither the live read nor `useBuskPageFollow` can
+  // stand in for it here.
+  const pageDecided = useBuskPageDecided()
+  useEffect(() => {
+    if (!pageDecided || activePage == null || activePage.id === requestedPageId) return
     // `replace`, never `push`: flipping between pages is not a history entry.
     setSearchParams(
       (prev) => {
@@ -152,7 +210,7 @@ export function BuskingView({ projectId }: { projectId: number }) {
       },
       { replace: true },
     )
-  }, [activePage, requestedPageId, setSearchParams])
+  }, [pageDecided, activePage, requestedPageId, setSearchParams])
 
   // Leaving the view leaves edit mode. Without this the FX cue-slot overlay, which reads the mode
   // from the store, would keep drawing its crosses on whatever page the operator went to.
@@ -310,8 +368,9 @@ export function BuskingView({ projectId }: { projectId: number }) {
             pages={pages ?? []}
             activePageId={activePage?.id ?? null}
             editing={editing}
-            // The desk, not the URL: the effect above mirrors what comes back into `?page=`, and
-            // `onPageSelect` falls back to the offline override above when the gesture never left.
+            // The desk while this window follows it, this window's own copy once unlinked — and
+            // the effect above mirrors whichever won into `?page=`. A click that never reached the
+            // desk unlinks the window rather than overriding it silently; see `onPageSelect`.
             onSelect={onPageSelect}
             onCreate={(name) => createPage({ projectId, name }).unwrap()}
             onRename={(name) =>

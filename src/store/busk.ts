@@ -215,7 +215,9 @@ export const buskApi = restApi.injectEndpoints({
 })
 
 /**
- * Point every client at one busk page. The `busk.pageState` frame is the acknowledgement.
+ * Move the **desk's** showing page. The `busk.pageState` frame is the acknowledgement, and every
+ * window *following* the desk's page moves with it; one that has unlinked (`lib/buskPageFollow.ts`)
+ * receives the frame and does not resolve against it.
  *
  * Returns whether the gesture actually reached the desk (false when the socket is down) — see
  * `BuskPageWsApi.setPage`'s doc for why `BuskingView` needs that boolean rather than treating this

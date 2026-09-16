@@ -4,13 +4,18 @@ import { createWsSubscribable } from './wsSubscriptionFactory'
 import { sendGesture } from './wsGesture'
 
 /**
- * The **showing busk page** — one per desk, server-owned, shared by every client.
+ * The **showing busk page** — one per desk, server-owned, and what a window follows by default.
  *
  * `selectionApi`'s shape and its argument: a hardware *next page* button and a tab click are two
- * ways of making one gesture, so there has to be one answer to "which page is showing" or the
- * button and the screen disagree the moment either is used. Transient — cleared on project switch,
- * never persisted — because it is a position, not a document; `?page=` keeps mirroring it so a link
- * still opens where it says.
+ * ways of making one gesture, so the surface needs one thing to move. Transient — cleared on project
+ * switch, never persisted — because it is a position, not a document.
+ *
+ * **A window may decline to be on it.** `lib/buskPageFollow.ts` is the per-tab follow/local flag,
+ * `lib/deskFollow.ts`'s twin for the page, and it is a *client* choice: the desk keeps exactly the
+ * fact it always kept and this module is unchanged by it. A local window still receives every frame
+ * and simply does not resolve against it; the MIDI page buttons still move every following window.
+ * `?page=` mirrors whichever page the window is showing, so a link still opens where it says — and
+ * a window arriving with one takes it as its own (see `BuskingView`).
  *
  * `busk.pageState` is both the snapshot on connect and the broadcast on every change; the write
  * gets no reply, the state frame being the acknowledgement (reply convention 3).
@@ -35,8 +40,9 @@ export interface BuskPageWsApi {
    * Returns `sendGesture`'s own boolean — `false` when the socket is down and the gesture never
    * left. This is the one shared-state write whose caller has a same-tab fallback worth taking on
    * that: unlike a programmer edit or a blackout, "which page is showing" also has a purely local
-   * answer (the URL), so `BuskingView` still switches the page *this tab* is looking at when the
-   * desk never heard the request, rather than the tab strip silently not responding to a click.
+   * answer, so a click the desk never heard **unlinks this window** onto the page clicked rather
+   * than leaving the tab strip silently unresponsive. That used to be a separate offline override;
+   * it is the local page now, because two mechanisms meaning "this tab's page" is one too many.
    */
   setPage(pageId: number): boolean
 }

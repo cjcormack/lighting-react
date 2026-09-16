@@ -744,7 +744,7 @@ function TargetBody({
           options={records.pages}
         />
         <p className="text-xs text-muted-foreground">
-          Shows this page on every client. Its LED is lit while it is the one showing.
+          Shows this page on the desk, and on every window following the desk’s page. Its LED is lit while it is the one showing.
         </p>
       </div>
     )

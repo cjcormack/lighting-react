@@ -165,26 +165,26 @@ describe('TargetBand', () => {
 
     it('reads `Desk` when nobody has moved the selection', () => {
       draw()
-      expect(screen.getByRole('button', { name: 'Desk' })).toHaveAttribute('aria-pressed', 'true')
+      expect(screen.getByRole('button', { name: 'Targets: Desk' })).toHaveAttribute('aria-pressed', 'true')
     })
 
     it('reads `Desk` when this window moved it last', () => {
       snapshot = { targets: [], families: null, source: { kind: 'window', name: 'Screen 2' } }
       draw()
-      expect(screen.getByRole('button', { name: 'Desk' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Targets: Desk' })).toBeInTheDocument()
       expect(screen.queryByText(/from/)).not.toBeInTheDocument()
     })
 
     it('names another window that moved it last', () => {
       snapshot = { targets: [], families: null, source: { kind: 'window', name: 'Screen 1' } }
       draw()
-      expect(screen.getByRole('button', { name: 'Desk · from Screen 1' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Targets: Desk · from Screen 1' })).toBeInTheDocument()
     })
 
     it('says `from the desk` for a control surface', () => {
       snapshot = { targets: [], families: null, source: { kind: 'surface', name: 'Control surface' } }
       draw()
-      expect(screen.getByRole('button', { name: 'Desk · from the desk' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Targets: Desk · from the desk' })).toBeInTheDocument()
     })
 
     it('reads a dashed `This window` once unlinked, and a click flips it back', () => {
@@ -194,18 +194,18 @@ describe('TargetBand', () => {
         source: { kind: 'window', name: 'Screen 1' },
       }
       draw()
-      fireEvent.click(screen.getByRole('button', { name: 'Desk · from Screen 1' }))
-      const chip = screen.getByRole('button', { name: 'This window' })
+      fireEvent.click(screen.getByRole('button', { name: 'Targets: Desk · from Screen 1' }))
+      const chip = screen.getByRole('button', { name: 'Targets: This window' })
       expect(chip).toHaveAttribute('aria-pressed', 'false')
       expect(chip.className).toContain('border-dashed')
       fireEvent.click(chip)
-      expect(screen.getByRole('button', { name: 'Desk · from Screen 1' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Targets: Desk · from Screen 1' })).toBeInTheDocument()
     })
 
     it('starts unlinked when the tab already is', () => {
       unlinkFromDesk({ targets: [], families: null })
       draw()
-      expect(screen.getByRole('button', { name: 'This window' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Targets: This window' })).toBeInTheDocument()
     })
   })
 })

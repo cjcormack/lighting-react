@@ -237,6 +237,41 @@ export const selectionWs: {
 }
 
 /**
+ * `busk.pageState` frames, so a test can move the **desk's** showing page: `fire` delivers a page id
+ * to the entry's subscriber and remembers it as the connect snapshot `getState` seeds. `sent` is
+ * every `busk.setPage` the code under test made, and `landed` is what `setPage` answers — a test
+ * sets it false to stand for a socket that is down.
+ *
+ * `last` starts **`undefined`**, not `null`, because the real `createBuskPageWsApi` distinguishes
+ * the two: `undefined` is "no frame yet" and `null` is the desk saying it is pointed at no page, and
+ * its `subscribe` replays on `!== undefined` — so it *does* hand a late subscriber an explicit
+ * `null`. A mock that could not tell them apart would silently not replay that one frame.
+ */
+export const buskPageWs: {
+  callback: null | ((pageId: number | null) => void)
+  last: number | null | undefined
+  landed: boolean
+  sent: number[]
+  fire: (pageId: number | null) => void
+  reset: () => void
+} = {
+  callback: null,
+  last: undefined,
+  landed: true,
+  sent: [],
+  fire: (pageId) => {
+    buskPageWs.last = pageId
+    buskPageWs.callback?.(pageId)
+  },
+  reset: () => {
+    buskPageWs.callback = null
+    buskPageWs.last = undefined
+    buskPageWs.landed = true
+    buskPageWs.sent = []
+  },
+}
+
+/**
  * `windows.state` frames and the rebroadcast commands, so a test can drive `store/windows.ts`'s
  * cache entry and the bridge hook. `announced` is every announce the code under test sent.
  */
@@ -493,9 +528,20 @@ export function lightingApiMock() {
       // compare a page id against and never match, masking the gap rather than surfacing it as a
       // wrong type. `setPage` returns `true` (a landed gesture), matching `sendGesture`'s shape.
       buskPage: {
-        getState: () => null,
-        subscribe: noopSub,
-        setPage: () => true,
+        getState: () => buskPageWs.last,
+        subscribe: (fn: (pageId: number | null) => void) => {
+          buskPageWs.callback = fn
+          if (buskPageWs.last !== undefined) fn(buskPageWs.last)
+          return {
+            unsubscribe: () => {
+              buskPageWs.callback = null
+            },
+          }
+        },
+        setPage: (pageId: number) => {
+          buskPageWs.sent.push(pageId)
+          return buskPageWs.landed
+        },
       },
       hand: {
         getState: () => handWs.last,

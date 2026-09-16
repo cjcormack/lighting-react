@@ -24,6 +24,7 @@ import {
 import { selectSaveStatus } from '@/store/saveStatusSlice'
 import type { BuskPage } from '@/api/buskApi'
 import { buskPageTabId, parseBuskDragId } from '@/lib/buskLayout'
+import { BuskPageChip } from './BuskPageChip'
 
 /**
  * The page tabs, and the one control that turns the page editable.
@@ -187,6 +188,17 @@ export function BuskPageStrip({
           </button>
         )}
       </div>
+
+      {/* Beside the tabs, because a control belongs with the thing it changes — and what it changes
+          is which of *these* this window is on. Its sibling, the selection's `DeskChip`, is a row
+          up in the target band; the pair carries the same pill so they read as one system, and each
+          names its own subject so neither reads as governing the whole view.
+
+          Withheld until there are pages, like the create button above it and for a sharper reason:
+          with none, a click would unlink this window onto nothing, and — because unlinking *is* a
+          decision — it would also spend the one arrival decision `BuskingView` is waiting to make,
+          so a window launched at `?page=3` would silently never land on page 3. */}
+      {pages.length > 0 && <BuskPageChip activePageId={activePageId} />}
 
       {naming != null && (
         <div className="flex items-center gap-1.5">

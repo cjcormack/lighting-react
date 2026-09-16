@@ -58,7 +58,13 @@ export function createSyncStore<T>({
    */
   storage?: () => Storage
 }): SyncStore<T> {
-  let current: T | null = null
+  // `hasRead` rather than `current == null` as the "not read yet" sentinel. A store whose value is
+  // legitimately `null` — `lib/buskPageFollow.ts`'s tri-state flag and its local page are the first
+  // — would otherwise re-read and re-parse storage on *every* `getSnapshot`, which
+  // `useSyncExternalStore` calls on every render and every notification. That is the whole life of
+  // a window that never unlinks, and it quietly breaks the "cached after" contract above.
+  let current: T = fallback
+  let hasRead = false
   const listeners = new Set<() => void>()
 
   function readStored(): T {
@@ -74,7 +80,10 @@ export function createSyncStore<T>({
   }
 
   function getSnapshot(): T {
-    current ??= readStored()
+    if (!hasRead) {
+      current = readStored()
+      hasRead = true
+    }
     return current
   }
 
@@ -88,6 +97,7 @@ export function createSyncStore<T>({
     set(next) {
       if (getSnapshot() === next) return
       current = next
+      hasRead = true
       try {
         storage().setItem(key, JSON.stringify(next))
       } catch {
@@ -96,7 +106,8 @@ export function createSyncStore<T>({
       listeners.forEach((fn) => fn())
     },
     reset() {
-      current = null
+      current = fallback
+      hasRead = false
       listeners.clear()
     },
   }

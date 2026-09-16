@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { Provider } from 'react-redux'
-import { MemoryRouter } from 'react-router'
+import { MemoryRouter, useSearchParams } from 'react-router'
 import { DndContext } from '@dnd-kit/core'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, configure, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, configure, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { installRelativeUrlRequest } from '@/test/backendMock'
 
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
@@ -14,17 +14,32 @@ vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).li
 configure({ asyncUtilTimeout: 5000 })
 // The band, the rail and the palette are tested in their own files; stubbing them keeps this one
 // about the view's own decisions — which page is showing, and what first open does.
-vi.mock('./TargetBand', () => ({ TargetBand: () => <div data-testid="target-band" /> }))
+// The band renders the selection's keys, which is the only DOM readout of it this file has. The
+// pad's press handler is built at render time, so a test that fires a `selection.state` frame and
+// presses has to wait for the *render*, not merely for the cache write — `findByTestId` on this
+// content is that wait, and without it the press sends the pair from the frame before last.
+vi.mock('./TargetBand', () => ({
+  TargetBand: ({ selectedTargets }: { selectedTargets: Map<string, unknown> }) => (
+    <div data-testid="target-band">{[...selectedTargets.keys()].join(' ') || 'none'}</div>
+  ),
+}))
 vi.mock('./BuskSpeedRail', () => ({ BuskSpeedRail: () => <div data-testid="speed-rail" /> }))
 vi.mock('./LibraryPalette', () => ({ LibraryPalette: () => <div data-testid="palette" /> }))
 
 import { store } from '@/store'
 import { restApi } from '@/store/restApi'
-import { lightingApi } from '@/api/lightingApi'
 import { BuskingView } from './BuskingView'
 import type { BuskPage, BuskPressResponse } from '@/api/buskApi'
-import { selectionWs } from '@/test/backendMock'
+import { buskPageWs, selectionWs } from '@/test/backendMock'
 import { resetDeskFollowStores, unlinkFromDesk } from '@/lib/deskFollow'
+import {
+  BUSK_PAGE_FOLLOW_KEY,
+  isFollowingBuskPage,
+  keepFollowingBuskPage,
+  relinkBuskPage,
+  resetBuskPageFollowStores,
+  unlinkBuskPage,
+} from '@/lib/buskPageFollow'
 import { toast } from 'sonner'
 
 const emptyPage: BuskPage = { id: 4, uuid: 'p4', name: 'Ballads', sortOrder: 0, rows: [] }
@@ -104,6 +119,20 @@ let pressAnswer: BuskPressResponse = {
   skippedFamilies: [],
 }
 
+/**
+ * Every value the router's `?page=` takes, in order — not just the settled one. The mirror effect's
+ * bug was a *transient* wrong write that corrects itself on the next tick, which a `waitFor` can
+ * never see. `MemoryRouter` keeps its own history and never touches `window.location`, so this has
+ * to read `useSearchParams` from inside the router.
+ */
+const urlSeen: (string | null)[] = []
+function PageProbe() {
+  const [params] = useSearchParams()
+  const page = params.get('page')
+  if (urlSeen[urlSeen.length - 1] !== page) urlSeen.push(page)
+  return null
+}
+
 function draw(pages: BuskPage[], path = '/projects/1/busk') {
   const calls: { url: string; method: string; body?: string }[] = []
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
@@ -134,6 +163,7 @@ function draw(pages: BuskPage[], path = '/projects/1/busk') {
     <Provider store={store}>
       <MemoryRouter initialEntries={[path]}>
         <DndContext>
+          <PageProbe />
           <BuskingView projectId={1} />
         </DndContext>
       </MemoryRouter>
@@ -170,11 +200,10 @@ describe('the busk view', () => {
     selectionWs.callback = null
     window.sessionStorage.clear()
     resetDeskFollowStores()
+    resetBuskPageFollowStores()
     pressAnswer = { kind: 'TEMPLATE', action: 'applied', effectCount: 0, released: 0, skippedFamilies: [] }
-    // A couple of tests below monkey-patch the mock's `buskPage` namespace directly (there's no
-    // per-test way to seed a WS snapshot otherwise); put it back so test order can't matter.
-    lightingApi.buskPage.getState = () => null
-    lightingApi.buskPage.setPage = () => true
+    buskPageWs.reset()
+    urlSeen.length = 0
   })
 
   it('offers the two starting points when the project has no pages', async () => {
@@ -226,20 +255,141 @@ describe('the busk view', () => {
     expect(screen.getByRole('button', { name: 'Ballads' }).getAttribute('aria-current')).toBe('page')
   })
 
-  it('prefers the desk over the URL — a hardware next-page press and a tab click are one gesture', async () => {
+  it('prefers the desk over the URL for a window that already follows — a hardware next-page press and a tab click are one gesture', async () => {
     // The desk already answers 5 before this tab ever mounts (e.g. another client moved it), and
-    // the URL still names 4 — the desk wins.
-    lightingApi.buskPage.getState = () => second.id
+    // the URL still names 4. This window has decided to follow — which is what a reload of a
+    // following window looks like, its own mirrored `?page=` and all — so the desk wins.
+    keepFollowingBuskPage()
+    buskPageWs.last = second.id
     draw([emptyPage, second], `/projects/1/busk?page=${emptyPage.id}`)
     await screen.findByRole('button', { name: 'Dance' })
     expect(screen.getByRole('button', { name: 'Dance' }).getAttribute('aria-current')).toBe('page')
+    expect(isFollowingBuskPage()).toBe(true)
   })
 
-  it('still switches this tab’s own view when a page click never reaches the desk', async () => {
+  /**
+   * The showing page is the desk's *and* this window's, and a per-tab flag says which
+   * (`lib/buskPageFollow.ts`). The desk still holds one page and the MIDI page buttons still move
+   * it; what changed is that a window may decline to be pinned to it.
+   */
+  describe('which page this window shows', () => {
+    it('takes a `?page=` this window arrived with as its own, unlinking it from the desk', async () => {
+      // A launcher URL — `?window=Screen 2&page=5` — is an explicit statement about this window, so
+      // it beats the desk rather than being a stale mirror of it.
+      buskPageWs.last = emptyPage.id
+      draw([emptyPage, second], `/projects/1/busk?page=${second.id}`)
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Dance' }).getAttribute('aria-current')).toBe('page'),
+      )
+      expect(await screen.findByRole('button', { name: 'Page: This window' })).toBeTruthy()
+    })
+
+    it('records that it follows when it arrives with no usable `?page=`, so a reload is not an arrival', async () => {
+      draw([emptyPage, second], '/projects/1/busk?page=999')
+      await screen.findByRole('button', { name: 'Ballads' })
+      await waitFor(() => expect(window.sessionStorage.getItem(BUSK_PAGE_FOLLOW_KEY)).toBe('true'))
+      expect(screen.getByRole('button', { name: 'Page: Desk' })).toBeTruthy()
+    })
+
+    it('does not read a bare `/busk` as an arrival — `Number(null)` is 0, not a page id', async () => {
+      // Latching the raw parameter rather than `Number(...)` of it is what keeps a page whose id
+      // really were 0 from making every plain load unlink an ordinary tab with nobody asking.
+      draw([{ ...emptyPage, id: 0 }, second], '/projects/1/busk')
+      await screen.findByRole('button', { name: 'Ballads' })
+      await waitFor(() => expect(window.sessionStorage.getItem(BUSK_PAGE_FOLLOW_KEY)).toBe('true'))
+      expect(screen.getByRole('button', { name: 'Page: Desk' })).toBeTruthy()
+    })
+
+    it('mirrors the arrival page into `?page=`, never the desk page it is unlinking from', async () => {
+      // Both effects run in one commit, arrival first, and the unlink only *schedules* the
+      // re-render that moves `activePage` — so an ungated mirror writes the desk's page into the
+      // URL and corrects it a tick later. `urlSeen` records every value the parameter ever takes,
+      // which is the only way to catch a transient: the settled state is right either way.
+      buskPageWs.last = emptyPage.id
+      draw([emptyPage, second], `/projects/1/busk?page=${second.id}`)
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Dance' }).getAttribute('aria-current')).toBe('page'),
+      )
+      expect(urlSeen).toEqual([String(second.id)])
+    })
+
+    it('draws no page chip before the pages arrive, so a click cannot spend the arrival decision', async () => {
+      // Unlinking *is* a decision, so a click on a chip drawn over an empty list would leave a
+      // window launched at `?page=` never landing on it.
+      draw([], '/projects/1/busk')
+      await screen.findByText('Start from your library')
+      expect(screen.queryByRole('button', { name: /^Page:/ })).toBeNull()
+    })
+
+    it('moves a following window when the desk’s page changes', async () => {
+      draw([emptyPage, second])
+      await screen.findByRole('button', { name: 'Ballads' })
+      act(() => buskPageWs.fire(second.id))
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Dance' }).getAttribute('aria-current')).toBe('page'),
+      )
+    })
+
+    it('leaves a local window where it is when the desk’s page changes — the MIDI page buttons included', async () => {
+      unlinkBuskPage(emptyPage.id)
+      draw([emptyPage, second])
+      await screen.findByRole('button', { name: 'Ballads' })
+      // `BuskPageNext` and friends write `BuskPageState`, which arrives here as this frame.
+      act(() => buskPageWs.fire(second.id))
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(screen.getByRole('button', { name: 'Ballads' }).getAttribute('aria-current')).toBe('page')
+      expect(screen.getByRole('button', { name: 'Dance' }).getAttribute('aria-current')).toBeNull()
+    })
+
+    it('keeps the page it is showing when the chip unlinks it, rather than jumping to the first', async () => {
+      buskPageWs.last = second.id
+      keepFollowingBuskPage()
+      draw([emptyPage, second])
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Dance' }).getAttribute('aria-current')).toBe('page'),
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Page: Desk' }))
+      // Unlinked, still on Dance — and the desk moving no longer reaches this window.
+      expect(screen.getByRole('button', { name: 'Page: This window' })).toBeTruthy()
+      act(() => buskPageWs.fire(emptyPage.id))
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(screen.getByRole('button', { name: 'Dance' }).getAttribute('aria-current')).toBe('page')
+    })
+
+    it('adopts the desk’s page again on re-link, and sends nothing', async () => {
+      unlinkBuskPage(emptyPage.id)
+      buskPageWs.last = second.id
+      draw([emptyPage, second])
+      await screen.findByRole('button', { name: 'Ballads' })
+      fireEvent.click(screen.getByRole('button', { name: 'Page: This window' }))
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Dance' }).getAttribute('aria-current')).toBe('page'),
+      )
+      expect(buskPageWs.sent).toEqual([])
+    })
+
+    it('writes the desk on a tab click while following, and only this window once unlinked', async () => {
+      draw([emptyPage, second])
+      await screen.findByRole('button', { name: 'Ballads' })
+      fireEvent.click(screen.getByRole('button', { name: 'Dance' }))
+      expect(buskPageWs.sent).toEqual([second.id])
+
+      act(() => relinkBuskPage())
+      act(() => unlinkBuskPage(second.id))
+      fireEvent.click(screen.getByRole('button', { name: 'Ballads' }))
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Ballads' }).getAttribute('aria-current')).toBe('page'),
+      )
+      // Still one — an unlinked window's click is its own and the desk is not written.
+      expect(buskPageWs.sent).toEqual([second.id])
+    })
+  })
+
+  it('unlinks this window when a page click never reaches the desk, rather than doing nothing', async () => {
     // `setShowingBuskPage` returns `sendGesture`'s boolean; `false` means the socket was down and
-    // the desk never heard the click. Without a local fallback the tab strip would look like the
-    // click did nothing — see `onPageSelect` in BuskingView.tsx.
-    lightingApi.buskPage.setPage = () => false
+    // the desk never heard the click. There is no separate offline override any more — a failed
+    // write is folded into the local page, which is the same shape and *says* what happened.
+    buskPageWs.landed = false
     draw([emptyPage, second])
     await screen.findByRole('button', { name: 'Ballads' })
     fireEvent.click(screen.getByRole('button', { name: 'Dance' }))
@@ -248,6 +398,8 @@ describe('the busk view', () => {
         'page',
       ),
     )
+    expect(screen.getByRole('button', { name: 'Page: This window' })).toBeTruthy()
+    expect(isFollowingBuskPage()).toBe(false)
   })
 
   it('swaps the speed rail for the library while editing, and puts it back', async () => {
@@ -335,6 +487,63 @@ describe('the busk view', () => {
       await press(calls)
       await waitFor(() =>
         expect(warning).toHaveBeenCalledWith('Position rows skipped — the selection is Colour'),
+      )
+    })
+
+    /**
+     * **The headline case, and the one assertion that would fail if the two flags were ever folded
+     * into one.** Colour templates on one screen and position templates on another, pressed onto
+     * one selection: the two screens must share the selection and differ in the page, at the same
+     * time. Neither half is caught by testing the two facts separately.
+     */
+    it('moves this window’s selection while leaving its page alone, when only the page is unlinked', async () => {
+      selectionWs.last = { targets: [{ type: 'fixture', key: 'par-1' }], families: ['COLOUR'], source: null }
+      unlinkBuskPage(padPage.id)
+      const { calls } = draw([padPage, second])
+      await screen.findByRole('button', { name: 'Ballads' })
+
+      // The desk's page moves — a hardware next-page press, or the other screen's tab click.
+      act(() => buskPageWs.fire(second.id))
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(screen.getByRole('button', { name: 'Ballads' }).getAttribute('aria-current')).toBe('page')
+
+      // …and the desk's selection moves, which this window *does* take, because the selection's
+      // own flag is untouched.
+      act(() =>
+        selectionWs.fire({ targets: [{ type: 'group', key: 'Movers' }], families: ['POSITION'], source: null }),
+      )
+      await screen.findByText('group:Movers')
+      expect(await press(calls)).toEqual({
+        targets: [{ type: 'group', key: 'Movers' }],
+        families: ['POSITION'],
+      })
+    })
+
+    it('moves this window’s page while leaving its selection alone, when only the selection is unlinked', async () => {
+      selectionWs.last = { targets: [{ type: 'fixture', key: 'par-1' }], families: ['COLOUR'], source: null }
+      unlinkFromDesk({ targets: [{ type: 'group', key: 'Movers' }], families: ['POSITION'] })
+      const { calls } = draw([padPage, second])
+      await screen.findByRole('button', { name: 'Ballads' })
+
+      // The desk's selection moves and this window does not take it. The band reads the local
+      // pair before *and* after, so a tick is given to any render the frame might have caused.
+      await screen.findByText('group:Movers')
+      act(() =>
+        selectionWs.fire({ targets: [{ type: 'fixture', key: 'par-1' }], families: ['COLOUR'], source: null }),
+      )
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20))
+      })
+      expect(screen.getByTestId('target-band').textContent).toBe('group:Movers')
+      expect(await press(calls)).toEqual({
+        targets: [{ type: 'group', key: 'Movers' }],
+        families: ['POSITION'],
+      })
+
+      // …while the desk's page still moves it, because the page's own flag is untouched.
+      act(() => buskPageWs.fire(second.id))
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Dance' }).getAttribute('aria-current')).toBe('page'),
       )
     })
 

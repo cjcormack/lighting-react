@@ -1,11 +1,10 @@
-import { Link2, Unlink2 } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { relinkToDesk, unlinkFromDesk, useDeskFollow } from '@/lib/deskFollow'
 import { useWindowName } from '@/lib/windowIdentity'
 import { useDeskSelectionSnapshot } from '@/store/selection'
 import { useDeskWindows, thisWindowRow } from '@/store/windows'
 import type { SelectionSource } from '@/api/selectionApi'
 import type { DeskWindow } from '@/api/windowsApi'
+import { FollowPill } from './FollowPill'
 
 /**
  * The **desk chip** — whose selection this window is showing, and a click to flip it
@@ -35,8 +34,22 @@ import type { DeskWindow } from '@/api/windowsApi'
  * It is the last **mover**, not a lock, and a press never touches it — so *from Screen 1* an hour
  * later is still true. Sitting on the programmer's row C and in the busk band's label row and
  * nowhere else: the plain lists never bridge to the desk (D1), so they have nothing to say.
+ *
+ * **`showSubject` names the fact this chip governs**, and it is off by default. On the busk view it
+ * has a sibling — `BuskPageChip`, the same pill for the *page* — and two chips reading a bare
+ * *Desk* a few rows apart would be worse than either alone, so the band's copy says *Targets:*. On
+ * the programmer's row C there is no page chip to be told apart from, and that row is a 40px chrome
+ * row budgeted to the pixel (§The programmer's chrome is one spacing system) where a `shrink-0`
+ * chip growing by a word pushes the template strip; there the chip is alone and *Desk* is
+ * unambiguous, so it says nothing extra. The subject is visible rather than `sr-only` on purpose:
+ * the confusion it fixes is a visual one, and rendering it only where it is needed keeps the one
+ * accessible name per surface honest — *Targets: Desk* beside *Page: Desk* on the busk view, plain
+ * *Desk* on row C.
+ *
+ * The pill itself is `FollowPill`'s, shared with the page chip so the two cannot drift apart
+ * visually; the flags stay entirely separate.
  */
-export function DeskChip({ className }: { className?: string }) {
+export function DeskChip({ showSubject, className }: { showSubject?: boolean; className?: string }) {
   const following = useDeskFollow()
   const snapshot = useDeskSelectionSnapshot()
   const windows = useDeskWindows()
@@ -49,24 +62,17 @@ export function DeskChip({ className }: { className?: string }) {
     : 'This window has its own selection — click to follow the desk again'
 
   return (
-    <button
-      type="button"
-      aria-pressed={following}
+    <FollowPill
+      following={following}
+      subject={showSubject ? 'Targets' : undefined}
       title={title}
       onClick={() =>
         following
           ? unlinkFromDesk({ targets: snapshot.targets, families: snapshot.families })
           : relinkToDesk()
       }
-      className={cn(
-        'inline-flex h-5 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2 text-[10px] font-medium leading-none',
-        following
-          ? 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15'
-          : 'border-dashed border-muted-foreground/50 text-muted-foreground hover:bg-accent/50',
-        className,
-      )}
+      className={className}
     >
-      {following ? <Link2 className="size-[11px]" /> : <Unlink2 className="size-[11px]" />}
       {following ? (
         <>
           {/* The space is the accessible name's, not the layout's: a whitespace-only text node
@@ -79,7 +85,7 @@ export function DeskChip({ className }: { className?: string }) {
       ) : (
         'This window'
       )}
-    </button>
+    </FollowPill>
   )
 }
 
