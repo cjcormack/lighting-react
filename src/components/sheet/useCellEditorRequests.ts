@@ -50,6 +50,15 @@ export function useCellEditorRequests<C extends string>({
   openCellEditor: (seed: string) => void
   /** The bar's Set: open the selection's editor at the button, or close the one it opened. */
   toggleCellEditor: () => void
+  /**
+   * Close whatever cell editor is open, if any, and say whether there was one.
+   *
+   * For a surface that changes *under* an open editor rather than deselecting — the programmer's
+   * scope switch is the one caller (CLAUDE.md §The programmer's scoped grid). `selectionEmpty` is
+   * the other way an editor is closed for it, and it cannot answer this: the editor is open for a
+   * selection that still exists, it is only pointed at something else now.
+   */
+  closeCellEditor: () => boolean
 } {
   const [keyboardOpen, setKeyboardOpen] = useState<CellOpenRequest<C> | null>(null)
   useEffect(() => {
@@ -80,16 +89,19 @@ export function useCellEditorRequests<C extends string>({
 
   const openCellEditor = useCallback((seed: string) => request(seed, false), [request])
 
-  const toggleCellEditor = useCallback(() => {
+  const closeCellEditor = useCallback(() => {
     const open = openCellEditorTarget<C>()
-    if (open) {
-      setCloseEditorCell(open)
-      return
-    }
+    if (!open) return false
+    setCloseEditorCell(open)
+    return true
+  }, [])
+
+  const toggleCellEditor = useCallback(() => {
+    if (closeCellEditor()) return
     // Set is pressed at the toolbar, so its editor opens there. Enter and a typed character are
     // made at the selection and open beside the cell — see `anchorAtButton` in `useCellEditorOpen`.
     request('', true)
-  }, [request])
+  }, [closeCellEditor, request])
 
-  return { keyboardOpen, closeEditorCell, openCellEditor, toggleCellEditor }
+  return { keyboardOpen, closeEditorCell, openCellEditor, toggleCellEditor, closeCellEditor }
 }

@@ -349,6 +349,30 @@ export function FixturesListContainer({
     [clearCells, setRowsRaw],
   )
   /**
+   * The fourth door, and the only one no gesture opens: **drop the marquee, keeping its heads.**
+   *
+   * Every other `clearCells()` here is paired with a row write in the same breath, so the selection
+   * is never left empty by one. This one exists because something can change *under* a standing
+   * marquee — today only the programmer's scope — and clearing the cells alone would empty
+   * `selectedRowIds`, since the rows were cleared when the cells were selected. That published
+   * `set([])` to the desk and took every other screen's target band with it. Named rather than
+   * inlined at its one call site so that the next automatic clear has something to reach for: a
+   * bare `clearCells()` from an effect is the shape of that bug, and nothing else marks it.
+   *
+   * Takes the marquee's *visible* rows, which is what `cellRowIds` holds, so a marquee whose rows
+   * have all been filtered out has none and this is a plain clear. That case reaches the desk as an
+   * empty selection — but it does so through the **filter**, with or without a scope switch, and it
+   * does so on the commit before this one, so it is a separate bug from the one this door fixes and
+   * not one the door can close.
+   */
+  const dropMarqueeToRows = useCallback(
+    (marqueeRows: ReadonlySet<RowId>) => {
+      if (marqueeRows.size > 0) setRows([...marqueeRows])
+      else clearCells()
+    },
+    [setRows, clearCells],
+  )
+  /**
    * The rows the marquee's cells sit on, identity-stable while the *set* is unchanged. A drag
    * mints a fresh `cells` array per pointer move, and everything derived from these ids — the
    * desk publish, the locate targets, the Record scope — would otherwise recompute and re-send on
@@ -371,13 +395,39 @@ export function FixturesListContainer({
 
   // Null outside the programmer, so the plain fixtures and groups lists are unaffected.
   const scope = useProgrammerScope()
+  /**
+   * The marquee's rows, read by the scope effect below without being one of its deps. A drag mints
+   * a new rectangle many times a second and that must not re-run an effect keyed on the scope.
+   */
+  const cellRowIdsRef = useRef(cellRowIds)
+  cellRowIdsRef.current = cellRowIds
+  // ── A scope switch drops the marquee to its rows ──────────────────────────────────────────────
+  //
   // A marquee is a scope-local edit target: "these eight cells" means eight of *your* values in
   // Local and eight of a Look's rows in a layer, so carrying one across a switch would aim the
-  // next edit at cells the operator picked while looking at something else. The row selection is
-  // deliberately *not* cleared — that is what Record scopes on, and it survives everything.
+  // next edit at cells the operator picked while looking at something else. The *heads* are not
+  // scope-local, though, and since the two selections became one they are the same state: clearing
+  // the cells outright emptied `selectedRowIds` — the rows had been cleared when the cells were
+  // selected — so the bridge published `set([])` and every other screen's band went dark and its
+  // family pill with it. **Never publish an empty selection the operator did not make.** So the
+  // switch converts rather than clears, through `dropMarqueeToRows` — which goes through the row
+  // door, so the one-selection rule still has one owner: the heads survive everywhere and only the
+  // mask is dropped, which is the same reading the bridge gives a mask another window made.
+  // Switching *back* re-mints nothing — there are no cells left to convert.
+  //
+  // `scope` is identity-stable while unchanged (`ProgrammerScopeProvider` dedupes through
+  // `scopesEqual`), so this fires on a genuine switch and on mount, where there is no marquee and
+  // the door's clear arm bails without a dispatch.
+  //
+  // **This effect must stay declared above `useDeskSelectionBridge`.** React runs a component's
+  // effects in hook order, and that is what makes a scope switch and a `selection.state` frame
+  // arriving in the same commit resolve with the *desk* winning: this writes first, the bridge's
+  // desk→list effect then overwrites with what the desk said. Move it below the bridge and a local
+  // scope switch would silently win a race against a genuine desk-originated change. Nothing in
+  // the type system says so, so it is said here.
   useEffect(() => {
-    clearCells()
-  }, [scope, clearCells])
+    dropMarqueeToRows(cellRowIdsRef.current)
+  }, [scope, dropMarqueeToRows])
 
   // Whichever shape the selection is in. The two are exclusive now, so this is no longer a ladder
   // with two rungs — but it stays one function for Escape, for a click on the grid's empty
@@ -670,11 +720,50 @@ export function FixturesListContainer({
   // bar's Set (`toggleCellEditor`, at the button, or closing what it opened). The rule is the sheet
   // kit's, shared with the patch list, the DMX sheet and the cue sheet; see the hook for why a
   // request is a one-shot and why an off-screen cell is scrolled to rather than opened.
-  const { keyboardOpen, closeEditorCell, openCellEditor, toggleCellEditor } =
+  const { keyboardOpen, closeEditorCell, openCellEditor, toggleCellEditor, closeCellEditor } =
     useCellEditorRequests<ColumnKey>({
       firstEditableCell: firstEditableSelectedCell,
       onScrollTo: setScrollToRowId,
     })
+
+  // ── A scope switch closes an open cell editor ────────────────────────────────────────────────
+  //
+  // An editor is open *for* a selection, and `selectionEmpty` closes it when that selection goes
+  // away. A scope switch is the case that rule cannot see: the selection still exists — the
+  // marquee above just converted it to its rows — but the grid is pointed at something else now,
+  // and in Output or on a focused template layer that something else is **read-only**.
+  //
+  // It used to be closed by accident. Under a marquee the row selection was empty, so the old
+  // `clearCells()` took `selectionEmpty` across its false→true edge and `useCellEditorOpen` shut
+  // the panel. Converting to rows keeps that flag false, so the edge never comes — and an open
+  // popover is not inert in a read-only scope: `disabled` reaches the cell's *trigger*, never the
+  // fields inside an already-open panel, and `useCellWriters` has no Output or template arm, so a
+  // commit from one falls through to a live write and puts literals in Local. Same hole the Fan
+  // and keyboard gates are written against, reached through a stale panel instead.
+  //
+  // **Not merely Radix's job.** A press on the scope band is an outside press, so at the desk the
+  // panel is usually dismissed before the click that flips the scope is handled. But the provider
+  // falls back to Output on a *broadcast* when another desk removes the focused layer
+  // (`ProgrammerScopeProvider`), and there is no pointer event in that path at all. The precedent
+  // is `CellEditorSurface`'s double-click guard: an environment dismissal is not a rule this code
+  // states.
+  //
+  // Deliberately a **second** effect rather than folded into the one above, which must stay
+  // declared above `useDeskSelectionBridge` — see its note. This one reads the editor requests, so
+  // it can only be declared here; the two are independent, so their relative order does not matter.
+  //
+  // **The first run is skipped, because a mount is not a switch.** `openCellEditorTarget` queries
+  // the whole document, and a grid that has only just mounted cannot have opened anything — so
+  // anything it matched on the first run would be some other surface's open editor, and this would
+  // close it. The conversion effect above needs no such guard: it has nothing to convert on mount.
+  const scopeSwitchedRef = useRef(false)
+  useEffect(() => {
+    if (!scopeSwitchedRef.current) {
+      scopeSwitchedRef.current = true
+      return
+    }
+    closeCellEditor()
+  }, [scope, closeCellEditor])
 
   /**
    * Backspace / Delete on a marquee: take the selected cells out of Local — the spreadsheet's

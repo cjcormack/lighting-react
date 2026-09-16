@@ -5,6 +5,7 @@ import type { ReactNode } from 'react'
 import type { CellSelection } from '../sheet/useCellSelection'
 import type { ColumnKey } from './columns'
 import type { Row, RowId } from './rowModel'
+import type { ProgrammerScope } from '../programmer/ProgrammerScope'
 import { makeFixture } from '../../test/fixtureFactories'
 
 /**
@@ -17,7 +18,19 @@ import { makeFixture } from '../../test/fixtureFactories'
  *
  * Everything store-connected is a fake: the subject is the container's wiring, not the data.
  */
-const rowSelection = vi.hoisted(() => ({ ids: new Set<RowId>(), select: vi.fn(), clear: vi.fn() }))
+const rowSelection = vi.hoisted(() => {
+  const state = {
+    ids: new Set<RowId>(),
+    select: vi.fn(),
+    clear: vi.fn(),
+    // The row door, faked the way the slice behaves: it replaces the selection, so a later render
+    // reads back what was set. The scope-switch test below is the one that needs that.
+    setSelection: vi.fn((ids: readonly RowId[]) => {
+      state.ids = new Set(ids)
+    }),
+  }
+  return state
+})
 vi.mock('./useListSelection', async () => {
   const actual = await vi.importActual<typeof import('./useListSelection')>('./useListSelection')
   return {
@@ -32,10 +45,17 @@ vi.mock('./useListSelection', async () => {
       select: rowSelection.select,
       selectAll: vi.fn(),
       clear: rowSelection.clear,
-      setSelection: vi.fn(),
+      setSelection: rowSelection.setSelection,
     }),
   }
 })
+
+/** The programmer's scope, flipped by the test rather than by a band. `null` on the plain lists. */
+const programmerScope = vi.hoisted(() => ({ value: null as ProgrammerScope | null }))
+vi.mock('../programmer/ProgrammerScope', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../programmer/ProgrammerScope')>()),
+  useProgrammerScope: () => programmerScope.value,
+}))
 
 // Through the shared factory, like every other suite in this directory: a hand-rolled partial
 // would not carry the fields a real `Fixture` always has, so a render path that started reading
@@ -104,6 +124,9 @@ vi.mock('react-router', () => ({
 const table = vi.hoisted(() => ({
   cellSelection: undefined as CellSelection<ColumnKey> | undefined,
   rows: [] as readonly Row[],
+  closeEditorCell: null as { rowId: string; col: ColumnKey } | null,
+  /** Draw the DOM shape of an open cell editor, which is how the container finds one to close. */
+  editorOpen: false,
 }))
 vi.mock('./FixturesTable', () => ({
   FixturesTable: (props: {
@@ -111,9 +134,11 @@ vi.mock('./FixturesTable', () => ({
     cellSelection: CellSelection<ColumnKey>
     onBeginCellEdit: (row: Row, col: ColumnKey) => void
     onBackgroundClick?: () => void
+    closeEditorCell?: { rowId: string; col: ColumnKey } | null
   }) => {
     table.cellSelection = props.cellSelection
     table.rows = props.rows
+    if (props.closeEditorCell) table.closeEditorCell = props.closeEditorCell
     return (
       <>
         <button
@@ -125,6 +150,16 @@ vi.mock('./FixturesTable', () => ({
         {/* What the real table renders for a column a row resolves nothing for, and for the
             empty space under the last row: both call `onBackgroundClick`. */}
         <button data-testid="blank-cell" onClick={() => props.onBackgroundClick?.()} />
+        {/* The real grid's addressing contract, which `openCellEditorTarget` reads to find the
+            open editor: a `data-state="open"` anchor inside a `[data-cell]` inside a
+            `[data-row-id]`. Rendered only when this stub is told an editor is open. */}
+        {table.editorOpen && (
+          <div data-row-id="fixture:a">
+            <div data-cell="dimmer">
+              <span data-state="open" />
+            </div>
+          </div>
+        )}
       </>
     )
   },
@@ -136,8 +171,12 @@ beforeEach(() => {
   rowSelection.ids = new Set()
   rowSelection.select.mockClear()
   rowSelection.clear.mockClear()
+  rowSelection.setSelection.mockClear()
+  programmerScope.value = null
   clearCellEffects.enabled = undefined
   table.cellSelection = undefined
+  table.closeEditorCell = null
+  table.editorOpen = false
 })
 afterEach(cleanup)
 
@@ -199,11 +238,118 @@ describe('FixturesListContainer on the plain list routes', () => {
     expect(rowSelection.clear).not.toHaveBeenCalled()
   })
 
+  it('leaves the plain lists alone: no scope, so nothing to switch', () => {
+    // `useProgrammerScope` is null on these two routes, so the scope effect fires once on mount and
+    // finds no marquee. Pinned because the conversion below writes through the row door, and a
+    // mount-time write there would be a `set([])` published to the desk by the programmer's bridge.
+    render(<FixturesListContainer grouped={false} selectionScope="fixtures" />)
+    expect(rowSelection.setSelection).not.toHaveBeenCalled()
+  })
+
   it("mounts the cell clear's effect sweep, so ⌫ means one thing on every list", () => {
     // Gated on `showOwnership` until this session, which would have left ⌫ here clearing the
     // values while the effect driving them kept running — indistinguishable, on the rig, from the
     // key having done nothing.
     render(<FixturesListContainer grouped={false} selectionScope="fixtures" />)
     expect(clearCellEffects.enabled).toBe(true)
+  })
+})
+
+/**
+ * A scope switch under a marquee (multi-screen session 1 follow-up A).
+ *
+ * The cells are scope-local and must go — eight cells in Local are eight of *your* values, and in a
+ * layer they are eight of a Look's rows. The *heads* are not, and since the two selections became
+ * one, clearing the cells outright emptied `selectedRowIds`: the bridge published `set([])` and
+ * every other screen's target band and family pill went with it. So the switch converts the
+ * marquee to its rows through the row door, and only the mask is dropped.
+ */
+describe('FixturesListContainer across a programmer scope switch', () => {
+  it('drops a marquee to its rows rather than to nothing', () => {
+    programmerScope.value = { kind: 'local' }
+    const { rerender } = render(
+      <FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />,
+    )
+    fireEvent.click(screen.getByTestId('cell'))
+    expect(screen.getByTestId('cell')).toHaveTextContent('1 cells')
+    expect(rowSelection.setSelection).not.toHaveBeenCalled()
+
+    programmerScope.value = { kind: 'output' }
+    rerender(<FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />)
+
+    expect(rowSelection.setSelection).toHaveBeenCalledWith(['fixture:a'])
+    expect(rowSelection.clear).not.toHaveBeenCalled()
+    expect(screen.getByTestId('cell')).toHaveTextContent('0 cells')
+    expect([...rowSelection.ids]).toEqual(['fixture:a'])
+  })
+
+  it('does not re-mint the cells on the way back', () => {
+    // The reverse direction: with the marquee already converted there is nothing left to convert,
+    // so switching back to Local leaves the rows exactly as they are and writes nothing.
+    // A fresh element each time: React bails out of re-rendering a reference-equal one, and the
+    // scope here is read through a mocked hook rather than through context, so a bail-out would
+    // mean the switch never reached the component at all and the test would pass vacuously.
+    const view = () => (
+      <FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />
+    )
+    const { rerender } = render(view())
+    fireEvent.click(screen.getByTestId('cell'))
+    programmerScope.value = { kind: 'output' }
+    rerender(view())
+    expect(screen.getByTestId('cell')).toHaveTextContent('0 cells')
+    rowSelection.setSelection.mockClear()
+
+    programmerScope.value = { kind: 'local' }
+    rerender(view())
+
+    expect(rowSelection.setSelection).not.toHaveBeenCalled()
+    expect(screen.getByTestId('cell')).toHaveTextContent('0 cells')
+    expect([...rowSelection.ids]).toEqual(['fixture:a'])
+  })
+})
+
+/**
+ * The other half of a scope switch: an editor that was already open when it happened.
+ *
+ * This used to be closed by accident. Under a marquee the row selection is empty, so the old
+ * `clearCells()` took `selectionEmpty` (`selection.count === 0 && cellCount === 0`) across its
+ * false→true edge and `useCellEditorOpen` shut the panel. Converting the marquee to rows keeps
+ * that flag false, so the edge never comes — and an open panel is *not* inert in a read-only
+ * scope: `disabled` reaches the cell's trigger, never the fields inside an open popover, and
+ * `useCellWriters` has no Output or template arm, so a commit falls through to a live write into
+ * Local. The close has to be said rather than fall out of the selection going away.
+ */
+describe('FixturesListContainer closes an open cell editor on a scope switch', () => {
+  it('asks the table to close whichever editor is open', () => {
+    programmerScope.value = { kind: 'local' }
+    table.editorOpen = true
+    const view = () => (
+      <FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />
+    )
+    const { rerender } = render(view())
+    fireEvent.click(screen.getByTestId('cell'))
+    expect(table.closeEditorCell).toBeNull()
+
+    programmerScope.value = { kind: 'output' }
+    rerender(view())
+
+    expect(table.closeEditorCell).toEqual({ rowId: 'fixture:a', col: 'dimmer' })
+  })
+
+  it('asks for no close when the switch happens with no editor open', () => {
+    // The request is a one-shot the table drops on the next commit, and a standing one re-opens
+    // the editor it names — so a scope switch must not mint one for a cell nobody was editing.
+    programmerScope.value = { kind: 'local' }
+    table.editorOpen = false
+    const view = () => (
+      <FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />
+    )
+    const { rerender } = render(view())
+    fireEvent.click(screen.getByTestId('cell'))
+
+    programmerScope.value = { kind: 'output' }
+    rerender(view())
+
+    expect(table.closeEditorCell).toBeNull()
   })
 })

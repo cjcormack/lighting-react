@@ -1578,6 +1578,21 @@ Things that will bite:
   unmount, so a conditional mount or a `key` per scope silently discards the fixture selection
   Record scopes on. `ProgrammerPage.test.tsx` asserts `gridMounts` across a switch; that is the
   load-bearing test of the whole session.
+- **A scope switch drops the marquee to its rows, it does not clear the selection.** The cells are
+  scope-local and must go, but since the two selections became one (§One selection, two shapes) the
+  rows had been cleared when the cells were selected — so clearing the cells outright emptied
+  `selectedRowIds`, the desk bridge published `set([])`, and every other screen's target band and
+  family pill went dark. `FixturesListContainer` converts instead, through the same row door every
+  other row gesture uses, so the heads survive everywhere and only the mask is dropped: the reading
+  the bridge already gives a mask another window made. **Never publish an empty selection the
+  operator did not make.** Two things ride on that conversion. It **closes any open cell editor**,
+  in a second effect and explicitly — the old clear did it by accident, by taking `selectionEmpty`
+  across its false→true edge, and rows that survive keep that flag false; an open popover's fields
+  are not disabled by a read-only scope (only the cell's trigger is) and `useCellWriters` has no
+  Output arm, so a commit from a stale panel lands literals in Local. And the **conversion effect
+  must stay declared above `useDeskSelectionBridge`**: effects run in hook order, and that is what
+  makes a scope switch and a `selection.state` frame arriving together resolve with the desk
+  winning.
 - **`null` scope is not Output.** `/fixtures` and `/groups` mount the same table with no scope above
   them and must behave exactly as before — live values, editable cells, no em-dashes. Only an
   *explicit* Output scope is read-only. Pinned in `FixturesTable.test.tsx`.

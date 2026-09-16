@@ -94,6 +94,33 @@ function drive(initial: string[] = [], enabled = true) {
     state.cells = cells
     render()
   }
+  /**
+   * The programmer's scope band is pressed while a marquee stands. The container converts the
+   * marquee to its rows through the row door — same heads, no cells — so this mirrors that: the id
+   * set is re-minted (it comes from the row selection now, not from `cellRowIds`) and the cells go.
+   */
+  const scopeSwitch = () => {
+    state.ids = new Set(state.ids)
+    state.cells = NO_CELLS
+    render()
+  }
+  /**
+   * A `selection.state` frame lands in the *same* render the scope switch's conversion does — the
+   * race two reviewers asked about. Distinct from calling `frame()` and `scopeSwitch()` in turn,
+   * which is the case where the frame is processed while the marquee still stands.
+   */
+  const frameDuringScopeSwitch = (
+    targets: CueTarget[],
+    families: AttributeFamily[] | null = null,
+    source: SelectionSource | null = null,
+  ) => {
+    deskTargets = targets
+    deskFamilies = families
+    deskSource = source
+    state.ids = new Set(state.ids)
+    state.cells = NO_CELLS
+    render()
+  }
   /** The list's filter changes what is on screen; the selection does not move. */
   const filter = (next: Row[]) => {
     state.rows = next
@@ -111,7 +138,7 @@ function drive(initial: string[] = [], enabled = true) {
     deskSource = source
     render()
   }
-  return { hook, setSelection, state, render, select, marquee, filter, follow, frame }
+  return { hook, setSelection, state, render, select, marquee, scopeSwitch, frameDuringScopeSwitch, filter, follow, frame }
 }
 
 beforeEach(() => {
@@ -194,6 +221,61 @@ describe('useDeskSelectionBridge', () => {
 
     // The dispatch has landed; the publish effect must recognise its own doing.
     render()
+    expect(setDeskSelection).not.toHaveBeenCalled()
+  })
+
+  /**
+   * A scope switch under a marquee (multi-screen session 1 follow-up A). The container used to
+   * clear the cells outright, and because the rows had been cleared when the cells were selected
+   * that emptied the whole selection — so what reached the desk was `set([])`, and every other
+   * screen's target band and family pill went dark. **Never publish an empty selection the
+   * operator did not make**: the switch converts the marquee to its rows, so the heads are
+   * republished unchanged and only the mask is dropped.
+   */
+  it('republishes the same heads with no mask when a scope switch drops a marquee to its rows', () => {
+    const { marquee, scopeSwitch } = drive()
+    marquee(COLOUR_ON_PAR_9)
+    expect(setDeskSelection).toHaveBeenCalledWith([{ type: 'fixture', key: 'par-9' }], ['COLOUR'])
+    setDeskSelection.mockClear()
+
+    scopeSwitch()
+
+    expect(setDeskSelection).toHaveBeenCalledWith([{ type: 'fixture', key: 'par-9' }], null)
+    // The regression itself, stated as what must never go out.
+    for (const [targets] of setDeskSelection.mock.calls) expect(targets).not.toEqual([])
+  })
+
+  /**
+   * The scope switch against an in-flight desk frame. Two reviewers raised this as a swallowed
+   * republish; it is two different cases, and both land where the bridge's own rules say they
+   * should, so what these pin is the outcome rather than a fix.
+   */
+  it('still republishes with no mask when a foreign frame lands in the same render as the switch', () => {
+    // The conversion has already rendered, so `hasCells` is false by the time the desk→list effect
+    // reads it: the "same heads" fast path returns without arming `pendingRef`, and the publish
+    // effect is free. This is the ordinary race, and the scope switch's own publish survives it.
+    const { marquee, frameDuringScopeSwitch } = drive()
+    marquee(COLOUR_ON_PAR_9)
+    setDeskSelection.mockClear()
+    frameDuringScopeSwitch([{ type: 'fixture', key: 'par-9' }], ['POSITION'], {
+      kind: 'window',
+      name: 'Screen 2',
+    })
+    expect(setDeskSelection).toHaveBeenCalledWith([{ type: 'fixture', key: 'par-9' }], null)
+    for (const [targets] of setDeskSelection.mock.calls) expect(targets).not.toEqual([])
+  })
+
+  it('leaves another window’s mask standing when its frame is processed before the switch', () => {
+    // The other order: the frame is read while the marquee still stands, so the bridge itself
+    // drops it to rows and mutes the publish — `landed`. A scope switch arriving behind that must
+    // NOT then publish `families: null` over the top, because the mask it would clear is not this
+    // window's to clear. The heads are unchanged either way, which is the invariant that matters.
+    const { setSelection, marquee, scopeSwitch, frame } = drive()
+    marquee(COLOUR_ON_PAR_9)
+    setDeskSelection.mockClear()
+    frame([{ type: 'fixture', key: 'par-9' }], ['POSITION'], { kind: 'window', name: 'Screen 2' })
+    expect(setSelection).toHaveBeenCalledWith(['fixture:par-9'])
+    scopeSwitch()
     expect(setDeskSelection).not.toHaveBeenCalled()
   })
 
