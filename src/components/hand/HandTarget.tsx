@@ -65,6 +65,16 @@ export interface HandPlaceStripProps {
   /** Where it would land, in the operator's words: `Colours`, `the programmer`, `Cue 4`. */
   where: string
   onPlace: (held: HeldRecord) => void
+  /**
+   * Is this surface currently showing **drop** targets of its own?
+   *
+   * Named for the reason rather than for the styling: on the busk page in *Edit layout*, dashed
+   * borders mean "a drag can land here", and this band is a button that no drag can land on. So it
+   * draws **solid** there, and dashed everywhere else where nothing else is dashed to be confused
+   * with. The place itself is offered either way — the gesture was briefly refused in edit mode,
+   * which removed a capability to fix what was only ever an appearance.
+   */
+  amongDropTargets?: boolean
   className?: string
 }
 
@@ -74,7 +84,13 @@ export interface HandPlaceStripProps {
  * Renders **null** otherwise, which is what keeps it addable to a crowded surface without costing
  * that surface a row.
  */
-export function HandPlaceStrip({ target, where, onPlace, className }: HandPlaceStripProps) {
+export function HandPlaceStrip({
+  target,
+  where,
+  onPlace,
+  amongDropTargets = false,
+  className,
+}: HandPlaceStripProps) {
   const held = useHandOffer(target)
   if (held == null) return null
   const name = heldName(held)
@@ -85,7 +101,8 @@ export function HandPlaceStrip({ target, where, onPlace, className }: HandPlaceS
       onClick={() => onPlace(held)}
       title={`Place “${name}” in ${where}`}
       className={cn(
-        'flex w-full items-center justify-center gap-1.5 rounded-md border-2 border-dashed',
+        'flex w-full items-center justify-center gap-1.5 rounded-md border-2',
+        amongDropTargets ? 'border-solid' : 'border-dashed',
         'border-primary bg-primary/5 px-2 py-1.5 text-[11px] font-medium text-primary',
         'hover:bg-primary/10',
         className,

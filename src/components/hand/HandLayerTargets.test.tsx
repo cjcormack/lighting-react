@@ -47,6 +47,7 @@ import { store } from '@/store/index'
 import { restApi } from '@/store/restApi'
 import type { Cue } from '@/api/cuesApi'
 import { HandCueLayerStrip, HandProgrammerLayerStrip } from './HandLayerTargets'
+import { HandPlaceStrip } from './HandTarget'
 
 /**
  * The hand's two **layer** places (multi-screen plan §3.5, D12).
@@ -219,5 +220,43 @@ describe('a cue’s stack', () => {
 
   it('draws nothing for a cue in the hand', async () => {
     await withHold(<HandCueLayerStrip projectId={1} cue={cue()} />, hold('CUE'), false)
+  })
+})
+
+/**
+ * The band's two borders, and why the distinction exists at all.
+ *
+ * The place was briefly *refused* on the busk page while *Edit layout* was on. The reason given was
+ * that a dashed band which no drag can land on, sitting among dashed slots that drags do land on,
+ * reads as a drop target — which is true, and is an argument about how it is drawn, not about
+ * whether the gesture should exist. Withholding it removed the capability in exactly the case the
+ * hand is for: a record picked up on *another* window, which the palette in this one cannot stand in
+ * for. So it is offered either way and drawn solid where something else is dashed.
+ */
+describe('HandPlaceStrip’s border', () => {
+  async function drawStrip(amongDropTargets: boolean) {
+    wrap(
+      <HandPlaceStrip
+        target="bank"
+        where="Colours"
+        amongDropTargets={amongDropTargets}
+        onPlace={() => {}}
+      />,
+    )
+    await waitFor(() => expect(handWs.callback).not.toBeNull())
+    await fire(hold('LOOK'))
+    return screen.findByRole('button', { name: /Place “/ })
+  }
+
+  it('is dashed where nothing else is — the ordinary play-mode band', async () => {
+    const strip = await drawStrip(false)
+    expect(strip.className).toContain('border-dashed')
+    expect(strip.className).not.toContain('border-solid')
+  })
+
+  it('is solid among drop targets, and still offers the place', async () => {
+    const strip = await drawStrip(true)
+    expect(strip.className).toContain('border-solid')
+    expect(strip.className).not.toContain('border-dashed')
   })
 })

@@ -323,15 +323,20 @@ export function BuskBankCluster({
             </div>
           )}
         </div>
-        {/* The hand's target (multi-screen plan §3.5). Not while editing: there the palette drag is
-            the same gesture with a pointer, and a dashed band that is *not* a droppable sitting
-            among ones that are is the confusion `BuskDropSlot`'s own comment is about. A bank this
-            client minted a moment ago has no server id for the append to address, so it offers
-            nothing until the layout PUT answers. */}
-        {!editing && bank.id != null && (
+        {/* The hand's target (multi-screen plan §3.5), offered **in edit mode too**.
+            It was withheld there at first, on the reasoning that the palette drag is the same
+            gesture with a pointer and that a dashed band which is *not* a droppable, sitting among
+            ones that are, is the confusion `BuskDropSlot`'s own comment is about. The second half
+            is real and the first is not: the palette only makes the hand *redundant* for a record
+            this window could already see, which is precisely not the case the hand exists for. So
+            the band is drawn solid while editing rather than withheld — `amongDropTargets`.
+            A bank this client minted a moment ago has no server id for the append to address, so it
+            offers nothing until the layout PUT answers. */}
+        {bank.id != null && (
           <HandPlaceStrip
             target="bank"
             where={bank.name}
+            amongDropTargets={editing}
             onPlace={(held) => behaviour.onHandPlace(bank.id!, bank.name, held)}
           />
         )}

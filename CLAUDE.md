@@ -818,9 +818,18 @@ fallback returns one collision in the gaps between banks, and a foreign candidat
 the "highlight in one place, slot in another" failure §"The busk layout" is written about. Session
 4's `elementsFromPoint` hit-test would not have been helped by one either — dnd-kit gives no way
 back from a DOM element to a droppable — so **`data-hand-target` is the registration** both sessions
-read. The affordance is explicit (`HandPlaceStrip`: a dashed *Place “X” here* band, rendering null
-otherwise) rather than a temporary second meaning for a surface's existing press, because a mode is
-state an operator forgets.
+read. The affordance is explicit (`HandPlaceStrip`: a *Place “X” here* band, rendering null otherwise)
+rather than a temporary second meaning for a surface's existing press, because a mode is state an
+operator forgets.
+
+**It is offered in *Edit layout* too, and draws solid there** (`amongDropTargets`). Both busk
+targets withheld it while editing at first, and that was wrong in a way worth recording because the
+reasoning sounded right: dashed means "a drag lands here" on that page, and this band is a button no
+drag can land on — which is an argument about how it is *drawn*. Turning it into a refusal removed
+the gesture in exactly the case the hand exists for, a record picked up on **another** window, which
+this window's palette cannot stand in for. The empty cue slot made it plainer still: an empty tile is
+not draggable and its click does nothing at all while editing, so the gate prevented no collision and
+cost the place. Reported as confusing by Chris on the desk, 2026-09-16.
 
 **`useHandOffer` narrows through `selectFromResult`, and the two layer strips are each split in
 two.** This hook runs once per bank and *unconditionally* in every `CueSlotCell` — hooks cannot be
@@ -844,11 +853,9 @@ the one place with no Undo to recover through.
 **The four places, and the three Undos.** A **bank** is `useAddBuskPadMutation` — it answers the
 whole page, so the busk view's commit queue needs nothing — and its inverse goes back through the
 layout PUT, since there is no remove-pad route: `lastPadOfBank` finds the appended pad in the page
-the append returned. A **cue slot** is `useAssignCueSlotMutation`, on **empty tiles only, and never while the busk view
-is editing** — a filled tile's press is live, and in edit mode a slot is a pointer-drag target, so
-in both cases a tap that quietly fired `assignSlot` would be a second meaning for a gesture the
-operator is making for something else. That is `BuskBank`'s `!editing` rule, and the tile broke it
-until the review caught it; replacing an occupied slot is *Clear slot* and then this. A **cue's stack** is `patchProjectCue`
+the append returned. A **cue slot** is `useAssignCueSlotMutation`, on **empty tiles only** — a filled tile's press is
+live, and a hand held over the panel must not quietly become a second meaning for it; replacing an
+occupied slot is *Clear slot* and then this. A **cue's stack** is `patchProjectCue`
 through `buildCueInput`, appended at the top (later wins within a cue), and its inverse patches back
 the layers array read *before* the place. The **programmer's layer stack** is `programmerAddLayer`
 and has **no Undo**, which is a decision: that op is fire-and-forget and returns no id, the only way

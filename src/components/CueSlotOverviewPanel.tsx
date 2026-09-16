@@ -474,13 +474,13 @@ function CueSlotCell({
   // Above the empty-slot early return, because hooks cannot be conditional. The eligibility rule
   // itself is `lib/handTargets.ts`'s, shared with the palette's `slotEligible`.
   //
-  // **Withheld while the busk view is editing**, which is `BuskBank`'s rule and has to be this
-  // tile's too: in edit mode a slot is a drop target for a pointer drag, and a tap that quietly
-  // fired `assignSlot` — a live mutation, on a show — would be a second meaning for a click the
-  // operator is making to arrange the page. The droppable two lines above already says the same
-  // thing from the other side (`disabled: !isEditMode`).
-  const handOffer = useHandOffer('slot')
-  const offer = isEditMode ? null : handOffer
+  // **Offered in edit mode too**, which is `BuskBank`'s rule and has to be this tile's too. It was
+  // withheld there at first, to keep a click from meaning two things while the operator arranges
+  // the page — but an *empty* tile is not draggable (`useDraggable`'s `disabled: !slot || …`) and
+  // its click does nothing at all in edit mode, so there was no second meaning to collide with:
+  // the gate cost the gesture and prevented nothing. What was real is that a dashed border means
+  // "a drag lands here" while editing, so the tile draws **solid** when it is a hand target there.
+  const offer = useHandOffer('slot')
 
   const {
     attributes: dragAttributes,
@@ -554,7 +554,7 @@ function CueSlotCell({
             : isOver
               ? 'border-primary bg-primary/5'
               : canPlace
-                ? cn(HAND_TARGET_RING, 'hover:bg-primary/10')
+                ? cn(HAND_TARGET_RING, 'hover:bg-primary/10', isEditMode && 'border-solid')
                 : 'border-muted-foreground/25 text-muted-foreground/40',
         )}
       >
